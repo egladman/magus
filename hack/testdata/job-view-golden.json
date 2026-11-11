@@ -58,7 +58,7 @@
   "",
   "```json",
   "{",
-  "  \"schema_version\": 2,",
+  "  \"api_version\": \"magus.job-result/v1alpha1\",",
   "  \"job\": \"guard-shell-quoting\",",
   "  \"changed_paths\": [\"<every path you changed>\"],",
   "  \"validation\": {\"command\": \"./magus run go::go-test . --budget-wait 0 -- -run 'Quote|Shell'\", \"output_ref\": \"<the ref the check printed>\"},",

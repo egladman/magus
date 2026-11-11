@@ -405,13 +405,13 @@ func projectSkeleton(tg types.TargetGraphOutput) types.KnowledgeGraphOutput {
 	}
 
 	return types.KnowledgeGraphOutput{
-		Definition:    tg.Definition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Directed:      true,
-		NodeCount:     len(nodes),
-		EdgeCount:     len(links),
-		Nodes:         nodes,
-		Links:         links,
+		Definition: tg.Definition,
+		APIVersion: types.KnowledgeAPIVersion,
+		Directed:   true,
+		NodeCount:  len(nodes),
+		EdgeCount:  len(links),
+		Nodes:      nodes,
+		Links:      links,
 		// The vocabulary travels with every flavor, because the schema version is what a
 		// consumer reads to decide whether it can resolve a predicate without a matching
 		// binary. Stamping the version while leaving these null tells it the vocabulary is

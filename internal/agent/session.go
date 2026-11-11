@@ -18,22 +18,15 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/types"
 )
 
-// SessionSchemaVersion is the version of the event line every adapter emits.
+// SessionAPIVersion is the version of the event line every adapter emits.
 // Bump it only when an existing field changes MEANING; adding a kind or a
 // dimension is not a bump on its own. A bump invalidates every installed
 // adapter at once, because a reader's copy is theirs from the moment they
 // download it.
-//
-// 2 is the one deliberate exception: it adds the model and host-version
-// dimensions (AgentEvent.Agent.Model, AgentEvent.Agent.HostVersion) that the
-// model-upgrade loop reads to tell an old session from a new one, and an
-// adapter silently missing them would misreport that loop's own evidence as
-// "no model ever ran here" rather than "this copy predates the fact". The
-// number in the coverage line is what lets a reader tell the two apart at a
-// glance.
-const SessionSchemaVersion = 2
+const SessionAPIVersion types.APIVersion = "magus.agent-session/v1alpha1"
 
 // SessionCoverageMarker introduces an adapter's machine-readable statement of what
 // its host can supply, and is what a reader greps for in their own copy.

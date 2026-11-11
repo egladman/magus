@@ -24,7 +24,7 @@ order, and its version is how many of them it has been through.
 The version lives in the store's own header line, as the `migration` member:
 
 ```jsonl
-{"schema_version":13,"migration":1}
+{"api_version":"magus.job/v1alpha1","migration":1}
 {"id":"docs-index","state":"pass","criteria":"index the docs"}
 ```
 
@@ -56,7 +56,7 @@ When magus opens a store:
 
 Migrations only go up. To go back, run the magus that wrote the store.
 
-`migration` is separate from `schema_version`. `schema_version` records the
+`migration` is separate from `api_version`. `api_version` records the
 newest row shape any writer used, and an older magus still reads those rows,
 carrying the members it does not know back out on its next write. A migration
 changes what an existing member means or is called, which an older magus would

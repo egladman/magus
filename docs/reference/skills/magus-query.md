@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 15815
-skill_short_bytes: 9351
+skill_full_bytes: 15809
+skill_short_bytes: 9345
 ---
 
 # magus-query
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `skill-stamp-format` | `1` |
-| `knowledge-schema-version` | `25` |
-| `skill-content` | `be8192581eff` |
+| `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
+| `knowledge-api-version` | `magus.knowledge/v1alpha1` |
+| `skill-content` | `3ad266d1fdf8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -156,14 +156,14 @@ Reading one file whose path you know: fine. This replaces SCAN, not targeted rea
 
 ## Reading results
 
-- Machine reading -> `-o json`. Every verb returns stable, `schema_version`-stamped OBJECT with top-level wrapper. Key into plural (`.matches`, `.targets`); never bare array. `-o name`: bare IDs for piping. Do not scrape human text or trim with `head`.
+- Machine reading -> `-o json`. Every verb returns stable, `api_version`-stamped OBJECT with top-level wrapper. Key into plural (`.matches`, `.targets`); never bare array. `-o name`: bare IDs for piping. Do not scrape human text or trim with `head`.
 - Each match carries `why`: `matched`/`of` words held (partial matches labeled), `terms` per field, `lists` ranks, `seeds` (changed files, lease paths). `ranking.weights`: weight file digest. explain/path/refs take full matches only.
 - Node IDs stable, structured: `<kind>:<qualified-name>`, like `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them.
 - Edges directed, carry `confidence`: `extracted` (read directly off source) or `inferred` (rubric score), plus `provenance` (origin).
 - Node `attrs` surface metadata.
   - `duration_p75_ms`, `cache_hit_rate`, `run_samples`, `last_output_ref`, `last_run_ok`: OBSERVED from local run history.
   - `magus query output <ref>` on target's `last_output_ref` fetches latest captured run.
-- Every output carries `schema_version`; bump means node/edge shape changed.
+- Every output carries `api_version`; bump means node/edge shape changed.
 
 ## Ownership, blast radius
 
@@ -411,7 +411,7 @@ same fragment a link into the rendered page carries.
 ## Reading results
 
 - Reading as a machine? Add `-o json`. Every verb returns a stable,
-  `schema_version`-stamped OBJECT with a top-level wrapper. Key into the plural
+  `api_version`-stamped OBJECT with a top-level wrapper. Key into the plural
   (`.matches`, `.targets`); it is never a bare array. `-o name` prints bare IDs for
   piping. Do not scrape the human text or trim it with `head`.
   Over MCP the tools already return structured content; nothing to shape.
@@ -435,7 +435,7 @@ same fragment a link into the rendered page carries.
     `last_run_ok` is that run's `true`/`false` outcome.
   - With `knowledge.vcs` enabled, file nodes also carry `vcs_last_commit`,
     `vcs_last_modified`, and `vcs_commits` from git history.
-- Every output carries `schema_version`; a bump means the node/edge shape changed.
+- Every output carries `api_version`; a bump means the node/edge shape changed.
 
 ## Ownership and blast radius
 

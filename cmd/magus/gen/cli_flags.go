@@ -1878,9 +1878,9 @@ type QueuePlanFlags struct {
 // BindQueuePlan registers `magus queue plan`'s flags on fs and returns the destination.
 func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 	var f QueuePlanFlags
-	fs.StringVar(&f.Changes, FlagQueuePlanChanges, "-", "The mergequeue.changes/v1 `document`, or `-` for stdin")
+	fs.StringVar(&f.Changes, FlagQueuePlanChanges, "-", "The mergequeue.changes/v1alpha1 `document`, or `-` for stdin")
 	fs.StringVar(&f.Provider, FlagQueuePlanProvider, "", "`provider` approval at each head is checked with")
-	fs.StringVar(&f.Out, FlagQueuePlanOut, "", "`file` the mergequeue.plan/v1 document is written to")
+	fs.StringVar(&f.Out, FlagQueuePlanOut, "", "`file` the mergequeue.plan/v1alpha1 document is written to")
 	fs.IntVar(&f.Depth, FlagQueuePlanDepth, 3, "Candidates of one partition that validate at once")
 	fs.IntVar(&f.Parallel, FlagQueuePlanParallel, 0, "Changes admitted at once; 0 is one per CPU")
 	fs.StringVar(&f.Facts, FlagQueuePlanFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
@@ -1909,7 +1909,7 @@ type QueueValidateFlags struct {
 // BindQueueValidate registers `magus queue validate`'s flags on fs and returns the destination.
 func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 	var f QueueValidateFlags
-	fs.BoolVar(&f.Stdin, FlagQueueValidateStdin, false, "Read the mergequeue.plan/v1 document from stdin; required")
+	fs.BoolVar(&f.Stdin, FlagQueueValidateStdin, false, "Read the mergequeue.plan/v1alpha1 document from stdin; required")
 	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagQueueValidateStdin)
 	fs.StringVar(&f.Gate, FlagQueueValidateGate, "", "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first `--`; exit 0 is green")
 	fs.StringVar(&f.Regenerate, FlagQueueValidateRegenerate, "", "`command` and its arguments, run with no shell in a candidate with the change's affected projects added ahead of its first `--` and the generated files to rewrite listed on stdin")

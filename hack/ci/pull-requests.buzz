@@ -1828,7 +1828,7 @@ object Ranked {
     line: int? = null,
 }
 
-// parseQueue reads `magus queue ls`'s mergequeue.changes/v1 document.
+// parseQueue reads `magus queue ls`'s mergequeue.changes/v1alpha1 document.
 export fun parseQueue(body: str) > [Queued] !> any {
     final acc = mut [<Queued>];
     foreach (c in serialize\jsonDecode(body).q("changes").listValue()) {
@@ -3340,11 +3340,11 @@ test "the week's merges are counted by who merged them" {
 }
 
 test "the dashboard's reads parse into what it renders" {
-    final ls = `{"schema":"mergequeue.changes/v1","base":"main","changes":[{"id":"4","head":"h4","base":"main","method":"squash","fork":false,"affected":[]},{"id":"5","head":"h5","base":"main","method":"squash","parent":"4","fork":false,"affected":[]}]}`;
+    final ls = `{"schema":"mergequeue.changes/v1alpha1","base":"main","changes":[{"id":"4","head":"h4","base":"main","method":"squash","fork":false,"affected":[]},{"id":"5","head":"h5","base":"main","method":"squash","parent":"4","fork":false,"affected":[]}]}`;
     final q = parseQueue(ls);
     assert\equal([q[0].id, q[1].id, q[1].parent ?? 0], want: [4, 5, 4], message: "queue order and parent");
     assert\equal(q[0].parent, want: null, message: "on the base");
-    assert\equal(parseQueue(`{"schema":"mergequeue.changes/v1","base":"main","changes":null}`).len(), want: 0, message: "an empty queue");
+    assert\equal(parseQueue(`{"schema":"mergequeue.changes/v1alpha1","base":"main","changes":null}`).len(), want: 0, message: "an empty queue");
 
     final merged = parseMerged(`[{"number": 9, "mergedAt": "2026-09-26T10:00:00Z", "statusCheckRollup": [{"__typename": "StatusContext", "context": "merge-queue", "state": "SUCCESS"}]},
         {"number": 8, "mergedAt": "2026-09-26T09:00:00Z", "statusCheckRollup": [{"__typename": "StatusContext", "context": "merge-queue", "state": "PENDING"}]}]`);

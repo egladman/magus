@@ -378,9 +378,9 @@ func (s *server) handle(ctx context.Context, conn net.Conn) {
 		return
 	}
 	var h hello
-	if first.Type != typeHello || decodeBody(first, &h) != nil || h.Magic != helloMagic || h.Protocol != ProtocolVersion {
+	if first.Type != typeHello || decodeBody(first, &h) != nil || h.Magic != helloMagic || h.Protocol != APIVersion {
 		_ = w.write(typeError, first.ID, errorReply{Code: CodeProtocol,
-			Message: fmt.Sprintf("broker: expected a hello speaking protocol %d", ProtocolVersion)})
+			Message: fmt.Sprintf("broker: expected a hello speaking protocol %s", APIVersion)})
 		s.forget(ctx, conn, nil)
 		return
 	}
@@ -396,7 +396,7 @@ func (s *server) handle(ctx context.Context, conn net.Conn) {
 	s.mu.Lock()
 	s.conns[conn] = sess
 	s.mu.Unlock()
-	_ = w.write(typeHelloReply, first.ID, helloReply{PID: os.Getpid(), Protocol: ProtocolVersion, Version: s.opts.version})
+	_ = w.write(typeHelloReply, first.ID, helloReply{PID: os.Getpid(), Protocol: APIVersion, Version: s.opts.version})
 
 	var reqs sync.WaitGroup
 	for {
@@ -719,7 +719,7 @@ func (s *server) status() daemon.Broker {
 	st := daemon.Broker{
 		PID:             os.Getpid(),
 		Version:         s.opts.version,
-		Protocol:        ProtocolVersion,
+		Protocol:        APIVersion,
 		Socket:          s.socket,
 		Executable:      s.executable,
 		StartTime:       s.started,

@@ -749,7 +749,7 @@ export fun verifyLayers(dir: str, s: stack\BranchStack) > result\Result::<[Verdi
             if (g.id == PRIMARY) { primary = r[1]; } else { evidence.append({"gate_id": g.id, "output_ref": r[1]}); }
         }
         try {
-            final rep = serialize\jsonEncode(serialize\Boxed.init({"schema_version": 2, "job": l.job, "changed_paths": [<str>],
+            final rep = serialize\jsonEncode(serialize\Boxed.init({"api_version": "magus.job-result/v1alpha1", "job": l.job, "changed_paths": [<str>],
                 "validation": {"command": l.check, "output_ref": primary}, "verification_evidence": evidence, "unresolved_risks": [<str>]}));
             try {
                 _ = magus\cmd("job", args: ["wait", l.job, "--integration", "--stdin"], opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true, stdin = rep });

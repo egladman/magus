@@ -2908,7 +2908,7 @@ func TestAWideningApplyKeepsTheHoldersBinding(t *testing.T) {
 			who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 			bindCaller(t, ctx, who, "held-job")
 
-			widen := types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "held-job", Criteria: "widen me",
+			widen := types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "held-job", Criteria: "widen me",
 				Checkpoint: "rev-a", WritePaths: []string{"std/*.go", "cmd/*.go"},
 				Goals: []types.Goal{{ID: "done", Kind: types.GoalKindPaths, Expect: types.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
 			_, err = job.Apply(ctx, store, []types.Declaration{widen}, config.Jobs{}, nil, nil, false)
@@ -3196,8 +3196,8 @@ func TestDenyLeaseScopedRebindHandsAChildToTheStore(t *testing.T) {
 		fmt.Sprintf("./magus job fork --parent=%s %s/research --read-only", me.ID, me.ID),
 		fmt.Sprintf("client op=put id=%s/research parent=%s read_only=true", me.ID, me.ID),
 		fmt.Sprintf(`magus job fork --stdin <<'EOF'
-{"schema_version": %s, "id": "%s/research", "parent": "%s", "read_only": true}
-EOF`, strconv.Itoa(types.JobSchemaVersion), me.ID, me.ID),
+{"api_version": %q, "id": "%s/research", "parent": "%s", "read_only": true}
+EOF`, string(types.JobAPIVersion), me.ID, me.ID),
 		fmt.Sprintf("magus job wait %s/scout", me.ID),
 		fmt.Sprintf("magus job fork %s/wide --parent %s --write-paths docs/**", me.ID, me.ID),
 	} {
@@ -3265,7 +3265,7 @@ func TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot(t *testing.T) {
 		"the checkout a child works in grants it nothing")
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
 		fmt.Sprintf(`magus job fork --stdin <<'EOF'
-{"schema_version": 11, "id": "%s/probe", "parent": "%s", "read_only": true, "check": {"target": "", "script": "probe.buzz"}}
+{"api_version": "magus.job/v1alpha1", "id": "%s/probe", "parent": "%s", "read_only": true, "check": {"target": "", "script": "probe.buzz"}}
 EOF`, me.ID, me.ID)),
 		"a script check grants nothing, and it is how a read-only scout passes job wait")
 	for _, command := range []string{
@@ -3273,7 +3273,7 @@ EOF`, me.ID, me.ID)),
 		fmt.Sprintf("magus job fork %s/scout --parent %s --read-only --read-paths **", me.ID, me.ID),
 		fmt.Sprintf("client op=put id=%s/scout parent=%s read_only=true state=pass", me.ID, me.ID),
 		fmt.Sprintf(`magus job fork --stdin <<'EOF'
-{"schema_version": 11, "id": "%s/probe", "parent": "%s", "read_only": true, "check": {"target": "go-test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "%s/probe", "parent": "%s", "read_only": true, "check": {"target": "go-test", "project": "."}}
 EOF`, me.ID, me.ID),
 	} {
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command).Say, "nothing would grade", "%q", command)

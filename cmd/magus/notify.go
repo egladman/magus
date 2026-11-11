@@ -132,8 +132,8 @@ func noteUnusableEnvelope(err error, ev types.Event) {
 }
 
 func normalizeEvent(ev *types.Event) {
-	if ev.SchemaVersion == 0 {
-		ev.SchemaVersion = types.EventSchemaVersion
+	if ev.APIVersion == "" {
+		ev.APIVersion = types.EventAPIVersion
 	}
 	if ev.Source.Kind == "" {
 		ev.Source.Kind = "magus"

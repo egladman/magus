@@ -907,11 +907,11 @@ func ForkFacts(ctx context.Context, root string, rows []types.Job, last FullTest
 	}
 	if len(waiting) > 0 {
 		record, _ := json.Marshal(map[string]any{
-			"schema_version": types.JobSchemaVersion,
-			"id":             fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
-			"criteria":       "merge each finished branch with --no-ff, resolve, regenerate, and pass the check",
-			"integrates":     branches,
-			"check":          map[string]string{"target": "<target>", "project": "<project>"},
+			"api_version": types.JobAPIVersion,
+			"id":          fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
+			"criteria":    "merge each finished branch with --no-ff, resolve, regenerate, and pass the check",
+			"integrates":  branches,
+			"check":       map[string]string{"target": "<target>", "project": "<project>"},
 		})
 		facts.IntegrateRecord = string(record)
 	}

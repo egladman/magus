@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -290,4 +291,36 @@ func ExampleDiscover() {
 	// Output:
 	// api
 	// web
+}
+
+type PreFoldWorkspaceCacheSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestPreFoldWorkspaceCacheSuite(t *testing.T) {
+	suite.Run(t, new(PreFoldWorkspaceCacheSuite))
+}
+
+func (s *PreFoldWorkspaceCacheSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.root, ".magus"), 0o755))
+}
+
+func (s *PreFoldWorkspaceCacheSuite) plant(body string) {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, wsCacheFile), []byte(body), 0o600))
+}
+
+func (s *PreFoldWorkspaceCacheSuite) TestReadsVersionOneAsV1alpha1() {
+	s.plant(`{"v":1,"projects":{"a":{"path":"a","dir":"a"}},"dir_mtimes":{}}`)
+	c, ok := loadWSCache(s.root)
+	s.Require().True(ok)
+	s.Equal(cacheStamp(cacheAPIVersion), c.APIVersion)
+	s.Contains(c.Projects, "a")
+}
+
+func (s *PreFoldWorkspaceCacheSuite) TestRefusesAnotherInteger() {
+	s.plant(`{"v":2,"projects":{},"dir_mtimes":{}}`)
+	_, ok := loadWSCache(s.root)
+	s.False(ok)
 }

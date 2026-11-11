@@ -40,11 +40,11 @@ type processOutput struct {
 type invoker func(context.Context, magusCall) (processOutput, error)
 
 type guardVerdict struct {
-	SchemaVersion int    `json:"schema_version"`
-	Decision      string `json:"decision"`
-	Reason        string `json:"reason,omitempty"`
-	Context       string `json:"context,omitempty"`
-	Why           string `json:"why,omitempty"`
+	APIVersion string `json:"api_version"`
+	Decision   string `json:"decision"`
+	Reason     string `json:"reason,omitempty"`
+	Context    string `json:"context,omitempty"`
+	Why        string `json:"why,omitempty"`
 }
 
 type hookEvent struct {
@@ -236,7 +236,7 @@ func eventValue(e hookEvent) vm.Value {
 		fields["reason"] = e.Verdict.Reason
 		fields["context"] = e.Verdict.Context
 		fields["why"] = e.Verdict.Why
-		if e.Verdict.Decision != "unjudged" && e.Verdict.SchemaVersion != 1 {
+		if e.Verdict.Decision != "unjudged" && e.Verdict.APIVersion != guardAPIVersion {
 			fields["decision"] = "unjudged"
 			fields["why"] = "unsupported guard verdict schema"
 		}
@@ -348,14 +348,18 @@ func verdictEnvelope(stdout string) (map[string]json.RawMessage, string) {
 	return envelope, schemaMismatch(envelope)
 }
 
+// guardAPIVersion is agent.GuardAPIVersion. The wasm build imports
+// neither package, so a test in each pins the same literal.
+const guardAPIVersion = "magus.guard/v1alpha1"
+
 func schemaMismatch(envelope map[string]json.RawMessage) string {
-	var schema float64
-	raw := envelope["schema_version"]
-	if envelope == nil || json.Unmarshal(raw, &schema) != nil || string(raw) == "null" {
+	var version string
+	raw := envelope["api_version"]
+	if envelope == nil || json.Unmarshal(raw, &version) != nil || version == "" {
 		return "magus answered an unrecognized verdict shape"
 	}
-	if schema != 1 {
-		return fmt.Sprintf("magus answered verdict schema %v, not 1; update this plugin from the magus docs", schema)
+	if version != guardAPIVersion {
+		return fmt.Sprintf("magus answered verdict %s, not %s; update this plugin from the magus docs", version, guardAPIVersion)
 	}
 	return ""
 }
@@ -363,7 +367,7 @@ func schemaMismatch(envelope map[string]json.RawMessage) string {
 func decideVerdict(envelope map[string]json.RawMessage) guardVerdict {
 	var decision string
 	_ = json.Unmarshal(envelope["decision"], &decision)
-	verdict := guardVerdict{SchemaVersion: 1, Decision: decision}
+	verdict := guardVerdict{APIVersion: guardAPIVersion, Decision: decision}
 	ok := false
 	switch decision {
 	case "pass":
@@ -389,7 +393,7 @@ func unknownDecision(envelope map[string]json.RawMessage) guardVerdict {
 		}
 	}
 	reason := fmt.Sprintf("magus guard returned the decision %s, which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs.", label)
-	return guardVerdict{SchemaVersion: 1, Decision: "deny", Reason: reason}
+	return guardVerdict{APIVersion: guardAPIVersion, Decision: "deny", Reason: reason}
 }
 
 // stringMember is false unless key holds a JSON string, so a verdict

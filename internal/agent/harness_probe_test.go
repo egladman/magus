@@ -98,7 +98,7 @@ func bytesTrimNewline(b []byte) []byte {
 func writeProbeableHarness(t *testing.T, root, id, command string) {
 	t.Helper()
 	body := fmt.Sprintf(`{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "%[1]s",
   "display": {"name": "%[1]s"},
   "config": {"path": "%[1]s/hooks.json"},
@@ -320,7 +320,7 @@ const reclaimCommand = "./magus buzz -s docs/guides/integrations/agents/magus-re
 func writeDeclaredHarness(t *testing.T, root, command, points string) {
 	t.Helper()
 	body := fmt.Sprintf(`{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "declared",
   "display": {"name": "declared"},
   "config": {"path": "declared/hooks.json"},

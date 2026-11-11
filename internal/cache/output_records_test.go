@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -16,8 +17,8 @@ func outputRecordLine(t *testing.T, mutate func(map[string]any)) string {
 	t.Helper()
 	key := strings.Repeat("ab", 32)
 	rec := map[string]any{
-		"schema_version": types.StoredOutputSchemaVersion,
-		"ref":            PortableRef(key), "key": key, "attempt": "out1234abcd",
+		"api_version": types.StoredOutputAPIVersion,
+		"ref":         PortableRef(key), "key": key, "attempt": "out1234abcd",
 		"project": "libs/x", "target": "lint", "failed": true, "timestamp_ms": 1, "duration_ms": 2,
 		"output": "FAIL: x\n",
 	}
@@ -48,17 +49,42 @@ func TestOutputImportReadsRecordsInOrder(t *testing.T) {
 }
 
 func TestOutputImportRefusesNewerSchema(t *testing.T) {
-	_, err := readRecords(outputRecordLine(t, func(r map[string]any) { r["schema_version"] = types.StoredOutputSchemaVersion + 1 }))
+	_, err := readRecords(outputRecordLine(t, func(r map[string]any) { r["api_version"] = "magus.output-record/v1alpha2" }))
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
 	assert.ErrorContains(t, err, "line 1: ")
-	assert.ErrorContains(t, err, "output record schema_version 2 is newer than this magus reads (1)")
+	assert.ErrorContains(t, err, "output record is magus.output-record/v1alpha2, newer than the magus.output-record/v1alpha1 this magus reads")
 
-	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { delete(r, "schema_version") }))
-	assert.ErrorContains(t, err, "line 1: not an output record: it has no schema_version")
+	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { delete(r, "api_version") }))
+	assert.ErrorContains(t, err, "line 1: not an output record: it has no api_version")
 
 	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { r["requires"] = []string{"future-feature"} }))
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
 	assert.ErrorContains(t, err, "output record requires [future-feature]")
+}
+
+type PreFoldOutputRecordSuite struct{ suite.Suite }
+
+func TestPreFoldOutputRecordSuite(t *testing.T) {
+	suite.Run(t, new(PreFoldOutputRecordSuite))
+}
+
+func (s *PreFoldOutputRecordSuite) TestReadsSchemaVersionOneAsV1alpha1() {
+	got, err := readRecords(outputRecordLine(s.T(), func(r map[string]any) {
+		delete(r, "api_version")
+		r["schema_version"] = 1
+	}))
+	s.Require().NoError(err)
+	s.Require().Len(got, 1)
+	s.Equal(types.StoredOutputAPIVersion, got[0].Version)
+	s.Empty(got[0].Unknown)
+}
+
+func (s *PreFoldOutputRecordSuite) TestReadsBothStampsAsTheAPIVersion() {
+	got, err := readRecords(outputRecordLine(s.T(), func(r map[string]any) { r["schema_version"] = 1 }))
+	s.Require().NoError(err)
+	s.Require().Len(got, 1)
+	s.Equal(types.StoredOutputAPIVersion, got[0].Version)
+	s.Empty(got[0].Unknown)
 }
 
 // Nothing reaches each when any line is bad, so a caller never prints half an input.

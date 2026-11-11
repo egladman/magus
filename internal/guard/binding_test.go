@@ -61,7 +61,7 @@ func (s *ExitedHolderBindingSuite) setState(state types.JobState) {
 // exitOwnJob files the holder's result and moves the row to exited, as the
 // store does once the line runs.
 func (s *ExitedHolderBindingSuite) exitOwnJob() {
-	v := s.judge("./magus job exit held-job --stdin <<'EOF'\n{\"schema_version\":2,\"changed_paths\":[],\"unresolved_risks\":[]}\nEOF", false)
+	v := s.judge("./magus job exit held-job --stdin <<'EOF'\n{\"api_version\":\"magus.job-result/v1alpha1\",\"changed_paths\":[],\"unresolved_risks\":[]}\nEOF", false)
 	s.Require().NotEqual(decisionDeny, v.Decision, v.Reason)
 	s.setState(types.StateExited)
 }

@@ -22,9 +22,7 @@ exec git commit -q -m 'shop before the refactor'
 
 exec magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
 cmp stdout $WORK/fork.out
-stderr '^note: the console is not running; start it to watch this job$'
-stderr '^next:$'
-stderr '^  magus server start$'
+! stderr 'the console is not running'
 exec magus job fork refactor/tax --criteria 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .'
 exec git worktree add -q ../shop-pricing
 exec git worktree add -q ../shop-tax
@@ -98,7 +96,7 @@ tax() { echo $(( $1 / 10 )); }
 # total adds two prices given in cents.
 total() { echo $(( $1 + $2 )); }
 -- result.in.json --
-{"schema_version": 2,
+{"api_version": "magus.job-result/v1alpha1",
  "changed_paths": ["pricing/total.sh"],
  "validation": {"command": "magus run test .", "output_ref": "out<hex>"},
  "unresolved_risks": []}
@@ -155,7 +153,7 @@ goal commands
   check: magus run test .
 the result `magus job exit refactor/pricing --stdin` reads
 {
-  "schema_version": 2,
+  "api_version": "magus.job-result/v1alpha1",
   "job": "refactor/pricing",
   "changed_paths": [
     "<each file you changed>"
@@ -184,5 +182,5 @@ refactor/pricing  shop-pricing  pass       standard  1      alone     magus run 
 refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
 
 not merged onto main: 1
-  refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply --stdin` with {"schema_version":13,"id":"refactor/pricing","left_unmerged":"<why>"}
+  refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"magus.job/v1alpha1","id":"refactor/pricing","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

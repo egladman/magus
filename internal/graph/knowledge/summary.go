@@ -13,7 +13,7 @@ import (
 // counts by kind and relation, not a data dump.
 func WriteSummary(w io.Writer, out types.KnowledgeGraphOutput) {
 	fmt.Fprintf(w, "definition: %s\n\n", out.Definition)
-	fmt.Fprintf(w, "knowledge graph (schema v%d): %d nodes, %d edges\n\n", out.SchemaVersion, out.NodeCount, out.EdgeCount)
+	fmt.Fprintf(w, "knowledge graph (%s): %d nodes, %d edges\n\n", out.APIVersion, out.NodeCount, out.EdgeCount)
 	fmt.Fprintln(w, "nodes by kind:")
 	for _, kv := range countBy(len(out.Nodes), func(i int) string { return out.Nodes[i].Kind }) {
 		fmt.Fprintf(w, "  %-11s %d\n", kv.key, kv.n)

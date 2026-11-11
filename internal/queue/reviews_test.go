@@ -84,7 +84,7 @@ func TestReviewsCarriesWhatThePolicyAllowsAndDismissesNothing(t *testing.T) {
 
 	var out bytes.Buffer
 	require.NoError(t, WriteReviews(&out, got))
-	assert.JSONEq(t, fmt.Sprintf("{\"schema\":\"mergequeue.reviews/v1\",\"change\":\"1\",\"head\":\"%s\",\"reviews\":[{\"reviewer\":\"ann\",\"review_id\":\"12\",\"commit\":\"%s\",\"carry\":true,\"tier\":\"prose\",\"changed\":[{\"path\":\"changes/unreleased/a.md\",\"tier\":\"prose\",\"why\":\"matches \\\"**/*.md\\\" (built-in default)\"}],\"reason\":\"head %s is %s rebased; changed since the approval: changes/unreleased/a.md (prose: matches \\\"**/*.md\\\" (built-in default))\",\"dismissed\":false}]}", c.Head, carryOld, c.Head[:12], carryOld[:12]), out.String())
+	assert.JSONEq(t, fmt.Sprintf("{\"schema\":\"mergequeue.reviews/v1alpha1\",\"change\":\"1\",\"head\":\"%s\",\"reviews\":[{\"reviewer\":\"ann\",\"review_id\":\"12\",\"commit\":\"%s\",\"carry\":true,\"tier\":\"prose\",\"changed\":[{\"path\":\"changes/unreleased/a.md\",\"tier\":\"prose\",\"why\":\"matches \\\"**/*.md\\\" (built-in default)\"}],\"reason\":\"head %s is %s rebased; changed since the approval: changes/unreleased/a.md (prose: matches \\\"**/*.md\\\" (built-in default))\",\"dismissed\":false}]}", c.Head, carryOld, c.Head[:12], carryOld[:12]), out.String())
 }
 
 // Two approvals at one commit are one classification, and each is dismissed with a

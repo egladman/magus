@@ -30,8 +30,8 @@ func judgeHandedCommands(ctx context.Context, deps Dependencies, req Request, di
 		}
 		first, _, _ := strings.Cut(v.Reason, "\n")
 		return types.GuardJudgment{
-			SchemaVersion: agent.GuardSchemaVersion,
-			Decision:      decisionDeny,
+			APIVersion: agent.GuardAPIVersion,
+			Decision:   decisionDeny,
 			Reason: fmt.Sprintf("this reply hands the person `%s`, a command the guard denies [%s]: %s\nA person's command reaches no hook, so fix the command before handing it over.",
 				elideCommand(cmd), v.Rule, first),
 			Rule: string(denyRuleBriefCommand),

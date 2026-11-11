@@ -1680,13 +1680,13 @@ magus\project({
 });
 magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}, "unjudged-tool": "advise"});
 -- .testscript/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- .testscript/magus/tools/runs --
 Bash
 -- .testscript/magus/tools/inert --
 TodoWrite
 -- read-ws/.testscript/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- read-ws/.testscript/magus/tools/reads --
 Read
 -- read-ws/big.go --
@@ -1924,7 +1924,7 @@ magus\guard.stop(fun (req: StopRequest) > GuardVerdict {
 echo "$*" >> "$COUNTING_MAGUS_LOG"
 cat > "$COUNTING_MAGUS_LOG.stdin"
 case "$1" in
-  shell) printf '%s\n' '{"schema_version":2,"decision":"advise","context":"COUNTED-ADVICE","rule":"counted"}' ;;
+  shell) printf '%s\n' '{"api_version":"magus.guard/v1alpha2","decision":"advise","context":"COUNTED-ADVICE","rule":"counted"}' ;;
   session) echo COUNTED-BRIEF ;;
 esac
 exit 0
@@ -1963,43 +1963,43 @@ testscript
 -- read-ws/.testscript/magus/tools/limits --
 {"foreground_default_ms":120000,"foreground_max_ms":600000,"resumes_on_background_from":"2.1.299","observes_skill_loads":true}
 -- push-ws/.testscript/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- push-ws/.testscript/magus/tools/host --
 testscript
 -- push-ws/.testscript/magus/tools/limits --
 {"foreground_default_ms":120000,"foreground_max_ms":600000,"resumes_on_background_from":"2.1.299","observes_skill_loads":true}
 -- arch-ws/.testscript/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- arch-ws/.testscript/magus/tools/host --
 testscript
 -- arch-ws/.testscript/magus/tools/limits --
 {"foreground_default_ms":120000,"foreground_max_ms":600000,"resumes_on_background_from":"2.1.299","observes_skill_loads":true}
 -- arch-ws/.blind/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- arch-ws/.blind/magus/tools/host --
 blind
 -- arch-ws/.blind/magus/tools/limits --
 {}
 -- notes-ws/.testscript/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- notes-ws/.testscript/magus/tools/host --
 testscript
 -- notes-ws/.testscript/magus/tools/limits --
 {"foreground_default_ms":120000,"foreground_max_ms":600000,"resumes_on_background_from":"2.1.299","observes_skill_loads":true}
 -- push-ws/.blind/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- push-ws/.blind/magus/tools/host --
 blind
 -- push-ws/.blind/magus/tools/limits --
 {}
 -- .cursor/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- .cursor/magus/tools/host --
 cursor
 -- .cursor/magus/tools/limits --
 {"observes_skill_loads":true}
 -- .codex/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- .codex/magus/tools/host --
 codex
 -- .codex/magus/tools/limits --
@@ -2007,19 +2007,19 @@ codex
 -- codex-shaped.json --
 {"hook_event_name": "PreToolUse", "session_id": "s1", "turn_id": "t1", "tool_name": "Bash", "tool_input": {"command": "ls"}}
 -- push-ws/.codex/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- push-ws/.codex/magus/tools/host --
 codex
 -- push-ws/.codex/magus/tools/limits --
 {}
 -- push-ws/.cursor/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- push-ws/.cursor/magus/tools/host --
 cursor
 -- push-ws/.cursor/magus/tools/limits --
 {"observes_skill_loads":true}
 -- notes-ws/.cursor/magus/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- notes-ws/.cursor/magus/tools/host --
 cursor
 -- notes-ws/.cursor/magus/tools/limits --

@@ -92,7 +92,7 @@ func TestCheckTokens(t *testing.T) {
 		_, _, err = store.Mint(types.GrantOperator, auth.MintRequest{Name: "good", Grant: types.GrantConsole, TTL: time.Hour})
 		require.NoError(t, err)
 		planted := filepath.Join(dir, "planted.json")
-		body := fmt.Sprintf(`{"version":2,"id":"aaaaaaaa","name":"planted","class":"stored","sha256":"%s","grant":{"tokens":"write","mcp":"write","console":"write"},"created":"2026-01-01T00:00:00Z","expires":"9999-01-01T00:00:00Z"}`, strings.Repeat("a", 64))
+		body := fmt.Sprintf(`{"version":"magus.token/v1alpha1","id":"aaaaaaaa","name":"planted","class":"stored","sha256":"%s","grant":{"tokens":"write","mcp":"write","console":"write"},"created":"2026-01-01T00:00:00Z","expires":"9999-01-01T00:00:00Z"}`, strings.Repeat("a", 64))
 		require.NoError(t, os.WriteFile(planted, []byte(body), 0o600))
 		got := (&runner{}).checkTokens()
 		assert.Equal(t, types.CheckFail, got.Status)

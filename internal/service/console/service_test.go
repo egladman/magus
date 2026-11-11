@@ -66,11 +66,11 @@ func TestServiceGraphSkeleton(t *testing.T) {
 	assert.Equal(t, types.RelationDependsOn, out.Links[0].Relation)
 	assert.NotEmpty(t, out.RelationFingerprint)
 	assert.Equal(t, types.KnowledgeGraphOutput{
-		Definition:    out.Definition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Directed:      true,
-		NodeCount:     out.NodeCount,
-		EdgeCount:     out.EdgeCount,
+		Definition: out.Definition,
+		APIVersion: types.KnowledgeAPIVersion,
+		Directed:   true,
+		NodeCount:  out.NodeCount,
+		EdgeCount:  out.EdgeCount,
 		// Stamped together or not at all: the schema version is what a consumer reads to decide
 		// whether it can resolve a predicate on its own, so claiming the version while carrying
 		// no vocabulary is the one combination that misleads.

@@ -877,7 +877,7 @@ func foldKnowledgeSite(h *knowledge.InputHash, cfg config.Config, root, cacheDir
 	if !foldBinary(h) {
 		return false
 	}
-	h.String(fmt.Sprint(types.KnowledgeSchemaVersion))
+	h.String(fmt.Sprint(types.KnowledgeAPIVersion))
 	h.String(root)
 	h.String(cacheDir)
 	h.String(cfg.HistoryPath)

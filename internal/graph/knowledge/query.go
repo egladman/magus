@@ -540,11 +540,11 @@ func (g *Graph) Explain(ref string) (types.KnowledgeExplainOutput, bool) {
 	g.ensureAdj()
 	n, _ := g.node(id)
 	out := types.KnowledgeExplainOutput{
-		Definition:    types.KnowledgeExplainDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Node:          n,
-		BlastRadius:   g.blastRadius(id),
-		Resolution:    how,
+		Definition:  types.KnowledgeExplainDefinition,
+		APIVersion:  types.KnowledgeAPIVersion,
+		Node:        n,
+		BlastRadius: g.blastRadius(id),
+		Resolution:  how,
 	}
 	if n.Kind == types.KindPackage && n.Attrs[attrPackageReplaced] == "" {
 		out.DocsURL, _ = deps.DocsURL(n.Attrs[attrPackageManager], n.Label, n.Attrs[AttrPackageVersion])
@@ -582,10 +582,10 @@ func (g *Graph) PathWith(a, b string, opts types.KnowledgePathOptions) (types.Kn
 		return types.KnowledgePathOutput{}, false
 	}
 	out := types.KnowledgePathOutput{
-		Definition:    types.KnowledgePathDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		From:          from,
-		To:            to,
+		Definition: types.KnowledgePathDefinition,
+		APIVersion: types.KnowledgeAPIVersion,
+		From:       from,
+		To:         to,
 	}
 	steps, found := g.shortestPath(from, to, relationSet(opts.Relations))
 	out.Found = found
@@ -606,10 +606,10 @@ func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	g.ensureAdj()
 	n, _ := g.node(id)
 	out := types.KnowledgeRefsOutput{
-		Definition:    types.KnowledgeRefsDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Symbol:        id,
-		Label:         n.Label,
+		Definition: types.KnowledgeRefsDefinition,
+		APIVersion: types.KnowledgeAPIVersion,
+		Symbol:     id,
+		Label:      n.Label,
 	}
 	if sig := n.Attrs[AttrSignature]; sig != "" {
 		out.Signature = &sig
@@ -675,10 +675,10 @@ func (g *Graph) Definitions(ref string) (types.KnowledgeDefinitionsOutput, bool)
 	n, _ := g.node(refs.Symbol)
 	endLine, _ := strconv.Atoi(n.Attrs[attrDefEndLine])
 	out := types.KnowledgeDefinitionsOutput{
-		Definition:    types.KnowledgeDefinitionsDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Symbol:        refs.Symbol,
-		Label:         refs.Label,
+		Definition: types.KnowledgeDefinitionsDefinition,
+		APIVersion: types.KnowledgeAPIVersion,
+		Symbol:     refs.Symbol,
+		Label:      refs.Label,
 	}
 	for _, d := range refs.Defs {
 		site := types.KnowledgeDefinitionSite{File: d.File, Status: types.DefinitionUnverified}
@@ -902,13 +902,13 @@ func (g *Graph) FocusNeighborhood(focus string, opts types.KnowledgeNeighborhood
 
 	graph := sub.Output()
 	out := types.KnowledgeNeighborhoodOutput{
-		Definition:    types.KnowledgeNeighborhoodDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Focus:         id,
-		Resolution:    how,
-		Options:       opts,
-		Nodes:         graph.Nodes,
-		Links:         graph.Links,
+		Definition: types.KnowledgeNeighborhoodDefinition,
+		APIVersion: types.KnowledgeAPIVersion,
+		Focus:      id,
+		Resolution: how,
+		Options:    opts,
+		Nodes:      graph.Nodes,
+		Links:      graph.Links,
 	}
 	for _, p := range slices.Sorted(maps.Keys(folded)) {
 		out.Folds = append(out.Folds, types.KnowledgeFold{Prefix: p, Node: dirID(p), Folded: folded[p]})

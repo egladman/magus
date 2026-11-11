@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // tempLocation places a ledger entirely under temp directories, so no test resolves the real
@@ -183,7 +184,7 @@ func TestStoreRoundTrip(t *testing.T) {
 			for i, w := range tt.want {
 				// Timestamps and the schema stamp are the store's, not the fixture's;
 				// assert them separately and compare the declared facts here.
-				assert.Equal(t, types.JobSchemaVersion, got[i].Version, "the store stamps the row shape")
+				assert.Equal(t, types.JobAPIVersion, got[i].Version, "the store stamps the row shape")
 				assert.Equal(t, trail.LocalOrigin(t.Context()), got[i].RegisteredBy, "the store records the OS account that created the row")
 				w.Created, w.Updated, w.Version, w.RegisteredBy = got[i].Created, got[i].Updated, got[i].Version, got[i].RegisteredBy
 				require.Len(t, got[i].Releases, len(w.Releases))
@@ -572,8 +573,8 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 	}{
 		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			row, err := decodeDeclaration(strings.NewReader(fmt.Sprintf(
-				`{"schema_version":%d,"id":"a","criteria":"goal","checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
-				types.JobSchemaVersion, checkpoint)))
+				`{"api_version":%q,"id":"a","criteria":"goal","checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
+				types.JobAPIVersion, checkpoint)))
 			require.NoError(t, err)
 			return s.Update(t.Context(), row.ID, Declare(row, 0))
 		}},
@@ -596,7 +597,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tc.validated, stored.Validated != 0, "validated stamp")
 			assert.Equal(t, types.Job{
-				Schema:       types.Schema{Version: types.JobSchemaVersion},
+				Schema:       types.Schema{Version: types.JobAPIVersion},
 				ID:           "a",
 				Criteria:     "goal",
 				Checkpoint:   head,
@@ -662,30 +663,30 @@ func TestStoreKeepsANewerRowWhole(t *testing.T) {
 
 	s := tempStore(t, t.TempDir())
 	path := plantRaw(t, s, fmt.Sprintf(
-		`{"id":"future","schema_version":99,"requires":[],"state":"running","created":1,"updated":1,"future_field":{"x":1}}`+"\n"+
-			`{"id":"other","schema_version":%d,"state":"running","created":1,"updated":1}`, types.JobSchemaVersion))
+		`{"id":"future","api_version":"magus.job/v1alpha99","requires":[],"state":"running","created":1,"updated":1,"future_field":{"x":1}}`+"\n"+
+			`{"id":"other","api_version":%q,"state":"running","created":1,"updated":1}`, types.JobAPIVersion))
 	want := map[string]any{"x": float64(1)}
 
 	_, err := s.Update(t.Context(), "other", func(u *types.Job) { u.Criteria = "moved" })
 	require.NoError(t, err)
 	future := storedRow(t, path, "future")
 	assert.Equal(t, want, future["future_field"], "an update of another row keeps this row's unknown member")
-	assert.Equal(t, float64(99), future["schema_version"], "and its stamp")
+	assert.Equal(t, "magus.job/v1alpha99", future["api_version"], "and its stamp")
 
 	_, err = s.Update(t.Context(), "future", func(u *types.Job) { u.State = types.StatePass })
 	require.NoError(t, err)
 	future = storedRow(t, path, "future")
 	assert.Equal(t, want, future["future_field"], "an update of this row keeps its unknown member")
-	assert.Equal(t, float64(99), future["schema_version"], "a rewrite never lowers the stamp")
+	assert.Equal(t, "magus.job/v1alpha99", future["api_version"], "a rewrite never lowers the stamp")
 	assert.Equal(t, "pass", future["state"], "the field the update named was applied")
-	assert.Equal(t, float64(types.JobSchemaVersion), storedRow(t, path, "other")["schema_version"])
+	assert.Equal(t, string(types.JobAPIVersion), storedRow(t, path, "other")["api_version"])
 
 	// A whole-row replace is still the store's to stamp: it cannot drop the envelope.
 	_, err = s.Update(t.Context(), "future", func(u *types.Job) { *u = types.Job{State: types.StateRunning} })
 	require.NoError(t, err)
 	future = storedRow(t, path, "future")
 	assert.Equal(t, want, future["future_field"])
-	assert.Equal(t, float64(99), future["schema_version"])
+	assert.Equal(t, "magus.job/v1alpha99", future["api_version"])
 }
 
 // A row requiring a feature this magus lacks is listed and named, and only a write to it is
@@ -695,8 +696,8 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 
 	s, notices := sweepStore(t, 10_000, time.Hour)
 	path := plantRaw(t, s, fmt.Sprintf(
-		`{"id":"future","schema_version":99,"requires":["never-implemented"],"state":"declared","created":1,"updated":1,"future_field":7}`+"\n"+
-			`{"id":"other","schema_version":%d,"state":"running","created":9999,"updated":9999}`, types.JobSchemaVersion))
+		`{"id":"future","api_version":"magus.job/v1alpha99","requires":["never-implemented"],"state":"declared","created":1,"updated":1,"future_field":7}`+"\n"+
+			`{"id":"other","api_version":%q,"state":"running","created":9999,"updated":9999}`, types.JobAPIVersion))
 	before := storedRow(t, path, "future")
 
 	rows, err := s.List()
@@ -708,8 +709,8 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 
 	_, err = s.Update(t.Context(), "future", func(u *types.Job) { u.State = types.StatePass })
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
-	assert.ErrorContains(t, err, fmt.Sprintf(`future requires "never-implemented", which this magus (schema %d) lacks: update magus`,
-		types.JobSchemaVersion))
+	assert.ErrorContains(t, err, fmt.Sprintf(`future requires "never-implemented", which this magus (%s) lacks: update magus`,
+		types.JobAPIVersion))
 	_, err = s.Delete(t.Context(), "future", true)
 	assert.ErrorContains(t, err, `requires "never-implemented"`, "a delete is a write to the row")
 
@@ -726,12 +727,12 @@ func TestStoreRefusesAFileItCannotActOn(t *testing.T) {
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
-	path := plantRaw(t, s, `{"schema_version":99,"requires":["jobs-v2"]}`)
+	path := plantRaw(t, s, `{"api_version":"magus.job/v1alpha99","requires":["jobs-v2"]}`)
 
 	_, err := s.List()
 	require.ErrorIs(t, err, types.JobStoreWriterOlder)
-	assert.ErrorContains(t, err, fmt.Sprintf(`%s requires "jobs-v2", which this magus (schema %d) lacks, update magus`,
-		path, types.JobSchemaVersion))
+	assert.ErrorContains(t, err, fmt.Sprintf(`%s requires "jobs-v2", which this magus (%s) lacks, update magus`,
+		path, types.JobAPIVersion))
 
 	_, err = s.Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })
 	require.ErrorIs(t, err, types.JobStoreWriterOlder, "a write refuses the same file")
@@ -743,12 +744,12 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 
 	s := tempStore(t, t.TempDir())
 	s.clock = func() time.Time { return time.Unix(1_700_000_000, 0) }
-	path := plantRaw(t, s, `{"schema_version":99,"plan":"p1"}`)
+	path := plantRaw(t, s, `{"api_version":"magus.job/v1alpha99","plan":"p1"}`)
 	seed(t, s, lease("a"))
 	_, err := s.Clear(t.Context())
 	require.NoError(t, err)
 
-	assert.Equal(t, []map[string]any{{"schema_version": float64(99), "plan": "p1", "retained": float64(1_700_000_000)}},
+	assert.Equal(t, []map[string]any{{"api_version": "magus.job/v1alpha99", "plan": "p1", "retained": float64(1_700_000_000)}},
 		storedLines(t, path), "a clear leaves the header alone, and the store's own retention stamp rides in it")
 }
 
@@ -981,8 +982,8 @@ func TestStoreUpdatePreservesAnUnknownMember(t *testing.T) {
 
 	s := tempStore(t, t.TempDir())
 	path := plantRaw(t, s, fmt.Sprintf(
-		`{"id":"adj/store","schema_version":%d,"state":"running","created":1,"updated":1,"woolgathering":7}`,
-		types.JobSchemaVersion))
+		`{"id":"adj/store","api_version":%q,"state":"running","created":1,"updated":1,"woolgathering":7}`,
+		types.JobAPIVersion))
 
 	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StatePass })
 	require.NoError(t, err)
@@ -1419,7 +1420,7 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 // TestStoreRefusesAFileItCannotActOn).
 func TestStoreWritesAStoreANewerCommitStamped(t *testing.T) {
 	s := tempStore(t, t.TempDir())
-	plantRaw(t, s, fmt.Sprintf(`{"schema_version":%d,"writer":{"commit":"8a9d","time":"2099-01-01T00:00:00Z"}}`, types.JobSchemaVersion))
+	plantRaw(t, s, fmt.Sprintf(`{"api_version":%q,"writer":{"commit":"8a9d","time":"2099-01-01T00:00:00Z"}}`, types.JobAPIVersion))
 
 	_, err := s.Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })
 	require.NoError(t, err)
@@ -1449,7 +1450,7 @@ func renamed(from, to string) migrate.Migration {
 }
 
 func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
-	st, path, notices := s.migratingStore(`{"schema_version":13}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`,
+	st, path, notices := s.migratingStore(`{"api_version":"magus.job/v1alpha1"}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`,
 		renamed("goal", "criteria"))
 	notice := fmt.Sprintf("job: migrated job store %s from 0 to 1 (1 entries)\n", path)
 
@@ -1466,7 +1467,7 @@ func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
 }
 
 func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
-	st, path, _ := s.migratingStore(`{"schema_version":13,"migration":1}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"aim":"ship it"}`,
+	st, path, _ := s.migratingStore(`{"api_version":"magus.job/v1alpha1","migration":1}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"aim":"ship it"}`,
 		renamed("goal", "aim"), renamed("aim", "intent"), renamed("intent", "criteria"))
 
 	_, err := st.Update(s.T().Context(), "a", func(u *types.Job) { u.Model = "standard" })
@@ -1478,7 +1479,7 @@ func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
 }
 
 func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
-	body := `{"schema_version":13,"migration":1}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1}`
+	body := `{"api_version":"magus.job/v1alpha1","migration":1}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1}`
 	st, path, notices := s.migratingStore(body, migrate.Migration{Name: "never", Up: func(migrate.Entry) (migrate.Entry, error) {
 		return nil, errors.New("ran")
 	}})
@@ -1492,7 +1493,7 @@ func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
 }
 
 func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
-	body := `{"schema_version":13,"migration":3}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1}`
+	body := `{"api_version":"magus.job/v1alpha1","migration":3}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1}`
 	st, path, _ := s.migratingStore(body, renamed("goal", "criteria"))
 
 	_, err := st.read()
@@ -1506,7 +1507,7 @@ func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
 }
 
 func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
-	body := `{"schema_version":13}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`
+	body := `{"api_version":"magus.job/v1alpha1"}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`
 	st, path, notices := s.migratingStore(body, renamed("goal", "criteria"), migrate.Migration{Name: "fail", Up: func(migrate.Entry) (migrate.Entry, error) {
 		return nil, errors.New("disk on fire")
 	}})
@@ -1527,4 +1528,92 @@ func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
 	path, err := st.Path()
 	s.Require().NoError(err)
 	s.InDelta(2, storedLines(s.T(), path)[0]["migration"], 0, "a new store needs no migration")
+}
+
+// IntegerStampSuite pins adoptIntegerStamp: a job store an integer-versioned
+// magus wrote reads as JobAPIVersion, and anything else old is refused.
+type IntegerStampSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestIntegerStamp(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(IntegerStampSuite))
+}
+
+func (s *IntegerStampSuite) SetupTest() {
+	s.store = tempStore(s.T(), s.T().TempDir())
+}
+
+const integerStore = `{"schema_version":13}` + "\n" +
+	`{"id":"a","schema_version":13,"state":"running","created":1,"updated":1}` + "\n" +
+	`{"id":"b","schema_version":13,"state":"running","created":1,"updated":1}`
+
+func (s *IntegerStampSuite) TestReadsAnIntegerRowAsV1alpha1() {
+	plantRaw(s.T(), s.store, integerStore)
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+	s.Require().Len(rows, 2)
+	s.Equal(types.JobAPIVersion, rows[0].Version)
+	s.NotContains(rows[0].Unknown, "schema_version")
+}
+
+func (s *IntegerStampSuite) TestRewriteWritesTheName() {
+	path := plantRaw(s.T(), s.store, integerStore)
+	_, err := s.store.Update(s.T().Context(), "a", func(u *types.Job) { u.Criteria = "moved" })
+	s.Require().NoError(err)
+	row := storedRow(s.T(), path, "a")
+	s.Equal(string(types.JobAPIVersion), row["api_version"])
+	s.NotContains(row, "schema_version")
+}
+
+// An older binary's rewrite keeps api_version and adds its integer beside
+// it, and the row's result keeps its integer alone.
+const rewrittenByOlder = `{"api_version":"magus.job/v1alpha1","schema_version":13}` + "\n" +
+	`{"api_version":"magus.job/v1alpha1","schema_version":0,"id":"a","state":"running","created":1,"updated":1,` +
+	`"result":{"api_version":"","schema_version":2,"job":"a","changed_paths":[],"unresolved_risks":[]}}`
+
+func (s *IntegerStampSuite) TestReadsALineCarryingBothStampsAsItsAPIVersion() {
+	plantRaw(s.T(), s.store, rewrittenByOlder)
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+	s.Require().Len(rows, 1)
+	s.Equal(types.JobAPIVersion, rows[0].Version)
+	s.Empty(rows[0].Unknown)
+}
+
+func (s *IntegerStampSuite) TestReadsAnIntegerResultAsV1alpha1() {
+	plantRaw(s.T(), s.store, rewrittenByOlder)
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+	s.Require().Len(rows, 1)
+	s.Require().NotNil(rows[0].Result)
+	s.Equal(types.JobResultAPIVersion, rows[0].Result.Version)
+	s.Empty(rows[0].Result.Unknown)
+}
+
+func (s *IntegerStampSuite) TestRewriteDropsTheLeftoverIntegers() {
+	path := plantRaw(s.T(), s.store, rewrittenByOlder)
+	_, err := s.store.Update(s.T().Context(), "a", func(u *types.Job) { u.Criteria = "moved" })
+	s.Require().NoError(err)
+	row := storedRow(s.T(), path, "a")
+	s.NotContains(row, "schema_version")
+	result, ok := row["result"].(map[string]any)
+	s.Require().True(ok, "the result is kept: %v", row)
+	s.Equal(string(types.JobResultAPIVersion), result["api_version"])
+	s.NotContains(result, "schema_version")
+}
+
+func (s *IntegerStampSuite) TestRefusesANonIntegerSchemaVersion() {
+	plantRaw(s.T(), s.store, `{"id":"a","schema_version":"13","state":"running","created":1,"updated":1}`)
+	_, err := s.store.List()
+	s.ErrorContains(err, "carries no api_version, so an older magus wrote it")
+	s.ErrorContains(err, "move jobs.jsonl aside, or delete it, and fork the jobs again")
+}
+
+func (s *IntegerStampSuite) TestRefusesAMalformedVersion() {
+	plantRaw(s.T(), s.store, `{"id":"a","api_version":"13","state":"running","created":1,"updated":1}`)
+	_, err := s.store.List()
+	s.ErrorContains(err, "move jobs.jsonl aside, or delete it")
 }

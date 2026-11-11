@@ -454,7 +454,7 @@ func TestFsWriteFileRefusesASchemaDowngrade(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "MAGUS.md")
 
-	newer := fmt.Sprintf("This workspace has a knowledge graph (schema v%d).\n", types.KnowledgeSchemaVersion+1)
+	newer := "This workspace has a knowledge graph (magus.knowledge/v1alpha2).\n"
 	require.NoError(t, os.WriteFile(p, []byte(newer), 0o644))
 
 	err := FsWriteFile(ctx, p, "rendered by an older build")
@@ -477,7 +477,7 @@ func gitRepositoryWithIgnoredExport(t *testing.T) (ignored, tracked string) {
 	out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput()
 	require.NoError(t, err, string(out))
 
-	newer := fmt.Sprintf("{\"schema_version\": %d}\n", types.KnowledgeSchemaVersion+1)
+	newer := "{\"api_version\": \"magus.knowledge/v1alpha2\"}\n"
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "gen"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("/gen/*.json\n"), 0o644))
 	ignored = filepath.Join(dir, "gen", "knowledge-graph.json")
@@ -500,7 +500,7 @@ func TestFsWriteFileOverwritesAnIgnoredNewerStamp(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "regenerated", string(got))
 
-	newer := fmt.Sprintf("{\"schema_version\": %d}\n", types.KnowledgeSchemaVersion+1)
+	newer := "{\"api_version\": \"magus.knowledge/v1alpha2\"}\n"
 	require.NoError(t, os.WriteFile(ignored, []byte(newer), 0o644))
 	require.NoError(t, FsWriteFileAtomic(ctx, ignored, "regenerated atomically"),
 		"the atomic spelling shares the exemption")
@@ -528,9 +528,9 @@ func TestFsWriteFileAllowsEqualOrOlderStamps(t *testing.T) {
 	dir := t.TempDir()
 
 	cases := map[string]string{
-		"equal":     fmt.Sprintf("knowledge graph (schema v%d)\n", types.KnowledgeSchemaVersion),
-		"older":     fmt.Sprintf("knowledge graph (schema v%d)\n", types.KnowledgeSchemaVersion-1),
-		"export":    fmt.Sprintf("{\"schema_version\": %d}\n", types.KnowledgeSchemaVersion),
+		"equal":     fmt.Sprintf("knowledge graph (%s)\n", types.KnowledgeAPIVersion),
+		"older":     "knowledge graph (magus.knowledge/v0alpha1)\n",
+		"export":    fmt.Sprintf("{\"api_version\": %q}\n", types.KnowledgeAPIVersion),
 		"unstamped": "ordinary prose with no version in it\n",
 	}
 	for name, existing := range cases {

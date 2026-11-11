@@ -14,7 +14,7 @@ import (
 // skillCatalog is built on first use: hashing the embedded skill sources is work a
 // session that never asks for a skill should not pay.
 var skillCatalog = sync.OnceValue(func() *agent.Catalog {
-	return agent.Default(types.KnowledgeSchemaVersion)
+	return agent.Default(types.KnowledgeAPIVersion)
 })
 
 func init() { //nolint:gochecknoinits // std cannot import internal/agent, which imports std

@@ -17,15 +17,15 @@ import (
 // receive; the extra count/flag fields are additive and ignored by the client.
 func graphToProto(g types.KnowledgeGraphOutput) *graphv1.Graph {
 	return &graphv1.Graph{
-		Definition:    g.Definition,
-		SchemaVersion: int32(g.SchemaVersion),
-		Directed:      g.Directed,
-		Multigraph:    g.Multigraph,
-		NodeCount:     int32(g.NodeCount),
-		EdgeCount:     int32(g.EdgeCount),
-		SourceBase:    g.SourceBaseURL,
-		Nodes:         nodesToProto(g.Nodes),
-		Links:         edgesToProto(g.Links),
+		Definition: g.Definition,
+		ApiVersion: string(g.APIVersion),
+		Directed:   g.Directed,
+		Multigraph: g.Multigraph,
+		NodeCount:  int32(g.NodeCount),
+		EdgeCount:  int32(g.EdgeCount),
+		SourceBase: g.SourceBaseURL,
+		Nodes:      nodesToProto(g.Nodes),
+		Links:      edgesToProto(g.Links),
 	}
 }
 

@@ -481,15 +481,15 @@ func (g *Graph) QueryRanked(input string, budget, offset, limit int, opts Retrie
 	}
 	out := g.Neighborhood(seeds, budget, parseQuery(input).fields["relation"]).Output()
 	return types.KnowledgeQueryOutput{
-		Definition:    types.KnowledgeQueryDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Query:         strings.TrimSpace(input),
-		Budget:        budget,
-		MatchCount:    len(matches),
-		Offset:        offset,
-		Matches:       page,
-		Nodes:         out.Nodes,
-		Links:         out.Links,
-		Ranking:       &ranking,
+		Definition: types.KnowledgeQueryDefinition,
+		APIVersion: types.KnowledgeAPIVersion,
+		Query:      strings.TrimSpace(input),
+		Budget:     budget,
+		MatchCount: len(matches),
+		Offset:     offset,
+		Matches:    page,
+		Nodes:      out.Nodes,
+		Links:      out.Links,
+		Ranking:    &ranking,
 	}, nil
 }

@@ -64,7 +64,7 @@ func (s *ProtocolSocketSuite) listen(name string) {
 }
 
 func (s *ProtocolSocketSuite) TestTheSocketNamesTheProtocol() {
-	s.Equal(fmt.Sprintf("broker-%d.sock", ProtocolVersion), SocketName)
+	s.Equal(fmt.Sprintf("broker-%s.sock", APIVersion.Version()), SocketName)
 }
 
 func (s *ProtocolSocketSuite) TestAnotherProtocolsLiveBrokerIsListed() {
@@ -90,5 +90,5 @@ func (s *ProtocolSocketSuite) TestTheWarningSaysTheBudgetIsNotShared() {
 
 // A protocol bump moves the socket with it, so two protocols never share one.
 func TestTheSocketNameNamesTheProtocol(t *testing.T) {
-	assert.Equal(t, fmt.Sprintf("broker-%d.sock", ProtocolVersion), SocketName)
+	assert.Equal(t, fmt.Sprintf("broker-%s.sock", APIVersion.Version()), SocketName)
 }

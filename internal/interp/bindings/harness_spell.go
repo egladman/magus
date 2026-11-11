@@ -23,10 +23,6 @@ func init() { //nolint:gochecknoinits // internal/agent cannot link the Buzz VM;
 	agent.RegisterHarnessSpellLoader(loadHarnessFromSpell)
 }
 
-// harnessSchemaVersion is the descriptor version a spell-built descriptor carries, the one
-// agent.LoadHarness validates against.
-const harnessSchemaVersion = 2
-
 // loadHarnessFromSpell builds a HarnessDescriptor from the harness contract's functions on
 // the spell registered under id. Missing mgs_getHarness is a miss (ok=false).
 // Missing mgs_renderPrompts is an error: it used to decode as the empty list a
@@ -47,12 +43,12 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 		return agent.HarnessDescriptor{}, "", false, nil
 	}
 	d := agent.HarnessDescriptor{
-		SchemaVersion: harnessSchemaVersion,
-		ID:            id,
-		Display:       agent.HarnessDisplay{Name: displayName(id)},
-		Config:        definition.Config,
-		Guard:         definition.Guard,
-		Probe:         slices.Clone(definition.Probe),
+		APIVersion: agent.HarnessAPIVersion,
+		ID:         id,
+		Display:    agent.HarnessDisplay{Name: displayName(id)},
+		Config:     definition.Config,
+		Guard:      definition.Guard,
+		Probe:      slices.Clone(definition.Probe),
 	}
 	for _, asset := range definition.Assets {
 		content, err := harnessAssetContent(drv, asset)

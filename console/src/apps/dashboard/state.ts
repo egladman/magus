@@ -193,7 +193,7 @@ export interface ClaimView {
 export interface BrokerView {
   pid: number;
   version: string;
-  protocol: number;
+  protocol: string;
   socket: string;
   executable: string;
   startTime?: Timestamp | undefined;
@@ -400,7 +400,7 @@ function mapBroker(b: Status["broker"]): BrokerView | null {
   return {
     pid: b.pid || 0,
     version: b.version || "",
-    protocol: b.protocol || 0,
+    protocol: b.apiVersion || "",
     socket: b.socket || "",
     executable: b.executable || "",
     startTime: b.startTime,

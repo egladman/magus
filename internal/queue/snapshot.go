@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -19,7 +20,7 @@ import (
 )
 
 // SchemaSnapshot names the document [WriteSnapshot] keeps.
-const SchemaSnapshot = "mergequeue.snapshot/v1"
+const SchemaSnapshot = "mergequeue.snapshot/v1alpha1"
 
 // Snapshot is the newest provider read for one base, kept so every reader after it
 // answers without the network. `magus queue ls` writes it, having paid for the call,
@@ -96,19 +97,52 @@ func NewestSnapshot(root string) (Snapshot, bool, error) {
 }
 
 func readSnapshot(path string) (Snapshot, bool, error) {
-	f, err := os.Open(path)
+	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return Snapshot{}, false, nil
 	}
 	if err != nil {
 		return Snapshot{}, false, err
 	}
-	defer f.Close()
 	var s Snapshot
-	if err := decode(f, SchemaSnapshot, &s, &s.Schema); err != nil {
+	err = decode(bytes.NewReader(b), SchemaSnapshot, &s, &s.Schema)
+	if err != nil && s.Schema == preFoldSnapshot {
+		s, err = readPreFoldSnapshot(b)
+	}
+	if err != nil {
 		return Snapshot{}, false, fmt.Errorf("%s: %w", path, err)
 	}
 	return s, true, nil
+}
+
+// preFoldSnapshot is the name an older magus wrote snapshots under.
+// compat(until: the next release): every worktree reads one snapshot,
+// and a binary built before the rename keeps writing it.
+const preFoldSnapshot = "mergequeue.snapshot/v1"
+
+// readPreFoldSnapshot decodes b as a preFoldSnapshot document, then names
+// it and the documents inside it as this build does.
+func readPreFoldSnapshot(b []byte) (Snapshot, error) {
+	var s Snapshot
+	if err := decode(bytes.NewReader(b), preFoldSnapshot, &s, &s.Schema); err != nil {
+		return Snapshot{}, err
+	}
+	s.Schema = SchemaSnapshot
+	if s.Changes.Schema == "mergequeue.changes/v1" {
+		s.Changes.Schema = types.SchemaChanges
+	}
+	if s.Plan == nil {
+		return s, nil
+	}
+	if s.Plan.Schema == "mergequeue.plan/v1" {
+		s.Plan.Schema = types.SchemaPlan
+	}
+	for i := range s.Plan.Verdicts {
+		if s.Plan.Verdicts[i].Schema == "mergequeue.verdict/v1" {
+			s.Plan.Verdicts[i].Schema = types.SchemaVerdict
+		}
+	}
+	return s, nil
 }
 
 // RecordPlan adds p to its base's snapshot. With no snapshot there are no changes for

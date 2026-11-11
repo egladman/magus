@@ -75,7 +75,7 @@ func acceptRow() types.Job {
 
 func passingResult() types.JobResult {
 	return types.JobResult{
-		Schema:       types.Schema{Version: types.JobResultSchemaVersion},
+		Schema:       types.Schema{Version: types.JobResultAPIVersion},
 		Job:          "harness/ledger-accept",
 		ChangedPaths: []string{"internal/ledger/report.go", "cmd/magus/ledger.go"},
 		Validation: types.JobResultValidation{
@@ -115,7 +115,7 @@ func goalRow() types.Job {
 
 func goalResult() types.JobResult {
 	return types.JobResult{
-		Schema:       types.Schema{Version: types.JobResultSchemaVersion},
+		Schema:       types.Schema{Version: types.JobResultAPIVersion},
 		Job:          "harness/gated",
 		ChangedPaths: []string{"internal/job/verify.go"},
 		VerificationEvidence: []types.VerificationEvidence{
@@ -349,7 +349,7 @@ func TestVerifyNotesAMagusMaintainedPathOutsideTheWritePaths(t *testing.T) {
 func TestVerifyRefusesTheFabricatedResult(t *testing.T) {
 	t.Parallel()
 
-	raw := `{"schema_version":2,"job":"harness/ledger-accept","changed_paths":[],` +
+	raw := `{"api_version":"magus.job-result/v1alpha1","job":"harness/ledger-accept","changed_paths":[],` +
 		`"validation":{"command":"magus run go::go-test .","output_ref":"deadbeef","passed":true},` +
 		`"unresolved_risks":[],"confidence":"high"}`
 
@@ -1144,7 +1144,7 @@ func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
 
 	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}, WritePaths: []string{"a.go", "b.go"}, State: types.StateRunning}
 	rep := types.JobResult{
-		Schema:               types.Schema{Version: types.JobResultSchemaVersion},
+		Schema:               types.Schema{Version: types.JobResultAPIVersion},
 		Job:                  "integrate",
 		ChangedPaths:         []string{"a.go", "MAGUS.md"},
 		VerificationEvidence: []types.VerificationEvidence{{GateID: "go-test", OutputRef: "test-ref"}, {GateID: "lint", OutputRef: "lint-ref"}},

@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 // LockFile is the lock's name. It sits beside magus.yaml with the same stem, as go.sum
@@ -23,7 +24,7 @@ const LockFile = "magus.lock"
 
 // lockVersion is the schema LockFile is written in. A lock in any other version is
 // refused by name rather than read field by field.
-const lockVersion = 1
+const lockVersion types.APIVersion = "magus.spell-lock/v1alpha1"
 
 // lockHeader opens every written lock, so a reader of the diff knows not to edit it.
 const lockHeader = "# Written by `magus spell lock`. Do not edit: change a tag in magus.yaml and run the update charm.\n"
@@ -32,7 +33,7 @@ const lockHeader = "# Written by `magus spell lock`. Do not edit: change a tag i
 // when the update charm last ran. It is the supply-chain record, so reviewing an
 // upgrade means reviewing its diff.
 type Lock struct {
-	Version int                  `yaml:"version"`
+	Version types.APIVersion     `yaml:"version"`
 	Spells  map[string]LockEntry `yaml:"spells,omitempty"`
 }
 
@@ -64,9 +65,8 @@ func parseLock(raw []byte) (Lock, error) {
 	if err := dec.Decode(&l); err != nil && !errors.Is(err, io.EOF) {
 		return Lock{}, fmt.Errorf("%s: %w", LockFile, err)
 	}
-	if l.Version != lockVersion {
-		return Lock{}, fmt.Errorf("%s: schema version %d, this magus reads version %d: rewrite it with `magus spell lock --update`",
-			LockFile, l.Version, lockVersion)
+	if err := lockVersion.Refuse(LockFile, l.Version, "rewrite it with `magus spell lock --update`"); err != nil {
+		return Lock{}, err
 	}
 	for path, e := range l.Spells {
 		if !spells.IsRemoteImport(path) {

@@ -32,9 +32,9 @@ func judgeStopUnfiled(ctx context.Context, deps Dependencies, raw string, who ho
 	}
 	if env.StopHookActive != nil && *env.StopHookActive {
 		return types.GuardJudgment{
-			SchemaVersion: agent.GuardSchemaVersion,
-			Decision:      decisionAdvise,
-			Rule:          string(denyRuleStopUnfiled),
+			APIVersion: agent.GuardAPIVersion,
+			Decision:   decisionAdvise,
+			Rule:       string(denyRuleStopUnfiled),
 			Context: fmt.Sprintf("magus workspace: job %s stopped a second time with no filed result, and stop-unfiled let it through; "+
 				"`magus job wait %s` shows the row never passed.", row.ID, row.ID),
 		}, true
@@ -43,7 +43,7 @@ func judgeStopUnfiled(ctx context.Context, deps Dependencies, raw string, who ho
 	if setting.Decision == builtin.Advise {
 		decision = decisionAdvise
 	}
-	v := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decision, Rule: string(denyRuleStopUnfiled)}
+	v := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decision, Rule: string(denyRuleStopUnfiled)}
 	say := unfiledStopReason(row)
 	if decision == decisionDeny {
 		v.Reason = say

@@ -211,9 +211,9 @@ func MagusRefs(ctx context.Context, symbol string, opts types.KnowledgeRefsOptio
 	out, ok := kg.Refs(symbol)
 	if !ok {
 		out = types.KnowledgeRefsOutput{
-			Definition:    types.KnowledgeRefsDefinition,
-			SchemaVersion: types.KnowledgeSchemaVersion,
-			Symbol:        symbol,
+			Definition: types.KnowledgeRefsDefinition,
+			APIVersion: types.KnowledgeAPIVersion,
+			Symbol:     symbol,
 		}
 	}
 	out.Answer = knowledge.Answer(symbol, len(out.Refs) > 0, graphCoverage(ctx, g, symbol, true))

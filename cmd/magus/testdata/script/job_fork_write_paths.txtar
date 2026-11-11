@@ -46,14 +46,14 @@ import "magus";
 
 export fun build(ctx: magus\Context, args: [str]) > void {}
 -- root.json --
-{"schema_version": 11, "id": "wave/root", "write_paths": ["."],
+{"api_version": "magus.job/v1alpha1", "id": "wave/root", "write_paths": ["."],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["src/pkg/code.go"]}]}
 -- console.json --
-{"schema_version": 11, "id": "wave/console", "write_paths": ["console"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/console", "write_paths": ["console"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["console/magusfile.buzz"]}]}
 -- file.json --
-{"schema_version": 11, "id": "wave/file", "write_paths": ["src/pkg/code.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/file", "write_paths": ["src/pkg/code.go"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["src/pkg/code.go"]}]}
 -- new.json --
-{"schema_version": 11, "id": "wave/new", "write_paths": ["src/fresh"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/new", "write_paths": ["src/fresh"],
  "goals": [{"id": "created", "kind": "paths", "expect": "present", "paths": ["src/fresh"]}]}

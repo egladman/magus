@@ -20,7 +20,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-const harnessSchemaVersion = 2
+// HarnessAPIVersion is the descriptor version LoadHarness accepts and a
+// spell-built descriptor carries.
+const HarnessAPIVersion types.APIVersion = "magus.harness/v1alpha1"
 
 // HarnessStatus is the explicit verification outcome for a harness config.
 type HarnessStatus string
@@ -80,7 +82,7 @@ var (
 // Each field holds what one function of the harness contract returned, nil or zero when
 // the spell does not export it.
 type HarnessDescriptor struct {
-	SchemaVersion  int                    `json:"schema_version"`
+	APIVersion     types.APIVersion       `json:"api_version"`
 	ID             string                 `json:"id"`
 	Display        HarnessDisplay         `json:"display"`
 	Guard          string                 `json:"guard,omitempty"`
@@ -327,8 +329,8 @@ func harnessMissingError(id string) error {
 }
 
 func validateHarnessDescriptor(d HarnessDescriptor) error {
-	if d.SchemaVersion != harnessSchemaVersion {
-		return fmt.Errorf("schema_version must be %d", harnessSchemaVersion)
+	if d.APIVersion != HarnessAPIVersion {
+		return fmt.Errorf("api_version must be %s", HarnessAPIVersion)
 	}
 	if !harnessIDPattern.MatchString(d.ID) {
 		return fmt.Errorf("id must match %s", harnessIDPattern.String())

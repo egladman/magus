@@ -1,6 +1,6 @@
 {
   "job": {
-    "schema_version": 11,
+    "api_version": "magus.job/v1alpha1",
     "id": "agent-scripts",
     "checkpoint": "7472f16fc709ab3827cd38ff281fecc0a217ca88",
     "write_paths": ["hack/dev/bootstrap-worktree.buzz"],

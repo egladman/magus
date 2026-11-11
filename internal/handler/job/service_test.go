@@ -375,7 +375,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 			VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}},
 		},
 	}
-	row.Version = 11
+	row.Version = "magus.job/v1alpha11"
 	row.Requires = []string{"claims"}
 	row.Breaks = []string{"--old-flag", "api.Open"}
 	row.ModelTier = &types.JobModelTier{
@@ -400,7 +400,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.Equal(t, "diverged", got.BaseVerdict)
 	require.Equal(t, "/w/agent-1", got.CheckoutRoot)
 	require.Equal(t, int64(1700000100), got.Registered)
-	require.Equal(t, int32(11), got.SchemaVersion)
+	require.Equal(t, "magus.job/v1alpha11", got.ApiVersion)
 	require.Equal(t, []string{"claims"}, got.Requires)
 
 	wantBy := &jobv1.JobOrigin{

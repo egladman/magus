@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
 )
@@ -38,7 +39,7 @@ func TestHarnessToolsFilesAreOneFilePerCapability(t *testing.T) {
 		{Path: "host/magus/tools/runs", Content: "Shell\n"},
 		{Path: "host/magus/tools/reads", Content: "Glob\nRead\n"},
 		{Path: "host/magus/tools/inert", Content: "Todo\n"},
-		{Path: "host/magus/tools/version", Content: "1\n"},
+		{Path: "host/magus/tools/version", Content: "magus.tool-rows/v1alpha1\n"},
 	}, ToolFiles(tools, nil))
 }
 
@@ -76,6 +77,27 @@ func TestReadToolRowsReadsBackWhatFilesWrote(t *testing.T) {
 	assert.Equal(t, types.ToolRuns, rows.Capability("Shell"))
 	assert.Equal(t, types.ToolNetwork, rows.Capability("Browse"))
 	assert.Empty(t, rows.Capability("Stranger"))
+}
+
+type PreFoldToolRowsSuite struct{ suite.Suite }
+
+func TestPreFoldToolRowsSuite(t *testing.T) {
+	suite.Run(t, new(PreFoldToolRowsSuite))
+}
+
+func (s *PreFoldToolRowsSuite) TestReadsVersionOneRows() {
+	root := s.T().TempDir()
+	files := ToolFiles(types.HarnessTools{Dir: "tools", Rows: shellRow()}, nil)
+	for i, f := range files {
+		if path.Base(f.Path) == types.ToolRowsVersionFile {
+			files[i].Content = "1\n"
+		}
+	}
+	writeToolFiles(s.T(), root, files)
+
+	rows := readToolRows(root, "tools")
+	s.Require().NoError(rows.Err)
+	s.Equal(types.ToolRuns, rows.Capability("Shell"))
 }
 
 func testModelFacts(t testing.TB) *ModelFacts {
@@ -177,7 +199,7 @@ func TestReadToolRowsSaysWhyThereAreNone(t *testing.T) {
 	for name, tc := range map[string]struct{ dir, says string }{
 		"no directory named": {"", "no tool rows directory was named"},
 		"never installed":    {"missing", "no tool rows at missing"},
-		"another layout":     {"stale", "are version 0 and this magus reads version 1"},
+		"another layout":     {"stale", "is 0 and this magus reads only magus.tool-rows/v1alpha1"},
 	} {
 		rows := readToolRows(root, tc.dir)
 		require.Error(t, rows.Err, name)

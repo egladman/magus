@@ -512,9 +512,9 @@ func applyWorkspaceAnswer(verdict types.GuardJudgment, decided string, asked rul
 	}
 	switch {
 	case answer.Decision == types.GuardDeny:
-		return types.GuardJudgment{SchemaVersion: verdict.SchemaVersion, Decision: decisionDeny, Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, Next: asked.next}, asked.by
+		return types.GuardJudgment{APIVersion: verdict.APIVersion, Decision: decisionDeny, Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, Next: asked.next}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionPass:
-		return types.GuardJudgment{SchemaVersion: verdict.SchemaVersion, Decision: decisionAdvise, Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
+		return types.GuardJudgment{APIVersion: verdict.APIVersion, Decision: decisionAdvise, Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionAdvise:
 		// The built-in advice keeps its rule; the workspace's is added, never dropped.
 		verdict.Context += "\n\n" + answer.Reason

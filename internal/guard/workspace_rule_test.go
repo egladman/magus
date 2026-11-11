@@ -209,7 +209,7 @@ func TestLoadFailurePassesOtherCommandsWithTheNote(t *testing.T) {
 	t.Run("told in full every time", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
-		want := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: note, Rule: string(advisoryCommandRuleFailed)}
+		want := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: note, Rule: string(advisoryCommandRuleFailed)}
 		first := Judge(ctx, unloadedDeps(), Request{Input: "ls", Host: "claude-code", Session: "s1"})
 		assert.Equal(t, want, first)
 		repeat := Judge(ctx, unloadedDeps(), Request{Input: "ls", Host: "claude-code", Session: "s1"})
@@ -545,8 +545,8 @@ func TestWorkspaceRuleApprovedDenyCarriesTheNote(t *testing.T) {
 	}
 	v := Judge(ctx, deps, Request{Input: "gh run watch 1", Host: "claude-code", Session: "s1"})
 	assert.Equal(t, types.GuardJudgment{
-		SchemaVersion: agent.GuardSchemaVersion,
-		Decision:      decisionDeny,
+		APIVersion: agent.GuardAPIVersion,
+		Decision:   decisionDeny,
 		Reason: fmt.Sprintf("no watching\n\nThe working tree's magus\\guard.command rule judged nothing: %s\n\n"+
 			"Only the built-in rules and the approved magus\\guard.command rule applied to this command.", staleFailures[0].Error),
 		Rule: workspaceCommandRule,
@@ -555,15 +555,15 @@ func TestWorkspaceRuleApprovedDenyCarriesTheNote(t *testing.T) {
 
 // A named answer reports under its own name; an unnamed one keeps the seam's.
 func TestApplyWorkspaceAnswerReportsANamedRule(t *testing.T) {
-	pass := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	pass := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	named := rulesAnswer{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no", Rule: "pull-request-text"}, by: decidedByWorktree}
 	v, by := applyWorkspaceAnswer(pass, "", named, workspaceCommandRule)
-	assert.Equal(t, types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: "no", Rule: "workspace:pull-request-text"}, v)
+	assert.Equal(t, types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: "no", Rule: "workspace:pull-request-text"}, v)
 	assert.Equal(t, decidedByWorktree, by)
 
 	named.answer.Decision = types.GuardAdvise
 	v, _ = applyWorkspaceAnswer(pass, "", named, workspaceWriteRule)
-	assert.Equal(t, types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: "no", Rule: "workspace:pull-request-text"}, v)
+	assert.Equal(t, types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: "no", Rule: "workspace:pull-request-text"}, v)
 
 	unnamed := rulesAnswer{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no"}, by: decidedByWorktree}
 	v, _ = applyWorkspaceAnswer(pass, "", unnamed, workspaceCommandRule)
@@ -631,7 +631,7 @@ func TestUnnamedWorkspaceDenyIsUntouched(t *testing.T) {
 	probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no listing"}}
 	for range 2 {
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "ls", Host: "claude-code", Session: "s1"})
-		assert.Equal(t, types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: "no listing", Rule: workspaceCommandRule}, v)
+		assert.Equal(t, types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: "no listing", Rule: workspaceCommandRule}, v)
 	}
 }
 

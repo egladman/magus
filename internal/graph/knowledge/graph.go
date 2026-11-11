@@ -336,7 +336,7 @@ func (g *Graph) Output() types.KnowledgeGraphOutput {
 	edges := g.Edges()
 	return types.KnowledgeGraphOutput{
 		Definition:          types.KnowledgeGraphDefinition,
-		SchemaVersion:       types.KnowledgeSchemaVersion,
+		APIVersion:          types.KnowledgeAPIVersion,
 		Directed:            true,
 		Multigraph:          false,
 		NodeCount:           len(nodes),

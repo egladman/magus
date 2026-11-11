@@ -35,7 +35,7 @@ import { MagusGuard } from "./opencode-plugin.installed.ts";
 type SpawnCall = { bin: string; argv: string[]; stdin: string };
 
 /** The verdicts a fake magus can be told to return, by the input it is asked about. */
-type Canned = { schema_version: number; decision: string; reason?: string; context?: string };
+type Canned = { api_version: string; decision: string; reason?: string; context?: string };
 
 /**
  * Installs a Bun.spawn that records how it was called and answers from `reply`.
@@ -183,9 +183,9 @@ async function hooks(sessions: Sessions = {}) {
   return await plugin(pluginInput(sessions));
 }
 
-const deny: Canned = { schema_version: 1, decision: "deny", reason: "whole-tree git stash" };
-const advise: Canned = { schema_version: 1, decision: "advise", context: "that file is generated" };
-const pass: Canned = { schema_version: 1, decision: "pass" };
+const deny: Canned = { api_version: "magus.guard/v1alpha1", decision: "deny", reason: "whole-tree git stash" };
+const advise: Canned = { api_version: "magus.guard/v1alpha1", decision: "advise", context: "that file is generated" };
+const pass: Canned = { api_version: "magus.guard/v1alpha1", decision: "pass" };
 
 test("a shell command is judged over stdin by the top-level shell subcommand", async () => {
   const calls = stubBun(() => deny);
@@ -332,7 +332,7 @@ test("an unrunnable magus refuses every call and says how to get one", async () 
 });
 
 test("a verdict from an unknown schema is refused rather than obeyed", async () => {
-  stubBun(() => ({ ...deny, schema_version: 99 }));
+  stubBun(() => ({ ...deny, api_version: "magus.guard/v1alpha99" }));
   const h = await hooks();
   await assert.rejects(
     h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
@@ -341,7 +341,7 @@ test("a verdict from an unknown schema is refused rather than obeyed", async () 
 });
 
 const ask: Canned = {
-  schema_version: 1,
+  api_version: "magus.guard/v1alpha1",
   decision: "ask",
   reason: "pushing abc1234, which no passing gate covers",
 };
@@ -349,7 +349,7 @@ const pushPrompt = { permission: { bash: { "git push": "ask", "git push *": "ask
 type Status = "ask" | "deny" | "allow";
 
 test("an unknown decision refuses the call, never allows it", async () => {
-  stubBun(() => ({ schema_version: 1, decision: "maybe", reason: "?" }));
+  stubBun(() => ({ api_version: "magus.guard/v1alpha1", decision: "maybe", reason: "?" }));
   const h = await hooks();
   await assert.rejects(
     h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
@@ -401,10 +401,10 @@ test("an ask no push prompt can match refuses", async () => {
 test("permission.ask answers a push prompt from the verdict", async () => {
   const cases: Array<[Canned, Status]> = [
     [pass, "allow"],
-    [{ schema_version: 1, decision: "advise", context: "gate ran" }, "allow"],
+    [{ api_version: "magus.guard/v1alpha1", decision: "advise", context: "gate ran" }, "allow"],
     [ask, "ask"],
     [deny, "deny"],
-    [{ schema_version: 1, decision: "maybe" }, "deny"],
+    [{ api_version: "magus.guard/v1alpha1", decision: "maybe" }, "deny"],
   ];
   for (const [verdict, want] of cases) {
     const calls = stubBun(() => verdict);
@@ -519,7 +519,7 @@ const humanOnlyPrompt = {
 };
 
 const humanOnlyAsk: Canned = {
-  schema_version: 1,
+  api_version: "magus.guard/v1alpha1",
   decision: "ask",
   reason: "`magus run agent-bench-run .` is run by a person: launches paid sessions",
 };
@@ -1204,7 +1204,7 @@ test("a tree with no magus.yaml falls back to the nearest magusfile", async () =
 
 test("a deny on a root session's stop goes back as one follow-up prompt", async () => {
   await withoutReplyScript(async () => {
-    const stop = { schema_version: 1, decision: "deny", reason: "a background task still runs" };
+    const stop = { api_version: "magus.guard/v1alpha1", decision: "deny", reason: "a background task still runs" };
     const isStop = (call: SpawnCall): boolean => call.stdin.includes('"hook_event_name":"Stop"');
     const calls = stubBun((call) => (isStop(call) ? stop : pass));
     const prompts: Array<{ id: string; text: string }> = [];
@@ -1254,7 +1254,7 @@ const isSubagentStop = (call: SpawnCall): boolean =>
   call.stdin.includes('"hook_event_name":"SubagentStop"');
 
 test("a foreground task's end is its child's stop, and a deny rides the parent's result", async () => {
-  const stop = { schema_version: 1, decision: "deny", reason: "the child left its job open" };
+  const stop = { api_version: "magus.guard/v1alpha1", decision: "deny", reason: "the child left its job open" };
   const calls = stubBun((call) => (isSubagentStop(call) ? stop : pass));
   const h = await hooks();
   const result = { output: "done", metadata: { sessionId: "child", parentSessionId: "root" } };
@@ -1289,7 +1289,7 @@ test("a passed child's stop leaves the parent's result alone", async () => {
 
 test("a backgrounded child's stop is its idle, and a deny is prompted back to the child", async () => {
   await withoutReplyScript(async () => {
-    const stop = { schema_version: 1, decision: "deny", reason: "the child left its job open" };
+    const stop = { api_version: "magus.guard/v1alpha1", decision: "deny", reason: "the child left its job open" };
     const calls = stubBun((call) => {
       if (!isSubagentStop(call)) return pass;
       return JSON.parse(call.stdin).stop_hook_active ? pass : stop;

@@ -219,12 +219,12 @@ func TestSpawnRuleDenyAndAdviseReachTheVerdict(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	deny := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "Name a model."}}
 	v := Judge(ctx, Dependencies{SpawnRule: deny.rule()}, Request{Input: claudeContinueEnvelope, Host: "claude-code"})
-	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule}, v)
+	assert.Equal(t, types.GuardJudgment{APIVersion: v.APIVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule}, v)
 
 	ctx, _ = spawnFixture(t)
 	advise := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Add a Done when section."}}
 	v = Judge(ctx, Dependencies{SpawnRule: advise.rule()}, Request{Input: cursorGlueEnvelope, Host: "cursor"})
-	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: "advise", Context: "Add a Done when section.", Rule: workspaceSpawnRule}, v)
+	assert.Equal(t, types.GuardJudgment{APIVersion: v.APIVersion, Decision: "advise", Context: "Add a Done when section.", Rule: workspaceSpawnRule}, v)
 }
 
 // A broken rule judges nothing, following guard.shell's fail-open stance on a workspace
@@ -1511,7 +1511,7 @@ func TestApprovedRuleAppliesAfterTheWorkingTreeDeletesIt(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	v := Judge(ctx, Dependencies{SpawnRule: m.SpawnRule(), ApprovedSpawnRule: m.ApprovedSpawnRule},
 		Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
+	assert.Equal(t, types.GuardJudgment{APIVersion: v.APIVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
 }
 
 // Resolving the approved rule is the one part of a spawn an agent can slow down, so running

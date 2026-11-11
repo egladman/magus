@@ -31,7 +31,7 @@ func TestCallersSymbolRefusesAnAmbiguousName(t *testing.T) {
 
 func TestApplyClaimRefusesPathBesideCallers(t *testing.T) {
 	rec := types.Declaration{
-		Schema: types.Schema{Version: types.JobSchemaVersion},
+		Schema: types.Schema{Version: types.JobAPIVersion},
 		ID:     "fix-parser",
 		Claim:  []types.JobClaimRequest{{Path: "lib/lib.go", Callers: "Parse"}},
 	}

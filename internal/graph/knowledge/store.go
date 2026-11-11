@@ -63,8 +63,11 @@ func StoreDir(cacheDir string) string { return filepath.Join(cacheDir, "knowledg
 // manifest is the per-shard index persisted at manifest.json. It doubles as the
 // (future) shard routing index; Phase 1 carries only fingerprints and counts.
 type manifest struct {
-	SchemaVersion int                  `json:"schema_version"`
-	Shards        map[string]shardMeta `json:"shards"`
+	APIVersion types.APIVersion `json:"api_version"`
+	// PreFold is the stamp an older magus wrote.
+	// compat: see manifest.readForward.
+	PreFold int                  `json:"schema_version,omitzero"`
+	Shards  map[string]shardMeta `json:"shards"`
 	// Inputs is the stamp each class's shards were last assembled under (see Stamps). A
 	// class with no entry matches no stamp, so a store written before stamps existed, or
 	// by a Sync that had none, is reassembled on its next build.
@@ -147,11 +150,11 @@ type SymbolIndexDeclaration struct {
 // to be parsed back into shard names (the manifest keys and this field are the
 // source of truth); the filename is a derived, collision-free slug.
 type shardFile struct {
-	SchemaVersion int                   `json:"schema_version"`
-	Name          string                `json:"name"`
-	Fingerprint   string                `json:"fingerprint"`
-	Nodes         []types.KnowledgeNode `json:"nodes"`
-	Edges         []types.KnowledgeEdge `json:"edges"`
+	APIVersion  types.APIVersion      `json:"api_version"`
+	Name        string                `json:"name"`
+	Fingerprint string                `json:"fingerprint"`
+	Nodes       []types.KnowledgeNode `json:"nodes"`
+	Edges       []types.KnowledgeEdge `json:"edges"`
 }
 
 // Store persists and loads knowledge shards. It is the cache-first backing: a
@@ -262,12 +265,12 @@ const syncLockWait = 2 * time.Minute
 func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string, plan syncPlan) error {
 	old := s.readManifestOrNil()
 	newMan := manifest{
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Shards:        map[string]shardMeta{},
-		Inputs:        map[ShardClass]string{},
-		FastStamps:    map[ShardClass]string{},
-		Extra:         map[ShardClass][]string{},
-		ShardErrors:   map[ShardClass][]string{},
+		APIVersion:  types.KnowledgeAPIVersion,
+		Shards:      map[string]shardMeta{},
+		Inputs:      map[ShardClass]string{},
+		FastStamps:  map[ShardClass]string{},
+		Extra:       map[ShardClass][]string{},
+		ShardErrors: map[ShardClass][]string{},
 	}
 	if old != nil {
 		newMan.Routing = old.Routing
@@ -969,6 +972,20 @@ func ProjectPaths(cacheDir string) []string {
 	return out
 }
 
+// preFoldKnowledge is the schema_version an older magus stamped
+// KnowledgeAPIVersion's shapes with.
+const preFoldKnowledge = 25
+
+// readForward names a preFoldKnowledge manifest KnowledgeAPIVersion.
+// compat(until: the next release): every worktree shares one cache dir,
+// and a binary built before the rename keeps writing the integer.
+func (m *manifest) readForward() {
+	if m.APIVersion == "" && m.PreFold == preFoldKnowledge {
+		m.APIVersion = types.KnowledgeAPIVersion
+	}
+	m.PreFold = 0
+}
+
 func (s *Store) readManifestOrNil() *manifest {
 	b, err := os.ReadFile(s.manifestPath())
 	if err != nil {
@@ -978,7 +995,8 @@ func (s *Store) readManifestOrNil() *manifest {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil // a corrupt manifest is treated as absent; a full rebuild follows
 	}
-	if m.SchemaVersion != types.KnowledgeSchemaVersion {
+	m.readForward()
+	if m.APIVersion != types.KnowledgeAPIVersion {
 		return nil // schema bump invalidates the whole store
 	}
 	readCache.sweep(s.dir, &m)
@@ -1034,11 +1052,11 @@ func (s *Store) writeShard(ctx context.Context, sh Shard, fp string) error {
 	// files (diffable, and the content fingerprint is stable).
 	nodes, edges := sh.canonicalContent()
 	sf := shardFile{
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Name:          sh.Name,
-		Fingerprint:   fp,
-		Nodes:         nodes,
-		Edges:         edges,
+		APIVersion:  types.KnowledgeAPIVersion,
+		Name:        sh.Name,
+		Fingerprint: fp,
+		Nodes:       nodes,
+		Edges:       edges,
 	}
 	// optimization: write the shard compact. The indentation was only for a human reading
 	// the file, and every reader goes through json.Unmarshal, which takes either. The
@@ -1114,7 +1132,7 @@ func ReadStoreExport(cacheDir string) (StoreExport, error) {
 	if man == nil {
 		return StoreExport{}, ErrNoStore
 	}
-	kept := manifest{SchemaVersion: man.SchemaVersion, Shards: map[string]shardMeta{}}
+	kept := manifest{APIVersion: man.APIVersion, Shards: map[string]shardMeta{}}
 	out := StoreExport{}
 	for _, name := range slices.Sorted(maps.Keys(man.Shards)) {
 		meta := man.Shards[name]
@@ -1147,8 +1165,9 @@ func ShardKeys(manifestJSON []byte) (map[string]string, error) {
 	if err := json.Unmarshal(manifestJSON, &m); err != nil {
 		return nil, fmt.Errorf("knowledge: decode store manifest: %w", err)
 	}
-	if m.SchemaVersion != types.KnowledgeSchemaVersion {
-		return nil, fmt.Errorf("knowledge: store manifest is schema %d, this binary reads %d", m.SchemaVersion, types.KnowledgeSchemaVersion)
+	m.readForward() // compat: see manifest.readForward.
+	if m.APIVersion != types.KnowledgeAPIVersion {
+		return nil, fmt.Errorf("knowledge: store manifest is %q, this binary reads %s", m.APIVersion, types.KnowledgeAPIVersion)
 	}
 	out := make(map[string]string, len(m.Shards))
 	for name, meta := range m.Shards {

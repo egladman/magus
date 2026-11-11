@@ -77,7 +77,7 @@ A worker files its result as its last act:
 
 ```sh
 magus job exit <job> --stdin <<'EOF'
-{"schema_version": 2, "job": "<job>",
+{"api_version": "magus.job-result/v1alpha1", "job": "<job>",
  "changed_paths": ["api/store.go", "api/store_test.go"],
  "validation": {"command": "magus run go-test api -- -run TestStore", "output_ref": "<ref>"},
  "verification_evidence": [{"gate_id": "go-test", "output_ref": "<ref>"}, {"gate_id": "lint", "output_ref": "<ref>"}],
@@ -272,7 +272,7 @@ printed ref as the result's `output_ref`:
 
 ```sh
 magus job fork --stdin <<'EOF'
-{"schema_version": 11, "id": "api-store/callers", "parent": "api-store", "read_only": true,
+{"api_version": "magus.job/v1alpha1", "id": "api-store/callers", "parent": "api-store", "read_only": true,
  "criteria": "no caller outside api names AccountStore",
  "check": {"script": "probes/callers.buzz"}}
 EOF
@@ -309,7 +309,7 @@ A record on stdin declares a `paths` goal and two `symbol` goals:
 
 ```sh
 magus job fork --stdin <<'EOF'
-{"schema_version": 11, "id": "api-store/migrate", "parent": "api-store", "model": "<model>",
+{"api_version": "magus.job/v1alpha1", "id": "api-store/migrate", "parent": "api-store", "model": "<model>",
  "criteria": "accounts move to the new store; nothing names the old one",
  "write_paths": ["db/migrations/*.sql", "api/migrate.go"],
  "check": {"target": "go-test", "project": "api", "args": ["-run", "TestMigrate"]},

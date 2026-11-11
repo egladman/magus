@@ -23,7 +23,7 @@ import (
 // different refusal than the one each one names. TestDecodeDeclarationRefusesTheStoresOwnFields
 // says so in its own body and then asserts it, and it is the reason this helper exists.
 func declaration(members ...string) *strings.Reader {
-	body := fmt.Sprintf(`{"schema_version":%d`, types.JobSchemaVersion)
+	body := fmt.Sprintf(`{"api_version":%q`, types.JobAPIVersion)
 	for _, m := range members {
 		body += "," + m
 	}
@@ -40,7 +40,7 @@ func TestDecodeDeclarationReadsAFieldUnderItsOldName(t *testing.T) {
 		`"forbidden_paths":["MAGUS.md"]`, `"focus":["internal/hint"]`, `"tier":"principal"`))
 	require.NoError(t, err)
 	require.Equal(t, types.Declaration{
-		Schema:     types.Schema{Version: types.JobSchemaVersion},
+		Schema:     types.Schema{Version: types.JobAPIVersion},
 		ID:         "adj/ledger",
 		WritePaths: []string{"internal/ledger"},
 		DenyPaths:  []string{"MAGUS.md"},
@@ -63,7 +63,7 @@ func TestDecodeRejectsFieldsNobodyAskedFor(t *testing.T) {
 	t.Parallel()
 
 	_, err := DecodeResult(strings.NewReader(
-		`{"schema_version":2,"changed_paths":["a.go"],"validation":{"command":"c","output_ref":"r"},` +
+		`{"api_version":"magus.job-result/v1alpha1","changed_paths":["a.go"],"validation":{"command":"c","output_ref":"r"},` +
 			`"unresolved_risks":[],"confidence":"high"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "confidence")
@@ -75,7 +75,7 @@ func TestDecodeNamesTheVersionsItAccepts(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{
-		"a version from the future": `{"schema_version":3,"changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[],"next_field":1}`,
+		"a version from the future": `{"api_version":"magus.job-result/v1alpha3","changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[],"next_field":1}`,
 		"no version at all":         `{"changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`,
 	}
 	for name, raw := range cases {
@@ -84,24 +84,24 @@ func TestDecodeNamesTheVersionsItAccepts(t *testing.T) {
 
 			_, err := DecodeResult(strings.NewReader(raw))
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "accepts versions 1 through 2")
+			assert.Contains(t, err.Error(), "magus.job-result/v1alpha1")
 			assert.NotContains(t, err.Error(), "next_field", "the version is the reason, not the field")
 		})
 	}
 }
 
-// An older sender's record is a subset of the current shape, so it is read, not refused.
-func TestDecodeAcceptsAnOlderVersion(t *testing.T) {
+// A record at the version this magus reads is read.
+func TestDecodeReadsItsOwnVersion(t *testing.T) {
 	t.Parallel()
 
 	rep, err := DecodeResult(strings.NewReader(
-		`{"schema_version":1,"changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`))
+		`{"api_version":"magus.job-result/v1alpha1","changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`))
 	require.NoError(t, err)
-	assert.Equal(t, 1, rep.Version)
+	assert.Equal(t, types.JobResultAPIVersion, rep.Version)
 
-	row, err := decodeDeclaration(strings.NewReader(`{"schema_version":1,"id":"adj/store"}`))
+	row, err := decodeDeclaration(strings.NewReader(`{"api_version":"magus.job/v1alpha1","id":"adj/store"}`))
 	require.NoError(t, err)
-	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: 1}, ID: "adj/store"}, row)
+	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "adj/store"}, row)
 }
 
 // A record demanding a feature this magus lacks is refused by name; one naming a feature
@@ -110,8 +110,8 @@ func TestDecodeRefusesAnUnmetRequirement(t *testing.T) {
 	t.Parallel()
 
 	_, err := decodeDeclaration(declaration(`"requires":["never-implemented"]`, `"id":"adj/store"`))
-	assert.Equal(t, fmt.Sprintf(`job: the job requires "never-implemented", which this magus (schema %d) lacks, update magus`,
-		types.JobSchemaVersion), err.Error())
+	assert.Equal(t, fmt.Sprintf(`job: the job requires "never-implemented", which this magus (%s) lacks, update magus`,
+		types.JobAPIVersion), err.Error())
 
 	row, err := decodeDeclaration(declaration(`"requires":["claim-declarations"]`, `"id":"adj/store"`))
 	require.NoError(t, err)
@@ -122,7 +122,7 @@ func TestDecodeReportReadsAWellFormedOne(t *testing.T) {
 	t.Parallel()
 
 	rep, err := DecodeResult(strings.NewReader(
-		`{"schema_version":2,"job":"adj/store","changed_paths":["internal/ledger/store.go"],` +
+		`{"api_version":"magus.job-result/v1alpha1","job":"adj/store","changed_paths":["internal/ledger/store.go"],` +
 			`"validation":{"command":"magus run test internal/ledger","output_ref":"out1a2b"},` +
 			`"unresolved_risks":["the archive is never read back"]}`))
 	require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
 	a := declaration(`"id":"a"`)
 	one, err := io.ReadAll(a)
 	require.NoError(t, err)
-	two := fmt.Sprintf(`{"schema_version":%d,"id":"b"}`, types.JobSchemaVersion)
+	two := fmt.Sprintf(`{"api_version":%q,"id":"b"}`, types.JobAPIVersion)
 	for name, raw := range map[string]string{
 		"an array": fmt.Sprintf("[%s,%s]", string(one), two),
 		"one per line": fmt.Sprintf(`%s
@@ -192,7 +192,7 @@ func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
 
-	bad := fmt.Sprintf(`{"schema_version":%d,"id":"c","confidence":"high"}`, types.JobSchemaVersion)
+	bad := fmt.Sprintf(`{"api_version":%q,"id":"c","confidence":"high"}`, types.JobAPIVersion)
 	_, err = DecodeDeclarations(strings.NewReader(fmt.Sprintf("%s\n%s\n%s", string(one), two, bad)))
 	require.ErrorContains(t, err, "record 3:")
 	assert.Contains(t, err.Error(), "confidence")
@@ -220,10 +220,10 @@ func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
 func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
 	t.Parallel()
 
-	stored := fmt.Sprintf(`{"schema_version":%d,"id":"a","write_paths":["internal/job"],"state":"declared",`+
+	stored := fmt.Sprintf(`{"api_version":%q,"id":"a","write_paths":["internal/job"],"state":"declared",`+
 		`"created":1,"updated":2,"deadline":3,"registered":4,"registered_by":{"session":"s"},`+
 		`"write_proof":{},"reported_base":"abc","base_verdict":"match","checkout_root":"/w",`+
-		`"holder":{},"releases":[],"result":null,"model_tier":{"name":"economy","rank":0,"skills":"full","source":"default"}}`, types.JobSchemaVersion)
+		`"holder":{},"releases":[],"result":null,"model_tier":{"name":"economy","rank":0,"skills":"full","source":"default"}}`, types.JobAPIVersion)
 	rows, err := DecodeDeclarations(strings.NewReader(stored))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -244,7 +244,7 @@ func TestDecodeDeclarationsUnwrapsADescribedRecord(t *testing.T) {
 	t.Parallel()
 
 	plain, err := DecodeDeclarations(strings.NewReader(fmt.Sprintf(
-		`{"schema_version":%d,"id":"a","write_paths":["internal/job"]}`, types.JobSchemaVersion)))
+		`{"api_version":%q,"id":"a","write_paths":["internal/job"]}`, types.JobAPIVersion)))
 	require.NoError(t, err)
 
 	described := `{"job":{"id":"a","write_paths":["internal/job"],"state":"declared","created":1},` +
@@ -264,8 +264,8 @@ func TestDecodeDeclarationsUnwrapsADescribedRecord(t *testing.T) {
 func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
 	t.Parallel()
 
-	stored := fmt.Sprintf(`{"schema_version":%d,"id":"a","write_paths":["internal/job/store.go"],`+
-		`"check":{"target":"go-test","project":"."},"validation":"magus run go-test ."}`, types.JobSchemaVersion)
+	stored := fmt.Sprintf(`{"api_version":%q,"id":"a","write_paths":["internal/job/store.go"],`+
+		`"check":{"target":"go-test","project":"."},"validation":"magus run go-test ."}`, types.JobAPIVersion)
 	rows, err := DecodeDeclarations(strings.NewReader(stored))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -273,7 +273,7 @@ func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
 	assert.Equal(t, "go-test", rows[0].Check.Target)
 	assert.Empty(t, rows[0].Validation)
 
-	line := fmt.Sprintf(`{"schema_version":%d,"id":"a","write_paths":["internal/job/store.go"],"validation":"magus run go-test ."}`, types.JobSchemaVersion)
+	line := fmt.Sprintf(`{"api_version":%q,"id":"a","write_paths":["internal/job/store.go"],"validation":"magus run go-test ."}`, types.JobAPIVersion)
 	rows, err = DecodeDeclarations(strings.NewReader(line))
 	require.NoError(t, err)
 	assert.Equal(t, "magus run go-test .", rows[0].Validation, "a line alone is the declaration's own check")
@@ -407,7 +407,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	// only apply proves.
 	// A settlement's fields too: only apply writes them.
 	skipped := func(field string) bool {
-		return field == "schema_version" || field == "requires" || field == "id" || field == "checkout" || field == "soft_paths" ||
+		return field == "api_version" || field == "requires" || field == "id" || field == "checkout" || field == "soft_paths" ||
 			field == "integrates" || field == "claim" || field == "deferred" || field == "left_unmerged" || legacy[field]
 	}
 	_, err := DecodePut(map[string]any{"checkout": "/tmp/co"})
@@ -471,13 +471,13 @@ func TestDecodeStdinDeclarationTakesTheCurrentVersionWhenTheRecordNamesNone(t *t
 	row, defaulted, err := DecodeStdinDeclaration(strings.NewReader(`{"id":"a","read_only":true}`))
 	require.NoError(t, err)
 	assert.True(t, defaulted, "the caller says it defaulted")
-	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "a", ReadOnly: true}, row)
+	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "a", ReadOnly: true}, row)
 
 	_, defaulted, err = DecodeStdinDeclaration(declaration(`"id":"a"`, `"read_only":true`))
 	require.NoError(t, err)
 	assert.False(t, defaulted, "a named version is read as named")
 
-	_, _, err = DecodeStdinDeclaration(strings.NewReader(`{"schema_version":0,"id":"a","read_only":true}`))
+	_, _, err = DecodeStdinDeclaration(strings.NewReader(`{"api_version":"","id":"a","read_only":true}`))
 	require.ErrorIs(t, err, types.JobRecordInvalid, "a version named 0 is no version, and is refused as before")
 
 	_, _, err = DecodeStdinDeclaration(strings.NewReader(`[]`))

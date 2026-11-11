@@ -632,7 +632,7 @@ func (s *LeasedNestedSpawnSuite) check(v types.GuardJudgment, decision, rule, re
 	if reasonPart != "" {
 		s.Contains(v.Reason, reasonPart)
 	}
-	want := types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decision, Rule: rule,
+	want := types.GuardJudgment{APIVersion: v.APIVersion, Decision: decision, Rule: rule,
 		LeaseFrom: v.LeaseFrom}
 	v.Reason, v.Next = "", nil
 	s.Equal(want, v)

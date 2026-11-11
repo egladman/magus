@@ -453,8 +453,8 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	// two doors agreeing on the FIELDS, and a fixture whose version fell behind would fail
 	// it at the version check instead, naming nothing it came here to compare.
 	piped, _, err := job.DecodeStdinDeclaration(strings.NewReader(fmt.Sprintf(`{
-	  "schema_version": %d,
-	  "id": "adj/store",`, types.JobSchemaVersion) + `
+	  "api_version": %q,
+	  "id": "adj/store",`, types.JobAPIVersion) + `
 	  "parent": "adjacency",
 	  "criteria": "the store is the enforcement point",
 	  "checkpoint": "cf5509d09",
@@ -683,8 +683,8 @@ func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	_, err := store.Exec(t.Context(), "live")
 	require.NoError(t, err)
 	record := func(id, checkout string) string {
-		return fmt.Sprintf(`{"schema_version": %d, "id": %q, "checkout": %q, "write_paths": ["magus.yaml"],`+
-			` "check": {"target": "test", "project": "."}}`, types.JobSchemaVersion, id, checkout)
+		return fmt.Sprintf(`{"api_version": %q, "id": %q, "checkout": %q, "write_paths": ["magus.yaml"],`+
+			` "check": {"target": "test", "project": "."}}`, types.JobAPIVersion, id, checkout)
 	}
 	fork := func(stdin string, args ...string) error {
 		writeStdin(t, stdin)
@@ -724,8 +724,8 @@ func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 		return jobFork(t.Context(), at, append([]string{"--stdin"}, args...))
 	}
 	record := func(id, path string) string {
-		return fmt.Sprintf(`{"schema_version": %d, "id": %q, "write_paths": [%q], "check": {"target": "test", "project": "."}}`,
-			types.JobSchemaVersion, id, path)
+		return fmt.Sprintf(`{"api_version": %q, "id": %q, "write_paths": [%q], "check": {"target": "test", "project": "."}}`,
+			types.JobAPIVersion, id, path)
 	}
 
 	own := filepath.Join(t.TempDir(), "own")
@@ -745,7 +745,7 @@ func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 	repo.Git("branch", "done")
 	repo.Git("reset", "-q", "--hard", "HEAD~1")
 	session := repo.AddWorktree("session").Root()
-	integration := fmt.Sprintf(`{"schema_version": %d, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobSchemaVersion)
+	integration := fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion)
 	err = fork(session, integration)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "the forker's own linked checkout")
@@ -769,7 +769,7 @@ func TestJobForkIntegrationIntoAStandingCheckoutRecordsTheCheckoutsRevision(t *t
 	repo.Commit("forker moves on", map[string]string{"forker.txt": "ahead\n"})
 	require.NotEqual(t, checkoutHead, repo.Head())
 
-	writeStdin(t, fmt.Sprintf(`{"schema_version": %d, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobSchemaVersion))
+	writeStdin(t, fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion))
 	captureStdout(t, func() {
 		require.NoError(t, jobFork(t.Context(), root, []string{"--stdin", "--checkout", standing}))
 	})
@@ -806,7 +806,7 @@ func (s *IntegrationStandingCheckoutSuite) SetupTest() {
 	repo.Commit("raise prices", map[string]string{"pricing.txt": "apples 2\n"})
 	repo.Git("branch", "done")
 	repo.Git("reset", "-q", "--hard", "HEAD~1")
-	writeStdin(t, fmt.Sprintf(`{"schema_version": %d, "id": "merge", "integrates": ["done"], "checkpoint": %q, "check": {"target": "test", "project": "."}}`, types.JobSchemaVersion, old))
+	writeStdin(t, fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "checkpoint": %q, "check": {"target": "test", "project": "."}}`, types.JobAPIVersion, old))
 	captureStdout(t, func() {
 		s.Require().NoError(jobFork(t.Context(), s.root, []string{"--stdin", "--checkout", s.standing}))
 	})
@@ -838,7 +838,7 @@ func TestJobForkTakesAnUnfinishedIntegrationAgain(t *testing.T) {
 	repo.Commit("raise prices", map[string]string{"pricing.txt": "apples 2\n"})
 	repo.Git("branch", "done")
 	repo.Git("reset", "-q", "--hard", "HEAD~1")
-	integration := fmt.Sprintf(`{"schema_version": %d, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobSchemaVersion)
+	integration := fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion)
 	fork := func() error {
 		resetStartupSingletons()
 		writeStdin(t, integration)
@@ -893,12 +893,12 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 	// for the wired id directly, since another test in this package may have cleared the
 	// spell-backed one.
 	fixture.WireHarness(t, agent.HarnessDescriptor{
-		SchemaVersion: 2,
-		ID:            "limit-host",
-		Display:       agent.HarnessDisplay{Name: "Limit host"},
-		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
-		Config:        types.HarnessConfig{Path: "hooks.json"},
-		Limits:        types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000},
+		APIVersion: agent.HarnessAPIVersion,
+		ID:         "limit-host",
+		Display:    agent.HarnessDisplay{Name: "Limit host"},
+		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
+		Config:     types.HarnessConfig{Path: "hooks.json"},
+		Limits:     types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000},
 	})
 	for _, tt := range []struct {
 		name, magusfile, want string
@@ -937,19 +937,19 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 // the wired harness publishes, and the host's own mapping of opus would give principal.
 func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	fixture.WireHarness(t, agent.HarnessDescriptor{
-		SchemaVersion: 2,
-		ID:            "limit-host",
-		Display:       agent.HarnessDisplay{Name: "Limit host"},
-		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
-		Config:        types.HarnessConfig{Path: "hooks.json"},
-		Models:        []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "economy"}},
+		APIVersion: agent.HarnessAPIVersion,
+		ID:         "limit-host",
+		Display:    agent.HarnessDisplay{Name: "Limit host"},
+		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
+		Config:     types.HarnessConfig{Path: "hooks.json"},
+		Models:     []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "economy"}},
 	})
 	resetWorkspaceMemo(t)
 	root, _ := execFixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
-	writeStdin(t, `{"schema_version": 12, "id": "wave/opus", "write_paths": ["a.go"], "model": "opus",`+
+	writeStdin(t, `{"api_version": "magus.job/v1alpha1", "id": "wave/opus", "write_paths": ["a.go"], "model": "opus",`+
 		` "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
 
 	out := captureStdout(t, func() {
@@ -963,11 +963,11 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 // since its rows would otherwise read as work.
 func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
 	harness := agent.HarnessDescriptor{
-		SchemaVersion: 2,
-		ID:            "limit-host",
-		Display:       agent.HarnessDisplay{Name: "Limit host"},
-		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
-		Config:        types.HarnessConfig{Path: "hooks.json"},
+		APIVersion: agent.HarnessAPIVersion,
+		ID:         "limit-host",
+		Display:    agent.HarnessDisplay{Name: "Limit host"},
+		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
+		Config:     types.HarnessConfig{Path: "hooks.json"},
 	}
 	for _, tt := range []struct {
 		name, toolsDir, want string
@@ -1111,7 +1111,7 @@ func TestJobExitTellsTheHolderItStaysBound(t *testing.T) {
 	row := leaseRow("held", "")
 	row.WritePaths, row.Registered = []string{"a/**"}, time.Now().Unix()
 	root, _ := execFixture(t, row)
-	writeStdin(t, `{"schema_version":2,"changed_paths":["a/x.go"],"unresolved_risks":[]}`)
+	writeStdin(t, `{"api_version":"magus.job-result/v1alpha1","changed_paths":["a/x.go"],"unresolved_risks":[]}`)
 
 	savedLog, savedGlobal := globalCfg.Log, global
 	t.Cleanup(func() { globalCfg.Log, global = savedLog, savedGlobal })
@@ -1145,14 +1145,14 @@ func (s *jobExitShapeSuite) refusal(stdin string) string {
 }
 
 func (s *jobExitShapeSuite) TestAnEmptyResultOnAWritingRowIsRefused() {
-	got := s.refusal(`{"schema_version":2}`)
+	got := s.refusal(`{"api_version":"magus.job-result/v1alpha1"}`)
 	s.Contains(got, "held writes, and its result names no changed path")
 	s.Contains(got, `"changed_paths"`)
 	s.Contains(got, `"owed": "no seat"`)
 }
 
 func (s *jobExitShapeSuite) TestAnUnknownFieldPrintsTheShape() {
-	got := s.refusal(`{"schema_version":2,"summary":"done"}`)
+	got := s.refusal(`{"api_version":"magus.job-result/v1alpha1","summary":"done"}`)
 	s.Contains(got, "File this shape:")
 	s.Contains(got, `"owed": "no seat"`)
 }
@@ -1209,8 +1209,8 @@ func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	record := filepath.Join(t.TempDir(), "w.json")
 	require.NoError(t, os.WriteFile(record, fmt.Appendf(nil,
-		`{"schema_version":%d,"id":"w","model":"standard","write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
-		types.JobSchemaVersion), 0o644))
+		`{"api_version":%q,"id":"w","model":"standard","write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
+		types.JobAPIVersion), 0o644))
 	args := []string{"-f", record}
 
 	globalCfg.DryRun = true
@@ -2675,7 +2675,7 @@ func (s *jobApplyContractSuite) integration(integrates ...string) (string, *job.
 	root, cacheDir := execFixture(s.T(), row)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
 	return root, store, types.Declaration{
-		Schema: types.Schema{Version: types.JobSchemaVersion}, ID: row.ID,
+		Schema: types.Schema{Version: types.JobAPIVersion}, ID: row.ID,
 		Model: row.Model, WritePaths: row.WritePaths, Check: row.Check, Integrates: integrates,
 	}
 }
@@ -2739,7 +2739,7 @@ func (s *jobApplyContractSuite) TestAnUnknownSettlementExitsFailureAndWritesNoth
 	resetWorkspaceMemo(s.T())
 	root, cacheDir := execFixture(s.T())
 	_, err := s.apply(root, types.Declaration{
-		Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "absent",
+		Schema: types.Schema{Version: types.JobAPIVersion}, ID: "absent",
 		LeftUnmerged: "superseded by another change",
 	})
 	s.Require().ErrorContains(err, "nothing declares job absent, so nothing settles")
@@ -2753,7 +2753,7 @@ func (s *jobApplyContractSuite) TestAnInvalidFiledResultExitsUsageAndKeepsTheJob
 	root, store, _ := s.integration()
 	before, err := store.List()
 	s.Require().NoError(err)
-	writeStdin(s.T(), `{"schema_version":2,"unexpected":"field"}`)
+	writeStdin(s.T(), `{"api_version":"magus.job-result/v1alpha1","unexpected":"field"}`)
 	err = jobExit(s.T().Context(), root, []string{"integration", "--stdin"})
 	s.Require().ErrorContains(err, "File this shape:")
 	s.Equal(exit.Usage, exit.Code(err))

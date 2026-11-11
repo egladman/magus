@@ -66,19 +66,44 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// SchemaVersion stamps every record written by this build. It exists so a reader
-// can tell a record it merely does not recognize from one written by a future
-// magus: readers IGNORE what they cannot interpret (an unknown kind, an unknown
-// payload field, a higher version) rather than failing, so an old binary reading a
-// newer store degrades to showing less instead of refusing to read.
-//
-// 2 is the invocation rename: a record names its process under `invocation`. Schema 1
-// named it `session`, and this build counts those lines ([Fold.Legacy]) without reading
-// them.
-const SchemaVersion = 2
+// APIVersion stamps every record this build writes. Readers IGNORE what
+// they cannot interpret rather than failing, so an old binary reading a
+// newer store shows less instead of refusing. An older record is
+// counted in [Fold.Legacy] and never read.
+const APIVersion types.APIVersion = "magus.sessions/v1alpha1"
 
-// schemaVersionSession is the schema whose records named their process `session`.
-const schemaVersionSession = 1
+// olderVersion reports whether line is a record stamped older than
+// APIVersion, an integer from an older magus included, but for
+// preFoldVersion.
+func olderVersion(line []byte) bool {
+	var stamp struct {
+		V json.RawMessage `json:"v"`
+	}
+	if json.Unmarshal(line, &stamp) != nil || stamp.V == nil || string(stamp.V) == preFoldVersion {
+		return false
+	}
+	var v types.APIVersion
+	return json.Unmarshal(stamp.V, &v) != nil || v.Compare(APIVersion) < 0
+}
+
+// preFoldVersion is the integer an older magus stamped APIVersion's
+// records with. compat(until: the next release): every worktree appends
+// to one store, and a binary built before the rename keeps writing it.
+const preFoldVersion = "2"
+
+// compat: see preFoldVersion. An older magus marshaled Record with v
+// first, so the prefix is the whole test.
+var preFoldPrefix = []byte(`{"v":` + preFoldVersion + `,`)
+
+// readForward is line with a preFoldVersion stamp named APIVersion.
+// compat: see preFoldVersion.
+func readForward(line []byte) []byte {
+	rest, ok := bytes.CutPrefix(line, preFoldPrefix)
+	if !ok {
+		return line
+	}
+	return slices.Concat([]byte(`{"v":"`+string(APIVersion)+`",`), rest)
+}
 
 // Kinds of fact an invocation records. A reader must tolerate a kind it does not know:
 // the set grows, and an invocation written by a newer magus is still readable.
@@ -97,12 +122,12 @@ const (
 // record it does not understand straight through; the field is the schema's escape
 // hatch, and decoding it eagerly would turn an unknown kind into a parse error.
 type Record struct {
-	V          int             `json:"v"`
-	Invocation string          `json:"invocation"`
-	Seq        uint64          `json:"seq"` // monotonic within an invocation, from 1
-	Kind       string          `json:"kind"`
-	Ts         int64           `json:"ts"` // unix milliseconds
-	Payload    json.RawMessage `json:"payload,omitempty"`
+	V          types.APIVersion `json:"v"`
+	Invocation string           `json:"invocation"`
+	Seq        uint64           `json:"seq"` // monotonic within an invocation, from 1
+	Kind       string           `json:"kind"`
+	Ts         int64            `json:"ts"` // unix milliseconds
+	Payload    json.RawMessage  `json:"payload,omitempty"`
 }
 
 // InvocationStart is the payload of the first fact an invocation writes: who is running
@@ -321,7 +346,7 @@ func (w *Writer) Append(kind string, payload any) error {
 // write appends one line. The caller holds w.mu, which is what keeps seq in step
 // with the order lines land in the file.
 func (w *Writer) write(kind string, payload any) error {
-	rec := Record{V: SchemaVersion, Invocation: w.invocation, Seq: w.seq + 1, Kind: kind, Ts: time.Now().UnixMilli()}
+	rec := Record{V: APIVersion, Invocation: w.invocation, Seq: w.seq + 1, Kind: kind, Ts: time.Now().UnixMilli()}
 	if payload != nil {
 		raw, err := json.Marshal(payload)
 		if err != nil {
@@ -456,13 +481,13 @@ func readFile(path string) (records []Record, skipped, legacy int, vanished bool
 			// for: with the tail invisible, no dispose is ever found and every request in
 			// the file re-opens forever.
 			skipped++
-		} else if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 {
+		} else if trimmed := readForward(bytes.TrimSpace(line)); len(trimmed) > 0 {
 			var rec Record
 			switch {
+			case olderVersion(trimmed):
+				legacy++
 			case json.Unmarshal(trimmed, &rec) != nil || rec.Kind == "":
 				skipped++
-			case rec.Invocation == "" && rec.V == schemaVersionSession:
-				legacy++
 			case rec.Invocation == "":
 				skipped++
 			default:

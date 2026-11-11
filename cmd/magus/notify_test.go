@@ -31,14 +31,14 @@ func TestClassifyOutcome(t *testing.T) {
 }
 
 func TestEventFromStdin(t *testing.T) {
-	canonical := `{"schema_version":1,"outcome":"permission","severity":"critical","source":{"kind":"agent","sub":"host","id":"abc"},"message":"needs approval"}`
+	canonical := `{"api_version":"magus.event/v1alpha1","outcome":"permission","severity":"critical","source":{"kind":"agent","sub":"host","id":"abc"},"message":"needs approval"}`
 	got := eventFromStdin([]byte(canonical))
 	assert.Equal(t, types.Event{
-		SchemaVersion: 1,
-		Outcome:       types.OutcomePermission,
-		Severity:      types.SeverityCritical,
-		Source:        types.EventSource{Kind: "agent", Sub: "host", ID: "abc"},
-		Message:       "needs approval",
+		APIVersion: types.EventAPIVersion,
+		Outcome:    types.OutcomePermission,
+		Severity:   types.SeverityCritical,
+		Source:     types.EventSource{Kind: "agent", Sub: "host", ID: "abc"},
+		Message:    "needs approval",
 	}, got)
 
 	assert.Equal(t, types.Event{Message: `{"outcome":"waiting"}`}, eventFromStdin([]byte(`{"outcome":"waiting"}`)))
@@ -108,7 +108,7 @@ func TestNotifyCmd(t *testing.T) {
 	})
 
 	t.Run("canonical envelope preserves producer fields", func(t *testing.T) {
-		ev := `{"schema_version":1,"outcome":"permission","severity":"warning","source":{"kind":"agent","sub":"host","id":"abc"},"message":"needs approval"}`
+		ev := `{"api_version":"magus.event/v1alpha1","outcome":"permission","severity":"warning","source":{"kind":"agent","sub":"host","id":"abc"},"message":"needs approval"}`
 		out, err := run(ev, "-o", "json")
 		require.NoError(t, err)
 		assert.Contains(t, out, `"outcome": "permission"`)
@@ -168,7 +168,7 @@ func TestNotifyCmdDoesNotToastARefiredPermission(t *testing.T) {
 	root := t.TempDir()
 	toasts := countToasts(t)
 
-	ev := `{"schema_version":1,"outcome":"permission","severity":"critical","source":{"kind":"agent","sub":"host","id":"abc"},"where":{"workspace":{"value":"/repo","is_dir":true},"files":[{"value":"cmd/magus/notify.go"}]},"message":"needs approval"}`
+	ev := `{"api_version":"magus.event/v1alpha1","outcome":"permission","severity":"critical","source":{"kind":"agent","sub":"host","id":"abc"},"where":{"workspace":{"value":"/repo","is_dir":true},"files":[{"value":"cmd/magus/notify.go"}]},"message":"needs approval"}`
 	run := func(stdin string, args ...string) {
 		t.Helper()
 		global = globalFlags{}
@@ -178,7 +178,7 @@ func TestNotifyCmdDoesNotToastARefiredPermission(t *testing.T) {
 	run(ev, "--desktop", "-o", "name")
 	assert.Equal(t, 1, *toasts, "the queue already holds the block; a second toast asks for a yes on it")
 
-	failed := `{"schema_version":1,"outcome":"failed","source":{"kind":"agent","sub":"host","id":"abc"},"message":"the gate failed"}`
+	failed := `{"api_version":"magus.event/v1alpha1","outcome":"failed","source":{"kind":"agent","sub":"host","id":"abc"},"message":"the gate failed"}`
 	run(failed, "--desktop", "-o", "name")
 	run(failed, "--desktop", "-o", "name")
 	assert.Equal(t, 3, *toasts, "a failure is news, never a queue row, and each one still notifies")

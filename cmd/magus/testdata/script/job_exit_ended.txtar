@@ -31,7 +31,7 @@ stdin $WORK/result.json
 stderr 'scout-a already ended no_return'
 
 -- result.json --
-{"schema_version": 2, "job": "scout-a", "changed_paths": [], "validation": {"command": "magus run test .", "output_ref": "out000000000000"}, "unresolved_risks": []}
+{"api_version": "magus.job-result/v1alpha1", "job": "scout-a", "changed_paths": [], "validation": {"command": "magus run test .", "output_ref": "out000000000000"}, "unresolved_risks": []}
 -- shop/.gitignore --
 .magus/
 -- shop/magusfile.buzz --

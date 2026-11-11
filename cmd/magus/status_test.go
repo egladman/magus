@@ -1101,7 +1101,7 @@ func statusFixture(now time.Time) daemon.Snapshot {
 		},
 		BrokerPolicy: types.BrokerBestEffort,
 		Broker: &daemon.Broker{
-			PID: 48213, Protocol: 1, Socket: "unix:///run/magus/" + broker.SocketName, StartTime: now.Add(-time.Hour),
+			PID: 48213, Protocol: "magus.broker/v1alpha1", Socket: "unix:///run/magus/" + broker.SocketName, StartTime: now.Add(-time.Hour),
 			Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2, BudgetMB: 4096, HeldMB: 1024},
 			Services: []daemon.Service{
 				{ID: "svc-db", Label: "postgres", Command: "docker compose up db", Ports: []string{"5432"}, State: daemon.ServiceRunning, Dependents: 2},
@@ -1144,7 +1144,7 @@ func TestPrintStatusTextRendersEverySection(t *testing.T) {
 	assert.Contains(t, out, "512")
 	assert.Contains(t, out, "concurrency")
 
-	assert.Contains(t, out, "broker    48213  up 1h0m  proto 1  unix:///run/magus/"+broker.SocketName)
+	assert.Contains(t, out, "broker    48213  up 1h0m  proto magus.broker/v1alpha1  unix:///run/magus/"+broker.SocketName)
 	assert.Contains(t, out, "slots 2/8  mem 1.0 GiB/4.0 GiB  broker: best-effort")
 	assert.Contains(t, out, "service   -      postgres  running  deps 2  ports 5432")
 	// A service with no label falls back to its id.

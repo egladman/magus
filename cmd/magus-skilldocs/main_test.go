@@ -22,7 +22,7 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 // skillCatalog is the same embedded catalog the generator renders from, so a test asserting what
 // pages exist is asserting against the bodies a build actually ships. It replaced a relative path
 // into another command's directory, which only worked because the assets were not importable.
-func skillCatalog() *agent.Catalog { return agent.Default(0) }
+func skillCatalog() *agent.Catalog { return agent.Default("") }
 
 // generate renders the whole reference into a fresh directory. It drives the real
 // embedded bodies rather than a fixture on purpose: the pages exist so a skill

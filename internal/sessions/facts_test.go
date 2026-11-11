@@ -96,7 +96,7 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 	// One session-start plus one fact per result, and the start is always seq 1.
 	require.Len(t, fold.Records, 4)
 	assert.Equal(t, Record{
-		V:          SchemaVersion,
+		V:          APIVersion,
 		Invocation: "inv1",
 		Seq:        1,
 		Kind:       KindInvocationStart,

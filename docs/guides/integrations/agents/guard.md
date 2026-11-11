@@ -980,7 +980,7 @@ only the stable fields:
 
 ```json
 {
-  "schema_version": 1,
+  "api_version": "magus.agent-command/v1alpha1",
   "host": "claude-code",
   "session": "abc123",
   "event": "PreToolUse",

@@ -1202,7 +1202,7 @@ func bindForkSpec(fs *flag.FlagSet, d *types.Declaration, check *string) {
 // An unparsable check is carried through so Validate names the rule,
 // rather than the row going silently checkless.
 func flagDeclaration(d types.Declaration, id, check string) types.Declaration {
-	d.Schema = types.Schema{Version: types.JobSchemaVersion}
+	d.Schema = types.Schema{Version: types.JobAPIVersion}
 	d.ID = id
 	if strings.TrimSpace(check) == "" {
 		return d
@@ -1340,7 +1340,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			return exit.Usagef("magus job fork: %s (`%s` prints the schema it must satisfy)", err, hint.JobFork.With("--schema"))
 		}
 		if defaulted {
-			slog.InfoContext(ctx, fmt.Sprintf("the record names no schema_version, so it was read as version %d", types.JobSchemaVersion), attr.Notice("note"))
+			slog.InfoContext(ctx, fmt.Sprintf("the record names no api_version, so it was read as %s", types.JobAPIVersion), attr.Notice("note"))
 		}
 		if row.Checkout, err = recordCheckout(row.Checkout, declared.Checkout); err != nil {
 			return err

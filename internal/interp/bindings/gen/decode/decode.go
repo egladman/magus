@@ -7488,12 +7488,12 @@ func decodeJobResult(v vm.Value, path string) (types.JobResult, error) {
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
-		case "schemaVersion":
-			nVersion, err := decodeInt(item, path+".schemaVersion")
+		case "apiVersion":
+			sVersion, err := decodeString(item, path+".apiVersion")
 			if err != nil {
 				return out, err
 			}
-			out.Schema.Version = int(nVersion)
+			out.Schema.Version = types.APIVersion(sVersion)
 		case "requires":
 			strsRequires, err := decodeStringList(item, path+".requires")
 			if err != nil {
@@ -8578,12 +8578,12 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
-		case "schemaVersion":
-			nVersion, err := decodeInt(item, path+".schemaVersion")
+		case "apiVersion":
+			sVersion, err := decodeString(item, path+".apiVersion")
 			if err != nil {
 				return out, err
 			}
-			out.Schema.Version = int(nVersion)
+			out.Schema.Version = types.APIVersion(sVersion)
 		case "requires":
 			strsRequires, err := decodeStringList(item, path+".requires")
 			if err != nil {

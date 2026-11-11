@@ -321,7 +321,7 @@ type Broker struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Pid             int32                  `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
 	Version         string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	Protocol        int32                  `protobuf:"varint,3,opt,name=protocol,proto3" json:"protocol,omitempty"` // the broker wire version it speaks
+	ApiVersion      string                 `protobuf:"bytes,10,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"` // the broker wire version it speaks, as magus.broker/v1alpha1
 	Socket          string                 `protobuf:"bytes,4,opt,name=socket,proto3" json:"socket,omitempty"`
 	Executable      string                 `protobuf:"bytes,5,opt,name=executable,proto3" json:"executable,omitempty"` // the binary it runs from
 	StartTime       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
@@ -376,11 +376,11 @@ func (x *Broker) GetVersion() string {
 	return ""
 }
 
-func (x *Broker) GetProtocol() int32 {
+func (x *Broker) GetApiVersion() string {
 	if x != nil {
-		return x.Protocol
+		return x.ApiVersion
 	}
-	return 0
+	return ""
 }
 
 func (x *Broker) GetSocket() string {
@@ -1816,11 +1816,13 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"\x06broker\x18\b \x01(\v2\x1d.magus.status.v1alpha1.BrokerR\x06broker\x125\n" +
 	"\x06server\x18\t \x01(\v2\x1d.magus.status.v1alpha1.ServerR\x06server\x12#\n" +
 	"\rbroker_policy\x18\n" +
-	" \x01(\tR\fbrokerPolicyJ\x04\b\x03\x10\x04R\rmagus_version\"\xc8\x02\n" +
+	" \x01(\tR\fbrokerPolicyJ\x04\b\x03\x10\x04R\rmagus_version\"\xdd\x02\n" +
 	"\x06Broker\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1a\n" +
-	"\bprotocol\x18\x03 \x01(\x05R\bprotocol\x12\x16\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1f\n" +
+	"\vapi_version\x18\n" +
+	" \x01(\tR\n" +
+	"apiVersion\x12\x16\n" +
 	"\x06socket\x18\x04 \x01(\tR\x06socket\x12\x1e\n" +
 	"\n" +
 	"executable\x18\x05 \x01(\tR\n" +
@@ -1829,7 +1831,7 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"start_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12;\n" +
 	"\bcapacity\x18\a \x01(\v2\x1f.magus.status.v1alpha1.CapacityR\bcapacity\x12*\n" +
 	"\x11idle_exit_seconds\x18\b \x01(\x05R\x0fidleExitSeconds\x12\x1a\n" +
-	"\bdraining\x18\t \x01(\bR\bdraining\"\xba\x01\n" +
+	"\bdraining\x18\t \x01(\bR\bdrainingJ\x04\b\x03\x10\x04R\bprotocol\"\xba\x01\n" +
 	"\bCapacity\x12\x1b\n" +
 	"\tbudget_mb\x18\x01 \x01(\x05R\bbudgetMb\x12\x17\n" +
 	"\aheld_mb\x18\x02 \x01(\x05R\x06heldMb\x12!\n" +

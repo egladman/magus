@@ -6,10 +6,10 @@ package types
 // shapes with -o template (or parses from -o json); the host-specific response
 // dialects live in the documentation, never in code.
 type GuardJudgment struct {
-	SchemaVersion int    `json:"schema_version"`
-	Decision      string `json:"decision"`          // one of agent.GuardDecisions
-	Reason        string `json:"reason,omitempty"`  // deny: the block reason, written for the model
-	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
+	APIVersion APIVersion `json:"api_version"`
+	Decision   string     `json:"decision"`          // one of agent.GuardDecisions
+	Reason     string     `json:"reason,omitempty"`  // deny: the block reason, written for the model
+	Context    string     `json:"context,omitempty"` // advise: context to inject alongside the allowed call
 	// Rule names the catalogued rule or advisory that produced this judgment, and is set on
 	// every deny, advise and ask (a workspace rule's carries its workspace prefix). Host
 	// adapters still render Reason and Context; this is what a PERSON looks up, reports
@@ -21,7 +21,7 @@ type GuardJudgment struct {
 	// A session bound to a typo'd id, a session bound to a finished row, and a session
 	// nobody leased are otherwise indistinguishable, and two of the three run unguarded.
 	// An added optional field is not a schema bump: a glue that does not read it is
-	// unaffected, which is the rule agent.GuardSchemaVersion states.
+	// unaffected, which is the rule agent.GuardAPIVersion states.
 	Lease string `json:"lease,omitempty"`
 	// LeaseFrom is which source answered Lease; see LeaseSource.
 	LeaseFrom LeaseSource `json:"lease_from,omitempty"`

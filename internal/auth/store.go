@@ -40,9 +40,27 @@ const (
 	ExchangeCodeTTL = 10 * time.Second
 )
 
-// storeVersion 2 is the first version with grants. Version 1 records (connectors.d) name a
-// scope instead, and are refused rather than translated.
-const storeVersion = 2
+// storeVersion is the token record this build writes and reads. Older
+// records are refused rather than translated, but for preFoldVersion.
+const storeVersion types.APIVersion = "magus.token/v1alpha1"
+
+// preFoldVersion is the integer an older magus stamped storeVersion's
+// records with. compat(until: the next release): a token minted under it
+// lives up to MaxTokenTTL, and refusing it locks its holder out.
+const preFoldVersion = "2"
+
+// recordVersion reads a record's version member, preFoldVersion as
+// storeVersion. Any other integer, or no member, is "".
+func recordVersion(raw json.RawMessage) types.APIVersion {
+	if string(raw) == preFoldVersion {
+		return storeVersion
+	}
+	var v types.APIVersion
+	if json.Unmarshal(raw, &v) != nil {
+		return ""
+	}
+	return v
+}
 
 // The sentinels a caller tests with errors.Is. Every refusal auth returns is a coded
 // DiagnosticError that unwraps to one of them, so each edge reports the same MGS code.
@@ -83,8 +101,22 @@ func (t Token) Credential() types.Credential {
 func (t Token) Expired(now time.Time) bool { return now.After(t.Expires) }
 
 type tokenRecord struct {
-	Version int `json:"version"`
+	Version types.APIVersion `json:"version"`
 	Token
+}
+
+func (r *tokenRecord) UnmarshalJSON(b []byte) error {
+	var probe struct {
+		Version json.RawMessage `json:"version"`
+	}
+	if err := json.Unmarshal(b, &probe); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, &r.Token); err != nil {
+		return err
+	}
+	r.Version = recordVersion(probe.Version)
+	return nil
 }
 
 // MintRequest is what a minter asks for. An empty Name takes the first free "connector-N"
@@ -166,7 +198,7 @@ func fileExists(path string) bool {
 func tooOld(files []string) error {
 	sort.Strings(files)
 	return types.DiagnosticErrorf(types.TokenStoreTooOld,
-		"auth: %d token file(s) predate grants and are refused: %s; remove each (`rm <file>`) and mint its replacement with `%s` or `%s`",
+		"auth: %d token file(s) an older magus wrote are refused: %s; remove each (`rm <file>`) and mint its replacement with `%s` or `%s`",
 		len(files), strings.Join(files, ", "), hint.ConfigMCPConnectorCreate.With("--name", "<name>"), hint.ConfigConsoleTokenCreate.With("--name", "<name>"))
 }
 
@@ -255,16 +287,16 @@ func parseTokenRecord(name, path string, info fs.FileInfo, now time.Time) (Token
 		return Token{}, fmt.Errorf("auth: read token %s: %w", path, err)
 	}
 	var version struct {
-		Version int `json:"version"`
+		Version json.RawMessage `json:"version"`
 	}
 	if err := json.Unmarshal(data, &version); err != nil {
 		return Token{}, invalidRecord(path, "it is not JSON: %v", err)
 	}
-	switch {
-	case version.Version < storeVersion:
+	switch got := recordVersion(version.Version); {
+	case got == "", got.Compare(storeVersion) < 0:
 		return Token{}, tooOld([]string{path})
-	case version.Version > storeVersion:
-		return Token{}, types.DiagnosticErrorf(types.TokenStoreTooNew, "auth: token %s is version %d, newer than this magus supports (%d); upgrade magus", path, version.Version, storeVersion)
+	case got != storeVersion:
+		return Token{}, types.DiagnosticErrorf(types.TokenStoreTooNew, "auth: token %s is %s, and this magus reads only %s; upgrade magus", path, got, storeVersion)
 	}
 	var rec tokenRecord
 	if err := json.Unmarshal(data, &rec); err != nil {

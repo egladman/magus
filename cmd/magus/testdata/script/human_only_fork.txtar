@@ -54,10 +54,10 @@ export fun bench(ctx: magus\Context, args: [str]) > void {}
 
 export fun lint(ctx: magus\Context, args: [str]) > void {}
 -- goal.json --
-{"schema_version": 12, "id": "wave/goal", "criteria": "run it", "write_paths": ["code.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/goal", "criteria": "run it", "write_paths": ["code.go"],
  "goals": [{"id": "paid", "kind": "check", "check": {"target": "bench", "project": "."}}]}
 -- apply.json --
-{"schema_version": 12, "id": "wave/lint", "criteria": "lint it", "write_paths": ["code.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/lint", "criteria": "lint it", "write_paths": ["code.go"],
  "check": {"target": "lint", "project": "."},
  "goals": [{"id": "paid", "kind": "check", "check": {"target": "bench", "project": "."}}]}
 -- code.go --

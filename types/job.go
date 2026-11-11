@@ -496,30 +496,15 @@ func JobIDRule(id string) string {
 	return ""
 }
 
-// JobSchemaVersion is the version of the row shape this magus writes: stamped on every row
-// it writes, and the newest a client may send. [JobSchema] is its ledger.
-//
-// AN ADDED FIELD DOES NOT MOVE IT. A reader ignores a member it does not know and a writer
-// carries that member back out ([Schema].Unknown), so a row a newer magus wrote survives an
-// older one's rewrite whole. The 2026-09-11 loss of write_paths and four other fields was a
-// writer dropping what it did not declare, which the bag closes; a bump would only have
-// refused the rows. A removed or renamed name goes into JobSchema.Reserved and is never
-// declared again, and a change of meaning is a new name.
-//
-// It moves only for a change an older reader would act on WRONGLY, and that version names
-// the feature in JobSchema.Requires, which the store stamps on each row whose content needs
-// it. 13 is generations and attempts: an older binary re-forking a row would leave
-// Generation behind the spec, so a stale result reads as current, and would ignore
-// MaxAttempts. 12 is the `signature` expectation on a symbol goal: an older binary would
-// grade it as `changed`. 11 is the `<path>#<declaration>` claim grammar in write_paths
-// (see SplitClaim): an older binary matches `run.go#RunCI` against no file and would stop
-// grading the claim. 10 is the field set that ends dead jobs.
-// TestSchemaLedgersEvolveAdditively fails a bump whose diff is only additive.
-const JobSchemaVersion = 13
+// JobAPIVersion is the row shape this magus writes and the only one a
+// client may send. [JobSchema] is its ledger. An added field does not
+// move it, since [Schema].Unknown carries unknown members through a
+// rewrite. JobSchema.Requires names what each later version brings.
+const JobAPIVersion APIVersion = "magus.job/v1alpha1"
 
-// JobResultSchemaVersion is the version of the result shape a holder files, the newest the
-// decoder accepts. [JobResultSchema] is its ledger, under JobSchemaVersion's rules.
-const JobResultSchemaVersion = 2
+// JobResultAPIVersion is the result shape a holder files, the only one
+// the decoder accepts.
+const JobResultAPIVersion APIVersion = "magus.job-result/v1alpha1"
 
 // JobWriteProof is what the fork could prove about a job's write paths against the other
 // live jobs bound to the SAME CHECKOUT, or not bound to any yet, at the moment it was
@@ -755,7 +740,7 @@ func (a JobAttempt) String() string {
 type Job struct {
 	// Schema is the shape this row was written in, stamped by the store on every write and
 	// never taken from a client, with every member this build does not declare. See
-	// JobSchemaVersion.
+	// JobAPIVersion.
 	Schema `yaml:",inline"`
 	// ID is the lease's identity within the plan, and the key Update upserts on. The
 	// console joins its drawer rows to agent activity by this value, so an
@@ -1452,7 +1437,7 @@ func (r Declaration) Problems() JobProblems {
 		rest := r
 		rest.Schema, rest.ID, rest.Enter = Schema{}, "", ""
 		if !reflect.ValueOf(rest).IsZero() {
-			invalid("enter", "a record carrying enter enters a job and declares nothing, so it carries only schema_version, id and enter",
+			invalid("enter", "a record carrying enter enters a job and declares nothing, so it carries only api_version, id and enter",
 				"drop every other field, or drop enter")
 		}
 		return ps
@@ -1570,7 +1555,7 @@ func (r Declaration) claimProblems() JobProblems {
 	rest := r
 	rest.Schema, rest.ID, rest.Claim = Schema{}, "", nil
 	if !reflect.ValueOf(rest).IsZero() {
-		invalid("claim", "a record carrying claim claims a job and declares nothing, so it carries only schema_version, id and claim",
+		invalid("claim", "a record carrying claim claims a job and declares nothing, so it carries only api_version, id and claim",
 			"drop every other field, or drop claim")
 	}
 	for i, w := range r.Claim {
@@ -1611,7 +1596,7 @@ func (r Declaration) settlementProblems() JobProblems {
 	rest := r
 	rest.Schema, rest.ID, rest.Deferred, rest.LeftUnmerged = Schema{}, "", nil, ""
 	if !reflect.ValueOf(rest).IsZero() {
-		invalid("deferred", "a record carrying deferred or left_unmerged settles a job and declares nothing, so it carries only schema_version, id, deferred and left_unmerged",
+		invalid("deferred", "a record carrying deferred or left_unmerged settles a job and declares nothing, so it carries only api_version, id, deferred and left_unmerged",
 			"drop every other field, or drop deferred and left_unmerged")
 	}
 	if r.LeftUnmerged != "" && strings.TrimSpace(r.LeftUnmerged) == "" {

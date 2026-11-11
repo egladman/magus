@@ -158,7 +158,7 @@ A row carries `id` and optionally `parent` (the job this one was forked from),
 `deny_paths`, `read_paths`, `depends_on`, `breaks`, `model`, `check`, `goals`,
 `state`, `read_only`, and `max_attempts` (see
 [attempts and generations](#attempts-and-generations)). A record naming no
-`state` is stored `declared`. The store adds `schema_version`, the actor that
+`state` is stored `declared`. The store adds `api_version`, the actor that
 recorded the row, `created`, `updated`, `releases`, `unattributed` (paths this
 job owns that somebody outside it wrote, noticed by the guard), `entries` (see
 [entering a job's path](#entering-a-jobs-path)), `write_proof`, `checkout_root` (where
@@ -526,7 +526,7 @@ job ended. Enter the path first, then write it:
 
 ```sh
 # client tool: magus\workspace().putJob("<job>", opts: {"enter": "<path>"})
-echo '{"schema_version": 11, "id": "<job>", "enter": "<path>"}' | magus job fork --stdin
+echo '{"api_version": "magus.job/v1alpha1", "id": "<job>", "enter": "<path>"}' | magus job fork --stdin
 ```
 
 The store records the entry on the job's `entries` and refuses one it cannot
@@ -648,7 +648,7 @@ magus job exit --schema                      # what that result must satisfy
 
 The result carries `changed_paths`, the `validation` the holder ran as
 `{command, output_ref}`, the `descendants` it forked, and its
-`unresolved_risks`, under a required `schema_version`. The run behind the output
+`unresolved_risks`, under a required `api_version`. The run behind the output
 ref is resolved in the holder's OWN checkout and its record is filed alongside,
 because the output store belongs to that checkout and nobody else can reopen it.
 That is what makes the evidence portable when the parent waits from another
@@ -698,7 +698,7 @@ it by; a `read_only` job is exempt.
 
 ```sh
 magus job fork --stdin <<'EOF'
-{"schema_version": 11, "id": "api/migrate",
+{"api_version": "magus.job/v1alpha1", "id": "api/migrate",
  "criteria": "move the accounts table to the new schema",
  "write_paths": ["db", "api"], "check": {"target": "go-test", "project": "api"},
  "goals": [

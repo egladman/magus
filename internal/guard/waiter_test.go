@@ -483,7 +483,7 @@ func TestJudgeRefusesARetryAfterARefusal(t *testing.T) {
 	v := Judge(ctx, Dependencies{}, Request{Input: "./magus run lint ."})
 	assert.Contains(t, v.Reason, "refused with MGS3009")
 	assert.Equal(t, types.GuardJudgment{
-		SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRuleSleepPoll),
+		APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRuleSleepPoll),
 	}, v, v.Reason)
 }
 

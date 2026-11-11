@@ -29,12 +29,12 @@ exec magus job exit scout/clean --stdin
 stdout '^exited scout/clean, recorded pass: returned: its holder filed a result'
 
 -- risky.in.json --
-{"schema_version": 2, "job": "scout/risky",
+{"api_version": "magus.job-result/v1alpha1", "job": "scout/risky",
  "changed_paths": [],
  "validation": {"command": "magus buzz --record probes/pricing.buzz", "output_ref": "out<hex>"},
  "unresolved_risks": ["gate FAILED, exited 75"]}
 -- clean.in.json --
-{"schema_version": 2, "job": "scout/clean",
+{"api_version": "magus.job-result/v1alpha1", "job": "scout/clean",
  "changed_paths": [],
  "validation": {"command": "magus buzz --record probes/pricing.buzz", "output_ref": "out<hex>"},
  "unresolved_risks": []}

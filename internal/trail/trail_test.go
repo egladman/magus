@@ -166,19 +166,19 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	var gotRequest agentCommandRequest
 	require.NoError(t, json.Unmarshal(request, &gotRequest))
 	require.Equal(t, agentCommandRequest{
-		SchemaVersion: agentCommandSchemaVersion,
-		Host:          "codex",
-		Session:       "abc123",
-		Event:         "PreToolUse",
-		Tool:          "Bash",
-		Command:       "magus run test .",
+		APIVersion: agentCommandAPIVersion,
+		Host:       "codex",
+		Session:    "abc123",
+		Event:      "PreToolUse",
+		Tool:       "Bash",
+		Command:    "magus run test .",
 	}, gotRequest)
 
 	response, err := ReadBlob(dir, event.ResponseRef)
 	require.NoError(t, err)
 	var gotResponse agentCommandResponse
 	require.NoError(t, json.Unmarshal(response, &gotResponse))
-	require.Equal(t, agentCommandResponse{SchemaVersion: agentCommandSchemaVersion, Decision: "pass"}, gotResponse)
+	require.Equal(t, agentCommandResponse{APIVersion: agentCommandAPIVersion, Decision: "pass"}, gotResponse)
 }
 
 func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
@@ -292,16 +292,16 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	require.NoError(t, err)
 	var gotRequest agentCommandRequest
 	require.NoError(t, json.Unmarshal(request, &gotRequest))
-	require.Equal(t, agentCommandRequest{SchemaVersion: agentCommandSchemaVersion, Path: "AGENTS.md"}, gotRequest)
+	require.Equal(t, agentCommandRequest{APIVersion: agentCommandAPIVersion, Path: "AGENTS.md"}, gotRequest)
 
 	response, err := ReadBlob(dir, event.ResponseRef)
 	require.NoError(t, err)
 	var gotResponse agentCommandResponse
 	require.NoError(t, json.Unmarshal(response, &gotResponse))
 	require.Equal(t, agentCommandResponse{
-		SchemaVersion: agentCommandSchemaVersion,
-		Decision:      "advise",
-		Context:       "record the decision",
+		APIVersion: agentCommandAPIVersion,
+		Decision:   "advise",
+		Context:    "record the decision",
 	}, gotResponse)
 }
 
@@ -422,14 +422,14 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 	var gotRequest agentSpawnRequest
 	require.NoError(t, json.Unmarshal(request, &gotRequest))
 	require.Equal(t, agentSpawnRequest{
-		SchemaVersion: agentSpawnSchemaVersion,
-		Host:          "claude-code",
-		Session:       "abc123",
-		Event:         "PreToolUse",
-		Tool:          "Task",
-		Child:         "Explore",
-		Lease:         "notes-store-6b",
-		Context:       handed,
+		APIVersion: agentSpawnAPIVersion,
+		Host:       "claude-code",
+		Session:    "abc123",
+		Event:      "PreToolUse",
+		Tool:       "Task",
+		Child:      "Explore",
+		Lease:      "notes-store-6b",
+		Context:    handed,
 	}, gotRequest)
 }
 

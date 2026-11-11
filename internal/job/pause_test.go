@@ -24,7 +24,7 @@ func TestPauseRecordsItsOwnerReasonAndBound(t *testing.T) {
 	got := first
 	// Who and when are the store's and the clock's own; the pause fields are the subject.
 	got.Paused, got.PausedBy, got.Updated, got.Created, got.RegisteredBy = 0, types.Origin{}, 0, 0, types.Origin{}
-	assert.Equal(t, types.Job{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "w", State: types.StateRunning,
+	assert.Equal(t, types.Job{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "w", State: types.StateRunning,
 		Registered: 1, Generation: 1, Attempts: 1, PauseReason: "release build needs the machine", PausedUntil: until}, got)
 
 	rows, err = s.Pause(t.Context(), "still building", 0, "w")

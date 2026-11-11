@@ -10,15 +10,14 @@ import (
 
 // Schema is the envelope a record magus rewrites in place embeds. A reader ignores the
 // members it does not know and refuses only what it cannot act on; a writer carries those
-// members back out and never lowers the stamp.
+// members back out.
 //
-// Embedded, never named: json inlines it, so schema_version stays a top-level member, and
-// the Buzz mirrors inline it the same way.
+// Embedded, never named: json inlines it, so api_version stays a
+// top-level member, and the Buzz mirrors inline it the same way.
 type Schema struct {
-	// Version is the newest schema any writer of this record used. A rewrite stamps the
-	// larger of the stored version and its own, so an older magus never relabels content
-	// a newer one wrote.
-	Version int `json:"schema_version" yaml:"schema_version" buzz:"schemaVersion"`
+	// Version is the format this record is written in. A reader refuses
+	// any other, so no magus acts on a record it cannot read.
+	Version APIVersion `json:"api_version" yaml:"api_version" buzz:"apiVersion"`
 	// Requires names the features a reader must implement to act on this record at all.
 	// A reader lacking one treats the record as read-only; the records around it stay
 	// usable. Set only for content an older reader would act on wrongly, never for an
@@ -55,25 +54,27 @@ func (s Schema) clone() Schema {
 // life. Version moves only for a change an older reader would act on WRONGLY, and that
 // version names the feature in Requires.
 type SchemaLedger struct {
-	// Name keys the golden files: testdata/schema/<Name>.v<N>.json.
+	// Name keys the golden files: testdata/schema/<Name>.<version>.json,
+	// as job.v1alpha1.json.
 	Name string
 	Type reflect.Type
 	// Version is the constant this build stamps and accepts.
-	Version int
+	Version APIVersion
 	// Added maps each field declared after the newest golden was frozen to the version
 	// in force when it appeared.
-	Added map[string]int
+	Added map[string]APIVersion
 	// Reserved are json names the type once declared. They may only grow.
 	Reserved []string
-	// Requires maps a version that broke older readers to the feature naming that break.
-	Requires map[int]string
+	// Requires maps each feature that broke older readers to the version
+	// that brought it.
+	Requires map[string]APIVersion
 }
 
 // Features are the Requires entries a reader at l.Version implements, sorted.
 func (l SchemaLedger) Features() []string {
 	var out []string
-	for v, f := range l.Requires {
-		if v <= l.Version {
+	for f, v := range l.Requires {
+		if v.Compare(l.Version) <= 0 {
 			out = append(out, f)
 		}
 	}
@@ -85,16 +86,15 @@ func (l SchemaLedger) Features() []string {
 var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
-	Version: JobSchemaVersion,
-	Added:   map[string]int{"worktree": 13, "validated": 13, "deviations": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claims": 13, "max_claims": 13, "paused": 13, "paused_by": 13, "pause_reason": 13, "paused_until": 13, "weight": 13, "delivery": 13, "parent_head": 13, "release_requests": 13, "deferred": 13, "left_unmerged": 13, "holder_stopped": 13, "landed": 13},
+	Version: JobAPIVersion,
 	// The four boundary renames and completion_gates, names only the JSON document an
 	// older magus kept the plan in carried, and waivers, the name deviations had first.
-	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers"},
-	Requires: map[int]string{
-		10: "dead-job-end",
-		11: "claim-declarations",
-		12: "signature-goals",
-		13: "job-generations",
+	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers", "schema_version"},
+	Requires: map[string]APIVersion{
+		"dead-job-end":       JobAPIVersion,
+		"claim-declarations": JobAPIVersion,
+		"signature-goals":    JobAPIVersion,
+		"job-generations":    JobAPIVersion,
 	},
 }
 
@@ -103,11 +103,10 @@ var JobSchema = SchemaLedger{
 var DeclarationSchema = SchemaLedger{
 	Name:    "declaration",
 	Type:    reflect.TypeFor[Declaration](),
-	Version: JobSchemaVersion,
-	Added:   map[string]int{"checkout": 13, "deviations": 13, "brief_format": 13, "soft_paths": 13, "follows": 13, "fresh_reason": 13, "integrates": 13, "claim": 13, "max_claims": 13, "weight": 13, "delivery": 13, "parent_head": 13, "deferred": 13, "left_unmerged": 13},
+	Version: JobAPIVersion,
 	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
 	// refused as an unknown member.
-	Reserved: []string{"completion_gates", "waivers"},
+	Reserved: []string{"completion_gates", "waivers", "schema_version"},
 	Requires: JobSchema.Requires,
 }
 
@@ -115,18 +114,17 @@ var DeclarationSchema = SchemaLedger{
 var JobResultSchema = SchemaLedger{
 	Name:     "job-result",
 	Type:     reflect.TypeFor[JobResult](),
-	Version:  JobResultSchemaVersion,
-	Added:    map[string]int{"observed_generation": 2, "follow_ups": 2, "verification_evidence": 2},
-	Reserved: []string{"gate_evidence"},
+	Version:  JobResultAPIVersion,
+	Reserved: []string{"gate_evidence", "schema_version"},
 }
 
 // StoredOutputSchema is the ledger of the record `magus query output <ref> -o jsonl`
 // writes and `magus query output --stdin` reads.
 var StoredOutputSchema = SchemaLedger{
-	Name:    "output-record",
-	Type:    reflect.TypeFor[StoredOutput](),
-	Version: StoredOutputSchemaVersion,
-	Added:   map[string]int{"failed_need_target": 1, "failed_need_ref": 1, "lease": 1},
+	Name:     "output-record",
+	Type:     reflect.TypeFor[StoredOutput](),
+	Version:  StoredOutputAPIVersion,
+	Reserved: []string{"schema_version"},
 }
 
 // SchemaLedgers are every ledger the conventions test holds to the contract.

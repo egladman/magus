@@ -5,9 +5,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ProtocolVersion is the wire version the hello exchange carries. A broker refuses a
+// APIVersion is the wire version the hello exchange carries. A broker refuses a
 // client speaking another one with CodeProtocol.
-const ProtocolVersion = 5
+const APIVersion types.APIVersion = "magus.broker/v1alpha1"
 
 // helloMagic guards the first frame on a connection. Every later frame mutates state
 // shared by every magus on the host (a claim against its memory, a release of one), so
@@ -67,12 +67,12 @@ type frame struct {
 // hello is the first frame a client sends: who is on the other end. The broker copies
 // it onto every claim this connection takes, so status can name a holder's command.
 type hello struct {
-	Magic    string   `json:"magic"`
-	Protocol int      `json:"protocol"`
-	PID      int      `json:"pid"`
-	Dir      string   `json:"dir,omitempty"`
-	Argv     []string `json:"argv,omitempty"`
-	Version  string   `json:"version,omitempty"`
+	Magic    string           `json:"magic"`
+	Protocol types.APIVersion `json:"protocol"`
+	PID      int              `json:"pid"`
+	Dir      string           `json:"dir,omitempty"`
+	Argv     []string         `json:"argv,omitempty"`
+	Version  string           `json:"version,omitempty"`
 	// Lease is the job lease the process acts under: the one its checkout's marker binds
 	// (see [WithLease]), else its BAGGAGE's; "" for a run nobody leased, which no
 	// validation cap counts.
@@ -92,9 +92,9 @@ type hello struct {
 
 // helloReply is the broker's own identity.
 type helloReply struct {
-	PID      int    `json:"pid"`
-	Protocol int    `json:"protocol"`
-	Version  string `json:"version,omitempty"`
+	PID      int              `json:"pid"`
+	Protocol types.APIVersion `json:"protocol"`
+	Version  string           `json:"version,omitempty"`
 }
 
 // claimRequest asks for a seat. Reassert records the claim without asking:

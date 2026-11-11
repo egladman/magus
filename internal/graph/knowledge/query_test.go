@@ -266,16 +266,16 @@ func TestQueryPagePaginatesMatches(t *testing.T) {
 		// The total is stable across pages. The window and its neighborhood are what the next
 		// assertions and the neighborhood tests pin, so they are carried over.
 		want := types.KnowledgeQueryOutput{
-			Definition:    types.KnowledgeQueryDefinition,
-			SchemaVersion: types.KnowledgeSchemaVersion,
-			Query:         "kind:target",
-			Budget:        50,
-			MatchCount:    all.MatchCount,
-			Offset:        offset,
-			Matches:       page.Matches,
-			Nodes:         page.Nodes,
-			Links:         page.Links,
-			Ranking:       &types.KnowledgeRanking{Weights: ShippedWeights().Digest()},
+			Definition: types.KnowledgeQueryDefinition,
+			APIVersion: types.KnowledgeAPIVersion,
+			Query:      "kind:target",
+			Budget:     50,
+			MatchCount: all.MatchCount,
+			Offset:     offset,
+			Matches:    page.Matches,
+			Nodes:      page.Nodes,
+			Links:      page.Links,
+			Ranking:    &types.KnowledgeRanking{Weights: ShippedWeights().Digest()},
 		}
 		assert.Equal(t, want, page)
 		assert.LessOrEqual(t, len(page.Matches), limit)
@@ -806,13 +806,13 @@ func TestNeighborhoodOfWalksDepthRelationsAndDirection(t *testing.T) {
 	require.True(t, ok)
 	// A depth of 0 means 1. The nodes and links are pinned just below, by id and relation.
 	wantOut := types.KnowledgeNeighborhoodOutput{
-		Definition:    types.KnowledgeNeighborhoodDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Focus:         "dir:internal/handler/mcp",
-		Resolution:    types.ResolvedPath,
-		Options:       types.KnowledgeNeighborhoodOptions{Depth: 1, Relations: imports},
-		Nodes:         out.Nodes,
-		Links:         out.Links,
+		Definition: types.KnowledgeNeighborhoodDefinition,
+		APIVersion: types.KnowledgeAPIVersion,
+		Focus:      "dir:internal/handler/mcp",
+		Resolution: types.ResolvedPath,
+		Options:    types.KnowledgeNeighborhoodOptions{Depth: 1, Relations: imports},
+		Nodes:      out.Nodes,
+		Links:      out.Links,
 	}
 	assert.Equal(t, wantOut, out)
 	assert.Equal(t, []string{"dir:internal/handler/mcp", "dir:internal/httpx"}, nodeIDs(out))

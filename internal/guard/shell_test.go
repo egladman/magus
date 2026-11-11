@@ -2785,7 +2785,7 @@ func (s *PersonLeaseSuite) TestASessionBoundRenameDryRunIsRefusedUntilItNamesIts
 	v := s.judgeBound(renameDryRun)
 	s.Contains(v.Reason, "start the line with `export BAGGAGE=magus.lease=lease-a;`")
 	v.Reason = ""
-	s.Equal(types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decisionDeny, Rule: string(denyRuleEditUngraded), Lease: "lease-a", LeaseFrom: types.LeaseSourceAgent}, v)
+	s.Equal(types.GuardJudgment{APIVersion: v.APIVersion, Decision: decisionDeny, Rule: string(denyRuleEditUngraded), Lease: "lease-a", LeaseFrom: types.LeaseSourceAgent}, v)
 }
 
 func (s *PersonLeaseSuite) TestTheClaimedRenameGradesPathsOutsideTheRow() {

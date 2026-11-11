@@ -377,8 +377,8 @@ func unanswered(rows []types.Job, row types.Job, items []string, why string) []t
 		}
 		out = append(out, types.JobUnmerged{
 			Job: row.ID, Item: item, Why: why,
-			Remedy: fmt.Sprintf("declare a row for it, or dismiss it: `%s` with {\"schema_version\":%d,\"id\":%q,\"deferred\":[{\"item\":\"<item>\",\"row\":\"<row>\"}]}, or \"reason\":\"<why>\" in place of row",
-				hint.JobApply.With("--stdin"), types.JobSchemaVersion, row.ID),
+			Remedy: fmt.Sprintf("declare a row for it, or dismiss it: `%s` with {\"api_version\":%q,\"id\":%q,\"deferred\":[{\"item\":\"<item>\",\"row\":\"<row>\"}]}, or \"reason\":\"<why>\" in place of row",
+				hint.JobApply.With("--stdin"), types.JobAPIVersion, row.ID),
 		})
 	}
 	return out
@@ -640,8 +640,8 @@ func (r *unmergedRead) holds(ctx context.Context, f *unmergedFact) (bool, int, e
 // or an unreadable head. A row with no checkout, no branch and no filed path
 // has nothing to lose, nor one a passed integration names.
 func (r *unmergedRead) facts(rows []types.Job, row types.Job) []types.JobUnmerged {
-	state := fmt.Sprintf("or state why it stays off: `%s` with {\"schema_version\":%d,\"id\":%q,\"left_unmerged\":\"<why>\"}",
-		hint.JobApply.With("--stdin"), types.JobSchemaVersion, row.ID)
+	state := fmt.Sprintf("or state why it stays off: `%s` with {\"api_version\":%q,\"id\":%q,\"left_unmerged\":\"<why>\"}",
+		hint.JobApply.With("--stdin"), types.JobAPIVersion, row.ID)
 	fact := func(head, why, remedy string) types.JobUnmerged {
 		return types.JobUnmerged{Job: row.ID, Head: head, Why: why, Remedy: fmt.Sprintf("%s, %s", remedy, state)}
 	}

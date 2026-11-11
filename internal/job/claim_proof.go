@@ -661,7 +661,7 @@ func proposeDeadHolder(row types.Job, rel string, facts claimFacts) (types.JobCl
 // ClaimCommand is the one `magus job apply` line that claims job id by reqs, and false
 // when it would run past [maxClaimCommand].
 func ClaimCommand(id string, reqs []types.JobClaimRequest) (string, bool) {
-	record, err := json.Marshal(types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: id, Claim: reqs})
+	record, err := json.Marshal(types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: id, Claim: reqs})
 	if err != nil {
 		return "", false
 	}

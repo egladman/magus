@@ -50,17 +50,14 @@ func DecodeResult(r io.Reader) (types.JobResult, error) {
 	}
 	var rep types.JobResult
 	if err := json.UnmarshalStrict(raw, &rep); err != nil {
-		return types.JobResult{}, fmt.Errorf("job: the input is not a version %d result: %w", types.JobResultSchemaVersion, err)
+		return types.JobResult{}, fmt.Errorf("job: the input is not a %s result: %w", types.JobResultAPIVersion, err)
 	}
 	return rep, nil
 }
 
-// decodeDeclaration reads one declared job. See [DecodeResult] for the rules; this is the
-// same two passes over the job's schema. A record that is not a job (blank, too large, no
-// schema_version, an unknown member) fails as JobRecordInvalid problems, each unknown member
-// its own, and a job that decodes fails with every problem [types.Declaration.Problems]
-// finds. A newer schema_version, or a requirement this magus lacks, is no defect of the
-// record and fails as a plain error naming the update.
+// decodeDeclaration reads one declared job in [DecodeResult]'s two passes.
+// A record that is not a job fails as JobRecordInvalid problems. A newer
+// api_version, or a missing feature, fails naming the update.
 func decodeDeclaration(r io.Reader) (types.Declaration, error) {
 	raw, err := readInput(r, "job")
 	switch {
@@ -71,7 +68,7 @@ func decodeDeclaration(r io.Reader) (types.Declaration, error) {
 	}
 	if err := checkVersion(raw, "job", types.DeclarationSchema); err != nil {
 		if missing := (*missingVersion)(nil); errors.As(err, &missing) {
-			return types.Declaration{}, recordInvalid("schema_version", err).Error()
+			return types.Declaration{}, recordInvalid("api_version", err).Error()
 		}
 		return types.Declaration{}, err
 	}
@@ -82,18 +79,17 @@ func decodeDeclaration(r io.Reader) (types.Declaration, error) {
 	return row, errors.Join(row.FoldLegacyNames(), row.Validate())
 }
 
-// DecodeStdinDeclaration is [decodeDeclaration] for the one record `magus job fork --stdin`
-// reads, where a JSON object naming no schema_version member takes this magus's version.
-// defaulted reports that it did, for the caller to say so. A schema_version the record
-// names, 0 included, is held to decodeDeclaration's rules.
+// DecodeStdinDeclaration is [decodeDeclaration] for `magus job fork --stdin`.
+// An object naming no api_version takes this magus's, and defaulted says
+// so for the caller to report. A named api_version follows the usual rules.
 func DecodeStdinDeclaration(r io.Reader) (row types.Declaration, defaulted bool, err error) {
 	raw, err := readInput(r, "job")
 	if err != nil {
 		return types.Declaration{}, false, asRecordInvalid(err)
 	}
 	if members, isObject := objectMembers(raw); isObject {
-		if _, named := members["schema_version"]; !named {
-			members["schema_version"] = json.RawMessage(strconv.Itoa(types.JobSchemaVersion))
+		if _, named := members["api_version"]; !named {
+			members["api_version"] = json.RawMessage(strconv.Quote(string(types.JobAPIVersion)))
 			if raw, err = json.Marshal(members); err != nil {
 				return types.Declaration{}, false, err
 			}
@@ -128,14 +124,14 @@ func memberProblems(raw []byte, err error) types.JobProblems {
 		ps = append(ps, types.JobProblem{
 			Code:    types.JobRecordInvalid,
 			Field:   name,
-			Message: fmt.Sprintf("%q is an unknown member of a version %d job", name, types.JobSchemaVersion),
+			Message: fmt.Sprintf("%q is an unknown member of a %s job", name, types.JobAPIVersion),
 			Fix:     fmt.Sprintf("drop it, or spell the field `%s` prints", hint.JobFork.With("--schema")),
 		})
 	}
 	if len(ps) > 0 {
 		return ps
 	}
-	return recordInvalid("", fmt.Errorf("the input is not a version %d job: %w", types.JobSchemaVersion, err))
+	return recordInvalid("", fmt.Errorf("the input is not a %s job: %w", types.JobAPIVersion, err))
 }
 
 // storeStamped are the members of a stored row that the store computes and a declaration
@@ -199,8 +195,9 @@ func dropStoreStamped(raw []byte) ([]byte, error) {
 
 // unwrapDescribed is the row inside a `describe job -o json` record: an object with an
 // object `job` and no `id`. The derived members beside `job` are dropped and any other is
-// refused, since a typo there would vanish unread. A row naming no schema_version takes
-// this magus's, as [DecodeStdinDeclaration] does; any other record comes back as it was.
+// refused, since a typo there would vanish unread. A row naming no
+// api_version takes this magus's, as [DecodeStdinDeclaration] does.
+// Any other record comes back as it was.
 func unwrapDescribed(raw []byte) ([]byte, error) {
 	members, isObject := objectMembers(raw)
 	if !isObject {
@@ -224,8 +221,8 @@ func unwrapDescribed(raw []byte) ([]byte, error) {
 		return nil, recordInvalid(unknown[0], fmt.Errorf("%s beside `job` is not a member `describe job -o json` prints",
 			quoteAll(unknown))).Error()
 	}
-	if _, named := row["schema_version"]; !named {
-		row["schema_version"] = json.RawMessage(strconv.Itoa(types.JobSchemaVersion))
+	if _, named := row["api_version"]; !named {
+		row["api_version"] = json.RawMessage(strconv.Quote(string(types.JobAPIVersion)))
 	}
 	return json.Marshal(row)
 }
@@ -326,15 +323,15 @@ func asRecordInvalid(err error) error {
 	return err
 }
 
-// missingVersion is checkVersion's failure for a record that names no schema_version, the
-// one version failure that is the record's own defect rather than this magus's age.
+// missingVersion is checkVersion's failure for a record naming no
+// api_version: the record's own defect, not this magus's age.
 type missingVersion struct {
 	what      string
-	supported int
+	supported types.APIVersion
 }
 
 func (e *missingVersion) Error() string {
-	return fmt.Sprintf("job: the %s carries no schema_version, this magus accepts versions 1 through %d", e.what, e.supported)
+	return fmt.Sprintf("job: the %s carries no api_version, and this magus reads only %s", e.what, e.supported)
 }
 
 // checkVersion reads the envelope that decides whether the rest can be read at all.
@@ -347,15 +344,14 @@ func checkVersion(raw []byte, what string, ledger types.SchemaLedger) error {
 		return fmt.Errorf("job: the %s is not JSON: %w", what, err)
 	}
 	supported := ledger.Version
-	switch v := envelope.Version; {
-	case v <= 0:
+	if envelope.Version == "" {
 		return &missingVersion{what: what, supported: supported}
-	case v > supported:
-		return fmt.Errorf("job: the %s is schema_version %d and this magus accepts versions 1 through %d:"+
-			" a newer record is not readable by an older magus, update magus or send version %d", what, v, supported, supported)
+	}
+	if err := supported.Refuse("job: the "+what, envelope.Version, "send api_version "+string(supported)); err != nil {
+		return err
 	}
 	if lacks := envelope.Unmet(ledger.Features()); lacks != nil {
-		return fmt.Errorf("job: the %s requires %s, which this magus (schema %d) lacks, update magus",
+		return fmt.Errorf("job: the %s requires %s, which this magus (%s) lacks, update magus",
 			what, quoteAll(lacks), supported)
 	}
 	return nil

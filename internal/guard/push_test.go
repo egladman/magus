@@ -303,7 +303,7 @@ func TestUngatedPushDenyStillAsksTheCommandRule(t *testing.T) {
 
 	probe.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: "batch it"}
 	v = Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRulePushUnverified)}, v, "an advise leaves the push deny as it stood")
+	assert.Equal(t, types.GuardJudgment{APIVersion: v.APIVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRulePushUnverified)}, v, "an advise leaves the push deny as it stood")
 	assert.NotContains(t, v.Reason, "batch it")
 }
 

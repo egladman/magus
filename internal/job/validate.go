@@ -566,7 +566,7 @@ func rowDeclaration(row types.Job) types.Declaration {
 // field [types.Declaration.Apply] writes, with no state, so the retry is a new attempt.
 func RetryDeclaration(row types.Job) types.Declaration {
 	rec := rowDeclaration(row)
-	rec.Schema = types.Schema{Version: types.JobSchemaVersion}
+	rec.Schema = types.Schema{Version: types.JobAPIVersion}
 	rec.State = ""
 	rec.SoftPaths, rec.Integrates = row.SoftPaths, row.Integrates
 	rec.BriefFormat, rec.Follows, rec.FreshReason = row.BriefFormat, row.Follows, row.FreshReason

@@ -246,7 +246,7 @@ func TestSpellLockThenPullByImportPath(t *testing.T) {
 	lock, err := remotespell.ReadLock(repo)
 	require.NoError(t, err)
 	d := digest.Digest(strings.TrimPrefix(pinned, path+"@"))
-	assert.Equal(t, remotespell.Lock{Version: 1, Spells: map[string]remotespell.LockEntry{path: {Tag: "v1", Digest: d}}}, lock)
+	assert.Equal(t, remotespell.Lock{Version: "magus.spell-lock/v1alpha1", Spells: map[string]remotespell.LockEntry{path: {Tag: "v1", Digest: d}}}, lock)
 
 	var res spellLockResult
 	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "lock", "-o", "json")), &res))

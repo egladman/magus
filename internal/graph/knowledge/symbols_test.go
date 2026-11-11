@@ -165,13 +165,13 @@ func TestGraphRefs(t *testing.T) {
 	// so an agent can edit at the exact line without reading the whole file. Refs are
 	// sorted by file: pkg/a before pkg/b. RefCount is 1 + 2 occurrences.
 	assert.Equal(t, types.KnowledgeRefsOutput{
-		Definition:    types.KnowledgeRefsDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Symbol:        "symbol:example.com/foo Bar#",
-		Label:         "Bar",
-		FileCount:     2,
-		RefCount:      3,
-		Defs:          []types.KnowledgeRefSite{{File: "pkg/foo/foo.go", Lines: []int{11}}},
+		Definition: types.KnowledgeRefsDefinition,
+		APIVersion: types.KnowledgeAPIVersion,
+		Symbol:     "symbol:example.com/foo Bar#",
+		Label:      "Bar",
+		FileCount:  2,
+		RefCount:   3,
+		Defs:       []types.KnowledgeRefSite{{File: "pkg/foo/foo.go", Lines: []int{11}}},
 		Refs: []types.KnowledgeRefSite{
 			{File: "pkg/a/a.go", Count: 2, Lines: []int{5, 8}},
 			{File: "pkg/b/b.go", Count: 1, Lines: []int{3}},
@@ -334,10 +334,10 @@ func TestGraphDefinitions(t *testing.T) {
 	out, ok := g.Definitions("symbol:example.com/foo Bar#")
 	require.True(t, ok)
 	assert.Equal(t, types.KnowledgeDefinitionsOutput{
-		Definition:    types.KnowledgeDefinitionsDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
-		Symbol:        "symbol:example.com/foo Bar#",
-		Label:         "Bar",
+		Definition: types.KnowledgeDefinitionsDefinition,
+		APIVersion: types.KnowledgeAPIVersion,
+		Symbol:     "symbol:example.com/foo Bar#",
+		Label:      "Bar",
 		Definitions: []types.KnowledgeDefinitionSite{{
 			File: "pkg/foo/foo.go", StartLine: 11, EndLine: 20, Status: types.DefinitionUnverified,
 		}},

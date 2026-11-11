@@ -10,14 +10,14 @@ import (
 // Schema names. Each document carries its own under "schema"; a reader refuses any
 // other, so a format change is a new name rather than a silent misread.
 const (
-	SchemaChanges = "mergequeue.changes/v1"
-	SchemaPlan    = "mergequeue.plan/v1"
-	SchemaVerdict = "mergequeue.verdict/v1"
+	SchemaChanges = "mergequeue.changes/v1alpha1"
+	SchemaPlan    = "mergequeue.plan/v1alpha1"
+	SchemaVerdict = "mergequeue.verdict/v1alpha1"
 	// SchemaCapabilities names what `magus queue describe` prints: a provider's
 	// [Capabilities] on one base.
-	SchemaCapabilities = "mergequeue.capabilities/v1"
+	SchemaCapabilities = "mergequeue.capabilities/v1alpha1"
 	// SchemaReviews names what `magus queue reviews` prints: a [ReviewReport].
-	SchemaReviews = "mergequeue.reviews/v1"
+	SchemaReviews = "mergequeue.reviews/v1alpha1"
 )
 
 // Changes is the queue's input: the changes carrying merge intent, in queue order.

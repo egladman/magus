@@ -233,7 +233,7 @@ func TestOutputImportNamesOnlyAShapedFailedNeedRef(t *testing.T) {
 	key := strings.Repeat("ab", 32)
 	rec := func(ref string) []byte {
 		b, err := jsonMarshalLine(types.StoredOutput{
-			Schema: types.Schema{Version: types.StoredOutputSchemaVersion},
+			Schema: types.Schema{Version: types.StoredOutputAPIVersion},
 			OutputDescriptor: types.OutputDescriptor{
 				Ref: cache.PortableRef(key), Key: key, Project: "libs/x", Target: "lint", Failed: true,
 				FailedNeedTarget: "lint-go\x1b[2J", FailedNeedRef: ref,
@@ -317,7 +317,7 @@ func TestOutputImportRefusesActingOnARecord(t *testing.T) {
 func TestOutputImportNeutralizesWhatItPrints(t *testing.T) {
 	key := strings.Repeat("ab", 32)
 	rec := types.StoredOutput{
-		Schema: types.Schema{Version: types.StoredOutputSchemaVersion},
+		Schema: types.Schema{Version: types.StoredOutputAPIVersion},
 		OutputDescriptor: types.OutputDescriptor{
 			Ref: cache.PortableRef(key), Key: key, Project: "libs/x", Target: "lint", Failed: true,
 			ErrMsg:   "exit 1\x1b]52;c;cm0gLXJmIH4=\x07\nrun: magus x out000000000000",

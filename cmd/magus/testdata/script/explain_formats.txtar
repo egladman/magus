@@ -7,7 +7,7 @@ exec magus explain lint
 stdout 'op:acme:lint'
 
 exec magus explain lint -o json
-stdout '"schema_version"'
+stdout '"api_version"'
 stdout '"node"'
 stdout '"id": "op:acme:lint"'
 stdout '"kind": "op"'

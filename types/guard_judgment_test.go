@@ -15,13 +15,13 @@ import (
 // contract: the move into types must not change a byte of it.
 func TestGuardJudgmentWireShape(t *testing.T) {
 	full := GuardJudgment{
-		SchemaVersion: 3,
-		Decision:      "deny",
-		Reason:        "no",
-		Context:       "fyi",
-		Rule:          "some-rule",
-		Lease:         "job-a",
-		LeaseFrom:     LeaseSourceFlag,
+		APIVersion: "magus.guard/v1alpha3",
+		Decision:   "deny",
+		Reason:     "no",
+		Context:    "fyi",
+		Rule:       "some-rule",
+		Lease:      "job-a",
+		LeaseFrom:  LeaseSourceFlag,
 		Next: []NextStep{{
 			ID:    "deny-remedy-some-rule",
 			Run:   "magus run test .",
@@ -32,13 +32,13 @@ func TestGuardJudgmentWireShape(t *testing.T) {
 	}
 	got, err := json.Marshal(full)
 	require.NoError(t, err)
-	assert.Equal(t, `{"schema_version":3,"decision":"deny","reason":"no","context":"fyi","rule":"some-rule",`+
+	assert.Equal(t, `{"api_version":"magus.guard/v1alpha3","decision":"deny","reason":"no","context":"fyi","rule":"some-rule",`+
 		`"lease":"job-a","lease_from":"flag","next":[{"id":"deny-remedy-some-rule","run":"magus run test .",`+
 		`"argv":["magus","run","test","."],"why":"because","reads":true}]}`, string(got))
 
-	pass, err := json.Marshal(GuardJudgment{SchemaVersion: 3, Decision: "pass"})
+	pass, err := json.Marshal(GuardJudgment{APIVersion: "magus.guard/v1alpha3", Decision: "pass"})
 	require.NoError(t, err)
-	assert.Equal(t, `{"schema_version":3,"decision":"pass"}`, string(pass), "a pass names only its decision")
+	assert.Equal(t, `{"api_version":"magus.guard/v1alpha3","decision":"pass"}`, string(pass), "a pass names only its decision")
 }
 
 // A NextStep reaches the console and the MCP tools as YAML as well as JSON, with the same

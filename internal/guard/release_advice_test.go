@@ -49,7 +49,7 @@ func TestReleaseRequestedAdvisesTheHolderOnce(t *testing.T) {
 		assert.Contains(t, v.Context, "lease-a has changed nothing under internal/ledger/**")
 		assert.Contains(t, v.Context, "magus job apply -f <record>")
 		require.Equal(t, types.GuardJudgment{
-			SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: v.Context,
+			APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: v.Context,
 			Rule: string(advisoryReleaseRequested), Lease: "lease-a", LeaseFrom: types.LeaseSourceFlag,
 		}, v, v.Context)
 		assert.NotEqual(t, string(advisoryReleaseRequested), call(ctx, "holder", "lease-a").Rule, "said once a session")

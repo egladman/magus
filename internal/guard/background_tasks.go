@@ -160,9 +160,9 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 		return refuseLeftStop(tasks, why, now), true, false
 	}
 	return types.GuardJudgment{
-		SchemaVersion: agent.GuardSchemaVersion,
-		Decision:      decisionAdvise,
-		Rule:          string(denyRuleBackgroundLeft),
+		APIVersion: agent.GuardAPIVersion,
+		Decision:   decisionAdvise,
+		Rule:       string(denyRuleBackgroundLeft),
 		Context: fmt.Sprintf("magus workspace: %s this session ran in the background %s still running; stop any nothing waits on:\n%s",
 			plural.Word(len(tasks), "a shell command", "shell commands"), plural.Word(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
 	}, true, false
@@ -173,9 +173,9 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 // the one a host shows the person.
 func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.GuardJudgment {
 	return types.GuardJudgment{
-		SchemaVersion: agent.GuardSchemaVersion,
-		Decision:      decisionDeny,
-		Rule:          string(denyRuleBackgroundLeft),
+		APIVersion: agent.GuardAPIVersion,
+		Decision:   decisionDeny,
+		Rule:       string(denyRuleBackgroundLeft),
 		Reason: fmt.Sprintf("magus workspace: this stop is refused while background tasks still run\nStop each, or background a wait as `magus job exec --timeout <d> -- <command>`:\n%s\n%s.",
 			stoppableTasks(tasks, now), why),
 	}
@@ -185,9 +185,9 @@ func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.Gua
 // resumes it when they complete.
 func adviseResumedStop(tasks []backgroundTask, why string, now time.Time) types.GuardJudgment {
 	return types.GuardJudgment{
-		SchemaVersion: agent.GuardSchemaVersion,
-		Decision:      decisionAdvise,
-		Rule:          string(denyRuleBackgroundLeft),
+		APIVersion: agent.GuardAPIVersion,
+		Decision:   decisionAdvise,
+		Rule:       string(denyRuleBackgroundLeft),
 		Context: fmt.Sprintf("magus workspace: this stop stands and the job stays yours: %s.\n%s you ran in the background %s still running:\n%s",
 			why, plural.Word(len(tasks), "A shell command", "Shell commands"), plural.Word(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
 	}

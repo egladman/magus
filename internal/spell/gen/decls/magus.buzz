@@ -821,7 +821,7 @@ export object VerificationEvidence {
 }
 
 export object JobResult {
-    schemaVersion: int = 0,
+    apiVersion: str = "",
     requires: [str] = [],
     job: str = "",
     changedPaths: [str] = [],
@@ -874,7 +874,7 @@ export object JobIntegration {
 }
 
 export object Job {
-    schemaVersion: int = 0,
+    apiVersion: str = "",
     requires: [str] = [],
     id: str = "",
     parent: str = "",
@@ -1438,7 +1438,7 @@ export object KnowledgeRanking {
 
 export object QueryResult {
     definition: str = "",
-    schemaVersion: int = 0,
+    apiVersion: str = "",
     query: str = "",
     budget: int = 0,
     matchCount: int = 0,
@@ -1470,7 +1470,7 @@ export object PublicSymbol {
 
 export object ExplainResult {
     definition: str = "",
-    schemaVersion: int = 0,
+    apiVersion: str = "",
     node: KnowledgeNode = KnowledgeNode{},
     blastRadius: int = 0,
     @"out": [EdgeRef] = [],
@@ -1494,7 +1494,7 @@ export object PathStep {
 
 export object PathResult {
     definition: str = "",
-    schemaVersion: int = 0,
+    apiVersion: str = "",
     @"from": str = "",
     to: str = "",
     found: bool = false,
@@ -1514,7 +1514,7 @@ export object RefSite {
 
 export object RefsResult {
     definition: str = "",
-    schemaVersion: int = 0,
+    apiVersion: str = "",
     symbol: str = "",
     label: str = "",
     fileCount: int = 0,
@@ -1576,7 +1576,7 @@ export object KnowledgeFold {
 
 export object NeighborhoodResult {
     definition: str = "",
-    schemaVersion: int = 0,
+    apiVersion: str = "",
     focus: str = "",
     resolution: KnowledgeResolution = KnowledgeResolution.none,
     options: NeighborhoodOptions = NeighborhoodOptions{},

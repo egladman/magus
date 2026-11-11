@@ -10,7 +10,6 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
@@ -21,7 +20,12 @@ import (
 // ToolRowsVersion is the layout of a tool rows directory this build writes and reads, kept in
 // the directory's version file. Bump it when the layout changes, so a directory written for
 // another layout is reported rather than misread.
-const ToolRowsVersion = 1
+const ToolRowsVersion types.APIVersion = "magus.tool-rows/v1alpha1"
+
+// preFoldToolRows is the version file an older magus wrote for
+// ToolRowsVersion's layout. compat(until: the next release): a harness
+// installed before the rename keeps its rows until it is reinstalled.
+const preFoldToolRows types.APIVersion = "1"
 
 // ModelFacts is what the guard prices and tiers a call by: the model rows the harness
 // publishes through mgs_listModels, and the workspace's model-tier declaration, nil when it
@@ -78,7 +82,7 @@ func ToolFiles(t types.HarnessTools, models *ModelFacts) []types.AgentFile {
 			types.AgentFile{Path: path.Join(t.Dir, types.ToolModelRowsFile), Content: encodeModelRows(models.Rows)},
 			types.AgentFile{Path: path.Join(t.Dir, types.ToolTiersFile), Content: encodeTiers(models.Tiers)})
 	}
-	return append(files, types.AgentFile{Path: path.Join(t.Dir, types.ToolRowsVersionFile), Content: strconv.Itoa(ToolRowsVersion) + "\n"})
+	return append(files, types.AgentFile{Path: path.Join(t.Dir, types.ToolRowsVersionFile), Content: string(ToolRowsVersion) + "\n"})
 }
 
 // hostFiles are the files that tell a hook which host a tool rows directory in dir belongs
@@ -173,8 +177,12 @@ func readToolRows(root, dir string) ToolRows {
 		rows.Err = fmt.Errorf("no tool rows at %s, %s: %w", dir, reinstall, err)
 		return rows
 	}
-	if got := strings.TrimSpace(string(version)); got != strconv.Itoa(ToolRowsVersion) {
-		rows.Err = fmt.Errorf("the tool rows at %s are version %s and this magus reads version %d, %s", dir, got, ToolRowsVersion, reinstall)
+	got := types.APIVersion(strings.TrimSpace(string(version)))
+	if got == preFoldToolRows {
+		got = ToolRowsVersion
+	}
+	if err := ToolRowsVersion.Refuse("the tool rows at "+dir, got, reinstall); err != nil {
+		rows.Err = err
 		return rows
 	}
 	rows.abs = abs

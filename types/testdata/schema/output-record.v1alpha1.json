@@ -1,5 +1,6 @@
 {
   "fields": {
+    "api_version": "types.APIVersion",
     "attempt": "string",
     "class_digests": "[]types.ClassDigest",
     "dirty": "bool",
@@ -7,9 +8,12 @@
     "error": "string",
     "extra_args": "[]string",
     "failed": "bool",
+    "failed_need_ref": "string",
+    "failed_need_target": "string",
     "inv": "string",
     "key": "string",
     "key_version": "int",
+    "lease": "string",
     "magus_version": "string",
     "output": "string",
     "output_base64": "[]uint8",
@@ -18,11 +22,12 @@
     "ref": "string",
     "requires": "[]string",
     "revision": "string",
-    "schema_version": "int",
     "spell": "string",
     "target": "string",
     "timestamp_ms": "int64",
     "vcs": "string"
   },
-  "reserved": []
+  "reserved": [
+    "schema_version"
+  ]
 }

@@ -133,7 +133,7 @@ func NewClient(addr string, opts ...ClientOption) *Client {
 	lease := trail.SpawnFromEnv().Lease
 	c := &Client{
 		addr:   addr,
-		hello:  hello{Magic: helloMagic, Protocol: ProtocolVersion, PID: os.Getpid(), Dir: dir, Argv: os.Args, Lease: lease},
+		hello:  hello{Magic: helloMagic, Protocol: APIVersion, PID: os.Getpid(), Dir: dir, Argv: os.Args, Lease: lease},
 		held:   map[string]*heldClaim{},
 		riders: map[string]*heldRider{},
 		done:   make(chan struct{}),
@@ -474,8 +474,8 @@ func (c *Client) sayHello(ctx context.Context, cn *conn, sock string) error {
 		}
 		if refusal != nil && refusal.Code == CodeProtocol {
 			return types.WrapDiagnostic(types.PeerFromAnotherBuild, err,
-				"the broker at %s is from another magus build (%v, this magus speaks protocol %d): it refuses every request; `magus server broker stop` stops it",
-				sock, err, ProtocolVersion)
+				"the broker at %s is from another magus build (%v, this magus speaks protocol %s): it refuses every request; `magus server broker stop` stops it",
+				sock, err, APIVersion)
 		}
 		return fmt.Errorf("hello: %w", err)
 	}

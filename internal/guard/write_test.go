@@ -1379,7 +1379,7 @@ func TestGradeLeasedWriteToAPathAWideningAddedInTheLeasesCheckout(t *testing.T) 
 			_, err = store.RecordWorktree(ctx, "w", types.JobWorktree{Root: own, Source: session})
 			require.NoError(t, err)
 
-			widen := types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "w", Criteria: "widen me",
+			widen := types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "w", Criteria: "widen me",
 				Checkpoint: "rev-a", WritePaths: []string{"std/*.go", "cmd/*.go"},
 				Goals: []types.Goal{{ID: "done", Kind: types.GoalKindPaths, Expect: types.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
 			_, err = job.Apply(ctx, store, []types.Declaration{widen}, config.Jobs{}, nil, nil, false)
@@ -1716,7 +1716,7 @@ func (s *ExitedHolderBindingSuite) TestEditIntoTheJobCheckoutAfterOwnExitIsDenie
 
 // withoutVolatile drops the fields of v that vary between runs.
 func withoutVolatile(v types.GuardJudgment) types.GuardJudgment {
-	v.SchemaVersion, v.Reason, v.Context, v.LeaseFrom, v.Next = 0, "", "", "", nil
+	v.APIVersion, v.Reason, v.Context, v.LeaseFrom, v.Next = "", "", "", "", nil
 	return v
 }
 

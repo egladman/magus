@@ -61,6 +61,6 @@ exec magus ls jobs -o name
 -- code.go --
 package pkg
 -- broad.json --
-{"schema_version": 11, "id": "wave/broad", "write_paths": ["**/*.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/broad", "write_paths": ["**/*.go"],
  "check": {"target": "test", "project": "."},
  "deviations": [{"code": "MGS3043", "subject": "**/*.go", "reason": "the job tunes every Go file"}]}

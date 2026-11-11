@@ -244,8 +244,8 @@ type Broker struct {
 	PID     int    `json:"pid" yaml:"pid"`
 	Version string `json:"version,omitempty" yaml:"version,omitempty"`
 	// Protocol is the broker wire version it speaks.
-	Protocol int    `json:"protocol" yaml:"protocol"`
-	Socket   string `json:"socket" yaml:"socket"`
+	Protocol types.APIVersion `json:"protocol" yaml:"protocol"`
+	Socket   string           `json:"socket" yaml:"socket"`
 	// Executable is the binary the broker runs from. A broker started by a worktree's
 	// ./magus keeps running after that worktree is gone, and this is where to look.
 	Executable string    `json:"executable,omitempty" yaml:"executable,omitempty"`

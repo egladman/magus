@@ -217,11 +217,11 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 		"export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }\n")
 	w.Write("AGENTS.md", "# rules\n")
 	fixture.WireHarness(t, agent.HarnessDescriptor{
-		SchemaVersion: 2,
-		ID:            "brief-host",
-		Display:       agent.HarnessDisplay{Name: "Brief Host"},
-		Config:        types.HarnessConfig{Path: "host/hooks.json"},
-		Skills:        types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormBoth},
+		APIVersion: agent.HarnessAPIVersion,
+		ID:         "brief-host",
+		Display:    agent.HarnessDisplay{Name: "Brief Host"},
+		Config:     types.HarnessConfig{Path: "host/hooks.json"},
+		Skills:     types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormBoth},
 		ManagedEntries: []types.ManagedEntries{{
 			Path: []string{"hooks", "before"},
 			Entries: []map[string]any{{

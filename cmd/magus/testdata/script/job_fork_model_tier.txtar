@@ -76,17 +76,17 @@ magus\modelTier(choose);
 -- code.go --
 package pkg
 -- small.json --
-{"schema_version": 12, "id": "wave/small", "write_paths": ["a.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/small", "write_paths": ["a.go"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}
 -- wide.json --
-{"schema_version": 12, "id": "wave/wide", "write_paths": ["b.go", "c.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/wide", "write_paths": ["b.go", "c.go"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["b.go", "c.go"]}]}
 -- named.json --
-{"schema_version": 12, "id": "wave/named", "write_paths": ["d.go"], "model": "principal",
+{"api_version": "magus.job/v1alpha1", "id": "wave/named", "write_paths": ["d.go"], "model": "principal",
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["d.go"]}]}
 -- model.json --
-{"schema_version": 12, "id": "wave/model", "write_paths": ["e.go"], "model": "haiku",
+{"api_version": "magus.job/v1alpha1", "id": "wave/model", "write_paths": ["e.go"], "model": "haiku",
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["e.go"]}]}
 -- applied.json --
-{"schema_version": 12, "id": "wave/applied", "write_paths": ["f.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/applied", "write_paths": ["f.go"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["f.go"]}]}

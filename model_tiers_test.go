@@ -33,12 +33,12 @@ export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }
 func TestModelRowsLetAJobPutResolveAnAliasThroughARealMagus(t *testing.T) {
 	testkit.Isolate(t)
 	fixture.WireHarness(t, agent.HarnessDescriptor{
-		SchemaVersion: 2,
-		ID:            "opus-host",
-		Display:       agent.HarnessDisplay{Name: "Opus host"},
-		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
-		Config:        types.HarnessConfig{Path: "hooks.json"},
-		Models:        []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "principal"}},
+		APIVersion: agent.HarnessAPIVersion,
+		ID:         "opus-host",
+		Display:    agent.HarnessDisplay{Name: "Opus host"},
+		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
+		Config:     types.HarnessConfig{Path: "hooks.json"},
+		Models:     []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "principal"}},
 	})
 	root := writeWorkspace(t, map[string]string{
 		"magus.yaml":                  "",

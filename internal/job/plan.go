@@ -651,7 +651,7 @@ func emptyResult(r types.JobResult) bool {
 // goals, then how a check the machine would not seat is filed.
 func resultShape(row types.Job) string {
 	shape := types.JobResult{
-		Schema:          types.Schema{Version: types.JobResultSchemaVersion},
+		Schema:          types.Schema{Version: types.JobResultAPIVersion},
 		Job:             row.ID,
 		ChangedPaths:    []string{},
 		UnresolvedRisks: []string{},

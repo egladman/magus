@@ -59,10 +59,10 @@ change() {
     g commit -qm "queue change $1"
 }
 
-# changes_json: every queue/* branch as a mergequeue.changes/v1 document, in name order.
+# changes_json: every queue/* branch as a mergequeue.changes/v1alpha1 document, in name order.
 changes_json() {
     g for-each-ref --sort=refname --format='%(refname:lstrip=3) %(objectname)' refs/heads/queue/ |
-        jq -R -s --arg base "$BASE" '{schema: "mergequeue.changes/v1", base: $base,
+        jq -R -s --arg base "$BASE" '{schema: "mergequeue.changes/v1alpha1", base: $base,
             changes: [split("\n")[] | select(. != "") | split(" ") |
                 {id: .[0], head: .[1], ref: ("refs/heads/queue/" + .[0]), title: ("queue/" + .[0])}]}'
 }

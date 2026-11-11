@@ -60,16 +60,16 @@ stderr 'scout/loose names no write paths and is not read-only'
 stderr '--read-only'
 
 -- scout.json --
-{"schema_version": 11, "id": "scout/pricing", "read_only": true,
+{"api_version": "magus.job/v1alpha1", "id": "scout/pricing", "read_only": true,
  "criteria": "say which file computes the total",
  "check": {"script": "probes/pricing.buzz"}}
 -- result.in.json --
-{"schema_version": 2, "job": "scout/pricing",
+{"api_version": "magus.job-result/v1alpha1", "job": "scout/pricing",
  "changed_paths": [],
  "validation": {"command": "magus buzz --record probes/pricing.buzz", "output_ref": "out<hex>"},
  "unresolved_risks": []}
 -- notes.in.json --
-{"schema_version": 2, "job": "scout/notes",
+{"api_version": "magus.job-result/v1alpha1", "job": "scout/notes",
  "changed_paths": [],
  "validation": {"command": "magus buzz --record probes/pricing.buzz", "output_ref": "out<hex>"},
  "unresolved_risks": []}

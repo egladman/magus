@@ -158,8 +158,9 @@ func (o Options) discoveryURL() string {
 	return DefaultDiscoveryURL
 }
 
-// ReleaseIndex is the JSON shape of gen/public/release/index.json (schema_version 1).
-// Schema is frozen at birth; additive changes only.
+// ReleaseIndex is the JSON shape of gen/public/release/index.json, at
+// schema_version 1 until the next release renames it. Additive changes
+// only.
 type ReleaseIndex struct {
 	SchemaVersion int `json:"schema_version"`
 	// KeyID names the key that signed this file. It is a cross-check, never the thing

@@ -57,7 +57,7 @@ func (s *scoutSuite) SetupTest() {
 }
 
 func (s *scoutSuite) skill(form types.SkillForm) string {
-	body, err := Default(6).SkillBytes("magus-multi-agent", form)
+	body, err := Default("magus.knowledge/v1alpha6").SkillBytes("magus-multi-agent", form)
 	s.Require().NoError(err)
 	return string(body)
 }

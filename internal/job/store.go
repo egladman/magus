@@ -340,8 +340,8 @@ func readOnly(row types.Job) error {
 	if lacks == nil {
 		return nil
 	}
-	return types.DiagnosticErrorf(types.StoreRecordsNewer, "%s requires %s, which this magus (schema %d) lacks: update magus",
-		row.ID, quoteAll(lacks), types.JobSchemaVersion)
+	return types.DiagnosticErrorf(types.StoreRecordsNewer, "%s requires %s, which this magus (%s) lacks: update magus",
+		row.ID, quoteAll(lacks), types.JobAPIVersion)
 }
 
 // requiredFeatures are the JobSchema features row's content needs a reader to implement,
@@ -354,15 +354,15 @@ func readOnly(row types.Job) error {
 func requiredFeatures(row types.Job) []string {
 	var out []string
 	if slices.ContainsFunc(slices.Concat(row.WritePaths, row.DenyPaths), types.HasClaim) {
-		out = append(out, types.JobSchema.Requires[11])
+		out = append(out, "claim-declarations")
 	}
 	if slices.ContainsFunc(row.Goals, func(g types.Goal) bool { return g.Resolve().Expect == types.ExpectSignature }) {
-		out = append(out, types.JobSchema.Requires[12])
+		out = append(out, "signature-goals")
 	}
 	// Every row has a generation, so a row carrying only that is not stamped: it would make
 	// every row read-only to an older magus.
 	if row.MaxAttempts > 0 || len(row.Prior) > 0 || row.Attempts > 1 {
-		out = append(out, types.JobSchema.Requires[13])
+		out = append(out, "job-generations")
 	}
 	slices.Sort(out)
 	return out
@@ -772,7 +772,7 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 		// The envelope is the store's, like the timestamps: a whole-row write keeps the
 		// members a newer magus stored, and the stamp never drops below what it read.
 		row.Schema = prev.Schema
-		row.Version = max(prev.Version, types.JobSchemaVersion)
+		row.Version = newestVersion(prev.Version)
 		row.ModelTier = prev.ModelTier
 		// Only RecordWorktree and EndWorktrees write the worktree record, and Exec rebinding
 		// an untaken row from an adopted checkout to another. The next attempt keeps a
@@ -1063,7 +1063,7 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 // was dropped, the header changed, the file ended in a line no writer finished, or the
 // appended lines would make it [file.CompactDue].
 func (s *Store) write(f jobsFile, log jobsLog) error {
-	f.Version = max(f.Version, types.JobSchemaVersion)
+	f.Version = newestVersion(f.Version)
 	f.Migration = len(s.migrations)
 	lines, err := encodeJobs(f)
 	if err != nil {
@@ -1226,13 +1226,13 @@ func (s *Store) parse(wait bool) (jobsFile, jobsLog, error) {
 	at := map[string]int{}
 	for _, line := range read.Lines {
 		var row types.Job
-		if err := json.Unmarshal(line.Text, &row); err != nil {
-			return jobsFile{}, jobsLog{}, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
+		if err := s.decodeLine(line.Text, line.N, &row, &row.Schema); err != nil {
+			return jobsFile{}, jobsLog{}, err
 		}
 		if row.ID == "" {
 			var header jobsFile
-			if err := json.Unmarshal(line.Text, &header); err != nil {
-				return jobsFile{}, jobsLog{}, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
+			if err := s.decodeLine(line.Text, line.N, &header, &header.Schema); err != nil {
+				return jobsFile{}, jobsLog{}, err
 			}
 			f.Schema, f.Migration, f.Retained, log.header = header.Schema, header.Migration, header.Retained, line.Text
 			continue
@@ -1246,8 +1246,8 @@ func (s *Store) parse(wait bool) (jobsFile, jobsLog, error) {
 		f.Jobs = append(f.Jobs, row)
 	}
 	if lacks := f.Unmet(types.JobSchema.Features()); lacks != nil {
-		return jobsFile{}, jobsLog{}, types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s requires %s, which this magus (schema %d) lacks, update magus",
-			s.path, quoteAll(lacks), types.JobSchemaVersion)
+		return jobsFile{}, jobsLog{}, types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s requires %s, which this magus (%s) lacks, update magus",
+			s.path, quoteAll(lacks), types.JobAPIVersion)
 	}
 	return f, log, nil
 }

@@ -11,7 +11,9 @@ package magus.graph.v1alpha1;
 // Graph is a knowledge-graph projection: nodes, edges (links), and shape metadata.
 message Graph {
   string definition = 1;
-  int32 schema_version = 2;
+  reserved 2;
+  reserved "schema_version";
+  string api_version = 10;
   bool directed = 3;
   bool multigraph = 4;
   int32 node_count = 5;
@@ -53,7 +55,7 @@ message Edge {
 //
 // Every verb is read-only, so the server mounts the service behind the console read bearer.
 //
-// The definition and schema_version fields every domain output carries are deliberately absent
+// The definition and api_version fields every domain output carries are deliberately absent
 // here. The proto package IS the version and buf-breaking gates it, so a second version number
 // could only ever disagree with the first; definition is CLI help prose, re-sent on every
 // response to a typed client that already knows what it called.

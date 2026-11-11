@@ -56,7 +56,7 @@ stdout '^  write_paths \+docs/manpage/\*\.md$'
 ! stdout 'docs:content-generate'
 
 -- fork.json --
-{"schema_version": 11, "id": "flags/glob", "write_paths": ["cli/*.go", "docs/rules/*.md"],
+{"api_version": "magus.job/v1alpha1", "id": "flags/glob", "write_paths": ["cli/*.go", "docs/rules/*.md"],
  "check": {"target": "test", "project": "."},
  "deviations": [{"code": "MGS3044", "subject": "**", "reason": "the integrator regenerates every one"}]}
 -- fork.out --
@@ -65,7 +65,7 @@ model tier: standard (rank 1), default: "the declared default" at magus/modeltie
 referenced outside the write paths: files that use what the write paths define
   unknown, no symbol index answered; `magus graph build` builds one
 -- widen.json --
-{"schema_version": 11, "id": "flags/shell", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
+{"api_version": "magus.job/v1alpha1", "id": "flags/shell", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
  "check": {"target": "test", "project": "."}}
 -- .gitignore --
 .magus/

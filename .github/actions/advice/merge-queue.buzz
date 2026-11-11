@@ -157,13 +157,13 @@ test "a provider that queues nothing by label still queues by auto-merge" {
 }
 
 test "an approval that carries is noted with its tier, and one that does not is left to GitHub" {
-    final report = `{"schema": "mergequeue.reviews/v1", "change": "7", "head": "h", "reviews": [
+    final report = `{"schema": "mergequeue.reviews/v1alpha1", "change": "7", "head": "h", "reviews": [
         {"reviewer": "ann", "review_id": "12", "commit": "c", "carry": true, "tier": "prose", "changed": [], "reason": "head h is c rebased; changed since the approval: a.md (prose: a prose glob)", "dismissed": false},
         {"reviewer": "bob", "review_id": "13", "commit": "c", "carry": false, "tier": "code", "changed": [], "reason": "changed since the approval at c: a.go (code: x)", "dismissed": true}
     ]}`;
     std\assert(carryNotes(report) == "Approvals given at an older commit that still stand, since nothing a reviewer must see changed:\n\n"
         + "- approval by @ann carries: prose (head h is c rebased; changed since the approval: a.md (prose: a prose glob))\n", message: "ann's carry, not bob's dismissal");
-    std\assert(carryNotes(`{"schema": "mergequeue.reviews/v1", "change": "7", "head": "h", "reviews": []}`) == "", message: "nothing to note");
+    std\assert(carryNotes(`{"schema": "mergequeue.reviews/v1alpha1", "change": "7", "head": "h", "reviews": []}`) == "", message: "nothing to note");
 }
 
 test "the advice names gh pr merge --auto for each allowed method, and the label only for a stack" {

@@ -409,7 +409,7 @@ var magusObjects = []Object{
 				Doc: "File a worker's result and the recorded attempt behind its output_ref, then move the job to " +
 					"exited. With no result it records no_return instead: the worker returned no evidence, which " +
 					"is distinct from a result that fails verification. A result is decoded with the strict, " +
-					"versioned contract `magus job exit --stdin` uses, keys in its JSON spelling (schema_version, " +
+					"versioned contract `magus job exit --stdin` uses, keys in its JSON spelling (api_version, " +
 					"changed_paths, output_ref). The output ref is resolved from this checkout before it is filed. " +
 					"Returns the stored row.",
 				Args:    []Arg{{Name: "result", Optional: true}},
