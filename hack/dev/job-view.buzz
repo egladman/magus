@@ -11,6 +11,8 @@ import "encoding/json";
 import "fs";
 
 final SUMMARY = "render a job's spec or its filed result as Markdown, never stored";
+final SERVES = ["replaces:cat jobs.jsonl"];
+final EFFECT = "read";
 
 final USAGE = "usage: magus buzz hack/dev/job-view.buzz -- --job <id> [--result]";
 final HELP = "cost: two job-store reads\n{USAGE}\n\n"
