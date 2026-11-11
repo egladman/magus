@@ -1,10 +1,10 @@
 ---
-title: "spawn-unbriefed: a subagent spawned before the multi-agent skill loaded"
+title: "spawn-before-skill: a subagent spawned before the multi-agent skill loaded"
 description: "A deny rule by default: it refuses a subagent spawned before the multi-agent skill loaded, and names what to run instead."
-tags: [guard, rules, spawn-unbriefed, deny]
+tags: [guard, rules, spawn-before-skill, deny]
 ---
 
-# spawn-unbriefed
+# spawn-before-skill
 
 A deny rule by default: it refuses a subagent spawned before the multi-agent skill loaded, and names what to run instead.
 
@@ -22,7 +22,7 @@ By default this rule takes the decision `deny`. A workspace sets it by name, in 
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"spawn-unbriefed": "advise"})
+magus\guard.builtins({"spawn-before-skill": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,12 +32,12 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [spawn-unbriefed]: ...
+deny [spawn-before-skill]: ...
 ```
 
-A workspace that sets this rule to `advise` sees `advise [spawn-unbriefed]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [spawn-before-skill]: ...` instead.
 
-`magus describe rule spawn-unbriefed` prints the same entry at a terminal, and
+`magus describe rule spawn-before-skill` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 
 ## See also

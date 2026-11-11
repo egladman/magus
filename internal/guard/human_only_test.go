@@ -370,9 +370,10 @@ func TestHumanOnlyReasonCarriesTheRecord(t *testing.T) {
 	}
 }
 
-// TestBriefCommandRefusesAHumanOnlyRun pins the spawn half: a brief telling a bound worker
-// to run a human-only target is refused before the worker exists to be refused.
-func TestBriefCommandRefusesAHumanOnlyRun(t *testing.T) {
+// TestSpawnCommandRefusesAHumanOnlyRun pins the spawn half: a brief
+// telling a bound worker to run a human-only target is refused before
+// the worker exists to be refused.
+func TestSpawnCommandRefusesAHumanOnlyRun(t *testing.T) {
 	for _, src := range humanOnlySources {
 		row := benchWorker()
 		ctx, root := fleetFixture(t, row)
@@ -384,10 +385,10 @@ func TestBriefCommandRefusesAHumanOnlyRun(t *testing.T) {
 
 		brief := fmt.Sprintf("JOB ID: %s\nRun the benchmark:\n\n```sh\nmagus run agent-bench-run .\n```\n", row.ID)
 		v := judgeBriefOffCheck(deps, briefInput{text: brief})
-		assert.Equal(t, denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleHumanOnly)}, v.Rule, src.name)
+		assert.Equal(t, denyRule{Name: denyRuleSpawnCommand, Arg: string(denyRuleHumanOnly)}, v.Rule, src.name)
 		assert.Contains(t, v.Deny, "job bench/run's worker to run `.:agent-bench-run`, which a person runs", src.name)
 		assert.Contains(t, v.Why, benchReason, src.name)
-		assert.Empty(t, judgeBriefCommand(deps, briefInput{text: brief, bound: true}).Deny,
+		assert.Empty(t, judgeSpawnCommand(deps, briefInput{text: brief, bound: true}).Deny,
 			"%s: a message to a bound worker is not graded against its row", src.name)
 
 		forbidding := fmt.Sprintf("JOB ID: %s\nNever run `magus run agent-bench-run .` yourself.\n", row.ID)

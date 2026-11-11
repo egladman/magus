@@ -106,5 +106,5 @@ func rankBuzzAuthor(v ShellVerdict, reason string) ShellVerdict {
 	if reason == "" || v.Deny != "" {
 		return v
 	}
-	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyBuzzUnbriefed}}
+	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyBuzzBeforeSkill}}
 }

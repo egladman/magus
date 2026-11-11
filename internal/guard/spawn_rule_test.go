@@ -156,7 +156,7 @@ func TestSpawnRuleCannotLiftABuiltInDeny(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAllow}}
 	v := Judge(ctx, strict(Dependencies{SpawnRule: probe.rule()}), Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true})
-	assert.Equal(t, verdictWithRule("deny", string(denySpawnUnbriefed)), unworded(v), "the built-in reason stands")
+	assert.Equal(t, verdictWithRule("deny", string(denySpawnBeforeSkill)), unworded(v), "the built-in reason stands")
 	assert.Empty(t, probe.asked)
 }
 
@@ -167,13 +167,13 @@ func TestSpawnDenyIsTheVerdictAndARef(t *testing.T) {
 	deps := strict(Dependencies{})
 	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true}
 
-	stored := shortDeny(t, cacheDir, Judge(ctx, deps, req), denySpawnUnbriefed,
+	stored := shortDeny(t, cacheDir, Judge(ctx, deps, req), denySpawnBeforeSkill,
 		"spawning before the magus-multi-agent skill loaded; load Skill(magus-multi-agent), then retry.")
 	assert.Contains(t, stored, "\nIt carries the lease, worktree, model-naming and git rules")
-	assert.Contains(t, stored, "\nsee: "+ruleDocsBase+string(denySpawnUnbriefed)+"/")
+	assert.Contains(t, stored, "\nsee: "+ruleDocsBase+string(denySpawnBeforeSkill)+"/")
 
 	repeat := Judge(ctx, deps, req)
-	doc, ok := Rule(string(denySpawnUnbriefed))
+	doc, ok := Rule(string(denySpawnBeforeSkill))
 	require.True(t, ok)
 	assert.True(t, strings.HasPrefix(repeat.Reason, fmt.Sprintf("denied again [spawn-before-skill]: %s\ndetails: ", doc.Catches)), repeat.Reason)
 }
@@ -196,23 +196,23 @@ func TestSpawnDenyTrailRowCarriesTheVerdictRef(t *testing.T) {
 		assert.Equal(t, ref, rows[i].VerdictRef, "row %d", i)
 		stored, err := trail.ReadBlob(cacheDir, rows[i].VerdictRef)
 		require.NoError(t, err)
-		assert.Contains(t, string(stored), "\nsee: "+ruleDocsBase+string(denySpawnUnbriefed)+"/")
+		assert.Contains(t, string(stored), "\nsee: "+ruleDocsBase+string(denySpawnBeforeSkill)+"/")
 	}
 }
 
-func TestSpawnUnbriefedAdvisesWhenSetToAdvise(t *testing.T) {
+func TestSpawnBeforeSkillAdvisesWhenSetToAdvise(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true}
-	lowered := advising(Dependencies{}, string(denySpawnUnbriefed))
+	lowered := advising(Dependencies{}, string(denySpawnBeforeSkill))
 
 	first := Judge(ctx, lowered, req)
 	// The context is the advice prose; the reason stays empty, which the comparison pins.
 	got := first
 	got.Context, got.Lease, got.LeaseFrom = "", "", ""
-	assert.Equal(t, verdictWithRule("advise", string(denySpawnUnbriefed)), got)
+	assert.Equal(t, verdictWithRule("advise", string(denySpawnBeforeSkill)), got)
 
 	again := Judge(ctx, lowered, req)
-	assert.NotEqual(t, string(denySpawnUnbriefed), again.Rule, "once per session")
+	assert.NotEqual(t, string(denySpawnBeforeSkill), again.Rule, "once per session")
 }
 
 func TestSpawnRuleDenyAndAdviseReachTheVerdict(t *testing.T) {

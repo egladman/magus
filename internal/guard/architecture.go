@@ -178,11 +178,11 @@ func inSource(workspace, p string) bool {
 	return true
 }
 
-// rankArchitectureUnbriefed turns the reason into advice under every other
+// rankArchitectureBeforeSkill turns the reason into advice under every other
 // deny on the line. A read is never refused.
-func rankArchitectureUnbriefed(v ShellVerdict, reason string) ShellVerdict {
+func rankArchitectureBeforeSkill(v ShellVerdict, reason string) ShellVerdict {
 	if reason == "" || v.Deny != "" {
 		return v
 	}
-	return ShellVerdict{Context: reason, Kind: hint.MarkerKind(denyArchitectureUnbriefed), demoted: true}
+	return ShellVerdict{Context: reason, Kind: hint.MarkerKind(denyArchitectureBeforeSkill), demoted: true}
 }

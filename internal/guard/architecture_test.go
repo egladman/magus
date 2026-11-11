@@ -118,16 +118,16 @@ func (s archSession) load(agentID, skill string) {
 // shortened to a line and a ref, so the reason's text is checked once, on the first.
 func requireArchitectureDeny(t *testing.T, v types.GuardJudgment, msgAndArgs ...any) {
 	t.Helper()
-	require.Equal(t, []string{"deny", string(denyArchitectureUnbriefed)}, []string{v.Decision, v.Rule}, msgAndArgs...)
+	require.Equal(t, []string{"deny", string(denyArchitectureBeforeSkill)}, []string{v.Decision, v.Rule}, msgAndArgs...)
 }
 
 // requireArchitectureAdvice checks that a read is advised and never refused.
 func requireArchitectureAdvice(t *testing.T, v types.GuardJudgment, msgAndArgs ...any) {
 	t.Helper()
-	require.Equal(t, []string{"advise", string(denyArchitectureUnbriefed)}, []string{v.Decision, v.Rule}, msgAndArgs...)
+	require.Equal(t, []string{"advise", string(denyArchitectureBeforeSkill)}, []string{v.Decision, v.Rule}, msgAndArgs...)
 }
 
-func TestArchitectureUnbriefedDeniesAfterAStructureMessage(t *testing.T) {
+func TestArchitectureBeforeSkillDeniesAfterAStructureMessage(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 
 	assert.NotEqual(t, "deny", s.bash("", "ls").Decision, "no structure question, nothing to read first")
@@ -148,20 +148,20 @@ func TestArchitectureUnbriefedDeniesAfterAStructureMessage(t *testing.T) {
 	assert.NotEqual(t, "deny", s.bash("", "ls").Decision, "the load clears the gate")
 }
 
-func TestArchitectureUnbriefedIgnoresAnOrdinaryMessage(t *testing.T) {
+func TestArchitectureBeforeSkillIgnoresAnOrdinaryMessage(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("fix the flaky cache test")
 	assert.NotEqual(t, "deny", s.bash("", "ls").Decision)
 }
 
-func TestArchitectureUnbriefedStandsDownWhereLoadsAreNotObserved(t *testing.T) {
+func TestArchitectureBeforeSkillStandsDownWhereLoadsAreNotObserved(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), false)
 	s.message("why do we need a new package called audit package?")
 	assert.NotEqual(t, "deny", s.bash("", "ls").Decision,
 		"a wiring that reports no loads could never clear it")
 }
 
-func TestArchitectureUnbriefedClearsOnTheFullTwin(t *testing.T) {
+func TestArchitectureBeforeSkillClearsOnTheFullTwin(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("check the blast radius of this")
 	s.load("", agent.FullTwinName(architectureSkill.String()))
@@ -170,7 +170,7 @@ func TestArchitectureUnbriefedClearsOnTheFullTwin(t *testing.T) {
 
 // A load counts for the context it was read into. A parent's load leaves its subagent
 // unbriefed, and a subagent's load leaves its parent unbriefed.
-func TestArchitectureUnbriefedCountsLoadsPerAgent(t *testing.T) {
+func TestArchitectureBeforeSkillCountsLoadsPerAgent(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("respecting the current like application boundaries")
 
@@ -190,7 +190,7 @@ func TestASubagentLoadDoesNotBriefItsParent(t *testing.T) {
 	requireArchitectureDeny(t, s.write("", "notes.txt"))
 }
 
-func TestArchitectureUnbriefedGatesANewDirectory(t *testing.T) {
+func TestArchitectureBeforeSkillGatesANewDirectory(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 
 	v := s.write("", filepath.Join("kvdir", "kvdir.go"))
@@ -211,14 +211,14 @@ func TestANewDirectoryStillAdvisesWhereLoadsAreNotObserved(t *testing.T) {
 }
 
 // Shipped default: a workspace that sets nothing is told once, and never refused.
-func TestArchitectureUnbriefedAdvisesOnceWhenSetToAdvise(t *testing.T) {
-	s := newArchSession(t, advising(testDependencies(), string(denyArchitectureUnbriefed)), true)
+func TestArchitectureBeforeSkillAdvisesOnceWhenSetToAdvise(t *testing.T) {
+	s := newArchSession(t, advising(testDependencies(), string(denyArchitectureBeforeSkill)), true)
 	s.message("where should the retry helper live?")
 
 	v := s.bash("", "ls")
-	assert.Equal(t, []string{"advise", string(denyArchitectureUnbriefed)}, []string{v.Decision, v.Rule})
+	assert.Equal(t, []string{"advise", string(denyArchitectureBeforeSkill)}, []string{v.Decision, v.Rule})
 	assert.Contains(t, v.Context, "magus-architecture-review")
-	assert.NotEqual(t, string(denyArchitectureUnbriefed), s.bash("", "ls").Rule, "said once per session")
+	assert.NotEqual(t, string(denyArchitectureBeforeSkill), s.bash("", "ls").Rule, "said once per session")
 }
 
 func TestAMessageIsNeverRecordedOnADryRun(t *testing.T) {
@@ -229,7 +229,7 @@ func TestAMessageIsNeverRecordedOnADryRun(t *testing.T) {
 	assert.NotEqual(t, "deny", s.bash("", "ls").Decision)
 }
 
-func TestArchitectureUnbriefedFiresOnlyOnAProbeOfSource(t *testing.T) {
+func TestArchitectureBeforeSkillFiresOnlyOnAProbeOfSource(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("does this respect our current architecture patterns?")
 
@@ -240,7 +240,7 @@ func TestArchitectureUnbriefedFiresOnlyOnAProbeOfSource(t *testing.T) {
 	assert.NotEqual(t, "deny", s.bash("", "ls internal").Decision, "a listing of it is advised once, never refused")
 }
 
-func TestArchitectureUnbriefedIgnoresAgentSkillDirectories(t *testing.T) {
+func TestArchitectureBeforeSkillIgnoresAgentSkillDirectories(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("does this respect our current architecture patterns?")
 	for _, command := range []string{
@@ -253,7 +253,7 @@ func TestArchitectureUnbriefedIgnoresAgentSkillDirectories(t *testing.T) {
 	requireArchitectureAdvice(t, s.bash("", "ls internal"), "source is still advised")
 }
 
-func TestArchitectureUnbriefedNeverDeniesARead(t *testing.T) {
+func TestArchitectureBeforeSkillNeverDeniesARead(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("does this respect our current architecture patterns?")
 	for _, command := range []string{

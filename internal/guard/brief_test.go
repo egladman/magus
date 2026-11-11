@@ -33,9 +33,9 @@ func TestBriefForAnIsolatedWorkerRefusesACompoundCommand(t *testing.T) {
 		{"teaches a loop", "```bash\nfor f in a b; do ./magus describe file $f; done\n```\n", true, true},
 		{"a shared checkout", "Then `git log $(git merge-base HEAD main)..HEAD`.", false, false},
 	} {
-		v := judgeBriefPlainCommands(briefInput{text: tt.brief, isolated: tt.isolated})
+		v := judgeSpawnPlainCommands(briefInput{text: tt.brief, isolated: tt.isolated})
 		if tt.want {
-			assert.Equal(t, denyRuleBriefPlainCommands, v.Rule.Name, tt.name)
+			assert.Equal(t, denyRuleSpawnPlainCommands, v.Rule.Name, tt.name)
 			assert.NotEmpty(t, v.Deny, tt.name)
 		} else {
 			assert.Empty(t, v.Deny, tt.name)
@@ -80,14 +80,14 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 		{"bootstrap beside a denied line", "Setup:\n```bash\nGOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\ngit add -A\n```\n", denyRuleStageAll},
 		{"go run of anything else", "Run `go run ./cmd/magus-docs` to render.", denyRuleRawTool},
 	} {
-		v := judgeBriefCommand(strict(testDependencies()), briefInput{text: tt.brief})
+		v := judgeSpawnCommand(strict(testDependencies()), briefInput{text: tt.brief})
 		if tt.arg == "" {
 			assert.Empty(t, v.Deny, tt.name)
 			continue
 		}
-		assert.Equal(t, denyRule{Name: denyRuleBriefCommand, Arg: string(tt.arg)}, v.Rule, tt.name)
+		assert.Equal(t, denyRule{Name: denyRuleSpawnCommand, Arg: string(tt.arg)}, v.Rule, tt.name)
 		assert.Contains(t, v.Deny, string(tt.arg), "the deny names the rule the brief would trip: %s", tt.name)
-		bound := judgeBriefCommand(strict(testDependencies()), briefInput{text: tt.brief, bound: true})
+		bound := judgeSpawnCommand(strict(testDependencies()), briefInput{text: tt.brief, bound: true})
 		assert.Equal(t, v.Rule, bound.Rule, "%s: a message to a bound worker is still graded for denied commands", tt.name)
 	}
 }
@@ -152,7 +152,7 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 	} {
 		ctx, _ := spawnFixture(t)
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: input, Host: "claude-code"})
-		assert.Equal(t, verdictWithRule("deny", string(denyRuleBriefCommand)), unworded(v), input)
+		assert.Equal(t, verdictWithRule("deny", string(denyRuleSpawnCommand)), unworded(v), input)
 		assert.Contains(t, v.Reason, "MAGUS_NO_WAIT")
 	}
 
@@ -163,17 +163,17 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 	ctx, _ = spawnFixture(t)
 	// A command the default still refuses, since a brief is only as strict as the rules it teaches.
 	taught := envelope("Agent", "prompt", "Clean up first with `git stash`.")
-	assert.Equal(t, verdictWithRule("deny", string(denyRuleBriefCommand)), unworded(Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})),
+	assert.Equal(t, verdictWithRule("deny", string(denyRuleSpawnCommand)), unworded(Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})),
 		"by default the brief is refused")
 
-	lowered := advising(Dependencies{}, string(denyRuleBriefCommand))
+	lowered := advising(Dependencies{}, string(denyRuleSpawnCommand))
 	first := Judge(ctx, lowered, Request{Input: taught, Host: "claude-code"})
-	assert.Equal(t, verdictWithRule("advise", string(denyRuleBriefCommand)), unworded(first),
+	assert.Equal(t, verdictWithRule("advise", string(denyRuleSpawnCommand)), unworded(first),
 		"set to advise, the brief is advised, not refused")
 	assert.Contains(t, first.Context, "git stash")
 
 	again := Judge(ctx, lowered, Request{Input: taught, Host: "claude-code"})
-	assert.NotEqual(t, string(denyRuleBriefCommand), again.Rule, "once per session")
+	assert.NotEqual(t, string(denyRuleSpawnCommand), again.Rule, "once per session")
 }
 
 // TestBriefOffCheckIsRefused: the 2026-09-29 briefs told figure workers they "may also run"
@@ -310,7 +310,7 @@ func TestBriefGradingExplainsAPass(t *testing.T) {
 
 	t.Run("a brief naming no job", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker draft", offCheck), Host: "claude-code"})
-		assert.Equal(t, verdictWithRule("advise", string(denyRuleBriefCommand)), unworded(v))
+		assert.Equal(t, verdictWithRule("advise", string(denyRuleSpawnCommand)), unworded(v))
 		assert.Contains(t, v.Context, "no row was held to a check")
 		assert.Contains(t, v.Context, "names no job")
 		assert.Contains(t, v.Context, `"Also run `+"`./magus run lint docs -s`"+` when done." is not graded: no row was held to a check`)
