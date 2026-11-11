@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "guard-internals",
+  "findings": [],
+  "stamp": "sha256:0d828dd77170cef32deaac33c748f3efc4b1f2de28a271b6bbff3d6713c81f9d"
+}

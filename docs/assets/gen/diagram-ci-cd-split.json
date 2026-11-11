@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "ci-cd-split",
+  "findings": [],
+  "stamp": "sha256:f57936c05fd2154637edf1fd8110af5162b5764639ca236eb18a525e2efd5e0a"
+}

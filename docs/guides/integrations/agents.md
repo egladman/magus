@@ -60,6 +60,8 @@ Codex, Cursor, and OpenCode therefore differ at the host layer, even when they
 use models from the same provider. magus normalizes its guidance and guard
 verdict, not those host capabilities.
 
+<!--diagram:harness-integrations-->
+
 ## Set up your host
 
 A full setup is two steps: install the guidance where the host reads it, then

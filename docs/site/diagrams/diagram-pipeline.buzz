@@ -2,7 +2,7 @@ namespace diagramPipeline;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages";
+import "site/diagrams/packages" as packages;
 
 export fun diagramPipelineFigure() > figure\Figure !> any {
     final module = magus\graph().dir("libs/figure");

@@ -2,7 +2,7 @@ namespace knowledgeGraph;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages";
+import "site/diagrams/packages" as packages;
 
 export fun knowledgeGraphFigure() > figure\Figure !> any {
     final graph = magus\graph().dir("internal/graph/knowledge");

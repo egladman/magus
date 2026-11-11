@@ -2,18 +2,18 @@ namespace buzzRun;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/buzz-stages" as _;
+import "site/diagrams/buzz-stages" as buzzStages;
 
 export fun buzzRunFigure() > figure\Figure !> any {
     final session = magus\graph().dir("libs/gopherbuzz");
     final vm = magus\graph().dir("libs/gopherbuzz/vm");
-    final compile = codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/VM#jitRun().", name: "Baseline JIT",
+    final compile = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/VM#jitRun().", name: "Baseline JIT",
         sub: "depths, then golang-asm");
-    final native = codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/jitEntry().", name: "Native code",
+    final native = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/jitEntry().", name: "Native code",
         sub: "int and float fast paths", look: figure\Look.focal);
-    final interpreter = codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/VM#Exec().", name: "Interpreter",
+    final interpreter = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/VM#Exec().", name: "Interpreter",
         sub: "VM.Exec, one dispatch switch");
-    final heap = codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/Owner#", name: "Heap table",
+    final heap = buzzStages\codeStage(vm, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz/vm`/Owner#", name: "Heap table",
         sub: "NaN-box handles, freed on Close", look: figure\Look.store);
     return figure\of("buzz-run",
             title: "Interpreter first, native code when the chunk allows it",
@@ -49,10 +49,10 @@ export fun buzzRunFigure() > figure\Figure !> any {
         .rank(actors: [native, interpreter])
         .zone("package vm", dirs: [vm], actors: [compile, native, interpreter, heap])
         .legend(figure\Look.focal, label: "the native tier")
-        .scope(gopherbuzzPackages())
+        .scope(buzzStages\gopherbuzzPackages())
         .except([magus\graph().dir("libs/gopherbuzz/token"), magus\graph().dir("libs/gopherbuzz/ast"), magus\graph().dir("libs/gopherbuzz/types")],
             why: "the compile side, drawn in buzz-compile; a run starts from the chunk")
         .except([magus\graph().dir("libs/gopherbuzz/std"), magus\graph().dir("libs/gopherbuzz/internal/codec")],
             why: "the Buzz stdlib and its JSON codec: modules a program calls, run by this same VM")
-        .except(gopherbuzzAround(), why: AROUND_WHY);
+        .except(buzzStages\gopherbuzzAround(), why: buzzStages\AROUND_WHY);
 }

@@ -2,7 +2,7 @@ namespace ciProviders;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
+import "site/diagrams/packages" as packages;
 
 export fun ciProvidersFigure() > figure\Figure !> any {
     final contract = magus\graph().dir("internal/ci/annotate");
@@ -32,7 +32,7 @@ export fun ciProvidersFigure() > figure\Figure !> any {
         .zone("magus binary, names no ci system", dirs: [contract, quote], actors: [run])
         .zone("provider spell, in buzz", actors: [ops, prefixes])
         .legend(figure\Look.external, label: "outside magus")
-        .scope(goPackages("internal/ci/**"))
+        .scope(packages\goPackages("internal/ci/**"))
         .except([magus\graph().dir("internal/ci/forecast"), magus\graph().dir("internal/ci/volatility")],
             why: "shard sizing and flaky-test retry: they read run history and speak to no CI system");
 }

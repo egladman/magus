@@ -2,7 +2,7 @@ namespace buzzStages;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
+import "site/diagrams/packages" as packages;
 
 // codeStage is an actor for a step that lives inside one package, so a box (one per
 // directory) cannot draw it. The symbol must be defined directly in dir, or the figure
@@ -15,13 +15,13 @@ export fun codeStage(dir: magus\Dir, symbol: str, name: str, sub: str = "", look
             return figure\external(name, sub: sub, look: look ?? figure\Look.plain);
         }
     }
-    throw "codeStage(\"{name}\"): {symbol} has no definition directly in {dir.path}";
+    throw "buzzStages\codeStage(\"{name}\"): {symbol} has no definition directly in {dir.path}";
 }
 
 // gopherbuzzPackages is every Go package in the gopherbuzz tree. A figure scoped to it meets
 // a new package as a finding until a box draws it or an except names it.
 export fun gopherbuzzPackages() > [magus\Dir] !> any {
-    return goPackages("libs/gopherbuzz/**");
+    return packages\goPackages("libs/gopherbuzz/**");
 }
 
 // gopherbuzzAround is the gopherbuzz packages built on the pipeline rather than part of

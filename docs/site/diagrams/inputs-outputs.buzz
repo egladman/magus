@@ -2,7 +2,7 @@ namespace inputsOutputs;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
+import "site/diagrams/packages" as packages;
 
 export fun inputsOutputsFigure() > figure\Figure !> any {
     // NestedDirs narrows a snapshot here, never the key.
@@ -46,9 +46,9 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
         .zone("a nested project", dirs: [audit], actors: [handle])
         .zone("the cache", dirs: [cache, claims], actors: [probe])
         .legend(figure\Look.focal, label: "what a hit is keyed on")
-        .scope(goPackages("internal/cache/**"))
-        .scope(goPackages("internal/audit/**"))
-        .scope(goPackages("types/**"))
+        .scope(packages\goPackages("internal/cache/**"))
+        .scope(packages\goPackages("internal/audit/**"))
+        .scope(packages\goPackages("types/**"))
         .except([magus\graph().dir("internal/cache/reflink")],
             why: "copies files in and out of the store; it reads no glob and keys nothing")
         .except([magus\graph().dir("internal/cache/remotetest")], why: "a fake remote cache for tests")

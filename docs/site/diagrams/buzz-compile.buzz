@@ -2,7 +2,7 @@ namespace buzzCompile;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/buzz-stages" as _;
+import "site/diagrams/buzz-stages" as buzzStages;
 
 export fun buzzCompileFigure() > figure\Figure !> any {
     final session = magus\graph().dir("libs/gopherbuzz");
@@ -10,17 +10,17 @@ export fun buzzCompileFigure() > figure\Figure !> any {
     final tree = magus\graph().dir("libs/gopherbuzz/ast");
     final typeSystem = magus\graph().dir("libs/gopherbuzz/types");
     final vm = magus\graph().dir("libs/gopherbuzz/vm");
-    final parseCache = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/ParseCache#tokenize().", name: "Parse cache",
+    final parseCache = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/ParseCache#tokenize().", name: "Parse cache",
         sub: "tokens keyed by source", look: figure\Look.store);
-    final parser = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/parseModedTracked().", name: "Parser",
+    final parser = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/parseModedTracked().", name: "Parser",
         sub: "recursive descent, *ast.Program");
-    final imports = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/Session#loadFileImports().", name: "Import resolution",
+    final imports = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/Session#loadFileImports().", name: "Import resolution",
         sub: "runs each module first", look: figure\Look.focal);
-    final checker = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/checkWithPrelude().", name: "Checker",
+    final checker = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/checkWithPrelude().", name: "Checker",
         sub: "types.Type, BZZ codes");
-    final compiler = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/CompileWith().", name: "Compiler",
+    final compiler = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/CompileWith().", name: "Compiler",
         sub: "AST to *vm.Chunk");
-    final store = codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/Session#loadCachedChunk().", name: "Bytecode store",
+    final store = buzzStages\codeStage(session, symbol: "symbol:gomod github.com/egladman/magus/libs/gopherbuzz `github.com/egladman/magus/libs/gopherbuzz`/Session#loadCachedChunk().", name: "Bytecode store",
         sub: ".bo plus its import closure", look: figure\Look.store);
     return figure\of("buzz-compile",
             title: "From Buzz source to a chunk",
@@ -60,12 +60,12 @@ export fun buzzCompileFigure() > figure\Figure !> any {
         .rank(dirs: [vm], actors: [store])
         .legend(figure\Look.focal, label: "where an import runs")
         .legend(figure\Look.store, label: "optional, set by the host")
-        .scope(gopherbuzzPackages())
+        .scope(buzzStages\gopherbuzzPackages())
         .except([session],
             why: "its steps are drawn one by one, each checked against the symbol that implements it")
         .except([tree, typeSystem],
             why: "data packages: their types label the connectors")
         .except([magus\graph().dir("libs/gopherbuzz/std"), magus\graph().dir("libs/gopherbuzz/internal/codec")],
             why: "the Buzz stdlib and its JSON codec: modules a program imports, compiled by these same steps")
-        .except(gopherbuzzAround(), why: AROUND_WHY);
+        .except(buzzStages\gopherbuzzAround(), why: buzzStages\AROUND_WHY);
 }

@@ -2,8 +2,8 @@ namespace buzzEngine;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
-import "site/diagrams/buzz-stages" as _;
+import "site/diagrams/packages" as packages;
+import "site/diagrams/buzz-stages" as buzzStages;
 
 export fun buzzEngineFigure() > figure\Figure !> any {
     final session = magus\graph().dir("libs/gopherbuzz");
@@ -56,13 +56,13 @@ export fun buzzEngineFigure() > figure\Figure !> any {
         .rank(dirs: [opencodeWasm, opencode, bindings])
         .row(dirs: [dry, trampolines])
         .legend(figure\Look.focal, label: "the browser's subset")
-        .scope(gopherbuzzPackages())
-        .scope(goPackages("internal/interp/**"))
-        .scope(goPackages("internal/dry/**"))
-        .scope(goPackages("std/**"))
+        .scope(buzzStages\gopherbuzzPackages())
+        .scope(packages\goPackages("internal/interp/**"))
+        .scope(packages\goPackages("internal/dry/**"))
+        .scope(packages\goPackages("std/**"))
         .except([buzzStdlib, magus\graph().dir("libs/gopherbuzz/internal/codec")],
             why: "the Buzz stdlib and its JSON codec: both hosts install them the same way, so they tell the two apart in nothing")
-        .except(gopherbuzzAround(), why: AROUND_WHY)
+        .except(buzzStages\gopherbuzzAround(), why: buzzStages\AROUND_WHY)
         .except([magus\graph().dir("internal/interp/bindings/ffi"), magus\graph().dir("internal/interp/bindings/gen/decode"),
                 magus\graph().dir("internal/interp/bindings/gen/providerops")],
             why: "the register call, the generated argument decoders and the generated provider-call values every trampoline uses")
@@ -70,8 +70,8 @@ export fun buzzEngineFigure() > figure\Figure !> any {
             why: "the generic engine interface and its buzz adapter; the magusfile engine drives the session directly")
         .except([magus\graph().dir("internal/interp/mcpclient"), magus\graph().dir("internal/interp/transform")],
             why: "the MCP client and transform workers run Buzz apart from the two hosts compared here")
-        .except(goPackages("std/encoding/**"),
+        .except(packages\goPackages("std/encoding/**"),
             why: "the encoding host modules, wired through the trampolines like every module in the Host modules box")
-        .except(goPackages("std/termkit/**"),
+        .except(packages\goPackages("std/termkit/**"),
             why: "the termkit host modules, wired through the trampolines like every module in the Host modules box");
 }

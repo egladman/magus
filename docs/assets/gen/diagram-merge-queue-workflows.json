@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "merge-queue-workflows",
+  "findings": [],
+  "stamp": "sha256:364e2a5f8ca2409f7932f3c85c9639012dab812c305cf841e4081df464b02b75"
+}

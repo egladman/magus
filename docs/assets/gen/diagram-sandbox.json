@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "sandbox",
+  "findings": [],
+  "stamp": "sha256:178e5c2616fe6ce89928422bbf40bc4ef7181bbf2a97169a853c0fbe16b0b01b"
+}

@@ -2,7 +2,7 @@ namespace cacheTrust;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
+import "site/diagrams/packages" as packages;
 
 export fun cacheTrustFigure() > figure\Figure !> any {
     final remote = magus\graph().dir("internal/cache");
@@ -34,7 +34,7 @@ export fun cacheTrustFigure() > figure\Figure !> any {
         .legend(figure\Look.focal, label: "the one shared store")
         .legend(figure\Look.store, label: "one pull request only")
         .legend(figure\Look.optional, label: "never replayed")
-        .scope(goPackages("internal/cache/**"))
+        .scope(packages\goPackages("internal/cache/**"))
         .except([magus\graph().dir("internal/cache/reflink")],
             why: "copy-on-write file clones for a local restore; no tier, key or signature")
         .except([magus\graph().dir("internal/cache/remotetest")],

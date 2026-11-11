@@ -21,7 +21,7 @@ graph knows what a diff reaches. The harness is built on that record, so it
 gets caching, affected sets and reproducible runs from the layer that owns
 them, and re-derives none of them.
 
-<!--diagram:harness-layer-->
+<!--diagram:agent-integration-->
 
 It is one Go module. The root package is the Go SDK, and everything uses it:
 you import it, or you go through the `magus` binary, which is both the CLI and
