@@ -31,10 +31,11 @@ final PERSON_VERBS = ["issue"];
 
 // NOUNS are the scripts named before the verb rule, and the workflow steps a person never
 // runs. host-schemas keeps its noun: its fetch step writes, which no read verb allows.
+// job-view keeps the name ADR 0043 gave it. It only prints, as render does.
 // TODO: rename hack/ci/labels to show-labels; it only prints gh commands.
 // TODO: rename hack/ci/pull-requests to show-pull-requests once apply and dashboard write
 // only behind --apply, the contract every write verb here keeps.
-final NOUNS = ["hack/ci/merge-queue", "hack/ci/labels", "hack/ci/pull-requests", "hack/dev/host-schemas"];
+final NOUNS = ["hack/ci/merge-queue", "hack/ci/labels", "hack/ci/pull-requests", "hack/dev/host-schemas", "hack/dev/job-view"];
 
 final MODULES = "hack/magusfile/";
 final REMOTE = "hack/remote/";
@@ -106,7 +107,7 @@ export fun check(files: [Path]) > [Finding] !> any {
 
 test "a verb in a script directory, on- in hack/remote, a module or a listed noun passes" {
     foreach (p in ["hack/dev/ls-worktrees.buzz", "hack/dev/rename-symbol.buzz", "hack/dev/mark-feedback.buzz", "hack/dev/show-feedback.buzz",
-                   "hack/dev/count-feedback.buzz", "hack/dev/show-session-figure.buzz", "hack/dev/render-brief.buzz",
+                   "hack/dev/count-feedback.buzz", "hack/dev/show-session-figure.buzz", "hack/dev/job-view.buzz",
                    "hack/dev/bootstrap-worktree.buzz", "hack/dev/check-guard-blocks.buzz", "hack/dev/reclaim-disk-space.buzz",
                    "hack/dev/merge-job-branches.buzz", "hack/dev/resolve-conflicts.buzz", "hack/dev/run-gate.buzz",
                    "hack/dev/land-commits.buzz", "hack/dev/merge-base-into-branches.buzz", "hack/dev/issue-mandate.buzz", "hack/bench/time-startup.buzz",
