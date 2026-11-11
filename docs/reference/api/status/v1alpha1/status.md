@@ -37,17 +37,19 @@ Broker is the per-user process holding this host's capacity (concurrency slots a
 
 Source: [status.proto](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto).
 
-| Field               | Type                  | # | Description                                      |
-| ------------------- | --------------------- | - | ------------------------------------------------ |
-| `pid`               | int32                 | 1 |                                                  |
-| `version`           | string                | 2 |                                                  |
-| `protocol`          | int32                 | 3 | the broker wire version it speaks                |
-| `socket`            | string                | 4 |                                                  |
-| `executable`        | string                | 5 | the binary it runs from                          |
-| `start_time`        | Timestamp             | 6 |                                                  |
-| `capacity`          | [Capacity](#capacity) | 7 |                                                  |
-| `idle_exit_seconds` | int32                 | 8 | how long it stays up once it holds nothing       |
-| `draining`          | bool                  | 9 | stopping: seats nothing new while holders finish |
+| Field               | Type                  | #  | Description                                                 |
+| ------------------- | --------------------- | -- | ----------------------------------------------------------- |
+| `pid`               | int32                 | 1  |                                                             |
+| `version`           | string                | 2  |                                                             |
+| `api_version`       | string                | 10 | the broker wire version it speaks, as magus.broker/v1alpha1 |
+| `socket`            | string                | 4  |                                                             |
+| `executable`        | string                | 5  | the binary it runs from                                     |
+| `start_time`        | Timestamp             | 6  |                                                             |
+| `capacity`          | [Capacity](#capacity) | 7  |                                                             |
+| `idle_exit_seconds` | int32                 | 8  | how long it stays up once it holds nothing                  |
+| `draining`          | bool                  | 9  | stopping: seats nothing new while holders finish            |
+
+_Reserved: 3; `protocol`._
 
 Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](status.md#streamstatus).
 

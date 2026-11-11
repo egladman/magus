@@ -18,15 +18,15 @@ Merge approved changes through a speculative, partitioned merge queue
 A speculative, partitioned merge queue. A queue run has three steps, each with
 the rights it needs and no more.
 
-plan reads the changes carrying merge intent (a mergequeue.changes/v1 document on
+plan reads the changes carrying merge intent (a mergequeue.changes/v1alpha1 document on
 stdin or --changes, as ls prints it), checks each one's approval at its head,
 finds which changes are stacked on which, drops what conflicts with the base on
 its own, and splits the rest into partitions whose affected sets are disjoint.
-It writes a mergequeue.plan/v1 document.
+It writes a mergequeue.plan/v1alpha1 document.
 
 validate runs the changes' code and needs read access only. Per partition it
 builds candidates base+A, base+A+B and so on onto each other, regenerates
-generated files on each, runs --gate on them, and writes a mergequeue.verdict/v1
+generated files on each, runs --gate on them, and writes a mergequeue.verdict/v1alpha1
 per change to --verdicts the moment that change is decided.
 
 apply holds the write credential and runs no change's code. It rebuilds each
@@ -37,7 +37,7 @@ validation run as the provider names it (github: \<owner\>/\<name\>/runs/\<id\>)
 
 The checkout is the one at the global --root (default: the current directory),
 and every relative path resolves against it. The provider is a built-in name
-(github) or a Buzz script. Every verb prints JSONL events (mergequeue.event/v1)
+(github) or a Buzz script. Every verb prints JSONL events (mergequeue.event/v1alpha1)
 on stdout; ls and describe print their document instead. The global --dry-run makes
 apply report what would merge and call nothing on the provider.
 
@@ -78,7 +78,7 @@ apply report what would merge and call nothing on the provider.
 ### queue plan options
 
 **--changes** *document* (default: -)
-: The mergequeue.changes/v1 document, or \`-\` for stdin
+: The mergequeue.changes/v1alpha1 document, or \`-\` for stdin
 
 **--depth** *int* (default: 3)
 : Candidates of one partition that validate at once
@@ -87,7 +87,7 @@ apply report what would merge and call nothing on the provider.
 : command and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
 
 **--out** *file*
-: file the mergequeue.plan/v1 document is written to
+: file the mergequeue.plan/v1alpha1 document is written to
 
 **--parallel** *int*
 : Changes admitted at once; 0 is one per CPU
@@ -131,7 +131,7 @@ apply report what would merge and call nothing on the provider.
 : Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand-in token. Refused without runner credentials or a trusted key
 
 **--[no-]stdin** (default: off)
-: Read the mergequeue.plan/v1 document from stdin; required
+: Read the mergequeue.plan/v1alpha1 document from stdin; required
 
 **--target** *target* (default: ci)
 : magus target the affected set is computed for; not with --facts
@@ -235,10 +235,10 @@ apply report what would merge and call nothing on the provider.
 ## Subcommands
 
 **describe**
-: Ask the provider what it supports on a base and what wiring the queue up still takes; prints the steps to run, or a mergequeue.capabilities/v1 document with -o json
+: Ask the provider what it supports on a base and what wiring the queue up still takes; prints the steps to run, or a mergequeue.capabilities/v1alpha1 document with -o json
 
 **ls**
-: Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document
+: Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1alpha1 document
 
 **plan**
 : Check approval, find stacks, drop what conflicts with the base, and partition by affected set
