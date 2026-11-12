@@ -169,6 +169,78 @@ export fun parse(p: str) > Name? {
         suffix = stripped.reverse().join("") + ext };
 }
 
+// Tally holds what judge counts over every file before it judges any one.
+object Tally {
+    counted: mut {str: bool},
+    bases: mut {str: int},
+    total: mut {str: int},
+    multi: mut {str: int},
+    suffixDirs: mut {str: int},
+}
+
+fun groupOf(n: Name) > str {
+    return n.dir + "\n" + n.lang;
+}
+
+fun suffixKey(n: Name) > str {
+    return n.lang + "\n" + n.words[n.words.len() - 1].lower();
+}
+
+// tally counts a base name once per group and once per suffix directory, so
+// foo.go and foo_test.go are one name.
+fun tally(n: Name, t: Tally) > void {
+    final group = groupOf(n);
+    final key = group + "\n" + n.words[0].lower();
+    if (t.counted[group + "\n" + n.base] == null) {
+        t.counted[group + "\n" + n.base] = true;
+        t.total[group] = (t.total[group] ?? 0) + 1;
+        if (n.words.len() > 1) {
+            t.multi[group] = (t.multi[group] ?? 0) + 1;
+            final suffix = suffixKey(n);
+            if (t.counted[suffix + "\n" + n.dir] == null) {
+                t.counted[suffix + "\n" + n.dir] = true;
+                t.suffixDirs[suffix] = (t.suffixDirs[suffix] ?? 0) + 1;
+            }
+        }
+    }
+    if (t.counted[key + "\n" + n.base] == null) {
+        t.counted[key + "\n" + n.base] = true;
+        t.bases[key] = (t.bases[key] ?? 0) + 1;
+    }
+}
+
+// Ordinals number a series, so they are not judged.
+fun hasUnsharedFirst(n: Name, t: Tally) > bool {
+    return n.words.len() > 1 and t.bases[groupOf(n) + "\n" + n.words[0].lower()] == 1 and !isOrdinal(n.words[0]);
+}
+
+// Most names here are multi-word: the directory has that convention.
+fun hasConvention(n: Name, t: Tally) > bool {
+    final group = groupOf(n);
+    return (t.multi[group] ?? 0) * 2 > (t.total[group] ?? 0);
+}
+
+// echoesDir is true when the name is its directory's name, separators aside.
+fun echoesDir(n: Name) > bool {
+    final dirParts = n.dir.split("/");
+    final dirName = squash(dirParts[dirParts.len() - 1]);
+    return squash(n.words[0]) == dirName or squash(n.base) == dirName;
+}
+
+fun suffixQualifies(n: Name, t: Tally) > bool {
+    return (t.suffixDirs[suffixKey(n)] ?? 0) >= SUFFIX_DIRS;
+}
+
+// The group's files must declare a type that starts with the first word.
+fun declaresFirst(n: Name, types: {str: str}) > bool {
+    final declared = types[groupOf(n) + "\n" + n.base] ?? "";
+    return declared.indexOf(" " + squash(n.words[0])) != null;
+}
+
+fun suggestion(n: Name) > str {
+    return (if (n.dir == "") "" else n.dir + "/") + n.words[0] + n.suffix;
+}
+
 // judge returns the files of two or more words whose first word no other
 // base name shares in the same directory and language.
 //
@@ -184,11 +256,8 @@ export fun judge(files: [str], skipped: [str], types: {str: str}) > [Hit] !> any
         every[f] = true;
     }
     final names = mut [<Name>];
-    final counted = mut {<str: bool>};
-    final bases = mut {<str: int>};
-    final total = mut {<str: int>};
-    final multi = mut {<str: int>};
-    final suffixDirs = mut {<str: int>};
+    final t = Tally{ counted = mut {<str: bool>}, bases = mut {<str: int>}, total = mut {<str: int>},
+        multi = mut {<str: int>}, suffixDirs = mut {<str: int>} };
     foreach (f in files) {
         if (path\matchesAny(skipped, path: f)) {
             continue;
@@ -198,53 +267,21 @@ export fun judge(files: [str], skipped: [str], types: {str: str}) > [Hit] !> any
             continue;
         }
         names.append(n!);
-        final group = n!.dir + "\n" + n!.lang;
-        final key = group + "\n" + n!.words[0].lower();
-        if (counted[group + "\n" + n!.base] == null) {
-            counted[group + "\n" + n!.base] = true;
-            total[group] = (total[group] ?? 0) + 1;
-            if (n!.words.len() > 1) {
-                multi[group] = (multi[group] ?? 0) + 1;
-                final suffixKey = n!.lang + "\n" + n!.words[n!.words.len() - 1].lower();
-                if (counted[suffixKey + "\n" + n!.dir] == null) {
-                    counted[suffixKey + "\n" + n!.dir] = true;
-                    suffixDirs[suffixKey] = (suffixDirs[suffixKey] ?? 0) + 1;
-                }
-            }
-        }
-        if (counted[key + "\n" + n!.base] == null) {
-            counted[key + "\n" + n!.base] = true;
-            bases[key] = (bases[key] ?? 0) + 1;
-        }
+        tally(n!, t);
     }
     final hits = mut [<Hit>];
     foreach (n in names) {
-        final first = n.words[0];
-        final group = n.dir + "\n" + n.lang;
-        if (n.words.len() < 2 or bases[group + "\n" + first.lower()] != 1 or isOrdinal(first)) {
+        if (!hasUnsharedFirst(n, t) or hasConvention(n, t) or echoesDir(n)) {
             continue;
         }
-        if ((multi[group] ?? 0) * 2 > (total[group] ?? 0)) {
+        if (!suffixQualifies(n, t) or !declaresFirst(n, types)) {
             continue;
         }
-        final dirParts = n.dir.split("/");
-        final dirName = squash(dirParts[dirParts.len() - 1]);
-        if (squash(first) == dirName or squash(n.base) == dirName) {
-            continue;
-        }
-        final suffixKey = n.lang + "\n" + n.words[n.words.len() - 1].lower();
-        if ((suffixDirs[suffixKey] ?? 0) < SUFFIX_DIRS) {
-            continue;
-        }
-        final declared = types[group + "\n" + n.base] ?? "";
-        if (declared.indexOf(" " + squash(first)) == null) {
-            continue;
-        }
-        final suggest = (if (n.dir == "") "" else n.dir + "/") + first + n.suffix;
+        final suggest = suggestion(n);
         if (every[suggest] != null) {
             continue;
         }
-        hits.append(Hit{ path = n.path, first = first, suggest = suggest, lang = n.lang });
+        hits.append(Hit{ path = n.path, first = n.words[0], suggest = suggest, lang = n.lang });
     }
     return hits;
 }
