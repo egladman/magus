@@ -43,6 +43,10 @@ func digest(lock []byte, buzz fs.FS) (string, error) {
 	var names []string
 	for _, dir := range buzzDirs {
 		err := fs.WalkDir(buzz, dir, func(p string, d fs.DirEntry, err error) error {
+			// An absent directory holds no generated Buzz.
+			if p == dir && errors.Is(err, fs.ErrNotExist) {
+				return fs.SkipDir
+			}
 			if err != nil {
 				return err
 			}

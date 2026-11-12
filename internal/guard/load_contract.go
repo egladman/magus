@@ -151,11 +151,12 @@ func rankContractPick(v ShellVerdict, reason string) ShellVerdict {
 }
 
 // denyContractSkew refuses a state-changing line while the binary's
-// contract differs from the tree's, before any load can pass or fail.
+// contract differs from a tree it still loads. A failed load is the
+// stale-binary rule's, whose denial names the failure.
 // Reads, VCS recovery and the relink still run.
 func denyContractSkew(deps Dependencies, at location, line string, d Dialect) string {
 	root := at.workspace
-	if root == "" {
+	if root == "" || deps.LoadFailure != nil {
 		return ""
 	}
 	skew, err := contract.Check(root)
