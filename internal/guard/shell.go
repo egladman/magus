@@ -686,8 +686,8 @@ func denyUngradedRewrite(ctx context.Context, deps Dependencies, actingLease, co
 		return true
 	})
 	calls, ok := locateCalls(command, d, cmp.Or(deps.callDir, at.dir, at.workspace), isMagusInvocation, false)
-	hook := checkoutHook(at.workspace)
-	if !ok || !slices.ContainsFunc(calls, func(c locatedCall) bool { return rewritesThroughGrader(c, heredoc.String(), hook) }) {
+	hook, placement := checkoutHook(at.workspace), placementScriptAt(at.workspace)
+	if !ok || !slices.ContainsFunc(calls, func(c locatedCall) bool { return rewritesThroughGrader(c, heredoc.String(), hook, placement) }) {
 		return denial{}
 	}
 	if _, live := actingLiveLease(ctx, deps, actingLease); !live {
@@ -705,7 +705,7 @@ func denyUngradedRewrite(ctx context.Context, deps Dependencies, actingLease, co
 // A dry-run rename counts, since it grades the same files.
 // An unreadable program or an imported write reads as no rewrite.
 // The bootstrap scripts are recovery lines: they take no assignment.
-func rewritesThroughGrader(c locatedCall, heredoc, hook string) bool {
+func rewritesThroughGrader(c locatedCall, heredoc, hook, placement string) bool {
 	args := withoutRelocation(c.inv.Args)
 	if magusHelpRequest(args) {
 		return false
@@ -723,7 +723,7 @@ func rewritesThroughGrader(c locatedCall, heredoc, hook string) bool {
 		return buzzGradedWriterRe.MatchString(script)
 	}
 	file, ok := buzzScriptFile(args)
-	if !ok || file == placementScript || job.RunsCheckoutHook(file, hook) {
+	if !ok || file == placement || job.RunsCheckoutHook(file, hook) {
 		return false
 	}
 	if dir, placed := magusCallDir(c); placed && !filepath.IsAbs(file) {

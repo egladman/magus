@@ -185,10 +185,13 @@ func TestLoadFailureDenyNamesThePlacementForALeasedWorker(t *testing.T) {
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	recordLoadedPolicy(t, cacheDir)
 	root := ownCheckout(t, ctx, true)
+	servesPlacement(t, root)
 
 	v := Judge(ctx, unloadedDeps(), Request{Input: "git push", Host: "claude-code", Session: "s1", Lease: "lease-a"})
 	want := verdictWithRule(decisionDeny, string(denyRuleStaleBinary))
-	want.Next = []types.NextStep{placementNext(denyRuleStaleBinary, "lease-a")}
+	next, ok := placementNext(root, denyRuleStaleBinary, "lease-a")
+	require.True(t, ok)
+	want.Next = []types.NextStep{next}
 	assert.Equal(t, want, unworded(v))
 	assert.Contains(t, v.Reason, "ask the main session to place a ./magus that loads this workspace")
 	assert.NotContains(t, v.Reason, ward.RelinkAt(root))

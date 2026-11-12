@@ -376,7 +376,7 @@ func recoveryLine(command string, d Dialect, lease string, builds bool, at locat
 	}
 	// denyCheckoutBootstrap still judges who may build which checkout.
 	places := onlyBaggageAssigns(call.Assigns) && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" &&
-		(words[2] == placementScript || words[2] == checkoutHook(at.workspace))
+		(words[2] == placementScriptAt(at.workspace) || words[2] == checkoutHook(at.workspace))
 	if places {
 		return true
 	}
@@ -635,14 +635,18 @@ func staleBinaryDenial(call judgedCall, cause unloadKind, failures []string, own
 // A bootstrap also names the checkout hook it needs.
 // placeFor is the lease whose checkout the main session places ./magus in,
 // "" when the fix is not that.
-type binaryFix struct{ say, why, placeFor string }
+type binaryFix struct{ say, why, placeFor, root string }
 
 // next is the fix's command, served as the deny's next under rule.
 func (f binaryFix) next(rule denyRuleName) []types.NextStep {
 	if f.placeFor == "" {
 		return nil
 	}
-	return []types.NextStep{placementNext(rule, f.placeFor)}
+	n, ok := placementNext(f.root, rule, f.placeFor)
+	if !ok {
+		return nil
+	}
+	return []types.NextStep{n}
 }
 
 // binaryRemedy is the fix for a binary that cannot load the tree at root, by who is asking.
@@ -656,11 +660,16 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	bootstrap := config.SourceCommand(root, "", "", true)
 	switch {
 	case lease != "" && own:
-		return binaryFix{
+		fix := binaryFix{
 			say:      "ask the main session to place a ./magus that loads this workspace",
 			why:      onePerBase,
 			placeFor: lease,
+			root:     root,
 		}
+		if _, ok := placementArgv(root, lease); !ok {
+			fix.why += "\n" + noPlacementScript
+		}
+		return fix
 	case own && hasBinary:
 		return binaryFix{
 			say: fmt.Sprintf("relink ./magus, alone on its line: `%s`", ward.RelinkAt(root)),
@@ -705,12 +714,20 @@ func readyCheckoutLine(root string) string {
 	return config.ReadyCheckoutCommand(config.CheckoutHookAt(root))
 }
 
-// placementScript copies the main checkout's ./magus into a worker's checkout.
-const placementScript = "hack/dev/bootstrap-worktree.buzz"
+// placementSituation is served by the script that places ./magus.
+const placementSituation = hint.SituationRule + string(denyRuleStaleBinary)
 
-// onePerBase is why a worker never builds magus, worded as hack/policy/builds.buzz words it.
+// mainCheckout stands in for a path a worker's checkout does not know.
+const mainCheckout = "<main checkout>"
+
+// noPlacementScript is the denial for a workspace that declares no placement.
+const noPlacementScript = "No script serves " + placementSituation + ", so no command places ./magus here. " +
+	"Declare one in a workspace .buzz script with `final SERVES = [\"" + placementSituation +
+	" -- --job {lease} --from {checkout}\"];` and run `magus graph build`."
+
+// onePerBase is why a worker never builds magus.
 const onePerBase = "There is one binary per base commit: the checkout's integrator builds ./magus once, in the landing checkout, " +
-	"and " + placementScript + " copies it into a worker checkout whenever no Go build input differs. " +
+	"and the workspace's placement script copies it into a worker checkout whenever no Go build input differs. " +
 	"A build per worker is two Go compiles each, and a fan-out runs a dozen at once."
 
 // relinkWhy is why the relink is the one remedy for whoever builds ./magus.
@@ -722,20 +739,49 @@ const relinkWhy = "The relink loads no magusfile, so it runs while nothing loads
 // placementNext, served apart from it.
 const workerBuildVerdict = "a worker does not build magus; ask the main session to place ./magus"
 
-// placementNext is the command that places the main checkout's ./magus in lease's checkout.
-// The main checkout stays a placeholder: a worker's checkout does not say which one it is.
-func placementNext(rule denyRuleName, lease string) types.NextStep {
-	return hint.NextForDenyRemedy(string(rule), placementArgv(lease), "copies the main checkout's ./magus into this checkout.")
+// placementNext places the main checkout's ./magus in lease's checkout.
+// False when root's scripts index has no script for it.
+func placementNext(root string, rule denyRuleName, lease string) (types.NextStep, bool) {
+	argv, ok := placementArgv(root, lease)
+	if !ok {
+		return types.NextStep{}, false
+	}
+	return hint.NextForDenyRemedy(string(rule), argv, "copies the main checkout's ./magus into this checkout."), true
 }
 
-// placementArgv is placementNext's command as argv, for matching a served next against it.
-func placementArgv(lease string) []string {
-	return []string{"<main checkout>/magus", "buzz", placementScript, "--", "--job", lease, "--from", "<main checkout>"}
+// placementArgv is placementNext's command, read from the scripts index.
+func placementArgv(root, lease string) ([]string, bool) {
+	facts := map[string]string{"lease": lease, "checkout": mainCheckout}
+	argv, ok := hint.ServingScriptArgv(workspaceCacheDir(root), placementSituation, facts)
+	if !ok {
+		return nil, false
+	}
+	return append([]string{mainCheckout + "/magus"}, argv[1:]...), true
+}
+
+// placementScriptAt is the workspace-relative path of the script serving the
+// placement, "" when none does.
+func placementScriptAt(root string) string {
+	argv, ok := placementArgv(root, "lease")
+	if !ok {
+		return ""
+	}
+	return argv[2]
+}
+
+// placementClause words the placement as a remedy, or names the missing script.
+func placementClause(root, lease string) string {
+	argv, ok := placementArgv(root, lease)
+	if !ok {
+		return noPlacementScript
+	}
+	return fmt.Sprintf("places it here with `%s`.", strings.Join(argv, " "))
 }
 
 // placesBinary reports whether n is lease's placement of ./magus.
-func placesBinary(n types.NextStep, lease string) bool {
-	return lease != "" && slices.Equal(n.Argv, placementArgv(lease))
+func placesBinary(root string, n types.NextStep, lease string) bool {
+	argv, ok := placementArgv(root, lease)
+	return ok && lease != "" && slices.Equal(n.Argv, argv)
 }
 
 // soleCall is the line's call when it is one command and nothing else: no pipe, chain,

@@ -68,6 +68,7 @@ func TestRowUnknownPassesTheRecoveryLines(t *testing.T) {
 	row := narrowLease()
 	ctx, root := fleetFixture(t, row)
 	declareCheckoutHook(t, root)
+	servesPlacement(t, root)
 	plantUnknownMember(t, ctx, row.ID, "widens_paths")
 	deps := Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
 

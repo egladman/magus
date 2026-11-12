@@ -257,7 +257,8 @@ func TestRelinkSuite(t *testing.T) {
 func (s *RelinkSuite) SetupTest() {
 	testkit.Isolate(s.T())
 	s.built = checkoutFixture(s.T(), ownModule, true)
-	s.layers = ctxLayers{atLayer(location{cacheDir: s.T().TempDir(), workspace: s.built})}
+	servesPlacement(s.T(), s.built)
+	s.layers =ctxLayers{atLayer(location{cacheDir: s.T().TempDir(), workspace: s.built})}
 }
 
 func (s *RelinkSuite) judge(lease, command string) types.GuardJudgment {
@@ -321,6 +322,7 @@ func TestBootstrapRemedyNamesTheCheckout(t *testing.T) {
 
 func TestRankOwnBuildKeepsAWorkersBootstrapDenied(t *testing.T) {
 	checkout := checkoutFixture(t, ownModule, true)
+	servesPlacement(t, checkout)
 	deps := strict(testDependencies())
 	deps.lease = "worker"
 	v := judgeOwnBuildWith(deps, checkout, ward.BootstrapCommand)

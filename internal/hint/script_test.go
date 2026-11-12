@@ -216,6 +216,29 @@ func TestScriptsForServesTheIndexedScripts(t *testing.T) {
 	assert.Nil(t, next, "a situation no script serves")
 }
 
+func TestServingScriptArgvBindsTheLease(t *testing.T) {
+	root := t.TempDir()
+	place := scriptFixture(t, root, "hack/dev/place.buzz", ScriptEffectWrite, "--job", "{lease}")
+	cacheDir := writeScriptsIndex(t, root, map[string][]ScriptServe{"rule:stale-binary": {place}})
+
+	argv, ok := ServingScriptArgv(cacheDir, "rule:stale-binary", map[string]string{"lease": "job-a"})
+	require.True(t, ok)
+	assert.Equal(t, []string{"magus", "buzz", "hack/dev/place.buzz", "--", "--job", "job-a"}, argv)
+}
+
+func TestServingScriptArgvIsFalseWhenNothingServes(t *testing.T) {
+	root := t.TempDir()
+	place := scriptFixture(t, root, "hack/dev/place.buzz", ScriptEffectWrite, "--job", "{lease}")
+	cacheDir := writeScriptsIndex(t, root, map[string][]ScriptServe{"rule:stale-binary": {place}})
+
+	_, ok := ServingScriptArgv(cacheDir, "rule:sed-in-place", nil)
+	assert.False(t, ok, "no script serves the rule")
+	_, ok = ServingScriptArgv(cacheDir, "rule:stale-binary", nil)
+	assert.False(t, ok, "the lease is unbound")
+	_, ok = ServingScriptArgv("", "rule:stale-binary", nil)
+	assert.False(t, ok, "no cache dir")
+}
+
 func TestScriptsForBindsPlaceholdersOrServesNothing(t *testing.T) {
 	root := t.TempDir()
 	failures := scriptFixture(t, root, "hack/dev/ls-test-failures.buzz", ScriptEffectRead, "--ref", "{ref}")

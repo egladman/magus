@@ -196,7 +196,7 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 | `ChangedBuildInputs` moves into the go spell; the Buzz copies go                              | proposed |
 | `builds.buzz` rewritten to the product-path rule                                              | done     |
 | Go names only its own module's paths, each saying why (`internal/contract`, `internal/ward`, `load_contract.go`) | done     |
-| the worker placement script comes from the scripts index, not `stale_binary.go`              | proposed |
+| the worker placement script comes from the scripts index, not `stale_binary.go`              | done     |
 | the worker relink of fbacfdce1 is removed                                                     | done     |
 | zero-trust containment of a worker's own code                                                 | planned  |
 

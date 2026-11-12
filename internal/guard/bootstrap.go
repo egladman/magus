@@ -271,7 +271,13 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 %s`, onePerBase, denial{Say: v.Deny, Why: v.Why}.full())
 		v.Deny = workerBuildVerdict
 		v.Next, v.Lead = nil, ""
-		return v.withRemedy(v.Deny, placementNext(denyRuleRawTool, o.lease))
+		next, ok := placementNext(o.root, denyRuleRawTool, o.lease)
+		if !ok {
+			v.Deny = "a worker does not build magus, and no script serves " + placementSituation + " to place it"
+			v.Why += "\n" + noPlacementScript
+			return v
+		}
+		return v.withRemedy(v.Deny, next)
 	case o.bootstrap && o.multipleCmds:
 		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
 		v.Deny = fmt.Sprintf("magus workspace: the bootstrap runs only alone on its line; drop %s.", dropList(o.others))

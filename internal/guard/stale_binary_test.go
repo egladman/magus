@@ -88,6 +88,13 @@ func servedDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyR
 // workerPlacementRun is the one command a leased worker is served in place of a build.
 const workerPlacementRun = `"<main checkout>/magus" buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from "<main checkout>"`
 
+// servesPlacement indexes the script serving the placement of ./magus.
+func servesPlacement(t *testing.T, root string) {
+	t.Helper()
+	servesScript(t, root, "hack/dev/bootstrap-worktree.buzz", "place ./magus and a lease in a job's worktree",
+		placementSituation+" -- --job {lease} --from {checkout}")
+}
+
 // staleOwnSay(root) is the verdict a stale-binary deny opens with in the
 // checkout of magus at root, whoever asks.
 func staleOwnSay(root string) string {
@@ -242,6 +249,7 @@ func (s *StaleBinaryRemedySuite) SetupTest() {
 	s.cacheDir = hookLocation(s.layers.of(s.T()), Dependencies{}).cacheDir
 	s.root = ownCheckout(s.T(), s.layers.of(s.T()), true)
 	declareGuardRule(s.T(), s.root)
+	servesPlacement(s.T(), s.root)
 	s.deps = unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 }
 
@@ -338,7 +346,8 @@ func TestBootstrapIsTheMainSessionsNotAWorkers(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()[0])
 	// The bootstrap rule reads the directory the call runs in, which the fleet fixture leaves unset.
 	ctx = WithLocation(ctx, hookLocation(ctx, Dependencies{}).cacheDir, root, root)
-	ownCheckout(t, ctx, false)
+	own := ownCheckout(t, ctx, false)
+	servesPlacement(t, own)
 	line := "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 
 	deps := strict(testDependencies())
@@ -347,9 +356,24 @@ func TestBootstrapIsTheMainSessionsNotAWorkers(t *testing.T) {
 	assert.Equal(t, decisionAdvise, orchestrator.Decision, orchestrator.Reason)
 
 	worker := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1", Lease: "lease-a"})
+	next, ok := placementNext(own, denyRuleRawTool, "lease-a")
+	require.True(t, ok)
 	stored := servedDeny(t, hookLocation(ctx, Dependencies{}).cacheDir, worker, denyRuleRawTool,
-		"a worker does not build magus; ask the main session to place ./magus", placementNext(denyRuleRawTool, "lease-a"))
+		"a worker does not build magus; ask the main session to place ./magus", next)
 	assert.Contains(t, stored, "\n"+onePerBase+"\n")
+}
+
+// Without a placement script the denial says so and serves no command.
+func TestBootstrapNamesTheMissingPlacementScriptToAWorker(t *testing.T) {
+	ctx, root := fleetFixture(t, fixture.FleetLeases()[0])
+	ctx = WithLocation(ctx, hookLocation(ctx, Dependencies{}).cacheDir, root, root)
+	ownCheckout(t, ctx, false)
+	line := "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
+
+	worker := Judge(ctx, strict(testDependencies()), Request{Input: line, Host: "claude-code", Session: "s1", Lease: "lease-a"})
+	assert.Equal(t, decisionDeny, worker.Decision)
+	assert.Contains(t, worker.Reason, "no script serves "+placementSituation)
+	assert.Empty(t, worker.Next)
 }
 
 // Over a ./magus of another contract the bootstrap is refused for anyone,
@@ -653,6 +677,21 @@ func (s *WorkerRouteSuite) TestAWorkerWithABinaryAsksForAPlacement() {
 	s.Equal("lease-a", fix.placeFor)
 }
 
+func (s *WorkerRouteSuite) TestAWorkerWithNoPlacementScriptIsToldHowToDeclareOne() {
+	fix := binaryRemedy(true, s.root, "lease-a", false)
+	s.Contains(fix.why, noPlacementScript)
+	s.Empty(fix.next(denyRuleStaleBinary))
+}
+
+func (s *WorkerRouteSuite) TestAWorkerIsServedThePlacementTheIndexDeclares() {
+	servesPlacement(s.T(), s.root)
+	fix := binaryRemedy(true, s.root, "lease-a", false)
+	s.NotContains(fix.why, noPlacementScript)
+	next := fix.next(denyRuleStaleBinary)
+	s.Require().Len(next, 1)
+	s.Equal([]string{"<main checkout>/magus", "buzz", "hack/dev/bootstrap-worktree.buzz", "--", "--job", "lease-a", "--from", "<main checkout>"}, next[0].Argv)
+}
+
 func (s *WorkerRouteSuite) TestTheIntegratorWithABinaryIsToldToRelinkIt() {
 	fix := binaryRemedy(true, s.root, "lease-a", true)
 	s.Contains(fix.say, ward.RelinkAt(s.root))
@@ -743,11 +782,14 @@ func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
 	ctx, _ := fleetFixture(t, fixture.FleetLeases()[0])
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
+	servesPlacement(t, root)
 	deps := unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
 	worker := Judge(ctx, deps, Request{Input: mcpEnvelope(t, "client", map[string]any{"script": "x"}), Host: "claude-code", Session: "s1", Lease: "lease-a"})
 	want := verdictWithRule(decisionDeny, string(denyRuleStaleBinary))
-	want.Next = []types.NextStep{placementNext(denyRuleStaleBinary, "lease-a")}
+	next, ok := placementNext(root, denyRuleStaleBinary, "lease-a")
+	require.True(t, ok)
+	want.Next = []types.NextStep{next}
 	assert.Equal(t, want, unworded(worker))
 	assert.Contains(t, worker.Reason, "ask the main session to place a ./magus")
 	assert.NotContains(t, worker.Reason, ward.RelinkAt(root))
@@ -781,6 +823,7 @@ func TestRecoveryLine(t *testing.T) {
 	at := magusRepoAt
 	at.workspace = t.TempDir()
 	declareCheckoutHook(t, at.workspace)
+	servesPlacement(t, at.workspace)
 	for _, tc := range []struct {
 		line, lease string
 		builds      bool
@@ -871,7 +914,10 @@ func TestRecoveryLinePassesEveryCommandTheRemedyNames(t *testing.T) {
 			case tc.builds:
 				named = []string{ward.BootstrapCommand, config.SourceCommand(root, "", "", true)}
 			default:
-				named = []string{strings.ReplaceAll(strings.Join(placementArgv(tc.lease), " "), "<main checkout>", "/repo")}
+				servesPlacement(t, root)
+				argv, ok := placementArgv(root, tc.lease)
+				require.True(t, ok)
+				named = []string{strings.ReplaceAll(strings.Join(argv, " "), "<main checkout>", "/repo")}
 			}
 			for _, line := range named {
 				assert.True(t, recoveryLine(line, DialectBash, tc.lease, tc.builds, at), "%s (binary %v) names %q: %s", tc.name, hasBinary, line, fix.say)

@@ -526,8 +526,8 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		if buildsCheckoutBinary(judge.workspace, r) {
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
-				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks.%s %s",
-					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0], productRemedy(judge.workspace, r), unpinnedRebuild),
+				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator %s Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks.%s %s",
+					onePerBase, placementClause(at.workspace, me.ID), commands[0], productRemedy(judge.workspace, r), unpinnedRebuild),
 			}
 		}
 		if readsOwnProjects(r, me) {

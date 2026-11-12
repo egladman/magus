@@ -1658,13 +1658,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		why := whys[verdict.Reason]
 		switch {
 		case len(remedy.Next) > 0 && verdict.Reason == remedy.Deny:
-			next = servableRemedy(ctx, deps, req, who, callDir, standing, actingLease, remedy.Next)
+			next = servableRemedy(ctx, deps, req, who, callDir, location.workspace, standing, actingLease, remedy.Next)
 			if len(next) > 0 {
 				verdict.Reason, why = remedy.Lead, remedy.Why
 			}
 		case len(verdict.Next) > 0:
 			// The workspace seam's own deny, which words its reason without the command.
-			next = servableRemedy(ctx, deps, req, who, callDir, standing, actingLease, verdict.Next)
+			next = servableRemedy(ctx, deps, req, who, callDir, location.workspace, standing, actingLease, verdict.Next)
 		}
 		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
 	}
@@ -1832,7 +1832,7 @@ func oneString(rule func(context.Context, Dependencies, string, string) string) 
 // lease, in callDir, judged as not yet served: a served next is pre-authorized, so one the
 // role may not run must never be served. A worker's placement of ./magus is kept whatever
 // its write paths, as the only way a worker gets its base's binary.
-func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir string, standing leaseStanding, actingLease string, next []types.NextStep) []types.NextStep {
+func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, root string, standing leaseStanding, actingLease string, next []types.NextStep) []types.NextStep {
 	if gradingRemedy(ctx) {
 		return nil
 	}
@@ -1840,7 +1840,7 @@ func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hoo
 	candidates := next
 	// The apply line claims the acting lease itself, so the role filter, which reads every
 	// job verb as a write outside the lease, would drop the one remedy written for it.
-	if len(next) != 1 || !placesBinary(next[0], actingLease) && next[0].ID != hint.DenyRemedyPrefix+string(denyRuleLeaseClaim) {
+	if len(next) != 1 || !placesBinary(root, next[0], actingLease) && next[0].ID != hint.DenyRemedyPrefix+string(denyRuleLeaseClaim) {
 		candidates = hint.FilterServable(role, writePaths, next)
 	}
 	ctx = context.WithValue(context.WithValue(ctx, gradingRemedyKey{}, true), judgmentMarkKey{}, judgmentMark{})

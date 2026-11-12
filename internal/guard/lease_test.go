@@ -922,13 +922,16 @@ func TestWorkerCheckOnlyLetsAWorkerVetItsOwnPaths(t *testing.T) {
 // with, so an integrating worker whose own changes reach the binary knows who builds it.
 func TestWorkerCheckOnlyNamesThePlacementForTheBinary(t *testing.T) {
 	row := testCheckLease()
-	ctx, _ := fleetFixture(t, row)
+	ctx, root := fleetFixture(t, row)
+	servesPlacement(t, root)
+	argv, ok := placementArgv(root, row.ID)
+	require.True(t, ok)
 
 	reason := denyWorkerCheckOnly(ctx, composingWorkspace(t), row.ID, "./magus run go-build .")
 	require.NotEmpty(t, reason)
 	assert.Equal(t, "magus workspace: `go-build` builds ./magus, the binary judging lease guard/fix's calls; "+workerBuildVerdict+".", reason.Say)
 	assert.Contains(t, reason.Why, onePerBase)
-	assert.Contains(t, reason.Why, strings.Join(placementArgv(row.ID), " "), "the rationale names the placement")
+	assert.Contains(t, reason.Why, strings.Join(argv, " "), "the rationale names the placement")
 	assert.Contains(t, reason.Why, "at this branch's commit", "the binary is built at the commit carrying the unit's changes")
 
 	other := denyWorkerCheckOnly(ctx, composingWorkspace(t), row.ID, "./magus run go-build docs")
