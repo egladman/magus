@@ -37,7 +37,7 @@ Measured on main at 5f0df014d, 2026-11-11, with `magus refs` and reads of
 
 ## Decision
 
-### 1. Two kinds: Job and Attempt
+### 1. Two kinds: job and attempt
 
 - A **Job** is a unit of work, agentic or not. Its graded part (paths, the check,
   the success rules, `needs`) names no model, tier or prose.
@@ -54,7 +54,7 @@ Measured on main at 5f0df014d, 2026-11-11, with `magus refs` and reads of
 
 Eli chose these on 2026-11-11.
 
-### 2. The agent section is its own domain package, and the Job holds it
+### 2. The agent section is its own domain package, and the job holds it
 
 On the wire the agent section is the Job's `spec.agent` and the Attempt's
 `status.agent`. In Go it is `agent.Spec` and `agent.Status` in the new domain package
@@ -66,7 +66,7 @@ On the wire the agent section is the Job's `spec.agent` and the Attempt's
 field. A rule comparing the requested model with the observed one is deterministic and
 is the store's to compute.
 
-### 3. Records are CRD-shaped, and the conversion lives in the store
+### 3. Records are `CRD`-shaped, and the conversion lives in the store
 
 Every kind is `apiVersion`, `kind`, `metadata`, `spec`, `status` in group
 `batch.magus/v1alpha1`. That is the `<group>.<domain>` order of a Kubernetes CRD
@@ -140,7 +140,7 @@ an agent message.
 
 ## Alternatives
 
-### A Task kind, one per Job
+### A task kind, one per job
 
 `kind: Task` in `tasks.jsonl`, named as its Job, holding the work and its agent
 section. It lost because it always maps one to one to its Job, so every reader pays a
@@ -148,7 +148,7 @@ join and nothing is gained; magus's domain type for a unit of work is already th
 Evidence: Eli, 2026-11-11, after reviewing full JSON examples of both shapes. It
 reopens if one Job ever needs several units of work under one grade.
 
-### An Agent kind of its own
+### An agent kind of its own
 
 `kind: Agent`, keyed by the job name, with its own generation. It lost because the
 agent has no lifecycle apart from its Job, and a second generation would let an Attempt
@@ -172,7 +172,7 @@ It lost because `job.Store` already owns sibling files (`grants.jsonl`) and ADR 
 already fixes where a domain type and a persistence type live. Evidence: Eli's
 rejection of 2026-11-11. It does not reopen.
 
-### Flat agent members on the Job (PR #734)
+### Flat agent members on the job, as in #734
 
 It lost because a graded record with flat `model` and `criteria` members makes every
 job agent specific. Evidence: Eli's rejection of 2026-11-11. It does not reopen.

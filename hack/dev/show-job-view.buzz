@@ -14,7 +14,7 @@ final SUMMARY = "render a job's spec or its filed result as Markdown, never stor
 final SERVES = ["replaces:cat jobs.jsonl"];
 final EFFECT = "read";
 
-final USAGE = "usage: magus buzz hack/dev/job-view.buzz -- --job <id> [--result]";
+final USAGE = "usage: magus buzz hack/dev/show-job-view.buzz -- --job <id> [--result]";
 final HELP = "cost: two job-store reads\n{USAGE}\n\n"
     + "Prints a view of job <id>: its spec for the worker by default, or with --result the JobResult its holder filed.\n"
     + "Both are rendered from the typed records (magus\\Job and magus\\JobResult) through the template module, at read\n"

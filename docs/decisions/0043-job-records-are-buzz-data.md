@@ -8,7 +8,7 @@ date: 2026-11-10
 supersedes: ADR 0036 sections 3 and 4 (the workspace-only stop rule and StopRequest.reply), and agents.brief_format
 ---
 
-# ADR 0043: job records are Buzz data, and Markdown is rendered from them
+# ADR 0043: job records are Buzz data, and markdown is rendered from them
 
 ## Context
 
@@ -83,11 +83,11 @@ neither is a record, neither is parsed and neither is rewritten (ADR 0036 sectio
 stand). A parent that wants the child to read something puts it on the row; the prompt
 names the row, as `<parent>/<role> <job>` already does.
 
-### 2. One render path, Buzz template over the record, Markdown out
+### 2. One render path, Buzz template over the record, markdown out
 
 The rendered Markdown is a view: a reading of the record for a person or a host that wants
 prose, never a record itself. It is rendered from the two records by one Buzz script,
-`job-view.buzz` beside `hack/dev/render-brief.buzz`, which replaces `render-brief.buzz`. It
+`show-job-view.buzz` beside `hack/dev/render-brief.buzz`, which replaces `render-brief.buzz`. It
 reads `magus\Job` and `magus\JobResult` typed, renders through the `template` host module,
 and returns `result\Result::<str>`. It has two entry points: a spec's view, for a worker, a
 Codex `SubagentStart` context or a mod pane; and a result's view, for a person or a pull
@@ -100,11 +100,11 @@ Rendered Markdown is never stored and never read back. `magus describe job` stay
 terminal door onto the same row and parses nothing. Core ships the records, `-o json`,
 `-o template=` and the `template` module; it ships no Markdown.
 
-No `magus job view <id>` verb ships. The verb would have to run `job-view.buzz` under `hack/dev`,
+No `magus job view <id>` verb ships. The verb would have to run `show-job-view.buzz` under `hack/dev`,
 and core never names a repository's Buzz script path
 ([The host wiring is yours](../design/judgment/the-host-wiring-is-yours.md); the stop and
 spawn rules reach the guard only because the magusfile registers them). In this repository
-the view is `magus buzz hack/dev/job-view.buzz -- --job <id>`, one command a person, a
+the view is `magus buzz hack/dev/show-job-view.buzz -- --job <id>`, one command a person, a
 worker or a host can run. A workspace that wants one door for it declares the renderer in
 its magusfile, as it declares its guard rules, and a verb that runs the declared renderer
 and refuses by name when none is declared is the only shape such a verb could take. That
@@ -121,7 +121,7 @@ declared behind it is a silent default waiting to happen.
 | `agents.brief_format`, `Job.BriefFormat`, `types.BriefFormat` | nothing                                               | there is no format to choose: the record has one shape, and the prompt is prose by definition                                                                                                                                                      |
 | `brief-command`, `brief-plain-commands`                | `spawn-command`, `spawn-plain-commands`                    | they grade the spawn's prompt, and every other spawn-time rule is `spawn-*`                                                                                                                                                                         |
 | `spawn-unbriefed`, `buzz-unbriefed`, `architecture-unbriefed` | `spawn-before-skill`, `buzz-before-skill`, `architecture-before-skill` | each refuses an act before a skill loaded; the new name says what it catches                                                                                                                                                       |
-| `hack/dev/render-brief.buzz`, `hack/testdata/render-brief-*.json` | `job-view.buzz` and `job-view-*.json` in the same directories | named for what it renders                                                                                                                                                                                                                     |
+| `hack/dev/render-brief.buzz`, `hack/testdata/render-brief-*.json` | `show-job-view.buzz` and `job-view-*.json` in the same directories | named for what it renders                                                                                                                                                                                                                     |
 | the checkout brief Codex `SubagentStart` receives      | the checkout spec                                          | same text, same source, one word                                                                                                                                                                                                                    |
 | "read the terms" in `job exec`'s last line             | "read the spec"                                            | one word for the record everywhere it is named                                                                                                                                                                                                      |
 | `magus session --brief`                                | unchanged                                                  | a summary flag with prior art (`diff --brief`, `file --brief`); not this feature's sense                                                                                                                                                 |
@@ -146,12 +146,12 @@ instructions (reads as prose to follow rather than conditions graded).
 | `types/brief.go`, `magus\Brief` and its two helpers             | deleted; fields move to `types/job.go`                                                 | planned (needs the boundary registry) |
 | `agents.brief_format`, `Job.BriefFormat`, `ResolveBriefFormat`, `BriefFormatUnset` | deleted                                                             | in progress (`Job.BriefFormat` waits on the regenerated bindings) |
 | `judgeBriefBuzz` and the Buzz type check of a prompt            | deleted                                                                                | done      |
-| `hack/dev/render-brief.buzz`                                    | replaced by `job-view.buzz` in the same directory, typed, two entry points             | done      |
+| `hack/dev/render-brief.buzz`                                    | replaced by `show-job-view.buzz` in the same directory, typed, two entry points             | done      |
 | `magus describe job`                                            | kept as the terminal door                                                              | done      |
 | `next` steps on structured results                              | kept; the view renders them as the worker's next commands                              | done      |
 | a stop rule requiring a filed result (ADR 0036 s3, workspace)   | replaced by the shipped `stop-unfiled` below                                           | done      |
 | `StopRequest.reply` (ADR 0036 s4)                               | not built: a reply judged for shape is prose parsed into data, the direction refused   | not built |
-| `magus job view <id>` running a workspace-declared renderer     | not built: core names no repository script; the view is `magus buzz hack/dev/job-view.buzz` | not built |
+| `magus job view <id>` running a workspace-declared renderer     | not built: core names no repository script; the view is `magus buzz hack/dev/show-job-view.buzz` | not built |
 | `brief-*` and `*-unbriefed` rule names                          | renamed as in section 3                                                                | done      |
 
 ### 5. The guard makes it explicit, at spawn and at stop
@@ -231,7 +231,7 @@ magus is pre-1.0 and this is one change, one pull request, no shim and no alias 
    rule pages regenerate from their descriptors. A workspace that set a renamed rule by its
    old name in `magus\guard.builtins` fails loudly with the new name.
 6. `stop-unfiled` is added as a shipped stop rule with its descriptor and page.
-7. `hack/dev/render-brief.buzz` becomes `job-view.buzz` in the same directory, reading typed
+7. `hack/dev/render-brief.buzz` becomes `show-job-view.buzz` in the same directory, reading typed
    records, with its fixtures renamed; `--extra` goes, since the prompt is where a parent's
    extra words live. `job exec`'s last line says "read the spec".
 8. Guides, glossary (a `spec` entry), ADR 0036 (amended: s3 and s4 superseded here) and
@@ -345,10 +345,10 @@ nothing repository-specific.
 
 ### A `magus job view <id>` verb in core
 
-One verb on every host, running the repository's `job-view.buzz`. It lost because core
+One verb on every host, running the repository's `show-job-view.buzz`. It lost because core
 never names a repository's Buzz script path, and a verb that ran a hard-coded `hack/` path
 would be the first. The declared route (a renderer registered in the magusfile, a verb that
-refuses by name when none is) stays open and is not built: `magus buzz hack/dev/job-view.buzz`
+refuses by name when none is) stays open and is not built: `magus buzz hack/dev/show-job-view.buzz`
 is already one command. Reopen when a second workspace renders a view and wants the same
 door, or a host needs the view without a shell.
 
@@ -388,7 +388,7 @@ skill load, a summary), which the renames separate. Reopen never.
 
 `judgeBriefBuzz`, `ResolveBriefFormat`, the doctor's brief-format check and
 `agents.brief_format` are gone, the rules carry their new names, `stop-unfiled` ships,
-and `hack/dev/job-view.buzz` renders a spec and a result from `magus\Job` and
+and `hack/dev/show-job-view.buzz` renders a spec and a result from `magus\Job` and
 `magus\JobResult`. `Job.BriefFormat`, `types/brief.go` and the two new row fields wait on
 the boundary registry and the regenerated bindings, which another branch holds. Two
 pieces of section 7 stay open with them: a `magus.yaml` still naming the removed key

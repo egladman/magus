@@ -736,6 +736,14 @@ fun idleStopReason(ready: [str], unmerged: [str], stopped: [str], tasksUnknown: 
     return reason;
 }
 
+// mandateEnded is true once the mandate in force has run past its end.
+fun mandateEnded(m: Mandate?, now: int) > bool {
+    if (m -> mandate) {
+        return mandate.action == "issue" and now >= mandate.ends;
+    }
+    return false;
+}
+
 // decideStop refuses the root's stop while rows it could fork wait and no worker runs to wake
 // it. With no mandate in force it refuses once per stop, so a person present can end a turn.
 // Under a mandate a refusal naming the same rows loopLimit stops running lets the turn end and
@@ -762,10 +770,8 @@ export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: 
             }
         }
     }
-    if (m -> mandate) {
-        if (mandate.action == "issue" and now >= mandate.ends) {
-            return magus\guard.allow();
-        }
+    if (mandateEnded(m, now: now)) {
+        return magus\guard.allow();
     }
     final ready = forkable(q, m: m, now: now);
     final unmerged = unmergedLines(q.unmerged);
