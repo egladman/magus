@@ -61,10 +61,10 @@ Used by: [GetNote (request)](notes.md#getnote).
 
 Source: [notes.proto](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto).
 
-| Field        | Type   | # | Description                                                                                                                                                              |
-| ------------ | ------ | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `page_size`  | int32  | 1 | _int32.lte: 1000; int32.gte: 0_ Bounded at the same tier as ListActivityEvents. A flat field rather than a shared pagination message: each list RPC owns its own bounds. |
-| `page_token` | string | 2 |                                                                                                                                                                          |
+| Field        | Type   | # | Description                                                                                                                                                                                              |
+| ------------ | ------ | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page_size`  | int32  | 1 | _int32.lte: 1000; int32.gte: 0_ Bounded at the same tier as ListActivity and ListMemories; see ListMemoriesRequest for why the three keep their own flat field rather than sharing a pagination message. |
+| `page_token` | string | 2 |                                                                                                                                                                                                          |
 
 Used by: [ListNotes (request)](notes.md#listnotes).
 
