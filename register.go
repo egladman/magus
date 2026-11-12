@@ -84,10 +84,10 @@ func TierCeiling(parent, child types.ModelTier) error {
 	}
 	above, err := child.Above(parent)
 	if err != nil {
-		return types.DiagnosticErrorf(types.ModelTiersIncomparable, "magus: spawn rule: %v", err)
+		return types.DiagnosticErrorf(types.ModelTiersIncomparable, "cannot compare the child's model tier with its parent's: %v", err)
 	}
 	if above {
-		return types.DiagnosticErrorf(types.ModelTierAboveParent, "magus: a job at model tier %q may not spawn one at %q: a child's tier is at most its parent's",
+		return types.DiagnosticErrorf(types.ModelTierAboveParent, "a job at model tier %q may not spawn one at %q: a child's tier is at most its parent's",
 			parent.Name(), child.Name())
 	}
 	return nil

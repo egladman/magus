@@ -83,7 +83,7 @@ func runAllBindings(outDir, pkg string) error {
 	}
 	var g errgroup.Group
 	g.Go(func() error {
-		cbs, err := implCallbacks(mods)
+		cbs, err := implementationCallbacks(mods)
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,7 @@ func runAllBindings(outDir, pkg string) error {
 		return nil
 	})
 	for _, m := range mods {
-		if !hasImpl(m) {
+		if !hasImplementation(m) {
 			continue
 		}
 		g.Go(func() error {
@@ -116,9 +116,9 @@ func runAllBindings(outDir, pkg string) error {
 	return g.Wait()
 }
 
-// hasImpl reports whether a module binds any Go function, so it has
+// hasImplementation reports whether a module binds any Go function, so it has
 // trampolines to generate.
-func hasImpl(m std.Module) bool {
+func hasImplementation(m std.Module) bool {
 	for _, meth := range m.Methods {
 		if meth.Impl != nil {
 			return true
