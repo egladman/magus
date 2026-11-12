@@ -43,7 +43,7 @@ Measured on main at 5f0df014d, 2026-11-11, with `magus refs` and reads of
   the success rules, `needs`) names no model, tier or prose.
 - An **agent** is one optional section of a Job, `spec.agent`: the requested model
   `{id, tier}`, the instructions, the decisions with their reasons, the evidence, and
-  `worker {type, reason}`. `type` is `Resume` or `New` and is always written. `reason`
+  `worker {type, reason}`. `type` is `Resumed` or `New` and is always written. `reason`
   says why a new worker starts instead of the warm one of the job this one
   `follows`. It replaces `fresh_reason` (Eli, 2026-11-11). A Job without the section
   is ordinary work, such as a server maintenance run.
@@ -109,8 +109,8 @@ maps them. The envelope is an unexported generic in `internal/job` until
 
 | item                                                                                                  | State    |
 | ----------------------------------------------------------------------------------------------------- | -------- |
-| model tier types moved into `types/agent`                                                             | proposed |
-| `agent.Spec` as `types.Job.Agent`, `JobPut.Agent`; the four flat fields deleted; store migration      | proposed |
+| model tier types moved into `types/agent`                                                             | done     |
+| `agent.Spec` as `types.Job.Agent`, `JobPut.Agent`; the four flat fields deleted; store migration      | done     |
 | `types.Attempt`, `attempts.jsonl` with `attemptRecord`; `Prior` and the job result move there         | proposed |
 | CRD envelope in `batch.magus/v1alpha1` on both files; conditions replace `state`; `Holder` deleted    | proposed |
 | envelope on `libs/apiversion` `TypeMeta`                                                              | proposed |
