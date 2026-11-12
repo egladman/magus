@@ -3808,14 +3808,14 @@ github.com/egladman/magus/types.ModelTierRecord.ReworkPerJob field float64 "json
 github.com/egladman/magus/types.ModelTierRecord.WideningsPerJob field float64 "json:\"widenings_per_job\" yaml:\"widenings_per_job\""
 github.com/egladman/magus/types.ModelTierRequest type struct
 github.com/egladman/magus/types.ModelTierRequest.Check field *LeaseCheck
-github.com/egladman/magus/types.ModelTierRequest.Criteria field string
-github.com/egladman/magus/types.ModelTierRequest.DeclaredModel field string
 github.com/egladman/magus/types.ModelTierRequest.DeclaredRank field *int
 github.com/egladman/magus/types.ModelTierRequest.DependsOn field []string
 github.com/egladman/magus/types.ModelTierRequest.Goals field []Goal
 github.com/egladman/magus/types.ModelTierRequest.History field []ModelTierRecord
 github.com/egladman/magus/types.ModelTierRequest.ID field string
+github.com/egladman/magus/types.ModelTierRequest.Instructions field string
 github.com/egladman/magus/types.ModelTierRequest.Kind field JobKind
+github.com/egladman/magus/types.ModelTierRequest.Model field github.com/egladman/magus/types/agent.Model
 github.com/egladman/magus/types.ModelTierRequest.Parent field string
 github.com/egladman/magus/types.ModelTierRequest.ParentRank field *int
 github.com/egladman/magus/types.ModelTierRequest.ReadOnly field bool

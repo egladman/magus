@@ -5035,7 +5035,7 @@ func ObjectModelTierRequest(v types.ModelTierRequest, enums ffi.EnumCases) vm.Va
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("parent", vm.StringValue(v.Parent))
-	out.MapSet("criteria", vm.StringValue(v.Criteria))
+	out.MapSet("instructions", vm.StringValue(v.Instructions))
 	out.MapSet("readOnly", vm.BoolValue(v.ReadOnly))
 	optCheck := vm.Null
 	if v.Check != nil {
@@ -5079,7 +5079,7 @@ func ObjectModelTierRequest(v types.ModelTierRequest, enums ffi.EnumCases) vm.Va
 		optDeclaredRank = vm.IntValue(int64((*v.DeclaredRank)))
 	}
 	out.MapSet("declaredRank", optDeclaredRank)
-	out.MapSet("declaredModel", vm.StringValue(v.DeclaredModel))
+	out.MapSet("model", ObjectModel(v.Model))
 	itemsHistory := make([]vm.Value, len(v.History))
 	for indexHistory := range v.History {
 		itemsHistory[indexHistory] = ObjectModelTierRecord(v.History[indexHistory], enums)

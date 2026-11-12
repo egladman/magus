@@ -163,7 +163,7 @@ func TestNewModelTierRequestCarriesTheRowAndItsParentsRank(t *testing.T) {
 	require.NotNil(t, req.DeclaredRank)
 	assert.Equal(t, 0, *req.DeclaredRank)
 	wantReq := req
-	wantReq.DeclaredModel, wantReq.History, wantReq.Goals = "economy", history, row.Goals
+	wantReq.Model, wantReq.History, wantReq.Goals = agent.Model{Tier: "economy"}, history, row.Goals
 	wantReq.WritePaths, wantReq.ReadPaths, wantReq.DependsOn = []string{"a.go"}, []string{"b"}, []string{"wave/b"}
 	assert.Equal(t, wantReq, req)
 	assert.Empty(t, req.WriteProjects, "a project is a graph fact the store does not hold")

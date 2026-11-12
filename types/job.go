@@ -1153,7 +1153,7 @@ type Declaration struct {
 	// never emitted.
 	//
 	// compat(until: no client or stored ledger still sends owned_paths/focus/
-	// forbidden_paths/tier; observe: grep the leases-*.json archives and the trail for the
+	// forbidden_paths; observe: grep the leases-*.json archives and the trail for the
 	// old keys): the decoder is strict, so an old client's row would be refused as an
 	// unknown member rather than understood. A row naming both spellings of one field is
 	// refused, since nothing here can say which one its author meant.

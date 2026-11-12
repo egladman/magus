@@ -2855,7 +2855,7 @@ export object ServiceLease {
 export object ModelTierRequest {
     id: str = "",
     parent: str = "",
-    criteria: str = "",
+    instructions: str = "",
     readOnly: bool = false,
     check: LeaseCheck? = null,
     goals: [Goal] = [],
@@ -2867,7 +2867,7 @@ export object ModelTierRequest {
     writeFiles: int = 0,
     parentRank: int? = null,
     declaredRank: int? = null,
-    declaredModel: str = "",
+    model: AgentModel = AgentModel{},
     history: [ModelTierRecord] = [],
 }
 

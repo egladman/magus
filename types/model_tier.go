@@ -31,7 +31,7 @@ type ModelTierMatrix func(ctx context.Context, req ModelTierRequest) (*agent.Job
 // typed declaration plus the workspace's recorded outcomes. ParentRank and DeclaredRank
 // are nil when the parent or the row carries no tier.
 type ModelTierRequest struct {
-	ID, Parent, Criteria                 string
+	ID, Parent, Instructions             string
 	ReadOnly                             bool
 	Check                                *LeaseCheck
 	Goals                                []Goal
@@ -40,7 +40,7 @@ type ModelTierRequest struct {
 	DependsOn                            []string
 	WriteFiles                           int
 	ParentRank, DeclaredRank             *int
-	DeclaredModel                        string
+	Model                                agent.Model
 	History                              []ModelTierRecord
 }
 

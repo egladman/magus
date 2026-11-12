@@ -21,7 +21,7 @@ func newModelTierRequest(row types.Job, rows []types.Job, set *agent.ModelTierSe
 	req := types.ModelTierRequest{
 		ID:            row.ID,
 		Parent:        row.Parent,
-		Criteria:      row.Instructions(),
+		Instructions:  row.Instructions(),
 		ReadOnly:      row.ReadOnly,
 		Goals:         slices.Clone(row.Goals),
 		Kind:          modelTierKind(row),
@@ -29,7 +29,7 @@ func newModelTierRequest(row types.Job, rows []types.Job, set *agent.ModelTierSe
 		ReadPaths:     slices.Clone(row.ReadPaths),
 		DependsOn:     slices.Clone(row.DependsOn),
 		WriteFiles:    writeFileCount(row.WritePaths),
-		DeclaredModel: row.Agent.RequestedModel().String(),
+		Model:         row.Agent.RequestedModel(),
 		History:       slices.Clone(history),
 	}
 	if row.Check != nil {
