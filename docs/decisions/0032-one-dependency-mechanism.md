@@ -273,6 +273,14 @@ code the pending design names, for either reference.
 | spell contract `needs`/`provides` renamed `sources`/`outputs`                                                                                                                    | proposed |
 | [dependencies.md](../concepts/dependencies.md) rewritten around two verbs; `magus\needs` in the docs becomes `ctx.needs`                                                         | proposed |
 | ADR 0027 gains an amendment pointing here                                                                                                                                        | proposed |
+| a `ctx.needs` edge carries the needed target's key: a step's key folds in the own inputs of every target its chain reaches; a `skip_cache` member's artifact keys as before      | done     |
+
+The needs-key row was measured over the 200 commits before it on `main`. Of the 158
+cacheable targets the `ci` targets reach, 60 gained key inputs. The target runs a
+commit's changed files miss rose from 12,207 to 13,802 of 31,600 (39% to 44%). The
+count matches each changed path against each target's source globs, so it leaves out the
+walk's pruning of nested projects. The agents guide's `test` rose from 64 misses to 196,
+since it now keys on what `go_build` reads.
 
 ### Principles checked
 

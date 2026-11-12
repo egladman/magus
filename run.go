@@ -621,19 +621,77 @@ func (m *Magus) reservedOpOutput(p *types.Project, target string) (string, bool)
 	return "", false
 }
 
-// buildStep assembles the cache.Step for running target on p.
-func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
-	step := m.baseStep(p)
-	step.Target = target
+// keyInputs is what one target's own declarations put in its cache key.
+type keyInputs struct {
+	sources       []types.Glob
+	ignoreDirs    []string
+	envAllow      []string
+	execOverrides []string
+	observations  []string
+}
+
+// ownKeyInputs is target's key on p before the targets it needs add theirs.
+func (m *Magus) ownKeyInputs(p *types.Project, target string) keyInputs {
+	base := m.baseStep(p)
+	sources := m.footprintBaseline(p, target, base.Sources)
+	for _, s := range p.ResolvedSpells {
+		// A malformed list matches nothing, as it did before it was parsed.
+		if globs, err := types.ParseGlobs(s.TargetSources()[target]); err == nil {
+			sources = append(sources, globs...)
+		}
+	}
+	// Per-target inputs declared via ctx.readsFiles define the cache footprint whenever
+	// present. Each InputRef carries its owning project, rooted by the same rule as
+	// outputs.
+	for _, ref := range p.TargetInputs[target] {
+		sources = append(sources, ref.Rooted(p.Path))
+	}
+	// Per-target ctx.writesFiles(..., editsExistingSource: true) refs fold into Sources exactly as inputs do, and into
+	// Outputs not at all. That asymmetry IS the feature: staying out of the output set
+	// keeps the file off the snapshot/replay path and out of magus clean's reach, while
+	// landing in the source set means editing the authored prose around a generated
+	// region invalidates the target that maintains that region. Declared as an output
+	// instead, the file was excluded from the source hash, so an edit to it could not
+	// invalidate anything.
+	for _, ref := range p.TargetUpdates[target] {
+		sources = append(sources, ref.Rooted(p.Path))
+	}
+	// Each install keys itself (installStep).
+	if len(findInstallOps(p, target)) > 0 {
+		sources = nil
+	}
+	return keyInputs{
+		sources:    sources,
+		ignoreDirs: base.IgnoreDirs,
+		// Names, not values: hashStep reads each variable's process value at hash time.
+		// An op's own EnvKeys travel with it regardless of whether target's body declared
+		// ctx.envInputs: the op knows its result depends on the variable (GOOS, say), the
+		// author composing it may not. Folded against the accumulated set so a name already
+		// present via ctx.envInputs, or shared by two composed ops, is not hashed twice.
+		envAllow: appendMissing(slices.Clone(p.TargetEnvAllow[target]), targetDrivenEnvKeys(p, target)),
+		// ctx.withEnv / ctx.withCwd overrides fold into the KEY, not the sources: they change what the
+		// tool does without naming a file, so two runs differing only by a derived env must
+		// not share an entry.
+		execOverrides: slices.Clone(p.TargetExecOverrides[target]),
+		// ctx.observes: an external fact the answer depends on, keyed so the target stays
+		// cacheable rather than having to opt out with skip_cache.
+		observations: slices.Clone(p.TargetObservations[target]),
+	}
+}
+
+// footprintBaseline is a copy of the source set target on p starts from:
+// baseline, unless the target or its indexer narrows it.
+func (m *Magus) footprintBaseline(p *types.Project, target string, baseline []types.Glob) []types.Glob {
+	sources := baseline
 	// An explicit target footprint is an ownership boundary, not an extra safety
 	// margin.  Keeping the project-wide baseline here made a target that declared
 	// its exact inputs indistinguishable from one that had not: unrelated spell
 	// claims still invalidated it.  Retain the magusfiles (they define the target)
 	// and the target-specific spell inputs, then let the body state the rest.
 	if len(p.TargetInputs[target]) > 0 {
-		step.Sources = magusfileGlobs(p.Path)
+		sources = magusfileGlobs(p.Path)
 		if p.Path != "." {
-			step.Sources = append(step.Sources, magusfileGlobs(".")...)
+			sources = append(sources, magusfileGlobs(".")...)
 		}
 	}
 	// The symbol indexer reads its language's sources and nothing else the project
@@ -645,12 +703,60 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// beside go leaves the Go index's key where it was.
 	if indexesSymbols(p, target, m.cfg.Spells) {
 		if indexed := symbolIndexSources(p, target, m.cfg.Spells); len(indexed) > 0 {
-			step.Sources = slices.Concat(magusfileGlobs(p.Path), indexed)
+			sources = slices.Concat(magusfileGlobs(p.Path), indexed)
 			if p.Path != "." {
-				step.Sources = append(step.Sources, magusfileGlobs(".")...)
+				sources = append(sources, magusfileGlobs(".")...)
 			}
 		}
 	}
+	return slices.Clone(sources)
+}
+
+// neededKeyInputs unions ownKeyInputs over target's ctx.needs closure, which
+// is what the needed targets' keys hold (ADR 0032 section 7). resolved is
+// false when a needed project is missing, so no key covers it.
+func (m *Magus) neededKeyInputs(p *types.Project, target string) (needed keyInputs, resolved bool) {
+	resolved = true
+	lookup := func(path string) *types.Project {
+		q := m.Get(path)
+		resolved = resolved && q != nil
+		return q
+	}
+	err := types.WalkChain(p, target, lookup, func(v types.ChainVisit) error {
+		if v.Depth == 0 {
+			return nil
+		}
+		// A skip_cache member folds too: its declared inputs are still what it
+		// reads. Its artifact enters through types.ChainSkipCacheOutputs.
+		in := m.ownKeyInputs(v.Project, v.Target)
+		needed.sources = append(needed.sources, in.sources...)
+		needed.ignoreDirs = appendMissing(needed.ignoreDirs, in.ignoreDirs)
+		needed.envAllow = appendMissing(needed.envAllow, in.envAllow)
+		needed.execOverrides = appendMissing(needed.execOverrides, in.execOverrides)
+		needed.observations = appendMissing(needed.observations, in.observations)
+		return nil
+	})
+	return needed, resolved && err == nil
+}
+
+// appendMissing appends each of add that dst lacks. The key hashes a
+// repeated line twice, so a shared name must enter once.
+func appendMissing(dst, add []string) []string {
+	for _, s := range add {
+		if !slices.Contains(dst, s) {
+			dst = append(dst, s)
+		}
+	}
+	return dst
+}
+
+// buildStep assembles the cache.Step for running target on p. Its key
+// carries the keys of the targets it needs (neededKeyInputs).
+func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
+	step := m.baseStep(p)
+	step.Target = target
+	own := m.ownKeyInputs(p, target)
+	needed, resolved := m.neededKeyInputs(p, target)
 	// Gathered BEFORE the ownership boundary below narrows step.Outputs to one target's.
 	// Every project's outputs, not just this one's. The reason is the reason OwnedOutputs
 	// already spans every target rather than the running one (a chained target's writes land
@@ -717,13 +823,6 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.Stamps = append(step.Stamps, out)
 		}
 	}
-	sources := slices.Clone(step.Sources)
-	for _, s := range p.ResolvedSpells {
-		// A malformed list matches nothing, as it did before it was parsed.
-		if globs, err := types.ParseGlobs(s.TargetSources()[target]); err == nil {
-			sources = append(sources, globs...)
-		}
-	}
 	// Which host facts key this step. Workspace-wide today: a per-target override is a
 	// narrower claim, and there is no evidence yet that anyone needs one axis on for
 	// one target and off for another within the same workspace.
@@ -739,40 +838,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.IncludeArch = *pol.IncludeArch
 		}
 	}
-	// Per-target inputs declared via ctx.readsFiles define the cache footprint whenever
-	// present. Each InputRef carries its owning project, rooted by the same rule as
-	// outputs below.
-	for _, ref := range p.TargetInputs[target] {
-		sources = append(sources, ref.Rooted(p.Path))
-	}
-	// A replay of this step would skip every composed skip_cache target, so key on
-	// their artifacts instead; see types.ChainSkipCacheOutputs.
-	sources = append(sources, types.ChainSkipCacheOutputs(p, target, m.Get)...)
-	// Per-target ctx.writesFiles(..., editsExistingSource: true) refs fold into Sources exactly as inputs do, and into
-	// Outputs not at all. That asymmetry IS the feature: staying out of the output set
-	// keeps the file off the snapshot/replay path and out of magus clean's reach, while
-	// landing in the source set means editing the authored prose around a generated
-	// region invalidates the target that maintains that region. Declared as an output
-	// instead, the file was excluded from the source hash, so an edit to it could not
-	// invalidate anything.
-	// ctx.withEnv / ctx.withCwd overrides fold into the KEY, not the sources: they change what the
-	// tool does without naming a file, so two runs differing only by a derived env must
-	// not share an entry.
-	step.ExecOverrides = append(step.ExecOverrides, p.TargetExecOverrides[target]...)
-	// Names, not values: hashStep reads each variable's process value at hash time.
-	step.EnvAllow = append(step.EnvAllow, p.TargetEnvAllow[target]...)
-	// An op's own EnvKeys travel with it regardless of whether target's body declared
-	// ctx.envInputs: the op knows its result depends on the variable (GOOS, say), the
-	// author composing it may not. Folded against the accumulated set so a name already
-	// present via ctx.envInputs, or shared by two composed ops, is not hashed twice.
-	for _, k := range targetDrivenEnvKeys(p, target) {
-		if !slices.Contains(step.EnvAllow, k) {
-			step.EnvAllow = append(step.EnvAllow, k)
-		}
-	}
-	// ctx.observes: an external fact the answer depends on, keyed so the target stays
-	// cacheable rather than having to opt out with skip_cache.
-	step.Observations = append(step.Observations, p.TargetObservations[target]...)
+	step.ExecOverrides = appendMissing(own.execOverrides, needed.execOverrides)
+	step.EnvAllow = appendMissing(own.envAllow, needed.envAllow)
+	step.Observations = appendMissing(own.observations, needed.observations)
+	step.IgnoreDirs = appendMissing(step.IgnoreDirs, needed.ignoreDirs)
 	if m.binaryAnswerTargets[types.TargetRef{Project: p.Path, Target: target}] {
 		step.Catalogs = answerCatalogs()
 	}
@@ -780,7 +849,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	for _, ref := range p.TargetUpdates[target] {
 		updates = append(updates, ref.Rooted(p.Path))
 	}
-	step.Sources = types.CompactGlobs(append(sources, updates...))
+	// A replay of this step would skip every composed skip_cache target, so key on
+	// their artifacts instead; see types.ChainSkipCacheOutputs.
+	step.Sources = types.CompactGlobs(slices.Concat(own.sources,
+		types.ChainSkipCacheOutputs(p, target, m.Get), needed.sources))
 	// Also on its own: once folded into Sources the glob can no longer answer "was this
 	// edit declared", which is what MGS4007 asks.
 	//
@@ -810,7 +882,8 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// A service op is a long-running process: it must never be cached, or a re-run
 	// would replay a completed-target result instead of restarting the process. This
 	// is inherent (not an author opt-in), so OR it into the explicit SkipCache policy.
-	step.NoCache = alwaysRuns(p, target)
+	// A key missing a needed target's inputs could replay a stale pass.
+	step.NoCache = alwaysRuns(p, target) || !resolved
 	if !step.NoCache {
 		step.BeforeKey = types.BeforeKey(p, target, m.Get)
 	}
