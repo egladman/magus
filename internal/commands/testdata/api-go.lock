@@ -279,6 +279,7 @@ github.com/egladman/magus.WithExtraArgs func(args []string) RunOption
 github.com/egladman/magus.WithGate func() RunOption
 github.com/egladman/magus.WithGraphHistory func(h DurationPredictor, target string) ComposeOption
 github.com/egladman/magus.WithGraphInput func(g *github.com/egladman/magus/types.Graph) ComposeOption
+github.com/egladman/magus.WithJobReader func(r github.com/egladman/magus/types.JobReader) Option
 github.com/egladman/magus.WithMetricsCollection func() Option
 github.com/egladman/magus.WithObserver func(o github.com/egladman/magus/types.Observer) RunOption
 github.com/egladman/magus.WithOutputs func(paths ...string) ProjectOption
@@ -2662,6 +2663,7 @@ github.com/egladman/magus/types.IsWrapperInvocation func(ref string) bool
 github.com/egladman/magus/types.Job type struct
 github.com/egladman/magus/types.Job.Agent field *github.com/egladman/magus/types/agent.Spec "json:\"agent,omitempty\" yaml:\"agent,omitempty\""
 github.com/egladman/magus/types.Job.Attempt field *JobAttempt "json:\"attempt,omitempty\" yaml:\"attempt,omitempty\""
+github.com/egladman/magus/types.Job.Authority field string "json:\"authority,omitempty\" yaml:\"authority,omitempty\""
 github.com/egladman/magus/types.Job.BaseVerdict field JobBaseVerdict "json:\"base_verdict,omitempty\" yaml:\"base_verdict,omitempty\""
 github.com/egladman/magus/types.Job.Breaks field []string "json:\"breaks,omitempty\" yaml:\"breaks,omitempty\""
 github.com/egladman/magus/types.Job.BriefFormat field BriefFormat "json:\"brief_format,omitempty\" yaml:\"brief_format,omitempty\""
@@ -2932,6 +2934,8 @@ github.com/egladman/magus/types.JobPut.WritePaths field *[]string "json:\"write_
 github.com/egladman/magus/types.JobReadOnly type struct
 github.com/egladman/magus/types.JobReadOnly.Job field string "json:\"job\"   yaml:\"job\""
 github.com/egladman/magus/types.JobReadOnly.Lacks field []string "json:\"lacks\" yaml:\"lacks\""
+github.com/egladman/magus/types.JobReader type interface
+github.com/egladman/magus/types.JobReader.List imethod func() ([]Job, error)
 github.com/egladman/magus/types.JobRecordInvalid const DiagnosticCode = "MGS3037"
 github.com/egladman/magus/types.JobRegistration type struct
 github.com/egladman/magus/types.JobRegistration.Advice field string "json:\"advice\""

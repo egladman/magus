@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 const refuseEverything = `import "magus";
@@ -163,4 +164,55 @@ func ExampleMagus_JudgeWrite() {
 	// decision: deny
 	// names its rule: true
 	// gives the rule's reason: true
+}
+
+// jobReaderSuite pins WithJobReader: the lease rules judge an embedder's own
+// rows, named by the lease on the call's context.
+type jobReaderSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestJobReader(t *testing.T) {
+	suite.Run(t, new(jobReaderSuite))
+}
+
+// taskReader answers an embedder's tasks as job rows.
+type taskReader []types.Job
+
+func (r taskReader) List() ([]types.Job, error) { return r, nil }
+
+func (s *jobReaderSuite) SetupTest() {
+	testkit.Isolate(s.T())
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile(`import "magus";` + "\n")
+	s.root = w.Root()
+}
+
+func (s *jobReaderSuite) judge(authority string) types.GuardJudgment {
+	task := types.Job{ID: "task", State: types.StateRunning, WritePaths: []string{"a.go"}, Authority: authority}
+	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	j, err := m.JudgeCommand(types.WithJobLease(s.T().Context(), "task"), "s1", m.Root(), "./build.sh")
+	s.Require().NoError(err)
+	return j
+}
+
+func (s *jobReaderSuite) TestATaskWithNoAuthorityIsRefusedWork() {
+	j := s.judge("")
+	s.Contains(j.Reason, "lease task records no authority")
+	s.Equal(types.GuardJudgment{
+		APIVersion: j.APIVersion, Decision: string(types.GuardDeny), Reason: j.Reason, Context: j.Context,
+		Rule: "lease-authority", Lease: "task", LeaseFrom: j.LeaseFrom, Next: j.Next,
+	}, j)
+}
+
+func (s *jobReaderSuite) TestATaskWithAnAuthorityIsNotRefusedForIt() {
+	s.NotEqual("lease-authority", s.judge("0123abcd").Rule)
+}
+
+func (s *jobReaderSuite) TestANilReaderFailsTheOpen() {
+	_, err := Open(s.T().Context(), s.root, WithJobReader(nil), WithSpawnRule(TierCeiling))
+	s.ErrorContains(err, "WithJobReader was given a nil reader")
 }

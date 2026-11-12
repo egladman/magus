@@ -30,6 +30,7 @@ var unclearable = map[string]bool{
 	string(denyRuleLeaseHarness):    true,
 	string(denyRuleLeaseRebind):     true,
 	string(denyRuleLeaseUndeclared): true,
+	string(denyRuleLeaseAuthority):  true,
 	string(denyRuleStaleBinary):     true,
 }
 

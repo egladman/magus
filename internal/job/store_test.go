@@ -117,6 +117,7 @@ func releasedPaths(row types.Job) []string {
 // comparison covers every other field.
 func stamped(want, got types.Job) types.Job {
 	want.Schema, want.RegisteredBy, want.Created, want.Updated = got.Schema, got.RegisteredBy, got.Created, got.Updated
+	want.Authority = got.Authority
 	want.Generation = got.Generation
 	return want
 }
@@ -612,6 +613,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 				Updated:      stored.Updated,
 				Validated:    stored.Validated,
 				RegisteredBy: stored.RegisteredBy,
+				Authority:    head,
 			}, stored)
 		})
 	}
@@ -1742,4 +1744,104 @@ func (s *StaleStampSuite) TestRefusesAMalformedVersion() {
 	plantRaw(s.T(), s.store, `{"id":"a","api_version":"13","state":"running","created":1,"updated":1}`)
 	_, err := s.store.List()
 	s.ErrorContains(err, "move jobs.jsonl aside, or delete it")
+}
+
+// authoritySuite pins ADR 0045's Authority: computed by the store at a fork
+// from who forked, and moved later only by the root.
+type authoritySuite struct {
+	suite.Suite
+	repo *testkit.Repo
+	loc  Location
+}
+
+func TestAuthority(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(authoritySuite))
+}
+
+func (s *authoritySuite) SetupTest() {
+	s.repo = execRepository(s.T())
+	s.loc = tempLocation(s.T(), s.repo.Root())
+}
+
+func (s *authoritySuite) fork(st *Store, row types.Job) (types.Job, error) {
+	return st.Update(s.T().Context(), row.ID, func(cur *types.Job) { *cur = row })
+}
+
+func (s *authoritySuite) TestARootForkRecordsTheRootCheckoutsCommittedRevision() {
+	stored, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}})
+	s.Require().NoError(err)
+	s.Equal(s.repo.Head(), stored.Authority)
+}
+
+func (s *authoritySuite) TestNeitherADeclaredCheckpointNorASentAuthoritySetsIt() {
+	head := s.repo.Head()
+	s.repo.Commit("later", map[string]string{"b.txt": "b\n"})
+	stored, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Checkpoint: head, Authority: "forged"})
+	s.Require().NoError(err)
+	s.Equal(s.repo.Head(), stored.Authority)
+}
+
+func (s *authoritySuite) TestAWorkersChildTakesItsParentsAuthority() {
+	parent, err := s.fork(NewStore(s.loc), types.Job{ID: "p", WritePaths: []string{"a.go"}, State: types.StateRunning})
+	s.Require().NoError(err)
+	worktree := s.repo.AddWorktree("p")
+	worktree.Commit("the worker's own", map[string]string{"a.go": "package a\n"})
+	worker := s.loc
+	worker.Root, worker.Actor = worktree.Root(), &Actor{Lease: "p"}
+
+	child, err := s.fork(NewStore(worker), types.Job{ID: "p/c", Parent: "p", WritePaths: []string{"a.go"}})
+	s.Require().NoError(err)
+	s.Equal(parent.Authority, child.Authority, "the child's checkout HEAD is the worker's commit, never its authority")
+}
+
+func (s *authoritySuite) TestALaterWriteCarriesTheAuthorityForward() {
+	first, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}})
+	s.Require().NoError(err)
+	s.repo.Commit("later", map[string]string{"b.txt": "b\n"})
+	again, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go", "b.go"}})
+	s.Require().NoError(err)
+	s.Equal(first.Authority, again.Authority)
+}
+
+func (s *authoritySuite) TestAForkOfTheNextAttemptRecordsTheRootsHeadThen() {
+	_, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}, State: types.StateFail})
+	s.Require().NoError(err)
+	later := s.repo.Commit("later", map[string]string{"b.txt": "b\n"})
+	again, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}, State: types.StateDeclared})
+	s.Require().NoError(err)
+	s.Equal(later, again.Authority)
+}
+
+func (s *authoritySuite) TestAForkWhereNoVersionControlAnswersRecordsNone() {
+	stored, err := s.fork(tempStore(s.T(), s.T().TempDir()), types.Job{ID: "a", WritePaths: []string{"a.go"}})
+	s.Require().NoError(err)
+	s.Empty(stored.Authority)
+}
+
+func (s *authoritySuite) TestTheRootAdvancesARowsAuthority() {
+	_, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}})
+	s.Require().NoError(err)
+	later := s.repo.Commit("merged", map[string]string{"b.txt": "b\n"})
+	advanced, err := NewStore(s.loc).AdvanceAuthority(s.T().Context(), "a")
+	s.Require().NoError(err)
+	s.Equal(later, advanced.Authority)
+}
+
+func (s *authoritySuite) TestALeasedCallerCannotAdvanceItsOwnAuthority() {
+	first, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}, State: types.StateRunning})
+	s.Require().NoError(err)
+	s.repo.Commit("the worker's own", map[string]string{"b.txt": "b\n"})
+	_, err = boundStore(s.loc, "a").AdvanceAuthority(s.T().Context(), "a")
+	var refused *RefusedError
+	s.Require().ErrorAs(err, &refused)
+	s.Contains(err.Error(), "only the root advances a row's authority")
+	rows, err := NewStore(s.loc).List()
+	s.Require().NoError(err)
+	s.Equal(first.Authority, rows[0].Authority)
+}
+
+func (s *authoritySuite) TestAdvancingAnUndeclaredRowFails() {
+	_, err := NewStore(s.loc).AdvanceAuthority(s.T().Context(), "nobody")
+	s.ErrorContains(err, "nobody is not declared")
 }

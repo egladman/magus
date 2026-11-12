@@ -402,6 +402,7 @@ guard-rule installed-skill
 guard-rule instruction-write
 guard-rule interpreter-rewrite
 guard-rule interpreter-script
+guard-rule lease-authority
 guard-rule lease-checkout
 guard-rule lease-claim
 guard-rule lease-gate

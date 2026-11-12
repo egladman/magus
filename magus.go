@@ -204,6 +204,8 @@ type Magus struct {
 	// cacheBackend is WithCacheBackend's; nil without one, when the magusfile may wire
 	// one instead.
 	cacheBackend types.CacheBackend
+	// jobReader is WithJobReader's; nil reads the job store.
+	jobReader types.JobReader
 }
 
 // env reads key from the environment WithEnv gave, "" for a key unset there or with no
@@ -603,8 +605,11 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if vo.CacheBackendGiven && vo.CacheBackend == nil {
 		return nil, errors.New("magus: WithCacheBackend was given a nil backend, so pass a backend, or leave the option out to use the one the magusfile wires")
 	}
+	if vo.JobReaderGiven && vo.JobReader == nil {
+		return nil, errors.New("magus: WithJobReader was given a nil reader, so pass a reader, or leave the option out to read the job store")
+	}
 	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.SpawnRule, cacheBackend: vo.CacheBackend,
-		environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine}
+		environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine, jobReader: vo.JobReader}
 	if vo.Stderr != nil {
 		m.stderr = vo.Stderr
 	}

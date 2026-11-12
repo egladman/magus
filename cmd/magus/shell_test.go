@@ -1637,7 +1637,7 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	testkit.Isolate(t)
-	root, cacheDir := t.TempDir(), t.TempDir()
+	root, cacheDir := testkit.NewRepository(t, nil).Root(), t.TempDir()
 	row := types.Job{ID: "worker", WritePaths: []string{"a.go"}, Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1}
 	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)

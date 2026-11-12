@@ -194,6 +194,9 @@ type Dependencies struct {
 	// them on every hook row, so a verdict can be tied to the build that reached it.
 	Binary        string
 	BinaryVersion string
+	// JobReader is what the lease rules read job rows through, nil for the
+	// job store of the checkout judged. An SDK caller passes its own.
+	JobReader types.JobReader
 
 	// scope is where the judged call runs. Judge fills it from the location it resolved,
 	// so Evaluate can tell a path outside the workspace without reading anything itself.
@@ -1034,6 +1037,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		}
 		if d := denyUndeclaredLease(standing, actingLease, command); d.refused() {
 			refuseWith(denyRuleLeaseUndeclared, d)
+			return
+		}
+		// A pending row is a fork grading its check, and the store stamps the
+		// authority only as it writes the row.
+		if pendingRowID(ctx) == actingLease {
+			return
+		}
+		if d := denyUnauthorizedLease(standing, actingLease, command); d.refused() {
+			refuseWith(denyRuleLeaseAuthority, d)
 		}
 	}
 	// A served next is magus's own suggestion, and the guard does not argue with it: no
@@ -2438,6 +2450,8 @@ type location struct {
 	// policies is what the workspace declares and how it was read, read once per judgment
 	// and only when a rule asks.
 	policies func() declaredIndex
+	// rows is the request's Dependencies.JobReader, nil for the job store.
+	rows types.JobReader
 }
 
 // jobs places the job store and checkout record of the checkout at. A user state dir that
@@ -2479,7 +2493,7 @@ func withJobStoreRows(ctx context.Context, at location) context.Context {
 // rereadJobStoreRows is withJobStoreRows over any rows already pinned, for a judgment
 // that has just written the store.
 func rereadJobStoreRows(ctx context.Context, at location) context.Context {
-	if at.cacheDir == "" {
+	if at.cacheDir == "" && at.rows == nil {
 		return ctx
 	}
 	log := judgmentPhases(ctx)
@@ -2498,21 +2512,30 @@ func rereadJobStoreRows(ctx context.Context, at location) context.Context {
 	wait, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	start := time.Now()
-	dryRun := isDryRun(ctx)
-	loc := at.jobs()
-	loc.DryRun = dryRun
-	store := job.NewStore(loc)
-	rows, err := awaitDeadline(wait, store.List)
+	reader, store := at.rows, (*job.Store)(nil)
+	if reader == nil {
+		store = at.store(isDryRun(ctx))
+		reader = store
+	}
+	rows, err := awaitDeadline(wait, reader.List)
 	if err != nil && wait.Err() != nil {
 		log.record(timedPhase(phaseJobRows, time.Since(start), budget, true))
 	} else {
 		log.idle()
 	}
+	// An embedder's reader answers rows alone: its tasks keep no attempts.
 	var tries []types.Attempt
-	if err == nil {
+	if err == nil && store != nil {
 		tries, err = store.Attempts()
 	}
 	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Attempts: tries, Err: err})
+}
+
+// store is the job store of at's checkout, a dry view for a dry run.
+func (at location) store(dryRun bool) *job.Store {
+	loc := at.jobs()
+	loc.DryRun = dryRun
+	return job.NewStore(loc)
 }
 
 // jobRowsBudget bounds a hook's wait for the job store's rows, half the hook's budget as a
@@ -2560,6 +2583,9 @@ func pendingRowID(ctx context.Context) string {
 func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 	if pinned, ok := job.SnapshotFromContext(ctx); ok {
 		return pinned.Rows, pinned.Err
+	}
+	if at.rows != nil {
+		return at.rows.List()
 	}
 	return job.NewStore(at.jobs()).List()
 }
@@ -2873,9 +2899,14 @@ func hookLocation(ctx context.Context, deps Dependencies) location {
 		if at.policies == nil {
 			at.policies = policiesAt(ctx, deps, at.workspace)
 		}
+		if at.rows == nil {
+			at.rows = deps.JobReader
+		}
 		return at
 	}
-	return hookLocationAt(deps, "")
+	at := hookLocationAt(deps, "")
+	at.rows = deps.JobReader
+	return at
 }
 
 // hookLocationAt resolves the workspace holding dir, or the process cwd for "".

@@ -64,7 +64,7 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 
 // writeMerge stores a merge that validated, stamping when it did.
 func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, proof types.JobWriteProof) (types.Job, error) {
-	return store.Update(ctx, id, func(u *types.Job) {
+	stored, err := store.Update(ctx, id, func(u *types.Job) {
 		created := u.Created == 0
 		merge(u)
 		if created && u.Deadline == 0 && limits.DefaultTimeout > 0 {
@@ -75,6 +75,10 @@ func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.
 		}
 		u.Validated = time.Now().Unix()
 	})
+	if err == nil {
+		store.noteNoAuthority(stored)
+	}
+	return stored, err
 }
 
 // mergeBase is the row a merge into id lands on, and whether the merge updates that row

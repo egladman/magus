@@ -207,7 +207,7 @@ func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
 
 	assert.ElementsMatch(t, []string{
 		"holder", "releases", "unattributed", "entries", "release_requests", "write_proof", "validated", "reported_base",
-		"base_verdict", "registered_by", "registered", "checkout_root", "worktree", "end_reason", "created",
+		"base_verdict", "registered_by", "authority", "registered", "checkout_root", "worktree", "end_reason", "created",
 		"updated", "deadline", "attempt", "gate_attempts", "last_run", "integration",
 		"waiter_evidence", "model_tier", "rework_rounds", "widenings", "claims", "generation",
 		"rejection", "paused", "paused_by", "pause_reason", "paused_until", "holder_stopped", "landed",

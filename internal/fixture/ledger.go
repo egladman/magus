@@ -26,10 +26,13 @@ func StateBase(tb testing.TB) string {
 // test off the developer's own ledger. A lease with no validated stamp gets one, as a fork
 // would give it, so a titled spawn of it is not refused as unvalidated. It returns the
 // workspace root, then the cache dir the store lives under.
+//
+// The root is a git repository, so each fork records the authority ADR 0045 has
+// the guard require of a leased call.
 func SeedLeases(tb testing.TB, leases ...types.Job) (root, cacheDir string) {
 	tb.Helper()
 	testkit.Isolate(tb)
-	root, cacheDir = tb.TempDir(), tb.TempDir()
+	root, cacheDir = testkit.NewRepository(tb, nil).Root(), tb.TempDir()
 	store := job.NewStore(job.Location{CacheDir: cacheDir, StateBase: StateBase(tb), Root: root})
 	for _, lease := range leases {
 		if lease.Validated == 0 {

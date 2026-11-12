@@ -890,6 +890,7 @@ export object Job {
     reportedBase: str = "",
     baseVerdict: JobBaseVerdict = JobBaseVerdict.none,
     registeredBy: Origin = Origin{},
+    authority: str = "",
     registered: int = 0,
     holderStopped: int = 0,
     checkoutRoot: str = "",

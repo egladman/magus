@@ -754,6 +754,7 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 	defer s.mu.Unlock()
 
 	actor := s.Actor()
+	rootHead := sync.OnceValue(func() string { return s.committedRevision(ctx) })
 	var stored types.Job
 	var ended endings
 	var folded *types.Attempt
@@ -870,7 +871,7 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 		row.Updated = now
 		// A wait that refuses records why and leaves the row where it was, heartbeat
 		// included: the waiter is not the holder.
-		if (kind == asObservation || entering || (kind == asVerdict && row.State == prev.State)) && i >= 0 {
+		if (kind == asObservation || kind == asAdvance || entering || (kind == asVerdict && row.State == prev.State)) && i >= 0 {
 			row.Updated = prev.Updated
 		}
 		row.Created = now
@@ -931,6 +932,13 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 		row.Requires = requiredFeatures(row)
 		if kind != asNarrowing {
 			row.Releases = s.releases(ctx, prev, row, now, prev.Registered != 0 && actor.Lease != id)
+		}
+		switch {
+		case kind == asAdvance:
+		case kind == asDeclaration && (i < 0 || refork):
+			row.Authority = forkAuthority(actor, f.Jobs, rootHead)
+		default:
+			row.Authority = prev.Authority
 		}
 		if i >= 0 {
 			row.Created = prev.Created

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -4906,4 +4907,81 @@ func (s *RootHeldRowSuite) TestARootEndsItsRowWithLiveChildren() {
 func (s *RootHeldRowSuite) TestAWorkerStillCannotForkOutsideItsTree() {
 	got := childForkRebind(childFork{id: "next-row", readOnly: true}, s.holder("orchestrator"), "declare a job", "fork it")
 	s.True(got.refuses())
+}
+
+// leaseAuthoritySuite pins lease-authority (ADR 0045): a live leased row with
+// no authority is refused its work, and the lines that remedy it still run.
+type leaseAuthoritySuite struct {
+	suite.Suite
+}
+
+func TestLeaseAuthority(t *testing.T) {
+	suite.Run(t, new(leaseAuthoritySuite))
+}
+
+func (s *leaseAuthoritySuite) standing(state types.JobState, authority string) leaseStanding {
+	row := types.Job{ID: "w", State: state, Authority: authority}
+	return leaseStanding{readable: true, declared: true, state: state, row: row}
+}
+
+// rowReader answers a fixed set of rows, as an embedder's reader would.
+type rowReader []types.Job
+
+func (r rowReader) List() ([]types.Job, error) { return slices.Clone(r), nil }
+
+// unauthorized is the held row as an older magus forked it, with no authority.
+func (s *leaseAuthoritySuite) unauthorized() (context.Context, hookAttribution, types.Job) {
+	held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, Registered: 1}
+	ctx, _ := fleetFixture(s.T(), held)
+	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
+	bindCaller(s.T(), ctx, who, held.ID)
+	return ctx, who, held
+}
+
+func (s *leaseAuthoritySuite) TestAShellLineIsRefused() {
+	d := denyUnauthorizedLease(s.standing(types.StateRunning, ""), "w", "./magus run go-test .")
+	s.True(d.refused())
+	s.Contains(d.Say, "lease w records no authority")
+	s.Contains(d.Why, "magus job exit w")
+}
+
+func (s *leaseAuthoritySuite) TestAFileWriteIsRefused() {
+	s.True(denyUnauthorizedLease(s.standing(types.StateRunning, ""), "w", "").refused())
+}
+
+func (s *leaseAuthoritySuite) TestTheRemedyLinesStillRun() {
+	for _, command := range []string{"./magus describe job w", "git status", "sed -n 1,5p x", "./magus job exit w"} {
+		s.False(denyUnauthorizedLease(s.standing(types.StateRunning, ""), "w", command).refused(), command)
+	}
+}
+
+func (s *leaseAuthoritySuite) TestARowWithAnAuthorityIsNotRefused() {
+	s.False(denyUnauthorizedLease(s.standing(types.StateRunning, "0123abcd"), "w", "./build.sh").refused())
+}
+
+func (s *leaseAuthoritySuite) TestAnEndedRowIsNotRefused() {
+	s.False(denyUnauthorizedLease(s.standing(types.StatePass, ""), "w", "./build.sh").refused())
+}
+
+func (s *leaseAuthoritySuite) TestAForkInARepositoryRecordsOne() {
+	ctx, _ := fleetFixture(s.T(), types.Job{ID: "held-job", State: types.StateRunning})
+	row, ok := leaseRow(ctx, hookLocation(ctx, Dependencies{}), "held-job")
+	s.Require().True(ok)
+	s.NotEmpty(row.Authority, "the fixture's root is a repository")
+}
+
+func (s *leaseAuthoritySuite) TestJudgeRefusesWorkUnderARowWithNoAuthority() {
+	ctx, who, held := s.unauthorized()
+	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{held}})
+	work := Judge(ctx, Dependencies{}, Request{Input: bashCall(s.T(), who.Session, who.Agent, "./build.sh"), Host: who.Host})
+	s.Equal(string(denyRuleLeaseAuthority), work.Rule, work.Reason)
+	read := Judge(ctx, Dependencies{}, Request{Input: bashCall(s.T(), who.Session, who.Agent, "sed -n 1,5p x"), Host: who.Host})
+	s.NotEqual(decisionDeny, read.Decision, read.Reason)
+}
+
+func (s *leaseAuthoritySuite) TestJudgeReadsRowsThroughTheDependenciesReader() {
+	ctx, who, held := s.unauthorized()
+	deps := Dependencies{JobReader: rowReader{held}}
+	v := Judge(ctx, deps, Request{Input: bashCall(s.T(), who.Session, who.Agent, "./build.sh"), Host: who.Host})
+	s.Equal(string(denyRuleLeaseAuthority), v.Rule, "the store's row has an authority; the reader's has none")
 }

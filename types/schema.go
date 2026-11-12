@@ -91,7 +91,7 @@ var JobSchema = FormatLedger{
 	// older magus kept the plan in carried, and waivers, the name deviations had first.
 	// result, prior and attempts moved to attempts.jsonl (ADR 0044).
 	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "result", "prior", "attempts"},
-	Added:    map[string]APIVersion{"agent": JobAPIVersion},
+	Added:    map[string]APIVersion{"agent": JobAPIVersion, "authority": JobAPIVersion},
 	Requires: map[string]APIVersion{
 		"dead-job-end":       JobAPIVersion,
 		"claim-declarations": JobAPIVersion,

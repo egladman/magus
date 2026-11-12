@@ -185,6 +185,7 @@ const (
 	// The acting lease's boundaries, as the job store declares them; see
 	// internal/guard/lease.go and internal/guard/write.go.
 	denyRuleLeaseUndeclared denyRuleName = "lease-undeclared"
+	denyRuleLeaseAuthority  denyRuleName = "lease-authority"
 	denyRuleLeaseWrite      denyRuleName = "lease-write"
 	denyRuleLeaseGate       denyRuleName = "lease-gate"
 	denyRuleLeaseVCS        denyRuleName = "lease-vcs"

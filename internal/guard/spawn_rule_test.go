@@ -47,11 +47,12 @@ func (p *spawnRuleProbe) rule() workspace.SpawnRule {
 }
 
 // spawnFixture pins the trail, markers and job store to temporary dirs, so a spawn test
-// writes nothing a developer's checkout reads.
+// writes nothing a developer's checkout reads. The root is a repository, so a
+// row forked there records an authority.
 func spawnFixture(t *testing.T) (ctx context.Context, cacheDir string) {
 	t.Helper()
 	testkit.Isolate(t)
-	root := testkit.NewWorkspace(t).Root()
+	root := testkit.NewRepository(t, nil).Root()
 	cacheDir = t.TempDir()
 	return WithLocation(t.Context(), cacheDir, root, root), cacheDir
 }
@@ -999,6 +1000,8 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 	// The store stamps the schema, the times, who registered and the holder; they are copied
 	// across so the rest of the row is compared whole.
 	got := rows[0]
+	// The fork's authority predates the spawner's later commit.
+	assert.NotEqual(t, head, got.Authority)
 	assert.Equal(t, types.Job{
 		Schema:       got.Schema,
 		ID:           row.ID,
@@ -1008,6 +1011,7 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 		ReportedBase: head,
 		BaseVerdict:  got.BaseVerdict,
 		RegisteredBy: got.RegisteredBy,
+		Authority:    got.Authority,
 		Registered:   got.Registered,
 		CheckoutRoot: abs,
 		Generation:   1,

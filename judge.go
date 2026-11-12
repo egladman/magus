@@ -67,6 +67,7 @@ func (m *Magus) guardDependencies(ctx context.Context) (guard.Dependencies, erro
 	deps.Workspace = m.Root()
 	deps.ModelTiers = func() *agent.ModelTierSet { return m.ModelTiers(ctx) }
 	deps.TierRule = m.spawnRule
+	deps.JobReader = m.jobReader
 	return deps, nil
 }
 

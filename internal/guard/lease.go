@@ -1632,6 +1632,25 @@ func denyUndeclaredLease(standing leaseStanding, actingLease, command string) de
 	}
 }
 
+// denyUnauthorizedLease refuses a live row that records no Authority every
+// state-changing line, passing the remedy lines denyUndeclaredLease passes.
+// Without an authority nothing says which revision may judge the worker.
+func denyUnauthorizedLease(standing leaseStanding, actingLease, command string) denial {
+	if !standing.declared || !standing.state.Live() || standing.row.Authority != "" {
+		return denial{}
+	}
+	if command != "" && undeclaredLeaseRepairs(command) {
+		return denial{}
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: lease %s records no authority; stop and report it, as only your orchestrator can fork the job again.", actingLease),
+		Why: fmt.Sprintf("The store records the revision a worker is judged from when the job is forked, and this row has none: an older magus forked it, or the root's version control named no committed revision. "+
+			"Without one the guard cannot tell the root's rules from the worker's own edits, so it refuses the work rather than judge it from the worker's tree. "+
+			"The orchestrator ends the job with `%s` and forks it again.\n"+
+			"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run.", hint.JobExit.With(actingLease)),
+	}
+}
+
 // undeclaredLeaseRepairs reports a shell line that only looks at this checkout or repairs
 // the binding, so an unenrolled session can find out what it is bound to and fix it.
 //

@@ -3177,6 +3177,12 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.RegisteredBy = xRegisteredBy
+		case "authority":
+			sAuthority, err := decodeString(item, path+".authority")
+			if err != nil {
+				return out, err
+			}
+			out.Authority = sAuthority
 		case "registered":
 			nRegistered, err := decodeInt(item, path+".registered")
 			if err != nil {

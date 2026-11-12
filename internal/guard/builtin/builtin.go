@@ -326,6 +326,7 @@ var defaults = map[string]decision{
 	"lease-paused":          Deny,
 	"lease-rebind":          Deny,
 	"lease-undeclared":      Deny,
+	"lease-authority":       Deny,
 	"lease-vcs":             Deny,
 	"lease-write":           Deny,
 	"lease-claim":           Deny,

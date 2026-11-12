@@ -829,7 +829,7 @@ func testModelTiers(t *testing.T, host string) *typesagent.ModelTierSet {
 func tierFixture(t *testing.T, set *typesagent.ModelTierSet, rows ...types.Job) context.Context {
 	t.Helper()
 	testkit.Isolate(t)
-	root, cacheDir := t.TempDir(), t.TempDir()
+	root, cacheDir := testkit.NewRepository(t, nil).Root(), t.TempDir()
 	matrix := func(context.Context, types.ModelTierRequest) (*typesagent.JobModelTier, error) {
 		return &typesagent.JobModelTier{Name: "economy", Rank: 0, Skills: typesagent.SkillVariantFull, Reason: "two files", Site: "hack/tiers.buzz:12"}, nil
 	}

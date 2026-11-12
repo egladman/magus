@@ -106,6 +106,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocLeaseRowUnknown},
 	{doc: ruleDocEditUngraded},
 	{doc: ruleDocLeaseUndeclared},
+	{doc: ruleDocLeaseAuthority},
 	{doc: ruleDocLeaseVcs},
 	{doc: ruleDocLeaseWrite},
 	{doc: ruleDocLeaseClaim},
@@ -186,7 +187,7 @@ var ruleDocStopUnfiled = types.RuleDoc{
 	Why: "A parent reads what its child did through `magus job wait`, which waits on the row's filed JobResult; a child that stops without one leaves nothing to wait on, and a rule nobody is required to follow is one nobody follows (ADR 0043). " +
 		"At a subagent's stop, when the caller holds a lease whose live row has no result, the stop is refused once, naming `magus job exit <job> --stdin` and `magus job exit --schema`. A read-only row files one too, with an empty changed_paths, so a scout is held to the same rule. " +
 		"The second stop passes with a note, since the host marks it as one a stop rule already held: nothing re-prompts the child, and `magus job wait` shows the row never passed. " +
-		"On Claude Code and Codex the refusal blocks the stop, so the child files the record itself. A host that reports no child stop never reaches it. Set to advise, the stop stands and the note says what was not filed.",
+		"Where the host's stop hook can block, the refusal blocks the stop, so the child files the record itself. A host that reports no child stop never reaches it. Set to advise, the stop stands and the note says what was not filed.",
 }
 
 var ruleDocBackgroundLeft = types.RuleDoc{
@@ -553,7 +554,7 @@ var ruleDocPersonAdvisory = types.RuleDoc{
 	Catches: "a root session ending its turn with an open `magus session advise` advisory it has not been shown",
 	Why: "An advisory is a person's directive to every session in the repository, and a stop is the one moment every host hands text back to the model. " +
 		"So a root session's stop that nothing else refuses is held once per advisory, with the advisory's text as the reason, and the session keeps working with it in front of it. " +
-		"Where the host renders a prompt's context (Claude Code, Codex) the next prompt shows it first and the stop does not repeat it. A subagent's stop shows nothing, so a child cannot spend its root's one showing. " +
+		"Where the host renders a prompt's context, the next prompt shows it first and the stop does not repeat it. A subagent's stop shows nothing, so a child cannot spend its root's one showing. " +
 		"Nothing closes an advisory but `magus session retract <id>`, which is a person's to run. The rule is fixed: a workspace setting would let a checkout silence the person.",
 }
 
@@ -751,6 +752,14 @@ var ruleDocLeaseRowUnknown = types.RuleDoc{
 var ruleDocLeaseUndeclared = types.RuleDoc{
 	Name:    string(denyRuleLeaseUndeclared),
 	Catches: "a call graded under a lease id the job store has no row for, or a binding it tombstoned",
+}
+
+var ruleDocLeaseAuthority = types.RuleDoc{
+	Name:    string(denyRuleLeaseAuthority),
+	Catches: "a state-changing call under a live lease whose row records no authority",
+	Why: "The store records an authority on every fork (ADR 0045): the root checkout's committed revision for a fork by the root, the parent's authority for a worker's child. " +
+		"A row without one was forked by an older magus or where the root's version control named no revision, so nothing says which revision may judge the worker, and judging from the worker's own tree would let it approve its own loosening. " +
+		"Reading the tree, printing a schema or a usage line, and the job verbs still run, as lease-undeclared passes them. The orchestrator ends the job and forks it again.",
 }
 
 var ruleDocLeaseVcs = types.RuleDoc{
@@ -1349,7 +1358,7 @@ var ruleDocStall = types.RuleDoc{
 	Name:    string(denyRuleStall),
 	Catches: "a leased worker refused by something only the root can clear",
 	Why: "A worker blocked on its lease's boundary or on a magus that cannot load the tree waits and reports again, and the root hears late. " +
-		"When lease-write, lease-vcs, lease-harness, lease-rebind, lease-undeclared or stale-binary refuses a leased worker, the refusal's verdict line ends with the job's exit, the block named as an unresolved risk, and one attention row per lease and rule states the facts: the job, the rule, the model it ran on and how often it was refused. It names no remedy, and never refuses anything itself. " +
+		"When lease-write, lease-vcs, lease-harness, lease-rebind, lease-undeclared, lease-authority or stale-binary refuses a leased worker, the refusal's verdict line ends with the job's exit, the block named as an unresolved risk, and one attention row per lease and rule states the facts: the job, the rule, the model it ran on and how often it was refused. It names no remedy, and never refuses anything itself. " +
 		"A refusal repeating the last one, and a run of refused calls (a calls parameter sets its length), are recorded per lease and said to no one.",
 }
 

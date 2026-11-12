@@ -70,6 +70,10 @@ type Load struct {
 	// place of one a magusfile wires.
 	CacheBackend      types.CacheBackend
 	CacheBackendGiven bool
+	// JobReader, when JobReaderGiven, is the rows the guard's lease rules read
+	// in place of the job store.
+	JobReader      types.JobReader
+	JobReaderGiven bool
 }
 
 // Option configures Open or Inspect.

@@ -117,6 +117,9 @@ const (
 	// asClaim is [Store.Claim] adding proved write paths: graded by
 	// [authorizeClaim], and the one write that appends to Claims.
 	asClaim
+	// asAdvance is [Store.AdvanceAuthority]: graded, refused for any bound
+	// caller, and the one write after a fork that sets Authority.
+	asAdvance
 )
 
 // graded reports whether the acting party's boundary applies to this write.
@@ -191,6 +194,9 @@ func refuse(actor Actor, id, rule string) error {
 func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, exists bool, rows []types.Job) error {
 	if kind == asClaim {
 		return authorizeClaim(actor, id, prev, next, exists, rows)
+	}
+	if kind == asAdvance && actor.Bound() {
+		return refuse(actor, id, "only the root advances a row's authority, and a worker that moved its own would approve its own work")
 	}
 	if !actor.Bound() {
 		return nil

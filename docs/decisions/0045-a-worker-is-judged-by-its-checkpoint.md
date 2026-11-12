@@ -91,7 +91,7 @@ build from the authority's revision), and the store records the binary's path an
 hash on the row. The root's hook hands a call only to a binary at a path and hash a live
 row records. Any other `./magus` is not run, and the session's own binary judges the call.
 That one check covers every door in Context: a relink, `go generate`, `go-build`, the
-bootstrap and a test that writes the file each leave a binary the hook will not run.
+bootstrap and a test that writes the file each leave a binary the hook does not run.
 
 The hash is cached against the file's identity and size and modification time. A worker
 can forge those, which section 1 accepts.
@@ -144,10 +144,11 @@ when the working tree's policy does not load, as the hook does.
 
 Every lease rule reads rows: write paths, read-only, checks, `lease-checkout`, and the
 authority and pin here. A Go program that embeds magus brings its own rows through one
-interface in `types`, a reader of the row for a lease, and passes it with
-`magus.WithJobReader`. magus's job store is the default reader. The lease the caller puts in
-the context (`types.WithJobLease`) names the embedder's own task, and the reader answers
-for it.
+interface in `types`, `JobReader`, and passes it with `magus.WithJobReader`. Its one
+method, `List`, returns every row: a rule reads the lease's row and also its parent,
+children and siblings, so a reader of one row would not serve them. magus's job store is
+the default reader. The lease the caller puts in the context (`types.WithJobLease`) names
+the embedder's own task, and the reader answers for it.
 
 A caller with no row, such as CI judging a pull request, passes its authority on the
 request: the revision of the branch the change targets. Otherwise a pull request would
@@ -168,8 +169,8 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 
 | item                                                                                         | State    |
 | -------------------------------------------------------------------------------------------- | -------- |
-| every fork records a store-computed `Authority`; a child inherits its parent's                 | proposed |
-| a leased row with no authority is refused state changes                                        | proposed |
+| every fork records a store-computed `Authority`; a child inherits its parent's                 | done     |
+| a leased row with no authority is refused state changes                                        | done     |
 | `Pending` and the approved sources read at the authority; cache keys carry it                 | proposed |
 | an optional VCS capability lists paths changed between a revision and the working tree        | proposed |
 | the row records the judging binary's path and hash; the hook runs only a recorded binary      | proposed |
@@ -179,7 +180,7 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 | the lease resolves before policy loads, at every door                                         | proposed |
 | the SDK judges with the approved sources when the working tree does not load                  | proposed |
 | a request carries an explicit authority for a caller with no row                              | proposed |
-| `types` row reader and `magus.WithJobReader`; the job store is the default                    | proposed |
+| `types` row reader and `magus.WithJobReader`; the job store is the default                    | done     |
 | `ChangedBuildInputs` moves into the go spell; the Buzz copies go                              | proposed |
 | `builds.buzz` rewritten to the product-path rule                                              | proposed |
 | Go stops naming repository paths (`internal/contract`, `internal/ward`, `load_contract.go`)   | proposed |
@@ -234,7 +235,7 @@ authority and none of the lease rules. A row reader serves both.
 A key holding globs. It names one repository's layout, and it is wrong here too: every Go
 package linked into `./magus` is part of the judge.
 
-### Keep the checkout's HEAD as the authority
+### Keep the checkout's `HEAD` as the authority
 
 Today's behavior. A worker approves its own loosening by committing it.
 
@@ -251,6 +252,5 @@ Today's behavior. A worker approves its own loosening by committing it.
 - Which directory a host runs a subagent's hooks in. Section 6 makes the answer matter
   less, but it has not been confirmed at runtime for Claude Code.
 - Whether a workspace that installs magus should pin its tool version the same way.
-- The shape of the row reader: the fewest methods every lease rule needs.
 
 ## Amendments

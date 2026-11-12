@@ -1439,7 +1439,7 @@ func TestJudgeGradesWriteAndEditInTheCheckoutTheLeasesForkMade(t *testing.T) {
 	module := filepath.Join(own, "std", "module.go")
 	require.NoError(t, os.WriteFile(module, []byte("package std\n\nfunc A() {}\n"), 0o644))
 	row := types.Job{ID: "w", WritePaths: []string{"std/*.go"}, State: types.StateRunning,
-		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1,
+		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1, Authority: "rev-a",
 		CheckoutRoot: session, Worktree: &types.JobWorktree{Root: own, Source: session}}
 	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{row}})
 	judge := func(tool string, input map[string]any) types.GuardJudgment {

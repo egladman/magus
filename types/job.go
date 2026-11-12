@@ -925,6 +925,9 @@ type Job struct {
 	// Distinct from Registered below, which is when a WORKER reported the base it landed
 	// on: one says who declared the work, the other when somebody turned up to do it.
 	RegisteredBy Origin `json:"registered_by,omitempty" yaml:"registered_by,omitempty"`
+	// Authority is the revision a leased call is judged from (ADR 0045).
+	// Store-computed at fork from who forked. Empty refuses leased work.
+	Authority string `json:"authority,omitempty" yaml:"authority,omitempty"`
 	// Registered is unix seconds, stamped by the store on the write that recorded
 	// ReportedBase, off the same clock read as Updated. No write door accepts it from a
 	// caller, for the reason Created and Updated do not: a client-supplied timestamp is a

@@ -59,6 +59,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [installed-skill](installed-skill.md)                     | a write to an installed skill copy, which re-installing discards                                    |
 | [interpreter-rewrite](interpreter-rewrite.md)             | an inline interpreter rewriting a file this tree already carries                                    |
 | [interpreter-script](interpreter-script.md)               | an ad-hoc script in python, node, perl or ruby, where Buzz is the workspace's scripting language    |
+| [lease-authority](lease-authority.md)                     | a state-changing call under a live lease whose row records no authority                             |
 | [lease-checkout](lease-checkout.md)                       | a worker holding a checkout running magus outside it                                                |
 | [lease-claim](lease-claim.md)                             | a leased write outside its write paths that magus proves belongs to the job                         |
 | [lease-gate](lease-gate.md)                               | a leased worker running the gate instead of the check it was assigned                               |
@@ -145,18 +146,18 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [shared-checkout](shared-checkout.md)                   | a spawn into a checkout a live job already holds and writes                                     |
 | [skill-source](skill-source.md)                         | a write to an installed skill copy rather than to its source                                    |
 | [source-read](source-read.md)                           | an unbounded source read the symbol index has already answered                                  |
-| [spawn-unplaced](spawn-unplaced.md)                     | a subagent's first call that no waiting spawn names, which then runs under no lease             |
-| [split-run](split-run.md)                               | the same target run again on a different project set, as a separate call                        |
-| [stage-classify](stage-classify.md)                     | staging without classifying, when generated and source differ                                   |
-| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                       |
-| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                         |
-| [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                           |
 | [root-heavy-command](root-heavy-command.md)             | a main thread running delegable commands one after another without spawning                     |
+| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it         |
+| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it              |
+| [unleased-write](unleased-write.md)                     | a write magus cannot attribute while a fleet is running                                         |
+| [stage-classify](stage-classify.md)                     | staging without classifying, when generated and source differ                                   |
+| [root-context-budget](root-context-budget.md)           | a session's main thread whose context has grown past its level's size                           |
+| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it            |
+| [spawn-unplaced](spawn-unplaced.md)                     | a subagent's first call that no waiting spawn names, which then runs under no lease             |
+| [timed-magus](timed-magus.md)                           | `time` around a silent magus run, which already reports its own durations                       |
+| [split-run](split-run.md)                               | the same target run again on a different project set, as a separate call                        |
 | [root-repeat](root-repeat.md)                           | a main thread running the same delegable command again with no write since                      |
 | [root-result-cap](root-result-cap.md)                   | one tool result too large for a main thread's context, said on its next call                    |
 | [spawn-above-model-tier](spawn-above-model-tier.md)     | a subagent spawned on a model whose tier ranks above the tier its job was forked at             |
 | [spawn-names-model](spawn-names-model.md)               | a spawn omitting its model, or (at deny) using a model outside its row's tier                   |
-| [workspace-command-failed](workspace-command-failed.md) | a command the workspace's rule could not judge, so only the built-in rules graded it            |
-| [workspace-spawn-failed](workspace-spawn-failed.md)     | a spawn the workspace's rule could not judge, so only the built-in rules graded it              |
-| [workspace-write-failed](workspace-write-failed.md)     | a file write the workspace's rule could not judge, so only the built-in rules graded it         |
 | [stall](stall.md)                                       | a leased worker refused by something only the root can clear                                    |

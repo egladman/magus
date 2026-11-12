@@ -14,7 +14,7 @@ A leased worker refused by something only the root can clear.
 
 ## Why
 
-A worker blocked on its lease's boundary or on a magus that cannot load the tree waits and reports again, and the root hears late. When lease-write, lease-vcs, lease-harness, lease-rebind, lease-undeclared or stale-binary refuses a leased worker, the refusal's verdict line ends with the job's exit, the block named as an unresolved risk, and one attention row per lease and rule states the facts: the job, the rule, the model it ran on and how often it was refused. It names no remedy, and never refuses anything itself. A refusal repeating the last one, and a run of refused calls (a calls parameter sets its length), are recorded per lease and said to no one.
+A worker blocked on its lease's boundary or on a magus that cannot load the tree waits and reports again, and the root hears late. When lease-write, lease-vcs, lease-harness, lease-rebind, lease-undeclared, lease-authority or stale-binary refuses a leased worker, the refusal's verdict line ends with the job's exit, the block named as an unresolved risk, and one attention row per lease and rule states the facts: the job, the rule, the model it ran on and how often it was refused. It names no remedy, and never refuses anything itself. A refusal repeating the last one, and a run of refused calls (a calls parameter sets its length), are recorded per lease and said to no one.
 
 ## Default and override
 
