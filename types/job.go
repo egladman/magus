@@ -1423,7 +1423,7 @@ func (r Declaration) Problems() JobProblems {
 	}
 	if r.Agent != nil {
 		if err := r.Agent.Validate(); err != nil {
-			invalid("agent", err.Error(), `write worker {"type": "resume"}, or {"type": "new", "reason": "<why>"}`)
+			invalid("agent", err.Error(), `write worker {"type": "resumed"}, or {"type": "new", "reason": "<why>"}`)
 		}
 	}
 	for i, dep := range r.DependsOn {

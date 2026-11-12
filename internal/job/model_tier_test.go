@@ -58,7 +58,7 @@ func TestRequestedModel(t *testing.T) {
 }
 
 func (s *requestedModelSuite) resolve(m agent.Model) (agent.JobModelTier, error) {
-	row := types.Job{ID: "a", Agent: &agent.Spec{Model: m, Worker: agent.Worker{Type: agent.WorkerTypeResume}}}
+	row := types.Job{ID: "a", Agent: &agent.Spec{Model: m, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}}
 	return resolveModelTier(s.T().Context(), tierSet(s.T()), nil, nil, types.ModelTierRequest{}, row)
 }
 
@@ -135,12 +135,12 @@ func TestNewModelTierRequestCountsFilesOnce(t *testing.T) {
 
 // tierRequest is an agent section requesting a tier, resumed.
 func tierRequest(tier string) *agent.Spec {
-	return &agent.Spec{Model: agent.Model{Tier: tier}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}
+	return &agent.Spec{Model: agent.Model{Tier: tier}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}
 }
 
 // modelRequest is an agent section requesting a host model id, resumed.
 func modelRequest(id string) *agent.Spec {
-	return &agent.Spec{Model: agent.Model{ID: id}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}
+	return &agent.Spec{Model: agent.Model{ID: id}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}
 }
 
 func TestNewModelTierRequestCarriesTheRowAndItsParentsRank(t *testing.T) {
@@ -149,7 +149,7 @@ func TestNewModelTierRequestCarriesTheRowAndItsParentsRank(t *testing.T) {
 	set := tierSet(t)
 	parent := types.Job{ID: "wave", ModelTier: &agent.JobModelTier{Name: "principal", Rank: 2}}
 	row := types.Job{
-		ID: "wave/a", Parent: "wave", Agent: &agent.Spec{Instructions: "do it", Model: agent.Model{Tier: "economy"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}, ReadOnly: false,
+		ID: "wave/a", Parent: "wave", Agent: &agent.Spec{Instructions: "do it", Model: agent.Model{Tier: "economy"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, ReadOnly: false,
 		WritePaths: []string{"a.go"}, ReadPaths: []string{"b"}, DependsOn: []string{"wave/b"},
 		Check: &types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "X"}},
 		Goals: []types.Goal{{ID: "g", Kind: types.GoalKindPaths, Paths: []string{"a.go"}}},

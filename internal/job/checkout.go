@@ -909,7 +909,7 @@ func ForkFacts(ctx context.Context, root string, rows []types.Job, last FullTest
 		record, _ := json.Marshal(map[string]any{
 			"api_version": types.JobAPIVersion,
 			"id":          fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
-			"agent":       map[string]any{"instructions": "merge each finished branch with --no-ff, resolve, regenerate, and pass the check", "worker": map[string]string{"type": "resume"}},
+			"agent":       map[string]any{"instructions": "merge each finished branch with --no-ff, resolve, regenerate, and pass the check", "worker": map[string]string{"type": "resumed"}},
 			"integrates":  branches,
 			"check":       map[string]string{"target": "<target>", "project": "<project>"},
 		})

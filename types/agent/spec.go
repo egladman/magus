@@ -22,7 +22,7 @@ type Spec struct {
 // Instructed is a section carrying instructions and no model request, taken
 // by the warm worker when there is one.
 func Instructed(instructions string) *Spec {
-	return &Spec{Instructions: instructions, Worker: Worker{Type: WorkerTypeResume}}
+	return &Spec{Instructions: instructions, Worker: Worker{Type: WorkerTypeResumed}}
 }
 
 // Clone is a copy of s that shares nothing with it, nil for nil.
@@ -88,14 +88,14 @@ type Worker struct {
 type WorkerType string
 
 const (
-	// WorkerTypeResume continues the warm worker of the followed job.
-	WorkerTypeResume WorkerType = "resume"
+	// WorkerTypeResumed continues the warm worker of the followed job.
+	WorkerTypeResumed WorkerType = "resumed"
 	// WorkerTypeNew starts a new worker, for the reason the section gives.
 	WorkerTypeNew WorkerType = "new"
 )
 
 // Validate refuses a section no door stores: a worker type outside the
-// set, a new worker with no reason, or a reason on a resume worker.
+// set, a new worker with no reason, or a reason on a resumed worker.
 func (s Spec) Validate() error {
 	switch {
 	case s.Worker.Type == "":
@@ -106,8 +106,8 @@ func (s Spec) Validate() error {
 			string(s.Worker.Type), strings.Join(s.Worker.Type.Values(), ", "))
 	case s.Worker.Type == WorkerTypeNew && strings.TrimSpace(s.Worker.Reason) == "":
 		return errors.New("agent: a new worker says why it starts instead of the warm one, in worker.reason")
-	case s.Worker.Type == WorkerTypeResume && s.Worker.Reason != "":
-		return errors.New("agent: worker.reason says why a new worker starts, so a resume worker carries none")
+	case s.Worker.Type == WorkerTypeResumed && s.Worker.Reason != "":
+		return errors.New("agent: worker.reason says why a new worker starts, so a resumed worker carries none")
 	}
 	return nil
 }

@@ -55,7 +55,7 @@ func TestUnloadableMagusfileIsOneLine(t *testing.T) {
 }
 
 func leaseRow(id, parent string) types.Job {
-	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "standard"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume}}}
+	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "standard"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}}
 }
 
 // A job verb, `ls jobs` and `describe job` read the job store first and open the workspace
@@ -456,7 +456,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	  "api_version": %q,
 	  "id": "adj/store",`, types.JobAPIVersion) + `
 	  "parent": "adjacency",
-	  "agent": {"model": {"tier": "principal"}, "instructions": "the store is the enforcement point", "worker": {"type": "resume"}},
+	  "agent": {"model": {"tier": "principal"}, "instructions": "the store is the enforcement point", "worker": {"type": "resumed"}},
 	  "checkpoint": "cf5509d09",
 	  "write_paths": ["internal/ledger", "types/lease.go"],
 	  "deny_paths": ["MAGUS.md"],
@@ -523,14 +523,14 @@ func (s *forkAgentFlagsSuite) TestNoAgentFlagWritesNoSection() {
 func (s *forkAgentFlagsSuite) TestInstructionsResumeTheWarmWorker() {
 	s.Equal(&typesagent.Spec{
 		Instructions: "ship it",
-		Worker:       typesagent.Worker{Type: typesagent.WorkerTypeResume},
+		Worker:       typesagent.Worker{Type: typesagent.WorkerTypeResumed},
 	}, s.fork("--read-only", "--instructions", "ship it").Agent)
 }
 
 func (s *forkAgentFlagsSuite) TestModelNamingATierRequestsTheTier() {
 	s.Equal(&typesagent.Spec{
 		Model:  typesagent.Model{Tier: "principal"},
-		Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume},
+		Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed},
 	}, s.fork("--read-only", "--model", "principal").Agent)
 }
 
@@ -1007,7 +1007,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
-	writeStdin(t, `{"api_version": "magus.job/v1alpha1", "id": "wave/opus", "write_paths": ["a.go"], "agent": {"model": {"id": "opus"}, "worker": {"type": "resume"}},`+
+	writeStdin(t, `{"api_version": "magus.job/v1alpha1", "id": "wave/opus", "write_paths": ["a.go"], "agent": {"model": {"id": "opus"}, "worker": {"type": "resumed"}},`+
 		` "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
 
 	out := captureStdout(t, func() {
@@ -1267,7 +1267,7 @@ func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	record := filepath.Join(t.TempDir(), "w.json")
 	require.NoError(t, os.WriteFile(record, fmt.Appendf(nil,
-		`{"api_version":%q,"id":"w","agent":{"model":{"tier":"standard"},"worker":{"type":"resume"}},"write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
+		`{"api_version":%q,"id":"w","agent":{"model":{"tier":"standard"},"worker":{"type":"resumed"}},"write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
 		types.JobAPIVersion), 0o644))
 	args := []string{"-f", record}
 
@@ -2295,7 +2295,7 @@ func TestJobModelCellFallsBackToTheAssignedTier(t *testing.T) {
 		row  types.Job
 		want string
 	}{
-		{"the model the row names wins", types.Job{Agent: &typesagent.Spec{Model: typesagent.Model{ID: "opus"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume}}, ModelTier: tier}, "opus"},
+		{"the model the row names wins", types.Job{Agent: &typesagent.Spec{Model: typesagent.Model{ID: "opus"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}, ModelTier: tier}, "opus"},
 		{"the assigned tier stands in", types.Job{ModelTier: tier}, "economy"},
 		{"neither is a dash", types.Job{}, "-"},
 	}

@@ -138,6 +138,45 @@ type storeConfig struct {
 // name lands here and no reader keeps the old name.
 var jobMigrations = []migrate.Migration{
 	{Name: "model, criteria and fresh_reason move under agent", Up: agentSection},
+	{Name: "worker type resume becomes resumed", Up: workerResumed},
+}
+
+// workerResumed respells a stored worker type "resume" as "resumed", the
+// value Go and the Buzz enum now share.
+func workerResumed(e migrate.Entry) (migrate.Entry, error) {
+	raw, ok := e["agent"]
+	if !ok {
+		return e, nil
+	}
+	var section map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &section); err != nil {
+		return nil, fmt.Errorf("reading the agent section: %w", err)
+	}
+	var worker map[string]json.RawMessage
+	if body, ok := section["worker"]; ok {
+		if err := json.Unmarshal(body, &worker); err != nil {
+			return nil, fmt.Errorf("reading agent.worker: %w", err)
+		}
+	}
+	var typ string
+	if body, ok := worker["type"]; ok {
+		if err := json.Unmarshal(body, &typ); err != nil {
+			return nil, fmt.Errorf("reading agent.worker.type: %w", err)
+		}
+	}
+	if typ != "resume" {
+		return e, nil
+	}
+	var err error
+	if worker["type"], err = json.Marshal(agent.WorkerTypeResumed); err == nil {
+		if section["worker"], err = json.Marshal(worker); err == nil {
+			e["agent"], err = json.Marshal(section)
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("writing agent.worker.type: %w", err)
+	}
+	return e, nil
 }
 
 // agentSection moves a row's flat agent members under agent. A model the
@@ -173,7 +212,7 @@ func agentSection(e migrate.Entry) (migrate.Entry, error) {
 	if old.Criteria == "" && old.Model == "" && old.FreshReason == "" || old.Holder == string(types.HolderServer) {
 		return e, nil
 	}
-	spec := agent.Spec{Instructions: old.Criteria, Worker: agent.Worker{Type: agent.WorkerTypeResume}}
+	spec := agent.Spec{Instructions: old.Criteria, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}
 	switch {
 	case old.Model == "":
 	case old.ModelTier != nil && old.ModelTier.Source == string(agent.ModelTierSourceRow) && old.ModelTier.Model == "":

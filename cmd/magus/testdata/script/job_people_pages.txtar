@@ -71,8 +71,8 @@ Téléchargez l'archive.
 
 À traduire.
 -- split.jsonl --
-{"api_version": "magus.job/v1alpha1", "id": "fr/install", "agent": {"instructions": "install page in French", "worker": {"type": "resume"}}, "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
-{"api_version": "magus.job/v1alpha1", "id": "fr/upgrading", "agent": {"instructions": "upgrading section in French", "worker": {"type": "resume"}}, "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "fr/install", "agent": {"instructions": "install page in French", "worker": {"type": "resumed"}}, "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "fr/upgrading", "agent": {"instructions": "upgrading section in French", "worker": {"type": "resumed"}}, "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
 -- refused.out --
 note: judging fr/upgrading's goals; a goal naming a symbol loads the symbol graph
 note: judged fr/upgrading's goals in 0ms

@@ -162,7 +162,7 @@ func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 	_, err := store.Update(t.Context(), "wave3/merge", func(row *types.Job) {
 		row.State = types.StateRunning
-		row.Agent = &agent.Spec{Model: agent.Model{ID: "opus"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}
+		row.Agent = &agent.Spec{Model: agent.Model{ID: "opus"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}
 		row.WritePaths = []string{"internal/handler"}
 	})
 	require.NoError(t, err)

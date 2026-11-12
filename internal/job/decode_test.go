@@ -317,7 +317,7 @@ func TestDeclarationApplyDeclaresRatherThanMerges(t *testing.T) {
 	t.Parallel()
 
 	stored := types.Job{
-		ID: "adj/store", Agent: &agent.Spec{Instructions: "old", Model: agent.Model{Tier: "principal"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}},
+		ID: "adj/store", Agent: &agent.Spec{Instructions: "old", Model: agent.Model{Tier: "principal"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
 		WritePaths: []string{"internal/ledger"},
 		Registered: 42,
 	}
@@ -425,7 +425,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 		case "write_paths", "deny_paths", "read_paths", "depends_on", "breaks":
 			value = []any{"internal/job"}
 		case "agent":
-			value = map[string]any{"instructions": "x", "worker": map[string]any{"type": "resume"}}
+			value = map[string]any{"instructions": "x", "worker": map[string]any{"type": "resumed"}}
 		case "read_only":
 			value = true
 		case "max_attempts", "max_claims":

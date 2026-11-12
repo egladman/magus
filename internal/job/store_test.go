@@ -54,7 +54,7 @@ func tempStore(t *testing.T, root string) *Store {
 func lease(id string) types.Job {
 	return types.Job{
 		ID:         id,
-		Agent:      &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: "standard"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}},
+		Agent:      &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: "standard"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
 		Checkpoint: "abc123",
 		WritePaths: []string{"internal/" + id},
 		DenyPaths:  []string{"MAGUS.md"},
@@ -573,14 +573,14 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 	}{
 		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			row, err := decodeDeclaration(strings.NewReader(fmt.Sprintf(
-				`{"api_version":%q,"id":"a","agent":{"instructions": "goal", "worker": {"type": "resume"}},"checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
+				`{"api_version":%q,"id":"a","agent":{"instructions": "goal", "worker": {"type": "resumed"}},"checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
 				types.JobAPIVersion, checkpoint)))
 			require.NoError(t, err)
 			return s.Update(t.Context(), row.ID, Declare(row, 0))
 		}},
 		{name: "magus\\workspace().putJob", proof: types.WriteProofAlone, validated: true, fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			put, err := DecodePut(map[string]any{
-				"agent": map[string]any{"instructions": "goal", "worker": map[string]any{"type": "resume"}}, "checkpoint": checkpoint, "write_paths": []any{"a.go"}, "check": "go-test .",
+				"agent": map[string]any{"instructions": "goal", "worker": map[string]any{"type": "resumed"}}, "checkpoint": checkpoint, "write_paths": []any{"a.go"}, "check": "go-test .",
 			})
 			require.NoError(t, err)
 			merge, err := PutMerge(put)
@@ -772,7 +772,7 @@ func TestStoreUpdateAppendsTheRowsNextLine(t *testing.T) {
 	require.Len(t, after, len(before)+1, "one line appended, nothing rewritten")
 	assert.Equal(t, before, after[:len(before)])
 	assert.Equal(t, "a", after[len(before)]["id"])
-	assert.Equal(t, map[string]any{"instructions": "moved", "worker": map[string]any{"type": "resume"}}, after[len(before)]["agent"])
+	assert.Equal(t, map[string]any{"instructions": "moved", "worker": map[string]any{"type": "resumed"}}, after[len(before)]["agent"])
 
 	rows, err := s.List()
 	require.NoError(t, err)
@@ -1312,7 +1312,7 @@ func realSizedRows(n int, now int64, checkout string) []types.Job {
 		age := int64(i*2357) % (30 * 24 * 3600)
 		row := types.Job{
 			ID:           fmt.Sprintf("job-%04d", i),
-			Agent:        &agent.Spec{Instructions: criteria, Model: agent.Model{ID: "sonnet"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}},
+			Agent:        &agent.Spec{Instructions: criteria, Model: agent.Model{ID: "sonnet"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
 			Checkpoint:   "08566ec817db6ff7932f0a4d62d8a9ed08f8ca18",
 			Validation:   "magus run test . -- -run Store",
 			Registered:   now - age,
@@ -1562,7 +1562,7 @@ func (s *agentSectionSuite) TestCriteriaAndATierNameMoveUnderAgent() {
 	s.Equal(&agent.Spec{
 		Instructions: "ship it",
 		Model:        agent.Model{Tier: "principal"},
-		Worker:       agent.Worker{Type: agent.WorkerTypeResume},
+		Worker:       agent.Worker{Type: agent.WorkerTypeResumed},
 	}, row.Agent)
 	s.Require().NotNil(row.ModelTier)
 	s.Equal("principal", row.ModelTier.Name, "the resolved tier stays on the row")
@@ -1591,6 +1591,48 @@ func (s *agentSectionSuite) TestAServerRowTakesNoSection() {
 
 func (s *agentSectionSuite) TestARowWithNoAgentMemberTakesNoSection() {
 	s.Nil(s.migrated(`{"id":"a","state":"running","created":1,"updated":1}`).Agent)
+}
+
+// workerResumedSuite pins the migration that respells a stored worker type
+// "resume" as "resumed".
+type workerResumedSuite struct {
+	suite.Suite
+}
+
+func TestWorkerResumedMigration(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(workerResumedSuite))
+}
+
+// migrated is the row after the job store's migrations ran over a file
+// already through migration 1.
+func (s *workerResumedSuite) migrated(line string) (types.Job, map[string]any) {
+	st := tempStore(s.T(), s.T().TempDir())
+	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
+	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"magus.job/v1alpha1","migration":1}`, line))
+	f, err := st.read()
+	s.Require().NoError(err)
+	s.Require().Len(f.Jobs, 1)
+	return f.Jobs[0], storedRow(s.T(), path, f.Jobs[0].ID)
+}
+
+func (s *workerResumedSuite) TestAResumeWorkerBecomesResumed() {
+	row, stored := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,` +
+		`"agent":{"instructions":"ship it","worker":{"type":"resume"}}}`)
+	s.Equal(&agent.Spec{Instructions: "ship it", Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, row.Agent)
+	s.Equal(map[string]any{"type": "resumed"}, stored["agent"].(map[string]any)["worker"], "the file holds the new spelling")
+}
+
+func (s *workerResumedSuite) TestANewWorkerKeepsItsReason() {
+	row, _ := s.migrated(`{"id":"a","state":"declared","created":1,"updated":1,` +
+		`"agent":{"worker":{"type":"new","reason":"b read the old limiter"}}}`)
+	s.Equal(agent.Worker{Type: agent.WorkerTypeNew, Reason: "b read the old limiter"}, row.Agent.Worker)
+}
+
+func (s *workerResumedSuite) TestARowWithNoAgentIsUntouched() {
+	row, stored := s.migrated(`{"id":"a","state":"running","created":1,"updated":1}`)
+	s.Nil(row.Agent)
+	s.NotContains(stored, "agent")
 }
 
 // IntegerStampSuite pins adoptIntegerStamp: a job store an integer-versioned

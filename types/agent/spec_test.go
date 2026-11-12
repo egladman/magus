@@ -21,11 +21,11 @@ func (s *specSuite) TestAResumedWorkerIsValid() {
 }
 
 func (s *specSuite) TestAnEmptyWorkerTypeIsRefused() {
-	s.ErrorContains(Spec{Instructions: "ship it"}.Validate(), "names no worker.type, one of resume, new")
+	s.ErrorContains(Spec{Instructions: "ship it"}.Validate(), "names no worker.type, one of resumed, new")
 }
 
 func (s *specSuite) TestAnUnknownWorkerTypeIsRefused() {
-	s.ErrorContains(Spec{Worker: Worker{Type: "warm"}}.Validate(), `worker.type "warm" is not one of resume, new`)
+	s.ErrorContains(Spec{Worker: Worker{Type: "warm"}}.Validate(), `worker.type "warm" is not one of resumed, new`)
 }
 
 func (s *specSuite) TestANewWorkerNeedsAReason() {
@@ -33,13 +33,13 @@ func (s *specSuite) TestANewWorkerNeedsAReason() {
 }
 
 func (s *specSuite) TestAResumedWorkerCarriesNoReason() {
-	s.ErrorContains(Spec{Worker: Worker{Type: WorkerTypeResume, Reason: "why"}}.Validate(), "carries none")
+	s.ErrorContains(Spec{Worker: Worker{Type: WorkerTypeResumed, Reason: "why"}}.Validate(), "carries none")
 }
 
 func (s *specSuite) TestTheWorkerTypeIsAlwaysWritten() {
-	body, err := json.Marshal(Spec{Worker: Worker{Type: WorkerTypeResume}})
+	body, err := json.Marshal(Spec{Worker: Worker{Type: WorkerTypeResumed}})
 	s.Require().NoError(err)
-	s.JSONEq(`{"worker": {"type": "resume"}}`, string(body), "a zero model and no instructions are left out")
+	s.JSONEq(`{"worker": {"type": "resumed"}}`, string(body), "a zero model and no instructions are left out")
 }
 
 func (s *specSuite) TestAModelNamesItsTierThenItsID() {

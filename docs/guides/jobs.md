@@ -369,7 +369,7 @@ record is the whole spec, so it repeats what stays:
 ```console
 $ magus job apply --stdin <<'EOF'
 {"api_version": "magus.job/v1alpha1", "id": "cents",
- "agent": {"instructions": "prices are integers of cents", "worker": {"type": "resume"}},
+ "agent": {"instructions": "prices are integers of cents", "worker": {"type": "resumed"}},
  "write_paths": ["pricing/total.sh"],
  "check": {"target": "test", "project": "."}}
 EOF
@@ -610,8 +610,8 @@ store, so the plan is committed beside the code:
 <!-- golden: job_people_ci.txtar shop/ci/jobs.jsonl -->
 
 ```json
-{"api_version": "magus.job/v1alpha1", "id": "release/pricing", "agent": {"instructions": "totals are computed in cents", "worker": {"type": "resume"}}, "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
-{"api_version": "magus.job/v1alpha1", "id": "release/tax", "agent": {"instructions": "tax rounds half up", "worker": {"type": "resume"}}, "write_paths": ["checkout/tax.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/pricing", "agent": {"instructions": "totals are computed in cents", "worker": {"type": "resumed"}}, "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/tax", "agent": {"instructions": "tax rounds half up", "worker": {"type": "resumed"}}, "write_paths": ["checkout/tax.sh"], "check": {"target": "test", "project": "."}}
 ```
 
 with the evidence the CI step fills in once it knows the run's ref:

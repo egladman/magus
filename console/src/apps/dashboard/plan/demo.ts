@@ -86,7 +86,7 @@ export function demoJobs(nowMs: number): Job[] {
     // The root of the session work. Still running because one child never reported - see
     // dashboard-client below.
     session("claims-audience", {
-      agent: { instructions: "Carry an audience through the token path, and fix every reader of the old field", model: { tier: "principal" }, worker: { type: "resume" } },
+      agent: { instructions: "Carry an audience through the token path, and fix every reader of the old field", model: { tier: "principal" }, worker: { type: "resumed" } },
       checkpoint: "services/identity:test and apps/dashboard:typecheck both green",
       state: "running",
       check: "magus affected ci",
@@ -97,7 +97,7 @@ export function demoJobs(nowMs: number): Job[] {
     // on, which is what the release digest records.
     session("authkit-type", {
       parent: "claims-audience",
-      agent: { instructions: "Replace Claims.Scope with an Audience slice and document the wire contract", model: { tier: "standard" }, worker: { type: "resume" } },
+      agent: { instructions: "Replace Claims.Scope with an Audience slice and document the wire contract", model: { tier: "standard" }, worker: { type: "resumed" } },
       checkpoint: "libs/authkit builds and its own tests pass",
       state: "pass",
       check: "magus run test libs/authkit",
@@ -138,7 +138,7 @@ export function demoJobs(nowMs: number): Job[] {
     // The Go reader. Green, and it waited on the type above.
     session("identity-verify", {
       parent: "claims-audience",
-      agent: { instructions: "Assert on the audience in the token verifier instead of the removed scope", model: { tier: "standard" }, worker: { type: "resume" } },
+      agent: { instructions: "Assert on the audience in the token verifier instead of the removed scope", model: { tier: "standard" }, worker: { type: "resumed" } },
       checkpoint: "services/identity:test green",
       state: "pass",
       check: "magus run test services/identity",
@@ -152,7 +152,7 @@ export function demoJobs(nowMs: number): Job[] {
     // the reader decides whether the work was meant to be cut that way.
     session("verify-tests", {
       parent: "claims-audience",
-      agent: { instructions: "Cover the two-service audience case the old scope test could not express", model: { tier: "standard" }, worker: { type: "resume" } },
+      agent: { instructions: "Cover the two-service audience case the old scope test could not express", model: { tier: "standard" }, worker: { type: "resumed" } },
       checkpoint: "a test that fails before authkit-type and passes after",
       state: "fail",
       check: "magus run test services/identity",
@@ -166,7 +166,7 @@ export function demoJobs(nowMs: number): Job[] {
     // stale mark belongs to docs-rename below, which is non-terminal and untouched.
     session("dashboard-client", {
       parent: "claims-audience",
-      agent: { instructions: "Read the audience array in the web client's session claims", model: { tier: "standard" }, worker: { type: "resume" } },
+      agent: { instructions: "Read the audience array in the web client's session claims", model: { tier: "standard" }, worker: { type: "resumed" } },
       checkpoint: "apps/dashboard:typecheck clean",
       state: "no_return",
       check: "magus run typecheck apps/dashboard",
@@ -178,7 +178,7 @@ export function demoJobs(nowMs: number): Job[] {
     // Never started: the work is declared and waiting on the two readers landing.
     session("docs-rename", {
       parent: "claims-audience",
-      agent: { instructions: "Rename the JWT page to tokens and fix the links that point at the old name", model: { tier: "economy" }, worker: { type: "resume" } },
+      agent: { instructions: "Rename the JWT page to tokens and fix the links that point at the old name", model: { tier: "economy" }, worker: { type: "resumed" } },
       checkpoint: "no link in docs/ resolves to docs/auth/jwt.md",
       state: "declared",
       dependsOn: ["identity-verify", "dashboard-client"],
@@ -190,7 +190,7 @@ export function demoJobs(nowMs: number): Job[] {
     // no paths" a rendered case rather than a theoretical one.
     session("reach-survey", {
       parent: "claims-audience",
-      agent: { instructions: "Report every project referencing the claims type before anything is renamed", model: { tier: "economy" }, worker: { type: "resume" } },
+      agent: { instructions: "Report every project referencing the claims type before anything is renamed", model: { tier: "economy" }, worker: { type: "resumed" } },
       checkpoint: "a list the parent can work from",
       state: "pass",
       readOnly: true,

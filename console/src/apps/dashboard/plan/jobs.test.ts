@@ -53,7 +53,7 @@ function row(partial: Partial<ActivityRow> & { id: string }): ActivityRow {
 // The listing every assembly test reads: a root with two children, one of which has a child of its
 // own, plus one ordering constraint that is NOT a parent link (b2 must wait for b1).
 const TREE: Job[] = [
-  job("root", { agent: { instructions: "ship the view", worker: { type: "resume" } } }),
+  job("root", { agent: { instructions: "ship the view", worker: { type: "resumed" } } }),
   job("b1", { parent: "root", state: "pass" }),
   job("b2", { parent: "root", state: "running", dependsOn: ["b1"] }),
   job("b2a", { parent: "b2", state: "no_return", readOnly: true }),
@@ -137,7 +137,7 @@ test("a parent cycle flattens instead of hanging, and every job still appears", 
 });
 
 test("a duplicate id keeps the first entry", () => {
-  const model = buildJobTree([job("a", { agent: { instructions: "first", worker: { type: "resume" } } }), job("a", { agent: { instructions: "second", worker: { type: "resume" } } })]);
+  const model = buildJobTree([job("a", { agent: { instructions: "first", worker: { type: "resumed" } } }), job("a", { agent: { instructions: "second", worker: { type: "resumed" } } })]);
   assert.equal(model.nodes.length, 1);
   assert.equal(model.byId.get("a")?.job.agent?.instructions, "first");
 });

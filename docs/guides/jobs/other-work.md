@@ -34,8 +34,8 @@ project, declared together in one stream:
 
 ```console
 $ magus job apply --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "upgrade/api", "agent": {"instructions": "api runs left-pad 1.3", "worker": {"type": "resume"}}, "write_paths": ["api/deps.txt"], "check": {"target": "test", "project": "api"}}
-{"api_version": "magus.job/v1alpha1", "id": "upgrade/web", "agent": {"instructions": "web runs left-pad 1.3", "worker": {"type": "resume"}}, "write_paths": ["web/deps.txt"], "check": {"target": "test", "project": "web"}}
+{"api_version": "magus.job/v1alpha1", "id": "upgrade/api", "agent": {"instructions": "api runs left-pad 1.3", "worker": {"type": "resumed"}}, "write_paths": ["api/deps.txt"], "check": {"target": "test", "project": "api"}}
+{"api_version": "magus.job/v1alpha1", "id": "upgrade/web", "agent": {"instructions": "web runs left-pad 1.3", "worker": {"type": "resumed"}}, "write_paths": ["web/deps.txt"], "check": {"target": "test", "project": "web"}}
 EOF
 created upgrade/api, declared, with 1 write path(s)
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
@@ -130,8 +130,8 @@ page by heading, which narrows Ana's job and declares Ben's in one stream:
 
 ```console
 $ magus job apply --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "fr/install", "agent": {"instructions": "install page in French", "worker": {"type": "resume"}}, "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
-{"api_version": "magus.job/v1alpha1", "id": "fr/upgrading", "agent": {"instructions": "upgrading section in French", "worker": {"type": "resume"}}, "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "fr/install", "agent": {"instructions": "install page in French", "worker": {"type": "resumed"}}, "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "fr/upgrading", "agent": {"instructions": "upgrading section in French", "worker": {"type": "resumed"}}, "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
 EOF
 updated fr/install, still running:
   write_paths +docs/fr/install.md#Installer -docs/fr/install.md
@@ -172,8 +172,8 @@ needs no target: `paths` goals read the diff and the tree.
 
 ```console
 $ magus job apply --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "release-1.3/changelog", "agent": {"instructions": "CHANGELOG.md has a 1.3 section", "worker": {"type": "resume"}}, "write_paths": ["CHANGELOG.md"], "goals": [{"id": "changelog", "kind": "paths", "expect": "changed", "paths": ["CHANGELOG.md"]}]}
-{"api_version": "magus.job/v1alpha1", "id": "release-1.3/notes", "agent": {"instructions": "release notes exist for 1.3", "worker": {"type": "resume"}}, "write_paths": ["notes/1.3.md"], "goals": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
+{"api_version": "magus.job/v1alpha1", "id": "release-1.3/changelog", "agent": {"instructions": "CHANGELOG.md has a 1.3 section", "worker": {"type": "resumed"}}, "write_paths": ["CHANGELOG.md"], "goals": [{"id": "changelog", "kind": "paths", "expect": "changed", "paths": ["CHANGELOG.md"]}]}
+{"api_version": "magus.job/v1alpha1", "id": "release-1.3/notes", "agent": {"instructions": "release notes exist for 1.3", "worker": {"type": "resumed"}}, "write_paths": ["notes/1.3.md"], "goals": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
 EOF
 created release-1.3/changelog, declared, with 1 write path(s)
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers

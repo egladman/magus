@@ -1307,7 +1307,7 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 		return ids
 	}
 
-	put(types.Job{ID: "a", State: types.StateDeclared, WritePaths: []string{"x.go"}, Agent: &typesagent.Spec{Model: typesagent.Model{ID: "sonnet"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume}}})
+	put(types.Job{ID: "a", State: types.StateDeclared, WritePaths: []string{"x.go"}, Agent: &typesagent.Spec{Model: typesagent.Model{ID: "sonnet"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}})
 	assert.Equal(t, []string{"a"}, rowsOf())
 	put(types.Job{ID: "b", State: types.StateDeclared})
 	assert.Equal(t, []string{"a", "b"}, rowsOf())

@@ -1203,7 +1203,7 @@ func flagDeclaration(d types.Declaration, id string, f flaggen.JobForkFlags, mod
 		d.Timeout = f.Timeout.String()
 	}
 	if f.Model != "" || f.Instructions != "" || f.NewWorker != "" {
-		d.Agent = &typesagent.Spec{Instructions: f.Instructions, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume}}
+		d.Agent = &typesagent.Spec{Instructions: f.Instructions, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}
 		if f.Model != "" {
 			d.Agent.Model = models(f.Model)
 		}

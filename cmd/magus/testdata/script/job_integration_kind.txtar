@@ -106,15 +106,15 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 }
 -- done-a.json --
-{"api_version": "magus.job/v1alpha1", "id": "done-a", "state": "pass", "agent": {"instructions": "raise prices", "worker": {"type": "resume"}}, "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "done-a", "state": "pass", "agent": {"instructions": "raise prices", "worker": {"type": "resumed"}}, "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
 -- done-b.json --
-{"api_version": "magus.job/v1alpha1", "id": "done-b", "state": "pass", "agent": {"instructions": "add a lint target", "worker": {"type": "resume"}}, "write_paths": ["magusfile.buzz#lint"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "done-b", "state": "pass", "agent": {"instructions": "add a lint target", "worker": {"type": "resumed"}}, "write_paths": ["magusfile.buzz#lint"], "check": {"target": "test", "project": "."}}
 -- declares-paths.json --
 {"api_version": "magus.job/v1alpha1", "id": "integrate", "integrates": ["done-a"], "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
 -- missing.json --
 {"api_version": "magus.job/v1alpha1", "id": "integrate", "integrates": ["no-such-branch"], "check": {"target": "test", "project": "."}}
 -- integrate.json --
-{"api_version": "magus.job/v1alpha1", "id": "integrate", "agent": {"instructions": "merge the finished branches", "worker": {"type": "resume"}}, "integrates": ["done-a", "done-b"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "integrate", "agent": {"instructions": "merge the finished branches", "worker": {"type": "resumed"}}, "integrates": ["done-a", "done-b"], "check": {"target": "test", "project": "."}}
 -- shop/.gitignore --
 .magus/
 -- shop/magus.yaml --

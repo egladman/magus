@@ -20,7 +20,7 @@ func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }
 func (v ModelTierSource) Valid() bool      { return modelTierSources.Valid(v) }
 func (v ModelTierSource) String() string   { return enum.String(v) }
 
-var workerTypes = enum.Set[WorkerType]{WorkerTypeResume, WorkerTypeNew}
+var workerTypes = enum.Set[WorkerType]{WorkerTypeResumed, WorkerTypeNew}
 
 func (v WorkerType) Values() []string { return workerTypes.Strings() }
 func (v WorkerType) Valid() bool      { return workerTypes.Valid(v) }

@@ -56,7 +56,7 @@ func briefRow() types.Job {
 			Instructions: "Move the lease ledger to the per-repository state dir.\n" +
 				"Done when a row put from one checkout is listed from a second worktree of the same repo.",
 			Model:  agent.Model{Tier: "principal"},
-			Worker: agent.Worker{Type: agent.WorkerTypeResume},
+			Worker: agent.Worker{Type: agent.WorkerTypeResumed},
 		},
 		Checkpoint: "cf5509d09",
 		WritePaths: []string{"internal/ledger", "cmd/magus/ledger.go"},

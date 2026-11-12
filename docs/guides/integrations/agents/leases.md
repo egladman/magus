@@ -155,7 +155,7 @@ spellings.
 A row carries `id` and optionally `parent` (the job this one was forked from),
 `agent` (the model requested as `{id, tier}`, the `instructions` that are the
 prose half, the machine-checkable half being `goals`, and the `worker`, whose
-`type` is `resume` or `new` with a `reason`), `checkpoint` (as
+`type` is `resumed` or `new` with a `reason`), `checkpoint` (as
 `magus vcs checkpoint -o name` prints it), `write_paths`, `deny_paths`,
 `read_paths`, `depends_on`, `breaks`, `check`, `goals`,
 `state`, `read_only`, and `max_attempts` (see
@@ -701,7 +701,7 @@ it by; a `read_only` job is exempt.
 ```sh
 magus job fork --stdin <<'EOF'
 {"api_version": "magus.job/v1alpha1", "id": "api/migrate",
- "agent": {"instructions": "move the accounts table to the new schema", "worker": {"type": "resume"}},
+ "agent": {"instructions": "move the accounts table to the new schema", "worker": {"type": "resumed"}},
  "write_paths": ["db", "api"], "check": {"target": "go-test", "project": "api"},
  "goals": [
    {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
@@ -860,7 +860,7 @@ import "std";
 fun declare() > void {
   try {
     magus\workspace().putJob("api/migrate", {
-      "agent": {"instructions": "move the accounts table to the new schema", "worker": {"type": "resume"}},
+      "agent": {"instructions": "move the accounts table to the new schema", "worker": {"type": "resumed"}},
       "write_paths": ["db", "api"],
       "goals": [
         {"id": "green", "check": {"target": "go-test", "project": "api"}},

@@ -369,7 +369,7 @@ func TestUserModelTierMatrix(t *testing.T) {
 func TestModelTierMatrixCannotTouchTheJobStore(t *testing.T) {
 	reg, err := loadModelTiers(t, matrixDecl+`
 magus\modelTier(fun (req: ModelTierRequest) > any !> any {
-    magus\workspace().putJob("smuggled", opts: {"agent": {"instructions": "from a matrix", "worker": {"type": "resume"}}});
+    magus\workspace().putJob("smuggled", opts: {"agent": {"instructions": "from a matrix", "worker": {"type": "resumed"}}});
     return null;
 });
 `, "claude-code")

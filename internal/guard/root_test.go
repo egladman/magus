@@ -520,7 +520,7 @@ func TestMainThreadCommandsAreJudgedByTheCostRules(t *testing.T) {
 // A spawn naming no model is refused at strict. A row forked with no model tier has no tier
 // to compare a named model against, and the declaration is never opened for it.
 func TestMainThreadSpawnsAreJudgedByTheSpawnRules(t *testing.T) {
-	ctx, _ := fleetFixture(t, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared, Agent: &typesagent.Spec{Model: typesagent.Model{ID: "haiku"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume}}})
+	ctx, _ := fleetFixture(t, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared, Agent: &typesagent.Spec{Model: typesagent.Model{ID: "haiku"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}})
 	deps := strictDeps(t)
 	asked := 0
 	deps.ModelTiers = func() *typesagent.ModelTierSet {
@@ -698,7 +698,7 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 		{"Opus", "principal", "claude-opus-5-5", false},
 	} {
 		t.Run(tc.model, func(t *testing.T) {
-			ctx := tierFixture(t, facts.Tiers, types.Job{ID: "scout", Agent: &typesagent.Spec{Model: typesagent.Model{Tier: tc.tier}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume}}, ReadOnly: true, State: types.StateDeclared})
+			ctx := tierFixture(t, facts.Tiers, types.Job{ID: "scout", Agent: &typesagent.Spec{Model: typesagent.Model{Tier: tc.tier}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}, ReadOnly: true, State: types.StateDeclared})
 			deps := strictDeps(t)
 			deps.ModelTiers = func() *typesagent.ModelTierSet { return facts.Tiers }
 			deps.ModelRows = func() []types.ModelPricing { return facts.Rows }

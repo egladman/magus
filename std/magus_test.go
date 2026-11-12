@@ -551,7 +551,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"agent": map[string]any{"instructions": "the declared goal", "worker": map[string]any{"type": "resume"}}, "write_paths": "internal/job", "check": "test ."}))
+	_, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"agent": map[string]any{"instructions": "the declared goal", "worker": map[string]any{"type": "resumed"}}, "write_paths": "internal/job", "check": "test ."}))
 	require.NoError(t, err)
 
 	got, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"state": "pass"}))
@@ -1021,7 +1021,7 @@ func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 		rows:            []types.ModelPricing{{ID: "claude-opus-9", Alias: "opus", Tier: "principal"}},
 	}
 
-	got, err := MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", types.JobPut{Agent: &agent.Spec{Instructions: "ship it", Model: agent.Model{ID: "opus"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}, ReadOnly: new(true)})
+	got, err := MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", types.JobPut{Agent: &agent.Spec{Instructions: "ship it", Model: agent.Model{ID: "opus"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, ReadOnly: new(true)})
 	require.NoError(t, err)
 	require.NotNil(t, got.ModelTier)
 	tier := *got.ModelTier
