@@ -46,6 +46,13 @@ When magus opens a store:
   Each store migrates once. The next magus to open it finds it current, and
   no reader keeps the old shape.
 
+- **Older, in a job's checkout**, the job store is refused, and nothing is
+  read or written. A job's checkout is one a live job's fork made or adopted,
+  and the store's own rows say which. Every checkout shares the file, so a
+  worker's binary built from its branch would move it past every other magus.
+  The root integrates the change and migrates the store once, from its own
+  checkout.
+
 - **Newer** than this magus knows, the store is refused, naming both versions,
   and nothing is read or written:
 

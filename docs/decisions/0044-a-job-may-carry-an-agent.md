@@ -196,4 +196,21 @@ job agent specific. Evidence: Eli's rejection of 2026-11-11. It does not reopen.
 
 ## Amendments
 
-None yet.
+### 2026-11-12: a job's checkout never migrates the shared store
+
+Each step above ships a store migration, and `jobs.jsonl` is one file per
+repository. On 2026-11-12 a worker rebuilt its job checkout's `./magus` from a
+branch that added a migration. `hack/dev/bootstrap-checkout.buzz` then ran
+`magus run install` with that binary, and it migrated the shared store in
+place. Every other magus refused the store with MGS3051 until a person
+restored it by hand. Eli decided on 2026-11-12 that a binary running in a job's
+checkout never migrates the shared store.
+
+#### Decision
+
+| Item                                                                                                                                                                                                                                                                                    | State |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| A store behind the migrations a magus writes, opened from inside the checkout a live row's fork made or adopted, is refused before anything is read or written. The refusal names both levels and says the root integrates the change and migrates the store once from its own checkout | done  |
+| The checkout is told from the store's rows, never from a path pattern. A checkout a row was only taken in, the root's own included, migrates as before, as does a person's or one no job owns                                                                                           | done  |
+| Reading is unchanged: no dual reader and no compatibility shim                                                                                                                                                                                                                          | done  |
+| `hack/dev/bootstrap-checkout.buzz` has the placed `./magus` open the job store before any step that writes it, so the store's own refusal stops the bootstrap                                                                                                                           | done  |

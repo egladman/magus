@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1528,6 +1529,80 @@ func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
 	path, err := st.Path()
 	s.Require().NoError(err)
 	s.InDelta(2, storedLines(s.T(), path)[0]["migration"], 0, "a new store needs no migration")
+}
+
+// checkoutStore is a store at root, behind its one migration, holding row a in
+// state with the members extra adds.
+func (s *jobSuite) checkoutStore(root, state string, extra map[string]any) (*Store, string, *bytes.Buffer) {
+	st := tempStore(s.T(), root)
+	row := map[string]any{"id": "a", "state": state, "created": 1, "updated": 1, "goal": "ship it"}
+	maps.Copy(row, extra)
+	line, err := json.Marshal(row)
+	s.Require().NoError(err)
+	notices := &bytes.Buffer{}
+	st.notices, st.migrations = notices, []migrate.Migration{renamed("goal", "parent")}
+	return st, plantRaw(s.T(), st, fmt.Sprintf("{\"api_version\":\"magus.job/v1alpha1\"}\n%s", line)), notices
+}
+
+// forkCheckout is the worktree member of a row whose fork made root.
+func forkCheckout(root string) map[string]any {
+	return map[string]any{"worktree": map[string]any{"root": root, "source": "/src", "base": "abc123", "created": 1, "made": true}}
+}
+
+func (s *jobSuite) TestAJobCheckoutNeverMigratesTheSharedStore() {
+	root := s.T().TempDir()
+	st, path, notices := s.checkoutStore(root, "running", forkCheckout(root))
+	raw, err := os.ReadFile(path)
+	s.Require().NoError(err)
+
+	_, err = st.read()
+	s.Require().ErrorContains(err, fmt.Sprintf("job store %s is at migration 0, and this magus writes migration 1 from %s, the checkout of live job a", path, root))
+	s.ErrorContains(err, "the root integrates this change and migrates the store once, from its own checkout")
+	_, err = st.Update(s.T().Context(), "b", func(cur *types.Job) { *cur = lease("b") })
+	s.Require().ErrorContains(err, "a job's checkout never migrates the store", "a write refuses it too")
+	after, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	s.Equal(string(raw), string(after), "nothing was written")
+	s.Empty(notices.String())
+}
+
+func (s *jobSuite) TestADirectoryInsideAJobCheckoutNeverMigratesTheSharedStore() {
+	root := s.T().TempDir()
+	nested := filepath.Join(root, "sub")
+	s.Require().NoError(os.Mkdir(nested, 0o755))
+	st, _, _ := s.checkoutStore(nested, "declared", forkCheckout(root))
+
+	_, err := st.read()
+	s.Require().ErrorContains(err, "a job's checkout never migrates the store")
+}
+
+func (s *jobSuite) TestTheCheckoutOfAnEndedJobMigrates() {
+	root := s.T().TempDir()
+	st, path, _ := s.checkoutStore(root, "pass", forkCheckout(root))
+
+	f, err := st.read()
+	s.Require().NoError(err)
+	s.Equal("ship it", f.Jobs[0].Parent)
+	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+}
+
+func (s *jobSuite) TestTheRootMigratesWhileAJobHoldsAnotherCheckout() {
+	st, path, _ := s.checkoutStore(s.T().TempDir(), "running", forkCheckout(s.T().TempDir()))
+
+	_, err := st.read()
+	s.Require().NoError(err)
+	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
+}
+
+// A job taken in the root's checkout without a fork's checkout leaves that
+// checkout the root's, which migrates as before.
+func (s *jobSuite) TestACheckoutAJobWasOnlyTakenInMigrates() {
+	root := s.T().TempDir()
+	st, path, _ := s.checkoutStore(root, "running", map[string]any{"checkout_root": root})
+
+	_, err := st.read()
+	s.Require().NoError(err)
+	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
 }
 
 // agentSectionSuite pins the migration that moves a row's flat model,

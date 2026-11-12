@@ -1241,15 +1241,38 @@ func (s *Store) read() (jobsFile, error) {
 //
 // A file behind [jobMigrations] is migrated first, once, under the lock (see
 // [Store.migrate]); without wait the caller already holds it.
+// A job's checkout refuses it instead (see [Store.refuseCheckoutMigration]).
 func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 	f, log, err := s.parse(wait)
 	if err != nil || f.Migration == len(s.migrations) || log.lines == 0 {
 		return f, log, err
 	}
+	if err := s.refuseCheckoutMigration(f); err != nil {
+		return jobsFile{}, jobsLog{}, err
+	}
 	if err := s.migrate(f.Migration, !wait); err != nil {
 		return jobsFile{}, jobsLog{}, err
 	}
 	return s.parse(wait)
+}
+
+// refuseCheckoutMigration refuses migrating f from a live job's own checkout.
+// Every checkout shares the file. A row only taken here does not count:
+// the root's own checkout is one.
+func (s *Store) refuseCheckoutMigration(f jobsFile) error {
+	if s.root == "" || f.Migration >= len(s.migrations) {
+		return nil
+	}
+	for _, row := range f.Jobs {
+		if !row.State.Live() || !row.Worktree.Standing() || !within(s.root, row.Worktree.Root) {
+			continue
+		}
+		return fmt.Errorf("job: job store %s is at migration %d, and this magus writes migration %d from %s, the checkout of live job %s:"+
+			" a job's checkout never migrates the store every checkout shares, so nothing was read or written,"+
+			" and the root integrates this change and migrates the store once, from its own checkout",
+			s.path, f.Migration, len(s.migrations), row.Worktree.Root, row.ID)
+	}
+	return nil
 }
 
 // migrate brings the file at migration found to the last of s.migrations, taking the lock
