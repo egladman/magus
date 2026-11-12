@@ -1023,7 +1023,6 @@
 {"group":"dir:hack/dev","path":"hack/dev/example-typed-results.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/host-schemas.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/issue-mandate.buzz"}
-{"group":"dir:hack/dev","path":"hack/dev/job-view.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/land-commits.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/ls-test-failures.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/ls-uncommitted.buzz"}
@@ -1042,6 +1041,7 @@
 {"group":"dir:hack/dev","path":"hack/dev/show-feedback.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-import-meet.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-interrupted-session.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/show-job.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-memory-kills.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-review-context.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/show-session-figure.buzz"}
