@@ -25,6 +25,7 @@ export fun sameFile(a: str, b: str) > bool {
 // The sources a ./magus answers from: the guard rules and hook plumbing compiled into it,
 // the skills it serves, and the host declarations and spell sources it embeds, which are
 // what a magusfile loads against. go-build links a digest of each into the binary.
+// The contract digest covers only api.lock and generated Buzz.
 final stampGlobs = [
     "internal/guard/*.go", "internal/interp/bindings/guard_*.go", "cmd/magus/shell*.go",
     "cmd/magus/guard_*.go", "internal/agent/*.go", "internal/agent/skills/*/SKILL.md",

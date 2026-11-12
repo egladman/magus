@@ -17,7 +17,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -1222,10 +1221,6 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 		DefaultCharms:        w.Config.DefaultCharms,
 		BinaryVersion:        w.BinaryVersion,
 		Binary:               w.Binary,
-		BinaryDirty:          buildinfo.Modified() || strings.HasSuffix(w.BinaryVersion, "-dirty"),
-	}
-	if commit, _ := buildinfo.Commit(); commit != "unknown" {
-		deps.BinaryCommit = commit
 	}
 	var site snapshotSite
 	if w.Root != "" {

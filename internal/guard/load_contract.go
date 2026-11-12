@@ -1,17 +1,14 @@
 package guard
 
 import (
-	"cmp"
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 )
 
@@ -20,7 +17,7 @@ import (
 // boundary bindings, and the Buzz checker and compiler that judge the policy. About one
 // commit in five touches it; every other commit may move Go sources and still load.
 //
-// A copy of LOAD_CONTRACT in hack/dev/merge-job-branches.buzz: neither can read the other.
+// A copy of loadContract in hack/magusfile/load-contract.buzz: Buzz reaches no Go digest.
 var (
 	loadContractDirs  = []string{"internal/spell/gen/decls/", "internal/interp/bindings/gen/"}
 	loadContractFiles = []string{"libs/gopherbuzz/checker*.go", "libs/gopherbuzz/compiler*.go"}
@@ -156,132 +153,4 @@ func leadPath(paths []string) string {
 		return paths[0]
 	}
 	return fmt.Sprintf("%s and %d more", paths[0], len(paths)-1)
-}
-
-// binarySkew is how the checkout's ./magus stands against the tree it judges, read once per
-// HEAD: the load-contract paths that differ from the commit it was built at, and whether
-// it was built from uncommitted changes, which makes that difference a guess.
-type binarySkew struct {
-	Head     string   `json:"head"`
-	Built    string   `json:"built"`
-	Dirty    bool     `json:"dirty,omitempty"`
-	Contract []string `json:"contract,omitempty"`
-}
-
-// binarySkewFile was renamed so no answer of the two-way diff is read back.
-const binarySkewFile = "binary-contract-skew.jsonl"
-
-// key is what a kept answer is looked up by: the HEAD it judged and the commit the binary
-// was built at.
-func (s binarySkew) key() string {
-	return fmt.Sprintf("%s %s", s.Head, s.Built)
-}
-
-// checkoutSkew is binarySkew for the binary judging at, when it is the checkout's own
-// ./magus and says which commit it was built at; ok is false otherwise. The answer is kept
-// in the cache keyed by HEAD and that commit, so a call pays one git diff per HEAD.
-func checkoutSkew(ctx context.Context, deps Dependencies, at location) (binarySkew, bool) {
-	root := at.workspace
-	if root == "" || deps.BinaryCommit == "" || deps.Revision == nil || !ownSourceRoot(root) || !sameFile(deps.Binary, filepath.Join(root, "magus")) {
-		return binarySkew{}, false
-	}
-	head := deps.Revision(ctx, root, "")
-	if head == "" {
-		return binarySkew{}, false
-	}
-	store := file.JSONL[binarySkew]{Path: filepath.Join(at.cacheDir, binarySkewFile), Key: binarySkew.key}
-	key := binarySkew{Head: head, Built: deps.BinaryCommit}.key()
-	if at.cacheDir != "" {
-		if kept, err := store.Load(); err == nil {
-			if i := slices.IndexFunc(kept, func(s binarySkew) bool { return store.Key(s) == key }); i >= 0 {
-				return kept[i], true
-			}
-		}
-	}
-	// Three dots: only what HEAD carries that the build lacks.
-	// A build descending from HEAD lacks nothing, and its load says the rest.
-	sinceBase, err := gitNames(ctx, root, "diff", "--name-only", deps.BinaryCommit+"...HEAD")
-	if err != nil {
-		return binarySkew{}, false
-	}
-	// Two dots: a path HEAD changed whose content the build already has
-	// is no skew. A squash of the build's own branch is all such paths.
-	differs, err := gitNames(ctx, root, "diff", "--name-only", deps.BinaryCommit, "HEAD")
-	if err != nil {
-		return binarySkew{}, false
-	}
-	changed := slices.DeleteFunc(sinceBase, func(p string) bool { return !slices.Contains(differs, p) })
-	skew := binarySkew{Head: head, Built: deps.BinaryCommit, Dirty: deps.BinaryDirty, Contract: contractPaths(changed)}
-	if at.cacheDir != "" {
-		_ = store.Update(ctx, func([]binarySkew) []binarySkew { return []binarySkew{skew} })
-	}
-	return skew, true
-}
-
-func sameFile(a, b string) bool {
-	if a == "" || b == "" {
-		return false
-	}
-	ai, errA := os.Stat(a)
-	bi, errB := os.Stat(b)
-	return errA == nil && errB == nil && os.SameFile(ai, bi)
-}
-
-// denyContractSkew refuses a state-changing line while ./magus was built before a change to
-// the load contract that HEAD carries: its next load may fail, and a commit or run made now
-// is judged by a policy that binary may not read. A binary built from uncommitted changes
-// may already carry the change; the stale-sources notice speaks for it instead.
-func denyContractSkew(ctx context.Context, deps Dependencies, at location, line string, d Dialect) string {
-	skew, ok := checkoutSkew(ctx, deps, at)
-	if !ok || len(skew.Contract) == 0 || skew.Dirty {
-		return ""
-	}
-	if readOnlyLine(line, d) || recoveryLine(line, d, deps.lease, deps.lease == "", at) || replacesStaleMagus(line, at) {
-		return ""
-	}
-	if finishesMergeOfBuild(ctx, at.workspace, skew.Built, line, d) {
-		return ""
-	}
-	built := skew.Built
-	if len(built) > 12 {
-		built = built[:12]
-	}
-	fix := binaryRemedy(true, at.workspace, deps.lease, deps.lease == "")
-	return denial{
-		Say: fmt.Sprintf("magus workspace: %s (%s) was built at %s, before %s changed the load contract; %s first.",
-			deps.Binary, cmp.Or(deps.BinaryVersion, "an unknown version"), built, leadPath(skew.Contract), fix.say),
-		Why: withPolicyNote("A binary built before a change to the host declarations, the API locks, the generated bindings or the Buzz checker may not load the tree after it, and anything run now is judged by a policy it may not read. "+
-			"This names the process that judged the call: a file replaced since it started answers `version` with its own build. "+
-			"Reads, `git status`, VCS recovery and the rebuild still run, and so does finishing a merge of the commit the binary was built at.", runPolicyNote(line, at)),
-	}.full()
-}
-
-// finishesMergeOfBuild reports a line that settles or commits a
-// merge whose incoming side is the binary's build commit. That
-// binary loads the incoming contract, and a dirty-tree build is
-// refused, so the merge commit is the way out.
-func finishesMergeOfBuild(ctx context.Context, root, built, line string, d Dialect) bool {
-	call, ok := soleCall(line, d)
-	if !ok || len(call.Assigns) > 0 || !mergeFinishLine(literalWords(call.Args)) {
-		return false
-	}
-	incoming, err := gitNames(ctx, root, "rev-parse", "-q", "--verify", "MERGE_HEAD")
-	return err == nil && len(incoming) == 1 && incoming[0] == built
-}
-
-// mergeFinishLine reports `git add`, `git commit` short of an
-// amend, or `magus vcs resolve`. Only PATH's git and this checkout's magus
-// count: `./git` or another directory's magus could be anything.
-func mergeFinishLine(words []string) bool {
-	if len(words) < 2 {
-		return false
-	}
-	switch words[0] {
-	case "git":
-		return words[1] == "add" || words[1] == "commit" && !slices.Contains(words[2:], "--amend")
-	case "magus", "./magus":
-		sub := magusSubcommandWords(words[1:])
-		return len(sub) >= 2 && sub[0] == "vcs" && sub[1] == "resolve"
-	}
-	return false
 }
