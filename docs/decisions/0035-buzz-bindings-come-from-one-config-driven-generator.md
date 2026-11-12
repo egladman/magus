@@ -524,3 +524,80 @@ A field or slice element that is a concrete generic instance, such as
 `Object::<JobSpec>{}`. The arguments are read from reflect's name for the instance, so
 each keeps its Go name: a `Namer` rename of an argument does not apply, and a map
 argument is refused.
+
+### 2026-11-11: membership is derived from declared roots
+
+Measured on 2026-11-11 at 2e6365f13. A Go type crossing into Buzz was listed by hand in
+up to five places: `boundaryTypes` (418 entries) and `boundaryEnumTypes` (104) in
+`cmd/magus-utils/boundary_types.go`, `inboundTypes` (about 150 names) in
+`boundary_decode.go`, `.buzzgen.yaml` (103 entries, 79 of them a bare `{}` that only said
+the type was a member), and `job_schema.go`'s `jobSources` and `closedSets`. Adding
+`agent.Spec` that day took an edit in four of them, and the guard refused each as more
+than one edge from what the job changed. Part 2's "the full list is the 413 registry
+entries carried over" kept membership a list, so it is replaced, as Eli approved:
+
+- **Membership is reach.** A type crosses when a host module's method signature, a
+  provider op, or a declared root reaches it, directly or through a field, slice, map,
+  pointer or callback. A field added to a crossing struct crosses with it, and no list is
+  edited.
+- **Direction is reach too**, as part 2 said. A parameter crosses in, a result crosses
+  out, and a callback's parameters cross opposite to the callback. In gets a decoder, out
+  gets an encoder. `RuntimeObject` and `inboundTypes` are deleted.
+- **The config holds settings only**: `name`, `module`, `open`, `required`, `ts`,
+  `zeroCase`, `cases`, `casesFrom` and a new `mirror`. `mirror` names the struct a type
+  crosses as when the host converts it first, as `types.Status` crosses as `StatusRecord`.
+  A line for a type nothing crosses as is an error that names the line to delete.
+- **`required` has one meaning.** The decoder refuses a value without the field, and the
+  mirror declares it with no default, so a literal that leaves it out fails the check. A
+  struct that holds such a struct by value must require that field too. `requiredMembers`
+  is deleted.
+- **Refusals are loud.** Two crossing types that take one Buzz name in one scope are an
+  error naming the root that reached each. So is a reached type that is unexported, or that
+  comes from an `internal` package with no line in the config.
+- **One load.** The packages of every reached type load in one go/packages call. It
+  derives the enums and gives jobschema the files and closed sets the job records reach.
+  `jobSources` and `closedSets` are deleted. `narrowedSets` keeps one entry, Deviation.Code's
+  permissible codes, because that set is narrower than any enum.
+
+The roots that remain are 53 `reflect.TypeFor` entries in `boundaryRoots`, grouped by
+owner: the spell and harness contracts, records the bindings assemble by hand, records
+only a script builds, and five strings an `Arg.Enum` names. They exist because the
+renderers read `reflect`, which knows only types compiled code hands it. They move to the
+config when the renderers read `go/types` (part 1). The derivation reproduced all 418
+structs. Generated decoders and encoders reordered by Buzz name and gained one decoder
+(`GuardVerdict`, which a guard callback returns) and seven encoders. 26 enums the old list
+declared were never emitted, so they are no longer derived. Four dead config lines went
+with them: `daemon.Readiness`, `diff.Author`, `ProjectOrigin` and `EventType`.
+
+| Item                                                                         | State     |
+| ---------------------------------------------------------------------------- | --------- |
+| Membership and direction derived by reach; `boundaryTypes`, `boundaryEnumTypes`, `inboundTypes`, `requiredMembers` deleted | done      |
+| `.buzzgen.yaml` holds settings only; a line nothing crosses as is an error   | done      |
+| `required` drops the mirror default; `agent.Worker.type` is required         | done      |
+| jobschema reads the derived set; `jobSources`, `closedSets` deleted          | done      |
+| Roots declared in `.buzzgen.yaml` instead of `boundaryRoots`                 | not built |
+
+Alternatives:
+
+- **Generate a reflect anchor file from a go/packages closure.** It lost because
+  magus-utils would link a file buzzgen writes. A stale anchor stops the generator that
+  repairs it from building, which is the problem part 1 solves by not linking. Reopen if
+  the go/types renderer port is dropped.
+- **Keep membership in the config and refuse an unlisted type loudly.** That was part 2.
+  It lost because every new or moved type still takes a config edit that no graph edge
+  reaches, as the agent.Spec job measured. Reopen if derived membership is measured
+  pulling in types no script should see.
+
+Principles checked:
+
+- [Delete before you add](../design/principles/delete-before-you-add.md): four hand lists
+  and the 79 bare lines are deleted, and only a 53-entry root list remains.
+- [One source, every door](../design/principles/one-source-every-door.md): the Go
+  signatures say what crosses and in which direction, and the config says only what Go
+  cannot.
+- [The checker catches it; the runtime is the backstop](../design/principles/the-checker-catches-it.md):
+  a required field left out of a literal is a check-time error. Before, it decoded as
+  the field's zero value.
+- [No silent defaults](../design/judgment/no-silent-defaults.md): a collision, an
+  unexported or undeclared internal type, and a dead config line each fail with what to
+  change.
