@@ -3079,11 +3079,10 @@ func (s *targetResultsSuite) TestAPassingTargetReportsOKWithItsRef() {
 	got, err := s.run()
 	s.Require().NoError(err)
 	s.Require().Len(got, 1)
-	s.Equal(".", got[0].Project)
-	s.Equal("build", got[0].Target)
-	s.Equal(types.TargetOK, got[0].Status)
-	s.False(got[0].CacheHit)
 	s.NotEmpty(got[0].Ref)
+	// The ref names a stored output, and the hash and duration vary run to run.
+	got[0].Ref, got[0].Hash, got[0].Duration = "", "", 0
+	s.Equal(types.TargetResult{Project: ".", Target: "build", Status: types.TargetOK}, got[0])
 	s.NoError(got[0].Err)
 }
 
