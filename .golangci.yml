@@ -523,6 +523,7 @@ linters:
             - vmstat    # the Darwin tool
             - jobserver # GNU make's name for the token protocol internal/proc/spawn implements
             - changelog # Keep a Changelog's own word for the file proofread's changelog kind judges
+            - worktree  # git's own word (`git worktree`) for a linked checkout
 
       nameoutput:
         type: module
