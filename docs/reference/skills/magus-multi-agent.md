@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27508
-skill_short_bytes: 21751
+skill_full_bytes: 27512
+skill_short_bytes: 21755
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `a4a965132754` |
+| `skill-content` | `0956eb9a9c54` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -338,7 +338,7 @@ binds its child to nothing.
 
    ```sh
    magus job fork api-store --model <tier or model> \
-     --criteria "accounts move to the new store; nothing names the old one" \
+     --instructions "accounts move to the new store; nothing names the old one" \
      --write-paths 'api/store.go,api/store_test.go,db/migrations/*.sql' \
      --check "go-test api -- -run TestStore" \
      --checkpoint <checkpoint>
@@ -814,7 +814,7 @@ an editor magus cannot attribute.
 
    ```sh
    magus job fork api-store --model <tier or model> \
-     --criteria "accounts move to the new store; nothing names the old one" \
+     --instructions "accounts move to the new store; nothing names the old one" \
      --write-paths 'api/store.go,api/store_test.go,db/migrations/*.sql' \
      --check "go-test api -- -run TestStore" \
      --checkpoint <checkpoint>

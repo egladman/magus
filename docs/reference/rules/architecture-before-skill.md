@@ -1,10 +1,10 @@
 ---
-title: "architecture-unbriefed: a write after a structure question, or into a new directory, before the architecture skill"
+title: "architecture-before-skill: a write after a structure question, or into a new directory, before the architecture skill"
 description: "A deny rule by default: it refuses a write after a structure question, or into a new directory, before the architecture skill, and names what to run instead."
-tags: [guard, rules, architecture-unbriefed, deny]
+tags: [guard, rules, architecture-before-skill, deny]
 ---
 
-# architecture-unbriefed
+# architecture-before-skill
 
 A deny rule by default: it refuses a write after a structure question, or into a new directory, before the architecture skill, and names what to run instead.
 
@@ -22,7 +22,7 @@ By default this rule takes the decision `deny`. A workspace sets it by name, in 
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"architecture-unbriefed": "advise"})
+magus\guard.builtins({"architecture-before-skill": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,12 +32,12 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [architecture-unbriefed]: ...
+deny [architecture-before-skill]: ...
 ```
 
-A workspace that sets this rule to `advise` sees `advise [architecture-unbriefed]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [architecture-before-skill]: ...` instead.
 
-`magus describe rule architecture-unbriefed` prints the same entry at a terminal, and
+`magus describe rule architecture-before-skill` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 
 ## See also

@@ -355,6 +355,15 @@ tags/fingerprint/
 # A rule page is generated per shipped rule, so the old page retires rather than aliases.
 reference/rules/person-only/
 
+# The brief format went (#730), and the rules that named it were renamed for what they
+# check: *-unbriefed became *-before-skill, brief-* became spawn-*. Rule pages are
+# generated per shipped rule, so the old pages retire rather than alias.
+reference/rules/architecture-unbriefed/
+reference/rules/brief-command/
+reference/rules/brief-plain-commands/
+reference/rules/buzz-unbriefed/
+reference/rules/spawn-unbriefed/
+
 # The stale-binary rule left the shipped guard for this repository's own policy, which
 # judges a binary by the stamp go-build links into it. A rule page is generated per
 # shipped rule, so it retires rather than aliases.
