@@ -209,7 +209,7 @@ type streamHead struct {
 // diagnosed.
 func (e Event) MarshalJSON() ([]byte, error) {
 	if e.Body == nil {
-		return nil, fmt.Errorf("marshal event: body is nil")
+		return nil, fmt.Errorf("marshal event: no body")
 	}
 	head, err := json.Marshal(streamHead{
 		Schema:    Schema,
