@@ -16,6 +16,9 @@
 package main
 
 import (
+	"errors"
+	"maps"
+	"reflect"
 	"flag"
 	"fmt"
 	"go/ast"
@@ -30,30 +33,23 @@ import (
 	"github.com/egladman/magus/internal/generate/godecl"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // jobRecord is one published record: the struct a caller's JSON decodes into, and the
 // file its schema is written to.
 type jobRecord struct {
-	Struct  string
+	Struct string
+	// Type is the record's Go type, the root the schema's sources are
+	// found from. Nil for a record read from a given file.
+	Type    reflect.Type
 	Title   string
 	File    string
 	Version string // the constant holding this record's api_version
 }
 
 var jobRecords = []jobRecord{
-	{Struct: "Declaration", Title: "magus job", File: "job.schema.json", Version: "JobAPIVersion"},
-	{Struct: "JobResult", Title: "magus job result", File: "result.schema.json", Version: "JobResultAPIVersion"},
-}
-
-// jobSources are the files the records and every type they reach are declared in.
-var jobSources = []string{
-	"internal/job/verify.go",
-	"types/job.go",
-	"types/job_problem.go",
-	"types/schema.go",
-	"types/agent/spec.go",
+	{Struct: "Declaration", Type: reflect.TypeFor[types.Declaration](), Title: "magus job", File: "job.schema.json", Version: "JobAPIVersion"},
+	{Struct: "JobResult", Type: reflect.TypeFor[types.JobResult](), Title: "magus job result", File: "result.schema.json", Version: "JobResultAPIVersion"},
 }
 
 const (
@@ -77,18 +73,11 @@ const (
 	absPathPattern = "^/"
 )
 
-// closedSets are the named types whose values are a published vocabulary, keyed by the
-// name a field is declared with. The values come from the package that owns the set, so
-// a state added there reaches the schema with nothing here to change.
-var closedSets = map[string][]string{
-	"JobState":    leaseStateNames(),
-	"GoalKind":    goalKindNames(),
-	"GoalExpect":  goalExpectNames(),
-	"BriefFormat": types.BriefFormat("").Values(),
-	"WorkerType":  agent.WorkerType("").Values(),
-	// The only DiagnosticCode a record declares is Deviation.Code, so the set is the codes a
-	// deviation may name: a deviation on any other code fails the schema as it fails the decoder.
-	"DiagnosticCode": permissibleCodeNames(),
+// narrowedSets are the open types a record publishes a narrower set for,
+// keyed by the name a field is declared with.
+var narrowedSets = map[string]func() []string{
+	// Deviation.Code names a code a deviation may waive, as the decoder checks.
+	"DiagnosticCode": permissibleCodeNames,
 }
 
 func runJobSchema(args []string) error {
@@ -97,7 +86,7 @@ func runJobSchema(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	decls, err := loadGoDecls(jobSources...)
+	decls, err := jobDecls(jobRecords)
 	if err != nil {
 		return err
 	}
@@ -138,11 +127,11 @@ func runJobSchema(args []string) error {
 func renderJobSchema(rec jobRecord, d *goDecls) ([]byte, error) {
 	st, ok := d.structs[rec.Struct]
 	if !ok {
-		return nil, fmt.Errorf("no struct %s is declared in %s", rec.Struct, strings.Join(jobSources, ", "))
+		return nil, fmt.Errorf("no struct %s is declared in the sources the records reach", rec.Struct)
 	}
 	version, ok := d.consts[rec.Version]
 	if !ok {
-		return nil, fmt.Errorf("%s: no constant %s is declared in %s", rec.Struct, rec.Version, strings.Join(jobSources, ", "))
+		return nil, fmt.Errorf("%s: no constant %s is declared in the sources the records reach", rec.Struct, rec.Version)
 	}
 	props, required, err := properties(rec.Struct, st, d, version)
 	if err != nil {
@@ -308,7 +297,7 @@ func withoutMarker(shape node, marker string) (node, error) {
 }
 
 func namedType(name string, omitempty bool, marker string, d *goDecls, version string) (node, error) {
-	if set, ok := closedSets[name]; ok {
+	if set, ok := d.sets[name]; ok {
 		values := set
 		if omitempty {
 			values = append([]string{""}, set...)
@@ -361,6 +350,90 @@ type goDecls struct {
 	structs map[string]*ast.StructType
 	docs    map[string]string
 	consts  map[string]string
+	// sets holds each closed set's values, keyed by the name a field
+	// declares it with.
+	sets map[string][]string
+}
+
+// jobDecls reads the files that declare every struct the records reach and
+// their version constants, as the boundary load found them. Each enum
+// the records reach publishes its cases as a closed set.
+func jobDecls(records []jobRecord) (*goDecls, error) {
+	paths, sets, err := jobSources(records)
+	if err != nil {
+		return nil, err
+	}
+	d, err := loadGoDecls(paths...)
+	if err != nil {
+		return nil, err
+	}
+	d.sets = sets
+	return d, nil
+}
+
+func jobSources(records []jobRecord) ([]string, map[string][]string, error) {
+	prog := boundary().prog
+	files := map[string]bool{}
+	sets := map[string][]string{}
+	for name, set := range narrowedSets {
+		sets[name] = set()
+	}
+	var errs []error
+	locate := func(pkgPath, name string) {
+		pkg, err := prog.Package(pkgPath)
+		if err != nil {
+			errs = append(errs, err)
+			return
+		}
+		obj := pkg.Types.Scope().Lookup(name)
+		if obj == nil {
+			errs = append(errs, fmt.Errorf("%s declares no %s", pkgPath, name))
+			return
+		}
+		files[pkg.Fset.Position(obj.Pos()).Filename] = true
+	}
+	seen := map[reflect.Type]bool{}
+	var walk func(t reflect.Type)
+	walk = func(t reflect.Type) {
+		for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Map {
+			t = t.Elem()
+		}
+		if t.PkgPath() == "" || seen[t] {
+			return
+		}
+		seen[t] = true
+		switch t.Kind() {
+		case reflect.String:
+			if e, ok := buzzEnum(t); ok {
+				sets[t.Name()] = caseValues(e)
+			}
+		case reflect.Struct:
+			locate(t.PkgPath(), t.Name())
+			for i := range t.NumField() {
+				if f := t.Field(i); f.IsExported() || f.Anonymous {
+					walk(f.Type)
+				}
+			}
+		}
+	}
+	for _, rec := range records {
+		walk(rec.Type)
+		locate(rec.Type.PkgPath(), rec.Version)
+	}
+	paths := slices.Sorted(maps.Keys(files))
+	return paths, sets, errors.Join(errs...)
+}
+
+// caseValues is an enum's values without its zero case: an omitempty field
+// adds "" itself.
+func caseValues(e boundaryEnum) []string {
+	var values []string
+	for _, c := range e.Cases {
+		if c.Value != "" {
+			values = append(values, c.Value)
+		}
+	}
+	return values
 }
 
 func loadGoDecls(paths ...string) (*goDecls, error) {
@@ -433,33 +506,6 @@ func permissibleCodeNames() []string {
 		if types.Permissible(c) {
 			names = append(names, string(c))
 		}
-	}
-	return names
-}
-
-func leaseStateNames() []string {
-	states := types.JobStates()
-	names := make([]string, len(states))
-	for i, s := range states {
-		names[i] = string(s)
-	}
-	return names
-}
-
-func goalKindNames() []string {
-	kinds := types.GoalKinds()
-	names := make([]string, len(kinds))
-	for i, k := range kinds {
-		names[i] = string(k)
-	}
-	return names
-}
-
-func goalExpectNames() []string {
-	expects := types.GoalExpects()
-	names := make([]string, len(expects))
-	for i, e := range expects {
-		names[i] = string(e)
 	}
 	return names
 }

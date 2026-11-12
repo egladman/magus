@@ -137,6 +137,8 @@ type boundarySet struct {
 	enums []boundaryEnum
 	// open holds each named string that crosses as str, with its reason.
 	open map[reflect.Type]string
+	// prog is the one load of every package a crossing type lives in.
+	prog *buzzgen.Program
 }
 
 // boundary derives the set on first use, because most subcommands never
@@ -198,11 +200,13 @@ func deriveBoundary() (boundarySet, error) {
 		return boundarySet{}, err
 	}
 	set := boundarySet{types: r.members(), open: map[reflect.Type]string{}}
-	enums, err := r.enums(root, set.open)
+	set.prog, err = r.load(root)
 	if err != nil {
 		return boundarySet{}, err
 	}
-	set.enums = enums
+	if set.enums, err = r.enums(set.prog, set.open); err != nil {
+		return boundarySet{}, err
+	}
 	return set, errors.Join(r.checkNames(set), r.checkListed(set))
 }
 

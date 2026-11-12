@@ -132,13 +132,26 @@ func writeRecordFixture(t *testing.T, src string) string {
 
 var fixtureRecord = jobRecord{Struct: "Fixture", Title: "magus fixture", File: "fixture.schema.json", Version: "FixtureAPIVersion"}
 
+// fixtureDecls reads a fixture with the closed sets the job records reach.
+func fixtureDecls(t *testing.T, src string) (*goDecls, error) {
+	t.Helper()
+	decls, err := loadGoDecls(writeRecordFixture(t, src))
+	if err != nil {
+		return nil, err
+	}
+	_, sets, err := jobSources(jobRecords)
+	require.NoError(t, err)
+	decls.sets = sets
+	return decls, nil
+}
+
 // One assertion over the whole rendered document rather than a probe per rule: the schema
 // is published byte for byte, so its layout and its ordering are part of what a reader
 // compiles against.
 func TestRenderLedgerSchemaDerivesEveryRuleFromTheStruct(t *testing.T) {
 	t.Parallel()
 
-	decls, err := loadGoDecls(writeRecordFixture(t, recordFixture))
+	decls, err := fixtureDecls(t, recordFixture)
 	require.NoError(t, err)
 
 	body, err := renderJobSchema(fixtureRecord, decls)
@@ -157,7 +170,7 @@ func TestLeaseIDPatternMatchesTheValidator(t *testing.T) {
 func TestDeviationCodeEnumIsExactlyThePermissibleCodes(t *testing.T) {
 	t.Parallel()
 
-	enum := closedSets["DiagnosticCode"]
+	enum := narrowedSets["DiagnosticCode"]()
 	require.NotEmpty(t, enum)
 	for _, c := range types.AllDiagnosticCodes() {
 		assert.Equal(t, types.Permissible(c), slices.Contains(enum, string(c)), "code %s", c)
@@ -192,7 +205,7 @@ func TestRenderLedgerSchemaNamesWhatItCannotPublish(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			decls, err := loadGoDecls(writeRecordFixture(t, tc.src))
+			decls, err := fixtureDecls(t, tc.src)
 			require.NoError(t, err)
 
 			_, err = renderJobSchema(fixtureRecord, decls)
@@ -202,16 +215,15 @@ func TestRenderLedgerSchemaNamesWhatItCannotPublish(t *testing.T) {
 	}
 }
 
-// The generator reads the job store's own sources, so a rename there is a rename this
-// command has to be told about rather than one it silently renders around.
-func TestJobRecordsRenderFromTheirDeclaredSources(t *testing.T) {
+// The sources come from the records' own types, so a type a record gains
+// is read with no list to extend.
+func TestJobRecordsRenderFromTheFilesTheyReach(t *testing.T) {
 	t.Parallel()
 
-	roots := make([]string, 0, len(jobSources))
-	for _, src := range jobSources {
-		roots = append(roots, filepath.Join("..", "..", src))
-	}
-	decls, err := loadGoDecls(roots...)
+	paths, _, err := jobSources(jobRecords)
+	require.NoError(t, err)
+	assert.Contains(t, paths, filepath.Join(boundaryRootDir(t), "types", "agent", "spec.go"), "Declaration.Agent reaches agent.Spec")
+	decls, err := jobDecls(jobRecords)
 	require.NoError(t, err)
 
 	for _, rec := range jobRecords {
@@ -219,6 +231,13 @@ func TestJobRecordsRenderFromTheirDeclaredSources(t *testing.T) {
 		require.NoError(t, err, rec.File)
 		assert.Contains(t, string(body), fmt.Sprintf("\"$id\": \"https://magus.invalid/job/%s\"", rec.File))
 	}
+}
+
+func boundaryRootDir(t *testing.T) string {
+	t.Helper()
+	root, err := buzzgenRoot()
+	require.NoError(t, err)
+	return root
 }
 
 func TestWritePathPatternMatchesTheValidator(t *testing.T) {
@@ -326,7 +345,7 @@ type LeaseCheck struct {
 func renderMarkerFixture(t *testing.T, src string) (map[string]any, error) {
 	t.Helper()
 
-	decls, err := loadGoDecls(writeRecordFixture(t, src))
+	decls, err := fixtureDecls(t, src)
 	require.NoError(t, err)
 	body, err := renderJobSchema(fixtureRecord, decls)
 	if err != nil {

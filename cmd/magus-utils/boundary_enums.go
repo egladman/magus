@@ -13,20 +13,21 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 )
 
-// enums derives each reached named string that is not open, and each enum
-// a module setting declares. buzzgen reads the cases from Go constants in
-// one load. open is filled with the strings that cross as str.
-func (r *reach) enums(root string, open map[reflect.Type]string) ([]boundaryEnum, error) {
+// load type-checks every package a reached type lives in, in one load.
+func (r *reach) load(root string) (*buzzgen.Program, error) {
 	var pkgs []string
-	for _, t := range r.named {
+	for t := range r.from {
 		if !slices.Contains(pkgs, t.PkgPath()) {
 			pkgs = append(pkgs, t.PkgPath())
 		}
 	}
-	prog, err := buzzgen.Load(root, r.cfg, pkgs...)
-	if err != nil {
-		return nil, err
-	}
+	return buzzgen.Load(root, r.cfg, pkgs...)
+}
+
+// enums derives each reached named string that is not open, and each enum
+// a module setting declares, reading the cases from Go constants. open is
+// filled with the strings that cross as str.
+func (r *reach) enums(prog *buzzgen.Program, open map[reflect.Type]string) ([]boundaryEnum, error) {
 	var enums []boundaryEnum
 	var errs []error
 	derived := map[string]bool{}
