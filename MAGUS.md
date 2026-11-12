@@ -74,8 +74,8 @@ magus graph export -o json  # the whole graph
 | import     |     200+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                                                                              |
 | rationale  |      10+ | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                                                            |
 | package    |     100+ | `magus query kind=package`    | `gopkg.in/yaml.v3`, `github.com/davecgh/go-spew`, `github.com/pmezard/go-difflib`                                                                                 |
-| link       |     100+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://cursor.com/docs/agent/hooks`, `https://eli.gladman.cc/magus/`                                                                  |
-| marker     |        4 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:skills`                                                                                                       |
+| link       |     100+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://cursor.com/docs/agent/hooks`                                                                  |
+| marker     |        4 | `magus query kind=marker`     | `magus:diagram server-share`, `magus:diagram server-http`, `magus:skills`                                                                                         |
 | figure     |      50+ | `magus query kind=figure`     | `One library draws every figure, here and in the console`, `One pipeline, and the modules each host registers`, `A target exists because a magusfile exported it` |
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                       |

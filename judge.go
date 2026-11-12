@@ -2,11 +2,13 @@ package magus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 	"mvdan.cc/sh/v3/syntax"
@@ -19,11 +21,23 @@ import (
 // workspace's trail as a hook's is.
 //
 // A deny is a judgment, returned with its Reason, Rule and Next and a nil error; a rule
-// that would ask the person denies, since no host is here to put the question. The error
-// is for a judgment that could not be made: the workspace's guard rules did not load,
-// which is a *types.EngineNotLinkedError when this program links no Buzz engine.
+// that would ask the person denies, since no host is here to put the question.
+//
+// A working tree whose rules do not load is judged by its approved
+// sources, as the hook judges it. The error is a
+// *types.EngineNotLinkedError: no Buzz engine loads either side.
 func (m *Magus) JudgeCommand(ctx context.Context, session, dir, command string) (types.GuardJudgment, error) {
 	return m.judge(ctx, guard.Request{Input: command, Dir: dir, Session: session})
+}
+
+type authorityKey struct{}
+
+// ContextWithAuthority has a judgment under ctx with no job row read the
+// approved rules at revision (ADR 0045). CI passes its target branch's,
+// so a pull request cannot approve its own loosening. A leased call reads
+// its row's authority instead.
+func ContextWithAuthority(ctx context.Context, revision string) context.Context {
+	return context.WithValue(ctx, authorityKey{}, revision)
 }
 
 // JudgeWrite is JudgeCommand for a file an edit is about to write: path, absolute or
@@ -34,18 +48,43 @@ func (m *Magus) JudgeWrite(ctx context.Context, session, dir, path string) (type
 
 func (m *Magus) judge(ctx context.Context, req guard.Request) (types.GuardJudgment, error) {
 	req.Lease = types.JobLeaseFromContext(ctx)
-	deps, err := m.guardDependencies(ctx)
+	req.Authority, _ = ctx.Value(authorityKey{}).(string)
+	authority := guard.ResolveAuthority(ctx, guard.Dependencies{CacheDir: m.guardCacheDir, JobReader: m.jobReader}, req)
+	deps, err := m.guardDependenciesAt(ctx, authority)
 	if err != nil {
 		return types.GuardJudgment{}, err
 	}
 	return guard.Judge(ctx, deps, req), nil
 }
 
-// guardDependencies is what the guard judges this workspace with.
-// The error is its guard rules failing to load.
+// guardCacheDir is the cache dir of the workspace at root, for the guard.
+func (m *Magus) guardCacheDir(root string) (string, error) {
+	if m.ownRoot(root) {
+		return m.CacheDir(), nil
+	}
+	return ResolveCacheDir(root, m.processOptions()...)
+}
+
+// guardDependencies is what the guard judges a call with no lease by.
 func (m *Magus) guardDependencies(ctx context.Context) (guard.Dependencies, error) {
+	return m.guardDependenciesAt(ctx, guard.CallAuthority{})
+}
+
+// guardDependenciesAt is what the guard judges a call with authority by: the
+// policy of its row's checkout, else this workspace's. The error is a
+// program with no Buzz engine, where neither side of that policy loads.
+func (m *Magus) guardDependenciesAt(ctx context.Context, authority guard.CallAuthority) (guard.Dependencies, error) {
+	root := m.Root()
+	if authority.Checkout != "" {
+		leased, err := workspace.FindRoot(authority.Checkout)
+		if err != nil {
+			return guard.Dependencies{}, fmt.Errorf("lease %s: its checkout %s holds no workspace to judge it by: %w", authority.Lease, authority.Checkout, err)
+		}
+		root = leased
+	}
 	deps, _ := guard.NewDependencies(ctx, guard.Wiring{
-		Root:          m.Root(),
+		Root:          root,
+		Authority:     authority.Revision,
 		Config:        m.cfg,
 		BinaryVersion: m.version,
 		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
@@ -54,14 +93,9 @@ func (m *Magus) guardDependencies(ctx context.Context) (guard.Dependencies, erro
 			}
 			return Inspect(ctx, root, m.processOptions()...)
 		},
-		CacheDir: func(root string) (string, error) {
-			if m.ownRoot(root) {
-				return m.CacheDir(), nil
-			}
-			return ResolveCacheDir(root, m.processOptions()...)
-		},
+		CacheDir: m.guardCacheDir,
 	})
-	if deps.LoadFailure != nil {
+	if notLinked := (*types.EngineNotLinkedError)(nil); errors.As(deps.LoadFailure, &notLinked) {
 		return guard.Dependencies{}, deps.LoadFailure
 	}
 	deps.Workspace = m.Root()

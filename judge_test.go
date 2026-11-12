@@ -73,15 +73,57 @@ func TestJudgeWriteJudgesThePathAsAWrite(t *testing.T) {
 	assert.Contains(t, j.Reason, "No writes here.")
 }
 
-// Rules that do not load are a judgment that could not be made, not a pass.
-func TestJudgeCommandErrorsWhenTheRulesDoNotLoad(t *testing.T) {
-	m, _ := openRefusing(t)
-	broken := []byte("import \"magus\";\n\nmagus\\guard.command(\n")
-	require.NoError(t, os.WriteFile(filepath.Join(m.Root(), "magusfile.buzz"), broken, 0o644))
+// authorityJudgeSuite pins the SDK's door onto ADR 0045's authority. Rules
+// that do not load fall back to the approved ones, read at the authority.
+type authorityJudgeSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+}
 
-	j, err := m.JudgeCommand(t.Context(), "s1", m.Root(), "ls")
-	require.Error(t, err)
-	assert.Equal(t, types.GuardJudgment{}, j)
+func TestAuthorityJudge(t *testing.T) { suite.Run(t, new(authorityJudgeSuite)) }
+
+func (s *authorityJudgeSuite) SetupTest() {
+	testkit.Isolate(s.T())
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": refuseEverything})
+}
+
+func (s *authorityJudgeSuite) judge(ctx context.Context) types.GuardJudgment {
+	m, err := Open(s.T().Context(), s.repo.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	j, err := m.JudgeCommand(ctx, "s1", m.Root(), "ls")
+	s.Require().NoError(err)
+	return j
+}
+
+func (s *authorityJudgeSuite) TestRulesThatDoNotLoadAreJudgedByTheApprovedOnes() {
+	broken := []byte("import \"magus\";\n\nmagus\\guard.command(\n")
+	m, err := Open(s.T().Context(), s.repo.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.Require().NoError(os.WriteFile(filepath.Join(m.Root(), "magusfile.buzz"), broken, 0o644))
+
+	j, err := m.JudgeCommand(s.T().Context(), "s1", m.Root(), "ls")
+
+	s.Require().NoError(err)
+	s.Equal(string(types.GuardDeny), j.Decision)
+	s.Contains(j.Reason, "Not in this workspace.")
+}
+
+func (s *authorityJudgeSuite) TestACommittedLooseningApprovesItselfWithNoAuthority() {
+	s.repo.Commit("loosen", map[string]string{"magusfile.buzz": "import \"magus\";\n"})
+
+	s.NotContains(s.judge(s.T().Context()).Reason, "Not in this workspace.")
+}
+
+func (s *authorityJudgeSuite) TestACommittedLooseningWaitsOnTheAuthorityTheCallerNames() {
+	target := s.repo.Head()
+	s.repo.Commit("loosen", map[string]string{"magusfile.buzz": "import \"magus\";\n"})
+
+	j := s.judge(ContextWithAuthority(s.T().Context(), target))
+
+	s.Equal(string(types.GuardDeny), j.Decision)
+	s.Contains(j.Reason, "Not in this workspace.")
 }
 
 // An in-process run is judged as the `magus run` line the CLI would be, before anything runs.
@@ -210,6 +252,20 @@ func (s *jobReaderSuite) TestATaskWithNoAuthorityIsRefusedWork() {
 
 func (s *jobReaderSuite) TestATaskWithAnAuthorityIsNotRefusedForIt() {
 	s.NotEqual("lease-authority", s.judge("0123abcd").Rule)
+}
+
+// A task is judged by the policy of the checkout its row names.
+func (s *jobReaderSuite) TestATaskIsJudgedByItsRowsCheckout() {
+	other := testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": refuseEverything})
+	task := types.Job{ID: "task", State: types.StateRunning, Authority: other.Head(), CheckoutRoot: other.Root()}
+	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+
+	j, err := m.JudgeCommand(types.WithJobLease(s.T().Context(), "task"), "s1", m.Root(), "ls")
+
+	s.Require().NoError(err)
+	s.Contains(j.Reason, "Not in this workspace.")
 }
 
 func (s *jobReaderSuite) TestANilReaderFailsTheOpen() {

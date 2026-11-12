@@ -2166,3 +2166,155 @@ func (s *WorkspaceMemoSuite) TestAFailedOpenIsTriedAgainNextJudgment() {
 	s.Require().NoError(err)
 	s.Equal(2, s.opens)
 }
+
+// authoritySuite pins ADR 0045's policy wait. What changed since the
+// authority's revision, committed or not, is pending until it holds it.
+type authoritySuite struct {
+	suite.Suite
+	root   string
+	file   string
+	before string
+	h      headPolicy
+	git    func(...string)
+}
+
+func TestAuthority(t *testing.T) { suite.Run(t, new(authoritySuite)) }
+
+func (s *authoritySuite) SetupTest() {
+	s.T().Setenv("MAGUS_CACHE_DIR", "")
+	s.root, s.h, s.git = gitPolicy(s.T(), map[string]string{"policy.buzz": "strict\n"})
+	s.file = filepath.Join(s.root, "policy.buzz")
+	before, err := s.h.driver.FindCommit(s.T().Context(), s.root, "")
+	s.Require().NoError(err)
+	s.before = before.ID
+	s.Require().NoError(os.WriteFile(s.file, []byte("loosened\n"), 0o644))
+	s.git("commit", "-q", "-am", "loosen")
+}
+
+// at is the authority over the same checkout read at rev.
+func (s *authoritySuite) at(rev string) headPolicy {
+	h := s.h
+	h.revision, h.batch = rev, &objectBatchState{}
+	return h
+}
+
+func (s *authoritySuite) TestACommittedLooseningIsPendingSinceTheAuthority() {
+	got, err := s.at(s.before).Pending(s.T().Context(), []string{s.file})
+
+	s.Require().NoError(err)
+	s.Require().Len(got, 1)
+	s.Equal(canonicalPath(s.file), canonicalPath(got[0]))
+}
+
+func (s *authoritySuite) TestTheCheckedOutCommitApprovesItsOwnCommit() {
+	got, err := s.h.Pending(s.T().Context(), []string{s.file})
+
+	s.Require().NoError(err)
+	s.Empty(got)
+}
+
+func (s *authoritySuite) TestTheApprovedSourceIsReadAtTheAuthority() {
+	h := s.at(s.before)
+	defer func() { _ = h.Close() }()
+
+	got, err := h.ReadFile(s.T().Context(), s.file)
+
+	s.Require().NoError(err)
+	s.Equal("strict\n", string(got))
+}
+
+func (s *authoritySuite) TestAnUnbatchedReadIsAtTheAuthorityToo() {
+	h := s.at(s.before)
+	h.driver = unbatchedDriver{VCSDriver: h.driver, reads: &[]string{}}
+
+	got, err := h.ReadFile(s.T().Context(), s.file)
+
+	s.Require().NoError(err)
+	s.Equal("strict\n", string(got))
+}
+
+func (s *authoritySuite) TestADriverThatCannotDiffARevisionLeavesTheAuthorityUnreadable() {
+	h := s.at(s.before)
+	h.driver = unbatchedDriver{VCSDriver: h.driver, reads: &[]string{}}
+
+	_, err := h.Pending(s.T().Context(), []string{s.file})
+
+	s.ErrorContains(err, fmt.Sprintf("the authority %s is unreadable", s.before))
+}
+
+func (s *authoritySuite) TestThePendingRecordIsKeyedByTheAuthority() {
+	s.NotEqual(s.at(s.before).pendingKey("id", "files"), s.h.pendingKey("id", "files"))
+}
+
+// One authority's record does not answer for another over the same scope.
+func (s *authoritySuite) TestAnotherAuthorityDoesNotReuseTheRecord() {
+	scope := []string{s.file}
+	_, err := s.h.Pending(s.T().Context(), scope)
+	s.Require().NoError(err)
+
+	got, err := s.at(s.before).Pending(s.T().Context(), scope)
+
+	s.Require().NoError(err)
+	s.Len(got, 1)
+}
+
+// resolveAuthoritySuite pins ResolveAuthority. A leased call takes its row's
+// checkout and authority, and a call with no row the request's own.
+type resolveAuthoritySuite struct {
+	suite.Suite
+	ws       string
+	checkout string
+}
+
+func TestResolveAuthority(t *testing.T) { suite.Run(t, new(resolveAuthoritySuite)) }
+
+type rowsReader []types.Job
+
+func (r rowsReader) List() ([]types.Job, error) { return r, nil }
+
+func (s *resolveAuthoritySuite) SetupTest() {
+	s.ws = s.T().TempDir()
+	s.checkout = s.T().TempDir()
+}
+
+func (s *resolveAuthoritySuite) resolve(req Request, rows ...types.Job) CallAuthority {
+	ctx := WithLocation(s.T().Context(), filepath.Join(s.ws, ".magus"), s.ws, s.ws)
+	return ResolveAuthority(ctx, Dependencies{JobReader: rowsReader(rows)}, req)
+}
+
+func (s *resolveAuthoritySuite) TestALeasedCallTakesItsRowsCheckoutAndAuthority() {
+	row := types.Job{ID: "task", State: types.StateRunning, Authority: "abc123", CheckoutRoot: s.checkout}
+
+	got := s.resolve(Request{Input: "ls", Lease: "task", Authority: "ignored"}, row)
+
+	s.Equal(CallAuthority{Lease: "task", Checkout: s.checkout, Revision: "abc123"}, got)
+}
+
+func (s *resolveAuthoritySuite) TestAForkedWorktreeOutranksTheExecCheckout() {
+	row := types.Job{ID: "task", State: types.StateRunning, Authority: "abc123", CheckoutRoot: s.T().TempDir(),
+		Worktree: &types.JobWorktree{Root: s.checkout}}
+
+	s.Equal(s.checkout, s.resolve(Request{Input: "ls", Lease: "task"}, row).Checkout)
+}
+
+func (s *resolveAuthoritySuite) TestACheckoutGoneFromDiskLoadsTheCallersOwn() {
+	row := types.Job{ID: "task", State: types.StateRunning, Authority: "abc123", CheckoutRoot: filepath.Join(s.checkout, "gone")}
+
+	s.Empty(s.resolve(Request{Input: "ls", Lease: "task"}, row).Checkout)
+}
+
+func (s *resolveAuthoritySuite) TestACallWithNoRowTakesTheRequestsAuthority() {
+	s.Equal(CallAuthority{Revision: "target"}, s.resolve(Request{Input: "ls", Authority: "target"}))
+}
+
+func (s *resolveAuthoritySuite) TestALeaseNoRowCarriesKeepsTheRequestsAuthority() {
+	got := s.resolve(Request{Input: "ls", Lease: "nobody", Authority: "target"})
+
+	s.Equal(CallAuthority{Lease: "nobody", Revision: "target"}, got)
+}
+
+func (s *resolveAuthoritySuite) TestAPendingRowHasNoAuthorityYet() {
+	got := s.resolve(Request{Input: "ls", PendingRow: &types.Job{ID: "fork"}, Authority: "target"})
+
+	s.Equal(CallAuthority{Lease: "fork", Revision: "target"}, got)
+}

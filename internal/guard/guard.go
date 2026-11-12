@@ -647,6 +647,10 @@ type Request struct {
 	DryRun bool
 	// Lease is an explicit --lease; empty resolves through job.LeaseQuery.Resolve.
 	Lease string
+	// Authority is the revision a caller with no row is judged from (ADR
+	// 0045). CI passes its target branch's, so a pull request cannot
+	// approve its own loosening.
+	Authority string
 	// PendingRow is the row of a lease the store does not carry yet, graded as if it did: it
 	// joins the rows the rules read, and Lease defaults to its id. For a fork that must know
 	// what the guard will say to its holder before the holder exists.

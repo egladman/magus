@@ -22,6 +22,7 @@ github.com/egladman/magus.Command.Cwd field string "json:\"cwd,omitempty\""
 github.com/egladman/magus.Command.Trigger field string "json:\"trigger,omitempty\""
 github.com/egladman/magus.ComposeGraph func(ws github.com/egladman/magus/types.WorkspaceRepository, opts ...ComposeOption) github.com/egladman/magus/types.GraphOutput
 github.com/egladman/magus.ComposeOption type func(*compose)
+github.com/egladman/magus.ContextWithAuthority func(ctx context.Context, revision string) context.Context
 github.com/egladman/magus.Drift func(policy github.com/egladman/magus/types.DriftPolicy, reason string) TargetOption
 github.com/egladman/magus.DurationPredictor type interface
 github.com/egladman/magus.DurationPredictor.PredictDuration imethod func(project string, target string, tags []string) time.Duration

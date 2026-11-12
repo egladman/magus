@@ -391,7 +391,7 @@ func openSnapshot(ctx context.Context, w Wiring) (snapshotSite, error) {
 	if err != nil {
 		return snapshotSite{}, err
 	}
-	authority, ok, err := approvalAuthority(ctx, w.Root, w.vcsOptions(), w.CacheDir)
+	authority, ok, err := approvalAuthority(ctx, w.Root, w.Authority, w.vcsOptions(), w.CacheDir)
 	switch {
 	case err != nil:
 		return snapshotSite{}, err
@@ -402,8 +402,8 @@ func openSnapshot(ctx context.Context, w Wiring) (snapshotSite, error) {
 }
 
 // key names the state a load of sources would see. It covers the build, the
-// checked-out commit, the agents settings and every byte in the load's
-// scope. ok is false when the checkout id cannot be read.
+// authority, the checked-out commit, the agents settings and every byte in
+// the load's scope. ok is false when the checkout id cannot be read.
 func (s snapshotSite) key(sources []string) (string, bool) {
 	files := make([]interp.SourceFile, len(sources))
 	for i, p := range sources {
@@ -420,7 +420,7 @@ func (s snapshotSite) key(sources []string) (string, bool) {
 	}
 	commit, _ := buildinfo.Commit()
 	h := sha256.New()
-	for _, part := range []string{s.w.Root, s.store.Stamp, commit, fmt.Sprintf("%+v", s.w.vcsOptions()), id, scope} {
+	for _, part := range []string{s.w.Root, s.store.Stamp, commit, fmt.Sprintf("%+v", s.w.vcsOptions()), s.authority.revision, id, scope} {
 		frame(h, framePath, []byte(part))
 	}
 	frame(h, frameFile, settings)
@@ -543,7 +543,7 @@ func (s snapshotSite) dependencies(deps Dependencies, snap policySnapshot) Depen
 	deps.Builtins = body.Builtins
 	s.lazyWorktreeRules(&deps, body.Worktree)
 	s.lazyApprovedRules(&deps, body)
-	lineage := &WorkspaceRules{root: w.Root, opts: w.vcsOptions(), cacheDir: w.CacheDir}
+	lineage := &WorkspaceRules{root: w.Root, opts: w.vcsOptions(), cacheDir: w.CacheDir, revision: w.Authority}
 	policy := WorkspacePolicy{
 		Digest: body.Digest, ShellRules: len(body.ShellRules),
 		SpawnRule: body.Worktree.Spawn, CommandRule: body.Worktree.Command, WriteRule: body.Worktree.Write, StopRule: body.Worktree.Stop,
@@ -565,7 +565,7 @@ func (s snapshotSite) lazyWorktreeRules(deps *Dependencies, has seamRules) {
 			defer w.trace(ctx, "guard.load_rules")()
 			rules, err := loadPolicyRules(ctx, w.Root, w.vcsOptions())
 			if rules != nil {
-				rules.cacheDir = w.CacheDir
+				rules.cacheDir, rules.revision = w.CacheDir, w.Authority
 			}
 			return rules, err
 		})
@@ -787,6 +787,6 @@ func WritePolicySnapshot(ctx context.Context, w Wiring) error {
 	if err != nil {
 		return err
 	}
-	rules.cacheDir = w.CacheDir
+	rules.cacheDir, rules.revision = w.CacheDir, w.Authority
 	return site.write(ctx, rules)
 }

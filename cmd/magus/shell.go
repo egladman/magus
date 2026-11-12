@@ -312,12 +312,14 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		// The hook ignores --root and loads no workspace up front: the one it judges in is
 		// wherever the host runs it, or a checkout whose own ./magus was passed over and whose
 		// tree this binary cannot load, so its stale-binary rule refuses what changes state.
-		deps := guardDependencies(ctx, judgeRoot)
 		if judgeRoot != "" {
-			if cache, err := deps.CacheDir(judgeRoot); err == nil {
+			if cache, err := guardCacheDir(judgeRoot)(judgeRoot); err == nil {
 				ctx = guard.WithLocation(ctx, cache, judgeRoot, judgeRoot)
 			}
 		}
+		// A leased call is judged by its row's checkout and authority, so
+		// the lease resolves before the policy loads.
+		deps, _ := loadGuardDependenciesAt(ctx, judgeRoot, guard.ResolveAuthority(ctx, base, req))
 		stopJudge := traceFromContext(ctx).phase("guard.judge")
 		defer stopJudge()
 		return guard.Judge(ctx, deps, req)
@@ -408,12 +410,27 @@ func checkoutJudgeDeps(ctx context.Context, deps guard.Dependencies, root, binar
 // loadGuardDependencies is guardDependencies that also returns the rules it loaded, nil
 // when none loaded, for a caller that must know which files they came from.
 func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Dependencies, *guard.WorkspaceRules) {
+	return loadGuardDependenciesAt(ctx, rootOverride, guard.CallAuthority{})
+}
+
+// loadGuardDependenciesAt is loadGuardDependencies for a call whose authority
+// resolved: its policy loads from the row's checkout at the row's revision.
+func loadGuardDependenciesAt(ctx context.Context, rootOverride string, authority guard.CallAuthority) (guard.Dependencies, *guard.WorkspaceRules) {
 	if failure, ok := ctx.Value(staleConfigKey{}).(error); ok {
 		return staleConfigDependencies(ctx, rootOverride, failure), nil
 	}
 	root, err := guardRoot(rootOverride)
 	if err != nil {
 		root = ""
+	}
+	policyRoot := root
+	if authority.Checkout != "" {
+		leased, err := guardRoot(authority.Checkout)
+		if err != nil {
+			slog.WarnContext(ctx, "the lease's checkout holds no workspace, so its call is judged by this checkout's policy",
+				attr.Error(err), attr.Component("magus shell"))
+		}
+		policyRoot = cmp.Or(leased, root)
 	}
 	inspect := func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 		if root == "" {
@@ -425,7 +442,8 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	// An unresolvable path leaves the trail row without one; the version still records.
 	binary, _ := runningBinaryPath()
 	deps, rules := guard.NewDependencies(ctx, guard.Wiring{
-		Root:                 root,
+		Root:                 policyRoot,
+		Authority:            authority.Revision,
 		Config:               globalCfg,
 		BinaryVersion:        version,
 		Binary:               binary,

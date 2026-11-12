@@ -171,15 +171,15 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 | -------------------------------------------------------------------------------------------- | -------- |
 | every fork records a store-computed `Authority`; a child inherits its parent's                 | done     |
 | a leased row with no authority is refused state changes                                        | done     |
-| `Pending` and the approved sources read at the authority; cache keys carry it                 | proposed |
-| an optional VCS capability lists paths changed between a revision and the working tree        | proposed |
+| `Pending` and the approved sources read at the authority; cache keys carry it                 | done     |
+| an optional VCS capability lists paths changed between a revision and the working tree        | done     |
 | the row records the judging binary's path and hash; the hook runs only a recorded binary      | proposed |
 | a build target declares a product path; the guard treats it as magus                          | proposed |
 | the integrator relinks, re-pins and advances; nobody else does                                | proposed |
-| a leased call loads policy and authority from its row's checkout                              | proposed |
-| the lease resolves before policy loads, at every door                                         | proposed |
-| the SDK judges with the approved sources when the working tree does not load                  | proposed |
-| a request carries an explicit authority for a caller with no row                              | proposed |
+| a leased call loads policy and authority from its row's checkout                              | done     |
+| the lease resolves before policy loads, at every door                                         | done     |
+| the SDK judges with the approved sources when the working tree does not load                  | done     |
+| a request carries an explicit authority for a caller with no row                              | done     |
 | `types` row reader and `magus.WithJobReader`; the job store is the default                    | done     |
 | `ChangedBuildInputs` moves into the go spell; the Buzz copies go                              | proposed |
 | `builds.buzz` rewritten to the product-path rule                                              | proposed |
