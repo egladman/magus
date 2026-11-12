@@ -414,7 +414,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]spells.Charm{
 				"update": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
-			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "-trimpath"}, TrailingArgs: []string{"./..."}, EnvKeys: goldenGoPlatformEnv}},
+			"go-vet": {Command: spells.Command{Bin: "go", Args: []string{"vet", "-trimpath"}, TrailingArgs: []string{"./..."}, EnvKeys: goldenGoPlatformEnv,
+				PathScope:      []string{"./{dir}"},
+				PathScopeFiles: []string{"**/*.go", "!**/testdata/**", "!**/vendor/**", "!**/_*/**", "!**/.*/**", "!**/_*", "!**/.*"}}},
 			"govulncheck": {Command: spells.Command{Bin: "govulncheck", DefaultArgs: []string{"./..."}, Capture: true, External: spells.ExternalReads}},
 			// Synthesized from mgs_getSymbolIndexer, not authored in mgs_listTargets, which
 			// is why it carries a kind no spell can write.
