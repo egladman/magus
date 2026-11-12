@@ -32,7 +32,7 @@ type Graph struct {
 	out   map[string][]types.KnowledgeEdge // by source ID
 	in    map[string][]types.KnowledgeEdge // by target ID
 
-	// The search index Resolve scans (see search_index.go): per node, the lowercased
+	// The search index Resolve scans (see search.go): per node, the lowercased
 	// id/label/doc text and the project that owns it, plus a kind partition. It is built
 	// lazily on the first query and holds node-derived data only, so AddNode drops it
 	// and an edge never does. idxMu guards the holder pointer; the holder's own mutex

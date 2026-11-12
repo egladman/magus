@@ -17,7 +17,13 @@ final THIS = "hack/lint/file-name-words-tell-siblings-apart.buzz";
 
 // ALLOW holds each kept file by workspace path, with why. An entry that is
 // no longer a finding is itself a finding.
-export final ALLOW = {<str: str>};
+export final ALLOW = {
+    "types/api_version.go": "version names the type: api.go would hide that it is the API version",
+    "types/api_version_test.go": "version names the type: its test is the API version's",
+    "types/import_graph.go": "graph names the type: import.go would hide that it is the import graph",
+    "types/import_graph_test.go": "graph names the type: its test is the import graph's",
+    "types/public_api.go": "api names the type: public.go would hide that it is the public API",
+};
 
 // The suffixes Go reads as build constraints; `unix` is one too.
 final GOARCH = ["386", "amd64", "arm", "arm64", "loong64", "mips", "mipsle", "mips64", "mips64le",
