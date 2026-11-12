@@ -839,38 +839,38 @@ func (s *BuildInputsSuite) TestEqualCommitsRunNothing() {
 }
 
 func (s *BuildInputsSuite) TestTheCommandRunsWithThePackageAppended() {
-	scopes, err := RelinkScopes(s.T().Context(), relinking(`printf '%s\n' "$1"`), s.repo.Root())
+	scopes, err := relinkScopes(s.T().Context(), relinking(`printf '%s\n' "$1"`), s.repo.Root())
 	s.Require().NoError(err)
 	s.Equal([]string{"cmd/magus"}, scopes)
 }
 
 func (s *BuildInputsSuite) TestAGlobOutsideTheRootDropsOut() {
-	scopes, err := RelinkScopes(s.T().Context(), relinking(libScopes), s.repo.Root())
+	scopes, err := relinkScopes(s.T().Context(), relinking(libScopes), s.repo.Root())
 	s.Require().NoError(err)
 	s.Equal([]string{"!lib/*_test.go", "cmd/magus/*.go", "go.mod", "lib/*.go"}, scopes)
 }
 
 func (s *BuildInputsSuite) TestNoRelinkingTargetLeavesTheInputsUnknown() {
-	_, err := RelinkScopes(s.T().Context(), []*types.Project{{Path: "."}}, s.repo.Root())
-	s.ErrorContains(err, "no target in "+s.repo.Root()+" relinks ./magus, so the build inputs of ./magus are unknown")
+	_, err := relinkScopes(s.T().Context(), []*types.Project{{Path: "."}}, s.repo.Root())
+	s.ErrorContains(err, fmt.Sprintf("no target in %s relinks ./magus, so the build inputs of ./magus are unknown", s.repo.Root()))
 }
 
 func (s *BuildInputsSuite) TestNoSpellDeclaringScopesLeavesTheInputsUnknown() {
 	projects := relinking()
 	projects[0].ResolvedSpells = []*spells.Spell{spells.NewSpell("plain")}
-	_, err := RelinkScopes(s.T().Context(), projects, s.repo.Root())
+	_, err := relinkScopes(s.T().Context(), projects, s.repo.Root())
 	s.ErrorContains(err, "no spell bound to project ., which relinks ./magus, declares mgs_getScopes")
 }
 
 func (s *BuildInputsSuite) TestAFailingCommandSaysWhatItPrinted() {
 	_, err := s.changed(relinking(`echo broken >&2; exit 3`), map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
-	s.ErrorContains(err, `the fake0 spell's mgs_getScopes`)
-	s.ErrorContains(err, `says "broken"`)
+	s.ErrorContains(err, `the fake0 spell's mgs_getScopes, `)
+	s.ErrorContains(err, `, says "broken"`)
 }
 
 func (s *BuildInputsSuite) TestAMalformedGlobIsAnError() {
-	_, err := RelinkScopes(s.T().Context(), relinking(`printf 'lib/[x\n'`), s.repo.Root())
-	s.ErrorContains(err, `"lib/[x" is not a glob`)
+	_, err := relinkScopes(s.T().Context(), relinking(`printf 'lib/[x\n'`), s.repo.Root())
+	s.ErrorContains(err, `the fake0 spell's mgs_getScopes printed "lib/[x", which is not a glob`)
 }
 
 // LandingBootstrapSuite: a fork with no checkout of its own lands in the
@@ -882,7 +882,6 @@ type LandingBootstrapSuite struct {
 	built string
 	store *Store
 	local string
-	ctx   context.Context
 }
 
 func TestLandingBootstrapSuite(t *testing.T) {
@@ -899,32 +898,36 @@ func (s *LandingBootstrapSuite) SetupTest() {
 	s.local = filepath.Join(root, "magus")
 	s.Require().NoError(os.WriteFile(s.local, []byte("build 1\n"), 0o755))
 	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(hookConfig), 0o644))
-	s.ctx = types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: s.built})
+}
+
+// builtAtBase is a context whose magus was built at the suite's first commit.
+func (s *LandingBootstrapSuite) builtAtBase() context.Context {
+	return types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: s.built})
 }
 
 func (s *LandingBootstrapSuite) TestACheckpointPastALinkedPackageNamesTheBootstrap() {
 	linked := s.repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
-	got, err := s.store.LandingBootstrap(s.ctx, s.local, linked)
+	got, err := s.store.LandingBootstrap(s.builtAtBase(), s.local, linked)
 	s.Require().NoError(err)
 	s.Equal(CheckoutBootstrap(testHook, s.repo.Root()), got)
 }
 
 func (s *LandingBootstrapSuite) TestACheckpointPastADocsEditNamesNothing() {
 	docs := s.repo.Commit("docs", map[string]string{"docs/a.md": "b\n"})
-	got, err := s.store.LandingBootstrap(s.ctx, s.local, docs)
+	got, err := s.store.LandingBootstrap(s.builtAtBase(), s.local, docs)
 	s.Require().NoError(err)
 	s.Empty(got)
 }
 
 func (s *LandingBootstrapSuite) TestTheCommitItWasBuiltAtNamesNothing() {
-	got, err := s.store.LandingBootstrap(s.ctx, s.local, s.built)
+	got, err := s.store.LandingBootstrap(s.builtAtBase(), s.local, s.built)
 	s.Require().NoError(err)
 	s.Empty(got)
 }
 
 func (s *LandingBootstrapSuite) TestAMagusOnPathNamesNothing() {
 	linked := s.repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
-	got, err := s.store.LandingBootstrap(s.ctx, filepath.Join(s.T().TempDir(), "magus"), linked)
+	got, err := s.store.LandingBootstrap(s.builtAtBase(), filepath.Join(s.T().TempDir(), "magus"), linked)
 	s.Require().NoError(err)
 	s.Empty(got)
 }
@@ -938,7 +941,7 @@ func (s *LandingBootstrapSuite) TestABuildWithNoCommitIsAnError() {
 func (s *LandingBootstrapSuite) TestAStoreWithNoWorkspaceSaysTheInputsAreUnknown() {
 	bare := NewStore(Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: s.repo.Root()})
 	linked := s.repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
-	_, err := bare.LandingBootstrap(s.ctx, s.local, linked)
+	_, err := bare.LandingBootstrap(s.builtAtBase(), s.local, linked)
 	s.ErrorContains(err, "the build inputs of ./magus are unknown, since this door opened the job store without a workspace")
 }
 

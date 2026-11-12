@@ -94,7 +94,7 @@ export fun stampedInputs(stamp: str) > str {
 
 // goInputs are the files under root that listed names, root-relative. listed
 // is one glob per line, absolute or relative to root, ! excluding. A glob
-// outside root drops out. job.RelinkScopes matches the same globs.
+// outside root drops out. job.ChangedBuildInputs matches the same globs.
 export fun goInputs(listed: str, root: str) > [str] !> any {
     final base = path\clean(root);
     final includes = mut [<str>];

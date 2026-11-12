@@ -472,7 +472,7 @@ func (s *Store) LinkedCheckout(ctx context.Context, dir string) (bool, error) {
 const mainPackage = "./cmd/magus"
 
 // ChangedBuildInputs are the paths differing between commits from and to,
-// in the checkout at root, that [RelinkScopes] matches. Each side's changes
+// in the checkout at root, that relinkScopes matches. Each side's changes
 // since the two diverged count. It fails when either commit or the scopes
 // cannot be read, so unknown inputs never match. Equal commits run nothing.
 func ChangedBuildInputs(ctx context.Context, drv types.VCSDriver, root string, projects []*types.Project, from, to string) ([]string, error) {
@@ -489,19 +489,17 @@ func ChangedBuildInputs(ctx context.Context, drv types.VCSDriver, root string, p
 	}
 	slices.Sort(changed)
 	changed = slices.Compact(changed)
-	scopes, err := RelinkScopes(ctx, projects, root)
+	scopes, err := relinkScopes(ctx, projects, root)
 	if err != nil {
 		return nil, err
 	}
 	return buildInputs(changed, scopes), nil
 }
 
-// RelinkScopes are the root-relative globs, "!" excluding, that the spells
-// of the project relinking ./magus say a build of [mainPackage] reads. Each
-// spell's mgs_getScopes command runs in that project's directory with the
-// package appended. No such target, no spell declaring the export, and a
-// command that fails are errors that say the build inputs are unknown.
-func RelinkScopes(ctx context.Context, projects []*types.Project, root string) ([]string, error) {
+// relinkScopes are the root-relative globs, "!" excluding, that the spells
+// of the project relinking ./magus print for [mainPackage]. A missing target
+// or export, or a failed command, leaves the build inputs unknown.
+func relinkScopes(ctx context.Context, projects []*types.Project, root string) ([]string, error) {
 	p := relinkingProject(projects)
 	if p == nil {
 		return nil, fmt.Errorf("job: no target in %s relinks ./%s, so the build inputs of ./%s are unknown", root, binaryName, binaryName)
@@ -515,13 +513,13 @@ func RelinkScopes(ctx context.Context, projects []*types.Project, root string) (
 			continue
 		}
 		declared = true
-		listed, err := runScopes(ctx, *c, dir)
+		listed, err := runScopes(ctx, sp.Name(), *c, dir)
 		if err != nil {
-			return nil, fmt.Errorf("job: the %s spell's mgs_getScopes: %w", sp.Name(), err)
+			return nil, err
 		}
-		found, err := parseScopes(listed, root, dir)
+		found, err := parseScopes(sp.Name(), listed, root, dir)
 		if err != nil {
-			return nil, fmt.Errorf("job: the %s spell's mgs_getScopes: %w", sp.Name(), err)
+			return nil, err
 		}
 		scopes = append(scopes, found...)
 	}
@@ -545,7 +543,7 @@ func relinkingProject(projects []*types.Project) *types.Project {
 	return nil
 }
 
-func runScopes(ctx context.Context, c spells.Command, dir string) (string, error) {
+func runScopes(ctx context.Context, spell string, c spells.Command, dir string) (string, error) {
 	argv := append(slices.Clone(c.Args), mainPackage)
 	cmd := exec.CommandContext(ctx, c.Bin, argv...)
 	cmd.Dir = dir
@@ -553,7 +551,8 @@ func runScopes(ctx context.Context, c spells.Command, dir string) (string, error
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("`%s %s` in %s says %q: %w", c.Bin, strings.Join(argv, " "), dir, strings.TrimSpace(stderr.String()), err)
+		return "", fmt.Errorf("job: the %s spell's mgs_getScopes, `%s %s` in %s, says %q: %w",
+			spell, c.Bin, strings.Join(argv, " "), dir, strings.TrimSpace(stderr.String()), err)
 	}
 	return string(out), nil
 }
@@ -561,7 +560,7 @@ func runScopes(ctx context.Context, c spells.Command, dir string) (string, error
 // parseScopes reads listed, one glob per line, absolute or relative to dir,
 // as globs relative to root. A glob outside root drops out: a lockfile
 // pins what lies there.
-func parseScopes(listed, root, dir string) ([]string, error) {
+func parseScopes(spell, listed, root, dir string) ([]string, error) {
 	base := filepath.Clean(root)
 	var scopes []string
 	for line := range strings.Lines(listed) {
@@ -579,7 +578,7 @@ func parseScopes(listed, root, dir string) ([]string, error) {
 		}
 		rel = filepath.ToSlash(rel)
 		if !doublestar.ValidatePattern(rel) {
-			return nil, fmt.Errorf("%q is not a glob", glob)
+			return nil, fmt.Errorf("job: the %s spell's mgs_getScopes printed %q, which is not a glob", spell, glob)
 		}
 		if excluded {
 			rel = "!" + rel
