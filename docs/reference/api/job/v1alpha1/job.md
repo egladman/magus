@@ -140,7 +140,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 ### JobAgentWorker
 
-JobAgentWorker says whether the warm worker takes the job: type is resume or new, and reason says why a new one starts.
+JobAgentWorker says whether the warm worker takes the job: type is resumed or new, and reason says why a new one starts.
 
 Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
 
