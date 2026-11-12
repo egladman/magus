@@ -62,7 +62,7 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": ["resume", "new"]
+              "enum": ["resumed", "new"]
             },
             "reason": {
               "type": "string",

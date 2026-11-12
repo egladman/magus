@@ -36,7 +36,7 @@ export enum<str> SymbolIndexFreshness {
 }
 
 export enum<str> WorkerType {
-    resumed = "resume",
+    resumed = "resumed",
     new = "new",
 }
 
@@ -653,14 +653,14 @@ export object AgentModel {
 }
 
 export object AgentWorker {
-    @"type": WorkerType = WorkerType.resumed,
+    @"type": WorkerType,
     reason: str = "",
 }
 
 export object AgentSpec {
     model: AgentModel = AgentModel{},
     instructions: str = "",
-    worker: AgentWorker = AgentWorker{},
+    worker: AgentWorker,
 }
 
 export object JobModelTier {

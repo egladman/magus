@@ -539,7 +539,7 @@ entries carried over" kept membership a list, so it is replaced, as Eli approved
 - **Membership is reach.** A type crosses when a host module's method signature, a
   provider op, or a declared root reaches it, directly or through a field, slice, map,
   pointer or callback. A field added to a crossing struct crosses with it, and no list is
-  edited.
+  edited. `buzzgen.Reach` walks the closure, and magus-utils only hands it the roots.
 - **Direction is reach too**, as part 2 said. A parameter crosses in, a result crosses
   out, and a callback's parameters cross opposite to the callback. In gets a decoder, out
   gets an encoder. `RuntimeObject` and `inboundTypes` are deleted.

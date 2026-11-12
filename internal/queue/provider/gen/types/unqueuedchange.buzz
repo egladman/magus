@@ -6,9 +6,9 @@
 // `go generate`, never this file.
 
 export object QueueUnqueuedChange {
-    id: str = "",
+    id: str,
     repo: str = "",
-    head: str = "",
+    head: str,
     title: str = "",
     author: str = "",
     branch: str = "",

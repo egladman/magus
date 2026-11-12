@@ -48,6 +48,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ChangeRiskFunction", Zero: types.ChangeRiskFunction{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectChangeRiskFunction(v.(types.ChangeRiskFunction), enums)
 	}},
+	{Name: "Charm", Zero: spells.Charm{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharm(v.(spells.Charm), enums) }},
 	{Name: "CharmConflict", Zero: spells.CharmConflict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmConflict(v.(spells.CharmConflict)) }},
 	{Name: "CharmDeclaration", Zero: types.CharmDeclaration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmDeclaration(v.(types.CharmDeclaration)) }},
 	{Name: "CharmEntry", Zero: types.CharmEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmEntry(v.(types.CharmEntry)) }},
@@ -163,6 +164,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "FileReport", Zero: types.FileReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileReport(v.(types.FileReport)) }},
 	{Name: "FileStat", Zero: types.FileStat{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileStat(v.(types.FileStat)) }},
 	{Name: "FindReviewRequest", Zero: types.FindReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFindReviewRequest(v.(types.FindReviewRequest)) }},
+	{Name: "Finding", Zero: types.Finding{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFinding(v.(types.Finding)) }},
 	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
 	{Name: "FunctionGap", Zero: types.FunctionGap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFunctionGap(v.(types.FunctionGap), enums) }},
 	{Name: "Goal", Zero: types.Goal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGoal(v.(types.Goal), enums) }},
@@ -182,6 +184,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectHarnessInstallation(v.(types.HarnessInstallation), enums)
 	}},
 	{Name: "HarnessWired", Zero: types.HarnessWired{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessWired(v.(types.HarnessWired)) }},
+	{Name: "Hint", Zero: spells.Hint{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHint(v.(spells.Hint)) }},
 	{Name: "History", Zero: types.History{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHistory(v.(types.History), enums) }},
 	{Name: "Holds", Zero: types.Holds{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHolds(v.(types.Holds), enums) }},
 	{Name: "Hotspots", Zero: types.Hotspots{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHotspots(v.(types.Hotspots)) }},
@@ -284,6 +287,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ModuleFieldEntry", Zero: types.ModuleFieldEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleFieldEntry(v.(types.ModuleFieldEntry)) }},
 	{Name: "ModuleMethodEntry", Zero: types.ModuleMethodEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleMethodEntry(v.(types.ModuleMethodEntry)) }},
 	{Name: "ModuleObjectEntry", Zero: types.ModuleObjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleObjectEntry(v.(types.ModuleObjectEntry)) }},
+	{Name: "NeighborhoodOptions", Zero: types.KnowledgeNeighborhoodOptions{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectKnowledgeNeighborhoodOptions(v.(types.KnowledgeNeighborhoodOptions), enums)
+	}},
 	{Name: "NeighborhoodResult", Zero: types.KnowledgeNeighborhoodOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeNeighborhoodOutput(v.(types.KnowledgeNeighborhoodOutput), enums)
 	}},
@@ -293,6 +299,8 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "OutputRef", Zero: types.OutputRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOutputRef(v.(types.OutputRef)) }},
 	{Name: "Ownership", Zero: types.Ownership{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOwnership(v.(types.Ownership)) }},
 	{Name: "OwnershipEntry", Zero: types.OwnershipEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectOwnershipEntry(v.(types.OwnershipEntry)) }},
+	{Name: "PatchOp", Zero: spells.PatchOp{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPatchOp(v.(spells.PatchOp), enums) }},
+	{Name: "Path", Zero: types.Path{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPath(v.(types.Path)) }},
 	{Name: "PathResult", Zero: types.KnowledgePathOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgePathOutput(v.(types.KnowledgePathOutput), enums)
 	}},
@@ -350,6 +358,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "QueueRetargetRequest", Zero: queuetypes.RetargetRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectQueueRetargetRequest(v.(queuetypes.RetargetRequest))
 	}},
+	{Name: "QueueReview", Zero: queuetypes.Review{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectQueueReview(v.(queuetypes.Review)) }},
 	{Name: "QueueReviewsRequest", Zero: queuetypes.ReviewsRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectQueueReviewsRequest(v.(queuetypes.ReviewsRequest))
 	}},

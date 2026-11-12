@@ -6,7 +6,7 @@
 // `go generate`, never this file.
 
 export object QueueGreenChange {
-    id: str = "",
-    repo: str = "",
-    head: str = "",
+    id: str,
+    repo: str,
+    head: str,
 }
