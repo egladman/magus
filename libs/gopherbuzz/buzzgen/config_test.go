@@ -57,6 +57,29 @@ func (s *ConfigSuite) TestTheZeroCaseDefaultsToNone() {
 	s.Equal(DefaultZeroCase, cfg.Types()[0].ZeroCase())
 }
 
+func (s *ConfigSuite) TestAnUnlistedTypeTakesItsPackageSettings() {
+	cfg, err := s.parse(layeredConfig)
+	s.Require().NoError(err)
+	ref := cfg.Ref("example.com/a", "Reached")
+	s.Equal("Reached", ref.BuzzName())
+	s.Equal("fs", *ref.Settings.Module)
+	s.Equal("unset", ref.ZeroCase())
+	s.Equal("WalkStep", cfg.Ref("example.com/a", "Step").BuzzName())
+}
+
+func (s *ConfigSuite) TestAMirrorNamesTheRecordATypeCrossesAs() {
+	cfg, err := s.parse("version: v1alpha1\npackages: {p: {types: {Status: {config: {mirror: StatusRecord}}}}}\n")
+	s.Require().NoError(err)
+	s.Equal("StatusRecord", cfg.Ref("p", "Status").MirrorName())
+	s.Empty(cfg.Ref("p", "Other").MirrorName())
+}
+
+func (s *ConfigSuite) TestOnlyATypeMaySetMirror() {
+	_, err := s.parse("version: v1alpha1\nmirror: X\npackages: {p: {config: {mirror: Y}}}\n")
+	s.ErrorContains(err, "mirror is set at the top level; only a type may set it")
+	s.ErrorContains(err, "packages.p.config.mirror is set; only a type may set it")
+}
+
 func (s *ConfigSuite) TestAnUnknownKeyIsRefused() {
 	_, err := s.parse("version: v1alpha1\nstray: 1\n")
 	s.ErrorContains(err, "field stray not found")

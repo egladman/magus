@@ -56,6 +56,10 @@ type Settings struct {
 	CasesFrom []string `yaml:"casesFrom,omitempty"`
 	// PkgName is the Go package name a go or go-decode output declares.
 	PkgName *string `yaml:"pkgname,omitempty"`
+	// Mirror names the struct in the same package whose mirror this one
+	// crosses as, for a type the host converts before it reaches Buzz.
+	// Only a type may set it.
+	Mirror *string `yaml:"mirror,omitempty"`
 }
 
 // DefaultZeroCase names the zero case when no level sets zeroCase.
@@ -87,6 +91,9 @@ func (s Settings) over(child Settings) Settings {
 	}
 	if child.Required != nil {
 		out.Required = child.Required
+	}
+	if child.Mirror != nil {
+		out.Mirror = child.Mirror
 	}
 	if child.Cases != nil {
 		out.Cases = map[string]string{}
@@ -211,9 +218,15 @@ func (c Config) Validate() error {
 	if c.Settings.Name != nil {
 		errs = append(errs, errors.New("name is set at the top level; only a type may set it"))
 	}
+	if c.Settings.Mirror != nil {
+		errs = append(errs, errors.New("mirror is set at the top level; only a type may set it"))
+	}
 	for _, pkg := range sortedKeys(c.Packages) {
 		if c.Packages[pkg].Config.Name != nil {
 			errs = append(errs, fmt.Errorf("packages.%s.config.name is set; only a type may set it", pkg))
+		}
+		if c.Packages[pkg].Config.Mirror != nil {
+			errs = append(errs, fmt.Errorf("packages.%s.config.mirror is set; only a type may set it", pkg))
 		}
 	}
 	for _, name := range sortedKeys(c.Modules.Dynamic) {
@@ -263,6 +276,21 @@ func (c Config) Types() []TypeRef {
 	return refs
 }
 
+// Ref is the type pkg.name with its settings layered. A type the config
+// does not list takes its package's and the top level's settings.
+func (c Config) Ref(pkg, name string) TypeRef {
+	p := c.Packages[pkg]
+	return TypeRef{Package: pkg, Name: name, Settings: c.Settings.over(p.Config).over(p.Types[name].Config)}
+}
+
+// MirrorName is the struct whose mirror the type crosses as, or "".
+func (r TypeRef) MirrorName() string {
+	if r.Settings.Mirror == nil {
+		return ""
+	}
+	return *r.Settings.Mirror
+}
+
 // PkgName is the Go package name the named output declares: its own
 // pkgname, else the top level's, else "" for the generator's default.
 func (c Config) PkgName(output string) string {
@@ -275,10 +303,11 @@ func (c Config) PkgName(output string) string {
 	return ""
 }
 
-// PackagePaths lists every package the config names, sorted.
-func (c Config) PackagePaths() []string {
+// PackagePaths lists every package the config names, and the extra ones
+// given, sorted.
+func (c Config) PackagePaths(extra ...string) []string {
 	paths := sortedKeys(c.Packages)
-	extra := []string{c.Modules.Package}
+	extra = append(slices.Clone(extra), c.Modules.Package)
 	for _, ref := range c.Types() {
 		extra = append(extra, ref.Settings.CasesFrom...)
 	}

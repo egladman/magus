@@ -20,11 +20,13 @@ type Program struct {
 const loadMode = packages.NeedName | packages.NeedTypes | packages.NeedSyntax |
 	packages.NeedTypesInfo | packages.NeedImports | packages.NeedDeps
 
-// Load type-checks every package cfg names, from the module at dir. A
-// type error inside an output buzzgen writes is tolerated, since a stale
-// output is what a run replaces; any other load error stops it.
-func Load(dir string, cfg Config) (*Program, error) {
-	loaded, err := packages.Load(&packages.Config{Mode: loadMode, Dir: dir}, cfg.PackagePaths()...)
+// Load type-checks every package cfg names, and the extra ones a caller
+// reached, from the module at dir in one load. A type error inside an
+// output buzzgen writes is tolerated, since a stale output is what a run
+// replaces; any other load error stops it.
+func Load(dir string, cfg Config, extra ...string) (*Program, error) {
+	paths := cfg.PackagePaths(extra...)
+	loaded, err := packages.Load(&packages.Config{Mode: loadMode, Dir: dir}, paths...)
 	if err != nil {
 		return nil, fmt.Errorf("buzzgen: load: %w", err)
 	}
@@ -38,7 +40,7 @@ func Load(dir string, cfg Config) (*Program, error) {
 			}
 		}
 	}
-	for _, path := range cfg.PackagePaths() {
+	for _, path := range paths {
 		if pkg, ok := p.pkgs[path]; !ok || pkg.Types == nil {
 			errs = append(errs, fmt.Errorf("package %s did not load", path))
 		}
