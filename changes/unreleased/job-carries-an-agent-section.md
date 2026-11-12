@@ -2,6 +2,6 @@
 
 - **Breaking: a job's model, criteria and fresh_reason move into one `agent`
   section.** It holds `model {id, tier}`, `instructions` and `worker {type, reason}`,
-  where `type` is always `resume` or `new`. `job fork --criteria` is `--instructions`,
+  where `type` is always `resumed` or `new`. `job fork --criteria` is `--instructions`,
   and `--new-worker <reason>` skips the warm worker. `jobs.jsonl` migrates once.
 - **`job fork --timeout` takes a duration.** A bare number means minutes.
