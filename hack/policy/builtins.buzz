@@ -26,6 +26,8 @@ export final BUILTINS: {str: any} = {
     // transcript search a scout left behind ran for four.
     "background-unbounded": {"decision": "deny", "ceiling_minutes": 30},
     "background-silent": {"decision": "deny", "advise_minutes": 30, "deny_minutes": 60},
+    // Temporary: a cloud container that cannot pass ci pushes for CI to gate.
+    "push-unverified": {"decision": "advise"},
 };
 
 // Evidence for the rules this repository set to deny before ADR 0013 made deny the
