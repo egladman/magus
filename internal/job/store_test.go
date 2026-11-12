@@ -55,7 +55,7 @@ func tempStore(t *testing.T, root string) *Store {
 func lease(id string) types.Job {
 	return types.Job{
 		ID:         id,
-		Agent:      &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: "standard"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
+		Agent:      &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: "bounded"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
 		Checkpoint: "abc123",
 		WritePaths: []string{"internal/" + id},
 		DenyPaths:  []string{"MAGUS.md"},
@@ -1645,11 +1645,11 @@ func (s *agentSectionSuite) TestCriteriaAndATierNameMoveUnderAgent() {
 		`"model_tier":{"name":"principal","rank":2,"skills":"short","source":"row"}}`)
 	s.Equal(&agent.Spec{
 		Instructions: "ship it",
-		Model:        agent.Model{Tier: "principal"},
+		Model:        agent.Model{Tier: "design"},
 		Worker:       agent.Worker{Type: agent.WorkerTypeResumed},
 	}, row.Agent)
 	s.Require().NotNil(row.ModelTier)
-	s.Equal("principal", row.ModelTier.Name, "the resolved tier stays on the row")
+	s.Equal("design", row.ModelTier.Name, "the resolved tier stays on the row, respelled by the four-tier migration")
 }
 
 func (s *agentSectionSuite) TestAModelTheTierMappedBecomesAnID() {

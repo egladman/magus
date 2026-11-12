@@ -102,7 +102,7 @@ magus\lifecycle.provider(eol);
 import "spells/github/review" as ghReview;
 magus\review.provider(ghReview);
 
-import "magus/modeltiers";
+import "magus/modeltiers" as modeltiers;
 import "./hack/magusfile/model-tiers" as tierhost;
 
 // The return value is the harness id a hosts key has to be. claude-code-mod wires
@@ -113,7 +113,7 @@ final claudeID = magus\harness.provider(claude);
 _ = magus\harness.provider(claudeMod);
 final opencodeID = magus\harness.provider(opencode);
 
-magus\modelTiers(modeltiers\ModelTier, default: modeltiers\ModelTier.economy,
+magus\modelTiers(modeltiers\ModelTier, default: modeltiers\ModelTier.routine,
     hosts: {
         cursorID: tierhost\cursor,
         codexID: tierhost\codex,

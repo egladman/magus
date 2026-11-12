@@ -307,7 +307,7 @@ export fun mgs_getLimits() > Limits {
 //
 // tier is the case of the shipped model tiers (magus/modeltiers) this exact id runs, "" for
 // none: a workspace that declares no tiers of its own maps each case to the row naming it,
-// and the agents magus ships run on the economy row. alias is the short name the host takes
+// and the agents magus ships run on the routine row. alias is the short name the host takes
 // for the model in a spawn, matched exactly, "" for none.
 fun claude_model(id: str, tier: str, alias: str, window: int, price: Price) > ModelRow {
     return ModelRow{id = id, tier = tier, alias = alias, window = window, price = price};
@@ -317,15 +317,15 @@ fun claude_models() > [ModelRow] {
     return [
         claude_model("claude-fable-5-1", tier: "", alias: "", window: 1000000,
             price: Price{input = 10.0, cacheWrite5m = 12.5, cacheWrite1h = 20.0, cacheRead = 0.25, output = 50.0}),
-        claude_model("claude-opus-5-5", tier: "principal", alias: "opus", window: 1000000,
+        claude_model("claude-opus-5-5", tier: "design", alias: "opus", window: 1000000,
             price: Price{input = 4.0, cacheWrite5m = 5.0, cacheWrite1h = 8.0, cacheRead = 0.2, output = 20.0}),
-        claude_model("claude-fable-5-2", tier: "principal", alias: "fable", window: 1000000,
+        claude_model("claude-fable-5-2", tier: "frontier", alias: "fable", window: 1000000,
             price: Price{input = 10.0, cacheWrite5m = 12.5, cacheWrite1h = 20.0, cacheRead = 0.25, output = 50.0}),
-        claude_model("claude-sonnet-5-5", tier: "standard", alias: "sonnet", window: 1000000,
+        claude_model("claude-sonnet-5-5", tier: "bounded", alias: "sonnet", window: 1000000,
             price: Price{input = 2.0, cacheWrite5m = 2.5, cacheWrite1h = 4.0, cacheRead = 0.1, output = 10.0}),
         // The one current model priced by prompt length: every category is 5x above 100000
         // prompt tokens, cache reads and writes included.
-        ModelRow{id = "claude-haiku-5-5", tier = "economy", alias = "haiku", window = 1000000,
+        ModelRow{id = "claude-haiku-5-5", tier = "routine", alias = "haiku", window = 1000000,
             price = Price{input = 0.1, cacheWrite5m = 0.125, cacheWrite1h = 0.2, cacheRead = 0.01, output = 0.5},
             step = PriceStep{above = 100000, multiplier = 5.0}},
         claude_model("claude-haiku-4-5", tier: "", alias: "", window: 200000,
@@ -478,7 +478,7 @@ test "mgs_listModels ships the six Claude rows, and only haiku-5-5 steps its pri
     assert\equal(steps.join(","), "claude-haiku-5-5", "the one model priced by prompt length");
 }
 
-test "each shipped tier runs on its rows, by exact id, each under its own alias" {
+test "each shipped tier runs on one row, by exact id, under its own alias" {
     final tiers = mut {<str: str>};
     final aliases = mut {<str: str>};
     foreach (row in claude_models()) {
@@ -491,11 +491,12 @@ test "each shipped tier runs on its rows, by exact id, each under its own alias"
         assert\isTrue(aliases[row.alias] == null, "alias {row.alias} names one row");
         aliases[row.alias] = row.id;
     }
-    assert\equal(tiers["economy"] ?? "", "claude-haiku-5-5", "the shipped agents' tier");
-    assert\equal(tiers["standard"] ?? "", "claude-sonnet-5-5", "the default tier");
-    assert\equal(tiers["principal"] ?? "", "claude-opus-5-5,claude-fable-5-2", "the top tier's two rows");
-    assert\equal(aliases["opus"] ?? "", "claude-opus-5-5", "the top tier's default alias");
-    assert\equal(aliases["fable"] ?? "", "claude-fable-5-2", "the second top-tier row's alias");
+    assert\equal(tiers["routine"] ?? "", "claude-haiku-5-5", "the shipped agents' tier");
+    assert\equal(tiers["bounded"] ?? "", "claude-sonnet-5-5", "the default tier");
+    assert\equal(tiers["design"] ?? "", "claude-opus-5-5", "the design tier runs Opus");
+    assert\equal(tiers["frontier"] ?? "", "claude-fable-5-2", "the frontier tier runs Fable");
+    assert\equal(aliases["opus"] ?? "", "claude-opus-5-5", "the design tier's alias");
+    assert\equal(aliases["fable"] ?? "", "claude-fable-5-2", "the frontier tier's alias");
     assert\equal(aliases.len(), 4, "only the tiered rows carry an alias");
 }
 

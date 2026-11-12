@@ -38,9 +38,9 @@ $ magus job apply --stdin <<'EOF'
 {"api_version": "magus.job/v1alpha1", "id": "upgrade/web", "agent": {"instructions": "web runs left-pad 1.3", "worker": {"type": "resumed"}}, "write_paths": ["web/deps.txt"], "check": {"target": "test", "project": "web"}}
 EOF
 created upgrade/api, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 created upgrade/web, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 Each job's check is that project's own test, so `api` passing says nothing about
@@ -82,9 +82,9 @@ done
 
 ```console
 $ magus ls jobs --all
-JOB          HOLDER  STATE  MODEL     PATHS  PROOF     CHECK
-upgrade/api  ana     pass   standard  1      alone     magus run test api
-upgrade/web  ben     pass   standard  1      disjoint  magus run test web
+JOB          HOLDER  STATE  MODEL    PATHS  PROOF     CHECK
+upgrade/api  ana     pass   bounded  1      alone     magus run test api
+upgrade/web  ben     pass   bounded  1      disjoint  magus run test web
 
 not merged onto main: 2
   upgrade/api at 4482968: 1 commit(s) at 4482968 are not on main; merge 4482968 into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"magus.job/v1alpha1","id":"upgrade/api","left_unmerged":"<why>"}
@@ -136,7 +136,7 @@ EOF
 updated fr/install, still running:
   write_paths +docs/fr/install.md#Installer -docs/fr/install.md
 created fr/upgrading, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 The part after `#` names a heading the diff driver matches. Once Ben takes his job,
@@ -146,9 +146,9 @@ the board shows the shared page and why it is not a conflict:
 
 ```console
 $ magus ls jobs
-JOB           HOLDER  STATE    MODEL     PATHS  PROOF     CHECK
-fr/install    ana     running  standard  1      alone     magus run lint .
-fr/upgrading  ben     running  standard  1      disjoint  magus run lint .
+JOB           HOLDER  STATE    MODEL    PATHS  PROOF     CHECK
+fr/install    ana     running  bounded  1      alone     magus run lint .
+fr/upgrading  ben     running  bounded  1      disjoint  magus run lint .
 
 overlaps
   fr/install and fr/upgrading claim common ground
@@ -176,9 +176,9 @@ $ magus job apply --stdin <<'EOF'
 {"api_version": "magus.job/v1alpha1", "id": "release-1.3/notes", "agent": {"instructions": "release notes exist for 1.3", "worker": {"type": "resumed"}}, "write_paths": ["notes/1.3.md"], "goals": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
 EOF
 created release-1.3/changelog, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 created release-1.3/notes, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 Two people take an item each in their own worktree. The changelog gets written and committed
@@ -204,9 +204,9 @@ The board says both items came back, and nothing more:
 
 ```console
 $ magus ls jobs
-JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
-release-1.3/changelog  changelog  exited  standard  1      alone     -
-release-1.3/notes      notes      exited  standard  1      disjoint  -
+JOB                    HOLDER     STATE   MODEL    PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  exited  bounded  1      alone     -
+release-1.3/notes      notes      exited  bounded  1      disjoint  -
 
 not merged onto main: 1
   release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"magus.job/v1alpha1","id":"release-1.3/changelog","left_unmerged":"<why>"}
@@ -251,9 +251,9 @@ name that job. The board is the checklist:
 
 ```console
 $ magus ls jobs --all
-JOB                    HOLDER     STATE    MODEL     PATHS  PROOF     CHECK
-release-1.3/changelog  changelog  pass     standard  1      alone     -
-release-1.3/notes      notes      running  standard  1      disjoint  -
+JOB                    HOLDER     STATE    MODEL    PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  pass     bounded  1      alone     -
+release-1.3/notes      notes      running  bounded  1      disjoint  -
 
 not merged onto main: 1
   release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"magus.job/v1alpha1","id":"release-1.3/changelog","left_unmerged":"<why>"}

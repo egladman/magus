@@ -1,8 +1,10 @@
 package job
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
@@ -21,7 +23,7 @@ func tierSet(t *testing.T, bounds ...agent.ModelTierBounds) *agent.ModelTierSet 
 	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
 		Enum:    "ModelTier",
 		Site:    "magusfile.buzz:3",
-		Cases:   []string{"economy", "standard", "principal"},
+		Cases:   []string{"routine", "bounded", "design"},
 		Default: 1,
 		Bounds:  bounds,
 		Skills:  []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort, agent.SkillVariantShort},
@@ -63,17 +65,17 @@ func (s *requestedModelSuite) resolve(m agent.Model) (agent.JobModelTier, error)
 }
 
 func (s *requestedModelSuite) TestATierAndTheIDItMapsToAgree() {
-	got, err := s.resolve(agent.Model{ID: "opus", Tier: "principal"})
+	got, err := s.resolve(agent.Model{ID: "opus", Tier: "design"})
 	s.Require().NoError(err)
 	s.Equal(agent.JobModelTier{
-		Name: "principal", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
-		Reason: "the job names the tier principal", Model: "opus",
+		Name: "design", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
+		Reason: "the job names the tier design", Model: "opus",
 	}, got, "the tier decides, and the id is the model the host spawns")
 }
 
 func (s *requestedModelSuite) TestATierAndAnIDOfAnotherTierAreRefused() {
-	_, err := s.resolve(agent.Model{ID: "haiku", Tier: "principal"})
-	s.ErrorContains(err, "the job requests the tier principal and the model haiku, which harness claude-code maps to the tier economy")
+	_, err := s.resolve(agent.Model{ID: "haiku", Tier: "design"})
+	s.ErrorContains(err, "the job requests the tier design and the model haiku, which harness claude-code maps to the tier routine")
 }
 
 func (s *requestedModelSuite) TestATierTheWorkspaceDoesNotDeclareIsRefused() {
@@ -82,20 +84,20 @@ func (s *requestedModelSuite) TestATierTheWorkspaceDoesNotDeclareIsRefused() {
 }
 
 func (s *requestedModelSuite) TestAnIDNamingATierIsNotReadAsOne() {
-	got, err := s.resolve(agent.Model{ID: "principal"})
+	got, err := s.resolve(agent.Model{ID: "design"})
 	s.Require().NoError(err)
-	s.Equal("standard", got.Name, "an id no host maps takes the default")
+	s.Equal("bounded", got.Name, "an id no host maps takes the default")
 }
 
 func (s *requestedModelSuite) TestTheStoreReadsAModelWord() {
 	st := NewStore(Location{ModelTiers: tierSet(s.T())})
-	s.Equal(agent.Model{Tier: "principal"}, st.ModelRequest("principal"))
+	s.Equal(agent.Model{Tier: "design"}, st.ModelRequest("design"))
 	s.Equal(agent.Model{ID: "opus"}, st.ModelRequest("opus"))
-	s.Equal(agent.Model{ID: "principal"}, NewStore(Location{}).ModelRequest("principal"), "with no tiers every word is an id")
+	s.Equal(agent.Model{ID: "design"}, NewStore(Location{}).ModelRequest("design"), "with no tiers every word is an id")
 }
 
-func economyAnswer() *agent.JobModelTier {
-	return &agent.JobModelTier{Name: "economy", Rank: 0, Skills: agent.SkillVariantFull, Reason: "small checked job", Site: "magusfile.buzz:20"}
+func routineAnswer() *agent.JobModelTier {
+	return &agent.JobModelTier{Name: "routine", Rank: 0, Skills: agent.SkillVariantFull, Reason: "small checked job", Site: "magusfile.buzz:20"}
 }
 
 func TestNewModelTierRequestDerivesKindFromTheRow(t *testing.T) {
@@ -147,14 +149,14 @@ func TestNewModelTierRequestCarriesTheRowAndItsParentsRank(t *testing.T) {
 	t.Parallel()
 
 	set := tierSet(t)
-	parent := types.Job{ID: "wave", ModelTier: &agent.JobModelTier{Name: "principal", Rank: 2}}
+	parent := types.Job{ID: "wave", ModelTier: &agent.JobModelTier{Name: "design", Rank: 2}}
 	row := types.Job{
-		ID: "wave/a", Parent: "wave", Agent: &agent.Spec{Instructions: "do it", Model: agent.Model{Tier: "economy"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, ReadOnly: false,
+		ID: "wave/a", Parent: "wave", Agent: &agent.Spec{Instructions: "do it", Model: agent.Model{Tier: "routine"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, ReadOnly: false,
 		WritePaths: []string{"a.go"}, ReadPaths: []string{"b"}, DependsOn: []string{"wave/b"},
 		Check: &types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "X"}},
 		Goals: []types.Goal{{ID: "g", Kind: types.GoalKindPaths, Paths: []string{"a.go"}}},
 	}
-	history := []types.ModelTierRecord{{Rank: 0, ModelTier: "economy", Jobs: 12}}
+	history := []types.ModelTierRecord{{Rank: 0, ModelTier: "routine", Jobs: 12}}
 
 	req := newModelTierRequest(row, []types.Job{parent, row}, set, nil, history)
 
@@ -163,7 +165,7 @@ func TestNewModelTierRequestCarriesTheRowAndItsParentsRank(t *testing.T) {
 	require.NotNil(t, req.DeclaredRank)
 	assert.Equal(t, 0, *req.DeclaredRank)
 	wantReq := req
-	wantReq.Model, wantReq.History, wantReq.Goals = agent.Model{Tier: "economy"}, history, row.Goals
+	wantReq.Model, wantReq.History, wantReq.Goals = agent.Model{Tier: "routine"}, history, row.Goals
 	wantReq.WritePaths, wantReq.ReadPaths, wantReq.DependsOn = []string{"a.go"}, []string{"b"}, []string{"wave/b"}
 	assert.Equal(t, wantReq, req)
 	assert.Empty(t, req.WriteProjects, "a project is a graph fact the store does not hold")
@@ -203,17 +205,17 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 	}{
 		{
 			name:        "a row naming a tier wins and the matrix never runs",
-			row:         types.Job{ID: "a", Agent: tierRequest("principal")},
-			matrix:      countingMatrix{answer: economyAnswer()},
-			want:        agent.JobModelTier{Name: "principal", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow, Reason: "the job names the tier principal"},
+			row:         types.Job{ID: "a", Agent: tierRequest("design")},
+			matrix:      countingMatrix{answer: routineAnswer()},
+			want:        agent.JobModelTier{Name: "design", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow, Reason: "the job names the tier design"},
 			matrixCalls: 0,
 		},
 		{
 			name:   "a model naming no tier is kept with the default's rank",
 			row:    types.Job{ID: "a", Agent: modelRequest("gpt")},
-			matrix: countingMatrix{answer: economyAnswer()},
+			matrix: countingMatrix{answer: routineAnswer()},
 			want: agent.JobModelTier{
-				Name: "standard", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
+				Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
 				Reason: "the job names the model gpt, which no model tier maps to", Model: "gpt",
 			},
 			matrixCalls: 0,
@@ -221,10 +223,10 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 		{
 			name:   "a model a host maps to a tier takes that tier and keeps the model",
 			row:    types.Job{ID: "a", Agent: modelRequest("opus")},
-			matrix: countingMatrix{answer: economyAnswer()},
+			matrix: countingMatrix{answer: routineAnswer()},
 			want: agent.JobModelTier{
-				Name: "principal", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
-				Reason: "the job names the model opus, which harness claude-code maps to the tier principal", Model: "opus",
+				Name: "design", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
+				Reason: "the job names the model opus, which harness claude-code maps to the tier design", Model: "opus",
 			},
 			matrixCalls: 0,
 		},
@@ -233,23 +235,23 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 			row:    types.Job{ID: "a", Agent: modelRequest("sonnet")},
 			matrix: countingMatrix{},
 			want: agent.JobModelTier{
-				Name: "standard", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
-				Reason: "the job names the model sonnet, which harness claude-code maps to the tier standard", Model: "sonnet",
+				Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
+				Reason: "the job names the model sonnet, which harness claude-code maps to the tier bounded", Model: "sonnet",
 			},
 			matrixCalls: 0,
 		},
 		{
 			name:        "the matrix answers when the row names nothing",
 			row:         types.Job{ID: "a"},
-			matrix:      countingMatrix{answer: economyAnswer()},
-			want:        agent.JobModelTier{Name: "economy", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
+			matrix:      countingMatrix{answer: routineAnswer()},
+			want:        agent.JobModelTier{Name: "routine", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
 			matrixCalls: 1,
 		},
 		{
 			name:        "a matrix that declines leaves the default",
 			row:         types.Job{ID: "a"},
 			matrix:      countingMatrix{},
-			want:        agent.JobModelTier{Name: "standard", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceDefault, Reason: "the declared default", Site: "magusfile.buzz:3"},
+			want:        agent.JobModelTier{Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceDefault, Reason: "the declared default", Site: "magusfile.buzz:3"},
 			matrixCalls: 1,
 		},
 	}
@@ -273,7 +275,7 @@ func TestAssignModelTierWithoutAMatrixTakesTheDefault(t *testing.T) {
 	got, err := resolveModelTier(t.Context(), set, nil, nil, newModelTierRequest(row, nil, set, nil, nil), row)
 	require.NoError(t, err)
 	wantTier := got
-	wantTier.Source, wantTier.Name = agent.ModelTierSourceDefault, "standard"
+	wantTier.Source, wantTier.Name = agent.ModelTierSourceDefault, "bounded"
 	wantTier.Site = "magusfile.buzz:3" // the default record names the declaration
 	assert.Equal(t, wantTier, got)
 }
@@ -282,15 +284,15 @@ func TestResolveModelTierReadsHarnessModelRowAliases(t *testing.T) {
 	t.Parallel()
 
 	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
-		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
+		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"routine", "bounded", "design"}, Default: 1,
 		Bounds: []agent.ModelTierBounds{{}, {}, {}},
 		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort, agent.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	models := []types.ModelPricing{
-		{ID: "claude-haiku-9", Alias: "haiku", Tier: "economy"},
-		{ID: "claude-sonnet-9", Alias: "sonnet", Tier: "standard"},
-		{ID: "claude-opus-9", Alias: "opus", Tier: "principal"},
+		{ID: "claude-haiku-9", Alias: "haiku", Tier: "routine"},
+		{ID: "claude-sonnet-9", Alias: "sonnet", Tier: "bounded"},
+		{ID: "claude-opus-9", Alias: "opus", Tier: "design"},
 		{ID: "claude-untiered-9", Alias: "loose"},
 	}
 	tests := []struct {
@@ -299,12 +301,12 @@ func TestResolveModelTierReadsHarnessModelRowAliases(t *testing.T) {
 		wantRank int
 		wantRow  bool
 	}{
-		{"haiku", "economy", 0, true},
-		{"sonnet", "standard", 1, true},
-		{"opus", "principal", 2, true},
-		{"claude-opus-9", "principal", 2, true},
-		{"loose", "standard", 1, false},
-		{"unlisted", "standard", 1, false},
+		{"haiku", "routine", 0, true},
+		{"sonnet", "bounded", 1, true},
+		{"opus", "design", 2, true},
+		{"claude-opus-9", "design", 2, true},
+		{"loose", "bounded", 1, false},
+		{"unlisted", "bounded", 1, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
@@ -372,10 +374,10 @@ func TestAssignModelTierRefusesAMatrixThatIsWrong(t *testing.T) {
 	}{
 		{"it raises", countingMatrix{err: errors.New("magus\\modelTier: the matrix raised: boom")}, "boom"},
 		{"a tier the declaration lacks", countingMatrix{answer: &agent.JobModelTier{Name: "huge", Skills: agent.SkillVariantFull, Reason: "r"}}, `"huge" is not a model tier`},
-		{"a rank the declaration disagrees with", countingMatrix{answer: &agent.JobModelTier{Name: "economy", Rank: 2, Skills: agent.SkillVariantFull, Reason: "r"}}, "ranks it 0"},
-		{"skills that are no variant", countingMatrix{answer: &agent.JobModelTier{Name: "economy", Skills: "tiny", Reason: "r"}}, "the variants are"},
-		{"no skills", countingMatrix{answer: &agent.JobModelTier{Name: "economy", Reason: "r"}}, "the variants are"},
-		{"no reason", countingMatrix{answer: &agent.JobModelTier{Name: "economy", Skills: agent.SkillVariantFull}}, "gave no reason"},
+		{"a rank the declaration disagrees with", countingMatrix{answer: &agent.JobModelTier{Name: "routine", Rank: 2, Skills: agent.SkillVariantFull, Reason: "r"}}, "ranks it 0"},
+		{"skills that are no variant", countingMatrix{answer: &agent.JobModelTier{Name: "routine", Skills: "tiny", Reason: "r"}}, "the variants are"},
+		{"no skills", countingMatrix{answer: &agent.JobModelTier{Name: "routine", Reason: "r"}}, "the variants are"},
+		{"no reason", countingMatrix{answer: &agent.JobModelTier{Name: "routine", Skills: agent.SkillVariantFull}}, "gave no reason"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -401,20 +403,20 @@ func TestRefuseModelTierLimits(t *testing.T) {
 	at := func(id, tier string, state types.JobState) types.Job {
 		return types.Job{ID: id, State: state, ModelTier: &agent.JobModelTier{Name: tier}}
 	}
-	economy := agent.JobModelTier{Name: "economy", Rank: 0}
+	routine := agent.JobModelTier{Name: "routine", Rank: 0}
 	tests := []struct {
 		name     string
 		rows     []types.Job
 		assigned agent.JobModelTier
 		wantErr  string
 	}{
-		{"under the bound", []types.Job{at("a", "economy", types.StateRunning)}, economy, ""},
-		{"at the bound", []types.Job{at("a", "economy", types.StateRunning), at("b", "economy", types.StateDeclared)}, economy, "3 live jobs at model tier economy"},
-		{"ended jobs do not count", []types.Job{at("a", "economy", types.StatePass), at("b", "economy", types.StateFail), at("c", "economy", types.StateRunning)}, economy, ""},
-		{"other tiers do not count", []types.Job{at("a", "principal", types.StateRunning), at("b", "principal", types.StateRunning)}, economy, ""},
-		{"a row without a tier does not count", []types.Job{{ID: "a", State: types.StateRunning}, {ID: "b", State: types.StateRunning}}, economy, ""},
-		{"no bound is unlimited", []types.Job{at("a", "standard", types.StateRunning), at("b", "standard", types.StateRunning), at("c", "standard", types.StateRunning)}, agent.JobModelTier{Name: "standard", Rank: 1}, ""},
-		{"a bound of one", []types.Job{at("a", "principal", types.StateExited)}, agent.JobModelTier{Name: "principal", Rank: 2}, "allows 1"},
+		{"under the bound", []types.Job{at("a", "routine", types.StateRunning)}, routine, ""},
+		{"at the bound", []types.Job{at("a", "routine", types.StateRunning), at("b", "routine", types.StateDeclared)}, routine, "3 live jobs at model tier routine"},
+		{"ended jobs do not count", []types.Job{at("a", "routine", types.StatePass), at("b", "routine", types.StateFail), at("c", "routine", types.StateRunning)}, routine, ""},
+		{"other tiers do not count", []types.Job{at("a", "design", types.StateRunning), at("b", "design", types.StateRunning)}, routine, ""},
+		{"a row without a tier does not count", []types.Job{{ID: "a", State: types.StateRunning}, {ID: "b", State: types.StateRunning}}, routine, ""},
+		{"no bound is unlimited", []types.Job{at("a", "bounded", types.StateRunning), at("b", "bounded", types.StateRunning), at("c", "bounded", types.StateRunning)}, agent.JobModelTier{Name: "bounded", Rank: 1}, ""},
+		{"a bound of one", []types.Job{at("a", "design", types.StateExited)}, agent.JobModelTier{Name: "design", Rank: 2}, "allows 1"},
 		{"a tier the declaration lacks", nil, agent.JobModelTier{Name: "huge"}, `"huge" is not a model tier`},
 	}
 	for _, tt := range tests {
@@ -435,8 +437,8 @@ func TestRefuseModelTierLimitsNamesTheBoundAndTheWayOut(t *testing.T) {
 	t.Parallel()
 
 	set := tierSet(t, agent.ModelTierBounds{MaxLive: 1}, agent.ModelTierBounds{}, agent.ModelTierBounds{})
-	rows := []types.Job{{ID: "a", State: types.StateRunning, ModelTier: &agent.JobModelTier{Name: "economy"}}}
-	err := refuseModelTierLimits(rows, agent.JobModelTier{Name: "economy"}, set)
+	rows := []types.Job{{ID: "a", State: types.StateRunning, ModelTier: &agent.JobModelTier{Name: "routine"}}}
+	err := refuseModelTierLimits(rows, agent.JobModelTier{Name: "routine"}, set)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `MaxLive bound declared at magusfile.buzz:3 allows 1`)
 	assert.ErrorContains(t, err, "job exit")
@@ -455,7 +457,7 @@ func tierWithin(parent, child agent.ModelTier) error { return child.Within(paren
 func TestStoreAssignsTheTierWhenARowIsCreated(t *testing.T) {
 	t.Parallel()
 
-	matrix := countingMatrix{answer: economyAnswer()}
+	matrix := countingMatrix{answer: routineAnswer()}
 	s := tieredStore(t, tierSet(t), matrix.choose)
 	row := lease("a")
 	row.Agent.Model = agent.Model{}
@@ -464,7 +466,7 @@ func TestStoreAssignsTheTierWhenARowIsCreated(t *testing.T) {
 
 	require.NotNil(t, stored.ModelTier)
 	assert.Equal(t, agent.JobModelTier{
-		Name: "economy", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix,
+		Name: "routine", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix,
 		Reason: "small checked job", Site: "magusfile.buzz:20",
 	}, *stored.ModelTier)
 	assert.Equal(t, 1, matrix.calls)
@@ -487,14 +489,14 @@ func TestStoreRecordsTheDefaultForAWorkspaceThatDeclaresNoMatrix(t *testing.T) {
 
 	require.NotNil(t, stored.ModelTier)
 	wantStored := *stored.ModelTier
-	wantStored.Source, wantStored.Name = agent.ModelTierSourceDefault, "standard"
+	wantStored.Source, wantStored.Name = agent.ModelTierSourceDefault, "bounded"
 	assert.Equal(t, wantStored, *stored.ModelTier)
 }
 
 func TestStoreReassignsOnlyWhenTheModelChanges(t *testing.T) {
 	t.Parallel()
 
-	matrix := countingMatrix{answer: economyAnswer()}
+	matrix := countingMatrix{answer: routineAnswer()}
 	s := tieredStore(t, tierSet(t), matrix.choose)
 	row := lease("a")
 	row.Agent.Model = agent.Model{}
@@ -504,13 +506,13 @@ func TestStoreReassignsOnlyWhenTheModelChanges(t *testing.T) {
 	row.Agent = agent.Instructed("reworded")
 	same := seed(t, s, row)
 	assert.Equal(t, 1, matrix.calls, "an edit that leaves the model alone does not run the matrix again")
-	assert.Equal(t, "economy", same.ModelTier.Name)
+	assert.Equal(t, "routine", same.ModelTier.Name)
 
-	row.Agent.Model = agent.Model{Tier: "principal"}
+	row.Agent.Model = agent.Model{Tier: "design"}
 	changed := seed(t, s, row)
 	assert.Equal(t, 1, matrix.calls, "a row that names a tier never reaches the matrix")
 	wantChanged := *changed.ModelTier
-	wantChanged.Name, wantChanged.Source = "principal", agent.ModelTierSourceRow
+	wantChanged.Name, wantChanged.Source = "design", agent.ModelTierSourceRow
 	assert.Equal(t, wantChanged, *changed.ModelTier)
 }
 
@@ -522,15 +524,15 @@ func TestStoreKeepsTheStoredTierAgainstAWholeRowWrite(t *testing.T) {
 	row.Agent.Model = agent.Model{}
 	first := seed(t, s, row)
 
-	row.ModelTier = &agent.JobModelTier{Name: "principal", Rank: 2, Source: agent.ModelTierSourceRow, Reason: "forged"}
+	row.ModelTier = &agent.JobModelTier{Name: "design", Rank: 2, Source: agent.ModelTierSourceRow, Reason: "forged"}
 	again := seed(t, s, row)
 	assert.Equal(t, first.ModelTier, again.ModelTier, "a caller's tier is replaced by the stored one")
 
 	forged := lease("b")
 	forged.Agent.Model = agent.Model{}
-	forged.ModelTier = &agent.JobModelTier{Name: "principal", Rank: 2, Source: agent.ModelTierSourceRow, Reason: "forged"}
+	forged.ModelTier = &agent.JobModelTier{Name: "design", Rank: 2, Source: agent.ModelTierSourceRow, Reason: "forged"}
 	created := seed(t, s, forged)
-	assert.Equal(t, "standard", created.ModelTier.Name, "a created row is assigned, whatever it sent")
+	assert.Equal(t, "bounded", created.ModelTier.Name, "a created row is assigned, whatever it sent")
 }
 
 func TestStoreAssignsNothingWithoutTiers(t *testing.T) {
@@ -545,7 +547,7 @@ func TestStoreAssignsNothingWithoutTiers(t *testing.T) {
 func TestStoreRefusesAForkPastAMaxLiveBound(t *testing.T) {
 	t.Parallel()
 
-	matrix := countingMatrix{answer: economyAnswer()}
+	matrix := countingMatrix{answer: routineAnswer()}
 	s := tieredStore(t, tierSet(t, agent.ModelTierBounds{MaxLive: 1}, agent.ModelTierBounds{}, agent.ModelTierBounds{}), matrix.choose)
 	first := lease("a")
 	first.Agent.Model = agent.Model{}
@@ -584,7 +586,7 @@ func TestStoreFailsAForkWhoseMatrixFails(t *testing.T) {
 func TestApplyDryRunAssignsNothingAndRunsNoMatrix(t *testing.T) {
 	t.Parallel()
 
-	matrix := countingMatrix{answer: economyAnswer()}
+	matrix := countingMatrix{answer: routineAnswer()}
 	s := tieredStore(t, tierSet(t), matrix.choose)
 	record := types.Declaration{ID: "wave/job", WritePaths: []string{"a.go"}, Check: forkCheck()}
 
@@ -600,7 +602,7 @@ func TestApplyDryRunAssignsNothingAndRunsNoMatrix(t *testing.T) {
 	plan, err = Apply(t.Context(), s, []types.Declaration{record}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
 	require.NotNil(t, plan[0].Next.ModelTier)
-	assert.Equal(t, "economy", plan[0].Next.ModelTier.Name)
+	assert.Equal(t, "routine", plan[0].Next.ModelTier.Name)
 	assert.Equal(t, 1, matrix.calls)
 }
 
@@ -626,7 +628,7 @@ func TestStoreFillsTheMatrixRequestWithTheProjectsThatOwnTheWritePaths(t *testin
 	assert.Equal(t, []string{"pkg/a"}, matrix.seen.WriteProjects)
 
 	named := lease("b")
-	named.Agent.Model = agent.Model{Tier: "principal"}
+	named.Agent.Model = agent.Model{Tier: "design"}
 	seed(t, s, named)
 	assert.Len(t, asked, 1, "a row that names its tier never reaches the matrix, so no one is asked")
 }
@@ -668,16 +670,16 @@ func TestStoreRefusesAChildAboveItsParentsTier(t *testing.T) {
 
 	s := tieredStore(t, tierSet(t), nil)
 	parent := lease("p")
-	parent.Agent.Model = agent.Model{Tier: "economy"}
+	parent.Agent.Model = agent.Model{Tier: "routine"}
 	seed(t, s, parent)
 
 	child := lease("c")
-	child.Parent, child.Agent.Model = "p", agent.Model{Tier: "principal"}
+	child.Parent, child.Agent.Model = "p", agent.Model{Tier: "design"}
 	_, err := s.Update(t.Context(), "c", func(cur *types.Job) { *cur = child })
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "c would run at model tier principal (rank 2)")
-	assert.ErrorContains(t, err, "its parent p was forked at economy (rank 0)")
-	assert.ErrorContains(t, err, "fork it at economy or lower (`--model economy`), or a person forks it at principal as a row of its own")
+	assert.ErrorContains(t, err, "c would run at model tier design (rank 2)")
+	assert.ErrorContains(t, err, "its parent p was forked at routine (rank 0)")
+	assert.ErrorContains(t, err, "fork it at routine or lower (`--model routine`), or a person forks it at design as a row of its own")
 	verdict := types.ClassifyRetry(err)
 	assert.False(t, verdict.Retryable)
 	assert.Equal(t, types.RetryAfterPerson, verdict.Change)
@@ -685,7 +687,7 @@ func TestStoreRefusesAChildAboveItsParentsTier(t *testing.T) {
 	child.Agent.Model = agent.Model{}
 	_, err = s.Update(t.Context(), "c", func(cur *types.Job) { *cur = child })
 	require.Error(t, err, "the declared default is held to the parent's tier too")
-	assert.ErrorContains(t, err, "c would run at model tier standard (rank 1)")
+	assert.ErrorContains(t, err, "c would run at model tier bounded (rank 1)")
 
 	rows, err := s.List()
 	require.NoError(t, err)
@@ -697,20 +699,20 @@ func TestStoreForksAChildAtOrBelowItsParentsTier(t *testing.T) {
 
 	s := tieredStore(t, tierSet(t), nil)
 	parent := lease("p")
-	parent.Agent.Model = agent.Model{Tier: "standard"}
+	parent.Agent.Model = agent.Model{Tier: "bounded"}
 	seed(t, s, parent)
 
 	equal := lease("p/equal")
-	equal.Parent, equal.Agent.Model = "p", agent.Model{Tier: "standard"}
-	assert.Equal(t, "standard", seed(t, s, equal).ModelTier.Name)
+	equal.Parent, equal.Agent.Model = "p", agent.Model{Tier: "bounded"}
+	assert.Equal(t, "bounded", seed(t, s, equal).ModelTier.Name)
 
 	lower := lease("p/lower")
 	lower.Parent, lower.Agent.Model = "p", agent.Model{ID: "haiku"}
-	assert.Equal(t, "economy", seed(t, s, lower).ModelTier.Name, "a host's model resolves to its tier and is held by rank")
+	assert.Equal(t, "routine", seed(t, s, lower).ModelTier.Name, "a host's model resolves to its tier and is held by rank")
 
 	orphan := lease("o")
-	orphan.Agent.Model = agent.Model{Tier: "principal"}
-	assert.Equal(t, "principal", seed(t, s, orphan).ModelTier.Name, "a row with no parent has no ceiling")
+	orphan.Agent.Model = agent.Model{Tier: "design"}
+	assert.Equal(t, "design", seed(t, s, orphan).ModelTier.Name, "a row with no parent has no ceiling")
 }
 
 func TestStoreRefusesReparentingUnderALowerTier(t *testing.T) {
@@ -718,40 +720,100 @@ func TestStoreRefusesReparentingUnderALowerTier(t *testing.T) {
 
 	s := tieredStore(t, tierSet(t), nil)
 	low := lease("low")
-	low.Agent.Model = agent.Model{Tier: "economy"}
+	low.Agent.Model = agent.Model{Tier: "routine"}
 	seed(t, s, low)
 	row := lease("a")
-	row.Agent.Model = agent.Model{Tier: "standard"}
+	row.Agent.Model = agent.Model{Tier: "bounded"}
 	seed(t, s, row)
 
 	_, err := s.Update(t.Context(), "a", func(cur *types.Job) { cur.Parent = "low" })
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "its parent low was forked at economy (rank 0)")
+	assert.ErrorContains(t, err, "its parent low was forked at routine (rank 0)")
 }
 
 func TestRefuseAboveParentJudgesOnlyAProvenPair(t *testing.T) {
 	t.Parallel()
 
 	set := tierSet(t)
-	principal := &agent.JobModelTier{Name: "principal", Rank: 2}
+	design := &agent.JobModelTier{Name: "design", Rank: 2}
 	tests := []struct {
 		name string
 		plan []types.Job
 	}{
 		{"parent missing from the plan", nil},
 		{"parent records no tier", []types.Job{{ID: "p"}}},
-		{"parent's tier is declared at another rank", []types.Job{{ID: "p", ModelTier: &agent.JobModelTier{Name: "economy", Rank: 1}}}},
+		{"parent's tier is declared at another rank", []types.Job{{ID: "p", ModelTier: &agent.JobModelTier{Name: "routine", Rank: 1}}}},
 		{"parent's tier is no longer declared", []types.Job{{ID: "p", ModelTier: &agent.JobModelTier{Name: "tiny", Rank: 0}}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.NoError(t, refuseAboveParent(set, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: principal}, tt.plan))
+			assert.NoError(t, refuseAboveParent(set, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: design}, tt.plan))
 		})
 	}
 
-	proven := []types.Job{{ID: "p", ModelTier: &agent.JobModelTier{Name: "economy", Rank: 0}}}
-	require.Error(t, refuseAboveParent(set, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven))
-	require.NoError(t, refuseAboveParent(nil, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven), "a workspace without tiers bounds nothing")
-	assert.ErrorContains(t, refuseAboveParent(set, nil, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven), "no spawn rule", "a proven pair with no rule is refused, never allowed")
+	proven := []types.Job{{ID: "p", ModelTier: &agent.JobModelTier{Name: "routine", Rank: 0}}}
+	require.Error(t, refuseAboveParent(set, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: design}, proven))
+	require.NoError(t, refuseAboveParent(nil, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: design}, proven), "a workspace without tiers bounds nothing")
+	assert.ErrorContains(t, refuseAboveParent(set, nil, types.Job{ID: "c", Parent: "p", ModelTier: design}, proven), "no spawn rule", "a proven pair with no rule is refused, never allowed")
+}
+
+// fourModelTiersSuite pins the migration that respells the three shipped
+// tiers as the four that replaced them.
+type fourModelTiersSuite struct {
+	suite.Suite
+}
+
+func TestFourModelTiersMigration(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(fourModelTiersSuite))
+}
+
+// migrated is the row after the job store's migrations ran over a temp
+// file already through the tries move.
+func (s *fourModelTiersSuite) migrated(line string) (types.Job, map[string]any) {
+	st := tempStore(s.T(), s.T().TempDir())
+	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
+	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"magus.job/v1alpha1","migration":3}`, line))
+	f, err := st.read()
+	s.Require().NoError(err)
+	s.Require().Len(f.Jobs, 1)
+	return f.Jobs[0], storedRow(s.T(), path, f.Jobs[0].ID)
+}
+
+func (s *fourModelTiersSuite) TestEachOldRequestedTierTakesItsNewName() {
+	for old, renamed := range map[string]string{"economy": "routine", "standard": "bounded", "principal": "design"} {
+		row, stored := s.migrated(fmt.Sprintf(`{"id":"a","state":"running","created":1,"updated":1,`+
+			`"agent":{"model":{"tier":%q},"worker":{"type":"resumed"}}}`, old))
+		s.Equal(agent.Model{Tier: renamed}, row.Agent.Model, old)
+		s.Equal(map[string]any{"tier": renamed}, stored["agent"].(map[string]any)["model"], "the file holds %s", renamed)
+	}
+}
+
+func (s *fourModelTiersSuite) TestTheAssignedTierTakesItsNewNameAndKeepsTheRest() {
+	row, _ := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,` +
+		`"model_tier":{"name":"economy","rank":0,"skills":"full","source":"matrix","reason":"1 file","site":"magusfile.buzz:9"}}`)
+	s.Equal(&agent.JobModelTier{Name: "routine", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix,
+		Reason: "1 file", Site: "magusfile.buzz:9"}, row.ModelTier)
+}
+
+func (s *fourModelTiersSuite) TestAModelIDKeepsItsSpelling() {
+	row, _ := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,` +
+		`"agent":{"model":{"id":"principal"},"worker":{"type":"resumed"}}}`)
+	s.Equal(agent.Model{ID: "principal"}, row.Agent.Model, "an id is a host's word, not a tier")
+}
+
+func (s *fourModelTiersSuite) TestATierTheOldSetNeverNamedIsUntouched() {
+	row, _ := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,` +
+		`"agent":{"model":{"tier":"frontier"},"worker":{"type":"resumed"}},` +
+		`"model_tier":{"name":"high","rank":1,"skills":"short","source":"row"}}`)
+	s.Equal(agent.Model{Tier: "frontier"}, row.Agent.Model)
+	s.Equal("high", row.ModelTier.Name)
+}
+
+func (s *fourModelTiersSuite) TestARowWithNoTierIsUntouched() {
+	row, stored := s.migrated(`{"id":"a","state":"running","created":1,"updated":1}`)
+	s.Nil(row.Agent)
+	s.Nil(row.ModelTier)
+	s.NotContains(stored, "agent")
 }

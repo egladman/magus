@@ -3688,6 +3688,12 @@ func decodeJobModelTier(v vm.Value, path string) (typesagent.JobModelTier, error
 				return out, err
 			}
 			out.Model = sModel
+		case "shared":
+			strsShared, err := decodeStringList(item, path+".shared")
+			if err != nil {
+				return out, err
+			}
+			out.Shared = strsShared
 		default:
 			return out, unknownMember(path, "JobModelTier", key)
 		}
@@ -3959,6 +3965,12 @@ func decodeJobWorktree(v vm.Value, path string) (types.JobWorktree, error) {
 				return out, err
 			}
 			out.Binary = sBinary
+		case "binaryDigest":
+			sBinaryDigest, err := decodeString(item, path+".binaryDigest")
+			if err != nil {
+				return out, err
+			}
+			out.BinaryDigest = sBinaryDigest
 		case "removed":
 			nRemoved, err := decodeInt(item, path+".removed")
 			if err != nil {

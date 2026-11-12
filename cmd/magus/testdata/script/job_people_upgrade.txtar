@@ -91,9 +91,9 @@ left-pad 1.3
 {"api_version": "magus.job-result/v1alpha1", "changed_paths": ["web/deps.txt"], "validation": {"command": "magus run test web", "output_ref": "out<hex>"}, "unresolved_risks": []}
 -- apply.out --
 created upgrade/api, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 created upgrade/web, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 -- holders.out --
 upgrade/api  ~/src/ana
 upgrade/web  ~/src/ben
@@ -104,9 +104,9 @@ goal check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   api/deps.txt:1-1
 -- ls-done.out --
-JOB          HOLDER  STATE  MODEL     PATHS  PROOF     CHECK
-upgrade/api  ana     pass   standard  1      alone     magus run test api
-upgrade/web  ben     pass   standard  1      disjoint  magus run test web
+JOB          HOLDER  STATE  MODEL    PATHS  PROOF     CHECK
+upgrade/api  ana     pass   bounded  1      alone     magus run test api
+upgrade/web  ben     pass   bounded  1      disjoint  magus run test web
 
 not merged onto main: 2
   upgrade/api at 4482968: 1 commit(s) at 4482968 are not on main; merge 4482968 into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"magus.job/v1alpha1","id":"upgrade/api","left_unmerged":"<why>"}

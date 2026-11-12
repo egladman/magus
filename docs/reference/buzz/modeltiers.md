@@ -16,7 +16,7 @@ The default model-tier declaration: the ModelTier enum, cheapest first, its defa
 
 ### bounds
 
-bounds caps the context an economy worker may reach. It caps no tier's live jobs: a
+bounds caps the context a routine worker may reach. It caps no tier's
 
 **Signature:** `modeltiers\bounds(tier) -> magus\ModelTierBounds`
 
@@ -28,7 +28,7 @@ bounds caps the context an economy worker may reach. It caps no tier's live jobs
 
 ### skills
 
-skills is the skill variant a tier's workers load. Economy gets the full bodies: a
+skills is the skill variant a tier's workers load. Routine gets the
 
 **Signature:** `modeltiers\skills(tier) -> magus\SkillVariant`
 

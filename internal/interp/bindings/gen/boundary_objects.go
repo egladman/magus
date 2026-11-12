@@ -499,6 +499,11 @@ func ObjectJobModelTier(v typesagent.JobModelTier, enums ffi.EnumCases) vm.Value
 	out.MapSet("reason", vm.StringValue(v.Reason))
 	out.MapSet("site", vm.StringValue(v.Site))
 	out.MapSet("model", vm.StringValue(v.Model))
+	itemsShared := make([]vm.Value, len(v.Shared))
+	for indexShared := range v.Shared {
+		itemsShared[indexShared] = vm.StringValue(v.Shared[indexShared])
+	}
+	out.MapSet("shared", vm.ListValue(itemsShared))
 	return out
 }
 
@@ -673,6 +678,7 @@ func ObjectJobWorktree(v types.JobWorktree) vm.Value {
 	out.MapSet("base", vm.StringValue(v.Base))
 	out.MapSet("created", vm.IntValue(int64(v.Created)))
 	out.MapSet("binary", vm.StringValue(v.Binary))
+	out.MapSet("binaryDigest", vm.StringValue(v.BinaryDigest))
 	out.MapSet("removed", vm.IntValue(int64(v.Removed)))
 	out.MapSet("kept", vm.StringValue(v.Kept))
 	out.MapSet("made", vm.BoolValue(v.Made))

@@ -102,13 +102,13 @@ total() { echo $(( $1 + $2 )); }
  "unresolved_risks": []}
 -- fork.out --
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 referenced outside the write paths: files that use what the write paths define
   unknown, no symbol index answered; `magus graph build` builds one
 -- ls-declared.out --
-JOB               HOLDER  STATE     MODEL     PATHS  PROOF     CHECK
-refactor/pricing  -       declared  standard  1      alone     magus run test .
-refactor/tax      -       declared  standard  1      disjoint  magus run test .
+JOB               HOLDER  STATE     MODEL    PATHS  PROOF     CHECK
+refactor/pricing  -       declared  bounded  1      alone     magus run test .
+refactor/tax      -       declared  bounded  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- exec.out --
@@ -116,7 +116,7 @@ recorded job refactor/pricing's base as 58d5e2c343b3312b97a2ac07d85607b3044e9b7d
 took refactor/pricing in ~/src/shop-pricing; read the spec with `magus describe job refactor/pricing`
 -- describe.out --
 job: refactor/pricing
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 skills: short
 
 instructions
@@ -177,9 +177,9 @@ goal check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   pricing/total.sh:1-1
 -- ls-done.out --
-JOB               HOLDER        STATE      MODEL     PATHS  PROOF     CHECK
-refactor/pricing  shop-pricing  pass       standard  1      alone     magus run test .
-refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
+JOB               HOLDER        STATE      MODEL    PATHS  PROOF     CHECK
+refactor/pricing  shop-pricing  pass       bounded  1      alone     magus run test .
+refactor/tax      shop-tax      no_return  bounded  1      disjoint  magus run test .
 
 not merged onto main: 1
   refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"magus.job/v1alpha1","id":"refactor/pricing","left_unmerged":"<why>"}

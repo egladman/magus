@@ -87,7 +87,7 @@ She declares a job per half, from her main checkout:
 ```console
 $ magus job fork refactor/pricing --instructions 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 referenced outside the write paths: files that use what the write paths define
   unknown, no symbol index answered; `magus graph build` builds one
 ```
@@ -105,9 +105,9 @@ board:
 
 ```console
 $ magus ls jobs
-JOB               HOLDER  STATE     MODEL     PATHS  PROOF     CHECK
-refactor/pricing  -       declared  standard  1      alone     magus run test .
-refactor/tax      -       declared  standard  1      disjoint  magus run test .
+JOB               HOLDER  STATE     MODEL    PATHS  PROOF     CHECK
+refactor/pricing  -       declared  bounded  1      alone     magus run test .
+refactor/tax      -       declared  bounded  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -138,7 +138,7 @@ it anyway: a divergence is a fact for the record, not a refusal. The terms:
 ```console
 $ magus describe job refactor/pricing
 job: refactor/pricing
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 skills: short
 
 instructions
@@ -265,9 +265,9 @@ with `--all`:
 
 ```console
 $ magus ls jobs --all
-JOB               HOLDER        STATE      MODEL     PATHS  PROOF     CHECK
-refactor/pricing  shop-pricing  pass       standard  1      alone     magus run test .
-refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
+JOB               HOLDER        STATE      MODEL    PATHS  PROOF     CHECK
+refactor/pricing  shop-pricing  pass       bounded  1      alone     magus run test .
+refactor/tax      shop-tax      no_return  bounded  1      disjoint  magus run test .
 
 not merged onto main: 1
   refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"magus.job/v1alpha1","id":"refactor/pricing","left_unmerged":"<why>"}
@@ -313,7 +313,7 @@ Ben's change needs `format.sh` too, and he declares it anyway:
 ```console
 $ magus job fork currency --instructions 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
 forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 referenced outside the write paths: files that use what the write paths define
   unknown, no symbol index answered; `magus graph build` builds one
 ```
@@ -347,9 +347,9 @@ Ben takes his job, and the board shows the shared ground:
 
 ```console
 $ magus ls jobs
-JOB       HOLDER  STATE    MODEL     PATHS  PROOF  CHECK
-cents     ana     running  standard  2      alone  magus run test .
-currency  ben     running  standard  2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL    PATHS  PROOF  CHECK
+cents     ana     running  bounded  2      alone  magus run test .
+currency  ben     running  bounded  2      alone  magus run test .
 
 overlaps
   cents and currency claim common ground
@@ -386,9 +386,9 @@ the file Ana left. The overlap is gone:
 
 ```console
 $ magus ls jobs
-JOB       HOLDER  STATE    MODEL     PATHS  PROOF  CHECK
-cents     ana     running  standard  1      alone  magus run test .
-currency  ben     running  standard  2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL    PATHS  PROOF  CHECK
+cents     ana     running  bounded  1      alone  magus run test .
+currency  ben     running  bounded  2      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -400,7 +400,7 @@ and Ben's terms now list only `total.sh` as Ana's:
 ```console
 $ magus describe job currency
 job: currency
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 skills: short
 
 instructions
@@ -641,9 +641,9 @@ done
 ```console
 $ magus job apply -f ci/jobs.jsonl
 created release/pricing, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 created release/tax, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 <!-- golden: job_people_ci.txtar pass.out -->
@@ -662,9 +662,9 @@ not move:
 
 ```console
 $ magus ls jobs
-JOB              HOLDER  STATE     MODEL     PATHS  PROOF     CHECK
-release/pricing  -       declared  standard  1      alone     magus run test .
-release/tax      -       declared  standard  1      disjoint  magus run test .
+JOB              HOLDER  STATE     MODEL    PATHS  PROOF     CHECK
+release/pricing  -       declared  bounded  1      alone     magus run test .
+release/tax      -       declared  bounded  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```

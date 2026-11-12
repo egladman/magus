@@ -680,6 +680,7 @@ export object JobModelTier {
     reason: str = "",
     site: str = "",
     model: str = "",
+    shared: [str] = [],
 }
 
 export object ClaimEvidence {
@@ -796,6 +797,7 @@ export object JobWorktree {
     base: str = "",
     created: int = 0,
     binary: str = "",
+    binaryDigest: str = "",
     removed: int = 0,
     kept: str = "",
     made: bool = false,

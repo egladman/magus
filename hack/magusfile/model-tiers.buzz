@@ -4,19 +4,21 @@
 // strict when a job row's spawn names a model, and the refusal names the hosts entry
 // to add. Each string is the exact id that host's spawn takes, read from the host's
 // own docs on 2026-10-25, not copied from another host's rows.
+// A host with three models gives frontier design's id.
 namespace modeltierhosts;
 
 import "magus/modeltiers" as modeltiers;
 import "assert";
 
-// claude keeps the exact id the Claude Code spell's economy, standard and
-// principal rows name, so the agents magus ships stay on claude-haiku-5-5. The
-// spell's short aliases still resolve a spawn of haiku, sonnet or opus.
+// claude keeps the exact id each tiered row of the Claude Code spell names,
+// so the agents magus ships stay on claude-haiku-5-5. The spell's short
+// aliases still resolve a spawn of haiku, sonnet, opus or fable.
 export fun claude(tier: modeltiers\ModelTier) > str {
     return match (tier) {
-        .economy -> "claude-haiku-5-5",
-        .standard -> "claude-sonnet-5-5",
-        .principal -> "claude-opus-5-5",
+        .routine -> "claude-haiku-5-5",
+        .bounded -> "claude-sonnet-5-5",
+        .design -> "claude-opus-5-5",
+        .frontier -> "claude-fable-5-2",
     };
 }
 
@@ -25,20 +27,22 @@ export fun claude(tier: modeltiers\ModelTier) > str {
 // the model page prices above both.
 export fun codex(tier: modeltiers\ModelTier) > str {
     return match (tier) {
-        .economy -> "gpt-6-luna",
-        .standard -> "gpt-6.1-sol",
-        .principal -> "gpt-6-astra",
+        .routine -> "gpt-6-luna",
+        .bounded -> "gpt-6.1-sol",
+        .design -> "gpt-6-astra",
+        .frontier -> "gpt-6-astra",
     };
 }
 
 // cursor uses Composer 2.5 for the fast rung, Sonnet at medium effort for the
-// standard one, and claude-opus-5-5-high, an id this repository already records
+// bounded one, and claude-opus-5-5-high, an id this repository already records
 // Cursor sending. The spell still writes model inherit on a shipped agent.
 export fun cursor(tier: modeltiers\ModelTier) > str {
     return match (tier) {
-        .economy -> "composer-2.5",
-        .standard -> "claude-sonnet-5-5-medium",
-        .principal -> "claude-opus-5-5-high",
+        .routine -> "composer-2.5",
+        .bounded -> "claude-sonnet-5-5-medium",
+        .design -> "claude-opus-5-5-high",
+        .frontier -> "claude-opus-5-5-high",
     };
 }
 
@@ -47,23 +51,31 @@ export fun cursor(tier: modeltiers\ModelTier) > str {
 // already prices, under that spelling. The spell sets no model on a shipped agent.
 export fun opencode(tier: modeltiers\ModelTier) > str {
     return match (tier) {
-        .economy -> "anthropic/claude-haiku-5-5",
-        .standard -> "anthropic/claude-sonnet-5-5",
-        .principal -> "anthropic/claude-opus-5-5",
+        .routine -> "anthropic/claude-haiku-5-5",
+        .bounded -> "anthropic/claude-sonnet-5-5",
+        .design -> "anthropic/claude-opus-5-5",
+        .frontier -> "anthropic/claude-opus-5-5",
     };
 }
 
-test "each harness maps the three tiers to the ids its docs name" {
-    assert\equal(claude(modeltiers\ModelTier.economy), "claude-haiku-5-5", "shipped agents stay on the exact id");
-    assert\equal(claude(modeltiers\ModelTier.standard), "claude-sonnet-5-5", "the spell's standard row");
-    assert\equal(claude(modeltiers\ModelTier.principal), "claude-opus-5-5", "the spell's principal row");
-    assert\equal(codex(modeltiers\ModelTier.economy), "gpt-6-luna", "the lighter Codex model");
-    assert\equal(codex(modeltiers\ModelTier.standard), "gpt-6.1-sol", "the model Codex says to start with");
-    assert\equal(codex(modeltiers\ModelTier.principal), "gpt-6-astra", "the flagship above both");
-    assert\equal(cursor(modeltiers\ModelTier.economy), "composer-2.5", "Cursor's fast model");
-    assert\equal(cursor(modeltiers\ModelTier.standard), "claude-sonnet-5-5-medium", "Sonnet at medium effort");
-    assert\equal(cursor(modeltiers\ModelTier.principal), "claude-opus-5-5-high", "the id the agents guide records");
-    assert\equal(opencode(modeltiers\ModelTier.economy), "anthropic/claude-haiku-5-5", "OpenCode's provider/model spelling");
-    assert\equal(opencode(modeltiers\ModelTier.standard), "anthropic/claude-sonnet-5-5", "the id the OpenCode docs show");
-    assert\equal(opencode(modeltiers\ModelTier.principal), "anthropic/claude-opus-5-5", "the same rung as Claude's principal");
+test "each harness maps the four tiers to the ids its docs name" {
+    assert\equal(claude(modeltiers\ModelTier.routine), "claude-haiku-5-5", "shipped agents stay on the exact id");
+    assert\equal(claude(modeltiers\ModelTier.bounded), "claude-sonnet-5-5", "the spell's bounded row");
+    assert\equal(claude(modeltiers\ModelTier.design), "claude-opus-5-5", "the spell's design row");
+    assert\equal(claude(modeltiers\ModelTier.frontier), "claude-fable-5-2", "the spell's frontier row");
+    assert\equal(codex(modeltiers\ModelTier.routine), "gpt-6-luna", "the lighter Codex model");
+    assert\equal(codex(modeltiers\ModelTier.bounded), "gpt-6.1-sol", "the model Codex says to start with");
+    assert\equal(codex(modeltiers\ModelTier.design), "gpt-6-astra", "the flagship above both");
+    assert\equal(cursor(modeltiers\ModelTier.routine), "composer-2.5", "Cursor's fast model");
+    assert\equal(cursor(modeltiers\ModelTier.bounded), "claude-sonnet-5-5-medium", "Sonnet at medium effort");
+    assert\equal(cursor(modeltiers\ModelTier.design), "claude-opus-5-5-high", "the id the agents guide records");
+    assert\equal(opencode(modeltiers\ModelTier.routine), "anthropic/claude-haiku-5-5", "OpenCode's provider/model spelling");
+    assert\equal(opencode(modeltiers\ModelTier.bounded), "anthropic/claude-sonnet-5-5", "the id the OpenCode docs show");
+    assert\equal(opencode(modeltiers\ModelTier.design), "anthropic/claude-opus-5-5", "the same rung as Claude's design");
+}
+
+test "a host with three models gives frontier the id design runs" {
+    assert\equal(codex(modeltiers\ModelTier.frontier), codex(modeltiers\ModelTier.design), "Codex has no fourth model");
+    assert\equal(cursor(modeltiers\ModelTier.frontier), cursor(modeltiers\ModelTier.design), "Cursor has no fourth model");
+    assert\equal(opencode(modeltiers\ModelTier.frontier), opencode(modeltiers\ModelTier.design), "OpenCode has no fourth model");
 }

@@ -25,7 +25,7 @@ several disjoint write sets you can name is another{{else}}: several disjoint wr
 you can name are reason enough{{end}}.
 
 {{if .Full}}What costs is unbounded fan-out, not fan-out: a hand-on without a shrinking scope,
-a job with no criteria, a principal model on mechanical edits. {{end}}Say what a round
+a job with no criteria, a design model on mechanical edits. {{end}}Say what a round
 costs when the user is deciding, and prefer the smallest fan-out that covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
@@ -235,8 +235,8 @@ that names one.
 - Inheriting it BY OMISSION is the failure. A host defaulting to "same as the parent"
   makes every unnamed spawn the most expensive one, and records no choice.
 
-When the tier is unclear, start at economy. A job that fails its criteria there is
-re-forked one tier up, not retried at the same one.{{if .Full}} Economy is a starting
+When the tier is unclear, start at routine. A job that fails its criteria there is
+re-forked one tier up, not retried at the same one.{{if .Full}} Routine is a starting
 point, not a ceiling: same-strength offload is legitimate.{{end}}
 
 Tiers are the workspace's{{if .Full}}: a magusfile enum (`magus\modelTiers`) maps each to every
@@ -245,25 +245,26 @@ or a model. magus never picks a model live: re-fork to change a tier.
 
 | Shipped tier | Assign |
 |---|---|
-| principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
-| standard | isolated implementation with a clear contract and a bounded set of projects, and tracing behavior through code |
-| economy | mechanical edits, fixtures, docs, inventory, and lookups the graph answers (exists, depends-on, is-generated) |
+| frontier | work moved up after it failed its criteria at design |
+| design | architecture, ambiguous ownership, public APIs, migrations, security, integration |
+| bounded | isolated implementation with a clear contract and a bounded set of projects, and tracing behavior through code |
+| routine | mechanical edits, fixtures, docs, inventory, and lookups the graph answers (exists, depends-on, is-generated) |
 
 If the host cannot select models or reasoning effort, keep its default. Tool access
 is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at economy{{if .Full}}. Many economy workers finish about as
-fast as one principal worker, for far fewer tokens{{end}}:
+To prove something, brute-force it at routine{{if .Full}}. Many routine workers finish about as
+fast as one design worker, for far fewer tokens{{end}}:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
   Give each a script check, so `{{cmd "job wait"}}` can pass it.
 - Spawn the `magus-scout` agent for each where your harness installed it.
 - Each reports its command and output ref{{if .Full}}, so evidence settles the claim and not a worker's reading{{end}}.
-- The principal tier only reconciles the claims where workers disagree.
+- The design tier only reconciles the claims where workers disagree.
 
-Keep economy jobs short-lived. The brief points at evidence (paths, output refs, the
+Keep routine jobs short-lived. The brief points at evidence (paths, output refs, the
 row) and carries no transcript.{{if .Full}} Some providers raise a tier's price past a prompt size.{{end}}
 Where the brief names that size, the worker reports and stops before passing it.
 

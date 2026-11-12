@@ -39,7 +39,7 @@ func TestModelRowsLetAJobPutResolveAnAliasThroughARealMagus(t *testing.T) {
 		Display:    agent.HarnessDisplay{Name: "Opus host"},
 		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
 		Config:     types.HarnessConfig{Path: "hooks.json"},
-		Models:     []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "principal"}},
+		Models:     []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "design"}},
 	})
 	root := writeWorkspace(t, map[string]string{
 		"magus.yaml":                  "",
@@ -52,7 +52,7 @@ func TestModelRowsLetAJobPutResolveAnAliasThroughARealMagus(t *testing.T) {
 	got, err := std.MagusPutJob(ws.(*Magus).Context(t.Context()), "w1", types.JobPut{Agent: &typesagent.Spec{Instructions: "ship it", Model: typesagent.Model{ID: "opus"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}, ReadOnly: new(true)})
 	require.NoError(t, err)
 	require.NotNil(t, got.ModelTier)
-	assert.Equal(t, "principal", got.ModelTier.Name)
+	assert.Equal(t, "design", got.ModelTier.Name)
 }
 
 func TestModelTiersWithoutARegistry(t *testing.T) {

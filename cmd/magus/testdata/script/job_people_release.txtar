@@ -76,15 +76,15 @@ import "magus";
 {"api_version": "magus.job-result/v1alpha1", "changed_paths": [], "unresolved_risks": ["the notes need the final benchmark numbers"]}
 -- apply.out --
 created release-1.3/changelog, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 created release-1.3/notes, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 -- exit-notes.out --
 exited release-1.3/notes, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait release-1.3/notes`
 -- ls-exited.out --
-JOB                    HOLDER     STATE   MODEL     PATHS  PROOF     CHECK
-release-1.3/changelog  changelog  exited  standard  1      alone     -
-release-1.3/notes      notes      exited  standard  1      disjoint  -
+JOB                    HOLDER     STATE   MODEL    PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  exited  bounded  1      alone     -
+release-1.3/notes      notes      exited  bounded  1      disjoint  -
 
 not merged onto main: 1
   release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"magus.job/v1alpha1","id":"release-1.3/changelog","left_unmerged":"<why>"}
@@ -107,9 +107,9 @@ footprint: no line changed since the checkpoint
 unresolved risks its holder reported
   the notes need the final benchmark numbers
 -- ls-board.out --
-JOB                    HOLDER     STATE    MODEL     PATHS  PROOF     CHECK
-release-1.3/changelog  changelog  pass     standard  1      alone     -
-release-1.3/notes      notes      running  standard  1      disjoint  -
+JOB                    HOLDER     STATE    MODEL    PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  pass     bounded  1      alone     -
+release-1.3/notes      notes      running  bounded  1      disjoint  -
 
 not merged onto main: 1
   release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"magus.job/v1alpha1","id":"release-1.3/changelog","left_unmerged":"<why>"}

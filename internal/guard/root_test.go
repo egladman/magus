@@ -670,10 +670,10 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, descriptor.Tools)
 	set, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
-		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
-		Bounds: []typesagent.ModelTierBounds{{}, {}, {}},
-		Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort, typesagent.SkillVariantShort},
-		Hosts:  map[string][]string{"claude-code": {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"}},
+		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"routine", "bounded", "design", "frontier"}, Default: 1,
+		Bounds: []typesagent.ModelTierBounds{{}, {}, {}, {}},
+		Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort, typesagent.SkillVariantShort, typesagent.SkillVariantShort},
+		Hosts:  map[string][]string{"claude-code": {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-2"}},
 	})
 	require.NoError(t, err)
 	tools := *descriptor.Tools
@@ -690,11 +690,11 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 		model, tier, parent string
 		allow               bool
 	}{
-		{"opus", "principal", "claude-opus-5-5", true},
-		{"sonnet", "standard", "claude-sonnet-5-5", true},
-		{"haiku", "economy", "claude-haiku-5-5", true},
-		{"fable", "principal", "claude-opus-5-5", true},
-		{"Opus", "principal", "claude-opus-5-5", false},
+		{"opus", "design", "claude-opus-5-5", true},
+		{"sonnet", "bounded", "claude-sonnet-5-5", true},
+		{"haiku", "routine", "claude-haiku-5-5", true},
+		{"fable", "frontier", "claude-fable-5-2", true},
+		{"Opus", "design", "claude-opus-5-5", false},
 	} {
 		t.Run(tc.model, func(t *testing.T) {
 			ctx := tierFixture(t, facts.Tiers, types.Job{ID: "scout", Agent: &typesagent.Spec{Model: typesagent.Model{Tier: tc.tier}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}, ReadOnly: true, State: types.StateDeclared})

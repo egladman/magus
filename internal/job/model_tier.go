@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 )
@@ -147,8 +149,8 @@ func modelIDTier(set *agent.ModelTierSet, models []types.ModelPricing, model str
 func (s *Store) ModelRequest(word string) agent.Model {
 	word = strings.TrimSpace(word)
 	if s.modelTiers != nil {
-		if _, err := s.modelTiers.Parse(word); err == nil {
-			return agent.Model{Tier: word}
+		if t, err := s.modelTiers.Parse(word); err == nil {
+			return agent.Model{Tier: t.Name()}
 		}
 	}
 	return agent.Model{ID: word}
@@ -271,6 +273,9 @@ func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types
 	if err != nil {
 		return agent.JobModelTier{}, err
 	}
+	if t, ok := s.modelTiers.At(assigned.Rank); ok {
+		assigned.Shared = s.modelTiers.SharedAliases(t)
+	}
 	others := slices.DeleteFunc(slices.Clone(plan), func(r types.Job) bool { return r.ID == row.ID })
 	if err := refuseModelTierLimits(others, assigned, s.modelTiers); err != nil {
 		return agent.JobModelTier{}, err
@@ -354,6 +359,7 @@ func checkMatrixAnswer(set *agent.ModelTierSet, id string, answer agent.JobModel
 	if answer.Source != agent.ModelTierSourceUserMatrix {
 		answer.Source = agent.ModelTierSourceMatrix
 	}
+	answer.Name = tier.Name()
 	return answer, nil
 }
 
@@ -382,5 +388,55 @@ func refuseModelTierLimits(rows []types.Job, assigned agent.JobModelTier, set *a
 		return fmt.Errorf("job: this would make %d live jobs at model tier %s, and its MaxLive bound declared at %s allows %d,"+
 			" end one with `%s` first or fork at another tier", live, assigned.Name, set.Site(), limit, hint.JobExit.With("<job>"))
 	}
+	return nil
+}
+
+// fourModelTiers respells a row's requested and assigned tier from the
+// three shipped tiers to the four that replaced them. The map is its own,
+// so it stays when the readers' shim for the old names goes.
+func fourModelTiers(e migrate.Entry) (migrate.Entry, error) {
+	renamed := map[string]string{"economy": "routine", "standard": "bounded", "principal": "design"}
+	if err := respellMember(e, "agent", renamed, "model", "tier"); err != nil {
+		return nil, err
+	}
+	if err := respellMember(e, "model_tier", renamed, "name"); err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+// respellMember replaces the string at path under e's key with its entry
+// in renamed. A missing member, or a value renamed lacks, changes nothing.
+func respellMember(e migrate.Entry, key string, renamed map[string]string, path ...string) error {
+	raw, ok := e[key]
+	if !ok {
+		return nil
+	}
+	var root any
+	if err := json.Unmarshal(raw, &root); err != nil {
+		return fmt.Errorf("reading %s: %w", key, err)
+	}
+	obj, ok := root.(map[string]any)
+	for _, p := range path[:len(path)-1] {
+		if !ok {
+			return nil
+		}
+		obj, ok = obj[p].(map[string]any)
+	}
+	if !ok {
+		return nil
+	}
+	last := path[len(path)-1]
+	old, _ := obj[last].(string)
+	to, ok := renamed[old]
+	if !ok {
+		return nil
+	}
+	obj[last] = to
+	body, err := json.Marshal(root)
+	if err != nil {
+		return fmt.Errorf("writing %s: %w", key, err)
+	}
+	e[key] = body
 	return nil
 }

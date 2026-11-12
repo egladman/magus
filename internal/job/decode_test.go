@@ -223,7 +223,7 @@ func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
 	stored := fmt.Sprintf(`{"api_version":%q,"id":"a","write_paths":["internal/job"],"state":"declared",`+
 		`"created":1,"updated":2,"deadline":3,"registered":4,"registered_by":{"session":"s"},`+
 		`"write_proof":{},"reported_base":"abc","base_verdict":"match","checkout_root":"/w",`+
-		`"holder":{},"releases":[],"model_tier":{"name":"economy","rank":0,"skills":"full","source":"default"}}`, types.JobAPIVersion)
+		`"holder":{},"releases":[],"model_tier":{"name":"routine","rank":0,"skills":"full","source":"default"}}`, types.JobAPIVersion)
 	rows, err := DecodeDeclarations(strings.NewReader(stored))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -317,7 +317,7 @@ func TestDeclarationApplyDeclaresRatherThanMerges(t *testing.T) {
 	t.Parallel()
 
 	stored := types.Job{
-		ID: "adj/store", Agent: &agent.Spec{Instructions: "old", Model: agent.Model{Tier: "principal"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
+		ID: "adj/store", Agent: &agent.Spec{Instructions: "old", Model: agent.Model{Tier: "design"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
 		WritePaths: []string{"internal/ledger"},
 		Registered: 42,
 	}

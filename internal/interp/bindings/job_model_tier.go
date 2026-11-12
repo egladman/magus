@@ -37,7 +37,7 @@ declareDefault(modeltiers\ModelTier, modeltiers\defaultTier, modeltiers\bounds, 
 // registerModelTiers binds magus\modelTiers onto magus:
 //
 //	final cc = magus\harness.provider(claudecode);
-//	magus\modelTiers(ModelTier, default: ModelTier.standard,
+//	magus\modelTiers(ModelTier, default: ModelTier.bounded,
 //	    hosts: {cc: claudeModel}, bounds: bounds, skills: skills);
 //
 // The functions run here, once per case, and are not kept. Every misdeclaration is
@@ -178,7 +178,7 @@ func declareModelTiers(ctx context.Context, sess *buzz.Session, tiers, def, host
 	enum, cases, ok := tiers.EnumDef()
 	if !ok {
 		return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember,
-			"tiers must be an enum, such as enum ModelTier { economy, standard, principal }, cheapest first, got %s", tiers.Kind())
+			"tiers must be an enum, such as enum ModelTier { routine, bounded, design, frontier }, cheapest first, got %s", tiers.Kind())
 	}
 	if len(cases) == 0 {
 		return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "enum %s declares no cases", enum)

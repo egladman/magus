@@ -140,6 +140,7 @@ var jobMigrations = []migrate.Migration{
 	{Name: "model, criteria and fresh_reason move under agent", Up: agentSection},
 	{Name: "worker type resume becomes resumed", Up: workerResumed},
 	{Name: triesMoved, Up: dropTries},
+	{Name: "model tiers economy, standard and principal become routine, bounded and design", Up: fourModelTiers},
 }
 
 // workerResumed respells a stored worker type "resume" as "resumed", the

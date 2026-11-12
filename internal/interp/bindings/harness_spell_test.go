@@ -479,10 +479,10 @@ func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {
 	rows := loadShippedHarness(t, "claude-code").Models
 	assert.Equal(t, []types.ModelPricing{
 		{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
-		{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.2, Output: 20},
-		{ID: "claude-fable-5-2", Tier: "principal", Alias: "fable", Window: 1_000_000, Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
-		{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "sonnet", Window: 1_000_000, Input: 2, CacheWrite5m: 2.5, CacheWrite1h: 4, CacheRead: 0.1, Output: 10},
-		{ID: "claude-haiku-5-5", Tier: "economy", Alias: "haiku", Window: 1_000_000, Input: 0.1, CacheWrite5m: 0.125, CacheWrite1h: 0.2, CacheRead: 0.01, Output: 0.5,
+		{ID: "claude-opus-5-5", Tier: "design", Alias: "opus", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.2, Output: 20},
+		{ID: "claude-fable-5-2", Tier: "frontier", Alias: "fable", Window: 1_000_000, Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
+		{ID: "claude-sonnet-5-5", Tier: "bounded", Alias: "sonnet", Window: 1_000_000, Input: 2, CacheWrite5m: 2.5, CacheWrite1h: 4, CacheRead: 0.1, Output: 10},
+		{ID: "claude-haiku-5-5", Tier: "routine", Alias: "haiku", Window: 1_000_000, Input: 0.1, CacheWrite5m: 0.125, CacheWrite1h: 0.2, CacheRead: 0.01, Output: 0.5,
 			LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
 		{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.1, Output: 5},
 	}, rows)
@@ -493,15 +493,15 @@ func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {
 
 func TestValidateModelRowsReadsPricesAndTiers(t *testing.T) {
 	got, tiers, err := validateModelRows([]types.ModelRow{{
-		ID: "m-1", Tier: "standard", Alias: "mid", Window: 200000,
+		ID: "m-1", Tier: "bounded", Alias: "mid", Window: 200000,
 		Price: types.Price{Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3, CacheRead: 0.1, Output: 7},
 		Step:  types.PriceStep{Above: 100000, Multiplier: 2},
 	}})
 
 	require.NoError(t, err)
-	assert.Equal(t, []types.ModelPricing{{ID: "m-1", Tier: "standard", Alias: "mid", Window: 200000, Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3,
+	assert.Equal(t, []types.ModelPricing{{ID: "m-1", Tier: "bounded", Alias: "mid", Window: 200000, Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3,
 		CacheRead: 0.1, Output: 7, LongContext: &types.PriceStep{Above: 100000, Multiplier: 2}}}, got)
-	assert.Equal(t, map[string][]string{"standard": {"m-1"}}, tiers)
+	assert.Equal(t, map[string][]string{"bounded": {"m-1"}}, tiers)
 
 	_, tiers, err = validateModelRows([]types.ModelRow{{ID: "m-1"}})
 	require.NoError(t, err)
@@ -519,7 +519,7 @@ func TestValidateModelRowsRefusesWhatNamesNoOneModel(t *testing.T) {
 			"row 1 (m-1) sets one of the price step's above and multiplier without the other"},
 		"alias without a tier": {[]types.ModelRow{{ID: "m-1", Alias: "mid"}},
 			"row 1 (m-1) sets alias mid without a tier, so the alias names no tier"},
-		"one alias on two rows": {[]types.ModelRow{{ID: "m-1", Tier: "standard", Alias: "mid"}, {ID: "m-2", Tier: "economy", Alias: "mid"}},
+		"one alias on two rows": {[]types.ModelRow{{ID: "m-1", Tier: "bounded", Alias: "mid"}, {ID: "m-2", Tier: "routine", Alias: "mid"}},
 			"rows m-1 and m-2 both declare alias mid"},
 		"a row without an id": {[]types.ModelRow{{Window: 1000}}, "row 1 has no id"},
 	}
@@ -541,13 +541,10 @@ func TestClaudeCodeRowsNameAModelForEveryShippedTier(t *testing.T) {
 	require.NoError(t, err)
 	_, tierRows, err := validateModelRows(rows)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"claude-opus-5-5", "claude-fable-5-2"}, tierRows["principal"])
-	_, err = pickTierModels(tierRows, func(string) (string, bool) { return "", false })
-	require.Error(t, err, "principal has two rows and nothing maps one")
-	tiers, err := pickTierModels(tierRows, shippedTierModel("claude-code"))
-	require.NoError(t, err)
+	tiers, err := pickTierModels(tierRows, func(string) (string, bool) { return "", false })
+	require.NoError(t, err, "each tier has one row, so nothing has to map one")
 	assert.Equal(t, map[string]string{
-		"economy": "claude-haiku-5-5", "standard": "claude-sonnet-5-5", "principal": "claude-opus-5-5",
+		"routine": "claude-haiku-5-5", "bounded": "claude-sonnet-5-5", "design": "claude-opus-5-5", "frontier": "claude-fable-5-2",
 	}, tiers)
 	ids := map[string]bool{}
 	for _, row := range d.Models {
@@ -893,35 +890,35 @@ func entryFailsClosed(d agent.HarnessDescriptor, event string) bool {
 
 func TestValidateModelRowsKeepsEveryRowOfATier(t *testing.T) {
 	_, tiers, err := validateModelRows([]types.ModelRow{
-		{ID: "m-1", Tier: "principal", Alias: "big"}, {ID: "m-2", Tier: "principal", Alias: "bigger"}, {ID: "m-3", Tier: "economy"},
+		{ID: "m-1", Tier: "design", Alias: "big"}, {ID: "m-2", Tier: "design", Alias: "bigger"}, {ID: "m-3", Tier: "routine"},
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, map[string][]string{"principal": {"m-1", "m-2"}, "economy": {"m-3"}}, tiers)
+	assert.Equal(t, map[string][]string{"design": {"m-1", "m-2"}, "routine": {"m-3"}}, tiers)
 }
 
 func TestPickTierModelsTakesTheDeclaredRowOfASeveralRowTier(t *testing.T) {
-	got, err := pickTierModels(map[string][]string{"principal": {"m-1", "m-2"}, "economy": {"m-3"}},
-		func(tier string) (string, bool) { return "m-2", tier == "principal" })
+	got, err := pickTierModels(map[string][]string{"design": {"m-1", "m-2"}, "routine": {"m-3"}},
+		func(tier string) (string, bool) { return "m-2", tier == "design" })
 
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"principal": "m-2", "economy": "m-3"}, got)
+	assert.Equal(t, map[string]string{"design": "m-2", "routine": "m-3"}, got)
 }
 
 func TestPickTierModelsRefusesASeveralRowTierTheDeclarationLeavesUnmapped(t *testing.T) {
-	_, err := pickTierModels(map[string][]string{"principal": {"m-1", "m-2"}},
+	_, err := pickTierModels(map[string][]string{"design": {"m-1", "m-2"}},
 		func(string) (string, bool) { return "", false })
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "rows m-1, m-2 all declare tier principal")
+	assert.Contains(t, err.Error(), "rows m-1, m-2 all declare tier design")
 }
 
 func TestPickTierModelsRefusesADeclaredIdThatIsNoRowOfTheTier(t *testing.T) {
-	_, err := pickTierModels(map[string][]string{"principal": {"m-1", "m-2"}},
+	_, err := pickTierModels(map[string][]string{"design": {"m-1", "m-2"}},
 		func(string) (string, bool) { return "other", true })
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "rows m-1, m-2 all declare tier principal")
+	assert.Contains(t, err.Error(), "rows m-1, m-2 all declare tier design")
 }
 
 func TestPickTierModelsPicksNothingForAHarnessWithNoTiers(t *testing.T) {
@@ -932,8 +929,8 @@ func TestPickTierModelsPicksNothingForAHarnessWithNoTiers(t *testing.T) {
 }
 
 func TestPickTierModelsRunsTheOneRowOfATierWithNoDeclaration(t *testing.T) {
-	got, err := pickTierModels(map[string][]string{"principal": {"m-1"}}, func(string) (string, bool) { return "", false })
+	got, err := pickTierModels(map[string][]string{"design": {"m-1"}}, func(string) (string, bool) { return "", false })
 
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"principal": "m-1"}, got)
+	assert.Equal(t, map[string]string{"design": "m-1"}, got)
 }

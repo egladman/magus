@@ -4,276 +4,366 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 const testHost = "test-host"
 
-func threeTiers() ModelTierDeclaration {
+func fourTiers() ModelTierDeclaration {
 	return ModelTierDeclaration{
 		Enum:    "ModelTier",
 		Site:    "magusfile.buzz:3",
-		Cases:   []string{"economy", "standard", "principal"},
+		Cases:   []string{"routine", "bounded", "design", "frontier"},
 		Default: 1,
-		Bounds:  []ModelTierBounds{{MaxLive: 4, MaxContext: 100000}, {MaxLive: 2}, {MaxLive: 1}},
-		Skills:  []SkillVariant{SkillVariantFull, SkillVariantShort, SkillVariantShort},
-		Hosts:   map[string][]string{testHost: {"small", "medium", "large"}},
+		Bounds:  []ModelTierBounds{{MaxLive: 4, MaxContext: 100000}, {MaxLive: 2}, {MaxLive: 1}, {MaxLive: 1}},
+		Skills:  []SkillVariant{SkillVariantFull, SkillVariantShort, SkillVariantShort, SkillVariantShort},
+		Hosts:   map[string][]string{testHost: {"small", "medium", "large", "largest"}},
 	}
 }
 
-func mustTiers(t *testing.T, decl ModelTierDeclaration) *ModelTierSet {
-	t.Helper()
+type modelTierSuite struct {
+	suite.Suite
+}
+
+func TestModelTier(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(modelTierSuite))
+}
+
+func (s *modelTierSuite) tiers(decl ModelTierDeclaration) *ModelTierSet {
 	set, err := NewModelTierSet(decl)
-	require.NoError(t, err)
+	s.Require().NoError(err)
 	return set
 }
 
-func TestModelTierSetReadsTheDeclaration(t *testing.T) {
-	t.Parallel()
-	set := mustTiers(t, threeTiers())
+func (s *modelTierSuite) at(set *ModelTierSet, rank int) ModelTier {
+	t, ok := set.At(rank)
+	s.Require().True(ok)
+	return t
+}
+
+// refused is the error NewModelTierSet gives decl once edit has changed it.
+func (s *modelTierSuite) refused(edit func(*ModelTierDeclaration)) error {
+	decl := fourTiers()
+	edit(&decl)
+	set, err := NewModelTierSet(decl)
+	s.Require().Error(err)
+	s.Nil(set)
+	s.ErrorIs(err, errModelTierDeclaration)
+	return err
+}
+
+func (s *modelTierSuite) TestTheSetReadsTheDeclaration() {
+	set := s.tiers(fourTiers())
 
 	names := []string{}
 	for _, tier := range set.All() {
 		names = append(names, tier.Name())
 	}
-	assert.Equal(t, []string{"economy", "standard", "principal"}, names)
+	s.Equal([]string{"routine", "bounded", "design", "frontier"}, names)
 
 	def := set.Default()
-	assert.Equal(t, "standard", def.Name())
-	assert.Equal(t, 1, def.Rank())
+	s.Equal("bounded", def.Name())
+	s.Equal(1, def.Rank())
 
-	economy, ok := set.At(0)
-	require.True(t, ok)
-	assert.Equal(t, ModelTierBounds{MaxLive: 4, MaxContext: 100000}, set.Bounds(economy))
-	assert.Equal(t, SkillVariantFull, set.Skills(economy))
-	assert.Equal(t, SkillVariantShort, set.Skills(def))
+	routine := s.at(set, 0)
+	s.Equal(ModelTierBounds{MaxLive: 4, MaxContext: 100000}, set.Bounds(routine))
+	s.Equal(SkillVariantFull, set.Skills(routine))
+	s.Equal(SkillVariantShort, set.Skills(def))
 
-	_, ok = set.At(3)
-	assert.False(t, ok)
+	_, ok := set.At(4)
+	s.False(ok)
 	_, ok = set.At(-1)
-	assert.False(t, ok)
+	s.False(ok)
 }
 
-func TestModelTierSetKeepsNoAliasOfItsDeclaration(t *testing.T) {
-	t.Parallel()
-	decl := threeTiers()
-	set := mustTiers(t, decl)
+func (s *modelTierSuite) TestTheSetKeepsNoAliasOfItsDeclaration() {
+	decl := fourTiers()
+	set := s.tiers(decl)
 	decl.Cases[0] = "changed"
 	decl.Hosts[testHost][0] = "changed"
 
-	economy, err := set.Parse("economy")
-	require.NoError(t, err)
-	alias, err := set.Alias(testHost, economy)
-	require.NoError(t, err)
-	assert.Equal(t, "small", alias)
+	routine, err := set.Parse("routine")
+	s.Require().NoError(err)
+	alias, err := set.Alias(testHost, routine)
+	s.Require().NoError(err)
+	s.Equal("small", alias)
 }
 
-func TestModelTierParseOfAnUnknownNameNamesTheCases(t *testing.T) {
-	t.Parallel()
-	set := mustTiers(t, threeTiers())
-
-	_, err := set.Parse("standrd")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `"standrd"`)
-	assert.Contains(t, err.Error(), "economy, standard, principal")
-	assert.Contains(t, err.Error(), "magusfile.buzz:3")
+func (s *modelTierSuite) TestParseOfAnUnknownNameNamesTheCases() {
+	_, err := s.tiers(fourTiers()).Parse("bounde")
+	s.Require().Error(err)
+	s.Contains(err.Error(), `"bounde"`)
+	s.Contains(err.Error(), "routine, bounded, design, frontier")
+	s.Contains(err.Error(), "magusfile.buzz:3")
 }
 
-func TestModelTierAboveComparesOnlyWithinOneSet(t *testing.T) {
-	t.Parallel()
-	set := mustTiers(t, threeTiers())
-	other := mustTiers(t, threeTiers())
-	economy, _ := set.At(0)
-	principal, _ := set.At(2)
-
-	above, err := principal.Above(economy)
-	require.NoError(t, err)
-	assert.True(t, above)
-	above, err = economy.Above(principal)
-	require.NoError(t, err)
-	assert.False(t, above)
-	above, err = economy.Above(economy)
-	require.NoError(t, err)
-	assert.False(t, above)
-
-	foreign, _ := other.At(0)
-	_, err = principal.Above(foreign)
-	require.Error(t, err, "an equal declaration is still a different set")
-	assert.Contains(t, err.Error(), "different declarations")
-
-	_, err = principal.Above(ModelTier{})
-	require.Error(t, err)
+func (s *modelTierSuite) TestParseReadsEachOldShippedNameAsItsNewOne() {
+	set := s.tiers(fourTiers())
+	for old, renamed := range map[string]string{"economy": "routine", "standard": "bounded", "principal": "design"} {
+		t, err := set.Parse(old)
+		s.Require().NoError(err, old)
+		s.Equal(renamed, t.Name(), "%s reads as %s", old, renamed)
+	}
 }
 
-func TestModelTierWithinAllowsEqualAndLowerOnly(t *testing.T) {
-	t.Parallel()
-	set := mustTiers(t, threeTiers())
-	economy, _ := set.At(0)
-	standard, _ := set.At(1)
-	principal, _ := set.At(2)
-
-	require.NoError(t, standard.Within(standard), "a child may run at its parent's tier")
-	require.NoError(t, economy.Within(standard), "a child may run below its parent's tier")
-
-	err := principal.Within(standard)
-	require.Error(t, err)
-	assert.Equal(t, "model tier principal (rank 2) ranks above standard (rank 1)", err.Error())
-
-	foreign, _ := mustTiers(t, threeTiers()).At(2)
-	err = economy.Within(foreign)
-	require.Error(t, err, "a ceiling from another declaration bounds nothing")
-	assert.Contains(t, err.Error(), "different declarations")
-
-	err = economy.Within(ModelTier{})
-	require.Error(t, err, "an unassigned ceiling bounds nothing")
-	assert.Contains(t, err.Error(), "unassigned")
+func (s *modelTierSuite) TestParseKeepsAnOldNameTheSetDeclares() {
+	decl := fourTiers()
+	decl.Cases = []string{"economy", "routine", "design", "frontier"}
+	t, err := s.tiers(decl).Parse("economy")
+	s.Require().NoError(err)
+	s.Equal(0, t.Rank(), "a workspace's own economy is its own case")
 }
 
-func TestModelTierZeroValueIsUnassigned(t *testing.T) {
-	t.Parallel()
+func (s *modelTierSuite) TestParseRefusesAnOldNameWhoseNewOneIsUndeclared() {
+	decl := fourTiers()
+	decl.Cases = []string{"cheap", "bounded", "design", "frontier"}
+	_, err := s.tiers(decl).Parse("economy")
+	s.Require().Error(err, "economy reads as routine, which this set does not declare")
+}
+
+func (s *modelTierSuite) TestRenamedModelTierNamesOnlyTheOldShippedNames() {
+	renamed, ok := RenamedModelTier("principal")
+	s.True(ok)
+	s.Equal("design", renamed)
+	_, ok = RenamedModelTier("design")
+	s.False(ok, "a current name is not renamed")
+	_, ok = RenamedModelTier("frontier")
+	s.False(ok)
+}
+
+func (s *modelTierSuite) TestAboveComparesOnlyWithinOneSet() {
+	set := s.tiers(fourTiers())
+	routine, design := s.at(set, 0), s.at(set, 2)
+
+	above, err := design.Above(routine)
+	s.Require().NoError(err)
+	s.True(above)
+	above, err = routine.Above(design)
+	s.Require().NoError(err)
+	s.False(above)
+	above, err = routine.Above(routine)
+	s.Require().NoError(err)
+	s.False(above)
+
+	_, err = design.Above(s.at(s.tiers(fourTiers()), 0))
+	s.Require().Error(err, "an equal declaration is still a different set")
+	s.Contains(err.Error(), "different declarations")
+
+	_, err = design.Above(ModelTier{})
+	s.Require().Error(err)
+}
+
+func (s *modelTierSuite) TestWithinAllowsEqualAndLowerOnly() {
+	set := s.tiers(fourTiers())
+	routine, bounded, design := s.at(set, 0), s.at(set, 1), s.at(set, 2)
+
+	s.Require().NoError(bounded.Within(bounded), "a child may run at its parent's tier")
+	s.Require().NoError(routine.Within(bounded), "a child may run below its parent's tier")
+
+	err := design.Within(bounded)
+	s.Require().Error(err)
+	s.Equal("model tier design (rank 2) ranks above bounded (rank 1)", err.Error())
+
+	err = routine.Within(s.at(s.tiers(fourTiers()), 2))
+	s.Require().Error(err, "a ceiling from another declaration bounds nothing")
+	s.Contains(err.Error(), "different declarations")
+
+	err = routine.Within(ModelTier{})
+	s.Require().Error(err, "an unassigned ceiling bounds nothing")
+	s.Contains(err.Error(), "unassigned")
+}
+
+func (s *modelTierSuite) TestTheZeroValueIsUnassigned() {
 	var zero ModelTier
-	assert.True(t, zero.IsZero())
-	assert.Equal(t, "", zero.Name())
-	assert.Equal(t, -1, zero.Rank())
+	s.True(zero.IsZero())
+	s.Empty(zero.Name())
+	s.Equal(-1, zero.Rank())
 
-	set := mustTiers(t, threeTiers())
-	assert.False(t, set.Default().IsZero())
-	assert.Equal(t, ModelTierBounds{}, set.Bounds(zero))
-	assert.Equal(t, SkillVariant(""), set.Skills(zero))
+	set := s.tiers(fourTiers())
+	s.False(set.Default().IsZero())
+	s.Equal(ModelTierBounds{}, set.Bounds(zero))
+	s.Equal(SkillVariant(""), set.Skills(zero))
 }
 
-func TestModelTierMarshalsItsName(t *testing.T) {
-	t.Parallel()
-	set := mustTiers(t, threeTiers())
-	out, err := json.Marshal(map[string]ModelTier{"tier": set.Default()})
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"tier":"standard"}`, string(out))
+func (s *modelTierSuite) TestATierMarshalsItsName() {
+	out, err := json.Marshal(map[string]ModelTier{"tier": s.tiers(fourTiers()).Default()})
+	s.Require().NoError(err)
+	s.JSONEq(`{"tier":"bounded"}`, string(out))
 }
 
-func TestModelTierAliasAndResolveRoundTrip(t *testing.T) {
-	t.Parallel()
-	set := mustTiers(t, threeTiers())
+func (s *modelTierSuite) TestAliasAndResolveRoundTrip() {
+	set := s.tiers(fourTiers())
 
 	for _, tier := range set.All() {
 		alias, err := set.Alias(testHost, tier)
-		require.NoError(t, err)
+		s.Require().NoError(err)
 		got, ok := set.Resolve(testHost, alias)
-		require.Truef(t, ok, "alias %q resolves", alias)
-		assert.Equal(t, tier, got)
+		s.Require().Truef(ok, "alias %q resolves", alias)
+		s.Equal(tier, got)
 	}
 
 	_, ok := set.Resolve(testHost, "unmapped-model")
-	assert.False(t, ok)
+	s.False(ok)
 	_, ok = set.Resolve("other", "small")
-	assert.False(t, ok)
+	s.False(ok)
 
 	_, err := set.Alias("other", set.Default())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "test-host", "the error names the hosts the declaration maps")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "test-host", "the error names the hosts the declaration maps")
 
-	foreign := mustTiers(t, threeTiers()).Default()
-	_, err = set.Alias(testHost, foreign)
-	require.Error(t, err)
+	_, err = set.Alias(testHost, s.tiers(fourTiers()).Default())
+	s.Require().Error(err)
 }
 
-func TestNewModelTierSetRefusesMisconfiguration(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name string
-		edit func(*ModelTierDeclaration)
-		want string
-	}{
-		{"no cases", func(d *ModelTierDeclaration) {
-			d.Cases, d.Bounds, d.Skills, d.Hosts = nil, nil, nil, nil
-		}, "declares no cases"},
-		{"no enum name", func(d *ModelTierDeclaration) { d.Enum = "" }, "has no name"},
-		{"duplicate case", func(d *ModelTierDeclaration) { d.Cases[2] = "economy" }, `"economy" is declared twice`},
-		{"default past the cases", func(d *ModelTierDeclaration) { d.Default = 3 }, "default rank 3 is outside 0..2"},
-		{"negative default", func(d *ModelTierDeclaration) { d.Default = -1 }, "default rank -1"},
-		{"bounds short", func(d *ModelTierDeclaration) { d.Bounds = d.Bounds[:2] }, "bounds covers 2 cases"},
-		{"negative bound", func(d *ModelTierDeclaration) { d.Bounds[1].MaxLive = -1 }, "bounds for rank 1 are negative"},
-		{"skills short", func(d *ModelTierDeclaration) { d.Skills = d.Skills[:1] }, "skills covers 1 cases"},
-		{"skill unset", func(d *ModelTierDeclaration) { d.Skills[0] = "" }, "skills for rank 0 is unset"},
-		{"skill unknown", func(d *ModelTierDeclaration) { d.Skills[0] = "medium" }, "the variants are short, full"},
-		{"host list short", func(d *ModelTierDeclaration) {
-			d.Hosts[testHost] = []string{"small", "large"}
-		}, "host test-host maps 2 cases and the enum declares 3"},
-		{"host list long", func(d *ModelTierDeclaration) {
-			d.Hosts[testHost] = []string{"a", "b", "c", "d"}
-		}, "host test-host maps 4 cases"},
-		{"empty alias", func(d *ModelTierDeclaration) { d.Hosts[testHost][1] = "" }, "maps rank 1 to an empty alias"},
-		{"shared alias", func(d *ModelTierDeclaration) { d.Hosts[testHost][2] = "small" }, `maps two cases to "small"`},
-		{"empty host id", func(d *ModelTierDeclaration) { d.Hosts[""] = []string{"a", "b", "c"} }, "has no harness id"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			decl := threeTiers()
-			tc.edit(&decl)
-			set, err := NewModelTierSet(decl)
-			require.Error(t, err)
-			assert.Nil(t, set)
-			assert.Contains(t, err.Error(), tc.want)
-			assert.ErrorIs(t, err, errModelTierDeclaration)
-		})
-	}
+func (s *modelTierSuite) TestAdjacentTiersMayShareAnAlias() {
+	decl := fourTiers()
+	decl.Hosts[testHost] = []string{"small", "medium", "large", "large"}
+	set := s.tiers(decl)
+
+	frontier := s.at(set, 3)
+	alias, err := set.Alias(testHost, frontier)
+	s.Require().NoError(err)
+	s.Equal("large", alias)
+	got, ok := set.Resolve(testHost, "large")
+	s.Require().True(ok)
+	s.Equal("design", got.Name(), "a shared alias resolves to the cheapest tier on it")
 }
 
-func TestNewModelTierSetReportsEveryProblem(t *testing.T) {
-	t.Parallel()
-	decl := threeTiers()
+func (s *modelTierSuite) TestSharedAliasesNamesEachHostThatRepeatsAnID() {
+	decl := fourTiers()
+	decl.Hosts = map[string][]string{
+		"zed":    {"a", "b", "c", "c"},
+		"claude": {"d", "e", "f", "g"},
+	}
+	set := s.tiers(decl)
+
+	s.Equal([]string{"zed runs design and frontier on one id, c"}, set.SharedAliases(s.at(set, 3)))
+	s.Equal([]string{"zed runs design and frontier on one id, c"}, set.SharedAliases(s.at(set, 2)))
+	s.Empty(set.SharedAliases(s.at(set, 1)), "no host repeats bounded's id")
+	s.Empty(set.SharedAliases(s.at(s.tiers(fourTiers()), 3)), "a tier of another set shares nothing here")
+}
+
+func (s *modelTierSuite) TestDeclarationWithNoCasesIsRefused() {
+	err := s.refused(func(d *ModelTierDeclaration) { d.Cases, d.Bounds, d.Skills, d.Hosts = nil, nil, nil, nil })
+	s.Contains(err.Error(), "declares no cases")
+}
+
+func (s *modelTierSuite) TestDeclarationWithNoEnumNameIsRefused() {
+	s.Contains(s.refused(func(d *ModelTierDeclaration) { d.Enum = "" }).Error(), "has no name")
+}
+
+func (s *modelTierSuite) TestADuplicateCaseIsRefused() {
+	s.Contains(s.refused(func(d *ModelTierDeclaration) { d.Cases[2] = "routine" }).Error(), `"routine" is declared twice`)
+}
+
+func (s *modelTierSuite) TestADefaultPastTheCasesIsRefused() {
+	s.Contains(s.refused(func(d *ModelTierDeclaration) { d.Default = 4 }).Error(), "default rank 4 is outside 0..3")
+}
+
+func (s *modelTierSuite) TestANegativeDefaultIsRefused() {
+	s.Contains(s.refused(func(d *ModelTierDeclaration) { d.Default = -1 }).Error(), "default rank -1")
+}
+
+func (s *modelTierSuite) TestShortBoundsAreRefused() {
+	s.Contains(s.refused(func(d *ModelTierDeclaration) { d.Bounds = d.Bounds[:2] }).Error(), "bounds covers 2 cases")
+}
+
+func (s *modelTierSuite) TestANegativeBoundIsRefused() {
+	s.Contains(s.refused(func(d *ModelTierDeclaration) { d.Bounds[1].MaxLive = -1 }).Error(), "bounds for rank 1 are negative")
+}
+
+func (s *modelTierSuite) TestShortSkillsAreRefused() {
+	s.Contains(s.refused(func(d *ModelTierDeclaration) { d.Skills = d.Skills[:1] }).Error(), "skills covers 1 cases")
+}
+
+func (s *modelTierSuite) TestAnUnsetSkillIsRefused() {
+	s.Contains(s.refused(func(d *ModelTierDeclaration) { d.Skills[0] = "" }).Error(), "skills for rank 0 is unset")
+}
+
+func (s *modelTierSuite) TestAnUnknownSkillIsRefused() {
+	s.Contains(s.refused(func(d *ModelTierDeclaration) { d.Skills[0] = "medium" }).Error(), "the variants are short, full")
+}
+
+func (s *modelTierSuite) TestAShortHostListIsRefused() {
+	err := s.refused(func(d *ModelTierDeclaration) { d.Hosts[testHost] = []string{"small", "large"} })
+	s.Contains(err.Error(), "host test-host maps 2 cases and the enum declares 4")
+}
+
+func (s *modelTierSuite) TestALongHostListIsRefused() {
+	err := s.refused(func(d *ModelTierDeclaration) { d.Hosts[testHost] = []string{"a", "b", "c", "d", "e"} })
+	s.Contains(err.Error(), "host test-host maps 5 cases")
+}
+
+func (s *modelTierSuite) TestAnEmptyAliasIsRefused() {
+	s.Contains(s.refused(func(d *ModelTierDeclaration) { d.Hosts[testHost][1] = "" }).Error(), "maps rank 1 to an empty alias")
+}
+
+func (s *modelTierSuite) TestAnAliasTwoTiersApartShareIsRefused() {
+	err := s.refused(func(d *ModelTierDeclaration) { d.Hosts[testHost][2] = "small" })
+	s.Contains(err.Error(), `maps ranks 0 and 2 to "small"`)
+}
+
+func (s *modelTierSuite) TestAnAliasThatReturnsAfterAnotherIsRefused() {
+	err := s.refused(func(d *ModelTierDeclaration) { d.Hosts[testHost] = []string{"a", "a", "b", "a"} })
+	s.Contains(err.Error(), `maps ranks 0 and 3 to "a"`, "the run of a broke at rank 2")
+}
+
+func (s *modelTierSuite) TestAnEmptyHostIDIsRefused() {
+	s.Contains(s.refused(func(d *ModelTierDeclaration) { d.Hosts[""] = []string{"a", "b", "c", "d"} }).Error(), "has no harness id")
+}
+
+func (s *modelTierSuite) TestEveryProblemIsReported() {
+	decl := fourTiers()
 	decl.Default = 9
 	decl.Skills = nil
 	_, err := NewModelTierSet(decl)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "default rank 9")
-	assert.Contains(t, err.Error(), "skills covers 0 cases")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "default rank 9")
+	s.Contains(err.Error(), "skills covers 0 cases")
 }
 
-func TestEnumModelTierVocabulariesCloseTheirSets(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, []string{"short", "full"}, SkillVariant("").Values())
-	assert.Equal(t, []string{"row", "matrix", "user-matrix", "default"}, ModelTierSource("").Values())
-	assert.False(t, SkillVariant("medium").Valid())
-	assert.True(t, SkillVariantFull.Full())
-	assert.False(t, SkillVariantFull.Short())
-	assert.True(t, SkillVariantShort.Short())
-	assert.Equal(t, "short", SkillVariantShort.String(), "the skill-variant stamp prints this")
+func (s *modelTierSuite) TestTheVocabulariesCloseTheirSets() {
+	s.Equal([]string{"short", "full"}, SkillVariant("").Values())
+	s.Equal([]string{"row", "matrix", "user-matrix", "default"}, ModelTierSource("").Values())
+	s.False(SkillVariant("medium").Valid())
+	s.True(SkillVariantFull.Full())
+	s.False(SkillVariantFull.Short())
+	s.True(SkillVariantShort.Short())
+	s.Equal("short", SkillVariantShort.String(), "the skill-variant stamp prints this")
 }
 
-func TestModelTierSetNamesItsSiteAndHosts(t *testing.T) {
-	t.Parallel()
-
-	decl := threeTiers()
+func (s *modelTierSuite) TestTheSetNamesItsSiteAndHosts() {
+	decl := fourTiers()
 	decl.Hosts = map[string][]string{
-		"zed":     {"a", "b", "c"},
-		"claude":  {"d", "e", "f"},
-		"bravado": {"g", "h", "i"},
+		"zed":     {"a", "b", "c", "d"},
+		"claude":  {"e", "f", "g", "h"},
+		"bravado": {"i", "j", "k", "l"},
 	}
-	set := mustTiers(t, decl)
+	set := s.tiers(decl)
+	s.Equal("magusfile.buzz:3", set.Site())
+	s.Equal([]string{"bravado", "claude", "zed"}, set.Hosts())
 
-	assert.Equal(t, "magusfile.buzz:3", set.Site())
-	assert.Equal(t, []string{"bravado", "claude", "zed"}, set.Hosts())
-	assert.Empty(t, mustTiers(t, func() ModelTierDeclaration { d := threeTiers(); d.Hosts = nil; return d }()).Hosts())
+	bare := fourTiers()
+	bare.Hosts = nil
+	s.Empty(s.tiers(bare).Hosts())
 }
 
-func TestJobModelTierStringIsTheLineForkPrints(t *testing.T) {
-	t.Parallel()
+func (s *modelTierSuite) TestTheForkLineNamesTheReasonAndSite() {
+	tier := JobModelTier{Name: "routine", Source: ModelTierSourceMatrix, Reason: "small", Site: "magusfile.buzz:20"}
+	s.Equal(`routine (rank 0), matrix: "small" at magusfile.buzz:20`, tier.String())
+}
 
-	tests := []struct {
-		name string
-		tier JobModelTier
-		want string
-	}{
-		{"reason and site", JobModelTier{Name: "economy", Source: ModelTierSourceMatrix, Reason: "small", Site: "magusfile.buzz:20"}, `economy (rank 0), matrix: "small" at magusfile.buzz:20`},
-		{"reason alone", JobModelTier{Name: "standard", Rank: 1, Source: ModelTierSourceDefault, Reason: "the declared default"}, `standard (rank 1), default: "the declared default"`},
-		{"neither", JobModelTier{Name: "principal", Rank: 2, Source: ModelTierSourceRow}, "principal (rank 2), row"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, tt.tier.String())
-		})
-	}
+func (s *modelTierSuite) TestTheForkLineNamesAReasonAlone() {
+	tier := JobModelTier{Name: "bounded", Rank: 1, Source: ModelTierSourceDefault, Reason: "the declared default"}
+	s.Equal(`bounded (rank 1), default: "the declared default"`, tier.String())
+}
+
+func (s *modelTierSuite) TestTheForkLineNamesTheSourceAlone() {
+	s.Equal("design (rank 2), row", JobModelTier{Name: "design", Rank: 2, Source: ModelTierSourceRow}.String())
+}
+
+func (s *modelTierSuite) TestTheForkLineSaysWhichTiersShareAnID() {
+	tier := JobModelTier{Name: "frontier", Rank: 3, Source: ModelTierSourceRow, Shared: []string{"codex runs design and frontier on one id, gpt-6-astra"}}
+	s.Equal("frontier (rank 3), row; codex runs design and frontier on one id, gpt-6-astra", tier.String())
 }

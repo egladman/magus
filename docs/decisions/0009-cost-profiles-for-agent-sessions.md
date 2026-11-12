@@ -132,7 +132,7 @@ resolve a spawn's model to a tier through the spawning harness's aliases in that
 and compare ranks, never model names or prices.
 
 - `spawn-names-model` at `strict` refuses a spawn whose tier is not its row's. The refusal
-  names the assignment whole, such as `economy (rank 0) -> haiku, matrix: "two files" at
+  names the assignment whole, such as `routine (rank 0) -> haiku, matrix: "two files" at
   hack/tiers.buzz:12`. A harness the declaration maps no model for is refused naming the
   `hosts` entry to add.
 - `spawn-above-model-tier` advises on a spawn whose tier ranks above its row's, and never
@@ -145,7 +145,7 @@ and compare ranks, never model names or prices.
   parent's tier the same way.
 - `model-tier-context-cap` advises a leased worker whose reported context passes its tier's
   `maxContext` bound, and set to deny refuses the worker's writes, as a passed deadline does.
-  It advises at every level by default; the shipped declaration caps only economy.
+  It advises at every level by default; the shipped declaration caps only routine.
 
 A row forked with no declaration, or a spawn bound to no row, has nothing to compare, so the
 rules stay silent: a workspace with no tiers and no harness spells sees none of this. Magus

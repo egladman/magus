@@ -57,7 +57,7 @@ func TestUnloadableMagusfileIsOneLine(t *testing.T) {
 }
 
 func leaseRow(id, parent string) types.Job {
-	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "standard"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}}
+	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "bounded"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}}
 }
 
 // A job verb, `ls jobs` and `describe job` read the job store first and open the workspace
@@ -448,7 +448,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 		"--read-paths", "internal/trail",
 		"--depends-on", "adj/guard",
 		"--check", "test internal/ledger",
-		"--model", "principal",
+		"--model", "design",
 		"--brief-format", "buzz",
 	}))
 	// The version is READ from the constant, not typed as a digit: this case is about the
@@ -458,7 +458,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	  "api_version": %q,
 	  "id": "adj/store",`, types.JobAPIVersion) + `
 	  "parent": "adjacency",
-	  "agent": {"model": {"tier": "principal"}, "instructions": "the store is the enforcement point", "worker": {"type": "resumed"}},
+	  "agent": {"model": {"tier": "design"}, "instructions": "the store is the enforcement point", "worker": {"type": "resumed"}},
 	  "checkpoint": "cf5509d09",
 	  "write_paths": ["internal/ledger", "types/lease.go"],
 	  "deny_paths": ["MAGUS.md"],
@@ -469,7 +469,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	}`))
 	require.NoError(t, err)
 
-	fromFlags := flagDeclaration(bound, "adj/store", *spec, tierWords("principal"))
+	fromFlags := flagDeclaration(bound, "adj/store", *spec, tierWords("design"))
 	require.NoError(t, fromFlags.Validate())
 
 	var a, b types.Job
@@ -513,7 +513,7 @@ func (s *forkAgentFlagsSuite) fork(args ...string) types.Declaration {
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
 	spec := bindForkSpec(flags, &bound)
 	s.Require().NoError(flags.Parse(args))
-	d := flagDeclaration(bound, "adj/store", *spec, tierWords("principal"))
+	d := flagDeclaration(bound, "adj/store", *spec, tierWords("design"))
 	s.Require().NoError(d.Validate())
 	return d
 }
@@ -531,9 +531,9 @@ func (s *forkAgentFlagsSuite) TestInstructionsResumeTheWarmWorker() {
 
 func (s *forkAgentFlagsSuite) TestModelNamingATierRequestsTheTier() {
 	s.Equal(&typesagent.Spec{
-		Model:  typesagent.Model{Tier: "principal"},
+		Model:  typesagent.Model{Tier: "design"},
 		Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed},
-	}, s.fork("--read-only", "--model", "principal").Agent)
+	}, s.fork("--read-only", "--model", "design").Agent)
 }
 
 func (s *forkAgentFlagsSuite) TestModelNamingNoTierRequestsTheID() {
@@ -1008,8 +1008,8 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 	}
 }
 
-// A fork naming a model takes the tier of the harness row that names it: the row is what
-// the wired harness publishes, and the host's own mapping of opus would give principal.
+// A fork naming a model takes the tier of the harness row that names it.
+// The row is what the wired harness publishes, whatever opus is elsewhere.
 func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	fixture.WireHarness(t, agent.HarnessDescriptor{
 		APIVersion: agent.HarnessAPIVersion,
@@ -1017,7 +1017,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 		Display:    agent.HarnessDisplay{Name: "Limit host"},
 		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
 		Config:     types.HarnessConfig{Path: "hooks.json"},
-		Models:     []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "economy"}},
+		Models:     []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "routine"}},
 	})
 	resetWorkspaceMemo(t)
 	root, _ := execFixture(t)
@@ -1030,7 +1030,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	out := captureStdout(t, func() {
 		require.NoError(t, jobFork(t.Context(), root, []string{"--stdin"}))
 	})
-	assert.Contains(t, out, "model tier: economy (rank 0)")
+	assert.Contains(t, out, "model tier: routine (rank 0)")
 }
 
 // The tool rows a wired harness installs in a checkout are magus's, so ending its job
@@ -1285,7 +1285,7 @@ func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	record := filepath.Join(t.TempDir(), "w.json")
 	require.NoError(t, os.WriteFile(record, fmt.Appendf(nil,
-		`{"api_version":%q,"id":"w","agent":{"model":{"tier":"standard"},"worker":{"type":"resumed"}},"write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
+		`{"api_version":%q,"id":"w","agent":{"model":{"tier":"bounded"},"worker":{"type":"resumed"}},"write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
 		types.JobAPIVersion), 0o644))
 	args := []string{"-f", record}
 
@@ -2307,14 +2307,14 @@ func TestEvidenceFlagCollectsGoalRefPairs(t *testing.T) {
 func TestJobModelCellFallsBackToTheAssignedTier(t *testing.T) {
 	t.Parallel()
 
-	tier := &typesagent.JobModelTier{Name: "economy"}
+	tier := &typesagent.JobModelTier{Name: "routine"}
 	tests := []struct {
 		name string
 		row  types.Job
 		want string
 	}{
 		{"the model the row names wins", types.Job{Agent: &typesagent.Spec{Model: typesagent.Model{ID: "opus"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}, ModelTier: tier}, "opus"},
-		{"the assigned tier stands in", types.Job{ModelTier: tier}, "economy"},
+		{"the assigned tier stands in", types.Job{ModelTier: tier}, "routine"},
 		{"neither is a dash", types.Job{}, "-"},
 	}
 	for _, tt := range tests {

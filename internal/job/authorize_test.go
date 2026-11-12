@@ -105,7 +105,7 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 		"validation":  func(u *types.Job) { u.Validation = "magus run ci ." },
 		"read_paths":  func(u *types.Job) { u.ReadPaths = []string{"/"} },
 		"parent":      func(u *types.Job) { u.Parent = "adj/other" },
-		"agent.model": func(u *types.Job) { u.Agent.Model = agent.Model{Tier: "principal"} },
+		"agent.model": func(u *types.Job) { u.Agent.Model = agent.Model{Tier: "design"} },
 		"breaks":      func(u *types.Job) { u.Breaks = []string{"--any-flag"} },
 		"read_only":   func(u *types.Job) { u.ReadOnly = true },
 		"deadline":    func(u *types.Job) { u.Deadline = 1 << 40 },

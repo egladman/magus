@@ -137,15 +137,15 @@ func TestModelTiersDefaultToTheShippedDeclaration(t *testing.T) {
 	for _, tier := range set.All() {
 		names = append(names, tier.Name())
 	}
-	assert.Equal(t, []string{"economy", "standard", "principal"}, names)
-	assert.Equal(t, "standard", set.Default().Name())
-	economy, err := set.Parse("economy")
+	assert.Equal(t, []string{"routine", "bounded", "design", "frontier"}, names)
+	assert.Equal(t, "bounded", set.Default().Name())
+	routine, err := set.Parse("routine")
 	require.NoError(t, err)
-	assert.Equal(t, agent.ModelTierBounds{MaxContext: 100000}, set.Bounds(economy))
-	standard, err := set.Parse("standard")
+	assert.Equal(t, agent.ModelTierBounds{MaxContext: 100000}, set.Bounds(routine))
+	bounded, err := set.Parse("bounded")
 	require.NoError(t, err)
-	assert.Zero(t, set.Bounds(standard).MaxLive, "the default caps no tier's live jobs")
-	assert.Equal(t, agent.SkillVariantFull, set.Skills(economy), "economy workers load the full skill bodies")
+	assert.Zero(t, set.Bounds(bounded).MaxLive, "the default caps no tier's live jobs")
+	assert.Equal(t, agent.SkillVariantFull, set.Skills(routine), "routine workers load the full skill bodies")
 	assert.Same(t, set, reg.ModelTiers(t.Context()), "the default is built once")
 }
 
@@ -189,11 +189,14 @@ magus\modelTiers(Level, default: Other.low, bounds: bounds, skills: skills);`,
 		{"a host keyed by something other than an id", `magus\modelTiers(Level, default: Level.low,
     hosts: {3: model}, bounds: bounds, skills: skills);`,
 			"must be the harness id", []string{"claude-code"}},
-		{"two tiers with one alias", `
-fun same(level: Level) > str { return "one"; }
-magus\modelTiers(Level, default: Level.low,
-    hosts: {"claude-code": same}, bounds: bounds, skills: skills);`,
-			"maps two cases", []string{"claude-code"}},
+		{"two tiers apart with one alias", `
+enum Spread { low, mid, high }
+fun spreadModel(s: Spread) > str { return match (s) { .low -> "one", .mid -> "two", .high -> "one" }; }
+fun spreadBounds(s: Spread) > magus\ModelTierBounds { return magus\ModelTierBounds{}; }
+fun spreadSkills(s: Spread) > magus\SkillVariant { return magus\SkillVariant.short; }
+magus\modelTiers(Spread, default: Spread.low,
+    hosts: {"claude-code": spreadModel}, bounds: spreadBounds, skills: spreadSkills);`,
+			"only adjacent tiers may share an id", []string{"claude-code"}},
 		{"an empty alias", `
 fun none(level: Level) > str { return ""; }
 magus\modelTiers(Level, default: Level.low,
@@ -419,22 +422,57 @@ func TestModelTiersDefaultMapsTheHarnessRows(t *testing.T) {
 		}
 		return spells.WithFuncSource(fmt.Sprintf("import \"magus/spell\";\nexport fun mgs_listModels() > [ModelRow] { return [%s]; }\n", strings.Join(list, ", ")))
 	}
-	full := register.Spell(t, "tiered-test", rows("economy", "standard", "principal"))
+	full := register.Spell(t, "tiered-test", rows("routine", "bounded", "design", "frontier"))
 	reg, err := loadModelTiers(t, `import "magus";`, full)
 	require.NoError(t, err)
 	set := reg.ModelTiers(t.Context())
 	require.NotNil(t, set)
-	economy, err := set.Parse("economy")
+	routine, err := set.Parse("routine")
 	require.NoError(t, err)
-	alias, err := set.Alias(full, economy)
+	alias, err := set.Alias(full, routine)
 	require.NoError(t, err)
-	assert.Equal(t, "m-economy", alias)
-	resolved, ok := set.Resolve(full, "m-principal")
+	assert.Equal(t, "m-routine", alias)
+	resolved, ok := set.Resolve(full, "m-design")
 	require.True(t, ok)
-	assert.Equal(t, "principal", resolved.Name())
+	assert.Equal(t, "design", resolved.Name())
 
-	partial := register.Spell(t, "half-tiered-test", rows("economy"))
+	partial := register.Spell(t, "half-tiered-test", rows("routine"))
 	_, err = defaultModelTierSet(t.Context(), []string{partial})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `add tier = "standard"`)
+	assert.Contains(t, err.Error(), `add tier = "bounded"`)
+}
+
+// A harness spell whose rows still name the three old tiers maps the first
+// three of the four, and names the one it lacks.
+func TestModelTiersDefaultReadsOldTierNamesOnHarnessRows(t *testing.T) {
+	old := register.Spell(t, "old-tiered-test", spells.WithFuncSource(`import "magus/spell";
+export fun mgs_listModels() > [ModelRow] {
+    return [
+        ModelRow{id = "m-low", tier = "economy"}, ModelRow{id = "m-mid", tier = "standard"},
+        ModelRow{id = "m-high", tier = "principal"}, ModelRow{id = "m-top", tier = "frontier"},
+    ];
+}
+`))
+	set, err := defaultModelTierSet(t.Context(), []string{old})
+	require.NoError(t, err)
+	var aliases []string
+	for _, tier := range set.All() {
+		alias, err := set.Alias(old, tier)
+		require.NoError(t, err)
+		aliases = append(aliases, alias)
+	}
+	assert.Equal(t, []string{"m-low", "m-mid", "m-high", "m-top"}, aliases)
+}
+
+func TestModelTiersLetAdjacentTiersShareAnAlias(t *testing.T) {
+	reg, err := loadModelTiers(t, levelsDecl+`
+fun same(level: Level) > str { return "one"; }
+magus\modelTiers(Level, default: Level.low,
+    hosts: {"claude-code": same}, bounds: bounds, skills: skills);`, "claude-code")
+	require.NoError(t, err)
+	set := reg.ModelTiers(t.Context())
+	require.NotNil(t, set)
+	high, err := set.Parse("high")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"claude-code runs low and high on one id, one"}, set.SharedAliases(high))
 }

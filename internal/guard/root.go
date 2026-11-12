@@ -511,8 +511,8 @@ func tierIn(set *agent.ModelTierSet, row types.Job) (forkedTier, bool) {
 	return forkedTier{job: row.ID, record: *row.ModelTier, tier: t, set: set}, true
 }
 
-// line is the assignment as a verdict names it, with the alias host spawns for it:
-// `economy (rank 0) -> haiku, matrix: "two files" at hack/tiers.buzz:12`.
+// line is the assignment as a verdict names it, with the alias host spawns.
+// One reads `routine (rank 0) -> haiku, matrix: "two files" at a.buzz:12`.
 func (f forkedTier) line(alias string) string {
 	out := fmt.Sprintf("%s (rank %d) -> %s, %s", f.record.Name, f.record.Rank, alias, f.record.Source)
 	if f.record.Reason != "" {

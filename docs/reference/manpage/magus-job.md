@@ -264,6 +264,12 @@ them and magus describe job prints one job's terms.
 **resume**
 : Lift the pause on jobs
 
+**pin**
+: Record the hash of the ./magus that judges a job's checkout
+
+**advance**
+: Move jobs' authority to this checkout's HEAD
+
 **grant**
 : Lower one guard rule to advice for one job, typed by a person
 

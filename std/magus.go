@@ -312,7 +312,8 @@ var Magus = Module{
 				"declaration must follow the magus\\harness.provider calls it maps. A declaration " +
 				"magus cannot use is MGS1052, and so is a second call or one outside the root " +
 				"magusfile. magus\\modelTiers(null) turns tiers off. With no call the workspace " +
-				"gets the magus/modeltiers module: economy, standard and principal. This declares; " +
+				"gets the magus/modeltiers module: routine, bounded, design and frontier. Adjacent " +
+				"tiers may share a host's alias, for a host with fewer models than tiers. This declares; " +
 				"it never selects a model for a call, retries or escalates, and prints nothing. " +
 				"The recorded outcomes per tier are magus\\workspace().tierOutcomes().",
 			Args: []Arg{

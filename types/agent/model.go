@@ -1,11 +1,14 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 )
 
 var errModelTierDeclaration = errors.New("model tier declaration")
@@ -106,6 +109,7 @@ type ModelTierBounds struct {
 // once: no cases, a duplicate or empty case, a default out of range, a bounds, skills
 // or host list whose length differs from the cases, a negative bound, an invalid skill
 // variant, an empty host id or alias, or one host giving two cases the same alias.
+// Adjacent cases may share one: a host with fewer models repeats an id.
 func NewModelTierSet(decl ModelTierDeclaration) (*ModelTierSet, error) {
 	problems := slices.Concat(decl.caseProblems(), decl.listProblems(), decl.hostProblems())
 	if len(problems) > 0 {
@@ -198,14 +202,18 @@ func (decl ModelTierDeclaration) hostProblems() []string {
 			out = append(out, fmt.Sprintf("host %s maps %d cases and the enum declares %d", host, len(aliases), n))
 			continue
 		}
-		seen := map[string]bool{}
+		seen := map[string]int{}
 		for i, a := range aliases {
-			if a == "" {
+			first, dup := seen[a]
+			switch {
+			case a == "":
 				out = append(out, fmt.Sprintf("host %s maps rank %d to an empty alias", host, i))
-			} else if seen[a] {
-				out = append(out, fmt.Sprintf("host %s maps two cases to %q, so a spawn of it names no one tier", host, a))
+			case dup && aliases[i-1] != a:
+				out = append(out, fmt.Sprintf("host %s maps ranks %d and %d to %q, and only adjacent tiers may share an id, so a spawn of it names no one run of tiers",
+					host, first, i, a))
+			case !dup:
+				seen[a] = i
 			}
-			seen[a] = true
 		}
 	}
 	return out
@@ -221,11 +229,40 @@ func (s *ModelTierSet) All() []ModelTier {
 }
 
 // Parse returns the tier named name. An unknown name errors, naming the declared cases.
+// An old name [RenamedModelTier] respells reads as its new one,
+// when the set declares the new name and not the old.
 func (s *ModelTierSet) Parse(name string) (ModelTier, error) {
 	if i, ok := s.byName[name]; ok {
 		return ModelTier{set: s, rank: i}, nil
 	}
+	if renamed, ok := RenamedModelTier(name); ok {
+		if i, ok := s.byName[renamed]; ok {
+			return ModelTier{set: s, rank: i}, nil
+		}
+	}
 	return ModelTier{}, fmt.Errorf("%q is not a model tier: enum %s at %s declares %s", name, s.enum, s.site, strings.Join(s.cases, ", "))
+}
+
+// renamedModelTiers maps each old shipped tier name to its new one.
+// compat(until: the next release): a row written before the rename
+// still names economy, standard or principal.
+var renamedModelTiers = map[string]string{"economy": "routine", "standard": "bounded", "principal": "design"}
+
+var renamedModelTierSaid sync.Map
+
+// RenamedModelTier is the new spelling of an old shipped tier name,
+// and false for any other name. The first read of each old name
+// in a process warns once. compat: see renamedModelTiers.
+func RenamedModelTier(name string) (string, bool) {
+	renamed, ok := renamedModelTiers[name]
+	if !ok {
+		return "", false
+	}
+	if _, said := renamedModelTierSaid.LoadOrStore(name, true); !said {
+		slog.WarnContext(context.Background(), fmt.Sprintf("model tier %s is now spelled %s: magus reads %s as %s until the next release, so write %s",
+			name, renamed, name, renamed, renamed))
+	}
+	return renamed, true
 }
 
 // At returns the tier at rank, and false when rank is outside the declaration.
@@ -269,13 +306,43 @@ func (s *ModelTierSet) Alias(host string, t ModelTier) (string, error) {
 }
 
 // Resolve returns the tier host's alias names, and false when host is unmapped or no
-// case maps to alias.
+// case maps to alias. An alias tiers share resolves to the cheapest.
 func (s *ModelTierSet) Resolve(host, alias string) (ModelTier, bool) {
 	i := slices.Index(s.hosts[host], alias)
 	if i < 0 {
 		return ModelTier{}, false
 	}
 	return ModelTier{set: s, rank: i}, true
+}
+
+// SharedAliases names each host that maps t and another tier to one
+// alias, with the tiers that share it, sorted by host. It is empty
+// when no host repeats t's alias, or t comes from another set.
+func (s *ModelTierSet) SharedAliases(t ModelTier) []string {
+	if t.set != s {
+		return nil
+	}
+	var out []string
+	for _, host := range s.Hosts() {
+		aliases := s.hosts[host]
+		var tiers []string
+		for i, a := range aliases {
+			if a == aliases[t.rank] {
+				tiers = append(tiers, s.cases[i])
+			}
+		}
+		if len(tiers) > 1 {
+			out = append(out, fmt.Sprintf("%s runs %s on one id, %s", host, joinAnd(tiers), aliases[t.rank]))
+		}
+	}
+	return out
+}
+
+func joinAnd(words []string) string {
+	if len(words) < 2 {
+		return strings.Join(words, "")
+	}
+	return fmt.Sprintf("%s and %s", strings.Join(words[:len(words)-1], ", "), words[len(words)-1])
 }
 
 // Enum is the name of the Buzz enum that declared the set.
@@ -333,10 +400,13 @@ type JobModelTier struct {
 	Reason string          `json:"reason,omitempty" yaml:"reason,omitempty"`
 	Site   string          `json:"site,omitempty"   yaml:"site,omitempty"`
 	Model  string          `json:"model,omitempty"  yaml:"model,omitempty"`
+	// Shared is [ModelTierSet.SharedAliases] for the tier when it was assigned.
+	Shared []string        `json:"shared,omitempty" yaml:"shared,omitempty"`
 }
 
 // String renders the assignment as `fork` and `describe job` print it: the name and rank,
 // the source that chose it and, where the source gave them, its reason and site.
+// Each Shared line follows.
 func (t JobModelTier) String() string {
 	line := fmt.Sprintf("%s (rank %d), %s", t.Name, t.Rank, t.Source)
 	if t.Reason != "" {
@@ -344,6 +414,9 @@ func (t JobModelTier) String() string {
 	}
 	if t.Site != "" {
 		line += " at " + t.Site
+	}
+	for _, s := range t.Shared {
+		line += "; " + s
 	}
 	return line
 }

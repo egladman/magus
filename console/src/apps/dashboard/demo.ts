@@ -606,7 +606,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
     modelTiers: {
       rows: [
         {
-          label: "economy / check",
+          label: "routine / check",
           rank: 0,
           jobs: 24,
           pass: 21,
@@ -621,7 +621,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
           medianTokens: 38_000,
         },
         {
-          label: "economy / symbol",
+          label: "routine / symbol",
           rank: 0,
           jobs: 14,
           pass: 6,

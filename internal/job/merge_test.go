@@ -31,9 +31,9 @@ func applyPut(t *testing.T, put types.JobPut, base types.Job) types.Job {
 func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 	t.Parallel()
 
-	base := types.Job{ID: "u1", Agent: &agent.Spec{Instructions: "original goal", Model: agent.Model{Tier: "standard"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}}
+	base := types.Job{ID: "u1", Agent: &agent.Spec{Instructions: "original goal", Model: agent.Model{Tier: "bounded"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}}
 	got := applyMerge(t, map[string]any{"state": "running"}, base)
-	assert.Equal(t, types.Job{ID: "u1", Agent: &agent.Spec{Instructions: "original goal", Model: agent.Model{Tier: "standard"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, State: types.StateRunning}, got,
+	assert.Equal(t, types.Job{ID: "u1", Agent: &agent.Spec{Instructions: "original goal", Model: agent.Model{Tier: "bounded"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, State: types.StateRunning}, got,
 		"an absent key must not erase what an earlier put set")
 	assert.Equal(t, base, applyPut(t, types.JobPut{}, base), "a put naming nothing changes nothing")
 }
@@ -199,9 +199,9 @@ func TestPutAgent(t *testing.T) { suite.Run(t, new(putAgentSuite)) }
 
 func (s *putAgentSuite) TestASectionReplacesTheRowsWhole() {
 	got := applyMerge(s.T(), map[string]any{"agent": map[string]any{
-		"model": map[string]any{"tier": "principal"}, "worker": map[string]any{"type": "resumed"},
+		"model": map[string]any{"tier": "design"}, "worker": map[string]any{"type": "resumed"},
 	}}, types.Job{ID: "u1", Agent: agent.Instructed("old")})
-	s.Equal(&agent.Spec{Model: agent.Model{Tier: "principal"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, got.Agent)
+	s.Equal(&agent.Spec{Model: agent.Model{Tier: "design"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, got.Agent)
 }
 
 func (s *putAgentSuite) TestASectionAsAJSONStringIsRead() {

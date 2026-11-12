@@ -55,7 +55,7 @@ func briefRow() types.Job {
 		Agent: &agent.Spec{
 			Instructions: "Move the lease ledger to the per-repository state dir.\n" +
 				"Done when a row put from one checkout is listed from a second worktree of the same repo.",
-			Model:  agent.Model{Tier: "principal"},
+			Model:  agent.Model{Tier: "design"},
 			Worker: agent.Worker{Type: agent.WorkerTypeResumed},
 		},
 		Checkpoint: "cf5509d09",
@@ -234,13 +234,13 @@ func TestTermsNamesTheModelTierAndItsSource(t *testing.T) {
 	}{
 		{
 			name: "a matrix answer names its reason and site",
-			tier: agent.JobModelTier{Name: "economy", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
-			want: "job: harness/ledger-per-repo\nmodel tier: economy (rank 0), matrix: \"small checked job\" at magusfile.buzz:20\nskills: full\n",
+			tier: agent.JobModelTier{Name: "routine", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
+			want: "job: harness/ledger-per-repo\nmodel tier: routine (rank 0), matrix: \"small checked job\" at magusfile.buzz:20\nskills: full\n",
 		},
 		{
 			name: "a default has no site",
-			tier: agent.JobModelTier{Name: "standard", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceDefault, Reason: "the declared default"},
-			want: "job: harness/ledger-per-repo\nmodel tier: standard (rank 1), default: \"the declared default\"\nskills: short\n",
+			tier: agent.JobModelTier{Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceDefault, Reason: "the declared default"},
+			want: "job: harness/ledger-per-repo\nmodel tier: bounded (rank 1), default: \"the declared default\"\nskills: short\n",
 		},
 	}
 	for _, tt := range tests {
@@ -271,9 +271,9 @@ func retriedRow() types.Job {
 // retriedTries are retriedRow's two ended tries: the second failing with
 // everything a try can leave, the first ended by the sweep.
 func retriedTries() []types.Attempt {
-	first := types.AttemptStatus{State: types.StateNoReturn, EndReason: "its checkout is gone", ModelTier: "economy", DenialsKnown: true}
+	first := types.AttemptStatus{State: types.StateNoReturn, EndReason: "its checkout is gone", ModelTier: "routine", DenialsKnown: true}
 	first.Retry = types.RetryVerdict{Retryable: true}
-	second := types.AttemptStatus{State: types.StateFail, ModelTier: "standard", ReworkRounds: 2, Widenings: 1, DenialsKnown: true}
+	second := types.AttemptStatus{State: types.StateFail, ModelTier: "bounded", ReworkRounds: 2, Widenings: 1, DenialsKnown: true}
 	second.Unmet = []types.VerificationStatus{{ID: "check"}, {ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
 	second.Violations = []string{`changed path "docs/x.md" is outside the job's write paths (internal/ledger)`}
 	second.Result = &types.JobResult{UnresolvedRisks: []string{"the second worktree was not tried"}}

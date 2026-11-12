@@ -90,7 +90,7 @@ func (s *AttemptsSuite) TestVerifyGatesWordsAnOutsidePathAsClassifyAttemptReadsI
 func foldedRow() types.Job {
 	prev := types.Job{ID: "a", State: types.StateFail, Generation: 2, Checkpoint: "abc", ReportedBase: "abd"}
 	prev.Updated, prev.ReworkRounds, prev.Widenings = 40, 2, 1
-	prev.ModelTier = &agent.JobModelTier{Name: "economy"}
+	prev.ModelTier = &agent.JobModelTier{Name: "routine"}
 	prev.Attempt = &types.JobAttempt{Ref: "out1", Failed: true}
 	prev.GateAttempts = []types.JobGateAttempt{
 		{GateID: "lint", Attempt: types.JobAttempt{Ref: "out2"}},
@@ -111,7 +111,7 @@ func (s *AttemptsSuite) TestFoldAttemptKeepsWhatTheNextHolderNeeds() {
 	got := foldAttempt(foldedRow(), live, nil, denials, true, 99)
 
 	want := tried(1, types.AttemptStatus{Started: 30, Ended: 40, End: types.AttemptEndJob, Result: result,
-		State: types.StateFail, ObservedGeneration: 2, ModelTier: "economy", Checkpoint: "abc", ReportedBase: "abd"})
+		State: types.StateFail, ObservedGeneration: 2, ModelTier: "routine", Checkpoint: "abc", ReportedBase: "abd"})
 	want.Status.ReworkRounds, want.Status.Widenings = 2, 1
 	want.Status.Unmet = []types.VerificationStatus{{ID: "check", Violations: []string{"failed"}}}
 	want.Status.Violations = []string{"v"}
@@ -132,7 +132,7 @@ func (s *AttemptsSuite) TestFoldAttemptSharesNothingWithTheRow() {
 // started, ended and ended by end as given.
 func foldedStatus(started, ended int64, end types.AttemptEnd) types.AttemptStatus {
 	st := types.AttemptStatus{Started: started, Ended: ended, End: end, State: types.StateFail, ObservedGeneration: 2,
-		ModelTier: "economy", Checkpoint: "abc", ReportedBase: "abd", ReworkRounds: 2, Widenings: 1}
+		ModelTier: "routine", Checkpoint: "abc", ReportedBase: "abd", ReworkRounds: 2, Widenings: 1}
 	st.Unmet = []types.VerificationStatus{{ID: "check", Violations: []string{"failed"}}}
 	st.Violations = []string{"v"}
 	st.FailingRefs = []string{"out1", "out3"}
