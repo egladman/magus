@@ -191,7 +191,6 @@ var recoveryForms = []string{
 	"GOEXPERIMENT=jsonv2 go generate ./internal/handler/mcp",
 }
 
-
 // The fixed recovery runs for any caller in its own checkout, with or
 // without a binary, and loads nothing to decide it.
 func TestRankOwnBuildAllowsTheFixedRecovery(t *testing.T) {

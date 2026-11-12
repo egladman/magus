@@ -319,7 +319,6 @@ func Inspect(ctx context.Context, root string, opts ...Option) (types.WorkspaceR
 	return m, nil
 }
 
-
 // WorkspaceLoadFailure describes err, a failed Open of root, as the server reports a FAILED
 // workspace: the error as rendered, plus the source position of each failing file that has
 // one. A position outside root keeps its absolute path.

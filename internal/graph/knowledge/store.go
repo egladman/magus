@@ -63,7 +63,7 @@ func StoreDir(cacheDir string) string { return filepath.Join(cacheDir, "knowledg
 // manifest is the per-shard index persisted at manifest.json. It doubles as the
 // (future) shard routing index; Phase 1 carries only fingerprints and counts.
 type manifest struct {
-	APIVersion types.APIVersion `json:"api_version"`
+	APIVersion types.APIVersion     `json:"api_version"`
 	Shards     map[string]shardMeta `json:"shards"`
 	// Inputs is the stamp each class's shards were last assembled under (see Stamps). A
 	// class with no entry matches no stamp, so a store written before stamps existed, or
