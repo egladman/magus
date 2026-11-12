@@ -221,7 +221,9 @@ test("live: bash arm denies git stash with the whole-tree reason", { skip }, asy
   );
 });
 
-test("live: bash arm advises once on a CI status read and denies a watched one", { skip }, async () => {
+test("live: bash arm advises once on a CI status read and denies a watched one", {
+  skip,
+}, async () => {
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();
   // once() keys on the session, so a fresh id keeps a rerun from finding the advice spent.
