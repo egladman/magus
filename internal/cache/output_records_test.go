@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -52,7 +51,7 @@ func TestOutputImportRefusesNewerSchema(t *testing.T) {
 	_, err := readRecords(outputRecordLine(t, func(r map[string]any) { r["api_version"] = "magus.output-record/v1alpha2" }))
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
 	assert.ErrorContains(t, err, "line 1: ")
-	assert.ErrorContains(t, err, "output record is magus.output-record/v1alpha2, newer than the magus.output-record/v1alpha1 this magus reads")
+	assert.ErrorContains(t, err, "output record: record is magus.output-record/v1alpha2, newer than the magus.output-record/v1alpha1 this reader reads")
 
 	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { delete(r, "api_version") }))
 	assert.ErrorContains(t, err, "line 1: not an output record: it has no api_version")
@@ -60,31 +59,6 @@ func TestOutputImportRefusesNewerSchema(t *testing.T) {
 	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { r["requires"] = []string{"future-feature"} }))
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
 	assert.ErrorContains(t, err, "output record requires [future-feature]")
-}
-
-type PreFoldOutputRecordSuite struct{ suite.Suite }
-
-func TestPreFoldOutputRecordSuite(t *testing.T) {
-	suite.Run(t, new(PreFoldOutputRecordSuite))
-}
-
-func (s *PreFoldOutputRecordSuite) TestReadsSchemaVersionOneAsV1alpha1() {
-	got, err := readRecords(outputRecordLine(s.T(), func(r map[string]any) {
-		delete(r, "api_version")
-		r["schema_version"] = 1
-	}))
-	s.Require().NoError(err)
-	s.Require().Len(got, 1)
-	s.Equal(types.StoredOutputAPIVersion, got[0].Version)
-	s.Empty(got[0].Unknown)
-}
-
-func (s *PreFoldOutputRecordSuite) TestReadsBothStampsAsTheAPIVersion() {
-	got, err := readRecords(outputRecordLine(s.T(), func(r map[string]any) { r["schema_version"] = 1 }))
-	s.Require().NoError(err)
-	s.Require().Len(got, 1)
-	s.Equal(types.StoredOutputAPIVersion, got[0].Version)
-	s.Empty(got[0].Unknown)
 }
 
 // Nothing reaches each when any line is bad, so a caller never prints half an input.

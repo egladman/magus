@@ -51,8 +51,8 @@ func TestReadLock(t *testing.T) {
 	for name, tc := range map[string]struct {
 		body, wantErr string
 	}{
-		"other version": {body: "version: magus.spell-lock/v1alpha2\n", wantErr: "magus.lock is magus.spell-lock/v1alpha2, newer than"},
-		"empty":         {body: "", wantErr: "magus.lock carries no api_version"},
+		"other version": {body: "version: magus.spell-lock/v1alpha2\n", wantErr: "magus.lock: record is magus.spell-lock/v1alpha2, newer than"},
+		"empty":         {body: "", wantErr: "magus.lock: record carries no apiVersion"},
 		"unknown field": {body: fmt.Sprintf("version: magus.spell-lock/v1alpha1\nspells:\n  ghcr.io/team/lint:\n    tag: v1\n    digest: %s\n    size: 3\n", d.String()), wantErr: "field size not found"},
 		"workspace key": {body: fmt.Sprintf("version: magus.spell-lock/v1alpha1\nspells:\n  spells/lint:\n    tag: v1\n    digest: %s\n", d.String()), wantErr: `"spells/lint" is not a registry path`},
 		"bad digest":    {body: "version: magus.spell-lock/v1alpha1\nspells:\n  ghcr.io/team/lint:\n    tag: v1\n    digest: sha256:abc\n", wantErr: "ghcr.io/team/lint"},
@@ -65,6 +65,16 @@ func TestReadLock(t *testing.T) {
 			require.ErrorContains(t, err, tc.wantErr)
 		})
 	}
+}
+
+func TestReadLockNamesTheVersionOfALockWithUnknownFields(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	body := "version: magus.spell-lock/v1alpha2\nsurprise: true\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, LockFile), []byte(body), 0o644))
+	_, err := ReadLock(dir)
+	require.ErrorContains(t, err, "newer than the magus.spell-lock/v1alpha1")
+	assert.NotContains(t, err.Error(), "not found")
 }
 
 // An update reads the lock it replaces under the file lock, so the callback sees what

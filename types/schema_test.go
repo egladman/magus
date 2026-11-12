@@ -24,12 +24,12 @@ type schemaGolden struct {
 	Reserved []string          `json:"reserved"`
 }
 
-// TestSchemaLedgersEvolveAdditively holds every versioned record to the contract
-// SchemaLedger states, against its frozen goldens. buf's WIRE_JSON rules, for JSON names.
-func TestSchemaLedgersEvolveAdditively(t *testing.T) {
+// TestFormatLedgersEvolveAdditively holds every versioned record to the contract
+// FormatLedger states, against its frozen goldens. buf's WIRE_JSON rules, for JSON names.
+func TestFormatLedgersEvolveAdditively(t *testing.T) {
 	t.Parallel()
 
-	for _, l := range SchemaLedgers {
+	for _, l := range FormatLedgers {
 		t.Run(l.Name, func(t *testing.T) {
 			t.Parallel()
 			goldens := loadGoldens(t, l)
@@ -38,7 +38,7 @@ func TestSchemaLedgersEvolveAdditively(t *testing.T) {
 	}
 }
 
-func loadGoldens(t *testing.T, l SchemaLedger) map[APIVersion]schemaGolden {
+func loadGoldens(t *testing.T, l FormatLedger) map[APIVersion]schemaGolden {
 	t.Helper()
 	paths, err := filepath.Glob(filepath.Join("testdata", "schema", l.Name+".v*.json"))
 	require.NoError(t, err)
@@ -67,7 +67,7 @@ func wireType(t string) string {
 }
 
 // ledgerViolations is every way l's type breaks the contract against goldens.
-func ledgerViolations(l SchemaLedger, goldens map[APIVersion]schemaGolden) []string {
+func ledgerViolations(l FormatLedger, goldens map[APIVersion]schemaGolden) []string {
 	var out []string
 	add := func(format string, args ...any) {
 		out = append(out, fmt.Sprintf("%s: %s", l.Name, fmt.Sprintf(format, args...)))
@@ -214,75 +214,75 @@ func TestLedgerViolations(t *testing.T) {
 	v1 := map[APIVersion]schemaGolden{ledgerV1: {Fields: fields()}}
 
 	for name, tc := range map[string]struct {
-		ledger  SchemaLedger
+		ledger  FormatLedger
 		goldens map[APIVersion]schemaGolden
 		want    []string
 	}{
 		"unchanged": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[base](), Version: ledgerV1},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[base](), Version: ledgerV1},
 			goldens: v1,
 		},
 		"an added field recorded in Added": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[added](), Version: ledgerV1, Added: map[string]APIVersion{"c": ledgerV1}},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[added](), Version: ledgerV1, Added: map[string]APIVersion{"c": ledgerV1}},
 			goldens: v1,
 		},
 		"an added field left out of Added": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[added](), Version: ledgerV1},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[added](), Version: ledgerV1},
 			goldens: v1,
 			want:    []string{`r: "c" is not in magus.r/v1alpha1; record it in Added as "c": "magus.r/v1alpha1", and leave the version where it is`},
 		},
 		"a removed field that is reserved": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[removed](), Version: ledgerV1, Reserved: []string{"b"}},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[removed](), Version: ledgerV1, Reserved: []string{"b"}},
 			goldens: v1,
 		},
 		"a removed field left unreserved": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[removed](), Version: ledgerV1},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[removed](), Version: ledgerV1},
 			goldens: v1,
 			want:    []string{`r: "b" (in magus.r/v1alpha1) is gone; a removed name goes into Reserved so it is never reused`},
 		},
 		"a changed type": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[retyped](), Version: ledgerV1},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[retyped](), Version: ledgerV1},
 			goldens: v1,
 			want:    []string{`r: "a" was string in magus.r/v1alpha1 and is int now; a new type is a new name`},
 		},
 		"a value made a pointer": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[pointered](), Version: ledgerV1},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[pointered](), Version: ledgerV1},
 			goldens: v1,
 		},
 		"a reserved name declared again": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[base](), Version: ledgerV1, Reserved: []string{"a"}},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[base](), Version: ledgerV1, Reserved: []string{"a"}},
 			goldens: v1,
 			want:    []string{`r: "a" is reserved and declared again; pick a new name`},
 		},
 		"a reservation dropped": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[base](), Version: ledgerV1},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[base](), Version: ledgerV1},
 			goldens: map[APIVersion]schemaGolden{ledgerV1: {Fields: fields(), Reserved: []string{"old"}}},
 			want:    []string{`r: "old" was reserved in magus.r/v1alpha1 and is not now; Reserved only grows`},
 		},
 		"a bump that only adds": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[added](), Version: ledgerV2},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[added](), Version: ledgerV2},
 			goldens: map[APIVersion]schemaGolden{ledgerV1: {Fields: fields()}, ledgerV2: {Fields: fields("c", "bool")}},
 			want: []string{`r: magus.r/v1alpha2 only adds to magus.r/v1alpha1; leave the version at magus.r/v1alpha1 and put the new names in Added,` +
 				` or name the feature an older reader lacks in Requires`},
 		},
 		"a bump that names the feature it breaks": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[added](), Version: ledgerV2, Requires: map[string]APIVersion{"c-means-d": ledgerV2}},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[added](), Version: ledgerV2, Requires: map[string]APIVersion{"c-means-d": ledgerV2}},
 			goldens: map[APIVersion]schemaGolden{ledgerV1: {Fields: fields()}, ledgerV2: {Fields: fields("c", "bool")}},
 		},
 		"a bump that removes a reserved name": {
-			ledger: SchemaLedger{Name: "r", Type: reflect.TypeFor[removed](), Version: ledgerV2, Reserved: []string{"b"}},
+			ledger: FormatLedger{Name: "r", Type: reflect.TypeFor[removed](), Version: ledgerV2, Reserved: []string{"b"}},
 			goldens: map[APIVersion]schemaGolden{ledgerV1: {Fields: fields()}, ledgerV2: {
 				Fields: map[string]string{"api_version": "types.APIVersion", "requires": "[]string", "a": "string"}, Reserved: []string{"b"},
 			}},
 		},
 		"a version with no frozen field set": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[base](), Version: ledgerV2},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[base](), Version: ledgerV2},
 			goldens: v1,
 			want: []string{"r: no frozen field set for magus.r/v1alpha2; commit testdata/schema/r.v1alpha2.json as\n" +
 				"{\n  \"fields\": {\n    \"a\": \"string\",\n    \"api_version\": \"types.APIVersion\",\n    \"b\": \"[]int\",\n    \"requires\": \"[]string\"\n  },\n  \"reserved\": null\n}"},
 		},
 		"a type without the bag": {
-			ledger:  SchemaLedger{Name: "r", Type: reflect.TypeFor[bagless](), Version: ledgerV1},
+			ledger:  FormatLedger{Name: "r", Type: reflect.TypeFor[bagless](), Version: ledgerV1},
 			goldens: map[APIVersion]schemaGolden{ledgerV1: {Fields: map[string]string{"api_version": "types.APIVersion", "a": "string", "b": "[]int"}}},
 			want:    []string{"r: types.bagless does not embed types.Schema, so a rewrite drops the members it does not declare"},
 		},

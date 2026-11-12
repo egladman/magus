@@ -80,13 +80,13 @@ func TestReadToolRowsReadsBackWhatFilesWrote(t *testing.T) {
 	assert.Empty(t, rows.Capability("Stranger"))
 }
 
-type PreFoldToolRowsSuite struct{ suite.Suite }
+type StaleToolRowsSuite struct{ suite.Suite }
 
-func TestPreFoldToolRowsSuite(t *testing.T) {
-	suite.Run(t, new(PreFoldToolRowsSuite))
+func TestStaleToolRowsSuite(t *testing.T) {
+	suite.Run(t, new(StaleToolRowsSuite))
 }
 
-func (s *PreFoldToolRowsSuite) TestReadsVersionOneRows() {
+func (s *StaleToolRowsSuite) TestRefusesVersionOneRows() {
 	root := s.T().TempDir()
 	files := ToolFiles(types.HarnessTools{Dir: "tools", Rows: shellRow()}, nil)
 	for i, f := range files {
@@ -97,8 +97,8 @@ func (s *PreFoldToolRowsSuite) TestReadsVersionOneRows() {
 	writeToolFiles(s.T(), root, files)
 
 	rows := readToolRows(root, "tools")
-	s.Require().NoError(rows.Err)
-	s.Equal(types.ToolRuns, rows.Capability("Shell"))
+	s.ErrorContains(rows.Err, "the tool rows at tools: record is 1, and this reader reads only magus.tool-rows/v1alpha1")
+	s.Empty(rows.Capability("Shell"))
 }
 
 func testModelFacts(t testing.TB) *ModelFacts {

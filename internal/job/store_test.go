@@ -1635,89 +1635,28 @@ func (s *workerResumedSuite) TestARowWithNoAgentIsUntouched() {
 	s.NotContains(stored, "agent")
 }
 
-// IntegerStampSuite pins adoptIntegerStamp: a job store an integer-versioned
-// magus wrote reads as JobAPIVersion, and anything else old is refused.
-type IntegerStampSuite struct {
+type StaleStampSuite struct {
 	suite.Suite
 	store *Store
 }
 
-func TestIntegerStamp(t *testing.T) {
+func TestStaleStamp(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(IntegerStampSuite))
+	suite.Run(t, new(StaleStampSuite))
 }
 
-func (s *IntegerStampSuite) SetupTest() {
+func (s *StaleStampSuite) SetupTest() {
 	s.store = tempStore(s.T(), s.T().TempDir())
 }
 
-const integerStore = `{"schema_version":13}` + "\n" +
-	`{"id":"a","schema_version":13,"state":"running","created":1,"updated":1}` + "\n" +
-	`{"id":"b","schema_version":13,"state":"running","created":1,"updated":1}`
-
-func (s *IntegerStampSuite) TestReadsAnIntegerRowAsV1alpha1() {
-	plantRaw(s.T(), s.store, integerStore)
-	rows, err := s.store.List()
-	s.Require().NoError(err)
-	s.Require().Len(rows, 2)
-	s.Equal(types.JobAPIVersion, rows[0].Version)
-	s.NotContains(rows[0].Unknown, "schema_version")
-}
-
-func (s *IntegerStampSuite) TestRewriteWritesTheName() {
-	path := plantRaw(s.T(), s.store, integerStore)
-	_, err := s.store.Update(s.T().Context(), "a", func(u *types.Job) { u.Agent = agent.Instructed("moved") })
-	s.Require().NoError(err)
-	row := storedRow(s.T(), path, "a")
-	s.Equal(string(types.JobAPIVersion), row["api_version"])
-	s.NotContains(row, "schema_version")
-}
-
-// An older binary's rewrite keeps api_version and adds its integer beside
-// it, and the row's result keeps its integer alone.
-const rewrittenByOlder = `{"api_version":"magus.job/v1alpha1","schema_version":13}` + "\n" +
-	`{"api_version":"magus.job/v1alpha1","schema_version":0,"id":"a","state":"running","created":1,"updated":1,` +
-	`"result":{"api_version":"","schema_version":2,"job":"a","changed_paths":[],"unresolved_risks":[]}}`
-
-func (s *IntegerStampSuite) TestReadsALineCarryingBothStampsAsItsAPIVersion() {
-	plantRaw(s.T(), s.store, rewrittenByOlder)
-	rows, err := s.store.List()
-	s.Require().NoError(err)
-	s.Require().Len(rows, 1)
-	s.Equal(types.JobAPIVersion, rows[0].Version)
-	s.Empty(rows[0].Unknown)
-}
-
-func (s *IntegerStampSuite) TestReadsAnIntegerResultAsV1alpha1() {
-	plantRaw(s.T(), s.store, rewrittenByOlder)
-	rows, err := s.store.List()
-	s.Require().NoError(err)
-	s.Require().Len(rows, 1)
-	s.Require().NotNil(rows[0].Result)
-	s.Equal(types.JobResultAPIVersion, rows[0].Result.Version)
-	s.Empty(rows[0].Result.Unknown)
-}
-
-func (s *IntegerStampSuite) TestRewriteDropsTheLeftoverIntegers() {
-	path := plantRaw(s.T(), s.store, rewrittenByOlder)
-	_, err := s.store.Update(s.T().Context(), "a", func(u *types.Job) { u.Agent = agent.Instructed("moved") })
-	s.Require().NoError(err)
-	row := storedRow(s.T(), path, "a")
-	s.NotContains(row, "schema_version")
-	result, ok := row["result"].(map[string]any)
-	s.Require().True(ok, "the result is kept: %v", row)
-	s.Equal(string(types.JobResultAPIVersion), result["api_version"])
-	s.NotContains(result, "schema_version")
-}
-
-func (s *IntegerStampSuite) TestRefusesANonIntegerSchemaVersion() {
-	plantRaw(s.T(), s.store, `{"id":"a","schema_version":"13","state":"running","created":1,"updated":1}`)
+func (s *StaleStampSuite) TestRefusesAnIntegerRow() {
+	plantRaw(s.T(), s.store, `{"id":"a","schema_version":13,"state":"running","created":1,"updated":1}`)
 	_, err := s.store.List()
-	s.ErrorContains(err, "carries no api_version, so an older magus wrote it")
+	s.ErrorContains(err, "record carries no apiVersion")
 	s.ErrorContains(err, "move jobs.jsonl aside, or delete it, and fork the jobs again")
 }
 
-func (s *IntegerStampSuite) TestRefusesAMalformedVersion() {
+func (s *StaleStampSuite) TestRefusesAMalformedVersion() {
 	plantRaw(s.T(), s.store, `{"id":"a","api_version":"13","state":"running","created":1,"updated":1}`)
 	_, err := s.store.List()
 	s.ErrorContains(err, "move jobs.jsonl aside, or delete it")

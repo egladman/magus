@@ -2,10 +2,13 @@ package types
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/egladman/magus/libs/apiversion"
 )
 
 // APIVersion names a versioned format Kubernetes-style, as
@@ -73,21 +76,19 @@ func (v APIVersion) Compare(w APIVersion) int {
 	)
 }
 
-// Refuse is a reader's error for a record that carries got where the
-// reader reads only v. It is nil when got is v. what names the record;
-// fix is what the person does next, such as deleting the store. A newer
-// version of the same group asks for a newer magus instead.
-func (v APIVersion) Refuse(what string, got APIVersion, fix string) error {
+// RefuseVersion wraps apiversion's refusal of got where the reader reads
+// only want. It is nil when got is want. what names the record; fix is
+// what the person does next, such as deleting the store. A newer version
+// of the same group asks for a newer magus instead.
+func RefuseVersion(want, got APIVersion, what, fix string) error {
+	err := apiversion.APIVersion(want).Refuse(apiversion.APIVersion(got))
 	switch {
-	case got == v:
+	case err == nil:
 		return nil
-	case got == "":
-		return fmt.Errorf("%s carries no api_version, so an older magus wrote it, "+
-			"and this magus reads only %s: %s", what, v, fix)
-	case got.Group() == v.Group() && got.Compare(v) > 0:
-		return fmt.Errorf("%s is %s, newer than the %s this magus reads: upgrade magus", what, got, v)
+	case errors.Is(err, apiversion.ErrNewer):
+		return fmt.Errorf("%s: %w: upgrade magus", what, err)
 	default:
-		return fmt.Errorf("%s is %s and this magus reads only %s: %s", what, got, v, fix)
+		return fmt.Errorf("%s: %w: %s", what, err, fix)
 	}
 }
 

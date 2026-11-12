@@ -884,7 +884,6 @@ github.com/egladman/magus/std.WithEditJudge func(ctx context.Context, j EditJudg
 github.com/egladman/magus/types.APIVersion type string
 github.com/egladman/magus/types.APIVersion.Compare method func(w APIVersion) int
 github.com/egladman/magus/types.APIVersion.Group method func() string
-github.com/egladman/magus/types.APIVersion.Refuse method func(what string, got APIVersion, fix string) error
 github.com/egladman/magus/types.APIVersion.Stability method func() Stability
 github.com/egladman/magus/types.APIVersion.String method func() string
 github.com/egladman/magus/types.APIVersion.Valid method func() bool
@@ -1682,7 +1681,7 @@ github.com/egladman/magus/types.Declaration.Validate method func() error
 github.com/egladman/magus/types.Declaration.Validation field string "json:\"validation,omitempty\""
 github.com/egladman/magus/types.Declaration.Weight field *float64 "json:\"weight,omitempty\""
 github.com/egladman/magus/types.Declaration.WritePaths field []string "json:\"write_paths,omitempty\" schema:\"writepath\""
-github.com/egladman/magus/types.DeclarationSchema var SchemaLedger
+github.com/egladman/magus/types.DeclarationSchema var FormatLedger
 github.com/egladman/magus/types.DefaultJobWeight const untyped float = 1/2
 github.com/egladman/magus/types.DefaultRefReporter type interface
 github.com/egladman/magus/types.DefaultRefReporter.DefaultRef imethod func(ctx context.Context, dir string) (string, error)
@@ -2156,6 +2155,15 @@ github.com/egladman/magus/types.ForgePull.Review field string
 github.com/egladman/magus/types.ForgePull.Title field string
 github.com/egladman/magus/types.ForgePull.URL field string
 github.com/egladman/magus/types.FormatDiagnostic func(c DiagnosticCode, msg string) string
+github.com/egladman/magus/types.FormatLedger type struct
+github.com/egladman/magus/types.FormatLedger.Added field map[string]APIVersion
+github.com/egladman/magus/types.FormatLedger.Features method func() []string
+github.com/egladman/magus/types.FormatLedger.Name field string
+github.com/egladman/magus/types.FormatLedger.Requires field map[string]APIVersion
+github.com/egladman/magus/types.FormatLedger.Reserved field []string
+github.com/egladman/magus/types.FormatLedger.Type field reflect.Type
+github.com/egladman/magus/types.FormatLedger.Version field APIVersion
+github.com/egladman/magus/types.FormatLedgers var []FormatLedger
 github.com/egladman/magus/types.FormatMB func(mb int) string
 github.com/egladman/magus/types.FunctionGap type struct
 github.com/egladman/magus/types.FunctionGap.Complexity field int
@@ -2924,7 +2932,7 @@ github.com/egladman/magus/types.JobResult.UnresolvedRisks field []string "json:\
 github.com/egladman/magus/types.JobResult.Validation field JobResultValidation "json:\"validation,omitempty\" yaml:\"validation,omitempty\""
 github.com/egladman/magus/types.JobResult.VerificationEvidence field []VerificationEvidence "json:\"verification_evidence,omitempty\" yaml:\"verification_evidence,omitempty\""
 github.com/egladman/magus/types.JobResultAPIVersion const APIVersion = "magus.job-result/v1alpha1"
-github.com/egladman/magus/types.JobResultSchema var SchemaLedger
+github.com/egladman/magus/types.JobResultSchema var FormatLedger
 github.com/egladman/magus/types.JobResultValidation type struct
 github.com/egladman/magus/types.JobResultValidation.Command field string "json:\"command\" yaml:\"command\""
 github.com/egladman/magus/types.JobResultValidation.OutputRef field string "json:\"output_ref\" yaml:\"output_ref\""
@@ -2938,7 +2946,7 @@ github.com/egladman/magus/types.JobRun.Error field string "json:\"error,omitempt
 github.com/egladman/magus/types.JobRun.Invocation field string "json:\"invocation,omitempty\" yaml:\"invocation,omitempty\""
 github.com/egladman/magus/types.JobRun.ItemsRemoved field int64 "json:\"items_removed,omitempty\"   yaml:\"items_removed,omitempty\""
 github.com/egladman/magus/types.JobRun.OK field bool "json:\"ok\"              yaml:\"ok\""
-github.com/egladman/magus/types.JobSchema var SchemaLedger
+github.com/egladman/magus/types.JobSchema var FormatLedger
 github.com/egladman/magus/types.JobStaleAt func(rows []Job, row Job, now int64, after time.Duration) bool
 github.com/egladman/magus/types.JobState type string
 github.com/egladman/magus/types.JobState.Editing method func() bool
@@ -4310,6 +4318,7 @@ github.com/egladman/magus/types.RefMatch.Project field string
 github.com/egladman/magus/types.RefMatch.Target field string
 github.com/egladman/magus/types.RefreshHookInstaller type interface
 github.com/egladman/magus/types.RefreshHookInstaller.InstallRefreshHook imethod func(ctx context.Context, root string, command string) ([]string, error)
+github.com/egladman/magus/types.RefuseVersion func(want APIVersion, got APIVersion, what string, fix string) error
 github.com/egladman/magus/types.RegionChange type struct
 github.com/egladman/magus/types.RegionChange.Declaration field string "json:\"declaration,omitempty\""
 github.com/egladman/magus/types.RegionChange.Driver field string "json:\"driver,omitempty\""
@@ -4479,15 +4488,6 @@ github.com/egladman/magus/types.Schema.Requires field []string "json:\"requires,
 github.com/egladman/magus/types.Schema.Unknown field map[string]github.com/egladman/magus/internal/json.RawMessage "json:\",unknown\" yaml:\"-\" buzz:\"-\""
 github.com/egladman/magus/types.Schema.Unmet method func(known []string) []string
 github.com/egladman/magus/types.Schema.Version field APIVersion "json:\"api_version\" yaml:\"api_version\" buzz:\"apiVersion\""
-github.com/egladman/magus/types.SchemaLedger type struct
-github.com/egladman/magus/types.SchemaLedger.Added field map[string]APIVersion
-github.com/egladman/magus/types.SchemaLedger.Features method func() []string
-github.com/egladman/magus/types.SchemaLedger.Name field string
-github.com/egladman/magus/types.SchemaLedger.Requires field map[string]APIVersion
-github.com/egladman/magus/types.SchemaLedger.Reserved field []string
-github.com/egladman/magus/types.SchemaLedger.Type field reflect.Type
-github.com/egladman/magus/types.SchemaLedger.Version field APIVersion
-github.com/egladman/magus/types.SchemaLedgers var []SchemaLedger
 github.com/egladman/magus/types.Scope type string
 github.com/egladman/magus/types.ScopeConsole const Scope = "console"
 github.com/egladman/magus/types.ScopeMCP const Scope = "mcp"
@@ -4770,7 +4770,7 @@ github.com/egladman/magus/types.StoredOutput.OutputDescriptor embedded OutputDes
 github.com/egladman/magus/types.StoredOutput.Schema embedded Schema
 github.com/egladman/magus/types.StoredOutput.Unmet method func(known []string) []string
 github.com/egladman/magus/types.StoredOutputAPIVersion const APIVersion = "magus.output-record/v1alpha1"
-github.com/egladman/magus/types.StoredOutputSchema var SchemaLedger
+github.com/egladman/magus/types.StoredOutputSchema var FormatLedger
 github.com/egladman/magus/types.StreamingUnsupported const DiagnosticCode = "MGS9028"
 github.com/egladman/magus/types.StricterGuardVerdict func(a GuardVerdict, b GuardVerdict) GuardVerdict
 github.com/egladman/magus/types.Strings type struct

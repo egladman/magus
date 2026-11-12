@@ -12,7 +12,6 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"io"
 	"os"
 	"path/filepath"
@@ -649,21 +648,9 @@ func TestShardKeysRefusesAForeignSchema(t *testing.T) {
 	assert.Error(t, err)
 }
 
-type PreFoldManifestSuite struct{ suite.Suite }
-
-func TestPreFoldManifestSuite(t *testing.T) {
-	suite.Run(t, new(PreFoldManifestSuite))
-}
-
-func (s *PreFoldManifestSuite) TestReadsSchemaVersion25AsV1alpha1() {
-	keys, err := ShardKeys([]byte(`{"schema_version":25,"shards":{"a":{"fingerprint":"f","node_count":1,"edge_count":0}}}`))
-	s.Require().NoError(err)
-	s.Len(keys, 1)
-}
-
-func (s *PreFoldManifestSuite) TestRefusesAnotherInteger() {
-	_, err := ShardKeys([]byte(`{"schema_version":24,"shards":{}}`))
-	s.Error(err)
+func TestShardKeysRefusesAnIntegerStamp(t *testing.T) {
+	_, err := ShardKeys([]byte(`{"schema_version":25,"shards":{"a":{"fingerprint":"f","node_count":1,"edge_count":0}}}`))
+	assert.Error(t, err)
 }
 
 // TestReadStoreExportWithoutAStore reports the absence rather than an empty export, so a
