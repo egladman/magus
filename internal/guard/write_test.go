@@ -79,7 +79,7 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 	t.Run("a read-only lease writing anywhere", func(t *testing.T) {
 		leases := append(fixture.FleetLeases(), types.Job{
 			ID:       "scout",
-			Agent: agent.Instructed("inventory the guard rules"),
+			Agent:    agent.Instructed("inventory the guard rules"),
 			ReadOnly: true,
 			State:    types.StateRunning,
 		})

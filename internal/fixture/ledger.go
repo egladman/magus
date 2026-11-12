@@ -52,7 +52,7 @@ func FleetLeases() []types.Job {
 	return []types.Job{
 		{
 			ID:           "lease-a",
-			Agent:     agent.Instructed("own the ledger store\nacceptance: List stays cheap"),
+			Agent:        agent.Instructed("own the ledger store\nacceptance: List stays cheap"),
 			WritePaths:   []string{"internal/ledger/**"},
 			State:        types.StateRunning,
 			Checkpoint:   "rev-a",
@@ -62,7 +62,7 @@ func FleetLeases() []types.Job {
 		},
 		{
 			ID:           "lease-b",
-			Agent:     agent.Instructed("grade writes in the guard"),
+			Agent:        agent.Instructed("grade writes in the guard"),
 			WritePaths:   []string{"cmd/magus/**", "docs/guard.md"},
 			DenyPaths:    []string{"cmd/magus/gen/**"},
 			State:        types.StateDeclared,

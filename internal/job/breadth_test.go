@@ -175,7 +175,7 @@ func TestBroadClaimFixSaysTheGraphDidNotAnswer(t *testing.T) {
 	row := types.Job{
 		ID:         "sweep",
 		WritePaths: []string{"**/*.go"},
-		Agent:   agent.Instructed("Fill (web/x.go:12)."),
+		Agent:      agent.Instructed("Fill (web/x.go:12)."),
 		Goals:      []types.Goal{{ID: "funcs", Kind: types.GoalKindSymbol, Symbols: []string{"Missing"}}},
 	}
 
@@ -191,9 +191,9 @@ func TestBroadClaimFixSaysTheGraphDidNotAnswer(t *testing.T) {
 func TestNarrowestCoverNamesTheDefiningFileItsTestsAndTheCriteriaFiles(t *testing.T) {
 	root := breadthWorkspace(t)
 	row := types.Job{
-		ID:       "fill",
+		ID:    "fill",
 		Agent: agent.Instructed("Implement Foo; see `web/x.go`, the claim pkg/b.go#Bar, and docs/missing.md, a/b and v1.2."),
-		Goals:    []types.Goal{{ID: "funcs", Kind: types.GoalKindSymbol, Symbols: []string{"Foo"}}},
+		Goals: []types.Goal{{ID: "funcs", Kind: types.GoalKindSymbol, Symbols: []string{"Foo"}}},
 	}
 
 	got := narrowestCover(context.Background(), root, row, symbolsAt(map[string][]string{"Foo": {"pkg/a.go"}}))

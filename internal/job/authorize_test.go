@@ -30,7 +30,7 @@ func declared(t *testing.T, rows ...types.Job) Location {
 func workerRow() types.Job {
 	return types.Job{
 		ID:         "adj/store",
-		Agent:   agent.Instructed("the store is the enforcement point"),
+		Agent:      agent.Instructed("the store is the enforcement point"),
 		WritePaths: []string{"internal/ledger", "types/lease.go"},
 		Validation: "magus run test internal/ledger",
 		State:      types.StateRunning,
@@ -102,13 +102,13 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 
 	loc := declared(t, workerRow())
 	cases := map[string]func(*types.Job){
-		"validation": func(u *types.Job) { u.Validation = "magus run ci ." },
-		"read_paths": func(u *types.Job) { u.ReadPaths = []string{"/"} },
-		"parent":     func(u *types.Job) { u.Parent = "adj/other" },
+		"validation":  func(u *types.Job) { u.Validation = "magus run ci ." },
+		"read_paths":  func(u *types.Job) { u.ReadPaths = []string{"/"} },
+		"parent":      func(u *types.Job) { u.Parent = "adj/other" },
 		"agent.model": func(u *types.Job) { u.Agent.Model = agent.Model{Tier: "principal"} },
-		"breaks":     func(u *types.Job) { u.Breaks = []string{"--any-flag"} },
-		"read_only":  func(u *types.Job) { u.ReadOnly = true },
-		"deadline":   func(u *types.Job) { u.Deadline = 1 << 40 },
+		"breaks":      func(u *types.Job) { u.Breaks = []string{"--any-flag"} },
+		"read_only":   func(u *types.Job) { u.ReadOnly = true },
+		"deadline":    func(u *types.Job) { u.Deadline = 1 << 40 },
 		// A holder that raised its own cap could fork itself past it.
 		"max_attempts": func(u *types.Job) { u.MaxAttempts = 9 },
 		"max_claims":   func(u *types.Job) { u.MaxClaims = 9 },

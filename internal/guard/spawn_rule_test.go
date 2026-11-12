@@ -1353,7 +1353,7 @@ func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
 	}
 	assert.Equal(t, map[string]graded{
 		"./magus job fork harness-audit/next --instructions 'the next step'": {},
-		"git merge linux-platform-design":                                {},
+		"git merge linux-platform-design":                                    {},
 	}, got, "the parent sharing the child's session and checkout acts under nothing")
 
 	lease, from := job.ActingLease(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir}, "")

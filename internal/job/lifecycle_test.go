@@ -882,7 +882,7 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 	rows := states(t, s)
 	assert.Equal(t, stamped(types.Job{
 		ID:           "w",
-		Agent:     agent.Instructed("rewritten"),
+		Agent:        agent.Instructed("rewritten"),
 		Checkpoint:   "abc",
 		State:        types.StateNoReturn,
 		ReportedBase: taken.ReportedBase,

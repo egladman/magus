@@ -114,7 +114,7 @@ func benchWorker() types.Job {
 	return types.Job{
 		ID:         "bench/run",
 		Parent:     "root",
-		Agent:   agent.Instructed("run the benchmark"),
+		Agent:      agent.Instructed("run the benchmark"),
 		WritePaths: []string{"benchmarks/agent/**"},
 		Check:      &types.LeaseCheck{Target: "agent-bench-run", Project: "."},
 		State:      types.StateRunning,

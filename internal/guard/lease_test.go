@@ -392,7 +392,7 @@ func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {
 func narrowLease() types.Job {
 	return types.Job{
 		ID:         "harness/lease-scoped-deny",
-		Agent:   agent.Instructed("lease-scoped denies in the guard"),
+		Agent:      agent.Instructed("lease-scoped denies in the guard"),
 		WritePaths: []string{"cmd/magus/**"},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
 		State:      types.StateRunning,
@@ -752,7 +752,7 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 func figuresLease() types.Job {
 	return types.Job{
 		ID:         "figures/flow",
-		Agent:   agent.Instructed("draw the flow figure"),
+		Agent:      agent.Instructed("draw the flow figure"),
 		WritePaths: []string{"docs/figures/flow.md", "docs/gen/figures/flow.svg"},
 		Check:      &types.LeaseCheck{Target: "diagrams_generate", Project: "docs"},
 		State:      types.StateRunning,
@@ -793,7 +793,7 @@ func figuresWorkspace(t *testing.T) Dependencies {
 func testCheckLease() types.Job {
 	return types.Job{
 		ID:         "guard/fix",
-		Agent:   agent.Instructed("fix a guard rule"),
+		Agent:      agent.Instructed("fix a guard rule"),
 		WritePaths: []string{"internal/guard/**"},
 		Check:      &types.LeaseCheck{Target: "test", Project: "."},
 		State:      types.StateRunning,
@@ -3427,14 +3427,14 @@ func writePathFleet() []types.Job {
 	return []types.Job{
 		{
 			ID:         "lease-a",
-			Agent:   agent.Instructed("own the ledger store"),
+			Agent:      agent.Instructed("own the ledger store"),
 			WritePaths: []string{"internal/ledger"},
 			State:      types.StateRunning,
 			Registered: 1,
 		},
 		{
 			ID:         "lease-b",
-			Agent:   agent.Instructed("grade writes in the guard"),
+			Agent:      agent.Instructed("grade writes in the guard"),
 			WritePaths: []string{"cmd/magus"},
 			DenyPaths:  []string{"cmd/magus/gen"},
 			State:      types.StateRunning,

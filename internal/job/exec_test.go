@@ -330,7 +330,7 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	require.NoError(t, err)
 	want := stamped(types.Job{
 		ID:           "u1",
-		Agent:     agent.Instructed("declared goal"),
+		Agent:        agent.Instructed("declared goal"),
 		Checkpoint:   handed,
 		State:        types.StateRunning,
 		ReportedBase: handed,

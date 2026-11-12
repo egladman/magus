@@ -542,7 +542,7 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 			assert.ElementsMatch(t, tc.read, stored.ReadPaths)
 			assert.Equal(t, stamped(types.Job{
 				ID:           "a",
-				Agent:     agent.Instructed(tc.criteria),
+				Agent:        agent.Instructed(tc.criteria),
 				Checkpoint:   "abc123",
 				WritePaths:   stored.WritePaths, // order is not what this test pins
 				ReadPaths:    stored.ReadPaths,
@@ -599,7 +599,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 			assert.Equal(t, types.Job{
 				Schema:       types.Schema{Version: types.JobAPIVersion},
 				ID:           "a",
-				Agent:     agent.Instructed("goal"),
+				Agent:        agent.Instructed("goal"),
 				Checkpoint:   head,
 				WritePaths:   []string{"a.go"},
 				Check:        &check,

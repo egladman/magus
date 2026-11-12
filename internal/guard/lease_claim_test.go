@@ -21,7 +21,7 @@ func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
 	t.Helper()
 	row := types.Job{
 		ID:         "cli-ls-files",
-		Agent:   agent.Instructed("add vcs ls-files"),
+		Agent:      agent.Instructed("add vcs ls-files"),
 		State:      types.StateRunning,
 		WritePaths: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"},
 		Registered: 1,

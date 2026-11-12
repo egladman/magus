@@ -19,18 +19,18 @@ import (
 // stays empty: a project is a graph fact, which [Store] fills from Location.Owners.
 func newModelTierRequest(row types.Job, rows []types.Job, set *agent.ModelTierSet, models []types.ModelPricing, history []types.ModelTierRecord) types.ModelTierRequest {
 	req := types.ModelTierRequest{
-		ID:            row.ID,
-		Parent:        row.Parent,
-		Instructions:  row.Instructions(),
-		ReadOnly:      row.ReadOnly,
-		Goals:         slices.Clone(row.Goals),
-		Kind:          modelTierKind(row),
-		WritePaths:    slices.Clone(row.WritePaths),
-		ReadPaths:     slices.Clone(row.ReadPaths),
-		DependsOn:     slices.Clone(row.DependsOn),
-		WriteFiles:    writeFileCount(row.WritePaths),
-		Model:         row.Agent.RequestedModel(),
-		History:       slices.Clone(history),
+		ID:           row.ID,
+		Parent:       row.Parent,
+		Instructions: row.Instructions(),
+		ReadOnly:     row.ReadOnly,
+		Goals:        slices.Clone(row.Goals),
+		Kind:         modelTierKind(row),
+		WritePaths:   slices.Clone(row.WritePaths),
+		ReadPaths:    slices.Clone(row.ReadPaths),
+		DependsOn:    slices.Clone(row.DependsOn),
+		WriteFiles:   writeFileCount(row.WritePaths),
+		Model:        row.Agent.RequestedModel(),
+		History:      slices.Clone(history),
 	}
 	if row.Check != nil {
 		check := *row.Check

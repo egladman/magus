@@ -68,8 +68,8 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 			State: string(types.StateRunning),
 			Exec:  hint.JobExec.With("f2-guard"),
 			// Longer than a line on purpose: the clip is part of the contract.
-			Instructions:   strings.Repeat("hold the boundary ", 20),
-			Validation: "magus run test internal/ledger",
+			Instructions: strings.Repeat("hold the boundary ", 20),
+			Validation:   "magus run test internal/ledger",
 		}},
 		Failures: []briefFailure{{
 			Target: "test", Project: "internal/ledger",
@@ -283,11 +283,11 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 		Rules:       brief.Rules, // asserted by name above
 		// A lease's goal reads as one line here; the rest is `magus describe job`.
 		Leases: []briefLease{{
-			ID:         "f2-guard",
-			State:      string(types.StateRunning),
-			Exec:       hint.JobExec.With("f2-guard"),
-			Instructions:   "hold the boundary",
-			Validation: "magus run test internal/ledger",
+			ID:           "f2-guard",
+			State:        string(types.StateRunning),
+			Exec:         hint.JobExec.With("f2-guard"),
+			Instructions: "hold the boundary",
+			Validation:   "magus run test internal/ledger",
 		}},
 		Failures: []briefFailure{{
 			Target:  "test",

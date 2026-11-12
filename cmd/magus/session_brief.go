@@ -185,11 +185,11 @@ type briefTree struct {
 
 // briefLease is one live lease and the single command that binds it here.
 type briefLease struct {
-	ID         string `json:"id"`
-	State      string `json:"state,omitempty"`
-	Exec       string `json:"exec"`
+	ID           string `json:"id"`
+	State        string `json:"state,omitempty"`
+	Exec         string `json:"exec"`
 	Instructions string `json:"instructions,omitempty"`
-	Validation string `json:"validation,omitempty"`
+	Validation   string `json:"validation,omitempty"`
 	// Claims are the write paths the job added with a proof, by `magus job apply` or by the
 	// guard on a write, each as path, evidence and proof.
 	Claims []string `json:"claims,omitempty"`
@@ -515,12 +515,12 @@ func briefLeases(rows []types.Job, acting, root string) (leases []briefLease, ot
 			criteria = "no instructions recorded"
 		}
 		item := briefLease{
-			ID:         row.ID,
-			State:      string(row.State),
-			Exec:       hint.JobExec.With(row.ID),
+			ID:           row.ID,
+			State:        string(row.State),
+			Exec:         hint.JobExec.With(row.ID),
 			Instructions: criteria,
-			Validation: row.Validation,
-			Claims:     claimLines(row.Claims),
+			Validation:   row.Validation,
+			Claims:       claimLines(row.Claims),
 		}
 		if row.State.Editing() {
 			editing = append(editing, item)
