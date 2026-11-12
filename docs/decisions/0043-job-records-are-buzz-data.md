@@ -8,7 +8,7 @@ date: 2026-11-10
 supersedes: ADR 0036 sections 3 and 4 (the workspace-only stop rule and StopRequest.reply), and agents.brief_format
 ---
 
-# ADR 0043: job records are Buzz data, and markdown is rendered from them
+# ADR 0043: job records are Buzz data, and Markdown is rendered from them
 
 ## Context
 
@@ -31,13 +31,14 @@ Read on 2026-11-10 from origin/main at a0625c0fe:
   requires a filed result is left to the workspace and not built; `StopRequest.reply` is
   proposed and not built.
 - `agents.brief_format` takes `markdown` (the default) or `buzz` (`types/brief.go`,
-  `internal/config/agents.go:29`, `internal/job/brief_format.go`). A `buzz` prompt is one
+  `internal/config/agents.go:29`, and a file since deleted, see the 2026-11-12 amendment).
+  A `buzz` prompt is one
   `magus\Brief{job, goal, why, decisions, evidence}` literal, which `judgeBriefBuzz` in
   `internal/guard/brief.go:97` type-checks against the generated declarations. Nothing
   rewrites it and nothing reads it after the check: the literal is text in the prompt and
   never reaches the store.
-- `hack/dev/render-brief.buzz` renders Markdown for a worker from `magus describe job -o
-  json` and `magus ls jobs -o json`, parsed as `any`, through a `Terms` object it declares
+- The render-brief.buzz script (since replaced by `hack/dev/show-job-view.buzz`) rendered
+  Markdown for a worker from `magus describe job -o json` and `magus ls jobs -o json`, parsed as `any`, through a `Terms` object it declares
   itself (`render-brief.buzz:50`). It refuses a row with no check, or no write paths on a
   job that is not read-only (`:271`).
 - `magus describe job <id>` prints the row for its holder, and `magus job exec` ends with
@@ -87,7 +88,7 @@ names the row, as `<parent>/<role> <job>` already does.
 
 The rendered Markdown is a view: a reading of the record for a person or a host that wants
 prose, never a record itself. It is rendered from the two records by one Buzz script,
-`show-job-view.buzz` beside `hack/dev/render-brief.buzz`, which replaces `render-brief.buzz`. It
+`hack/dev/show-job-view.buzz`, which replaces render-brief.buzz in the same directory. It
 reads `magus\Job` and `magus\JobResult` typed, renders through the `template` host module,
 and returns `result\Result::<str>`. It has two entry points: a spec's view, for a worker, a
 Codex `SubagentStart` context or a mod pane; and a result's view, for a person or a pull
@@ -121,7 +122,7 @@ declared behind it is a silent default waiting to happen.
 | `agents.brief_format`, `Job.BriefFormat`, `types.BriefFormat` | nothing                                               | there is no format to choose: the record has one shape, and the prompt is prose by definition                                                                                                                                                      |
 | `brief-command`, `brief-plain-commands`                | `spawn-command`, `spawn-plain-commands`                    | they grade the spawn's prompt, and every other spawn-time rule is `spawn-*`                                                                                                                                                                         |
 | `spawn-unbriefed`, `buzz-unbriefed`, `architecture-unbriefed` | `spawn-before-skill`, `buzz-before-skill`, `architecture-before-skill` | each refuses an act before a skill loaded; the new name says what it catches                                                                                                                                                       |
-| `hack/dev/render-brief.buzz`, `hack/testdata/render-brief-*.json` | `show-job-view.buzz` and `job-view-*.json` in the same directories | named for what it renders                                                                                                                                                                                                                     |
+| render-brief.buzz, render-brief-*.json | `show-job-view.buzz` and `job-view-*.json` in the same directories | named for what it renders                                                                                                                                                                                                                     |
 | the checkout brief Codex `SubagentStart` receives      | the checkout spec                                          | same text, same source, one word                                                                                                                                                                                                                    |
 | "read the terms" in `job exec`'s last line             | "read the spec"                                            | one word for the record everywhere it is named                                                                                                                                                                                                      |
 | `magus session --brief`                                | unchanged                                                  | a summary flag with prior art (`diff --brief`, `file --brief`); not this feature's sense                                                                                                                                                 |
@@ -146,7 +147,7 @@ instructions (reads as prose to follow rather than conditions graded).
 | `types/brief.go`, `magus\Brief` and its two helpers             | deleted; fields move to `types/job.go`                                                 | planned (needs the boundary registry) |
 | `agents.brief_format`, `Job.BriefFormat`, `ResolveBriefFormat`, `BriefFormatUnset` | deleted                                                             | in progress (`Job.BriefFormat` waits on the regenerated bindings) |
 | `judgeBriefBuzz` and the Buzz type check of a prompt            | deleted                                                                                | done      |
-| `hack/dev/render-brief.buzz`                                    | replaced by `show-job-view.buzz` in the same directory, typed, two entry points             | done      |
+| render-brief.buzz                                               | replaced by `show-job-view.buzz` in the same directory, typed, two entry points             | done      |
 | `magus describe job`                                            | kept as the terminal door                                                              | done      |
 | `next` steps on structured results                              | kept; the view renders them as the worker's next commands                              | done      |
 | a stop rule requiring a filed result (ADR 0036 s3, workspace)   | replaced by the shipped `stop-unfiled` below                                           | done      |
@@ -227,11 +228,11 @@ magus is pre-1.0 and this is one change, one pull request, no shim and no alias 
    that reads one such line; the row's next put writes it without. No reader branches on
    it, so this is not a compat shim and carries no marker.
 5. `internal/guard/brief.go` loses `judgeBriefBuzz`, `briefInput.format` and
-   `formatFrom`; `internal/job/brief_format.go` is deleted; the rules are renamed and the
+   `formatFrom`; the brief-format file is deleted (a7ce591b0); the rules are renamed and the
    rule pages regenerate from their descriptors. A workspace that set a renamed rule by its
    old name in `magus\guard.builtins` fails loudly with the new name.
 6. `stop-unfiled` is added as a shipped stop rule with its descriptor and page.
-7. `hack/dev/render-brief.buzz` becomes `show-job-view.buzz` in the same directory, reading typed
+7. render-brief.buzz becomes `show-job-view.buzz` in the same directory, reading typed
    records, with its fixtures renamed; `--extra` goes, since the prompt is where a parent's
    extra words live. `job exec`'s last line says "read the spec".
 8. Guides, glossary (a `spec` entry), ADR 0036 (amended: s3 and s4 superseded here) and
@@ -394,3 +395,12 @@ the boundary registry and the regenerated bindings, which another branch holds. 
 pieces of section 7 stay open with them: a `magus.yaml` still naming the removed key
 fails as an unknown key without naming this record, and validation at `job fork` does not
 yet require criteria and a model, since most of the scripted tests fork without either.
+
+### 2026-11-12: the brief-format file and render-brief.buzz are gone
+
+The brief-format file that Context and section 7 step 5 name was deleted in a7ce591b0
+("feat(guard)!: drop the brief format", #730). Nothing replaces it: section 6 refuses a
+format setting, so there is no code to point at. render-brief.buzz was deleted in the same
+commit, and its replacement was added as hack/dev/job-view.buzz, since renamed to
+`hack/dev/show-job-view.buzz`, which section 2 names. Context is left as read on 2026-11-10,
+so its Markdown mentions of the old paths are history, not current references.
