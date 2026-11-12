@@ -14,7 +14,7 @@ final SUMMARY = "render a job's spec or its filed result as Markdown, never stor
 final SERVES = ["replaces:cat jobs.jsonl"];
 final EFFECT = "read";
 
-final USAGE = "usage: magus buzz hack/dev/show-job-view.buzz -- --job <id> [--result]";
+final USAGE = "usage: magus buzz hack/dev/show-job.buzz -- --job <id> [--result]";
 final HELP = "cost: two job-store reads\n{USAGE}\n\n"
     + "Prints a view of job <id>: its spec for the worker by default, or with --result the JobResult its holder filed.\n"
     + "Both are rendered from the typed records (magus\\Job and magus\\JobResult) through the template module, at read\n"
@@ -376,7 +376,7 @@ export fun specView(row: magus\Job, list: magus\JobList) > result\Result::<str> 
     try {
         return result\ok::<str>(template\render(SPEC, data: data).trim() + "\n");
     } catch (err: any) {
-        return result\caught::<str>(err, doing: "job-view: render the spec of job {row.id}");
+        return result\caught::<str>(err, doing: "show-job: render the spec of job {row.id}");
     }
 }
 
@@ -398,7 +398,7 @@ fun refLine(label: str, ref: str, owed: str, unrun: str) > str {
 // error: `magus job wait` says when there is one.
 export fun resultView(row: magus\Job, filed: magus\JobResult?) > result\Result::<str> {
     if (filed == null) {
-        return result\fail::<str>("job-view: job {row.id} has no filed result yet; `./magus job wait {row.id}` waits for one");
+        return result\fail::<str>("show-job: job {row.id} has no filed result yet; `./magus job wait {row.id}` waits for one");
     }
     final r = filed!;
     var validation = "- no check was filed";
@@ -425,7 +425,7 @@ export fun resultView(row: magus\Job, filed: magus\JobResult?) > result\Result::
     try {
         return result\ok::<str>(template\render(RESULT, data: data).trim() + "\n");
     } catch (err: any) {
-        return result\caught::<str>(err, doing: "job-view: render the result of job {row.id}");
+        return result\caught::<str>(err, doing: "show-job: render the result of job {row.id}");
     }
 }
 
@@ -450,11 +450,11 @@ export fun main(args: [str]) > void !> any {
         return;
     }
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "job-view: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+        throw "show-job: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
     }
     final id = parsed.values["--job"] ?? "";
     if (id == "") {
-        throw "job-view: --job is required\n{USAGE}";
+        throw "show-job: --job is required\n{USAGE}";
     }
     final row = magus\job(id);
     final list = magus\workspace().jobs();
@@ -509,7 +509,7 @@ export fun fixtureList() > magus\JobList {
 }
 
 test "the fixture spec renders the golden view" {
-    final want: [str] = json\parse(fs\readFile("hack/testdata/job-view-golden.json"));
+    final want: [str] = json\parse(fs\readFile("hack/testdata/show-job-golden.json"));
     final got = specView(fixtureRow(), list: fixtureList()).value!.trim().split("\n");
     assert\equal(got, want: want, message: "spec view");
 }
