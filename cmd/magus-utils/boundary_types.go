@@ -9,10 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/hostmodules"
@@ -179,270 +177,100 @@ func deriveBoundary() (boundarySet, error) {
 	if err != nil {
 		return boundarySet{}, err
 	}
-	r := newReach(cfg)
-	r.hostModules(hostmodules.All())
+	r := buzzgen.NewReach(cfg)
+	for _, sig := range hostSignatures(hostmodules.All()) {
+		r.Walk(sig.Type, buzzgen.Outbound, sig.Owner)
+	}
 	for _, op := range providerOps {
 		label := fmt.Sprintf("provider op %s.%s", op.Family, op.Op)
-		r.walk(op.Req, crossOut, label)
-		r.walk(op.Resp, crossIn, label)
+		r.Walk(op.Req, buzzgen.Outbound, label)
+		r.Walk(op.Resp, buzzgen.Inbound, label)
 	}
 	for _, rt := range boundaryRoots {
 		label := fmt.Sprintf("root %s", rt.Type)
-		r.walk(rt.Type, crossNone, label)
+		r.Walk(rt.Type, buzzgen.Mirrored, label)
 		if rt.Inbound {
-			r.walk(rt.Type, crossIn, label)
+			r.Walk(rt.Type, buzzgen.Inbound, label)
 		}
 		if rt.Outbound {
-			r.walk(rt.Type, crossOut, label)
+			r.Walk(rt.Type, buzzgen.Outbound, label)
 		}
 	}
-	if err := errors.Join(r.errs...); err != nil {
+	if err := r.Err(); err != nil {
 		return boundarySet{}, err
 	}
-	set := boundarySet{types: r.members(), open: map[reflect.Type]string{}}
-	set.prog, err = r.load(root)
-	if err != nil {
+	set := boundarySet{types: boundaryMembers(r.Members()), open: map[reflect.Type]string{}}
+	if set.prog, err = buzzgen.Load(root, cfg, r.Packages()...); err != nil {
 		return boundarySet{}, err
 	}
-	if set.enums, err = r.enums(set.prog, set.open); err != nil {
+	if set.enums, err = deriveEnums(r, set.prog, set.open); err != nil {
 		return boundarySet{}, err
 	}
-	return set, errors.Join(r.checkNames(set), r.checkListed(set))
-}
-
-// crossing is the direction a reached type crosses in.
-type crossing int
-
-const (
-	crossNone crossing = iota
-	crossIn
-	crossOut
-)
-
-// flip is the direction a callback's parameters cross in: opposite its own.
-func (c crossing) flip() crossing {
-	switch c {
-	case crossIn:
-		return crossOut
-	case crossOut:
-		return crossIn
+	var claims []buzzgen.Claim
+	for _, entry := range set.types {
+		claims = append(claims, buzzgen.Claim{Key: entry.key(), Type: entry.Type})
 	}
-	return crossNone
-}
-
-// reach walks Go types from the roots, recording each struct and named
-// string it meets and the root that first met it.
-type reach struct {
-	cfg     buzzgen.Config
-	seen    map[crossing]map[reflect.Type]bool
-	from    map[reflect.Type]string
-	named   []reflect.Type
-	errs    []error
-}
-
-func newReach(cfg buzzgen.Config) *reach {
-	return &reach{
-		cfg:  cfg,
-		seen: map[crossing]map[reflect.Type]bool{crossNone: {}, crossIn: {}, crossOut: {}},
-		from: map[reflect.Type]string{},
+	var enumKeys []string
+	for _, e := range set.enums {
+		claims = append(claims, buzzgen.Claim{Key: e.key(), Type: e.Type})
+		enumKeys = append(enumKeys, e.goKey)
 	}
+	return set, errors.Join(r.CheckNames(claims), r.CheckListed(enumKeys...))
 }
 
-// hostModules walks every method signature the modules declare.
-func (r *reach) hostModules(mods []std.Module) {
+// hostSignature is one method's Go func type and the member that owns it.
+type hostSignature struct {
+	Owner string
+	Type  reflect.Type
+}
+
+// hostSignatures lists the signature of every method the modules declare,
+// on the module, its namespaces, objects and protocols.
+func hostSignatures(mods []std.Module) []hostSignature {
+	var out []hostSignature
+	add := func(owner string, ms []std.Method) {
+		for _, m := range ms {
+			if sig := m.Signature(); sig != nil {
+				out = append(out, hostSignature{Owner: fmt.Sprintf("%s.%s", owner, m.Name), Type: sig})
+			}
+		}
+	}
 	for _, mod := range mods {
-		r.methods(mod.Methods, mod.Name)
+		add(mod.Name, mod.Methods)
 		for _, n := range mod.Namespaces {
-			r.methods(n.Methods, fmt.Sprintf("%s.%s", mod.Name, n.Name))
+			add(fmt.Sprintf("%s.%s", mod.Name, n.Name), n.Methods)
 		}
 		for _, o := range mod.Objects {
-			r.methods(o.Methods, fmt.Sprintf("%s.%s", mod.Name, o.Name))
+			add(fmt.Sprintf("%s.%s", mod.Name, o.Name), o.Methods)
 		}
 		for _, p := range mod.Protocols {
-			r.methods(p.Methods, fmt.Sprintf("%s.%s", mod.Name, p.Name))
+			add(fmt.Sprintf("%s.%s", mod.Name, p.Name), p.Methods)
 		}
 	}
-}
-
-// methods walks each signature as a value Go hands out: its parameters
-// cross in and its results cross out.
-func (r *reach) methods(ms []std.Method, owner string) {
-	for _, m := range ms {
-		if sig := m.Signature(); sig != nil {
-			r.walk(sig, crossOut, fmt.Sprintf("%s.%s", owner, m.Name))
-		}
-	}
-}
-
-var (
-	timeType     = reflect.TypeFor[time.Time]()
-	durationType = reflect.TypeFor[time.Duration]()
-	placeholder  = reflect.TypeFor[buzzgen.T]()
-)
-
-func (r *reach) walk(t reflect.Type, dir crossing, root string) {
-	switch t.Kind() {
-	case reflect.Pointer, reflect.Slice, reflect.Array:
-		r.walk(t.Elem(), dir, root)
-		return
-	case reflect.Map:
-		r.walk(t.Key(), dir, root)
-		r.walk(t.Elem(), dir, root)
-		return
-	case reflect.Func:
-		for i := range t.NumIn() {
-			r.walk(t.In(i), dir.flip(), root)
-		}
-		for i := range t.NumOut() {
-			r.walk(t.Out(i), dir, root)
-		}
-		return
-	}
-	if t.PkgPath() == "" || t == timeType || t == durationType || t == placeholder {
-		return
-	}
-	switch t.Kind() {
-	case reflect.String:
-		if _, ok := r.from[t]; !ok {
-			r.from[t] = root
-			r.named = append(r.named, t)
-			r.admit(t, root)
-		}
-	case reflect.Struct:
-		r.walkStruct(t, dir, root)
-	}
-}
-
-func (r *reach) walkStruct(t reflect.Type, dir crossing, root string) {
-	if r.seen[dir][t] {
-		return
-	}
-	r.seen[dir][t] = true
-	// A concrete generic instance mirrors as its generic object, so only
-	// its arguments cross.
-	instance := strings.Contains(t.Name(), "[") && len(buzzgen.TypeParams(t)) == 0
-	mirrored := r.cfg.Ref(t.PkgPath(), goName(t)).MirrorName() != ""
-	if !instance && !mirrored {
-		if _, ok := r.from[t]; !ok {
-			r.from[t] = root
-			r.admit(t, root)
-		}
-	}
-	if mirrored {
-		return
-	}
-	for _, f := range emit.ObjectFields(t) {
-		r.walk(f.Type, dir, root)
-	}
-}
-
-// admit refuses a type generated code cannot name: an unexported one, or
-// one from an internal package .buzzgen.yaml does not list.
-func (r *reach) admit(t reflect.Type, root string) {
-	name := goName(t)
-	if name == "" || !isExported(name) {
-		r.errs = append(r.errs, fmt.Errorf("%s reaches unexported type %s, which no generated code can name", root, t))
-		return
-	}
-	if isInternal(t.PkgPath()) {
-		if _, ok := r.cfg.Packages[t.PkgPath()]; !ok {
-			r.errs = append(r.errs, fmt.Errorf("%s reaches %s from internal package %s: give the package a line in .buzzgen.yaml if it crosses, or stop the field reaching it", root, t, t.PkgPath()))
-		}
-	}
-}
-
-func isExported(name string) bool {
-	return name[0] >= 'A' && name[0] <= 'Z'
-}
-
-func isInternal(pkgPath string) bool {
-	return slices.Contains(strings.Split(pkgPath, "/"), "internal")
-}
-
-// goName is t's Go name without a generic's type arguments.
-func goName(t reflect.Type) string {
-	name, _, _ := strings.Cut(t.Name(), "[")
-	return name
-}
-
-// members is every reached struct, ordered by key.
-func (r *reach) members() []boundaryType {
-	var out []boundaryType
-	for t := range r.from {
-		if t.Kind() != reflect.Struct {
-			continue
-		}
-		ref := r.cfg.Ref(t.PkgPath(), goName(t))
-		entry := boundaryType{
-			Name:     ref.BuzzName(),
-			Type:     t,
-			Outbound: r.seen[crossOut][t],
-			Inbound:  r.seen[crossIn][t],
-			Required: ref.Settings.Required,
-		}
-		if ref.Settings.Module != nil {
-			entry.Module = *ref.Settings.Module
-		}
-		if ref.Settings.TS != nil {
-			entry.TS = *ref.Settings.TS
-		}
-		out = append(out, entry)
-	}
-	slices.SortFunc(out, func(a, b boundaryType) int {
-		if c := strings.Compare(a.key(), b.key()); c != 0 {
-			return c
-		}
-		return strings.Compare(a.Type.String(), b.Type.String())
-	})
 	return out
 }
 
-// checkNames refuses two crossing types that take one Buzz name in one
-// scope, naming the root that reached each.
-func (r *reach) checkNames(set boundarySet) error {
-	owner := map[string]reflect.Type{}
-	var errs []error
-	claim := func(key string, t reflect.Type) {
-		if t == nil {
-			return
+// boundaryMembers converts each reached struct to the entry the renderers
+// read.
+func boundaryMembers(members []buzzgen.Member) []boundaryType {
+	out := make([]boundaryType, 0, len(members))
+	for _, m := range members {
+		entry := boundaryType{
+			Name:     m.Ref.BuzzName(),
+			Type:     m.Type,
+			Outbound: m.Outbound,
+			Inbound:  m.Inbound,
+			Required: m.Ref.Settings.Required,
 		}
-		if prev, ok := owner[key]; ok && prev != t {
-			errs = append(errs, fmt.Errorf("Buzz name %s is taken by %s (reached from %s) and %s (reached from %s): set name or module on one in .buzzgen.yaml",
-				key, prev, r.from[prev], t, r.from[t]))
-			return
+		if m.Ref.Settings.Module != nil {
+			entry.Module = *m.Ref.Settings.Module
 		}
-		owner[key] = t
-	}
-	for _, entry := range set.types {
-		claim(entry.key(), entry.Type)
-	}
-	for _, e := range set.enums {
-		claim(e.key(), e.Type)
-	}
-	return errors.Join(errs...)
-}
-
-// checkListed refuses a .buzzgen.yaml line for a type that does not cross,
-// since its settings would apply to nothing.
-func (r *reach) checkListed(set boundarySet) error {
-	crossing := map[string]bool{}
-	for t := range r.from {
-		crossing[fmt.Sprintf("%s.%s", t.PkgPath(), goName(t))] = true
-	}
-	for _, e := range set.enums {
-		crossing[e.goKey] = true
-	}
-	var errs []error
-	for _, ref := range r.cfg.Types() {
-		key := fmt.Sprintf("%s.%s", ref.Package, ref.Name)
-		if ref.MirrorName() != "" {
-			key = fmt.Sprintf("%s.%s", ref.Package, ref.MirrorName())
+		if m.Ref.Settings.TS != nil {
+			entry.TS = *m.Ref.Settings.TS
 		}
-		if !crossing[key] {
-			errs = append(errs, fmt.Errorf(".buzzgen.yaml: packages.%s.types.%s names %s, which nothing crosses as: delete the line", ref.Package, ref.Name, key))
-		}
+		out = append(out, entry)
 	}
-	return errors.Join(errs...)
+	return out
 }
 
 // openStringTypes are the named string types that cross as a bare str on

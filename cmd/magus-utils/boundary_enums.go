@@ -13,39 +13,28 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 )
 
-// load type-checks every package a reached type lives in, in one load.
-func (r *reach) load(root string) (*buzzgen.Program, error) {
-	var pkgs []string
-	for t := range r.from {
-		if !slices.Contains(pkgs, t.PkgPath()) {
-			pkgs = append(pkgs, t.PkgPath())
-		}
-	}
-	return buzzgen.Load(root, r.cfg, pkgs...)
-}
-
-// enums derives each reached named string that is not open, and each enum
-// a module setting declares, reading the cases from Go constants. open is
-// filled with the strings that cross as str.
-func (r *reach) enums(prog *buzzgen.Program, open map[reflect.Type]string) ([]boundaryEnum, error) {
+// deriveEnums derives each reached named string that is not open, and each
+// enum a module setting declares, reading the cases from Go constants.
+// open is filled with the strings that cross as str.
+func deriveEnums(r *buzzgen.Reach, prog *buzzgen.Program, open map[reflect.Type]string) ([]boundaryEnum, error) {
 	var enums []boundaryEnum
 	var errs []error
 	derived := map[string]bool{}
-	for _, t := range r.named {
-		ref := r.cfg.Ref(t.PkgPath(), t.Name())
+	for _, t := range r.Named() {
+		ref := prog.Config.Ref(t.PkgPath(), t.Name())
 		if reason := ref.OpenReason(); reason != "" {
 			open[t] = reason
 			continue
 		}
 		e, err := prog.Enum(ref)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("%s, reached from %s: %w", t, r.from[t], err))
+			errs = append(errs, fmt.Errorf("%s, reached from %s: %w", t, r.From(t), err))
 			continue
 		}
 		derived[goKey(ref)] = true
 		enums = append(enums, newBoundaryEnum(e, t, ref))
 	}
-	for _, ref := range r.cfg.Types() {
+	for _, ref := range prog.Config.Types() {
 		if ref.Settings.Module == nil || derived[goKey(ref)] || ref.OpenReason() != "" {
 			continue
 		}
