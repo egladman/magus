@@ -146,15 +146,13 @@ and the advice spent. The strictest decision wins.
 
 - An ask goes to a caller that said it can prompt. Otherwise it is a deny that says so
   (ADR 0039, part 5).
-- What a deny suggests next is built on the existing `types.NextStep`
-  (`types/next_step.go:30`), carried as `Next []agent.NextStep` on the verdict.
-  `types.NextStep` is a general type that hints, reports, logs, query output and guard
-  denials share, so it gains no agent field. `agent.NextStep`, in `types/agent`, holds a
-  `types.NextStep` (the command, argv and why every caller gets) and `Call *agent.Call`,
-  the typed call an embedder's loop can offer without parsing prose (a kind, a name and
-  an input). A hook still gets the command. `types/agent` imports `types`, never the
-  reverse ([ADR 0044](0044-a-job-may-carry-an-agent.md)). The judge only names the
-  call. It never makes it, and the loop decides whether to offer it.
+- What a deny suggests next is the same primitive it judged: `Next []agent.Call` on the
+  verdict. An embedder's loop can pass a suggestion straight back to `Judge`, and the
+  deny's reason says why it is offered. A hook renders a next call of the shell kind as
+  its command line, so a person still gets the command. `types.NextStep`
+  (`types/next_step.go:30`) stays the general breadcrumb CLI results print and gains no
+  agent field (Eli, 2026-11-12). The judge only names the call. It never makes it, and
+  the loop decides whether to offer it.
 - A verdict never carries a changed call.
 
 ### 5. Rules for any kind are workspace policy
@@ -226,13 +224,9 @@ type CallRequest struct { // replaces ADR 0039's ToolRequest: what a rule reads
     Lease        string
 }
 
-type NextStep struct { // what a deny suggests next
-    types.NextStep
-    Call *Call `json:"call,omitempty"` // an embedder's loop can offer it
-}
 ```
 
-`agent.Verdict` and `agent.Judgment` carry their next steps as `Next []agent.NextStep`.
+`agent.Verdict` and `agent.Judgment` carry what a deny suggests as `Next []agent.Call`.
 
 In the root package:
 
@@ -279,7 +273,7 @@ func WithCallRule(rule CallRule) Option
 | `unjudged-call` replaces `unjudged-tool`; a mistyped location is a deny      | proposed  |
 | the hook envelope and `magus shell` decode into a `Call`                     | proposed  |
 | `CallRow.InputSchema`; a mismatch is refused with the schema path            | proposed  |
-| `agent.NextStep` (a `types.NextStep` and `Call`); `Next` on the verdict      | proposed  |
+| `Next []agent.Call` on the verdict: a deny suggests the primitive it judged  | proposed  |
 | a typed Go struct or method per kind                                         | not built |
 | a verdict that changes the call, or a step that suspends the caller's loop   | not built |
 | judging a result after the call ran                                          | not built |
@@ -341,14 +335,14 @@ already names a target's build step (`internal/cache.Step`, `types.ChainStep`,
 word with it in the same logs. Reopen if the judge is ever given an ordered plan to
 rule on whole.
 
-### A separate agent.NextCall type
+### A separate type for what a deny suggests
 
-The first draft gave a deny its own `agent.NextCall` and `NextCalls` beside the next
-steps. It lost because `types.NextStep` already is what a result says to do next, and a
-second list would make an embedder read two for one idea. Adding the typed call to
-`types.NextStep` lost too: that type is general, shared by hints, reports, logs, query
-output and guard denials, and carries no agent field. `agent.NextStep` wraps it and adds
-the call.
+Drafts gave a deny its own `agent.NextCall`, then an `agent.NextStep` wrapping
+`types.NextStep` with a call. Both lost on Eli's call of 2026-11-12: a suggested next
+move is another call the agent could make, so it is the same primitive the judge rules
+on, and a loop feeds it back without converting it. Adding the call to `types.NextStep`
+lost as well, because that type is general, shared by hints, reports, logs, query output
+and guard denials. Reopen it if a suggestion ever needs data a call cannot carry.
 
 ### A typed Go struct and a method for each kind
 
