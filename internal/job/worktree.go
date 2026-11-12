@@ -10,7 +10,6 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
-	"maps"
 	"os"
 	"os/exec"
 	"path"
@@ -828,9 +827,6 @@ func BinaryDigest(bin string) (string, error) {
 // binary's hash, so every checkout of the repository shares one.
 const digestCacheName = "binary-digests.jsonl"
 
-// digestCacheCompactAt is the line count past which a write compacts the cache.
-const digestCacheCompactAt = 256
-
 // binaryDigest is one hash of the file at Path. It holds while the file keeps
 // the identity, size and modification time it was hashed under. A writer can
 // forge all three, which ADR 0045 section 1 accepts.
@@ -858,74 +854,27 @@ func (s *Store) cachedDigest(bin string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cache := filepath.Join(filepath.Dir(s.path), digestCacheName)
-	entries := readDigests(cache)
+	cache := digestCache(filepath.Join(filepath.Dir(s.path), digestCacheName))
+	entries, _ := cache.Load() // an unreadable cache is rehashed
 	key := resolved(bin)
-	for i := len(entries) - 1; i >= 0; i-- {
-		if entries[i].Path != key {
-			continue
+	for _, e := range entries {
+		if e.Path == key && e.describes(fi) {
+			return e.Digest, nil
 		}
-		if entries[i].describes(fi) {
-			return entries[i].Digest, nil
-		}
-		break
 	}
 	digest, err := BinaryDigest(bin)
 	if err != nil {
 		return "", err
 	}
 	ino, _, _ := file.Identity(fi)
-	_ = writeDigest(cache, entries, binaryDigest{Path: key, Ino: ino, Size: fi.Size(), ModNs: fi.ModTime().UnixNano(), Digest: digest}) // unwritten, the next call hashes again
+	entry := binaryDigest{Path: key, Ino: ino, Size: fi.Size(), ModNs: fi.ModTime().UnixNano(), Digest: digest}
+	_ = cache.Update(context.Background(), func([]binaryDigest) []binaryDigest { return []binaryDigest{entry} }) // a miss rehashes
 	return digest, nil
 }
 
-// readDigests is every entry the cache at path holds, oldest first, stopping
-// at the first that does not decode.
-func readDigests(path string) []binaryDigest {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil
-	}
-	defer f.Close()
-	var entries []binaryDigest
-	dec := json.NewDecoder(f)
-	for {
-		var d binaryDigest
-		if err := dec.Decode(&d); err != nil {
-			return entries
-		}
-		entries = append(entries, d)
-	}
-}
-
-// writeDigest appends d to the cache at path. Past digestCacheCompactAt lines
-// it replaces the file by rename, keeping the last entry per path.
-func writeDigest(path string, entries []binaryDigest, d binaryDigest) error {
-	if len(entries) < digestCacheCompactAt {
-		line, err := json.Marshal(d)
-		if err != nil {
-			return err
-		}
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-		if err != nil {
-			return err
-		}
-		_, werr := f.Write(append(line, '\n'))
-		return errors.Join(werr, f.Close())
-	}
-	last := map[string]binaryDigest{}
-	for _, e := range append(entries, d) {
-		last[e.Path] = e
-	}
-	var body []byte
-	for _, p := range slices.Sorted(maps.Keys(last)) {
-		line, err := json.Marshal(last[p])
-		if err != nil {
-			return err
-		}
-		body = append(append(body, line...), '\n')
-	}
-	return file.ReplaceFile(path, body, 0o644)
+// digestCache is the JSON Lines store at path, keyed by binary path.
+func digestCache(path string) file.JSONL[binaryDigest] {
+	return file.JSONL[binaryDigest]{Path: path, Key: func(d binaryDigest) string { return d.Path }}
 }
 
 // PinRefusal says why the root's hook may not hand a call to bin, "" when it

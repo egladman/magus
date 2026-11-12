@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -1209,11 +1210,19 @@ func (s *BinaryPinSuite) TestABoundWorkerPinsNothing() {
 }
 
 func (s *BinaryPinSuite) TestTheCacheCompactsToOneEntryPerPath() {
-	cache := filepath.Join(s.T().TempDir(), digestCacheName)
-	var entries []binaryDigest
-	for i := range digestCacheCompactAt {
-		entries = append(entries, binaryDigest{Path: "/a", Size: int64(i), Digest: "sha256:old"})
+	cache := digestCache(filepath.Join(s.T().TempDir(), digestCacheName))
+	for i := range 2 + file.CompactSlack {
+		s.Require().NoError(cache.Update(s.T().Context(), func([]binaryDigest) []binaryDigest {
+			return []binaryDigest{{Path: "/a", Size: int64(i), Digest: "sha256:old"}}
+		}))
 	}
-	s.Require().NoError(writeDigest(cache, entries, binaryDigest{Path: "/a", Digest: "sha256:new"}))
-	s.Equal([]binaryDigest{{Path: "/a", Digest: "sha256:new"}}, readDigests(cache))
+	s.Require().NoError(cache.Update(s.T().Context(), func([]binaryDigest) []binaryDigest {
+		return []binaryDigest{{Path: "/a", Digest: "sha256:new"}}
+	}))
+	got, err := cache.Load()
+	s.Require().NoError(err)
+	s.Equal([]binaryDigest{{Path: "/a", Digest: "sha256:new"}}, got)
+	read, err := file.ReadLines(cache.Path)
+	s.Require().NoError(err)
+	s.Len(read.Lines, 1)
 }

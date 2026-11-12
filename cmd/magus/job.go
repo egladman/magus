@@ -1513,6 +1513,10 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			}
 			worktree.Binary, built, placed = filepath.Join(worktree.Root, "magus"), !reused, true
 		}
+		if _, err := os.Stat(worktree.Binary); placed && errors.Is(err, fs.ErrNotExist) {
+			slog.InfoContext(ctx, fmt.Sprintf("%s holds no %s after its bootstrap, so the row records no pin and the hook hands it no call", row.ID, worktree.Binary), attr.Notice("note"))
+			placed = false
+		}
 		if placed {
 			if worktree.BinaryDigest, err = job.BinaryDigest(worktree.Binary); err != nil {
 				return failedProvision(ctx, store, worktree, made, fmt.Errorf("pinning %s: %w", worktree.Binary, err))

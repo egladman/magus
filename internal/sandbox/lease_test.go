@@ -143,6 +143,31 @@ func TestNarrowToLeaseRefusesAForbiddenPathInsideAnOwnedOne(t *testing.T) {
 		"pkg/a cannot be granted without granting the forbidden pkg/a/gen with it")
 }
 
+func TestNarrowToLeaseGrantsTheDeclaredProductPath(t *testing.T) {
+	root, cacheDir := leaseWorkspace(t, types.Job{
+		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
+		WritePaths: []string{"pkg/a/**"},
+	})
+	base := fromConfig(t, root, cacheDir, config.SandboxConfig{})
+	p, err := NarrowToLease(t.Context(), base, job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root}, "fleet/w1", types.LeaseSourceMarker, "pkg/b/product")
+	require.NoError(t, err)
+
+	require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(root, "pkg", "b", "product")))
+	require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(root, "pkg", "a", "x.txt")))
+	assert.Error(t, p.CheckWrite(t.Context(), filepath.Join(root, "x.txt")))
+}
+
+func TestNarrowToLeaseGrantsNoProductPathToAReadOnlyRow(t *testing.T) {
+	root, cacheDir := leaseWorkspace(t, types.Job{
+		ID: "fleet/r1", Parent: "fleet/root", State: types.StateRunning, ReadOnly: true,
+	})
+	base := fromConfig(t, root, cacheDir, config.SandboxConfig{})
+	p, err := NarrowToLease(t.Context(), base, job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root}, "fleet/r1", types.LeaseSourceMarker, "pkg/b/product")
+	require.NoError(t, err)
+
+	assert.Error(t, p.CheckWrite(t.Context(), filepath.Join(root, "pkg", "b", "product")))
+}
+
 // TestNarrowToLeaseGrantsNothingForAGlobThatMatchesNothing keeps a typo from reading as a
 // grant: an owned path is a claim about files that exist.
 func TestNarrowToLeaseGrantsNothingForAGlobThatMatchesNothing(t *testing.T) {

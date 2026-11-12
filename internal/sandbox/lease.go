@@ -50,7 +50,10 @@ import (
 //
 // from is the source that answered leaseID; the narrowed policy carries it so a denial
 // can say whether the boundary was bound or only claimed.
-func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseID string, from types.LeaseSource) (*Policy, error) {
+//
+// products are workspace-relative product paths. A writable lease may write
+// them beside its write paths, as run.go grants them to the step.
+func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseID string, from types.LeaseSource, products ...string) (*Policy, error) {
 	if policy == nil || loc.Root == "" || leaseID == "" {
 		return policy, nil
 	}
@@ -66,7 +69,7 @@ func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseI
 
 	b := &leaseBoundary{id: row.ID, from: from, root: filesystem.ResolveRulePath(loc.Root), cacheDir: loc.CacheDir}
 	if !row.ReadOnly {
-		b.granted = grantedPaths(loc.Root, row.WritePaths, row.DenyPaths)
+		b.granted = grantedPaths(loc.Root, slices.Concat(row.WritePaths, products), row.DenyPaths)
 	}
 	slog.With(attr.Component("magus")).InfoContext(ctx, "narrowed the sandbox write grant to a lease boundary",
 		"lease", row.ID, "parent", row.Parent, "write_paths", len(row.WritePaths), "write_rules", len(b.granted))
