@@ -126,7 +126,7 @@ func TestExternDeclTypesACallback(t *testing.T) {
 
 // One adapter per callback type, named for its parameter and result types.
 func TestImplCallbacksNamesOneAdapterPerType(t *testing.T) {
-	cbs, err := implCallbacks(hostmodules.All())
+	cbs, err := implementationCallbacks(hostmodules.All())
 	require.NoError(t, err)
 	names := make([]string, len(cbs))
 	for i, cb := range cbs {

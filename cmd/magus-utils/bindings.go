@@ -83,7 +83,7 @@ func runAllBindings(outDir, pkg string) error {
 	}
 	var g errgroup.Group
 	g.Go(func() error {
-		cbs, err := implCallbacks(mods)
+		cbs, err := implementationCallbacks(mods)
 		if err != nil {
 			return err
 		}
