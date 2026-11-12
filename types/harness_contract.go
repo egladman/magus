@@ -143,6 +143,9 @@ type ModelRow struct {
 	Window int64     `json:"window,omitzero"`
 	Price  Price     `json:"price"`
 	Step   PriceStep `json:"step,omitzero"`
+	// Default picks this row for its tier when the workspace maps no
+	// tiers. A tier of several rows needs exactly one.
+	Default bool `json:"default,omitempty"`
 }
 
 // HarnessTool is one row of a host's tool table: a tool by the host's own name, and what

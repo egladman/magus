@@ -521,6 +521,8 @@ func TestValidateModelRowsRefusesWhatNamesNoOneModel(t *testing.T) {
 		"one alias on two rows": {[]types.ModelRow{{ID: "m-1", Tier: "standard", Alias: "mid"}, {ID: "m-2", Tier: "economy", Alias: "mid"}},
 			"rows m-1 and m-2 both declare alias mid"},
 		"a row without an id": {[]types.ModelRow{{Window: 1000}}, "row 1 has no id"},
+		"default without a tier": {[]types.ModelRow{{ID: "m-1", Default: true}},
+			"row 1 (m-1) sets default without a tier, so it is the default of no tier"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -543,8 +545,8 @@ func TestClaudeCodeRowsNameAModelForEveryShippedTier(t *testing.T) {
 	assert.Equal(t, []string{"claude-opus-5-5", "claude-fable-5-2"}, tierRows["principal"])
 	_, err = pickTierModels(tierRows, func(string) (string, bool) { return "", false })
 	require.Error(t, err, "principal has two rows and nothing maps one")
-	tiers, err := pickTierModels(tierRows, shippedTierModel("claude-code"))
-	require.NoError(t, err)
+	tiers, err := defaultTierModels(rows)
+	require.NoError(t, err, "principal resolves through its row's default flag")
 	assert.Equal(t, map[string]string{
 		"economy": "claude-haiku-5-5", "standard": "claude-sonnet-5-5", "principal": "claude-opus-5-5",
 	}, tiers)
@@ -928,6 +930,30 @@ func TestPickTierModelsPicksNothingForAHarnessWithNoTiers(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, got)
+}
+
+func TestDefaultTierModelsRunsTheDefaultRowOfASeveralRowTier(t *testing.T) {
+	got, err := defaultTierModels([]types.ModelRow{
+		{ID: "m-1", Tier: "principal"}, {ID: "m-2", Tier: "principal", Default: true}, {ID: "m-3", Tier: "economy"}, {ID: "m-4"},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"principal": "m-2", "economy": "m-3"}, got)
+}
+
+func TestDefaultTierModelsRefusesASeveralRowTierWithNoDefault(t *testing.T) {
+	_, err := defaultTierModels([]types.ModelRow{{ID: "m-1", Tier: "principal"}, {ID: "m-2", Tier: "principal"}})
+
+	assert.EqualError(t, err, "rows m-1, m-2 all declare tier principal and none sets default, "+
+		"so set default = true on the row that tier runs on, or declare model tiers that map principal")
+}
+
+func TestDefaultTierModelsRefusesASeveralRowTierWithTwoDefaults(t *testing.T) {
+	_, err := defaultTierModels([]types.ModelRow{
+		{ID: "m-1", Tier: "principal", Default: true}, {ID: "m-2", Tier: "principal", Default: true}, {ID: "m-3", Tier: "principal"},
+	})
+
+	assert.EqualError(t, err, "rows m-1, m-2 all set default for tier principal, so keep default = true on the one row that tier runs on")
 }
 
 func TestPickTierModelsRunsTheOneRowOfATierWithNoDeclaration(t *testing.T) {

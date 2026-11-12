@@ -6034,6 +6034,7 @@ func ObjectModelRow(v types.ModelRow) vm.Value {
 	out.MapSet("window", vm.IntValue(int64(v.Window)))
 	out.MapSet("price", ObjectPrice(v.Price))
 	out.MapSet("step", ObjectPriceStep(v.Step))
+	out.MapSet("default", vm.BoolValue(v.Default))
 	return out
 }
 

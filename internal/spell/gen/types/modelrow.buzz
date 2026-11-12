@@ -12,4 +12,5 @@ export object ModelRow {
     window: int = 0,
     price: Price = Price{},
     step: PriceStep = PriceStep{},
+    default: bool = false,
 }

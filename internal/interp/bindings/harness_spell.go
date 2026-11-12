@@ -251,13 +251,10 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 		if err != nil {
 			return nil, fmt.Errorf("harness spell %q: %w", id, err)
 		}
-		_, tierRows, err := validateModelRows(rows)
-		if err != nil {
+		if _, _, err := validateModelRows(rows); err != nil {
 			return nil, fmt.Errorf("harness spell %q: mgs_listModels: %w", id, err)
 		}
-		// No declaration maps a tier yet. A tier of several rows
-		// runs the shipped default, or fails here without one.
-		tiers, err := pickTierModels(tierRows, shippedTierModel(id))
+		tiers, err := defaultTierModels(rows)
 		if err != nil {
 			return nil, fmt.Errorf("harness spell %q: mgs_listModels: %w", id, err)
 		}
@@ -278,18 +275,38 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 	return hosts, nil
 }
 
-// shippedTierModels is the model a harness runs for a tier of
-// several rows. It applies only when the workspace maps no tiers.
-var shippedTierModels = map[string]map[string]string{
-	"claude-code": {"principal": "claude-opus-5-5"},
-}
-
-// shippedTierModel maps a tier to its shippedTierModels entry.
-func shippedTierModel(id string) func(tier string) (string, bool) {
-	return func(tier string) (string, bool) {
-		model, ok := shippedTierModels[id][tier]
-		return model, ok
+// defaultTierModels is each tier's model when no declaration maps one.
+// A tier of several rows runs its one default row. No default, or two,
+// is an error, never a pick by order.
+func defaultTierModels(rows []types.ModelRow) (map[string]string, error) {
+	tierRows := map[string][]string{}
+	defaults := map[string][]string{}
+	for _, r := range rows {
+		if r.Tier == "" {
+			continue
+		}
+		tierRows[r.Tier] = append(tierRows[r.Tier], r.ID)
+		if r.Default {
+			defaults[r.Tier] = append(defaults[r.Tier], r.ID)
+		}
 	}
+	out := map[string]string{}
+	for _, tier := range slices.Sorted(maps.Keys(tierRows)) {
+		ids, picked := tierRows[tier], defaults[tier]
+		switch {
+		case len(ids) == 1:
+			out[tier] = ids[0]
+		case len(picked) == 1:
+			out[tier] = picked[0]
+		case len(picked) == 0:
+			return nil, fmt.Errorf("rows %s all declare tier %s and none sets default, so set default = true on the row that tier runs on, "+
+				"or declare model tiers that map %s", strings.Join(ids, ", "), tier, tier)
+		default:
+			return nil, fmt.Errorf("rows %s all set default for tier %s, so keep default = true on the one row that tier runs on",
+				strings.Join(picked, ", "), tier)
+		}
+	}
+	return out, nil
 }
 
 // declaredTierModels is each tier's default model under harness id.
@@ -365,6 +382,9 @@ func validateModelRows(rows []types.ModelRow) ([]types.ModelPricing, map[string]
 				return nil, nil, fmt.Errorf("rows %s and %s both declare alias %s", prior, r.ID, r.Alias)
 			}
 			aliases[r.Alias] = r.ID
+		}
+		if r.Default && r.Tier == "" {
+			return nil, nil, fmt.Errorf("row %d (%s) sets default without a tier, so it is the default of no tier", i+1, r.ID)
 		}
 		if r.Tier != "" {
 			if tiers == nil {

@@ -4347,6 +4347,12 @@ func decodeModelRow(v vm.Value, path string) (types.ModelRow, error) {
 				return out, err
 			}
 			out.Step = xStep
+		case "default":
+			bDefault, err := decodeBool(item, path+".default")
+			if err != nil {
+				return out, err
+			}
+			out.Default = bDefault
 		default:
 			return out, unknownMember(path, "ModelRow", key)
 		}

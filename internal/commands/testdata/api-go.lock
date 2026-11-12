@@ -3784,6 +3784,7 @@ github.com/egladman/magus/types.ModelPricing.Tier field string
 github.com/egladman/magus/types.ModelPricing.Window field int64
 github.com/egladman/magus/types.ModelRow type struct
 github.com/egladman/magus/types.ModelRow.Alias field string "json:\"alias,omitzero\""
+github.com/egladman/magus/types.ModelRow.Default field bool "json:\"default,omitempty\""
 github.com/egladman/magus/types.ModelRow.ID field string "json:\"id\""
 github.com/egladman/magus/types.ModelRow.Price field Price "json:\"price\""
 github.com/egladman/magus/types.ModelRow.Step field PriceStep "json:\"step,omitzero\""
