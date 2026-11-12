@@ -462,8 +462,7 @@ func (s *JudgedShortSuite) TestALoadFailureWithNoRecordPassesAReadWithTheNote() 
 func (s *JudgedShortSuite) TestALoadFailureWithNoRecordDeniesAStateChange() {
 	ctx, _ := spawnFixture(s.T())
 	v := Judge(ctx, unloadedDeps(), Request{Input: "touch NOTES.md", Host: "claude-code", Session: "s1"})
-	s.Equal(decisionDeny, v.Decision)
-	s.Equal(string(denyRuleStaleBinary), v.Rule)
+	s.Equal(verdictOf(decisionDeny, string(denyRuleStaleBinary)), judgedAs(v))
 }
 
 // A spawn is gated; a continuation of a child already running is not.

@@ -35,7 +35,7 @@ func unknownMagusArgv(deps Dependencies, work []hint.Invocation) (ShellVerdict, 
 		if !isMagusInvocation(c) {
 			continue
 		}
-		bad, ok := unknownArgvOf(c.Args)
+		bad, ok := resolveUnknownArgv(c.Args)
 		if !ok {
 			continue
 		}
@@ -59,9 +59,9 @@ func unknownMagusArgv(deps Dependencies, work []hint.Invocation) (ShellVerdict, 
 	return ShellVerdict{}, false
 }
 
-// unknownArgvOf resolves args against commands.Root. Words past `--` belong
+// resolveUnknownArgv resolves args against commands.Root. Words past `--` belong
 // to the tool a target runs, so they are not read.
-func unknownArgvOf(args []string) (unknownArgv, bool) {
+func resolveUnknownArgv(args []string) (unknownArgv, bool) {
 	words := magusSubcommandWords(args)
 	if len(words) == 0 || words[0] == commands.Help.Name {
 		return unknownArgv{}, false

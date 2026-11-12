@@ -73,7 +73,7 @@ func unfiledStopReason(row types.Job) string {
 	if row.ReadOnly {
 		changed = `nothing: a read-only row files "changed_paths": []`
 	}
-	return fmt.Sprintf("magus workspace: job %s has no filed result, so this stop is refused once [%s]\n"+
-		"File it: `magus job exit %s --stdin`, its changed_paths naming %s; `magus job exit --schema` prints the shape.",
+	return fmt.Sprintf("magus workspace: job %s filed no result, stop refused once [%s]\n"+
+		"Run `magus job exit %s --stdin` naming %s; shape: magus job exit --schema",
 		row.ID, denyRuleStopUnfiled, row.ID, changed)
 }

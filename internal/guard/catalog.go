@@ -186,7 +186,7 @@ var ruleDocStopUnfiled = types.RuleDoc{
 	Why: "A parent reads what its child did through `magus job wait`, which waits on the row's filed JobResult; a child that stops without one leaves nothing to wait on, and a rule nobody is required to follow is one nobody follows (ADR 0043). " +
 		"At a subagent's stop, when the caller holds a lease whose live row has no result, the stop is refused once, naming `magus job exit <job> --stdin` and `magus job exit --schema`. A read-only row files one too, with an empty changed_paths, so a scout is held to the same rule. " +
 		"The second stop passes with a note, since the host marks it as one a stop rule already held: nothing re-prompts the child, and `magus job wait` shows the row never passed. " +
-		"On Claude Code and Codex the refusal blocks the stop, so the child files the record itself. A host that reports no child stop never reaches it. Set to advise, the stop stands and the note says what was not filed.",
+		"Where the host lets a stop be blocked, the child files the record itself. A host that reports no child stop never reaches it. Set to advise, the stop stands and the note says what was not filed.",
 }
 
 var ruleDocBackgroundLeft = types.RuleDoc{
@@ -553,7 +553,7 @@ var ruleDocPersonAdvisory = types.RuleDoc{
 	Catches: "a root session ending its turn with an open `magus session advise` advisory it has not been shown",
 	Why: "An advisory is a person's directive to every session in the repository, and a stop is the one moment every host hands text back to the model. " +
 		"So a root session's stop that nothing else refuses is held once per advisory, with the advisory's text as the reason, and the session keeps working with it in front of it. " +
-		"Where the host renders a prompt's context (Claude Code, Codex) the next prompt shows it first and the stop does not repeat it. A subagent's stop shows nothing, so a child cannot spend its root's one showing. " +
+		"Where the host renders a prompt's context the next prompt shows it first and the stop does not repeat it. A subagent's stop shows nothing, so a child cannot spend its root's one showing. " +
 		"Nothing closes an advisory but `magus session retract <id>`, which is a person's to run. The rule is fixed: a workspace setting would let a checkout silence the person.",
 }
 
