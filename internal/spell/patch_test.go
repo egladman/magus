@@ -794,6 +794,9 @@ func TestBuiltinsMatchGolden(t *testing.T) {
 		// Sandbox is out of BuiltinsHash too, and the grants are pinned by behavior in
 		// TestGoSpellDeclaresTheToolchainsGrants rather than copied here.
 		g.Sandbox = nil
+		// Scopes is out of BuiltinsHash as well; spells/golang/spell_test.buzz
+		// pins the go spell's.
+		g.Scopes = nil
 		if len(g.Ops) > 0 {
 			ops := make(map[string]spells.Op, len(g.Ops))
 			for opName, op := range g.Ops {

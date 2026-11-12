@@ -237,3 +237,14 @@ test "coverage is a go profile the project's tests leave in .magus" {
 test "go-test scopes to one package directory" {
     std\assert(command("go-test").testScope.join(" ") == "./\{dir\}", message: "scope");
 }
+
+test "mgs_getScopes lists every linked package's globs, tests excluded" {
+    final scopes = go\mgs_getScopes();
+    std\assert(scopes.bin == "go", message: "bin");
+    std\assert(scopes.args.sub(0, len: 4).join(" ") == "list -e -deps -f", message: scopes.args.join(" "));
+    final format = scopes.args[4];
+    foreach (glob in ["/*.go\n", "!\{\{.Dir\}\}/*_test.go\n", "\{\{.Dir\}\}/go.mod\n", "\{\{.Dir\}\}/go.sum\n", "/\{\{.\}\}/**\n"]) {
+        std\assert(format.indexOf(glob) != null, message: "names {glob}");
+    }
+    std\assert(format.startsWith("\{\{if and (not .Standard) .Dir\}\}"), message: "the standard library drops out");
+}

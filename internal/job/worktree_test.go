@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -737,86 +738,208 @@ func TestDeleteEndsTheCheckoutTheRowOwns(t *testing.T) {
 	assert.Equal(t, "dirty", rows[0].ID)
 }
 
-func TestBuildInputsAreTheChangedPathsALinkedPackageReaches(t *testing.T) {
-	t.Parallel()
-	root := filepath.FromSlash("/w/a")
-	listed := fmt.Sprintf("%s|VERSION|banner.txt\n%s\n%s\n\n%s\n%s\n",
-		root,
-		filepath.Join(root, "cmd", "magus"),
-		filepath.Join(root, "internal", "job"),
-		filepath.FromSlash("/usr/local/go/src/fmt"),
-		filepath.FromSlash("/home/u/go/pkg/mod/x@v1/y"))
-	scopes := packageScopes(listed, root)
-	assert.Equal(t, []string{"./", "VERSION", "banner.txt", "cmd/magus/", "internal/job/"}, scopes)
-
-	for _, tc := range []struct {
-		path  string
-		input bool
-	}{
-		{"internal/job/worktree.go", true},
-		{"cmd/magus/main.go", true},
-		{"main.go", true},
-		{"go.mod", true},
-		{"go.sum", true},
-		{"go.work", true},
-		{"VERSION", true},
-		{"internal/job/gen/job.schema.json", true},
-		{"internal/job/worktree_test.go", false},
-		{"internal/other/x.go", false},
-		{"libs/embed/train/go.mod", false},
-		{"docs/index.md", false},
-		{"MAGUS.md", false},
-		{"console/src/app.ts", false},
-		{"changes/unreleased/x.md", false},
-	} {
-		assert.Equal(t, tc.input, len(buildInputs([]string{tc.path}, scopes)) == 1, tc.path)
-	}
+// BuildInputsSuite judges changed paths against a fake spell's scopes, in a
+// checkout whose ./magus links lib, beside an unlinked package and docs.
+type BuildInputsSuite struct {
+	suite.Suite
+	repo  *testkit.Repo
+	built string
 }
 
-// goModuleRepository is a git checkout holding a Go module whose ./cmd/magus links lib, beside a
-// package nothing links and a docs file.
-func goModuleRepository(t *testing.T) *testkit.Repo {
+func TestBuildInputsSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(BuildInputsSuite))
+}
+
+func (s *BuildInputsSuite) SetupTest() {
+	s.repo = linkingRepository(s.T())
+	s.built = s.repo.Head()
+}
+
+func linkingRepository(t *testing.T) *testkit.Repo {
 	t.Helper()
 	return testkit.NewRepository(t, map[string]string{
-		"go.mod":            "module example.com/m\n\ngo 1.26\n",
-		"cmd/magus/main.go": "package main\n\nimport \"example.com/m/lib\"\n\nfunc main() { lib.Run() }\n",
-		"lib/lib.go":        "package lib\n\nfunc Run() {}\n",
+		"go.mod":            "module example.com/m\n",
+		"cmd/magus/main.go": "package main\n",
+		"lib/lib.go":        "package lib\n",
 		"lib/lib_test.go":   "package lib\n",
 		"unlinked/u.go":     "package unlinked\n",
 		"docs/a.md":         "a\n",
 	})
 }
 
-// A fork with no checkout of its own lands in the forking checkout, whose ./magus judges
-// the job: built before the checkpoint's Go build inputs, it names the bootstrap.
-func TestLandingBootstrapNamesTheBuildAStaleMagusNeeds(t *testing.T) {
-	t.Parallel()
-	repo := goModuleRepository(t)
-	s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
-	built := repo.Head()
-	docs := repo.Commit("docs", map[string]string{"docs/a.md": "b\n"})
-	linked := repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nfunc Run() { _ = 1 }\n"})
-	local := filepath.Join(repo.Root(), "magus")
-	require.NoError(t, os.WriteFile(local, []byte("build 1\n"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "magus.yaml"), []byte(hookConfig), 0o644))
-	ctx := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built})
+// libScopes prints scopes the way the go spell does. One is absolute, one
+// excludes, and one lies outside the root.
+const libScopes = `printf '%s\n' "$PWD/cmd/magus/*.go" 'lib/*.go' '!lib/*_test.go' go.mod /elsewhere/x/*.go`
 
-	for name, tc := range map[string]struct {
-		exe, checkpoint, want string
-	}{
-		"a checkpoint past a linked package": {exe: local, checkpoint: linked, want: CheckoutBootstrap(testHook, repo.Root())},
-		"a checkpoint past a docs edit":      {exe: local, checkpoint: docs},
-		"the commit it was built at":         {exe: local, checkpoint: built},
-		"a magus on PATH":                    {exe: filepath.Join(t.TempDir(), "magus"), checkpoint: linked},
-	} {
-		got, err := s.LandingBootstrap(ctx, tc.exe, tc.checkpoint)
-		require.NoError(t, err, name)
-		assert.Equal(t, tc.want, got, name)
+// relinking is a root project whose go-build relinks ./magus, bound to one
+// spell per script, each its mgs_getScopes. The package is the script's $1.
+func relinking(scripts ...string) []*types.Project {
+	p := &types.Project{Path: ".", TargetPolicies: map[string]types.Target{"go-build": {Relinks: "./magus"}}}
+	for i, script := range scripts {
+		cmd := &spells.Command{Bin: "sh", Args: []string{"-c", script, "scopes"}}
+		p.ResolvedSpells = append(p.ResolvedSpells, spells.NewSpell(fmt.Sprintf("fake%d", i), spells.WithScopes(cmd)))
 	}
+	return []*types.Project{p}
+}
 
-	unknown := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "dev", Commit: "unknown"})
-	_, err := s.LandingBootstrap(unknown, local, linked)
-	require.ErrorContains(t, err, "records no commit it was built from")
+func (s *BuildInputsSuite) changed(projects []*types.Project, files map[string]string) ([]string, error) {
+	later := s.repo.Commit("later", files)
+	return s.since(projects, later)
+}
+
+func (s *BuildInputsSuite) since(projects []*types.Project, to string) ([]string, error) {
+	drv, why := resolveDriver(s.T().Context(), s.repo.Root())
+	s.Require().NotNil(drv, why)
+	return ChangedBuildInputs(s.T().Context(), drv, s.repo.Root(), projects, s.built, to)
+}
+
+func (s *BuildInputsSuite) TestALinkedSourceIsAnInput() {
+	inputs, err := s.changed(relinking(libScopes), map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
+	s.Require().NoError(err)
+	s.Equal([]string{"lib/lib.go"}, inputs)
+}
+
+func (s *BuildInputsSuite) TestAnAbsoluteScopeUnderTheRootMatches() {
+	inputs, err := s.changed(relinking(libScopes), map[string]string{"cmd/magus/main.go": "package main\n\nvar _ = 1\n"})
+	s.Require().NoError(err)
+	s.Equal([]string{"cmd/magus/main.go"}, inputs)
+}
+
+func (s *BuildInputsSuite) TestAnExcludedTestIsNotAnInput() {
+	inputs, err := s.changed(relinking(libScopes), map[string]string{"lib/lib_test.go": "package lib\n\nvar _ = 1\n"})
+	s.Require().NoError(err)
+	s.Empty(inputs)
+}
+
+func (s *BuildInputsSuite) TestAnUnlinkedPackageAndDocsAreNotInputs() {
+	inputs, err := s.changed(relinking(libScopes), map[string]string{"unlinked/u.go": "package unlinked\n\nvar _ = 1\n", "docs/a.md": "b\n"})
+	s.Require().NoError(err)
+	s.Empty(inputs)
+}
+
+func (s *BuildInputsSuite) TestADeletedLinkedSourceIsAnInput() {
+	s.repo.Git("rm", "-q", "lib/lib.go")
+	s.repo.Git("commit", "-q", "-m", "drop lib.go")
+	inputs, err := s.since(relinking(libScopes), s.repo.Head())
+	s.Require().NoError(err)
+	s.Equal([]string{"lib/lib.go"}, inputs)
+}
+
+func (s *BuildInputsSuite) TestEverySpellsScopesCount() {
+	inputs, err := s.changed(relinking(`printf 'lib/*.go\n'`, `printf 'docs/*.md\n'`), map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n", "docs/a.md": "b\n"})
+	s.Require().NoError(err)
+	s.Equal([]string{"docs/a.md", "lib/lib.go"}, inputs)
+}
+
+func (s *BuildInputsSuite) TestEqualCommitsRunNothing() {
+	inputs, err := s.since(nil, s.built)
+	s.Require().NoError(err)
+	s.Empty(inputs)
+}
+
+func (s *BuildInputsSuite) TestTheCommandRunsWithThePackageAppended() {
+	scopes, err := RelinkScopes(s.T().Context(), relinking(`printf '%s\n' "$1"`), s.repo.Root())
+	s.Require().NoError(err)
+	s.Equal([]string{"cmd/magus"}, scopes)
+}
+
+func (s *BuildInputsSuite) TestAGlobOutsideTheRootDropsOut() {
+	scopes, err := RelinkScopes(s.T().Context(), relinking(libScopes), s.repo.Root())
+	s.Require().NoError(err)
+	s.Equal([]string{"!lib/*_test.go", "cmd/magus/*.go", "go.mod", "lib/*.go"}, scopes)
+}
+
+func (s *BuildInputsSuite) TestNoRelinkingTargetLeavesTheInputsUnknown() {
+	_, err := RelinkScopes(s.T().Context(), []*types.Project{{Path: "."}}, s.repo.Root())
+	s.ErrorContains(err, "no target in "+s.repo.Root()+" relinks ./magus, so the build inputs of ./magus are unknown")
+}
+
+func (s *BuildInputsSuite) TestNoSpellDeclaringScopesLeavesTheInputsUnknown() {
+	projects := relinking()
+	projects[0].ResolvedSpells = []*spells.Spell{spells.NewSpell("plain")}
+	_, err := RelinkScopes(s.T().Context(), projects, s.repo.Root())
+	s.ErrorContains(err, "no spell bound to project ., which relinks ./magus, declares mgs_getScopes")
+}
+
+func (s *BuildInputsSuite) TestAFailingCommandSaysWhatItPrinted() {
+	_, err := s.changed(relinking(`echo broken >&2; exit 3`), map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
+	s.ErrorContains(err, `the fake0 spell's mgs_getScopes`)
+	s.ErrorContains(err, `says "broken"`)
+}
+
+func (s *BuildInputsSuite) TestAMalformedGlobIsAnError() {
+	_, err := RelinkScopes(s.T().Context(), relinking(`printf 'lib/[x\n'`), s.repo.Root())
+	s.ErrorContains(err, `"lib/[x" is not a glob`)
+}
+
+// LandingBootstrapSuite: a fork with no checkout of its own lands in the
+// forking checkout. A ./magus built before the checkpoint's build inputs
+// names the bootstrap.
+type LandingBootstrapSuite struct {
+	suite.Suite
+	repo  *testkit.Repo
+	built string
+	store *Store
+	local string
+	ctx   context.Context
+}
+
+func TestLandingBootstrapSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(LandingBootstrapSuite))
+}
+
+func (s *LandingBootstrapSuite) SetupTest() {
+	s.repo = linkingRepository(s.T())
+	s.built = s.repo.Head()
+	root := s.repo.Root()
+	s.store = NewStore(Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: root}).
+		InWorkspace(Workspace{Projects: relinking(libScopes)})
+	s.local = filepath.Join(root, "magus")
+	s.Require().NoError(os.WriteFile(s.local, []byte("build 1\n"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(hookConfig), 0o644))
+	s.ctx = types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: s.built})
+}
+
+func (s *LandingBootstrapSuite) TestACheckpointPastALinkedPackageNamesTheBootstrap() {
+	linked := s.repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
+	got, err := s.store.LandingBootstrap(s.ctx, s.local, linked)
+	s.Require().NoError(err)
+	s.Equal(CheckoutBootstrap(testHook, s.repo.Root()), got)
+}
+
+func (s *LandingBootstrapSuite) TestACheckpointPastADocsEditNamesNothing() {
+	docs := s.repo.Commit("docs", map[string]string{"docs/a.md": "b\n"})
+	got, err := s.store.LandingBootstrap(s.ctx, s.local, docs)
+	s.Require().NoError(err)
+	s.Empty(got)
+}
+
+func (s *LandingBootstrapSuite) TestTheCommitItWasBuiltAtNamesNothing() {
+	got, err := s.store.LandingBootstrap(s.ctx, s.local, s.built)
+	s.Require().NoError(err)
+	s.Empty(got)
+}
+
+func (s *LandingBootstrapSuite) TestAMagusOnPathNamesNothing() {
+	linked := s.repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
+	got, err := s.store.LandingBootstrap(s.ctx, filepath.Join(s.T().TempDir(), "magus"), linked)
+	s.Require().NoError(err)
+	s.Empty(got)
+}
+
+func (s *LandingBootstrapSuite) TestABuildWithNoCommitIsAnError() {
+	unknown := types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "dev", Commit: "unknown"})
+	_, err := s.store.LandingBootstrap(unknown, s.local, s.built)
+	s.ErrorContains(err, "records no commit it was built from")
+}
+
+func (s *LandingBootstrapSuite) TestAStoreWithNoWorkspaceSaysTheInputsAreUnknown() {
+	bare := NewStore(Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: s.repo.Root()})
+	linked := s.repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
+	_, err := bare.LandingBootstrap(s.ctx, s.local, linked)
+	s.ErrorContains(err, "the build inputs of ./magus are unknown, since this door opened the job store without a workspace")
 }
 
 // testHook is the checkout.bootstrap hookConfig declares.
@@ -1031,23 +1154,6 @@ func (s *ReviewCheckoutSuite) TestInstallTargetsListsOnlyProjectsDeclaringInstal
 		{Path: "docs", MagusfileTargets: []string{"build"}},
 	}
 	s.Equal([]string{".", "web"}, InstallTargets(projects))
-}
-
-func TestChangedBuildInputsFailsWhereThePackagesCannotBeListed(t *testing.T) {
-	t.Parallel()
-	repo := execRepository(t)
-	built := repo.Head()
-	later := repo.Commit("later", map[string]string{"b.txt": "b\n"})
-	s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
-	drv, why := resolveDriver(t.Context(), repo.Root())
-	require.NotNil(t, drv, why)
-
-	_, err := ChangedBuildInputs(t.Context(), drv, s.root, built, later)
-	require.ErrorContains(t, err, "go list -deps ./cmd/magus")
-
-	inputs, err := ChangedBuildInputs(t.Context(), drv, s.root, later, later)
-	require.NoError(t, err, "equal commits list nothing")
-	assert.Empty(t, inputs)
 }
 
 type ForkAgainSuite struct {

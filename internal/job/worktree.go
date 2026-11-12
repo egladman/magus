@@ -18,11 +18,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -465,20 +467,15 @@ func (s *Store) LinkedCheckout(ctx context.Context, dir string) (bool, error) {
 	return slices.ContainsFunc(registered, func(c types.RegisteredCheckout) bool { return !c.Primary && samePath(c.Root, dir) }), nil
 }
 
-// moduleFiles decide the module graph a Go build resolves, at the root.
-var moduleFiles = []string{"go.mod", "go.sum", "go.work", "go.work.sum"}
+// mainPackage is the package the relink builds into ./magus. It names
+// magus's own main package: no workspace declares where a binary links from.
+const mainPackage = "./cmd/magus"
 
-// rootScope marks the root package among the scopes. It is not a prefix: "" or "./" as one
-// would take in every file at the root.
-const rootScope = "./"
-
-// ChangedBuildInputs are the paths differing between commits from and to, in the checkout
-// at root, that can change the binary ./cmd/magus compiles to: a non-test Go file in a
-// package `go list -deps` names, a root module file, or another file in such a package's
-// directory, where go:embed reads. Each side's changes since the two diverged count. It fails
-// when either commit or the package list cannot be read, so unknown inputs never match;
-// equal commits run no process. hack/dev/bootstrap-worktree.buzz holds the same rule.
-func ChangedBuildInputs(ctx context.Context, drv types.VCSDriver, root, from, to string) ([]string, error) {
+// ChangedBuildInputs are the paths differing between commits from and to,
+// in the checkout at root, that [RelinkScopes] matches. Each side's changes
+// since the two diverged count. It fails when either commit or the scopes
+// cannot be read, so unknown inputs never match. Equal commits run nothing.
+func ChangedBuildInputs(ctx context.Context, drv types.VCSDriver, root string, projects []*types.Project, from, to string) ([]string, error) {
 	if from == to {
 		return nil, nil
 	}
@@ -492,57 +489,107 @@ func ChangedBuildInputs(ctx context.Context, drv types.VCSDriver, root, from, to
 	}
 	slices.Sort(changed)
 	changed = slices.Compact(changed)
-	scopes, err := binaryScopes(ctx, root)
+	scopes, err := RelinkScopes(ctx, projects, root)
 	if err != nil {
 		return nil, err
 	}
 	return buildInputs(changed, scopes), nil
 }
 
-// binaryScopes asks the Go toolchain which packages under root ./cmd/magus links, as
-// [packageScopes] reads them. go list loads packages without compiling any; magus refuses
-// to load without jsonv2.
-func binaryScopes(ctx context.Context, root string) ([]string, error) {
-	cmd := exec.CommandContext(ctx, "go", "list", "-deps", "-f",
-		`{{if not .Standard}}{{.Dir}}{{range .EmbedFiles}}|{{.}}{{end}}{{end}}`, "./cmd/magus")
-	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GOEXPERIMENT=jsonv2")
+// RelinkScopes are the root-relative globs, "!" excluding, that the spells
+// of the project relinking ./magus say a build of [mainPackage] reads. Each
+// spell's mgs_getScopes command runs in that project's directory with the
+// package appended. No such target, no spell declaring the export, and a
+// command that fails are errors that say the build inputs are unknown.
+func RelinkScopes(ctx context.Context, projects []*types.Project, root string) ([]string, error) {
+	p := relinkingProject(projects)
+	if p == nil {
+		return nil, fmt.Errorf("job: no target in %s relinks ./%s, so the build inputs of ./%s are unknown", root, binaryName, binaryName)
+	}
+	dir := filepath.Join(root, filepath.FromSlash(p.Path))
+	var scopes []string
+	declared := false
+	for _, sp := range p.ResolvedSpells {
+		c := sp.Scopes()
+		if c == nil {
+			continue
+		}
+		declared = true
+		listed, err := runScopes(ctx, *c, dir)
+		if err != nil {
+			return nil, fmt.Errorf("job: the %s spell's mgs_getScopes: %w", sp.Name(), err)
+		}
+		found, err := parseScopes(listed, root, dir)
+		if err != nil {
+			return nil, fmt.Errorf("job: the %s spell's mgs_getScopes: %w", sp.Name(), err)
+		}
+		scopes = append(scopes, found...)
+	}
+	if !declared {
+		return nil, fmt.Errorf("job: no spell bound to project %s, which relinks ./%s, declares mgs_getScopes, so the build inputs of ./%s are unknown",
+			p.Path, binaryName, binaryName)
+	}
+	slices.Sort(scopes)
+	return slices.Compact(scopes), nil
+}
+
+// relinkingProject is the project with a target relinking ./magus, or nil.
+func relinkingProject(projects []*types.Project) *types.Project {
+	for _, p := range projects {
+		for _, pol := range p.TargetPolicies {
+			if pol.Relinks != "" && path.Clean(pol.Relinks) == binaryName {
+				return p
+			}
+		}
+	}
+	return nil
+}
+
+func runScopes(ctx context.Context, c spells.Command, dir string) (string, error) {
+	argv := append(slices.Clone(c.Args), mainPackage)
+	cmd := exec.CommandContext(ctx, c.Bin, argv...)
+	cmd.Dir = dir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("job: `go list -deps ./cmd/magus` in %s says %q: %w", root, strings.TrimSpace(stderr.String()), err)
+		return "", fmt.Errorf("`%s %s` in %s says %q: %w", c.Bin, strings.Join(argv, " "), dir, strings.TrimSpace(stderr.String()), err)
 	}
-	return packageScopes(string(out), root), nil
+	return string(out), nil
 }
 
-// packageScopes are where a file can reach the binary, root-relative: "dir/" for a package
-// below root, rootScope for the root package, a bare path for a file the root package embeds.
-// listed is one package per line, its absolute directory then each go:embed file after "|";
-// a directory outside root (stdlib, module cache) drops out.
-func packageScopes(listed, root string) []string {
+// parseScopes reads listed, one glob per line, absolute or relative to dir,
+// as globs relative to root. A glob outside root drops out: a lockfile
+// pins what lies there.
+func parseScopes(listed, root, dir string) ([]string, error) {
 	base := filepath.Clean(root)
 	var scopes []string
 	for line := range strings.Lines(listed) {
-		fields := strings.Split(strings.TrimSpace(line), "|")
-		if fields[0] == "" {
+		glob := strings.TrimSpace(line)
+		if glob == "" {
 			continue
 		}
-		dir := filepath.Clean(fields[0])
-		if dir == base {
-			scopes = append(scopes, rootScope)
-			scopes = append(scopes, fields[1:]...)
+		pattern, excluded := strings.CutPrefix(glob, "!")
+		if !filepath.IsAbs(pattern) {
+			pattern = filepath.Join(dir, pattern)
+		}
+		rel, ok := strings.CutPrefix(filepath.Clean(pattern), base+string(filepath.Separator))
+		if !ok {
 			continue
 		}
-		if rel, ok := strings.CutPrefix(dir, base+string(filepath.Separator)); ok {
-			scopes = append(scopes, filepath.ToSlash(rel)+"/")
+		rel = filepath.ToSlash(rel)
+		if !doublestar.ValidatePattern(rel) {
+			return nil, fmt.Errorf("%q is not a glob", glob)
 		}
+		if excluded {
+			rel = "!" + rel
+		}
+		scopes = append(scopes, rel)
 	}
-	return scopes
+	return scopes, nil
 }
 
-// buildInputs are the paths in changed that scopes reach. A linked package deleted since
-// the listing is not missed: whatever imported it changed too.
+// buildInputs are the paths in changed that scopes reach.
 func buildInputs(changed, scopes []string) []string {
 	var inputs []string
 	for _, p := range changed {
@@ -553,22 +600,19 @@ func buildInputs(changed, scopes []string) []string {
 	return inputs
 }
 
+// isBuildInput reports whether a glob of scopes matches p and no "!" one does.
 func isBuildInput(p string, scopes []string) bool {
-	dir, name := path.Split(p)
-	if dir == "" {
-		dir = rootScope
+	included := false
+	for _, s := range scopes {
+		if pattern, excluded := strings.CutPrefix(s, "!"); excluded {
+			if doublestar.MatchUnvalidated(pattern, p) {
+				return false
+			}
+			continue
+		}
+		included = included || doublestar.MatchUnvalidated(s, p)
 	}
-	switch {
-	case dir == rootScope && slices.Contains(moduleFiles, name):
-		return true
-	case strings.HasSuffix(name, "_test.go"):
-		return false
-	case strings.HasSuffix(name, ".go"):
-		return slices.Contains(scopes, dir)
-	}
-	return slices.ContainsFunc(scopes, func(s string) bool {
-		return s == p || (s != rootScope && strings.HasSuffix(s, "/") && strings.HasPrefix(p, s))
-	})
+	return included
 }
 
 // NoCheckoutHook says that a workspace declares no checkout.bootstrap hook.
@@ -645,7 +689,11 @@ func (s *Store) LandingBootstrap(ctx context.Context, exe, checkpoint string) (s
 	if err != nil {
 		return "", fmt.Errorf("job: the checkpoint %s is a commit %s cannot find: %w", revision, drv.Name(), err)
 	}
-	inputs, err := ChangedBuildInputs(ctx, drv, root, built.ID, base.ID)
+	ws, missing := s.loadedWorkspace()
+	if missing != "" {
+		return "", fmt.Errorf("job: the build inputs of ./%s are unknown, since %s", binaryName, missing)
+	}
+	inputs, err := ChangedBuildInputs(ctx, drv, root, ws.Projects, built.ID, base.ID)
 	if err != nil || len(inputs) == 0 {
 		return "", err
 	}
