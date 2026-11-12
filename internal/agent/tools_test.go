@@ -200,7 +200,7 @@ func TestReadToolRowsSaysWhyThereAreNone(t *testing.T) {
 	for name, tc := range map[string]struct{ dir, says string }{
 		"no directory named": {"", "no tool rows directory was named"},
 		"never installed":    {"missing", "no tool rows at missing"},
-		"another layout":     {"stale", "is 0 and this magus reads only magus.tool-rows/v1alpha1"},
+		"another layout":     {"stale", "is 0, and this reader reads only magus.tool-rows/v1alpha1"},
 	} {
 		rows := readToolRows(root, tc.dir)
 		require.Error(t, rows.Err, name)

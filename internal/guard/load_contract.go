@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os/exec"
@@ -9,7 +10,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/ward"
 )
 
 // The load contract is what a magus built before a change needs to load the tree after it:
@@ -145,6 +148,35 @@ func rankContractPick(v ShellVerdict, reason string) ShellVerdict {
 		return v
 	}
 	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleStaleBinary}}
+}
+
+// denyContractSkew refuses a state-changing line while the binary's
+// contract differs from the tree's, before any load can pass or fail.
+// Reads, VCS recovery and the relink still run.
+func denyContractSkew(deps Dependencies, at location, line string, d Dialect) string {
+	root := at.workspace
+	if root == "" {
+		return ""
+	}
+	skew, err := contract.Check(root)
+	if err == nil && !skew.Differs() {
+		return ""
+	}
+	if readOnlyLine(line, d) || recoveryLine(line, d, deps.lease, deps.lease == "", at) || replacesStaleMagus(line, at) {
+		return ""
+	}
+	if err != nil {
+		return denial{
+			Say: fmt.Sprintf("magus workspace: cannot read the contract %s carries (%v); relink ./magus, alone on its line: `%s`.",
+				root, err, ward.RelinkAt(root)),
+			Why: withPolicyNote(relinkWhy, runPolicyNote(line, at)),
+		}.full()
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: %s (%s) embeds contract %.12s, and %s carries %.12s; relink ./magus, alone on its line: `%s`.",
+			deps.Binary, cmp.Or(deps.BinaryVersion, "an unknown version"), skew.Binary, root, skew.Tree, ward.RelinkAt(root)),
+		Why: withPolicyNote(relinkWhy, runPolicyNote(line, at)),
+	}.full()
 }
 
 // leadPath names the first of paths and how many more there are.

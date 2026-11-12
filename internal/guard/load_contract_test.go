@@ -11,7 +11,61 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/internal/ward"
 )
+
+type ContractSkewSuite struct {
+	suite.Suite
+	root string
+	deps Dependencies
+}
+
+func TestContractSkewSuite(t *testing.T) {
+	suite.Run(t, new(ContractSkewSuite))
+}
+
+func (s *ContractSkewSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	s.deps = Dependencies{Binary: filepath.Join(s.root, "magus"), BinaryVersion: "v0-test"}
+}
+
+func (s *ContractSkewSuite) carryContract() {
+	for _, dir := range []string{"internal/commands/testdata", "internal/spell/gen/decls", "internal/spell/gen/types"} {
+		s.Require().NoError(os.MkdirAll(filepath.Join(s.root, dir), 0o755))
+	}
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "internal/commands/testdata/api.lock"), []byte("another contract\n"), 0o644))
+}
+
+func (s *ContractSkewSuite) deny(line string) string {
+	at := location{workspace: s.root, dir: s.root, cacheDir: s.T().TempDir()}
+	return denyContractSkew(s.deps, at, line, DialectBash)
+}
+
+func (s *ContractSkewSuite) TestADifferingContractRefusesAChangeAndNamesTheRelink() {
+	s.carryContract()
+	s.Contains(s.deny("touch notes.txt"), fmt.Sprintf("relink ./magus, alone on its line: `%s`", ward.RelinkAt(s.root)))
+}
+
+func (s *ContractSkewSuite) TestADifferingContractLetsAReadThrough() {
+	s.carryContract()
+	s.Empty(s.deny("git status"))
+}
+
+func (s *ContractSkewSuite) TestADifferingContractLetsTheRelinkThrough() {
+	s.carryContract()
+	s.Empty(s.deny(ward.RelinkAt(s.root)))
+}
+
+func (s *ContractSkewSuite) TestATreeCarryingNoContractNeverDiffers() {
+	s.Empty(s.deny("touch notes.txt"))
+}
+
+func (s *ContractSkewSuite) TestAnUnreadableContractRefusesAChange() {
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.root, "internal/commands/testdata/api.lock"), 0o755))
+	s.Contains(s.deny("touch notes.txt"), "cannot read the contract")
+}
 
 func TestLoadContractNamesTheTriggerPaths(t *testing.T) {
 	for _, p := range []string{
