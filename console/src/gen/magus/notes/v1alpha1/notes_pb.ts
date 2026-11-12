@@ -293,8 +293,8 @@ export const StoreStatusSchema: GenMessage<StoreStatus> = /*@__PURE__*/
  */
 export type ListNotesRequest = Message<"magus.notes.v1alpha1.ListNotesRequest"> & {
   /**
-   * Bounded at the same tier as ListActivity and ListMemories; see ListMemoriesRequest for
-   * why the three keep their own flat field rather than sharing a pagination message.
+   * Bounded at the same tier as ListActivityEvents. A flat field rather than a shared
+   * pagination message: each list RPC owns its own bounds.
    *
    * @generated from field: int32 page_size = 1;
    */
