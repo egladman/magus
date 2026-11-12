@@ -529,10 +529,10 @@ The implementing change owes these, all outside this record's one file:
 
 ### 2026-11-12: the tool door becomes ADR 0046's Judge
 
-[ADR 0046](0046-the-judge-takes-any-agent-call.md) renames the tool door to take any
-agent call. `JudgeTool` becomes `Judge`, `ToolCall` becomes `Call`, `ToolRow` becomes
-`CallRow`, `ToolRequest` becomes `CallRequest`, `WithToolRows` becomes
-`WithCallRows`, and `magus\guard.tool` becomes `magus\guard.call`. Go rules stay: an
+[ADR 0046](0046-the-judge-takes-any-agent-step.md) renames the tool door to take any
+agent step. `JudgeTool` becomes `Judge`, `ToolCall` becomes `Step`, `ToolRow` becomes
+`StepRow`, `ToolRequest` becomes `StepRequest`, `WithToolRows` becomes
+`WithStepRows`, and `magus\guard.tool` becomes `magus\guard.step`. Go rules stay: an
 embedder may register a rule in Go and in Buzz, so `ToolRule` and `WithToolRule` become
-`CallRule` and `WithCallRule`, which answers the open question above as "both". The
+`StepRule` and `WithStepRule`, which answers the open question above as "both". The
 text above is kept as written.
