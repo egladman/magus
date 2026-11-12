@@ -17,233 +17,6 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 )
 
-// inboundTypes names the boundary types Buzz hands TO magus, each of which gets a strict
-// generated decoder, Decode<T>(vm.Value) (T, error). It is the counterpart of
-// RuntimeObject, which marks the types magus hands to Buzz. Every name must be registered
-// in boundaryTypes, and a struct an inbound type carries must be inbound itself, so each
-// nested decoder is declared here and round-trip tested like its parent.
-//
-// An inbound type also gets a Go-to-Buzz encoder (boundaryobjects reads this list), which
-// is what lets a test prove Decode(Object(v)) == v for every entry.
-var inboundTypes = []string{
-	"Path",
-	"Hint",
-	"Command",
-	"Install",
-	"Manifest",
-	"Service",
-	"SymbolIndexer",
-	"Coverage",
-	"Charm",
-	"PatchOp",
-	"VersionKey",
-	"VersionBounds",
-	"Tool",
-	"SandboxAllow",
-	"SandboxEnv",
-	"SandboxCache",
-	"Sandbox",
-	"CommentBlock",
-	"Quote",
-	"CommentSyntax",
-	"StubSyntax",
-	"DecisionSyntax",
-	"Syntax",
-	"Language",
-	// Provider op responses (provider_ops.go), leaf first: Lifecycle.cycles is [ReleaseCycle].
-	"Ack",
-	"GreenRun",
-	"Strings",
-	"PruneResult",
-	"Secret",
-	"ReleaseCycle",
-	"Lifecycle",
-	"ReviewTarget",
-	"ReviewComment",
-	"RateLimit",
-	"ForgeCheck",
-	"BaseCommit",
-	"BaseBranch",
-	"ForgePull",
-	"PullList",
-	"Project",
-	"DiscoveryGap",
-	"DiscoveredProject",
-	// The queue script's answers, leaf first.
-	"Person",
-	"QueueIntegration",
-	"QueueRequiredCheck",
-	"QueueSetting",
-	"QueueApp",
-	"QueueSetupStep",
-	"QueueSetup",
-	"QueueSetupRefusal",
-	"QueueCapabilities",
-	"QueueDescribeResult",
-	"QueueChange",
-	"QueueMergedChange",
-	"QueueUnqueuedChange",
-	"QueueClosedChange",
-	"QueueChanges",
-	"QueueApproval",
-	"QueueCheck",
-	"QueueGreenChange",
-	"QueueMergeAnswer",
-	"QueueRunOrigin",
-	"QueueArtifact",
-	"QueueArtifactListing",
-	"QueueReview",
-	"QueueReviews",
-	// The harness contract's answers (internal/spell/contract.go), leaf first.
-	"HarnessConfig",
-	"HarnessAsset",
-	"Harness",
-	"HarnessSkills",
-	"HookCommand",
-	"HookBinding",
-	"ManagedEntries",
-	"McpServer",
-	"Price",
-	"PriceStep",
-	"ModelRow",
-	"HarnessTool",
-	"HarnessTools",
-	"AgentFile",
-	"Prompt",
-	"Setting",
-	"Limits",
-	// The image module's arguments, leaf first: Spec holds the records before it, a
-	// Document a Descriptor, and RegistryAuth the Secret above.
-	"Platform",
-	"Digest",
-	"Descriptor",
-	"File",
-	"Tree",
-	"Symlink",
-	"Directory",
-	"Config",
-	"Spec",
-	"RegistryAuth",
-	"Dependency",
-	"Provenance",
-	"Document",
-	// The host doors' option records, each decoded strictly at its door.
-	"DirsOptions",
-	"NeighborhoodOptions",
-	"PathOptions",
-	"QueryOptions",
-	"RefsOptions",
-	"HistoryMetricsOptions",
-	"ExecOptions",
-	`magus\CommandOptions`,
-	`vcs\CommandOptions`,
-	`magus\DiffOptions`,
-	"DiagnosticCode",
-	"RaiseOptions",
-	"SkillsOptions",
-	`http\Options`,
-	`http\ServerOptions`,
-	`http\Retry`,
-	`archive\Options`,
-	"RetryOptions",
-	// The magus root constructors' records, which their methods take back as
-	// the receiver, and the options those take.
-	"ProjectRef",
-	"JobModelTier",
-	"AgentModel",
-	"AgentWorker",
-	"AgentSpec",
-	"JobClaim",
-	"ClaimEvidence",
-	"Origin",
-	"Credential",
-	"Grant",
-	"JobDeferred",
-	"PriorAttempt",
-	"VerificationStatus",
-	"JobDenial",
-	"RetryVerdict",
-	"JobRejection",
-	"LeaseCheck",
-	"Goal",
-	"JobRelease",
-	"JobUnattributedWrite",
-	"JobEntry",
-	"Deviation",
-	"JobWorktree",
-	"JobResult",
-	"JobResultValidation",
-	"VerificationEvidence",
-	"JobAttempt",
-	"JobGateAttempt",
-	"JobRun",
-	"JobIntegration",
-	"KnowledgeSymbolGap",
-	"Graph",
-	"VCSCheckpoint",
-	"ChangeOptions",
-	"Change",
-	"FunctionGap",
-	"ChangeRiskFunction",
-	"History",
-	"SessionOptions",
-	"Session",
-	"Workspace",
-	"TierOptions",
-	"Job",
-}
-
-// requiredMembers names, per inbound type, the members its decoder refuses an answer
-// without. Absent otherwise decodes as the zero value, and for these a zero would admit
-// what the provider meant to refuse: a change missing "fork" read as one from this
-// repository, a missing approval count as a base requiring no review.
-var requiredMembers = map[string][]string{
-	"DiscoveredProject":    {"path", "role"},
-	"QueueCapabilities":    {"stackMerge", "linearStacks", "methods", "requiredApprovals"},
-	"QueueSetup":           {"statusContext", "credential"},
-	"QueueSetupRefusal":    {"reason", "url", "app"},
-	"QueueChange":          {"id", "repo", "head", "base", "method", "fork"},
-	"QueueMergedChange":    {"id", "head", "commit", "method"},
-	"QueueUnqueuedChange":  {"id", "head"},
-	"QueueClosedChange":    {"id"},
-	"QueueChanges":         {"changes", "merged", "unqueued"},
-	"QueueApproval":        {"approved", "head", "base", "method", "queued", "branchSharedWith"},
-	"QueueCheck":           {"name", "state"},
-	"QueueGreenChange":     {"id", "repo", "head"},
-	"QueueMergeAnswer":     {"merged"},
-	"QueueRunOrigin":       {"repo", "headRepo", "headBranch", "event", "branchEvent", "definition"},
-	"QueueArtifact":        {"name", "url"},
-	"QueueArtifactListing": {"run", "complete", "artifacts"},
-	"QueueReview":          {"id", "reviewer", "commit"},
-	"QueueReviews":         {"head", "approving"},
-	"Platform":             {"os", "architecture"},
-	"Spec":                 {"platform"},
-	"File":                 {"source", "path", "mode"},
-	"Tree":                 {"source", "path", "modePolicy", "symlinks"},
-	"Symlink":              {"path", "target"},
-	"Directory":            {"path", "mode"},
-	"Document":             {"path", "descriptor"},
-	"Provenance":           {"builderID", "sourceRevision"},
-}
-
-// inboundBoundaryTypes resolves inboundTypes against the registry, in list order.
-func inboundBoundaryTypes() ([]boundaryType, error) {
-	for name := range requiredMembers {
-		if !slices.Contains(inboundTypes, name) {
-			return nil, fmt.Errorf("requiredMembers names %s, which inboundTypes does not list", name)
-		}
-	}
-	out := make([]boundaryType, 0, len(inboundTypes))
-	for _, name := range inboundTypes {
-		entry, ok := boundaryTypeNamed(name)
-		if !ok {
-			return nil, fmt.Errorf("inbound type %s is not registered in boundaryTypes (cmd/magus-utils/boundary_types.go)", name)
-		}
-		out = append(out, entry)
-	}
-	return out, nil
-}
-
 // runBoundaryDecode emits a strict Buzz-to-Go decoder per inbound type into
 // internal/interp/bindings/gen/decode, plus the list of inbound types its round-trip
 // test iterates and the provider op table. -ops and -op-vars, given together, also emit
@@ -268,11 +41,7 @@ func runBoundaryDecode(args []string) error {
 	if *outPath == "" || *listPath == "" || *bindingsPkg == "" || (*opsPath == "") != (*opVarsPath == "") {
 		return fmt.Errorf("usage: magus-utils boundarydecode -out <decode.go> -list <inbound_list_test.go> -bindings-pkg <package> [-ops <boundary_ops.go> -op-vars <providerops.go>]")
 	}
-	entries, err := inboundBoundaryTypes()
-	if err != nil {
-		return err
-	}
-
+	entries := inboundTypes()
 	e := newDecodeEmitter(entries)
 	for _, entry := range entries {
 		if err := e.emitStruct(entry); err != nil {
@@ -353,14 +122,14 @@ func (e *decodeEmitter) emitStruct(entry boundaryType) error {
 	fmt.Fprintln(&body, "\tif !ok {")
 	fmt.Fprintf(&body, "\t\treturn out, mismatch(path, %q, v)\n", entry.Name)
 	fmt.Fprintln(&body, "\t}")
-	required := requiredMembers[entry.key()]
+	required := entry.Required
 	declared := map[string]bool{}
 	for _, bf := range emit.ObjectFields(t) {
 		declared[buzzVMFieldName(bf.StructField)] = true
 	}
 	for _, key := range required {
 		if !declared[key] {
-			return fmt.Errorf("requiredMembers names %q, which %s does not declare", key, entry.Name)
+			return fmt.Errorf(".buzzgen.yaml requires %q of %s, which it does not declare", key, entry.Name)
 		}
 		fmt.Fprintf(&body, "\thas%s := false\n", goCase(key))
 	}
@@ -456,7 +225,7 @@ func (e *decodeEmitter) assign(w *bytes.Buffer, src, path, dst, name string, t r
 		ret(e.convert(t, n))
 	case reflect.Struct:
 		if _, ok := e.inbound[t]; !ok {
-			return fmt.Errorf("%s is not inbound: add %s to inboundTypes (cmd/magus-utils/boundary_decode.go)", t, buzzName(t))
+			return fmt.Errorf("%s (%s) is not inbound: no parameter or inbound boundaryRoots entry reaches it (cmd/magus-utils/boundary_types.go)", t, buzzName(t))
 		}
 		x := "x" + name
 		fmt.Fprintf(w, "%s%s, err := decode%s(%s, %s)\n", indent, x, typeIdent(t), src, path)

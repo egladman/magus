@@ -4,15 +4,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// Every response decodes through a generated decoder, so the struct it is, or holds, must
-// be inbound; every request is encoded, so it must be a RuntimeObject.
+// Every response decodes through a generated decoder, so it must be inbound.
+// Every request is encoded, so it must be outbound.
 func TestProviderOpsAreRegistered(t *testing.T) {
 	require.NoError(t, checkProviderOps())
 	for _, op := range providerOps {
@@ -20,7 +19,8 @@ func TestProviderOpsAreRegistered(t *testing.T) {
 		if resp.Kind() == reflect.Slice {
 			resp = resp.Elem()
 		}
-		assert.True(t, slices.Contains(inboundTypes, buzzName(resp)), "%s: response %s is not in inboundTypes", op.Op, resp)
+		entry, ok := boundaryTypeNamed(buzzName(resp))
+		assert.True(t, ok && entry.Inbound, "%s: response %s is not inbound", op.Op, resp)
 		params, returns, err := providerSignature(op)
 		require.NoError(t, err)
 		want := "target: Target, req: " + buzzName(op.Req)

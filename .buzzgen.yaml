@@ -1,123 +1,171 @@
-# The Go types and host modules that cross into Buzz. libs/gopherbuzz/buzzgen
-# reads it; ADR 0035 records the design. Settings layer: the top level,
-# then a package's config, then a type's config.
+# Settings for the Go types that cross into Buzz. libs/gopherbuzz/buzzgen
+# reads it; ADR 0035 records the design. Membership is not listed here: a
+# type crosses when a host signature, a provider op or a declared root
+# reaches it. Settings layer: the top level, then a package's config, then a
+# type's config.
 version: v1alpha1
 packages:
   github.com/egladman/magus/types/diff:
     types:
-      Author: {config: {name: DiffAuthor}}
+      API: {config: {name: DiffAPI}}
+      Churn: {config: {name: DiffChurn}}
+      File: {config: {name: DiffFile}}
+      Group: {config: {name: DiffGroup}}
       GroupKind: {config: {name: DiffGroupKind}}
+      Hunk: {config: {name: DiffHunk}}
+      HunkRef: {config: {name: DiffHunkRef}}
+      Order: {config: {name: DiffOrder}}
+      OrderCount: {config: {name: DiffOrderCount}}
+      PublicPath: {config: {name: DiffPublicPath}}
       ReadState: {config: {name: DiffReadState}}
+      Reviewed: {config: {name: DiffReviewed}}
+      Step: {config: {name: DiffStep}}
+      StepHunk: {config: {name: DiffStepHunk}}
+      Symbol: {config: {name: DiffSymbol}}
+      ThreadRef: {config: {name: DiffThreadRef}}
+      Touch: {config: {name: DiffTouch}}
+      Uncovered: {config: {name: DiffUncovered}}
       UncoveredReason: {config: {name: DiffUncoveredReason}}
+      Unread: {config: {name: DiffUnread}}
+      Why: {config: {name: DiffWhy}}
       WhyRelation: {config: {name: DiffWhyRelation}}
-      CommentAnchorRung: {}
-      SuggestionStatus: {}
   github.com/egladman/magus/types/trail:
     types:
+      Mark: {config: {name: TrailMark}}
+      Observation: {config: {name: TrailObservation}}
+      ReadOptions: {config: {name: SessionOptions}}
       Section: {config: {name: TrailSection}}
+      Spawn: {config: {name: TrailSpawn}}
       Verdict: {config: {name: TrailVerdict}}
-  github.com/egladman/magus/types/daemon:
+  github.com/egladman/magus/libs/diagnostics:
     types:
-      ListenerKind: {}
-      ReadinessName: {}
-      Readiness: {config: {name: ReadinessStatus}}
-      ServiceState: {}
-      TargetRunState: {}
-      WorkspaceState: {}
+      Code:
+        config:
+          open: a workspace mints its own codes through magus\raise beside magus's catalog
   github.com/egladman/magus/spells:
     types:
       CoverageFormat: {config: {cases: {"go-coverprofile": goProfile}}}
-      DiscoveryRole: {}
+      DiscoveredProject: {config: {required: [path, role]}}
       External: {config: {cases: {"reads-external": reads, "mutates-external": mutates}}}
-      PatchOpKind: {}
-      SandboxAccess: {}
-      SymbolFormat: {}
-      VersionComponent: {}
+      ProvidedProject: {config: {name: Project}}
   github.com/egladman/magus/types/image:
     types:
-      Architecture: {}
-      EntryKind: {}
+      Document: {config: {required: [path, descriptor]}}
+      Directory: {config: {required: [path, mode]}}
+      File: {config: {required: [source, path, mode]}}
       MediaType: {config: {module: image, zeroCase: ""}}
-      ModePolicy: {}
-      OS: {}
-      SymlinkPolicy: {}
-      Variant: {}
+      Platform: {config: {required: [os, architecture]}}
+      Provenance: {config: {required: [builderID, sourceRevision]}}
+      Spec: {config: {required: [platform]}}
+      Symlink: {config: {required: [path, target]}}
+      Tree: {config: {required: [source, path, modePolicy, symlinks]}}
   github.com/egladman/magus/types/agent:
     types:
+      Model: {config: {name: AgentModel}}
       ModelTierSource: {config: {zeroCase: ""}}
       SkillVariant: {config: {zeroCase: ""}}
+      Spec: {config: {name: AgentSpec, required: [worker]}}
+      Worker: {config: {name: AgentWorker, required: [type]}}
       WorkerType: {config: {zeroCase: ""}}
+  github.com/egladman/magus/internal/queue/types:
+    config:
+      open: the queue provider script reads it as str until its typed rewrite
+    types:
+      App: {config: {name: QueueApp}}
+      Approval: {config: {name: QueueApproval, required: [approved, head, base, method, queued, branchSharedWith]}}
+      ApprovalRequest: {config: {name: QueueApprovalRequest}}
+      Artifact: {config: {name: QueueArtifact, required: [name, url]}}
+      ArtifactListing: {config: {name: QueueArtifactListing, required: [run, complete, artifacts]}}
+      Capabilities: {config: {name: QueueCapabilities, required: [stackMerge, linearStacks, methods, requiredApprovals]}}
+      Change: {config: {name: QueueChange, required: [id, repo, head, base, method, fork]}}
+      Changes: {config: {name: QueueChanges, required: [changes, merged, unqueued]}}
+      Check: {config: {name: QueueCheck, required: [name, state]}}
+      ClosedChange: {config: {name: QueueClosedChange, required: [id]}}
+      DescribeRequest: {config: {name: QueueDescribeRequest}}
+      DescribeResult: {config: {name: QueueDescribeResult}}
+      DismissReviewRequest: {config: {name: QueueDismissReviewRequest, required: [review]}}
+      GreenChange: {config: {name: QueueGreenChange, required: [id, repo, head]}}
+      Integration: {config: {name: QueueIntegration}}
+      KickBackRequest: {config: {name: QueueKickBackRequest}}
+      ListArtifactsRequest: {config: {name: QueueListArtifactsRequest}}
+      ListChangesRequest: {config: {name: QueueListChangesRequest}}
+      ListGreenRequest: {config: {name: QueueListGreenRequest}}
+      MarkRequest: {config: {name: QueueMarkRequest}}
+      MergeAnswer: {config: {name: QueueMergeAnswer, required: [merged]}}
+      MergeRequest: {config: {name: QueueMergeRequest}}
+      MergedChange: {config: {name: QueueMergedChange, required: [id, head, commit, method]}}
+      PinnedChange: {config: {name: QueuePinnedChange}}
+      Reproduction: {config: {name: QueueReproduction}}
+      RequiredCheck: {config: {name: QueueRequiredCheck}}
+      RequiredChecksRequest: {config: {name: QueueRequiredChecksRequest}}
+      RetargetRequest: {config: {name: QueueRetargetRequest}}
+      Review: {config: {name: QueueReview, required: [id, reviewer, commit]}}
+      Reviews: {config: {name: QueueReviews, required: [head, approving]}}
+      ReviewsRequest: {config: {name: QueueReviewsRequest}}
+      RunOrigin: {config: {name: QueueRunOrigin, required: [repo, headRepo, headBranch, event, branchEvent, definition]}}
+      Setting: {config: {name: QueueSetting}}
+      Setup: {config: {name: QueueSetup, required: [statusContext, credential]}}
+      SetupRefusedError: {config: {name: QueueSetupRefusal, required: [reason, url, app]}}
+      SetupStep: {config: {name: QueueSetupStep}}
+      StatusRequest: {config: {name: QueueStatusRequest}}
+      UnqueuedChange: {config: {name: QueueUnqueuedChange, required: [id, head]}}
   github.com/egladman/magus/types:
     types:
-      AgentBilling: {}
-      AgentRole: {}
-      AgentThread: {}
-      BindingStatus: {}
-      BriefFormat: {}
+      AffectedResult: {config: {name: Affected}}
+      APIVersion:
+        config:
+          open: a reader compares it to the one version it reads and names any other, so the set is every version ever written
+      ArchiveOptions: {config: {name: Options, module: archive}}
       BriefRefKind: {config: {zeroCase: ""}}
-      BrokerPolicy: {}
-      ChangeStatus: {}
-      CheckStatus: {}
-      ClaimKind: {}
-      ConcurrencyProfile: {}
-      ConflictKind: {}
-      ConformanceMetric: {}
-      ConformancePopulation: {}
-      ContextSource: {}
-      CredentialKind: {}
-      DelegableClass: {}
+      Commit: {config: {mirror: CommitRecord}}
+      CommitRecord: {config: {name: Commit}}
+      Diagnostic: {config: {ts: true}}
+      DiagnosticCodeRef: {config: {name: DiagnosticCode}}
       DiagnosticOrigin: {config: {zeroCase: unknown}}
-      DriftPolicy: {}
-      DuplicationPlacement: {}
-      DuplicationShape: {}
+      DriftResult: {config: {mirror: DriftResultRecord}}
+      DriftResultRecord: {config: {name: DriftResult}}
       EdgeDirection: {config: {cases: {"out": outward, "in": inward}}}
-      EntryPoint: {}
-      EventOutcome: {}
-      EventSeverity: {}
-      Evidence: {}
-      GoalExpect: {}
-      GoalKind: {}
-      GroupingShape: {}
-      GroupingVerdict: {}
-      GuardDecision: {}
-      GuardProfile: {}
-      HarnessChangeOp: {}
-      HookPoint: {}
+      HTTPOptions: {config: {name: Options, module: http}}
+      HTTPResponse: {config: {name: Response, module: http}}
+      HTTPRetry: {config: {name: Retry, module: http}}
+      HTTPServerOptions: {config: {name: ServerOptions, module: http}}
+      ImpactResult: {config: {name: Impact}}
       InflightAttention: {config: {zeroCase: unset}}
       JobBaseVerdict: {config: {cases: {"match": matches}}}
-      JobHolder: {}
       JobKind: {config: {zeroCase: ""}}
-      JobState: {}
-      JobWriteProof: {}
-      KnowledgeDefinitionStatus: {}
-      KnowledgeResolution: {}
-      KnowledgeUnknownReason: {}
-      KnowledgeVerdict: {}
-      LeaseSource: {}
+      KnowledgeEdgeRef: {config: {name: EdgeRef}}
+      KnowledgeExplainOutput: {config: {name: ExplainResult}}
+      KnowledgeMatch: {config: {name: Match}}
+      KnowledgeNeighborhoodOptions: {config: {name: NeighborhoodOptions}}
+      KnowledgeNeighborhoodOutput: {config: {name: NeighborhoodResult}}
+      KnowledgePathOptions: {config: {name: PathOptions}}
+      KnowledgePathOutput: {config: {name: PathResult}}
+      KnowledgePathStep: {config: {name: PathStep}}
+      KnowledgeQueryOptions: {config: {name: QueryOptions}}
+      KnowledgeQueryOutput: {config: {name: QueryResult}}
+      KnowledgeRefSite: {config: {name: RefSite}}
+      KnowledgeRefsOptions: {config: {name: RefsOptions}}
+      KnowledgeRefsOutput: {config: {name: RefsResult}}
       LogLevel: {config: {zeroCase: ""}}
-      MarkerFamily: {}
-      MarkerVerb: {}
-      McpTransport: {}
-      Orchestration: {}
-      PatternType: {}
-      PlatformStyle: {}
-      PrecedentFamily: {}
-      RegionSide: {}
-      RelationID: {}
-      RetryChange: {}
-      SandboxMode: {}
-      Scope: {}
+      MagusCommandOptions: {config: {name: CommandOptions, module: magus}}
+      MagusDiffOptions: {config: {name: DiffOptions, module: magus}}
+      MagusWorkspace: {config: {name: Workspace}}
+      ModuleEntry: {config: {name: Module}}
+      ProjectsOutput: {config: {name: Projects}}
+      Result: {config: {ts: true}}
+      ReviewVerdict:
+        config:
+          open: a review provider op carries it, and a provider op's request encoder writes no session enum case
+      RuleDoc: {config: {name: Rule}}
       SignAlgorithm: {config: {zeroCase: "", cases: {"ed25519": Ed25519}}}
-      SkillForm: {}
-      SlotSource: {}
       SpawnKind: {config: {cases: {"continue": continuation}}}
-      SymbolIndexFreshness: {}
-      SymbolOccurrenceStatus: {}
-      TermStyle: {}
-      ThreadSource: {}
-      Tier: {}
+      Status: {config: {mirror: StatusRecord}}
+      StatusRecord: {config: {name: Status}}
+      SymbolIndexDigest: {config: {name: Graph}}
+      TargetArtifact: {config: {name: Artifact}}
+      TargetGraphOutput: {config: {name: TargetGraph}}
       TimeLayout: {config: {zeroCase: ""}}
-      ToolCapability: {}
-      VCSCapability: {}
-      VCSSource: {}
+      VCSCommandOptions: {config: {name: CommandOptions, module: vcs}}
+      VCSTag: {config: {name: Tag}}
       WalkStep: {config: {module: fs, zeroCase: ""}}
+      YAMLPositions: {config: {name: YamlPositions}}

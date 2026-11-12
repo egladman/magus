@@ -69,7 +69,7 @@ func TestReadContractRefuses(t *testing.T) {
 	cases := map[string]struct{ src, want string }{
 		"an unregistered type": {
 			src:  "type Contract struct {\n\tX time.Time `mgs:\"mgs_x\"`\n}",
-			want: "time.Time is not a registered boundary type",
+			want: "time.Time does not cross into Buzz",
 		},
 		"a missing tag": {
 			src:  "type Contract struct {\n\tX string\n}",

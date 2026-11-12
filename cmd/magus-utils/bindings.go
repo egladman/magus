@@ -459,7 +459,7 @@ func emitArgDecode(w *bytes.Buffer, pkgs *argPackages, member string, a std.Arg,
 func emitObjectArgDecode(w *bytes.Buffer, pkgs *argPackages, member string, a std.Arg, idx int, param reflect.Type) (bool, error) {
 	name := strings.Trim(a.Object, "[]")
 	entry, ok := boundaryTypeIn(pkgs.module, name)
-	if a.Object == "" || !ok || !slices.Contains(inboundTypes, entry.key()) {
+	if a.Object == "" || !ok || !entry.Inbound {
 		return false, nil
 	}
 	list := strings.HasPrefix(a.Object, "[")
@@ -605,7 +605,7 @@ func isBoundaryType(rt reflect.Type) bool {
 	if rt.PkgPath() == reflect.TypeFor[types.FileInfo]().PkgPath() {
 		return true
 	}
-	for _, entry := range boundaryTypes {
+	for _, entry := range boundaryTypes() {
 		if entry.Type == rt {
 			return true
 		}

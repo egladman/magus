@@ -59,7 +59,7 @@ func runTypes(args []string) error {
 	// gap it actually is.
 	entry, ok := boundaryTypeNamed(*typeName)
 	if !ok {
-		return fmt.Errorf("unknown boundary type %q: declare it in boundaryTypes first", *typeName)
+		return fmt.Errorf("unknown boundary type %q: no host signature or boundaryRoots entry reaches it", *typeName)
 	}
 
 	out, err := renderBuzzMirror(entry.Name, entry.Type)
@@ -90,7 +90,7 @@ func renderListedMirrors(goFile string) error {
 		g.Go(func() error {
 			entry, found := boundaryTypeNamed(typeName)
 			if !found {
-				return fmt.Errorf("%s: unknown boundary type %q: declare it in boundaryTypes first", goFile, typeName)
+				return fmt.Errorf("%s: unknown boundary type %q: no host signature or boundaryRoots entry reaches it", goFile, typeName)
 			}
 			src, err := renderBuzzMirror(entry.Name, entry.Type)
 			if err != nil {
@@ -132,6 +132,7 @@ func mirrorOptions() buzzgen.Options {
 		}
 		return e.Name, fmt.Sprintf("%s.%s", e.Name, e.Cases[0].Name), true
 	}
+	opts.Required = requiredFields
 	return opts
 }
 

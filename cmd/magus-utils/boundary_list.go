@@ -32,8 +32,8 @@ func runBoundaryList(args []string) error {
 	var rows []string
 	used := map[string]bool{"types": true}
 	objects := newBuzzValueEmitter()
-	for _, e := range boundaryTypes {
-		if !e.RuntimeObject {
+	for _, e := range boundaryTypes() {
+		if !e.Outbound {
 			continue
 		}
 		t := e.Type

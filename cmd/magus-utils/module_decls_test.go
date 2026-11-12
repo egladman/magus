@@ -32,7 +32,7 @@ func TestCollectMirrorsVisitsNamespaceObjects(t *testing.T) {
 		Name:       "probe",
 		Namespaces: []std.Namespace{{Name: "guard", Objects: []string{"NoSuchObject"}}},
 	})
-	assert.ErrorContains(t, err, `object "NoSuchObject" is not declared in boundaryTypes`)
+	assert.ErrorContains(t, err, `object "NoSuchObject" does not cross into Buzz`)
 }
 
 // Every bundle declares each type it names, so executing it alone cannot stop on one

@@ -2813,7 +2813,7 @@ fun kickFacts(code: str, paths: [str], commits: [str], candidate: str) > str !> 
 
 test "a red gate's kick-back links the run, reproduces it locally and lists the files" {
     final io = QueueKickBackRequest{
-        id = "300", base = "main", method = "squash", code = "KICK_RED", candidateCommit = "c0ffee",
+        id = "300", repo = "", head = "", base = "main", method = "squash", fork = false, code = "KICK_RED", candidateCommit = "c0ffee",
         report = "The merge queue built this change at `4d028a1474d1` onto `main` at `9f2e01234567`, and the gate failed on it and passed without it.\n",
         claim = "the gate exited 1",
         source = "egladman/magus/runs/123",
@@ -2867,20 +2867,20 @@ test "a red gate's kick-back links the run, reproduces it locally and lists the 
 
 test "a conflict planning found links the run and reproduces nothing" {
     final io = QueueKickBackRequest{
-        id = "7", base = "main", method = "rebase", code = "KICK_CONFLICT",
+        id = "7", repo = "", head = "", base = "main", method = "rebase", fork = false, code = "KICK_CONFLICT",
         report = "It conflicts.\n\nMerge `main` in.\n", source = "o/r/runs/9",
     };
     final got = kickComment(io, web: "https://github.com", requeue: requeueLine("7", method: "rebase", fork: false, label: "", top: ""));
     assert\equal(got, want: "### Merge queue: kicked back\n\nIt conflicts.\n\nMerge `main` in.\n\n[Validation run](https://github.com/o/r/actions/runs/9)\n\n"
         + "Queue it again once fixed: `gh pr merge 7 --auto --rebase`\n\n" + kickFacts("KICK_CONFLICT", paths: [<str>], commits: [<str>], candidate: "") + "\n",
         message: "no reproduce block, no files");
-    assert\equal(kickComment(QueueKickBackRequest{ id = "7", report = "r" }, web: "https://github.com", requeue: ""),
+    assert\equal(kickComment(QueueKickBackRequest{ id = "7", repo = "", head = "", base = "", method = "", fork = false, report = "r" }, web: "https://github.com", requeue: ""),
         want: "### Merge queue: kicked back\n\nr\n\n" + kickFacts("", paths: [<str>], commits: [<str>], candidate: "") + "\n", message: "a directory source links nothing");
 }
 
 test "a change needing regeneration names its label and is queued again once regenerated" {
     final io = QueueKickBackRequest{
-        id = "8", base = "main", method = "squash", code = "KICK_REGENERATION",
+        id = "8", repo = "", head = "", base = "main", method = "squash", fork = false, code = "KICK_REGENERATION",
         report = "The merge queue cannot merge this change: it changes what regenerates gen/x.go.\n",
     };
     final got = kickComment(io, web: "https://github.com", requeue: requeueLine("8", method: "squash", fork: false, label: "", top: ""));
@@ -2895,7 +2895,7 @@ test "a change needing regeneration names its label and is queued again once reg
 
 test "what a verdict carries renders inert: file names, commits and the run's claim" {
     final io = QueueKickBackRequest{
-        id = "9", base = "main", code = "KICK_RED", report = "r",
+        id = "9", repo = "", head = "", base = "main", method = "", fork = false, code = "KICK_RED", report = "r",
         claim = "``` \n@everyone <!-- x -->\n````",
         paths = ["a`b.go", "x\ny.md", "@org/team", "--> <img src=x>", "``` fence"], with = ["abc @someone"],
     };
@@ -2933,7 +2933,7 @@ test "a kick-back lists a bounded number of files" {
         paths.append("f{i}");
         i = i + 1;
     }
-    final lines = kickComment(QueueKickBackRequest{ id = "9", report = "r", paths = paths }, web: "https://github.com", requeue: "").split("\n");
+    final lines = kickComment(QueueKickBackRequest{ id = "9", repo = "", head = "", base = "", method = "", fork = false, report = "r", paths = paths }, web: "https://github.com", requeue: "").split("\n");
     assert\equal(lines[4], want: "<details><summary>Files ({MAX_LISTED + 3})</summary>", message: "the count is every file");
     assert\equal(lines[6 + MAX_LISTED], want: "- and 3 more", message: "the list stops at MAX_LISTED");
 }

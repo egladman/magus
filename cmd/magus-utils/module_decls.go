@@ -540,7 +540,7 @@ func collectMirrors(mod std.Module) ([]string, error) {
 		}
 		entry, ok := boundaryTypeIn(mod.Name, name)
 		if !ok {
-			return fmt.Errorf("object %q is not declared in boundaryTypes", name)
+			return fmt.Errorf("object %q does not cross into Buzz: no host signature or boundaryRoots entry reaches it", name)
 		}
 		seen[name] = true // before descending, so a self-referential type terminates
 		for _, dep := range referencedObjects(entry.Type) {
@@ -607,7 +607,7 @@ func collectMirrors(mod std.Module) ([]string, error) {
 }
 
 // collectEnums returns the enum declarations a module's signatures and its mirrors'
-// fields name, in first-use order, then the ones boundaryEnums scopes to the module.
+// fields name, in first-use order, then the ones .buzzgen.yaml scopes to the module.
 //
 // Derived rather than hand-listed, as collectMirrors is: an enum whose declaration does
 // not travel with its use leaves the bundle naming an undefined type, and running the
@@ -621,7 +621,7 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 		}
 		e, ok := boundaryEnumNamed(name)
 		if !ok {
-			return fmt.Errorf("%s: enum %q is not declared in boundaryEnums", where, name)
+			return fmt.Errorf("%s: enum %q does not cross into Buzz: add its type to boundaryRoots", where, name)
 		}
 		seen[name] = true
 		order = append(order, e)
