@@ -807,6 +807,12 @@ func testCheckLease() types.Job {
 // ./magus. No target declares a write.
 func composingWorkspace(t *testing.T) Dependencies {
 	t.Helper()
+	return composingWorkspaceBuilding(t, types.Target{Relinks: "./magus"})
+}
+
+// composingWorkspaceBuilding is composingWorkspace with go-build's policy.
+func composingWorkspaceBuilding(t *testing.T, goBuild types.Target) Dependencies {
+	t.Helper()
 	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
 		{Path: ".", Nodes: []types.TargetGraphNode{
@@ -824,7 +830,7 @@ func composingWorkspace(t *testing.T) Dependencies {
 	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	ws.EXPECT().All().Return([]*types.Project{
 		{Path: ".", MagusfileTargets: []string{"test", "format", "lint", "go-build"},
-			TargetPolicies: map[string]types.Target{"go-build": {Relinks: "./magus"}}},
+			TargetPolicies: map[string]types.Target{"go-build": goBuild}},
 		{Path: "libs/conventions", MagusfileTargets: []string{"proofread-build"}},
 	}).Maybe()
 	return Dependencies{
@@ -4537,6 +4543,46 @@ func (s *workerCheckReadsSuite) TestABriefMayNotTeachTheBuildToARowHoldingNoChec
 	s.True(s.briefed(testCheckLease(), s.ruled(), "./magus run go-build . --no-default-charms"))
 }
 
+// producing is a workspace whose go-build declares bin/magus as its product.
+func (s *workerCheckReadsSuite) producing() Dependencies {
+	return composingWorkspaceBuilding(s.T(), types.Target{
+		Relinks: "./magus", Product: "bin/magus", ProductTarget: "go-build-product",
+	})
+}
+
+func (s *workerCheckReadsSuite) TestAProductBuildPasses() {
+	s.Empty(s.judged(testCheckLease(), s.producing(), "./magus run go-build-product ."))
+}
+
+func (s *workerCheckReadsSuite) TestAProductBuildInAnOwnedCheckoutPasses() {
+	got := s.judgedInCheckout(testCheckLease(), s.producing(), "./magus run go-build-product .")
+	s.Empty(got)
+}
+
+func (s *workerCheckReadsSuite) TestAnotherProjectsProductTargetIsHeldToTheCheck() {
+	got := s.judged(testCheckLease(), s.producing(), "./magus run go-build-product docs")
+	s.True(got.refused())
+}
+
+func (s *workerCheckReadsSuite) TestTheRelinkStaysRefusedAndNamesTheProductBuild() {
+	got := s.judged(testCheckLease(), s.producing(), "./magus run go-build .")
+	s.Contains(got.Say, workerBuildVerdict)
+	s.Contains(got.Why, "at bin/magus, which no hook runs: `magus run go-build-product .`")
+}
+
+func (s *workerCheckReadsSuite) TestARelinkWithNoProductNamesNone() {
+	s.NotContains(s.judged(testCheckLease(), s.ruled(), "./magus run go-build .").Why, "no hook runs")
+}
+
+// A run from the product path is a magus line: the same rule holds it.
+func (s *workerCheckReadsSuite) TestARunFromTheProductPathIsHeldToTheCheck() {
+	s.True(s.judged(testCheckLease(), s.producing(), "bin/magus run lint .").refused())
+}
+
+func (s *workerCheckReadsSuite) TestABriefMayTeachTheProductBuild() {
+	s.False(s.briefed(testCheckLease(), s.producing(), "./magus run go-build-product ."))
+}
+
 type scriptRunDirsSuite struct {
 	suite.Suite
 }
@@ -4787,6 +4833,35 @@ func (s *LeaseBoundarySuite) TestRunningTheCheckoutsOwnBinaryPasses() {
 func (s *LeaseBoundarySuite) TestUnleasedWriteToTheBinaryIsNotGraded() {
 	s.NotEqual(decisionDeny, gradeLeasedWrite(s.leaseContext(), Dependencies{}, "", s.binary()).Decision)
 	s.Empty(denyWriteOutsideLease(s.leaseContext(), Dependencies{callDir: s.root}, "", "go build -o magus ./cmd/magus"))
+}
+
+// denyProducing is deny in a workspace whose go-build declares bin/magus.
+func (s *LeaseBoundarySuite) denyProducing(command string) string {
+	ix := types.TargetPolicyIndex{Projects: []string{"."}, Targets: []types.TargetPolicy{{
+		TargetRef: types.TargetRef{Project: ".", Target: "go-build"},
+		Relinks:   "./magus", Product: "bin/magus", ProductTarget: "go-build-product",
+	}}}
+	deps := Dependencies{callDir: s.root, TargetPolicies: func(context.Context, string) (types.TargetPolicyIndex, bool) {
+		return ix, true
+	}}
+	return denyWriteOutsideLease(s.leaseContext(), deps, "lease-b", command)
+}
+
+func (s *LeaseBoundarySuite) TestAWriteOverTheProductPathPasses() {
+	s.binary()
+	s.write("bin/magus", "#!/bin/sh\n")
+	s.Empty(s.denyProducing("cp /tmp/built bin/magus"))
+}
+
+func (s *LeaseBoundarySuite) TestAWriteBesideTheProductPathIsRefused() {
+	s.binary()
+	s.write("bin/other", "#!/bin/sh\n")
+	s.Contains(s.denyProducing("cp /tmp/built bin/other"), "bin/other")
+}
+
+func (s *LeaseBoundarySuite) TestTheProductPathLeavesTheJudgeRefused() {
+	s.binary()
+	s.Contains(s.denyProducing("go build -o magus ./cmd/magus"), "own magus binary")
 }
 
 func (s *LeaseBoundarySuite) TestScriptPipedIntoAShellIsJudged() {

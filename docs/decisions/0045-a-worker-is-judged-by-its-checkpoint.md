@@ -97,9 +97,12 @@ The hash is cached against the file's identity and size and modification time. A
 can forge those, which section 1 accepts.
 
 A worker that needs its own build, to try a flag it added, builds it at a product path no
-hook executes. The workspace's build target declares that path beside the judge's
-(`relinks: ./magus` on `go-build`, `magusfile.buzz:237`, gains its product path). The
-guard treats a line running the product path as a magus line for every lease rule.
+hook executes. The workspace's build target declares that path beside the judge's, with the
+sibling target that writes it: `go-build` declares `relinks: ./magus` and
+`product: {"path": "bin/magus", "target": "go-build-product"}`. The path keeps the relinked
+binary's file name, so the guard treats a line running it as a magus line for every lease
+rule. A worker may run the product target and write the product path; its relink of
+`./magus` is still refused. The hook hands no call to the product path, since no row pins it.
 
 The contract digest stays. It compares the judging binary with the tree at the authority's
 revision, so a worker's own edit to `api.lock` is its work, not skew.
@@ -179,7 +182,7 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 | `Pending` and the approved sources read at the authority; cache keys carry it                 | done     |
 | an optional VCS capability lists paths changed between a revision and the working tree        | done     |
 | the row records the judging binary's path and hash; the hook runs only a recorded binary      | done     |
-| a build target declares a product path; the guard treats it as magus                          | proposed |
+| a build target declares a product path; the guard treats it as magus                          | done     |
 | the integrator relinks, re-pins and advances; nobody else does                                | done     |
 | a leased call loads policy and authority from its row's checkout                              | done     |
 | the lease resolves before policy loads, at every door                                         | done     |
@@ -187,7 +190,7 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 | a request carries an explicit authority for a caller with no row                              | done     |
 | `types` row reader and `magus.WithJobReader`; the job store is the default                    | done     |
 | `ChangedBuildInputs` moves into the go spell; the Buzz copies go                              | proposed |
-| `builds.buzz` rewritten to the product-path rule                                              | proposed |
+| `builds.buzz` rewritten to the product-path rule                                              | done     |
 | Go stops naming repository paths (`internal/contract`, `internal/ward`, `load_contract.go`)   | proposed |
 | the worker relink of fbacfdce1 is removed                                                     | done     |
 | zero-trust containment of a worker's own code                                                 | planned  |

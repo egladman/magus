@@ -235,6 +235,10 @@ type Target struct {
 	// Relinks is the binary a run replaces ("./magus"), "" for none. The guard reads it, not
 	// the name: no pipe stage may follow it, and it is the fix while that binary is stale.
 	Relinks string `json:"relinks,omitempty" buzz:"relinks"`
+	// Product is where a leased worker builds that binary; no hook runs it.
+	// ProductTarget writes it. Authored nested, mirrored as Sandbox is.
+	Product       string `json:"product,omitempty" buzz:"-"`
+	ProductTarget string `json:"product_target,omitempty" buzz:"-"`
 	// Integrates is why a checkout's integrator runs this target to integrate work, such as
 	// a regeneration; "" for one it does not. The cost rule keeps such a run to one line.
 	Integrates string `json:"integrates,omitempty" buzz:"integrates"`

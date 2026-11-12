@@ -235,8 +235,11 @@ magus\project({
         "go-build": {
             "skip_cache": "declares no outputs, so a replay would skip the link and restore no binary",
             "relinks": "./magus",
+            // A worker tries its own edits at bin/magus, which no hook runs.
+            "product": {"path": "bin/magus", "target": "go-build-product"},
             "integrates": "links ./magus",
         },
+        "go-build-product": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary"},
         "image-build": {
             "skip_cache": "pushes and cosign-signs a registry digest per invocation",
             "needs_ready": ["docker"],
@@ -374,6 +377,16 @@ export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> 
 
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
+    link_magus(ctx, binary: "magus");
+}
+
+// Compiles magus at bin/magus, the product path go-build declares. A leased
+// worker tries its own edits there; no hook runs it.
+export fun go_build_product(ctx: magus\Context, args: [str]) > void !> any {
+    link_magus(ctx, binary: "bin/magus");
+}
+
+fun link_magus(ctx: magus\Context, binary: str) > void !> any {
     ctx.needs(gopherbuzz\build, opencode_runtime_generate);
     // The embedded spell type mirrors are an output, so the link must follow their
     // regeneration; ctx.readsFiles would replace the **/*.go footprint, not add to it.
@@ -384,14 +397,14 @@ export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-trimpath",
             "-ldflags", ld_flags() + " -X github.com/egladman/magus/internal/interp/bindings.buildStamp=" + stamp,
-            "-o", "magus",
+            "-o", binary,
             "./cmd/magus"],
     });
     // macOS assesses a new executable on its first exec, which can outlast a hook's
     // budget; run it here so no hook pays for that.
-    final said = proc\exec("./magus", ["version"], ".").stdout;
+    final said = proc\exec("./{binary}", ["version"], ".").stdout;
     if (!said.startsWith("magus ")) {
-        throw "go-build: the built ./magus did not answer `version` with a `magus ` line: {said}";
+        throw "go-build: the built ./{binary} did not answer `version` with a `magus ` line: {said}";
     }
 }
 

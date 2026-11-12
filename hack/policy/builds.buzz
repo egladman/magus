@@ -3,6 +3,7 @@
 // checkout, and hack/dev/bootstrap-worktree.buzz copies it into each worker checkout. A
 // worker builds no ./magus, in a checkout its job owns either: the root's hook runs only a
 // binary a live job row pins, and only the fork, the placement and the integrator pin one.
+// A worker builds magus only at go-build's product path, which no hook runs.
 namespace agentpolicy\builds;
 
 import "std";
@@ -28,8 +29,10 @@ final separators = ["&&", "||", "|", ";"];
 
 // buildOf is what a program does to compile magus, "" for anything else: `go run`, `go build`
 // or `go install` of the package cmd/magus, or a run of the root project's go-build or build
-// target. An unrelated `go run` and every other magus verb pass.
+// target. An unrelated `go run` and every other magus verb pass, and so does a
+// build of the product path.
 export fun buildOf(p: helpers\Program) > str {
+    if (buildsProduct(p)) { return ""; }
     if (p.name == "go") {
         final call = helpers\goCall(p.args);
         if (call.args.len() == 0 or goVerbs.indexOf(call.args[0]) == null) { return ""; }
@@ -49,6 +52,32 @@ export fun buildOf(p: helpers\Program) > str {
         return "magus run {ops[1]} " + (if (ops.len() > 2) ops[2] else ".");
     }
     return "";
+}
+
+// go-build's product in magusfile.buzz, copied: a command request carries no
+// target policy.
+final productPath = "bin/magus";
+final productTarget = "go-build-product";
+
+// buildsProduct reports a program that compiles at the product path and nowhere
+// else: `go build -o bin/magus ./cmd/magus`, or a run of the product target.
+export fun buildsProduct(p: helpers\Program) > bool {
+    if (p.name == "go") {
+        final call = helpers\goCall(p.args);
+        if (call.args.len() == 0 or call.args[0] != "build") { return false; }
+        final output = helpers\flagValue(call.args.sub(1), long: "-o", short: "");
+        if (output == null) { return false; }
+        final clean = path\clean(output!);
+        return clean == productPath or clean.endsWith("/" + productPath);
+    }
+    if (p.name == "magus") {
+        final ops = helpers\magusOperands(p.args);
+        if (ops.len() < 2 or ops[0] != "run") { return false; }
+        final named = ops[1].split("::");
+        if (named[named.len() - 1] != productTarget) { return false; }
+        return ops.len() == 2 or path\clean(ops[2]) == ".";
+    }
+    return false;
 }
 
 fun isMagusPackage(arg: str) > bool {
@@ -81,7 +110,8 @@ export fun workerPlacement(built: str, lease: str) > str {
         + "which it builds and places in one step with "
         + "`<main checkout>/magus buzz {stale\placementScript} -- --job <id> --build-from <main checkout>`. "
         + "A worker builds no ./magus in a checkout its job owns either, nor after a fast-forward or a merge moved it: "
-        + "the root's hook runs only a ./magus a live job row pins, and only the fork, the placement and the integrator pin one.";
+        + "the root's hook runs only a ./magus a live job row pins, and only the fork, the placement and the integrator pin one. "
+        + "To try this unit's own edits, build them at {productPath}, which no hook runs: `magus run {productTarget} .`.";
 }
 
 // workerBuildDenial is worker-builds-magus: the denial for a program that compiles magus run
@@ -122,7 +152,8 @@ export fun briefDenial(brief: str) > str {
                     + "landing checkout, and {stale\placementScript} copies it into each worker checkout. A worker that compiles "
                     + "it adds two Go builds per worker, and a fan-out runs a dozen at once. The worker uses the "
                     + "./magus already placed, and asks the main session for a newer one if it cannot load the "
-                    + "tree. A line that names the command to forbid it (\"never ...\") is not graded.";
+                    + "tree, and builds its own edits at {productPath}, which no hook runs, with `magus run {productTarget} .`. "
+                    + "A line that names the command to forbid it (\"never ...\") is not graded.";
             }
         }
     }
@@ -285,5 +316,39 @@ test "a brief that only names the build to forbid it, or builds something else, 
     ]) {
         std\assert(briefDenial(brief) == "", message: brief);
     }
+}
+
+test "a worker's build at the product path passes, and every other build of magus is denied" {
+    foreach (argv in [
+        ["go", "build", "-o", "bin/magus", "./cmd/magus"],
+        ["go", "build", "-trimpath", "-o=./bin/magus", "./cmd/magus"],
+        ["go", "-C", "/w/a", "build", "-o", "/w/a/bin/magus", "./cmd/magus"],
+        ["magus", "run", "go-build-product", "."],
+        ["./magus", "run", "go-build-product"],
+    ]) {
+        std\assert(buildsProduct(program(argv)), message: argv.join(" "));
+        std\assert(workerBuildDenial(program(argv), lease: "ui-logs") == "", message: argv.join(" "));
+    }
+    foreach (argv in [
+        ["go", "build", "-o", "magus", "./cmd/magus"],
+        ["go", "build", "-o", "bin/magus-dev", "./cmd/magus"],
+        ["go", "run", "./cmd/magus", "-o", "bin/magus"],
+        ["magus", "run", "go-build", "."],
+        ["magus", "run", "go-build-product", "docs"],
+    ]) {
+        std\assert(!buildsProduct(program(argv)), message: argv.join(" "));
+    }
+    std\assert(workerBuildDenial(program(["go", "build", "-o", "magus", "./cmd/magus"]), lease: "ui-logs") != "", message: "the judge");
+}
+
+test "the denial names the product build" {
+    final denial = workerPlacement("go build ./cmd/magus", lease: "ui-logs");
+    std\assert(denial.indexOf("build them at bin/magus, which no hook runs: `magus run go-build-product .`") != null, message: denial);
+}
+
+test "a brief may teach the product build" {
+    std\assert(briefDenial("Try your flag: `./magus run go-build-product .`, then `bin/magus x`.") == "", message: "the target");
+    std\assert(briefDenial("Build `go build -o bin/magus ./cmd/magus` to try it.") == "", message: "the raw build");
+    std\assert(briefDenial("Build `go build -o magus ./cmd/magus` first.") != "", message: "the judge");
 }
 

@@ -4878,6 +4878,8 @@ github.com/egladman/magus/types.Target.MemoryMB field int "json:\"memory_mb,omit
 github.com/egladman/magus/types.Target.Name field string "json:\"name,omitempty\""
 github.com/egladman/magus/types.Target.NeedsReady field []string "json:\"needs_ready,omitempty\" buzz:\"needs_ready\""
 github.com/egladman/magus/types.Target.Path field string "json:\"path,omitempty\"   buzz:\"projectPath\""
+github.com/egladman/magus/types.Target.Product field string "json:\"product,omitempty\" buzz:\"-\""
+github.com/egladman/magus/types.Target.ProductTarget field string "json:\"product_target,omitempty\" buzz:\"-\""
 github.com/egladman/magus/types.Target.Relinks field string "json:\"relinks,omitempty\" buzz:\"relinks\""
 github.com/egladman/magus/types.Target.RetryOnVolatile field bool "json:\"retryOnVolatile,omitempty\" buzz:\"retry_on_volatile\""
 github.com/egladman/magus/types.Target.RetryOnVolatileReason field string "json:\"retry_on_volatile_reason,omitempty\" buzz:\"retry_on_volatile_reason\""
@@ -4951,6 +4953,8 @@ github.com/egladman/magus/types.TargetPolicy type struct
 github.com/egladman/magus/types.TargetPolicy.Compare method func(o TargetRef) int
 github.com/egladman/magus/types.TargetPolicy.HumanOnly field bool "json:\"human_only,omitempty\""
 github.com/egladman/magus/types.TargetPolicy.Integrates field string "json:\"integrates,omitempty\""
+github.com/egladman/magus/types.TargetPolicy.Product field string "json:\"product,omitempty\""
+github.com/egladman/magus/types.TargetPolicy.ProductTarget field string "json:\"product_target,omitempty\""
 github.com/egladman/magus/types.TargetPolicy.ReachedBy field []TargetRef "json:\"reached_by,omitempty\""
 github.com/egladman/magus/types.TargetPolicy.Reason field string "json:\"reason,omitempty\""
 github.com/egladman/magus/types.TargetPolicy.Ref method func() string
@@ -4960,6 +4964,8 @@ github.com/egladman/magus/types.TargetPolicy.TargetRef embedded TargetRef
 github.com/egladman/magus/types.TargetPolicyIndex type struct
 github.com/egladman/magus/types.TargetPolicyIndex.HumanOnly method func() []TargetPolicy
 github.com/egladman/magus/types.TargetPolicyIndex.Lookup method func(ref TargetRef) (TargetPolicy, bool)
+github.com/egladman/magus/types.TargetPolicyIndex.ProductBuild method func(ref TargetRef) (TargetPolicy, bool)
+github.com/egladman/magus/types.TargetPolicyIndex.Products method func() []string
 github.com/egladman/magus/types.TargetPolicyIndex.Projects field []string "json:\"projects,omitempty\""
 github.com/egladman/magus/types.TargetPolicyIndex.Targets field []TargetPolicy "json:\"targets,omitempty\""
 github.com/egladman/magus/types.TargetPolicyKeys func() []string

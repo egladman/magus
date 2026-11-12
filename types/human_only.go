@@ -15,7 +15,11 @@ type TargetPolicy struct {
 	Reason     string `json:"reason,omitempty"`
 	SkipCache  bool   `json:"skip_cache,omitempty"`
 	Relinks    string `json:"relinks,omitempty"`
-	Integrates string `json:"integrates,omitempty"`
+	// Product is where a worker builds the Relinks binary, which no hook runs.
+	// ProductTarget is the sibling target that writes it.
+	Product       string `json:"product,omitempty"`
+	ProductTarget string `json:"product_target,omitempty"`
+	Integrates    string `json:"integrates,omitempty"`
 	// ReachedBy is every target whose ctx.needs chain reaches this human_only one at depth
 	// > 0 through no other human_only target: an approved run covers the chain under it.
 	ReachedBy []TargetRef `json:"reached_by,omitempty"`
@@ -40,6 +44,28 @@ func (ix TargetPolicyIndex) Lookup(ref TargetRef) (TargetPolicy, bool) {
 		}
 	}
 	return TargetPolicy{}, false
+}
+
+// ProductBuild is the relinking policy whose product ref writes.
+// It is false when no target in ref's project names ref as its product target.
+func (ix TargetPolicyIndex) ProductBuild(ref TargetRef) (TargetPolicy, bool) {
+	for _, t := range ix.Targets {
+		if t.Project == ref.Project && t.ProductTarget != "" && t.ProductTarget == ref.Target {
+			return t, true
+		}
+	}
+	return TargetPolicy{}, false
+}
+
+// Products is every declared product path, workspace-relative, in index order.
+func (ix TargetPolicyIndex) Products() []string {
+	var out []string
+	for _, t := range ix.Targets {
+		if t.Product != "" {
+			out = append(out, t.Product)
+		}
+	}
+	return out
 }
 
 // HumanOnly is the human_only targets of ix, in index order.
@@ -75,7 +101,7 @@ func IndexTargetPolicies(ws WorkspaceReader) TargetPolicyIndex {
 			humanOnly = humanOnly || pol.HumanOnly
 			ix.Targets = append(ix.Targets, TargetPolicy{
 				TargetRef: ref, HumanOnly: pol.HumanOnly, Reason: pol.HumanOnlyReason, SkipCache: pol.SkipCache,
-				Relinks: pol.Relinks, Integrates: pol.Integrates,
+				Relinks: pol.Relinks, Product: pol.Product, ProductTarget: pol.ProductTarget, Integrates: pol.Integrates,
 			})
 		}
 	}

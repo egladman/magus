@@ -774,14 +774,17 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		}
 	}
 	step.OwnedOutputs = types.CompactGlobs(owned)
-	// Every spell's caches and relinked binary, since a chained target writes
-	// inside this window too. With no home dir, MGS4011 names cache writes.
+	// Every spell's caches, relinked binary and product path, since a chained
+	// target writes inside this window too. With no home dir, MGS4011 names
+	// cache writes.
 	home, homeErr := os.UserHomeDir()
 	seen := map[string]bool{}
 	for _, proj := range m.All() {
 		for _, pol := range proj.TargetPolicies {
-			if pol.Relinks != "" {
-				step.WritePaths = append(step.WritePaths, filepath.Join(step.WorkspaceRoot, filepath.FromSlash(pol.Relinks)))
+			for _, binary := range []string{pol.Relinks, pol.Product} {
+				if binary != "" {
+					step.WritePaths = append(step.WritePaths, filepath.Join(step.WorkspaceRoot, filepath.FromSlash(binary)))
+				}
 			}
 		}
 		for _, s := range proj.ResolvedSpells {

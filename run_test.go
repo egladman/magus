@@ -3237,3 +3237,44 @@ func (s *neededKeySuite) TestASkipCacheTargetsOwnStepStillNeverReplays() {
 	s.NotContains(step.Sources, types.Glob{Pattern: "MAGUS.md"},
 		"its own output says nothing about its own run")
 }
+
+// productStepSuite pins that a run's undeclared-write check (MGS4011) skips
+// the product path a relinking target declares, as it skips the relinked one.
+type productStepSuite struct {
+	suite.Suite
+	m *Magus
+}
+
+func TestProductStepSuite(t *testing.T) {
+	suite.Run(t, new(productStepSuite))
+}
+
+func (s *productStepSuite) SetupTest() {
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile(`import "magus";
+magus\project({"targets": {
+    "link": {"relinks": "./tool", "product": {"path": "bin/tool", "target": "link-product"}},
+}});
+export fun link(ctx: magus\Context, args: [str]) > void {}
+export fun link_product(ctx: magus\Context, args: [str]) > void {}
+`)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *productStepSuite) TestTheProductTargetMayWriteTheProductPath() {
+	step := s.m.buildStep(s.m.Get("."), "link-product")
+	s.Contains(step.WritePaths, filepath.Join(step.WorkspaceRoot, "bin", "tool"))
+}
+
+func (s *productStepSuite) TestTheRelinkingTargetStillMayWriteItsBinary() {
+	step := s.m.buildStep(s.m.Get("."), "link")
+	s.Contains(step.WritePaths, filepath.Join(step.WorkspaceRoot, "tool"))
+}
+
+func (s *productStepSuite) TestTheDeclarationReachesTheTargetPolicy() {
+	want := types.Target{Relinks: "./tool", Product: "bin/tool", ProductTarget: "link-product"}
+	s.Equal(want, s.m.Get(".").TargetPolicies["link"])
+}

@@ -77,6 +77,8 @@ coverage.cmd.out
 # the binary into a commit); the non-prefixed tools are named individually.
 /magus
 /magus-*
+# A leased worker's own build, the product path go-build declares. No hook runs it.
+/bin/magus
 /coverage-badge
 /langservice-manifest
 /buzz-playground

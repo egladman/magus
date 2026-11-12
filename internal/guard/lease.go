@@ -467,6 +467,7 @@ const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 // worktree can run nothing, its check included, until its dependencies are there. Every
 // other run it lets through, the check included, is held to the write paths under the rw
 // charm. rowJudge decides all of it, so a brief is refused exactly when its worker would be.
+// A product build passes too: it links where no hook runs (ADR 0045).
 //
 // Silent where there is nothing to hold the run to: no lease, no live row, the checkout's
 // integrator, which builds, regenerates and gates there, the gate itself for the holder of a
@@ -519,11 +520,14 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		for i, c := range checks {
 			commands[i] = fmt.Sprintf("`%s`", checkCommand(c))
 		}
+		if buildsProduct(judge.workspace, r) {
+			continue
+		}
 		if buildsCheckoutBinary(judge.workspace, r) {
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
-				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks. %s",
-					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0], unpinnedRebuild),
+				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks.%s %s",
+					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0], productRemedy(judge.workspace, r), unpinnedRebuild),
 			}
 		}
 		if readsOwnProjects(r, me) {
@@ -1373,9 +1377,43 @@ func buildsCheckoutBinary(workspace func() (types.WorkspaceRepository, error), r
 	return runRelinks(types.IndexTargetPolicies(ws), r)
 }
 
+// buildsProduct reports a run of the target a relinking one names as the
+// writer of its product path. No hook runs that binary, so a worker may.
+func buildsProduct(workspace func() (types.WorkspaceRepository, error), r targetRun) bool {
+	ws, err := workspace()
+	if err != nil || r.verb != "run" {
+		return false
+	}
+	ix := types.IndexTargetPolicies(ws)
+	for _, project := range runProjects(r) {
+		if _, ok := ix.ProductBuild(types.TargetRef{Project: project, Target: targetName(r.target)}); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// productRemedy is the sentence naming where a worker builds r's binary
+// instead, "" when r's target declares no product.
+func productRemedy(workspace func() (types.WorkspaceRepository, error), r targetRun) string {
+	ws, err := workspace()
+	if err != nil {
+		return ""
+	}
+	pol, ok := runPolicy(types.IndexTargetPolicies(ws), r)
+	if !ok || pol.Product == "" {
+		return ""
+	}
+	return fmt.Sprintf(" To try this unit's own edits, build them at %s, which no hook runs: `magus run %s %s`.",
+		pol.Product, pol.ProductTarget, pol.Project)
+}
+
 // runsOffCheck reports a run a brief may teach though no check permits it.
-// A worker never relinks the binary that judges it.
+// A worker never relinks the binary that judges it, and builds its product.
 func (j rowJudge) runsOffCheck(r targetRun) bool {
+	if buildsProduct(j.workspace, r) {
+		return true
+	}
 	return !buildsCheckoutBinary(j.workspace, r) && readsOwnProjects(r, j.row)
 }
 
@@ -4032,6 +4070,11 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	removed := append(removedOrMovedOperands(command, 0, dialect, start, home), boundPathOperands(command, dialect, start)...)
 	destinations := destinationOperands(command, dialect, start, home)
 	candidates := placedWriteCandidates(command, dialect, start, home)
+	// Read only for a refused write: it can open the workspace.
+	products := sync.OnceValue(func() []string {
+		ix, _, _ := declaredPolicies(ctx, deps, checkout, lazyWorkspace(ctx, deps, checkout))
+		return ix.Products()
+	})
 	for _, w := range slices.Concat(candidates, destinations, removed) {
 		if target, placed := w.place(home); placed {
 			if g := denyOwnBinaryWrite(actingLease, target); g.Decision == decisionDeny {
@@ -4082,7 +4125,8 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			// A catch-all covers every word, `print(1)` included.
 			continue
 		}
-		if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
+		// A worker builds its own magus at a product path; no hook runs it.
+		if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny && !slices.Contains(products(), rel) {
 			return g.Reason
 		}
 	}

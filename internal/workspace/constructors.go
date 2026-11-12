@@ -392,6 +392,13 @@ func Relinks(binary string) TargetOption {
 	return func(t *types.Target) { t.Relinks = binary }
 }
 
+// Product returns a TargetOption declaring where a leased worker builds the
+// binary the target relinks, workspace-relative, and the sibling target that
+// writes it.
+func Product(path, target string) TargetOption {
+	return func(t *types.Target) { t.Product, t.ProductTarget = path, target }
+}
+
 // Integrates returns a TargetOption that declares the target one a checkout's integrator
 // runs to integrate work, such as a regeneration; the cost rule keeps such a run to one
 // line. reason is required for the same reason SkipCache's is.

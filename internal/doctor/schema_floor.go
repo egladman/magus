@@ -68,6 +68,7 @@ func usedSchemaKeys(projects []*types.Project) []gatedKey {
 			addPolicy("sandbox", policy.Sandbox != nil)
 			addPolicy("human_only", policy.HumanOnly)
 			addPolicy("relinks", policy.Relinks != "")
+			addPolicy("product", policy.Product != "")
 			addPolicy("integrates", policy.Integrates != "")
 			addPolicy("needs_ready", len(policy.NeedsReady) > 0)
 		}

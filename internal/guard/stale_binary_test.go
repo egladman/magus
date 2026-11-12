@@ -1104,3 +1104,26 @@ func (s *NoBinaryRemedySuite) TestItNamesTheBootstrapThenTheCheckoutHook() {
 	at := location{workspace: s.root, policies: magusRepoAt.policies}
 	s.True(recoveryLine(ready, DialectBash, "", true, at), ready)
 }
+
+// productLineSuite pins that a line running a product path (bin/magus) reads
+// as a magus line, so a stale judge holds back its state changes too.
+type productLineSuite struct {
+	suite.Suite
+}
+
+func TestProductLineSuite(t *testing.T) {
+	suite.Run(t, new(productLineSuite))
+}
+
+func (s *productLineSuite) TestItsReadsAreReadOnly() {
+	s.True(readOnlyLine("bin/magus describe job x", DialectBash))
+}
+
+func (s *productLineSuite) TestItsJobVerbsChangeState() {
+	s.False(readOnlyLine("bin/magus job exit x --stdin", DialectBash))
+}
+
+func (s *productLineSuite) TestAWorkerMayNotRecoverThroughIt() {
+	at := location{workspace: s.T().TempDir(), policies: magusRepoAt.policies}
+	s.False(recoveryLine("bin/magus run go-build .", DialectBash, "lease-b", false, at))
+}
