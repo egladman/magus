@@ -53,6 +53,11 @@ func verdictWithRule(decision, rule string) types.GuardJudgment {
 	return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decision, Rule: rule}
 }
 
+// verdictOf is the decision and rule alone, the shape judgedAs keeps.
+func verdictOf(decision, rule string) types.GuardJudgment {
+	return types.GuardJudgment{Decision: decision, Rule: rule}
+}
+
 // unworded is v without the fields a rule test leaves to other assertions: the reason and
 // context prose, which the test checks by substring, and the lease attribution, which follows
 // the environment the test ran in.

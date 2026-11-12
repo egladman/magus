@@ -2181,7 +2181,7 @@ block.`,
 The text goes to an append-only store keyed by repository identity, so every
 worktree's sessions read it. The guard shows each open advisory once to each
 root session: as context at its next user prompt where the host takes context
-(Claude Code, Codex), and at its next stop on every host, where it keeps the
+and at its next stop on every host, where it keeps the
 session working with the text in front of it. The text says who posted it and
 that these are that person's own words, not a relay from another agent.
 

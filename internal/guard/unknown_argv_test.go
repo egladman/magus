@@ -139,7 +139,7 @@ func (s *UnknownMagusArgvSuite) TestEveryDeclaredCommandAndFlagIsBound() {
 		if flag := firstFlag(c); flag != "" {
 			argv = append(argv, "--"+flag)
 		}
-		got, bad := unknownArgvOf(argv)
+		got, bad := resolveUnknownArgv(argv)
 		s.False(bad, "%s: %+v", path, got)
 	})
 }
