@@ -19,6 +19,7 @@ import (
 // the host declarations the magusfile compiles against, the API locks, the generated
 // boundary bindings, and the Buzz checker and compiler that judge the policy. About one
 // commit in five touches it; every other commit may move Go sources and still load.
+// The paths are magus's own module, judged only in a checkout of it.
 //
 // A copy of loadContract in hack/magusfile/load-contract.buzz: Buzz reaches no Go digest.
 var (

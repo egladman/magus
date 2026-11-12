@@ -100,12 +100,14 @@ func CheckRequiredVersion(constraint, running string) *types.DiagnosticError {
 const DevVersion = "unknown"
 
 // BootstrapCommand builds a first binary in a checkout no magus on hand can load; the
-// guard serves the same command.
+// guard serves the same command. ./cmd/magus is magus's own main package,
+// served only for a checkout of magus's module.
 const BootstrapCommand = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 
 // relinkCommand links ./magus from the checkout's committed sources.
 // It loads no magusfile, so it runs whatever the tree's contract says.
 // The binary it links embeds the tree's contract.
+// It names magus's own main package, as [BootstrapCommand] does.
 const relinkCommand = "GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus"
 
 // RelinkAt is the relink of the checkout at root, aimed with -C so it runs

@@ -136,7 +136,11 @@ The lease is resolved before policy loads, so every door can choose the row firs
   changed between a revision and the working tree, and the binary pin. The paths changed
   are an optional capability of the VCS driver (as `CheckoutIDReader` is), so a driver
   without it is not broken: the authority is unreadable there, and the verdict says so.
-  Go names no repository path; the paths it names today move to declarations.
+  Go names no path of the repository's own policy, such as a `hack/` script; those move
+  to declarations. A path in magus's own module stays named, with a comment saying why:
+  the contract mirrors the module's `go:embed` lines, and the relink and bootstrap build
+  `./cmd/magus`, its main package. Each is used only in a checkout of magus, and no
+  workspace can declare where a binary embeds from.
 - **The language spell** names a build's inputs. The go spell answers which files a target
   that relinks compiles and embeds, and `job.ChangedBuildInputs`
   (`internal/job/worktree.go:478`) moves there, with the Buzz copies in
@@ -191,7 +195,8 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 | `types` row reader and `magus.WithJobReader`; the job store is the default                    | done     |
 | `ChangedBuildInputs` moves into the go spell; the Buzz copies go                              | proposed |
 | `builds.buzz` rewritten to the product-path rule                                              | done     |
-| Go stops naming repository paths (`internal/contract`, `internal/ward`, `load_contract.go`)   | proposed |
+| Go names only its own module's paths, each saying why (`internal/contract`, `internal/ward`, `load_contract.go`) | done     |
+| the worker placement script comes from the scripts index, not `stale_binary.go`              | proposed |
 | the worker relink of fbacfdce1 is removed                                                     | done     |
 | zero-trust containment of a worker's own code                                                 | planned  |
 

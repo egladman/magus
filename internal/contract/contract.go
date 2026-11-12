@@ -21,7 +21,7 @@ import (
 
 // The contract is every committed file a magus binary embeds and a load reads:
 // api.lock, and the generated Buzz under internal/spell/gen. buzzDirs are under
-// spellDir.
+// spellDir. They mirror magus's own go:embed lines; no workspace declares them.
 const (
 	lockPath = "internal/commands/testdata/api.lock"
 	spellDir = "internal/spell"
