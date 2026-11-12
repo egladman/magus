@@ -662,10 +662,10 @@ func TestMainWorkClearsTheForkedRowsCheck(t *testing.T) {
 	at, _ := orchestratorFixture(t)
 	rows := []types.Job{
 		{ID: "a1", State: types.StateRunning, Check: &types.LeaseCheck{Target: "go-test", Project: "."}},
-		{ID: "a2", State: types.StatePass, Check: &types.LeaseCheck{Target: "lint", Project: "docs"},
-			Result: &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out9"}}},
+		{ID: "a2", State: types.StatePass, Check: &types.LeaseCheck{Target: "lint", Project: "docs"}},
 	}
-	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: rows})
+	tries := []types.Attempt{filedResult("a2", &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out9"}})}
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: rows, Attempts: tries})
 	forked := costState{Forked: []string{"a1", "a2"}}
 
 	assert.Empty(t, mainWork(ctx, at, forked, "./magus run go-test . -s"))

@@ -408,6 +408,12 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	require.NoError(t, err)
 
 	pinned := types.Job{ID: "orchestrator/guard-facts", Agent: agent.Instructed("the seam"), State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	// listed is the list of rows a pinned snapshot holding no tries answers.
+	listed := func(rows []types.Job) types.JobList {
+		l := types.NewJobList(rows)
+		l.Attempts = []types.Attempt{}
+		return l
+	}
 	cases := []struct {
 		name    string
 		snap    job.Snapshot
@@ -417,9 +423,9 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 		{
 			name: "the guard's rows",
 			snap: job.Snapshot{Rows: []types.Job{pinned}},
-			want: types.NewJobList([]types.Job{pinned}),
+			want: listed([]types.Job{pinned}),
 		},
-		{name: "an empty store", snap: job.Snapshot{}, want: types.NewJobList(nil)},
+		{name: "an empty store", snap: job.Snapshot{}, want: listed(nil)},
 		{
 			name:    "a store the guard could not read",
 			snap:    job.Snapshot{Err: errors.New("jobs.json: unexpected end of JSON input")},
@@ -498,12 +504,13 @@ func TestLedgerNeedsAWorkspace(t *testing.T) {
 	require.Error(t, err)
 }
 
-// A stop rule runs under the rows the guard pinned.
+// A stop rule runs under the rows and tries the guard pinned.
 func TestJobUnmergedAnswersFromThePinnedRows(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "r", State: types.StatePass, ReadOnly: true, Result: &types.JobResult{FollowUps: []string{"later"}}}
-	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: []types.Job{row}})
+	row := types.Job{ID: "r", State: types.StatePass, ReadOnly: true}
+	tries := []types.Attempt{{Job: "r", N: 1, Status: types.AttemptStatus{Result: &types.JobResult{FollowUps: []string{"later"}}}}}
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: []types.Job{row}, Attempts: tries})
 
 	got, err := MagusUnmergedJob(ctx, t.TempDir())
 

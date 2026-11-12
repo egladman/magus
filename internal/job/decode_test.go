@@ -208,9 +208,9 @@ func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"holder", "releases", "unattributed", "entries", "release_requests", "write_proof", "validated", "reported_base",
 		"base_verdict", "registered_by", "registered", "checkout_root", "worktree", "end_reason", "created",
-		"updated", "deadline", "result", "attempt", "gate_attempts", "last_run", "integration",
-		"waiter_evidence", "model_tier", "rework_rounds", "widenings", "claims", "generation", "attempts",
-		"prior", "rejection", "paused", "paused_by", "pause_reason", "paused_until", "holder_stopped", "landed",
+		"updated", "deadline", "attempt", "gate_attempts", "last_run", "integration",
+		"waiter_evidence", "model_tier", "rework_rounds", "widenings", "claims", "generation",
+		"rejection", "paused", "paused_by", "pause_reason", "paused_until", "holder_stopped", "landed",
 	}, storeStamped)
 }
 
@@ -223,7 +223,7 @@ func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
 	stored := fmt.Sprintf(`{"api_version":%q,"id":"a","write_paths":["internal/job"],"state":"declared",`+
 		`"created":1,"updated":2,"deadline":3,"registered":4,"registered_by":{"session":"s"},`+
 		`"write_proof":{},"reported_base":"abc","base_verdict":"match","checkout_root":"/w",`+
-		`"holder":{},"releases":[],"result":null,"model_tier":{"name":"economy","rank":0,"skills":"full","source":"default"}}`, types.JobAPIVersion)
+		`"holder":{},"releases":[],"model_tier":{"name":"economy","rank":0,"skills":"full","source":"default"}}`, types.JobAPIVersion)
 	rows, err := DecodeDeclarations(strings.NewReader(stored))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)

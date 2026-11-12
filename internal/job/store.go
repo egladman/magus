@@ -954,7 +954,7 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 	// After the row, so a refused write folds nothing.
 	if folded != nil {
 		if err := s.appendAttempts(ctx, *folded); err != nil {
-			return stored, fmt.Errorf("job: %s was forked again, and its last attempt was not folded: %w", id, err)
+			return stored, fmt.Errorf("%s was forked again, and its last attempt was not folded: %w", id, err)
 		}
 	}
 	if err := ended.record(ctx, time.Now().UnixMilli()); err != nil {
@@ -1329,7 +1329,7 @@ func (s *Store) migrate(found int, held bool) error {
 	apply := func() error {
 		if i := slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == triesMoved }); i >= found {
 			if err := s.moveTries(context.Background()); err != nil {
-				return fmt.Errorf("job: moving tries to %s: %w", attemptsFileName, err)
+				return fmt.Errorf("moving tries to %s: %w", attemptsFileName, err)
 			}
 		}
 		res, err := st.Apply()

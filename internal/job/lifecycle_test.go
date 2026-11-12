@@ -28,20 +28,20 @@ import (
 func TestEndedReasonSaysWhichEnd(t *testing.T) {
 	t.Parallel()
 	check := &types.LeaseCheck{Target: "test", Project: "."}
-	filed := &types.JobResult{}
 	for _, tt := range []struct {
 		name     string
 		row      types.Job
+		filed    bool
 		byHolder bool
 		want     string
 	}{
-		{"a read-only scout that filed nothing", types.Job{ID: "s", ReadOnly: true, Registered: 1}, true, "ended ungraded"},
-		{"a result nobody verified", types.Job{ID: "w", Check: check, Registered: 1, Result: filed}, false, "ended unverified"},
-		{"a row nobody took", types.Job{ID: "w", Check: check}, false, "before any holder ran"},
-		{"its holder giving it up", types.Job{ID: "w", Check: check, Registered: 1}, true, "abandoned by its holder"},
-		{"the root ending an isolated worker's row", types.Job{ID: "w", Check: check, Registered: 1}, false, "ended by someone other than its holder"},
+		{"a read-only scout that filed nothing", types.Job{ID: "s", ReadOnly: true, Registered: 1}, false, true, "ended ungraded"},
+		{"a result nobody verified", types.Job{ID: "w", Check: check, Registered: 1}, true, false, "ended unverified"},
+		{"a row nobody took", types.Job{ID: "w", Check: check}, false, false, "before any holder ran"},
+		{"its holder giving it up", types.Job{ID: "w", Check: check, Registered: 1}, false, true, "abandoned by its holder"},
+		{"the root ending an isolated worker's row", types.Job{ID: "w", Check: check, Registered: 1}, false, false, "ended by someone other than its holder"},
 	} {
-		assert.Contains(t, endedReason(tt.row, tt.byHolder), tt.want, tt.name)
+		assert.Contains(t, endedReason(tt.row, tt.filed, tt.byHolder), tt.want, tt.name)
 	}
 }
 
@@ -58,8 +58,8 @@ func TestExitPassesAReadOnlyRowNothingElseGrades(t *testing.T) {
 
 	notes, err := Exit(t.Context(), s, "notes", &types.JobResult{}, none)
 	require.NoError(t, err)
-	notes.Schema, notes.Generation, notes.Attempts, notes.RegisteredBy = types.Schema{}, 0, 0, types.Origin{}
-	notes.Created, notes.Updated, notes.Result, notes.GateAttempts = 0, 0, nil, nil
+	notes.Schema, notes.Generation, notes.RegisteredBy = types.Schema{}, 0, types.Origin{}
+	notes.Created, notes.Updated, notes.GateAttempts = 0, 0, nil
 	assert.Equal(t, types.Job{ID: "notes", ReadOnly: true, State: types.StatePass, Registered: 1, EndReason: returnedReason}, notes,
 		"the store's own stamps aside, a read-only row passes and changes nothing else")
 
@@ -93,11 +93,12 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	exited, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolver)
 	require.NoError(t, err)
 	assert.Equal(t, types.StateExited, exited.State)
-	require.NotNil(t, exited.Result)
+	filed := liveTry(t, NewStore(loc), result.Job).Status.Result
+	require.NotNil(t, filed)
 	require.NotNil(t, exited.Attempt)
 	attempt.ObservedGeneration = 1
 	assert.Equal(t, attempt, *exited.Attempt, "the run is stamped with the generation it was filed at")
-	assert.Equal(t, 1, exited.Result.ObservedGeneration)
+	assert.Equal(t, 1, filed.ObservedGeneration)
 
 	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, observeClaim(result), nil)
 	require.NoError(t, err)
@@ -1381,6 +1382,12 @@ func (j waiterEvidenceJob) stored(t *testing.T) types.Job {
 	return rows[i]
 }
 
+// filed is the result the job's live try holds.
+func (j waiterEvidenceJob) filed(t *testing.T) *types.JobResult {
+	t.Helper()
+	return liveTry(t, NewStore(j.loc), j.row.ID).Status.Result
+}
+
 // requireUnmoved asserts the wait recorded nothing: the job stays exited, with no waiter
 // evidence beside it.
 func (j waiterEvidenceJob) requireUnmoved(t *testing.T) {
@@ -1419,8 +1426,9 @@ func TestWaitTakesWaiterEvidenceForAGoalTheHolderFailed(t *testing.T) {
 	assert.Equal(t, types.StatePass, row.State)
 	require.NotNil(t, row.Attempt)
 	assert.True(t, row.Attempt.Failed, "the holder's own attempt stays beside the waiter's")
-	require.NotNil(t, row.Result)
-	assert.Equal(t, "a1b2c3d4", row.Result.Validation.OutputRef)
+	filed := j.filed(t)
+	require.NotNil(t, filed)
+	assert.Equal(t, "a1b2c3d4", filed.Validation.OutputRef)
 	require.NotNil(t, row.WaiterEvidence)
 	assert.Equal(t, j.waiter, row.WaiterEvidence.Checkout)
 	assert.NotZero(t, row.WaiterEvidence.At)
@@ -1448,7 +1456,7 @@ func TestWaitTakesWaiterEvidenceForOneNamedGoalOnly(t *testing.T) {
 	row := j.stored(t)
 	require.NotNil(t, row.WaiterEvidence)
 	assert.Equal(t, []types.VerificationStatus{{ID: "unit", Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates, "docs passed on the holder's evidence and took none")
-	assert.Equal(t, "unit-ref", row.Result.VerificationEvidence[0].OutputRef)
+	assert.Equal(t, "unit-ref", j.filed(t).VerificationEvidence[0].OutputRef)
 	assert.True(t, row.GateAttempts[0].Attempt.Failed)
 }
 

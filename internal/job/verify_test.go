@@ -1237,23 +1237,28 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 	worker := types.Job{ID: "a", Check: &scoped, Goals: []types.Goal{
 		{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
 		{ID: "buzz", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "buzz-test", Project: "docs"}},
-	}, Result: &types.JobResult{
+	}}
+	owed := &types.JobResult{
 		Validation:           types.JobResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: types.OwedNoSeat},
 		VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat}, {GateID: "buzz", Owed: types.OwedNoSeat}},
-	}}
-	paid := types.Job{ID: "b", Check: &types.LeaseCheck{Target: "buzz-test", Project: "console"},
-		Result: &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out1"}}}
+	}
+	paid := types.Job{ID: "b", Check: &types.LeaseCheck{Target: "buzz-test", Project: "console"}}
 	elsewhere := worker
 	elsewhere.ID = "c"
+	tries := types.NewJobAttempts([]types.Attempt{
+		filedTry("a", owed),
+		filedTry("b", &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out1"}}),
+		filedTry("c", owed),
+	})
 	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}}
 	held := integratorGoals(row)
 
-	got := owedGoals(row, []types.Job{worker, paid, elsewhere}, held)
+	got := owedGoals(row, []types.Job{worker, paid, elsewhere}, tries, held)
 	want := []types.Goal{
 		{ID: "buzz-test-docs", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "buzz-test", Project: "docs"}},
 	}
 	assert.Equal(t, want, got, "the scoped go-test and lint ride the full runs; a check paid for and a branch not merged add nothing")
-	assert.Empty(t, owedGoals(types.Job{ID: "w"}, []types.Job{worker}, nil), "a job that integrates nothing owes nothing")
+	assert.Empty(t, owedGoals(types.Job{ID: "w"}, []types.Job{worker}, tries, nil), "a job that integrates nothing owes nothing")
 }
 
 // narrowedRunSuite pins a file-scoped goal grading what the row changed.

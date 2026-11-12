@@ -89,7 +89,8 @@ var JobSchema = FormatLedger{
 	Version: JobAPIVersion,
 	// The four boundary renames and completion_gates, names only the JSON document an
 	// older magus kept the plan in carried, and waivers, the name deviations had first.
-	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason"},
+	// result, prior and attempts moved to attempts.jsonl (ADR 0044).
+	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "result", "prior", "attempts"},
 	Added:    map[string]APIVersion{"agent": JobAPIVersion},
 	Requires: map[string]APIVersion{
 		"dead-job-end":       JobAPIVersion,

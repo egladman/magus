@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"time"
 
 	"github.com/egladman/magus/internal/file"
@@ -26,14 +25,14 @@ type attemptRecord struct {
 	Job        string              `json:"job"`
 	N          int                 `json:"n"`
 	Status     attemptStatusRecord `json:"status"`
-	Dropped    bool                `json:"dropped,omitempty"`
+	Dropped    bool                `json:"dropped,omitzero"`
 }
 
 // attemptStatusRecord is the stored status. Its own type, so the record
 // can leave the domain shape without the domain type moving.
 type attemptStatusRecord types.AttemptStatus
 
-func (r attemptRecord) key() string { return r.Job + "\x00" + strconv.Itoa(r.N) }
+func (r attemptRecord) key() string { return fmt.Sprintf("%s\x00%d", r.Job, r.N) }
 
 // recordAttempt is a as the line attempts.jsonl stores.
 func recordAttempt(a types.Attempt) attemptRecord {
@@ -64,7 +63,7 @@ func refuseAttemptVersion(r attemptRecord) error {
 	if r.APIVersion == types.JobAPIVersion {
 		return nil
 	}
-	return types.DiagnosticErrorf(types.StoreRecordsNewer, "job: %s: attempt %d of %s is %s, and this magus reads %s: update magus, or %s",
+	return types.DiagnosticErrorf(types.StoreRecordsNewer, "%s: attempt %d of %s is %s, and this magus reads %s: update magus, or %s",
 		attemptsFileName, r.N, r.Job, r.APIVersion, types.JobAPIVersion, staleStoreFix)
 }
 

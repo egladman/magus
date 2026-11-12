@@ -1384,7 +1384,7 @@ func (s *reapplySuite) reappliedIs(from, to types.JobState) {
 	s.Require().NoError(err)
 	next := applied[0].Next
 	s.Empty(next.Releases)
-	want.Releases, want.Version, want.Generation, want.Attempts = next.Releases, next.Version, next.Generation, next.Attempts
+	want.Releases, want.Version, want.Generation = next.Releases, next.Version, next.Generation
 	want.Validation, want.Validated, want.WriteProof = next.Validation, next.Validated, next.WriteProof
 	s.GreaterOrEqual(next.Updated, want.Updated)
 	want.Updated = next.Updated

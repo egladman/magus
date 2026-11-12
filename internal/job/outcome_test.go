@@ -61,7 +61,7 @@ func TestNewJobOutcomeReadsTheEndedRow(t *testing.T) {
 		Reason: "small checked job", Site: "magusfile.buzz:20", Model: "haiku",
 	}
 
-	got := newJobOutcome(row, 160_000)
+	got := newJobOutcome(row, nil, 160_000)
 
 	assert.Equal(t, types.JobOutcome{
 		Job: "a", ModelTier: "economy", Kind: types.JobKindCheck, Skills: agent.SkillVariantFull,
@@ -71,17 +71,18 @@ func TestNewJobOutcomeReadsTheEndedRow(t *testing.T) {
 	}, got)
 }
 
-// The ending's attempt number and its classification ride the outcome, from the row alone.
+// The ending's attempt number and its classification ride the outcome,
+// from the row and its tries.
 func TestNewJobOutcomeNumbersTheAttemptAndClassifiesIt(t *testing.T) {
 	t.Parallel()
 
 	row := lease("a")
 	row.State = types.StateFail
-	row.Attempts = 2
-	row.Prior = []types.PriorAttempt{{N: 1, State: types.StateFail, Unmet: []types.VerificationStatus{{ID: "check"}}}}
 	row.Rejection = &types.JobRejection{Unmet: []types.VerificationStatus{{ID: "check"}}}
+	tries := types.NewJobAttempts([]types.Attempt{{Job: "a", N: 1, Status: types.AttemptStatus{
+		State: types.StateFail, Unmet: []types.VerificationStatus{{ID: "check"}}}}})
 
-	got := newJobOutcome(row, 5_000)
+	got := newJobOutcome(row, tries, 5_000)
 
 	want := got
 	want.Attempt = 2
@@ -95,7 +96,7 @@ func TestNewJobOutcomeOfARowWithNoTierNamesNone(t *testing.T) {
 	row := lease("a")
 	row.State = types.StatePass
 
-	got := newJobOutcome(row, 5)
+	got := newJobOutcome(row, nil, 5)
 
 	assert.Empty(t, got.ModelTier)
 	assert.Equal(t, "standard", got.Model, "the model the row named")
@@ -230,7 +231,7 @@ func TestStoreRecordsAnOutcomeWhenARowEnds(t *testing.T) {
 
 	jobs := recordedJobs(t, history)
 	require.Len(t, jobs, 1)
-	wantJob := newJobOutcome(ended, jobs[0].Ended)
+	wantJob := newJobOutcome(ended, nil, jobs[0].Ended)
 	wantJob.ModelTier, wantJob.State = "standard", types.StateFail
 	assert.Equal(t, wantJob, jobs[0])
 	assert.Positive(t, jobs[0].Ended)

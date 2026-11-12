@@ -16,7 +16,6 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 )
 
 // Transcript lines shaped like Claude Code 2.1.295's, cut from a subagent log and a root
@@ -208,112 +207,18 @@ func TestLiveBackgroundTasksLeavesAPartialLineOutOfTheCheckpoint(t *testing.T) {
 	assert.Equal(t, "bc0m5o2bg", got[0].ID)
 }
 
-// A root transcript's subagent spawn, shaped like Claude Code's
-// of 2026-11-04: the call, the result that launches it in the
-// background, and the notice that it finished.
+// A root transcript's background subagent spawn, shaped like Claude
+// Code's of 2026-11-04: the call and the result that launches it.
 const (
-	spawnCall       = `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01QCmx","name":"Agent","input":{"description":"root/worker naming-lint","prompt":"JOB ID: naming-lint","subagent_type":"general-purpose","model":"sonnet"}}]},"uuid":"s1","timestamp":"2026-11-04T10:00:00.000Z"}`
-	spawnLaunched   = `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01QCmx","type":"tool_result","content":[{"type":"text","text":"Async agent launched successfully. (This tool result is internal metadata.)\nagentId: a4dce34d9c86d3e46 (internal ID - do not mention to user.)\nThe agent is working in the background. You will be notified automatically when it completes."}]}]},"uuid":"s2","timestamp":"2026-11-04T10:00:01.000Z"}`
-	spawnAnswered   = `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01QCmx","type":"tool_result","content":[{"type":"text","text":"Done: naming-lint passed."}]}]},"uuid":"s3","timestamp":"2026-11-04T10:20:00.000Z"}`
-	spawnFinished   = `{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-04T10:30:00.000Z","content":"<task-notification>\n<task-id>a4dce34d9c86d3e46</task-id>\n<tool-use-id>toolu_01QCmx</tool-use-id>\n<status>completed</status>\n<summary>Agent \"root/worker naming-lint\" finished</summary>\n</task-notification>"}`
-	spawnNoticeOnly = `{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-04T10:30:00.000Z","content":"<task-notification>\n<task-id>a4dce34d9c86d3e46</task-id>\n<status>completed</status>\n</task-notification>"}`
-	spawnWaiting    = `{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-04T10:10:00.000Z","content":"<task-notification>\n<task-id>a4dce34d9c86d3e46</task-id>\n<tool-use-id>toolu_01QCmx</tool-use-id>\n<status>completed</status>\n<summary>Agent \"root/worker naming-lint\" is waiting on its own background work</summary>\n<note>This agent stopped with background work of its own still running.</note>\n</task-notification>"}`
-	resumeCall      = `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01Rsm","name":"SendMessage","input":{"to":"a4dce34d9c86d3e46","summary":"widen the row","message":"The row is widened."}}]},"uuid":"r1","timestamp":"2026-11-04T10:40:00.000Z"}`
-	resumeResult    = `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01Rsm","type":"tool_result","content":[{"type":"text","text":"{\"success\":true,\"message\":\"Resuming agent a4dce34\",\"resumedAgentId\":\"a4dce34d9c86d3e46\"}"}]}]},"uuid":"r2","timestamp":"2026-11-04T10:40:01.000Z"}`
-	resumeFinished  = `{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-04T10:50:00.000Z","content":"<task-notification>\n<task-id>a4dce34d9c86d3e46</task-id>\n<tool-use-id>toolu_01Rsm</tool-use-id>\n<status>completed</status>\n<summary>Agent \"root/worker naming-lint\" finished</summary>\n</task-notification>"}`
+	spawnCall     = `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01QCmx","name":"Agent","input":{"description":"root/worker naming-lint","prompt":"JOB ID: naming-lint","subagent_type":"general-purpose","model":"sonnet"}}]},"uuid":"s1","timestamp":"2026-11-04T10:00:00.000Z"}`
+	spawnLaunched = `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01QCmx","type":"tool_result","content":[{"type":"text","text":"Async agent launched successfully. (This tool result is internal metadata.)\nagentId: a4dce34d9c86d3e46 (internal ID - do not mention to user.)\nThe agent is working in the background. You will be notified automatically when it completes."}]}]},"uuid":"s2","timestamp":"2026-11-04T10:00:01.000Z"}`
 )
 
-type SubagentTasksSuite struct {
-	suite.Suite
-	now time.Time
-}
-
-func TestSubagentTasksSuite(t *testing.T) { suite.Run(t, new(SubagentTasksSuite)) }
-
-func (s *SubagentTasksSuite) SetupTest() { s.now = bgTime(s.T(), "2026-11-04T11:00:00Z") }
-
-func (s *SubagentTasksSuite) live(lines ...string) ([]string, string) {
-	return liveSubagents(writeTranscript(s.T(), lines...), "", s.now)
-}
-
-func (s *SubagentTasksSuite) TestABackgroundSpawnIsLiveUntilItsNotice() {
-	got, unknown := s.live(spawnCall, spawnLaunched)
-	s.Equal([]string{"root/worker naming-lint"}, got)
-	s.Empty(unknown)
-	got, _ = s.live(spawnCall, spawnLaunched, spawnFinished)
-	s.Empty(got)
-}
-
-func (s *SubagentTasksSuite) TestANoticeNamingOnlyTheAgentIdEndsIt() {
-	got, _ := s.live(spawnCall, spawnLaunched, spawnNoticeOnly)
-	s.Empty(got)
-}
-
-func (s *SubagentTasksSuite) TestASubagentWaitingOnItsOwnWorkStaysLiveUntilItFinishes() {
-	got, _ := s.live(spawnCall, spawnLaunched, spawnWaiting)
-	s.Equal([]string{"root/worker naming-lint"}, got)
-	got, _ = s.live(spawnCall, spawnLaunched, spawnWaiting, spawnFinished)
-	s.Empty(got)
-}
-
-func (s *SubagentTasksSuite) TestAResumeMakesAnEndedSpawnLiveAgain() {
-	got, _ := s.live(spawnCall, spawnLaunched, spawnFinished, resumeCall, resumeResult)
-	s.Equal([]string{"root/worker naming-lint"}, got)
-	got, _ = s.live(spawnCall, spawnLaunched, spawnFinished, resumeCall, resumeResult, spawnWaiting)
-	s.Equal([]string{"root/worker naming-lint"}, got)
-	got, _ = s.live(spawnCall, spawnLaunched, spawnFinished, resumeCall, resumeResult, resumeFinished)
-	s.Empty(got)
-}
-
-func (s *SubagentTasksSuite) TestAResumeOfALiveSpawnNamesItOnce() {
-	got, _ := s.live(spawnCall, spawnLaunched, spawnWaiting, resumeCall, resumeResult)
-	s.Equal([]string{"root/worker naming-lint"}, got)
-}
-
-func (s *SubagentTasksSuite) TestAResumeOfAnUnknownAgentStartsNothing() {
-	got, _ := s.live(resumeCall, resumeResult)
-	s.Empty(got)
-}
-
-func (s *SubagentTasksSuite) TestAResumeAfterACheckpointRevivesTheSpawn() {
-	cacheDir := s.T().TempDir()
-	transcript := writeTranscript(s.T(), spawnCall, spawnLaunched, spawnFinished)
-	got, _ := liveSubagents(transcript, cacheDir, s.now)
-	s.Require().Empty(got)
-	appendTranscript(s.T(), transcript, resumeCall, resumeResult)
-	got, _ = liveSubagents(transcript, cacheDir, s.now)
-	s.Equal([]string{"root/worker naming-lint"}, got)
-}
-
-func (s *SubagentTasksSuite) TestAForegroundSpawnStartsNothing() {
-	got, _ := s.live(spawnCall, spawnAnswered)
-	s.Empty(got)
-}
-
-func (s *SubagentTasksSuite) TestASpawnIsNoShellTask() {
-	tasks, err := liveBackgroundTasks(writeTranscript(s.T(), spawnCall, spawnLaunched), "", s.now)
-	s.Require().NoError(err)
-	s.Empty(tasks)
-}
-
-func (s *SubagentTasksSuite) TestASpawnSurvivesACheckpoint() {
-	cacheDir := s.T().TempDir()
-	transcript := writeTranscript(s.T(), spawnCall, spawnLaunched)
-	_, unknown := liveSubagents(transcript, cacheDir, s.now)
-	s.Require().Empty(unknown)
-	appendTranscript(s.T(), transcript, bgSearchCall)
-	got, _ := liveSubagents(transcript, cacheDir, s.now)
-	s.Equal([]string{"root/worker naming-lint"}, got)
-	appendTranscript(s.T(), transcript, spawnFinished)
-	got, _ = liveSubagents(transcript, cacheDir, s.now)
-	s.Empty(got)
-}
-
-func (s *SubagentTasksSuite) TestAnUnreadableTranscriptIsUnknown() {
-	_, unknown := liveSubagents("/nonexistent/root.jsonl", "", s.now)
-	s.Contains(unknown, "/nonexistent/root.jsonl could not be read")
-	_, unknown = liveSubagents("", "", s.now)
-	s.Equal("the host reported no transcript to read its tasks from", unknown)
+// A subagent is a job store try, never a shell task the transcript names.
+func TestASpawnIsNoShellTask(t *testing.T) {
+	tasks, err := liveBackgroundTasks(writeTranscript(t, spawnCall, spawnLaunched), "", bgTime(t, "2026-11-04T11:00:00Z"))
+	require.NoError(t, err)
+	assert.Empty(t, tasks)
 }
 
 // rootStop is Claude Code's Stop for the root session: no agent, and the session's own

@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -13,7 +14,9 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/egladman/magus/internal/file"
 	jobstore "github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -24,6 +27,21 @@ import (
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
+
+// seedFiled appends job id's first try, having filed result, to the
+// attempts file beside store's rows. The job package files a result only
+// through an exit; internal/guard keeps the same copy.
+func seedFiled(t *testing.T, store *jobstore.Store, id string, result *types.JobResult) {
+	t.Helper()
+	path, err := store.Path()
+	require.NoError(t, err)
+	line, err := json.Marshal(struct {
+		APIVersion types.APIVersion `json:"api_version"`
+		types.Attempt
+	}{types.JobAPIVersion, types.Attempt{Job: id, N: 1, Status: types.AttemptStatus{Result: result}}})
+	require.NoError(t, err)
+	require.NoError(t, file.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
+}
 
 // trailWorkspace is a workspace whose trail lives at dir, whose cache reports a fixed size,
 // and which declares projects.
@@ -123,7 +141,7 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 
 	j, ok := jobstore.Lookup("rotate-activities")
 	require.True(t, ok)
-	got := s.job(j, running, types.Job{})
+	got := s.job(j, running, types.Job{}, nil)
 
 	require.Equal(t, "jobs/rotate-activities", got.Name)
 	require.True(t, got.Running)
@@ -223,13 +241,13 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 				Signature: "func (Store).Update(ctx context.Context, id string) error",
 			},
 		}
-		row.Result = &types.JobResult{
-			ChangedPaths:    []string{"internal/job/store.go"},
-			UnresolvedRisks: []string{"schema churn"},
-			Descendants:     []string{"job-b"},
-		}
 	})
 	require.NoError(t, err)
+	seedFiled(t, store, "job-a", &types.JobResult{
+		ChangedPaths:    []string{"internal/job/store.go"},
+		UnresolvedRisks: []string{"schema churn"},
+		Descendants:     []string{"job-b"},
+	})
 	// The store derives a release from a claim that shrinks, so giving up types/job.go is
 	// the only way to get one onto the wire.
 	stored, err := store.Update(t.Context(), "job-a", func(row *types.Job) {
@@ -371,10 +389,10 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 			Checkout: "/waiter", At: 12, Verified: true,
 			Gates: []types.VerificationStatus{{ID: "lint", Verified: true, OutputRef: "out4"}},
 		},
-		Result: &types.JobResult{
-			Validation:           types.JobResultValidation{Command: "magus run go-test api", OutputRef: "out1"},
-			VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}},
-		},
+	}
+	result := &types.JobResult{
+		Validation:           types.JobResultValidation{Command: "magus run go-test api", OutputRef: "out1"},
+		VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}},
 	}
 	row.Version = "magus.job/v1alpha11"
 	row.Requires = []string{"claims"}
@@ -385,7 +403,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	}
 	row.ReworkRounds, row.Widenings = 2, 1
 
-	got := delegatedJob(row)
+	got := delegatedJob(row, result)
 
 	require.True(t, proto.Equal(&jobv1.JobModelTier{
 		Name: "economy", Rank: 0, Skills: "full", Source: "matrix",
@@ -435,7 +453,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.Equal(t, "out1", got.Result.ValidationOutputRef)
 	require.True(t, proto.Equal(&jobv1.JobVerificationEvidence{GateId: "lint", OutputRef: "out2"}, got.Result.VerificationEvidence[0]))
 
-	bare := delegatedJob(types.Job{ID: "old", State: types.StatePass})
+	bare := delegatedJob(types.Job{ID: "old", State: types.StatePass}, nil)
 	require.Nil(t, bare.RegisteredBy, "a row from before origins were recorded has no origin to report")
 	require.Nil(t, bare.Attempt)
 	require.Nil(t, bare.Integration)

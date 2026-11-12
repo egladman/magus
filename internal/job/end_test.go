@@ -425,8 +425,12 @@ func TestExitWithoutAResultRecordsNoReturn(t *testing.T) {
 	stored, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.StateNoReturn, stored.State)
-	assert.Nil(t, stored.Result)
 	assert.Nil(t, stored.Attempt)
+	tries, err := NewStore(loc).Attempts()
+	require.NoError(t, err)
+	live := types.NewJobAttempts(tries).Live(row.ID)
+	assert.Nil(t, live.Status.Result)
+	assert.Equal(t, types.AttemptEndExit, live.Status.End, "the exit ends the try")
 }
 
 type exitCommittedSuite struct {

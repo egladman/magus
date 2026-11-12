@@ -29,7 +29,8 @@ stdout '^previous attempts$'
 stdout '^  attempt 1: no_return'
 stdout '^    retryable$'
 exec magus describe job scout -o json
-stdout '"attempts": 2'
+stdout '"n": 1,'
+stdout '"end": "exit"'
 stdout '"generation": 1'
 
 exec magus job exit scout

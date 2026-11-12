@@ -24,6 +24,8 @@ type worktreeRepo struct {
 	origin *testkit.Repo
 	main   string
 	parent string
+	// tries are the attempts the judged store holds.
+	tries []types.Attempt
 }
 
 func newWorktreeRepository(t *testing.T) worktreeRepo {
@@ -82,7 +84,7 @@ func (r worktreeRepo) judgeIn(callDir, command string, rows ...types.Job) ShellV
 
 func (r worktreeRepo) judgeWith(deps Dependencies, callDir, command string, rows ...types.Job) ShellVerdict {
 	r.t.Helper()
-	ctx := job.WithSnapshot(r.t.Context(), job.Snapshot{Rows: rows})
+	ctx := job.WithSnapshot(r.t.Context(), job.Snapshot{Rows: rows, Attempts: r.tries})
 	at := location{cacheDir: r.t.TempDir(), workspace: r.main, dir: callDir}
 	return denyWorktreeRemove(ctx, deps, at, callDir, command, DialectBash)
 }
@@ -214,7 +216,8 @@ func TestWorktreeRemoveRequiresLandedCommitsWhateverTheJobState(t *testing.T) {
 	require.Len(t, v.Next, 1)
 	assert.Equal(t, hint.JobExit.Argv("w"), v.Next[0].Argv, "an exited job with no result is told to file one")
 
-	filed := r.judge("git worktree remove "+wt, types.Job{ID: "w", State: types.StateExited, CheckoutRoot: wt, Result: &types.JobResult{}})
+	r.tries = []types.Attempt{filedTry("w")}
+	filed := r.judge("git worktree remove "+wt, types.Job{ID: "w", State: types.StateExited, CheckoutRoot: wt})
 	assertRemovalDenied(t, filed, "job w (exited)")
 	require.Len(t, filed.Next, 1)
 	assert.Equal(t, hint.JobWait.Argv("w"), filed.Next[0].Argv, "an exited job with a filed result waits for its grade")
@@ -309,7 +312,7 @@ func TestWorktreeRemoveRefusesALockItCannotProveIsYourFinishedWorkers(t *testing
 	t.Run("an exited job with a filed result", func(t *testing.T) {
 		r := newWorktreeRepository(t)
 		wt, row := r.workerWorktree(types.StateExited)
-		row.Result = &types.JobResult{}
+		r.tries = []types.Attempt{filedTry(row.ID)}
 		v := r.judgeWith(rootSession(t, spawnedW1), r.main, removeFF(wt), row)
 		assertRemovalDenied(t, v, "job w1 (exited) was taken in it", "it is locked (claude agent")
 		require.Len(t, v.Next, 1)

@@ -931,12 +931,13 @@ func (s *RootCitedReadSuite) judge(line string) types.GuardJudgment {
 func TestRootCitedReadSuite(t *testing.T) { suite.Run(t, new(RootCitedReadSuite)) }
 
 func (s *RootCitedReadSuite) SetupTest() {
-	research := types.Job{ID: "research", ReadOnly: true, State: types.StateExited, Result: &types.JobResult{
-		ChangedPaths:    []string{},
-		UnresolvedRisks: []string{"`docs/guide/page.md:12` contradicts internal/guard/root.go"},
-	}}
+	research := types.Job{ID: "research", ReadOnly: true, State: types.StateExited}
 	s.layers, _ = fleetLayers(s.T(), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared}, research)
 	s.deps = levelDeps(s.T(), types.GuardProfileLight)
+	storeTries(s.T(), hookLocation(s.testContext(), s.deps), filedResult("research", &types.JobResult{
+		ChangedPaths:    []string{},
+		UnresolvedRisks: []string{"`docs/guide/page.md:12` contradicts internal/guard/root.go"},
+	}))
 	hostGate(hookLocation(s.testContext(), s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
 	s.Require().NotEqual(decisionDeny, judgeSpawn(s.testContext(), s.T(), s.deps, "haiku").Decision)
 }

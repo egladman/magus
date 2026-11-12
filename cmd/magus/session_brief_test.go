@@ -488,7 +488,7 @@ func TestSessionBriefListsTheJobTreeForkedFromThisCheckout(t *testing.T) {
 	require.NoError(t, err)
 	for _, row := range []types.Job{
 		{ID: "plan", State: types.StateRunning, Worktree: &types.JobWorktree{Root: work, Source: root}},
-		{ID: "plan/exited", Parent: "plan", State: types.StateExited, Result: &types.JobResult{UnresolvedRisks: []string{"merge is the root's", "second"}}},
+		{ID: "plan/exited", Parent: "plan", State: types.StateExited},
 		{ID: "plan/waiting", Parent: "plan", State: types.StateDeclared, DependsOn: []string{"plan/exited"}},
 		{ID: "plan/failed", Parent: "plan", State: types.StateFail},
 		{ID: "landed", State: types.StatePass, Worktree: &types.JobWorktree{Root: t.TempDir(), Source: root, Removed: 1}},
@@ -501,6 +501,7 @@ func TestSessionBriefListsTheJobTreeForkedFromThisCheckout(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
+	seedFiled(t, store, "plan/exited", &types.JobResult{UnresolvedRisks: []string{"merge is the root's", "second"}})
 
 	brief := gatherSessionBrief(ctx, root, nil)
 	require.NotNil(t, brief.Jobs)
@@ -607,7 +608,7 @@ func TestSessionBriefNamesEveryExitedJobNobodyCollected(t *testing.T) {
 	}
 	rows = append(rows, types.Job{ID: "root/rejected", Parent: "root", State: types.StateExited, Rejection: &types.JobRejection{Violations: []string{"check failed"}}})
 
-	tree := sessionJobTree(t.Context(), rows, "root", t.TempDir(), types.VCSOptions{})
+	tree := sessionJobTree(t.Context(), rows, nil, "root", t.TempDir(), types.VCSOptions{})
 	require.NotNil(t, tree)
 	assert.Len(t, tree.Jobs, briefMaxJobs)
 	assert.Equal(t, 3, tree.More)

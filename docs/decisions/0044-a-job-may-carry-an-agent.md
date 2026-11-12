@@ -111,7 +111,9 @@ maps them. The envelope is an unexported generic in `internal/job` until
 | ----------------------------------------------------------------------------------------------------- | -------- |
 | model tier types moved into `types/agent`                                                             | done     |
 | `agent.Spec` as `types.Job.Agent`, `JobPut.Agent`; the four flat fields deleted; store migration      | done     |
-| `types.Attempt`, `attempts.jsonl` with `attemptRecord`; `Prior` and the job result move there         | proposed |
+| `types.Attempt`, `attempts.jsonl` with `attemptRecord`; `Prior` and the job result move there         | done     |
+| a spawn naming a row starts its try; handback, `SubagentStop` and exit end it; the deadline bounds it | done     |
+| the transcript spawn scan and `StopRequest.Tasks` deleted; the stop rule reads started tries          | done     |
 | CRD envelope in `batch.magus/v1alpha1` on both files; conditions replace `state`; `Holder` deleted    | proposed |
 | envelope on `libs/apiversion` `TypeMeta`                                                              | proposed |
 
@@ -123,6 +125,11 @@ Pre-1.0, with no compatibility reader
 store migrates it, and `fresh_reason` becomes `agent.worker` with `type: New`. The JSON output of `magus job` and `describe job`
 shows them under `agent`. The job proto's `model_tier` and `criteria` fields move into
 an agent message.
+
+Step 3 moves a row's `result`, `prior` and `attempts` to `attempts.jsonl` in store
+migration 3, and the names are reserved on the row. `magus job` JSON output and the Buzz
+`job.list` value carry the tries as `attempts` beside the rows. `StopRequest.Tasks` and
+`TasksUnknown` are gone: a stop rule reads the tries that started and have not ended.
 
 ### Principles checked
 

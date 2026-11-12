@@ -1011,7 +1011,6 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 		Registered:   got.Registered,
 		CheckoutRoot: abs,
 		Generation:   1,
-		Attempts:     1,
 		Validated:    row.Validated,
 		Created:      got.Created,
 		Updated:      got.Updated,

@@ -396,54 +396,29 @@ func TestJobCloneCopiesAttemptArgs(t *testing.T) {
 	assert.Equal(t, []string{"-run", "TestOne"}, orig.GateAttempts[0].Attempt.ExtraArgs)
 }
 
-// The previous attempts and the rejection are the next holder's evidence, so a clone handed
-// out of the store must not alias the slices one level down. Asserted across two clones for
-// the reason TestJobCloneCopiesEverySliceField gives.
-func TestJobCloneCopiesPriorAttemptsAndRejection(t *testing.T) {
+// The rejection is the next holder's evidence, so a clone handed out of
+// the store must not alias the slices one level down. Asserted across
+// two clones for the reason TestJobCloneCopiesEverySliceField gives.
+func TestJobCloneCopiesTheRejection(t *testing.T) {
 	t.Parallel()
 
 	refs := func() []string { return append(make([]string, 0, 4), "out1") }
 	unmet := func() []VerificationStatus {
 		return append(make([]VerificationStatus, 0, 4), VerificationStatus{ID: "unit", Violations: refs()})
 	}
-	prior := func() PriorAttempt {
-		return PriorAttempt{
-			N:               1,
-			Unmet:           unmet(),
-			Violations:      refs(),
-			UnresolvedRisks: refs(),
-			FailingRefs:     refs(),
-			Denials:         append(make([]JobDenial, 0, 4), JobDenial{Rule: "lease-write"}),
-		}
-	}
-	orig := Job{
-		ID:        "a",
-		Prior:     append(make([]PriorAttempt, 0, 4), prior()),
-		Rejection: &JobRejection{Unmet: unmet(), Violations: refs()},
-	}
+	orig := Job{ID: "a", Rejection: &JobRejection{Unmet: unmet(), Violations: refs()}}
 
 	first, second := orig.Clone(), orig.Clone()
 	for i, c := range []Job{first, second} {
 		tag := fmt.Sprint(i)
-		p := &c.Prior[0]
-		p.Unmet[0].Violations = append(p.Unmet[0].Violations, tag)
-		p.Violations = append(p.Violations, tag)
-		p.UnresolvedRisks = append(p.UnresolvedRisks, tag)
-		p.FailingRefs = append(p.FailingRefs, tag)
-		p.Denials = append(p.Denials, JobDenial{Rule: tag})
 		c.Rejection.Unmet[0].Violations = append(c.Rejection.Unmet[0].Violations, tag)
 		c.Rejection.Violations = append(c.Rejection.Violations, tag)
 	}
-	first.Prior[0].FailingRefs[0] = "first"
 	first.Rejection.At = 9
 
-	assert.Equal(t, []string{"first", "0"}, first.Prior[0].FailingRefs)
-	wantPrior := second.Prior[0]
-	wantPrior.FailingRefs = []string{"out1", "1"}
-	wantPrior.Denials = []JobDenial{{Rule: "lease-write"}, {Rule: "1"}}
-	assert.Equal(t, wantPrior, second.Prior[0])
 	assert.Equal(t, []string{"out1", "1"}, second.Rejection.Unmet[0].Violations)
-	assert.Equal(t, Job{ID: "a", Prior: []PriorAttempt{prior()}, Rejection: &JobRejection{Unmet: unmet(), Violations: refs()}}, orig)
+	assert.Equal(t, []string{"out1", "1"}, second.Rejection.Violations)
+	assert.Equal(t, Job{ID: "a", Rejection: &JobRejection{Unmet: unmet(), Violations: refs()}}, orig)
 }
 
 // A cap on attempts is declared like the rest of the spec, so applying a record that omits
@@ -483,16 +458,14 @@ func TestDeclarationRefusesAWeightOutOfRange(t *testing.T) {
 	assert.Equal(t, int64(42), row.Paused, "apply keeps a pause")
 }
 
-// The generation and the attempt record are the store's, so a declaration never writes
-// them: Apply leaves them where they were.
-func TestDeclarationApplyLeavesStoreComputedAttemptsAlone(t *testing.T) {
+// The generation and the rejection are the store's, so a declaration
+// never writes them: Apply leaves them where they were.
+func TestDeclarationApplyLeavesStoreComputedFieldsAlone(t *testing.T) {
 	t.Parallel()
 
 	row := Job{
 		ID:         "worker",
 		Generation: 2,
-		Attempts:   2,
-		Prior:      []PriorAttempt{{N: 1, State: StateFail}},
 		Rejection:  &JobRejection{At: 1, ObservedGeneration: 2},
 	}
 	want := row

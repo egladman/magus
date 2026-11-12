@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/contract"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
@@ -598,6 +599,21 @@ func seedJobStore(t *testing.T, root string, rows ...types.Job) (string, string)
 	return root, cacheDir
 }
 
+// seedFiled appends job id's first try, having filed result, to the
+// attempts file beside store's rows. The job package files a result only
+// through an exit; internal/guard keeps the same copy.
+func seedFiled(t *testing.T, store *job.Store, id string, result *types.JobResult) {
+	t.Helper()
+	path, err := store.Path()
+	require.NoError(t, err)
+	line, err := json.Marshal(struct {
+		APIVersion types.APIVersion `json:"api_version"`
+		types.Attempt
+	}{types.JobAPIVersion, types.Attempt{Job: id, N: 1, Status: types.AttemptStatus{Result: result}}})
+	require.NoError(t, err)
+	require.NoError(t, file.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
+}
+
 // A deny path naming a declaration of a file no diff driver reads is refused at fork
 // (MGS3031): the guard could only honor it by denying the whole file.
 func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
@@ -1118,12 +1134,13 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 	row := types.Job{
 		ID: "w", Created: 1, State: types.StateExited, WritePaths: []string{"a.go"}, CheckoutRoot: holder.Root(),
 		Check:   &types.LeaseCheck{Target: "go-test", Project: "."},
-		Result:  &types.JobResult{Job: "w", ChangedPaths: []string{"a.go"}, Validation: types.JobResultValidation{OutputRef: "failed"}},
 		Attempt: &types.JobAttempt{Found: true, Ref: "failed", Project: ".", Target: "go-test", Failed: true, TimestampMs: 2_000},
 	}
 	seedJobStore(t, waiter.Root(), row)
 	store, err := openJobs(t.Context(), waiter.Root(), jobOpen{})
 	require.NoError(t, err)
+	seedFiled(t, store, "w",
+		&types.JobResult{Job: "w", ChangedPaths: []string{"a.go"}, Validation: types.JobResultValidation{OutputRef: "failed"}})
 	observe := func(context.Context, types.Job) (job.Observed, error) {
 		return job.Observed{Changed: []string{"a.go"}, ChangedKnown: true}, nil
 	}
@@ -2675,12 +2692,12 @@ type lsJobsUnmergedSuite struct {
 func TestLsJobsUnmerged(t *testing.T) { suite.Run(t, new(lsJobsUnmergedSuite)) }
 
 func (s *lsJobsUnmergedSuite) TestTheNameFormatSkipsTheRead() {
-	s.Nil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, outputName))
+	s.Nil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, nil, outputName))
 }
 
 func (s *lsJobsUnmergedSuite) TestEveryOtherFormatCarriesTheReport() {
-	s.NotNil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, outputText))
-	s.NotNil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, outputJSON))
+	s.NotNil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, nil, outputText))
+	s.NotNil(unmergedReport(s.T().Context(), s.T().TempDir(), nil, nil, outputJSON))
 }
 
 type forkFactsReportSuite struct {

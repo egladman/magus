@@ -259,26 +259,29 @@ func TestTermsPrintsNoModelTierForARowWithout(t *testing.T) {
 	assert.NotContains(t, NewTerms(briefRow(), TermsFacts{}).String(), "model tier")
 }
 
-// retriedRow is a job on its third attempt of four: the second ended failing with
-// everything an attempt can leave, the first ended by the sweep.
+// retriedRow is a job on its third attempt of four.
 func retriedRow() types.Job {
-	first := types.PriorAttempt{N: 1, State: types.StateNoReturn, EndReason: "its checkout is gone", ModelTier: "economy", DenialsKnown: true}
+	row := types.Job{ID: "harness/retry", Agent: agent.Instructed("Retry the store."), State: types.StateDeclared}
+	row.WritePaths = []string{"internal/ledger"}
+	row.Validation = "magus run test internal/ledger"
+	row.MaxAttempts = 4
+	return row
+}
+
+// retriedTries are retriedRow's two ended tries: the second failing with
+// everything a try can leave, the first ended by the sweep.
+func retriedTries() []types.Attempt {
+	first := types.AttemptStatus{State: types.StateNoReturn, EndReason: "its checkout is gone", ModelTier: "economy", DenialsKnown: true}
 	first.Retry = types.RetryVerdict{Retryable: true}
-	second := types.PriorAttempt{N: 2, State: types.StateFail, ModelTier: "standard", ReworkRounds: 2, Widenings: 1, DenialsKnown: true}
+	second := types.AttemptStatus{State: types.StateFail, ModelTier: "standard", ReworkRounds: 2, Widenings: 1, DenialsKnown: true}
 	second.Unmet = []types.VerificationStatus{{ID: "check"}, {ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
 	second.Violations = []string{`changed path "docs/x.md" is outside the job's write paths (internal/ledger)`}
-	second.UnresolvedRisks = []string{"the second worktree was not tried"}
+	second.Result = &types.JobResult{UnresolvedRisks: []string{"the second worktree was not tried"}}
 	second.Denials = []types.JobDenial{{Rule: "lease-write", Reason: "docs/x.md belongs to no lease you hold\nask the orchestrator"}}
 	second.FailingRefs = []string{"out0123456789ab"}
 	second.Retry = types.RetryVerdict{Change: types.RetryAfterWidening,
 		Reason: "the guard denied its holder under lease-write: docs/x.md belongs to no lease you hold"}
-
-	row := types.Job{ID: "harness/retry", Agent: agent.Instructed("Retry the store."), State: types.StateDeclared}
-	row.WritePaths = []string{"internal/ledger"}
-	row.Validation = "magus run test internal/ledger"
-	row.Attempts, row.MaxAttempts = 3, 4
-	row.Prior = []types.PriorAttempt{first, second}
-	return row
+	return []types.Attempt{{Job: "harness/retry", N: 1, Status: first}, {Job: "harness/retry", N: 2, Status: second}}
 }
 
 // The previous attempt is what the next holder starts from, so it renders byte for byte
@@ -288,17 +291,17 @@ func TestTermsRendersThePreviousAttemptGolden(t *testing.T) {
 
 	want, err := os.ReadFile(filepath.Join("testdata", "previous_attempt.golden"))
 	require.NoError(t, err)
-	first := NewTerms(retriedRow(), TermsFacts{}).String()
+	first := NewTerms(retriedRow(), TermsFacts{Attempts: retriedTries()}).String()
 	assert.Equal(t, string(want), first)
-	assert.Equal(t, first, NewTerms(retriedRow(), TermsFacts{}).String())
+	assert.Equal(t, first, NewTerms(retriedRow(), TermsFacts{Attempts: retriedTries()}).String())
 }
 
 func TestTermsSaysWhenAnAttemptsDenialsAreUnknown(t *testing.T) {
 	t.Parallel()
 
-	row := retriedRow()
-	row.Prior[1].Denials, row.Prior[1].DenialsKnown = nil, false
-	got := NewTerms(row, TermsFacts{}).String()
+	tries := retriedTries()
+	tries[1].Status.Denials, tries[1].Status.DenialsKnown = nil, false
+	got := NewTerms(retriedRow(), TermsFacts{Attempts: tries}).String()
 	assert.Contains(t, got, "    (denials unknown: the trail was rotated)\n")
 	assert.NotContains(t, got, "denied:")
 }
@@ -307,7 +310,6 @@ func TestTermsNamesTheAttemptOnlyPastTheFirstOrUnderACap(t *testing.T) {
 	t.Parallel()
 
 	first := briefRow()
-	first.Attempts = 1
 	assert.NotContains(t, NewTerms(first, TermsFacts{}).String(), "attempt")
 
 	capped := briefRow()
@@ -318,7 +320,7 @@ func TestTermsNamesTheAttemptOnlyPastTheFirstOrUnderACap(t *testing.T) {
 
 	uncapped := retriedRow()
 	uncapped.MaxAttempts = 0
-	assert.Contains(t, NewTerms(uncapped, TermsFacts{}).String(), "\nattempt 3\n")
+	assert.Contains(t, NewTerms(uncapped, TermsFacts{Attempts: retriedTries()}).String(), "\nattempt 3\n")
 }
 
 type termsTestScopeSuite struct{ suite.Suite }

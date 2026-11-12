@@ -17,11 +17,11 @@ type Attempt struct {
 type AttemptStatus struct {
 	// Started is the unix second the guard let a spawn or continuation
 	// naming the job through, zero when it saw none.
-	Started int64 `json:"started,omitempty" yaml:"started,omitempty"`
+	Started int64 `json:"started,omitzero" yaml:"started,omitempty"`
 	// Ended is the unix second the end was observed, and End how.
 	// A started try with neither is "started, end unobserved".
-	Ended int64      `json:"ended,omitempty" yaml:"ended,omitempty"`
-	End   AttemptEnd `json:"end,omitempty"   yaml:"end,omitempty"`
+	Ended int64      `json:"ended,omitzero" yaml:"ended,omitempty"`
+	End   AttemptEnd `json:"end,omitempty"  yaml:"end,omitempty"`
 	// Result is what the holder filed with `magus job exit`.
 	Result *JobResult `json:"result,omitempty" yaml:"result,omitempty"`
 	// The members below are written when a fork of the ended job starts
@@ -32,8 +32,8 @@ type AttemptStatus struct {
 	ModelTier          string               `json:"model_tier,omitempty"          yaml:"model_tier,omitempty"`
 	Checkpoint         string               `json:"checkpoint,omitempty"          yaml:"checkpoint,omitempty"`
 	ReportedBase       string               `json:"reported_base,omitempty"       yaml:"reported_base,omitempty"`
-	ReworkRounds       int                  `json:"rework_rounds,omitempty"       yaml:"rework_rounds,omitempty"`
-	Widenings          int                  `json:"widenings,omitempty"           yaml:"widenings,omitempty"`
+	ReworkRounds       int                  `json:"rework_rounds,omitzero"        yaml:"rework_rounds,omitempty"`
+	Widenings          int                  `json:"widenings,omitzero"            yaml:"widenings,omitempty"`
 	Unmet              []VerificationStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
 	Violations         []string             `json:"violations,omitempty"          yaml:"violations,omitempty"`
 	// FailingRefs are the output refs of the try's failed runs.
@@ -41,7 +41,7 @@ type AttemptStatus struct {
 	// DenialsKnown is false once the trail rotated past the try, so
 	// empty Denials then means unknown rather than none.
 	Denials      []JobDenial  `json:"denials,omitempty"       yaml:"denials,omitempty"`
-	DenialsKnown bool         `json:"denials_known,omitempty" yaml:"denials_known,omitempty"`
+	DenialsKnown bool         `json:"denials_known,omitzero"  yaml:"denials_known,omitempty"`
 	Retry        RetryVerdict `json:"retry,omitzero"          yaml:"retry,omitempty"`
 }
 

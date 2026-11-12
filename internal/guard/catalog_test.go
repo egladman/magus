@@ -764,8 +764,9 @@ func (s *remedyContractSuite) TestWorktreeRemove() {
 		func(t *testing.T, at location) (Request, string) {
 			r := newWorktreeRepository(t)
 			wt, row := r.workerWorktree(types.StateExited)
-			row.ID, row.Result = "remedy-wait", &types.JobResult{}
+			row.ID = "remedy-wait"
 			seedRemedyJob(t, at, row)
+			storeTries(t, at, filedTry(row.ID))
 			return Request{Input: "git worktree remove " + wt, Dir: r.main}, hint.JobWait.With("remedy-wait")
 		},
 	)
