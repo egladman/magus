@@ -337,10 +337,30 @@ func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw,
 	case sessionEnded(raw):
 		_, ended, err := store.EndSession(ctx, c)
 		return ended, err
-	case subagentStopped(raw) && !resumedStop(raw, resumesFrom, time.Now()):
-		return false, errors.Join(store.StampHolderStopped(ctx, c), store.EndCallerAttempt(ctx, c, types.AttemptEndStop, time.Now()))
+	case subagentStopped(raw):
+		now := time.Now()
+		resumed := resumedStop(raw, resumesFrom, now)
+		var errs []error
+		if !resumed {
+			errs = append(errs, store.StampHolderStopped(ctx, c))
+		}
+		if !resumed && !waitingStop(raw, now) {
+			errs = append(errs, store.EndCallerAttempt(ctx, c, types.AttemptEndStop, now))
+		}
+		return false, errors.Join(errs...)
 	}
 	return false, nil
+}
+
+// waitingStop reports a subagent stop that leaves a background task running.
+// Its try stays started until a handback, an exit or the deadline.
+func waitingStop(raw string, now time.Time) bool {
+	env, ok := decodeStop(raw)
+	if !ok || env.AgentID == "" || env.AgentTranscriptPath == "" {
+		return false
+	}
+	read, err := readBackgroundTranscript(env.AgentTranscriptPath, "", now)
+	return err == nil && len(read.tasks) > 0
 }
 
 // resumedStop reports a subagent stop that leaves a background task running on a host that

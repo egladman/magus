@@ -744,6 +744,48 @@ func TestReadBackgroundTranscriptKeepsTheVersionAcrossACheckpoint(t *testing.T) 
 	assert.Len(t, read.tasks, 1)
 }
 
+func waitingStore(t *testing.T) (*job.Store, job.Caller) {
+	root := t.TempDir()
+	commitCheckout(t, root)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	require.NoError(t, err)
+	_, err = store.Exec(t.Context(), "w")
+	require.NoError(t, err)
+	worker := job.Caller{Host: "claude-code", Session: "8f2c6a1e", Agent: "a05d44b006f8f68af"}
+	require.NoError(t, store.Bind(worker, "w"))
+	_, err = store.StartAttempt(t.Context(), "w", time.Now())
+	require.NoError(t, err)
+	return store, worker
+}
+
+// A stop that leaves a task running ends nothing, on any host version.
+func TestASubagentStopWithALiveTaskLeavesItsTryRunning(t *testing.T) {
+	store, worker := waitingStore(t)
+	transcript := writeTranscript(t, bgSearchCall, bgSearchResult)
+
+	_, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), "", types.GuardJudgment{})
+	require.NoError(t, err)
+
+	tries, err := store.Attempts()
+	require.NoError(t, err)
+	require.Len(t, tries, 1)
+	assert.Zero(t, tries[0].Status.Ended)
+}
+
+func TestASubagentStopWithNoLiveTaskEndsItsTry(t *testing.T) {
+	store, worker := waitingStore(t)
+	transcript := writeTranscript(t, `{"type":"user"}`)
+
+	_, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), "", types.GuardJudgment{})
+	require.NoError(t, err)
+
+	tries, err := store.Attempts()
+	require.NoError(t, err)
+	require.Len(t, tries, 1)
+	assert.Equal(t, types.AttemptEndStop, tries[0].Status.End)
+}
+
 // A stop its host resumes leaves the row as it was, since a wake is
 // coming. Below the declared version, or with none, the stop stamps it.
 func TestEndStoppedSessionKeepsTheJobOfAResumedSubagent(t *testing.T) {
