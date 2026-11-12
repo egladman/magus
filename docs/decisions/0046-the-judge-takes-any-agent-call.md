@@ -146,11 +146,15 @@ and the advice spent. The strictest decision wins.
 
 - An ask goes to a caller that said it can prompt. Otherwise it is a deny that says so
   (ADR 0039, part 5).
-- The next step stays a command a person can paste (`types.NextStep`,
-  `types/next_step.go:30`). When the remedy is another call of the embedder's, a deny
-  may carry it as a typed next call beside its reason: a kind, a name and an input, the
-  same fields a call has. An embedder's loop can offer it without parsing prose. The
-  judge only names the call. It never makes it, and the loop decides whether to offer it.
+- What a deny suggests next is built on the existing `types.NextStep`
+  (`types/next_step.go:30`), carried as `Next []agent.NextStep` on the verdict.
+  `types.NextStep` is a general type that hints, reports, logs, query output and guard
+  denials share, so it gains no agent field. `agent.NextStep`, in `types/agent`, holds a
+  `types.NextStep` (the command, argv and why every caller gets) and `Call *agent.Call`,
+  the typed call an embedder's loop can offer without parsing prose (a kind, a name and
+  an input). A hook still gets the command. `types/agent` imports `types`, never the
+  reverse ([ADR 0044](0044-a-job-may-carry-an-agent.md)). The judge only names the
+  call. It never makes it, and the loop decides whether to offer it.
 - A verdict never carries a changed call.
 
 ### 5. Rules for any kind are workspace policy
@@ -222,15 +226,13 @@ type CallRequest struct { // replaces ADR 0039's ToolRequest: what a rule reads
     Lease        string
 }
 
-type NextCall struct { // what a deny offers beside its reason
-    Kind  string         `json:"kind"`
-    Name  string         `json:"name"`
-    Input map[string]any `json:"input,omitempty"`
+type NextStep struct { // what a deny suggests next
+    types.NextStep
+    Call *Call `json:"call,omitempty"` // an embedder's loop can offer it
 }
 ```
 
-`agent.Verdict` and `agent.Judgment` each gain `NextCalls []NextCall`, beside the next
-steps they carry today.
+`agent.Verdict` and `agent.Judgment` carry their next steps as `Next []agent.NextStep`.
 
 In the root package:
 
@@ -277,7 +279,7 @@ func WithCallRule(rule CallRule) Option
 | `unjudged-call` replaces `unjudged-tool`; a mistyped location is a deny      | proposed  |
 | the hook envelope and `magus shell` decode into a `Call`                     | proposed  |
 | `CallRow.InputSchema`; a mismatch is refused with the schema path            | proposed  |
-| `agent.NextCall`; `NextCalls` on `Verdict` and `Judgment`                    | proposed  |
+| `agent.NextStep` (a `types.NextStep` and `Call`); `Next` on the verdict      | proposed  |
 | a typed Go struct or method per kind                                         | not built |
 | a verdict that changes the call, or a step that suspends the caller's loop   | not built |
 | judging a result after the call ran                                          | not built |
@@ -333,8 +335,20 @@ call. Reopen if a unit arrives that no embedder can call a call.
 
 It lost because a step is a workflow building block in Mastra, and the word implies a
 sequence: a rule would read order into units that have none. The `workflow` kind and its
-rule read the steps already recorded, and a single call is not a step. Reopen if the
-judge is ever given an ordered plan to rule on whole.
+rule read the steps already recorded, and a single call is not a step. The word also
+already names a target's build step (`internal/cache.Step`, `types.ChainStep`,
+`RunningTarget.Step`, the console's log waterfall), so an `agent.Step` would share a
+word with it in the same logs. Reopen if the judge is ever given an ordered plan to
+rule on whole.
+
+### A separate agent.NextCall type
+
+The first draft gave a deny its own `agent.NextCall` and `NextCalls` beside the next
+steps. It lost because `types.NextStep` already is what a result says to do next, and a
+second list would make an embedder read two for one idea. Adding the typed call to
+`types.NextStep` lost too: that type is general, shared by hints, reports, logs, query
+output and guard denials, and carries no agent field. `agent.NextStep` wraps it and adds
+the call.
 
 ### A typed Go struct and a method for each kind
 
