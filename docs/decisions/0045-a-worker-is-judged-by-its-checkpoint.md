@@ -193,7 +193,7 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 | the SDK judges with the approved sources when the working tree does not load                  | done     |
 | a request carries an explicit authority for a caller with no row                              | done     |
 | `types` row reader and `magus.WithJobReader`; the job store is the default                    | done     |
-| `ChangedBuildInputs` moves into the go spell; the Buzz copies go                              | proposed |
+| `ChangedBuildInputs` moves into the go spell (`mgs_getScopes`); the Buzz copies go           | done     |
 | `builds.buzz` rewritten to the product-path rule                                              | done     |
 | Go names only its own module's paths, each saying why (`internal/contract`, `internal/ward`, `load_contract.go`) | done     |
 | the worker placement script comes from the scripts index, not `stale_binary.go`              | done     |
