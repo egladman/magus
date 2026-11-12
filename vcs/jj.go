@@ -187,6 +187,30 @@ func (v jjVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, er
 	return splitLines(out), nil
 }
 
+// ChangedSince implements RevisionDiffer. jj's working copy is a commit, so
+// `diff --from rev` sees every edit. It runs from the root: see DirtyFiles.
+func (v jjVCS) ChangedSince(ctx context.Context, dir, rev string, paths []string) ([]string, error) {
+	if err := checkRef(rev); err != nil {
+		return nil, err
+	}
+	root, prefix, err := repositoryPathPrefix(ctx, v, dir)
+	if err != nil {
+		return nil, err
+	}
+	args := []string{"diff", "--name-only", "--from", rev}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		for _, p := range paths {
+			args = append(args, prefix+p)
+		}
+	}
+	out, err := vcsOutput(ctx, root, "jj", args...)
+	if err != nil {
+		return nil, fmt.Errorf("jj diff: %w", err)
+	}
+	return splitStatusLines(out), nil
+}
+
 func (v jjVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
 	cmd := vcsExec(ctx, "jj", "log", "-r", "@", "--no-graph", "-T", "commit_id")
 	cmd.Dir = dir

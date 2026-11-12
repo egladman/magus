@@ -2988,6 +2988,42 @@ type ObjectBatchOpener interface {
 	OpenObjectBatch(ctx context.Context, root, rev string) (ObjectBatch, error)
 }
 
+// RevisionDiffer is a driver that can name the paths differing between a
+// revision and the working tree, commits included (ADR 0045). Without it an
+// authority the guard reads by revision is unreadable.
+type RevisionDiffer interface {
+	// ChangedSince is the repository-relative paths differing between rev
+	// and the working tree, untracked ones included. An untracked directory
+	// may be named once, ending in "/". paths scope it.
+	ChangedSince(ctx context.Context, dir, rev string, paths []string) ([]string, error)
+}
+
+// ChangedSince implements RevisionDiffer. `git diff <rev>` skips untracked
+// files, so ls-files lists them as status does.
+func (gitVCS) ChangedSince(ctx context.Context, dir, rev string, paths []string) ([]string, error) {
+	if err := checkRev(rev); err != nil {
+		return nil, err
+	}
+	var spec []string
+	if len(paths) > 0 {
+		spec = append([]string{"--"}, paths...)
+	}
+	// As DirtyFiles: a made checkout's submodule config may be the worker's.
+	submodules := "--ignore-submodules=none"
+	if _, made := madeCheckout(dir); made {
+		submodules = "--ignore-submodules=dirty"
+	}
+	diff, err := gitOutput(ctx, dir, gitOpts{}, append([]string{"diff", "--name-only", "--no-renames", submodules, rev}, spec...)...)
+	if err != nil {
+		return nil, fmt.Errorf("git diff: %w", err)
+	}
+	untracked, err := gitOutput(ctx, dir, gitOpts{}, append([]string{"ls-files", "--others", "--exclude-standard", "--directory", "--no-empty-directory", "--full-name"}, spec...)...)
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files: %w", err)
+	}
+	return append(splitLines([]byte(diff)), splitLines([]byte(untracked))...), nil
+}
+
 // CheckoutIDReader is a driver that can name the checked-out revision from the
 // checkout's own files, without starting the tool. ok is false when it cannot,
 // and the caller asks the tool. The id is whatever a commit moves and a status

@@ -136,6 +136,37 @@ func (v hgVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, er
 	return splitLines(out), nil
 }
 
+// ChangedSince implements RevisionDiffer. `status --rev` compares rev with
+// the working directory, unknown files included.
+func (v hgVCS) ChangedSince(ctx context.Context, dir, rev string, paths []string) ([]string, error) {
+	return statusSince(ctx, v, "hg", dir, rev, paths)
+}
+
+// statusSince is ChangedSince for the two backends that speak Mercurial's
+// status. A pattern makes both print cwd-relative paths, and sl refuses
+// --root-relative beside one, so it runs from the root as jj's does.
+func statusSince(ctx context.Context, v types.VCSDriver, bin, dir, rev string, paths []string) ([]string, error) {
+	if err := checkRef(rev); err != nil {
+		return nil, err
+	}
+	root, prefix, err := repositoryPathPrefix(ctx, v, dir)
+	if err != nil {
+		return nil, err
+	}
+	args := []string{"status", "--rev", rev}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		for _, p := range paths {
+			args = append(args, fmt.Sprintf("glob:%s%s", prefix, p))
+		}
+	}
+	out, err := vcsOutputRaw(ctx, root, bin, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s status: %w", bin, err)
+	}
+	return trimStatusColumns(splitStatusLines(out), 2), nil
+}
+
 func (v hgVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
 	out, err := vcsExec(ctx, "hg", "-R", dir, "log", "-r", ".", "--template", "{node}").Output()
 	if err != nil {

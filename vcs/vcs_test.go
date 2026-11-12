@@ -2409,3 +2409,80 @@ func TestParityRemoteURLByName(t *testing.T) {
 		}
 	})
 }
+
+// committedRevision is the full id of dir's last commit. jj's working copy is
+// a commit of its own, so its last commit is @'s parent.
+func committedRevision(t *testing.T, b parityBackend, dir string) string {
+	t.Helper()
+	if b.name == "jj" {
+		return strings.TrimSpace(vcsTestOutput(t, dir, "jj", "log", "-r", "@-", "--no-graph", "-T", "commit_id"))
+	}
+	c, err := b.drv.FindCommit(t.Context(), dir, "")
+	require.NoError(t, err)
+	return c.ID
+}
+
+// changedSince is b's ChangedSince, failing the test for a driver without it.
+func changedSince(t *testing.T, b parityBackend, dir, rev string, paths []string) []string {
+	t.Helper()
+	differ, ok := b.drv.(RevisionDiffer)
+	require.Truef(t, ok, "%s cannot list the paths changed since a revision", b.name)
+	got, err := differ.ChangedSince(t.Context(), dir, rev, paths)
+	require.NoError(t, err)
+	return got
+}
+
+// A commit since the revision is a change: the guard reads a worker's
+// committed loosening as pending until its authority holds it.
+func TestParityChangedSinceNamesACommittedChange(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n", "b.txt": "same\n"})
+		rev := committedRevision(t, b, dir)
+		writeRepositoryFile(t, dir, "a.txt", "two\n")
+		commitAll(t, b, dir, "loosen")
+
+		assert.Equal(t, []string{"a.txt"}, changedSince(t, b, dir, rev, nil), b.name)
+	})
+}
+
+func TestParityChangedSinceNamesAnEditAndAnUntrackedFile(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n", "b.txt": "same\n"})
+		rev := committedRevision(t, b, dir)
+		writeRepositoryFile(t, dir, "a.txt", "two\n")
+		writeRepositoryFile(t, dir, "new.txt", "new\n")
+
+		assert.ElementsMatch(t, []string{"a.txt", "new.txt"}, changedSince(t, b, dir, rev, nil), b.name)
+	})
+}
+
+func TestParityChangedSinceKeepsToItsPaths(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n", "b.txt": "one\n"})
+		rev := committedRevision(t, b, dir)
+		writeRepositoryFile(t, dir, "a.txt", "two\n")
+		writeRepositoryFile(t, dir, "b.txt", "two\n")
+
+		assert.Equal(t, []string{"a.txt"}, changedSince(t, b, dir, rev, []string{"a.txt"}), b.name)
+	})
+}
+
+func TestParityChangedSinceIsRepositoryRelative(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"root.txt": "r\n", "sub/a.txt": "s\n"})
+		rev := committedRevision(t, b, dir)
+		writeRepositoryFile(t, dir, "sub/a.txt", "changed\n")
+
+		assert.Equal(t, []string{"sub/a.txt"}, changedSince(t, b, filepath.Join(dir, "sub"), rev, []string{"a.txt"}), b.name)
+	})
+}
+
+func TestChangedSinceRejectsAFlagLikeRevision(t *testing.T) {
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "one\n"})
+	_, err := (gitVCS{}).ChangedSince(t.Context(), repo.Root(), "--output=x", nil)
+	assert.Error(t, err)
+}

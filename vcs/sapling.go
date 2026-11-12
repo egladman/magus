@@ -99,6 +99,11 @@ func (v saplingVCS) ChangedFiles(ctx context.Context, dir, base string) ([]strin
 	return splitLines(out), nil
 }
 
+// ChangedSince implements RevisionDiffer, as hg's does.
+func (v saplingVCS) ChangedSince(ctx context.Context, dir, rev string, paths []string) ([]string, error) {
+	return statusSince(ctx, v, "sl", dir, rev, paths)
+}
+
 func (v saplingVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
 	out, err := vcsExec(ctx, "sl", "-R", dir, "log", "-r", ".", "--template", "{node}").Output()
 	if err != nil {
