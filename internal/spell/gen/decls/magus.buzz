@@ -80,24 +80,6 @@ export enum<str> EntryPoint {
     server = "server",
 }
 
-export enum<str> RetryChange {
-    none = "",
-    config = "config",
-    widening = "widening",
-    person = "person",
-    upgrade = "upgrade",
-}
-
-export enum<str> JobState {
-    none = "",
-    declared = "declared",
-    running = "running",
-    exited = "exited",
-    pass = "pass",
-    fail = "fail",
-    noReturn = "no_return",
-}
-
 export enum<str> GoalKind {
     none = "",
     check = "check",
@@ -121,6 +103,16 @@ export enum<str> BriefFormat {
     buzz = "buzz",
 }
 
+export enum<str> JobState {
+    none = "",
+    declared = "declared",
+    running = "running",
+    exited = "exited",
+    pass = "pass",
+    fail = "fail",
+    noReturn = "no_return",
+}
+
 export enum<str> JobHolder {
     none = "",
     server = "server",
@@ -140,6 +132,23 @@ export enum<str> JobBaseVerdict {
     revisionMatch = "revision-match",
     diverged = "diverged",
     unknown = "unknown",
+}
+
+export enum<str> RetryChange {
+    none = "",
+    config = "config",
+    widening = "widening",
+    person = "person",
+    upgrade = "upgrade",
+}
+
+export enum<str> AttemptEnd {
+    none = "",
+    exit = "exit",
+    handback = "handback",
+    stop = "stop",
+    deadline = "deadline",
+    job = "job",
 }
 
 export enum<str> InflightAttention {
@@ -724,41 +733,6 @@ export object VerificationStatus {
     violations: [str] = [],
 }
 
-export object JobDenial {
-    rule: str = "",
-    reason: str = "",
-    action: str = "",
-    verdictRef: str = "",
-    ts: int = 0,
-}
-
-export object RetryVerdict {
-    retryable: bool = false,
-    change: RetryChange = RetryChange.none,
-    reason: str = "",
-    code: str = "",
-}
-
-export object PriorAttempt {
-    n: int = 0,
-    state: JobState = JobState.none,
-    observedGeneration: int = 0,
-    endReason: str = "",
-    modelTier: str = "",
-    checkpoint: str = "",
-    reportedBase: str = "",
-    ended: int = 0,
-    reworkRounds: int = 0,
-    widenings: int = 0,
-    unmet: [VerificationStatus] = [],
-    violations: [str] = [],
-    unresolvedRisks: [str] = [],
-    failingRefs: [str] = [],
-    denials: [JobDenial] = [],
-    denialsKnown: bool = false,
-    retry: RetryVerdict = RetryVerdict{},
-}
-
 export object JobRejection {
     unmet: [VerificationStatus] = [],
     violations: [str] = [],
@@ -825,33 +799,6 @@ export object JobWorktree {
     removed: int = 0,
     kept: str = "",
     made: bool = false,
-}
-
-export object JobResultValidation {
-    command: str = "",
-    outputRef: str = "",
-    owed: str = "",
-    unrun: str = "",
-}
-
-export object VerificationEvidence {
-    gateID: str = "",
-    outputRef: str = "",
-    owed: str = "",
-    unrun: str = "",
-}
-
-export object JobResult {
-    apiVersion: str = "",
-    requires: [str] = [],
-    job: str = "",
-    changedPaths: [str] = [],
-    validation: JobResultValidation = JobResultValidation{},
-    verificationEvidence: [VerificationEvidence] = [],
-    descendants: [str] = [],
-    unresolvedRisks: [str] = [],
-    followUps: [str] = [],
-    observedGeneration: int = 0,
 }
 
 export object JobAttempt {
@@ -927,8 +874,6 @@ export object Job {
     pausedBy: Origin = Origin{},
     pauseReason: str = "",
     pausedUntil: int = 0,
-    attempts: int = 0,
-    prior: [PriorAttempt] = [],
     rejection: JobRejection? = null,
     check: LeaseCheck? = null,
     validation: str = "",
@@ -953,7 +898,6 @@ export object Job {
     created: int = 0,
     updated: int = 0,
     deadline: int = 0,
-    result: JobResult? = null,
     attempt: JobAttempt? = null,
     gateAttempts: [JobGateAttempt] = [],
     lastRun: JobRun? = null,
@@ -1076,6 +1020,75 @@ export object Workspace {
     }
 }
 
+export object JobResultValidation {
+    command: str = "",
+    outputRef: str = "",
+    owed: str = "",
+    unrun: str = "",
+}
+
+export object VerificationEvidence {
+    gateID: str = "",
+    outputRef: str = "",
+    owed: str = "",
+    unrun: str = "",
+}
+
+export object JobResult {
+    apiVersion: str = "",
+    requires: [str] = [],
+    job: str = "",
+    changedPaths: [str] = [],
+    validation: JobResultValidation = JobResultValidation{},
+    verificationEvidence: [VerificationEvidence] = [],
+    descendants: [str] = [],
+    unresolvedRisks: [str] = [],
+    followUps: [str] = [],
+    observedGeneration: int = 0,
+}
+
+export object JobDenial {
+    rule: str = "",
+    reason: str = "",
+    action: str = "",
+    verdictRef: str = "",
+    ts: int = 0,
+}
+
+export object RetryVerdict {
+    retryable: bool = false,
+    change: RetryChange = RetryChange.none,
+    reason: str = "",
+    code: str = "",
+}
+
+export object AttemptStatus {
+    started: int = 0,
+    ended: int = 0,
+    end: AttemptEnd = AttemptEnd.none,
+    result: JobResult? = null,
+    state: JobState = JobState.none,
+    observedGeneration: int = 0,
+    endReason: str = "",
+    modelTier: str = "",
+    checkpoint: str = "",
+    reportedBase: str = "",
+    reworkRounds: int = 0,
+    widenings: int = 0,
+    unmet: [VerificationStatus] = [],
+    violations: [str] = [],
+    failingRefs: [str] = [],
+    denials: [JobDenial] = [],
+    denialsKnown: bool = false,
+    retry: RetryVerdict = RetryVerdict{},
+}
+
+export object Attempt {
+    job: str = "",
+    n: int = 0,
+    status: AttemptStatus = AttemptStatus{},
+}
+
 export object JobOverlapFootprint {
     verdict: str = "",
     shared: [str] = [],
@@ -1159,6 +1172,7 @@ export object JobUnmergedReport {
 
 export object JobList {
     jobs: [Job] = [],
+    attempts: [Attempt] = [],
     overlaps: [JobOverlap] = [],
     overdue: [str] = [],
     orphans: [str] = [],
@@ -2395,8 +2409,6 @@ export object StopRequest {
     event: str = "",
     stopHookActive: bool = false,
     transcript: str = "",
-    tasks: [str] = [],
-    tasksUnknown: str = "",
     checkout: CheckoutState? = null,
     dir: str = "",
     workspace: str = "",

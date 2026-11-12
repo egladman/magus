@@ -92,6 +92,7 @@ const jobsPrefix = "jobs/"
 func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJobsRequest]) (*connect.Response[jobv1.ListJobsResponse], error) {
 	running := s.runningByArgv(ctx)
 	list := s.report(ctx)
+	tries := types.NewJobAttempts(list.Attempts)
 	byID := make(map[string]types.Job, len(list.Jobs))
 	for _, row := range list.Jobs {
 		byID[row.ID] = row
@@ -101,11 +102,11 @@ func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJob
 	catalog := make(map[string]bool, len(all))
 	for _, j := range all {
 		catalog[j.Name] = true
-		out = append(out, s.job(j, running, byID[j.Name]))
+		out = append(out, s.job(j, running, byID[j.Name], tries.Result(j.Name)))
 	}
 	for _, row := range list.Jobs {
 		if !catalog[row.ID] {
-			out = append(out, delegatedJob(row))
+			out = append(out, delegatedJob(row, tries.Result(row.ID)))
 		}
 	}
 	resp := &jobv1.ListJobsResponse{
@@ -177,6 +178,19 @@ func (s *Service) row(name string) types.Job {
 	return types.Job{}
 }
 
+// result is what the job named name's live attempt filed, nil when it
+// filed nothing or the store will not read; see [Service.report].
+func (s *Service) result(name string) *types.JobResult {
+	if s.store == nil {
+		return nil
+	}
+	tries, err := s.store.Attempts()
+	if err != nil {
+		return nil
+	}
+	return types.NewJobAttempts(tries).Result(name)
+}
+
 // wireOverlaps maps the overlaps [jobstore.Store.Report] derived and measured.
 func wireOverlaps(derived []types.JobOverlap) []*jobv1.JobOverlap {
 	out := make([]*jobv1.JobOverlap, 0, len(derived))
@@ -223,7 +237,7 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	info := s.job(j, running, s.row(j.Name))
+	info := s.job(j, running, s.row(j.Name), s.result(j.Name))
 
 	state := jobv1.SubmitState_SUBMIT_STATE_SUBMITTED
 	if inv == "" { // the server coalesced this into an identical in-flight job
@@ -267,7 +281,7 @@ func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv
 // job assembles a job's descriptor plus its running state, last completed run (from the
 // trail), and the current size of what it maintains. running maps a worker-argv key to the live
 // invocation id, so ListJobs and submit share one status query.
-func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row types.Job) *jobv1.Job {
+func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row types.Job, result *types.JobResult) *jobv1.Job {
 	info := &jobv1.Job{
 		Name:        jobsPrefix + j.Name,
 		Id:          j.Name,
@@ -290,7 +304,7 @@ func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row ty
 		info.LastRun = lastRun(ev)
 	}
 	info.Goals = wireGoals(row.Goals)
-	info.Result = wireJobResult(row.Result)
+	info.Result = wireJobResult(result)
 	return info
 }
 
@@ -301,7 +315,7 @@ func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row ty
 // Running is left unset rather than derived from the state. Nothing here watched the
 // worker, and a row still reading `running` after its holder died would be the stored
 // running flag this service refuses to keep for the catalog.
-func delegatedJob(row types.Job) *jobv1.Job {
+func delegatedJob(row types.Job, result *types.JobResult) *jobv1.Job {
 	j := &jobv1.Job{
 		Name:       jobsPrefix + row.ID,
 		Id:         row.ID,
@@ -319,7 +333,7 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		Created:    row.Created,
 		Updated:    row.Updated,
 		Goals:      wireGoals(row.Goals),
-		Result:     wireJobResult(row.Result),
+		Result:     wireJobResult(result),
 		Deadline:   row.Deadline,
 
 		EndReason:      row.EndReason,

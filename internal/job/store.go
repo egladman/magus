@@ -139,6 +139,7 @@ type storeConfig struct {
 var jobMigrations = []migrate.Migration{
 	{Name: "model, criteria and fresh_reason move under agent", Up: agentSection},
 	{Name: "worker type resume becomes resumed", Up: workerResumed},
+	{Name: triesMoved, Up: dropTries},
 }
 
 // workerResumed respells a stored worker type "resume" as "resumed", the
@@ -453,7 +454,7 @@ func requiredFeatures(row types.Job) []string {
 	}
 	// Every row has a generation, so a row carrying only that is not stamped: it would make
 	// every row read-only to an older magus.
-	if row.MaxAttempts > 0 || len(row.Prior) > 0 || row.Attempts > 1 {
+	if row.MaxAttempts > 0 {
 		out = append(out, "job-generations")
 	}
 	slices.Sort(out)
@@ -755,8 +756,9 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 	actor := s.Actor()
 	var stored types.Job
 	var ended endings
+	var folded *types.Attempt
 	err := s.update(ctx, func(f *jobsFile) error {
-		ended = endings{}
+		ended, folded = endings{}, nil
 		i := slices.IndexFunc(f.Jobs, func(e types.Job) bool { return e.ID == id })
 		var prev types.Job
 		if i >= 0 {
@@ -810,9 +812,16 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 			// and a checkout left on it would refuse every new taker and, once that
 			// worktree is gone, end the row again on the next sweep.
 			if refork {
-				if aerr := refuseAttempt(id, prev, row); aerr != nil {
+				all, aerr := s.Attempts()
+				if aerr != nil {
 					return aerr
 				}
+				tries := types.NewJobAttempts(all)
+				if aerr := refuseAttempt(id, tries.LiveN(id), row); aerr != nil {
+					return aerr
+				}
+				fold := foldAttempt(prev, tries.Live(id), tries.Prior(id), denials, denialsKnown, now)
+				folded = &fold
 				row.ReportedBase, row.BaseVerdict, row.Registered, row.CheckoutRoot = "", "", 0, ""
 			}
 			if kind != asObservation {
@@ -850,7 +859,11 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 		case row.State.Live():
 			row.EndReason = ""
 		case i >= 0 && prev.State.Live() && row.State == types.StateNoReturn:
-			row.EndReason = endedReason(prev, s.endsOwnRow(prev))
+			all, aerr := s.Attempts()
+			if aerr != nil {
+				return aerr
+			}
+			row.EndReason = endedReason(prev, types.NewJobAttempts(all).Result(id) != nil, s.endsOwnRow(prev))
 		case i >= 0 && prev.State.Live() && row.State == types.StatePass && gradedByHolder(prev):
 			row.EndReason = returnedReason
 		}
@@ -903,19 +916,15 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 			slices.ContainsFunc(row.WritePaths, func(p string) bool { return !slices.Contains(prev.WritePaths, p) }) {
 			row.Widenings++
 		}
-		// The generation and the attempt record are the store's too. Only a wait records a
-		// rejection, and a fork of the next attempt folds this one into Prior and starts the
-		// evidence and the counters over, so the next ending counts its own attempt alone.
+		// The generation and the evidence are the store's too. Only a wait
+		// records a rejection. A fork of the next attempt starts the
+		// evidence and the counters over.
 		row.Generation = nextGeneration(prev, row, i >= 0, kind)
-		row.Attempts, row.Prior = max(prev.Attempts, 1), prev.Prior
 		if kind != asVerdict {
 			row.Rejection = prev.Rejection
 		}
 		if refork {
-			row.Prior = append(slices.Clone(prev.Prior), foldAttempt(prev, denials, denialsKnown, now))
-			row.Prior = row.Prior[max(len(row.Prior)-maxPrior, 0):]
-			row.Attempts++
-			row.Result, row.Attempt, row.GateAttempts, row.Rejection = nil, nil, nil, nil
+			row.Attempt, row.GateAttempts, row.Rejection = nil, nil, nil
 			row.Integration, row.WaiterEvidence = nil, nil
 			row.ReworkRounds, row.Widenings, row.Claims = 0, 0, nil
 		}
@@ -941,6 +950,12 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 	})
 	if err != nil {
 		return types.Job{}, err
+	}
+	// After the row, so a refused write folds nothing.
+	if folded != nil {
+		if err := s.appendAttempts(ctx, *folded); err != nil {
+			return stored, fmt.Errorf("job: %s was forked again, and its last attempt was not folded: %w", id, err)
+		}
 	}
 	if err := ended.record(ctx, time.Now().UnixMilli()); err != nil {
 		return stored, err
@@ -969,7 +984,11 @@ func (s *Store) endedAttemptDenials(id string) ([]types.JobDenial, bool) {
 	if err != nil {
 		return nil, false
 	}
-	denials, known, err := trail.LeaseDenials(base, id, attemptStart(row), maxDenialsRead)
+	all, err := s.Attempts()
+	if err != nil {
+		return nil, false
+	}
+	denials, known, err := trail.LeaseDenials(base, id, attemptStart(row, types.NewJobAttempts(all)), maxDenialsRead)
 	if err != nil {
 		return nil, false
 	}
@@ -1107,8 +1126,12 @@ func (s *Store) archive(f jobsFile) error {
 	if err != nil {
 		return err
 	}
-	name := fmt.Sprintf("jobs-%s.jsonl", time.Now().UTC().Format("20060102T150405Z"))
-	return file.RewriteLines(filepath.Join(filepath.Dir(s.path), name), lines, 0o600)
+	stamp := time.Now().UTC().Format("20060102T150405Z")
+	dir := filepath.Dir(s.path)
+	if err := s.archiveAttempts(filepath.Join(dir, fmt.Sprintf("jobs-%s.attempts.jsonl", stamp)), f.Jobs); err != nil {
+		return err
+	}
+	return file.RewriteLines(filepath.Join(dir, fmt.Sprintf("jobs-%s.jsonl", stamp)), lines, 0o600)
 }
 
 // update runs fn over the ledger as it stands under the file lock beside jobs.jsonl, so a
@@ -1133,6 +1156,10 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 		if err != nil {
 			return err
 		}
+		gone := make(map[string]bool, len(f.Jobs))
+		for _, row := range f.Jobs {
+			gone[row.ID] = true
+		}
 		if err := fn(&f); err != nil {
 			if errors.Is(err, file.ErrSkipWrite) {
 				return nil
@@ -1146,7 +1173,13 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 		if retained != 0 && f.Retained != retained {
 			s.pruneFootprints(f.Jobs)
 		}
-		return s.write(f, log)
+		if err := s.write(f, log); err != nil {
+			return err
+		}
+		for _, row := range f.Jobs {
+			delete(gone, row.ID)
+		}
+		return s.dropAttempts(ctx, gone)
 	})
 }
 
@@ -1294,6 +1327,11 @@ func (s *Store) migrate(found int, held bool) error {
 		return refuse(err)
 	}
 	apply := func() error {
+		if i := slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == triesMoved }); i >= found {
+			if err := s.moveTries(context.Background()); err != nil {
+				return fmt.Errorf("job: moving tries to %s: %w", attemptsFileName, err)
+			}
+		}
 		res, err := st.Apply()
 		if err != nil {
 			return refuse(err)

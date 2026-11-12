@@ -587,19 +587,20 @@ func (f forkedTier) rankedAbove(host, model string) string {
 // recoversOwnCheckout reports a line that runs root's checkout.bootstrap with
 // --here --recover and nothing else. Only that entry is root work; ordinary
 // builds remain delegated. A workspace declaring no hook has no such line.
-func readsCitedResult(rows []types.Job, line string, at location) bool {
+func readsCitedResult(tries types.JobAttempts, line string, at location) bool {
 	paths := focusReadPaths(line, cmp.Or(at.dir, at.workspace), userHome())
 	if len(paths) == 0 {
 		return false
 	}
 	var cited []string
-	for _, row := range rows {
-		if row.Result == nil {
+	for job := range tries {
+		result := tries.Result(job)
+		if result == nil {
 			continue
 		}
-		cited = append(cited, row.Result.ChangedPaths...)
-		cited = append(cited, row.Result.UnresolvedRisks...)
-		cited = append(cited, row.Result.FollowUps...)
+		cited = append(cited, result.ChangedPaths...)
+		cited = append(cited, result.UnresolvedRisks...)
+		cited = append(cited, result.FollowUps...)
 	}
 	return len(cited) > 0 && !slices.ContainsFunc(paths, func(p string) bool { return !citesPath(cited, p) })
 }

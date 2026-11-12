@@ -1002,6 +1002,39 @@ github.com/egladman/magus/types.ArtifactVersion.Entry field string
 github.com/egladman/magus/types.ArtifactVersion.Short field string
 github.com/egladman/magus/types.ArtifactVersion.Size field int64
 github.com/egladman/magus/types.ArtifactVersion.Target field string
+github.com/egladman/magus/types.Attempt type struct
+github.com/egladman/magus/types.Attempt.Bound method func(deadline int64, now int64) Attempt
+github.com/egladman/magus/types.Attempt.Clone method func() Attempt
+github.com/egladman/magus/types.Attempt.Job field string "json:\"job\"    yaml:\"job\""
+github.com/egladman/magus/types.Attempt.N field int "json:\"n\"      yaml:\"n\""
+github.com/egladman/magus/types.Attempt.Running method func() bool
+github.com/egladman/magus/types.Attempt.Status field AttemptStatus "json:\"status\" yaml:\"status\""
+github.com/egladman/magus/types.Attempt.Superseded method func() bool
+github.com/egladman/magus/types.AttemptEnd type string
+github.com/egladman/magus/types.AttemptEndDeadline const AttemptEnd = "deadline"
+github.com/egladman/magus/types.AttemptEndExit const AttemptEnd = "exit"
+github.com/egladman/magus/types.AttemptEndHandback const AttemptEnd = "handback"
+github.com/egladman/magus/types.AttemptEndJob const AttemptEnd = "job"
+github.com/egladman/magus/types.AttemptEndStop const AttemptEnd = "stop"
+github.com/egladman/magus/types.AttemptStatus type struct
+github.com/egladman/magus/types.AttemptStatus.Checkpoint field string "json:\"checkpoint,omitempty\"          yaml:\"checkpoint,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.Denials field []JobDenial "json:\"denials,omitempty\"       yaml:\"denials,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.DenialsKnown field bool "json:\"denials_known,omitempty\" yaml:\"denials_known,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.End field AttemptEnd "json:\"end,omitempty\"   yaml:\"end,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.EndReason field string "json:\"end_reason,omitempty\"          yaml:\"end_reason,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.Ended field int64 "json:\"ended,omitempty\" yaml:\"ended,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.FailingRefs field []string "json:\"failing_refs,omitempty\" yaml:\"failing_refs,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.ModelTier field string "json:\"model_tier,omitempty\"          yaml:\"model_tier,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.ObservedGeneration field int "json:\"observed_generation,omitzero\"  yaml:\"observed_generation,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.ReportedBase field string "json:\"reported_base,omitempty\"       yaml:\"reported_base,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.Result field *JobResult "json:\"result,omitempty\" yaml:\"result,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.Retry field RetryVerdict "json:\"retry,omitzero\"          yaml:\"retry,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.ReworkRounds field int "json:\"rework_rounds,omitempty\"       yaml:\"rework_rounds,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.Started field int64 "json:\"started,omitempty\" yaml:\"started,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.State field JobState "json:\"state,omitempty\"               yaml:\"state,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.Unmet field []VerificationStatus "json:\"unmet,omitempty\"               yaml:\"unmet,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.Violations field []string "json:\"violations,omitempty\"          yaml:\"violations,omitempty\""
+github.com/egladman/magus/types.AttemptStatus.Widenings field int "json:\"widenings,omitempty\"           yaml:\"widenings,omitempty\""
 github.com/egladman/magus/types.AttentionAuthor const InflightAttention = "author"
 github.com/egladman/magus/types.AttentionList type struct
 github.com/egladman/magus/types.AttentionList.Requests field []AttentionRequest "json:\"requests\""
@@ -2629,7 +2662,6 @@ github.com/egladman/magus/types.IsWrapperInvocation func(ref string) bool
 github.com/egladman/magus/types.Job type struct
 github.com/egladman/magus/types.Job.Agent field *github.com/egladman/magus/types/agent.Spec "json:\"agent,omitempty\" yaml:\"agent,omitempty\""
 github.com/egladman/magus/types.Job.Attempt field *JobAttempt "json:\"attempt,omitempty\" yaml:\"attempt,omitempty\""
-github.com/egladman/magus/types.Job.Attempts field int "json:\"attempts,omitempty\"  yaml:\"attempts,omitempty\""
 github.com/egladman/magus/types.Job.BaseVerdict field JobBaseVerdict "json:\"base_verdict,omitempty\" yaml:\"base_verdict,omitempty\""
 github.com/egladman/magus/types.Job.Breaks field []string "json:\"breaks,omitempty\" yaml:\"breaks,omitempty\""
 github.com/egladman/magus/types.Job.BriefFormat field BriefFormat "json:\"brief_format,omitempty\" yaml:\"brief_format,omitempty\""
@@ -2676,7 +2708,6 @@ github.com/egladman/magus/types.Job.Paused field int64 "json:\"paused,omitzero\"
 github.com/egladman/magus/types.Job.PausedAt method func(now int64) bool
 github.com/egladman/magus/types.Job.PausedBy field Origin "json:\"paused_by,omitzero\"    yaml:\"paused_by,omitempty\""
 github.com/egladman/magus/types.Job.PausedUntil field int64 "json:\"paused_until,omitzero\" yaml:\"paused_until,omitempty\""
-github.com/egladman/magus/types.Job.Prior field []PriorAttempt "json:\"prior,omitempty\"     yaml:\"prior,omitempty\""
 github.com/egladman/magus/types.Job.ReadOnly field bool "json:\"read_only,omitempty\" yaml:\"read_only,omitempty\""
 github.com/egladman/magus/types.Job.ReadPaths field []string "json:\"read_paths,omitempty\" yaml:\"read_paths,omitempty\""
 github.com/egladman/magus/types.Job.Registered field int64 "json:\"registered,omitempty\" yaml:\"registered,omitempty\""
@@ -2685,7 +2716,6 @@ github.com/egladman/magus/types.Job.Rejection field *JobRejection "json:\"reject
 github.com/egladman/magus/types.Job.ReleaseRequests field []JobReleaseRequest "json:\"release_requests,omitempty\" yaml:\"release_requests,omitempty\" buzz:\"-\""
 github.com/egladman/magus/types.Job.Releases field []JobRelease "json:\"releases,omitempty\" yaml:\"releases,omitempty\""
 github.com/egladman/magus/types.Job.ReportedBase field string "json:\"reported_base,omitempty\" yaml:\"reported_base,omitempty\""
-github.com/egladman/magus/types.Job.Result field *JobResult "json:\"result,omitempty\"  yaml:\"result,omitempty\""
 github.com/egladman/magus/types.Job.ReworkRounds field int "json:\"rework_rounds,omitempty\" yaml:\"rework_rounds,omitempty\""
 github.com/egladman/magus/types.Job.Schema embedded Schema "yaml:\",inline\""
 github.com/egladman/magus/types.Job.SoftPaths field []string "json:\"soft_paths,omitempty\" yaml:\"soft_paths,omitempty\""
@@ -2720,6 +2750,11 @@ github.com/egladman/magus/types.JobAttempt.Spell field string "json:\"spell,omit
 github.com/egladman/magus/types.JobAttempt.String method func() string
 github.com/egladman/magus/types.JobAttempt.Target field string "json:\"target,omitempty\" yaml:\"target,omitempty\""
 github.com/egladman/magus/types.JobAttempt.TimestampMs field int64 "json:\"timestamp_ms,omitempty\" yaml:\"timestamp_ms,omitempty\""
+github.com/egladman/magus/types.JobAttempts type map[string][]Attempt
+github.com/egladman/magus/types.JobAttempts.Live method func(job string) Attempt
+github.com/egladman/magus/types.JobAttempts.LiveN method func(job string) int
+github.com/egladman/magus/types.JobAttempts.Prior method func(job string) []Attempt
+github.com/egladman/magus/types.JobAttempts.Result method func(job string) *JobResult
 github.com/egladman/magus/types.JobBaseVerdict type string
 github.com/egladman/magus/types.JobBlock type struct
 github.com/egladman/magus/types.JobBlock.Job field string "json:\"job\"             yaml:\"job\""
@@ -2781,7 +2816,7 @@ github.com/egladman/magus/types.JobGrant.Attempt field int "json:\"attempt,omitz
 github.com/egladman/magus/types.JobGrant.By field Origin "json:\"by\" yaml:\"by\""
 github.com/egladman/magus/types.JobGrant.Job field string "json:\"job\" yaml:\"job\""
 github.com/egladman/magus/types.JobGrant.Key method func() string
-github.com/egladman/magus/types.JobGrant.Lowers method func(row Job, now int64) bool
+github.com/egladman/magus/types.JobGrant.Lowers method func(row Job, attempt int, now int64) bool
 github.com/egladman/magus/types.JobGrant.Revoked field bool "json:\"revoked,omitzero\" yaml:\"revoked,omitempty\""
 github.com/egladman/magus/types.JobGrant.Rule field string "json:\"rule\" yaml:\"rule\""
 github.com/egladman/magus/types.JobGrant.Until field int64 "json:\"until,omitzero\" yaml:\"until,omitempty\""
@@ -2806,11 +2841,12 @@ github.com/egladman/magus/types.JobKindScript const JobKind = "script"
 github.com/egladman/magus/types.JobKindSymbol const JobKind = "symbol"
 github.com/egladman/magus/types.JobLeaseFromContext func(ctx context.Context) string
 github.com/egladman/magus/types.JobList type struct
+github.com/egladman/magus/types.JobList.Attempts field []Attempt "json:\"attempts,omitempty\" yaml:\"attempts,omitempty\""
 github.com/egladman/magus/types.JobList.Blocked field []JobBlock "json:\"blocked,omitempty\" yaml:\"blocked,omitempty\""
 github.com/egladman/magus/types.JobList.Changes field []InflightChange "json:\"changes,omitempty\" yaml:\"changes,omitempty\""
 github.com/egladman/magus/types.JobList.Fetched field *InflightFetch "json:\"fetched,omitempty\" yaml:\"fetched,omitempty\""
 github.com/egladman/magus/types.JobList.Flag method func(now int64, staleAfter time.Duration) JobList
-github.com/egladman/magus/types.JobList.Jobs field []Job "json:\"jobs\"               yaml:\"jobs\""
+github.com/egladman/magus/types.JobList.Jobs field []Job "json:\"jobs\" yaml:\"jobs\""
 github.com/egladman/magus/types.JobList.Orphans field []string "json:\"orphans,omitempty\" yaml:\"orphans,omitempty\""
 github.com/egladman/magus/types.JobList.Overdue field []string "json:\"overdue,omitempty\" yaml:\"overdue,omitempty\""
 github.com/egladman/magus/types.JobList.Overlaps field []JobOverlap "json:\"overlaps,omitempty\" yaml:\"overlaps,omitempty\""
@@ -3879,6 +3915,7 @@ github.com/egladman/magus/types.NestedOwner func(rel string, nested []string) st
 github.com/egladman/magus/types.NewFileReport func(files []FileEntry) FileReport
 github.com/egladman/magus/types.NewGraph func(repo DepGraphRepository, projects map[string]*Project) *Graph
 github.com/egladman/magus/types.NewGraphConfig func(initial Observer) *GraphConfig
+github.com/egladman/magus/types.NewJobAttempts func(all []Attempt) JobAttempts
 github.com/egladman/magus/types.NewJobList func(jobs []Job) JobList
 github.com/egladman/magus/types.NewProjectRef func(path string, dir string) ProjectRef
 github.com/egladman/magus/types.NewSecret func(s string) Secret
@@ -4132,24 +4169,6 @@ github.com/egladman/magus/types.PriceStep type struct
 github.com/egladman/magus/types.PriceStep.Above field int64
 github.com/egladman/magus/types.PriceStep.Multiplier field float64
 github.com/egladman/magus/types.PrimaryGoalID const untyped string = "check"
-github.com/egladman/magus/types.PriorAttempt type struct
-github.com/egladman/magus/types.PriorAttempt.Checkpoint field string "json:\"checkpoint,omitempty\"          yaml:\"checkpoint,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.Denials field []JobDenial "json:\"denials,omitempty\"      yaml:\"denials,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.DenialsKnown field bool "json:\"denials_known\"          yaml:\"denials_known\""
-github.com/egladman/magus/types.PriorAttempt.EndReason field string "json:\"end_reason,omitempty\"          yaml:\"end_reason,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.Ended field int64 "json:\"ended,omitempty\"               yaml:\"ended,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.FailingRefs field []string "json:\"failing_refs,omitempty\" yaml:\"failing_refs,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.ModelTier field string "json:\"model_tier,omitempty\"          yaml:\"model_tier,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.N field int "json:\"n\"                             yaml:\"n\""
-github.com/egladman/magus/types.PriorAttempt.ObservedGeneration field int "json:\"observed_generation,omitzero\"  yaml:\"observed_generation,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.ReportedBase field string "json:\"reported_base,omitempty\"       yaml:\"reported_base,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.Retry field RetryVerdict "json:\"retry\"                  yaml:\"retry\""
-github.com/egladman/magus/types.PriorAttempt.ReworkRounds field int "json:\"rework_rounds,omitempty\"       yaml:\"rework_rounds,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.State field JobState "json:\"state\"                         yaml:\"state\""
-github.com/egladman/magus/types.PriorAttempt.Unmet field []VerificationStatus "json:\"unmet,omitempty\"               yaml:\"unmet,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.UnresolvedRisks field []string "json:\"unresolved_risks,omitempty\"    yaml:\"unresolved_risks,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.Violations field []string "json:\"violations,omitempty\"          yaml:\"violations,omitempty\""
-github.com/egladman/magus/types.PriorAttempt.Widenings field int "json:\"widenings,omitempty\"        yaml:\"widenings,omitempty\""
 github.com/egladman/magus/types.ProcSocketWithheld const DiagnosticCode = "MGS2008"
 github.com/egladman/magus/types.ProfileAggressive const ConcurrencyProfile = "aggressive"
 github.com/egladman/magus/types.ProfileBalanced const ConcurrencyProfile = "balanced"
@@ -4752,8 +4771,6 @@ github.com/egladman/magus/types.StopRequest.Parent field string
 github.com/egladman/magus/types.StopRequest.Role field AgentRole
 github.com/egladman/magus/types.StopRequest.Session field string
 github.com/egladman/magus/types.StopRequest.StopHookActive field bool
-github.com/egladman/magus/types.StopRequest.Tasks field []string
-github.com/egladman/magus/types.StopRequest.TasksUnknown field string
 github.com/egladman/magus/types.StopRequest.Thread field AgentThread
 github.com/egladman/magus/types.StopRequest.ThreadFrom field ThreadSource
 github.com/egladman/magus/types.StopRequest.Transcript field string

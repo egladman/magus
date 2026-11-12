@@ -11,8 +11,6 @@ import (
 )
 
 const (
-	// maxPrior is how many ended attempts a row keeps, newest last.
-	maxPrior = 3
 	// maxFolded caps each list one ended attempt keeps.
 	maxFolded = 8
 	// maxDenialsRead caps the denials read from the trail for one attempt, before the fold
@@ -63,9 +61,8 @@ func widens(held, next []string) bool {
 
 // refuseAttempt refuses a fork of ended row prev, declared again as row, that starts an
 // attempt past row's max_attempts. The cap read is the new record's, so a fork that raises
-// it in the same write passes.
-func refuseAttempt(id string, prev, row types.Job) error {
-	used := max(prev.Attempts, 1)
+// it in the same write passes. used is prev's live attempt.
+func refuseAttempt(id string, used int, row types.Job) error {
 	if row.MaxAttempts == 0 || used < row.MaxAttempts {
 		return nil
 	}
@@ -78,19 +75,16 @@ func refuseAttempt(id string, prev, row types.Job) error {
 // what its last wait refused, what it left unresolved and the failed runs to reopen, with
 // denials the guard's refusals of its holder and known whether the trail still reached back
 // to its start. now stands in for an end prev never stamped.
-func foldAttempt(prev types.Job, denials []types.JobDenial, known bool, now int64) types.PriorAttempt {
-	p := types.PriorAttempt{
-		N:                  max(prev.Attempts, 1),
-		State:              prev.State,
-		ObservedGeneration: prev.Generation,
-		EndReason:          prev.EndReason,
-		Checkpoint:         prev.Checkpoint,
-		ReportedBase:       prev.ReportedBase,
-		Ended:              cmp.Or(prev.Updated, now),
-		ReworkRounds:       prev.ReworkRounds,
-		Widenings:          prev.Widenings,
-		Denials:            slices.Clone(denials[max(len(denials)-maxFolded, 0):]),
-		DenialsKnown:       known,
+// live is prev's try, and earlier the tries before it.
+func foldAttempt(prev types.Job, live types.Attempt, earlier []types.Attempt, denials []types.JobDenial, known bool, now int64) types.Attempt {
+	a := live.Clone()
+	p := &a.Status
+	p.State, p.ObservedGeneration, p.EndReason = prev.State, prev.Generation, prev.EndReason
+	p.Checkpoint, p.ReportedBase = prev.Checkpoint, prev.ReportedBase
+	p.ReworkRounds, p.Widenings = prev.ReworkRounds, prev.Widenings
+	p.Denials, p.DenialsKnown = slices.Clone(denials[max(len(denials)-maxFolded, 0):]), known
+	if p.Ended == 0 {
+		p.Ended, p.End = cmp.Or(prev.Updated, now), types.AttemptEndJob
 	}
 	if prev.ModelTier != nil {
 		p.ModelTier = prev.ModelTier.Name
@@ -98,9 +92,6 @@ func foldAttempt(prev types.Job, denials []types.JobDenial, known bool, now int6
 	if r := prev.Rejection; r != nil {
 		p.Unmet = cloneGates(r.Unmet[:min(len(r.Unmet), maxFolded)])
 		p.Violations = slices.Clone(r.Violations[:min(len(r.Violations), maxFolded)])
-	}
-	if r := prev.Result; r != nil {
-		p.UnresolvedRisks = slices.Clone(r.UnresolvedRisks[:min(len(r.UnresolvedRisks), maxFolded)])
 	}
 	runs := make([]types.JobAttempt, 0, len(prev.GateAttempts)+1)
 	if prev.Attempt != nil {
@@ -114,8 +105,8 @@ func foldAttempt(prev types.Job, denials []types.JobDenial, known bool, now int6
 			p.FailingRefs = append(p.FailingRefs, run.Ref)
 		}
 	}
-	p.Retry = classifyAttempt(p, prev.Prior)
-	return p
+	p.Retry = classifyAttempt(a, earlier)
+	return a
 }
 
 // classifyAttempt says what must change before another attempt like p could help, earlier
@@ -123,8 +114,8 @@ func foldAttempt(prev types.Job, denials []types.JobDenial, known bool, now int6
 // write paths needs a widening; a goal unmet in p and in the attempt before it needs a
 // person, since a second agent already failed it. Anything else, an end the sweep wrote
 // included, is retryable as is.
-func classifyAttempt(p types.PriorAttempt, earlier []types.PriorAttempt) types.RetryVerdict {
-	for _, d := range p.Denials {
+func classifyAttempt(p types.Attempt, earlier []types.Attempt) types.RetryVerdict {
+	for _, d := range p.Status.Denials {
 		if slices.Contains(wideningRules, d.Rule) {
 			reason := "the guard denied its holder under " + d.Rule
 			if line := firstLine(d.Reason); line != "" {
@@ -133,15 +124,15 @@ func classifyAttempt(p types.PriorAttempt, earlier []types.PriorAttempt) types.R
 			return types.RetryVerdict{Change: types.RetryAfterWidening, Reason: reason}
 		}
 	}
-	for _, v := range p.Violations {
+	for _, v := range p.Status.Violations {
 		if strings.Contains(v, outsideWritePaths) {
 			return types.RetryVerdict{Change: types.RetryAfterWidening, Reason: v}
 		}
 	}
 	if n := len(earlier); n > 0 {
 		before := earlier[n-1]
-		for _, goal := range p.Unmet {
-			if slices.ContainsFunc(before.Unmet, func(g types.VerificationStatus) bool { return g.ID == goal.ID }) {
+		for _, goal := range p.Status.Unmet {
+			if slices.ContainsFunc(before.Status.Unmet, func(g types.VerificationStatus) bool { return g.ID == goal.ID }) {
 				return types.RetryVerdict{Change: types.RetryAfterPerson,
 					Reason: fmt.Sprintf("goal %s was unmet in attempts %d and %d", goal.ID, before.N, p.N)}
 			}
@@ -158,7 +149,8 @@ func classifyAttempt(p types.PriorAttempt, earlier []types.PriorAttempt) types.R
 // something else. A result filed then still grades, its changed paths checked against the
 // diff either way, and only marks prior. A record with no stamp is unknown and grades as
 // current.
-func evidenceAt(row types.Job) (ev graded, prior int) {
+// result is what row's live attempt filed.
+func evidenceAt(row types.Job, result *types.JobResult) (ev graded, prior int) {
 	older := func(observed int) bool {
 		if !row.StaleAt(observed) {
 			return false
@@ -169,9 +161,9 @@ func evidenceAt(row types.Job) (ev graded, prior int) {
 		return true
 	}
 	ev.result = types.JobResult{Job: row.ID}
-	if row.Result != nil {
-		ev.result = *row.Result
-		older(row.Result.ObservedGeneration)
+	if result != nil {
+		ev.result = *result
+		older(result.ObservedGeneration)
 	}
 	if row.Attempt != nil && !older(row.Attempt.ObservedGeneration) {
 		ev.attempt = *row.Attempt

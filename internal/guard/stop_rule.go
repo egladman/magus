@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/workspace"
@@ -77,7 +76,6 @@ func stopRequest(ctx context.Context, deps Dependencies, env stopEnvelope, who h
 	if env.AgentID != "" {
 		transcript = cmp.Or(env.AgentTranscriptPath, transcript)
 	}
-	tasks, tasksUnknown := liveSubagents(transcript, facts.CacheDir(), time.Now())
 	req := types.StopRequest{
 		Host:           who.Host,
 		Session:        who.Session,
@@ -92,8 +90,6 @@ func stopRequest(ctx context.Context, deps Dependencies, env stopEnvelope, who h
 		Event:          who.Event,
 		StopHookActive: env.StopHookActive != nil && *env.StopHookActive,
 		Transcript:     transcript,
-		Tasks:          tasks,
-		TasksUnknown:   tasksUnknown,
 		Dir:            at.dir,
 		Workspace:      at.workspace,
 	}

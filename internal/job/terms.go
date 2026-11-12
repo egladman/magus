@@ -81,6 +81,8 @@ type Terms struct {
 	// TestScope is the narrow test run per project and spell the write paths
 	// reach, from [NarrowTestScope].
 	TestScope []TestScope `json:"test_scope,omitempty" yaml:"test_scope,omitempty"`
+	// Attempts are the lease's tries the store holds, oldest first.
+	Attempts []types.Attempt `json:"attempts,omitempty" yaml:"attempts,omitempty"`
 }
 
 // TermsEvidence is what the knowledge graph knows about one write path: the node it
@@ -135,6 +137,7 @@ type TermsFacts struct {
 	ReferencedOutside    []ReferencedFile
 	ReferencedOutsideGap string
 	TestScope            []TestScope
+	Attempts             []types.Attempt
 }
 
 // NewTerms renders one job's terms: the job itself, plus what the workspace contributed.
@@ -155,6 +158,7 @@ func NewTerms(row types.Job, facts TermsFacts) Terms {
 		ReferencedOutside:    facts.ReferencedOutside,
 		ReferencedOutsideGap: facts.ReferencedOutsideGap,
 		TestScope:            facts.TestScope,
+		Attempts:             facts.Attempts,
 	}
 }
 
@@ -179,7 +183,7 @@ func (b Terms) String() string {
 
 	writeList(&s, "interface", interfaceLines(b.Lease.Goals))
 	writeBlock(&s, "instructions", b.Lease.Instructions())
-	writeAttempts(&s, b.Lease)
+	writeAttempts(&s, b.Lease, types.NewJobAttempts(b.Attempts))
 	writeList(&s, "may break", b.Lease.Breaks)
 	if b.Stage.Known() {
 		writeList(&s, "release stage", []string{stageLine(b.Stage)})
@@ -284,29 +288,31 @@ const maxUnmetShown = 5
 // the newest in full, so the next holder starts from what failed and never from a
 // transcript, and each older one in a line, newest first. A first attempt with no cap writes
 // nothing.
-func writeAttempts(s *strings.Builder, row types.Job) {
-	if row.Attempts > 1 || row.MaxAttempts > 0 {
-		line := fmt.Sprintf("attempt %d", max(row.Attempts, 1))
+func writeAttempts(s *strings.Builder, row types.Job, tries types.JobAttempts) {
+	if n := tries.LiveN(row.ID); n > 1 || row.MaxAttempts > 0 {
+		line := fmt.Sprintf("attempt %d", n)
 		if row.MaxAttempts > 0 {
 			line += fmt.Sprintf(" of %d", row.MaxAttempts)
 		}
 		fmt.Fprintf(s, "\n%s\n", line)
 	}
-	if len(row.Prior) == 0 {
+	prior := tries.Prior(row.ID)
+	if len(prior) == 0 {
 		return
 	}
-	newest := row.Prior[len(row.Prior)-1]
+	newest := prior[len(prior)-1]
 	lines := append([]string{priorSummary(newest)}, priorDetail(newest)...)
-	for _, p := range slices.Backward(row.Prior[:len(row.Prior)-1]) {
-		lines = append(lines, fmt.Sprintf("%s, %s", priorSummary(p), retryLine(p.Retry)))
+	for _, p := range slices.Backward(prior[:len(prior)-1]) {
+		lines = append(lines, fmt.Sprintf("%s, %s", priorSummary(p), retryLine(p.Status.Retry)))
 	}
 	writeList(s, "previous attempts", lines)
 }
 
 // priorSummary is one ended attempt in a line: how it ended, at which tier, and how much
 // more work and room it was given on the way.
-func priorSummary(p types.PriorAttempt) string {
-	line := fmt.Sprintf("attempt %d: %s", p.N, p.State)
+func priorSummary(a types.Attempt) string {
+	p := a.Status
+	line := fmt.Sprintf("attempt %d: %s", a.N, p.State)
 	if p.EndReason != "" {
 		line += fmt.Sprintf(" (%s)", p.EndReason)
 	}
@@ -318,7 +324,12 @@ func priorSummary(p types.PriorAttempt) string {
 
 // priorDetail is what the newest ended attempt left for the next holder, indented under its
 // summary, ending with its retry verdict.
-func priorDetail(p types.PriorAttempt) []string {
+func priorDetail(a types.Attempt) []string {
+	p := a.Status
+	var risks []string
+	if p.Result != nil {
+		risks = p.Result.UnresolvedRisks[:min(len(p.Result.UnresolvedRisks), maxFolded)]
+	}
 	var lines []string
 	if len(p.Unmet) > 0 {
 		ids := make([]string, 0, maxUnmetShown)
@@ -334,7 +345,7 @@ func priorDetail(p types.PriorAttempt) []string {
 	for _, v := range p.Violations {
 		lines = append(lines, "  violation: "+firstLine(v))
 	}
-	for _, r := range p.UnresolvedRisks {
+	for _, r := range risks {
 		lines = append(lines, "  unresolved risk: "+firstLine(r))
 	}
 	for _, d := range p.Denials {

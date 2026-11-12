@@ -571,67 +571,6 @@ func ObjectVerificationStatus(v types.VerificationStatus) vm.Value {
 	return out
 }
 
-func ObjectJobDenial(v types.JobDenial) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("rule", vm.StringValue(v.Rule))
-	out.MapSet("reason", vm.StringValue(v.Reason))
-	out.MapSet("action", vm.StringValue(v.Action))
-	out.MapSet("verdictRef", vm.StringValue(v.VerdictRef))
-	out.MapSet("ts", vm.IntValue(int64(v.Ts)))
-	return out
-}
-
-func ObjectRetryVerdict(v types.RetryVerdict, enums ffi.EnumCases) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("retryable", vm.BoolValue(v.Retryable))
-	out.MapSet("change", enums.Case("RetryChange", string(v.Change)))
-	out.MapSet("reason", vm.StringValue(v.Reason))
-	out.MapSet("code", vm.StringValue(string(v.Code)))
-	return out
-}
-
-func ObjectPriorAttempt(v types.PriorAttempt, enums ffi.EnumCases) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("n", vm.IntValue(int64(v.N)))
-	out.MapSet("state", enums.Case("JobState", string(v.State)))
-	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
-	out.MapSet("endReason", vm.StringValue(v.EndReason))
-	out.MapSet("modelTier", vm.StringValue(v.ModelTier))
-	out.MapSet("checkpoint", vm.StringValue(v.Checkpoint))
-	out.MapSet("reportedBase", vm.StringValue(v.ReportedBase))
-	out.MapSet("ended", vm.IntValue(int64(v.Ended)))
-	out.MapSet("reworkRounds", vm.IntValue(int64(v.ReworkRounds)))
-	out.MapSet("widenings", vm.IntValue(int64(v.Widenings)))
-	itemsUnmet := make([]vm.Value, len(v.Unmet))
-	for indexUnmet := range v.Unmet {
-		itemsUnmet[indexUnmet] = ObjectVerificationStatus(v.Unmet[indexUnmet])
-	}
-	out.MapSet("unmet", vm.ListValue(itemsUnmet))
-	itemsViolations := make([]vm.Value, len(v.Violations))
-	for indexViolations := range v.Violations {
-		itemsViolations[indexViolations] = vm.StringValue(v.Violations[indexViolations])
-	}
-	out.MapSet("violations", vm.ListValue(itemsViolations))
-	itemsUnresolvedRisks := make([]vm.Value, len(v.UnresolvedRisks))
-	for indexUnresolvedRisks := range v.UnresolvedRisks {
-		itemsUnresolvedRisks[indexUnresolvedRisks] = vm.StringValue(v.UnresolvedRisks[indexUnresolvedRisks])
-	}
-	out.MapSet("unresolvedRisks", vm.ListValue(itemsUnresolvedRisks))
-	itemsFailingRefs := make([]vm.Value, len(v.FailingRefs))
-	for indexFailingRefs := range v.FailingRefs {
-		itemsFailingRefs[indexFailingRefs] = vm.StringValue(v.FailingRefs[indexFailingRefs])
-	}
-	out.MapSet("failingRefs", vm.ListValue(itemsFailingRefs))
-	itemsDenials := make([]vm.Value, len(v.Denials))
-	for indexDenials := range v.Denials {
-		itemsDenials[indexDenials] = ObjectJobDenial(v.Denials[indexDenials])
-	}
-	out.MapSet("denials", vm.ListValue(itemsDenials))
-	out.MapSet("denialsKnown", vm.BoolValue(v.DenialsKnown))
-	out.MapSet("retry", ObjectRetryVerdict(v.Retry, enums))
-	return out
-}
-
 func ObjectJobRejection(v types.JobRejection) vm.Value {
 	out := vm.NewMap()
 	itemsUnmet := make([]vm.Value, len(v.Unmet))
@@ -740,63 +679,6 @@ func ObjectJobWorktree(v types.JobWorktree) vm.Value {
 	return out
 }
 
-func ObjectJobResultValidation(v types.JobResultValidation) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("command", vm.StringValue(v.Command))
-	out.MapSet("outputRef", vm.StringValue(v.OutputRef))
-	out.MapSet("owed", vm.StringValue(v.Owed))
-	out.MapSet("unrun", vm.StringValue(v.Unrun))
-	return out
-}
-
-func ObjectVerificationEvidence(v types.VerificationEvidence) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("gateID", vm.StringValue(v.GateID))
-	out.MapSet("outputRef", vm.StringValue(v.OutputRef))
-	out.MapSet("owed", vm.StringValue(v.Owed))
-	out.MapSet("unrun", vm.StringValue(v.Unrun))
-	return out
-}
-
-func ObjectJobResult(v types.JobResult) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("apiVersion", vm.StringValue(string(v.Schema.Version)))
-	itemsRequires := make([]vm.Value, len(v.Schema.Requires))
-	for indexRequires := range v.Schema.Requires {
-		itemsRequires[indexRequires] = vm.StringValue(v.Schema.Requires[indexRequires])
-	}
-	out.MapSet("requires", vm.ListValue(itemsRequires))
-	out.MapSet("job", vm.StringValue(v.Job))
-	itemsChangedPaths := make([]vm.Value, len(v.ChangedPaths))
-	for indexChangedPaths := range v.ChangedPaths {
-		itemsChangedPaths[indexChangedPaths] = vm.StringValue(v.ChangedPaths[indexChangedPaths])
-	}
-	out.MapSet("changedPaths", vm.ListValue(itemsChangedPaths))
-	out.MapSet("validation", ObjectJobResultValidation(v.Validation))
-	itemsVerificationEvidence := make([]vm.Value, len(v.VerificationEvidence))
-	for indexVerificationEvidence := range v.VerificationEvidence {
-		itemsVerificationEvidence[indexVerificationEvidence] = ObjectVerificationEvidence(v.VerificationEvidence[indexVerificationEvidence])
-	}
-	out.MapSet("verificationEvidence", vm.ListValue(itemsVerificationEvidence))
-	itemsDescendants := make([]vm.Value, len(v.Descendants))
-	for indexDescendants := range v.Descendants {
-		itemsDescendants[indexDescendants] = vm.StringValue(v.Descendants[indexDescendants])
-	}
-	out.MapSet("descendants", vm.ListValue(itemsDescendants))
-	itemsUnresolvedRisks := make([]vm.Value, len(v.UnresolvedRisks))
-	for indexUnresolvedRisks := range v.UnresolvedRisks {
-		itemsUnresolvedRisks[indexUnresolvedRisks] = vm.StringValue(v.UnresolvedRisks[indexUnresolvedRisks])
-	}
-	out.MapSet("unresolvedRisks", vm.ListValue(itemsUnresolvedRisks))
-	itemsFollowUps := make([]vm.Value, len(v.FollowUps))
-	for indexFollowUps := range v.FollowUps {
-		itemsFollowUps[indexFollowUps] = vm.StringValue(v.FollowUps[indexFollowUps])
-	}
-	out.MapSet("followUps", vm.ListValue(itemsFollowUps))
-	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
-	return out
-}
-
 func ObjectJobAttempt(v types.JobAttempt) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("found", vm.BoolValue(v.Found))
@@ -902,10 +784,6 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	for indexDeferred := range v.Deferred {
 		itemsDeferred[indexDeferred] = ObjectJobDeferred(v.Deferred[indexDeferred])
 	}
-	itemsPrior := make([]vm.Value, len(v.Prior))
-	for indexPrior := range v.Prior {
-		itemsPrior[indexPrior] = ObjectPriorAttempt(v.Prior[indexPrior], enums)
-	}
 	optRejection := vm.Null
 	if v.Rejection != nil {
 		optRejection = ObjectJobRejection((*v.Rejection))
@@ -938,10 +816,6 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	if v.Worktree != nil {
 		optWorktree = ObjectJobWorktree((*v.Worktree))
 	}
-	optResult := vm.Null
-	if v.Result != nil {
-		optResult = ObjectJobResult((*v.Result))
-	}
 	optAttempt := vm.Null
 	if v.Attempt != nil {
 		optAttempt = ObjectJobAttempt((*v.Attempt))
@@ -962,11 +836,138 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	if v.WaiterEvidence != nil {
 		optWaiterEvidence = ObjectJobIntegration((*v.WaiterEvidence))
 	}
-	return enums.Instance("Job", []string{"apiVersion", "requires", "id", "parent", "agent", "checkpoint", "writePaths", "denyPaths", "softPaths", "readPaths", "dependsOn", "integrates", "breaks", "modelTier", "briefFormat", "delivery", "parentHead", "follows", "reworkRounds", "widenings", "claims", "generation", "maxAttempts", "maxClaims", "deferred", "leftUnmerged", "landed", "weight", "paused", "pausedBy", "pauseReason", "pausedUntil", "attempts", "prior", "rejection", "check", "validation", "goals", "state", "holder", "readOnly", "releases", "unattributed", "entries", "writeProof", "deviations", "validated", "reportedBase", "baseVerdict", "registeredBy", "registered", "holderStopped", "checkoutRoot", "worktree", "endReason", "created", "updated", "deadline", "result", "attempt", "gateAttempts", "lastRun", "integration", "waiterEvidence"}, []vm.Value{vm.StringValue(string(v.Schema.Version)), vm.ListValue(itemsRequires), vm.StringValue(v.ID), vm.StringValue(v.Parent), optAgent, vm.StringValue(v.Checkpoint), vm.ListValue(itemsWritePaths), vm.ListValue(itemsDenyPaths), vm.ListValue(itemsSoftPaths), vm.ListValue(itemsReadPaths), vm.ListValue(itemsDependsOn), vm.ListValue(itemsIntegrates), vm.ListValue(itemsBreaks), optModelTier, enums.Case("BriefFormat", string(v.BriefFormat)), vm.StringValue(v.Delivery), vm.StringValue(v.ParentHead), vm.StringValue(v.Follows), vm.IntValue(int64(v.ReworkRounds)), vm.IntValue(int64(v.Widenings)), vm.ListValue(itemsClaims), vm.IntValue(int64(v.Generation)), vm.IntValue(int64(v.MaxAttempts)), vm.IntValue(int64(v.MaxClaims)), vm.ListValue(itemsDeferred), vm.StringValue(v.LeftUnmerged), vm.BoolValue(v.Landed), vm.FloatValue(float64(v.Weight)), vm.IntValue(int64(v.Paused)), ObjectOrigin(v.PausedBy, enums), vm.StringValue(v.PauseReason), vm.IntValue(int64(v.PausedUntil)), vm.IntValue(int64(v.Attempts)), vm.ListValue(itemsPrior), optRejection, optCheck, vm.StringValue(v.Validation), vm.ListValue(itemsGoals), enums.Case("JobState", string(v.State)), enums.Case("JobHolder", string(v.Holder)), vm.BoolValue(v.ReadOnly), vm.ListValue(itemsReleases), vm.ListValue(itemsUnattributed), vm.ListValue(itemsEntries), enums.Case("JobWriteProof", string(v.WriteProof)), vm.ListValue(itemsDeviations), vm.IntValue(int64(v.Validated)), vm.StringValue(v.ReportedBase), enums.Case("JobBaseVerdict", string(v.BaseVerdict)), ObjectOrigin(v.RegisteredBy, enums), vm.IntValue(int64(v.Registered)), vm.IntValue(int64(v.HolderStopped)), vm.StringValue(v.CheckoutRoot), optWorktree, vm.StringValue(v.EndReason), vm.IntValue(int64(v.Created)), vm.IntValue(int64(v.Updated)), vm.IntValue(int64(v.Deadline)), optResult, optAttempt, vm.ListValue(itemsGateAttempts), optLastRun, optIntegration, optWaiterEvidence})
+	return enums.Instance("Job", []string{"apiVersion", "requires", "id", "parent", "agent", "checkpoint", "writePaths", "denyPaths", "softPaths", "readPaths", "dependsOn", "integrates", "breaks", "modelTier", "briefFormat", "delivery", "parentHead", "follows", "reworkRounds", "widenings", "claims", "generation", "maxAttempts", "maxClaims", "deferred", "leftUnmerged", "landed", "weight", "paused", "pausedBy", "pauseReason", "pausedUntil", "rejection", "check", "validation", "goals", "state", "holder", "readOnly", "releases", "unattributed", "entries", "writeProof", "deviations", "validated", "reportedBase", "baseVerdict", "registeredBy", "registered", "holderStopped", "checkoutRoot", "worktree", "endReason", "created", "updated", "deadline", "attempt", "gateAttempts", "lastRun", "integration", "waiterEvidence"}, []vm.Value{vm.StringValue(string(v.Schema.Version)), vm.ListValue(itemsRequires), vm.StringValue(v.ID), vm.StringValue(v.Parent), optAgent, vm.StringValue(v.Checkpoint), vm.ListValue(itemsWritePaths), vm.ListValue(itemsDenyPaths), vm.ListValue(itemsSoftPaths), vm.ListValue(itemsReadPaths), vm.ListValue(itemsDependsOn), vm.ListValue(itemsIntegrates), vm.ListValue(itemsBreaks), optModelTier, enums.Case("BriefFormat", string(v.BriefFormat)), vm.StringValue(v.Delivery), vm.StringValue(v.ParentHead), vm.StringValue(v.Follows), vm.IntValue(int64(v.ReworkRounds)), vm.IntValue(int64(v.Widenings)), vm.ListValue(itemsClaims), vm.IntValue(int64(v.Generation)), vm.IntValue(int64(v.MaxAttempts)), vm.IntValue(int64(v.MaxClaims)), vm.ListValue(itemsDeferred), vm.StringValue(v.LeftUnmerged), vm.BoolValue(v.Landed), vm.FloatValue(float64(v.Weight)), vm.IntValue(int64(v.Paused)), ObjectOrigin(v.PausedBy, enums), vm.StringValue(v.PauseReason), vm.IntValue(int64(v.PausedUntil)), optRejection, optCheck, vm.StringValue(v.Validation), vm.ListValue(itemsGoals), enums.Case("JobState", string(v.State)), enums.Case("JobHolder", string(v.Holder)), vm.BoolValue(v.ReadOnly), vm.ListValue(itemsReleases), vm.ListValue(itemsUnattributed), vm.ListValue(itemsEntries), enums.Case("JobWriteProof", string(v.WriteProof)), vm.ListValue(itemsDeviations), vm.IntValue(int64(v.Validated)), vm.StringValue(v.ReportedBase), enums.Case("JobBaseVerdict", string(v.BaseVerdict)), ObjectOrigin(v.RegisteredBy, enums), vm.IntValue(int64(v.Registered)), vm.IntValue(int64(v.HolderStopped)), vm.StringValue(v.CheckoutRoot), optWorktree, vm.StringValue(v.EndReason), vm.IntValue(int64(v.Created)), vm.IntValue(int64(v.Updated)), vm.IntValue(int64(v.Deadline)), optAttempt, vm.ListValue(itemsGateAttempts), optLastRun, optIntegration, optWaiterEvidence})
 }
 
 func ObjectSession(v types.Session, enums ffi.EnumCases) vm.Value {
 	return enums.Instance("Session", []string{"session", "since", "until"}, []vm.Value{vm.StringValue(v.Session), vm.StringValue(v.Since), vm.StringValue(v.Until)})
+}
+
+func ObjectJobResultValidation(v types.JobResultValidation) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("command", vm.StringValue(v.Command))
+	out.MapSet("outputRef", vm.StringValue(v.OutputRef))
+	out.MapSet("owed", vm.StringValue(v.Owed))
+	out.MapSet("unrun", vm.StringValue(v.Unrun))
+	return out
+}
+
+func ObjectVerificationEvidence(v types.VerificationEvidence) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("gateID", vm.StringValue(v.GateID))
+	out.MapSet("outputRef", vm.StringValue(v.OutputRef))
+	out.MapSet("owed", vm.StringValue(v.Owed))
+	out.MapSet("unrun", vm.StringValue(v.Unrun))
+	return out
+}
+
+func ObjectJobResult(v types.JobResult) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("apiVersion", vm.StringValue(string(v.Schema.Version)))
+	itemsRequires := make([]vm.Value, len(v.Schema.Requires))
+	for indexRequires := range v.Schema.Requires {
+		itemsRequires[indexRequires] = vm.StringValue(v.Schema.Requires[indexRequires])
+	}
+	out.MapSet("requires", vm.ListValue(itemsRequires))
+	out.MapSet("job", vm.StringValue(v.Job))
+	itemsChangedPaths := make([]vm.Value, len(v.ChangedPaths))
+	for indexChangedPaths := range v.ChangedPaths {
+		itemsChangedPaths[indexChangedPaths] = vm.StringValue(v.ChangedPaths[indexChangedPaths])
+	}
+	out.MapSet("changedPaths", vm.ListValue(itemsChangedPaths))
+	out.MapSet("validation", ObjectJobResultValidation(v.Validation))
+	itemsVerificationEvidence := make([]vm.Value, len(v.VerificationEvidence))
+	for indexVerificationEvidence := range v.VerificationEvidence {
+		itemsVerificationEvidence[indexVerificationEvidence] = ObjectVerificationEvidence(v.VerificationEvidence[indexVerificationEvidence])
+	}
+	out.MapSet("verificationEvidence", vm.ListValue(itemsVerificationEvidence))
+	itemsDescendants := make([]vm.Value, len(v.Descendants))
+	for indexDescendants := range v.Descendants {
+		itemsDescendants[indexDescendants] = vm.StringValue(v.Descendants[indexDescendants])
+	}
+	out.MapSet("descendants", vm.ListValue(itemsDescendants))
+	itemsUnresolvedRisks := make([]vm.Value, len(v.UnresolvedRisks))
+	for indexUnresolvedRisks := range v.UnresolvedRisks {
+		itemsUnresolvedRisks[indexUnresolvedRisks] = vm.StringValue(v.UnresolvedRisks[indexUnresolvedRisks])
+	}
+	out.MapSet("unresolvedRisks", vm.ListValue(itemsUnresolvedRisks))
+	itemsFollowUps := make([]vm.Value, len(v.FollowUps))
+	for indexFollowUps := range v.FollowUps {
+		itemsFollowUps[indexFollowUps] = vm.StringValue(v.FollowUps[indexFollowUps])
+	}
+	out.MapSet("followUps", vm.ListValue(itemsFollowUps))
+	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
+	return out
+}
+
+func ObjectJobDenial(v types.JobDenial) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("rule", vm.StringValue(v.Rule))
+	out.MapSet("reason", vm.StringValue(v.Reason))
+	out.MapSet("action", vm.StringValue(v.Action))
+	out.MapSet("verdictRef", vm.StringValue(v.VerdictRef))
+	out.MapSet("ts", vm.IntValue(int64(v.Ts)))
+	return out
+}
+
+func ObjectRetryVerdict(v types.RetryVerdict, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("retryable", vm.BoolValue(v.Retryable))
+	out.MapSet("change", enums.Case("RetryChange", string(v.Change)))
+	out.MapSet("reason", vm.StringValue(v.Reason))
+	out.MapSet("code", vm.StringValue(string(v.Code)))
+	return out
+}
+
+func ObjectAttemptStatus(v types.AttemptStatus, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("started", vm.IntValue(int64(v.Started)))
+	out.MapSet("ended", vm.IntValue(int64(v.Ended)))
+	out.MapSet("end", enums.Case("AttemptEnd", string(v.End)))
+	optResult := vm.Null
+	if v.Result != nil {
+		optResult = ObjectJobResult((*v.Result))
+	}
+	out.MapSet("result", optResult)
+	out.MapSet("state", enums.Case("JobState", string(v.State)))
+	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
+	out.MapSet("endReason", vm.StringValue(v.EndReason))
+	out.MapSet("modelTier", vm.StringValue(v.ModelTier))
+	out.MapSet("checkpoint", vm.StringValue(v.Checkpoint))
+	out.MapSet("reportedBase", vm.StringValue(v.ReportedBase))
+	out.MapSet("reworkRounds", vm.IntValue(int64(v.ReworkRounds)))
+	out.MapSet("widenings", vm.IntValue(int64(v.Widenings)))
+	itemsUnmet := make([]vm.Value, len(v.Unmet))
+	for indexUnmet := range v.Unmet {
+		itemsUnmet[indexUnmet] = ObjectVerificationStatus(v.Unmet[indexUnmet])
+	}
+	out.MapSet("unmet", vm.ListValue(itemsUnmet))
+	itemsViolations := make([]vm.Value, len(v.Violations))
+	for indexViolations := range v.Violations {
+		itemsViolations[indexViolations] = vm.StringValue(v.Violations[indexViolations])
+	}
+	out.MapSet("violations", vm.ListValue(itemsViolations))
+	itemsFailingRefs := make([]vm.Value, len(v.FailingRefs))
+	for indexFailingRefs := range v.FailingRefs {
+		itemsFailingRefs[indexFailingRefs] = vm.StringValue(v.FailingRefs[indexFailingRefs])
+	}
+	out.MapSet("failingRefs", vm.ListValue(itemsFailingRefs))
+	itemsDenials := make([]vm.Value, len(v.Denials))
+	for indexDenials := range v.Denials {
+		itemsDenials[indexDenials] = ObjectJobDenial(v.Denials[indexDenials])
+	}
+	out.MapSet("denials", vm.ListValue(itemsDenials))
+	out.MapSet("denialsKnown", vm.BoolValue(v.DenialsKnown))
+	out.MapSet("retry", ObjectRetryVerdict(v.Retry, enums))
+	return out
+}
+
+func ObjectAttempt(v types.Attempt, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("job", vm.StringValue(v.Job))
+	out.MapSet("n", vm.IntValue(int64(v.N)))
+	out.MapSet("status", ObjectAttemptStatus(v.Status, enums))
+	return out
 }
 
 func ObjectJobOverlapFootprint(v types.JobOverlapFootprint) vm.Value {
@@ -1123,6 +1124,11 @@ func ObjectJobList(v types.JobList, enums ffi.EnumCases) vm.Value {
 		itemsJobs[indexJobs] = ObjectJob(v.Jobs[indexJobs], enums)
 	}
 	out.MapSet("jobs", vm.ListValue(itemsJobs))
+	itemsAttempts := make([]vm.Value, len(v.Attempts))
+	for indexAttempts := range v.Attempts {
+		itemsAttempts[indexAttempts] = ObjectAttempt(v.Attempts[indexAttempts], enums)
+	}
+	out.MapSet("attempts", vm.ListValue(itemsAttempts))
 	itemsOverlaps := make([]vm.Value, len(v.Overlaps))
 	for indexOverlaps := range v.Overlaps {
 		itemsOverlaps[indexOverlaps] = ObjectJobOverlap(v.Overlaps[indexOverlaps])
@@ -5081,12 +5087,6 @@ func ObjectStopRequest(v types.StopRequest, enums ffi.EnumCases) vm.Value {
 	out.MapSet("event", vm.StringValue(v.Event))
 	out.MapSet("stopHookActive", vm.BoolValue(v.StopHookActive))
 	out.MapSet("transcript", vm.StringValue(v.Transcript))
-	itemsTasks := make([]vm.Value, len(v.Tasks))
-	for indexTasks := range v.Tasks {
-		itemsTasks[indexTasks] = vm.StringValue(v.Tasks[indexTasks])
-	}
-	out.MapSet("tasks", vm.ListValue(itemsTasks))
-	out.MapSet("tasksUnknown", vm.StringValue(v.TasksUnknown))
 	optCheckout := vm.Null
 	if v.Checkout != nil {
 		optCheckout = ObjectCheckoutState((*v.Checkout))

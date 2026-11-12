@@ -848,14 +848,10 @@ type Job struct {
 	PausedBy    Origin `json:"paused_by,omitzero"    yaml:"paused_by,omitempty"`
 	PauseReason string `json:"pause_reason,omitempty" yaml:"pause_reason,omitempty"`
 	PausedUntil int64  `json:"paused_until,omitzero" yaml:"paused_until,omitempty"`
-	// Attempts numbers the live attempt from 1; each fork of an ended row starts the next.
-	// Prior holds the attempts before it, newest last, at most three, as structured
-	// diagnostics and never a transcript. Rejection is the last `magus job wait` that
-	// refused the live attempt, which leaves State where it was. All three are
-	// store-computed.
-	Attempts  int            `json:"attempts,omitempty"  yaml:"attempts,omitempty"`
-	Prior     []PriorAttempt `json:"prior,omitempty"     yaml:"prior,omitempty"`
-	Rejection *JobRejection  `json:"rejection,omitempty" yaml:"rejection,omitempty"`
+	// Rejection is the last `magus job wait` that refused the live try,
+	// which leaves State where it was. Store-computed. The tries are
+	// [Attempt] records beside the row.
+	Rejection *JobRejection `json:"rejection,omitempty" yaml:"rejection,omitempty"`
 	// Check is the one check this lease runs. See [LeaseCheck].
 	Check *LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
 	// Validation is Check rendered as the command that runs it.
@@ -963,15 +959,9 @@ type Job struct {
 	// Created is not accepted. A taken row that passes it ends as no_return on the next read
 	// of the store, and an untaken one is ended by `magus job prune`.
 	Deadline int64 `json:"deadline,omitempty" yaml:"deadline,omitempty"`
-	// Result is what the holder filed when it exited, and Attempt is the run record behind
-	// that result's output ref, resolved in the holder's OWN checkout.
-	//
-	// Both are on the job because an output store belongs to a cache dir: a parent waiting
-	// from another worktree cannot resolve the holder's ref, so a result that travelled as
-	// a file read as evidence from nowhere every time it crossed a checkout. Carrying the
-	// run record with the result is what makes the evidence portable, and it is the
-	// store's record rather than anything the holder asserts.
-	Result  *JobResult  `json:"result,omitempty"  yaml:"result,omitempty"`
+	// Attempt is the run record behind the live try's result, resolved
+	// in the holder's OWN checkout, so a waiter in another checkout
+	// reopens it. The result is on the [Attempt].
 	Attempt *JobAttempt `json:"attempt,omitempty" yaml:"attempt,omitempty"`
 	// GateAttempts are the portable output-store snapshots for every explicit goal.
 	// Attempt remains the snapshot for the primary Check.
@@ -1060,31 +1050,6 @@ type JobDenial struct {
 	Action     string `json:"action,omitempty"      yaml:"action,omitempty"`
 	VerdictRef string `json:"verdict_ref,omitempty" yaml:"verdict_ref,omitempty"`
 	Ts         int64  `json:"ts"                    yaml:"ts"`
-}
-
-// PriorAttempt is an ended attempt of a job, folded onto the row when the job is forked
-// again, so the next holder reads what failed without a transcript. Ended is unix seconds.
-// DenialsKnown is false once the trail rotated past the attempt, so empty Denials then
-// means unknown rather than none.
-type PriorAttempt struct {
-	N                  int                  `json:"n"                             yaml:"n"`
-	State              JobState             `json:"state"                         yaml:"state"`
-	ObservedGeneration int                  `json:"observed_generation,omitzero"  yaml:"observed_generation,omitempty"`
-	EndReason          string               `json:"end_reason,omitempty"          yaml:"end_reason,omitempty"`
-	ModelTier          string               `json:"model_tier,omitempty"          yaml:"model_tier,omitempty"`
-	Checkpoint         string               `json:"checkpoint,omitempty"          yaml:"checkpoint,omitempty"`
-	ReportedBase       string               `json:"reported_base,omitempty"       yaml:"reported_base,omitempty"`
-	Ended              int64                `json:"ended,omitempty"               yaml:"ended,omitempty"`
-	ReworkRounds       int                  `json:"rework_rounds,omitempty"       yaml:"rework_rounds,omitempty"`
-	Widenings          int                  `json:"widenings,omitempty"        yaml:"widenings,omitempty"`
-	Unmet              []VerificationStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
-	Violations         []string             `json:"violations,omitempty"          yaml:"violations,omitempty"`
-	UnresolvedRisks    []string             `json:"unresolved_risks,omitempty"    yaml:"unresolved_risks,omitempty"`
-	// FailingRefs are the output refs of the attempt's failed runs, to reopen.
-	FailingRefs  []string     `json:"failing_refs,omitempty" yaml:"failing_refs,omitempty"`
-	Denials      []JobDenial  `json:"denials,omitempty"      yaml:"denials,omitempty"`
-	DenialsKnown bool         `json:"denials_known"          yaml:"denials_known"`
-	Retry        RetryVerdict `json:"retry"                  yaml:"retry"`
 }
 
 // Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing
@@ -2168,7 +2133,10 @@ type JobOverlapFootprint struct {
 // door, because the MCP tool and the console's route must not be able to disagree
 // about whether an overlap exists: the same reason types.NewFileReport exists.
 type JobList struct {
-	Jobs     []Job        `json:"jobs"               yaml:"jobs"`
+	Jobs []Job `json:"jobs" yaml:"jobs"`
+	// Attempts are the tries of Jobs the store holds, each read under its
+	// job's deadline (see [Attempt.Bound]).
+	Attempts []Attempt    `json:"attempts,omitempty" yaml:"attempts,omitempty"`
 	Overlaps []JobOverlap `json:"overlaps,omitempty" yaml:"overlaps,omitempty"`
 	// Overdue, Orphans and Stale are live job ids a reader should look at, derived at one
 	// instant by [JobList.Flag]. The store's read ends orphans and most untaken stale rows
@@ -2760,16 +2728,6 @@ func (u Job) Clone() Job {
 		tier := *u.ModelTier
 		c.ModelTier = &tier
 	}
-	if u.Result != nil {
-		result := *u.Result
-		result.Schema = u.Result.clone()
-		result.ChangedPaths = slices.Clone(u.Result.ChangedPaths)
-		result.Descendants = slices.Clone(u.Result.Descendants)
-		result.UnresolvedRisks = slices.Clone(u.Result.UnresolvedRisks)
-		result.FollowUps = slices.Clone(u.Result.FollowUps)
-		result.VerificationEvidence = slices.Clone(u.Result.VerificationEvidence)
-		c.Result = &result
-	}
 	if u.Attempt != nil {
 		attempt := *u.Attempt
 		attempt.ExtraArgs = slices.Clone(u.Attempt.ExtraArgs)
@@ -2788,14 +2746,6 @@ func (u Job) Clone() Job {
 	if u.Worktree != nil {
 		wt := *u.Worktree
 		c.Worktree = &wt
-	}
-	c.Prior = slices.Clone(u.Prior)
-	for i, p := range c.Prior {
-		c.Prior[i].Unmet = cloneVerificationStatuses(p.Unmet)
-		c.Prior[i].Violations = slices.Clone(p.Violations)
-		c.Prior[i].UnresolvedRisks = slices.Clone(p.UnresolvedRisks)
-		c.Prior[i].FailingRefs = slices.Clone(p.FailingRefs)
-		c.Prior[i].Denials = slices.Clone(p.Denials)
 	}
 	if u.Rejection != nil {
 		r := *u.Rejection

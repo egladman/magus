@@ -338,7 +338,7 @@ func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw,
 		_, ended, err := store.EndSession(ctx, c)
 		return ended, err
 	case subagentStopped(raw) && !resumedStop(raw, resumesFrom, time.Now()):
-		return false, store.StampHolderStopped(ctx, c)
+		return false, errors.Join(store.StampHolderStopped(ctx, c), store.EndCallerAttempt(ctx, c, types.AttemptEndStop, time.Now()))
 	}
 	return false, nil
 }
@@ -484,8 +484,7 @@ func lastHeard(t backgroundTask) time.Time {
 }
 
 // backgroundTask is one task a host runs in the background for
-// an agent: a backgrounded shell call, a watcher's command, or a
-// subagent it spawned.
+// an agent: a backgrounded shell call or a watcher's command.
 type backgroundTask struct {
 	// ID is the host's task id, "" when the transcript never named one.
 	ID      string    `json:"id,omitzero"`
@@ -497,10 +496,6 @@ type backgroundTask struct {
 	Output string `json:"output,omitzero"`
 	// Heard is the newest event notice the task sent, zero for none.
 	Heard time.Time `json:"heard,omitzero"`
-	// Subagent marks a subagent the host runs in the background. It runs no
-	// Command; Description is its spawn description.
-	Subagent    bool   `json:"subagent,omitzero"`
-	Description string `json:"description,omitzero"`
 }
 
 // The host's words for a shell command it runs in the background: asked for, timed out
@@ -508,19 +503,6 @@ type backgroundTask struct {
 // the id. Anchored, so a result that merely prints one of these (a search over
 // transcripts) starts nothing.
 var backgroundIDPattern = regexp.MustCompile(`^(?:Command running in background with ID: |Command did not complete[^\n]*? moved to the background \(ID: |Monitor started \(task )([A-Za-z0-9_-]+)`)
-
-// subagentLaunchPattern is the host's word that a spawn runs in
-// the background, with the subagent's id. Anchored for the reason
-// backgroundIDPattern is.
-var subagentLaunchPattern = regexp.MustCompile(`^Async agent launched successfully\.[^\n]*\nagentId: ([A-Za-z0-9_-]+)`)
-
-// subagentResumePattern is the result of a message that resumes a
-// subagent, with its id.
-var subagentResumePattern = regexp.MustCompile(`^\{"success":true,"message":"Resuming agent [^"]*","resumedAgentId":"([A-Za-z0-9_-]+)"`)
-
-// subagentWaitingSummary is the summary of a notice a subagent sends
-// when it stops with its own background work still running.
-const subagentWaitingSummary = `is waiting on its own background work</summary>`
 
 // backgroundOutputPattern is the file the same result says the task writes to.
 var backgroundOutputPattern = regexp.MustCompile(`Output is being written to: (\S+)\.(?:\s|$)`)
@@ -537,8 +519,7 @@ var (
 // backgroundMarkers are the bytes a transcript line that starts or ends a task holds; a
 // line without one is never decoded, which keeps a root transcript of hundreds of
 // megabytes inside a hook's time.
-var backgroundMarkers = [][]byte{[]byte(`"command"`), []byte(`background`), []byte(`started (task `), []byte(`task-notification`), []byte(`"task_id"`), []byte(`"shell_id"`),
-	[]byte(`"description"`), []byte(`Async agent launched`), []byte(`resumedAgentId`)}
+var backgroundMarkers = [][]byte{[]byte(`"command"`), []byte(`background`), []byte(`started (task `), []byte(`task-notification`), []byte(`"task_id"`), []byte(`"shell_id"`)}
 
 var errNotATranscript = errors.New("transcript path is not absolute")
 
@@ -587,30 +568,10 @@ func liveBackgroundTasks(transcript, cacheDir string, now time.Time) ([]backgrou
 	return read.tasks, err
 }
 
-// liveSubagents lists the spawn descriptions of the subagents
-// transcript's agent still runs in the background. unknown says
-// why when the transcript cannot be read.
-func liveSubagents(transcript, cacheDir string, now time.Time) (descriptions []string, unknown string) {
-	if transcript == "" {
-		return nil, "the host reported no transcript to read its tasks from"
-	}
-	read, err := readBackgroundTranscript(transcript, cacheDir, now)
-	if err != nil {
-		return nil, fmt.Sprintf("the host's transcript %s could not be read: %v", transcript, err)
-	}
-	for _, t := range read.subagents {
-		descriptions = append(descriptions, t.Description)
-	}
-	return descriptions, ""
-}
-
 // transcriptTasks is what one read of a transcript found: the tasks still running, and
 // the host version its newest decoded line names, "" when none named one.
 type transcriptTasks struct {
-	// tasks are the shell commands; subagents are kept apart, since no
-	// shell rule judges one.
 	tasks       []backgroundTask
-	subagents   []backgroundTask
 	hostVersion string
 }
 
@@ -655,15 +616,7 @@ func readBackgroundTranscript(transcript, cacheDir string, now time.Time) (trans
 		}
 	}
 	r.fold(tail)
-	read := transcriptTasks{hostVersion: r.version}
-	for _, t := range r.result(now) {
-		if t.Subagent {
-			read.subagents = append(read.subagents, t)
-		} else {
-			read.tasks = append(read.tasks, t)
-		}
-	}
-	return read, nil
+	return transcriptTasks{tasks: r.result(now), hostVersion: r.version}, nil
 }
 
 // pendingCallWindow is how long a shell call stays in a checkpoint waiting for a result
@@ -684,8 +637,6 @@ type taskCheckpoint struct {
 	Pending    map[string]backgroundTask `json:"pending,omitzero"`
 	Live       []checkpointTask          `json:"live,omitzero"`
 	Heard      map[string]time.Time      `json:"heard,omitzero"`
-	// Spawned is every subagent launched, by id, so a resume can revive one.
-	Spawned map[string]backgroundTask `json:"spawned,omitzero"`
 	// HostVersion is the newest host version read, so a resumed read still knows it when
 	// no line written since names one.
 	HostVersion string `json:"host_version,omitzero"`
@@ -726,7 +677,6 @@ func resumeTaskReader(store file.Log[taskCheckpoint], transcript string, f *os.F
 		live:     map[string]*backgroundTask{},
 		endedIDs: map[string]bool{},
 		heard:    map[string]time.Time{},
-		spawned:  map[string]backgroundTask{},
 	}
 	if store.Path == "" {
 		return r, 0, savedCheckpoints{}
@@ -753,7 +703,6 @@ func resumeTaskReader(store file.Log[taskCheckpoint], transcript string, f *os.F
 			r.start(t.CallID, t.Task)
 		}
 		maps.Copy(r.heard, cp.Heard)
-		maps.Copy(r.spawned, cp.Spawned)
 		r.version = cp.HostVersion
 		return r, cp.Offset, saved
 	}
@@ -767,7 +716,6 @@ func resumeTaskReader(store file.Log[taskCheckpoint], transcript string, f *os.F
 func (r *taskReader) save(store file.Log[taskCheckpoint], saved savedCheckpoints, cp taskCheckpoint) {
 	cp.Pending = r.commands
 	cp.Heard = r.heard
-	cp.Spawned = r.spawned
 	cp.HostVersion = r.version
 	for _, callID := range r.order {
 		cp.Live = append(cp.Live, checkpointTask{CallID: callID, Task: *r.live[callID]})
@@ -860,8 +808,6 @@ type taskReader struct {
 	endedIDs map[string]bool
 	// heard is each task id's newest event notice.
 	heard map[string]time.Time
-	// spawned is every subagent launched, by id.
-	spawned map[string]backgroundTask
 	// latest is the newest timestamp read.
 	latest time.Time
 	// version is the host version the newest decoded line names.
@@ -923,7 +869,6 @@ func (r *taskReader) call(b transcriptBlock, at time.Time) {
 	}
 	command, ok := b.Input["command"].(string)
 	if !ok || command == "" {
-		r.spawn(b, at)
 		return
 	}
 	task := backgroundTask{Command: command, Started: at}
@@ -932,17 +877,6 @@ func (r *taskReader) call(b transcriptBlock, at time.Time) {
 		task.Expires = at.Add(time.Duration(ms) * time.Millisecond)
 	}
 	r.commands[b.ID] = task
-}
-
-// spawn holds a subagent spawn, read by shape: a call whose input
-// names a prompt and a description and runs no command.
-func (r *taskReader) spawn(b transcriptBlock, at time.Time) {
-	description, _ := b.Input["description"].(string)
-	prompt, _ := b.Input["prompt"].(string)
-	if description == "" || prompt == "" {
-		return
-	}
-	r.commands[b.ID] = backgroundTask{Subagent: true, Description: description, Started: at}
 }
 
 // truthy reads a boolean a host may send as a JSON boolean or as a string.
@@ -978,10 +912,6 @@ func (r *taskReader) callResult(b transcriptBlock) {
 	if b.IsError {
 		return
 	}
-	if m := subagentResumePattern.FindStringSubmatch(blockText(b.Content)); m != nil {
-		r.resume(b.ToolUseID, m[1])
-		return
-	}
 	task, known := r.commands[b.ToolUseID]
 	if t, ok := r.live[b.ToolUseID]; ok {
 		task, known = *t, true
@@ -989,12 +919,8 @@ func (r *taskReader) callResult(b transcriptBlock) {
 	if !known {
 		return
 	}
-	pattern := backgroundIDPattern
-	if task.Subagent {
-		pattern = subagentLaunchPattern
-	}
 	text := blockText(b.Content)
-	m := pattern.FindStringSubmatch(text)
+	m := backgroundIDPattern.FindStringSubmatch(text)
 	if m == nil {
 		return
 	}
@@ -1003,25 +929,6 @@ func (r *taskReader) callResult(b transcriptBlock) {
 	if out := backgroundOutputPattern.FindStringSubmatch(text); out != nil {
 		r.live[b.ToolUseID].Output = out[1]
 	}
-	if task.Subagent {
-		r.spawned[m[1]] = *r.live[b.ToolUseID]
-	}
-}
-
-// resume makes the subagent id live again under callID, the call
-// that resumed it, so a notice naming that call ends it.
-func (r *taskReader) resume(callID, id string) {
-	task, ok := r.spawned[id]
-	if !ok {
-		return
-	}
-	delete(r.endedIDs, id)
-	for _, t := range r.live {
-		if t.ID == id {
-			return
-		}
-	}
-	r.start(callID, task)
 }
 
 // blockText is a result's text, whether the host wrote it as a string or as text blocks.
@@ -1053,10 +960,6 @@ func (r *taskReader) notices(text string, at time.Time) {
 					r.heard[key] = at
 				}
 			}
-			continue
-		}
-		if strings.Contains(m[1], subagentWaitingSummary) {
-			// It stopped its turn, not its work: its own task resumes it.
 			continue
 		}
 		if id := noticeTaskID.FindStringSubmatch(m[1]); id != nil {

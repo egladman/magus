@@ -3023,28 +3023,6 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.PausedUntil = nPausedUntil
-		case "attempts":
-			nAttempts, err := decodeInt(item, path+".attempts")
-			if err != nil {
-				return out, err
-			}
-			out.Attempts = int(nAttempts)
-		case "prior":
-			listPrior, err := decodeList(item, path+".prior", "[PriorAttempt]")
-			if err != nil {
-				return out, err
-			}
-			if len(listPrior) > 0 {
-				itemsPrior := make([]types.PriorAttempt, len(listPrior))
-				for indexPrior, itemPrior := range listPrior {
-					xPriorItem, err := decodePriorAttempt(itemPrior, fmt.Sprintf("%s[%d]", path+".prior", indexPrior))
-					if err != nil {
-						return out, err
-					}
-					itemsPrior[indexPrior] = xPriorItem
-				}
-				out.Prior = itemsPrior
-			}
 		case "rejection":
 			if !item.IsNull() {
 				var optRejection types.JobRejection
@@ -3251,16 +3229,6 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.Deadline = nDeadline
-		case "result":
-			if !item.IsNull() {
-				var optResult types.JobResult
-				xResult, err := decodeJobResult(item, path+".result")
-				if err != nil {
-					return out, err
-				}
-				optResult = xResult
-				out.Result = &optResult
-			}
 		case "attempt":
 			if !item.IsNull() {
 				var optAttempt types.JobAttempt
@@ -3514,57 +3482,6 @@ func decodeJobDeferred(v vm.Value, path string) (types.JobDeferred, error) {
 			out.Reason = sReason
 		default:
 			return out, unknownMember(path, "JobDeferred", key)
-		}
-	}
-	return out, nil
-}
-
-// DecodeJobDenial decodes a Buzz JobDenial, an object instance or a map, into a types.JobDenial.
-func DecodeJobDenial(v vm.Value) (types.JobDenial, error) {
-	return decodeJobDenial(v, "jobDenial")
-}
-
-func decodeJobDenial(v vm.Value, path string) (types.JobDenial, error) {
-	var out types.JobDenial
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "JobDenial", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "rule":
-			sRule, err := decodeString(item, path+".rule")
-			if err != nil {
-				return out, err
-			}
-			out.Rule = sRule
-		case "reason":
-			sReason, err := decodeString(item, path+".reason")
-			if err != nil {
-				return out, err
-			}
-			out.Reason = sReason
-		case "action":
-			sAction, err := decodeString(item, path+".action")
-			if err != nil {
-				return out, err
-			}
-			out.Action = sAction
-		case "verdictRef":
-			sVerdictRef, err := decodeString(item, path+".verdictRef")
-			if err != nil {
-				return out, err
-			}
-			out.VerdictRef = sVerdictRef
-		case "ts":
-			nTs, err := decodeInt(item, path+".ts")
-			if err != nil {
-				return out, err
-			}
-			out.Ts = nTs
-		default:
-			return out, unknownMember(path, "JobDenial", key)
 		}
 	}
 	return out, nil
@@ -3885,142 +3802,6 @@ func decodeJobRelease(v vm.Value, path string) (types.JobRelease, error) {
 			out.Narrowed = bNarrowed
 		default:
 			return out, unknownMember(path, "JobRelease", key)
-		}
-	}
-	return out, nil
-}
-
-// DecodeJobResult decodes a Buzz JobResult, an object instance or a map, into a types.JobResult.
-func DecodeJobResult(v vm.Value) (types.JobResult, error) {
-	return decodeJobResult(v, "jobResult")
-}
-
-func decodeJobResult(v vm.Value, path string) (types.JobResult, error) {
-	var out types.JobResult
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "JobResult", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "apiVersion":
-			sVersion, err := decodeString(item, path+".apiVersion")
-			if err != nil {
-				return out, err
-			}
-			out.Schema.Version = types.APIVersion(sVersion)
-		case "requires":
-			strsRequires, err := decodeStringList(item, path+".requires")
-			if err != nil {
-				return out, err
-			}
-			out.Schema.Requires = strsRequires
-		case "job":
-			sJob, err := decodeString(item, path+".job")
-			if err != nil {
-				return out, err
-			}
-			out.Job = sJob
-		case "changedPaths":
-			strsChangedPaths, err := decodeStringList(item, path+".changedPaths")
-			if err != nil {
-				return out, err
-			}
-			out.ChangedPaths = strsChangedPaths
-		case "validation":
-			xValidation, err := decodeJobResultValidation(item, path+".validation")
-			if err != nil {
-				return out, err
-			}
-			out.Validation = xValidation
-		case "verificationEvidence":
-			listVerificationEvidence, err := decodeList(item, path+".verificationEvidence", "[VerificationEvidence]")
-			if err != nil {
-				return out, err
-			}
-			if len(listVerificationEvidence) > 0 {
-				itemsVerificationEvidence := make([]types.VerificationEvidence, len(listVerificationEvidence))
-				for indexVerificationEvidence, itemVerificationEvidence := range listVerificationEvidence {
-					xVerificationEvidenceItem, err := decodeVerificationEvidence(itemVerificationEvidence, fmt.Sprintf("%s[%d]", path+".verificationEvidence", indexVerificationEvidence))
-					if err != nil {
-						return out, err
-					}
-					itemsVerificationEvidence[indexVerificationEvidence] = xVerificationEvidenceItem
-				}
-				out.VerificationEvidence = itemsVerificationEvidence
-			}
-		case "descendants":
-			strsDescendants, err := decodeStringList(item, path+".descendants")
-			if err != nil {
-				return out, err
-			}
-			out.Descendants = strsDescendants
-		case "unresolvedRisks":
-			strsUnresolvedRisks, err := decodeStringList(item, path+".unresolvedRisks")
-			if err != nil {
-				return out, err
-			}
-			out.UnresolvedRisks = strsUnresolvedRisks
-		case "followUps":
-			strsFollowUps, err := decodeStringList(item, path+".followUps")
-			if err != nil {
-				return out, err
-			}
-			out.FollowUps = strsFollowUps
-		case "observedGeneration":
-			nObservedGeneration, err := decodeInt(item, path+".observedGeneration")
-			if err != nil {
-				return out, err
-			}
-			out.ObservedGeneration = int(nObservedGeneration)
-		default:
-			return out, unknownMember(path, "JobResult", key)
-		}
-	}
-	return out, nil
-}
-
-// DecodeJobResultValidation decodes a Buzz JobResultValidation, an object instance or a map, into a types.JobResultValidation.
-func DecodeJobResultValidation(v vm.Value) (types.JobResultValidation, error) {
-	return decodeJobResultValidation(v, "jobResultValidation")
-}
-
-func decodeJobResultValidation(v vm.Value, path string) (types.JobResultValidation, error) {
-	var out types.JobResultValidation
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "JobResultValidation", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "command":
-			sCommand, err := decodeString(item, path+".command")
-			if err != nil {
-				return out, err
-			}
-			out.Command = sCommand
-		case "outputRef":
-			sOutputRef, err := decodeString(item, path+".outputRef")
-			if err != nil {
-				return out, err
-			}
-			out.OutputRef = sOutputRef
-		case "owed":
-			sOwed, err := decodeString(item, path+".owed")
-			if err != nil {
-				return out, err
-			}
-			out.Owed = sOwed
-		case "unrun":
-			sUnrun, err := decodeString(item, path+".unrun")
-			if err != nil {
-				return out, err
-			}
-			out.Unrun = sUnrun
-		default:
-			return out, unknownMember(path, "JobResultValidation", key)
 		}
 	}
 	return out, nil
@@ -5112,149 +4893,6 @@ func decodePriceStep(v vm.Value, path string) (types.PriceStep, error) {
 			out.Multiplier = nMultiplier
 		default:
 			return out, unknownMember(path, "PriceStep", key)
-		}
-	}
-	return out, nil
-}
-
-// DecodePriorAttempt decodes a Buzz PriorAttempt, an object instance or a map, into a types.PriorAttempt.
-func DecodePriorAttempt(v vm.Value) (types.PriorAttempt, error) {
-	return decodePriorAttempt(v, "priorAttempt")
-}
-
-func decodePriorAttempt(v vm.Value, path string) (types.PriorAttempt, error) {
-	var out types.PriorAttempt
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "PriorAttempt", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "n":
-			nN, err := decodeInt(item, path+".n")
-			if err != nil {
-				return out, err
-			}
-			out.N = int(nN)
-		case "state":
-			sState, err := decodeEnum(item, path+".state", "JobState", enumJobStateValues)
-			if err != nil {
-				return out, err
-			}
-			out.State = types.JobState(sState)
-		case "observedGeneration":
-			nObservedGeneration, err := decodeInt(item, path+".observedGeneration")
-			if err != nil {
-				return out, err
-			}
-			out.ObservedGeneration = int(nObservedGeneration)
-		case "endReason":
-			sEndReason, err := decodeString(item, path+".endReason")
-			if err != nil {
-				return out, err
-			}
-			out.EndReason = sEndReason
-		case "modelTier":
-			sModelTier, err := decodeString(item, path+".modelTier")
-			if err != nil {
-				return out, err
-			}
-			out.ModelTier = sModelTier
-		case "checkpoint":
-			sCheckpoint, err := decodeString(item, path+".checkpoint")
-			if err != nil {
-				return out, err
-			}
-			out.Checkpoint = sCheckpoint
-		case "reportedBase":
-			sReportedBase, err := decodeString(item, path+".reportedBase")
-			if err != nil {
-				return out, err
-			}
-			out.ReportedBase = sReportedBase
-		case "ended":
-			nEnded, err := decodeInt(item, path+".ended")
-			if err != nil {
-				return out, err
-			}
-			out.Ended = nEnded
-		case "reworkRounds":
-			nReworkRounds, err := decodeInt(item, path+".reworkRounds")
-			if err != nil {
-				return out, err
-			}
-			out.ReworkRounds = int(nReworkRounds)
-		case "widenings":
-			nWidenings, err := decodeInt(item, path+".widenings")
-			if err != nil {
-				return out, err
-			}
-			out.Widenings = int(nWidenings)
-		case "unmet":
-			listUnmet, err := decodeList(item, path+".unmet", "[VerificationStatus]")
-			if err != nil {
-				return out, err
-			}
-			if len(listUnmet) > 0 {
-				itemsUnmet := make([]types.VerificationStatus, len(listUnmet))
-				for indexUnmet, itemUnmet := range listUnmet {
-					xUnmetItem, err := decodeVerificationStatus(itemUnmet, fmt.Sprintf("%s[%d]", path+".unmet", indexUnmet))
-					if err != nil {
-						return out, err
-					}
-					itemsUnmet[indexUnmet] = xUnmetItem
-				}
-				out.Unmet = itemsUnmet
-			}
-		case "violations":
-			strsViolations, err := decodeStringList(item, path+".violations")
-			if err != nil {
-				return out, err
-			}
-			out.Violations = strsViolations
-		case "unresolvedRisks":
-			strsUnresolvedRisks, err := decodeStringList(item, path+".unresolvedRisks")
-			if err != nil {
-				return out, err
-			}
-			out.UnresolvedRisks = strsUnresolvedRisks
-		case "failingRefs":
-			strsFailingRefs, err := decodeStringList(item, path+".failingRefs")
-			if err != nil {
-				return out, err
-			}
-			out.FailingRefs = strsFailingRefs
-		case "denials":
-			listDenials, err := decodeList(item, path+".denials", "[JobDenial]")
-			if err != nil {
-				return out, err
-			}
-			if len(listDenials) > 0 {
-				itemsDenials := make([]types.JobDenial, len(listDenials))
-				for indexDenials, itemDenials := range listDenials {
-					xDenialsItem, err := decodeJobDenial(itemDenials, fmt.Sprintf("%s[%d]", path+".denials", indexDenials))
-					if err != nil {
-						return out, err
-					}
-					itemsDenials[indexDenials] = xDenialsItem
-				}
-				out.Denials = itemsDenials
-			}
-		case "denialsKnown":
-			bDenialsKnown, err := decodeBool(item, path+".denialsKnown")
-			if err != nil {
-				return out, err
-			}
-			out.DenialsKnown = bDenialsKnown
-		case "retry":
-			xRetry, err := decodeRetryVerdict(item, path+".retry")
-			if err != nil {
-				return out, err
-			}
-			out.Retry = xRetry
-		default:
-			return out, unknownMember(path, "PriorAttempt", key)
 		}
 	}
 	return out, nil
@@ -7387,51 +7025,6 @@ func decodeRetryOptions(v vm.Value, path string) (types.RetryOptions, error) {
 	return out, nil
 }
 
-// DecodeRetryVerdict decodes a Buzz RetryVerdict, an object instance or a map, into a types.RetryVerdict.
-func DecodeRetryVerdict(v vm.Value) (types.RetryVerdict, error) {
-	return decodeRetryVerdict(v, "retryVerdict")
-}
-
-func decodeRetryVerdict(v vm.Value, path string) (types.RetryVerdict, error) {
-	var out types.RetryVerdict
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "RetryVerdict", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "retryable":
-			bRetryable, err := decodeBool(item, path+".retryable")
-			if err != nil {
-				return out, err
-			}
-			out.Retryable = bRetryable
-		case "change":
-			sChange, err := decodeEnum(item, path+".change", "RetryChange", enumRetryChangeValues)
-			if err != nil {
-				return out, err
-			}
-			out.Change = types.RetryChange(sChange)
-		case "reason":
-			sReason, err := decodeString(item, path+".reason")
-			if err != nil {
-				return out, err
-			}
-			out.Reason = sReason
-		case "code":
-			sCode, err := decodeString(item, path+".code")
-			if err != nil {
-				return out, err
-			}
-			out.Code = diagnostics.Code(sCode)
-		default:
-			return out, unknownMember(path, "RetryVerdict", key)
-		}
-	}
-	return out, nil
-}
-
 // DecodeDiffReviewComment decodes a Buzz ReviewComment, an object instance or a map, into a difftypes.ReviewComment.
 func DecodeDiffReviewComment(v vm.Value) (difftypes.ReviewComment, error) {
 	return decodeDiffReviewComment(v, "reviewComment")
@@ -8631,51 +8224,6 @@ func decodeVCSCheckpoint(v vm.Value, path string) (types.VCSCheckpoint, error) {
 	return out, nil
 }
 
-// DecodeVerificationEvidence decodes a Buzz VerificationEvidence, an object instance or a map, into a types.VerificationEvidence.
-func DecodeVerificationEvidence(v vm.Value) (types.VerificationEvidence, error) {
-	return decodeVerificationEvidence(v, "verificationEvidence")
-}
-
-func decodeVerificationEvidence(v vm.Value, path string) (types.VerificationEvidence, error) {
-	var out types.VerificationEvidence
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "VerificationEvidence", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "gateID":
-			sGateID, err := decodeString(item, path+".gateID")
-			if err != nil {
-				return out, err
-			}
-			out.GateID = sGateID
-		case "outputRef":
-			sOutputRef, err := decodeString(item, path+".outputRef")
-			if err != nil {
-				return out, err
-			}
-			out.OutputRef = sOutputRef
-		case "owed":
-			sOwed, err := decodeString(item, path+".owed")
-			if err != nil {
-				return out, err
-			}
-			out.Owed = sOwed
-		case "unrun":
-			sUnrun, err := decodeString(item, path+".unrun")
-			if err != nil {
-				return out, err
-			}
-			out.Unrun = sUnrun
-		default:
-			return out, unknownMember(path, "VerificationEvidence", key)
-		}
-	}
-	return out, nil
-}
-
 // DecodeVerificationStatus decodes a Buzz VerificationStatus, an object instance or a map, into a types.VerificationStatus.
 func DecodeVerificationStatus(v vm.Value) (types.VerificationStatus, error) {
 	return decodeVerificationStatus(v, "verificationStatus")
@@ -9713,7 +9261,6 @@ var enumModelTierSourceValues = []string{"row", "matrix", "user-matrix", "defaul
 var enumOSValues = []string{"", "linux"}
 var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "copy", "test"}
 var enumRelationIDValues = []string{"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"}
-var enumRetryChangeValues = []string{"", "config", "widening", "person", "upgrade"}
 var enumSandboxAccessValues = []string{"", "ro", "rx", "rw", "rwx"}
 var enumSkillFormValues = []string{"", "both", "short", "full"}
 var enumSkillVariantValues = []string{"short", "full"}

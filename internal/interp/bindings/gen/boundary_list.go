@@ -30,6 +30,8 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Artifact", Zero: types.TargetArtifact{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetArtifact(v.(types.TargetArtifact)) }},
 	{Name: "ArtifactRequest", Zero: types.ArtifactRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectArtifactRequest(v.(types.ArtifactRequest)) }},
 	{Name: "ArtifactVersion", Zero: types.ArtifactVersion{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectArtifactVersion(v.(types.ArtifactVersion)) }},
+	{Name: "Attempt", Zero: types.Attempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAttempt(v.(types.Attempt), enums) }},
+	{Name: "AttemptStatus", Zero: types.AttemptStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAttemptStatus(v.(types.AttemptStatus), enums) }},
 	{Name: "AttentionList", Zero: types.AttentionList{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAttentionList(v.(types.AttentionList), enums) }},
 	{Name: "AttentionRequest", Zero: types.AttentionRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectAttentionRequest(v.(types.AttentionRequest), enums)
@@ -312,7 +314,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Precedent", Zero: types.Precedent{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedent(v.(types.Precedent), enums) }},
 	{Name: "PrecedentKey", Zero: types.PrecedentKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedentKey(v.(types.PrecedentKey)) }},
 	{Name: "PrecedentScope", Zero: types.PrecedentScope{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedentScope(v.(types.PrecedentScope)) }},
-	{Name: "PriorAttempt", Zero: types.PriorAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPriorAttempt(v.(types.PriorAttempt), enums) }},
 	{Name: "ProjectEntry", Zero: types.ProjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectEntry(v.(types.ProjectEntry)) }},
 	{Name: "ProjectGraph", Zero: types.ProjectGraph{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectGraph(v.(types.ProjectGraph)) }},
 	{Name: "ProjectQuery", Zero: types.ProjectQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectQuery(v.(types.ProjectQuery)) }},

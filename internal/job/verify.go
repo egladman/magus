@@ -120,6 +120,9 @@ type Observed struct {
 	// anyLease accepts a run recorded under any lease. Integration grades runs in the
 	// integrator's own tree, where its validators run checks under their own leases.
 	anyLease bool
+	// tries are the store's attempts. An integration owes runs their
+	// results owe.
+	tries types.JobAttempts
 }
 
 // GreenGate is a passing ci gate and what changed since it.
@@ -314,7 +317,7 @@ func integratorGoals(row types.Job) []types.Goal {
 // owedGoals are the checks the jobs row merges filed as owed (see [types.OwedNoSeat]), one
 // goal per check no goal in held or before it covers. A merged job is one whose id names a
 // branch row integrates.
-func owedGoals(row types.Job, declared []types.Job, held []types.Goal) []types.Goal {
+func owedGoals(row types.Job, declared []types.Job, tries types.JobAttempts, held []types.Goal) []types.Goal {
 	if !row.Integrating() {
 		return nil
 	}
@@ -328,10 +331,11 @@ func owedGoals(row types.Job, declared []types.Job, held []types.Goal) []types.G
 		return slices.ContainsFunc(held, runs) || slices.ContainsFunc(goals, runs)
 	}
 	for _, d := range declared {
-		if d.Result == nil || !slices.Contains(row.Integrates, d.ID) {
+		result := tries.Result(d.ID)
+		if result == nil || !slices.Contains(row.Integrates, d.ID) {
 			continue
 		}
-		for _, c := range owedChecks(d) {
+		for _, c := range owedChecks(d, *result) {
 			if covered(c) {
 				continue
 			}
@@ -344,12 +348,12 @@ func owedGoals(row types.Job, declared []types.Job, held []types.Goal) []types.G
 }
 
 // owedChecks are the checks d's result files as owed rather than citing a run.
-func owedChecks(d types.Job) []types.LeaseCheck {
+func owedChecks(d types.Job, result types.JobResult) []types.LeaseCheck {
 	owed := map[string]bool{}
-	if d.Result.Validation.Owed != "" {
+	if result.Validation.Owed != "" {
 		owed[types.PrimaryGoalID] = true
 	}
-	for _, e := range d.Result.VerificationEvidence {
+	for _, e := range result.VerificationEvidence {
 		if e.Owed != "" {
 			owed[e.GateID] = true
 		}
@@ -486,7 +490,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	// The check is a goal here too, so verification_evidence may name it by its
 	// id.
 	gates := append(row.EffectiveGoals(), integratorGoals(row)...)
-	gates = append(gates, owedGoals(row, declared, gates)...)
+	gates = append(gates, owedGoals(row, declared, seen.tries, gates)...)
 	declaredGates := make(map[string]types.Goal, len(gates))
 	for _, gate := range gates {
 		declaredGates[gate.ID] = gate

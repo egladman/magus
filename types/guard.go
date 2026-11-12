@@ -310,13 +310,6 @@ type StopRequest struct {
 	// Transcript is the path of the stopping agent's transcript as the host reported it,
 	// empty when it reported none.
 	Transcript string
-	// Tasks are the spawn descriptions of the subagents
-	// the host still runs in the background, in spawn order.
-	// One leaves only when the host reports it ended.
-	Tasks []string
-	// TasksUnknown is why the task list was not read, empty
-	// when it was. Tasks is then unknown, not empty.
-	TasksUnknown string
 	// Checkout is the state of the checkout the stop happens in, nil when its version
 	// control cannot report it: a rule reads nil as unknown.
 	Checkout *CheckoutState

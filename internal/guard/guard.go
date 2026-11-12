@@ -830,6 +830,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			// same session.
 			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.skillsKey()), env.LoadedSkill)
 		}
+		if env.Tool == handbackTool && !req.DryRun && !req.Observe {
+			endHandedBack(ctx, hookLocation(ctx, deps), who, time.Now())
+		}
 		// A foreground spawn returns after its child stopped and a host may send no start for
 		// it, so the child's first call joins it to the spawn too; joinStartedChild leaves a
 		// child it already has a record of alone, and advises one it cannot place, which a
@@ -2505,7 +2508,11 @@ func rereadJobStoreRows(ctx context.Context, at location) context.Context {
 	} else {
 		log.idle()
 	}
-	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Err: err})
+	var tries []types.Attempt
+	if err == nil {
+		tries, err = store.Attempts()
+	}
+	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Attempts: tries, Err: err})
 }
 
 // jobRowsBudget bounds a hook's wait for the job store's rows, half the hook's budget as a
@@ -2537,7 +2544,7 @@ func withPendingRow(ctx context.Context, row types.Job) context.Context {
 	}
 	rows := slices.DeleteFunc(slices.Clone(snap.Rows), func(r types.Job) bool { return r.ID == row.ID })
 	ctx = context.WithValue(ctx, pendingRowKey{}, row.ID)
-	return job.WithSnapshot(ctx, job.Snapshot{Rows: append(rows, row.Clone())})
+	return job.WithSnapshot(ctx, job.Snapshot{Rows: append(rows, row.Clone()), Attempts: snap.Attempts})
 }
 
 type pendingRowKey struct{}

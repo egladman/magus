@@ -40,9 +40,10 @@ const returnedReason = "returned: its holder filed a result, and a read-only row
 // endedReason says which end a write recording no_return on the live row prev is, so a
 // row its holder returned with nothing to grade never reads as one nobody returned. byHolder
 // is a write under the row's lease or from the checkout its holder took it in.
-func endedReason(prev types.Job, byHolder bool) string {
+// filed says prev's live attempt filed a result.
+func endedReason(prev types.Job, filed, byHolder bool) string {
 	switch {
-	case prev.Result != nil:
+	case filed:
 		return fmt.Sprintf("ended unverified: its holder filed a result and nobody ran `%s` on it", hint.JobWait.With(prev.ID))
 	case prev.Registered == 0:
 		return fmt.Sprintf("ended with no result filed, before any holder ran `%s` on it", hint.JobExec.With(prev.ID))
@@ -85,17 +86,29 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	if err := refuseLiveDescendants(ctx, rows, id, result != nil); err != nil {
 		return types.Job{}, err
 	}
+	tries, err := store.Attempts()
+	if err != nil {
+		return types.Job{}, err
+	}
+	var filed *types.JobResult
 	update := func(apply func(*types.Job)) (types.Job, error) {
 		if store.dryRun {
 			row := rows[i].Clone()
 			apply(&row)
 			if row.State == types.StateNoReturn {
-				row.EndReason = endedReason(rows[i], store.endsOwnRow(rows[i]))
+				row.EndReason = endedReason(rows[i], types.NewJobAttempts(tries).Result(id) != nil, store.endsOwnRow(rows[i]))
 			}
 			store.endDry(row)
 			return row, nil
 		}
-		return store.Update(ctx, id, apply)
+		row, err := store.Update(ctx, id, apply)
+		if err != nil {
+			return row, err
+		}
+		if filed != nil {
+			return row, store.fileResult(ctx, id, filed, store.now().Unix())
+		}
+		return row, store.EndAttempt(ctx, id, types.AttemptEndExit, store.now())
 	}
 	if result == nil {
 		return update(func(row *types.Job) { row.State = types.StateNoReturn })
@@ -134,9 +147,9 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 	return update(func(row *types.Job) {
 		prev := row.Clone()
 		generation := max(row.Generation, 1)
-		filed := *result
-		filed.ObservedGeneration = generation
-		row.Result = &filed
+		stamped := *result
+		stamped.ObservedGeneration = generation
+		filed = &stamped
 		row.GateAttempts = gateAttempts
 		for i := range row.GateAttempts {
 			row.GateAttempts[i].Attempt.ObservedGeneration = generation
@@ -243,13 +256,18 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.JobStatus{}, fmt.Errorf("job: there is no job %q", id)
 	}
 
+	tries, err := store.Attempts()
+	if err != nil {
+		return types.JobStatus{}, err
+	}
+	filed := types.NewJobAttempts(tries).Result(id)
 	var ev graded
 	var prior int
 	if result == nil {
-		if jobs[i].Result == nil {
+		if filed == nil {
 			return types.JobStatus{}, fmt.Errorf("job: %s has filed no result", id)
 		}
-		ev, prior = evidenceAt(jobs[i])
+		ev, prior = evidenceAt(jobs[i], filed)
 	} else {
 		resolve, where := store.acrossCheckouts(jobs, id, resolve)
 		ev.result = *result
@@ -270,6 +288,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		}
 	}
 	seen.TestSelection = store.testSelection()
+	seen.tries = types.NewJobAttempts(tries)
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, jobs[i]), seen, ev.result, store.generated, ev.runs()...)
 	seen.changedFiles = rowFiles(WorkTree(store.root, jobs[i]), seen, ev.result, store.generated)
 	seen.namedFiles = namedFiles(WorkTree(store.root, jobs[i]), inheritGoals(jobs[i], jobs).EffectiveGoals(), slices.Concat(seen.Changed, ev.result.ChangedPaths))
@@ -305,7 +324,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 				At:                 now,
 				ObservedGeneration: generation,
 			}
-			if note := reclaimForRework(row, jobs); note != "" {
+			if note := reclaimForRework(row, filed, jobs); note != "" {
 				status.Notes = append(status.Notes, note)
 			}
 			return nil
@@ -327,7 +346,8 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 // under the rule a claim meets ([checkClaimPath]).
 // Another job may have taken a path. One the result changed keeps the row
 // exited. One it never touched goes to that job. The note says which.
-func reclaimForRework(row *types.Job, rows []types.Job) string {
+// filed is the result row's live attempt filed.
+func reclaimForRework(row *types.Job, filed *types.JobResult, rows []types.Job) string {
 	if row.State != types.StateExited {
 		return ""
 	}
@@ -339,7 +359,7 @@ func reclaimForRework(row *types.Job, rows []types.Job) string {
 		switch {
 		case err == nil:
 			kept = append(kept, entry)
-		case row.Result != nil && slices.ContainsFunc(row.Result.ChangedPaths, func(p string) bool { return types.PathWithin(p, file) }):
+		case filed != nil && slices.ContainsFunc(filed.ChangedPaths, func(p string) bool { return types.PathWithin(p, file) }):
 			return fmt.Sprintf("%s stays exited and holds nothing, since its rework could not re-claim its write paths: %v; it reworks once that job ends, or `magus job fork` declares it again",
 				row.ID, err)
 		default:
@@ -990,7 +1010,11 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 	}
 	row := inheritGoals(jobs[i], jobs)
 
-	ev, prior := evidenceAt(jobs[i])
+	tries, err := store.Attempts()
+	if err != nil {
+		return types.JobStatus{}, err
+	}
+	ev, prior := evidenceAt(jobs[i], types.NewJobAttempts(tries).Result(id))
 	var seen Observed
 	if observe != nil {
 		if seen, err = observe(ctx, row); err != nil {
@@ -998,6 +1022,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 		}
 	}
 	seen.TestSelection = store.testSelection()
+	seen.tries = types.NewJobAttempts(tries)
 	seen.Stale = staleRuns(ctx, WorkTree(store.root, row), seen, ev.result, store.generated, ev.runs()...)
 	seen.changedFiles = rowFiles(WorkTree(store.root, row), seen, ev.result, store.generated)
 	seen.namedFiles = namedFiles(WorkTree(store.root, row), row.EffectiveGoals(), slices.Concat(seen.Changed, ev.result.ChangedPaths))

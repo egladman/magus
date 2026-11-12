@@ -220,8 +220,47 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		if env.IsSpawn {
 			recordPendingSpawn(facts, env, actingLease, time.Now())
 		}
+		if note := startNamedAttempt(ctx, at, facts, env, titled, time.Now()); note != "" {
+			verdict.Context = strings.Join(slices.DeleteFunc([]string{verdict.Context, note}, func(s string) bool { return s == "" }), "\n\n")
+			if verdict.Decision == decisionPass {
+				verdict.Decision = decisionAdvise
+			}
+		}
 	}
 	return verdict
+}
+
+// startNamedAttempt records a try of the row a spawn's title or a
+// continuation's worker names starting at now. It returns what kept it
+// from being recorded, "" when it was or no row is named.
+func startNamedAttempt(ctx context.Context, at location, facts hint.Gate, env hookRequest, titled spawnTitle, now time.Time) string {
+	if isDryRun(ctx) {
+		return ""
+	}
+	row, ok := continuedRow(ctx, at, facts, env)
+	if env.IsSpawn {
+		row, ok = titled()
+	}
+	if !ok {
+		return ""
+	}
+	if _, err := job.NewStore(at.jobs()).StartAttempt(ctx, row.ID, now); err != nil {
+		return fmt.Sprintf("magus workspace: this worker's try of job %s was not recorded, so the stop rule cannot count it: %s", row.ID, err)
+	}
+	return ""
+}
+
+// handbackTool is the tool a Claude Code subagent files its report
+// through, which ends its try as the glue's HANDBACK_TOOLS reads it.
+const handbackTool = "SubagentHandback"
+
+// endHandedBack records that the caller's bound job's try ended by
+// handback at now. Best effort, like every hook record: a call the
+// store cannot attribute ends nothing, and the deadline bounds the try.
+func endHandedBack(ctx context.Context, at location, who hookAttribution, now time.Time) {
+	if b := boundJob(who, at); b.Job != "" && !b.Gone {
+		_ = job.NewStore(at.jobs()).EndAttempt(ctx, b.Job, types.AttemptEndHandback, now)
+	}
 }
 
 // spawnBuiltIns is the compiled half of a spawn's verdict, which reads session state and

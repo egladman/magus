@@ -64,7 +64,12 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		}
 	}
 	rows = HardenWritten(ctx, store, rows)
-	graded := WithSnapshot(ctx, Snapshot{Rows: rows})
+	var tries []types.Attempt
+	var triesErr error
+	if store != nil {
+		tries, triesErr = store.Attempts()
+	}
+	graded := WithSnapshot(ctx, Snapshot{Rows: rows, Attempts: tries, Err: triesErr})
 	prev, updates = mergeBase(rows, id, merge)
 	merged := prev.Clone()
 	merge(&merged)

@@ -394,13 +394,13 @@ fun refLine(label: str, ref: str, owed: str, unrun: str) > str {
     return "{label}: no ref filed";
 }
 
-// resultView renders the JobResult row's holder filed. A row with none is an
+// resultView renders filed, the JobResult row's live try filed. None is an
 // error: `magus job wait` says when there is one.
-export fun resultView(row: magus\Job) > result\Result::<str> {
-    if (row.result == null) {
+export fun resultView(row: magus\Job, filed: magus\JobResult?) > result\Result::<str> {
+    if (filed == null) {
         return result\fail::<str>("job-view: job {row.id} has no filed result yet; `./magus job wait {row.id}` waits for one");
     }
-    final r = row.result!;
+    final r = filed!;
     var validation = "- no check was filed";
     if (r.validation.command != "") {
         validation = refLine("- `{r.validation.command}`", ref: r.validation.outputRef, owed: r.validation.owed, unrun: r.validation.unrun);
@@ -429,6 +429,20 @@ export fun resultView(row: magus\Job) > result\Result::<str> {
     }
 }
 
+// liveResult is what job id's newest try no fork superseded filed,
+// null when it filed nothing.
+fun liveResult(list: magus\JobList, id: str) > magus\JobResult? {
+    var n = 0;
+    var filed: magus\JobResult? = null;
+    foreach (a in list.attempts) {
+        if (a.job == id and a.n > n and a.status.state == magus\JobState.none) {
+            n = a.n;
+            filed = a.status.result;
+        }
+    }
+    return filed;
+}
+
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: ["--help", "--result"], valued: ["--job"]);
     if (parsed.values["--help"] != null) {
@@ -443,9 +457,10 @@ export fun main(args: [str]) > void !> any {
         throw "job-view: --job is required\n{USAGE}";
     }
     final row = magus\job(id);
-    var view = resultView(row);
+    final list = magus\workspace().jobs();
+    var view = resultView(row, filed: liveResult(list, id: id));
     if (parsed.values["--result"] == null) {
-        view = specView(row, list: magus\workspace().jobs());
+        view = specView(row, list: list);
     }
     if (view.error != null) {
         throw view.error!.message;
@@ -520,23 +535,27 @@ test "declaration claims are spelled out per file, grouped by reason" {
 
 test "a filed result renders its refs and what is owed" {
     final row = fixtureRow();
-    final filed = magus\Job{ id = row.id, state = magus\JobState.pass, generation = 2,
-        result = magus\JobResult{
-            job = row.id,
-            changedPaths = ["internal/guard/quote.go"],
-            validation = magus\JobResultValidation{ command = "magus run go::go-test .", outputRef = "out1a2b3c" },
-            verificationEvidence = [magus\VerificationEvidence{ gateID = "lint", owed = "no seat" }],
-            unresolvedRisks = [<str>],
-            observedGeneration = 2,
-        } };
-    final got = resultView(filed).value!;
+    final filed = magus\Job{ id = row.id, state = magus\JobState.pass, generation = 2 };
+    final result = magus\JobResult{
+        job = row.id,
+        changedPaths = ["internal/guard/quote.go"],
+        validation = magus\JobResultValidation{ command = "magus run go::go-test .", outputRef = "out1a2b3c" },
+        verificationEvidence = [magus\VerificationEvidence{ gateID = "lint", owed = "no seat" }],
+        unresolvedRisks = [<str>],
+        observedGeneration = 2,
+    };
+    final list = magus\JobList{ attempts = [
+        magus\Attempt{ job = row.id, n = 1, status = magus\AttemptStatus{ state = magus\JobState.fail } },
+        magus\Attempt{ job = row.id, n = 2, status = magus\AttemptStatus{ result = result } },
+    ] };
+    final got = resultView(filed, filed: liveResult(list, id: row.id)).value!;
     assert\equal(got.indexOf("- `magus run go::go-test .`: `out1a2b3c`") != null, want: true, message: "validation ref");
     assert\equal(got.indexOf("- gate `lint`: owed, no seat") != null, want: true, message: "owed gate");
     assert\equal(got.indexOf("## Unresolved risks\n\n- none") != null, want: true, message: "no risks");
 }
 
 test "a spec with no filed result has no result view" {
-    assert\equal(resultView(fixtureRow()).error != null, want: true, message: "unfiled");
+    assert\equal(resultView(fixtureRow(), filed: null).error != null, want: true, message: "unfiled");
 }
 
 test "the same records render the same bytes" {

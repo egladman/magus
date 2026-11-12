@@ -504,11 +504,11 @@ func reportForkFacts(ctx context.Context, store *job.Store, root string) {
 
 // unmergedReport is nil for the format that prints only ids, which cannot show
 // a report that costs up to the read's whole budget.
-func unmergedReport(ctx context.Context, root string, rows []types.Job, format output.Format) *types.JobUnmergedReport {
+func unmergedReport(ctx context.Context, root string, rows []types.Job, tries types.JobAttempts, format output.Format) *types.JobUnmergedReport {
 	if format == outputName {
 		return nil
 	}
-	report := job.Unmerged(ctx, root, rows)
+	report := job.Unmerged(ctx, root, rows, tries)
 	return &report
 }
 
@@ -585,7 +585,7 @@ func lsJobs(root string, args []string) error {
 		return err
 	}
 	// Before ended rows drop out: their work is what most often goes missing.
-	list.Unmerged = unmergedReport(ctx, resolveRootOrEmpty(root), list.Jobs, opts.Format)
+	list.Unmerged = unmergedReport(ctx, resolveRootOrEmpty(root), list.Jobs, types.NewJobAttempts(list.Attempts), opts.Format)
 	if !all {
 		var ended int
 		list, ended = withoutEnded(list)
@@ -1017,6 +1017,11 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	facts := leaseBoundary(ctx, root, store, row, leases, graph)
 	waiting.Stop()
 	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, graph, row.WritePaths)
+	tries, err := store.Attempts()
+	if err != nil {
+		return err
+	}
+	facts.Attempts = types.NewJobAttempts(tries)[row.ID]
 	brief := job.NewTerms(row, facts)
 
 	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root, graphsByTree(root, graph, false)))

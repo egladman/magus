@@ -1559,7 +1559,10 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 		if snap.Err != nil {
 			return types.JobList{}, snap.Err
 		}
-		return types.NewJobList(snap.Clone().Rows), nil
+		snap = snap.Clone()
+		list := types.NewJobList(snap.Rows)
+		list.Attempts = job.BoundAttempts(snap.Rows, snap.Attempts, time.Now().Unix())
+		return list, nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.list")
 	if err != nil {
@@ -1588,17 +1591,18 @@ func MagusUnmergedJob(ctx context.Context, workspace string) (types.JobUnmergedR
 		if snap.Err != nil {
 			return types.JobUnmergedReport{}, snap.Err
 		}
-		return job.Unmerged(ctx, workspace, snap.Clone().Rows), nil
+		snap = snap.Clone()
+		return job.Unmerged(ctx, workspace, snap.Rows, types.NewJobAttempts(snap.Attempts)), nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.unmerged")
 	if err != nil {
 		return types.JobUnmergedReport{}, err
 	}
-	rows, err := store.List()
-	if err != nil {
-		return types.JobUnmergedReport{}, err
+	snap := job.ReadSnapshot(store)
+	if snap.Err != nil {
+		return types.JobUnmergedReport{}, snap.Err
 	}
-	return job.Unmerged(ctx, workspace, rows), nil
+	return job.Unmerged(ctx, workspace, snap.Rows, types.NewJobAttempts(snap.Attempts)), nil
 }
 
 // checkoutCacheDir is the cache directory of the workspace on ctx, or the one
