@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestFieldType_Kinds pins every Go kind the mirror generator accepts, and the
@@ -99,7 +100,7 @@ func TestRenderFields_InlinesEmbedded(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{}), DefaultOptions()))
+	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{}), DefaultOptions(), map[string]bool{}))
 
 	got := b.String()
 	assert.Contains(t, got, "alpha: str", "embedded field must be promoted, not nested")
@@ -120,7 +121,7 @@ func TestRenderFields_NamedEmbeddedNests(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{}), DefaultOptions()))
+	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{}), DefaultOptions(), map[string]bool{}))
 
 	got := b.String()
 	assert.Contains(t, got, "inner: Embedded", "a tagged embedded field nests under its tag")
@@ -139,7 +140,7 @@ func TestRenderFields_SkipsUnexportedAndOptedOut(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{}), DefaultOptions()))
+	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{}), DefaultOptions(), map[string]bool{}))
 
 	got := b.String()
 	assert.Contains(t, got, "kept: str")
@@ -220,4 +221,77 @@ func TestFieldType_GenericInstanceWithMapArgumentRefused(t *testing.T) {
 
 	_, _, err := FieldType(reflect.TypeFor[genericResult[map[string]int]](), DefaultOptions())
 	require.ErrorContains(t, err, "is a map")
+}
+
+type requiredWorker struct {
+	Type   string
+	Reason string
+}
+
+type requiredSpec struct {
+	Worker requiredWorker
+	Note   string
+}
+
+type requiredHolder struct {
+	Spec *requiredSpec
+	Many []requiredWorker
+}
+
+type RequiredFieldSuite struct {
+	suite.Suite
+	opts Options
+}
+
+func TestRequiredFieldSuite(t *testing.T) {
+	suite.Run(t, new(RequiredFieldSuite))
+}
+
+func (s *RequiredFieldSuite) SetupTest() {
+	s.opts = DefaultOptions()
+	s.opts.Required = func(t reflect.Type) []string {
+		switch t {
+		case reflect.TypeFor[requiredWorker]():
+			return []string{"type"}
+		case reflect.TypeFor[requiredSpec]():
+			return []string{"worker"}
+		}
+		return nil
+	}
+}
+
+func (s *RequiredFieldSuite) TestRequiredFieldHasNoDefault() {
+	got, err := ObjectDecl("Worker", reflect.TypeFor[requiredWorker](), s.opts)
+	s.Require().NoError(err)
+	s.Equal("export object Worker {\n    @\"type\": str,\n    reason: str = \"\",\n}\n", string(got))
+}
+
+func (s *RequiredFieldSuite) TestStructHoldingARequiredStructIsRequiredToo() {
+	got, err := ObjectDecl("Spec", reflect.TypeFor[requiredSpec](), s.opts)
+	s.Require().NoError(err)
+	s.Contains(string(got), "    worker: requiredWorker,\n")
+}
+
+func (s *RequiredFieldSuite) TestStructDefaultOfARequiredStructIsRefused() {
+	s.opts.Required = func(t reflect.Type) []string {
+		if t == reflect.TypeFor[requiredWorker]() {
+			return []string{"type"}
+		}
+		return nil
+	}
+	_, err := ObjectDecl("Spec", reflect.TypeFor[requiredSpec](), s.opts)
+	s.EqualError(err, "field Worker: requiredWorker requires type, so requiredWorker{} is no default: require worker too")
+}
+
+func (s *RequiredFieldSuite) TestPointerAndSliceKeepTheirDefaults() {
+	got, err := ObjectDecl("Holder", reflect.TypeFor[requiredHolder](), s.opts)
+	s.Require().NoError(err)
+	s.Contains(string(got), "    spec: requiredSpec? = null,\n")
+	s.Contains(string(got), "    many: [requiredWorker] = [],\n")
+}
+
+func (s *RequiredFieldSuite) TestUndeclaredRequiredFieldIsRefused() {
+	s.opts.Required = func(reflect.Type) []string { return []string{"missing"} }
+	_, err := ObjectDecl("Worker", reflect.TypeFor[requiredWorker](), s.opts)
+	s.ErrorContains(err, "requires field missing, which it does not declare")
 }
