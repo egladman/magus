@@ -138,7 +138,7 @@ The lease is resolved before policy loads, so every door can choose the row firs
 
 ### 8. Every door reaches the same judgment, and rows are pluggable
 
-The hook, `magus shell`, the SDK's `Judge` (ADR 0046) and the Buzz guard module are doors
+The hook, `magus shell`, the SDK's `Judge` ([ADR 0046](0046-the-judge-takes-any-agent-call.md)) and the Buzz guard module are doors
 onto the one judgment `internal/guard` computes. The SDK judges with the approved sources
 when the working tree's policy does not load, as the hook does.
 
