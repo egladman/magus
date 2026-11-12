@@ -17,14 +17,14 @@ package main
 
 import (
 	"errors"
-	"maps"
-	"reflect"
 	"flag"
 	"fmt"
 	"go/ast"
 	"go/token"
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"

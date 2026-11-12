@@ -741,7 +741,7 @@ func (x *JobAgentModel) GetTier() string {
 }
 
 // JobAgentWorker says whether the warm worker takes the job: type is
-// resume or new, and reason says why a new one starts.
+// resumed or new, and reason says why a new one starts.
 type JobAgentWorker struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`

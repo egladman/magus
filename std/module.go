@@ -114,7 +114,7 @@ type Arg struct {
 	// changes only the DECLARED signature: an enum case is a string at runtime, so
 	// the Impl still receives a string and needs no decoder.
 	//
-	// The name must be a boundaryEnums entry in cmd/magus-utils. Without it a
+	// The name must be an enum buzzgen.Reach finds. Without it a
 	// closed-set parameter reads as `str`, and naming an algorithm magus does not
 	// implement is a runtime throw rather than something the checker catches.
 	Enum string

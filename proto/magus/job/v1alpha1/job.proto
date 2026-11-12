@@ -172,7 +172,7 @@ message JobAgentModel {
 }
 
 // JobAgentWorker says whether the warm worker takes the job: type is
-// resume or new, and reason says why a new one starts.
+// resumed or new, and reason says why a new one starts.
 message JobAgentWorker {
   string type = 1;
   string reason = 2;

@@ -423,7 +423,7 @@ export const JobAgentModelSchema: GenMessage<JobAgentModel> = /*@__PURE__*/
 
 /**
  * JobAgentWorker says whether the warm worker takes the job: type is
- * resume or new, and reason says why a new one starts.
+ * resumed or new, and reason says why a new one starts.
  *
  * @generated from message magus.job.v1alpha1.JobAgentWorker
  */
