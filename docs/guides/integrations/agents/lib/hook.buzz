@@ -283,20 +283,33 @@ export fun magusFix(root: str) > str {
     return "Install magus ({SETUP_URL}), or set __MAGUS_BIN to its path.";
 }
 
-// recoveryLine is the bootstrap aimed at root with -C, runnable from any
-// directory, as the Go guard spells it (config.SourceCommand). "" outside a
-// checkout of magus.
-export fun recoveryLine(root: str) > str {
-    if (root == "" or !buildsMagus(root)) { return ""; }
+// RELINK is ward.RelinkCommand: it links ./magus from the tree and loads no
+// magusfile, so it runs while nothing loads the tree.
+// cmd/magus/shell_test.go pins the copy.
+final RELINK = "GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus";
+
+// aimedAt is line with -C root after its go, runnable from any directory.
+fun aimedAt(line: str, root: str) > str {
     final at = path\abs(root) catch root;
-    return BOOTSTRAP.replace(" go ", with: " go -C {shellWord(at)} ");
+    return line.replace(" go ", with: " go -C {shellWord(at)} ");
 }
 
-// recovers reports the line that runs while no magus judges: the bootstrap,
-// bare or aimed at root.
+// recoveryLine is the one recovery for root, a checkout of magus, as the Go
+// guard spells it: the relink over a ./magus, else the bootstrap. Both are
+// aimed at root. "" outside a checkout of magus.
+export fun recoveryLine(root: str) > str {
+    if (root == "" or !buildsMagus(root)) { return ""; }
+    if (fs\exists("{root}/magus") catch false) { return aimedAt(RELINK, root: root); }
+    return aimedAt(BOOTSTRAP, root: root);
+}
+
+// recovers reports a line that runs while no magus judges: the bootstrap
+// or the relink, bare or aimed at root.
 export fun recovers(command: str, root: str) > bool {
-    final line = recoveryLine(root);
-    return isBootstrap(command) or (line != "" and command.trim() == line);
+    final line = command.trim();
+    if (isBootstrap(line) or line == RELINK) { return true; }
+    if (root == "" or !buildsMagus(root)) { return false; }
+    return line == aimedAt(BOOTSTRAP, root: root) or line == aimedAt(RELINK, root: root);
 }
 
 // exitsJob is a `magus job exit`, the call a worker files its result through.
@@ -451,7 +464,7 @@ export fun fellToNotice(judged: Judged, what: str, root: str) > str {
     if (judged.trail.len() == 0) { return ""; }
     var rebuild = "";
     final line = recoveryLine(root);
-    if (line != "") { rebuild = " Rebuild ./magus in {root}: `{line}`."; }
+    if (line != "") { rebuild = " Get ./magus in {root} a binary that reads its tree: `{line}`."; }
     return judged.trail.join("\n") + "\nfell to {judged.by}, which judged this {what}.{rebuild}";
 }
 
@@ -662,7 +675,7 @@ test "the whole envelope goes to magus unless a host names a field to select" {
     std\assert(wholeEvent(todo, dotPath: "tool_input.command", toolPath: "tool_name"), message: "an absent field sends the envelope");
 }
 
-test "the recovery line aims the bootstrap at the checkout of magus" {
+test "the recovery line aims the bootstrap, or the relink over a binary, at the checkout of magus" {
     final root = fs\tempDir("hook-recovery-");
     fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
     final line = recoveryLine(root);
@@ -670,6 +683,12 @@ test "the recovery line aims the bootstrap at the checkout of magus" {
     std\assert(recoveryFix(root).indexOf(line) != null, message: "the fix names the line that passes");
     std\assert(recovers(" {line} ", root: root) and recovers(BOOTSTRAP, root: root), message: "both spellings run");
     std\assert(!recovers(line + " && ls", root: root), message: "a line after it is not the recovery");
+    plantBinary(root);
+    final relink = recoveryLine(root);
+    std\assert(relink == "GOEXPERIMENT=jsonv2 go -C {root} build -trimpath -o magus ./cmd/magus", message: relink);
+    std\assert(recovers(relink, root: root) and recovers(RELINK, root: root), message: "the relink runs, bare or aimed");
+    std\assert(recovers(line, root: root), message: "the bootstrap still runs over a binary");
+    std\assert(!recovers(relink + " && ls", root: root), message: "a line after the relink is not the recovery");
     fs\writeFile("{root}/go.mod", content: "module example.com/other\n");
     std\assert(recoveryLine(root) == "", message: "no bootstrap outside a checkout of magus");
     std\assert(shellWord("/a b/it's") == "'/a b/it'\\''s'", message: shellWord("/a b/it's"));

@@ -4046,8 +4046,9 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	removed := append(removedOrMovedOperands(command, 0, dialect, start, home), boundPathOperands(command, dialect, start)...)
 	destinations := destinationOperands(command, dialect, start, home)
 	candidates := placedWriteCandidates(command, dialect, start, home)
+	relinked := relinksCheckout(command, dialect, start, checkout)
 	for _, w := range slices.Concat(candidates, destinations, removed) {
-		if target, placed := w.place(home); placed {
+		if target, placed := w.place(home); placed && !samePath(target, relinked) {
 			if g := denyOwnBinaryWrite(actingLease, target); g.Decision == decisionDeny {
 				return g.Reason
 			}
@@ -4060,7 +4061,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			continue
 		}
 		target, placed := candidate.place(home)
-		if !placed {
+		if !placed || samePath(target, relinked) {
 			continue
 		}
 		rel, inside := workspaceRelative(checkout, target)

@@ -1,15 +1,11 @@
 package ward
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-
-	"github.com/egladman/magus/libs/diagnostics"
 
 	"github.com/egladman/magus/types"
 )
@@ -103,25 +99,38 @@ func CheckRequiredVersion(constraint, running string) *types.DiagnosticError {
 // keep the three in sync.
 const DevVersion = "unknown"
 
-// Codes gopherbuzz reports when a name magus itself provides cannot be resolved.
-// Referenced as literals rather than by importing gopherbuzz: this package is in the
-// magus module's dependency floor, and the codes are the stable published identifier.
-const (
-	buzzUndefinedType    = "BZZ1002"
-	buzzUnresolvedImport = "BZZ2001"
-)
-
 // BootstrapCommand builds a first binary in a checkout no magus on hand can load; the
 // guard serves the same command.
 const BootstrapCommand = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 
+// relinkCommand links ./magus from the checkout's committed sources.
+// It loads no magusfile, so it runs whatever the tree's contract says.
+// The binary it links embeds the tree's contract.
+const relinkCommand = "GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus"
+
+// RelinkAt is the relink of the checkout at root, aimed with -C so it runs
+// from any directory, and bare for root "". A root a POSIX shell would
+// split is single-quoted.
+func RelinkAt(root string) string {
+	if root == "" {
+		return relinkCommand
+	}
+	return strings.Replace(relinkCommand, " go ", fmt.Sprintf(" go -C %s ", shellWord(root)), 1)
+}
+
+// shellWord quotes word for a POSIX shell, and leaves it bare when it can.
+func shellWord(word string) string {
+	const safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" +
+		"0123456789@%+=:,./-_"
+	if word != "" && strings.Trim(word, safe) == "" {
+		return word
+	}
+	return fmt.Sprintf("'%s'", strings.ReplaceAll(word, "'", `'\''`))
+}
+
 // StaleBuild is what magus knows about a binary that may be older than its workspace:
 // the facts every out-of-date-binary report states, and the only ones it decides from.
-//
-// Two paths reach that conclusion from different evidence and at different moments: a
-// magusfile naming something this build never heard of ([ExplainStaleBinary]) and
-// magus.yaml carrying a key it cannot decode, which fails before there is a Config to
-// read. Both render [StaleBuild.Advice], so they cannot disagree about the remedy.
+// A magus.yaml key the build cannot decode renders [StaleBuild.Advice].
 type StaleBuild struct {
 	// Running is the binary's version, [DevVersion] for an unstamped build, and "" when
 	// the caller does not know it. "" is reported as unknown, never guessed at.
@@ -248,146 +257,4 @@ func belowFloor(running, constraint string) (below, ok bool) {
 		v = &base
 	}
 	return !c.Check(v), true
-}
-
-// ExplainStaleBinary annotates a workspace-load failure that looks like an
-// out-of-date binary, and returns err untouched otherwise.
-//
-// CheckRequiredVersion above is the ward that PREVENTS this, and it only fires when
-// the workspace author remembered to raise the floor. When they did not (the common
-// case, because the floor is a separate manual edit from the change that needed it),
-// the failure lands here instead, as a name the magusfile or a spell reached for and
-// this binary has never heard of. That is indistinguishable from a typo unless
-// something says otherwise, and what makes it worse than a typo is that EVERY magus
-// command then fails the same way, including the one that would build a newer binary.
-// That is the deadlock: the tool cannot tell you to update the tool.
-//
-// This cannot say which release introduced the missing name: an old binary has never
-// heard of that release. It says the two things an old binary does know: what it is,
-// and what the workspace asked for. That is enough to act on.
-//
-// Deliberately NOT restricted to released builds. CheckRequiredVersion exempts dev
-// builds on the reasoning that a source build is compiled from the workspace it runs,
-// so it cannot lack a feature that workspace uses. That holds only until the checkout
-// moves: a binary built before a pull is a dev build that is genuinely too old, and it
-// is the single most likely way to reach this in day-to-day work.
-//
-// A joined load error keeps its branches: each stale-shaped one becomes MGS1021 with a
-// one-line note, the others are returned untouched, and [StaleBuild.Advice] is stated
-// once, on the last stale branch, however many files failed.
-func ExplainStaleBinary(err error, running, constraint string) error {
-	if err == nil {
-		return nil
-	}
-	branches, isJoin := joined(err)
-	if !isJoin {
-		branches = []error{err}
-	}
-	last := -1
-	for i, e := range branches {
-		if staleShaped(e) {
-			last = i
-		}
-	}
-	if last < 0 {
-		return err
-	}
-	out := make([]error, len(branches))
-	for i, e := range branches {
-		switch {
-		case i == last:
-			// MGS1021, the same code CheckRequiredVersion raises: this is the same
-			// condition caught later and by a different signal, so it should be the same
-			// thing to look up. WrapDiagnostic keeps the original diagnostic in the
-			// chain, so a caller that branches on the BZZ code still can.
-			out[i] = types.WrapDiagnostic(types.WorkspaceNeedsNewerMagus, e, "%s\n%s\n\n%s",
-				e, staleNameNote, StaleBuild{Running: running, Floor: constraint}.Advice())
-		case staleShaped(e):
-			out[i] = types.WrapDiagnostic(types.WorkspaceNeedsNewerMagus, e, "%s\n%s", e, staleNameNote)
-		default:
-			out[i] = e
-		}
-	}
-	if !isJoin {
-		return out[0]
-	}
-	return errors.Join(out...)
-}
-
-// staleNameNote follows each failure that names something this build may not provide.
-const staleNameNote = "This build does not provide that name; unless it is misspelled, this magus is out of date."
-
-// staleShaped reports whether err carries one of the codes an out-of-date binary produces,
-// or the one uncoded complaint it produces when a host object lacks a member the tree
-// calls. BZZ1009, a namespace the file never imported, is not one: no newer binary
-// supplies a missing import line.
-//
-// A guard rule the build does not know (MGS1045) is one too when no near name is offered:
-// a magusfile written after the binary names a rule the binary predates. A near name is a
-// typo, and a rebuild reports it the same way. Other MGS1045 failures are declaration
-// mistakes a rebuild does not fix.
-func staleShaped(err error) bool {
-	var d *diagnostics.Error
-	if errors.As(err, &d) {
-		switch d.Code {
-		case types.GuardRuleMisdeclared:
-			return strings.Contains(d.Msg, unknownBuiltinRule) && !strings.Contains(d.Msg, nearNameOffer)
-		case types.UnknownConfigKey:
-			return !strings.Contains(d.Msg, nearNameOffer) && !strings.Contains(d.Msg, renamedKeyOffer)
-		case buzzUndefinedType, buzzUnresolvedImport:
-			return true
-		}
-		return false
-	}
-	return missingObjectMember.MatchString(err.Error())
-}
-
-// The two phrases of internal/guard/builtin's complaint about a rule name it does not
-// provide. builtin exports no matcher, so TestStaleShapedReadsTheBuiltinComplaint resolves
-// real declarations against it to keep the two from drifting.
-const (
-	unknownBuiltinRule = "unknown built-in rule"
-	nearNameOffer      = "did you mean"
-	renamedKeyOffer    = "renamed to"
-)
-
-// missingObjectMember matches the checker's complaint that an object lacks a member. It
-// has no BZZ code, so the sentence is the only handle: a magusfile calling a host member
-// this build predates, such as `magus\guard.builtins` on a binary built before it,
-// fails with exactly this. A misspelled field fails the same way, which is why the note
-// stays hedged ("unless it is misspelled"). The checker words it two ways: "has no field
-// or method" for a member read or call, and "has no field" for an object literal's key.
-var missingObjectMember = regexp.MustCompile(`object [A-Za-z_][A-Za-z0-9_]* has no field (or method )?"`)
-
-// IsStaleBinary reports whether a workspace-load failure looks like an out-of-date
-// binary: any branch of err is stale-shaped, or ExplainStaleBinary already annotated it
-// as MGS1021.
-func IsStaleBinary(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, types.WorkspaceNeedsNewerMagus) {
-		return true
-	}
-	branches, isJoin := joined(err)
-	if !isJoin {
-		return staleShaped(err)
-	}
-	return slices.ContainsFunc(branches, staleShaped)
-}
-
-// joined returns err's branches when rejoining them reproduces its message, as it
-// does for errors.Join. A multi-%w wrapper such as "%w: %w" fails that test, so
-// splitting it would drop its own text.
-func joined(err error) ([]error, bool) {
-	multi, ok := err.(interface{ Unwrap() []error })
-	if !ok {
-		return nil, false
-	}
-	errs := multi.Unwrap()
-	msgs := make([]string, len(errs))
-	for i, e := range errs {
-		msgs[i] = e.Error()
-	}
-	return errs, strings.Join(msgs, "\n") == err.Error()
 }

@@ -360,10 +360,10 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	own := ownSourceRoot(at.workspace)
 	recorded := recordedRule(at.cacheDir, call.seam)
 	unknown := !policyRecorded(at.cacheDir)
-	reason := unloadCause(asked.loadFailure, at.workspace)
+	cause := unloadCause(asked.loadFailure, at.workspace)
 	guarded := call.changes
-	holds := guarded && reason.Cause != unloadNone
-	broken := guarded && reason.Cause == unloadNone && !call.guardSource
+	holds := guarded && cause != unloadNone
+	broken := guarded && cause == unloadNone && !call.guardSource
 	if holds || broken {
 		if why := loadRestore(call, asked.loadFailure, at); why != "" {
 			asked.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: why}
@@ -374,7 +374,7 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	var d denial
 	switch {
 	case holds:
-		d, asked.rule = staleBinaryDenial(call, reason, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
+		d, asked.rule = staleBinaryDenial(call, cause, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
 	case call.verb != "" && (recorded || unknown):
 		broken = false
 		d, asked.rule = unloadedDenial(call, asked.failures, own, recorded, at.workspace), denyRulePolicyUnloaded
@@ -385,7 +385,7 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	}
 	// One string, verdict first: verdictParts splits it again when the deny is worded.
 	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: d.full()}
-	if !broken && !reason.userTier() {
+	if !broken {
 		asked.next = binaryRemedy(own, at.workspace, call.lease, call.builds).next(asked.rule)
 	}
 	asked.by = decidedByBuiltin
@@ -409,30 +409,6 @@ func brokenPolicyDenial(call judgedCall, failures []string) denial {
 		"Reads, `git status`, edits to the policy's own sources, writes outside any workspace, " +
 		"VCS recovery (`--abort` or `--continue`) and a rebuild of ./magus still run.")
 	return denial{Say: say, Why: why.String()}
-}
-
-// unknownSpellImport is the refusal of an import naming a spell this build does not ship,
-// as the spell bindings raise it.
-type unknownSpellImport interface{ UnknownSpell() string }
-
-// skewedSpell names the spell loadFailure says this build does not ship when root, a
-// checkout of magus itself, carries that spell's sources: the judging ./magus was built from
-// a commit on the other side of the spell's addition or removal. "" otherwise. Outside
-// magus's own checkout nothing tells a spell from a newer or older release apart from a
-// misspelled import, so that stays the typo it may be.
-func skewedSpell(loadFailure error, root string) string {
-	if loadFailure == nil || root == "" || !ownSourceRoot(root) {
-		return ""
-	}
-	var unknown unknownSpellImport
-	if !errors.As(loadFailure, &unknown) {
-		return ""
-	}
-	name := unknown.UnknownSpell()
-	if info, err := os.Stat(filepath.Join(root, "spells", name)); err != nil || !info.IsDir() {
-		return ""
-	}
-	return name
 }
 
 // failureLines renders each failure as the side and the head of its error. An error
@@ -603,10 +579,9 @@ type judgingBinary struct {
 	hasBinary bool
 	// same reports that path is the checkout's own ./magus.
 	same bool
-	// unload is why the binary cannot load the tree, stale or a skewed spell; fix is then
-	// the remedy to name. A missing ./magus is hasBinary's to tell.
-	unload unloadReason
-	fix    string
+	// stale is a failed load under another contract; fix is then the remedy.
+	stale bool
+	fix   string
 }
 
 // judgingBinaryNote names the magus that judged the call and how it relates to the
@@ -624,18 +599,9 @@ func judgingBinaryNote(deps Dependencies, at location, loadFailure error, lease 
 			b, errB := os.Stat(filepath.Join(j.root, "magus"))
 			j.same = errA == nil && errB == nil && os.SameFile(a, b)
 		}
-		j.unload = unloadCause(loadFailure, j.root)
-		if j.unload.Cause == unloadNoBinary {
-			j.unload.Cause = unloadNone
-			if j.unload.Spell != "" {
-				j.unload.Cause = unloadSkewedSpell
-			}
-		}
-		switch j.unload.Cause {
-		case unloadStale:
+		if unloadCause(loadFailure, j.root) == unloadStale {
+			j.stale = true
 			j.fix = binaryRemedy(ownSourceRoot(j.root), j.root, lease, false).say
-		case unloadSkewedSpell:
-			j.fix = binaryRemedy(true, j.root, lease, false).say
 		}
 	}
 	return j.String()
@@ -658,12 +624,10 @@ func (j judgingBinary) String() string {
 		who += ", which is not this checkout's ./magus."
 	}
 	switch {
-	case j.unload.Cause == unloadSkewedSpell:
-		return fmt.Sprintf("%s It ships no spell %q, which the tree carries, so it was built from another commit. Fix: %s.", who, j.unload.Spell, j.fix)
-	case j.unload.Cause != unloadStale:
+	case !j.stale:
 		return who
 	case j.hasBinary && !j.same:
-		return fmt.Sprintf("%s It is older than the tree: the hook uses ./magus when the call runs inside this checkout and ./magus is executable. Otherwise %s.", who, j.fix)
+		return fmt.Sprintf("%s It was built from another contract than the tree carries: the hook uses ./magus when the call runs inside this checkout and ./magus is executable. Otherwise %s.", who, j.fix)
 	}
-	return fmt.Sprintf("%s Fix: %s.", who, j.fix)
+	return fmt.Sprintf("%s It was built from another contract than the tree carries. Fix: %s.", who, j.fix)
 }

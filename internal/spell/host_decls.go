@@ -23,8 +23,12 @@ import (
 // changed signature cannot drift from what the checker enforces.
 
 //go:generate go run ../../cmd/magus-utils moduledecls -outdir gen/decls
-//go:embed gen/decls
+//go:embed gen/decls gen/types
 var hostDeclsFS embed.FS
+
+// GeneratedBuzz is the generated Buzz this binary was built with: the host
+// declarations under gen/decls/ and the boundary types under gen/types/.
+func GeneratedBuzz() fs.FS { return hostDeclsFS }
 
 // ModuleDecls returns the Buzz declarations for a host module by import path, and
 // whether any exist. A module with no generated declarations is not an error: the

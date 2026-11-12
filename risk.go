@@ -43,7 +43,7 @@ func (m *Magus) AssessRisk(ctx context.Context, target string, o types.TierOptio
 	}
 	defer func() { _ = other.Close() }()
 	if err := other.load(ctx); err != nil {
-		return types.TierReport{}, other.explainStale(err)
+		return types.TierReport{}, explainStale(err, other.Root())
 	}
 	return other.AssessChange(ctx, target, opts)
 }

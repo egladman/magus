@@ -216,17 +216,6 @@ func bootstrapLine(command string, d Dialect) bool {
 	return ok && shaped && "GOEXPERIMENT="+v == env
 }
 
-// cannotLoad reports whether the workspace at root fails to load for the binary judging
-// the call in a way unloadCause blames on that binary: MGS1021, an unresolved import, or a
-// spell the binary does not ship. The hook runs the checkout's own ./magus when there is one, so
-// a binary that predates its sources answers for itself; with none, the binary on PATH
-// answers, and a tree it can load needs no recovery.
-func cannotLoad(ctx context.Context, deps Dependencies, root string) bool {
-	_, err := deps.inspect(ctx, root)
-	cause := unloadCause(err, root).Cause
-	return cause == unloadStale || cause == unloadSkewedSpell
-}
-
 // ownSourceRoot reports whether dir is the root of a checkout of this guard's module.
 func ownSourceRoot(dir string) bool {
 	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
@@ -240,8 +229,6 @@ func hasMagusBinary(root string) bool {
 	return !errors.Is(err, fs.ErrNotExist)
 }
 
-const ownRebuild = "`./magus run go-build .`"
-
 // ownBuildOutcome is the correction rankOwnBuild applies to a raw-tool deny of a go
 // command in a checkout of magus. It records whether the call is the bootstrap, whether
 // its line carries exactly the bootstrap's prefix, whether root already has a binary and
@@ -252,7 +239,6 @@ type ownBuildOutcome struct {
 	// Remedies carry their root even when the call starts there: a host may report
 	// its session directory instead of the native shell tool's workdir on a retry.
 	bootstrapArgv []string
-	rebuild       string
 	bootstrap     bool
 	prefixed      bool
 	link          bool
@@ -261,15 +247,10 @@ type ownBuildOutcome struct {
 	// others is the rest of the call's line, as besideGoCall renders it.
 	others   []string
 	advisory ShellVerdict
-	// recovery is a recoversMagus call alone on its line in a root whose workspace fails
-	// to load with MGS1021, advised through as recoveryAdvisory.
+	// recovery is a recoversMagus call alone on its line, in the caller's own
+	// checkout, advised through as recoveryAdvisory for every caller.
 	recovery         bool
 	recoveryAdvisory ShellVerdict
-	// staleBootstrap is the bootstrap, alone on its line, in a root whose ./magus cannot
-	// load the tree: the binary the "already has a binary" deny points at is the very one
-	// that needs replacing.
-	staleBootstrap         bool
-	staleBootstrapAdvisory ShellVerdict
 	// lease is the lease the call acts under, "" for the orchestrator, a person or the
 	// checkout's integrator. A worker never builds the binary: there is one per base, the
 	// integrator builds it and the main session places it.
@@ -282,17 +263,15 @@ type ownBuildOutcome struct {
 // apply layers this outcome onto v, the raw-tool deny it refines.
 func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 	switch {
-	case o.lease != "" && (o.recovery || o.bootstrap || o.link || !o.hasBinary):
+	case o.recovery:
+		return o.recoveryAdvisory
+	case o.lease != "" && (o.bootstrap || o.link || !o.hasBinary):
 		// Replaces every pass-through and every "get one with" below: each names a build.
 		v.Why = fmt.Sprintf(`%s
 %s`, onePerBase, denial{Say: v.Deny, Why: v.Why}.full())
 		v.Deny = workerBuildVerdict
 		v.Next, v.Lead = nil, ""
 		return v.withRemedy(v.Deny, placementNext(denyRuleRawTool, o.lease))
-	case o.recovery:
-		return o.recoveryAdvisory
-	case o.staleBootstrap:
-		return o.staleBootstrapAdvisory
 	case o.bootstrap && o.multipleCmds:
 		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
 		v.Deny = fmt.Sprintf("magus workspace: the bootstrap runs only alone on its line; drop %s.", dropList(o.others))
@@ -300,7 +279,7 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 		return v.withRemedy(v.Deny, hint.NextForDenyRemedy(string(denyRuleRawTool), o.bootstrapArgv, bootstrapWhy))
 	case o.hasBinary && (o.bootstrap || o.link):
 		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
-		v.Deny = fmt.Sprintf("magus workspace: not a bootstrap: %s already has a magus binary; rebuild with `%s`, or name another checkout with `go -C <dir>`.", o.root, o.rebuild)
+		v.Deny = fmt.Sprintf("magus workspace: not a bootstrap: %s already has a magus binary; relink it, alone on its line: `%s`.", o.root, ward.RelinkAt(o.root))
 		v.Next, v.Lead = nil, ""
 		return v
 	case o.hasBinary:
@@ -384,15 +363,13 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 	if env, goArgv, ok := bootstrapParts(); ok {
 		argv = slices.Concat([]string{env, "go", "-C", root}, goArgv[1:])
 	}
-	rebuild := hint.NextForDenyRemedy(string(denyRuleRawTool), []string{filepath.Join(root, "magus"), "--root", root, "run", "go-build", "."}, "").Run
 	if root != filepath.Clean(cwd) {
 		where = root
 	}
 	rule := denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(denied)}
 	workspaceShell := matchWorkspaceShell(deps.ShellRules, command, d)
-	// The load is a full workspace open, so only a line that could be let through pays it.
-	recovery := call.recoversMagus() && soleGoCommand(command, d) && cannotLoad(ctx, deps, root)
-	staleBootstrap := call.bootstrapsMagus() && bootstrapLine(command, d) && hasMagusBinary(root) && (staleOwnBinary(root) || cannotLoad(ctx, deps, root))
+	recovery := call.recoversMagus() && soleGoCommand(command, d) &&
+		(deps.lease == "" || ownsCheckout(ctx, deps, hookLocation(ctx, deps), root) || samePath(root, hookLocation(ctx, deps).workspace))
 	lease := deps.lease
 	if me, ok := actingLiveLease(ctx, deps, lease); ok && integrates(me, spawnedAs(deps.facts, deps.caller.Agent), root) {
 		lease = ""
@@ -401,7 +378,6 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 		lease:         lease,
 		root:          root,
 		bootstrapArgv: argv,
-		rebuild:       rebuild,
 		bootstrap:     call.bootstrapsMagus(),
 		prefixed:      bootstrapLine(command, d),
 		link:          call.linksMagus(),
@@ -415,14 +391,8 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 		}, workspaceShell),
 		recovery: recovery,
 		recoveryAdvisory: strengthenWithWorkspace(ShellVerdict{
-			Context: fmt.Sprintf("magus workspace: recovery allowed because %s cannot load its own sources (MGS1021): relink and regenerate only, then rebuild with %s.", where, ownRebuild),
-			Why:     "No magus target can run until the checkout loads its own sources again, so only the go commands that repair it are let through.",
-			Rule:    rule,
-		}, workspaceShell),
-		staleBootstrap: staleBootstrap,
-		staleBootstrapAdvisory: strengthenWithWorkspace(ShellVerdict{
-			Context: fmt.Sprintf("magus workspace: bootstrap allowed because ./magus in %s is older than its sources or cannot load it: the bootstrap replaces it.", where),
-			Why:     "A binary older than its sources may not load the tree or rebuild itself, so the bootstrap is the one go command allowed here: " + bootstrapWhy,
+			Context: fmt.Sprintf("magus workspace: the relink and the regenerate run in %s for every caller: neither loads a magusfile.", where),
+			Why:     "A ./magus built from another contract than the tree carries cannot load it, and the relink links one that embeds the tree's contract.",
 			Rule:    rule,
 		}, workspaceShell),
 	}
@@ -434,9 +404,8 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 // yet, is advised through instead of denied, and every other raw go command there is
 // served it. Nil when the line holds no go command denied in a checkout of magus.
 //
-// The RECOVERY correction covers a checkout that cannot load its own sources (MGS1021):
-// no target runs there, so the relink and the generators (recoversMagus), each alone on
-// its line, are advised through while the load fails, with or without a binary.
+// The RECOVERY correction advises the relink and the generators (recoversMagus)
+// through, each alone on its line, for any caller in its own checkout.
 //
 // A -C outside the workspace passes the pure rule, since a foreign tree is not its to
 // funnel; a -C into another checkout of magus is this repository's policy to judge

@@ -480,11 +480,42 @@ func TestBuiltAtJudgesABinaryByItsOwnVersion(t *testing.T) {
 	dirty, _ := forkersBinary(t, types.MagusBuild{Version: "v0.5.0-dirty", Commit: at})
 	other, _ := forkersBinary(t, types.MagusBuild{Version: "v0.5.0", Commit: "fedcba9876543210fedcba9876543210fedcba98"})
 
-	assert.True(t, BuiltAt(ctx, clean, at))
-	assert.False(t, BuiltAt(ctx, dirty, at), "uncommitted changes")
-	assert.False(t, BuiltAt(ctx, other, at), "another commit")
-	assert.False(t, BuiltAt(ctx, filepath.Join(t.TempDir(), "absent"), at), "no binary")
-	assert.False(t, BuiltAt(ctx, "", at), "no path")
+	assert.True(t, builtAt(ctx, clean, at))
+	assert.False(t, builtAt(ctx, dirty, at), "uncommitted changes")
+	assert.False(t, builtAt(ctx, other, at), "another commit")
+	assert.False(t, builtAt(ctx, filepath.Join(t.TempDir(), "absent"), at), "no binary")
+	assert.False(t, builtAt(ctx, "", at), "no path")
+}
+
+// BinaryContractSuite pins the digest a binary reports of the contract it
+// was built with, which a fork compares against the checkout's tree.
+type BinaryContractSuite struct {
+	suite.Suite
+}
+
+func TestBinaryContractSuite(t *testing.T) {
+	suite.Run(t, new(BinaryContractSuite))
+}
+
+func (s *BinaryContractSuite) script(body string) string {
+	bin := filepath.Join(s.T().TempDir(), "magus")
+	s.Require().NoError(os.WriteFile(bin, fmt.Appendf(nil, "#!/bin/sh\n%s\n", body), 0o755))
+	return bin
+}
+
+func (s *BinaryContractSuite) TestItReadsTheEmbeddedDigest() {
+	bin := s.script(`echo '{"version":"v0.5.0","embedded":{"contract_sha256":"abc"}}'`)
+	s.Equal("abc", BinaryContract(s.T().Context(), bin))
+}
+
+func (s *BinaryContractSuite) TestABinaryFromBeforeTheDigestSaysNone() {
+	bin := s.script(`echo '{"version":"v0.4.0"}'`)
+	s.Empty(BinaryContract(s.T().Context(), bin))
+}
+
+func (s *BinaryContractSuite) TestABinaryThatCannotAnswerSaysNone() {
+	s.Empty(BinaryContract(s.T().Context(), s.script("exit 1")))
+	s.Empty(BinaryContract(s.T().Context(), ""))
 }
 
 func TestAdoptedCheckoutWithAStaleBinaryIsNotBuiltAtItsBase(t *testing.T) {
@@ -501,7 +532,7 @@ func TestAdoptedCheckoutWithAStaleBinaryIsNotBuiltAtItsBase(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, madeNow)
 	assert.NotEmpty(t, wt.Binary, "the adopted checkout holds a ./magus")
-	assert.False(t, BuiltAt(ctx, wt.Binary, wt.Base), "which the fork must replace")
+	assert.False(t, builtAt(ctx, wt.Binary, wt.Base), "which the fork must replace")
 }
 
 // A checkout holding the bootstrap script builds its own ./magus, so the forker's is never

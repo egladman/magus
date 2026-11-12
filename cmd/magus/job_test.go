@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
@@ -3014,4 +3015,65 @@ func (s *jobApplyReleaseWritePathSuite) TestAClaimWithACommaIsOnePath() {
 	s.Require().NoError(paths.Set("b.go,c.go"))
 
 	s.Equal(claimListFlag{"a.go#Run,Stop", "b.go", "c.go"}, paths)
+}
+
+// ForkProvisionContractSuite pins how a fork judges an adopted checkout of
+// magus: by the contract its tree carries, never by the commit.
+type ForkProvisionContractSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestForkProvisionContractSuite(t *testing.T) {
+	suite.Run(t, new(ForkProvisionContractSuite))
+}
+
+func (s *ForkProvisionContractSuite) SetupTest() {
+	s.root = s.T().TempDir()
+}
+
+func (s *ForkProvisionContractSuite) lock(body string) {
+	p := filepath.Join(s.root, "internal", "commands", "testdata", "api.lock")
+	s.Require().NoError(os.MkdirAll(filepath.Dir(p), 0o755))
+	s.Require().NoError(os.WriteFile(p, []byte(body), 0o644))
+	for _, dir := range []string{"gen/decls", "gen/types"} {
+		s.Require().NoError(os.MkdirAll(filepath.Join(s.root, "internal", "spell", dir), 0o755))
+	}
+}
+
+func (s *ForkProvisionContractSuite) binary(contract string) string {
+	bin := filepath.Join(s.T().TempDir(), "magus")
+	body := fmt.Sprintf("#!/bin/sh\necho '{\"version\":\"v0.5.0\",\"embedded\":{\"contract_sha256\":%q}}'\n", contract)
+	s.Require().NoError(os.WriteFile(bin, []byte(body), 0o755))
+	return bin
+}
+
+func (s *ForkProvisionContractSuite) TestATreeThatReadsTheRowPasses() {
+	s.lock(fmt.Sprintf("store %s\n", types.JobAPIVersion))
+	s.NoError(checkoutReadsRow(s.root))
+}
+
+func (s *ForkProvisionContractSuite) TestATreeOlderThanTheStoreIsRefused() {
+	s.lock("config a\n")
+	err := checkoutReadsRow(s.root)
+	s.Require().Error(err)
+	s.Contains(err.Error(), fmt.Sprintf("reads no %s rows", types.JobAPIVersion))
+}
+
+func (s *ForkProvisionContractSuite) TestATreeCarryingNoContractPasses() {
+	s.NoError(checkoutReadsRow(s.root))
+}
+
+func (s *ForkProvisionContractSuite) TestABinaryOfTheTreesContractReadsIt() {
+	s.lock("config a\n")
+	tree, err := contract.Tree(s.root)
+	s.Require().NoError(err)
+	s.True(readsTree(s.T().Context(), s.binary(tree), s.root))
+	s.False(readsTree(s.T().Context(), s.binary("another"), s.root))
+	s.False(readsTree(s.T().Context(), "", s.root))
+}
+
+func (s *ForkProvisionContractSuite) TestAnyBinaryReadsATreeCarryingNoContract() {
+	s.True(readsTree(s.T().Context(), s.binary(""), s.root))
+	s.False(readsTree(s.T().Context(), "", s.root))
 }

@@ -4745,9 +4745,17 @@ func (s *LeaseBoundarySuite) TestToolWriteToTheCheckoutsOwnBinaryIsRefused() {
 	s.Contains(g.Reason, "own magus binary")
 }
 
-func (s *LeaseBoundarySuite) TestGoBuildOfTheCheckoutsOwnBinaryIsRefused() {
+// The relink is the one line a lease replaces its checkout's ./magus with.
+func (s *LeaseBoundarySuite) TestTheRelinkOfTheCheckoutsOwnBinaryPasses() {
 	s.binary()
-	s.Contains(s.deny("go build -o magus ./cmd/magus"), "own magus binary")
+	s.Empty(s.deny("go build -o magus ./cmd/magus"))
+	s.Empty(s.deny("GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus"))
+}
+
+func (s *LeaseBoundarySuite) TestAnyOtherWriteOfTheCheckoutsOwnBinaryIsRefused() {
+	s.binary()
+	s.Contains(s.deny("go build -o magus -ldflags=-s ./cmd/magus"), "own magus binary")
+	s.Contains(s.deny("cp /tmp/other magus"), "own magus binary")
 }
 
 func (s *LeaseBoundarySuite) TestMovingTheCheckoutsOwnBinaryAsideIsRefused() {

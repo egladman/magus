@@ -2757,8 +2757,16 @@ func (s *unjudgedHookSuite) TestTheHookBootstrapIsWardsCommand() {
 	s.Contains(string(body), fmt.Sprintf("final BOOTSTRAP = %q;", ward.BootstrapCommand))
 }
 
+// The hook carries a copy of the relink, which it passes with no judge.
+func (s *unjudgedHookSuite) TestTheHookRelinkIsWardsCommand() {
+	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "lib", "hook.buzz"))
+	s.Require().NoError(err)
+	s.Contains(string(body), fmt.Sprintf("final RELINK = %q;", ward.RelinkAt("")))
+}
+
 // staleConfigSuite pins the guard over a magus.yaml key this build predates
 // (MGS1040): it judges the call as a stale binary's rather than exiting.
+// The checkout carries another contract than the test binary's.
 type staleConfigSuite struct {
 	suite.Suite
 	root string
@@ -2773,6 +2781,7 @@ func (s *staleConfigSuite) SetupTest() {
 	ws.Write("go.mod", "module github.com/egladman/magus\n\ngo 1.25\n")
 	ws.Write("magusfile.buzz", "import \"magus\";\nmagus\\guard.command(judge);\n")
 	ws.Write("magus.yaml", "checkout:\n  bootstrap: hack/dev/bootstrap-checkout.buzz\n")
+	ws.Write("internal/commands/testdata/api.lock", "config another.key\n")
 	ws.WriteExecutable("magus", "#!/bin/sh\n")
 	s.root = ws.Root()
 	s.T().Chdir(s.root)
@@ -2795,7 +2804,7 @@ func (s *staleConfigSuite) judge(command string) types.GuardJudgment {
 
 func (s *staleConfigSuite) TestAStateChangeIsRefusedAsAStaleBinary() {
 	v := s.judge("touch notes.txt")
-	s.Contains(v.Reason, "predates this workspace's magus.yaml")
+	s.Contains(v.Reason, "built from another contract than this tree carries")
 	s.Equal(types.GuardJudgment{Decision: "deny", Rule: "stale-binary"}, types.GuardJudgment{Decision: v.Decision, Rule: v.Rule})
 }
 
@@ -2818,7 +2827,7 @@ func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
 	s.Require().NoError(err)
 	var v types.GuardJudgment
 	s.Require().NoError(json.Unmarshal(body, &v), string(body))
-	s.Contains(v.Reason, "predates this workspace's magus.yaml")
+	s.Contains(v.Reason, "built from another contract than this tree carries")
 	s.Equal(types.GuardJudgment{Decision: "deny", Rule: "stale-binary"}, types.GuardJudgment{Decision: v.Decision, Rule: v.Rule})
 	s.Equal(2, code, "the guard's deny exit, never startup's 1")
 }
@@ -2829,7 +2838,8 @@ func (s *staleConfigSuite) TestTheBootstrapItServesRuns() {
 }
 
 // CheckoutJudgeDepsSuite judges from a hook whose working directory is a magus
-// source checkout, by a binary that is not that checkout's ./magus.
+// source checkout, by a binary that is not that checkout's ./magus and was
+// built from another contract.
 type CheckoutJudgeDepsSuite struct {
 	suite.Suite
 	root, binary string
@@ -2843,6 +2853,9 @@ func (s *CheckoutJudgeDepsSuite) SetupTest() {
 	s.root = s.T().TempDir()
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), []byte("module github.com/egladman/magus\n\ngo 1.25\n"), 0o644))
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus"), []byte("#!/bin/sh\n"), 0o755))
+	lock := filepath.Join(s.root, "internal", "commands", "testdata", "api.lock")
+	s.Require().NoError(os.MkdirAll(filepath.Dir(lock), 0o755))
+	s.Require().NoError(os.WriteFile(lock, []byte("config another.key\n"), 0o644))
 	s.binary = filepath.Join(s.T().TempDir(), "magus")
 	s.Require().NoError(os.WriteFile(s.binary, []byte("#!/bin/sh\n"), 0o755))
 }

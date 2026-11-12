@@ -469,8 +469,8 @@ func TestGroundworkNamesJobExecWhenSpawningIsBroken(t *testing.T) {
 	assert.Contains(t, f.say, "spawning is broken: harness claude-code maps no model; take a row with `./magus job exec <row>`")
 }
 
-// While ./magus is older than its sources or absent, rebuilding it is the root's own work;
-// once it is current, the build is integration again.
+// While ./magus is absent or built from another contract, rebuilding it
+// is the root's own work. Once they agree, the build is integration again.
 func TestRootRebuildsAStaleBinary(t *testing.T) {
 	t.Parallel()
 	at, _ := orchestratorFixture(t)
@@ -479,12 +479,11 @@ func TestRootRebuildsAStaleBinary(t *testing.T) {
 	assert.Empty(t, rootWorkClass(ward.BootstrapCommand, at), "no binary yet")
 
 	require.NoError(t, os.WriteFile(filepath.Join(at.workspace, "magus"), []byte("binary"), 0o755))
-	ageBinary(t, at.workspace)
-	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run go-build .", at), "a current binary")
+	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run go-build .", at), "a tree that carries no contract")
 
-	writeSource(t, at.workspace, "internal/guard/x.go")
-	assert.True(t, staleOwnBinary(at.workspace))
-	assert.Empty(t, rootWorkClass("./magus run go-build .", at), "a stale binary that still loads")
+	writeSource(t, at.workspace, "internal/commands/testdata/api.lock")
+	assert.True(t, contractDiffers(at.workspace))
+	assert.Empty(t, rootWorkClass("./magus run go-build .", at), "a binary built from another contract")
 	assert.Empty(t, rootWorkClass(ward.BootstrapCommand, at))
 	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run go-build . && git add -A", at), "only alone on its line")
 	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run generate .", at), "only the build")

@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/types"
 )
 
 // jobWorkspace is the workspace at root as a job record's validation reads it, loaded once.
@@ -33,7 +34,7 @@ func jobWorkspace(ctx context.Context, root string) job.Workspace {
 // workspaceLoadFailure is err's text. A binary too old for root also names
 // root's own ./magus, unless running is that binary.
 func workspaceLoadFailure(err error, root, running string) string {
-	if !ward.IsStaleBinary(err) {
+	if !errors.Is(err, types.WorkspaceNeedsNewerMagus) {
 		return err.Error()
 	}
 	own := checkoutBinary(root, running)

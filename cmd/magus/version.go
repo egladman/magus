@@ -10,6 +10,7 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/buildinfo"
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/types"
@@ -88,6 +89,9 @@ type versionEmbedded struct {
 	// FigureSHA256 is the hex SHA-256 of the magus/figure source; diagrams-generate in
 	// docs keys on it, since the figures render from this copy and not the checkout's.
 	FigureSHA256 string `json:"figure_sha256" yaml:"figure_sha256"`
+	// ContractSHA256 is the digest of the contract it was built with, which
+	// a checkout of magus it judges must carry. See internal/contract.
+	ContractSHA256 string `json:"contract_sha256" yaml:"contract_sha256"`
 }
 
 // newVersionOutput is this binary's stamp, without the server half.
@@ -96,7 +100,7 @@ func newVersionOutput() versionOutput {
 	return versionOutput{
 		Version: b.Version, Commit: b.Commit, Dirty: builtDirty(b), Repository: sourceRepository,
 		BuildDate: b.Date, BuiltBy: builtBy, Engine: "buzz",
-		Embedded: versionEmbedded{FigureSHA256: figure.SourceSHA256()},
+		Embedded: versionEmbedded{FigureSHA256: figure.SourceSHA256(), ContractSHA256: contract.Binary()},
 	}
 }
 

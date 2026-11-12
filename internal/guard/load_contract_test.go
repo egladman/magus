@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/internal/ward"
 )
 
 // ContractSkewDirectionSuite places a ./magus on each side of HEAD.
@@ -158,7 +160,7 @@ func TestContractSkewRefusesChangesUntilTheRebuild(t *testing.T) {
 	ctx := context.Background()
 
 	deny := denyContractSkew(ctx, deps, at, "touch notes.txt", DialectBash)
-	assert.Contains(t, deny, fmt.Sprintf("%s (an unknown version) was built at %s, before internal/spell/gen/decls/magus.buzz changed the load contract; rebuild ./magus with `./magus run go-build .` first.", filepath.Join(root, "magus"), base[:12]))
+	assert.Contains(t, deny, fmt.Sprintf("%s (an unknown version) was built at %s, before internal/spell/gen/decls/magus.buzz changed the load contract; relink ./magus, alone on its line: `%s` first.", filepath.Join(root, "magus"), base[:12], ward.RelinkAt(root)))
 	assert.Empty(t, denyContractSkew(ctx, deps, at, "git status", DialectBash))
 	assert.Empty(t, denyContractSkew(ctx, deps, at, "./magus run go-build .", DialectBash))
 

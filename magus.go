@@ -108,9 +108,7 @@ type Magus struct {
 	ws    *types.Workspace
 	cfg   config.Config
 	cache *cache.Cache
-	// version is the running build, as the caller reported it via WithVersion. Kept so
-	// a workspace-load failure can say what this binary IS: the one thing an
-	// out-of-date binary can state about itself. See explainStale.
+	// version is the running build, as the caller reported it via WithVersion.
 	version string
 	// records receives a -o jsonl invocation's stderr records: the cache's log and any
 	// output that runs outside a target's capture. Nil for every other format.
@@ -316,18 +314,11 @@ func Inspect(ctx context.Context, root string, opts ...Option) (types.WorkspaceR
 		return nil, err
 	}
 	if err := m.load(ctx); err != nil {
-		return nil, m.explainStale(err)
+		return nil, explainStale(err, m.Root())
 	}
 	return m, nil
 }
 
-// explainStale annotates a workspace-load failure that looks like an out-of-date
-// binary. load() is the right place: it is where magusfiles and local spells are
-// EVALUATED, and therefore where a name this build does not provide actually surfaces.
-// Discover, above, only walks the tree; it cannot fail this way.
-func (m *Magus) explainStale(err error) error {
-	return withOwnBuildEscape(ward.ExplainStaleBinary(err, m.version, m.cfg.RequiredVersion), m.Root())
-}
 
 // WorkspaceLoadFailure describes err, a failed Open of root, as the server reports a FAILED
 // workspace: the error as rendered, plus the source position of each failing file that has
@@ -903,7 +894,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// autobind, and any magus.cache.remote() backend wiring all happen here, so a
 	// magusfile-chosen remote backend can be attached at cache construction.
 	if err := m.load(ctx); err != nil {
-		return nil, m.explainStale(err)
+		return nil, explainStale(err, m.Root())
 	}
 
 	cacheDir := resolveCacheDir(m.ws.Root, m.cfg)

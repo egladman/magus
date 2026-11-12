@@ -108,7 +108,7 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout at %s: %w", id, dir, err)
 	}
 	wt = types.JobWorktree{Root: dir, Source: source, Base: base.ID, Created: time.Now().Unix(), Made: true}
-	if binary != "" && !BuildsItsOwnMagus(dir) && !BuiltAt(ctx, binary, base.ID) {
+	if binary != "" && !BuildsItsOwnMagus(dir) && !builtAt(ctx, binary, base.ID) {
 		slog.InfoContext(ctx, fmt.Sprintf("not placing %s in %s: it is not a clean build at %.12s", binary, dir, base.ID), attr.Notice("note"))
 	} else if binary != "" && !BuildsItsOwnMagus(dir) {
 		placed, err := placeBinary(binary, dir)
@@ -281,7 +281,7 @@ func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (st
 		}
 	}
 	for _, bin := range candidates {
-		if !BuiltAt(ctx, bin, base) {
+		if !builtAt(ctx, bin, base) {
 			continue
 		}
 		if _, err := placeBinary(bin, dir); err != nil {
@@ -292,24 +292,41 @@ func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (st
 	return "", nil
 }
 
-// BuiltAt reports whether the magus at bin says it was built at base, clean.
-// A binary that cannot answer is not one to reuse.
-func BuiltAt(ctx context.Context, bin, base string) bool {
+// builtVersion is what `magus version -o json` says about a build.
+type builtVersion struct {
+	Version  string `json:"version"`
+	Commit   string `json:"commit"`
+	Embedded struct {
+		Contract string `json:"contract_sha256"`
+	} `json:"embedded"`
+}
+
+// askVersion is what the magus at bin says about its build. ok is false
+// when it cannot answer.
+func askVersion(ctx context.Context, bin string) (builtVersion, bool) {
+	var v builtVersion
 	if bin == "" {
-		return false
+		return v, false
 	}
-	out, err := exec.CommandContext(ctx, bin, "version", "-o", "json").Output()
+	out, err := exec.CommandContext(ctx, bin, "version", "--client", "-o", "json").Output()
 	if err != nil {
-		return false
+		return v, false
 	}
-	var v struct {
-		Version string `json:"version"`
-		Commit  string `json:"commit"`
-	}
-	if err := json.Unmarshal(out, &v); err != nil {
-		return false
-	}
-	return v.Commit == base && !strings.HasSuffix(v.Version, "-dirty")
+	return v, json.Unmarshal(out, &v) == nil
+}
+
+// builtAt reports whether the magus at bin says it was built at base, clean.
+// A binary that cannot answer is not one to reuse.
+func builtAt(ctx context.Context, bin, base string) bool {
+	v, ok := askVersion(ctx, bin)
+	return ok && v.Commit == base && !strings.HasSuffix(v.Version, "-dirty")
+}
+
+// BinaryContract is the contract digest the magus at bin was built with,
+// "" when it cannot say. A binary built before the digest existed says "".
+func BinaryContract(ctx context.Context, bin string) string {
+	v, _ := askVersion(ctx, bin)
+	return v.Embedded.Contract
 }
 
 // InstallProjects is the comma-joined projects with an install target that own

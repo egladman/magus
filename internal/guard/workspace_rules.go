@@ -24,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
-	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -1274,9 +1273,7 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 	}
 	// The approved sources load when the working tree does not, and they are what an agent
 	// breaking the working tree must not be able to turn off.
-	// Annotated like every other load failure: a binary older than the tree says so, and
-	// the guard reads that off the error to decide what the failure costs the session.
-	deps.LoadFailure = ward.ExplainStaleBinary(loadErr, w.BinaryVersion, w.Config.RequiredVersion)
+	deps.LoadFailure = loadErr
 	// One load of the approved sources for the settings and every function rule, as
 	// WorkspaceRules keeps for a working tree that loads.
 	var approved onceAnswer[*workspace.WorkspaceRegistry]

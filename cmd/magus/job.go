@@ -31,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
@@ -1490,9 +1491,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if worktree, made, err = store.ForkWorktree(ctx, row.ID, row.Checkout, row.Checkpoint, mirrored); err != nil {
 			return err
 		}
+		if err := checkoutReadsRow(worktree.Root); err != nil {
+			return failedProvision(ctx, store, worktree, made, err)
+		}
 		followed := !made && priorHead != "" && priorHead != worktree.Base
-		// An adopted checkout may hold a ./magus built at another commit.
-		stale := !made && !job.BuiltAt(ctx, worktree.Binary, worktree.Base)
+		stale := !made && !readsTree(ctx, worktree.Binary, worktree.Root)
 		if mirrored != "" && (followed || stale || made && worktree.Binary == "") && job.BuildsItsOwnMagus(worktree.Root) {
 			reused, err := provisionCheckout(ctx, store, jobWS, mirrored, root, row, worktree)
 			if err != nil {
@@ -2389,6 +2392,33 @@ func provisionCheckout(ctx context.Context, store *job.Store, ws job.Workspace, 
 	var declared types.Job
 	row.Apply(&declared)
 	return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root, "--install", job.InstallProjects(forker, declared, ws.Projects))
+}
+
+// checkoutReadsRow refuses a checkout of magus whose tree builds a binary
+// that cannot read the row this fork writes. A rebuild there leaves a
+// checkout whose ./magus cannot read its own job.
+func checkoutReadsRow(root string) error {
+	reads, err := contract.ReadsFormat(root, types.JobAPIVersion)
+	switch {
+	case errors.Is(err, contract.ErrNotCarried):
+		return nil
+	case err != nil:
+		return err
+	case !reads:
+		return fmt.Errorf("the checkout %s carries a tree older than the job store, so a magus built there reads no %s rows: "+
+			"move it to the job's checkpoint, or fork the job into a new checkout", root, types.JobAPIVersion)
+	}
+	return nil
+}
+
+// readsTree reports whether the magus at bin was built from the contract
+// the checkout at root carries. A tree that carries none takes any binary.
+func readsTree(ctx context.Context, bin, root string) bool {
+	tree, err := contract.Tree(root)
+	if errors.Is(err, contract.ErrNotCarried) {
+		return bin != ""
+	}
+	return err == nil && job.BinaryContract(ctx, bin) == tree
 }
 
 // failedProvision is err, from readying wt, with what became of wt.
