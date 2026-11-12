@@ -1125,3 +1125,95 @@ func (s *ForkAgainSuite) TestDiscardKeepsABranchThatMovedPastTheBase() {
 	s.Require().NoError(s.store.DiscardWorktree(s.T().Context(), wt))
 	s.NotEmpty(s.branches())
 }
+
+// BinaryPinSuite pins what PinBinary records and what PinRefusal accepts.
+type BinaryPinSuite struct {
+	suite.Suite
+	store *Store
+	loc   Location
+	row   types.Job
+	bin   string
+}
+
+func TestBinaryPinSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(BinaryPinSuite))
+}
+
+func (s *BinaryPinSuite) SetupTest() {
+	s.store, s.loc, _ = worktreeStore(s.T())
+	s.row = forkInto(s.T(), s.store, "w1", "")
+	s.bin = filepath.Join(s.row.Worktree.Root, binaryName)
+	s.write("one")
+}
+
+func (s *BinaryPinSuite) write(body string) {
+	s.Require().NoError(os.WriteFile(s.bin, []byte(body), 0o755))
+}
+
+func (s *BinaryPinSuite) refusal(bin string) string {
+	why, err := s.store.PinRefusal(bin)
+	s.Require().NoError(err)
+	return why
+}
+
+func (s *BinaryPinSuite) TestPinRecordsTheBinaryAndItsHash() {
+	pinned, err := s.store.PinBinary(s.T().Context(), "w1")
+	s.Require().NoError(err)
+	want, err := BinaryDigest(s.bin)
+	s.Require().NoError(err)
+	s.Require().Len(pinned, 1)
+	s.Equal(s.bin, pinned[0].Worktree.Binary)
+	s.Equal(want, pinned[0].Worktree.BinaryDigest)
+	s.Empty(s.refusal(s.bin))
+}
+
+func (s *BinaryPinSuite) TestABinaryRecordedWithNoHashIsRefused() {
+	wt := *s.row.Worktree
+	wt.Binary = s.bin
+	_, err := s.store.RecordWorktree(s.T().Context(), "w1", wt)
+	s.Require().NoError(err)
+	s.Contains(s.refusal(s.bin), "its bytes do not hash to what job w1 pins")
+}
+
+func (s *BinaryPinSuite) TestABinaryRewrittenAfterItsPinIsRefused() {
+	_, err := s.store.PinBinary(s.T().Context(), "w1")
+	s.Require().NoError(err)
+	s.Empty(s.refusal(s.bin))
+	s.write("two, longer")
+	s.Contains(s.refusal(s.bin), "its bytes do not hash to what job w1 pins")
+}
+
+func (s *BinaryPinSuite) TestABinaryNoRowRecordsIsRefused() {
+	s.Equal("no live job row records it as its checkout's binary", s.refusal(filepath.Join(s.T().TempDir(), binaryName)))
+}
+
+func (s *BinaryPinSuite) TestTheCacheAnswersWhileTheFileKeepsItsIdentity() {
+	_, err := s.store.PinBinary(s.T().Context(), "w1")
+	s.Require().NoError(err)
+	s.Empty(s.refusal(s.bin))
+	info, err := os.Stat(s.bin)
+	s.Require().NoError(err)
+	// ADR 0045 section 1 accepts this forgery.
+	s.write("owt")
+	s.Require().NoError(os.Chtimes(s.bin, info.ModTime(), info.ModTime()))
+	s.Empty(s.refusal(s.bin))
+}
+
+func (s *BinaryPinSuite) TestABoundWorkerPinsNothing() {
+	worker := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: s.loc.Root, Actor: &Actor{Lease: "w1"}})
+	_, err := worker.PinBinary(s.T().Context(), "w1")
+	var refused *RefusedError
+	s.Require().ErrorAs(err, &refused)
+	s.Contains(refused.Rule, "a worker that pinned its own build would pick its judge")
+}
+
+func (s *BinaryPinSuite) TestTheCacheCompactsToOneEntryPerPath() {
+	cache := filepath.Join(s.T().TempDir(), digestCacheName)
+	var entries []binaryDigest
+	for i := range digestCacheCompactAt {
+		entries = append(entries, binaryDigest{Path: "/a", Size: int64(i), Digest: "sha256:old"})
+	}
+	s.Require().NoError(writeDigest(cache, entries, binaryDigest{Path: "/a", Digest: "sha256:new"}))
+	s.Equal([]binaryDigest{{Path: "/a", Digest: "sha256:new"}}, readDigests(cache))
+}

@@ -1011,6 +1011,9 @@ type JobWorktree struct {
 	// Binary is the magus the fork placed in it, the same file the forking checkout runs,
 	// "" when the forking checkout ran magus from PATH and so the job's runs it too.
 	Binary string `json:"binary,omitempty" yaml:"binary,omitempty"`
+	// BinaryDigest pins Binary's bytes ("sha256:<hex>"), "" for none.
+	// The root's hook runs only a Binary that still hashes to it.
+	BinaryDigest string `json:"binary_digest,omitempty" yaml:"binary_digest,omitempty"`
 	// Removed is unix seconds when magus removed it, zero while it stands.
 	Removed int64 `json:"removed,omitempty" yaml:"removed,omitempty"`
 	// Kept is why magus left it standing after the job ended, "" until then or once it is

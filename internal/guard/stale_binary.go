@@ -358,8 +358,9 @@ func scoutRecord(args []string) bool {
 // out of an interrupted cherry-pick, merge or rebase, or adds a worktree, since a tree left
 // mid-pick links no binary at all. Each stands alone on its line. builds is whether the
 // caller builds this checkout's binary: the root, or the checkout's integrator.
-// Only it runs the rebuild target, a target at declares relinks.
-// The relink, regenerate, placement and bootstrap pass for any caller.
+// Only it runs the rebuild target, the relink, the regenerate or the bootstrap,
+// since any other leased build leaves a binary no row pins. The placement
+// passes for any caller.
 func recoveryLine(command string, d Dialect, lease string, builds bool, at location) bool {
 	command = withoutLeaseExport(command, d)
 	call, ok := soleCall(command, d)
@@ -381,6 +382,8 @@ func recoveryLine(command string, d Dialect, lease string, builds bool, at locat
 	}
 	workerOnly := lease != "" && !builds
 	switch prog := path.Base(words[0]); {
+	case workerOnly:
+		return false
 	case words[0] == "go":
 		g, ok := readGoCall(hint.Invocation{Name: "go", Args: words[1:]})
 		if !ok || !soleGoCommand(command, d) {
@@ -388,30 +391,12 @@ func recoveryLine(command string, d Dialect, lease string, builds bool, at locat
 		}
 		own := g.buildRoot(cmp.Or(at.dir, at.workspace)) == filepath.Clean(at.workspace)
 		return (g.bootstrapsMagus() && bootstrapLine(command, d)) || (own && g.recoversMagus())
-	case workerOnly:
-		return false
 	case prog == "magus" && len(call.Assigns) == 0:
 		if r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]}); ok {
 			return runRelinks(at.declared().ix, r)
 		}
 	}
 	return false
-}
-
-// relinksCheckout is checkout's ./magus when command is the relink of
-// checkout, alone on its line, and "" otherwise. The holder of a checkout
-// replaces its binary that way and no other.
-func relinksCheckout(command string, d Dialect, cwd, checkout string) string {
-	call, ok := soleCall(command, d)
-	if checkout == "" || !ok || !soleGoCommand(command, d) {
-		return ""
-	}
-	words := literalWords(call.Args)
-	g, ok := readGoCall(hint.Invocation{Name: "go", Args: words[1:]})
-	if !ok || g.args[0] != "build" || !g.recoversMagus() || !samePath(g.buildRoot(cmp.Or(cwd, checkout)), checkout) {
-		return ""
-	}
-	return filepath.Join(checkout, "magus")
 }
 
 // withoutLeaseExport is command past a leading `export BAGGAGE=...`, the prefix
@@ -661,7 +646,8 @@ func (f binaryFix) next(rule denyRuleName) []types.NextStep {
 }
 
 // binaryRemedy is the fix for a binary that cannot load the tree at root, by who is asking.
-// In a checkout of magus holding ./magus it is the relink, for every caller.
+// In a checkout of magus holding ./magus it is the relink for the root and the
+// integrator, and the placement for a worker.
 func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	if builds {
 		lease = ""
@@ -669,16 +655,16 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	hasBinary := hasMagusBinary(root)
 	bootstrap := config.SourceCommand(root, "", "", true)
 	switch {
-	case own && hasBinary:
-		return binaryFix{
-			say: fmt.Sprintf("relink ./magus, alone on its line: `%s`", ward.RelinkAt(root)),
-			why: relinkWhy,
-		}
 	case lease != "" && own:
 		return binaryFix{
 			say:      "ask the main session to place a ./magus that loads this workspace",
 			why:      onePerBase,
 			placeFor: lease,
+		}
+	case own && hasBinary:
+		return binaryFix{
+			say: fmt.Sprintf("relink ./magus, alone on its line: `%s`", ward.RelinkAt(root)),
+			why: relinkWhy,
 		}
 	case lease != "":
 		return binaryFix{
@@ -727,7 +713,7 @@ const onePerBase = "There is one binary per base commit: the checkout's integrat
 	"and " + placementScript + " copies it into a worker checkout whenever no Go build input differs. " +
 	"A build per worker is two Go compiles each, and a fan-out runs a dozen at once."
 
-// relinkWhy is why the relink is the one remedy, for every caller.
+// relinkWhy is why the relink is the one remedy for whoever builds ./magus.
 const relinkWhy = "The relink loads no magusfile, so it runs while nothing loads the tree, and the binary it links embeds the tree's contract. " +
 	"If the load error names a magusfile line instead, fix that line. " +
 	"If it names generated code the tree's sources moved past, regenerate it with `go generate ./<package>`, alone on its line, then relink."

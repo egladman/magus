@@ -117,8 +117,8 @@ const (
 	// asClaim is [Store.Claim] adding proved write paths: graded by
 	// [authorizeClaim], and the one write that appends to Claims.
 	asClaim
-	// asAdvance is [Store.AdvanceAuthority]: graded, refused for any bound
-	// caller, and the one write after a fork that sets Authority.
+	// asAdvance is [Store.AdvanceAuthority], the one write after a fork that
+	// sets Authority. A bound caller may make it only as [landsRow] says.
 	asAdvance
 )
 
@@ -174,6 +174,19 @@ func refuse(actor Actor, id, rule string) error {
 	}
 }
 
+// landsRow reports whether actor holds an integration row that lands row id:
+// its own, or a branch its Integrates names.
+func landsRow(actor Actor, id string, rows []types.Job) bool {
+	if actor.Unstamped {
+		return false
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == actor.Lease })
+	if i < 0 || !rows[i].State.Live() || len(rows[i].Integrates) == 0 {
+		return false
+	}
+	return id == actor.Lease || slices.Contains(rows[i].Integrates, id)
+}
+
 // authorizeRow grades whether actor may turn prev into next on the row id, with rows
 // standing for the rest of the book (a child row's boundary is read from the parent's).
 //
@@ -195,8 +208,11 @@ func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, ex
 	if kind == asClaim {
 		return authorizeClaim(actor, id, prev, next, exists, rows)
 	}
-	if kind == asAdvance && actor.Bound() {
-		return refuse(actor, id, "only the root advances a row's authority, and a worker that moved its own would approve its own work")
+	if kind == asAdvance {
+		if !actor.Bound() || landsRow(actor, id, rows) {
+			return nil
+		}
+		return refuse(actor, id, "only the root advances a row's authority, or the integrator that lands it, and a worker that moved its own would approve its own work")
 	}
 	if !actor.Bound() {
 		return nil

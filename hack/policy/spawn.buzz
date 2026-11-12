@@ -40,9 +40,6 @@ export object Spawn {
     prompt: str = "",
     // checkout is the checkout the spawn runs in, "" when unread.
     checkout: str = "",
-    // ownBuild: the spawned job owns its checkout and its write paths cover a build input of
-    // ./cmd/magus there, so its worker builds ./magus (see builds\OwnBuild).
-    ownBuild: bool = false,
     // agentType is the host's subagent type. No rule reads it: the type is the
     // orchestrator's choice, and the host enforces the tools it carries.
     agentType: str = "",
@@ -83,7 +80,7 @@ export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) >
     if (helpers\titleRole(spawn.title) == integrateRole) {
         return row;
     }
-    final building = builds\briefDenial(spawn.prompt, ownBuild: spawn.ownBuild);
+    final building = builds\briefDenial(spawn.prompt);
     if (building != "") {
         return magus\guard.deny(building);
     }
@@ -363,11 +360,10 @@ test "a brief that forbids the build or builds something else passes" {
     std\assert(judged(continued, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a continue starts nothing");
 }
 
-test "a spawn whose job builds its own binary may brief the build" {
+test "a brief for a job that owns its checkout may not teach the build either" {
     final prompt = "Run `magus run go-build .` first.";
-    final own = Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/feat guard-command", isolated = true, prompt = prompt, ownBuild = true };
-    std\assert(judged(own, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "its own build");
-    std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == magus\GuardDecision.deny, message: "the same brief for any other job");
+    final own = Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/feat guard-command", isolated = true, prompt = prompt };
+    std\assert(judged(own, rows: store, unreadable: "").decision == magus\GuardDecision.deny, message: "no row pins a worker's build");
 }
 
 // A starting guess, not a measurement: change it here when it stops fitting.

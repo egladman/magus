@@ -99,8 +99,10 @@ func jobCommand(ctx context.Context, root string, args []string) error {
 		return jobPause(ctx, root, "resume", args[1:])
 	case "grant":
 		return jobGrant(ctx, root, args[1:])
+	case "pin", "advance":
+		return jobPinOrAdvance(ctx, root, args[0], args[1:])
 	default:
-		return exit.Usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, graph, rm, prune, pause, resume or grant; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return exit.Usagef("magus job: unknown subcommand %q (want fork, apply, exec, exit, wait, watch, run, graph, rm, prune, pause, resume, grant, pin or advance; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
@@ -1501,12 +1503,20 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 		followed := !made && priorHead != "" && priorHead != worktree.Base
 		stale := !made && !readsTree(ctx, worktree.Binary, worktree.Root)
+		// Only a binary this fork placed is pinned: one an adopted
+		// checkout already holds may be anyone's build.
+		placed := made && worktree.Binary != ""
 		if mirrored != "" && (followed || stale || made && worktree.Binary == "") && job.BuildsItsOwnMagus(worktree.Root) {
 			reused, err := provisionCheckout(ctx, store, jobWS, mirrored, root, row, worktree)
 			if err != nil {
 				return failedProvision(ctx, store, worktree, made, err)
 			}
-			worktree.Binary, built = filepath.Join(worktree.Root, "magus"), !reused
+			worktree.Binary, built, placed = filepath.Join(worktree.Root, "magus"), !reused, true
+		}
+		if placed {
+			if worktree.BinaryDigest, err = job.BinaryDigest(worktree.Binary); err != nil {
+				return failedProvision(ctx, store, worktree, made, fmt.Errorf("pinning %s: %w", worktree.Binary, err))
+			}
 		}
 		rows, err := store.List()
 		if err != nil {

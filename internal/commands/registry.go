@@ -2612,6 +2612,27 @@ shows what it is doing.`,
 			Usage:  "magus job resume <job>... [flags]",
 		},
 		{
+			Name:   "pin",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Record the hash of the ./magus that judges a job's checkout",
+			Description: "Hash the ./magus in each job's standing checkout and record it on every live row standing there. " +
+				"The root's hook hands a call only to a ./magus whose bytes match the hash a live row records, so a binary " +
+				"written there since the last pin judges nothing and the root's own magus judges the call. The fork pins the " +
+				"binary it places. The integrator runs this in its landing checkout after it relinks ./magus there, and the " +
+				"root after it places one. The store refuses it to any other caller holding a lease.",
+			Usage: "magus job pin <job>... [flags]",
+		},
+		{
+			Name:   "advance",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Move jobs' authority to this checkout's HEAD",
+			Description: "Set each job's authority, the revision its guard policy and its own diff are judged from, to the " +
+				"HEAD of the checkout this runs in. Until it advances, commits landed after the fork count as the job's own " +
+				"diff. The root runs it once it merges into a job's checkout. The integrator runs it in its landing checkout " +
+				"for its own row and each row it lands. The store refuses it to any other caller holding a lease.",
+			Usage: "magus job advance <job>... [flags]",
+		},
+		{
 			Name:   "grant",
 			Effect: cmdline.EffectLocalWrite,
 			Short:  "Lower one guard rule to advice for one job, typed by a person",

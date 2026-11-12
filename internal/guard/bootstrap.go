@@ -247,8 +247,8 @@ type ownBuildOutcome struct {
 	// others is the rest of the call's line, as besideGoCall renders it.
 	others   []string
 	advisory ShellVerdict
-	// recovery is a recoversMagus call alone on its line, in the caller's own
-	// checkout, advised through as recoveryAdvisory for every caller.
+	// recovery is a recoversMagus call alone on its line. The root and the
+	// integrator get recoveryAdvisory, and a worker workerBuildVerdict.
 	recovery         bool
 	recoveryAdvisory ShellVerdict
 	// lease is the lease the call acts under, "" for the orchestrator, a person or the
@@ -263,9 +263,9 @@ type ownBuildOutcome struct {
 // apply layers this outcome onto v, the raw-tool deny it refines.
 func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 	switch {
-	case o.recovery:
+	case o.recovery && o.lease == "":
 		return o.recoveryAdvisory
-	case o.lease != "" && (o.bootstrap || o.link || !o.hasBinary):
+	case o.lease != "" && (o.recovery || o.bootstrap || o.link || !o.hasBinary):
 		// Replaces every pass-through and every "get one with" below: each names a build.
 		v.Why = fmt.Sprintf(`%s
 %s`, onePerBase, denial{Say: v.Deny, Why: v.Why}.full())
@@ -368,8 +368,7 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 	}
 	rule := denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(denied)}
 	workspaceShell := matchWorkspaceShell(deps.ShellRules, command, d)
-	recovery := call.recoversMagus() && soleGoCommand(command, d) &&
-		(deps.lease == "" || ownsCheckout(ctx, deps, hookLocation(ctx, deps), root) || samePath(root, hookLocation(ctx, deps).workspace))
+	recovery := call.recoversMagus() && soleGoCommand(command, d)
 	lease := deps.lease
 	if me, ok := actingLiveLease(ctx, deps, lease); ok && integrates(me, spawnedAs(deps.facts, deps.caller.Agent), root) {
 		lease = ""
@@ -391,7 +390,7 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 		}, workspaceShell),
 		recovery: recovery,
 		recoveryAdvisory: strengthenWithWorkspace(ShellVerdict{
-			Context: fmt.Sprintf("magus workspace: the relink and the regenerate run in %s for every caller: neither loads a magusfile.", where),
+			Context: fmt.Sprintf("magus workspace: the relink and the regenerate run in %s for the root and the integrator: neither loads a magusfile.", where),
 			Why:     "A ./magus built from another contract than the tree carries cannot load it, and the relink links one that embeds the tree's contract.",
 			Rule:    rule,
 		}, workspaceShell),
@@ -405,7 +404,7 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 // served it. Nil when the line holds no go command denied in a checkout of magus.
 //
 // The RECOVERY correction advises the relink and the generators (recoversMagus)
-// through, each alone on its line, for any caller in its own checkout.
+// through, each alone on its line, for the root and the checkout's integrator.
 //
 // A -C outside the workspace passes the pure rule, since a foreign tree is not its to
 // funnel; a -C into another checkout of magus is this repository's policy to judge
@@ -496,18 +495,13 @@ func checkoutHook(root string) string {
 	return hook
 }
 
-// movedCheckoutRebuild is the sentence naming how a row that moved its own
-// checkout rebuilds ./magus there.
-func movedCheckoutRebuild(hook string) string {
-	if hook == "" {
-		return "A row that moved the checkout it owns asks the root for a placement: " + job.NoCheckoutHook + "."
-	}
-	return fmt.Sprintf("A row that moved the checkout it owns finishes with `./magus buzz %s -- --here`.", hook)
-}
+// unpinnedRebuild is why a worker whose checkout moved still builds nothing.
+const unpinnedRebuild = "A row that moved the checkout it owns asks the root for a placement too: " +
+	"a ./magus it built there is pinned by no row, so the root's hook would not run it."
 
-// denyCheckoutBootstrap refuses a build of ./magus in dir under a lease that does not own
-// dir: the root, the integrator and the job holding that checkout may run it, since a
-// checkout forked at a commit no placed binary matches has no other way to get one.
+// denyCheckoutBootstrap refuses a build of ./magus in dir under a
+// worker's lease. The root and the integrator run it, then pin what it
+// built. The job holding dir does not: its build would judge its calls.
 func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, command, hook, dir string) denial {
 	if deps.lease == "" {
 		return denial{}
@@ -515,11 +509,8 @@ func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, command, hook
 	if me, live := actingLiveLease(ctx, deps, deps.lease); live && actingIntegrator(ctx, deps, me, command) {
 		return denial{}
 	}
-	if ownsCheckout(ctx, deps, hookLocation(ctx, deps), dir) {
-		return denial{}
-	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `magus buzz %s -- --checkout %s` builds ./magus in a checkout lease %s does not own; the root places it.", hook, dir, deps.lease),
-		Why: workerBuildVerdict + ". Only the root and the holder of the job whose checkout it names run it.\n" + onePerBase,
+		Say: fmt.Sprintf("magus workspace: `magus buzz %s -- --checkout %s` builds ./magus under lease %s; the root places it.", hook, dir, deps.lease),
+		Why: workerBuildVerdict + ". Only the root and the checkout's integrator run it.\n" + onePerBase + "\n" + unpinnedRebuild,
 	}
 }

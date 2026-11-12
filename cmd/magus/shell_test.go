@@ -2287,6 +2287,17 @@ func (s *DelegateToCheckoutSuite) write(dir string) string {
 	return fmt.Sprintf(`{"cwd":%q,"tool_input":{"file_path":%q}}`, s.session, filepath.Join(dir, "x.go"))
 }
 
+// pin is [pinCheckoutBinary] in the session's job store.
+func (s *DelegateToCheckoutSuite) pin(own string) string {
+	pinCheckoutBinary(s.T(), s.session, own)
+	return own
+}
+
+// placePinned is placeStub into the checkout, pinned.
+func (s *DelegateToCheckoutSuite) placePinned(stamp, say string, code int) string {
+	return s.pin(placeStub(s.T(), s.repo.Root(), stamp, say, code))
+}
+
 func (s *DelegateToCheckoutSuite) delegate(input string) (handled bool, declined, out string, err error) {
 	return s.delegateWithin(context.Background(), input)
 }
@@ -2304,6 +2315,7 @@ func (s *DelegateToCheckoutSuite) delegateToSleeper(say string) (own string, han
 	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\nprintf '%%s' '%s'\ntouch '%s'\nexec sleep 30\n", s.repo.Head(), say, started)
 	own = filepath.Join(s.repo.Root(), "magus")
 	s.Require().NoError(os.WriteFile(own, []byte(script), 0o755))
+	s.pin(own)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -2338,6 +2350,7 @@ func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheParentsDeadline() {
 	own := filepath.Join(s.repo.Root(), "magus")
 	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\ncat >/dev/null\nprintf '%%s' \"$%s\"\n", s.repo.Head(), guard.HookDeadlineEnv)
 	s.Require().NoError(os.WriteFile(own, []byte(script), 0o755))
+	s.pin(own)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	want, _ := ctx.Deadline()
@@ -2348,7 +2361,7 @@ func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheParentsDeadline() {
 }
 
 func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesTheWrite() {
-	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	handled, declined, out, err := s.delegate(s.write(s.repo.Root()))
 	s.True(handled)
 	s.Empty(declined)
@@ -2357,7 +2370,7 @@ func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesTheWrite() {
 }
 
 func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesALineThatCdsIntoTheCheckout() {
-	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	handled, declined, out, err := s.delegate(s.line())
 	s.True(handled)
 	s.Empty(declined)
@@ -2369,7 +2382,7 @@ func (s *DelegateToCheckoutSuite) TestABuildAfterHeadJudges() {
 	base := s.repo.Head()
 	ahead := s.repo.Commit("ahead", nil)
 	s.repo.Git("checkout", "-q", base)
-	placeStub(s.T(), s.repo.Root(), ahead, `{"decision":"deny"}`, 2)
+	s.placePinned(ahead, `{"decision":"deny"}`, 2)
 	handled, declined, _, _ := s.delegate(s.line())
 	s.True(handled)
 	s.Empty(declined)
@@ -2378,7 +2391,7 @@ func (s *DelegateToCheckoutSuite) TestABuildAfterHeadJudges() {
 func (s *DelegateToCheckoutSuite) TestABuildBehindHeadJudges() {
 	behind := s.repo.Head()
 	s.repo.Commit("moved on", nil)
-	placeStub(s.T(), s.repo.Root(), behind, `{"decision":"deny"}`, 2)
+	s.placePinned(behind, `{"decision":"deny"}`, 2)
 	handled, declined, out, err := s.delegate(s.line())
 	s.True(handled)
 	s.Empty(declined)
@@ -2387,14 +2400,14 @@ func (s *DelegateToCheckoutSuite) TestABuildBehindHeadJudges() {
 }
 
 func (s *DelegateToCheckoutSuite) TestAnUnstampedBuildJudges() {
-	placeStub(s.T(), s.repo.Root(), unknownVersion, `{"decision":"deny"}`, 2)
+	s.placePinned(unknownVersion, `{"decision":"deny"}`, 2)
 	handled, declined, _, _ := s.delegate(s.line())
 	s.True(handled)
 	s.Empty(declined)
 }
 
 func (s *DelegateToCheckoutSuite) TestACallAlreadyHandedOnIsJudgedHere() {
-	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	s.T().Setenv(delegatedEnv, "/other/magus")
 	ctx, cancel, err := takeDelegation(context.Background())
 	defer cancel()
@@ -2443,7 +2456,7 @@ func (s *DelegateToCheckoutSuite) TestADelegateHandedAPastDeadlineDeniesAndSaysT
 }
 
 func (s *DelegateToCheckoutSuite) TestALineThatStaysInTheSessionIsJudgedHere() {
-	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	input := fmt.Sprintf(`{"cwd":%q,"tool_name":"Bash","tool_input":{"command":"./magus run lint ."}}`, s.T().TempDir())
 	handled, declined, _, _ := s.delegate(input)
 	s.False(handled)
@@ -2458,7 +2471,7 @@ func (s *DelegateToCheckoutSuite) TestASessionDirectoryMovedIntoAnotherRepositor
 	s.Require().NoError(err)
 	s.False(handled)
 	s.Empty(out)
-	s.Contains(declined, "is not a checkout of the session's repository")
+	s.Contains(declined, "no live job row records it")
 }
 
 func (s *DelegateToCheckoutSuite) TestAReadIntoAnotherRepositoryIsJudgedHere() {
@@ -2468,7 +2481,7 @@ func (s *DelegateToCheckoutSuite) TestAReadIntoAnotherRepositoryIsJudgedHere() {
 	s.Require().NoError(err)
 	s.False(handled)
 	s.Empty(out)
-	s.Contains(declined, "is not a checkout of the session's repository")
+	s.Contains(declined, "no live job row records it")
 }
 
 func (s *DelegateToCheckoutSuite) TestALineThatCdsIntoAPlantedWorkspaceIsJudgedHere() {
@@ -2480,7 +2493,7 @@ func (s *DelegateToCheckoutSuite) TestALineThatCdsIntoAPlantedWorkspaceIsJudgedH
 	s.Require().NoError(err)
 	s.False(handled)
 	s.Empty(out)
-	s.Contains(declined, "is not a checkout of the session's repository")
+	s.Contains(declined, "no live job row records it")
 }
 
 func (s *DelegateToCheckoutSuite) TestABinaryInNoCheckoutHandsNothingOn() {
@@ -2491,6 +2504,38 @@ func (s *DelegateToCheckoutSuite) TestABinaryInNoCheckoutHandsNothingOn() {
 	s.False(handled)
 	s.Empty(out)
 	s.Contains(declined, "is no checkout's own ./magus")
+}
+
+func (s *DelegateToCheckoutSuite) TestACheckoutBinaryNoRowPinsIsJudgedHere() {
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"pass"}`, 0)
+	handled, declined, out, err := s.delegate(s.line())
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Empty(out)
+	s.Contains(declined, "no live job row records it as its checkout's binary")
+}
+
+func (s *DelegateToCheckoutSuite) TestABinaryRewrittenSinceItsPinIsJudgedHere() {
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
+	// A worker's relink lands a different binary at the pinned path.
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"pass"}`, 0)
+	handled, declined, out, err := s.delegate(s.line())
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Empty(out)
+	s.Contains(declined, "its bytes do not hash to what job pinned pins")
+}
+
+func (s *DelegateToCheckoutSuite) TestAPinOnAnEndedRowHandsNothingOn() {
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
+	_, cacheDir := seedJobStore(s.T(), s.session)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: s.session})
+	_, err := store.Update(s.T().Context(), "pinned", func(cur *types.Job) { cur.State = types.StatePass })
+	s.Require().NoError(err)
+	handled, declined, _, err := s.delegate(s.line())
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Contains(declined, "no live job row records it")
 }
 
 func (s *DelegateToCheckoutSuite) TestCallDirIsTheCheckoutALineCdsInto() {

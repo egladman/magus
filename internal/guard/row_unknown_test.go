@@ -63,7 +63,7 @@ func TestRowUnknownRefusesARowCarryingAMemberThisBuildDoesNotDeclare(t *testing.
 	assert.Equal(t, denyRuleLeaseRowUnknown, roleScopedCommandRules()[0].name, "judged before any rule that reads the row")
 }
 
-// Refusing these locked a worker out of the only lines that replace the judge.
+// Refusing these locked a worker out of its placement and its checkout hook.
 func TestRowUnknownPassesTheRecoveryLines(t *testing.T) {
 	row := narrowLease()
 	ctx, root := fleetFixture(t, row)
@@ -79,12 +79,11 @@ func TestRowUnknownPassesTheRecoveryLines(t *testing.T) {
 		fmt.Sprintf("export BAGGAGE=magus.lease=%s; ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", row.ID),
 		fmt.Sprintf("export BAGGAGE=magus.lease=%s && ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", row.ID),
 		fmt.Sprintf("BAGGAGE=magus.lease=%s ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", row.ID),
-		ward.BootstrapCommand,
 	} {
 		assert.False(t, denyUnknownRowMembers(ctx, deps, row.ID, line).refused(), line)
 	}
 	for _, line := range []string{
-		"./build.sh", "./magus run go-build .", "git commit -m x",
+		"./build.sh", "./magus run go-build .", "git commit -m x", ward.BootstrapCommand,
 		fmt.Sprintf("export BAGGAGE=magus.lease=%s; ./build.sh", row.ID),
 		"export FOO=1; ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here",
 		fmt.Sprintf("export BAGGAGE=magus.lease=%s; ./magus buzz hack/dev/bootstrap-checkout.buzz -- --here; ./build.sh", row.ID),

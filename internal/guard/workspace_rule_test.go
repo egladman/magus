@@ -178,16 +178,21 @@ func TestLoadFailureDenyNamesTheBootstrapWhereThereIsNoBinary(t *testing.T) {
 	assert.NotContains(t, stored, "mv magus magus.old")
 }
 
-// A leased worker is told the same relink, never the rebuild target.
-func TestLoadFailureDenyNamesTheRelinkForALeasedWorker(t *testing.T) {
+// A leased worker is told to ask for a placement, never to relink or rebuild:
+// no row would pin a binary it built.
+func TestLoadFailureDenyNamesThePlacementForALeasedWorker(t *testing.T) {
 	ctx, _ := fleetFixture(t, fixture.FleetLeases()[0])
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	recordLoadedPolicy(t, cacheDir)
 	root := ownCheckout(t, ctx, true)
 
 	v := Judge(ctx, unloadedDeps(), Request{Input: "git push", Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleOwnSay(root))
-	assert.NotContains(t, stored, "go-build")
+	want := verdictWithRule(decisionDeny, string(denyRuleStaleBinary))
+	want.Next = []types.NextStep{placementNext(denyRuleStaleBinary, "lease-a")}
+	assert.Equal(t, want, unworded(v))
+	assert.Contains(t, v.Reason, "ask the main session to place a ./magus that loads this workspace")
+	assert.NotContains(t, v.Reason, ward.RelinkAt(root))
+	assert.NotContains(t, v.Reason, "go-build")
 }
 
 // An error in the magusfile that no newer binary would fix, in a checkout that has its
@@ -327,18 +332,19 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 	})
 }
 
-// A worker is told the same relink as anyone: the relink loads nothing,
-// and the binary it links reads the tree. A caller that does not know its
-// binary path leaves the note out.
-func TestJudgingBinaryNoteForAWorkerNamesTheRelink(t *testing.T) {
+// A worker is told to ask for a placement, and the root to relink. A caller
+// that does not know its binary path leaves the note out.
+func TestJudgingBinaryNoteForAWorkerNamesThePlacement(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	root := ownCheckout(t, ctx, true)
 	at := location{workspace: root}
 	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date")
+	judge := Dependencies{Binary: filepath.Join(root, "magus")}
 
-	got := judgingBinaryNote(Dependencies{Binary: filepath.Join(root, "magus")}, at, stale, "lease-a")
-
-	assert.Equal(t, fmt.Sprintf("Judged by %s, this checkout's ./magus. It was built from another contract than the tree carries. Fix: relink ./magus, alone on its line: `%s`.", filepath.Join(root, "magus"), ward.RelinkAt(root)), got)
+	assert.Equal(t, fmt.Sprintf("Judged by %s, this checkout's ./magus. It was built from another contract than the tree carries. Fix: ask the main session to place a ./magus that loads this workspace.", filepath.Join(root, "magus")),
+		judgingBinaryNote(judge, at, stale, "lease-a"))
+	assert.Equal(t, fmt.Sprintf("Judged by %s, this checkout's ./magus. It was built from another contract than the tree carries. Fix: relink ./magus, alone on its line: `%s`.", filepath.Join(root, "magus"), ward.RelinkAt(root)),
+		judgingBinaryNote(judge, at, stale, ""))
 	assert.Empty(t, judgingBinaryNote(Dependencies{}, at, stale, ""))
 }
 

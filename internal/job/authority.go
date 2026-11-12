@@ -57,9 +57,11 @@ func (s *Store) committedRevision(ctx context.Context) string {
 }
 
 // AdvanceAuthority moves row id's Authority to the store checkout's HEAD and
-// returns the row. Only an unbound caller, the root, may: a bound one gets a
-// [*RefusedError], since a worker moving its own authority approves its own
-// work. It fails on an undeclared row and where version control names no HEAD.
+// returns the row. The root advances a row once it merges into the row's
+// checkout, and the integrator each row it lands, from its landing checkout.
+// Any other bound caller gets a [*RefusedError], since a worker moving its
+// own authority approves its own work. It fails on an undeclared row and where
+// version control names no HEAD.
 func (s *Store) AdvanceAuthority(ctx context.Context, id string) (types.Job, error) {
 	head := s.committedRevision(ctx)
 	if head == "" {

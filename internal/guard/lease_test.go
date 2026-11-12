@@ -4429,8 +4429,8 @@ func (s *workerCheckReadsSuite) TestTheGateOverTheCheckProjectStaysRefused() {
 	s.True(denyLeaseScopedGate(ctx, composingWorkspace(s.T()), row.ID, "./magus run ci libs/conventions --no-default-charms").refused())
 }
 
-func (s *workerCheckReadsSuite) TestABuildInAnOwnedCheckoutIsLeftToTheWorkspaceRule() {
-	s.Empty(s.judgedInCheckout(testCheckLease(), s.ruled(), "./magus run go-build ."))
+func (s *workerCheckReadsSuite) TestABuildInAnOwnedCheckoutIsRefusedUnderAWorkspaceRule() {
+	s.Contains(s.judgedInCheckout(testCheckLease(), s.ruled(), "./magus run go-build .").Say, workerBuildVerdict)
 }
 
 func (s *workerCheckReadsSuite) TestABuildWithNoWorkspaceRuleIsRefused() {
@@ -4455,8 +4455,8 @@ func (s *workerCheckReadsSuite) TestABuildWhoseApprovedRuleCannotResolveIsRefuse
 	s.Contains(got.Say, workerBuildVerdict)
 }
 
-func (s *workerCheckReadsSuite) TestABuildIsLeftToARuleOnlyTheApprovedSideHolds() {
-	s.Empty(s.judgedInCheckout(testCheckLease(), s.approved((&commandRuleProbe{}).rule(), nil), "./magus run go-build ."))
+func (s *workerCheckReadsSuite) TestABuildIsRefusedUnderARuleOnlyTheApprovedSideHolds() {
+	s.Contains(s.judgedInCheckout(testCheckLease(), s.approved((&commandRuleProbe{}).rule(), nil), "./magus run go-build .").Say, workerBuildVerdict)
 }
 
 func (s *workerCheckReadsSuite) TestABriefMayNotTeachTheBuildWithNoRuleOnEitherSide() {
@@ -4527,10 +4527,10 @@ func (s *workerCheckReadsSuite) TestABriefMayTeachAReadOnlyRunOverTheCheckProjec
 	s.False(s.briefed(movedProjectRow(), composingWorkspace(s.T()), "./magus run lint libs/conventions --no-default-charms"))
 }
 
-func (s *workerCheckReadsSuite) TestABriefMayTeachTheBuildToARowHoldingACheckout() {
+func (s *workerCheckReadsSuite) TestABriefMayNotTeachTheBuildToARowHoldingACheckout() {
 	row := testCheckLease()
 	row.Worktree = &types.JobWorktree{Root: s.T().TempDir(), Source: s.T().TempDir()}
-	s.False(s.briefed(row, s.ruled(), "./magus run go-build ."))
+	s.True(s.briefed(row, s.ruled(), "./magus run go-build ."))
 }
 
 func (s *workerCheckReadsSuite) TestABriefMayNotTeachTheBuildToARowHoldingNoCheckout() {
@@ -4746,11 +4746,11 @@ func (s *LeaseBoundarySuite) TestToolWriteToTheCheckoutsOwnBinaryIsRefused() {
 	s.Contains(g.Reason, "own magus binary")
 }
 
-// The relink is the one line a lease replaces its checkout's ./magus with.
-func (s *LeaseBoundarySuite) TestTheRelinkOfTheCheckoutsOwnBinaryPasses() {
+// A lease never relinks its checkout's ./magus: no row would pin the build.
+func (s *LeaseBoundarySuite) TestTheRelinkOfTheCheckoutsOwnBinaryIsRefused() {
 	s.binary()
-	s.Empty(s.deny("go build -o magus ./cmd/magus"))
-	s.Empty(s.deny("GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus"))
+	s.Contains(s.deny("go build -o magus ./cmd/magus"), "own magus binary")
+	s.Contains(s.deny("GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus"), "own magus binary")
 }
 
 func (s *LeaseBoundarySuite) TestAnyOtherWriteOfTheCheckoutsOwnBinaryIsRefused() {

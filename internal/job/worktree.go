@@ -3,10 +3,14 @@ package job
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
@@ -804,6 +808,188 @@ func placeBinary(bin, dir string) (string, error) {
 	}
 	dst := filepath.Join(dir, binaryName)
 	return dst, file.WriteFileAtomic(dst, body, 0o755)
+}
+
+// BinaryDigest is the content hash of the file at bin, "sha256:<hex>".
+func BinaryDigest(bin string) (string, error) {
+	f, err := os.Open(bin)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("job: hash %s: %w", bin, err)
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// digestCacheName is the file beside the job store that keeps each judging
+// binary's hash, so every checkout of the repository shares one.
+const digestCacheName = "binary-digests.jsonl"
+
+// digestCacheCompactAt is the line count past which a write compacts the cache.
+const digestCacheCompactAt = 256
+
+// binaryDigest is one hash of the file at Path. It holds while the file keeps
+// the identity, size and modification time it was hashed under. A writer can
+// forge all three, which ADR 0045 section 1 accepts.
+type binaryDigest struct {
+	Path   string `json:"path"`
+	Ino    uint64 `json:"ino,omitempty"`
+	Size   int64  `json:"size"`
+	ModNs  int64  `json:"mod_ns"`
+	Digest string `json:"digest"`
+}
+
+func (d binaryDigest) describes(fi os.FileInfo) bool {
+	ino, _, _ := file.Identity(fi)
+	return d.Size == fi.Size() && d.ModNs == fi.ModTime().UnixNano() && d.Ino == ino
+}
+
+// cachedDigest is [BinaryDigest] read through the cache beside the store.
+// The cache is never the authority. One that does not read is rehashed.
+func (s *Store) cachedDigest(bin string) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
+	// Stat before the hash: a write in between changes what the next stat sees.
+	fi, err := os.Stat(bin)
+	if err != nil {
+		return "", err
+	}
+	cache := filepath.Join(filepath.Dir(s.path), digestCacheName)
+	entries := readDigests(cache)
+	key := resolved(bin)
+	for i := len(entries) - 1; i >= 0; i-- {
+		if entries[i].Path != key {
+			continue
+		}
+		if entries[i].describes(fi) {
+			return entries[i].Digest, nil
+		}
+		break
+	}
+	digest, err := BinaryDigest(bin)
+	if err != nil {
+		return "", err
+	}
+	ino, _, _ := file.Identity(fi)
+	_ = writeDigest(cache, entries, binaryDigest{Path: key, Ino: ino, Size: fi.Size(), ModNs: fi.ModTime().UnixNano(), Digest: digest}) // unwritten, the next call hashes again
+	return digest, nil
+}
+
+// readDigests is every entry the cache at path holds, oldest first, stopping
+// at the first that does not decode.
+func readDigests(path string) []binaryDigest {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	var entries []binaryDigest
+	dec := json.NewDecoder(f)
+	for {
+		var d binaryDigest
+		if err := dec.Decode(&d); err != nil {
+			return entries
+		}
+		entries = append(entries, d)
+	}
+}
+
+// writeDigest appends d to the cache at path. Past digestCacheCompactAt lines
+// it replaces the file by rename, keeping the last entry per path.
+func writeDigest(path string, entries []binaryDigest, d binaryDigest) error {
+	if len(entries) < digestCacheCompactAt {
+		line, err := json.Marshal(d)
+		if err != nil {
+			return err
+		}
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return err
+		}
+		_, werr := f.Write(append(line, '\n'))
+		return errors.Join(werr, f.Close())
+	}
+	last := map[string]binaryDigest{}
+	for _, e := range append(entries, d) {
+		last[e.Path] = e
+	}
+	var body []byte
+	for _, p := range slices.Sorted(maps.Keys(last)) {
+		line, err := json.Marshal(last[p])
+		if err != nil {
+			return err
+		}
+		body = append(append(body, line...), '\n')
+	}
+	return file.ReplaceFile(path, body, 0o644)
+}
+
+// PinRefusal says why the root's hook may not hand a call to bin, "" when it
+// may. It may when a live row's standing checkout records bin as its Binary
+// and bin still hashes to that row's BinaryDigest.
+func (s *Store) PinRefusal(bin string) (string, error) {
+	rows, err := s.List()
+	if err != nil {
+		return "", err
+	}
+	pinning := slices.DeleteFunc(rows, func(r types.Job) bool {
+		return !r.State.Live() || !r.Worktree.Standing() || !samePath(r.Worktree.Binary, bin)
+	})
+	if len(pinning) == 0 {
+		return "no live job row records it as its checkout's binary", nil
+	}
+	digest, err := s.cachedDigest(bin)
+	if err != nil {
+		return "", err
+	}
+	if slices.ContainsFunc(pinning, func(r types.Job) bool { return r.Worktree.BinaryDigest == digest }) {
+		return "", nil
+	}
+	return fmt.Sprintf("its bytes do not hash to what job %s pins, so neither its fork, its placement nor its integrator wrote it last", pinning[0].ID), nil
+}
+
+// PinBinary records the hash ./magus in job id's checkout has now on every
+// live row standing at that checkout, and returns those rows. The root pins
+// any row, and the integrator its own after it relinks there. Any other bound
+// caller gets a [*RefusedError]: a worker that pinned its own build would pick
+// its judge.
+func (s *Store) PinBinary(ctx context.Context, id string) ([]types.Job, error) {
+	rows, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	if i < 0 {
+		return nil, fmt.Errorf("%w: %q", ErrUnknownJob, id)
+	}
+	if actor := s.Actor(); actor.Bound() && (actor.Lease != id || len(rows[i].Integrates) == 0) {
+		return nil, refuse(actor, id, "only the root and a row's own integrator pin the binary that judges it, and a worker that pinned its own build would pick its judge")
+	}
+	wt := rows[i].Worktree
+	if !wt.Standing() {
+		return nil, fmt.Errorf("job: %s owns no standing checkout, so it has no binary to pin", id)
+	}
+	bin := filepath.Join(wt.Root, binaryName)
+	digest, err := BinaryDigest(bin)
+	if err != nil {
+		return nil, fmt.Errorf("hashing %s's binary to pin it: %w", id, err)
+	}
+	var pinned []types.Job
+	for _, r := range rows {
+		if !r.State.Live() || !r.Worktree.Standing() || !samePath(r.Worktree.Root, wt.Root) {
+			continue
+		}
+		row, err := s.writeWorktree(ctx, r.ID, func(w *types.JobWorktree) { w.Binary, w.BinaryDigest = bin, digest })
+		if err != nil {
+			return pinned, err
+		}
+		pinned = append(pinned, row)
+	}
+	return pinned, nil
 }
 
 // RecordWorktree records wt as the checkout job id owns.

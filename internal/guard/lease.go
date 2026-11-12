@@ -520,13 +520,10 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 			commands[i] = fmt.Sprintf("`%s`", checkCommand(c))
 		}
 		if buildsCheckoutBinary(judge.workspace, r) {
-			if judge.leavesBuildToRule(r) && ownsCheckout(ctx, deps, at, at.workspace) {
-				continue
-			}
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
 				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks. %s",
-					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0], movedCheckoutRebuild(checkoutHook(at.workspace))),
+					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0], unpinnedRebuild),
 			}
 		}
 		if readsOwnProjects(r, me) {
@@ -608,8 +605,6 @@ type rowJudge struct {
 	others func() []types.Job
 	// ignored asks the VCS at root which paths it ignores, for job.RegeneratedOutside.
 	ignored func() func([]string) []string
-	// commandRuled reports a command rule on either side of the policy.
-	commandRuled func() bool
 }
 
 func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at location, workspace func() (types.WorkspaceRepository, error)) rowJudge {
@@ -630,7 +625,6 @@ func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at locat
 		composes: sync.OnceValue(func() func(target, project string) bool {
 			return checksCompose(graph, checks)
 		}),
-		commandRuled: sync.OnceValue(func() bool { return holdsCommandRule(ctx, deps) }),
 	}
 }
 
@@ -1379,37 +1373,10 @@ func buildsCheckoutBinary(workspace func() (types.WorkspaceRepository, error), r
 	return runRelinks(types.IndexTargetPolicies(ws), r)
 }
 
-// leavesBuildToRule reports a build the workspace's command rule answers next.
-// A charm, another project, or no rule on either side stays refused here. A
-// rule that raises or runs out of time is denied when asked.
-func (j rowJudge) leavesBuildToRule(r targetRun) bool {
-	_, t, err := r.parse()
-	if err != nil || len(t.Charms) > 0 || !slices.Equal(runProjects(r), []string{"."}) {
-		return false
-	}
-	return j.commandRuled()
-}
-
-// holdsCommandRule reports a command rule on either side. The approved side is
-// always wired, so only resolving it says whether it holds one.
-func holdsCommandRule(ctx context.Context, deps Dependencies) bool {
-	if deps.CommandRule != nil {
-		return true
-	}
-	if deps.ApprovedCommandRule == nil {
-		return false
-	}
-	rule, err := deps.ApprovedCommandRule(ctx)
-	return err == nil && rule != nil
-}
-
 // runsOffCheck reports a run a brief may teach though no check permits it.
-// A brief has no checkout yet, so the row's standing one stands in for it.
+// A worker never relinks the binary that judges it.
 func (j rowJudge) runsOffCheck(r targetRun) bool {
-	if buildsCheckoutBinary(j.workspace, r) {
-		return j.leavesBuildToRule(r) && j.row.Worktree.Standing()
-	}
-	return readsOwnProjects(r, j.row)
+	return !buildsCheckoutBinary(j.workspace, r) && readsOwnProjects(r, j.row)
 }
 
 // rowChecks are the runs a row names as its checks: the check record and every check goal.
@@ -4065,9 +4032,8 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	removed := append(removedOrMovedOperands(command, 0, dialect, start, home), boundPathOperands(command, dialect, start)...)
 	destinations := destinationOperands(command, dialect, start, home)
 	candidates := placedWriteCandidates(command, dialect, start, home)
-	relinked := relinksCheckout(command, dialect, start, checkout)
 	for _, w := range slices.Concat(candidates, destinations, removed) {
-		if target, placed := w.place(home); placed && !samePath(target, relinked) {
+		if target, placed := w.place(home); placed {
 			if g := denyOwnBinaryWrite(actingLease, target); g.Decision == decisionDeny {
 				return g.Reason
 			}
@@ -4080,7 +4046,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			continue
 		}
 		target, placed := candidate.place(home)
-		if !placed || samePath(target, relinked) {
+		if !placed {
 			continue
 		}
 		rel, inside := workspaceRelative(checkout, target)

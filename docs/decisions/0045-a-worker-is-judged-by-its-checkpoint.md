@@ -111,6 +111,11 @@ its landing checkout it relinks the judge, the store records the new hash, and i
 the `Authority` of each row whose work it lands. No other leased call does any of the three.
 The root advances a row's authority when it merges into that row's checkout.
 
+The doors are `magus job pin <job>` and `magus job advance <job>`. The fork pins the binary
+it places, and so does `hack/dev/bootstrap-worktree.buzz`. The integrator runs both doors in
+its landing checkout after it relinks there, and the root runs `advance` after a merge and
+`pin` after it rebuilds a job's checkout. The store refuses both to any other bound caller.
+
 Until the authority advances, the root's later commits count as the worker's own diff,
 and the verdict says the authority is behind.
 
@@ -173,9 +178,9 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 | a leased row with no authority is refused state changes                                        | done     |
 | `Pending` and the approved sources read at the authority; cache keys carry it                 | done     |
 | an optional VCS capability lists paths changed between a revision and the working tree        | done     |
-| the row records the judging binary's path and hash; the hook runs only a recorded binary      | proposed |
+| the row records the judging binary's path and hash; the hook runs only a recorded binary      | done     |
 | a build target declares a product path; the guard treats it as magus                          | proposed |
-| the integrator relinks, re-pins and advances; nobody else does                                | proposed |
+| the integrator relinks, re-pins and advances; nobody else does                                | done     |
 | a leased call loads policy and authority from its row's checkout                              | done     |
 | the lease resolves before policy loads, at every door                                         | done     |
 | the SDK judges with the approved sources when the working tree does not load                  | done     |
@@ -184,7 +189,7 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 | `ChangedBuildInputs` moves into the go spell; the Buzz copies go                              | proposed |
 | `builds.buzz` rewritten to the product-path rule                                              | proposed |
 | Go stops naming repository paths (`internal/contract`, `internal/ward`, `load_contract.go`)   | proposed |
-| the worker relink of fbacfdce1 is removed                                                     | proposed |
+| the worker relink of fbacfdce1 is removed                                                     | done     |
 | zero-trust containment of a worker's own code                                                 | planned  |
 
 ### Principles checked

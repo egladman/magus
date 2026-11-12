@@ -242,31 +242,49 @@ func TestRankOwnBuildDeniesEverythingButTheFixedRecovery(t *testing.T) {
 	}
 }
 
-func TestJudgeAllowsTheRelinkForAnyCaller(t *testing.T) {
-	testkit.Isolate(t)
-	built := checkoutFixture(t, ownModule, true)
-	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: built})
-	envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"%s\",\"tool_input\":{\"command\":\"%s\"}}", built, ward.RelinkAt(""))
-	v := Judge(ctx, strict(testDependencies()), Request{Input: envelope})
-	assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
-	assert.Contains(t, v.Context, "for every caller")
-
-	deps := strict(testDependencies())
-	deps.lease = "worker"
-	assert.NotEqual(t, decisionDeny, Judge(ctx, deps, Request{Input: envelope}).Decision, "a worker")
+// RelinkSuite pins who relinks ./magus with go: the root and the integrator,
+// never a worker, whose relink would leave a binary no row pins.
+type RelinkSuite struct {
+	suite.Suite
+	layers ctxLayers
+	built string
 }
 
-// A worker relinks its own checkout only. Another checkout's ./magus
-// is the other row's to replace.
-func TestRelinksCheckoutNamesOnlyTheCheckoutItLinks(t *testing.T) {
-	mine := checkoutFixture(t, ownModule, true)
-	other := checkoutFixture(t, ownModule, true)
-	d := effectiveDialect("")
-	assert.Equal(t, filepath.Join(mine, "magus"), relinksCheckout(ward.RelinkAt(""), d, mine, mine))
-	assert.Equal(t, filepath.Join(mine, "magus"), relinksCheckout(ward.RelinkAt(mine), d, other, mine))
-	assert.Empty(t, relinksCheckout(ward.RelinkAt(other), d, mine, mine))
-	assert.Empty(t, relinksCheckout(ward.RelinkAt("")+" && ls", d, mine, mine))
-	assert.Empty(t, relinksCheckout("go generate ./internal/spell", d, mine, mine))
+func TestRelinkSuite(t *testing.T) {
+	suite.Run(t, new(RelinkSuite))
+}
+
+func (s *RelinkSuite) SetupTest() {
+	testkit.Isolate(s.T())
+	s.built = checkoutFixture(s.T(), ownModule, true)
+	s.layers = ctxLayers{atLayer(location{cacheDir: s.T().TempDir(), workspace: s.built})}
+}
+
+func (s *RelinkSuite) judge(lease, command string) types.GuardJudgment {
+	deps := strict(testDependencies())
+	deps.lease = lease
+	envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"%s\",\"tool_input\":{\"command\":\"%s\"}}", s.built, command)
+	return Judge(s.layers.of(s.T()), deps, Request{Input: envelope})
+}
+
+func (s *RelinkSuite) TestTheRootRelinks() {
+	v := s.judge("", ward.RelinkAt(""))
+	s.Equal(verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
+	s.Contains(v.Context, "for the root and the integrator")
+}
+
+func (s *RelinkSuite) worker() Dependencies {
+	deps := strict(testDependencies())
+	deps.lease = "worker"
+	return deps
+}
+
+func (s *RelinkSuite) TestAWorkerDoesNotRelink() {
+	s.Equal(workerBuildVerdict, judgeOwnBuildWith(s.worker(), s.built, ward.RelinkAt("")).Deny)
+}
+
+func (s *RelinkSuite) TestAWorkerDoesNotRegenerate() {
+	s.Equal(workerBuildVerdict, judgeOwnBuildWith(s.worker(), s.built, "go generate ./internal/spell").Deny)
 }
 
 // A binary that exists keeps "not a bootstrap" whatever its load says:
@@ -355,55 +373,67 @@ func (s *CheckoutHookSuite) TestTheDeclaredHookMatchesItsBootstrapLine() {
 	s.Equal(s.root, dir)
 }
 
-func (s *CheckoutHookSuite) TestAMovedCheckoutWithNoHookAsksForAPlacement() {
-	s.Equal("A row that moved the checkout it owns asks the root for a placement: no checkout.bootstrap declared.", movedCheckoutRebuild(""))
+// CheckoutBootstrapSuite pins who runs the checkout bootstrap: the root and
+// the integrator. Any other lease is refused, the checkout's holder included,
+// since a ./magus it built there is pinned by no row.
+type CheckoutBootstrapSuite struct {
+	suite.Suite
+	layers         ctxLayers
+	root, checkout string
+	holder, other  types.Job
 }
 
-func (s *CheckoutHookSuite) TestAMovedCheckoutRunsTheHookHere() {
-	s.Equal("A row that moved the checkout it owns finishes with `./magus buzz "+testCheckoutHook+" -- --here`.", movedCheckoutRebuild(testCheckoutHook))
+func TestCheckoutBootstrapSuite(t *testing.T) {
+	suite.Run(t, new(CheckoutBootstrapSuite))
 }
 
-// A checkout forked at a commit no placed binary matches gets one from the checkout
-// bootstrap, which the root and the job holding that checkout run; any other lease is a
-// worker building magus.
-func TestRankOwnBuildLetsOnlyTheRootAndTheHolderBootstrapACheckout(t *testing.T) {
-	checkout := t.TempDir()
-	ctx, root := fleetFixture(t)
-	holder := types.Job{ID: "pages-fix", State: types.StateRunning, Registered: 1, CheckoutRoot: checkout, Worktree: &types.JobWorktree{Root: checkout, Source: root}}
-	other := types.Job{ID: "other", State: types.StateRunning, Registered: 1}
-	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{holder, other}})
-	declareCheckoutHook(t, root)
-	line := job.CheckoutBootstrap(testCheckoutHook, checkout)
+func (s *CheckoutBootstrapSuite) SetupTest() {
+	s.checkout = s.T().TempDir()
+	s.layers, s.root = fleetLayers(s.T())
+	s.holder = types.Job{ID: "pages-fix", State: types.StateRunning, Registered: 1, CheckoutRoot: s.checkout, Worktree: &types.JobWorktree{Root: s.checkout, Source: s.root}}
+	s.other = types.Job{ID: "other", State: types.StateRunning, Registered: 1}
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{s.holder, s.other}}))
+	declareCheckoutHook(s.T(), s.root)
+}
 
-	for _, tt := range []struct {
-		name, lease, cwd, command string
-		deny                      bool
-	}{
-		{name: "the root", cwd: root, command: line},
-		{name: "the holder", lease: holder.ID, cwd: checkout, command: line},
-		{name: "the holder by a relative path", lease: holder.ID, cwd: filepath.Dir(checkout), command: "./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout=" + filepath.Base(checkout)},
-		{name: "another lease", lease: other.ID, cwd: root, command: line, deny: true},
-		{name: "another lease by the script's absolute path", lease: other.ID, cwd: root, command: fmt.Sprintf("./magus buzz %s -- --checkout %s", filepath.Join(root, testCheckoutHook), checkout), deny: true},
-		{name: "the holder in its checkout with --here", lease: holder.ID, cwd: checkout, command: "./magus buzz hack/dev/bootstrap-checkout.buzz -- --here"},
-		{name: "another lease with --here", lease: other.ID, cwd: root, command: "./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", deny: true},
-		{name: "another lease running another script", lease: other.ID, cwd: root, command: "./magus buzz hack/dev/ls-uncommitted.buzz"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			deps := strict(testDependencies())
-			deps.lease = tt.lease
-			deps.caller = job.Caller{Host: "claude", Session: "s1"}
-			if tt.lease != "" {
-				deps.caller.Agent = "agent-a1b2c3"
-			}
-			d := effectiveDialect("")
-			v := rankOwnBuild(Evaluate(deps, tt.command), ownBuildVerdict(ctx, deps, tt.cwd, tt.command, d))
-			if !tt.deny {
-				assert.Empty(t, v.Deny)
-				return
-			}
-			assert.Equal(t, denyRuleRawTool, v.Rule.Name)
-			assert.Contains(t, v.Deny, "builds ./magus in a checkout lease other does not own")
-			assert.Contains(t, v.Deny, "--checkout ", "names the command")
-		})
+func (s *CheckoutBootstrapSuite) verdict(lease, cwd, command string) ShellVerdict {
+	deps := strict(testDependencies())
+	deps.lease = lease
+	deps.caller = job.Caller{Host: "claude", Session: "s1"}
+	if lease != "" {
+		deps.caller.Agent = "agent-a1b2c3"
 	}
+	return rankOwnBuild(Evaluate(deps, command), ownBuildVerdict(s.layers.of(s.T()), deps, cwd, command, effectiveDialect("")))
+}
+
+func (s *CheckoutBootstrapSuite) refused(v ShellVerdict, lease string) {
+	s.Equal(denyRuleRawTool, v.Rule.Name)
+	s.Contains(v.Deny, "builds ./magus under lease "+lease)
+	s.Contains(v.Deny, "--checkout ", "names the command")
+	s.Contains(v.Why, unpinnedRebuild)
+}
+
+func (s *CheckoutBootstrapSuite) TestTheRootRunsIt() {
+	s.Empty(s.verdict("", s.root, job.CheckoutBootstrap(testCheckoutHook, s.checkout)).Deny)
+}
+
+func (s *CheckoutBootstrapSuite) TestTheHolderOfTheCheckoutIsRefused() {
+	s.refused(s.verdict(s.holder.ID, s.checkout, job.CheckoutBootstrap(testCheckoutHook, s.checkout)), s.holder.ID)
+}
+
+func (s *CheckoutBootstrapSuite) TestTheHolderIsRefusedHere() {
+	s.refused(s.verdict(s.holder.ID, s.checkout, "./magus buzz hack/dev/bootstrap-checkout.buzz -- --here"), s.holder.ID)
+}
+
+func (s *CheckoutBootstrapSuite) TestAnotherLeaseIsRefused() {
+	s.refused(s.verdict(s.other.ID, s.root, job.CheckoutBootstrap(testCheckoutHook, s.checkout)), s.other.ID)
+}
+
+func (s *CheckoutBootstrapSuite) TestAnotherLeaseIsRefusedByTheScriptsAbsolutePath() {
+	command := fmt.Sprintf("./magus buzz %s -- --checkout %s", filepath.Join(s.root, testCheckoutHook), s.checkout)
+	s.refused(s.verdict(s.other.ID, s.root, command), s.other.ID)
+}
+
+func (s *CheckoutBootstrapSuite) TestAnotherScriptPasses() {
+	s.Empty(s.verdict(s.other.ID, s.root, "./magus buzz hack/dev/ls-uncommitted.buzz").Deny)
 }

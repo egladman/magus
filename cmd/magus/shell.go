@@ -33,7 +33,6 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
-	"github.com/egladman/magus/vcs"
 )
 
 // magus shell is the guard with one door.
@@ -1058,24 +1057,19 @@ func binaryCheckout(bin string) string {
 	return dir
 }
 
-// foreignCheckout says why root is not a checkout of the session's
-// repository, or "" when it is. A magus.yaml dir inside a checkout is not
-// a checkout root. A VCS that lists no other checkouts trusts only its own.
-func foreignCheckout(root, session string) string {
-	here, others, err := vcs.Checkouts(session)
+// unpinnedBinary says why the session's job store does not pin own, "" when a
+// live row records own and its hash (ADR 0045 section 4). The read skips the
+// sweep's writes.
+func unpinnedBinary(ctx context.Context, own, session string) string {
+	store, err := openJobs(ctx, session, jobOpen{DryRun: true})
 	if err != nil {
-		return fmt.Sprintf("the checkouts of the session's repository at %s could not be listed: %v", session, err)
+		return fmt.Sprintf("the job store of %s, which pins every binary this hands a call to, did not open: %v", session, err)
 	}
-	if here == "" {
-		return fmt.Sprintf("the session's directory %s is in no checkout, so no checkout's binary is trusted", session)
+	why, err := store.PinRefusal(own)
+	if err != nil {
+		return fmt.Sprintf("whether a job row pins it cannot be read: %v", err)
 	}
-	want := realPath(root)
-	for _, c := range append([]string{here}, others...) {
-		if realPath(c) == want {
-			return ""
-		}
-	}
-	return fmt.Sprintf("%s is not a checkout of the session's repository at %s, so its binary is not trusted to judge", root, here)
+	return why
 }
 
 // realPath is p with symlinks resolved, or p cleaned when they cannot be.
@@ -1119,7 +1113,7 @@ func checkoutBinary(dir, running string) string {
 }
 
 // delegateToCheckout hands a hook call to the ./magus of the checkout
-// it lands in, when that is a checkout of the session's own repository.
+// it lands in, when a live row of the session's job store pins it.
 // A ./magus behind HEAD judges too, and its own stale-binary
 // rules name the bootstrap. On handled false this binary judges, and declined
 // says why.
@@ -1146,9 +1140,9 @@ func delegateToCheckout(ctx context.Context, input string, opts output.Options, 
 	if session == "" {
 		return false, decline("", "this binary is no checkout's own ./magus, so it trusts no checkout's binary"), nil
 	}
-	// A foreign root's rules are not loaded either: this binary judges the
+	// An unpinned root's rules are not loaded either: this binary judges the
 	// call as it would one into a tree with no ./magus.
-	if why := foreignCheckout(filepath.Dir(own), session); why != "" {
+	if why := unpinnedBinary(ctx, own, session); why != "" {
 		return false, decline("", why), nil
 	}
 	// The sentinel keeps the delegate from re-execing into the ./magus of this process's

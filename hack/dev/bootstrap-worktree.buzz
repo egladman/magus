@@ -315,6 +315,11 @@ export fun bootstrap(root: str, job: str, source: str) > result\Result::<Row> {
     } catch (err: any) {
         return result\caught::<Row>(err, doing: "bootstrap-worktree: place ./magus in {root}");
     }
+    // The root's hook runs only a ./magus a live row pins.
+    final pinned = magusAt(v.bin, root: origin, args: ["job", "pin", job]);
+    if (pinned.error -> e) {
+        io\stderr.write("bootstrap-worktree: placed ./magus, and no row pins it, so the root's hook judges with its own binary: {e.message}\n");
+    }
     return claimThenIndex(
         fun (args: [str]) > result\Result::<str> => magusAt(local, root: root, args: args),
         root: root,
