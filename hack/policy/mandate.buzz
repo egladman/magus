@@ -373,7 +373,7 @@ export object Fork {
 // readFork is the fork p declares; body is the heredoc the line feeds it, "" for none.
 export fun readFork(p: helpers\Program, body: str) > Fork {
     if (!helpers\hasFlag(p.args, long: "--stdin")) {
-        final ops = helpers\stripFlags(p.args, valueFlags: ["--parent", "--write-paths", "--deny-paths", "--read-paths", "--depends-on", "--criteria",
+        final ops = helpers\stripFlags(p.args, valueFlags: ["--parent", "--write-paths", "--deny-paths", "--read-paths", "--depends-on", "--instructions", "--new-worker",
             "--check", "--checkout", "--checkpoint", "--model", "--timeout", "--brief-format"]);
         final named = helpers\magusOperands(ops);
         final id = if (named.len() > 2) named[2] else "";

@@ -21,7 +21,7 @@ func newModelTierRequest(row types.Job, rows []types.Job, set *agent.ModelTierSe
 	req := types.ModelTierRequest{
 		ID:            row.ID,
 		Parent:        row.Parent,
-		Criteria:      row.Criteria,
+		Criteria:      row.Instructions(),
 		ReadOnly:      row.ReadOnly,
 		Goals:         slices.Clone(row.Goals),
 		Kind:          modelTierKind(row),
@@ -29,7 +29,7 @@ func newModelTierRequest(row types.Job, rows []types.Job, set *agent.ModelTierSe
 		ReadPaths:     slices.Clone(row.ReadPaths),
 		DependsOn:     slices.Clone(row.DependsOn),
 		WriteFiles:    writeFileCount(row.WritePaths),
-		DeclaredModel: row.Model,
+		DeclaredModel: row.Agent.RequestedModel().String(),
 		History:       slices.Clone(history),
 	}
 	if row.Check != nil {
@@ -43,7 +43,7 @@ func newModelTierRequest(row types.Job, rows []types.Job, set *agent.ModelTierSe
 			req.ParentRank = &rank
 		}
 	}
-	if tier, _, ok, _ := declaredModelTier(set, models, row.Model); ok {
+	if tier, _, ok, _ := declaredModelTier(set, models, row.Agent.RequestedModel()); ok {
 		rank := tier.Rank()
 		req.DeclaredRank = &rank
 	}
@@ -90,19 +90,38 @@ func writeFileCount(writePaths []string) int {
 	return len(files)
 }
 
-// declaredModelTier is the tier a row's Model names, and false when Model is empty or names
-// none. A model naming no tier of set is looked up in each host's alias list; host is the
-// harness whose alias it is, empty when Model is a tier name. An alias that two hosts map
-// to different tiers is an error, since the row would name no one tier. A model no host maps
-// is then looked up in models, the harness model rows, by exact id or alias, and reports
-// [modelRowsHost].
-func declaredModelTier(set *agent.ModelTierSet, models []types.ModelPricing, model string) (tier agent.ModelTier, host string, ok bool, err error) {
-	if set == nil || model == "" {
+// declaredModelTier is the tier a row's requested model names, false when it
+// names none. A requested tier must be one of set, and an id beside it must
+// map to no other tier. host is empty when the tier decides.
+func declaredModelTier(set *agent.ModelTierSet, models []types.ModelPricing, m agent.Model) (agent.ModelTier, string, bool, error) {
+	if set == nil || m.IsZero() {
 		return agent.ModelTier{}, "", false, nil
 	}
-	if tier, perr := set.Parse(model); perr == nil {
+	if m.Tier == "" {
+		return modelIDTier(set, models, m.ID)
+	}
+	tier, err := set.Parse(m.Tier)
+	if err != nil {
+		return agent.ModelTier{}, "", false, fmt.Errorf("the job requests the tier %s: %w", m.Tier, err)
+	}
+	if m.ID == "" {
 		return tier, "", true, nil
 	}
+	idTier, host, ok, err := modelIDTier(set, models, m.ID)
+	if err != nil {
+		return agent.ModelTier{}, "", false, err
+	}
+	if ok && idTier.Rank() != tier.Rank() {
+		return agent.ModelTier{}, "", false, fmt.Errorf("the job requests the tier %s and the model %s, which %s maps to the tier %s: drop one",
+			m.Tier, m.ID, mapper(host), idTier.Name())
+	}
+	return tier, "", true, nil
+}
+
+// modelIDTier is the tier a host model id maps to, through each host's
+// alias list and then the harness model rows ([modelRowsHost]). Two hosts
+// mapping it to different tiers is an error.
+func modelIDTier(set *agent.ModelTierSet, models []types.ModelPricing, model string) (tier agent.ModelTier, host string, ok bool, err error) {
 	for _, h := range set.Hosts() {
 		t, found := set.Resolve(h, model)
 		switch {
@@ -120,6 +139,19 @@ func declaredModelTier(set *agent.ModelTierSet, models []types.ModelPricing, mod
 		}
 	}
 	return tier, host, ok, nil
+}
+
+// ModelRequest reads one model word, as `job fork --model` takes it: a tier
+// the workspace declares is the tier, and any other word a host model id.
+// A store opened with no model tiers reads every word as an id.
+func (s *Store) ModelRequest(word string) agent.Model {
+	word = strings.TrimSpace(word)
+	if s.modelTiers != nil {
+		if _, err := s.modelTiers.Parse(word); err == nil {
+			return agent.Model{Tier: word}
+		}
+	}
+	return agent.Model{ID: word}
 }
 
 // modelRowsHost stands in for the host of a model the harness model rows map, since no one
@@ -147,15 +179,14 @@ func modelRowTier(set *agent.ModelTierSet, models []types.ModelPricing, model st
 }
 
 // resolveModelTier decides row's model tier and says why. It runs once, when the row is
-// created or its Model changes, and nothing re-runs it: a tier moves only when someone
+// created or its model changes, and nothing re-runs it: a tier moves only when someone
 // edits the row, the matrix or the declaration.
 //
 // The first step that answers decides, and the result records which:
 //
-//   - row: the row's Model names a tier of set, or a model some host maps to one. A Model
-//     naming neither is kept as the row's word and takes the declared default's rank,
-//     since hosts name models differently and a refusal would force a tier onto a model
-//     that fits none.
+//   - row: the agent section requests a tier of set, or a model id.
+//     An id no host maps takes the default's rank, since a refusal
+//     would force a tier onto a model that fits none.
 //   - matrix: matrix answered. It may decline with nil. An error from it, or an answer
 //     naming a tier outside set, a skill variant that is not one, or no reason, fails the
 //     assignment, so a matrix that is wrong never silently falls through to the default.
@@ -166,7 +197,8 @@ func resolveModelTier(ctx context.Context, set *agent.ModelTierSet, models []typ
 	if set == nil {
 		return agent.JobModelTier{}, errors.New("job: no model tiers to assign from")
 	}
-	tier, host, ok, err := declaredModelTier(set, models, row.Model)
+	requested := row.Agent.RequestedModel()
+	tier, host, ok, err := declaredModelTier(set, models, requested)
 	if err != nil {
 		return agent.JobModelTier{}, fmt.Errorf("%s: %w", row.ID, err)
 	}
@@ -178,6 +210,7 @@ func resolveModelTier(ctx context.Context, set *agent.ModelTierSet, models []typ
 			Skills: set.Skills(tier),
 			Source: agent.ModelTierSourceRow,
 			Reason: fmt.Sprintf("the job names the tier %s", tier.Name()),
+			Model:  requested.ID,
 		}, nil
 	case ok:
 		return agent.JobModelTier{
@@ -185,18 +218,18 @@ func resolveModelTier(ctx context.Context, set *agent.ModelTierSet, models []typ
 			Rank:   tier.Rank(),
 			Skills: set.Skills(tier),
 			Source: agent.ModelTierSourceRow,
-			Reason: fmt.Sprintf("the job names the model %s, which %s maps to the tier %s", row.Model, mapper(host), tier.Name()),
-			Model:  row.Model,
+			Reason: fmt.Sprintf("the job names the model %s, which %s maps to the tier %s", requested.ID, mapper(host), tier.Name()),
+			Model:  requested.ID,
 		}, nil
-	case row.Model != "":
+	case requested.ID != "":
 		def := set.Default()
 		return agent.JobModelTier{
 			Name:   def.Name(),
 			Rank:   def.Rank(),
 			Skills: set.Skills(def),
 			Source: agent.ModelTierSourceRow,
-			Reason: fmt.Sprintf("the job names the model %s, which no model tier maps to", row.Model),
-			Model:  row.Model,
+			Reason: fmt.Sprintf("the job names the model %s, which no model tier maps to", requested.ID),
+			Model:  requested.ID,
 		}, nil
 	}
 	if matrix != nil {
@@ -227,7 +260,7 @@ func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types
 		models = s.modelRows()
 	}
 	req := newModelTierRequest(row, plan, s.modelTiers, models, nil)
-	if s.modelTierMatrix != nil && s.owners != nil && row.Model == "" && len(row.WritePaths) > 0 {
+	if s.modelTierMatrix != nil && s.owners != nil && row.Agent.RequestedModel().IsZero() && len(row.WritePaths) > 0 {
 		projects, err := s.writeProjects(ctx, row)
 		if err != nil {
 			return agent.JobModelTier{}, fmt.Errorf("finding the projects %s writes in: %w", row.ID, err)

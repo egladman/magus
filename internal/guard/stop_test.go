@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -15,7 +16,7 @@ type StopUnfiledSuite struct {
 func TestStopUnfiledSuite(t *testing.T) { suite.Run(t, new(StopUnfiledSuite)) }
 
 func (s *StopUnfiledSuite) row() types.Job {
-	return types.Job{ID: "spec/worker", Criteria: "build the spec", WritePaths: []string{"types/**"},
+	return types.Job{ID: "spec/worker", Agent: agent.Instructed("build the spec"), WritePaths: []string{"types/**"},
 		State: types.StateRunning, Registered: 1}
 }
 

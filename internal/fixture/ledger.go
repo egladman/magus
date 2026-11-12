@@ -7,6 +7,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +52,7 @@ func FleetLeases() []types.Job {
 	return []types.Job{
 		{
 			ID:           "lease-a",
-			Criteria:     "own the ledger store\nacceptance: List stays cheap",
+			Agent:     agent.Instructed("own the ledger store\nacceptance: List stays cheap"),
 			WritePaths:   []string{"internal/ledger/**"},
 			State:        types.StateRunning,
 			Checkpoint:   "rev-a",
@@ -61,7 +62,7 @@ func FleetLeases() []types.Job {
 		},
 		{
 			ID:           "lease-b",
-			Criteria:     "grade writes in the guard",
+			Agent:     agent.Instructed("grade writes in the guard"),
 			WritePaths:   []string{"cmd/magus/**", "docs/guard.md"},
 			DenyPaths:    []string{"cmd/magus/gen/**"},
 			State:        types.StateDeclared,

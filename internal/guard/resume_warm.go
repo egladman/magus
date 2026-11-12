@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 const denyRuleSpawnWarmWorker denyRuleName = "spawn-warm-worker"
@@ -83,10 +84,10 @@ func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row types.
 }
 
 // findWarmWorker is the worker row continues: one that stopped or ended
-// within ttl, which row follows or shares a path with. A FreshReason,
+// within ttl, which row follows or shares a path with. A new worker type,
 // another role, another checkout or a near price step answers false.
 func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, title string, models []types.ModelPricing, ttl time.Duration, now time.Time) (warmWorker, bool) {
-	if row.FreshReason != "" || ttl <= 0 {
+	if (row.Agent != nil && row.Agent.Worker.Type == typesagent.WorkerTypeNew) || ttl <= 0 {
 		return warmWorker{}, false
 	}
 	session := readCostState(facts).Model
@@ -173,10 +174,10 @@ func denySpawnWarmWorker(row types.Job, w warmWorker, ttl promptCacheTTL) denial
 		message = fmt.Sprintf("with a message to end %s with `%s` and then take %s", w.job, hint.JobExit.With(w.job, "--stdin"), row.ID)
 	}
 	return denial{
-		Say: fmt.Sprintf("job %s %s; worker %s stays warm %s more (TTL %s: %s): continue agent %s %s, or set `fresh_reason` and run `%s`.",
+		Say: fmt.Sprintf("job %s %s; worker %s stays warm %s more (TTL %s: %s): continue agent %s %s, or set agent.worker {type: new, reason} and run `%s`.",
 			row.ID, w.link, w.agent, w.left.Round(time.Second), ttl.ttl, ttl.source, w.agent, message, hint.JobApply.With("-f", "<record>")),
 		Why: fmt.Sprintf("Worker %s ended %s ago. "+
 			"A resumed worker reads its context at the cache-read price and has already oriented; a fresh one pays the prefix and the orientation again for code another context already holds. "+
-			"`fresh_reason` is for a context that is wrong for the job, never for one that is merely large.", w.agent, w.idle.Round(time.Second)),
+			"A new worker is for a context that is wrong for the job, never for one that is merely large.", w.agent, w.idle.Round(time.Second)),
 	}
 }

@@ -158,7 +158,7 @@ func narrowestCover(ctx context.Context, root string, row types.Job, read Symbol
 			}
 		}
 	}
-	for _, token := range strings.Fields(row.Criteria) {
+	for _, token := range strings.Fields(row.Instructions()) {
 		if p, ok := criteriaPath(root, token); ok {
 			add(p)
 		}

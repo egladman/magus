@@ -89,7 +89,8 @@ var JobSchema = SchemaLedger{
 	Version: JobAPIVersion,
 	// The four boundary renames and completion_gates, names only the JSON document an
 	// older magus kept the plan in carried, and waivers, the name deviations had first.
-	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers", "schema_version"},
+	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason"},
+	Added:    map[string]APIVersion{"agent": JobAPIVersion},
 	Requires: map[string]APIVersion{
 		"dead-job-end":       JobAPIVersion,
 		"claim-declarations": JobAPIVersion,
@@ -106,7 +107,8 @@ var DeclarationSchema = SchemaLedger{
 	Version: JobAPIVersion,
 	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
 	// refused as an unknown member.
-	Reserved: []string{"completion_gates", "waivers", "schema_version"},
+	Reserved: []string{"completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "tier"},
+	Added:    map[string]APIVersion{"agent": JobAPIVersion},
 	Requires: JobSchema.Requires,
 }
 

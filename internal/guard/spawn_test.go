@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -131,7 +132,7 @@ func TestDenyNamesTheInstallWhenTheSkillIsMissing(t *testing.T) {
 // worktree that makes the check unnecessary.
 func TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld(t *testing.T) {
 	held := types.Job{
-		ID: "wave/holder", Criteria: "the store", WritePaths: []string{"internal/job", "types/job.go"},
+		ID: "wave/holder", Agent: typesagent.Instructed("the store"), WritePaths: []string{"internal/job", "types/job.go"},
 		State: types.StateRunning, Registered: 1,
 	}
 	ctx, _ := fleetFixture(t, held)

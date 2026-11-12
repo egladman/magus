@@ -85,7 +85,7 @@ She declares a job per half, from her main checkout:
 <!-- golden: job_people_solo.txtar fork.out -->
 
 ```console
-$ magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
+$ magus job fork refactor/pricing --instructions 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 referenced outside the write paths: files that use what the write paths define
@@ -93,7 +93,7 @@ referenced outside the write paths: files that use what the write paths define
 ```
 
 ```sh
-magus job fork refactor/tax --criteria 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .'
+magus job fork refactor/tax --instructions 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .'
 git worktree add ../shop-pricing
 git worktree add ../shop-tax
 ```
@@ -141,7 +141,7 @@ job: refactor/pricing
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 skills: short
 
-criteria
+instructions
 totals are computed in cents
 
 write paths
@@ -280,7 +280,7 @@ Ana made both worktrees by hand, and removing them is hers to remember. `--check
 hands both ends to magus:
 
 ```sh
-magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .' --checkout ../shop-pricing
+magus job fork refactor/pricing --instructions 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .' --checkout ../shop-pricing
 ```
 
 The fork makes the checkout at the job's checkpoint, or at the revision her checkout
@@ -302,7 +302,7 @@ Ana and Ben share a workstation, each in a worktree of the shop: `../ana` and
 `../ben`. Ana takes a job on `total.sh` and `format.sh`, both in the pricing directory:
 
 ```sh
-magus job fork cents --criteria 'prices are integers of cents' --write-paths pricing/total.sh,pricing/format.sh --check 'test .'
+magus job fork cents --instructions 'prices are integers of cents' --write-paths pricing/total.sh,pricing/format.sh --check 'test .'
 magus job exec cents
 ```
 
@@ -311,7 +311,7 @@ Ben's change needs `format.sh` too, and he declares it anyway:
 <!-- golden: job_people_team.txtar fork.out -->
 
 ```console
-$ magus job fork currency --criteria 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
+$ magus job fork currency --instructions 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
 forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 referenced outside the write paths: files that use what the write paths define
@@ -369,7 +369,7 @@ record is the whole spec, so it repeats what stays:
 ```console
 $ magus job apply --stdin <<'EOF'
 {"api_version": "magus.job/v1alpha1", "id": "cents",
- "criteria": "prices are integers of cents",
+ "agent": {"instructions": "prices are integers of cents", "worker": {"type": "resume"}},
  "write_paths": ["pricing/total.sh"],
  "check": {"target": "test", "project": "."}}
 EOF
@@ -403,7 +403,7 @@ job: currency
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 skills: short
 
-criteria
+instructions
 prices carry a currency code
 
 write paths
@@ -610,8 +610,8 @@ store, so the plan is committed beside the code:
 <!-- golden: job_people_ci.txtar shop/ci/jobs.jsonl -->
 
 ```json
-{"api_version": "magus.job/v1alpha1", "id": "release/pricing", "criteria": "totals are computed in cents", "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
-{"api_version": "magus.job/v1alpha1", "id": "release/tax", "criteria": "tax rounds half up", "write_paths": ["checkout/tax.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/pricing", "agent": {"instructions": "totals are computed in cents", "worker": {"type": "resume"}}, "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/tax", "agent": {"instructions": "tax rounds half up", "worker": {"type": "resume"}}, "write_paths": ["checkout/tax.sh"], "check": {"target": "test", "project": "."}}
 ```
 
 with the evidence the CI step fills in once it knows the run's ref:

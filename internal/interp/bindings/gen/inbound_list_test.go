@@ -138,6 +138,9 @@ var inboundTypes = []inboundType{
 	{Name: "RetryOptions", Zero: types.RetryOptions{}, Encode: func(v any) vm.Value { return ObjectRetryOptions(v.(types.RetryOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeRetryOptions(v) }},
 	{Name: "ProjectRef", Zero: types.ProjectRef{}, Encode: func(v any) vm.Value { return ObjectProjectRef(v.(types.ProjectRef)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeProjectRef(v) }},
 	{Name: "JobModelTier", Zero: typesagent.JobModelTier{}, Encode: func(v any) vm.Value { return ObjectJobModelTier(v.(typesagent.JobModelTier), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobModelTier(v) }},
+	{Name: "AgentModel", Zero: typesagent.Model{}, Encode: func(v any) vm.Value { return ObjectModel(v.(typesagent.Model)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeModel(v) }},
+	{Name: "AgentWorker", Zero: typesagent.Worker{}, Encode: func(v any) vm.Value { return ObjectWorker(v.(typesagent.Worker), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeWorker(v) }},
+	{Name: "AgentSpec", Zero: typesagent.Spec{}, Encode: func(v any) vm.Value { return ObjectSpec(v.(typesagent.Spec), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSpec(v) }},
 	{Name: "JobClaim", Zero: types.JobClaim{}, Encode: func(v any) vm.Value { return ObjectJobClaim(v.(types.JobClaim), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobClaim(v) }},
 	{Name: "ClaimEvidence", Zero: types.ClaimEvidence{}, Encode: func(v any) vm.Value { return ObjectClaimEvidence(v.(types.ClaimEvidence), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeClaimEvidence(v) }},
 	{Name: "Origin", Zero: types.Origin{}, Encode: func(v any) vm.Value { return ObjectOrigin(v.(types.Origin), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeOrigin(v) }},
@@ -213,4 +216,5 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.ToolCapability]():       {"", "runs", "reads", "writes", "spawns", "network", "inert"},
 	reflect.TypeFor[imagetypes.Variant]():         {"", "v1", "v2", "v3", "v8"},
 	reflect.TypeFor[spells.VersionComponent]():    {"", "major", "minor", "patch"},
+	reflect.TypeFor[typesagent.WorkerType]():      {"resume", "new"},
 }

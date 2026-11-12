@@ -288,7 +288,7 @@ test("a served but empty listing is a different sentence from a refusal", async 
 test("the jobs draw one node and one list row each", async () => {
   serve({
     jobs: okJobs([
-      sessionJob("root", { state: "running", criteria: "ship it" }),
+      sessionJob("root", { state: "running", agent: { instructions: "ship it", worker: { type: "resume" } } }),
       sessionJob("b1", { parent: "root", state: "pass" }),
       sessionJob("b2", {
         parent: "root",
@@ -332,7 +332,7 @@ test("a row says who holds the job, and the server's own carry what they maintai
         target: { sizeBytes: "2048", itemCount: "12" },
         lastRun: { endTime: new Date(Date.now() - 120_000).toISOString(), ok: true },
       }),
-      sessionJob("docs-rename", { model: "opus" }),
+      sessionJob("docs-rename", { agent: { model: { id: "opus" }, worker: { type: "resume" } } }),
     ]),
   });
   const { host, teardown } = mount();
@@ -570,9 +570,8 @@ test("selecting a job shows its criteria, checkpoint, model, check and paths", a
   serve({
     jobs: okJobs([
       sessionJob("root", {
-        criteria: "draw the jobs",
+        agent: { instructions: "draw the jobs", model: { id: "opus" }, worker: { type: "resume" } },
         checkpoint: "after the stage lands",
-        model: "opus",
         check: "console:test",
         writePaths: ["console/src/console/plan/"],
         denyPaths: ["internal/"],
@@ -607,10 +606,10 @@ test("selecting a job shows its criteria, checkpoint, model, check and paths", a
 test("a row shows its kind and its goals - criteria and parent - not only the detail sheet", async () => {
   serve({
     jobs: okJobs([
-      sessionJob("root", { criteria: "draw the jobs" }),
+      sessionJob("root", { agent: { instructions: "draw the jobs", worker: { type: "resume" } } }),
       sessionJob("child", {
         parent: "root",
-        criteria: "make the card say what it is for, same as the row does",
+        agent: { instructions: "make the card say what it is for, same as the row does", worker: { type: "resume" } },
       }),
     ]),
   });
@@ -634,7 +633,7 @@ test("the card carries the job's kind and a truncated criteria", async () => {
   serve({
     jobs: okJobs([
       sessionJob("root", {
-        criteria: "a criteria sentence long enough that the card has to cut it off somewhere",
+        agent: { instructions: "a criteria sentence long enough that the card has to cut it off somewhere", worker: { type: "resume" } },
       }),
     ]),
   });
@@ -1417,7 +1416,7 @@ test("a changed model repaints the row that carries it", async () => {
     jobs: () => {
       reads++;
       return okJobs([
-        sessionJob("root", { state: "running", model: reads > 1 ? "sonnet" : "opus" }),
+        sessionJob("root", { state: "running", agent: { model: { id: reads > 1 ? "sonnet" : "opus" }, worker: { type: "resume" } } }),
       ])();
     },
   });

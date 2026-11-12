@@ -159,7 +159,7 @@ env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
 exec git init -q
 exec git -c user.email=t@example.com -c user.name=T commit -q --allow-empty -m init
-exec magus job fork harness/mcp-worker --read-only --criteria 'the transport test set, held so the rebind rule has a job to read'
+exec magus job fork harness/mcp-worker --read-only --instructions 'the transport test set, held so the rebind rule has a job to read'
 stdin $WORK/exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 
@@ -519,7 +519,7 @@ env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
 exec git init -q
 exec git -c user.email=t@example.com -c user.name=T commit -q --allow-empty -m init
-exec magus job fork harness/cursor-mcp-worker --read-only --criteria 'the cursor MCP transport cases, held so the rebind rule has a job to read'
+exec magus job fork harness/cursor-mcp-worker --read-only --instructions 'the cursor MCP transport cases, held so the rebind rule has a job to read'
 stdin $WORK/cursor-exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 
@@ -576,7 +576,7 @@ env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 exec git init -q
 exec git -c user.email=t@example.com -c user.name=T commit -q --allow-empty -m init
-exec magus job fork harness/cursor-mcp-string --read-only --criteria 'the cursor MCP string-input case, held so the rebind rule has a job to read'
+exec magus job fork harness/cursor-mcp-string --read-only --instructions 'the cursor MCP string-input case, held so the rebind rule has a job to read'
 stdin $WORK/cursor-exec-mcp-string.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdin $WORK/cursor-mcp-call-string.json
@@ -1425,7 +1425,7 @@ stdout '"permissionDecision":"deny"'
 # takes the job through its own template first.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
-exec magus job fork harness/push-worker --parent harness --read-only --criteria 'the push transport cases, held so the push gate has a worker to refuse'
+exec magus job fork harness/push-worker --parent harness --read-only --instructions 'the push transport cases, held so the push gate has a worker to refuse'
 stdin $WORK/exec-push-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdin $WORK/push-approval.json

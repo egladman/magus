@@ -547,9 +547,9 @@ func unrunGateProblems(gates []UnrunGate) types.JobProblems {
 // [types.Declaration.Problems] makes.
 func rowDeclaration(row types.Job) types.Declaration {
 	rec := types.Declaration{
-		ID: row.ID, Parent: row.Parent, Criteria: row.Criteria, Checkpoint: row.Checkpoint,
+		ID: row.ID, Parent: row.Parent, Agent: row.Agent.Clone(), Checkpoint: row.Checkpoint,
 		WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, ReadPaths: row.ReadPaths, DependsOn: row.DependsOn,
-		Breaks: row.Breaks, Model: row.Model, Goals: row.Goals, State: row.State, ReadOnly: row.ReadOnly,
+		Breaks: row.Breaks, Goals: row.Goals, State: row.State, ReadOnly: row.ReadOnly,
 		MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims, Deviations: row.Deviations,
 		Delivery: row.Delivery, ParentHead: row.ParentHead,
 	}
@@ -569,7 +569,7 @@ func RetryDeclaration(row types.Job) types.Declaration {
 	rec.Schema = types.Schema{Version: types.JobAPIVersion}
 	rec.State = ""
 	rec.SoftPaths, rec.Integrates = row.SoftPaths, row.Integrates
-	rec.BriefFormat, rec.Follows, rec.FreshReason = row.BriefFormat, row.Follows, row.FreshReason
+	rec.BriefFormat, rec.Follows = row.BriefFormat, row.Follows
 	if row.Weight != 0 {
 		rec.Weight = &row.Weight
 	}

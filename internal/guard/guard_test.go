@@ -38,6 +38,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -192,11 +193,11 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 // rather than both running ungraded.
 func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 	one := types.Job{
-		ID: "wave/one", Criteria: "the store", WritePaths: []string{"internal/job/**"},
+		ID: "wave/one", Agent: typesagent.Instructed("the store"), WritePaths: []string{"internal/job/**"},
 		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
 	}
 	two := types.Job{
-		ID: "wave/two", Criteria: "the guard", WritePaths: []string{"internal/guard/**"},
+		ID: "wave/two", Agent: typesagent.Instructed("the guard"), WritePaths: []string{"internal/guard/**"},
 		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
 	}
 	ctx, _ := fleetFixture(t, one, two)
@@ -1306,7 +1307,7 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 		return ids
 	}
 
-	put(types.Job{ID: "a", State: types.StateDeclared, WritePaths: []string{"x.go"}, Model: "sonnet"})
+	put(types.Job{ID: "a", State: types.StateDeclared, WritePaths: []string{"x.go"}, Agent: &typesagent.Spec{Model: typesagent.Model{ID: "sonnet"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume}}})
 	assert.Equal(t, []string{"a"}, rowsOf())
 	put(types.Job{ID: "b", State: types.StateDeclared})
 	assert.Equal(t, []string{"a", "b"}, rowsOf())

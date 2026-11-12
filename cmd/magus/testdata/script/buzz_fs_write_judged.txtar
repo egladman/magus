@@ -16,10 +16,10 @@ exec git commit -q -m 'run.go with two functions'
 exec git worktree add -q ../ana
 exec git worktree add -q ../ben
 cd ../ana
-exec magus job fork wave/a --criteria 'change A' --write-paths 'run.go#A' --check 'lint .'
+exec magus job fork wave/a --instructions 'change A' --write-paths 'run.go#A' --check 'lint .'
 exec magus job exec wave/a
 cd ../ben
-exec magus job fork wave/b --criteria 'change B' --write-paths 'run.go#B' --check 'lint .'
+exec magus job fork wave/b --instructions 'change B' --write-paths 'run.go#B' --check 'lint .'
 exec magus job exec wave/b
 
 # The destination is argv, which the hook's static scan cannot read.

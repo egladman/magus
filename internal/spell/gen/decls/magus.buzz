@@ -35,6 +35,11 @@ export enum<str> SymbolIndexFreshness {
     unvouched = "unvouched",
 }
 
+export enum<str> WorkerType {
+    resumed = "resume",
+    new = "new",
+}
+
 export enum<str> SkillVariant {
     short = "short",
     full = "full",
@@ -642,6 +647,22 @@ export object History {
     }
 }
 
+export object AgentModel {
+    id: str = "",
+    tier: str = "",
+}
+
+export object AgentWorker {
+    @"type": WorkerType = WorkerType.resumed,
+    reason: str = "",
+}
+
+export object AgentSpec {
+    model: AgentModel = AgentModel{},
+    instructions: str = "",
+    worker: AgentWorker = AgentWorker{},
+}
+
 export object JobModelTier {
     name: str = "",
     rank: int = 0,
@@ -878,7 +899,7 @@ export object Job {
     requires: [str] = [],
     id: str = "",
     parent: str = "",
-    criteria: str = "",
+    agent: AgentSpec? = null,
     checkpoint: str = "",
     writePaths: [str] = [],
     denyPaths: [str] = [],
@@ -887,13 +908,11 @@ export object Job {
     dependsOn: [str] = [],
     integrates: [str] = [],
     breaks: [str] = [],
-    model: str = "",
     modelTier: JobModelTier? = null,
     briefFormat: BriefFormat = BriefFormat.none,
     delivery: str = "",
     parentHead: str = "",
     follows: str = "",
-    freshReason: str = "",
     reworkRounds: int = 0,
     widenings: int = 0,
     claims: [JobClaim] = [],

@@ -1052,7 +1052,7 @@ var ruleDocSpawnWarmWorker = types.RuleDoc{
 	Why: "Within the prompt-cache TTL a resumed worker re-reads its context at the cache-read price and has already paid its orientation, so it costs no more than a fresh agent, which pays the prefix and the orientation again. " +
 		"Context size is not cost: a large context read from cache is cheaper than a small one written fresh. " +
 		"A spawn whose job names an ended job in `follows`, or shares its write paths, is refused while that job's worker is warm, naming the agent to continue and the TTL left. " +
-		"It passes once the TTL has passed, when the warm worker's context is near its model's long-context price step, or when the job record carries a `fresh_reason`. " +
+		"It passes once the TTL has passed, when the warm worker's context is near its model's long-context price step, or when the job record names a new worker in agent.worker. " +
 		"It sees only the workers this session spawned, and measures warmth from the worker's last call, or from its job's last write when magus never saw one.",
 }
 

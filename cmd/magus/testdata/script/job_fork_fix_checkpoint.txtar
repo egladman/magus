@@ -10,12 +10,12 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'shop'
 
-! exec magus job fork moved --read-only --criteria 'read the pricing code' --checkpoint 0123456789abcdef0123456789abcdef01234567 --checkout $WORK/moved --fix
+! exec magus job fork moved --read-only --instructions 'read the pricing code' --checkpoint 0123456789abcdef0123456789abcdef01234567 --checkout $WORK/moved --fix
 stderr '\[MGS3041\] checkpoint: checkpoint "0123456789abcdef0123456789abcdef01234567" names no revision this repository holds'
 ! stderr 'refreshed the checkpoint'
 ! exists $WORK/moved
 
-! exec magus -s job fork moved --read-only --criteria 'read the pricing code' --checkpoint 0123456789abcdef0123456789abcdef01234567 --checkout $WORK/moved --fix
+! exec magus -s job fork moved --read-only --instructions 'read the pricing code' --checkpoint 0123456789abcdef0123456789abcdef01234567 --checkout $WORK/moved --fix
 stderr '\[MGS3041\]'
 ! stderr 'refreshed the checkpoint'
 ! exists $WORK/moved

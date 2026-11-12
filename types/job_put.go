@@ -1,5 +1,7 @@
 package types
 
+import "github.com/egladman/magus/types/agent"
+
 // JobPut is one put against a job row: the fields it changes and nothing else. A nil
 // field is left as the row has it; a non-nil field is written, and a non-nil empty value
 // is an explicit clear. That is why every field is a pointer: the second put in a job's
@@ -8,18 +10,17 @@ package types
 //
 // The json tags are the keys magus\workspace().putJob takes in its opts map.
 type JobPut struct {
-	Parent     *string `json:"parent,omitempty"`
-	Criteria   *string `json:"criteria,omitempty"`
-	Checkpoint *string `json:"checkpoint,omitempty"`
-	Model      *string `json:"model,omitempty"`
+	Parent *string `json:"parent,omitempty"`
+	// Agent replaces the row's whole agent section; the zero Spec clears it.
+	Agent      *agent.Spec `json:"agent,omitempty"`
+	Checkpoint *string     `json:"checkpoint,omitempty"`
 	// BriefFormat sets the row's brief format; empty clears it back to magus.yaml's.
 	BriefFormat *BriefFormat `json:"brief_format,omitempty"`
 	// Delivery and ParentHead: see [Job.Delivery].
 	Delivery   *string `json:"delivery,omitempty"`
 	ParentHead *string `json:"parent_head,omitempty"`
-	// Follows and FreshReason set the row's link to the job it continues; see [Job.Follows].
-	Follows     *string `json:"follows,omitempty"`
-	FreshReason *string `json:"fresh_reason,omitempty"`
+	// Follows sets the row's link to the job it continues; see [Job.Follows].
+	Follows *string `json:"follows,omitempty"`
 	// Timeout is a length such as "45m", never an instant: the deadline is stamped when
 	// the store applies the put. "0" or "" clears it.
 	Timeout *string `json:"timeout,omitempty"`

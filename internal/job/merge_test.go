@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -30,9 +31,9 @@ func applyPut(t *testing.T, put types.JobPut, base types.Job) types.Job {
 func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 	t.Parallel()
 
-	base := types.Job{ID: "u1", Criteria: "original goal", Model: "standard"}
+	base := types.Job{ID: "u1", Agent: &agent.Spec{Instructions: "original goal", Model: agent.Model{Tier: "standard"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}}
 	got := applyMerge(t, map[string]any{"state": "running"}, base)
-	assert.Equal(t, types.Job{ID: "u1", Criteria: "original goal", Model: "standard", State: types.StateRunning}, got,
+	assert.Equal(t, types.Job{ID: "u1", Agent: &agent.Spec{Instructions: "original goal", Model: agent.Model{Tier: "standard"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}, State: types.StateRunning}, got,
 		"an absent key must not erase what an earlier put set")
 	assert.Equal(t, base, applyPut(t, types.JobPut{}, base), "a put naming nothing changes nothing")
 }
@@ -40,9 +41,9 @@ func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
 	t.Parallel()
 
-	base := types.Job{ID: "u1", Criteria: "original goal"}
-	got := applyMerge(t, map[string]any{"criteria": ""}, base)
-	assert.Empty(t, got.Criteria, "goal present with an empty value clears it, unlike an absent key")
+	base := types.Job{ID: "u1", Agent: agent.Instructed("original goal")}
+	got := applyMerge(t, map[string]any{"agent": nil}, base)
+	assert.Nil(t, got.Agent, "agent present with a null value clears it, unlike an absent key")
 }
 
 func TestMergeListAcceptsBothWireForms(t *testing.T) {
@@ -70,9 +71,9 @@ func TestMergeRejectsAnUnknownState(t *testing.T) {
 func TestMergeReportsEveryMistypedFieldTogether(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodePut(map[string]any{"criteria": 3, "read_only": "yes", "state": "passed"})
+	_, err := DecodePut(map[string]any{"agent": 3, "read_only": "yes", "state": "passed"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "criteria")
+	assert.Contains(t, err.Error(), "agent")
 	assert.Contains(t, err.Error(), "read_only")
 	assert.Contains(t, err.Error(), "state must be one of", "a refusal PutMerge makes joins the decoding errors")
 }
@@ -136,8 +137,8 @@ func TestMergeSetsOrClearsTheCheck(t *testing.T) {
 func TestMergeKeepsAnEntryAlone(t *testing.T) {
 	t.Parallel()
 
-	_, err := PutMerge(types.JobPut{Enter: new("cmd/magus/x/a.go"), Criteria: new("x"), ReadOnly: new(true)})
-	require.ErrorContains(t, err, "so criteria does not belong beside it")
+	_, err := PutMerge(types.JobPut{Enter: new("cmd/magus/x/a.go"), Agent: agent.Instructed("x"), ReadOnly: new(true)})
+	require.ErrorContains(t, err, "so agent does not belong beside it")
 	require.ErrorContains(t, err, "so read_only does not belong beside it")
 
 	got := applyPut(t, types.JobPut{Enter: new("cmd/magus/x/a.go")}, types.Job{ID: "u1"})
@@ -187,4 +188,38 @@ func (s *putDeliverySuite) TestAPutSetsTheDeliveryAndParentHead() {
 func (s *putDeliverySuite) TestAnUnknownDeliveryIsRefused() {
 	_, err := PutMerge(types.JobPut{Delivery: new("merge")})
 	s.Require().ErrorContains(err, `delivery "merge" is not one of fold, separate, stacked`)
+}
+
+// putAgentSuite pins the agent key of a put: the whole section, strict.
+type putAgentSuite struct {
+	suite.Suite
+}
+
+func TestPutAgent(t *testing.T) { suite.Run(t, new(putAgentSuite)) }
+
+func (s *putAgentSuite) TestASectionReplacesTheRowsWhole() {
+	got := applyMerge(s.T(), map[string]any{"agent": map[string]any{
+		"model": map[string]any{"tier": "principal"}, "worker": map[string]any{"type": "resume"},
+	}}, types.Job{ID: "u1", Agent: agent.Instructed("old")})
+	s.Equal(&agent.Spec{Model: agent.Model{Tier: "principal"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}, got.Agent)
+}
+
+func (s *putAgentSuite) TestASectionAsAJSONStringIsRead() {
+	got := applyMerge(s.T(), map[string]any{"agent": `{"instructions": "ship it", "worker": {"type": "resume"}}`}, types.Job{ID: "u1"})
+	s.Equal(agent.Instructed("ship it"), got.Agent)
+}
+
+func (s *putAgentSuite) TestAnUnknownMemberIsRefused() {
+	_, err := DecodePut(map[string]any{"agent": map[string]any{"criteria": "x", "worker": map[string]any{"type": "resume"}}})
+	s.ErrorContains(err, "job: agent must be an object")
+}
+
+func (s *putAgentSuite) TestASectionNamingNoWorkerIsRefused() {
+	_, err := DecodePut(map[string]any{"agent": map[string]any{"instructions": "ship it"}})
+	s.ErrorContains(err, "names no worker.type")
+}
+
+func (s *putAgentSuite) TestANewWorkerNeedsAReason() {
+	_, err := DecodePut(map[string]any{"agent": map[string]any{"worker": map[string]any{"type": "new"}}})
+	s.ErrorContains(err, "worker.reason")
 }

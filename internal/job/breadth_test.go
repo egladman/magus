@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -44,7 +45,7 @@ func symbolsAt(defs map[string][]string) SymbolReader {
 
 func TestBroadClaimRefusesAGlobAcrossProjects(t *testing.T) {
 	root := breadthWorkspace(t)
-	row := types.Job{ID: "sweep", WritePaths: []string{"pkg/a.go", "**/*.go"}, Criteria: "Edit `pkg/b.go`."}
+	row := types.Job{ID: "sweep", WritePaths: []string{"pkg/a.go", "**/*.go"}, Agent: agent.Instructed("Edit `pkg/b.go`.")}
 
 	got := broadClaimProblems(context.Background(), root, row, Workspace{}, nil)
 
@@ -174,7 +175,7 @@ func TestBroadClaimFixSaysTheGraphDidNotAnswer(t *testing.T) {
 	row := types.Job{
 		ID:         "sweep",
 		WritePaths: []string{"**/*.go"},
-		Criteria:   "Fill (web/x.go:12).",
+		Agent:   agent.Instructed("Fill (web/x.go:12)."),
 		Goals:      []types.Goal{{ID: "funcs", Kind: types.GoalKindSymbol, Symbols: []string{"Missing"}}},
 	}
 
@@ -191,7 +192,7 @@ func TestNarrowestCoverNamesTheDefiningFileItsTestsAndTheCriteriaFiles(t *testin
 	root := breadthWorkspace(t)
 	row := types.Job{
 		ID:       "fill",
-		Criteria: "Implement Foo; see `web/x.go`, the claim pkg/b.go#Bar, and docs/missing.md, a/b and v1.2.",
+		Agent: agent.Instructed("Implement Foo; see `web/x.go`, the claim pkg/b.go#Bar, and docs/missing.md, a/b and v1.2."),
 		Goals:    []types.Goal{{ID: "funcs", Kind: types.GoalKindSymbol, Symbols: []string{"Foo"}}},
 	}
 

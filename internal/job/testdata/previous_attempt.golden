@@ -1,6 +1,6 @@
 job: harness/retry
 
-criteria
+instructions
 Retry the store.
 
 attempt 3 of 4

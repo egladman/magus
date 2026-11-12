@@ -37,6 +37,8 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
+
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,7 +55,7 @@ func TestUnloadableMagusfileIsOneLine(t *testing.T) {
 }
 
 func leaseRow(id, parent string) types.Job {
-	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Model: "standard"}
+	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "standard"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume}}}
 }
 
 // A job verb, `ls jobs` and `describe job` read the job store first and open the workspace
@@ -432,14 +434,11 @@ func TestChainToGateTerminatesOnACycle(t *testing.T) {
 func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	t.Parallel()
 
-	var (
-		bound types.Declaration
-		check string
-	)
+	var bound types.Declaration
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
-	bindForkSpec(flags, &bound, &check)
+	spec := bindForkSpec(flags, &bound)
 	require.NoError(t, flags.Parse([]string{
-		"--criteria", "the store is the enforcement point",
+		"--instructions", "the store is the enforcement point",
 		"--parent", "adjacency",
 		"--checkpoint", "cf5509d09",
 		"--write-paths", "internal/ledger,types/lease.go",
@@ -457,19 +456,18 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	  "api_version": %q,
 	  "id": "adj/store",`, types.JobAPIVersion) + `
 	  "parent": "adjacency",
-	  "criteria": "the store is the enforcement point",
+	  "agent": {"model": {"tier": "principal"}, "instructions": "the store is the enforcement point", "worker": {"type": "resume"}},
 	  "checkpoint": "cf5509d09",
 	  "write_paths": ["internal/ledger", "types/lease.go"],
 	  "deny_paths": ["MAGUS.md"],
 	  "read_paths": ["internal/trail"],
 	  "depends_on": ["adj/guard"],
 	  "validation": "magus run test internal/ledger",
-	  "model": "principal",
 	  "brief_format": "buzz"
 	}`))
 	require.NoError(t, err)
 
-	fromFlags := flagDeclaration(bound, "adj/store", check)
+	fromFlags := flagDeclaration(bound, "adj/store", *spec, tierWords("principal"))
 	require.NoError(t, fromFlags.Validate())
 
 	var a, b types.Job
@@ -482,9 +480,68 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 // A brief format is one of the two, refused at fork rather than read as markdown later.
 func TestForkRefusesAnUnknownBriefFormat(t *testing.T) {
 	t.Parallel()
-	err := flagDeclaration(types.Declaration{Criteria: "c", BriefFormat: "json"}, "adj/store", "").Validate()
+	err := flagDeclaration(types.Declaration{}, "adj/store", flaggen.JobForkFlags{Instructions: "c", BriefFormat: "json"}, tierWords()).Validate()
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `brief_format "json"`)
+}
+
+// tierWords reads a --model word as a store declaring tiers would.
+func tierWords(tiers ...string) func(string) typesagent.Model {
+	return func(word string) typesagent.Model {
+		if slices.Contains(tiers, word) {
+			return typesagent.Model{Tier: word}
+		}
+		return typesagent.Model{ID: word}
+	}
+}
+
+// forkAgentFlagsSuite pins how the agent flags of `job fork` write the
+// agent section: each flag alone, and none at all.
+type forkAgentFlagsSuite struct {
+	suite.Suite
+}
+
+func TestForkAgentFlags(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(forkAgentFlagsSuite))
+}
+
+func (s *forkAgentFlagsSuite) fork(args ...string) types.Declaration {
+	var bound types.Declaration
+	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
+	spec := bindForkSpec(flags, &bound)
+	s.Require().NoError(flags.Parse(args))
+	d := flagDeclaration(bound, "adj/store", *spec, tierWords("principal"))
+	s.Require().NoError(d.Validate())
+	return d
+}
+
+func (s *forkAgentFlagsSuite) TestNoAgentFlagWritesNoSection() {
+	s.Nil(s.fork("--read-only").Agent)
+}
+
+func (s *forkAgentFlagsSuite) TestInstructionsResumeTheWarmWorker() {
+	s.Equal(&typesagent.Spec{
+		Instructions: "ship it",
+		Worker:       typesagent.Worker{Type: typesagent.WorkerTypeResume},
+	}, s.fork("--read-only", "--instructions", "ship it").Agent)
+}
+
+func (s *forkAgentFlagsSuite) TestModelNamingATierRequestsTheTier() {
+	s.Equal(&typesagent.Spec{
+		Model:  typesagent.Model{Tier: "principal"},
+		Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume},
+	}, s.fork("--read-only", "--model", "principal").Agent)
+}
+
+func (s *forkAgentFlagsSuite) TestModelNamingNoTierRequestsTheID() {
+	s.Equal(typesagent.Model{ID: "opus"}, s.fork("--read-only", "--model", "opus").Agent.Model)
+}
+
+func (s *forkAgentFlagsSuite) TestNewWorkerStartsANewWorkerForItsReason() {
+	s.Equal(&typesagent.Spec{
+		Worker: typesagent.Worker{Type: typesagent.WorkerTypeNew, Reason: "the warm one read the old limiter"},
+	}, s.fork("--read-only", "--new-worker", "the warm one read the old limiter").Agent)
 }
 
 // A path flag takes both spellings, and refuses the empty segment a trailing comma
@@ -571,7 +628,7 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 	root := repo.Root()
 	repo.WriteTree(map[string]string{"run.go": "package run\n"})
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
-	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--check", "test .", "--write-paths", "run.go", "--criteria", "run"}))
+	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--check", "test .", "--write-paths", "run.go", "--instructions", "run"}))
 	_, err := job.Exit(t.Context(), store, "w", nil, nil)
 	require.NoError(t, err)
 
@@ -591,11 +648,11 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 	assert.Equal(t, spec(first[0]), spec(rows[0]), "the retry keeps the declared spec")
 	assert.Equal(t, types.StateDeclared, rows[0].State, "the retry is a new attempt")
 
-	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--read-only", "--criteria", "anew"}))
+	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--read-only", "--instructions", "anew"}))
 	rows, err = store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.Declaration{ID: "w", Criteria: "anew", ReadOnly: true}, spec(rows[0]), "a spec flag declares the job anew")
+	assert.Equal(t, types.Declaration{ID: "w", Agent: typesagent.Instructed("anew"), ReadOnly: true}, spec(rows[0]), "a spec flag declares the job anew")
 }
 
 // A row naming no write paths bounds its holder by nothing unless it is read-only, so fork
@@ -605,14 +662,14 @@ func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 	root, cacheDir := execFixture(t)
 	fork := func(args ...string) error { return jobFork(t.Context(), root, args) }
 
-	err := fork("scout", "--criteria", "find the callers", "--check", "test .")
+	err := fork("scout", "--instructions", "find the callers", "--check", "test .")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "scout names no write paths and is not read-only")
 	assert.Contains(t, err.Error(), "--read-only")
 	assert.Contains(t, err.Error(), `{"check": {"script": "<probe>.buzz"}}`)
 	assert.Contains(t, err.Error(), fmt.Sprintf("`%s`", hint.Buzz.With("--record", "<probe>.buzz")))
 
-	require.NoError(t, fork("reader", "--read-only", "--criteria", "find the callers"))
+	require.NoError(t, fork("reader", "--read-only", "--instructions", "find the callers"))
 	require.NoError(t, fork("writer", "--write-paths", "run.go", "--check", "test ."))
 	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
 	require.NoError(t, err)
@@ -950,7 +1007,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
-	writeStdin(t, `{"api_version": "magus.job/v1alpha1", "id": "wave/opus", "write_paths": ["a.go"], "model": "opus",`+
+	writeStdin(t, `{"api_version": "magus.job/v1alpha1", "id": "wave/opus", "write_paths": ["a.go"], "agent": {"model": {"id": "opus"}, "worker": {"type": "resume"}},`+
 		` "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
 
 	out := captureStdout(t, func() {
@@ -1210,7 +1267,7 @@ func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	record := filepath.Join(t.TempDir(), "w.json")
 	require.NoError(t, os.WriteFile(record, fmt.Appendf(nil,
-		`{"api_version":%q,"id":"w","model":"standard","write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
+		`{"api_version":%q,"id":"w","agent":{"model":{"tier":"standard"},"worker":{"type":"resume"}},"write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
 		types.JobAPIVersion), 0o644))
 	args := []string{"-f", record}
 
@@ -1502,7 +1559,7 @@ func TestJobForkReadOnlyRowPrintsNoBudgetAdvice(t *testing.T) {
 	require.NoError(t, err)
 
 	reader := captureStdout(t, func() {
-		require.NoError(t, jobFork(t.Context(), root, []string{"reader", "--read-only", "--criteria", "find the callers"}))
+		require.NoError(t, jobFork(t.Context(), root, []string{"reader", "--read-only", "--instructions", "find the callers"}))
 	})
 	assert.NotContains(t, reader, "the build budget is full")
 	writer := captureStdout(t, func() {
@@ -2238,7 +2295,7 @@ func TestJobModelCellFallsBackToTheAssignedTier(t *testing.T) {
 		row  types.Job
 		want string
 	}{
-		{"the model the row names wins", types.Job{Model: "opus", ModelTier: tier}, "opus"},
+		{"the model the row names wins", types.Job{Agent: &typesagent.Spec{Model: typesagent.Model{ID: "opus"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume}}, ModelTier: tier}, "opus"},
 		{"the assigned tier stands in", types.Job{ModelTier: tier}, "economy"},
 		{"neither is a dash", types.Job{}, "-"},
 	}
@@ -2357,9 +2414,9 @@ func TestForkDelivery(t *testing.T) { suite.Run(t, new(forkDeliverySuite)) }
 func (s *forkDeliverySuite) TestTheFlagReachesTheRecord() {
 	var bound types.Declaration
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
-	bindForkSpec(flags, &bound, new(string))
-	s.Require().NoError(flags.Parse([]string{"--criteria", "c", "--delivery", types.DeliveryFold}))
-	row := flagDeclaration(bound, "adj/store", "")
+	spec := bindForkSpec(flags, &bound)
+	s.Require().NoError(flags.Parse([]string{"--instructions", "c", "--delivery", types.DeliveryFold}))
+	row := flagDeclaration(bound, "adj/store", *spec, tierWords())
 	s.Require().NoError(row.Validate())
 	s.Equal(types.DeliveryFold, row.Delivery)
 }
@@ -2677,7 +2734,7 @@ func (s *jobApplyContractSuite) integration(integrates ...string) (string, *job.
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
 	return root, store, types.Declaration{
 		Schema: types.Schema{Version: types.JobAPIVersion}, ID: row.ID,
-		Model: row.Model, WritePaths: row.WritePaths, Check: row.Check, Integrates: integrates,
+		Agent: row.Agent.Clone(), WritePaths: row.WritePaths, Check: row.Check, Integrates: integrates,
 	}
 }
 
@@ -2831,7 +2888,7 @@ func (s *forkErrorsSuite) TestForkPreservesTheStackedHeadCancellation() {
 	ctx, cancel := context.WithCancel(s.T().Context())
 	cancel()
 
-	err := jobFork(ctx, repo.Root(), []string{"child", "--read-only", "--criteria", "inspect", "--delivery", "stacked"})
+	err := jobFork(ctx, repo.Root(), []string{"child", "--read-only", "--instructions", "inspect", "--delivery", "stacked"})
 
 	s.ErrorIs(err, context.Canceled)
 	s.ErrorContains(err, "magus job fork: child is stacked with no pull request base")
@@ -2849,7 +2906,7 @@ func (s *forkErrorsSuite) TestForkPreservesThePlanWriteFailure() {
 	// Readers can inspect the absent plan; its writer cannot open the dangling lock link.
 	s.Require().NoError(os.Symlink(filepath.Join(s.T().TempDir(), "missing", "lock"), path+".lock"))
 
-	err = jobFork(s.T().Context(), repo.Root(), []string{"child", "--read-only", "--criteria", "inspect"})
+	err = jobFork(s.T().Context(), repo.Root(), []string{"child", "--read-only", "--instructions", "inspect"})
 
 	var cause *os.PathError
 	s.Require().ErrorAs(err, &cause)

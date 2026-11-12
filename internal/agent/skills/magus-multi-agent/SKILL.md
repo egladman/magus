@@ -357,7 +357,7 @@ an editor magus cannot attribute{{end}}.
 
    ```sh
    magus job fork api-store --model <tier or model> \
-     --criteria "accounts move to the new store; nothing names the old one" \
+     --instructions "accounts move to the new store; nothing names the old one" \
      --write-paths 'api/store.go,api/store_test.go,db/migrations/*.sql' \
      --check "go-test api -- -run TestStore" \
      --checkpoint <checkpoint>

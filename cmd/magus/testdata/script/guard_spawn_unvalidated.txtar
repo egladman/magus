@@ -13,7 +13,7 @@ cp $WORK/lint.buzz magusfile.buzz
 exec git add -A
 exec git commit -q -m 'start'
 
-exec magus job fork wave/lint --criteria 'lint it' --write-paths code.go --check 'lint .'
+exec magus job fork wave/lint --instructions 'lint it' --write-paths code.go --check 'lint .'
 stdin spawn.json
 exec magus shell
 ! stdout 'spawn-unvalidated'

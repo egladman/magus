@@ -131,7 +131,7 @@ fresh agent pays the prefix and the orientation again.
 - A fresh spawn passes once the TTL has passed, or when the warm worker's context is within
   10% of its model's long-context price step.
 - When the old context is wrong for the job (it read code the job replaces, or it is
-  stuck), put the reason in `fresh_reason` on the record. A context that is only large is
+  stuck), fork with `--new-worker <reason>`, or set `agent.worker` to `{"type": "new", "reason": ...}` on the record. A context that is only large is
   not a reason{{if .Full}}: at 300k tokens read from cache a resumed worker still costs less
   than a fresh one at 70k written{{end}}.
 

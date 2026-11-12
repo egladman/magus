@@ -389,7 +389,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", types.JobPut{Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
+	_, err := MagusPutJob(ctx, "u1", types.JobPut{Agent: agent.Instructed("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	report, err := MagusListJob(ctx)
@@ -404,10 +404,10 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	testkit.Isolate(t)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ws, "on-disk", types.JobPut{Criteria: new("not what the guard read"), ReadOnly: new(true)})
+	_, err := MagusPutJob(ws, "on-disk", types.JobPut{Agent: agent.Instructed("not what the guard read"), ReadOnly: new(true)})
 	require.NoError(t, err)
 
-	pinned := types.Job{ID: "orchestrator/guard-facts", Criteria: "the seam", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	pinned := types.Job{ID: "orchestrator/guard-facts", Agent: agent.Instructed("the seam"), State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
 	cases := []struct {
 		name    string
 		snap    job.Snapshot
@@ -551,13 +551,13 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"criteria": "the declared goal", "write_paths": "internal/job", "check": "test ."}))
+	_, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"agent": map[string]any{"instructions": "the declared goal", "worker": map[string]any{"type": "resume"}}, "write_paths": "internal/job", "check": "test ."}))
 	require.NoError(t, err)
 
 	got, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"state": "pass"}))
 	require.NoError(t, err)
 	assert.Equal(t, types.StatePass, got.State) //nolint:fieldwise // a stored job row carries store-stamped schema, origin, checkout root and timestamps this test does not construct
-	assert.Equal(t, "the declared goal", got.Criteria, "the state advance must not erase the row")
+	assert.Equal(t, "the declared goal", got.Instructions(), "the state advance must not erase the row")
 	assert.Equal(t, []string{"internal/job"}, got.WritePaths)
 	require.NotNil(t, got.Check, "the state advance must not erase the check")
 }
@@ -629,14 +629,14 @@ func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	cacheDir, root := t.TempDir(), t.TempDir()
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: cacheDir, root: root})
 
-	_, err := MagusPutJob(ctx, "u1", types.JobPut{Criteria: new("shared row"), ReadOnly: new(true)})
+	_, err := MagusPutJob(ctx, "u1", types.JobPut{Agent: agent.Instructed("shared row"), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	store := job.NewStore(job.Location{StateBase: stateBase, CacheDir: cacheDir, Root: root})
 	leases, err := store.List()
 	require.NoError(t, err)
 	require.Len(t, leases, 1)
-	assert.Equal(t, "shared row", leases[0].Criteria)
+	assert.Equal(t, "shared row", leases[0].Instructions())
 }
 
 // builtGraphWorkspace is a workspace holding a hand-built knowledge graph and an output
@@ -1021,7 +1021,7 @@ func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 		rows:            []types.ModelPricing{{ID: "claude-opus-9", Alias: "opus", Tier: "principal"}},
 	}
 
-	got, err := MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", types.JobPut{Criteria: new("ship it"), Model: new("opus"), ReadOnly: new(true)})
+	got, err := MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", types.JobPut{Agent: &agent.Spec{Instructions: "ship it", Model: agent.Model{ID: "opus"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}, ReadOnly: new(true)})
 	require.NoError(t, err)
 	require.NotNil(t, got.ModelTier)
 	tier := *got.ModelTier

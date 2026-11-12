@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,7 @@ func TestDecodeDeclarationReadsAFieldUnderItsOldName(t *testing.T) {
 
 	row, err := decodeDeclaration(declaration(
 		`"id":"adj/ledger"`, `"owned_paths":["internal/ledger"]`,
-		`"forbidden_paths":["MAGUS.md"]`, `"focus":["internal/hint"]`, `"tier":"principal"`))
+		`"forbidden_paths":["MAGUS.md"]`, `"focus":["internal/hint"]`))
 	require.NoError(t, err)
 	require.Equal(t, types.Declaration{
 		Schema:     types.Schema{Version: types.JobAPIVersion},
@@ -45,7 +46,6 @@ func TestDecodeDeclarationReadsAFieldUnderItsOldName(t *testing.T) {
 		WritePaths: []string{"internal/ledger"},
 		DenyPaths:  []string{"MAGUS.md"},
 		ReadPaths:  []string{"internal/hint"},
-		Model:      "principal",
 	}, row)
 }
 
@@ -317,15 +317,15 @@ func TestDeclarationApplyDeclaresRatherThanMerges(t *testing.T) {
 	t.Parallel()
 
 	stored := types.Job{
-		ID: "adj/store", Criteria: "old", Model: "principal",
+		ID: "adj/store", Agent: &agent.Spec{Instructions: "old", Model: agent.Model{Tier: "principal"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}},
 		WritePaths: []string{"internal/ledger"},
 		Registered: 42,
 	}
-	types.Declaration{ID: "adj/store", Criteria: "new"}.Apply(&stored)
+	types.Declaration{ID: "adj/store", Agent: agent.Instructed("new")}.Apply(&stored)
 
 	// The declaration's own fields are replaced (the omitted Model and WritePaths cleared), and
 	// what the store computed is not the declaration's to drop.
-	assert.Equal(t, types.Job{ID: "adj/store", Criteria: "new", Registered: 42}, stored)
+	assert.Equal(t, types.Job{ID: "adj/store", Agent: agent.Instructed("new"), Registered: 42}, stored)
 }
 
 // The embedded schema is generated, so a field on one side and not the other means the
@@ -424,6 +424,8 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 		switch field {
 		case "write_paths", "deny_paths", "read_paths", "depends_on", "breaks":
 			value = []any{"internal/job"}
+		case "agent":
+			value = map[string]any{"instructions": "x", "worker": map[string]any{"type": "resume"}}
 		case "read_only":
 			value = true
 		case "max_attempts", "max_claims":

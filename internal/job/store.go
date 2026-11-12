@@ -136,7 +136,59 @@ type storeConfig struct {
 // jobMigrations take a jobs.jsonl from each migration to the next, in order; see
 // [Store.migrate]. A migration rewrites stored rows once, so a change to a stored member's
 // name lands here and no reader keeps the old name.
-var jobMigrations []migrate.Migration
+var jobMigrations = []migrate.Migration{
+	{Name: "model, criteria and fresh_reason move under agent", Up: agentSection},
+}
+
+// agentSection moves a row's flat agent members under agent. A model the
+// stored tier resolved as a tier name becomes the requested tier, and any
+// other model an id. A server's row takes no section: it ran no agent.
+func agentSection(e migrate.Entry) (migrate.Entry, error) {
+	var old struct {
+		Criteria    string `json:"criteria"`
+		Model       string `json:"model"`
+		FreshReason string `json:"fresh_reason"`
+		Holder      string `json:"holder"`
+		ModelTier   *struct {
+			Source string `json:"source"`
+			Model  string `json:"model"`
+		} `json:"model_tier"`
+	}
+	flat := map[string]json.RawMessage{}
+	for _, key := range []string{"criteria", "model", "fresh_reason", "holder", "model_tier"} {
+		if v, ok := e[key]; ok {
+			flat[key] = v
+		}
+	}
+	body, err := json.Marshal(flat)
+	if err == nil {
+		err = json.Unmarshal(body, &old)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading the flat agent members: %w", err)
+	}
+	delete(e, "criteria")
+	delete(e, "model")
+	delete(e, "fresh_reason")
+	if old.Criteria == "" && old.Model == "" && old.FreshReason == "" || old.Holder == string(types.HolderServer) {
+		return e, nil
+	}
+	spec := agent.Spec{Instructions: old.Criteria, Worker: agent.Worker{Type: agent.WorkerTypeResume}}
+	switch {
+	case old.Model == "":
+	case old.ModelTier != nil && old.ModelTier.Source == string(agent.ModelTierSourceRow) && old.ModelTier.Model == "":
+		spec.Model.Tier = old.Model
+	default:
+		spec.Model.ID = old.Model
+	}
+	if old.FreshReason != "" {
+		spec.Worker = agent.Worker{Type: agent.WorkerTypeNew, Reason: old.FreshReason}
+	}
+	if e["agent"], err = json.Marshal(spec); err != nil {
+		return nil, fmt.Errorf("writing the agent section: %w", err)
+	}
+	return e, nil
+}
 
 // Location is where a Store lives: the repository whose rows these are, the state base
 // that places the file, and the checkout's cache directory.
@@ -787,14 +839,14 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 				row.Worktree = nil
 			}
 		}
-		if s.modelTiers != nil && (i < 0 || prev.Model != row.Model) {
+		if s.modelTiers != nil && (i < 0 || prev.Agent.RequestedModel() != row.Agent.RequestedModel()) {
 			assigned, aerr := s.assignModelTierWithHistory(ctx, row, f.Jobs)
 			if aerr != nil {
 				return aerr
 			}
 			row.ModelTier = &assigned
 		}
-		if i < 0 || prev.Model != row.Model || prev.Parent != row.Parent {
+		if i < 0 || prev.Agent.RequestedModel() != row.Agent.RequestedModel() || prev.Parent != row.Parent {
 			if aerr := refuseAboveParent(s.modelTiers, s.spawnRule, row, f.Jobs); aerr != nil {
 				return aerr
 			}

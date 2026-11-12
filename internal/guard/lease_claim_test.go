@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +21,7 @@ func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
 	t.Helper()
 	row := types.Job{
 		ID:         "cli-ls-files",
-		Criteria:   "add vcs ls-files",
+		Agent:   agent.Instructed("add vcs ls-files"),
 		State:      types.StateRunning,
 		WritePaths: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"},
 		Registered: 1,

@@ -46,6 +46,7 @@ packages:
     types:
       ModelTierSource: {config: {zeroCase: ""}}
       SkillVariant: {config: {zeroCase: ""}}
+      WorkerType: {config: {zeroCase: "", cases: {"resume": resumed}}}
   github.com/egladman/magus/types:
     types:
       AgentBilling: {}

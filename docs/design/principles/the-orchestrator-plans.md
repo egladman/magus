@@ -45,7 +45,7 @@ named for it:
 
 ```sh
 magus job fork design-index --model economy \
-  --criteria "design.md lists every design page" \
+  --instructions "design.md lists every design page" \
   --write-paths 'docs/design.md' \
   --check "conventions docs"
 ```

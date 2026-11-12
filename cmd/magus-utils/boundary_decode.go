@@ -150,6 +150,9 @@ var inboundTypes = []string{
 	// the receiver, and the options those take.
 	"ProjectRef",
 	"JobModelTier",
+	"AgentModel",
+	"AgentWorker",
+	"AgentSpec",
 	"JobClaim",
 	"ClaimEvidence",
 	"Origin",

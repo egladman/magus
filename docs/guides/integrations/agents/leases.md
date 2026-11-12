@@ -105,7 +105,7 @@ and the one check it runs. It replaces any job with the same id.
 
 ```sh
 magus job fork <job> \
-  --criteria 'move the store' \
+  --instructions 'move the store' \
   --write-paths internal/job/store.go,internal/job/store_test.go \
   --check 'test internal/job'
 
@@ -153,9 +153,11 @@ refuses an unescaped entry that names an existing path, and names both
 spellings.
 
 A row carries `id` and optionally `parent` (the job this one was forked from),
-`criteria` (the prose half; the machine-checkable half is `goals`),
-`checkpoint` (as `magus vcs checkpoint -o name` prints it), `write_paths`,
-`deny_paths`, `read_paths`, `depends_on`, `breaks`, `model`, `check`, `goals`,
+`agent` (the model requested as `{id, tier}`, the `instructions` that are the
+prose half, the machine-checkable half being `goals`, and the `worker`, whose
+`type` is `resume` or `new` with a `reason`), `checkpoint` (as
+`magus vcs checkpoint -o name` prints it), `write_paths`, `deny_paths`,
+`read_paths`, `depends_on`, `breaks`, `check`, `goals`,
 `state`, `read_only`, and `max_attempts` (see
 [attempts and generations](#attempts-and-generations)). A record naming no
 `state` is stored `declared`. The store adds `api_version`, the actor that
@@ -699,7 +701,7 @@ it by; a `read_only` job is exempt.
 ```sh
 magus job fork --stdin <<'EOF'
 {"api_version": "magus.job/v1alpha1", "id": "api/migrate",
- "criteria": "move the accounts table to the new schema",
+ "agent": {"instructions": "move the accounts table to the new schema", "worker": {"type": "resume"}},
  "write_paths": ["db", "api"], "check": {"target": "go-test", "project": "api"},
  "goals": [
    {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
@@ -858,7 +860,7 @@ import "std";
 fun declare() > void {
   try {
     magus\workspace().putJob("api/migrate", {
-      "criteria": "move the accounts table to the new schema",
+      "agent": {"instructions": "move the accounts table to the new schema", "worker": {"type": "resume"}},
       "write_paths": ["db", "api"],
       "goals": [
         {"id": "green", "check": {"target": "go-test", "project": "api"}},

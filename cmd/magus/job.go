@@ -916,10 +916,11 @@ func printJobOverlaps(out io.Writer, overlaps []types.JobOverlap) {
 
 // jobModelCell is the model the job names, else the model tier the store assigned it.
 func jobModelCell(row types.Job) string {
-	if row.Model == "" && row.ModelTier != nil {
+	requested := row.Agent.RequestedModel()
+	if requested.IsZero() && row.ModelTier != nil {
 		return row.ModelTier.Name
 	}
-	return orDash(row.Model)
+	return orDash(requested.String())
 }
 
 // jobHolderCell is who holds row as the tree names it: the server for its own jobs, the
@@ -1178,39 +1179,44 @@ func (e evidenceFlag) Set(value string) error {
 	return nil
 }
 
-// bindForkSpec binds `job fork`'s flags onto d, the record --stdin decodes,
-// so a typed job and a piped one are one declaration. It names no state:
-// the store stores a declaration that names none as declared.
-func bindForkSpec(fs *flag.FlagSet, d *types.Declaration, check *string) {
-	fs.StringVar(&d.Criteria, "criteria", "", "What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares")
-	fs.StringVar(&d.Timeout, "timeout", "", "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout")
-	fs.StringVar(&d.Parent, "parent", "", "The job this one is forked from")
-	fs.StringVar(&d.Checkpoint, "checkpoint", "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
+// bindForkSpec binds `job fork`'s flags with the command tree's binder. The
+// list flags it leaves to the command land on d, the record --stdin decodes.
+func bindForkSpec(fs *flag.FlagSet, d *types.Declaration) *flaggen.JobForkFlags {
+	f := flaggen.BindJobFork(fs)
 	fs.Var((*listFlag)(&d.WritePaths), "write-paths", "A path this job may write, or `<file>#<declaration>` to claim one declaration of a file (a path holding a literal # is spelled `./a#b.md` or `a\\#b.md`); repeatable or comma-separated")
 	fs.Var((*listFlag)(&d.DenyPaths), "deny-paths", "A path this job may not write, carved out of its write paths; repeatable or comma-separated")
 	fs.Var((*listFlag)(&d.ReadPaths), "read-paths", "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)")
 	fs.Var((*listFlag)(&d.DependsOn), "depends-on", "A job this one waits on; repeatable or comma-separated")
-	fs.StringVar(check, "check", "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
-	fs.StringVar(&d.Model, "model", "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
-	fs.StringVar((*string)(&d.BriefFormat), "brief-format", "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
-	fs.StringVar(&d.Delivery, "delivery", "", deliveryDoc)
-	fs.BoolVar(&d.ReadOnly, "read-only", false, "A job that gathers evidence and writes nothing")
-	cmdline.NegatedBoolVar(fs, &d.ReadOnly, "read-only")
-	fs.StringVar(&d.Checkout, "checkout", "", "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work")
+	return f
 }
 
 // flagDeclaration is the record for id from what bindForkSpec bound.
 // An unparsable check is carried through so Validate names the rule,
-// rather than the row going silently checkless.
-func flagDeclaration(d types.Declaration, id, check string) types.Declaration {
+// rather than the row going silently checkless. An agent flag writes the
+// agent section, and models reads the --model word.
+func flagDeclaration(d types.Declaration, id string, f flaggen.JobForkFlags, models func(string) typesagent.Model) types.Declaration {
 	d.Schema = types.Schema{Version: types.JobAPIVersion}
 	d.ID = id
-	if strings.TrimSpace(check) == "" {
+	d.Parent, d.Checkpoint, d.Checkout = f.Parent, f.Checkpoint, f.Checkout
+	d.BriefFormat, d.Delivery, d.ReadOnly = types.BriefFormat(f.BriefFormat), f.Delivery, f.ReadOnly
+	if f.Timeout != 0 {
+		d.Timeout = f.Timeout.String()
+	}
+	if f.Model != "" || f.Instructions != "" || f.NewWorker != "" {
+		d.Agent = &typesagent.Spec{Instructions: f.Instructions, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResume}}
+		if f.Model != "" {
+			d.Agent.Model = models(f.Model)
+		}
+		if f.NewWorker != "" {
+			d.Agent.Worker = typesagent.Worker{Type: typesagent.WorkerTypeNew, Reason: f.NewWorker}
+		}
+	}
+	if strings.TrimSpace(f.Check) == "" {
 		return d
 	}
-	parsed, err := types.ParseLeaseCheck(check)
+	parsed, err := types.ParseLeaseCheck(f.Check)
 	if err != nil {
-		parsed = types.LeaseCheck{Target: check}
+		parsed = types.LeaseCheck{Target: f.Check}
 	}
 	d.Check = &parsed
 	return d
@@ -1229,22 +1235,18 @@ func flagDeclaration(d types.Declaration, id, check string) types.Declaration {
 // live job must not erase the rest.
 func jobFork(ctx context.Context, root string, args []string) error {
 	var (
-		row, declared      types.Declaration
-		check              string
-		schema, stdin, fix bool
+		row, declared types.Declaration
+		spec          *flaggen.JobForkFlags
+		// fromFlags is a fork whose record the flags declare, built once the
+		// store can read the --model word.
+		fromFlags bool
 		// retry is a fork naming an id and no spec flag, which forks a stored job again as declared.
 		retry bool
 		flags *flag.FlagSet
 	)
 	pos, err := commandParse("job fork", args, func(fs *flag.FlagSet) {
 		flags = fs
-		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a job must satisfy, and exit")
-		fs.BoolVar(&stdin, "stdin", false, "Read one job as JSON on stdin instead of taking it from flags")
-		fs.BoolVar(&fix, "fix", false, "Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain")
-		bindForkSpec(fs, &declared, &check)
-		cmdline.NegatedBoolVar(fs, &schema, "schema")
-		cmdline.NegatedBoolVar(fs, &stdin, "stdin")
-		cmdline.NegatedBoolVar(fs, &fix, "fix")
+		spec = bindForkSpec(fs, &declared)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job fork <job> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus job fork --stdin < job.json")
@@ -1311,18 +1313,18 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if schema {
+	if spec.Schema {
 		fmt.Print(job.DeclarationSchema)
 		return nil
 	}
 
-	if declared.Checkout != "" {
-		if declared.Checkout, err = filepath.Abs(declared.Checkout); err != nil {
+	if spec.Checkout != "" {
+		if spec.Checkout, err = filepath.Abs(spec.Checkout); err != nil {
 			return exit.Usagef("magus job fork: --checkout: %s", err)
 		}
 	}
 	switch {
-	case stdin:
+	case spec.Stdin:
 		if len(pos) > 0 {
 			return exit.Usagef("magus job fork: --stdin reads the id from the record, so %q is one id too many", pos[0])
 		}
@@ -1343,16 +1345,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if defaulted {
 			slog.InfoContext(ctx, fmt.Sprintf("the record names no api_version, so it was read as %s", types.JobAPIVersion), attr.Notice("note"))
 		}
-		if row.Checkout, err = recordCheckout(row.Checkout, declared.Checkout); err != nil {
+		if row.Checkout, err = recordCheckout(row.Checkout, spec.Checkout); err != nil {
 			return err
 		}
 	case len(pos) != 1:
 		return exit.Usagef("magus job fork: requires exactly one job id, or --stdin with a job on it")
 	default:
-		row = flagDeclaration(declared, pos[0], check)
-		if err := row.Validate(); err != nil {
-			return exit.Usagef("magus job fork: %s", err)
-		}
+		fromFlags = true
 		retry = true
 		flags.Visit(func(f *flag.Flag) { retry = retry && !slices.Contains(forkSpecFlags, f.Name) })
 	}
@@ -1371,6 +1370,12 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 	jobWS := jobWorkspace(ctx, root)
 	store = store.InWorkspace(jobWS).WithGrader(newForkGrader(forkHeldWorkspace(ctx, root, jobWS)).grade)
+	if fromFlags {
+		row = flagDeclaration(declared, pos[0], *spec, store.ModelRequest)
+		if err := row.Validate(); err != nil {
+			return exit.Usagef("magus job fork: %s", err)
+		}
+	}
 	if retry {
 		if row, err = retriedDeclaration(ctx, store, row); err != nil {
 			return err
@@ -1439,7 +1444,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	for _, n := range notes {
 		slog.InfoContext(ctx, n, attr.Notice("note"))
 	}
-	if fix {
+	if spec.Fix {
 		if row, err = fixFork(ctx, store, row, reader); err != nil {
 			return err
 		}
@@ -1630,10 +1635,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 
 // forkSpecFlags are the job fork flags that declare the spec, which a --stdin record carries
 // instead and a fork by id alone takes from the stored job.
-var forkSpecFlags = []string{"criteria", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "brief-format", "delivery", "read-only"}
-
-// deliveryDoc is --delivery's help, equal to the command registry's.
-const deliveryDoc = "How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)"
+var forkSpecFlags = []string{"instructions", "new-worker", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "brief-format", "delivery", "read-only"}
 
 // checkpointNames reports whether checkpoint's revision is revision, a full
 // id, or an abbreviation of it.

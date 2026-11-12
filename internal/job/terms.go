@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // Terms is what one job grants its holder: the declared job, and the workspace facts
@@ -169,12 +170,15 @@ func (b Terms) String() string {
 	if t := b.Lease.ModelTier; t != nil {
 		fmt.Fprintf(&s, "model tier: %s\nskills: %s\n", t, t.Skills)
 	}
+	if a := b.Lease.Agent; a != nil && a.Worker.Type == agent.WorkerTypeNew {
+		fmt.Fprintf(&s, "worker: new, since %s\n", a.Worker.Reason)
+	}
 	if b.Lease.Delivery != "" {
 		fmt.Fprintf(&s, "delivery: %s\n", deliveryLine(b.Lease))
 	}
 
 	writeList(&s, "interface", interfaceLines(b.Lease.Goals))
-	writeBlock(&s, "criteria", b.Lease.Criteria)
+	writeBlock(&s, "instructions", b.Lease.Instructions())
 	writeAttempts(&s, b.Lease)
 	writeList(&s, "may break", b.Lease.Breaks)
 	if b.Stage.Known() {

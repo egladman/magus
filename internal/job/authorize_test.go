@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +30,7 @@ func declared(t *testing.T, rows ...types.Job) Location {
 func workerRow() types.Job {
 	return types.Job{
 		ID:         "adj/store",
-		Criteria:   "the store is the enforcement point",
+		Agent:   agent.Instructed("the store is the enforcement point"),
 		WritePaths: []string{"internal/ledger", "types/lease.go"},
 		Validation: "magus run test internal/ledger",
 		State:      types.StateRunning,
@@ -104,7 +105,7 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 		"validation": func(u *types.Job) { u.Validation = "magus run ci ." },
 		"read_paths": func(u *types.Job) { u.ReadPaths = []string{"/"} },
 		"parent":     func(u *types.Job) { u.Parent = "adj/other" },
-		"model":      func(u *types.Job) { u.Model = "principal" },
+		"agent.model": func(u *types.Job) { u.Agent.Model = agent.Model{Tier: "principal"} },
 		"breaks":     func(u *types.Job) { u.Breaks = []string{"--any-flag"} },
 		"read_only":  func(u *types.Job) { u.ReadOnly = true },
 		"deadline":   func(u *types.Job) { u.Deadline = 1 << 40 },
@@ -160,7 +161,7 @@ func TestBoundWorkerWritesOnlyItsOwnRowAndChildren(t *testing.T) {
 	loc := declared(t, workerRow(), types.Job{ID: "adj/other", WritePaths: []string{"internal/sessions"}})
 
 	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/other", func(u *types.Job) {
-		u.Criteria = "rewritten by a neighbour"
+		u.Agent = agent.Instructed("rewritten by a neighbour")
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no row but its own")
@@ -294,7 +295,7 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 
 	require.NoError(t, s.Bind(Caller{}, "adj/other"))
 
-	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.Criteria = "rewritten" })
+	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.Agent = agent.Instructed("rewritten") })
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused, "the worker bound after construction writes no row but its own")
 	_, err = s.Clear(t.Context())
@@ -303,7 +304,7 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, workerRow().Criteria, rows[0].Criteria)
+	assert.Equal(t, workerRow().Instructions(), rows[0].Instructions())
 }
 
 // A process a shared server forks for a remote caller acts as that caller or as nobody, and
@@ -356,7 +357,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 			return err
 		},
 		"a new row": func() error {
-			_, err := s.Update(t.Context(), "stray", func(u *types.Job) { u.Criteria = "a plan of its own" })
+			_, err := s.Update(t.Context(), "stray", func(u *types.Job) { u.Agent = agent.Instructed("a plan of its own") })
 			return err
 		},
 		"an ending": func() error {

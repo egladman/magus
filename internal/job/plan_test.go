@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -94,7 +95,7 @@ func (s *applyCheckoutSuite) TestAnotherCheckoutIsRefusedNamingBoth() {
 func (s *applyCheckoutSuite) TestABoundWorktreeIsTheRowsCheckout() {
 	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
 	own := s.T().TempDir()
-	plant(s.T(), store, types.Job{ID: "w", Criteria: "goal", WritePaths: []string{"a.go"}, Check: forkCheck(), State: types.StateDeclared, Updated: time.Now().Unix(), Worktree: &types.JobWorktree{Root: own}})
+	plant(s.T(), store, types.Job{ID: "w", Agent: agent.Instructed("goal"), WritePaths: []string{"a.go"}, Check: forkCheck(), State: types.StateDeclared, Updated: time.Now().Unix(), Worktree: &types.JobWorktree{Root: own}})
 
 	_, err := Apply(s.T().Context(), store, s.record(own, "a.go"), config.Jobs{}, nil, nil, false)
 
@@ -192,7 +193,7 @@ func (s *ancestorDeviationSuite) store() *Store {
 	}
 	store := NewStore(tempLocation(s.T(), loadableRepository(s.T()))).InWorkspace(Workspace{Projects: projects})
 	plant(s.T(), store, types.Job{
-		ID: "w", Criteria: "goal", WritePaths: []string{"libs/buzz/a.go"}, Check: forkCheck(), Deviations: s.deviation(),
+		ID: "w", Agent: agent.Instructed("goal"), WritePaths: []string{"libs/buzz/a.go"}, Check: forkCheck(), Deviations: s.deviation(),
 		State: types.StateRunning, Updated: time.Now().Unix(),
 	})
 	return store
@@ -796,9 +797,9 @@ func TestForkMergeHoldsANewRowToTheLimits(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "jobs.max_depth")
 
-	updated, err := ForkMerge(ctx, s, "root/a", func(u *types.Job) { u.Model = "opus" }, config.Jobs{MaxLive: 1}, nil)
+	updated, err := ForkMerge(ctx, s, "root/a", func(u *types.Job) { u.Agent = modelRequest("opus") }, config.Jobs{MaxLive: 1}, nil)
 	require.NoError(t, err, "an update is not a fork")
-	assert.Equal(t, "opus", updated.Model)
+	assert.Equal(t, agent.Model{ID: "opus"}, updated.Agent.Model)
 
 	_, err = ForkMerge(ctx, s, "root/a", func(u *types.Job) { u.State = types.StateFail }, limits, nil)
 	require.NoError(t, err)
@@ -826,7 +827,7 @@ func TestForkMergeRecomputesTheWriteProofOfMovedPaths(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.WriteProofDisjoint, row.WriteProof)
 
-	row, err = ForkMerge(ctx, s, "wave/mine", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
+	row, err = ForkMerge(ctx, s, "wave/mine", func(u *types.Job) { u.Agent = modelRequest("opus") }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.WriteProofDisjoint, row.WriteProof, "paths that did not move keep their proof")
 
@@ -973,7 +974,7 @@ func appliedRow(t *testing.T, write ...string) (*Store, Location) {
 }
 
 func spec(write ...string) types.Declaration {
-	return types.Declaration{ID: "w", Criteria: "goal", WritePaths: write, Check: forkCheck()}
+	return types.Declaration{ID: "w", Agent: agent.Instructed("goal"), WritePaths: write, Check: forkCheck()}
 }
 
 func storeBytes(t *testing.T, s *Store) string {
@@ -1094,14 +1095,14 @@ func TestApplyLetsAWorkerOnlyReleaseItsOwnPaths(t *testing.T) {
 	_, err = Apply(t.Context(), worker, []types.Declaration{spec("a.go", "c.go")}, config.Jobs{}, nil, nil, false)
 	require.ErrorAs(t, err, &refused, "widening")
 	criteria := spec("a.go")
-	criteria.Criteria = "another goal"
+	criteria.Agent = agent.Instructed("another goal")
 	_, err = Apply(t.Context(), worker, []types.Declaration{criteria}, config.Jobs{}, nil, nil, true)
 	require.ErrorAs(t, err, &refused, "a dry run answers what the write would")
 
 	rows, err := s.List()
 	require.NoError(t, err)
 	want := shrunk[0].Next.Clone()
-	want.WritePaths, want.Criteria = []string{"a.go"}, "goal"
+	want.WritePaths, want.Agent = []string{"a.go"}, agent.Instructed("goal")
 	assert.Equal(t, want, rows[0], "the refused writes left the shrunk row as it was")
 }
 
@@ -1353,7 +1354,7 @@ func (s *reapplySuite) TestApplyAfterExitWritesEveryPathAndHandsTheRowBack() {
 func (s *reapplySuite) narrowedAt(state types.JobState) *Store {
 	store := NewStore(tempLocation(s.T(), loadableRepository(s.T())))
 	plant(s.T(), store, types.Job{
-		ID: "w", Criteria: "goal", WritePaths: []string{"a.go"}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
+		ID: "w", Agent: agent.Instructed("goal"), WritePaths: []string{"a.go"}, Check: forkCheck(), State: state, Updated: time.Now().Unix(),
 		Releases: []types.JobRelease{{Path: "b.go", Digest: types.DigestAbsent, ReleasedAt: 1}},
 	})
 	rows, err := store.List()

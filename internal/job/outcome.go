@@ -29,7 +29,7 @@ func newJobOutcome(row types.Job, ended int64) types.JobOutcome {
 	out := types.JobOutcome{
 		Job:          row.ID,
 		Kind:         modelTierKind(row),
-		Model:        row.Model,
+		Model:        row.Agent.RequestedModel().String(),
 		WriteFiles:   writeFileCount(row.WritePaths),
 		State:        row.State,
 		ChecksRun:    len(row.GateAttempts),
@@ -46,7 +46,7 @@ func newJobOutcome(row types.Job, ended int64) types.JobOutcome {
 	}
 	if t := row.ModelTier; t != nil {
 		out.ModelTier, out.Skills, out.Source, out.Reason, out.Site = t.Name, t.Skills, t.Source, t.Reason, t.Site
-		out.Model = cmp.Or(t.Model, row.Model)
+		out.Model = cmp.Or(t.Model, out.Model)
 	}
 	if row.Created > 0 {
 		out.DurationMs = max(ended-row.Created*1000, 0)

@@ -162,7 +162,7 @@ func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 	_, err := store.Update(t.Context(), "wave3/merge", func(row *types.Job) {
 		row.State = types.StateRunning
-		row.Model = "opus"
+		row.Agent = &agent.Spec{Model: agent.Model{ID: "opus"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}
 		row.WritePaths = []string{"internal/handler"}
 	})
 	require.NoError(t, err)
@@ -187,7 +187,7 @@ func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	require.NotNil(t, delegated, "the delegated job is missing from the listing")
 	require.Equal(t, jobv1.JobHolder_JOB_HOLDER_SESSION, delegated.Holder)
 	require.Equal(t, string(types.StateRunning), delegated.State)
-	require.Equal(t, "opus", delegated.Model)
+	require.Equal(t, "opus", delegated.GetAgent().GetModel().GetId())
 	require.Equal(t, []string{"internal/handler"}, delegated.WritePaths)
 }
 
@@ -198,7 +198,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	dir := t.TempDir()
 	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 	_, err := store.Update(t.Context(), "job-a", func(row *types.Job) {
-		row.Criteria = "ship the store"
+		row.Agent = agent.Instructed("ship the store")
 		row.Checkpoint = "60dc9151"
 		row.WritePaths = []string{"internal/job", "types/job.go"}
 		row.State = types.StateRunning
@@ -255,7 +255,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 
 	got := byID["job-a"]
 	require.NotNil(t, got, "the delegated row is missing from the listing")
-	require.Equal(t, "ship the store", got.Criteria)
+	require.Equal(t, "ship the store", got.GetAgent().GetInstructions())
 	require.Equal(t, "60dc9151", got.Checkpoint)
 	require.Equal(t, []string{"internal/job"}, got.WritePaths)
 	require.Equal(t, stored.Updated, got.Updated, "the row's own stamp, not the moment it was read")

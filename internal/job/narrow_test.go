@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -286,10 +287,10 @@ func TestReleaseUnderPattern(t *testing.T) { suite.Run(t, new(releaseUnderPatter
 func (s *releaseUnderPatternSuite) applied(write ...string) types.Job {
 	loc := tempLocation(s.T(), testkit.NewRepository(s.T(), configFiles).Root())
 	store := NewStore(loc)
-	seed(s.T(), store, types.Job{ID: "cfg", Criteria: "goal", State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Check: forkCheck()})
+	seed(s.T(), store, types.Job{ID: "cfg", Agent: agent.Instructed("goal"), State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Check: forkCheck()})
 	_, _, err := NarrowHold(s.T().Context(), boundStore(loc, "cfg"), "cfg", "magusfile.buzz", []string{"project.targets.test"}, "")
 	s.Require().NoError(err)
-	applied, err := Apply(s.T().Context(), store, []types.Declaration{{ID: "cfg", Criteria: "goal", WritePaths: write, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+	applied, err := Apply(s.T().Context(), store, []types.Declaration{{ID: "cfg", Agent: agent.Instructed("goal"), WritePaths: write, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
 	return applied[0].Next
 }
@@ -419,7 +420,7 @@ func (s *ReleaseRequestRowSuite) TestAnUnknownHolderIsAnError() {
 }
 
 func (s *ReleaseRequestRowSuite) TestAWriteToTheRowKeepsIt() {
-	_, err := s.store.Update(s.T().Context(), "h", func(cur *types.Job) { cur.Criteria = "changed" })
+	_, err := s.store.Update(s.T().Context(), "h", func(cur *types.Job) { cur.Agent = agent.Instructed("changed") })
 	s.Require().NoError(err)
 	s.Len(s.requests(), 1)
 }

@@ -19,11 +19,11 @@ exec git worktree add -q ../ana
 exec git worktree add -q ../ben
 
 cd ../ana
-exec magus job fork cents --criteria 'prices are integers of cents' --write-paths pricing/total.sh,pricing/format.sh --check 'test .'
+exec magus job fork cents --instructions 'prices are integers of cents' --write-paths pricing/total.sh,pricing/format.sh --check 'test .'
 exec magus job exec cents
 
 cd ../ben
-exec magus job fork currency --criteria 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
+exec magus job fork currency --instructions 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
 cmp stdout $WORK/fork.out
 
 # An advisory exits 0: a person who names no job is told, never stopped.
@@ -80,7 +80,7 @@ tax() { echo $(( $1 / 10 )); }
 [ "$(total 2 3)" = 5 ] && [ "$(format 5)" = 5.00 ] && [ "$(tax 50)" = 5 ]
 -- release.json --
 {"api_version": "magus.job/v1alpha1", "id": "cents",
- "criteria": "prices are integers of cents",
+ "agent": {"instructions": "prices are integers of cents", "worker": {"type": "resume"}},
  "write_paths": ["pricing/total.sh"],
  "check": {"target": "test", "project": "."}}
 -- fork.out --
@@ -116,7 +116,7 @@ job: currency
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 skills: short
 
-criteria
+instructions
 prices carry a currency code
 
 write paths

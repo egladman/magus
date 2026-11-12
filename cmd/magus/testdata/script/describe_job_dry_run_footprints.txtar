@@ -12,7 +12,7 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'run.go'
 
-exec magus job fork wave/a --criteria 'change A' --write-paths run.go --check 'lint .'
+exec magus job fork wave/a --instructions 'change A' --write-paths run.go --check 'lint .'
 cp edited.go run.go
 exec sh -c 'ref=$(magus run lint . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed "s/out<hex>/$ref/" "$WORK/result.in.json" > "$WORK/result.json"'
 

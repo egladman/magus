@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -102,7 +103,7 @@ func claimFixture(t *testing.T, extra ...types.Job) (context.Context, string) {
 
 func claimLease(id string, paths ...string) types.Job {
 	return types.Job{
-		ID: id, Criteria: "work on " + id, WritePaths: paths, State: types.StateRunning,
+		ID: id, Agent: agent.Instructed("work on " + id), WritePaths: paths, State: types.StateRunning,
 		Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
 	}
 }

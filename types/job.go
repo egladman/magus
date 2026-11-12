@@ -751,15 +751,9 @@ type Job struct {
 	// root spawned. Depth is read off this chain rather than stored, so a mis-stamped depth
 	// cannot disagree with the tree.
 	Parent string `json:"parent,omitempty" yaml:"parent,omitempty"`
-	// Criteria is what this lease is for and what done means, as one block of prose. Not
-	// split into two fields: the skill requires criteria to be observable, and a separate
-	// empty field would read as "none required" rather than as "the author did not write
-	// any".
-	//
-	// PROSE, graded by a reader. The machine-checkable half is Goals, and the two are
-	// deliberately separate: a condition magus can verify belongs in a goal, where it is a
-	// contract, rather than in a sentence here that nothing reads.
-	Criteria string `json:"criteria,omitempty" yaml:"criteria,omitempty"`
+	// Agent is the agent section: the requested model, the instructions and
+	// the worker. Nil is ordinary work, and nothing graded reads it.
+	Agent *agent.Spec `json:"agent,omitempty" yaml:"agent,omitempty"`
 	// Checkpoint is the working state this lease was handed, in the form
 	// `magus vcs checkpoint -o name` prints: the revision, plus a dirty-patch digest
 	// when the tree was not clean. A string rather than an embedded VCSCheckpoint
@@ -797,14 +791,9 @@ type Job struct {
 	// this job breaking. Empty means the job breaks nothing on its own authority: a break
 	// outside the list is a finding for the root, not a decision for the worker.
 	Breaks []string `json:"breaks,omitempty" yaml:"breaks,omitempty"`
-	// Model is the model or effort tier the work was matched to (principal, standard,
-	// economy in the skill's table). A free string: hosts name their models differently
-	// and a closed set here would force a lie for the ones that do not fit.
-	Model string `json:"model,omitempty" yaml:"model,omitempty"`
-	// ModelTier is the model tier the store assigned when the row was created or its Model
-	// changed, with the source, reason and site that chose it. Store-computed and
-	// output-only like Releases: a caller's value is replaced by the stored one, and nil
-	// means the workspace declared no model tiers when the row was written.
+	// ModelTier is the tier the store assigned for the requested model, and
+	// why. Store-computed like Releases. Nil means the workspace declared no
+	// model tiers when the row was written.
 	ModelTier *agent.JobModelTier `json:"model_tier,omitempty" yaml:"model_tier,omitempty"`
 	// BriefFormat is the format a brief to this row's worker takes, over the workspace's
 	// agents.brief_format. Empty defers to magus.yaml.
@@ -815,10 +804,9 @@ type Job struct {
 	// ParentHead is the branch a stacked job's pull request is based on.
 	ParentHead string `json:"parent_head,omitempty" yaml:"parent_head,omitempty"`
 	// Follows is the job this one continues: follow-up work on what that job's worker wrote.
-	// FreshReason says why that worker's context is wrong for this job, which lets a fresh
-	// spawn pass while that worker is still warm (see the guard's spawn-warm-worker).
-	Follows     string `json:"follows,omitempty"      yaml:"follows,omitempty"`
-	FreshReason string `json:"fresh_reason,omitempty" yaml:"fresh_reason,omitempty"`
+	// Agent.Worker says whether that warm worker takes it (see the guard's
+	// spawn-warm-worker).
+	Follows string `json:"follows,omitempty" yaml:"follows,omitempty"`
 	// ReworkRounds counts the times the guard saw this row's holder sent more work after it
 	// handed back. Widenings counts the writes that added write paths after a holder took
 	// the row. Both are store-computed like ModelTier: a caller's value is replaced by the
@@ -1123,9 +1111,8 @@ type Declaration struct {
 	ID string `json:"id" schema:"leaseid"`
 	// Parent is the lease this one was spawned under, empty for a lease the root declared.
 	Parent string `json:"parent,omitempty" schema:"leaseid"`
-	// Criteria is what this lease is for and what done means, as one block of prose. The
-	// machine-checkable half is Goals.
-	Criteria string `json:"criteria,omitempty"`
+	// Agent is the agent section; nil is ordinary work. See [Job.Agent].
+	Agent *agent.Spec `json:"agent,omitempty"`
 	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
 	// name` prints it.
 	Checkpoint string `json:"checkpoint,omitempty"`
@@ -1146,9 +1133,6 @@ type Declaration struct {
 	// Breaks are the flags, JSON keys, exported symbols or stored formats the root approved
 	// this job breaking; empty means it breaks nothing on its own authority. See [Job.Breaks].
 	Breaks []string `json:"breaks,omitempty"`
-	// Model is the model or effort tier the work was matched to, a free string because
-	// hosts name their models differently.
-	Model string `json:"model,omitempty"`
 	// Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an
 	// explicit 0 is out of range. See [Job.Weight].
 	Weight *float64 `json:"weight,omitempty"`
@@ -1158,10 +1142,8 @@ type Declaration struct {
 	// Delivery and ParentHead: see [Job.Delivery].
 	Delivery   string `json:"delivery,omitempty"`
 	ParentHead string `json:"parent_head,omitempty"`
-	// Follows and FreshReason name the job this one continues and why its worker is not
-	// resumed for it. See [Job.Follows].
-	Follows     string `json:"follows,omitempty" schema:"leaseid"`
-	FreshReason string `json:"fresh_reason,omitempty"`
+	// Follows names the job this one continues. See [Job.Follows].
+	Follows string `json:"follows,omitempty" schema:"leaseid"`
 	// Checkout is an absolute directory, outside the workspace, where the fork makes a new
 	// checkout of the repository for this job at its checkpoint, or at the forking
 	// checkout's revision when it names none.
@@ -1180,8 +1162,6 @@ type Declaration struct {
 	LegacyDenyPaths []string `json:"forbidden_paths,omitempty"`
 	// LegacyReadPaths is the pre-rename spelling of read_paths. compat: see LegacyWritePaths.
 	LegacyReadPaths []string `json:"focus,omitempty"`
-	// LegacyModel is the pre-rename spelling of model. compat: see LegacyWritePaths.
-	LegacyModel string `json:"tier,omitempty"`
 	// Check is the one check this lease runs, and acceptance binds a worker's evidence
 	// to it.
 	Check *LeaseCheck `json:"check,omitempty"`
@@ -1389,18 +1369,7 @@ func (r *Declaration) FoldLegacyNames() error {
 	fold("owned_paths", &r.WritePaths, r.LegacyWritePaths)
 	fold("forbidden_paths", &r.DenyPaths, r.LegacyDenyPaths)
 	fold("focus", &r.ReadPaths, r.LegacyReadPaths)
-	foldString := func(name string, into *string, from string) {
-		switch {
-		case from == "":
-		case *into != "":
-			err = errors.Join(err, DiagnosticErrorf(JobRecordInvalid, "a row declares %s or its renamed spelling, not both", name))
-		default:
-			*into = from
-		}
-	}
-	foldString("tier", &r.Model, r.LegacyModel)
 	r.LegacyWritePaths, r.LegacyDenyPaths, r.LegacyReadPaths = nil, nil, nil
-	r.LegacyModel = ""
 	return err
 }
 
@@ -1451,6 +1420,11 @@ func (r Declaration) Problems() JobProblems {
 	}
 	if p := strings.TrimSpace(r.Parent); p != "" && !ValidJobID(p) {
 		invalid("parent", fmt.Sprintf("parent %q is not a lease id", r.Parent), "name the id of the job this one was forked under")
+	}
+	if r.Agent != nil {
+		if err := r.Agent.Validate(); err != nil {
+			invalid("agent", err.Error(), `write worker {"type": "resume"}, or {"type": "new", "reason": "<why>"}`)
+		}
 	}
 	for i, dep := range r.DependsOn {
 		if d := strings.TrimSpace(dep); d != "" && !ValidJobID(d) {
@@ -1946,7 +1920,6 @@ func JobStateVocabulary() string {
 // untouched: a row that already carries releases or a registration keeps them.
 func (r Declaration) Apply(u *Job) {
 	u.Parent = strings.TrimSpace(r.Parent)
-	u.Criteria = r.Criteria
 	u.Checkpoint = strings.TrimSpace(r.Checkpoint)
 	u.WritePaths = trimmedNonEmpty(r.WritePaths)
 	u.DenyPaths = trimmedNonEmpty(r.DenyPaths)
@@ -1955,7 +1928,7 @@ func (r Declaration) Apply(u *Job) {
 	u.DependsOn = trimmedNonEmpty(r.DependsOn)
 	u.Integrates = trimmedNonEmpty(r.Integrates)
 	u.Breaks = trimmedNonEmpty(r.Breaks)
-	u.Model = strings.TrimSpace(r.Model)
+	u.Agent = r.Agent.Trimmed()
 	u.Weight = 0
 	if r.Weight != nil {
 		u.Weight = *r.Weight
@@ -1964,7 +1937,6 @@ func (r Declaration) Apply(u *Job) {
 	u.Delivery = r.Delivery
 	u.ParentHead = strings.TrimSpace(r.ParentHead)
 	u.Follows = strings.TrimSpace(r.Follows)
-	u.FreshReason = strings.TrimSpace(r.FreshReason)
 	// Validate refused an unparsable check before the row reached a store, so the problems
 	// here cannot arise; the rendered line is written from the record so the two agree.
 	check, declared, _ := r.check()
@@ -2751,6 +2723,14 @@ func (u Job) HardPaths() []string {
 	return slices.DeleteFunc(slices.Clone(u.WritePaths), func(p string) bool { return slices.Contains(u.SoftPaths, p) })
 }
 
+// Instructions is the agent section's prose, empty for ordinary work.
+func (u Job) Instructions() string {
+	if u.Agent == nil {
+		return ""
+	}
+	return u.Agent.Instructions
+}
+
 // Clone returns a deep copy: the slice fields are the only shared state, so copying
 // them is what makes a value handed out of a store safe to keep. slices.Clone
 // preserves nil, so a row that stored null does not come back as [].
@@ -2775,6 +2755,7 @@ func (u Job) Clone() Job {
 	}
 	c.Deviations = slices.Clone(u.Deviations)
 	c.Deferred = slices.Clone(u.Deferred)
+	c.Agent = u.Agent.Clone()
 	if u.ModelTier != nil {
 		tier := *u.ModelTier
 		c.ModelTier = &tier

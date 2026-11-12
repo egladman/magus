@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -78,7 +79,7 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 	t.Run("a read-only lease writing anywhere", func(t *testing.T) {
 		leases := append(fixture.FleetLeases(), types.Job{
 			ID:       "scout",
-			Criteria: "inventory the guard rules",
+			Agent: agent.Instructed("inventory the guard rules"),
 			ReadOnly: true,
 			State:    types.StateRunning,
 		})
@@ -97,7 +98,7 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 // can neither verify nor end the owner, so the denial names the root of the owner's tree
 // and files one attention row for it, however often the write is retried.
 func TestGradeLeasedWriteKnocksOnTheOwnersTreeRoot(t *testing.T) {
-	leases := append(fixture.FleetLeases(), types.Job{ID: "orch", Criteria: "plan", ReadOnly: true, State: types.StateRunning, Registered: 1})
+	leases := append(fixture.FleetLeases(), types.Job{ID: "orch", Agent: agent.Instructed("plan"), ReadOnly: true, State: types.StateRunning, Registered: 1})
 	leases[0].Parent = "orch"
 	ctx, root := fleetFixture(t, leases...)
 	for range 2 {
@@ -949,9 +950,9 @@ func dependentFleet(depState types.JobState) []types.Job {
 		return j
 	}
 	return []types.Job{
-		registered(types.Job{ID: "dep", Criteria: "land the store", State: depState}),
-		registered(types.Job{ID: "waiter", Criteria: "build on the store", WritePaths: []string{"internal/job/**"}, DependsOn: []string{"dep"}, State: types.StateDeclared}),
-		registered(types.Job{ID: "other", Criteria: "unrelated", WritePaths: []string{"docs/**"}, State: types.StateRunning}),
+		registered(types.Job{ID: "dep", Agent: agent.Instructed("land the store"), State: depState}),
+		registered(types.Job{ID: "waiter", Agent: agent.Instructed("build on the store"), WritePaths: []string{"internal/job/**"}, DependsOn: []string{"dep"}, State: types.StateDeclared}),
+		registered(types.Job{ID: "other", Agent: agent.Instructed("unrelated"), WritePaths: []string{"docs/**"}, State: types.StateRunning}),
 	}
 }
 
@@ -996,8 +997,8 @@ func TestGradeLeasedWriteHoldsAnExitedHolderToItsPaths(t *testing.T) {
 		j.Checkpoint, j.ReportedBase, j.BaseVerdict, j.Registered = "rev-a", "rev-a", types.BaseMatch, 1
 		return j
 	}
-	holder := registered(types.Job{ID: "holder", Criteria: "land the store", WritePaths: []string{"internal/job/**"}, State: types.StateExited})
-	sibling := registered(types.Job{ID: "sibling", Criteria: "unrelated", WritePaths: []string{"docs/**"}, State: types.StateRunning})
+	holder := registered(types.Job{ID: "holder", Agent: agent.Instructed("land the store"), WritePaths: []string{"internal/job/**"}, State: types.StateExited})
+	sibling := registered(types.Job{ID: "sibling", Agent: agent.Instructed("unrelated"), WritePaths: []string{"docs/**"}, State: types.StateRunning})
 	for name, rows := range map[string][]types.Job{
 		"alone":            {holder},
 		"beside a sibling": {holder, sibling},
@@ -1372,14 +1373,14 @@ func TestGradeLeasedWriteToAPathAWideningAddedInTheLeasesCheckout(t *testing.T) 
 			}
 			store := storeAt(ctx)
 			_, err := store.Update(ctx, "w", func(cur *types.Job) {
-				*cur = types.Job{ID: "w", Criteria: "widen me", WritePaths: []string{"std/*.go"}, State: state,
+				*cur = types.Job{ID: "w", Agent: agent.Instructed("widen me"), WritePaths: []string{"std/*.go"}, State: state,
 					Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1, CheckoutRoot: own}
 			})
 			require.NoError(t, err)
 			_, err = store.RecordWorktree(ctx, "w", types.JobWorktree{Root: own, Source: session})
 			require.NoError(t, err)
 
-			widen := types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "w", Criteria: "widen me",
+			widen := types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "w", Agent: agent.Instructed("widen me"),
 				Checkpoint: "rev-a", WritePaths: []string{"std/*.go", "cmd/*.go"},
 				Goals: []types.Goal{{ID: "done", Kind: types.GoalKindPaths, Expect: types.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
 			_, err = job.Apply(ctx, store, []types.Declaration{widen}, config.Jobs{}, nil, nil, false)

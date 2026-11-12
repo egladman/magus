@@ -253,7 +253,6 @@ func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv
 	}
 	if _, err := s.store.Update(ctx, j.Name, func(row *types.Job) {
 		row.Holder = types.HolderServer
-		row.Criteria = j.Desc
 		row.State = types.StateRunning
 		if row.LastRun == nil {
 			row.LastRun = &types.JobRun{}
@@ -308,9 +307,7 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		Id:         row.ID,
 		Holder:     jobv1.JobHolder_JOB_HOLDER_SESSION,
 		State:      string(row.State),
-		Criteria:   row.Criteria,
 		Parent:     row.Parent,
-		Model:      row.Model,
 		Check:      row.Validation,
 		WritePaths: row.WritePaths,
 		DenyPaths:  row.DenyPaths,
@@ -341,6 +338,7 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		BriefFormat:    string(row.BriefFormat),
 		ReworkRounds:   int32(row.ReworkRounds),
 		Widenings:      int32(row.Widenings),
+		Agent:          wireAgent(row.Agent),
 	}
 	if row.Holder.OrSession() == types.HolderServer {
 		j.Holder = jobv1.JobHolder_JOB_HOLDER_SERVER
@@ -388,6 +386,17 @@ func wireModelTier(t *agent.JobModelTier) *jobv1.JobModelTier {
 	return &jobv1.JobModelTier{
 		Name: t.Name, Rank: int32(t.Rank), Skills: string(t.Skills), Source: string(t.Source),
 		Reason: t.Reason, Site: t.Site, Model: t.Model,
+	}
+}
+
+func wireAgent(a *agent.Spec) *jobv1.JobAgent {
+	if a == nil {
+		return nil
+	}
+	return &jobv1.JobAgent{
+		Model:        &jobv1.JobAgentModel{Id: a.Model.ID, Tier: a.Model.Tier},
+		Instructions: a.Instructions,
+		Worker:       &jobv1.JobAgentWorker{Type: string(a.Worker.Type), Reason: a.Worker.Reason},
 	}
 }
 

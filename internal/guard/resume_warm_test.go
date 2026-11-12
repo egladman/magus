@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 const (
@@ -109,7 +110,7 @@ func TestSpawnWarmWorkerReadsTheWorkspaceTTL(t *testing.T) {
 func TestSpawnWarmWorkerPassesAFreshReason(t *testing.T) {
 	v := warmFixture(t, func(j *types.Job) {
 		j.Follows = "gate-fits"
-		j.FreshReason = "gate-fits read the old limiter; this job replaces it"
+		j.Agent = &typesagent.Spec{Worker: typesagent.Worker{Type: typesagent.WorkerTypeNew, Reason: "gate-fits read the old limiter; this job replaces it"}}
 	}).spawn(t)
 
 	assert.NotEqual(t, string(denyRuleSpawnWarmWorker), v.Rule, v.Reason)

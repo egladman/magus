@@ -188,7 +188,7 @@ type briefLease struct {
 	ID         string `json:"id"`
 	State      string `json:"state,omitempty"`
 	Exec       string `json:"exec"`
-	Criteria   string `json:"criteria,omitempty"`
+	Instructions string `json:"instructions,omitempty"`
 	Validation string `json:"validation,omitempty"`
 	// Claims are the write paths the job added with a proof, by `magus job apply` or by the
 	// guard on a write, each as path, evidence and proof.
@@ -510,15 +510,15 @@ func briefLeases(rows []types.Job, acting, root string) (leases []briefLease, ot
 			others++
 			continue
 		}
-		criteria, _, _ := strings.Cut(strings.TrimSpace(row.Criteria), "\n")
+		criteria, _, _ := strings.Cut(strings.TrimSpace(row.Instructions()), "\n")
 		if criteria == "" {
-			criteria = "no criteria recorded"
+			criteria = "no instructions recorded"
 		}
 		item := briefLease{
 			ID:         row.ID,
 			State:      string(row.State),
 			Exec:       hint.JobExec.With(row.ID),
-			Criteria:   criteria,
+			Instructions: criteria,
 			Validation: row.Validation,
 			Claims:     claimLines(row.Claims),
 		}
@@ -907,7 +907,7 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 		briefLine(s, "leases live here:")
 	}
 	for _, l := range b.Leases {
-		briefLine(s, "  %s (%s): %s", l.ID, orDash(l.State), orDash(l.Criteria))
+		briefLine(s, "  %s (%s): %s", l.ID, orDash(l.State), orDash(l.Instructions))
 		briefLine(s, "    exec: %s", l.Exec)
 		if l.Validation != "" {
 			briefLine(s, "    validation: %s", l.Validation)

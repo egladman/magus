@@ -455,6 +455,10 @@ var boundaryTypes = []boundaryType{
 	{Name: "Document", Type: reflect.TypeFor[image.Document](), RuntimeObject: true},
 	{Name: "ShippedAgent", Type: reflect.TypeFor[types.ShippedAgent](), RuntimeObject: true},
 	{Name: "JobModelTier", Type: reflect.TypeFor[agent.JobModelTier](), RuntimeObject: true},
+	// Leaf first: AgentSpec, a job's agent section, holds the two before it.
+	{Name: "AgentModel", Type: reflect.TypeFor[agent.Model](), RuntimeObject: true},
+	{Name: "AgentWorker", Type: reflect.TypeFor[agent.Worker](), RuntimeObject: true},
+	{Name: "AgentSpec", Type: reflect.TypeFor[agent.Spec](), RuntimeObject: true},
 	{Name: "ModelTierRequest", Type: reflect.TypeFor[types.ModelTierRequest](), RuntimeObject: true},
 	// Leaf first: Job.prior is [PriorAttempt], whose denials and retry are these two.
 	{Name: "JobDenial", Type: reflect.TypeFor[types.JobDenial](), RuntimeObject: true},
@@ -580,6 +584,7 @@ var boundaryEnumTypes = []reflect.Type{
 	reflect.TypeFor[types.BindingStatus](),
 	reflect.TypeFor[types.McpTransport](),
 	reflect.TypeFor[agent.ModelTierSource](),
+	reflect.TypeFor[agent.WorkerType](),
 	reflect.TypeFor[types.GroupingShape](),
 	reflect.TypeFor[types.BriefFormat](),
 	reflect.TypeFor[types.BriefRefKind](),

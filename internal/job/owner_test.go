@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -415,7 +416,7 @@ func TestWaitReclaimsTheWritePathsForRework(t *testing.T) {
 	assert.Equal(t, types.StateRunning, state(t, loc))
 	assert.Contains(t, strings.Join(status.Notes, "\n"), "holds its write paths again")
 
-	taker := types.Job{ID: "taker", Criteria: "c", WritePaths: []string{"cmd/magus/ledger.go"}, State: types.StateRunning}
+	taker := types.Job{ID: "taker", Agent: agent.Instructed("c"), WritePaths: []string{"cmd/magus/ledger.go"}, State: types.StateRunning}
 	loc = exited(t, taker)
 	status, err = Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
 	require.NoError(t, err)

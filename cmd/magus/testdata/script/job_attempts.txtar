@@ -50,9 +50,9 @@ stdout '^  attempt 2: no_return'
 stdout '^  attempt 1: no_return.*, retryable$'
 
 -- two.json --
-{"api_version": "magus.job/v1alpha1", "id": "scout", "read_only": true, "criteria": "read the pricing code", "max_attempts": 2}
+{"api_version": "magus.job/v1alpha1", "id": "scout", "read_only": true, "agent": {"instructions": "read the pricing code", "worker": {"type": "resume"}}, "max_attempts": 2}
 -- three.json --
-{"api_version": "magus.job/v1alpha1", "id": "scout", "read_only": true, "criteria": "read the pricing code", "max_attempts": 3}
+{"api_version": "magus.job/v1alpha1", "id": "scout", "read_only": true, "agent": {"instructions": "read the pricing code", "worker": {"type": "resume"}}, "max_attempts": 3}
 -- shop/.gitignore --
 .magus/
 -- shop/magus.yaml --

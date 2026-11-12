@@ -133,7 +133,7 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
             + "`{found!.checkoutRoot}`, where the guard takes its lease and the child would find no lease to hold. "
             + "The holder of a `--checkout` row runs the gate in that checkout itself, so it needs no integrator from here. "
             + "Otherwise spawn it from a session in `{found!.checkoutRoot}`, or fork a row bound to this checkout: "
-            + "`magus job fork {found!.id}-here --write-paths <paths> --criteria \"<what done means>\"` (no --checkout), "
+            + "`magus job fork {found!.id}-here --write-paths <paths> --instructions \"<what done means>\"` (no --checkout), "
             + "then spawn with `{line!.parent}/integrate {found!.id}-here`.");
     }
     return magus\guard.allow();
@@ -182,16 +182,16 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
         tool = tool + "parent = \"{parent}\", ";
     }
     fork = fork + " --model {model}";
-    tool = tool + "model = \"{model}\"";
+    final modelKey = if (spawn.model != "") "id" else "tier";
     if (thinkingRoles.indexOf(role) != null) {
         fork = fork + " --read-only";
-        tool = tool + ", read_only = true";
+        tool = tool + "read_only = true";
     } else {
         fork = fork + " --write-paths <paths>";
-        tool = tool + ", write_paths = [\"<paths>\"]";
+        tool = tool + "write_paths = [\"<paths>\"]";
     }
-    fork = fork + " --criteria \"<what done means>\"";
-    tool = tool + ", criteria = \"<what done means>\" })";
+    fork = fork + " --instructions \"<what done means>\"";
+    tool = tool + ", agent = \{\"model\": \{\"{modelKey}\": \"{model}\"}, \"instructions\": \"<what done means>\", \"worker\": \{\"type\": \"resume\"}} })";
     var scope = "";
     if (spawn.lease != "") {
         scope = " Under your lease the row is a child of `{spawn.lease}`: its write paths are ones "

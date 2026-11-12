@@ -97,7 +97,7 @@ func fleetFixture(t *testing.T, leases ...types.Job) (ctx context.Context, root,
 func narrowLease() types.Job {
 	return types.Job{
 		ID:         "harness/lease-scoped-deny",
-		Criteria:   "lease-scoped denies in the guard",
+		Agent:   typesagent.Instructed("lease-scoped denies in the guard"),
 		WritePaths: []string{"cmd/magus/**"},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
 		State:      types.StateRunning,

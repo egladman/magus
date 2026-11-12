@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // Actor is the party a job-store write is made by: the lease it is bound to.
@@ -361,7 +362,7 @@ func changedFields(prev, next types.Job) []string {
 		}
 	}
 	add("parent", prev.Parent != next.Parent)
-	add("criteria", prev.Criteria != next.Criteria)
+	out = append(out, changedAgentFields(prev.Agent, next.Agent)...)
 	add("checkpoint", prev.Checkpoint != next.Checkpoint)
 	add("write_paths", !slices.Equal(prev.WritePaths, next.WritePaths))
 	add("deny_paths", !slices.Equal(prev.DenyPaths, next.DenyPaths))
@@ -370,9 +371,7 @@ func changedFields(prev, next types.Job) []string {
 	add("integrates", !slices.Equal(prev.Integrates, next.Integrates))
 	add("soft_paths", !slices.Equal(prev.SoftPaths, next.SoftPaths))
 	add("breaks", !slices.Equal(prev.Breaks, next.Breaks))
-	add("model", prev.Model != next.Model)
 	add("follows", prev.Follows != next.Follows)
-	add("fresh_reason", prev.FreshReason != next.FreshReason)
 	add("brief_format", prev.BriefFormat != next.BriefFormat)
 	add("delivery", prev.Delivery != next.Delivery)
 	add("parent_head", prev.ParentHead != next.ParentHead)
@@ -388,6 +387,28 @@ func changedFields(prev, next types.Job) []string {
 	// Stamped by the store, yet a worker's put can move it through a timeout, and a holder
 	// that extends its own bound has none.
 	add("deadline", prev.Deadline != next.Deadline)
+	return out
+}
+
+// changedAgentFields names what differs between two agent sections: agent
+// when only one exists, else each member that differs.
+func changedAgentFields(prev, next *agent.Spec) []string {
+	switch {
+	case prev == nil && next == nil:
+		return nil
+	case prev == nil || next == nil:
+		return []string{"agent"}
+	}
+	var out []string
+	if prev.Model != next.Model {
+		out = append(out, "agent.model")
+	}
+	if prev.Instructions != next.Instructions {
+		out = append(out, "agent.instructions")
+	}
+	if prev.Worker != next.Worker {
+		out = append(out, "agent.worker")
+	}
 	return out
 }
 

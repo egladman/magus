@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -495,8 +496,8 @@ func TestDeclarationApplyLeavesStoreComputedAttemptsAlone(t *testing.T) {
 		Rejection:  &JobRejection{At: 1, ObservedGeneration: 2},
 	}
 	want := row
-	want.Criteria = "again"
-	Declaration{ID: "worker", Criteria: "again"}.Apply(&row)
+	want.Agent = agent.Instructed("again")
+	Declaration{ID: "worker", Agent: agent.Instructed("again")}.Apply(&row)
 	assert.Equal(t, want, row)
 }
 
@@ -1212,7 +1213,7 @@ func TestAClaimRecordDeclaresNothingElse(t *testing.T) {
 	rec := Declaration{Schema: Schema{Version: JobAPIVersion}, ID: "cli-ls-files", Claim: []JobClaimRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}}
 	assert.Empty(t, rec.Problems())
 
-	rec.Criteria = "more"
+	rec.Agent = agent.Instructed("more")
 	rec.Claim = append(rec.Claim, JobClaimRequest{Path: "../x.go", Because: "released"}, JobClaimRequest{Path: "internal/**", Because: "maybe"})
 	var fields []string
 	for _, p := range rec.Problems() {

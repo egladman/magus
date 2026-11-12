@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/generate/godecl"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // jobRecord is one published record: the struct a caller's JSON decodes into, and the
@@ -52,6 +53,7 @@ var jobSources = []string{
 	"types/job.go",
 	"types/job_problem.go",
 	"types/schema.go",
+	"types/agent/spec.go",
 }
 
 const (
@@ -83,6 +85,7 @@ var closedSets = map[string][]string{
 	"GoalKind":    goalKindNames(),
 	"GoalExpect":  goalExpectNames(),
 	"BriefFormat": types.BriefFormat("").Values(),
+	"WorkerType":  agent.WorkerType("").Values(),
 	// The only DiagnosticCode a record declares is Deviation.Code, so the set is the codes a
 	// deviation may name: a deviation on any other code fails the schema as it fails the decoder.
 	"DiagnosticCode": permissibleCodeNames(),

@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -53,11 +54,10 @@ func tempStore(t *testing.T, root string) *Store {
 func lease(id string) types.Job {
 	return types.Job{
 		ID:         id,
-		Criteria:   "goal for " + id,
+		Agent:      &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: "standard"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}},
 		Checkpoint: "abc123",
 		WritePaths: []string{"internal/" + id},
 		DenyPaths:  []string{"MAGUS.md"},
-		Model:      "standard",
 		Validation: "magus run test",
 		State:      types.StateDeclared,
 	}
@@ -144,13 +144,13 @@ func TestStoreRoundTrip(t *testing.T) {
 			name: "a second put on the same id replaces the row in place",
 			puts: []types.Job{
 				lease("a"), lease("b"),
-				{ID: "a", Criteria: "revised", State: types.StatePass},
+				{ID: "a", Agent: agent.Instructed("revised"), State: types.StatePass},
 			},
 			want: []types.Job{
 				// The replacement carries no write paths, so the row's paths were
 				// released by it; see TestStorePutRecordsReleasedPaths.
 				{
-					ID: "a", Criteria: "revised", State: types.StatePass, Generation: 2, Attempts: 1,
+					ID: "a", Agent: agent.Instructed("revised"), State: types.StatePass, Generation: 2, Attempts: 1,
 					Releases: []types.JobRelease{{Path: "internal/a", Digest: types.DigestAbsent}},
 				},
 				stamped(lease("b"), 1),
@@ -158,8 +158,8 @@ func TestStoreRoundTrip(t *testing.T) {
 		},
 		{
 			name: "a read-only row carries no paths by design",
-			puts: []types.Job{{ID: "scout", Criteria: "inventory", ReadOnly: true, State: types.StateRunning}},
-			want: []types.Job{{ID: "scout", Criteria: "inventory", ReadOnly: true, State: types.StateRunning, Generation: 1, Attempts: 1}},
+			puts: []types.Job{{ID: "scout", Agent: agent.Instructed("inventory"), ReadOnly: true, State: types.StateRunning}},
+			want: []types.Job{{ID: "scout", Agent: agent.Instructed("inventory"), ReadOnly: true, State: types.StateRunning, Generation: 1, Attempts: 1}},
 		},
 		{
 			name: "no_return is stored as its own terminal state",
@@ -203,7 +203,7 @@ func TestStoreIsPrivateToItsOwner(t *testing.T) {
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
-	_, err := s.Update(t.Context(), "row", func(cur *types.Job) { cur.Criteria = "private" })
+	_, err := s.Update(t.Context(), "row", func(cur *types.Job) { cur.Agent = agent.Instructed("private") })
 	require.NoError(t, err)
 
 	info, err := os.Stat(filepath.Dir(s.path))
@@ -219,7 +219,7 @@ func TestStorePutRequiresAnID(t *testing.T) {
 
 	ctx := t.Context()
 	s := tempStore(t, t.TempDir())
-	row := types.Job{Criteria: "no id"}
+	row := types.Job{Agent: agent.Instructed("no id")}
 	_, err := s.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
 	require.ErrorIs(t, err, ErrNoID, "a row with no id could never be updated or referred to again")
 
@@ -283,7 +283,7 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, types.StatePass, got[0].State, "the state advance survived the concurrent checkpoint write")
 	assert.Equal(t, "deadbeef", got[0].Checkpoint, "and the checkpoint survived the concurrent state advance")
-	assert.Equal(t, "goal for a", got[0].Criteria, "neither merge erased the row it did not name")
+	assert.Equal(t, "goal for a", got[0].Instructions(), "neither merge erased the row it did not name")
 }
 
 // TestStoreUpdateSurvivesSeparateStores is the CROSS-PROCESS half, and the one the
@@ -507,7 +507,7 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 
 	fork := func(criteria string, write, read []string) func(*types.Job) {
 		return Declare(types.Declaration{
-			ID: "a", Criteria: criteria, Checkpoint: "abc123", WritePaths: write, ReadPaths: read, State: types.StateDeclared,
+			ID: "a", Agent: agent.Instructed(criteria), Checkpoint: "abc123", WritePaths: write, ReadPaths: read, State: types.StateDeclared,
 		}, 0)
 	}
 	for _, tc := range []struct {
@@ -542,7 +542,7 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 			assert.ElementsMatch(t, tc.read, stored.ReadPaths)
 			assert.Equal(t, stamped(types.Job{
 				ID:           "a",
-				Criteria:     tc.criteria,
+				Agent:     agent.Instructed(tc.criteria),
 				Checkpoint:   "abc123",
 				WritePaths:   stored.WritePaths, // order is not what this test pins
 				ReadPaths:    stored.ReadPaths,
@@ -573,14 +573,14 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 	}{
 		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			row, err := decodeDeclaration(strings.NewReader(fmt.Sprintf(
-				`{"api_version":%q,"id":"a","criteria":"goal","checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
+				`{"api_version":%q,"id":"a","agent":{"instructions": "goal", "worker": {"type": "resume"}},"checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
 				types.JobAPIVersion, checkpoint)))
 			require.NoError(t, err)
 			return s.Update(t.Context(), row.ID, Declare(row, 0))
 		}},
 		{name: "magus\\workspace().putJob", proof: types.WriteProofAlone, validated: true, fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			put, err := DecodePut(map[string]any{
-				"criteria": "goal", "checkpoint": checkpoint, "write_paths": []any{"a.go"}, "check": "go-test .",
+				"agent": map[string]any{"instructions": "goal", "worker": map[string]any{"type": "resume"}}, "checkpoint": checkpoint, "write_paths": []any{"a.go"}, "check": "go-test .",
 			})
 			require.NoError(t, err)
 			merge, err := PutMerge(put)
@@ -599,7 +599,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 			assert.Equal(t, types.Job{
 				Schema:       types.Schema{Version: types.JobAPIVersion},
 				ID:           "a",
-				Criteria:     "goal",
+				Agent:     agent.Instructed("goal"),
 				Checkpoint:   head,
 				WritePaths:   []string{"a.go"},
 				Check:        &check,
@@ -667,7 +667,7 @@ func TestStoreKeepsANewerRowWhole(t *testing.T) {
 			`{"id":"other","api_version":%q,"state":"running","created":1,"updated":1}`, types.JobAPIVersion))
 	want := map[string]any{"x": float64(1)}
 
-	_, err := s.Update(t.Context(), "other", func(u *types.Job) { u.Criteria = "moved" })
+	_, err := s.Update(t.Context(), "other", func(u *types.Job) { u.Agent = agent.Instructed("moved") })
 	require.NoError(t, err)
 	future := storedRow(t, path, "future")
 	assert.Equal(t, want, future["future_field"], "an update of another row keeps this row's unknown member")
@@ -696,8 +696,9 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 
 	s, notices := sweepStore(t, 10_000, time.Hour)
 	path := plantRaw(t, s, fmt.Sprintf(
-		`{"id":"future","api_version":"magus.job/v1alpha99","requires":["never-implemented"],"state":"declared","created":1,"updated":1,"future_field":7}`+"\n"+
-			`{"id":"other","api_version":%q,"state":"running","created":9999,"updated":9999}`, types.JobAPIVersion))
+		`{"api_version":%q,"migration":%d}`+"\n"+
+			`{"id":"future","api_version":"magus.job/v1alpha99","requires":["never-implemented"],"state":"declared","created":1,"updated":1,"future_field":7}`+"\n"+
+			`{"id":"other","api_version":%q,"state":"running","created":9999,"updated":9999}`, types.JobAPIVersion, len(jobMigrations), types.JobAPIVersion))
 	before := storedRow(t, path, "future")
 
 	rows, err := s.List()
@@ -749,7 +750,7 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 	_, err := s.Clear(t.Context())
 	require.NoError(t, err)
 
-	assert.Equal(t, []map[string]any{{"api_version": "magus.job/v1alpha99", "plan": "p1", "retained": float64(1_700_000_000)}},
+	assert.Equal(t, []map[string]any{{"api_version": "magus.job/v1alpha99", "migration": float64(len(jobMigrations)), "plan": "p1", "retained": float64(1_700_000_000)}},
 		storedLines(t, path), "a clear leaves the header alone, and the store's own retention stamp rides in it")
 }
 
@@ -765,18 +766,18 @@ func TestStoreUpdateAppendsTheRowsNextLine(t *testing.T) {
 	require.NoError(t, err)
 	before := storedLines(t, path)
 
-	_, err = s.Update(t.Context(), "a", func(u *types.Job) { u.Criteria = "moved" })
+	_, err = s.Update(t.Context(), "a", func(u *types.Job) { u.Agent = agent.Instructed("moved") })
 	require.NoError(t, err)
 	after := storedLines(t, path)
 	require.Len(t, after, len(before)+1, "one line appended, nothing rewritten")
 	assert.Equal(t, before, after[:len(before)])
 	assert.Equal(t, "a", after[len(before)]["id"])
-	assert.Equal(t, "moved", after[len(before)]["criteria"])
+	assert.Equal(t, map[string]any{"instructions": "moved", "worker": map[string]any{"type": "resume"}}, after[len(before)]["agent"])
 
 	rows, err := s.List()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a", "b"}, []string{rows[0].ID, rows[1].ID}, "a row keeps its first line's place")
-	assert.Equal(t, "moved", rows[0].Criteria)
+	assert.Equal(t, "moved", rows[0].Instructions())
 }
 
 // The file is rewritten to one line per row once superseded lines make it file.CompactDue.
@@ -789,7 +790,7 @@ func TestStoreCompactsPastTheBound(t *testing.T) {
 	require.NoError(t, err)
 	bound := 2 + file.CompactSlack
 	for i := range bound {
-		_, err := s.Update(t.Context(), "a", func(u *types.Job) { u.Criteria = fmt.Sprint(i) })
+		_, err := s.Update(t.Context(), "a", func(u *types.Job) { u.Agent = agent.Instructed(fmt.Sprint(i)) })
 		require.NoError(t, err)
 		assert.False(t, file.CompactDue(len(storedLines(t, path)), 1))
 	}
@@ -800,7 +801,7 @@ func TestStoreCompactsPastTheBound(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, fmt.Sprint(bound-1), rows[0].Criteria)
+	assert.Equal(t, fmt.Sprint(bound-1), rows[0].Instructions())
 }
 
 // A delete drops the row's every line by rewriting the file.
@@ -810,7 +811,7 @@ func TestStoreDeleteRewritesWithoutTheRow(t *testing.T) {
 	s := tempStore(t, t.TempDir())
 	seed(t, s, lease("a"))
 	seed(t, s, lease("b"))
-	_, err := s.Update(t.Context(), "a", func(u *types.Job) { u.Criteria = "moved" })
+	_, err := s.Update(t.Context(), "a", func(u *types.Job) { u.Agent = agent.Instructed("moved") })
 	require.NoError(t, err)
 	_, err = s.Delete(t.Context(), "a", false)
 	require.NoError(t, err)
@@ -1006,7 +1007,7 @@ func TestStoreListReturnsCopies(t *testing.T) {
 	got, err := s.List()
 	require.NoError(t, err)
 	got[0].WritePaths[0] = "mutated"
-	got[0].Criteria = "mutated"
+	got[0].Agent = agent.Instructed("mutated")
 
 	again, err := s.List()
 	require.NoError(t, err)
@@ -1117,7 +1118,7 @@ func TestStoreBumpsTheGenerationOnlyForASpecChange(t *testing.T) {
 	assert.Equal(t, 1, seed(t, s, row).Generation, "state and deadline are not the spec")
 
 	require.NoError(t, s.RecordRework(t.Context(), "a"))
-	row.Criteria = "a sharper goal"
+	row.Agent = agent.Instructed("a sharper goal")
 	assert.Equal(t, 2, seed(t, s, row).Generation)
 
 	row.Generation, row.Attempts = 9, 9
@@ -1153,7 +1154,7 @@ func TestStoreKeepsTheGenerationWhenWritePathsOnlyWiden(t *testing.T) {
 	assert.Equal(t, 2, seed(t, s, row).Generation, "narrowing or moving the paths is a new spec")
 
 	row.WritePaths = []string{"cmd/magus/job.go", "types/job.go"}
-	row.Criteria = "a sharper goal"
+	row.Agent = agent.Instructed("a sharper goal")
 	assert.Equal(t, 3, seed(t, s, row).Generation, "a widening beside another change still counts")
 }
 
@@ -1218,7 +1219,7 @@ func TestStoreRefusesAForkPastMaxAttempts(t *testing.T) {
 	row := lease("a")
 	row.MaxAttempts = 2
 	seed(t, s, row)
-	row.Criteria = "reworded while live"
+	row.Agent = agent.Instructed("reworded while live")
 	seed(t, s, row)
 	endAttempt(t, s)
 	seed(t, s, row)
@@ -1311,9 +1312,8 @@ func realSizedRows(n int, now int64, checkout string) []types.Job {
 		age := int64(i*2357) % (30 * 24 * 3600)
 		row := types.Job{
 			ID:           fmt.Sprintf("job-%04d", i),
-			Criteria:     criteria,
+			Agent:        &agent.Spec{Instructions: criteria, Model: agent.Model{ID: "sonnet"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}},
 			Checkpoint:   "08566ec817db6ff7932f0a4d62d8a9ed08f8ca18",
-			Model:        "sonnet",
 			Validation:   "magus run test . -- -run Store",
 			Registered:   now - age,
 			CheckoutRoot: checkout,
@@ -1407,7 +1407,7 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 		})
 		b.Run(tc.name+"/update", func(b *testing.B) {
 			for b.Loop() {
-				if _, err := s.Update(b.Context(), "job-0098", func(u *types.Job) { u.Criteria += "." }); err != nil {
+				if _, err := s.Update(b.Context(), "job-0098", func(u *types.Job) { u.Agent.Instructions += "." }); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -1451,13 +1451,13 @@ func renamed(from, to string) migrate.Migration {
 
 func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
 	st, path, notices := s.migratingStore(`{"api_version":"magus.job/v1alpha1"}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`,
-		renamed("goal", "criteria"))
+		renamed("goal", "parent"))
 	notice := fmt.Sprintf("job: migrated job store %s from 0 to 1 (1 entries)\n", path)
 
 	f, err := st.read()
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
-	s.Equal("ship it", f.Jobs[0].Criteria, "the row reads under the name the migration gave it")
+	s.Equal("ship it", f.Jobs[0].Parent, "the row reads under the name the migration gave it")
 	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0, "the header records the migration")
 	s.Equal(notice, notices.String())
 
@@ -1468,13 +1468,13 @@ func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
 
 func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
 	st, path, _ := s.migratingStore(`{"api_version":"magus.job/v1alpha1","migration":1}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"aim":"ship it"}`,
-		renamed("goal", "aim"), renamed("aim", "intent"), renamed("intent", "criteria"))
+		renamed("goal", "aim"), renamed("aim", "intent"), renamed("intent", "parent"))
 
-	_, err := st.Update(s.T().Context(), "a", func(u *types.Job) { u.Model = "standard" })
+	_, err := st.Update(s.T().Context(), "a", func(u *types.Job) { u.Checkpoint = "abc123" })
 	s.Require().NoError(err)
 	row := storedRow(s.T(), path, "a")
-	s.Equal("ship it", row["criteria"], "migrations 2 and 3 ran, in order, before the write")
-	s.Equal("standard", row["model"])
+	s.Equal("ship it", row["parent"], "migrations 2 and 3 ran, in order, before the write")
+	s.Equal("abc123", row["checkpoint"])
 	s.InDelta(3, storedLines(s.T(), path)[0]["migration"], 0)
 }
 
@@ -1494,7 +1494,7 @@ func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
 
 func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
 	body := `{"api_version":"magus.job/v1alpha1","migration":3}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1}`
-	st, path, _ := s.migratingStore(body, renamed("goal", "criteria"))
+	st, path, _ := s.migratingStore(body, renamed("goal", "parent"))
 
 	_, err := st.read()
 	s.Require().ErrorIs(err, types.JobStoreWriterOlder)
@@ -1508,7 +1508,7 @@ func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
 
 func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
 	body := `{"api_version":"magus.job/v1alpha1"}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`
-	st, path, notices := s.migratingStore(body, renamed("goal", "criteria"), migrate.Migration{Name: "fail", Up: func(migrate.Entry) (migrate.Entry, error) {
+	st, path, notices := s.migratingStore(body, renamed("goal", "parent"), migrate.Migration{Name: "fail", Up: func(migrate.Entry) (migrate.Entry, error) {
 		return nil, errors.New("disk on fire")
 	}})
 
@@ -1522,12 +1522,75 @@ func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
 
 func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
 	st := tempStore(s.T(), s.T().TempDir())
-	st.migrations = []migrate.Migration{renamed("goal", "criteria"), renamed("aim", "criteria")}
+	st.migrations = []migrate.Migration{renamed("goal", "parent"), renamed("aim", "parent")}
 	seed(s.T(), st, lease("a"))
 
 	path, err := st.Path()
 	s.Require().NoError(err)
 	s.InDelta(2, storedLines(s.T(), path)[0]["migration"], 0, "a new store needs no migration")
+}
+
+// agentSectionSuite pins the migration that moves a row's flat model,
+// criteria and fresh_reason under agent.
+type agentSectionSuite struct {
+	suite.Suite
+}
+
+func TestAgentSectionMigration(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(agentSectionSuite))
+}
+
+// migrated is the row line after the job store's own migrations ran over it.
+func (s *agentSectionSuite) migrated(line string) types.Job {
+	st := tempStore(s.T(), s.T().TempDir())
+	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
+	path := plantRaw(s.T(), st, fmt.Sprintf("%s\n%s", `{"api_version":"magus.job/v1alpha1"}`, line))
+	f, err := st.read()
+	s.Require().NoError(err)
+	s.Require().Len(f.Jobs, 1)
+	row := storedRow(s.T(), path, f.Jobs[0].ID)
+	for _, key := range []string{"criteria", "model", "fresh_reason"} {
+		s.NotContains(row, key, "the migration keeps no flat member")
+	}
+	return f.Jobs[0]
+}
+
+func (s *agentSectionSuite) TestCriteriaAndATierNameMoveUnderAgent() {
+	row := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,"criteria":"ship it","model":"principal",` +
+		`"model_tier":{"name":"principal","rank":2,"skills":"short","source":"row"}}`)
+	s.Equal(&agent.Spec{
+		Instructions: "ship it",
+		Model:        agent.Model{Tier: "principal"},
+		Worker:       agent.Worker{Type: agent.WorkerTypeResume},
+	}, row.Agent)
+	s.Require().NotNil(row.ModelTier)
+	s.Equal("principal", row.ModelTier.Name, "the resolved tier stays on the row")
+}
+
+func (s *agentSectionSuite) TestAModelTheTierMappedBecomesAnID() {
+	row := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,"model":"opus",` +
+		`"model_tier":{"name":"principal","rank":2,"skills":"short","source":"row","model":"opus"}}`)
+	s.Equal(agent.Model{ID: "opus"}, row.Agent.Model)
+}
+
+func (s *agentSectionSuite) TestAModelWithNoTierRecordedBecomesAnID() {
+	row := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,"model":"principal"}`)
+	s.Equal(agent.Model{ID: "principal"}, row.Agent.Model)
+}
+
+func (s *agentSectionSuite) TestFreshReasonStartsANewWorker() {
+	row := s.migrated(`{"id":"a","state":"declared","created":1,"updated":1,"follows":"b","fresh_reason":"b read the old limiter"}`)
+	s.Equal(&agent.Spec{Worker: agent.Worker{Type: agent.WorkerTypeNew, Reason: "b read the old limiter"}}, row.Agent)
+}
+
+func (s *agentSectionSuite) TestAServerRowTakesNoSection() {
+	row := s.migrated(`{"id":"rotate","holder":"server","state":"pass","created":1,"updated":1,"criteria":"rotate the trail"}`)
+	s.Nil(row.Agent)
+}
+
+func (s *agentSectionSuite) TestARowWithNoAgentMemberTakesNoSection() {
+	s.Nil(s.migrated(`{"id":"a","state":"running","created":1,"updated":1}`).Agent)
 }
 
 // IntegerStampSuite pins adoptIntegerStamp: a job store an integer-versioned
@@ -1561,7 +1624,7 @@ func (s *IntegerStampSuite) TestReadsAnIntegerRowAsV1alpha1() {
 
 func (s *IntegerStampSuite) TestRewriteWritesTheName() {
 	path := plantRaw(s.T(), s.store, integerStore)
-	_, err := s.store.Update(s.T().Context(), "a", func(u *types.Job) { u.Criteria = "moved" })
+	_, err := s.store.Update(s.T().Context(), "a", func(u *types.Job) { u.Agent = agent.Instructed("moved") })
 	s.Require().NoError(err)
 	row := storedRow(s.T(), path, "a")
 	s.Equal(string(types.JobAPIVersion), row["api_version"])
@@ -1595,7 +1658,7 @@ func (s *IntegerStampSuite) TestReadsAnIntegerResultAsV1alpha1() {
 
 func (s *IntegerStampSuite) TestRewriteDropsTheLeftoverIntegers() {
 	path := plantRaw(s.T(), s.store, rewrittenByOlder)
-	_, err := s.store.Update(s.T().Context(), "a", func(u *types.Job) { u.Criteria = "moved" })
+	_, err := s.store.Update(s.T().Context(), "a", func(u *types.Job) { u.Agent = agent.Instructed("moved") })
 	s.Require().NoError(err)
 	row := storedRow(s.T(), path, "a")
 	s.NotContains(row, "schema_version")

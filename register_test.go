@@ -624,7 +624,7 @@ func (s *SpawnRuleSuite) TestAForkAboveItsParentIsRefusedWithTheRulesCode() {
 	})
 	put := func(id, parent, model string) error {
 		row := types.Job{
-			ID: id, Parent: parent, Model: model, Criteria: "goal for " + id, Checkpoint: "abc123",
+			ID: id, Parent: parent, Agent: &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: model}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}, Checkpoint: "abc123",
 			WritePaths: []string{"internal/" + id}, Validation: "magus run test", State: types.StateDeclared,
 		}
 		_, err := store.Update(t.Context(), id, func(cur *types.Job) { *cur = row })

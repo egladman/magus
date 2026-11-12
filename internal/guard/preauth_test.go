@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -233,11 +234,11 @@ func servedRoles(t *testing.T) (context.Context, []servedRole) {
 	exited := narrowLease()
 	exited.ID, exited.Parent, exited.State = "harness/exited", "harness/root", types.StateExited
 	reviewer := types.Job{
-		ID: "harness/reviewer", Criteria: "read the guard",
+		ID: "harness/reviewer", Agent: agent.Instructed("read the guard"),
 		ReadOnly: true, ReadPaths: []string{"cmd/magus/**"},
 		State: types.StateRunning, Registered: 1,
 	}
-	handed := types.Job{ID: "harness/handed", Criteria: "a row the root handed out", WritePaths: []string{"docs/**"}, State: types.StateDeclared}
+	handed := types.Job{ID: "harness/handed", Agent: agent.Instructed("a row the root handed out"), WritePaths: []string{"docs/**"}, State: types.StateDeclared}
 	ctx, _ := fleetFixture(t, worker, exited, reviewer, handed)
 	at := hookLocation(ctx, Dependencies{})
 	const host, session = "claude-code", "served"

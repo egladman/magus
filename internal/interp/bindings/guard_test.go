@@ -617,7 +617,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
     foreach (row in list.jobs) { ids = ids + row.id + ";"; }
     var wrote = "refused";
     if (req.kind == magus\SpawnKind.spawn) {
-        magus\workspace().putJob("smuggled", opts: {"criteria": "from a rule"});
+        magus\workspace().putJob("smuggled", opts: {"agent": {"instructions": "from a rule", "worker": {"type": "resume"}}});
         wrote = "written";
     }
     var target = "";

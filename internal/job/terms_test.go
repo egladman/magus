@@ -52,13 +52,16 @@ func briefRow() types.Job {
 	return types.Job{
 		ID:     "harness/ledger-per-repo",
 		Parent: "harness",
-		Criteria: "Move the lease ledger to the per-repository state dir.\n" +
-			"Done when a row put from one checkout is listed from a second worktree of the same repo.",
+		Agent: &agent.Spec{
+			Instructions: "Move the lease ledger to the per-repository state dir.\n" +
+				"Done when a row put from one checkout is listed from a second worktree of the same repo.",
+			Model:  agent.Model{Tier: "principal"},
+			Worker: agent.Worker{Type: agent.WorkerTypeResume},
+		},
 		Checkpoint: "cf5509d09",
 		WritePaths: []string{"internal/ledger", "cmd/magus/ledger.go"},
 		DenyPaths:  []string{"MAGUS.md", "docs/gen"},
 		DependsOn:  []string{"harness/session-load"},
-		Model:      "principal",
 		Validation: "magus run test internal/ledger",
 		State:      types.StateDeclared,
 	}
@@ -93,7 +96,7 @@ func TestTermsNamesAWorkspaceThatWouldNotLoad(t *testing.T) {
 
 	b := NewTerms(briefRow(), TermsFacts{WorkspaceCold: true})
 	assert.Contains(t, b.String(), "this workspace would not load")
-	assert.Contains(t, b.String(), briefRow().Criteria, "the row is rendered whatever the workspace does")
+	assert.Contains(t, b.String(), briefRow().Instructions(), "the row is rendered whatever the workspace does")
 }
 
 // The unrun gates are a section of the terms, after the regenerated outputs, and a row with
@@ -171,7 +174,7 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 		"  Open (signature): func Open(root string) error\n" +
 		"    opens the ledger at root\n" +
 		"  OpenLegacy (absent)\n" +
-		"\ncriteria\n"
+		"\ninstructions\n"
 	assert.True(t, strings.HasPrefix(got, want), "got:\n%s", got)
 	for _, section := range []string{
 		"\nmay break\n  --old-flag\n  ledger.Open\n",
@@ -209,7 +212,7 @@ func TestTermsRendersOnlyTheRow(t *testing.T) {
 	t.Parallel()
 
 	row := briefRow()
-	row.Criteria, row.DependsOn, row.DenyPaths = "", nil, nil
+	row.Agent, row.DependsOn, row.DenyPaths = nil, nil, nil
 	got := NewTerms(row, TermsFacts{}).String()
 
 	assert.NotContains(t, got, "goal")
@@ -270,7 +273,7 @@ func retriedRow() types.Job {
 	second.Retry = types.RetryVerdict{Change: types.RetryAfterWidening,
 		Reason: "the guard denied its holder under lease-write: docs/x.md belongs to no lease you hold"}
 
-	row := types.Job{ID: "harness/retry", Criteria: "Retry the store.", State: types.StateDeclared}
+	row := types.Job{ID: "harness/retry", Agent: agent.Instructed("Retry the store."), State: types.StateDeclared}
 	row.WritePaths = []string{"internal/ledger"}
 	row.Validation = "magus run test internal/ledger"
 	row.Attempts, row.MaxAttempts = 3, 4

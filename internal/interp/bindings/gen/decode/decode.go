@@ -6467,6 +6467,111 @@ func decodeJobModelTier(v vm.Value, path string) (typesagent.JobModelTier, error
 	return out, nil
 }
 
+// DecodeModel decodes a Buzz AgentModel, an object instance or a map, into a typesagent.Model.
+func DecodeModel(v vm.Value) (typesagent.Model, error) {
+	return decodeModel(v, "agentModel")
+}
+
+func decodeModel(v vm.Value, path string) (typesagent.Model, error) {
+	var out typesagent.Model
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "AgentModel", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			sID, err := decodeString(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "tier":
+			sTier, err := decodeString(item, path+".tier")
+			if err != nil {
+				return out, err
+			}
+			out.Tier = sTier
+		default:
+			return out, unknownMember(path, "AgentModel", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeWorker decodes a Buzz AgentWorker, an object instance or a map, into a typesagent.Worker.
+func DecodeWorker(v vm.Value) (typesagent.Worker, error) {
+	return decodeWorker(v, "agentWorker")
+}
+
+func decodeWorker(v vm.Value, path string) (typesagent.Worker, error) {
+	var out typesagent.Worker
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "AgentWorker", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "type":
+			sType, err := decodeEnum(item, path+".type", "WorkerType", enumWorkerTypeValues)
+			if err != nil {
+				return out, err
+			}
+			out.Type = typesagent.WorkerType(sType)
+		case "reason":
+			sReason, err := decodeString(item, path+".reason")
+			if err != nil {
+				return out, err
+			}
+			out.Reason = sReason
+		default:
+			return out, unknownMember(path, "AgentWorker", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeSpec decodes a Buzz AgentSpec, an object instance or a map, into a typesagent.Spec.
+func DecodeSpec(v vm.Value) (typesagent.Spec, error) {
+	return decodeSpec(v, "agentSpec")
+}
+
+func decodeSpec(v vm.Value, path string) (typesagent.Spec, error) {
+	var out typesagent.Spec
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "AgentSpec", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "model":
+			xModel, err := decodeModel(item, path+".model")
+			if err != nil {
+				return out, err
+			}
+			out.Model = xModel
+		case "instructions":
+			sInstructions, err := decodeString(item, path+".instructions")
+			if err != nil {
+				return out, err
+			}
+			out.Instructions = sInstructions
+		case "worker":
+			xWorker, err := decodeWorker(item, path+".worker")
+			if err != nil {
+				return out, err
+			}
+			out.Worker = xWorker
+		default:
+			return out, unknownMember(path, "AgentSpec", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeJobClaim decodes a Buzz JobClaim, an object instance or a map, into a types.JobClaim.
 func DecodeJobClaim(v vm.Value) (types.JobClaim, error) {
 	return decodeJobClaim(v, "jobClaim")
@@ -8603,12 +8708,16 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.Parent = sParent
-		case "criteria":
-			sCriteria, err := decodeString(item, path+".criteria")
-			if err != nil {
-				return out, err
+		case "agent":
+			if !item.IsNull() {
+				var optAgent typesagent.Spec
+				xAgent, err := decodeSpec(item, path+".agent")
+				if err != nil {
+					return out, err
+				}
+				optAgent = xAgent
+				out.Agent = &optAgent
 			}
-			out.Criteria = sCriteria
 		case "checkpoint":
 			sCheckpoint, err := decodeString(item, path+".checkpoint")
 			if err != nil {
@@ -8657,12 +8766,6 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.Breaks = strsBreaks
-		case "model":
-			sModel, err := decodeString(item, path+".model")
-			if err != nil {
-				return out, err
-			}
-			out.Model = sModel
 		case "modelTier":
 			if !item.IsNull() {
 				var optModelTier typesagent.JobModelTier
@@ -8697,12 +8800,6 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.Follows = sFollows
-		case "freshReason":
-			sFreshReason, err := decodeString(item, path+".freshReason")
-			if err != nil {
-				return out, err
-			}
-			out.FreshReason = sFreshReason
 		case "reworkRounds":
 			nReworkRounds, err := decodeInt(item, path+".reworkRounds")
 			if err != nil {
@@ -9576,6 +9673,7 @@ var enumSymlinkPolicyValues = []string{"", "refuse", "keep", "follow"}
 var enumToolCapabilityValues = []string{"", "runs", "reads", "writes", "spawns", "network", "inert"}
 var enumVariantValues = []string{"", "v1", "v2", "v3", "v8"}
 var enumVersionComponentValues = []string{"", "major", "minor", "patch"}
+var enumWorkerTypeValues = []string{"resume", "new"}
 
 // mismatch names an object by its type, which says more than "object".
 func mismatch(path, want string, got vm.Value) error {

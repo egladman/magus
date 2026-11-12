@@ -124,7 +124,7 @@ func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) typ
 			Message: fmt.Sprintf("lease %q is bound here, and no row declares it", id),
 			Details: []string{
 				"the guard grades every write here as an unattributed edit: advisory, never denied",
-				"declare the row under this id: " + hint.JobFork.With(id, "--criteria", "<criteria>"),
+				"declare the row under this id: " + hint.JobFork.With(id, "--instructions", "<instructions>"),
 			},
 		}
 	}

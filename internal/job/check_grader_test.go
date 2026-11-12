@@ -111,7 +111,7 @@ func TestDeniedCheckProblemsAcceptWhatTheGuardLets(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rec.graded, 1)
 
-	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
+	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Agent = modelRequest("opus") }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 1, "an update that leaves the check alone is not graded again")
 

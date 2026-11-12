@@ -149,6 +149,16 @@ export function jobKey(job: Job): string {
   return job.name.startsWith("jobs/") ? job.name.slice("jobs/".length) : job.name;
 }
 
+// jobInstructions is the agent section's prose, "" with no agent.
+export function jobInstructions(job: Job): string {
+  return job.agent?.instructions ?? "";
+}
+
+// jobModel is the requested model: its tier, else its host model id.
+export function jobModel(job: Job): string {
+  return job.agent?.model?.tier || job.agent?.model?.id || "";
+}
+
 // sizeLine is how much there is to maintain, for a job that maintains something. Both halves are
 // optional on the wire - a job that reconciles rather than trims reports no size - so a job with
 // neither renders nothing rather than "0 B".

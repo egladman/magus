@@ -48,7 +48,7 @@ func TestNewJobOutcomeReadsTheEndedRow(t *testing.T) {
 	t.Parallel()
 
 	row := lease("a")
-	row.Model = "sonnet"
+	row.Agent.Model = agent.Model{ID: "sonnet"}
 	row.State = types.StateFail
 	row.Created = 100
 	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
@@ -221,7 +221,7 @@ func TestStoreRecordsAnOutcomeWhenARowEnds(t *testing.T) {
 
 	s, history := outcomeStore(t, tierSet(t), nil, false)
 	row := lease("a")
-	row.Model = ""
+	row.Agent.Model = agent.Model{}
 	running := endWith(t, s, row, types.StateRunning)
 	require.Empty(t, recordedJobs(t, history), "a row that is still taken has no outcome")
 
@@ -235,7 +235,7 @@ func TestStoreRecordsAnOutcomeWhenARowEnds(t *testing.T) {
 	assert.Equal(t, wantJob, jobs[0])
 	assert.Positive(t, jobs[0].Ended)
 
-	row.Criteria = "reworded after it failed"
+	row.Agent = agent.Instructed("reworded after it failed")
 	endWith(t, s, row, types.StateFail)
 	assert.Len(t, recordedJobs(t, history), 1, "a row that was already over records nothing again")
 }
@@ -245,7 +245,7 @@ func TestStoreRecordsNothingForADryRunOrAnUntieredRow(t *testing.T) {
 
 	dry, dryHistory := outcomeStore(t, tierSet(t), nil, true)
 	row := lease("a")
-	row.Model = ""
+	row.Agent.Model = agent.Model{}
 	endWith(t, dry, endWith(t, dry, row, types.StateRunning), types.StatePass)
 	assert.NoFileExists(t, dryHistory, "a dry run writes no history")
 
@@ -259,7 +259,7 @@ func TestStoreRefusesToEndARowWhoseConfigDoesNotRead(t *testing.T) {
 
 	s, _ := outcomeStore(t, tierSet(t), nil, false)
 	row := lease("a")
-	row.Model = ""
+	row.Agent.Model = agent.Model{}
 	running := endWith(t, s, row, types.StateRunning)
 	require.NoError(t, os.WriteFile(filepath.Join(s.root, config.Filename), []byte("history_path: [not, a, path]\n"), 0o644))
 
@@ -279,12 +279,12 @@ func TestStoreFeedsRecordedOutcomesToTheMatrix(t *testing.T) {
 	matrix := countingMatrix{answer: economyAnswer()}
 	s, _ := outcomeStore(t, tierSet(t), matrix.choose, false)
 	first := lease("a")
-	first.Model = ""
+	first.Agent.Model = agent.Model{}
 	endWith(t, s, endWith(t, s, first, types.StateRunning), types.StatePass)
 	require.Empty(t, matrix.seen.History, "the first fork has no history to read")
 
 	second := lease("b")
-	second.Model = ""
+	second.Agent.Model = agent.Model{}
 	seed(t, s, second)
 
 	require.Len(t, matrix.seen.History, 1)
@@ -429,10 +429,10 @@ func TestStoreRecordsTheParentAttemptProjectsAndWork(t *testing.T) {
 	s, history := outcomeStore(t, tierSet(t), nil, false)
 	s.owners = func(context.Context, []string) ([]string, error) { return []string{"internal/job", "types"}, nil }
 	parent := lease("root")
-	parent.Model = ""
+	parent.Agent.Model = agent.Model{}
 	seed(t, s, parent)
 	child := lease("w")
-	child.Model, child.Parent = "", "root"
+	child.Agent.Model, child.Parent = agent.Model{}, "root"
 	running := endWith(t, s, child, types.StateRunning)
 	call(t, s.cacheDir, "w", "file.read", 10_000, "pass")
 	call(t, s.cacheDir, "w", "file.write", 30_000, "pass")
@@ -461,7 +461,7 @@ func TestStoreRecordsNoWorkForAHolderWithNoObservedCall(t *testing.T) {
 
 	s, history := outcomeStore(t, tierSet(t), nil, false)
 	row := lease("a")
-	row.Model = ""
+	row.Agent.Model = agent.Model{}
 	endWith(t, s, endWith(t, s, row, types.StateRunning), types.StatePass)
 
 	jobs := recordedJobs(t, history)

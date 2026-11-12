@@ -12,12 +12,12 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'shop'
 
-exec magus job fork scout/first --read-only --criteria 'read the tests'
+exec magus job fork scout/first --read-only --instructions 'read the tests'
 
 # A build from commit 8a9d, committed in 2099, wrote the store.
 exec sh -c 'f=$(find "$XDG_STATE_HOME" -name jobs.jsonl) && sed "1s/}\$/,\"writer\":{\"commit\":\"8a9d\",\"time\":\"2099-01-01T00:00:00Z\"}}/" "$f" > "$f.new" && mv "$f.new" "$f"'
 
-exec magus job fork scout/second --read-only --criteria 'read the tests'
+exec magus job fork scout/second --read-only --instructions 'read the tests'
 exec magus ls jobs --all
 stdout 'scout/first'
 stdout 'scout/second'
@@ -25,7 +25,7 @@ stdout 'scout/second'
 # The store now requires a feature this build lacks.
 exec sh -c 'f=$(find "$XDG_STATE_HOME" -name jobs.jsonl) && sed "1s/}\$/,\"requires\":[\"jobs-v99\"]}/" "$f" > "$f.new" && mv "$f.new" "$f"'
 
-! exec magus job fork scout/third --read-only --criteria 'read the tests'
+! exec magus job fork scout/third --read-only --instructions 'read the tests'
 stderr '\[MGS3051\]'
 stderr 'requires "jobs-v99"'
 stderr 'update magus'

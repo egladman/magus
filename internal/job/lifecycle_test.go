@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -422,7 +423,7 @@ func (s *rowKeepsItsPathsSuite) TestAbandonmentKeepsEveryPath() {
 }
 
 func (s *rowKeepsItsPathsSuite) TestRejectionGivesUpOnlyAnUntouchedPathAnotherJobTook() {
-	taker := types.Job{ID: "taker", Criteria: "c", WritePaths: []string{"docs/reference/*.md"}, State: types.StateRunning}
+	taker := types.Job{ID: "taker", Agent: agent.Instructed("c"), WritePaths: []string{"docs/reference/*.md"}, State: types.StateRunning}
 	row := acceptRow()
 	loc := declared(s.T(), row, taker)
 	result := passingResult()
@@ -511,7 +512,7 @@ func TestWaitNeverPassesOnEvidenceOfAnEarlierSpec(t *testing.T) {
 	resolver := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
 	_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolver)
 	require.NoError(t, err)
-	respecced, err := NewStore(loc).Update(t.Context(), result.Job, func(u *types.Job) { u.Criteria = "also cover the console" })
+	respecced, err := NewStore(loc).Update(t.Context(), result.Job, func(u *types.Job) { u.Agent = agent.Instructed("also cover the console") })
 	require.NoError(t, err)
 	require.Equal(t, 2, respecced.Generation)
 
@@ -875,13 +876,13 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, abs, taken.CheckoutRoot)
 
-	seed(t, s, types.Job{ID: "w", State: types.StateDeclared, Checkpoint: "abc", Criteria: "rewritten"})
+	seed(t, s, types.Job{ID: "w", State: types.StateDeclared, Checkpoint: "abc", Agent: agent.Instructed("rewritten")})
 	require.NoError(t, os.RemoveAll(checkout))
 
 	rows := states(t, s)
 	assert.Equal(t, stamped(types.Job{
 		ID:           "w",
-		Criteria:     "rewritten",
+		Agent:     agent.Instructed("rewritten"),
 		Checkpoint:   "abc",
 		State:        types.StateNoReturn,
 		ReportedBase: taken.ReportedBase,
@@ -1116,7 +1117,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 			t.Parallel()
 
 			row := types.Job{
-				ID: "goal", Criteria: "the goal holds", WritePaths: []string{"."}, State: types.StateRunning, Created: 1,
+				ID: "goal", Agent: agent.Instructed("the goal holds"), WritePaths: []string{"."}, State: types.StateRunning, Created: 1,
 				Checkpoint: cmp.Or(tc.checkpoint, checkpoint), CheckoutRoot: cmp.Or(tc.checkout, worker),
 				Goals: []types.Goal{tc.goal.Resolve()},
 			}

@@ -90,9 +90,6 @@ Make a new checkout of this repository for the job at this directory, outside th
 \fB\-\-checkpoint\fR \fImagus vcs checkpoint -o name\fR
 The working state this job is handed, as magus vcs checkpoint \-o name prints it
 .TP
-\fB\-\-criteria\fR \fIstring\fR
-What this job is for and what done means, as prose; the machine\-checkable half is \-\-check, and the goals a \-\-stdin record declares
-.TP
 \fB\-\-delivery\fR \fIstring\fR
 How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)
 .TP
@@ -105,8 +102,14 @@ A job this one waits on; repeatable or comma\-separated
 \fB\-\-[no\-]fix\fR (default: off)
 Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain
 .TP
+\fB\-\-instructions\fR \fIstring\fR
+What this job is for and what done means, as prose for its agent; the machine\-checkable half is \-\-check, and the goals a \-\-stdin record declares
+.TP
 \fB\-\-model\fR \fIstring\fR
 The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier
+.TP
+\fB\-\-new\-worker\fR \fIstring\fR
+Start a new worker for this job instead of resuming the warm one of the job it follows, for this reason
 .TP
 \fB\-\-parent\fR \fIstring\fR
 The job this one is forked from

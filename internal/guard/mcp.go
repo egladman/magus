@@ -21,11 +21,11 @@ import (
 // writePathsParam is the one list a bound caller may shrink.
 const writePathsParam = "write_paths"
 
-// mcpElidedParams render as a presence marker instead of their value. No rule reads this
-// one, and criteria are free prose: the rendered line is recorded in the activity trail, so
-// copying it there would put a caller's sentences into an audit record shaped like a
-// command. Presence is all the rebind rule needs, since naming it at all is a rewrite.
-var mcpElidedParams = map[string]bool{"criteria": true}
+// mcpElidedParams render as a presence marker instead of their value. The
+// agent section holds a caller's prose, and the rendered line lands in the
+// activity trail. Presence is all the rebind rule needs, since naming it at
+// all is a rewrite.
+var mcpElidedParams = map[string]bool{"agent": true}
 
 // mcpElidedValue stands in for an elided value. A word rather than an empty string: an
 // empty value is how the merge spells an explicit clear, and the two must not render alike.

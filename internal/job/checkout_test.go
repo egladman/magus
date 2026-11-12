@@ -300,7 +300,7 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}
 		}, config.Jobs{}, nil)
 		require.NoError(t, err)
-		_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
+		_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) { u.Agent = modelRequest("opus") }, config.Jobs{}, nil)
 		require.NoError(t, err)
 	})
 }

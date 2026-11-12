@@ -49,7 +49,7 @@ func TestModelTierContextCapAdvisesPastTheTiersCap(t *testing.T) {
 func TestModelTierContextCapNeedsATierWithACap(t *testing.T) {
 	set := testModelTiers(t, "claude-code")
 	lease := fixture.FleetLeases()[0]
-	lease.Model = "sonnet"
+	lease.Agent = &agent.Spec{Model: agent.Model{ID: "sonnet"}, Worker: agent.Worker{Type: agent.WorkerTypeResume}}
 	ctx := tierFixture(t, set, lease)
 	at := hookLocation(ctx, Dependencies{})
 	who := hookAttribution{Host: "claude-code", Session: "s", Agent: "a1"}

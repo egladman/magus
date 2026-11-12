@@ -155,7 +155,7 @@ func newWorkspace(t, owner *testing.T, host *hostDriver) *workspace {
 	w.magus(t, "agent", "harness", "verify", "--id", host.id)
 	w.magus(t, "agent", "harness", "install", "--id", host.id)
 	w.magus(t, "job", "fork", jobID, "--write-paths", "probe.txt", "--check", "generate .",
-		"--criteria", w.code("BRIEF")+" is this lease's code word; a host end-to-end probe")
+		"--instructions", w.code("BRIEF")+" is this lease's code word; a host end-to-end probe")
 	w.probeRules(t, host.id)
 	host.wire(t, w)
 	w.ready = time.Now().UnixMilli()

@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -75,7 +76,7 @@ func autoClaimFixture(t *testing.T, row types.Job, others ...types.Job) (context
 }
 
 func autoClaimRow() types.Job {
-	return types.Job{ID: "render-change", Criteria: "change hint.Render", State: types.StateRunning,
+	return types.Job{ID: "render-change", Agent: agent.Instructed("change hint.Render"), State: types.StateRunning,
 		WritePaths: []string{"internal/hint/render.go"}, Registered: 1}
 }
 
@@ -117,7 +118,7 @@ func TestGradeLeasedWriteClaimsATestOfAFileTheJobHolds(t *testing.T) {
 }
 
 func TestGradeLeasedWriteDeniesWhatItWillNotClaim(t *testing.T) {
-	holder := types.Job{ID: "held-change", Criteria: "own held", State: types.StateRunning,
+	holder := types.Job{ID: "held-change", Agent: agent.Instructed("own held"), State: types.StateRunning,
 		WritePaths: []string{"internal/held/held.go"}, Registered: 1}
 	for name, tc := range map[string]struct {
 		path, stop string

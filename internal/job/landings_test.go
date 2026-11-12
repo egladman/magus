@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // A probe history appends what changed, and is rewritten to the entries still kept when one
@@ -764,7 +765,7 @@ func (s *unmergedSuite) TestSettleRefusesARowNothingDeclares() {
 func (s *unmergedSuite) TestSettleRefusesARecordAlsoDeclaringASpec() {
 	seed(s.T(), s.store, types.Job{ID: "r", State: types.StatePass})
 
-	_, err := s.settle(types.Declaration{ID: "r", LeftUnmerged: "dropped", Criteria: "more"})
+	_, err := s.settle(types.Declaration{ID: "r", LeftUnmerged: "dropped", Agent: agent.Instructed("more")})
 
 	s.Require().ErrorContains(err, "settles a job and declares nothing")
 }

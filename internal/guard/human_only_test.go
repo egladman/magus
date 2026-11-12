@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -113,7 +114,7 @@ func benchWorker() types.Job {
 	return types.Job{
 		ID:         "bench/run",
 		Parent:     "root",
-		Criteria:   "run the benchmark",
+		Agent:   agent.Instructed("run the benchmark"),
 		WritePaths: []string{"benchmarks/agent/**"},
 		Check:      &types.LeaseCheck{Target: "agent-bench-run", Project: "."},
 		State:      types.StateRunning,

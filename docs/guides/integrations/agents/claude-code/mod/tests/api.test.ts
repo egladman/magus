@@ -46,7 +46,7 @@ describe('parseJobs', () => {
             parent: 'api',
             holder: 'JOB_HOLDER_SESSION',
             state: 'running',
-            model: 'opus',
+            agent: { model: { id: 'opus' }, worker: { type: 'resume' } },
             check: 'magus run go-test api',
             writePaths: ['api/store.go'],
             goals: [{ id: 'gone', kind: 'symbol' }],

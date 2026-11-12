@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -67,7 +68,7 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 			State: string(types.StateRunning),
 			Exec:  hint.JobExec.With("f2-guard"),
 			// Longer than a line on purpose: the clip is part of the contract.
-			Criteria:   strings.Repeat("hold the boundary ", 20),
+			Instructions:   strings.Repeat("hold the boundary ", 20),
 			Validation: "magus run test internal/ledger",
 		}},
 		Failures: []briefFailure{{
@@ -245,7 +246,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	guardRow := types.Job{
 		ID:           "f2-guard",
 		State:        types.StateRunning,
-		Criteria:     "hold the boundary\nsecond line nobody reads here",
+		Agent:        typesagent.Instructed("hold the boundary\nsecond line nobody reads here"),
 		Validation:   "magus run test internal/ledger",
 		WritePaths:   []string{"internal/ledger"},
 		CheckoutRoot: root,
@@ -285,7 +286,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 			ID:         "f2-guard",
 			State:      string(types.StateRunning),
 			Exec:       hint.JobExec.With("f2-guard"),
-			Criteria:   "hold the boundary",
+			Instructions:   "hold the boundary",
 			Validation: "magus run test internal/ledger",
 		}},
 		Failures: []briefFailure{{

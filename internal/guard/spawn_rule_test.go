@@ -304,7 +304,7 @@ func TestApprovedResolveFailureIsReported(t *testing.T) {
 
 // A built-in advice and a workspace advice both reach the reader, and the trail names both.
 func TestDecidedByNamesBothAdvisingSides(t *testing.T) {
-	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	row := types.Job{ID: "wave/worker", Agent: agent.Instructed("the guard"), WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	execHere(t, ctx, row.ID)
@@ -319,7 +319,7 @@ func TestDecidedByNamesBothAdvisingSides(t *testing.T) {
 
 // Role is computed from the job store, never declared by the caller.
 func TestSpawnRuleRoleIsComputed(t *testing.T) {
-	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	row := types.Job{ID: "wave/worker", Agent: agent.Instructed("the guard"), WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 
 	probe := &spawnRuleProbe{}
@@ -428,7 +428,7 @@ func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
 
 // A workspace advise joins a built-in one rather than being dropped behind it.
 func TestWorkspaceAdviseJoinsABuiltInAdvise(t *testing.T) {
-	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	row := types.Job{ID: "wave/worker", Agent: agent.Instructed("the guard"), WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 	execHere(t, ctx, row.ID)
 
@@ -827,7 +827,7 @@ func TestSubagentStopRecordsOnlyReportedUsage(t *testing.T) {
 // The rule reads the same job rows the guard graded the call against, through the
 // snapshot magus\workspace().jobs answers from.
 func TestSpawnRuleSeesTheGuardsJobRows(t *testing.T) {
-	row := types.Job{ID: "guard-facts", Criteria: "the seam", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	row := types.Job{ID: "guard-facts", Agent: agent.Instructed("the seam"), WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 	var seen []job.Snapshot
 	rule := func(ctx context.Context, _ types.SpawnRequest, _ hint.Gate) (types.GuardVerdict, error) {
@@ -1327,9 +1327,9 @@ func gradedAs(v types.GuardJudgment) graded {
 // CLI wrote a checkout-wide marker, the orchestrator's session fell back to it, and its
 // next `job fork` and `git merge` were refused as the worker's.
 func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
-	research := types.Job{ID: "linux-platform-design", Parent: "harness-audit", Criteria: "research only", ReadOnly: true, State: types.StateDeclared, Checkpoint: "23558048b"}
+	research := types.Job{ID: "linux-platform-design", Parent: "harness-audit", Agent: agent.Instructed("research only"), ReadOnly: true, State: types.StateDeclared, Checkpoint: "23558048b"}
 	ctx, root := fleetFixture(t,
-		types.Job{ID: "harness-audit", Criteria: "the audit", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}},
+		types.Job{ID: "harness-audit", Agent: agent.Instructed("the audit"), State: types.StateRunning, WritePaths: []string{"internal/guard/**"}},
 		research)
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	const session = "8f2c6a1e"
@@ -1348,11 +1348,11 @@ func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
 	assert.Equal(t, graded{Lease: research.ID, From: types.LeaseSourceAgent}, gradedAs(child), "the child is graded under the job it took")
 
 	got := map[string]graded{}
-	for _, command := range []string{"./magus job fork harness-audit/next --criteria 'the next step'", "git merge linux-platform-design"} {
+	for _, command := range []string{"./magus job fork harness-audit/next --instructions 'the next step'", "git merge linux-platform-design"} {
 		got[command] = gradedAs(Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "", command), Host: "claude-code"}))
 	}
 	assert.Equal(t, map[string]graded{
-		"./magus job fork harness-audit/next --criteria 'the next step'": {},
+		"./magus job fork harness-audit/next --instructions 'the next step'": {},
 		"git merge linux-platform-design":                                {},
 	}, got, "the parent sharing the child's session and checkout acts under nothing")
 

@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -391,7 +392,7 @@ func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {
 func narrowLease() types.Job {
 	return types.Job{
 		ID:         "harness/lease-scoped-deny",
-		Criteria:   "lease-scoped denies in the guard",
+		Agent:   agent.Instructed("lease-scoped denies in the guard"),
 		WritePaths: []string{"cmd/magus/**"},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
 		State:      types.StateRunning,
@@ -751,7 +752,7 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 func figuresLease() types.Job {
 	return types.Job{
 		ID:         "figures/flow",
-		Criteria:   "draw the flow figure",
+		Agent:   agent.Instructed("draw the flow figure"),
 		WritePaths: []string{"docs/figures/flow.md", "docs/gen/figures/flow.svg"},
 		Check:      &types.LeaseCheck{Target: "diagrams_generate", Project: "docs"},
 		State:      types.StateRunning,
@@ -792,7 +793,7 @@ func figuresWorkspace(t *testing.T) Dependencies {
 func testCheckLease() types.Job {
 	return types.Job{
 		ID:         "guard/fix",
-		Criteria:   "fix a guard rule",
+		Agent:   agent.Instructed("fix a guard rule"),
 		WritePaths: []string{"internal/guard/**"},
 		Check:      &types.LeaseCheck{Target: "test", Project: "."},
 		State:      types.StateRunning,
@@ -1037,7 +1038,7 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 
 	lease := func(writePaths ...string) types.Job {
 		return types.Job{
-			ID: "docs/jobs", Criteria: "document jobs", WritePaths: writePaths,
+			ID: "docs/jobs", Agent: agent.Instructed("document jobs"), WritePaths: writePaths,
 			Check: &types.LeaseCheck{Target: "format", Project: "."}, State: types.StateRunning, Registered: 1,
 		}
 	}
@@ -1099,7 +1100,7 @@ func TestWorkerCheckOnlyRefusesAnOpRewrite(t *testing.T) {
 	ws := formatChainWorkspace(t)
 	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
 	row := types.Job{
-		ID: "docs/jobs", Criteria: "document jobs", WritePaths: []string{"docs/**"},
+		ID: "docs/jobs", Agent: agent.Instructed("document jobs"), WritePaths: []string{"docs/**"},
 		Check: &types.LeaseCheck{Target: "format", Project: "."}, State: types.StateRunning, Registered: 1,
 	}
 	for _, tt := range []struct {
@@ -1183,9 +1184,9 @@ func formatChainWorkspace(t *testing.T) *typestest.MockWorkspaceRepository {
 // TestRowJudgeHoldersSkipAnExitedRow: an exited row filed its result and holds nothing, so
 // it never blocks a run regenerating an output in its paths; a running row still does.
 func TestRowJudgeHoldersSkipAnExitedRow(t *testing.T) {
-	me := types.Job{ID: "me", Criteria: "c", WritePaths: []string{"docs/a.md"}, State: types.StateRunning, Registered: 1, Created: 2}
-	exited := types.Job{ID: "exited", Criteria: "c", WritePaths: []string{"coverage/**"}, State: types.StateExited, Registered: 1, Created: 1}
-	running := types.Job{ID: "running", Criteria: "c", WritePaths: []string{"gen/**"}, State: types.StateRunning, Registered: 1, Created: 1}
+	me := types.Job{ID: "me", Agent: agent.Instructed("c"), WritePaths: []string{"docs/a.md"}, State: types.StateRunning, Registered: 1, Created: 2}
+	exited := types.Job{ID: "exited", Agent: agent.Instructed("c"), WritePaths: []string{"coverage/**"}, State: types.StateExited, Registered: 1, Created: 1}
+	running := types.Job{ID: "running", Agent: agent.Instructed("c"), WritePaths: []string{"gen/**"}, State: types.StateRunning, Registered: 1, Created: 1}
 	ctx, root := fleetFixture(t, me, exited, running)
 	deps := Dependencies{}
 	judge := newRowJudge(ctx, deps, me, location{workspace: root, dir: root}, lazyWorkspace(ctx, deps, root))
@@ -1200,10 +1201,10 @@ func TestRowJudgeHoldersSkipAnExitedRow(t *testing.T) {
 // the holder's tree, so a held output names the root of the holder's tree and files one
 // attention row for it; a holder below the caller is one it waits on, and nothing is filed.
 func TestHeldDenialKnocksOnTheHoldersTreeRoot(t *testing.T) {
-	orch := types.Job{ID: "orch", Criteria: "plan", ReadOnly: true, State: types.StateRunning, Registered: 1}
-	holder := types.Job{ID: "mover", Parent: "orch", Criteria: "c", WritePaths: []string{"coverage/**"}, State: types.StateRunning, Registered: 1}
-	me := types.Job{ID: "worker", Criteria: "c", WritePaths: []string{"docs/a.md"}, State: types.StateRunning, Registered: 1}
-	child := types.Job{ID: "child", Parent: "worker", Criteria: "c", WritePaths: []string{"gen/**"}, State: types.StateRunning, Registered: 1}
+	orch := types.Job{ID: "orch", Agent: agent.Instructed("plan"), ReadOnly: true, State: types.StateRunning, Registered: 1}
+	holder := types.Job{ID: "mover", Parent: "orch", Agent: agent.Instructed("c"), WritePaths: []string{"coverage/**"}, State: types.StateRunning, Registered: 1}
+	me := types.Job{ID: "worker", Agent: agent.Instructed("c"), WritePaths: []string{"docs/a.md"}, State: types.StateRunning, Registered: 1}
+	child := types.Job{ID: "child", Parent: "worker", Agent: agent.Instructed("c"), WritePaths: []string{"gen/**"}, State: types.StateRunning, Registered: 1}
 	ctx, root := fleetFixture(t, orch, holder, me, child)
 	deps := Dependencies{}
 	v := runVerdict{run: targetRun{verb: "run", target: "buzz-test"}, held: "coverage/buzz/x.lcov", holder: holder}
@@ -1237,7 +1238,7 @@ func TestWorkerCheckOnlyJudgesTheDefaultCharms(t *testing.T) {
 	ws.EXPECT().Get(mock.Anything).Return(nil).Maybe()
 	inspect := func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }
 	row := types.Job{
-		ID: "docs/jobs", Criteria: "document jobs", WritePaths: []string{"docs/guides/jobs.md"},
+		ID: "docs/jobs", Agent: agent.Instructed("document jobs"), WritePaths: []string{"docs/guides/jobs.md"},
 		Check: &types.LeaseCheck{Target: "dprint", Project: "docs"}, State: types.StateRunning, Registered: 1,
 	}
 	for _, tt := range []struct {
@@ -1317,7 +1318,7 @@ func TestWorkerCheckOnlyNamesASlowOpen(t *testing.T) {
 // holding the caller's directory, so the rule judges that project, not the root.
 func TestWorkerCheckOnlyJudgesTheCwdProject(t *testing.T) {
 	row := types.Job{
-		ID: "docs/jobs", Criteria: "document jobs", WritePaths: []string{"docs/guides/jobs.md"},
+		ID: "docs/jobs", Agent: agent.Instructed("document jobs"), WritePaths: []string{"docs/guides/jobs.md"},
 		Check: &types.LeaseCheck{Target: "format", Project: "docs"}, State: types.StateRunning, Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
@@ -2899,7 +2900,7 @@ func TestAWideningApplyKeepsTheHoldersBinding(t *testing.T) {
 			}
 			store := storeAt(ctx)
 			_, err := store.Update(ctx, "held-job", func(cur *types.Job) {
-				*cur = types.Job{ID: "held-job", Criteria: "widen me", WritePaths: []string{"std/*.go"}, State: state,
+				*cur = types.Job{ID: "held-job", Agent: agent.Instructed("widen me"), WritePaths: []string{"std/*.go"}, State: state,
 					Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1, CheckoutRoot: own}
 			})
 			require.NoError(t, err)
@@ -2908,7 +2909,7 @@ func TestAWideningApplyKeepsTheHoldersBinding(t *testing.T) {
 			who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 			bindCaller(t, ctx, who, "held-job")
 
-			widen := types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "held-job", Criteria: "widen me",
+			widen := types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "held-job", Agent: agent.Instructed("widen me"),
 				Checkpoint: "rev-a", WritePaths: []string{"std/*.go", "cmd/*.go"},
 				Goals: []types.Goal{{ID: "done", Kind: types.GoalKindPaths, Expect: types.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
 			_, err = job.Apply(ctx, store, []types.Declaration{widen}, config.Jobs{}, nil, nil, false)
@@ -3192,7 +3193,7 @@ func TestDenyLeaseScopedRebindHandsAChildToTheStore(t *testing.T) {
 	ctx, me, bound := childFleet(t, true)
 
 	for _, command := range []string{
-		fmt.Sprintf("magus job fork %s/research --parent %s --read-only --criteria 'read the store'", me.ID, me.ID),
+		fmt.Sprintf("magus job fork %s/research --parent %s --read-only --instructions 'read the store'", me.ID, me.ID),
 		fmt.Sprintf("./magus job fork --parent=%s %s/research --read-only", me.ID, me.ID),
 		fmt.Sprintf("client op=put id=%s/research parent=%s read_only=true", me.ID, me.ID),
 		fmt.Sprintf(`magus job fork --stdin <<'EOF'
@@ -3426,14 +3427,14 @@ func writePathFleet() []types.Job {
 	return []types.Job{
 		{
 			ID:         "lease-a",
-			Criteria:   "own the ledger store",
+			Agent:   agent.Instructed("own the ledger store"),
 			WritePaths: []string{"internal/ledger"},
 			State:      types.StateRunning,
 			Registered: 1,
 		},
 		{
 			ID:         "lease-b",
-			Criteria:   "grade writes in the guard",
+			Agent:   agent.Instructed("grade writes in the guard"),
 			WritePaths: []string{"cmd/magus"},
 			DenyPaths:  []string{"cmd/magus/gen"},
 			State:      types.StateRunning,
@@ -4023,7 +4024,7 @@ func (s *CherryPickWriteSuite) TestAnUnleasedSessionIsNotGraded() {
 
 func regeneratingLease(id string) types.Job {
 	return types.Job{
-		ID: id, Criteria: "add a flag", WritePaths: []string{"cli/registry.go"},
+		ID: id, Agent: agent.Instructed("add a flag"), WritePaths: []string{"cli/registry.go"},
 		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
 	}
 }
@@ -4088,7 +4089,7 @@ func TestWorkerRegeneratesItsOwnOutputs(t *testing.T) {
 func TestWorkerRegenerateWaitsForTheFirstHolder(t *testing.T) {
 	deps := regeneratingWorkspace(t)
 	owner := types.Job{
-		ID: "a/lock", Criteria: "own the lock", WritePaths: []string{"testdata/api.lock"},
+		ID: "a/lock", Agent: agent.Instructed("own the lock"), WritePaths: []string{"testdata/api.lock"},
 		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
 	}
 	ended := owner
@@ -4210,7 +4211,7 @@ func (s *guardSuite) writeHeldBeside(file string, checkout func(root string) str
 // writeHeldBesideIn is writeHeldBeside with the workspace deps loads.
 func (s *guardSuite) writeHeldBesideIn(deps Dependencies, file string, checkout func(root string) string) writeGrade {
 	t := s.T()
-	holder := types.Job{ID: "a/gen", Criteria: "regenerate", WritePaths: []string{file}, State: types.StateRunning, Registered: 1}
+	holder := types.Job{ID: "a/gen", Agent: agent.Instructed("regenerate"), WritePaths: []string{file}, State: types.StateRunning, Registered: 1}
 	ctx, root := fleetFixture(t)
 	holder.CheckoutRoot = checkout(root)
 	_, err := storeAt(ctx).Update(ctx, holder.ID, func(cur *types.Job) { *cur = holder })

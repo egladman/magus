@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -220,7 +221,7 @@ func (s *owningProjectGateSuite) unresolvedStore() *Store {
 
 func (s *owningProjectGateSuite) validated(store *Store, check *types.LeaseCheck, write string) types.JobValidation {
 	v, err := ValidateFork(s.T().Context(), store, "j", func(u *types.Job) {
-		u.WritePaths, u.Check, u.Criteria = []string{write}, check, "c"
+		u.WritePaths, u.Check, u.Agent = []string{write}, check, agent.Instructed("c")
 	}, config.Jobs{}, nil)
 	s.Require().NoError(err)
 	return v

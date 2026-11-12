@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -144,7 +145,7 @@ func TestStoreGroupingLensReadsTheRecordedOutcomes(t *testing.T) {
 
 	s, _ := outcomeStore(t, tierSet(t), nil, false)
 	row := lease("a")
-	row.Model = ""
+	row.Agent.Model = agent.Model{}
 	endWith(t, s, endWith(t, s, row, types.StateRunning), types.StatePass)
 
 	got, err := s.GroupingLens(t.Context(), nil)

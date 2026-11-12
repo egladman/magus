@@ -165,7 +165,7 @@ func TestBuildCall(t *testing.T) {
 		},
 		"a backslash put":   {clientScript(imp + `magus\workspace()\putJob("a/b", opts: {"parent": "a"});`), "client op=put id=a/b parent=a"},
 		"a flat put":        {clientScript(`import "magus" as _; workspace().putJob("a/b", opts: {"parent": "a"});`), "client op=put id=a/b parent=a"},
-		"an elided value":   {clientScript(imp + `magus\workspace().putJob("a/b", opts: {"criteria": "ship the thing"});`), "client op=put id=a/b criteria=..."},
+		"an elided value":   {clientScript(imp + `magus\workspace().putJob("a/b", opts: {"agent": {"instructions": "ship the thing", "worker": {"type": "resume"}}});`), "client op=put id=a/b agent=..."},
 		"a computed id":     {clientScript(imp + `final id = "a/b"; magus\workspace().putJob(id);`), "client op=put id=%unread%"},
 		"a computed opts":   {clientScript(imp + `final o = {"parent": "a"}; magus\workspace().putJob("a/b", opts: o);`), "client op=put id=a/b opts=%unread%"},
 		"a computed value":  {clientScript(imp + `final p = "a"; magus\workspace().putJob("a/b", opts: {"parent": p});`), "client op=put id=a/b parent=%unread%"},

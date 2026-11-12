@@ -56,8 +56,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("sh", ["test/run.sh"]);
 }
 -- shop/ci/jobs.jsonl --
-{"api_version": "magus.job/v1alpha1", "id": "release/pricing", "criteria": "totals are computed in cents", "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
-{"api_version": "magus.job/v1alpha1", "id": "release/tax", "criteria": "tax rounds half up", "write_paths": ["checkout/tax.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/pricing", "agent": {"instructions": "totals are computed in cents", "worker": {"type": "resume"}}, "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/tax", "agent": {"instructions": "tax rounds half up", "worker": {"type": "resume"}}, "write_paths": ["checkout/tax.sh"], "check": {"target": "test", "project": "."}}
 -- shop/ci/evidence.tmpl.json --
 {"api_version": "magus.job-result/v1alpha1",
  "changed_paths": [],

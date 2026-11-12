@@ -32,9 +32,47 @@
       "maxLength": 128,
       "description": "Parent is the lease this one was spawned under, empty for a lease the root declared."
     },
-    "criteria": {
-      "type": "string",
-      "description": "Criteria is what this lease is for and what done means, as one block of prose. The machine-checkable half is Goals."
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["worker"],
+      "properties": {
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "tier": {
+              "type": "string"
+            }
+          },
+          "description": "Model is the requested model. Zero leaves the choice to the workspace's matrix or default."
+        },
+        "instructions": {
+          "type": "string",
+          "description": "Instructions say what the job is for and what done means, as prose a reader grades. The machine-checkable half is the job's goals."
+        },
+        "worker": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["resume", "new"]
+            },
+            "reason": {
+              "type": "string",
+              "description": "Reason says why a new worker starts instead of the warm one."
+            }
+          },
+          "description": "Worker says which worker takes the job. Its type is always written."
+        }
+      },
+      "description": "Agent is the agent section; nil is ordinary work. See [Job.Agent]."
     },
     "checkpoint": {
       "type": "string",
@@ -95,10 +133,6 @@
       },
       "description": "Breaks are the flags, JSON keys, exported symbols or stored formats the root approved this job breaking; empty means it breaks nothing on its own authority. See [Job.Breaks]."
     },
-    "model": {
-      "type": "string",
-      "description": "Model is the model or effort tier the work was matched to, a free string because hosts name their models differently."
-    },
     "weight": {
       "type": "number",
       "description": "Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an explicit 0 is out of range. See [Job.Weight]."
@@ -119,10 +153,7 @@
       "type": "string",
       "pattern": "^[./0-9a-z-]+$",
       "maxLength": 128,
-      "description": "Follows and FreshReason name the job this one continues and why its worker is not resumed for it. See [Job.Follows]."
-    },
-    "fresh_reason": {
-      "type": "string"
+      "description": "Follows names the job this one continues. See [Job.Follows]."
     },
     "checkout": {
       "type": "string",
@@ -149,10 +180,6 @@
         "type": "string"
       },
       "description": "LegacyReadPaths is the pre-rename spelling of read_paths. compat: see LegacyWritePaths."
-    },
-    "tier": {
-      "type": "string",
-      "description": "LegacyModel is the pre-rename spelling of model. compat: see LegacyWritePaths."
     },
     "check": {
       "type": "object",

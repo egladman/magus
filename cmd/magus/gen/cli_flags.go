@@ -319,8 +319,6 @@ const (
 	FlagJobForkCheckout = "checkout"
 	// job fork: --checkpoint
 	FlagJobForkCheckpoint = "checkpoint"
-	// job fork: --criteria
-	FlagJobForkCriteria = "criteria"
 	// job fork: --delivery
 	FlagJobForkDelivery = "delivery"
 	// job fork: --deny-paths
@@ -329,8 +327,12 @@ const (
 	FlagJobForkDependsOn = "depends-on"
 	// job fork: --fix
 	FlagJobForkFix = "fix"
+	// job fork: --instructions
+	FlagJobForkInstructions = "instructions"
 	// job fork: --model
 	FlagJobForkModel = "model"
+	// job fork: --new-worker
+	FlagJobForkNewWorker = "new-worker"
 	// job fork: --parent
 	FlagJobForkParent = "parent"
 	// job fork: --read-only
@@ -1591,19 +1593,20 @@ func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
 // It does NOT carry --write-paths, --deny-paths, --read-paths, --depends-on: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type JobForkFlags struct {
-	Schema      bool          // --[no-]schema
-	Stdin       bool          // --[no-]stdin
-	Criteria    string        // --criteria
-	Timeout     time.Duration // --timeout
-	Parent      string        // --parent
-	Checkpoint  string        // --checkpoint
-	Check       string        // --check
-	Model       string        // --model
-	BriefFormat string        // --brief-format
-	Delivery    string        // --delivery
-	ReadOnly    bool          // --[no-]read-only
-	Checkout    string        // --checkout
-	Fix         bool          // --[no-]fix
+	Schema       bool          // --[no-]schema
+	Stdin        bool          // --[no-]stdin
+	Instructions string        // --instructions
+	NewWorker    string        // --new-worker
+	Timeout      time.Duration // --timeout
+	Parent       string        // --parent
+	Checkpoint   string        // --checkpoint
+	Check        string        // --check
+	Model        string        // --model
+	BriefFormat  string        // --brief-format
+	Delivery     string        // --delivery
+	ReadOnly     bool          // --[no-]read-only
+	Checkout     string        // --checkout
+	Fix          bool          // --[no-]fix
 }
 
 // BindJobFork registers `magus job fork`'s flags on fs and returns the destination.
@@ -1613,7 +1616,8 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	cmdline.NegatedBoolVar(fs, &f.Schema, FlagJobForkSchema)
 	fs.BoolVar(&f.Stdin, FlagJobForkStdin, false, "Read one job as JSON on stdin instead of taking it from flags")
 	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagJobForkStdin)
-	fs.StringVar(&f.Criteria, FlagJobForkCriteria, "", "What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares")
+	fs.StringVar(&f.Instructions, FlagJobForkInstructions, "", "What this job is for and what done means, as prose for its agent; the machine-checkable half is --check, and the goals a --stdin record declares")
+	fs.StringVar(&f.NewWorker, FlagJobForkNewWorker, "", "Start a new worker for this job instead of resuming the warm one of the job it follows, for this reason")
 	cmdline.DurationVar(fs, &f.Timeout, FlagJobForkTimeout, 0, "m", "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout. Bare numbers are minutes.")
 	fs.StringVar(&f.Parent, FlagJobForkParent, "", "The job this one is forked from")
 	fs.StringVar(&f.Checkpoint, FlagJobForkCheckpoint, "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")

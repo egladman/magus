@@ -11,11 +11,11 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'shop'
 
-exec magus job fork scout --read-only --criteria 'read the pricing code' --checkout $WORK/scout
+exec magus job fork scout --read-only --instructions 'read the pricing code' --checkout $WORK/scout
 exec magus job exit scout
 ! exists $WORK/scout
 
-exec magus job fork scout --read-only --criteria 'read the pricing code again' --checkout $WORK/again
+exec magus job fork scout --read-only --instructions 'read the pricing code again' --checkout $WORK/again
 stdout '^checkout .*again: made for job scout at '
 exists $WORK/again/magusfile.buzz
 

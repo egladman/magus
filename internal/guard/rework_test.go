@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -36,7 +37,7 @@ func newReworkFixture(t *testing.T) reworkFixture {
 
 func (f reworkFixture) putJob(t *testing.T, state types.JobState) {
 	t.Helper()
-	row := types.Job{ID: "guard-facts", Criteria: "prove it", WritePaths: []string{"a.go"}, Validation: "magus run test", State: state}
+	row := types.Job{ID: "guard-facts", Agent: agent.Instructed("prove it"), WritePaths: []string{"a.go"}, Validation: "magus run test", State: state}
 	_, err := f.store.Update(f.testContext(t), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 }

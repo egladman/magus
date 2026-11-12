@@ -20,10 +20,10 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'shop before the refactor'
 
-exec magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
+exec magus job fork refactor/pricing --instructions 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
 cmp stdout $WORK/fork.out
 ! stderr 'the console is not running'
-exec magus job fork refactor/tax --criteria 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .'
+exec magus job fork refactor/tax --instructions 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .'
 exec git worktree add -q ../shop-pricing
 exec git worktree add -q ../shop-tax
 exec magus ls jobs
@@ -119,7 +119,7 @@ job: refactor/pricing
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
 skills: short
 
-criteria
+instructions
 totals are computed in cents
 
 write paths

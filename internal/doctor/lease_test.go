@@ -146,7 +146,7 @@ func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 		Message: `lease "adj/no-such-lease" is bound here, and no row declares it`,
 		Details: []string{
 			"the guard grades every write here as an unattributed edit: advisory, never denied",
-			"declare the row under this id: " + hint.JobFork.With("adj/no-such-lease", "--criteria", "<criteria>"),
+			"declare the row under this id: " + hint.JobFork.With("adj/no-such-lease", "--instructions", "<instructions>"),
 		},
 	}, got)
 }

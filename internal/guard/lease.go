@@ -2093,7 +2093,7 @@ func childForkRebind(f childFork, h holder, verb, ask string) rebind {
 // forkFlagsUnbounded are the `job fork` flags, and the magus\job.put opts, that declare no
 // boundary: the lineage, the prose, the timing, read_only and the checkout the child works in.
 var forkFlagsUnbounded = map[string]bool{
-	"parent": true, "criteria": true, "model": true, "timeout": true, "checkpoint": true, "checkout": true,
+	"parent": true, "instructions": true, "new-worker": true, "agent": true, "model": true, "timeout": true, "checkpoint": true, "checkout": true,
 	"read-only": true, "read_only": true, "depends-on": true, "depends_on": true,
 	"stdin": true, "op": true, "id": true,
 }

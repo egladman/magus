@@ -468,6 +468,28 @@ func ObjectHistory(v types.History, enums ffi.EnumCases) vm.Value {
 	return enums.Instance("History", []string{"dir", "commits", "since", "files"}, []vm.Value{vm.StringValue(v.Dir), vm.IntValue(int64(v.Commits)), vm.StringValue(v.Since), vm.BoolValue(v.Files)})
 }
 
+func ObjectModel(v typesagent.Model) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StringValue(v.ID))
+	out.MapSet("tier", vm.StringValue(v.Tier))
+	return out
+}
+
+func ObjectWorker(v typesagent.Worker, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("type", enums.Case("WorkerType", string(v.Type)))
+	out.MapSet("reason", vm.StringValue(v.Reason))
+	return out
+}
+
+func ObjectSpec(v typesagent.Spec, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("model", ObjectModel(v.Model))
+	out.MapSet("instructions", vm.StringValue(v.Instructions))
+	out.MapSet("worker", ObjectWorker(v.Worker, enums))
+	return out
+}
+
 func ObjectJobModelTier(v typesagent.JobModelTier, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StringValue(v.Name))
@@ -836,6 +858,10 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	for indexRequires := range v.Schema.Requires {
 		itemsRequires[indexRequires] = vm.StringValue(v.Schema.Requires[indexRequires])
 	}
+	optAgent := vm.Null
+	if v.Agent != nil {
+		optAgent = ObjectSpec((*v.Agent), enums)
+	}
 	itemsWritePaths := make([]vm.Value, len(v.WritePaths))
 	for indexWritePaths := range v.WritePaths {
 		itemsWritePaths[indexWritePaths] = vm.StringValue(v.WritePaths[indexWritePaths])
@@ -936,7 +962,7 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	if v.WaiterEvidence != nil {
 		optWaiterEvidence = ObjectJobIntegration((*v.WaiterEvidence))
 	}
-	return enums.Instance("Job", []string{"apiVersion", "requires", "id", "parent", "criteria", "checkpoint", "writePaths", "denyPaths", "softPaths", "readPaths", "dependsOn", "integrates", "breaks", "model", "modelTier", "briefFormat", "delivery", "parentHead", "follows", "freshReason", "reworkRounds", "widenings", "claims", "generation", "maxAttempts", "maxClaims", "deferred", "leftUnmerged", "landed", "weight", "paused", "pausedBy", "pauseReason", "pausedUntil", "attempts", "prior", "rejection", "check", "validation", "goals", "state", "holder", "readOnly", "releases", "unattributed", "entries", "writeProof", "deviations", "validated", "reportedBase", "baseVerdict", "registeredBy", "registered", "holderStopped", "checkoutRoot", "worktree", "endReason", "created", "updated", "deadline", "result", "attempt", "gateAttempts", "lastRun", "integration", "waiterEvidence"}, []vm.Value{vm.StringValue(string(v.Schema.Version)), vm.ListValue(itemsRequires), vm.StringValue(v.ID), vm.StringValue(v.Parent), vm.StringValue(v.Criteria), vm.StringValue(v.Checkpoint), vm.ListValue(itemsWritePaths), vm.ListValue(itemsDenyPaths), vm.ListValue(itemsSoftPaths), vm.ListValue(itemsReadPaths), vm.ListValue(itemsDependsOn), vm.ListValue(itemsIntegrates), vm.ListValue(itemsBreaks), vm.StringValue(v.Model), optModelTier, enums.Case("BriefFormat", string(v.BriefFormat)), vm.StringValue(v.Delivery), vm.StringValue(v.ParentHead), vm.StringValue(v.Follows), vm.StringValue(v.FreshReason), vm.IntValue(int64(v.ReworkRounds)), vm.IntValue(int64(v.Widenings)), vm.ListValue(itemsClaims), vm.IntValue(int64(v.Generation)), vm.IntValue(int64(v.MaxAttempts)), vm.IntValue(int64(v.MaxClaims)), vm.ListValue(itemsDeferred), vm.StringValue(v.LeftUnmerged), vm.BoolValue(v.Landed), vm.FloatValue(float64(v.Weight)), vm.IntValue(int64(v.Paused)), ObjectOrigin(v.PausedBy, enums), vm.StringValue(v.PauseReason), vm.IntValue(int64(v.PausedUntil)), vm.IntValue(int64(v.Attempts)), vm.ListValue(itemsPrior), optRejection, optCheck, vm.StringValue(v.Validation), vm.ListValue(itemsGoals), enums.Case("JobState", string(v.State)), enums.Case("JobHolder", string(v.Holder)), vm.BoolValue(v.ReadOnly), vm.ListValue(itemsReleases), vm.ListValue(itemsUnattributed), vm.ListValue(itemsEntries), enums.Case("JobWriteProof", string(v.WriteProof)), vm.ListValue(itemsDeviations), vm.IntValue(int64(v.Validated)), vm.StringValue(v.ReportedBase), enums.Case("JobBaseVerdict", string(v.BaseVerdict)), ObjectOrigin(v.RegisteredBy, enums), vm.IntValue(int64(v.Registered)), vm.IntValue(int64(v.HolderStopped)), vm.StringValue(v.CheckoutRoot), optWorktree, vm.StringValue(v.EndReason), vm.IntValue(int64(v.Created)), vm.IntValue(int64(v.Updated)), vm.IntValue(int64(v.Deadline)), optResult, optAttempt, vm.ListValue(itemsGateAttempts), optLastRun, optIntegration, optWaiterEvidence})
+	return enums.Instance("Job", []string{"apiVersion", "requires", "id", "parent", "agent", "checkpoint", "writePaths", "denyPaths", "softPaths", "readPaths", "dependsOn", "integrates", "breaks", "modelTier", "briefFormat", "delivery", "parentHead", "follows", "reworkRounds", "widenings", "claims", "generation", "maxAttempts", "maxClaims", "deferred", "leftUnmerged", "landed", "weight", "paused", "pausedBy", "pauseReason", "pausedUntil", "attempts", "prior", "rejection", "check", "validation", "goals", "state", "holder", "readOnly", "releases", "unattributed", "entries", "writeProof", "deviations", "validated", "reportedBase", "baseVerdict", "registeredBy", "registered", "holderStopped", "checkoutRoot", "worktree", "endReason", "created", "updated", "deadline", "result", "attempt", "gateAttempts", "lastRun", "integration", "waiterEvidence"}, []vm.Value{vm.StringValue(string(v.Schema.Version)), vm.ListValue(itemsRequires), vm.StringValue(v.ID), vm.StringValue(v.Parent), optAgent, vm.StringValue(v.Checkpoint), vm.ListValue(itemsWritePaths), vm.ListValue(itemsDenyPaths), vm.ListValue(itemsSoftPaths), vm.ListValue(itemsReadPaths), vm.ListValue(itemsDependsOn), vm.ListValue(itemsIntegrates), vm.ListValue(itemsBreaks), optModelTier, enums.Case("BriefFormat", string(v.BriefFormat)), vm.StringValue(v.Delivery), vm.StringValue(v.ParentHead), vm.StringValue(v.Follows), vm.IntValue(int64(v.ReworkRounds)), vm.IntValue(int64(v.Widenings)), vm.ListValue(itemsClaims), vm.IntValue(int64(v.Generation)), vm.IntValue(int64(v.MaxAttempts)), vm.IntValue(int64(v.MaxClaims)), vm.ListValue(itemsDeferred), vm.StringValue(v.LeftUnmerged), vm.BoolValue(v.Landed), vm.FloatValue(float64(v.Weight)), vm.IntValue(int64(v.Paused)), ObjectOrigin(v.PausedBy, enums), vm.StringValue(v.PauseReason), vm.IntValue(int64(v.PausedUntil)), vm.IntValue(int64(v.Attempts)), vm.ListValue(itemsPrior), optRejection, optCheck, vm.StringValue(v.Validation), vm.ListValue(itemsGoals), enums.Case("JobState", string(v.State)), enums.Case("JobHolder", string(v.Holder)), vm.BoolValue(v.ReadOnly), vm.ListValue(itemsReleases), vm.ListValue(itemsUnattributed), vm.ListValue(itemsEntries), enums.Case("JobWriteProof", string(v.WriteProof)), vm.ListValue(itemsDeviations), vm.IntValue(int64(v.Validated)), vm.StringValue(v.ReportedBase), enums.Case("JobBaseVerdict", string(v.BaseVerdict)), ObjectOrigin(v.RegisteredBy, enums), vm.IntValue(int64(v.Registered)), vm.IntValue(int64(v.HolderStopped)), vm.StringValue(v.CheckoutRoot), optWorktree, vm.StringValue(v.EndReason), vm.IntValue(int64(v.Created)), vm.IntValue(int64(v.Updated)), vm.IntValue(int64(v.Deadline)), optResult, optAttempt, vm.ListValue(itemsGateAttempts), optLastRun, optIntegration, optWaiterEvidence})
 }
 
 func ObjectSession(v types.Session, enums ffi.EnumCases) vm.Value {

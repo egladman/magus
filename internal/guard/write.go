@@ -1161,13 +1161,12 @@ func nestedCheckout(root, abs string) bool {
 	return false
 }
 
-// criteriaLine is the lease's criteria reduced to its first line. Criteria holds what the
-// lease is for AND what done means as one block (see types.Job), and pasting all of that
-// into a denial would bury the next step under it.
+// criteriaLine is the first line of the lease's instructions. Pasting all
+// of them into a denial would bury the next step.
 func criteriaLine(u types.Job) string {
-	line, _, _ := strings.Cut(strings.TrimSpace(u.Criteria), "\n")
+	line, _, _ := strings.Cut(strings.TrimSpace(u.Instructions()), "\n")
 	if line == "" {
-		return "no criteria recorded"
+		return "no instructions recorded"
 	}
 	return line
 }

@@ -123,7 +123,7 @@ export fun tree(t: Trail, jobs: [magus\Job], all: bool, start: int) > JobTree {
     final depends = mut [<[str]>];
     foreach (id in order) {
         final j = byID[id]!;
-        nodes.append(JobBox{ id = id, state = j.state.value, model = j.model, paths = j.writePaths.len(), check = j.check?.target ?? "" });
+        nodes.append(JobBox{ id = id, state = j.state.value, model = modelWord(j), paths = j.writePaths.len(), check = j.check?.target ?? "" });
         var parent = j.parent;
         if (parent == "" or keep[parent] != true) {
             parent = spawnedBy[id] ?? "";
@@ -280,6 +280,14 @@ export fun rendered(tr: JobTree, format: str, theme: figure\Theme, console: str)
         + (if (url.value! != "") "explore: {url.value!}" else "explore: the tree is too large for a link; -o svg prints the figure"));
 }
 
+// modelWord is the model a job requests: its tier, else its host model id.
+fun modelWord(j: magus\Job) > str {
+    if (j.agent -> a) {
+        return if (a.model.tier != "") a.model.tier else a.model.id;
+    }
+    return "";
+}
+
 // fixture builds the tree of hack/testdata/session-figure-jobs.json.
 // It reads the feedback trail fixture beside it.
 // They are what magus\workspace().jobs() and magus\session().trail() return.
@@ -294,7 +302,7 @@ fun fixture() > result\Result::<JobTree> {
             foreach (p in j["writePaths"] ?? []) { paths.append(p); }
             final target = j["check"] ?? "";
             jobs.append(magus\Job{
-                id = j["id"], parent = j["parent"] ?? "", dependsOn = deps, model = j["model"] ?? "", state = magus\JobState(j["state"] ?? ""),
+                id = j["id"], parent = j["parent"] ?? "", dependsOn = deps, agent = magus\AgentSpec{ model = magus\AgentModel{ id = j["model"] ?? "" } }, state = magus\JobState(j["state"] ?? ""),
                 writePaths = paths, created = std\toInt(j["created"] ?? 0),
                 check = if (target != "") magus\LeaseCheck{ target = target, project = "." } else null,
             });

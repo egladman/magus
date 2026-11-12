@@ -47,7 +47,7 @@ stdout '"output": "cli/testdata/api\.lock"'
 stdout '"target": "\.:man-generate"'
 stdout '"source": "cli/registry\.go"'
 
-exec magus job fork flags/survey --read-only --criteria 'read the registry'
+exec magus job fork flags/survey --read-only --instructions 'read the registry'
 ! stdout 'regenerated outside'
 
 stdin $WORK/widen.json
