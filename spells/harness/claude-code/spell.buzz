@@ -215,6 +215,8 @@ fun claude_tools() > [HarnessTool] {
     foreach (name in ["Write", "Edit", "MultiEdit", "NotebookEdit"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.writes}); }
     foreach (name in ["Agent", "Task", "SendMessage", "ScheduleWakeup"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.spawns}); }
     rows.append(HarnessTool{name = "ReadNotifications", capability = ToolCapability.reads});
+    // Inert, as the desktop app's own send_message row is.
+    rows.append(HarnessTool{name = "mcp__claude-code-remote__send_message", capability = ToolCapability.inert});
     foreach (name in [
         "BashOutput", "KillShell", "TaskOutput", "TaskStop", "TodoWrite", "WebFetch", "WebSearch",
         "ExitPlanMode", "EnterPlanMode", "AskUserQuestion", "Skill", "ToolSearch",
