@@ -50,8 +50,8 @@ What the SDK offers today, in `judge.go`:
   tools, `JudgeTool`, over tool rows declared at `Open`. None of it is built:
   `./magus refs JudgeTool` answers "absent" for the symbol on this tree.
 - [ADR 0045](0045-a-worker-is-judged-by-its-checkpoint.md) proposes
-  `types.AuthoritySource`, so an embedder with no magus job store can say which revision
-  may approve a call.
+  a row reader in `types` and `magus.WithJobReader`, so an embedder with no magus job
+  store can supply the row that says which revision may approve a call.
 
 The gap: ADR 0039's door judges a tool call and nothing else. An agent in an embedder's
 loop also calls models, writes memory, advances a workflow, reaches the network, messages
@@ -154,8 +154,10 @@ lease, and it returns a verdict.
 - Built-in rules read capabilities, never kinds. A `runs` row's command, a `reads` or
   `writes` row's paths, a `spawns` row and an `external` row are judged as ADR 0039 says,
   whatever the kind is called.
-- There is no Go rule function. Policy has one home, read at the authority's revision
-  beside its approved copy (ADR 0045, part 2).
+- A rule for a kind is a Go `ActionRule` (an SDK embedder's door) or a Buzz
+  `magus\guard.action` function (the workspace's policy). Both feed the one judgment. A
+  workspace's Buzz policy is read at the row's revision beside its approved copy (ADR
+  0045, part 2); a Go rule is the embedder's own code and has no approved copy.
 
 ### 6. What stays one implementation, and what a caller supplies
 
@@ -163,9 +165,11 @@ One implementation: the rules, the policy load, the order rules run in, the stri
 decision, the verdict, the recording and the trail. Every door computes the same verdict
 for the same action against the same state.
 
-A caller supplies data and two answers: its rows, the authority (ADR 0045's
-`AuthoritySource`) and whether it can put an ask in front of a person. The lease still
-travels in the context.
+A caller supplies data and two answers: its rows, the row reader (ADR 0045's
+`magus.WithJobReader`) and whether it can put an ask in front of a person. The lease
+still travels in the context. It may also supply rules: a Go rule from an SDK embedder
+and a Buzz rule from the workspace feed the same judgment and so the same verdict
+(part 7).
 
 ### 7. Mapped onto magus
 
@@ -211,11 +215,20 @@ In the root package:
 func (m *Magus) Judge(ctx context.Context, action agent.Action) (agent.Judgment, error)
 func (m *Magus) RecordJudgment(ctx context.Context, action agent.Action, j agent.Judgment) error
 func WithActionRows(rows ...agent.ActionRow) Option
+func WithActionRule(rule ActionRule) Option
 ```
 
-- `Judge` replaces `JudgeTool`, and `WithActionRows` replaces `WithToolRows`. `ToolRule`
-  and `WithToolRule` are not built. Against ADR 0039 the root package has two fewer names
-  and no new one.
+`ActionRule` is
+`func(ctx context.Context, req agent.ActionRequest) (agent.Verdict, error)`.
+
+- `Judge` replaces `JudgeTool`, `WithActionRows` replaces `WithToolRows`, and
+  `ActionRule` and `WithActionRule` replace ADR 0039's `ToolRule` and `WithToolRule`, so
+  the names match `Judge`, `Action` and `ActionRow`. Against ADR 0039 the root package
+  has the same names renamed, none dropped and none new.
+- A rule has two doors that feed one judgment and one verdict. `WithActionRule` is the
+  SDK embedder's door: a Go program registers a rule without writing a Buzz policy. A
+  workspace's own policy stays in its Buzz, beside `magus\guard.action`. The strictest
+  decision wins across both, as it does across the built-in rules.
 - `Dir` is required when the row has `Paths` or a `Command`, and an empty one is then an
   error that names the field.
 - In Buzz, `magus\guard.action(<kind>, <fun>)` replaces ADR 0039's `magus\guard.tool`.
@@ -225,7 +238,7 @@ func WithActionRows(rows ...agent.ActionRow) Option
   and `tool_input` as the input. `unjudged-tool` becomes `unjudged-action`.
 - `magus shell` reads the same record as JSON, so a caller that is not Go reaches the
   same judgment.
-- ADR 0045's `magus.WithAuthoritySource` applies to `Judge` unchanged.
+- ADR 0045's `magus.WithJobReader` applies to `Judge` unchanged.
 
 ### State
 
@@ -236,11 +249,11 @@ func WithActionRows(rows ...agent.ActionRow) Option
 | `agent.Action`, `agent.ActionRow`, `agent.ActionRequest`                     | proposed  |
 | `Magus.Judge`, `WithActionRows`; `RecordJudgment` takes an `Action`          | proposed  |
 | `magus\guard.action(<kind>, <fun>)`                                          | proposed  |
+| `ActionRule`, `WithActionRule`, beside the Buzz seam                         | proposed  |
 | an uncovered kind is an error when the rules load                            | proposed  |
 | `unjudged-action` replaces `unjudged-tool`; a mistyped location is a deny    | proposed  |
 | the hook envelope and `magus shell` decode into an `Action`                  | proposed  |
 | a typed Go struct or method per kind                                         | not built |
-| a Go rule function (`ToolRule`, `WithToolRule`)                              | not built |
 | a verdict that changes the action, or a step that suspends the caller's loop | not built |
 | judging a result after the action ran                                        | not built |
 
@@ -254,17 +267,18 @@ func WithActionRows(rows ...agent.ActionRow) Option
   substrate around someone else's loop. `Judge` returns and does nothing else.
 - [What we do not build is the product](../design/principles/what-we-do-not-build.md) and
   [Delete before you add](../design/principles/delete-before-you-add.md): one door is
-  renamed and two proposed names are dropped. No door is added per kind.
+  renamed, and no door is added per kind.
 - [Capability is not a reason](../design/principles/capability-is-not-a-reason.md): the
   failure removed is a rule guessing an action's meaning from a tool's name. The other
   frameworks are input only.
 - [One source, every door](../design/principles/one-source-every-door.md): the hook, the
   CLI, the SDK and Buzz reach one `guard.Judge` with one record.
 - [Abstract at the right layer, or not at all](../design/principles/abstract-at-the-right-layer.md):
-  the only interface stays ADR 0045's authority. Rows are data, and the rules are not
-  behind an interface.
+  the only interface stays ADR 0045's row reader. Rows are data, and the rules are not
+  behind an interface: a Go rule is a function option.
 - [Behavior is code, facts are data](../design/principles/behavior-is-code-facts-are-data.md):
-  a row is data and a rule is Buzz. The shipped Go names no kind, no tool and no
+  a row is data and a rule is code, Go from an embedder or Buzz from a workspace. The
+  shipped Go names no kind, no tool and no
   language.
 - [No silent defaults](../design/judgment/no-silent-defaults.md): an undeclared kind is
   denied and an uncovered kind is an error. `inert` is the only way to say nothing judges
@@ -298,13 +312,22 @@ cannot group by kind. Evidence: `ToolRow` keys on a name alone. Reopen if, after
 built, no workspace registers a rule for a kind other than `tool`. Then the kind field is
 unused, and it goes.
 
-### A Go rule function, or the rules behind an interface
+### Buzz only, with no Go rule function
 
-This is ADR 0039's `WithToolRule`, widened. It lost because policy would have two homes.
-A Go rule is not read at the authority's revision and has no approved copy, so ADR 0045's
-guarantee would not cover it. Evidence: `guardDependencies` already fails when the Buzz
-rules do not load (`judge.go:45`), so an SDK caller links the engine today. Reopen when
-an embedder shows, with a measurement, that it cannot link the Buzz engine.
+The first draft dropped ADR 0039's `WithToolRule` so that every rule was Buzz. It lost on
+Eli's call of 2026-11-12: an embedder may register a judging rule in Go and in Buzz. The
+cost is that policy has two homes, and a Go rule is not read at the row's revision and
+has no approved copy, so ADR 0045's guarantee does not cover it. That is accepted: a Go
+rule is the SDK embedder's own code, and a workspace's policy stays in its Buzz.
+Evidence: `guardDependencies` already fails when the Buzz rules do not load
+(`judge.go:45`), so an SDK caller links the engine today. Reopen when a Go rule and the
+workspace's Buzz policy give different verdicts for one action, shown by a test.
+
+### The rules behind one interface
+
+A single rule interface that a Go function and a Buzz function both implement. It lost
+because the two doors take different inputs, a Go struct and a generated Buzz mirror, and
+the interface adds a layer nothing else calls. Reopen when a third door appears.
 
 ### A closed list of kinds shipped by magus
 
@@ -329,14 +352,14 @@ needs to hold the action itself. Reopen only if that refusal is reopened.
 ## Consequences
 
 - ADR 0039's `JudgeTool`, `ToolCall`, `ToolRow`, `ToolRequest`, `WithToolRows`,
-  `ToolRule`, `WithToolRule` and `magus\guard.tool` are renamed or dropped before they
-  are built. ADR 0039 needs a dated amendment that points here.
+  `ToolRule`, `WithToolRule` and `magus\guard.tool` are renamed before they are built.
+  The Go rule becomes `ActionRule` and `WithActionRule`. ADR 0039 needs a dated amendment that points here.
 - ADR 0045, part 8, says `JudgeCommand` and `JudgeWrite` keep their signatures. ADR 0039
   deletes them. Part 8 should name `Judge`.
 - The rule `unjudged-tool` is renamed on the hook path too, which changes a rule name on
   the trail. That break is deliberate.
-- An embedder writes Buzz to judge its own kinds. A program that declares only `inert`
-  rows and rows the built-in rules judge writes none.
+- An embedder writes a Go rule or a Buzz rule to judge its own kinds. A program that
+  declares only `inert` rows and rows the built-in rules judge writes none.
 - A rule for a kind reads an untyped input. A field it misreads is found when the rule
   runs, not when the policy is checked.
 - The implementing change owes the SDK reference and guide, the rule page for
@@ -344,8 +367,6 @@ needs to hold the action itself. Reopen only if that refusal is reopened.
 
 ## Open questions
 
-- Dropping `WithToolRule` answers ADR 0039's open question as "Buzz only". Confirm (yes
-  or no)?
 - May a row name a schema for its input, checked before any rule runs (yes), or does the
   rule read an untyped input until a misread field is measured (no)?
 - Does a rule read the actions already recorded for a session through a typed repository

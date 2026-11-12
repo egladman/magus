@@ -526,3 +526,13 @@ The implementing change owes these, all outside this record's one file:
 - Name the capability `external` or `irreversible`?
 
 ## Amendments
+
+### 2026-11-12: the tool door becomes ADR 0046's Judge
+
+[ADR 0046](0046-the-judge-takes-any-agent-action.md) renames the tool door to take any
+agent action. `JudgeTool` becomes `Judge`, `ToolCall` becomes `Action`, `ToolRow` becomes
+`ActionRow`, `ToolRequest` becomes `ActionRequest`, `WithToolRows` becomes
+`WithActionRows`, and `magus\guard.tool` becomes `magus\guard.action`. Go rules stay: an
+embedder may register a rule in Go and in Buzz, so `ToolRule` and `WithToolRule` become
+`ActionRule` and `WithActionRule`, which answers the open question above as "both". The
+text above is kept as written.
