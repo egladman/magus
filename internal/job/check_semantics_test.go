@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -142,10 +141,10 @@ func (s *testSelectionSuite) TestUnknownProjectDoesNotBorrowAnotherProjectDialec
 }
 func (s *testSelectionSuite) TestStoreValidationReportsUnavailableSelection() {
 	store := tempStore(s.T(), testRoot(s.T()).Root())
-	validation, err := ValidateFork(context.Background(), store, "unknown", func(row *types.Job) {
+	validation, err := validateDryFork(context.Background(), store, "unknown", func(row *types.Job) {
 		row.WritePaths = []string{"pkg/a.go"}
 		row.Check = &types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha"}}
-	}, config.Jobs{}, nil)
+	})
 	s.Require().NoError(err)
 	s.Contains(validation.Unchecked, "the check's project, target and test-selection semantics: this door opened the job store without a workspace")
 }

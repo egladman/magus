@@ -202,13 +202,13 @@ func TestValidateMergeNamesWhatItCouldNotCheck(t *testing.T) {
 	assert.Empty(t, v.Unchecked, "a read-only row with no check skips nothing it would have needed")
 }
 
-func TestValidateForkWritesNothing(t *testing.T) {
+func TestValidateDryForkWritesNothing(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	v, err := ValidateFork(t.Context(), s, "w", func(u *types.Job) {
+	v, err := validateDryFork(t.Context(), s, "w", func(u *types.Job) {
 		u.WritePaths, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz"
-	}, config.Jobs{}, nil)
+	})
 	require.NoError(t, err)
 	got := codes(v.Problems)
 	assert.Contains(t, got, types.JobCheckpointUnplaceable, "the checkpoint is judged in the same pass")
@@ -224,6 +224,85 @@ func TestValidateForkWritesNothing(t *testing.T) {
 	}, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.JobCheckpointUnplaceable)
 	require.ErrorIs(t, err, types.WritePathIsDirectory, "a fork reports both, not the first")
+}
+
+// forkPlanSuite pins that a fork validates once: its dry run lists what it
+// refuses, and it writes the plan it judged.
+type forkPlanSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestForkPlan(t *testing.T) { suite.Run(t, new(forkPlanSuite)) }
+
+func (s *forkPlanSuite) SetupTest() { s.store, _ = validateWorkspace(s.T()) }
+
+func (s *forkPlanSuite) plan(merge func(*types.Job), dry bool) ForkPlan {
+	plan, err := PlanFork(s.T().Context(), s.store, "w", merge, config.Jobs{}, nil, dry)
+	s.Require().NoError(err)
+	return plan
+}
+
+func (s *forkPlanSuite) TestDryRunListsWhatTheForkRefuses() {
+	merge := func(u *types.Job) { u.WritePaths, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz" }
+
+	dry := s.plan(merge, true)
+	real := s.plan(merge, false)
+	_, err := WriteFork(s.T().Context(), s.store, real, nil, config.Jobs{})
+
+	s.Require().NotEmpty(dry.Validation.Problems)
+	s.Equal(dry.Validation.Problems, real.Validation.Problems)
+	for _, p := range dry.Validation.Problems {
+		s.ErrorIs(err, p.Code)
+	}
+	rows, lerr := s.store.List()
+	s.Require().NoError(lerr)
+	s.Empty(rows)
+}
+
+func (s *forkPlanSuite) TestForkWritesThePlanItValidated() {
+	merge := func(u *types.Job) { u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck() }
+	permit := func(u *types.Job) {
+		merge(u)
+		u.Deviations = []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+	}
+	plan := s.plan(permit, false)
+	s.Require().Empty(plan.Validation.Problems)
+
+	stored, err := WriteFork(s.T().Context(), s.store, plan, func(u *types.Job) { u.Checkpoint = "amended" }, config.Jobs{})
+
+	s.Require().NoError(err)
+	want := plan.Validation.Job
+	want.Checkpoint = "amended"
+	s.Equal(RetryDeclaration(want), RetryDeclaration(stored), "the plan's settled merge, lint goal included, then the amend")
+}
+
+func (s *forkPlanSuite) TestForkRefusesWhenALiveRowAppeared() {
+	plan := s.plan(func(u *types.Job) {
+		u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck()
+		u.Deviations = []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+	}, false)
+	s.Require().Empty(plan.Validation.Problems)
+	seed(s.T(), s.store, types.Job{ID: "other", State: types.StateRunning, WritePaths: []string{"cli/registry.go"}, Check: forkCheck()})
+
+	_, err := WriteFork(s.T().Context(), s.store, plan, nil, config.Jobs{})
+
+	s.Require().Error(err)
+	s.Contains(err.Error(), "other changed after w was validated")
+}
+
+func (s *forkPlanSuite) TestForkWritesWhenALiveRowOnlyNarrowed() {
+	seed(s.T(), s.store, types.Job{ID: "other", State: types.StateRunning, WritePaths: []string{"docs/**"}, Check: forkCheck()})
+	plan := s.plan(func(u *types.Job) {
+		u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck()
+		u.Deviations = []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+	}, false)
+	s.Require().Empty(plan.Validation.Problems)
+	seed(s.T(), s.store, types.Job{ID: "other", State: types.StateRunning, WritePaths: []string{"docs/rules/guard.md"}, Check: forkCheck()})
+
+	_, err := WriteFork(s.T().Context(), s.store, plan, nil, config.Jobs{})
+
+	s.NoError(err, "a narrowed hold only lifts a constraint")
 }
 
 func TestValidateMergeJudgesAnUpdateByWhatItAdds(t *testing.T) {

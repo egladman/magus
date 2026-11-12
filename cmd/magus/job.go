@@ -1449,25 +1449,20 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			return err
 		}
 	}
-	merge := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
-	// Validating before the worktree is made leaves nothing behind for a record with problems.
-	// A real fork's store write says each notice, so this pass stays quiet.
-	validating := store
-	if !globalCfg.DryRun {
-		validating = store.Quiet()
-	}
+	// Judged before the worktree is made, so a refusal leaves
+	// nothing behind.
 	slog.InfoContext(ctx, fmt.Sprintf("judging %s's goals; a goal naming a symbol loads the symbol graph", row.ID), attr.Notice("note"))
 	judging := time.Now()
-	validation, err := job.ValidateFork(ctx, validating, row.ID, judgedMerge(row), globalCfg.Jobs, reader)
+	forkPlan, err := job.PlanFork(ctx, store, row.ID, judgedMerge(row), globalCfg.Jobs, reader, globalCfg.DryRun)
 	if err != nil {
 		return err
 	}
+	validation := forkPlan.Validation
 	slog.InfoContext(ctx, fmt.Sprintf("judged %s's goals in %s", row.ID, cache.FormatDuration(time.Since(judging))), attr.Notice("note"))
-	// ForkMerge validates once more, from the grades and the workspace this pass kept.
 	releaseSeat()
 	judgedLive := noteForkJudgedAsUpdate(ctx, store, row.ID)
 	if row.Parent == "" && len(row.Integrates) == 0 && len(validation.Problems) == 0 {
@@ -1476,11 +1471,15 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if globalCfg.DryRun {
 		return forkDryRun(opts, validation)
 	}
-	var worktree types.JobWorktree
+	if len(validation.Problems) > 0 {
+		return refuseFork(validation)
+	}
+	var (
+		worktree types.JobWorktree
+		amend    func(*types.Job)
+	)
 	made, built := false, false
-	// A refused fork still reaches ForkMerge, which asks a holder
-	// to release a config it holds.
-	if row.Checkout != "" && len(validation.Problems) == 0 {
+	if row.Checkout != "" {
 		exe, _ := os.Executable()
 		cache.KickDiskTick(exe, root, globalCfg.Disk.SampleEvery)
 		if err := refuseForkOnFullDisk(ctx, exe, root, row.Checkout, int64(globalCfg.Disk.CriticalFreeMB)<<20); err != nil {
@@ -1510,14 +1509,15 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if note != "" {
 			slog.InfoContext(ctx, note, attr.Notice("note"))
 		}
-		declare := merge
-		merge = func(u *types.Job) {
-			declare(u)
-			u.Checkpoint = start
+		amend = func(u *types.Job) {
+			// The validated merge expanded the declared checkpoint already.
+			if start != row.Checkpoint {
+				u.Checkpoint = start
+			}
 			u.Worktree = &worktree
 		}
 	}
-	stored, err := job.ForkMerge(ctx, store, row.ID, merge, globalCfg.Jobs, reader)
+	stored, err := job.WriteFork(ctx, store, forkPlan, amend, globalCfg.Jobs)
 	switch {
 	case err != nil && made:
 		err = errors.Join(err, store.DiscardWorktree(ctx, worktree))
@@ -1532,10 +1532,6 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return err
 	case err != nil:
 		noteForkRowEnded(ctx, store, row.ID, judgedLive)
-		// The fork stored nothing, so the validation is read again for the list it joined.
-		if v, verr := job.ValidateFork(ctx, store.Quiet(), row.ID, merge, globalCfg.Jobs, reader); verr == nil && len(v.Problems) > 0 {
-			return refuseFork(v)
-		}
 		return exit.Usagef("magus job fork: %w", err)
 	}
 	var asked types.Job

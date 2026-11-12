@@ -43,8 +43,8 @@ func Declare(row types.Declaration, defaultTimeout time.Duration) func(*types.Jo
 	}
 }
 
-// ForkMerge applies a field merge to one row, for `magus job fork` (whose merge is
-// [Declare]) and magus\job.put (from the client tool or a magusfile), and takes
+// ForkMerge applies a field merge to one row for magus\job.put; `job fork`
+// goes through [PlanFork]. It takes
 // default_timeout when a merge that creates the row named no timeout. What it is held to is
 // [validateMerge]'s, the rules `magus job apply` shares, with the merge's checkpoint and
 // symbol goals settled in the same pass: the error joins every problem left after the row's

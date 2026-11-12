@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
@@ -220,9 +219,9 @@ func (s *owningProjectGateSuite) unresolvedStore() *Store {
 }
 
 func (s *owningProjectGateSuite) validated(store *Store, check *types.LeaseCheck, write string) types.JobValidation {
-	v, err := ValidateFork(s.T().Context(), store, "j", func(u *types.Job) {
+	v, err := validateDryFork(s.T().Context(), store, "j", func(u *types.Job) {
 		u.WritePaths, u.Check, u.Agent = []string{write}, check, agent.Instructed("c")
-	}, config.Jobs{}, nil)
+	})
 	s.Require().NoError(err)
 	return v
 }

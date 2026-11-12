@@ -125,12 +125,12 @@ func TestACheckpointOnASiblingBranchIsPlaceableForItsOwnCheckout(t *testing.T) {
 		}
 	}
 
-	v, err := ValidateFork(t.Context(), s, "sibling", own(elsewhere[:9]), config.Jobs{}, nil)
+	v, err := validateDryFork(t.Context(), s, "sibling", own(elsewhere[:9]))
 	require.NoError(t, err)
 	assert.NotContains(t, codes(v.Problems), types.JobCheckpointUnplaceable, "a sibling branch is where its own checkout starts: %v", v.Problems)
 	assert.Equal(t, elsewhere, v.Job.Checkpoint, "it is stored expanded")
 
-	v, err = ValidateFork(t.Context(), s, "made-up", own(madeUpRevision), config.Jobs{}, nil)
+	v, err = validateDryFork(t.Context(), s, "made-up", own(madeUpRevision))
 	require.NoError(t, err)
 	assert.Contains(t, codes(v.Problems), types.JobCheckpointUnplaceable)
 	assert.ErrorContains(t, v.Problems.Error(), "names no revision this repository holds")

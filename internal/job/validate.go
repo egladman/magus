@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -125,7 +126,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		ps = append(ps, deniedCheckProblems(graded, store, merged)...)
 		v.WriteProof = store.WriteProof(rows, merged)
 	}
-	found, unchecked := workspaceProblems(ctx, store, merged, judged, updates, read)
+	found, unchecked := workspaceProblems(ctx, store, rows, merged, judged, updates, read)
 	ps = append(ps, found...)
 	v.Unchecked = unchecked
 	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)
@@ -283,6 +284,48 @@ func FootprintMayExtend(root string, row types.Job) bool {
 // integratorRegenerates is the reason a record gives for an output the integrator owns.
 const integratorRegenerates = "the integrator regenerates it"
 
+// integratorRuns is the reason given for a gate an
+// integrating ancestor runs.
+const integratorRuns = "the integrator runs it"
+
+// gateOwner is who meets the gates and outputs a writing
+// row leaves out.
+type gateOwner struct {
+	// runs is the reason a GateNotRun deviation gives,
+	// empty when no owner is declared.
+	runs string
+	// unread is a magus.yaml that did not load, which
+	// [broadClaimProblems] reports. No edit is guessed then.
+	unread bool
+}
+
+// declaredGateOwner is the owner the workspace declares for
+// row's gates. ci.remote_gate runs ci on every pushed commit.
+// Failing that, an integrating ancestor gates what it merges.
+// An integration job is that owner itself, so it has none.
+func declaredGateOwner(root string, rows []types.Job, row types.Job) gateOwner {
+	if row.Integrating() {
+		return gateOwner{}
+	}
+	cfg, err := config.LoadWorkspaceOnly(root)
+	switch {
+	case err != nil:
+		return gateOwner{unread: true}
+	case cfg.CI.RemoteGate != "":
+		return gateOwner{runs: cfg.CI.RemoteGate + " runs it"}
+	case row.Parent == "":
+		return gateOwner{}
+	}
+	lineage := types.JobAncestors(rows, row.Parent)
+	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.Parent }); i >= 0 {
+		lineage = append(lineage, rows[i])
+	}
+	if slices.ContainsFunc(lineage, types.Job.Integrating) {
+		return gateOwner{runs: integratorRuns}
+	}
+	return gateOwner{}
+}
+
 // IntegratorDeviations is one deviation per output a target regenerates from row's write paths
 // that sits outside them: the integrator regenerates it after the job. An output a deny
 // path touches stays its owner's, and one a deviation of row accepts already needs no new one.
@@ -300,18 +343,113 @@ func IntegratorDeviations(root string, row types.Job, projects []*types.Project,
 	return deviations
 }
 
-// ValidateFork is the dry run of a fork: the plan as store reads it, the merge's checkpoint
+// validateDryFork is the dry run of a fork: the plan as store reads it, the merge's checkpoint
 // and symbol goals settled as a fork settles them, and [validateMerge] over a dry view of
 // store, so nothing is written, no release is requested, no sweep runs and no worktree is
 // made. The error is only a store that could not be read.
-func ValidateFork(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.JobValidation, error) {
-	dry := store.dry()
-	rows, err := dry.List()
-	if err != nil {
-		return types.JobValidation{}, err
+func validateDryFork(ctx context.Context, store *Store, id string, merge func(*types.Job)) (types.JobValidation, error) {
+	plan, err := PlanFork(ctx, store, id, merge, config.Jobs{}, nil, true)
+	return plan.Validation, err
+}
+
+// ForkPlan is a fork's merge settled and validated once by
+// [PlanFork]. A dry run prints its Validation, and [WriteFork]
+// writes its merge, so the two cannot differ.
+type ForkPlan struct {
+	Validation types.JobValidation
+	id         string
+	merge      func(*types.Job)
+	read       planRead
+}
+
+// PlanFork settles the merge into job id and validates it once:
+// its checkpoint expanded, its symbol goals resolved. With dry it
+// reads store's dry view and writes nothing. Without, it reads as
+// a real fork: the sweep writes, and a refusal asks a holder to
+// release a file the fork wanted. The error is only a store that
+// could not be read.
+func PlanFork(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader, dry bool) (ForkPlan, error) {
+	if dry {
+		store = store.dry()
 	}
-	v, _ := validateFork(ctx, dry, rows, id, merge, limits, read)
-	return v, nil
+	rows, err := store.List()
+	if err != nil {
+		return ForkPlan{}, err
+	}
+	v, settled := validateFork(ctx, store, rows, id, merge, limits, read)
+	return ForkPlan{Validation: v, id: id, merge: settled, read: readPlan(rows)}, nil
+}
+
+// WriteFork stores plan's merge and then amend, which may be nil.
+// amend sets only what the fork learned after validating, such as
+// the checkout it made. Nothing is written while a problem
+// remains, or once the plan the fork was judged against moved.
+func WriteFork(ctx context.Context, store *Store, plan ForkPlan, amend func(*types.Job), limits config.Jobs) (types.Job, error) {
+	if err := plan.Validation.Error(); err != nil {
+		return types.Job{}, err
+	}
+	rows, err := store.List()
+	if err != nil {
+		return types.Job{}, err
+	}
+	if moved := plan.read.movedIn(readPlan(rows), plan.id); moved != "" {
+		return types.Job{}, fmt.Errorf("job: %s changed after %s was validated, so the plan it was judged against no longer stands: fork it again", moved, plan.id)
+	}
+	merge := plan.merge
+	if amend != nil {
+		merge = func(u *types.Job) {
+			plan.merge(u)
+			amend(u)
+		}
+	}
+	return writeMerge(ctx, store, plan.id, merge, limits, plan.Validation.WriteProof)
+}
+
+// planRead is what a fork's validation read of each live row of
+// the plan, by id. A heartbeat or a result moves none of it.
+type planRead map[string]planEntry
+
+// planEntry is one live row as a fork's validation reads it.
+type planEntry struct {
+	// rest is the row's parent, integrations, deny paths and
+	// checkout, encoded so a change to any of them compares.
+	rest  string
+	write []string
+}
+
+func readPlan(rows []types.Job) planRead {
+	read := planRead{}
+	for _, r := range rows {
+		if r.State.Terminal() {
+			continue
+		}
+		rest, _ := json.Marshal([]any{r.Parent, r.Integrates, r.DenyPaths, WorkingCheckout(r.CheckoutRoot, r)})
+		read[r.ID] = planEntry{rest: string(rest), write: r.WritePaths}
+	}
+	return read
+}
+
+// movedIn is the id of a row whose entry in now r did not read,
+// or "". A row that ended or narrowed its write paths only lifts a
+// constraint. The forked row id ending makes its update a new row,
+// judged whole.
+func (r planRead) movedIn(now planRead, id string) string {
+	if _, live := r[id]; live {
+		if _, still := now[id]; !still {
+			return id
+		}
+	}
+	for _, at := range slices.Sorted(maps.Keys(now)) {
+		was, read := r[at]
+		is := now[at]
+		narrowed := !slices.ContainsFunc(is.write, func(p string) bool {
+			return !slices.ContainsFunc(was.write, func(held string) bool { return types.PathWithin(p, held) })
+		})
+		if !read || was.rest != is.rest || !narrowed {
+			return at
+		}
+	}
+	return ""
 }
 
 // validateFork settles a fork's merge (its checkpoint expanded, its symbol goals resolved)
@@ -354,7 +492,8 @@ func (s *Store) loadedWorkspace() (Workspace, string) {
 // paths that sits outside every write path of merged, a ci target over judged's write paths
 // that no check or goal of merged runs, and a write path broader than it allows. Each check
 // that could not run is named, with why, in the second result.
-func workspaceProblems(ctx context.Context, store *Store, merged, judged types.Job, updates bool, read SymbolReader) (types.JobProblems, []string) {
+// rows is the plan [declaredGateOwner] reads.
+func workspaceProblems(ctx context.Context, store *Store, rows []types.Job, merged, judged types.Job, updates bool, read SymbolReader) (types.JobProblems, []string) {
 	// Soft paths come from the symbol index, so a list judged on them would
 	// change with the index's temperature.
 	judged.WritePaths = slices.DeleteFunc(slices.Clone(judged.WritePaths), func(p string) bool {
@@ -391,9 +530,10 @@ func workspaceProblems(ctx context.Context, store *Store, merged, judged types.J
 			return !slices.ContainsFunc(whole, func(w RegeneratedOutput) bool { return w.Output == o.Output && w.Target == o.Target })
 		})
 	}
-	ps = append(ps, regeneratedProblems(regenerated, merged.DenyPaths)...)
+	owner := declaredGateOwner(store.root, rows, merged)
+	ps = append(ps, regeneratedProblems(regenerated, merged.DenyPaths, owner)...)
 	gates, undecided := unrunGates(store.root, gated, ws.Projects, regenerated, gradeWith(store.checkGrader(), store.root, merged))
-	ps = append(ps, unrunGateProblems(gates)...)
+	ps = append(ps, unrunGateProblems(gates, owner)...)
 	unchecked = append(unchecked, undecided...)
 	ps = append(ps, onRow(broadClaimProblems(ctx, store.root, judged, ws, read), judged, merged)...)
 	return ps, unchecked
@@ -490,7 +630,8 @@ func listNames(names []string) string {
 
 // regeneratedProblems is each output as OutputOutsideWritePaths, its Subject the output.
 // One a deny path touches carries no Edit: the record kept it from the job on purpose.
-func regeneratedProblems(outputs []RegeneratedOutput, deny []string) types.JobProblems {
+// With a declared owner, the Edit permits the output for the integrator.
+func regeneratedProblems(outputs []RegeneratedOutput, deny []string, owner gateOwner) types.JobProblems {
 	ps := make(types.JobProblems, 0, len(outputs))
 	for _, o := range outputs {
 		p := types.JobProblem{
@@ -500,7 +641,12 @@ func regeneratedProblems(outputs []RegeneratedOutput, deny []string) types.JobPr
 				o.Output, types.OutputOutsideWritePaths, o.Output),
 		}
 		glob, _, _ := strings.Cut(o.Output, " !")
-		if !slices.ContainsFunc(deny, func(d string) bool { return types.PathsIntersect(d, glob) }) {
+		denied := slices.ContainsFunc(deny, func(d string) bool { return types.PathsIntersect(d, glob) })
+		switch {
+		case denied || owner.unread:
+		case owner.runs != "":
+			p.Edit = &types.JobEdit{AddDeviation: &types.Deviation{Code: types.OutputOutsideWritePaths, Subject: o.Output, Reason: integratorRegenerates}}
+		default:
 			p.Edit = regeneratedEdit(o.Output)
 		}
 		ps = append(ps, p)
@@ -520,7 +666,8 @@ func regeneratedEdit(output string) *types.JobEdit {
 // unrunGateProblems is each gate as GateNotRun, its Subject `<target> <project>`. A gate no
 // worker may run is the integrator's and raises nothing. The goal a lint gate's Edit adds
 // skips default charms, as [lintGoals] adds it, so --fix lint reports and rewrites nothing.
-func unrunGateProblems(gates []UnrunGate) types.JobProblems {
+// With a declared owner, another gate's Edit is the deviation naming it.
+func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 	ps := make(types.JobProblems, 0, len(gates))
 	for _, g := range gates {
 		if g.IntegratorGates {
@@ -532,13 +679,23 @@ func unrunGateProblems(gates []UnrunGate) types.JobProblems {
 			add.Check.NoDefaultCharms = true
 		}
 		goal, _ := json.Marshal(g.Goal)
-		ps = append(ps, types.JobProblem{
+		p := types.JobProblem{
 			Code: types.GateNotRun, Field: "goals", Subject: subject,
 			Message: fmt.Sprintf("ci runs `%s` over the write paths (it reads %s), and neither the check nor a goal runs it", subject, g.Source),
 			Fix: fmt.Sprintf(`add the goal %s to goals, or permit it in deviations: {"code":%q,"subject":%q,"reason":"the root runs it"}`,
 				goal, types.GateNotRun, subject),
-			Edit: &types.JobEdit{AddGoal: &add},
-		})
+		}
+		switch {
+		case g.Target == lintTarget:
+			p.Edit = &types.JobEdit{AddGoal: &add}
+		case owner.unread:
+		case owner.runs != "":
+			p.Fix = fmt.Sprintf(`permit it in deviations, since %s: {"code":%q,"subject":%q,"reason":%q}`, owner.runs, types.GateNotRun, subject, owner.runs)
+			p.Edit = &types.JobEdit{AddDeviation: &types.Deviation{Code: types.GateNotRun, Subject: subject, Reason: owner.runs}}
+		default:
+			p.Edit = &types.JobEdit{AddGoal: &add}
+		}
+		ps = append(ps, p)
 	}
 	return ps
 }

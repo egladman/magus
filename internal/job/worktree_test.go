@@ -251,7 +251,7 @@ func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
 	s.notices = &notes
 	merge := func(u *types.Job) { u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck() }
 
-	_, err := ValidateFork(t.Context(), s.Quiet(), "w", merge, config.Jobs{}, nil)
+	_, err := validateDryFork(t.Context(), s.Quiet(), "w", merge)
 	require.NoError(t, err)
 	_, _ = ForkMerge(t.Context(), s, "w", merge, config.Jobs{}, nil)
 	assert.Equal(t, 1, strings.Count(notes.String(), `added the goal "lint"`), notes.String())
@@ -280,13 +280,13 @@ func TestSoftPathsRaiseNoWorkspaceProblem(t *testing.T) {
 	warm.WritePaths = append(warm.WritePaths, "cli/registry_test.go")
 	warm.SoftPaths = []string{"cli/registry_test.go"}
 
-	coldList, _ := workspaceProblems(t.Context(), store, cold, cold, false, nil)
-	warmList, _ := workspaceProblems(t.Context(), store, warm, warm, false, nil)
+	coldList, _ := workspaceProblems(t.Context(), store, nil, cold, cold, false, nil)
+	warmList, _ := workspaceProblems(t.Context(), store, nil, warm, warm, false, nil)
 	assert.Equal(t, codes(coldList), codes(warmList))
 	assert.NotContains(t, codes(warmList), types.GateNotRun)
 
 	warm.SoftPaths = nil
-	declared, _ := workspaceProblems(t.Context(), store, warm, warm, false, nil)
+	declared, _ := workspaceProblems(t.Context(), store, nil, warm, warm, false, nil)
 	assert.Contains(t, codes(declared), types.GateNotRun, "the same path, declared, raises its gate")
 }
 

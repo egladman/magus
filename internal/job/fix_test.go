@@ -2,11 +2,13 @@ package job
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/testkit"
@@ -20,7 +22,7 @@ func TestFixForkAppliesEveryMechanicalEditAndLeavesJudgment(t *testing.T) {
 
 	s, _ := validateWorkspace(t)
 	row := types.Declaration{ID: "w", WritePaths: []string{"cli", "cli/registry.go"}, Check: forkCheck()}
-	before, err := ValidateFork(t.Context(), s, row.ID, fixMerge(row), config.Jobs{}, nil)
+	before, err := validateDryFork(t.Context(), s, row.ID, fixMerge(row))
 	require.NoError(t, err)
 	require.NotZero(t, before.Problems.Fixable(), "the record starts with mechanical problems: %v", codes(before.Problems))
 
@@ -29,7 +31,7 @@ func TestFixForkAppliesEveryMechanicalEditAndLeavesJudgment(t *testing.T) {
 
 	require.NotEmpty(t, edits)
 	assert.Contains(t, edits, types.JobEdit{AddWritePath: "docs/manpage/*.md"}, "an output regenerated outside the write paths is added to them")
-	after, err := ValidateFork(t.Context(), s, fixed.ID, fixMerge(fixed), config.Jobs{}, nil)
+	after, err := validateDryFork(t.Context(), s, fixed.ID, fixMerge(fixed))
 	require.NoError(t, err)
 	assert.Zero(t, after.Problems.Fixable(), "nothing mechanical is left: %v", after.Problems)
 	assert.Equal(t, types.WritePathIsDirectory, problemAt(t, after.Problems, types.WritePathIsDirectory).Code, "a directory write path is a judgment, left alone")
@@ -78,7 +80,7 @@ func TestFixForkNeverMovesACheckpointToHead(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, edits, "a revision nobody holds is an error to the forker, never moved to HEAD")
 	assert.Equal(t, unknown, fixed)
-	after, err := ValidateFork(t.Context(), s, fixed.ID, own(fixed), config.Jobs{}, nil)
+	after, err := validateDryFork(t.Context(), s, fixed.ID, own(fixed))
 	require.NoError(t, err)
 	assert.Equal(t, types.JobCheckpointUnplaceable, problemAt(t, after.Problems, types.JobCheckpointUnplaceable).Code)
 }
@@ -103,7 +105,7 @@ func TestRegeneratedProblemsLeaveADeniedOutputToJudgment(t *testing.T) {
 		{Target: ".:man-generate", Output: "manpage/*.1", Source: "cli/registry.go"},
 		{Target: ".:types-generate", Output: "gen/*.go !gen/*_test.go", Source: "types/job.go"},
 		{Target: ".:config-generate", Output: "cli/api.lock", Source: "cli/registry.go"},
-	}, []string{"cli/api.lock"})
+	}, []string{"cli/api.lock"}, gateOwner{})
 
 	assert.Equal(t, &types.JobEdit{AddWritePath: "manpage/*.1"}, ps[0].Edit)
 	assert.Equal(t, &types.JobEdit{AddDeviation: &types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "gen/*.go !gen/*_test.go", Reason: integratorRegenerates}},
@@ -135,7 +137,7 @@ func TestFixForkLeavesNoGateNeedingADeviationForAGoJob(t *testing.T) {
 	}
 	row := types.Declaration{ID: "w", WritePaths: []string{"cli/registry.go"}, Check: &types.LeaseCheck{Target: "vet", Project: "."}}
 
-	before, err := ValidateFork(t.Context(), s, row.ID, fixMerge(row), config.Jobs{}, nil)
+	before, err := validateDryFork(t.Context(), s, row.ID, fixMerge(row))
 	require.NoError(t, err)
 	var gates []string
 	for _, p := range before.Problems {
@@ -147,7 +149,7 @@ func TestFixForkLeavesNoGateNeedingADeviationForAGoJob(t *testing.T) {
 
 	fixed, _, err := FixFork(t.Context(), s, row, fixMerge, config.Jobs{}, nil)
 	require.NoError(t, err)
-	after, err := ValidateFork(t.Context(), s, fixed.ID, fixMerge(fixed), config.Jobs{}, nil)
+	after, err := validateDryFork(t.Context(), s, fixed.ID, fixMerge(fixed))
 	require.NoError(t, err)
 	assert.NotContains(t, codes(after.Problems), types.GateNotRun)
 	assert.NotContains(t, codes(after.Problems), types.JobCheckUnrunnable, "every goal --fix added is one the worker may run")
@@ -156,15 +158,95 @@ func TestFixForkLeavesNoGateNeedingADeviationForAGoJob(t *testing.T) {
 	}
 }
 
+// declaredGateSuite pins what --fix records for a gate and an output
+// a worker's row leaves out, by who the workspace says owns them.
+type declaredGateSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestDeclaredGate(t *testing.T) { suite.Run(t, new(declaredGateSuite)) }
+
+func (s *declaredGateSuite) SetupTest() {
+	store, projects := validateWorkspace(s.T())
+	top := projects[0]
+	top.MagusfileTargets = append(top.MagusfileTargets, "vet", "unit")
+	top.TargetInputs["unit"] = []types.InputRef{{Glob: "**/*.go"}}
+	top.TargetChains["ci"] = []types.ChainStep{{Target: "lint"}, {Target: "unit"}}
+	s.store = store
+}
+
+func (s *declaredGateSuite) writeConfig(body string) {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.store.root, "magus.yaml"), []byte(body), 0o644))
+}
+
+func (s *declaredGateSuite) record() types.Declaration {
+	return types.Declaration{ID: "w", WritePaths: []string{"cli/registry.go"}, Check: &types.LeaseCheck{Target: "vet", Project: "."}}
+}
+
+func (s *declaredGateSuite) fix(row types.Declaration) (types.Declaration, []types.JobEdit) {
+	fixed, edits, err := FixFork(s.T().Context(), s.store, row, fixMerge, config.Jobs{}, nil)
+	s.Require().NoError(err)
+	return fixed, edits
+}
+
+func (s *declaredGateSuite) TestRemoteGateRecordsTheDeviationAndAddsNoGoal() {
+	s.writeConfig("ci:\n  remote_gate: github-actions\n")
+
+	fixed, _ := s.fix(s.record())
+
+	s.Empty(fixed.Goals, "no ci goal is added for a worker")
+	s.Equal([]string{"cli/registry.go"}, fixed.WritePaths, "no output widens the write paths")
+	s.Contains(fixed.Deviations, types.Deviation{Code: types.GateNotRun, Subject: "unit .", Reason: "github-actions runs it"})
+	s.Contains(fixed.Deviations, types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "docs/manpage/*.md", Reason: integratorRegenerates})
+	after, err := validateDryFork(s.T().Context(), s.store, fixed.ID, fixMerge(fixed))
+	s.Require().NoError(err)
+	s.Empty(after.Problems)
+}
+
+func (s *declaredGateSuite) TestWithoutAnOwnerTheGoalIsAdded() {
+	fixed, edits := s.fix(s.record())
+
+	checks := make([]types.LeaseCheck, len(fixed.Goals))
+	for i, g := range fixed.Goals {
+		checks[i] = g.Check
+	}
+	s.Contains(checks, types.LeaseCheck{Target: "unit", Project: "."})
+	s.Contains(edits, types.JobEdit{AddWritePath: "docs/manpage/*.md"})
+	for _, w := range fixed.Deviations {
+		s.NotEqual(types.GateNotRun, w.Code)
+	}
+}
+
+func (s *declaredGateSuite) TestIntegratingParentRunsTheGate() {
+	seed(s.T(), s.store, types.Job{ID: "integrate", State: types.StateRunning, Integrates: []string{"a-branch"}})
+	row := s.record()
+	row.Parent = "integrate"
+
+	fixed, _ := s.fix(row)
+
+	s.Empty(fixed.Goals)
+	s.Contains(fixed.Deviations, types.Deviation{Code: types.GateNotRun, Subject: "unit .", Reason: integratorRuns})
+}
+
+func (s *declaredGateSuite) TestUnreadableConfigGuessesNoEdit() {
+	s.writeConfig("ci: [\n")
+
+	ps := unrunGateProblems([]UnrunGate{{Target: "unit", Project: ".", Source: "**/*.go"}}, declaredGateOwner(s.store.root, nil, types.Job{ID: "w"}))
+
+	s.Require().Len(ps, 1)
+	s.Nil(ps[0].Edit)
+}
+
 func TestUnrunGateProblemsAddTheGoalLintRunsByWithoutCharms(t *testing.T) {
 	t.Parallel()
 
 	goal := types.Goal{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}}
-	ps := unrunGateProblems([]UnrunGate{{Target: "lint", Project: ".", Source: "**/*.go", Goal: goal}})
+	ps := unrunGateProblems([]UnrunGate{{Target: "lint", Project: ".", Source: "**/*.go", Goal: goal}}, gateOwner{runs: "github-actions runs it"})
 
 	require.NotNil(t, ps[0].Edit)
 	want := goal
 	want.Check.NoDefaultCharms = true
-	assert.Equal(t, &want, ps[0].Edit.AddGoal, "lint added by --fix reports instead of rewriting the worker's tree")
+	assert.Equal(t, &want, ps[0].Edit.AddGoal, "lint added by --fix reports instead of rewriting the worker's tree, whoever owns the other gates")
 	assert.False(t, goal.Check.NoDefaultCharms, "the gate's own goal is not changed")
 }
