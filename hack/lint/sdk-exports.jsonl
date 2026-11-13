@@ -110,10 +110,10 @@
 {"name":"Magus.MachineClaims","reason":"cache, sandbox and lock state the CLI reports or manages"}
 {"name":"Magus.MetricsCollector","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
 {"name":"Magus.MetricsSnapshot","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
-{"name":"Magus.ModelRows","reason":"std's job store resolves harness model aliases through it"}
 {"name":"Magus.ModelTierLens","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
 {"name":"Magus.ModelTierMatrix","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
 {"name":"Magus.ModelTiers","reason":"provider or configuration accessor the CLI and std read from the loaded workspace"}
+{"name":"Magus.Models","reason":"std's job store resolves harness model aliases through it"}
 {"name":"Magus.OutputAttempts","reason":"captured output lookup behind query output and the run ref"}
 {"name":"Magus.OutputByRef","reason":"captured output lookup behind query output and the run ref"}
 {"name":"Magus.OutputByRefRemote","reason":"captured output lookup behind query output and the run ref"}
@@ -239,8 +239,8 @@
 {"name":"WithSpellFilter","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithStderr","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithStep","reason":"functional option that configures a Run, a Target or a Project declaration"}
-{"name":"WithStepRows","reason":"functional option that declares the step kinds Judge judges (ADR 0046)"}
 {"name":"WithStepRule","reason":"functional option that adds an embedder's rule to Judge (ADR 0046)"}
+{"name":"WithStepSpecs","reason":"functional option that declares the step kinds Judge judges (ADR 0046)"}
 {"name":"WithTarget","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithTargetResults","reason":"functional option that configures a Run; the SDK examples read each finished target through it"}
 {"name":"WithUpstream","reason":"functional option that configures a Run, a Target or a Project declaration"}
