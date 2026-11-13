@@ -4,6 +4,7 @@ package commands
 
 import (
 	_ "embed"
+	"fmt"
 	"io/fs"
 	"path"
 	"slices"
@@ -26,8 +27,11 @@ var storeFormats = []types.APIVersion{
 // "guard-rule <name>" per compiled guard rule, "store <api_version>" per
 // store format and "spell <name>" per shipped spell. configKeys comes from
 // config.KnownKeys, which this package does not import.
-func API(configKeys []string) []string {
-	out := generate.Lock(Root)
+func API(configKeys []string) ([]string, error) {
+	out, err := generate.Lock(Root)
+	if err != nil {
+		return nil, fmt.Errorf("list the command tree: %w", err)
+	}
 	for _, k := range configKeys {
 		out = append(out, "config "+k)
 	}
@@ -37,16 +41,20 @@ func API(configKeys []string) []string {
 	for _, f := range storeFormats {
 		out = append(out, "store "+f.String())
 	}
-	out = append(out, shippedSpells()...)
+	shipped, err := shippedSpells(spells.Shipped())
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, shipped...)
 	slices.Sort(out)
-	return out
+	return out, nil
 }
 
-// shippedSpells is "spell <name>" per spell this build carries, named by
+// shippedSpells is "spell <name>" per spell tree carries, named by
 // its directory. A tree that adds or drops one changes the contract.
-func shippedSpells() []string {
+func shippedSpells(tree fs.FS) ([]string, error) {
 	var out []string
-	err := fs.WalkDir(spells.Shipped(), ".", func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(tree, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -56,9 +64,9 @@ func shippedSpells() []string {
 		return nil
 	})
 	if err != nil {
-		panic("commands: the shipped spells do not list: " + err.Error())
+		return nil, fmt.Errorf("list the shipped spells: %w", err)
 	}
-	return out
+	return out, nil
 }
 
 //go:embed testdata/api.lock

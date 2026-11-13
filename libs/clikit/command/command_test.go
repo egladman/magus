@@ -47,21 +47,17 @@ func TestBindFlagsUsesEachKindsDefault(t *testing.T) {
 }
 
 func TestBindFlagsRefusesAMistypedDefault(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Error("an int flag with a string default bound without a panic")
-		}
-	}()
-	Command{Flags: []Flag{{Name: "n", Kind: Int, Default: "8"}}}.BindFlags(flag.NewFlagSet("t", flag.ContinueOnError))
+	err := Command{Flags: []Flag{{Name: "n", Kind: Int, Default: "8"}}}.BindFlags(flag.NewFlagSet("t", flag.ContinueOnError))
+	if err == nil || !strings.Contains(err.Error(), "flag --n is int but its default 8 is a string") {
+		t.Errorf("want an error naming --n and its default, got %v", err)
+	}
 }
 
 func TestBindFlagsRefusesAnUnknownKind(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Error("a flag with no Kind bound without a panic")
-		}
-	}()
-	Command{Flags: []Flag{{Name: "n"}}}.BindFlags(flag.NewFlagSet("t", flag.ContinueOnError))
+	err := Command{Flags: []Flag{{Name: "n"}}}.BindFlags(flag.NewFlagSet("t", flag.ContinueOnError))
+	if err == nil || !strings.Contains(err.Error(), "flag --n has unknown kind") {
+		t.Errorf("want an error naming --n and its kind, got %v", err)
+	}
 }
 
 func negatableFlagSet(t *testing.T) (*flag.FlagSet, *bool) {
@@ -122,12 +118,9 @@ func TestBindFlagsRefusesWhatCheckRefuses(t *testing.T) {
 		"missing default": {Name: "cache", Kind: Bool},
 	} {
 		t.Run(name, func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Error("bound without a panic")
-				}
-			}()
-			Command{Flags: []Flag{f}}.BindFlags(flag.NewFlagSet("t", flag.ContinueOnError))
+			if err := (Command{Flags: []Flag{f}}).BindFlags(flag.NewFlagSet("t", flag.ContinueOnError)); err == nil {
+				t.Error("bound without an error")
+			}
 		})
 	}
 }

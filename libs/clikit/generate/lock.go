@@ -13,17 +13,20 @@ import (
 // "operand run/build". Committed and diffed, a removed line is a removed element a
 // reviewer can see. The caller appends lines for anything the tree does not hold,
 // such as config keys, and sorts again.
-func Lock(root command.Command) []string {
+func Lock(root command.Command) ([]string, error) {
 	var out []string
 	for _, c := range root.Children {
 		out = append(out, "subcommand "+c.Name)
-		visitFlags(c, func(f *flag.Flag) {
+		err := visitFlags(c, func(f *flag.Flag) {
 			out = append(out, fmt.Sprintf("flag %s/%s", c.Name, f.Name))
 		})
+		if err != nil {
+			return nil, err
+		}
 		for _, o := range c.Operands {
 			out = append(out, fmt.Sprintf("operand %s/%s", c.Name, o.Name))
 		}
 	}
 	sort.Strings(out)
-	return out
+	return out, nil
 }

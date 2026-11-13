@@ -20,7 +20,11 @@ func runAPI(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	data := []byte(strings.Join(commands.API(config.KnownKeys()), "\n") + "\n")
+	lines, err := commands.API(config.KnownKeys())
+	if err != nil {
+		return err
+	}
+	data := []byte(strings.Join(lines, "\n") + "\n")
 	if *out == "" {
 		_, err := os.Stdout.Write(data)
 		return err

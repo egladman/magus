@@ -55,6 +55,23 @@ func (s *DigestSuite) write(rel string, body []byte) {
 	s.Require().NoError(os.WriteFile(p, body, 0o644))
 }
 
+type brokenFS struct{}
+
+func (brokenFS) Open(string) (fs.File, error) { return nil, fmt.Errorf("disk gone") }
+
+func (s *DigestSuite) TestAnEmbeddedContractThatDoesNotHashIsAnError() {
+	_, err := embeddedDigest(nil, brokenFS{})
+	s.Require().Error(err)
+	s.ErrorContains(err, "hash the embedded contract")
+	s.ErrorContains(err, "disk gone")
+}
+
+func (s *DigestSuite) TestTheBinarysContractHashes() {
+	sum, err := Binary()
+	s.Require().NoError(err)
+	s.NotEmpty(sum)
+}
+
 func (s *DigestSuite) TestATreeCarryingTheBinarysFilesAgrees() {
 	s.carry()
 	skew, err := Check(s.root)

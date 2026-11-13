@@ -58,7 +58,9 @@ func pagesByName(pages []Page) map[string]string {
 }
 
 func TestRoff(t *testing.T) {
-	pages := pagesByName(Roff(tool, "2026-07-26", "v1.2.3"))
+	rendered, err := Roff(tool, "2026-07-26", "v1.2.3")
+	noError(t, err)
+	pages := pagesByName(rendered)
 	equal(t, 1+len(tool.Children), len(pages))
 
 	contains(t, pages["tool.1"], `.TH TOOL 1 "2026-07-26" "tool v1.2.3" "tool Manual"`)
@@ -83,7 +85,9 @@ func TestRoff(t *testing.T) {
 // TestRoffSynopsisNamesTheCommand pins that SYNOPSIS splits the program from its
 // arguments rather than emitting a bare ".B " line.
 func TestRoffSynopsisNamesTheCommand(t *testing.T) {
-	content := pagesByName(Roff(tool, "", ""))["tool-init.1"]
+	rendered, err := Roff(tool, "", "")
+	noError(t, err)
+	content := pagesByName(rendered)["tool-init.1"]
 	notContains(t, content, ".SH SYNOPSIS\n.B \n")
 	contains(t, content, ".B tool\n.RI \"init [flags]\"")
 }
@@ -100,20 +104,36 @@ func TestRoffExitStatusSectionIsOptional(t *testing.T) {
 			{Code: 2, Meaning: "denied, and also a well-formed call it could not parse"},
 		},
 	}
-	rendered := string(renderCommandRoff(tool, with, "2026-07-26", "v1.2.3"))
-	contains(t, rendered, ".SH EXIT STATUS")
-	contains(t, rendered, `\fB0\fR`)
-	contains(t, rendered, `\fB2\fR`)
+	rendered, err := renderCommandRoff(tool, with, "2026-07-26", "v1.2.3")
+	noError(t, err)
+	contains(t, string(rendered), ".SH EXIT STATUS")
+	contains(t, string(rendered), `\fB0\fR`)
+	contains(t, string(rendered), `\fB2\fR`)
 	// The meaning is escaped like any other prose: an unescaped hyphen renders as a
 	// soft-hyphen break rather than a minus.
-	contains(t, rendered, `well\-formed`)
+	contains(t, string(rendered), `well\-formed`)
 
 	without := command.Command{Name: "guard", Short: "judge one command", Usage: "tool guard [flags]"}
-	notContains(t, string(renderCommandRoff(tool, without, "2026-07-26", "v1.2.3")), "EXIT STATUS")
+	plain, err := renderCommandRoff(tool, without, "2026-07-26", "v1.2.3")
+	noError(t, err)
+	notContains(t, string(plain), "EXIT STATUS")
 }
 
 func TestRoffIsDeterministic(t *testing.T) {
-	equal(t, Roff(tool, "", ""), Roff(tool, "", ""))
+	first, err := Roff(tool, "", "")
+	noError(t, err)
+	second, err := Roff(tool, "", "")
+	noError(t, err)
+	equal(t, first, second)
+}
+
+func TestRoffNamesTheFlagItCannotBind(t *testing.T) {
+	broken := command.Command{Name: "tool", Children: []command.Command{
+		{Name: "run", Flags: []command.Flag{{Name: "n", Kind: command.Int, Default: "8"}}},
+	}}
+	_, err := Roff(broken, "", "")
+	isError(t, err)
+	contains(t, err.Error(), "flag --n is int but its default 8 is a string")
 }
 
 // The helpers below stand in for testify: a library module takes no test dependency.
@@ -176,21 +196,4 @@ func noError(t *testing.T, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-}
-
-func panicsWith(t *testing.T, want any, fn func()) {
-	t.Helper()
-	equal(t, want, panics(t, fn))
-}
-
-func panics(t *testing.T, fn func(), msg ...any) (recovered any) {
-	t.Helper()
-	defer func() {
-		recovered = recover()
-		if recovered == nil {
-			t.Errorf("%s: did not panic", message(msg))
-		}
-	}()
-	fn()
-	return nil
 }

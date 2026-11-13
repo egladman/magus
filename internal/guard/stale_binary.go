@@ -102,7 +102,11 @@ func authorityContract(ctx context.Context, root, rev string) (contract.Skew, er
 	key := authorityKey{root: root, rev: rev}
 	if kept, ok := authorityTrees.Load(key); ok {
 		if tree, ok := kept.(string); ok {
-			return contract.Skew{Binary: contract.Binary(), Tree: tree, Root: root, Revision: rev}, nil
+			bin, err := contract.Binary()
+			if err != nil {
+				return contract.Skew{}, err
+			}
+			return contract.Skew{Binary: bin, Tree: tree, Root: root, Revision: rev}, nil
 		}
 	}
 	vc, err := openRevision(ctx, root, rev)

@@ -27,7 +27,12 @@ func main() {
 	out := flag.String("out", "docs/config.md", "output path for the config reference")
 	flag.Parse()
 
-	if err := os.WriteFile(*out, []byte(render()), 0o644); err != nil {
+	page, err := render()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "magus-configdocs:", err)
+		os.Exit(1)
+	}
+	if err := os.WriteFile(*out, []byte(page), 0o644); err != nil {
 		fmt.Fprintln(os.Stderr, "magus-configdocs:", err)
 		os.Exit(1)
 	}
@@ -36,7 +41,7 @@ func main() {
 
 // render builds the full Markdown page: frontmatter, intro, then one table per
 // top-level config section (cache, output, ...), sorted for byte-stable output.
-func render() string {
+func render() (string, error) {
 	var b strings.Builder
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
 		Title:         "magus.yaml configuration",
@@ -66,11 +71,15 @@ func render() string {
 		fmt.Fprintf(&b, "## %s\n\n", s)
 		rows := make([][]string, 0, len(fields))
 		for _, f := range fields {
-			rows = append(rows, []string{md.Code(f.YamlPath), md.Code(f.EnvVar), flagCell(f.Flag), kindLabel(f.Kind)})
+			label, err := kindLabel(f.Kind)
+			if err != nil {
+				return "", fmt.Errorf("label setting %s: %w", f.YamlPath, err)
+			}
+			rows = append(rows, []string{md.Code(f.YamlPath), md.Code(f.EnvVar), flagCell(f.Flag), label})
 		}
 		b.WriteString(md.Table([]string{"Config key", "Environment variable", "Flag", "Type"}, nil, rows))
 	}
-	return b.String()
+	return b.String(), nil
 }
 
 // topSection returns the config section a yaml path belongs to: the first dotted
@@ -97,22 +106,22 @@ func flagCell(f configuration.FlagNames) string {
 }
 
 // kindLabel maps a setting's command.Kind to a reader-facing type name.
-func kindLabel(k command.Kind) string {
+func kindLabel(k command.Kind) (string, error) {
 	switch k {
 	case command.String:
-		return "string"
+		return "string", nil
 	case command.Int:
-		return "int"
+		return "int", nil
 	case command.Bool:
-		return "bool"
+		return "bool", nil
 	case command.Float:
-		return "float"
+		return "float", nil
 	case command.OptionalBool:
-		return "bool _(env only)_"
+		return "bool _(env only)_", nil
 	case command.Duration:
-		return "duration"
+		return "duration", nil
 	case command.StringList:
-		return "list _(comma-separated, env only)_"
+		return "list _(comma-separated, env only)_", nil
 	}
-	panic(fmt.Sprintf("magus-configdocs: no label for setting kind %q", k))
+	return "", fmt.Errorf("setting kind %q has no label", k)
 }

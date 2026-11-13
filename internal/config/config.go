@@ -1149,28 +1149,31 @@ type Report struct {
 // KnownEnvVar and EnvVarProblem (MGS1046) answer from it, so a name missing here is
 // reported as unknown by doctor and can draw a did-you-mean refusal.
 // TestEveryReadMagusEnvVarIsRegistered fails when shipped code reads a name it lacks.
-func EnvVars() []command.Env {
+func EnvVars() ([]command.Env, error) {
 	defaults := reflect.ValueOf(Defaults())
 	out := make([]command.Env, 0, len(settings.Settings)+len(envOnly))
 	for _, f := range settings.Settings {
-		out = append(out, command.Env{Name: f.EnvVar, Key: f.YamlPath, Default: defaultText(defaults, f.GoPath), Doc: f.Doc})
+		text, err := defaultText(defaults, f.GoPath)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, command.Env{Name: f.EnvVar, Key: f.YamlPath, Default: text, Doc: f.Doc})
 	}
-	return append(out, envOnly...)
+	return append(out, envOnly...), nil
 }
 
-// defaultText renders the field at goPath in defaults, or "" for a zero value. A path
-// the struct does not have panics: the schema is generated from this struct, so a miss
-// means the generated inventory is stale.
-func defaultText(defaults reflect.Value, goPath string) string {
+// defaultText renders the field at goPath in defaults, or "" for a zero value.
+// A path Config lacks means the generated schema is stale.
+func defaultText(defaults reflect.Value, goPath string) (string, error) {
 	v := defaults
 	for _, name := range strings.Split(goPath, ".") {
 		v = v.FieldByName(name)
 		if !v.IsValid() {
-			panic(fmt.Sprintf("config: schema field %s is not in Config; regenerate internal/config/gen/settings", goPath))
+			return "", fmt.Errorf("schema field %s is not in Config; regenerate internal/config/gen/settings", goPath)
 		}
 	}
 	if v.IsZero() {
-		return ""
+		return "", nil
 	}
 	if d, ok := v.Interface().(time.Duration); ok {
 		// 6h0m0s reads as 6h: drop each trailing zero unit.
@@ -1181,7 +1184,7 @@ func defaultText(defaults reflect.Value, goPath string) string {
 		if trimmed, ok := strings.CutSuffix(s, "h0m"); ok {
 			s = trimmed + "h"
 		}
-		return s
+		return s, nil
 	}
 	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
@@ -1191,9 +1194,9 @@ func defaultText(defaults reflect.Value, goPath string) string {
 		for i := range parts {
 			parts[i] = fmt.Sprint(v.Index(i).Interface())
 		}
-		return strings.Join(parts, ",")
+		return strings.Join(parts, ","), nil
 	}
-	return fmt.Sprint(v.Interface())
+	return fmt.Sprint(v.Interface()), nil
 }
 
 // envOnly are the variables no config field carries, so the schema cannot list them:

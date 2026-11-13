@@ -94,13 +94,14 @@ type versionEmbedded struct {
 	ContractSHA256 string `json:"contract_sha256" yaml:"contract_sha256"`
 }
 
-// newVersionOutput is this binary's stamp, without the server half.
+// newVersionOutput is this binary's stamp, without the server half and without
+// the contract digest, which can fail to hash: runVersion adds it.
 func newVersionOutput() versionOutput {
 	b := selfBuild()
 	return versionOutput{
 		Version: b.Version, Commit: b.Commit, Dirty: builtDirty(b), Repository: sourceRepository,
 		BuildDate: b.Date, BuiltBy: builtBy, Engine: "buzz",
-		Embedded: versionEmbedded{FigureSHA256: figure.SourceSHA256(), ContractSHA256: contract.Binary()},
+		Embedded: versionEmbedded{FigureSHA256: figure.SourceSHA256()},
 	}
 }
 
@@ -139,6 +140,9 @@ func runVersion(ctx context.Context, args []string) error {
 		return err
 	}
 	out := newVersionOutput()
+	if out.Embedded.ContractSHA256, err = contract.Binary(); err != nil {
+		return err
+	}
 	// -o name prints the bare version and nothing else, so the round-trip would be paid
 	// for a field nothing renders, and that form is what a CI step compares against a
 	// pin, which is exactly where a server that is slow to answer must not be felt.

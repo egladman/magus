@@ -51,11 +51,12 @@ func TestAliasGroupSpellings(t *testing.T) {
 func TestGroupAliasesFoldsAnAliasIntoItsPrimary(t *testing.T) {
 	explain := command.Flag{Name: "explain", Kind: command.Bool}
 	base := command.Flag{Name: "base", Kind: command.String}
-	groups := groupAliases("demo", []command.Flag{
+	groups, err := groupAliases("demo", []command.Flag{
 		explain,
 		{Name: "e", Kind: command.Bool, AliasOf: "explain"},
 		base,
 	})
+	noError(t, err)
 
 	equal(t, 2, len(groups), "an alias must not introduce a group of its own")
 	equal(t, []aliasGroup{
@@ -67,49 +68,43 @@ func TestGroupAliasesFoldsAnAliasIntoItsPrimary(t *testing.T) {
 // TestGroupAliasesNamesTheFieldForTheLongestSpelling covers the {t, test} case from the
 // doc comment: naming the field after the PRIMARY would hand every read site f.T.
 func TestGroupAliasesNamesTheFieldForTheLongestSpelling(t *testing.T) {
-	groups := groupAliases("demo", []command.Flag{
+	groups, err := groupAliases("demo", []command.Flag{
 		{Name: "t", Kind: command.Bool},
 		{Name: "test", Kind: command.Bool, AliasOf: "t"},
 	})
+	noError(t, err)
 	equal(t, 1, len(groups))
 	equal(t, "Test", groups[0].field)
 }
 
-// TestGroupAliasesPanics pins all three rejections. Each would otherwise emit a
-// shorthand that parses and writes to nothing, which is the bug AliasOf was added to
-// prevent, so a silent extra field is the wrong outcome for every one of them.
-func TestGroupAliasesPanics(t *testing.T) {
+// TestGroupAliasesRefuses pins each rejection. Each would otherwise emit a
+// shorthand that parses and writes to nothing.
+func TestGroupAliasesRefuses(t *testing.T) {
 	t.Run("dangling AliasOf", func(t *testing.T) {
-		panicsWith(t,
-			`binders: demo --x is AliasOf "nope", which it does not declare`,
-			func() {
-				groupAliases("demo", []command.Flag{
-					{Name: "x", Kind: command.Bool, AliasOf: "nope"},
-				})
-			})
+		_, err := groupAliases("demo", []command.Flag{
+			{Name: "x", Kind: command.Bool, AliasOf: "nope"},
+		})
+		isError(t, err)
+		equal(t, `demo --x is AliasOf "nope", which it does not declare`, err.Error())
 	})
 
 	t.Run("alias of an alias", func(t *testing.T) {
-		panicsWith(t,
-			"binders: demo --z aliases --y, which is itself an alias",
-			func() {
-				groupAliases("demo", []command.Flag{
-					{Name: "a", Kind: command.Bool},
-					{Name: "y", Kind: command.Bool, AliasOf: "a"},
-					{Name: "z", Kind: command.Bool, AliasOf: "y"},
-				})
-			})
+		_, err := groupAliases("demo", []command.Flag{
+			{Name: "a", Kind: command.Bool},
+			{Name: "y", Kind: command.Bool, AliasOf: "a"},
+			{Name: "z", Kind: command.Bool, AliasOf: "y"},
+		})
+		isError(t, err)
+		equal(t, "demo --z aliases --y, which is itself an alias", err.Error())
 	})
 
 	t.Run("kind mismatch", func(t *testing.T) {
-		panicsWith(t,
-			"binders: demo --b is string but aliases --a, which is bool",
-			func() {
-				groupAliases("demo", []command.Flag{
-					{Name: "a", Kind: command.Bool},
-					{Name: "b", Kind: command.String, AliasOf: "a"},
-				})
-			})
+		_, err := groupAliases("demo", []command.Flag{
+			{Name: "a", Kind: command.Bool},
+			{Name: "b", Kind: command.String, AliasOf: "a"},
+		})
+		isError(t, err)
+		equal(t, "demo --b is string but aliases --a, which is bool", err.Error())
 	})
 }
 
@@ -166,15 +161,23 @@ func TestGoTypeAndBindMethodCoverEveryBoundKind(t *testing.T) {
 		{command.String, "string", "String"},
 	}
 	for _, c := range cases {
-		equal(t, c.goType, goType(c.kind))
-		equal(t, c.bindMethod, bindMethod(c.kind))
+		typ, err := goType(c.kind)
+		noError(t, err)
+		equal(t, c.goType, typ)
+		method, err := bindMethod(c.kind)
+		noError(t, err)
+		equal(t, c.bindMethod, method)
 	}
-	equal(t, "[]string", goType(command.StringList))
+	typ, err := goType(command.StringList)
+	noError(t, err)
+	equal(t, "[]string", typ)
 
 	// FlagCustom is declared but never bound, so reaching either of these with it
 	// means writeBinder's filter stopped working.
-	panics(t, func() { goType(command.Custom) })
-	panics(t, func() { bindMethod(command.Custom) })
+	_, err = goType(command.Custom)
+	isError(t, err)
+	_, err = bindMethod(command.Custom)
+	isError(t, err)
 }
 
 func TestFlagDefaultLiteral(t *testing.T) {
@@ -198,20 +201,26 @@ func TestFlagDefaultLiteral(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			equal(t, c.want, flagDefaultLiteral(c.flag))
+			got, err := flagDefaultLiteral(c.flag)
+			noError(t, err)
+			equal(t, c.want, got)
 		})
 	}
 
-	panics(t, func() { flagDefaultLiteral(command.Flag{Kind: command.Custom}) })
-	panics(t, func() { flagDefaultLiteral(command.Flag{Name: "n", Kind: command.Int, Default: "8"}) })
+	_, err := flagDefaultLiteral(command.Flag{Kind: command.Custom})
+	isError(t, err)
+	_, err = flagDefaultLiteral(command.Flag{Name: "n", Kind: command.Int, Default: "8"})
+	isError(t, err)
+	contains(t, err.Error(), "flag --n is int but its default 8 is a string")
 }
 
 func TestRenderConsts(t *testing.T) {
 	seen := map[string]string{}
-	got := renderConsts("demo", []command.Flag{
+	got, err := renderConsts("demo", []command.Flag{
 		{Name: "watch", Kind: command.Bool},
 		{Name: "no-cache", Kind: command.Bool},
 	}, seen)
+	noError(t, err)
 
 	equal(t, []string{
 		"\t// demo: --watch\n\tFlagDemoWatch = \"watch\"\n",
@@ -220,29 +229,28 @@ func TestRenderConsts(t *testing.T) {
 
 	// A command visited twice must not emit the constant twice: the second run is a
 	// duplicate declaration, not a collision.
-	again := renderConsts("demo", []command.Flag{{Name: "watch", Kind: command.Bool}}, seen)
+	again, err := renderConsts("demo", []command.Flag{{Name: "watch", Kind: command.Bool}}, seen)
+	noError(t, err)
 	empty(t, again)
 }
 
 // TestRenderConstsRefusesTwoFlagsUnderOneName is the collision goIdent's case-folding
 // makes reachable: -c and -C are different flags and one constant.
 func TestRenderConstsRefusesTwoFlagsUnderOneName(t *testing.T) {
-	panicsWith(t,
-		`binders: FlagDemoC would name both "c" and "C"`,
-		func() {
-			renderConsts("demo", []command.Flag{
-				{Name: "c", Kind: command.Bool},
-				{Name: "C", Kind: command.Bool},
-			}, map[string]string{})
-		})
+	_, err := renderConsts("demo", []command.Flag{
+		{Name: "c", Kind: command.Bool},
+		{Name: "C", Kind: command.Bool},
+	}, map[string]string{})
+	isError(t, err)
+	equal(t, `FlagDemoC would name both "c" and "C"`, err.Error())
 }
 
 func TestWriteBinderEmitsTheStructAndOneBindPerSpelling(t *testing.T) {
 	var b bytes.Buffer
-	writeBinder(&b, "demo", "demo", []command.Flag{
+	noError(t, writeBinder(&b, "demo", "demo", []command.Flag{
 		{Name: "watch", Kind: command.Bool, Default: false, Doc: "Watch it"},
 		{Name: "W", Kind: command.Bool, AliasOf: "watch", Doc: "Short for --watch"},
-	})
+	}))
 	got := b.String()
 
 	contains(t, got, "// DemoFlags are the flags declared for `magus demo`.")
@@ -262,9 +270,9 @@ func TestWriteBinderEmitsTheStructAndOneBindPerSpelling(t *testing.T) {
 
 func TestWriteBinderBindsAStringListWithItsVar(t *testing.T) {
 	var b bytes.Buffer
-	writeBinder(&b, "demo", "demo", []command.Flag{
+	noError(t, writeBinder(&b, "demo", "demo", []command.Flag{
 		{Name: "add-path", Kind: command.StringList, Doc: "A path to add; repeatable"},
-	})
+	}))
 	got := b.String()
 
 	contains(t, got, "\tAddPath []string // --add-path")
@@ -276,10 +284,10 @@ func TestWriteBinderBindsAStringListWithItsVar(t *testing.T) {
 // generated binders from hardcoding a number the live binding disagreed with.
 func TestWriteBinderEmitsDefaultsForARuntimeDefault(t *testing.T) {
 	var b bytes.Buffer
-	writeBinder(&b, "affected plan", "affected", []command.Flag{
+	noError(t, writeBinder(&b, "affected plan", "affected", []command.Flag{
 		{Name: "max-shards", Kind: command.Int, Default: 8, DefaultAtBind: true, Doc: "Maximum CI shards"},
 		{Name: "detail", Kind: command.Bool, Doc: "Per-shard detail"},
-	})
+	}))
 	got := b.String()
 
 	contains(t, got, "type AffectedPlanDefaults struct {")
@@ -298,7 +306,7 @@ func TestWriteBinderEmitsDefaultsForARuntimeDefault(t *testing.T) {
 func TestWriteBinderEmitsNothingWithoutABindableFlag(t *testing.T) {
 	t.Run("no flags", func(t *testing.T) {
 		var b bytes.Buffer
-		writeBinder(&b, "demo", "demo", nil)
+		noError(t, writeBinder(&b, "demo", "demo", nil))
 		empty(t, b.String())
 	})
 
@@ -306,7 +314,7 @@ func TestWriteBinderEmitsNothingWithoutABindableFlag(t *testing.T) {
 	// would panic at parse time with "flag redefined".
 	t.Run("only custom flags", func(t *testing.T) {
 		var b bytes.Buffer
-		writeBinder(&b, "demo", "demo", []command.Flag{{Name: "ignore", Kind: command.Custom}})
+		noError(t, writeBinder(&b, "demo", "demo", []command.Flag{{Name: "ignore", Kind: command.Custom}}))
 		empty(t, b.String())
 	})
 }
@@ -315,11 +323,11 @@ func TestWriteBinderEmitsNothingWithoutABindableFlag(t *testing.T) {
 // hand-binding with it and produces a command that cannot declare write paths, compiling.
 func TestWriteBinderNamesTheFlagsItCannotCarry(t *testing.T) {
 	var b bytes.Buffer
-	writeBinder(&b, "demo", "demo", []command.Flag{
+	noError(t, writeBinder(&b, "demo", "demo", []command.Flag{
 		{Name: "criteria", Kind: command.String},
 		{Name: "write-paths", Kind: command.Custom},
 		{Name: "deny-paths", Kind: command.Custom},
-	})
+	}))
 
 	got := b.String()
 	contains(t, got, "It does NOT carry --write-paths, --deny-paths")
@@ -332,11 +340,11 @@ func TestWriteBinderEmitsParsableGo(t *testing.T) {
 	var b bytes.Buffer
 	b.WriteString("package flaggen\n\nimport (\n\t\"flag\"\n\t\"time\"\n)\n\n")
 	b.WriteString("const (\n\tFlagDemoTimeout = \"timeout\"\n\tFlagDemoName = \"name\"\n\tFlagDemoDepth = \"depth\"\n)\n")
-	writeBinder(&b, "demo", "demo", []command.Flag{
+	noError(t, writeBinder(&b, "demo", "demo", []command.Flag{
 		{Name: "timeout", Kind: command.Duration, Unit: "s", Default: 90 * time.Second, Doc: "Give up after this long"},
 		{Name: "name", Kind: command.String, Default: "main", Doc: "Which one"},
 		{Name: "depth", Kind: command.Int, Doc: "How deep"},
-	})
+	}))
 
 	_, err := format.Source(b.Bytes())
 	if err != nil {

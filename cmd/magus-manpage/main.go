@@ -42,7 +42,11 @@ func main() {
 	flag.Parse()
 
 	root := commands.Root
-	root.Env = config.EnvVars()
+	env, err := config.EnvVars()
+	if err != nil {
+		fatalf("list the environment variables: %v", err)
+	}
+	root.Env = env
 	var pages []generate.Page
 	var ext string
 	switch *format {
@@ -50,14 +54,19 @@ func main() {
 		if *out == "" {
 			*out = "manpage"
 		}
-		pages, ext = generate.Roff(root, *date, *ver), ".1"
+		pages, err = generate.Roff(root, *date, *ver)
+		ext = ".1"
 	case "md":
 		if *out == "" {
 			*out = "docs/reference/manpage"
 		}
-		pages, ext = generate.Markdown(root, "internal/commands/registry.go"), ".md"
+		pages, err = generate.Markdown(root, "internal/commands/registry.go")
+		ext = ".md"
 	default:
 		fatalf("unknown -format %q; want roff or md", *format)
+	}
+	if err != nil {
+		fatalf("render the %s pages: %v", *format, err)
 	}
 
 	if err := os.MkdirAll(*out, 0o755); err != nil {

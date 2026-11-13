@@ -85,16 +85,23 @@ func hidden(name string) bool {
 	return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
 }
 
-// Binary is the digest of the contract this binary was built with.
-func Binary() string { return binary() }
+// Binary is the digest of the contract this binary was built with. It fails
+// when the embedded contract does not hash.
+func Binary() (string, error) { return binary() }
 
-var binary = sync.OnceValue(func() string {
-	d, err := digest(commands.Lock(), spell.GeneratedBuzz())
-	if err != nil {
-		panic("contract: the embedded contract does not hash: " + err.Error())
-	}
-	return d
+var binary = sync.OnceValues(func() (string, error) {
+	return embeddedDigest(commands.Lock(), spell.GeneratedBuzz())
 })
+
+// embeddedDigest is digest over the copies a binary embeds, with the error
+// saying whose contract failed to hash.
+func embeddedDigest(lock []byte, buzz fs.FS) (string, error) {
+	d, err := digest(lock, buzz)
+	if err != nil {
+		return "", fmt.Errorf("hash the embedded contract: %w", err)
+	}
+	return d, nil
+}
 
 // ErrNotCarried is a tree that holds no contract: a workspace that is not a
 // checkout of magus.
@@ -210,7 +217,11 @@ func CheckAt(ctx context.Context, vc Revision, root, rev string) (Skew, error) {
 
 // skew fills s with this binary's digest and the one tree computes.
 func skew(s Skew, tree func() (string, error)) (Skew, error) {
-	s.Binary = Binary()
+	bin, err := Binary()
+	if err != nil {
+		return Skew{}, err
+	}
+	s.Binary = bin
 	sum, err := tree()
 	if errors.Is(err, ErrNotCarried) {
 		return s, nil

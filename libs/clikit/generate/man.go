@@ -19,19 +19,24 @@ type Page struct {
 // Roff renders section 1 man pages for root: <name>.1 for the program and
 // <name>-<command>.1 for each top-level command. An empty date omits it from the
 // title line, and an empty version leaves the source field as the program name.
-func Roff(root command.Command, date, version string) []Page {
+func Roff(root command.Command, date, version string) ([]Page, error) {
 	pages := make([]Page, 0, 1+len(root.Children))
-	pages = append(pages, Page{Name: root.Name + ".1", Content: renderMainRoff(root, date, version)})
-	for _, command := range root.Children {
-		pages = append(pages, Page{
-			Name:    fmt.Sprintf("%s-%s.1", root.Name, command.Name),
-			Content: renderCommandRoff(root, command, date, version),
-		})
+	main, err := renderMainRoff(root, date, version)
+	if err != nil {
+		return nil, err
 	}
-	return pages
+	pages = append(pages, Page{Name: root.Name + ".1", Content: main})
+	for _, command := range root.Children {
+		content, err := renderCommandRoff(root, command, date, version)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, Page{Name: fmt.Sprintf("%s-%s.1", root.Name, command.Name), Content: content})
+	}
+	return pages, nil
 }
 
-func renderMainRoff(root command.Command, date, version string) []byte {
+func renderMainRoff(root command.Command, date, version string) ([]byte, error) {
 	var buf bytes.Buffer
 	w := newWriter(&buf)
 	w.TH(root.Name, "1", date, thSource(root.Name, version), root.Name+" Manual")
@@ -42,7 +47,9 @@ func renderMainRoff(root command.Command, date, version string) []byte {
 	w.Para(root.Long)
 	if len(root.Flags) > 0 {
 		w.SH("Global Flags")
-		writeFlagListRoff(w, root)
+		if err := writeFlagListRoff(w, root); err != nil {
+			return nil, err
+		}
 	}
 	w.SH("Subcommands")
 	w.Indent()
@@ -54,10 +61,10 @@ func renderMainRoff(root command.Command, date, version string) []byte {
 	writeEnvSectionRoff(w, root.Env)
 	writeFilesSectionRoff(w, root.Files)
 	writeSeeAlsoRoff(w, &buf, root, "")
-	return buf.Bytes()
+	return buf.Bytes(), nil
 }
 
-func renderCommandRoff(root, command command.Command, date, version string) []byte {
+func renderCommandRoff(root, command command.Command, date, version string) ([]byte, error) {
 	var buf bytes.Buffer
 	w := newWriter(&buf)
 	pageName := fmt.Sprintf("%s-%s", root.Name, command.Name)
@@ -71,11 +78,15 @@ func renderCommandRoff(root, command command.Command, date, version string) []by
 	}
 	if len(command.Flags) > 0 {
 		w.SH("Options")
-		writeFlagListRoff(w, command)
+		if err := writeFlagListRoff(w, command); err != nil {
+			return nil, err
+		}
 	}
 	// Recursive: a tree nests several levels, and a one-level walk silently dropped
 	// every flag below the second.
-	writeChildFlagsRoff(w, command.Name, command.Children)
+	if err := writeChildFlagsRoff(w, command.Name, command.Children); err != nil {
+		return nil, err
+	}
 	if len(command.Children) > 0 {
 		w.SH("Subcommands")
 		w.Indent()
@@ -106,7 +117,7 @@ func renderCommandRoff(root, command command.Command, date, version string) []by
 		}
 	}
 	writeSeeAlsoRoff(w, &buf, root, command.Name)
-	return buf.Bytes()
+	return buf.Bytes(), nil
 }
 
 func writeSynopsisRoff(buf *bytes.Buffer, usage string) {
@@ -121,37 +132,52 @@ func writeSynopsisRoff(buf *bytes.Buffer, usage string) {
 
 // writeChildFlagsRoff emits an options section for every descendant that
 // declares flags, naming each by its full path.
-func writeChildFlagsRoff(w *writer, path string, children []command.Command) {
+func writeChildFlagsRoff(w *writer, path string, children []command.Command) error {
 	for _, child := range children {
 		sub := fmt.Sprintf("%s %s", path, child.Name)
 		if len(child.Flags) > 0 {
 			w.SS(escapeHyphen(sub + " options"))
-			writeFlagListRoff(w, child)
+			if err := writeFlagListRoff(w, child); err != nil {
+				return err
+			}
 		}
-		writeChildFlagsRoff(w, sub, child.Children)
+		if err := writeChildFlagsRoff(w, sub, child.Children); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func writeFlagListRoff(w *writer, command command.Command) {
+func writeFlagListRoff(w *writer, command command.Command) error {
+	helps, err := flagHelp(command)
+	if err != nil {
+		return err
+	}
 	w.Indent()
-	for _, h := range flagHelp(command) {
+	for _, h := range helps {
 		w.TP(roffFlagLabel(h), escape(h.Usage))
 	}
 	w.Dedent()
+	return nil
 }
 
 // flagHelp binds c's flags on a throwaway FlagSet and describes them sorted.
-func flagHelp(c command.Command) []command.Help {
+func flagHelp(c command.Command) ([]command.Help, error) {
 	fs := flag.NewFlagSet(c.Name, flag.ContinueOnError)
-	c.BindFlags(fs)
-	return command.FlagHelp(fs, nil)
+	if err := c.BindFlags(fs); err != nil {
+		return nil, err
+	}
+	return command.FlagHelp(fs, nil), nil
 }
 
 // visitFlags binds command's flags on a throwaway FlagSet and visits them sorted.
-func visitFlags(command command.Command, visit func(*flag.Flag)) {
+func visitFlags(command command.Command, visit func(*flag.Flag)) error {
 	fs := flag.NewFlagSet(command.Name, flag.ContinueOnError)
-	command.BindFlags(fs)
+	if err := command.BindFlags(fs); err != nil {
+		return err
+	}
 	fs.VisitAll(visit)
+	return nil
 }
 
 func writeExitStatusRoff(w *writer, codes []command.ExitCode) {

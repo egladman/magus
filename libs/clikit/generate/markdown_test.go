@@ -3,7 +3,9 @@ package generate
 import "testing"
 
 func TestMarkdown(t *testing.T) {
-	pages := pagesByName(Markdown(tool, "registry.go"))
+	rendered, err := Markdown(tool, "registry.go")
+	noError(t, err)
+	pages := pagesByName(rendered)
 	equal(t, 1+len(tool.Children), len(pages))
 
 	main := pages["tool.md"]

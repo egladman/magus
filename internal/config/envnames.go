@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/config/gen/settings"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -47,9 +48,11 @@ func Offline() bool {
 var inheritedEnv = map[string]bool{"MAGUS_DAEMON_SOCKET": true}
 
 var registeredEnv = sync.OnceValue(func() map[string]bool {
-	docs := EnvVars()
-	out := make(map[string]bool, len(docs))
-	for _, d := range docs {
+	out := make(map[string]bool, len(settings.Settings)+len(envOnly))
+	for _, f := range settings.Settings {
+		out[f.EnvVar] = true
+	}
+	for _, d := range envOnly {
 		out[d.Name] = true
 	}
 	return out

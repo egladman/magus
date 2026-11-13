@@ -32,7 +32,9 @@ func TestRetiredEnvReplacementsAreKnown(t *testing.T) {
 		known[EnvName("MAGUS", strings.Split(key, ".")...)] = true
 	}
 	// A key can carry a flat name of its own (sandbox.mode is MAGUS_SANDBOX).
-	for _, d := range EnvVars() {
+	docs, err := EnvVars()
+	require.NoError(t, err)
+	for _, d := range docs {
 		known[d.Name] = true
 	}
 	for old, r := range retiredEnv {

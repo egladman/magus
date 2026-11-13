@@ -13,19 +13,24 @@ import (
 // <name>-<command>.md, each opening with YAML frontmatter (title, description,
 // tags) and naming source as the file it is generated from. The definition lists
 // use the PHP Markdown Extra syntax ("term\n: body").
-func Markdown(root command.Command, source string) []Page {
+func Markdown(root command.Command, source string) ([]Page, error) {
 	pages := make([]Page, 0, 1+len(root.Children))
-	pages = append(pages, Page{Name: root.Name + ".md", Content: renderMainMD(root, source)})
-	for _, command := range root.Children {
-		pages = append(pages, Page{
-			Name:    fmt.Sprintf("%s-%s.md", root.Name, command.Name),
-			Content: renderCommandMD(root, command, source),
-		})
+	main, err := renderMainMD(root, source)
+	if err != nil {
+		return nil, err
 	}
-	return pages
+	pages = append(pages, Page{Name: root.Name + ".md", Content: main})
+	for _, command := range root.Children {
+		content, err := renderCommandMD(root, command, source)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, Page{Name: fmt.Sprintf("%s-%s.md", root.Name, command.Name), Content: content})
+	}
+	return pages, nil
 }
 
-func renderMainMD(root command.Command, source string) []byte {
+func renderMainMD(root command.Command, source string) ([]byte, error) {
 	var m mdBuf
 	m.frontmatter(root.Name+" command", root.Description, source, root.Tags)
 	m.h1(root.Name)
@@ -38,7 +43,9 @@ func renderMainMD(root command.Command, source string) []byte {
 	}
 	if len(root.Flags) > 0 {
 		m.h2("Global Flags")
-		writeFlagListMD(&m, root)
+		if err := writeFlagListMD(&m, root); err != nil {
+			return nil, err
+		}
 	}
 	m.h2("Subcommands")
 	for _, command := range root.Children {
@@ -48,10 +55,10 @@ func renderMainMD(root command.Command, source string) []byte {
 	writeEnvSectionMD(&m, root.Env)
 	writeFilesSectionMD(&m, root.Files)
 	writeSeeAlsoMD(&m, root, "")
-	return m.bytes()
+	return m.bytes(), nil
 }
 
-func renderCommandMD(root, command command.Command, source string) []byte {
+func renderCommandMD(root, command command.Command, source string) ([]byte, error) {
 	var m mdBuf
 	desc := command.Description
 	if desc == "" {
@@ -74,10 +81,14 @@ func renderCommandMD(root, command command.Command, source string) []byte {
 	}
 	if len(command.Flags) > 0 {
 		m.h2("Options")
-		writeFlagListMD(&m, command)
+		if err := writeFlagListMD(&m, command); err != nil {
+			return nil, err
+		}
 	}
 	// Recursive, matching the roff renderer.
-	writeChildFlagsMD(&m, command.Name, command.Children)
+	if err := writeChildFlagsMD(&m, command.Name, command.Children); err != nil {
+		return nil, err
+	}
 	if len(command.Children) > 0 {
 		m.h2("Subcommands")
 		for _, child := range command.Children {
@@ -102,7 +113,7 @@ func renderCommandMD(root, command command.Command, source string) []byte {
 		}
 	}
 	writeSeeAlsoMD(&m, root, command.Name)
-	return m.bytes()
+	return m.bytes(), nil
 }
 
 func synopsisMD(usage string) string {
@@ -113,21 +124,31 @@ func synopsisMD(usage string) string {
 }
 
 // writeChildFlagsMD emits an options block for every descendant declaring flags.
-func writeChildFlagsMD(m *mdBuf, path string, children []command.Command) {
+func writeChildFlagsMD(m *mdBuf, path string, children []command.Command) error {
 	for _, child := range children {
 		sub := fmt.Sprintf("%s %s", path, child.Name)
 		if len(child.Flags) > 0 {
 			m.h3(sub + " options")
-			writeFlagListMD(m, child)
+			if err := writeFlagListMD(m, child); err != nil {
+				return err
+			}
 		}
-		writeChildFlagsMD(m, sub, child.Children)
+		if err := writeChildFlagsMD(m, sub, child.Children); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func writeFlagListMD(m *mdBuf, command command.Command) {
-	for _, h := range flagHelp(command) {
+func writeFlagListMD(m *mdBuf, command command.Command) error {
+	helps, err := flagHelp(command)
+	if err != nil {
+		return err
+	}
+	for _, h := range helps {
 		m.def(flagLabelMD(h), mdEsc(h.Usage))
 	}
+	return nil
 }
 
 func writeExitStatusMD(m *mdBuf, codes []command.ExitCode) {

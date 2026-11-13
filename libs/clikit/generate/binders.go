@@ -18,7 +18,7 @@ import (
 //
 // Constants are prefixed by command because a bare flag name is not unique, and a
 // shared constant would quietly tie two commands' flags together. An unknown Kind or
-// a mistyped Default panics, as command.Command.BindFlags does.
+// a mistyped Default is an error, as command.Command.BindFlags reports it.
 func Binders(root command.Command, pkg string) ([]byte, error) {
 	if err := command.Check(root); err != nil {
 		return nil, fmt.Errorf("binders: %w", err)
@@ -36,9 +36,21 @@ func Binders(root command.Command, pkg string) ([]byte, error) {
 
 	seen := map[string]string{}
 	var lines []string
+	var walkErr error
 	command.Walk(root, func(path string, cmd command.Command) {
-		lines = append(lines, renderConsts(path, cmd.Flags, seen)...)
+		if walkErr != nil {
+			return
+		}
+		consts, err := renderConsts(path, cmd.Flags, seen)
+		if err != nil {
+			walkErr = err
+			return
+		}
+		lines = append(lines, consts...)
 	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
 	slices.Sort(lines)
 	for _, l := range lines {
 		b.WriteString(l)
@@ -47,13 +59,19 @@ func Binders(root command.Command, pkg string) ([]byte, error) {
 
 	command.Walk(root, func(path string, cmd command.Command) {
 		for _, mode := range flagModes(cmd.Flags) {
+			if walkErr != nil {
+				return
+			}
 			name := path
 			if mode != "" {
 				name += " " + mode
 			}
-			writeBinder(&b, name, path, flagsForMode(cmd.Flags, mode))
+			walkErr = writeBinder(&b, name, path, flagsForMode(cmd.Flags, mode))
 		}
 	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
 
 	formatted, err := format.Source(b.Bytes())
 	if err != nil {
@@ -112,9 +130,9 @@ func flagsForMode(flags []command.Flag, mode string) []command.Flag {
 // names the command whose constants its flags resolve to ("affected"). They
 // differ only for a sub-mode: a mode binds a subset of ONE command's flags, so
 // --base is a single FlagAffectedBase however many modes accept it.
-func writeBinder(b *bytes.Buffer, cmdPath, constCommand string, flags []command.Flag) {
+func writeBinder(b *bytes.Buffer, cmdPath, constCommand string, flags []command.Flag) error {
 	if len(flags) == 0 {
-		return
+		return nil
 	}
 	// A custom-valued flag is declared for the docs and bound by the command
 	// itself; emitting a field and a second fs.Var for it would panic at parse
@@ -129,9 +147,12 @@ func writeBinder(b *bytes.Buffer, cmdPath, constCommand string, flags []command.
 		bindable = append(bindable, f)
 	}
 	if len(bindable) == 0 {
-		return
+		return nil
 	}
-	groups := groupAliases(cmdPath, bindable)
+	groups, err := groupAliases(cmdPath, bindable)
+	if err != nil {
+		return err
+	}
 
 	// The struct SAYS what it cannot carry, because a caller that binds it and stops
 	// there gets a command whose custom flags parse into nothing and still compiles.
@@ -142,7 +163,11 @@ func writeBinder(b *bytes.Buffer, cmdPath, constCommand string, flags []command.
 	typeName := goIdent(cmdPath) + "Flags"
 	fmt.Fprintf(b, "\n// %sFlags are the flags declared for `magus %s`.%s\ntype %s struct {\n", goIdent(cmdPath), cmdPath, partial, typeName)
 	for _, g := range groups {
-		fmt.Fprintf(b, "\t%s %s // %s\n", g.field, goType(g.primary.Kind), g.spellings())
+		typ, err := goType(g.primary.Kind)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(b, "\t%s %s // %s\n", g.field, typ, g.spellings())
 	}
 	b.WriteString("}\n\n")
 
@@ -159,7 +184,11 @@ func writeBinder(b *bytes.Buffer, cmdPath, constCommand string, flags []command.
 	if len(runtime) > 0 {
 		fmt.Fprintf(b, "// %s carries the defaults `magus %s` resolves at runtime (config, a\n// package constant) rather than declaring as a literal.\ntype %s struct {\n", defaultsType, cmdPath, defaultsType)
 		for _, g := range runtime {
-			fmt.Fprintf(b, "\t%s %s // %s\n", g.field, goType(g.primary.Kind), g.spellings())
+			typ, err := goType(g.primary.Kind)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(b, "\t%s %s // %s\n", g.field, typ, g.spellings())
 		}
 		b.WriteString("}\n\n")
 		param = ", d " + defaultsType
@@ -167,9 +196,12 @@ func writeBinder(b *bytes.Buffer, cmdPath, constCommand string, flags []command.
 
 	fmt.Fprintf(b, "// Bind%s registers `magus %s`'s flags on fs and returns the destination.\nfunc Bind%s(fs *flag.FlagSet%s) *%s {\n\tvar f %s\n", goIdent(cmdPath), cmdPath, goIdent(cmdPath), param, typeName, typeName)
 	for _, g := range groups {
-		def := flagDefaultLiteral(g.primary)
-		if g.primary.DefaultAtBind {
-			def = "d." + g.field
+		def := "d." + g.field
+		if !g.primary.DefaultAtBind {
+			var err error
+			if def, err = flagDefaultLiteral(g.primary); err != nil {
+				return err
+			}
 		}
 		for _, name := range g.names {
 			usage := flagDoc(flags, name)
@@ -186,14 +218,19 @@ func writeBinder(b *bytes.Buffer, cmdPath, constCommand string, flags []command.
 					g.field, fmt.Sprintf("Flag%s%s", goIdent(constCommand), goIdent(name)), def, g.primary.Unit, usage)
 				continue
 			}
+			method, err := bindMethod(g.primary.Kind)
+			if err != nil {
+				return err
+			}
 			fmt.Fprintf(b, "\tfs.%sVar(&f.%s, %s, %s, %q)\n",
-				bindMethod(g.primary.Kind), g.field, fmt.Sprintf("Flag%s%s", goIdent(constCommand), goIdent(name)), def, usage)
+				method, g.field, fmt.Sprintf("Flag%s%s", goIdent(constCommand), goIdent(name)), def, usage)
 		}
 		if g.primary.Kind == command.Bool {
 			fmt.Fprintf(b, "\tcommand.NegatedBoolVar(fs, &f.%s, Flag%s%s)\n", g.field, goIdent(constCommand), goIdent(g.primary.Name))
 		}
 	}
 	b.WriteString("\treturn &f\n}\n")
+	return nil
 }
 
 // aliasGroup is one destination and every flag name that writes to it.
@@ -233,7 +270,7 @@ func dashes(name string) string {
 // group. A dangling or mistyped AliasOf is a panic rather than a silent extra
 // field, because the failure it would otherwise produce is a shorthand that parses
 // and does nothing, the exact bug this concept was added to prevent.
-func groupAliases(cmdPath string, flags []command.Flag) []aliasGroup {
+func groupAliases(cmdPath string, flags []command.Flag) ([]aliasGroup, error) {
 	index := make(map[string]command.Flag, len(flags))
 	for _, f := range flags {
 		index[f.Name] = f
@@ -254,13 +291,13 @@ func groupAliases(cmdPath string, flags []command.Flag) []aliasGroup {
 		}
 		primary, ok := index[f.AliasOf]
 		if !ok {
-			panic(fmt.Sprintf("binders: %s --%s is AliasOf %q, which it does not declare", cmdPath, f.Name, f.AliasOf))
+			return nil, fmt.Errorf("%s --%s is AliasOf %q, which it does not declare", cmdPath, f.Name, f.AliasOf)
 		}
 		if primary.AliasOf != "" {
-			panic(fmt.Sprintf("binders: %s --%s aliases --%s, which is itself an alias", cmdPath, f.Name, f.AliasOf))
+			return nil, fmt.Errorf("%s --%s aliases --%s, which is itself an alias", cmdPath, f.Name, f.AliasOf)
 		}
 		if primary.Kind != f.Kind {
-			panic(fmt.Sprintf("binders: %s --%s is %s but aliases --%s, which is %s", cmdPath, f.Name, f.Kind, f.AliasOf, primary.Kind))
+			return nil, fmt.Errorf("%s --%s is %s but aliases --%s, which is %s", cmdPath, f.Name, f.Kind, f.AliasOf, primary.Kind)
 		}
 		i := at[f.AliasOf]
 		groups[i].names = append(groups[i].names, f.Name)
@@ -279,7 +316,7 @@ func groupAliases(cmdPath string, flags []command.Flag) []aliasGroup {
 		}
 		groups[i].field = goIdent(longest)
 	}
-	return groups
+	return groups, nil
 }
 
 // flagDoc returns the help text declared for one flag name.
@@ -299,61 +336,67 @@ func flagByName(flags []command.Flag, name string) (command.Flag, bool) {
 	return command.Flag{}, false
 }
 
-func goType(k command.Kind) string {
+func goType(k command.Kind) (string, error) {
 	switch k {
 	case command.Bool:
-		return "bool"
+		return "bool", nil
 	case command.Int:
-		return "int"
+		return "int", nil
 	case command.Duration:
-		return "time.Duration"
+		return "time.Duration", nil
 	case command.String:
-		return "string"
+		return "string", nil
 	case command.StringList:
-		return "[]string"
+		return "[]string", nil
 	}
-	panic("binders: unknown flag kind " + string(k))
+	return "", fmt.Errorf("unknown flag kind %s", k)
 }
 
-func bindMethod(k command.Kind) string {
+func bindMethod(k command.Kind) (string, error) {
 	switch k {
 	case command.Bool:
-		return "Bool"
+		return "Bool", nil
 	case command.Int:
-		return "Int"
+		return "Int", nil
 	case command.Duration:
-		return "Duration"
+		return "Duration", nil
 	case command.String:
-		return "String"
+		return "String", nil
 	}
-	panic("binders: unknown flag kind " + string(k))
+	return "", fmt.Errorf("unknown flag kind %s", k)
 }
 
 // flagDefaultLiteral renders a Flag's default as Go source for the generated binder.
-// A nil Default is the kind's zero; a Default of another Go type panics, since the
-// binder would otherwise bind a default the declaration does not say.
-func flagDefaultLiteral(f command.Flag) string {
+// A nil Default is the kind's zero. A Default of another Go type is an error.
+func flagDefaultLiteral(f command.Flag) (string, error) {
 	switch f.Kind {
 	case command.Bool:
-		return fmt.Sprintf("%t", command.TypedDefault[bool](f))
+		v, err := command.TypedDefault[bool](f)
+		return fmt.Sprintf("%t", v), err
 	case command.Int:
-		return fmt.Sprintf("%d", command.TypedDefault[int](f))
+		v, err := command.TypedDefault[int](f)
+		return fmt.Sprintf("%d", v), err
 	case command.Duration:
-		if v := command.TypedDefault[time.Duration](f); v != 0 {
-			return fmt.Sprintf("time.Duration(%d)", int64(v))
+		v, err := command.TypedDefault[time.Duration](f)
+		if err != nil {
+			return "", err
 		}
-		return "0"
+		if v != 0 {
+			return fmt.Sprintf("time.Duration(%d)", int64(v)), nil
+		}
+		return "0", nil
 	case command.String:
-		return fmt.Sprintf("%q", command.TypedDefault[string](f))
+		v, err := command.TypedDefault[string](f)
+		return fmt.Sprintf("%q", v), err
 	case command.StringList:
-		return "nil"
+		return "nil", nil
 	}
-	panic("binders: unknown flag kind " + string(f.Kind))
+	return "", fmt.Errorf("unknown flag kind %s", f.Kind)
 }
 
 // renderConsts renders one command's flags, skipping a name it has already emitted so
 // a command listed twice cannot produce a duplicate declaration.
-func renderConsts(command string, flags []command.Flag, seen map[string]string) []string {
+func renderConsts(command string, flags []command.Flag, seen map[string]string) ([]string, error) {
 	var out []string
 	for _, f := range flags {
 		name := fmt.Sprintf("Flag%s%s", goIdent(command), goIdent(f.Name))
@@ -361,12 +404,12 @@ func renderConsts(command string, flags []command.Flag, seen map[string]string) 
 			if prev == f.Name {
 				continue
 			}
-			panic(fmt.Sprintf("binders: %s would name both %q and %q", name, prev, f.Name))
+			return nil, fmt.Errorf("%s would name both %q and %q", name, prev, f.Name)
 		}
 		seen[name] = f.Name
 		out = append(out, fmt.Sprintf("\t// %s: --%s\n\t%s = %q\n", command, f.Name, name, f.Name))
 	}
-	return out
+	return out, nil
 }
 
 // initialisms are the words Go spells in full caps, as a subset of the list Go's
@@ -395,7 +438,7 @@ func FieldName(name string) string { return goIdent(name) }
 // "no-default-charms" becomes "NoDefaultCharms", "graph deps" becomes "GraphDeps".
 //
 // Each word is title-cased with the rest lowercased, so the one-character flags -c and
-// -C collapse to the same fragment; renderConsts's panic catches that at generate time
+// -C collapse to the same fragment; renderConsts's error catches that at generate time
 // rather than emitting one constant for two flags.
 func goIdent(s string) string {
 	var b strings.Builder

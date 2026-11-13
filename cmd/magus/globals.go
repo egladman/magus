@@ -324,7 +324,10 @@ func printRootFlags(w io.Writer) {
 	// nodisplayflags: this set only prints the root's declared flags in the top-level
 	// help, which lists the display flags itself; it parses nothing.
 	fs := flag.NewFlagSet(commands.Root.Name, flag.ContinueOnError)
-	commands.Root.BindFlags(fs)
+	if err := commands.Root.BindFlags(fs); err != nil {
+		fmt.Fprintf(w, "  the program's own flags cannot be listed: %v\n", err)
+		return
+	}
 	printFlagHelp(w, command.FlagHelp(fs, nil))
 }
 

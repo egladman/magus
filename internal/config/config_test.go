@@ -35,6 +35,20 @@ func TestDefaults_ARunWaitsHalfAnHourForTheBudget(t *testing.T) {
 	assert.Equal(t, 30*time.Minute, Defaults().BudgetWait)
 }
 
+func TestDefaultTextNamesASchemaFieldConfigLacks(t *testing.T) {
+	t.Parallel()
+	_, err := defaultText(reflect.ValueOf(Defaults()), "Cache.NoSuchField")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "schema field Cache.NoSuchField is not in Config")
+}
+
+func TestEnvVarsListsEverySchemaField(t *testing.T) {
+	t.Parallel()
+	docs, err := EnvVars()
+	require.NoError(t, err)
+	assert.Len(t, docs, len(settings.Settings)+len(envOnly))
+}
+
 func TestJobsClaimBounds(t *testing.T) {
 	t.Parallel()
 

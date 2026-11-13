@@ -189,28 +189,42 @@ func walk(path string, c Command, visit func(string, Command)) {
 }
 
 // BindFlags registers c's flags on fs to render or inspect them; the program parses
-// with its generated binders. A Flag with an unknown Kind, or a Default whose type
-// does not match its Kind, panics: the declaration is static data, and a wrong one
-// would document a flag the program does not have. So does a bool whose name starts
-// with no- or that declares no Default; see Check.
+// with its generated binders. It fails on an unknown Kind, on a Default whose
+// type does not match its Kind, and on what Check refuses.
 //
 // Each bool also gets its --no-<name> form, as the generated binders do.
-func (c Command) BindFlags(fs *flag.FlagSet) {
+func (c Command) BindFlags(fs *flag.FlagSet) error {
 	if err := checkFlags(c.Name, c.Flags); err != nil {
-		panic(err.Error())
+		return err
 	}
 	for _, f := range c.Flags {
 		switch f.Kind {
 		case Bool:
-			p := fs.Bool(f.Name, TypedDefault[bool](f), f.Doc)
+			def, err := TypedDefault[bool](f)
+			if err != nil {
+				return err
+			}
+			p := fs.Bool(f.Name, def, f.Doc)
 			if f.AliasOf == "" {
 				NegatedBoolVar(fs, p, f.Name)
 			}
 		case String, Custom:
-			fs.String(f.Name, TypedDefault[string](f), f.Doc)
+			def, err := TypedDefault[string](f)
+			if err != nil {
+				return err
+			}
+			fs.String(f.Name, def, f.Doc)
 		case Int:
-			fs.Int(f.Name, TypedDefault[int](f), f.Doc)
+			def, err := TypedDefault[int](f)
+			if err != nil {
+				return err
+			}
+			fs.Int(f.Name, def, f.Doc)
 		case Duration:
+			def, err := TypedDefault[time.Duration](f)
+			if err != nil {
+				return err
+			}
 			unit, usage := f.Unit, f.Doc
 			if f.AliasOf == "" {
 				usage = DurationUsage(f)
@@ -222,13 +236,14 @@ func (c Command) BindFlags(fs *flag.FlagSet) {
 					}
 				}
 			}
-			DurationVar(fs, new(time.Duration), f.Name, TypedDefault[time.Duration](f), unit, usage)
+			DurationVar(fs, new(time.Duration), f.Name, def, unit, usage)
 		case StringList:
 			StringListVar(fs, new([]string), f.Name, f.Doc)
 		default:
-			panic(fmt.Sprintf("command:flag --%s has unknown kind %s", f.Name, string(f.Kind)))
+			return fmt.Errorf("flag --%s has unknown kind %s", f.Name, string(f.Kind))
 		}
 	}
+	return nil
 }
 
 // Check reports every flag declaration in root's tree the generators refuse: a bool
@@ -411,15 +426,15 @@ func isBool(f *flag.Flag) bool {
 }
 
 // TypedDefault returns f.Default as T, or T's zero value when it is nil. A Default of
-// another type panics; see BindFlags.
-func TypedDefault[T any](f Flag) T {
+// another type is an error; see BindFlags.
+func TypedDefault[T any](f Flag) (T, error) {
 	var zero T
 	if f.Default == nil {
-		return zero
+		return zero, nil
 	}
 	v, ok := f.Default.(T)
 	if !ok {
-		panic(fmt.Sprintf("command:flag --%s is %s but its default %v is a %T", f.Name, f.Kind, f.Default, f.Default))
+		return zero, fmt.Errorf("flag --%s is %s but its default %v is a %T", f.Name, f.Kind, f.Default, f.Default)
 	}
-	return v
+	return v, nil
 }

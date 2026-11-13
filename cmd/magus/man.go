@@ -40,8 +40,15 @@ func manCommand(args []string) error {
 		dir = def
 	}
 	root := commands.Root
-	root.Env = config.EnvVars()
-	pages := generate.Roff(root, "", version)
+	env, err := config.EnvVars()
+	if err != nil {
+		return fmt.Errorf("magus self man: %w", err)
+	}
+	root.Env = env
+	pages, err := generate.Roff(root, "", version)
+	if err != nil {
+		return fmt.Errorf("magus self man: %w", err)
+	}
 	names := make([]string, 0, len(pages))
 	for _, page := range pages {
 		names = append(names, page.Name)
