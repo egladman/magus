@@ -18,8 +18,9 @@ const (
 	// AgentRoleWorker is a session a lease binds in this checkout.
 	AgentRoleWorker AgentRole = "worker"
 	// AgentRoleIntegrator is the worker that integrates this checkout: a subagent spawned
-	// `<parent>/integrate <job>` for the lease that binds it, whose row was taken here. It
-	// builds, regenerates and gates, where any other worker runs only its check.
+	// `<parent>/integrate <job>` for a lease whose job was taken here.
+	// It builds, regenerates and gates, where any other worker
+	// runs only its check.
 	AgentRoleIntegrator AgentRole = "integrator"
 )
 
@@ -209,8 +210,8 @@ type CommandRequest struct {
 	// Role is worker when a lease binds the calling session in this checkout, and
 	// integrator when that worker integrates it.
 	Role AgentRole
-	// Lease is the job row a worker acts under, nil for root. A bound id the job store
-	// does not carry comes back with only its ID set.
+	// Lease is the job a worker acts under, nil for root.
+	// A bound id the job store does not carry comes back with only its ID set.
 	Lease *Job
 	// Thread is which thread of its session the caller is. Role says whether a lease binds
 	// it, which an unleased subagent and a person share; Thread says main or sub. It is
@@ -238,10 +239,9 @@ type CommandRequest struct {
 	// whose directory only running the line reveals, as after
 	// `cd "$X"`. Dir then names where the line starts.
 	Unplaced bool
-	// OwnedCheckouts are the roots, cleaned, of the standing checkouts `magus job fork
-	// --checkout` made for jobs the caller may work in: its lease's, one descending from
-	// it, the row a spawn record names before the caller binds, or any for a root. Empty
-	// when the job store cannot be read, which a rule reads as owning none.
+	// OwnedCheckouts are the cleaned roots of the checkouts `magus job fork
+	// --checkout` made for jobs the caller may work in. An unreadable job
+	// store leaves it empty, owning none.
 	OwnedCheckouts []string
 }
 

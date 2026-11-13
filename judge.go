@@ -88,7 +88,7 @@ func (m *Magus) guardDependencies(ctx context.Context) (guard.Dependencies, erro
 }
 
 // guardDependenciesAt is what the guard judges a call with authority by: the
-// policy of its row's checkout, else this workspace's. The error is a
+// policy of its job's checkout, else this workspace's. The error is a
 // program with no Buzz engine, where neither side of that policy loads.
 func (m *Magus) guardDependenciesAt(ctx context.Context, authority guard.CallAuthority) (guard.Dependencies, error) {
 	root := m.Root()

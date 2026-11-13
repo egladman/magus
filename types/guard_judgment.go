@@ -16,12 +16,8 @@ type GuardJudgment struct {
 	// as a false positive, or greps a trail for, and the text arm prints it beside the
 	// decision for exactly that reason. Empty on a pass.
 	Rule string `json:"rule,omitempty"`
-	// Lease is the row this judgment was graded under, empty when the call named none.
-	//
-	// A session bound to a typo'd id, a session bound to a finished row, and a session
-	// nobody leased are otherwise indistinguishable, and two of the three run unguarded.
-	// An added optional field is not a schema bump: a glue that does not read it is
-	// unaffected, which is the rule agent.GuardAPIVersion states.
+	// Lease is the job this judgment was graded under, empty when the call
+	// named none. It tells a typo'd id, a finished job and no lease apart.
 	Lease string `json:"lease,omitempty"`
 	// LeaseFrom is which source answered Lease; see LeaseSource.
 	LeaseFrom LeaseSource `json:"lease_from,omitempty"`

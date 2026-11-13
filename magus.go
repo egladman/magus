@@ -1421,10 +1421,10 @@ func (m *Magus) untrackedPatch(ctx context.Context, driver types.VCSDriver, path
 			continue
 		}
 		content := strings.TrimSuffix(string(body), "\n")
-		rows := strings.Split(content, "\n")
-		fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n", p, p, p, len(rows))
-		for _, r := range rows {
-			fmt.Fprintf(&b, "+%s\n", r)
+		added := strings.Split(content, "\n")
+		fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n", p, p, p, len(added))
+		for _, line := range added {
+			fmt.Fprintf(&b, "+%s\n", line)
 		}
 	}
 	return b.String(), nil
