@@ -191,8 +191,8 @@ func readConformanceEntry(entry string) (types.Conformance, bool, error) {
 	}
 	drifted := len(out.Distributions) == 0 && out.Answer.Verdict == types.VerdictFound
 	if drifted || (len(keys.Rows) == 0 && len(keys.Distributions) == 0) {
-		return types.Conformance{}, false, fmt.Errorf("conformance: %s holds no distributions, so it was kept in another shape; "+
-			"measure the base again with `magus run conformance-base .`", entry)
+		return types.Conformance{}, false, fmt.Errorf("conformance: %s holds no distributions, since it was kept in another shape, "+
+			"so measure the base again with `magus run conformance-base .`", entry)
 	}
 	return out, true, nil
 }

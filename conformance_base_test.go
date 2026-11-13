@@ -144,7 +144,7 @@ func (s *ConformanceBaseSuite) keep(body string) string {
 	return entry
 }
 
-func (s *ConformanceBaseSuite) TestAnEntryKeptUnderTheOldRowsKeyIsRefused() {
+func (s *ConformanceBaseSuite) TestAnEntryKeptUnderTheOldKeyIsRefused() {
 	entry := s.keep(`{"rows":[],"answer":{"verdict":"found"}}`)
 
 	_, ok, err := readConformanceEntry(entry)
@@ -155,7 +155,7 @@ func (s *ConformanceBaseSuite) TestAnEntryKeptUnderTheOldRowsKeyIsRefused() {
 	s.Contains(err.Error(), "magus run conformance-base .")
 }
 
-func (s *ConformanceBaseSuite) TestAnEntryWithNeitherRowsNorDistributionsIsRefused() {
+func (s *ConformanceBaseSuite) TestAnEntryWithNeitherKeyIsRefused() {
 	entry := s.keep(`{"answer":{"verdict":"absent"}}`)
 
 	_, ok, err := readConformanceEntry(entry)
