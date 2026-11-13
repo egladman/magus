@@ -3286,6 +3286,18 @@ return value(menu\pick()) + value(shop\size\Size.small) + shop\open();`)
 	s.Equal("lsopen", v.String())
 }
 
+func (s *nestedNamespaceSuite) TestAnEnumConvertsAValueThroughANestedNamespace() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/size", "namespace shop\\size;\nexport enum<str> Size { small = \"s\", large = \"l\" }\n")
+	v, err := sess.Eval(context.Background(), `import "shop/size";
+final found = shop\size\Size("l");
+final missing = shop\size\Size("x");
+return (found?.value ?? "none") + (missing?.value ?? "none");`)
+	s.Require().NoError(err)
+	s.Equal("lnone", v.String())
+}
+
 func (s *nestedNamespaceSuite) TestAnAliasedModulesImportLeavesTheEntrysImportWhole() {
 	sess := NewSession(context.Background(), WithEmbedded())
 	s.T().Cleanup(func() { _ = sess.Close() })
