@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // checkServerVersion fails when the server answering this workspace is a different build
@@ -19,7 +19,7 @@ import (
 // The predicate carries no judgment: two version strings match or they do not. For a
 // normal install both sides are one binary and this never fires, so it is not an advisory
 // competing for attention and uptake is the wrong measure of it.
-func (r *runner) checkServerVersion() types.Check {
+func (r *runner) checkServerVersion() check.Check {
 	const name = "server-version"
 
 	di := r.opts.serverInfo
@@ -28,18 +28,18 @@ func (r *runner) checkServerVersion() types.Check {
 		// A PERSISTENT server only. magus adopts a per-process proc server for ordinary
 		// commands, and that one is this very binary, so comparing against it would always
 		// match and would hide exactly the case this check exists for.
-		return types.Check{
-			Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown,
+		return check.Check{
+			Name: name, Status: check.OK, Evidence: check.EvidenceUnknown,
 			Message: "no persistent server answered, so nothing here is served by another build",
 		}
 	case di.ServerVersion == "" || di.ClientVersion == "":
-		return types.Check{
-			Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown,
+		return check.Check{
+			Name: name, Status: check.OK, Evidence: check.EvidenceUnknown,
 			Message: "one side did not report a version, so the two cannot be compared",
 		}
 	case di.ServerVersion == di.ClientVersion:
-		return types.Check{
-			Name: name, Status: types.CheckOK,
+		return check.Check{
+			Name: name, Status: check.OK,
 			Message: fmt.Sprintf("the server serving this workspace is this build (%s)", di.ClientVersion),
 		}
 	}
@@ -54,9 +54,9 @@ func (r *runner) checkServerVersion() types.Check {
 		fmt.Sprintf("restart it to pick up this build: `%s` then `%s`", hint.ServerStop, hint.ServerStart),
 		"it may be serving other workspaces, which stop for them too",
 	)
-	return types.Check{
+	return check.Check{
 		Name:   name,
-		Status: types.CheckFail,
+		Status: check.Fail,
 		Message: fmt.Sprintf("this magus is %s and the server serving it is %s (pid %d)",
 			di.ClientVersion, di.ServerVersion, di.ParentPID),
 		Details: details,

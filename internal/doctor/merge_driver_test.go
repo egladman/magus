@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,7 @@ func TestCheckOwedRegeneration(t *testing.T) {
 	root := testkit.NewRepository(t, nil).Root()
 	r := &runner{ws: rootedWorkspace{root: root}}
 
-	assert.Equal(t, types.Check{Name: "owed-regeneration", Status: types.CheckOK,
+	assert.Equal(t, check.Check{Name: "owed-regeneration", Status: check.OK,
 		Message: "no merge left a regeneration owed"}, r.checkOwedRegeneration(t.Context()))
 
 	ok, err := vcs.RecordOwedRegeneration(t.Context(), root, vcs.OwedRegeneration{Project: ".", Target: "generate", Paths: []string{"MAGUS.md"}})
@@ -28,9 +29,9 @@ func TestCheckOwedRegeneration(t *testing.T) {
 	path, err := vcs.OwedRegenerationPath(t.Context(), root)
 	require.NoError(t, err)
 
-	assert.Equal(t, types.Check{
+	assert.Equal(t, check.Check{
 		Name:    "owed-regeneration",
-		Status:  types.CheckFail,
+		Status:  check.Fail,
 		Message: "1 regeneration(s) a merge kept one side for have not run, so those generated files are stale",
 		Details: []string{
 			hint.Run.With("generate:rw", ".") + " (1 kept file(s): MAGUS.md)",
@@ -59,9 +60,9 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 	register()
 	r := &runner{ws: rootedDetectingWorkspace{rootedWorkspace{root: root}}}
 
-	assert.Equal(t, types.Check{
+	assert.Equal(t, check.Check{
 		Name:   "merge-driver-loads-workspace",
-		Status: types.CheckFail,
+		Status: check.Fail,
 		Message: "the merge driver is registered without the diff drivers installed beside it, so " +
 			"hunk headers name no declaration and a footprint cannot say what a change touched",
 		Details: []string{
@@ -86,7 +87,7 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 	require.True(t, ok)
 	require.NoError(t, installer.InstallMergeDriver(t.Context(), root, types.MergeDriverGlobs{}))
 	register() // the install points the driver at a real magus; the probe needs `true`
-	assert.Equal(t, types.Check{Name: "merge-driver-loads-workspace", Status: types.CheckOK,
+	assert.Equal(t, check.Check{Name: "merge-driver-loads-workspace", Status: check.OK,
 		Message: "the registered merge driver loads this workspace"}, r.checkMergeDriverLoads(t.Context()))
 }
 

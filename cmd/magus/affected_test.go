@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -340,10 +341,10 @@ func TestPlanSummaryMarkdownNamesStagesAndFallbacks(t *testing.T) {
 func TestPlanRiskOnATrivialChange(t *testing.T) {
 	t.Parallel()
 
-	rep := types.TierReport{Base: "0123456789abcdef", Tier: types.RiskTrivial, Gate: []types.TierGateStep{},
-		Evidence: []types.TierEvidence{{Path: "notes/v1.md", Class: "prose", Tier: types.RiskTrivial, Why: "nothing in ci's chain reads it"}}}
+	rep := types.TierReport{Base: "0123456789abcdef", Tier: check.RiskTrivial, Gate: []types.TierGateStep{},
+		Evidence: []check.TierEvidence{{Path: "notes/v1.md", Class: "prose", Tier: check.RiskTrivial, Why: "nothing in ci's chain reads it"}}}
 	risk := newPlanRisk(rep)
-	assert.Equal(t, &planRisk{Tier: types.RiskTrivial, Base: "0123456789abcdef", Paths: rep.Evidence}, risk)
+	assert.Equal(t, &planRisk{Tier: check.RiskTrivial, Base: "0123456789abcdef", Paths: rep.Evidence}, risk)
 	summary := "### Gate sized trivial\n\n" +
 		"No shard runs: the change against `01234567` tiers trivial, so no step of the gate can observe it.\n\n" +
 		"| Changed path | Tier | Class | Decided by |\n| --- | --- | --- | --- |\n" +
@@ -364,7 +365,7 @@ func TestSavedPlanJSONContainsTypedInputsWithoutMarkdown(t *testing.T) {
 	for _, out := range []planOutput{
 		{Target: "ci", Matrix: []planShard{{Shard: "1", Projects: "."}}},
 		{Target: "ci", Inherit: &planInherit{Run: "42", Commit: "abc123"}},
-		{Target: "ci", Risk: &planRisk{Tier: types.RiskTrivial, Paths: []types.TierEvidence{{Path: "notes/v1.md", Tier: types.RiskTrivial, Why: "no gate step reads it"}}}},
+		{Target: "ci", Risk: &planRisk{Tier: check.RiskTrivial, Paths: []check.TierEvidence{{Path: "notes/v1.md", Tier: check.RiskTrivial, Why: "no gate step reads it"}}}},
 	} {
 		body, err := json.Marshal(out)
 		require.NoError(t, err)

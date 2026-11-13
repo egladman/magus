@@ -819,9 +819,9 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 	return nil
 }
 
-// boundaryPackage is a Go package boundary types may live in: the alias a generated file
-// imports it under, and the prefix that keeps its encoder and decoder names apart from a
-// same-named type in another package (queue's Check beside types.Check).
+// boundaryPackage is a Go package boundary types may live in. The alias is
+// what a generated file imports it under. The prefix keeps its encoder names
+// apart from a same-named type elsewhere, as queue's Check beside check.Check.
 type boundaryPackage struct {
 	path   string
 	alias  string
@@ -835,6 +835,7 @@ var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/spells", alias: "spells"},
 	{path: "github.com/egladman/magus/types", alias: "types"},
 	{path: "github.com/egladman/magus/types/agent", alias: "typesagent"},
+	{path: "github.com/egladman/magus/types/check", alias: "check", prefix: "Check"},
 	{path: "github.com/egladman/magus/types/image", alias: "imagetypes", prefix: "Image"},
 	{path: "github.com/egladman/magus/types/daemon", alias: "daemon", prefix: "Status"},
 	{path: "github.com/egladman/magus/types/trail", alias: "trail", prefix: "Trail"},
@@ -929,8 +930,7 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 
 	switch t.Kind() {
 	case reflect.String:
-		// A NAMED string (types.CheckStatus, daemon.TargetRunState) is a distinct
-		// Go type, so it needs the conversion every numeric case already makes. Plain
+		// A named string such as check.Status needs a conversion. Plain
 		// string is emitted bare rather than as string(s), which is redundant and what
 		// the unconvert linter exists to catch.
 		if t != reflect.TypeOf("") {

@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // checkSpellOverrides compares each workspace copy that replaces a built-in with the
@@ -20,18 +20,18 @@ import (
 // Advice at most, and never a Fix: the copy is the workspace's to edit, and whether to
 // take a change the built-in made since is judgment. A copy that does not load is
 // already MGS1044 when the workspace loads.
-func (r *runner) checkSpellOverrides() types.Check {
+func (r *runner) checkSpellOverrides() check.Check {
 	const name = "spell-overrides"
 	// r.ws.Root() is the resolved workspace root; r.root can be empty on this path.
 	details, advice := spellOverrideFindings(r.ws.Root(), r.opts.cfg.Spells)
 	switch {
 	case len(details) == 0:
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no workspace copy replaces a built-in spell"}
+		return check.Check{Name: name, Status: check.OK, Message: "no workspace copy replaces a built-in spell"}
 	case advice == 0:
-		return types.Check{Name: name, Status: types.CheckOK, Message: fmt.Sprintf("%d built-in spell(s) replaced by a workspace copy", len(details)), Details: details}
+		return check.Check{Name: name, Status: check.OK, Message: fmt.Sprintf("%d built-in spell(s) replaced by a workspace copy", len(details)), Details: details}
 	}
-	return types.Check{
-		Name: name, Status: types.CheckAdvice, Details: details,
+	return check.Check{
+		Name: name, Status: check.Advice, Details: details,
 		Message: fmt.Sprintf("%d of %d workspace copies of built-in spells differ from what their stamp says", advice, len(details)),
 	}
 }

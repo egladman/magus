@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
@@ -349,17 +350,17 @@ func ObjectOutputRecord(v types.OutputRecord) vm.Value {
 	return out
 }
 
-func ObjectCheck(v types.Check, enums ffi.EnumCases) vm.Value {
+func ObjectCheck(v check.Check, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StringValue(v.Name))
-	out.MapSet("status", enums.Case("CheckStatus", string(v.Status)))
+	out.MapSet("status", enums.Case("magus\\check\\Status", string(v.Status)))
 	out.MapSet("message", vm.StringValue(v.Message))
 	itemsDetails := make([]vm.Value, len(v.Details))
 	for indexDetails := range v.Details {
 		itemsDetails[indexDetails] = vm.StringValue(v.Details[indexDetails])
 	}
 	out.MapSet("details", vm.ListValue(itemsDetails))
-	out.MapSet("evidence", enums.Case("Evidence", string(v.Evidence)))
+	out.MapSet("evidence", enums.Case("magus\\check\\Evidence", string(v.Evidence)))
 	itemsFix := make([]vm.Value, len(v.Fix))
 	for indexFix := range v.Fix {
 		itemsFix[indexFix] = vm.StringValue(v.Fix[indexFix])
@@ -2199,13 +2200,13 @@ func ObjectDuplication(v types.Duplication, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectTierEvidence(v types.TierEvidence, enums ffi.EnumCases) vm.Value {
+func ObjectCheckTierEvidence(v check.TierEvidence, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("project", vm.StringValue(v.Project))
 	out.MapSet("target", vm.StringValue(v.Target))
 	out.MapSet("class", vm.StringValue(v.Class))
-	out.MapSet("tier", enums.Case("Tier", string(v.Tier)))
+	out.MapSet("tier", enums.Case("magus\\check\\Tier", string(v.Tier)))
 	out.MapSet("why", vm.StringValue(v.Why))
 	itemsPackages := make([]vm.Value, len(v.Packages))
 	for indexPackages := range v.Packages {
@@ -2241,7 +2242,7 @@ func ObjectTierReport(v types.TierReport, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StringValue(v.Base))
 	out.MapSet("target", vm.StringValue(v.Target))
-	out.MapSet("tier", enums.Case("Tier", string(v.Tier)))
+	out.MapSet("tier", enums.Case("magus\\check\\Tier", string(v.Tier)))
 	itemsAffected := make([]vm.Value, len(v.Affected))
 	for indexAffected := range v.Affected {
 		itemsAffected[indexAffected] = vm.StringValue(v.Affected[indexAffected])
@@ -2249,7 +2250,7 @@ func ObjectTierReport(v types.TierReport, enums ffi.EnumCases) vm.Value {
 	out.MapSet("affected", vm.ListValue(itemsAffected))
 	itemsEvidence := make([]vm.Value, len(v.Evidence))
 	for indexEvidence := range v.Evidence {
-		itemsEvidence[indexEvidence] = ObjectTierEvidence(v.Evidence[indexEvidence], enums)
+		itemsEvidence[indexEvidence] = ObjectCheckTierEvidence(v.Evidence[indexEvidence], enums)
 	}
 	out.MapSet("evidence", vm.ListValue(itemsEvidence))
 	itemsGate := make([]vm.Value, len(v.Gate))
@@ -2417,7 +2418,7 @@ func ObjectDiffFile(v difftypes.File, enums ffi.EnumCases) vm.Value {
 	out.MapSet("threads", vm.ListValue(itemsThreads))
 	optRisk := vm.Null
 	if v.Risk != nil {
-		optRisk = ObjectTierEvidence((*v.Risk), enums)
+		optRisk = ObjectCheckTierEvidence((*v.Risk), enums)
 	}
 	out.MapSet("risk", optRisk)
 	return out

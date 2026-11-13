@@ -31,6 +31,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // The viewer is the DEFAULT at a terminal, so this table is about FALLBACK rather than
@@ -1862,8 +1863,8 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	t.Run("conformance shows each check's message", func(t *testing.T) {
 		facts := diffFileFacts(diff.File{
 			Path: "a.go",
-			Symbols: []diff.Symbol{{Label: "EntryPointFrom", Checks: []types.Check{{
-				Name: diff.CheckNamingAffix, Status: types.CheckAdvice, Evidence: types.EvidenceInferred,
+			Symbols: []diff.Symbol{{Label: "EntryPointFrom", Checks: []check.Check{{
+				Name: diff.CheckNamingAffix, Status: check.Advice, Evidence: check.EvidenceInferred,
 				Message: "`EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext`",
 				Details: []string{"named <X>FromContext: BaseFromContext"},
 			}}}},

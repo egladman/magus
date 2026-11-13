@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -124,8 +125,8 @@ func fixtureInputs(provers map[string]Prover, delta ...Classified) Inputs {
 	}
 }
 
-func tiers(rep types.TierReport) map[string]types.Tier {
-	out := map[string]types.Tier{}
+func tiers(rep types.TierReport) map[string]check.Tier {
+	out := map[string]check.Tier{}
 	for _, e := range rep.Evidence {
 		if e.Path != "" {
 			out[e.Path] = e.Tier
@@ -155,20 +156,20 @@ func TestAssessTierRules(t *testing.T) {
 		name  string
 		path  string
 		class Class
-		want  map[string]types.Tier
+		want  map[string]check.Tier
 	}{
-		{"generated", "e/zz_generated.go", ClassGenerated, map[string]types.Tier{"no prover": types.RiskTrivial,
-			"equivalent": types.RiskTrivial, "placed": types.RiskTrivial, "unplaced": types.RiskTrivial, "prover fails": types.RiskTrivial}},
-		{"prose", "README.md", ClassProse, map[string]types.Tier{"no prover": types.RiskTrivial,
-			"equivalent": types.RiskTrivial, "placed": types.RiskScoped, "unplaced": types.RiskFull, "prover fails": types.RiskFull}},
-		{"prose the chain reads", "docs/guide.md", ClassProse, map[string]types.Tier{"no prover": types.RiskScoped,
-			"equivalent": types.RiskScoped, "placed": types.RiskScoped, "unplaced": types.RiskFull, "prover fails": types.RiskFull}},
-		{"comment-only", "c/c.go", ClassCommentOnly, map[string]types.Tier{"no prover": types.RiskMechanical,
-			"equivalent": types.RiskMechanical, "placed": types.RiskMechanical, "unplaced": types.RiskMechanical, "prover fails": types.RiskMechanical}},
-		{"comment-only the chain reads", "a/a.go", ClassCommentOnly, map[string]types.Tier{"no prover": types.RiskScoped,
-			"equivalent": types.RiskScoped, "placed": types.RiskScoped, "unplaced": types.RiskScoped, "prover fails": types.RiskScoped}},
-		{"code", "a/a.go", ClassCode, map[string]types.Tier{"no prover": types.RiskFull,
-			"equivalent": types.RiskMechanical, "placed": types.RiskScoped, "unplaced": types.RiskFull, "prover fails": types.RiskFull}},
+		{"generated", "e/zz_generated.go", ClassGenerated, map[string]check.Tier{"no prover": check.RiskTrivial,
+			"equivalent": check.RiskTrivial, "placed": check.RiskTrivial, "unplaced": check.RiskTrivial, "prover fails": check.RiskTrivial}},
+		{"prose", "README.md", ClassProse, map[string]check.Tier{"no prover": check.RiskTrivial,
+			"equivalent": check.RiskTrivial, "placed": check.RiskScoped, "unplaced": check.RiskFull, "prover fails": check.RiskFull}},
+		{"prose the chain reads", "docs/guide.md", ClassProse, map[string]check.Tier{"no prover": check.RiskScoped,
+			"equivalent": check.RiskScoped, "placed": check.RiskScoped, "unplaced": check.RiskFull, "prover fails": check.RiskFull}},
+		{"comment-only", "c/c.go", ClassCommentOnly, map[string]check.Tier{"no prover": check.RiskMechanical,
+			"equivalent": check.RiskMechanical, "placed": check.RiskMechanical, "unplaced": check.RiskMechanical, "prover fails": check.RiskMechanical}},
+		{"comment-only the chain reads", "a/a.go", ClassCommentOnly, map[string]check.Tier{"no prover": check.RiskScoped,
+			"equivalent": check.RiskScoped, "placed": check.RiskScoped, "unplaced": check.RiskScoped, "prover fails": check.RiskScoped}},
+		{"code", "a/a.go", ClassCode, map[string]check.Tier{"no prover": check.RiskFull,
+			"equivalent": check.RiskMechanical, "placed": check.RiskScoped, "unplaced": check.RiskFull, "prover fails": check.RiskFull}},
 	}
 	const graphMoves = "magusfile.buzz can change the dependency graph or every project's build, which the affected set cannot see"
 	for _, tc := range cases {
@@ -177,7 +178,7 @@ func TestAssessTierRules(t *testing.T) {
 				name := fmt.Sprintf("%s/%s", tc.name, outcome)
 				if unbounded != "" {
 					name += "/unbounded by the " + unbounded
-					tier = types.RiskFull
+					tier = check.RiskFull
 				}
 				t.Run(name, func(t *testing.T) {
 					in := fixtureInputs(outcomes[outcome](tc.path), Classified{Path: tc.path, Class: tc.class, Why: "classified"})
@@ -191,7 +192,7 @@ func TestAssessTierRules(t *testing.T) {
 					}
 					rep := Assess(context.Background(), in)
 					assert.Equal(t, tier, rep.Tier)
-					assert.Equal(t, map[string]types.Tier{tc.path: tier}, tiers(rep))
+					assert.Equal(t, map[string]check.Tier{tc.path: tier}, tiers(rep))
 					if want != "" {
 						assert.Equal(t, want, rep.Evidence[0].Why, "the reason is the unbounded one")
 					}
@@ -209,7 +210,7 @@ func TestAssessProseAGeneratorReads(t *testing.T) {
 		Classified{Path: "docs/guide.md", Class: ClassProse, Why: `matches "**/*.md" (built-in default)`},
 		Classified{Path: "notes/v1.md", Class: ClassProse, Why: `matches "**/*.md" (built-in default)`},
 	))
-	assert.Equal(t, types.RiskScoped, rep.Tier)
+	assert.Equal(t, check.RiskScoped, rep.Tier)
 	assert.Equal(t, []string{
 		`docs/guide.md: scoped (prose: read by .:x-generate, which ci reaches)`,
 		`notes/v1.md: trivial (prose: matches "**/*.md" (built-in default); nothing in ci's chain reads it)`,
@@ -238,7 +239,7 @@ func TestAssessReaderGates(t *testing.T) {
 	}
 
 	alone := Assess(context.Background(), in(nil, guide))
-	assert.Equal(t, types.RiskScoped, alone.Tier)
+	assert.Equal(t, check.RiskScoped, alone.Tier)
 	assert.Equal(t, []string{"docs/guide.md: scoped (prose: read by .:x-generate, site:render, which ci reaches)"}, alone.Lines(),
 		"site:publish is outside ci's chain")
 	assert.Equal(t, []string{"magus run x-generate . --no-default-charms", "magus run render site --no-default-charms"}, gateLines(alone))
@@ -259,12 +260,12 @@ func TestAssessReaderGates(t *testing.T) {
 // as surely as lint does. One nothing declares stays mechanical.
 func TestAssessCommentOnlyAReaderDeclares(t *testing.T) {
 	read := Assess(context.Background(), fixtureInputs(nil, Classified{Path: "a/a.go", Class: ClassCommentOnly, Why: "only comments differ"}))
-	assert.Equal(t, types.RiskScoped, read.Tier)
+	assert.Equal(t, check.RiskScoped, read.Tier)
 	assert.Equal(t, []string{"a/a.go: scoped (comment-only: only comments differ; read by .:cgo-test, which ci reaches)"}, read.Lines())
 	assert.Equal(t, []string{"magus run lint . --no-default-charms", "magus run cgo-test . --no-default-charms"}, gateLines(read))
 
 	unread := Assess(context.Background(), fixtureInputs(nil, Classified{Path: "c/c.go", Class: ClassCommentOnly, Why: "only comments differ"}))
-	assert.Equal(t, types.RiskMechanical, unread.Tier)
+	assert.Equal(t, check.RiskMechanical, unread.Tier)
 	assert.Equal(t, []string{"magus run lint . --no-default-charms"}, gateLines(unread))
 }
 
@@ -286,14 +287,14 @@ func TestAssessUnboundedPathAlone(t *testing.T) {
 	in := fixtureInputs(nil, Classified{Path: "stray.txt", Class: ClassCode}, Classified{Path: "notes/v1.md", Class: ClassProse, Why: "prose"})
 	in.Unbounded = map[string]string{"stray.txt": "no project claims stray.txt"}
 	rep := Assess(context.Background(), in)
-	assert.Equal(t, types.RiskFull, rep.Tier)
+	assert.Equal(t, check.RiskFull, rep.Tier)
 	assert.Equal(t, []string{
 		"stray.txt: full (code: no project claims stray.txt)",
 		"notes/v1.md: trivial (prose: prose; nothing in ci's chain reads it)",
 	}, rep.Lines())
 
 	in.Delta.Paths = in.Delta.Paths[1:]
-	assert.Equal(t, types.RiskTrivial, Assess(context.Background(), in).Tier, "the claimed path alone is sized by its own tier")
+	assert.Equal(t, check.RiskTrivial, Assess(context.Background(), in).Tier, "the claimed path alone is sized by its own tier")
 }
 
 // gateLines is Commands with each narrowed step's op and packages beside it.
@@ -318,10 +319,10 @@ func TestAssessEmbeddedProse(t *testing.T) {
 	assert.Equal(t, types.TierReport{
 		Base:     "base",
 		Target:   "ci",
-		Tier:     types.RiskScoped,
+		Tier:     check.RiskScoped,
 		Affected: []string{"."},
-		Evidence: []types.TierEvidence{
-			{Path: skill, Project: ".", Class: "prose", Tier: types.RiskScoped, Why: "embedded by Go package fx/skills (go:embed)", Packages: []string{"fx/agent", "fx/skills"}},
+		Evidence: []check.TierEvidence{
+			{Path: skill, Project: ".", Class: "prose", Tier: check.RiskScoped, Why: "embedded by Go package fx/skills (go:embed)", Packages: []string{"fx/agent", "fx/skills"}},
 		},
 		Gate: []types.TierGateStep{
 			{Target: "lint", Projects: []string{"."}, Argv: []string{"magus", "run", "lint", ".", "--no-default-charms"}},
@@ -344,7 +345,7 @@ func TestAssessGeneratedOutput(t *testing.T) {
 	alone := Assess(context.Background(), fixtureInputs(nil,
 		Classified{Path: "e/zz_generated.go", Class: ClassGenerated, Why: "a declared output glob claims it"}))
 	assert.Equal(t, types.TierReport{
-		Base: "base", Target: "ci", Tier: types.RiskTrivial, Affected: []string{"."},
+		Base: "base", Target: "ci", Tier: check.RiskTrivial, Affected: []string{"."},
 		Evidence: alone.Evidence, // asserted as lines below
 		Gate:     []types.TierGateStep{},
 	}, alone, "a trivial change runs nothing")
@@ -353,13 +354,13 @@ func TestAssessGeneratedOutput(t *testing.T) {
 	unrelated := Assess(context.Background(), fixtureInputs(nil,
 		Classified{Path: "e/zz_generated.go", Class: ClassGenerated, Why: "a declared output glob claims it"},
 		Classified{Path: "c/c.go", Class: ClassCommentOnly, Why: "only comments differ"}))
-	assert.Equal(t, map[string]types.Tier{"e/zz_generated.go": types.RiskTrivial, "c/c.go": types.RiskMechanical}, tiers(unrelated),
+	assert.Equal(t, map[string]check.Tier{"e/zz_generated.go": check.RiskTrivial, "c/c.go": check.RiskMechanical}, tiers(unrelated),
 		"a file its generator does not declare leaves the output trusted")
 
 	withInput := Assess(context.Background(), fixtureInputs(nil,
 		Classified{Path: "e/zz_generated.go", Class: ClassGenerated, Why: "a declared output glob claims it"},
 		Classified{Path: "tools/gen.yaml", Class: ClassCode, Why: "no comment syntax"}))
-	assert.Equal(t, map[string]types.Tier{"e/zz_generated.go": types.RiskMechanical, "tools/gen.yaml": types.RiskFull}, tiers(withInput))
+	assert.Equal(t, map[string]check.Tier{"e/zz_generated.go": check.RiskMechanical, "tools/gen.yaml": check.RiskFull}, tiers(withInput))
 	assert.Contains(t, withInput.Lines()[0], "tools/gen.yaml, which it reads, changed too")
 }
 
@@ -368,15 +369,15 @@ func TestAssessGeneratedOutput(t *testing.T) {
 func TestAssessCodeEquivalenceNeedsBothSides(t *testing.T) {
 	in := fixtureInputs(map[string]Prover{".go": tableProver{equivalent: true}}, Classified{Path: "a/a.go", Class: ClassCode})
 	in.Read = func(context.Context, string) (string, string, error) { return "", "", errors.New("absent at base") }
-	assert.Equal(t, types.RiskFull, Assess(context.Background(), in).Tier)
+	assert.Equal(t, check.RiskFull, Assess(context.Background(), in).Tier)
 	in.Read = nil
-	assert.Equal(t, types.RiskFull, Assess(context.Background(), in).Tier)
+	assert.Equal(t, check.RiskFull, Assess(context.Background(), in).Tier)
 }
 
 func TestAssessEmptyDeltaIsTrivial(t *testing.T) {
 	rep := Assess(context.Background(), fixtureInputs(nil))
-	assert.Equal(t, types.TierReport{Base: "base", Target: "ci", Tier: types.RiskTrivial, Affected: []string{"."},
-		Evidence: []types.TierEvidence{}, Gate: []types.TierGateStep{}}, rep)
+	assert.Equal(t, types.TierReport{Base: "base", Target: "ci", Tier: check.RiskTrivial, Affected: []string{"."},
+		Evidence: []check.TierEvidence{}, Gate: []types.TierGateStep{}}, rep)
 }
 
 // TestAssessGates pins the gate each tier builds.
@@ -394,46 +395,46 @@ func TestAssessGates(t *testing.T) {
 	tests := []struct {
 		name string
 		in   Inputs
-		tier types.Tier
+		tier check.Tier
 		gate []string
 	}{
 		{
 			name: "mechanical runs lint, and generate only where lint does not",
 			in:   withProjects(fixtureInputs(nil, Classified{Path: "c/c.go", Class: ClassCommentOnly})),
-			tier: types.RiskMechanical,
+			tier: check.RiskMechanical,
 			gate: []string{"magus run lint . --no-default-charms", "magus run generate docs --no-default-charms", "magus run ci site --no-default-charms"},
 		},
 		{
 			name: "scoped narrows the test target and runs the rest of the chain",
 			in:   fixtureInputs(map[string]Prover{".go": placed}, Classified{Path: "a/a.go", Class: ClassCode}),
-			tier: types.RiskScoped,
+			tier: check.RiskScoped,
 			gate: []string{"magus run lint . --no-default-charms", "magus run build . --no-default-charms",
 				"magus run test . --no-default-charms (go::go-test narrowed to fx/a fx/b)"},
 		},
 		{
 			name: "scoped runs every other affected project whole",
 			in:   withProjects(fixtureInputs(map[string]Prover{".go": placed}, Classified{Path: "a/a.go", Class: ClassCode})),
-			tier: types.RiskScoped,
+			tier: check.RiskScoped,
 			gate: []string{"magus run lint . --no-default-charms", "magus run build . --no-default-charms",
 				"magus run test . --no-default-charms (go::go-test narrowed to fx/a fx/b)", "magus run ci docs site --no-default-charms"},
 		},
 		{
 			name: "a scoped reader alone runs only the reader",
 			in:   withProjects(fixtureInputs(nil, Classified{Path: "docs/guide.md", Class: ClassProse})),
-			tier: types.RiskScoped,
+			tier: check.RiskScoped,
 			gate: []string{"magus run x-generate . --no-default-charms"},
 		},
 		{
 			name: "a module no project is rooted at is full",
 			in: fixtureInputs(map[string]Prover{".go": tableProver{hits: map[string]PackageHit{"libs/x/x.go": {Package: "fx/x", Module: "libs/x"}}}},
 				Classified{Path: "libs/x/x.go", Class: ClassCode}),
-			tier: types.RiskFull,
+			tier: check.RiskFull,
 			gate: []string{"magus run ci . --no-default-charms"},
 		},
 		{
 			name: "full runs the target over every affected project that has it",
 			in:   withProjects(fixtureInputs(nil, Classified{Path: "tools/gen.yaml", Class: ClassCode})),
-			tier: types.RiskFull,
+			tier: check.RiskFull,
 			gate: []string{"magus run ci . docs site --no-default-charms"},
 		},
 	}
@@ -453,7 +454,7 @@ func TestAssessScopedWithoutANarrowableTest(t *testing.T) {
 		Classified{Path: "a/a.go", Class: ClassCode})
 	in.Projects[0].TargetSpellOps = nil
 	rep := Assess(context.Background(), in)
-	require.Equal(t, types.RiskScoped, rep.Tier)
+	require.Equal(t, check.RiskScoped, rep.Tier)
 	assert.Equal(t, []string{"magus run ci . --no-default-charms"}, rep.Commands())
 	assert.True(t, slices.ContainsFunc(rep.Lines(), func(l string) bool {
 		return strings.HasPrefix(l, ". ci: scoped (no test target in ci's chain runs go::go-test")
@@ -461,7 +462,7 @@ func TestAssessScopedWithoutANarrowableTest(t *testing.T) {
 }
 
 func TestHigher(t *testing.T) {
-	order := []types.Tier{types.RiskTrivial, types.RiskMechanical, types.RiskScoped, types.RiskFull}
+	order := []check.Tier{check.RiskTrivial, check.RiskMechanical, check.RiskScoped, check.RiskFull}
 	for i, a := range order {
 		for j, b := range order {
 			assert.Equal(t, i > j, Higher(a, b), "%s over %s", a, b)

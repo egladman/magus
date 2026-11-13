@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // Review is the annotated changeset: every changed file with what the workspace already
@@ -37,9 +38,9 @@ const (
 )
 
 // The DiffRead constants say whether anybody recorded reading a file AT the content it holds
-// now. Untyped strings, matching the older DiffRole and DiffVisibility constants beside them
-// rather than the newer types.Evidence: File.ReadState is one more string field on a
-// struct whose peers are all strings, and typing this one alone would make the odd one out.
+// now. They are untyped strings like the DiffRole constants beside them.
+// File.ReadState's peers are all strings, so typing it alone would make it
+// the odd one out.
 //
 // It is the one fact in a review that no analysis can supply. Every other annotation here
 // describes what a change DOES; this describes whether a person weighed it, which is the
@@ -174,11 +175,10 @@ type Symbol struct {
 	// rendered no declaration.
 	Signature     string `json:"signature,omitempty"      yaml:"signature,omitempty"`
 	BaseSignature string `json:"base_signature,omitempty" yaml:"base_signature,omitempty"`
-	// Checks are what the conformance checks found about a symbol this change adds, renames or
-	// re-signs: each a fact about how the rest of the workspace declares the same kind of
-	// thing, with its counts, reported as CheckAdvice. Only findings that clear the checks' own
-	// bar appear, strongest first.
-	Checks []types.Check `json:"checks,omitempty" yaml:"checks,omitempty"`
+	// Checks are the conformance findings, as check.Advice, about a symbol
+	// this change adds, renames or re-signs. Only findings over the checks'
+	// own bar appear, strongest first.
+	Checks []check.Check `json:"checks,omitempty" yaml:"checks,omitempty"`
 	// PublicThrough are the callers of this symbol that are referenced across a package or
 	// project boundary, each with the chain of calls leading into the symbol, nearest first. At
 	// most 10, walked at most 4 calls deep, each path stopping at its first such caller. Empty
@@ -372,11 +372,10 @@ type File struct {
 	// Hunks is every hunk of the file's patch, in patch order, whether or not a symbol sits in
 	// it. Empty for a file the patch gives no hunks: binary, a pure rename or a mode change.
 	Hunks []Hunk `json:"hunks,omitempty" yaml:"hunks,omitempty"`
-	// Layout is what the package checks found about the directory this change creates around
-	// this file: its file count, test files and name against the directories beside it, as
-	// CheckAdvice. Only the first changed file of a new directory carries it, so a finding is
-	// reported once per directory.
-	Layout []types.Check `json:"layout,omitempty" yaml:"layout,omitempty"`
+	// Layout is the package checks' advice on a directory this change
+	// creates, measured against the directories beside it. Only the first
+	// changed file of a new directory carries it.
+	Layout []check.Check `json:"layout,omitempty" yaml:"layout,omitempty"`
 	// Visibility is one of the DiffVisibility constants: whether any changed symbol here is
 	// referenced from another project. It is the semver-relevant fact, and it is evidence
 	// rather than a verdict; see DiffVisibility.
@@ -424,7 +423,7 @@ type File struct {
 	// Risk is the tier `magus affected ci` proved for this file.
 	// Nil when no assessment ran, and Diff.Notes says why.
 	// Nil ranks as full: an unproven file is unbounded.
-	Risk *types.TierEvidence `json:"risk,omitempty" yaml:"risk,omitempty"`
+	Risk *check.TierEvidence `json:"risk,omitempty" yaml:"risk,omitempty"`
 }
 
 // ThreadRef names one review thread where a report lists it: the id `magus diff --thread`
@@ -459,7 +458,7 @@ func (f File) Generated() bool { return f.Role == RoleOutput }
 // assessment ran.
 func (f File) RiskRank() int {
 	if f.Risk == nil {
-		return types.RiskFull.Rank()
+		return check.RiskFull.Rank()
 	}
 	return f.Risk.Tier.Rank()
 }

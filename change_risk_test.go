@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 type ChangeRiskSuite struct {
@@ -366,7 +367,7 @@ func (s *ChangeRiskSuite) TestSymbolChangesListsEachChangedSymbol() {
 
 func (s *ChangeRiskSuite) TestAttachChangeRiskChecksAddsAScoreAndAGap() {
 	files := []diff.File{{Symbols: []diff.Symbol{
-		{ID: "f", Checks: []types.Check{{Name: "naming"}}}, {ID: "g"}, {ID: "h"},
+		{ID: "f", Checks: []check.Check{{Name: "naming"}}}, {ID: "g"}, {ID: "h"},
 	}}}
 	risk := types.ChangeRisk{
 		Functions: []types.ChangeRiskFunction{{Symbol: "f", Complexity: 3, Covered: 3, Coverable: 4, Score: 3.04}},
@@ -376,12 +377,12 @@ func (s *ChangeRiskSuite) TestAttachChangeRiskChecksAddsAScoreAndAGap() {
 	attachChangeRiskChecks(files, risk)
 
 	s.Equal([]diff.Symbol{
-		{ID: "f", Checks: []types.Check{{Name: "naming"}, {
-			Name: riskCheck, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
+		{ID: "f", Checks: []check.Check{{Name: "naming"}, {
+			Name: riskCheck, Status: check.Advice, Evidence: check.EvidenceMeasured,
 			Message: "change risk 3.0: complexity 3, 3 of 4 coverable units covered",
 		}}},
-		{ID: "g", Checks: []types.Check{{
-			Name: riskCheck, Status: types.CheckAdvice, Evidence: types.EvidenceUnknown,
+		{ID: "g", Checks: []check.Check{{
+			Name: riskCheck, Status: check.Advice, Evidence: check.EvidenceUnknown,
 			Message: "change risk unmeasured: spell go declares no coverage (mgs_getCoverage)",
 		}}},
 		{ID: "h"},

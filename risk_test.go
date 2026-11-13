@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // TestSizedRuns: a sized gate's plain steps run together, and each narrowed step runs on
@@ -46,11 +47,11 @@ func TestAssessRiskTiersASmallChangeHereAndInAnotherCheckout(t *testing.T) {
 	var assessor types.RiskAssessor = m
 	here, err := assessor.AssessRisk(context.Background(), types.TargetCI, types.TierOptions{Paths: []string{"notes/v1.md"}})
 	require.NoError(t, err)
-	assert.Equal(t, types.RiskTrivial, here.Tier, here.Lines())
+	assert.Equal(t, check.RiskTrivial, here.Tier, here.Lines())
 
 	there, err := assessor.AssessRisk(context.Background(), types.TargetCI, types.TierOptions{Paths: []string{"magusfile.buzz"}, Checkout: other})
 	require.NoError(t, err)
-	assert.Equal(t, types.RiskFull, there.Tier, there.Lines())
+	assert.Equal(t, check.RiskFull, there.Tier, there.Lines())
 }
 
 // TestAssessChangeTiersFromDeclarations: prose tiers from what the workspace declares.
@@ -75,12 +76,12 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 
 	for _, tc := range []struct {
 		path string
-		tier types.Tier
+		tier check.Tier
 		gate []string
 	}{
-		{"notes/v1.md", types.RiskTrivial, []string{}},
-		{"docs/guide.md", types.RiskScoped, []string{"magus run render . --no-default-charms"}},
-		{"magusfile.buzz", types.RiskFull, []string{"magus run ci . --no-default-charms"}},
+		{"notes/v1.md", check.RiskTrivial, []string{}},
+		{"docs/guide.md", check.RiskScoped, []string{"magus run render . --no-default-charms"}},
+		{"magusfile.buzz", check.RiskFull, []string{"magus run ci . --no-default-charms"}},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			rep, err := m.AssessChange(context.Background(), types.TargetCI, AssessOptions{ChangedPaths: []string{tc.path}})

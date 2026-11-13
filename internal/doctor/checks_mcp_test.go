@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +30,7 @@ func TestCheckTokens(t *testing.T) {
 	t.Run("absent operator token and no stored tokens", func(t *testing.T) {
 		isolate(t)
 		got := (&runner{}).checkTokens()
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "operator token: absent")
 		assert.Contains(t, got.Message, "0 stored token(s)")
 		assert.Empty(t, got.Details)
@@ -60,7 +61,7 @@ func TestCheckTokens(t *testing.T) {
 			require.NoError(t, err)
 		}
 		got := (&runner{}).checkTokens()
-		assert.Equal(t, types.CheckAdvice, got.Status)
+		assert.Equal(t, check.Advice, got.Status)
 		assert.Contains(t, got.Message, "2 stored token(s)")
 		joined := strings.Join(got.Details, "\n")
 		assert.Contains(t, joined, `token "soon" (mcp=write) expires in`)
@@ -74,7 +75,7 @@ func TestCheckTokens(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(old), 0o700))
 		require.NoError(t, os.WriteFile(old, []byte(`{"version":1}`), 0o600))
 		got := (&runner{}).checkTokens()
-		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, check.Fail, got.Status)
 		joined := strings.Join(got.Details, "\n")
 		assert.Contains(t, joined, "MGS9016")
 		assert.Contains(t, joined, "MGS9017")
@@ -95,7 +96,7 @@ func TestCheckTokens(t *testing.T) {
 		body := fmt.Sprintf(`{"version":"magus.token/v1alpha1","id":"aaaaaaaa","name":"planted","class":"stored","sha256":"%s","grant":{"tokens":"write","mcp":"write","console":"write"},"created":"2026-01-01T00:00:00Z","expires":"9999-01-01T00:00:00Z"}`, strings.Repeat("a", 64))
 		require.NoError(t, os.WriteFile(planted, []byte(body), 0o600))
 		got := (&runner{}).checkTokens()
-		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, check.Fail, got.Status)
 		joined := strings.Join(got.Details, "\n")
 		assert.Contains(t, joined, "MGS9019")
 		assert.Contains(t, joined, planted)
@@ -106,7 +107,7 @@ func TestCheckTokens(t *testing.T) {
 		state := isolate(t)
 		require.NoError(t, os.Chmod(filepath.Join(state, "magus"), 0o755))
 		got := (&runner{}).checkTokens()
-		assert.Equal(t, types.CheckAdvice, got.Status)
+		assert.Equal(t, check.Advice, got.Status)
 		assert.Contains(t, strings.Join(got.Details, "\n"), "chmod 700")
 	})
 }
@@ -120,13 +121,13 @@ func TestCheckTokens(t *testing.T) {
 func TestProbeBridgeReachability(t *testing.T) {
 	t.Run("console disabled skips", func(t *testing.T) {
 		got := probeBridgeReachability(t.Context(), &ServerInfo{})
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "console.enabled: false")
 	})
 
 	t.Run("mcp disabled skips", func(t *testing.T) {
 		got := probeBridgeReachability(t.Context(), &ServerInfo{BridgeEnabled: true})
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "mcp.enabled is false")
 	})
 
@@ -135,9 +136,9 @@ func TestProbeBridgeReachability(t *testing.T) {
 		got := probeBridgeReachability(t.Context(), &ServerInfo{
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, MCPAddr: "127.0.0.1:1",
 		})
-		assert.Equal(t, types.Check{
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceUnknown,
+		assert.Equal(t, check.Check{
+			Status:   check.OK,
+			Evidence: check.EvidenceUnknown,
 			Details:  []string{"start it to serve the console: " + hint.ServerStart.String()},
 		}, withoutWording(got))
 		assert.Contains(t, got.Message, "no persistent server")
@@ -150,7 +151,7 @@ func TestProbeBridgeReachability(t *testing.T) {
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, Persistent: true,
 			MCPAddr: unreachableAddr(t),
 		})
-		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, check.Fail, got.Status)
 		assert.Contains(t, got.Message, "bridge endpoint not reachable")
 	})
 
@@ -164,7 +165,7 @@ func TestProbeBridgeReachability(t *testing.T) {
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, Persistent: true,
 			MCPAddr: strings.TrimPrefix(srv.URL, "http://"),
 		})
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "reachable at")
 	})
 }

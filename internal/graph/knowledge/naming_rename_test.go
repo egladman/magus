@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // files is a Read over fixed contents.
@@ -43,7 +44,7 @@ func TestConformanceFindsARenameLeftover(t *testing.T) {
 		Renamed: map[string]string{symID(subj): "TrackDependencyWait"},
 	})
 
-	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(diff.CheckRenameLeftover,
+	assert.Equal(t, map[string][]check.Check{symID(subj): {advice(diff.CheckRenameLeftover,
 		"`WithDependencyWait` replaced `TrackDependencyWait`, which 2 lines in 2 of the 3 files referencing it still name",
 		"internal/run/wait.go:1", "internal/run/wait_test.go:1",
 	)}}, got)
@@ -62,7 +63,7 @@ func TestConformanceFindsARenameLeftoverInTypeScript(t *testing.T) {
 		Subjects:    subjectIDs(subj), Read: read, Renamed: map[string]string{symID(subj): "landPlan"},
 	})
 
-	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(diff.CheckRenameLeftover,
+	assert.Equal(t, map[string][]check.Check{symID(subj): {advice(diff.CheckRenameLeftover,
 		"`applyPlan` replaced `landPlan`, which 2 lines in 1 of the 2 files referencing it still name",
 		"web/src/queue.ts:3", "web/src/queue.ts:4",
 	)}}, got)

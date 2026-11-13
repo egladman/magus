@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -42,32 +43,32 @@ var wsDocs = config.Diagnostics{Prefix: "WS", Docs: "docs/codes/{code}.md"}
 func (s *doctorSuite) TestWorkspaceDiagnosticDocsPassesAPageWithAResolution() {
 	root := s.workspaceCodePage("WS1001.md", "# WS1001\n\n## Resolution\n\nRun the fix.\n")
 	got := checkWorkspaceDiagnosticDocs(root, wsDocs)
-	s.Equal(types.CheckOK, got.Status, got.Message)
+	s.Equal(check.OK, got.Status, got.Message)
 }
 
 func (s *doctorSuite) TestWorkspaceDiagnosticDocsFailsAPageWithNoResolution() {
 	root := s.workspaceCodePage("WS1001.md", "# WS1001\n\nSomething broke.\n")
 	got := checkWorkspaceDiagnosticDocs(root, wsDocs)
-	s.Equal(types.CheckFail, got.Status)
+	s.Equal(check.Fail, got.Status)
 	s.Contains(got.Details[0], "docs/codes/WS1001.md: declares no remediation section")
 }
 
 func (s *doctorSuite) TestWorkspaceDiagnosticDocsFailsAPageForAnotherPrefix() {
 	root := s.workspaceCodePage("MGS1001.md", "# MGS1001\n\n## Resolution\n\nRun the fix.\n")
 	got := checkWorkspaceDiagnosticDocs(root, wsDocs)
-	s.Equal(types.CheckFail, got.Status)
+	s.Equal(check.Fail, got.Status)
 	s.Contains(got.Details[0], "MGS catalog magus ships")
 }
 
 func (s *doctorSuite) TestWorkspaceDiagnosticDocsSaysAURLIsOutOfReach() {
 	got := checkWorkspaceDiagnosticDocs(s.T().TempDir(), config.Diagnostics{Prefix: "WS", Docs: "https://ws.example/{code}/"})
-	s.Equal(types.CheckAdvice, got.Status)
+	s.Equal(check.Advice, got.Status)
 	s.Contains(got.Message, "cannot read the pages")
 }
 
 func (s *doctorSuite) TestWorkspaceDiagnosticDocsWithNoPrefixHasNothingToCheck() {
 	got := checkWorkspaceDiagnosticDocs(s.T().TempDir(), config.Diagnostics{})
-	s.Equal(types.CheckOK, got.Status)
+	s.Equal(check.OK, got.Status)
 	s.Contains(got.Message, "no diagnostics.prefix")
 }
 
@@ -94,78 +95,78 @@ func TestCheckDiagnosticDocs(t *testing.T) {
 	cases := []struct {
 		name       string
 		body       string
-		wantStatus types.CheckStatus
+		wantStatus check.Status
 		wantDetail string
 	}{
 		{
 			"a page naming the next step",
 			"# MGS1001\n\n## Why\n\nBecause.\n\n## Resolution\n\nDeclare a ci target.\n",
-			types.CheckOK, "",
+			check.OK, "",
 		},
 		{
 			"a page that only explains",
 			"# MGS1001\n\n## Why\n\nBecause.\n\n## What this is NOT\n\nNot that.\n",
-			types.CheckAdvice, "declares no remediation section",
+			check.Advice, "declares no remediation section",
 		},
 		{
 			"a remediation section with nothing under it",
 			"# MGS1001\n\n## Resolution\n\n## See also\n\n- something\n",
-			types.CheckAdvice, "declares no remediation section",
+			check.Advice, "declares no remediation section",
 		},
 		{
 			"verifying the fix is not the fix",
 			"# MGS1001\n\n## Confirming the fix\n\nRun magus ls.\n",
-			types.CheckAdvice, "declares no remediation section",
+			check.Advice, "declares no remediation section",
 		},
 		{
 			"a heading inside a fenced block is sample output",
 			"# MGS1001\n\n```text\n## Resolution\n```\n",
-			types.CheckAdvice, "declares no remediation section",
+			check.Advice, "declares no remediation section",
 		},
 		{
 			"a heading inside a four-backtick fence quoting a three-backtick example",
 			"# MGS1001\n\n````text\n```\n## Resolution\n```\n````\n",
-			types.CheckAdvice, "declares no remediation section",
+			check.Advice, "declares no remediation section",
 		},
 		{
 			// The inner ``` line closing the outer fence would leave every later
 			// heading reading as sample output, this one included.
 			"a section after a four-backtick fence",
 			"# MGS1001\n\n````text\n```\n## Not this one\n```\n````\n\n## Resolution\n\nDeclare it.\n",
-			types.CheckOK, "",
+			check.OK, "",
 		},
 		{
 			"a closed ATX heading",
 			"# MGS1001\n\n## Resolution ##\n\nDeclare it.\n",
-			types.CheckOK, "",
+			check.OK, "",
 		},
 		{
 			"a heading indented three spaces",
 			"# MGS1001\n\n   ## Resolution\n\nDeclare it.\n",
-			types.CheckOK, "",
+			check.OK, "",
 		},
 		{
 			"a fourth space makes it an indented code block",
 			"# MGS1001\n\n    ## Resolution\n\nDeclare it.\n",
-			types.CheckAdvice, "declares no remediation section",
+			check.Advice, "declares no remediation section",
 		},
 		{
 			"a deeper subsection with nothing under it",
 			"# MGS1001\n\n## Fix\n\n### Declaring one\n\n## See also\n\n- something\n",
-			types.CheckAdvice, "declares no remediation section",
+			check.Advice, "declares no remediation section",
 		},
 		{
 			// MGS4001's shape: the section's whole body is numbered subsections.
 			"a deeper subsection carrying the prose",
 			"# MGS1001\n\n## Fix\n\n### 1. Declare a ci target\n\nAdd one to the magusfile.\n",
-			types.CheckOK, "",
+			check.OK, "",
 		},
 		// The spellings already in the tree: the pages say Resolution, Fix, The fix,
 		// Fixing it and Resolve it, and all five are the same section.
-		{"spelled Fix", "# MGS1001\n\n## Fix\n\nDeclare it.\n", types.CheckOK, ""},
-		{"spelled The fix", "# MGS1001\n\n## The fix\n\nDeclare it.\n", types.CheckOK, ""},
-		{"spelled Fixing it", "# MGS1001\n\n## Fixing it\n\nDeclare it.\n", types.CheckOK, ""},
-		{"spelled Resolve it", "# MGS1001\n\n## Resolve it\n\nDeclare it.\n", types.CheckOK, ""},
+		{"spelled Fix", "# MGS1001\n\n## Fix\n\nDeclare it.\n", check.OK, ""},
+		{"spelled The fix", "# MGS1001\n\n## The fix\n\nDeclare it.\n", check.OK, ""},
+		{"spelled Fixing it", "# MGS1001\n\n## Fixing it\n\nDeclare it.\n", check.OK, ""},
+		{"spelled Resolve it", "# MGS1001\n\n## Resolve it\n\nDeclare it.\n", check.OK, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -193,7 +194,7 @@ func TestCheckDiagnosticDocsMissingPage(t *testing.T) {
 	writeCodePage(t, root, types.NoCITarget, "# MGS1001\n\n## Resolution\n\nDeclare it.\n")
 
 	got := checkDiagnosticDocs(root, []types.DiagnosticCode{types.NoCITarget, types.SpellShadowed}, types.CodeURL, nil)
-	require.Equal(t, types.CheckFail, got.Status)
+	require.Equal(t, check.Fail, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "MGS1002")
 	assert.Contains(t, got.Details[0], "docs/reference/codes/magusfile/MGS1002.md",
@@ -216,7 +217,7 @@ func TestCheckDiagnosticDocsUnroutableCode(t *testing.T) {
 	}
 
 	got := checkDiagnosticDocs(root, []types.DiagnosticCode{types.NoCITarget, stray}, url, nil)
-	require.Equal(t, types.CheckFail, got.Status)
+	require.Equal(t, check.Fail, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "no see: target")
 	assert.Contains(t, got.Details[0], "types/diagnostic.go")
@@ -227,7 +228,7 @@ func TestCheckDiagnosticDocsUnroutableCode(t *testing.T) {
 // every user of magus.
 func TestCheckDiagnosticDocsSilentElsewhere(t *testing.T) {
 	got := (&runner{root: t.TempDir()}).checkDiagnosticDocs()
-	require.Equal(t, types.CheckOK, got.Status)
+	require.Equal(t, check.OK, got.Status)
 	require.Contains(t, got.Message, "skipped")
 }
 
@@ -242,7 +243,7 @@ func TestCheckDiagnosticDocsBreakageIsNotAbsence(t *testing.T) {
 		writeCodePage(t, root, types.NoCITarget, "# MGS1001\n\n## Resolution\n\nDeclare it.\n")
 
 		got := checkDiagnosticDocs(root, codes, func(types.DiagnosticCode) string { return "" }, nil)
-		require.Equal(t, types.CheckFail, got.Status, got.Message)
+		require.Equal(t, check.Fail, got.Status, got.Message)
 		require.Len(t, got.Details, 2)
 		assert.Contains(t, got.Details[0], "no see: target")
 	})
@@ -252,7 +253,7 @@ func TestCheckDiagnosticDocsBreakageIsNotAbsence(t *testing.T) {
 		writeCodesTree(t, root)
 
 		got := checkDiagnosticDocs(root, codes, types.CodeURL, nil)
-		require.Equal(t, types.CheckFail, got.Status, got.Message)
+		require.Equal(t, check.Fail, got.Status, got.Message)
 		require.Len(t, got.Details, 2)
 		assert.Contains(t, got.Details[0], "docs/reference/codes/magusfile/MGS1001.md")
 	})
@@ -266,14 +267,14 @@ func TestCheckDiagnosticDocsHelpTitle(t *testing.T) {
 	codes := []types.DiagnosticCode{types.NoCITarget}
 
 	got := checkDiagnosticDocs(root, codes, types.CodeURL, map[types.DiagnosticCode]string{types.NoCITarget: "no ci target"})
-	require.Equal(t, types.CheckOK, got.Status, got.Message)
+	require.Equal(t, check.OK, got.Status, got.Message)
 
 	got = checkDiagnosticDocs(root, codes, types.CodeURL, map[types.DiagnosticCode]string{types.NoCITarget: "ci target missing"})
 	require.Len(t, got.Details, 1)
 	// The detail line is pinned by substring below, so it is carried over here.
-	want := types.Check{
+	want := check.Check{
 		Name:    "diagnostic-docs",
-		Status:  types.CheckFail,
+		Status:  check.Fail,
 		Message: "1 code page(s) are titled otherwise than the Help link that opens them",
 		Details: got.Details,
 	}
@@ -291,12 +292,12 @@ func TestCheckDiagnosticDocsHelpTitle(t *testing.T) {
 // The one test in this module that reads docs/: every page is keyed to a Go constant and
 // graded by Go code, so the root test target declares docs/reference/codes for it.
 //
-// The message is asserted too: CheckOK is also what the out-of-scope skip returns, so a
-// status assertion alone passes on a check that resolved no page at all.
+// The message is asserted too. The out-of-scope skip also returns check.OK,
+// so a status assertion alone passes on a check that resolved no page.
 func TestDiagnosticCatalogPassesItsOwnCheck(t *testing.T) {
 	got := (&runner{root: filepath.Join("..", "..")}).checkDiagnosticDocs()
 
-	require.Equalf(t, types.CheckOK, got.Status, "%s\n%s", got.Message, strings.Join(got.Details, "\n"))
+	require.Equalf(t, check.OK, got.Status, "%s\n%s", got.Message, strings.Join(got.Details, "\n"))
 	require.Equal(t, fmt.Sprintf(
 		"%d diagnostic code(s) resolve to a docs page carrying a remediation section",
 		len(types.AllDiagnosticCodes())), got.Message)

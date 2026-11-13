@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // unexplainedWindow is how much history the hotspot scan reads, and unexplainedTop is how
@@ -47,17 +48,17 @@ type Explanations struct {
 // check red by default is one people learn to skip, taking the real findings with it. The
 // advice fires only where it can mean something: a workspace that HAS notes, none of which
 // reach its hottest code.
-func (r *runner) checkUnexplainedHotspots(ctx context.Context, _ []*types.Project) types.Check {
+func (r *runner) checkUnexplainedHotspots(ctx context.Context, _ []*types.Project) check.Check {
 	const name = "unexplained-hotspots"
 
 	exp := r.explanations()
 	// No notes at all is a choice, not a gap. Grading a workspace 0-of-10 against a
 	// feature it declined is the kind of finding that teaches people to stop reading.
 	if exp.Notes == 0 {
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceUnknown,
+			Status:   check.OK,
+			Evidence: check.EvidenceUnknown,
 			Message:  "no notes in this workspace, so what its hottest files mean is unrecorded rather than unexplained",
 			Details:  []string{"start one where a reason is worth keeping: " + hint.NotesEdit.With("<name>")},
 		}
@@ -65,10 +66,10 @@ func (r *runner) checkUnexplainedHotspots(ctx context.Context, _ []*types.Projec
 
 	analyzer, ok := r.ws.(types.HistoryMetrics)
 	if !ok {
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceUnknown,
+			Status:   check.OK,
+			Evidence: check.EvidenceUnknown,
 			Message:  "this workspace exposes no history lens; skipped",
 		}
 	}
@@ -76,10 +77,10 @@ func (r *runner) checkUnexplainedHotspots(ctx context.Context, _ []*types.Projec
 	if err != nil || len(hot.Files) == 0 {
 		// No history is the common shape of this (a fresh clone, a non-git tree), and it
 		// is emphatically not "the hot code is all explained".
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceUnknown,
+			Status:   check.OK,
+			Evidence: check.EvidenceUnknown,
 			Message:  fmt.Sprintf("no file history in the last %d commits; nothing to rank", unexplainedWindow),
 		}
 	}
@@ -102,12 +103,12 @@ func (r *runner) checkUnexplainedHotspots(ctx context.Context, _ []*types.Projec
 
 	msg := fmt.Sprintf("%d of the %d most-edited file(s) carry a note explaining them", covered, len(top))
 	if covered > 0 {
-		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceInferred, Message: msg}
+		return check.Check{Name: name, Status: check.OK, Evidence: check.EvidenceInferred, Message: msg}
 	}
-	return types.Check{
+	return check.Check{
 		Name:     name,
-		Status:   types.CheckAdvice,
-		Evidence: types.EvidenceInferred,
+		Status:   check.Advice,
+		Evidence: check.EvidenceInferred,
 		Message:  msg + "; the code this workspace works on hardest is what it has written down least about",
 		Details: append(bare,
 			fmt.Sprintf("%d note(s) exist and anchor other code; anchor one here: %s", exp.Notes, hint.NotesEdit.With("<name>"))),

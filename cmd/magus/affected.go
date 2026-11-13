@@ -35,6 +35,7 @@ import (
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -296,7 +297,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	sized := gate.size(ctx, af.Base, !af.RedundancyCheck)
 	if sized != nil {
 		slog.InfoContext(ctx, renderSizing(target, *sized), attr.Notice(""), attr.Component("magus"))
-		if sized.Tier == types.RiskTrivial {
+		if sized.Tier == check.RiskTrivial {
 			return nil
 		}
 	}
@@ -643,9 +644,9 @@ type planInheritPath struct {
 // no gate step can observe it, so the matrix is empty, and every changed path rides
 // along with its tier and what decided it.
 type planRisk struct {
-	Tier  types.Tier           `json:"tier"`
+	Tier  check.Tier           `json:"tier"`
 	Base  string               `json:"base"`
-	Paths []types.TierEvidence `json:"paths"`
+	Paths []check.TierEvidence `json:"paths"`
 }
 
 func newPlanRisk(rep types.TierReport) *planRisk {
@@ -703,9 +704,9 @@ func planOutputs(out planOutput) ([]planPublish, error) {
 // for the delta.
 func planSummaryMarkdown(out planOutput) string {
 	if out.Inherit != nil {
-		evidence := make([]types.TierEvidence, 0, len(out.Inherit.Paths))
+		evidence := make([]check.TierEvidence, 0, len(out.Inherit.Paths))
 		for _, p := range out.Inherit.Paths {
-			evidence = append(evidence, types.TierEvidence{Path: p.Path, Tier: types.Tier(p.Tier), Class: p.Class, Why: p.Why})
+			evidence = append(evidence, check.TierEvidence{Path: p.Path, Tier: check.Tier(p.Tier), Class: p.Class, Why: p.Why})
 		}
 		return (internalci.InheritFinding{
 			Run: out.Inherit.Run, Commit: out.Inherit.Commit,
@@ -931,7 +932,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// waits on a multi-target run.
 	var trivial *planRisk
 	if target == types.TargetCI && !pf.Stdin && len(only) == 0 && inherit == nil {
-		if rep, err := m.AssessChange(ctx, target, magus.AssessOptions{Base: pf.Base}); err == nil && rep.Tier == types.RiskTrivial {
+		if rep, err := m.AssessChange(ctx, target, magus.AssessOptions{Base: pf.Base}); err == nil && rep.Tier == check.RiskTrivial {
 			trivial = newPlanRisk(rep)
 			plan.StageZero, plan.Shards = nil, nil
 			plan.MaxParallel = 0

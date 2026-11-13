@@ -1353,21 +1353,7 @@ github.com/egladman/magus/types.CharmReport.Count field int "json:\"count\"     
 github.com/egladman/magus/types.CharmReport.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.CharmUpdate const untyped string = "update"
 github.com/egladman/magus/types.CharmsFromContext func(ctx context.Context) []string
-github.com/egladman/magus/types.Check type struct
-github.com/egladman/magus/types.Check.Details field []string "json:\"details,omitempty\" yaml:\"details,omitempty\""
-github.com/egladman/magus/types.Check.Evidence field Evidence "json:\"evidence,omitempty\" yaml:\"evidence,omitempty\""
-github.com/egladman/magus/types.Check.Fix field []string "json:\"fix,omitempty\" yaml:\"fix,omitempty\""
-github.com/egladman/magus/types.Check.Message field string "json:\"message,omitempty\" yaml:\"message,omitempty\""
-github.com/egladman/magus/types.Check.Name field string "json:\"name\" yaml:\"name\""
-github.com/egladman/magus/types.Check.Status field CheckStatus "json:\"status\" yaml:\"status\""
-github.com/egladman/magus/types.CheckAdvice const CheckStatus = "advice"
-github.com/egladman/magus/types.CheckFail const CheckStatus = "fail"
 github.com/egladman/magus/types.CheckLayer func(dir string, name string) error
-github.com/egladman/magus/types.CheckOK const CheckStatus = "ok"
-github.com/egladman/magus/types.CheckStatus type string
-github.com/egladman/magus/types.CheckStatus.String method func() string
-github.com/egladman/magus/types.CheckStatus.Valid method func() bool
-github.com/egladman/magus/types.CheckStatus.Values method func() []string
 github.com/egladman/magus/types.CheckoutCommit type struct
 github.com/egladman/magus/types.CheckoutCommit.CommitMeta embedded CommitMeta
 github.com/egladman/magus/types.CheckoutCommit.Paths field []string
@@ -1870,7 +1856,7 @@ github.com/egladman/magus/types.DiskUsage.FreeBytes field int64
 github.com/egladman/magus/types.DiskUsage.Path field string
 github.com/egladman/magus/types.DiskUsage.TotalBytes field int64
 github.com/egladman/magus/types.DoctorReport type struct
-github.com/egladman/magus/types.DoctorReport.Checks field []Check "json:\"checks\" yaml:\"checks\""
+github.com/egladman/magus/types.DoctorReport.Checks field []github.com/egladman/magus/types/check.Check "json:\"checks\" yaml:\"checks\""
 github.com/egladman/magus/types.DoctorReport.Summary field DoctorSummary "json:\"summary\" yaml:\"summary\""
 github.com/egladman/magus/types.DoctorReport.Workspace field string "json:\"workspace\" yaml:\"workspace\""
 github.com/egladman/magus/types.DoctorSummary type struct
@@ -2055,11 +2041,6 @@ github.com/egladman/magus/types.EventSource type struct
 github.com/egladman/magus/types.EventSource.ID field string "json:\"id,omitempty\""
 github.com/egladman/magus/types.EventSource.Kind field string "json:\"kind\""
 github.com/egladman/magus/types.EventSource.Sub field string "json:\"sub,omitempty\""
-github.com/egladman/magus/types.Evidence type string
-github.com/egladman/magus/types.EvidenceDeclared const Evidence = "declared"
-github.com/egladman/magus/types.EvidenceInferred const Evidence = "inferred"
-github.com/egladman/magus/types.EvidenceMeasured const Evidence = "measured"
-github.com/egladman/magus/types.EvidenceUnknown const Evidence = "unknown"
 github.com/egladman/magus/types.ExecDenied const DiagnosticCode = "MGS2007"
 github.com/egladman/magus/types.ExecOptions type struct
 github.com/egladman/magus/types.ExecOptions.AllowFailure field bool
@@ -4479,10 +4460,6 @@ github.com/egladman/magus/types.RevisionWriter.embeds MergeStarter
 github.com/egladman/magus/types.RevisionWriter.embeds TreeMerger
 github.com/egladman/magus/types.RiskAssessor type interface
 github.com/egladman/magus/types.RiskAssessor.AssessRisk imethod func(ctx context.Context, target string, o TierOptions) (TierReport, error)
-github.com/egladman/magus/types.RiskFull const Tier = "full"
-github.com/egladman/magus/types.RiskMechanical const Tier = "mechanical"
-github.com/egladman/magus/types.RiskScoped const Tier = "scoped"
-github.com/egladman/magus/types.RiskTrivial const Tier = "trivial"
 github.com/egladman/magus/types.RootGlob func(projectPath string, glob string) string
 github.com/egladman/magus/types.RootProject const untyped string = "."
 github.com/egladman/magus/types.RuleDoc type struct
@@ -5023,17 +5000,6 @@ github.com/egladman/magus/types.ThreadSource.MarshalText method func() ([]byte, 
 github.com/egladman/magus/types.ThreadSource.UnmarshalText method(ptr) func(text []byte) error
 github.com/egladman/magus/types.ThreadSource.Valid method func() bool
 github.com/egladman/magus/types.ThreadSource.Values method func() []string
-github.com/egladman/magus/types.Tier type string
-github.com/egladman/magus/types.Tier.Rank method func() int
-github.com/egladman/magus/types.TierEvidence type struct
-github.com/egladman/magus/types.TierEvidence.Class field string "json:\"class,omitempty\"   yaml:\"class,omitempty\""
-github.com/egladman/magus/types.TierEvidence.Line method func() string
-github.com/egladman/magus/types.TierEvidence.Packages field []string "json:\"packages,omitempty\" yaml:\"packages,omitempty\""
-github.com/egladman/magus/types.TierEvidence.Path field string "json:\"path,omitempty\"    yaml:\"path,omitempty\""
-github.com/egladman/magus/types.TierEvidence.Project field string "json:\"project,omitempty\" yaml:\"project,omitempty\""
-github.com/egladman/magus/types.TierEvidence.Target field string "json:\"target,omitempty\"  yaml:\"target,omitempty\""
-github.com/egladman/magus/types.TierEvidence.Tier field Tier "json:\"tier\"              yaml:\"tier\""
-github.com/egladman/magus/types.TierEvidence.Why field string "json:\"why\"               yaml:\"why\""
 github.com/egladman/magus/types.TierGateStep type struct
 github.com/egladman/magus/types.TierGateStep.Argv field []string "json:\"argv\"               yaml:\"argv\""
 github.com/egladman/magus/types.TierGateStep.Op field string "json:\"op,omitempty\"       yaml:\"op,omitempty\""
@@ -5048,11 +5014,11 @@ github.com/egladman/magus/types.TierReport type struct
 github.com/egladman/magus/types.TierReport.Affected field []string "json:\"affected\" yaml:\"affected\""
 github.com/egladman/magus/types.TierReport.Base field string "json:\"base\"     yaml:\"base\""
 github.com/egladman/magus/types.TierReport.Commands method func() []string
-github.com/egladman/magus/types.TierReport.Evidence field []TierEvidence "json:\"evidence\" yaml:\"evidence\""
+github.com/egladman/magus/types.TierReport.Evidence field []github.com/egladman/magus/types/check.TierEvidence "json:\"evidence\" yaml:\"evidence\""
 github.com/egladman/magus/types.TierReport.Gate field []TierGateStep "json:\"gate\"     yaml:\"gate\""
 github.com/egladman/magus/types.TierReport.Lines method func() []string
 github.com/egladman/magus/types.TierReport.Target field string "json:\"target\"   yaml:\"target\""
-github.com/egladman/magus/types.TierReport.Tier field Tier "json:\"tier\"     yaml:\"tier\""
+github.com/egladman/magus/types.TierReport.Tier field github.com/egladman/magus/types/check.Tier "json:\"tier\"     yaml:\"tier\""
 github.com/egladman/magus/types.TimeDateOnly const TimeLayout = "2006-01-02"
 github.com/egladman/magus/types.TimeDateTime const TimeLayout = "2006-01-02 15:04:05"
 github.com/egladman/magus/types.TimeKitchen const TimeLayout = "3:04PM"

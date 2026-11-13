@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
@@ -52,7 +53,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "CharmDeclaration", Zero: types.CharmDeclaration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmDeclaration(v.(types.CharmDeclaration)) }},
 	{Name: "CharmEntry", Zero: types.CharmEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmEntry(v.(types.CharmEntry)) }},
 	{Name: "CharmTraceStep", Zero: spells.CharmTraceStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmTraceStep(v.(spells.CharmTraceStep)) }},
-	{Name: "Check", Zero: types.Check{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCheck(v.(types.Check), enums) }},
+	{Name: "Check", Zero: check.Check{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCheck(v.(check.Check), enums) }},
 	{Name: "CheckoutState", Zero: types.CheckoutState{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCheckoutState(v.(types.CheckoutState)) }},
 	{Name: "ClaimEvidence", Zero: types.ClaimEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectClaimEvidence(v.(types.ClaimEvidence), enums) }},
 	{Name: "CleanReport", Zero: types.CleanReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCleanReport(v.(types.CleanReport)) }},
@@ -427,7 +428,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "TargetRun", Zero: daemon.TargetRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusTargetRun(v.(daemon.TargetRun), enums) }},
 	{Name: "TargetSpellUse", Zero: types.TargetSpellUse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetSpellUse(v.(types.TargetSpellUse)) }},
 	{Name: "TermSize", Zero: types.TermSize{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTermSize(v.(types.TermSize)) }},
-	{Name: "TierEvidence", Zero: types.TierEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierEvidence(v.(types.TierEvidence), enums) }},
+	{Name: "TierEvidence", Zero: check.TierEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectCheckTierEvidence(v.(check.TierEvidence), enums)
+	}},
 	{Name: "TierGateStep", Zero: types.TierGateStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierGateStep(v.(types.TierGateStep)) }},
 	{Name: "TierReport", Zero: types.TierReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierReport(v.(types.TierReport), enums) }},
 	{Name: "ToolReport", Zero: types.ToolReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolReport(v.(types.ToolReport)) }},

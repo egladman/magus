@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // goSymbol spells a scip-go moniker for a symbol in package pkg, so a test reads as the
@@ -317,7 +318,7 @@ func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
 	require.Len(t, out.Files[0].Symbols, 1, "Trail's definition line is unchanged, so only EntryPointFrom is a subject")
 	got := out.Files[0].Symbols[0]
 	require.Len(t, got.Checks, 1)
-	check := got.Checks[0]
+	found := got.Checks[0]
 	// The patch added its definition. The exposure counts and signature are the index's, and
 	// the check's wording and counts are pinned where the check is tested.
 	assert.Equal(t, diff.Symbol{
@@ -332,9 +333,9 @@ func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
 		Qualified:             "EntryPointFrom",
 		Signature:             got.Signature,
 		BaseSignature:         got.BaseSignature,
-		Checks: []types.Check{{
-			Name: diff.CheckNamingAffix, Status: types.CheckAdvice,
-			Message: check.Message, Details: check.Details, Evidence: check.Evidence, Fix: check.Fix,
+		Checks: []check.Check{{
+			Name: diff.CheckNamingAffix, Status: check.Advice,
+			Message: found.Message, Details: found.Details, Evidence: found.Evidence, Fix: found.Fix,
 		}},
 		PublicThrough: got.PublicThrough,
 	}, got)

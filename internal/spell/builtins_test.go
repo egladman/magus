@@ -579,7 +579,7 @@ func TestMagusDeclarationsRun(t *testing.T) {
 	for _, r := range records {
 		names = append(names, r.name)
 	}
-	assert.Subset(t, names, []string{"DirsOptions", "NeighborhoodOptions", "PathOptions", "CheckStatus", "TargetRun", "Run"})
+	assert.Subset(t, names, []string{"DirsOptions", "NeighborhoodOptions", "PathOptions", "DiagnosticOrigin", "TargetRun", "Run"})
 	assert.NotContains(t, names, "Context", "the target context is the host's to build")
 }
 

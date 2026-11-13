@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 func doctorCommand(ctx context.Context, root string, rc runConfig, args []string) error {
@@ -177,7 +178,7 @@ func emitDoctor(opts output.Options, out types.DoctorReport) error {
 	case outputName:
 		var names []string
 		for _, c := range out.Checks {
-			if c.Status != types.CheckOK {
+			if c.Status != check.OK {
 				names = append(names, c.Name)
 			}
 		}
@@ -200,7 +201,7 @@ func emitDoctor(opts output.Options, out types.DoctorReport) error {
 		// Only the evidence that qualifies the verdict is printed. Stamping "measured"
 		// on the forty checks that measured something is noise, and noise is what
 		// people learn to skip; "inferred" is the one that says read this twice.
-		if c.Evidence == types.EvidenceInferred {
+		if c.Evidence == check.EvidenceInferred {
 			fmt.Printf(" [%s]", c.Evidence)
 		}
 		fmt.Println()
@@ -224,11 +225,11 @@ func emitDoctor(opts output.Options, out types.DoctorReport) error {
 // checkGlyph renders a finding's level, except that a check which did not run gets its
 // own glyph rather than the pass it nominally returned.
 //
-// A skipped check carries CheckOK because it found nothing wrong, which is true and
-// misleading: nothing was looked at. Rendering it as [pass] is how a green report came
+// A skipped check carries check.OK, which is true and misleading.
+// Nothing was looked at. Rendering it as [pass] is how a green report came
 // to mean "either fine or unexamined, and you cannot tell which from here".
-func checkGlyph(c types.Check, color bool) string {
-	if c.Evidence == types.EvidenceUnknown {
+func checkGlyph(c check.Check, color bool) string {
+	if c.Evidence == check.EvidenceUnknown {
 		if color {
 			return "\x1b[36m[unknown]\x1b[0m"
 		}
@@ -240,14 +241,14 @@ func checkGlyph(c types.Check, color bool) string {
 // statusGlyph renders a doctor check's status with the shared [pass]/[fail] glyphs,
 // colored (green/red) when color is true. Mirrors the cache handler's glyphs so a
 // failed check and a failed build look identical across the tool.
-func statusGlyph(status types.CheckStatus, color bool) string {
+func statusGlyph(status check.Status, color bool) string {
 	label, code := "[?]", "0"
 	switch status {
-	case types.CheckOK:
+	case check.OK:
 		label, code = "[pass]", "32" // green
-	case types.CheckFail:
+	case check.Fail:
 		label, code = "[fail]", "31" // red
-	case types.CheckAdvice:
+	case check.Advice:
 		// Yellow, not red: it did not fail, and coloring it like a failure would
 		// undo the whole point of the level.
 		label, code = "[advice]", "33"
@@ -340,7 +341,7 @@ func buildServerInfo(ctx context.Context) doctor.ServerInfo {
 func applyDoctorFixes(ctx context.Context, root string, rc runConfig, out types.DoctorReport) error {
 	var ran, failed int
 	for _, c := range out.Checks {
-		if c.Status == types.CheckOK || len(c.Fix) == 0 {
+		if c.Status == check.OK || len(c.Fix) == 0 {
 			continue
 		}
 		cmdline := "magus " + strings.Join(c.Fix, " ")

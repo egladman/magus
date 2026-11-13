@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // codeDocsMarker is the path segment every MGS docs URL routes through, and the hinge
@@ -62,14 +63,14 @@ var remediationSections = map[string]bool{
 // reasons). Each such page must be titled "<CODE>: <description>", so the link reads the
 // same as the page it opens; a mismatch fails, since it is mechanical to fix.
 func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func(types.DiagnosticCode) string,
-	helpTitles map[types.DiagnosticCode]string) types.Check {
+	helpTitles map[types.DiagnosticCode]string) check.Check {
 	const name = "diagnostic-docs"
 
 	if _, err := os.Stat(codeDocsRoot(root)); err != nil {
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceUnknown,
+			Status:   check.OK,
+			Evidence: check.EvidenceUnknown,
 			Message:  "no docs" + codeDocsMarker + " tree; skipped (the MGS pages ship with magus's own sources)",
 		}
 	}
@@ -119,33 +120,33 @@ func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func
 		if len(silent) > 0 {
 			msg += fmt.Sprintf("; a further %d have a page that never names a next step", len(silent))
 		}
-		return types.Check{
+		return check.Check{
 			Name:    name,
-			Status:  types.CheckFail,
+			Status:  check.Fail,
 			Message: msg,
 			Details: append(broken, silent...),
 		}
 	}
 	if len(silent) > 0 {
-		return types.Check{
+		return check.Check{
 			Name:   name,
-			Status: types.CheckAdvice,
+			Status: check.Advice,
 			Message: fmt.Sprintf(
 				"%d of %d diagnostic code(s) have a page that says what fires them and not what to do about it",
 				len(silent), len(codes)),
 			Details: silent,
 		}
 	}
-	return types.Check{
+	return check.Check{
 		Name:    name,
-		Status:  types.CheckOK,
+		Status:  check.OK,
 		Message: fmt.Sprintf("%d diagnostic code(s) resolve to a docs page carrying a remediation section", pages),
 	}
 }
 
 // checkDiagnosticDocs reports diagnostic codes whose docs page is missing or names no
 // next step.
-func (r *runner) checkDiagnosticDocs() types.Check {
+func (r *runner) checkDiagnosticDocs() check.Check {
 	return checkDiagnosticDocs(r.root, types.AllDiagnosticCodes(), types.CodeURL, rpcerr.Titles())
 }
 
@@ -156,22 +157,22 @@ const workspaceDiagnosticDocsCheck = "workspace-diagnostic-docs"
 // workspace that are not a code under its prefix or name no next step, the same bar
 // magus's own code pages meet. A docs URL off the workspace is out of reach, and saying so
 // is the answer rather than a pass.
-func checkWorkspaceDiagnosticDocs(root string, d config.Diagnostics) types.Check {
+func checkWorkspaceDiagnosticDocs(root string, d config.Diagnostics) check.Check {
 	switch {
 	case d.Prefix == "":
-		return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckOK,
+		return check.Check{Name: workspaceDiagnosticDocsCheck, Status: check.OK,
 			Message: "this workspace declares no diagnostics.prefix, so it mints no codes to document"}
 	case d.Docs == "":
-		return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckAdvice,
+		return check.Check{Name: workspaceDiagnosticDocsCheck, Status: check.Advice,
 			Message: fmt.Sprintf("diagnostics.prefix %s mints codes, but diagnostics.docs names no page for them, so each raise prints no see: line", d.Prefix)}
 	case strings.Contains(d.Docs, "://"):
-		return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckAdvice,
+		return check.Check{Name: workspaceDiagnosticDocsCheck, Status: check.Advice,
 			Message: fmt.Sprintf("diagnostics.docs is a URL (%s), so doctor cannot read the pages it names", d.Docs)}
 	}
 	pattern := filepath.Join(root, filepath.FromSlash(strings.ReplaceAll(d.Docs, "{code}", "*")))
 	pages, err := filepath.Glob(pattern)
 	if err != nil {
-		return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckFail,
+		return check.Check{Name: workspaceDiagnosticDocsCheck, Status: check.Fail,
 			Message: fmt.Sprintf("diagnostics.docs %q is not a pattern doctor can read: %v", d.Docs, err)}
 	}
 	before, after, _ := strings.Cut(filepath.Base(pattern), "*")
@@ -188,11 +189,11 @@ func checkWorkspaceDiagnosticDocs(root string, d config.Diagnostics) types.Check
 		}
 	}
 	if len(problems) > 0 {
-		return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckFail,
+		return check.Check{Name: workspaceDiagnosticDocsCheck, Status: check.Fail,
 			Message: fmt.Sprintf("%d of %d workspace code page(s) are not a %s code or name no next step", len(problems), len(pages), d.Prefix),
 			Details: problems}
 	}
-	return types.Check{Name: workspaceDiagnosticDocsCheck, Status: types.CheckOK,
+	return check.Check{Name: workspaceDiagnosticDocsCheck, Status: check.OK,
 		Message: fmt.Sprintf("%d workspace code page(s) under %s carry a remediation section", len(pages), d.Docs)}
 }
 

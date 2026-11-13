@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -142,7 +143,7 @@ func TestProjectOptionKeysCoverEveryOption(t *testing.T) {
 
 // floorCheck runs checkSchemaFloor against a workspace declaring required_version and
 // one project using a version-gated key ("tools", gated at 0.4.0).
-func floorCheck(t *testing.T, requiredVersion string) types.Check {
+func floorCheck(t *testing.T, requiredVersion string) check.Check {
 	t.Helper()
 	dir := t.TempDir()
 	yaml := "concurrency: 2\n"
@@ -166,28 +167,28 @@ func floorCheck(t *testing.T, requiredVersion string) types.Check {
 // magus new enough to read the file.
 func TestSchemaFloorCatchesAFloorInsideThePreviousSeries(t *testing.T) {
 	got := floorCheck(t, ">= 0.3.5")
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Equal(t, check.Advice, got.Status)
 	assert.Contains(t, got.Message, "admits a magus older than 0.4.0")
 	assert.Contains(t, got.Details, "tools (needs >= 0.4.0)")
 }
 
 func TestSchemaFloorAcceptsAFloorThatCoversTheKeysInUse(t *testing.T) {
-	assert.Equal(t, types.CheckOK, floorCheck(t, ">= 0.4.0").Status)
+	assert.Equal(t, check.OK, floorCheck(t, ">= 0.4.0").Status)
 	// Higher than needed is still covered: the question is whether the floor is high
 	// enough, never whether it is exactly right.
-	assert.Equal(t, types.CheckOK, floorCheck(t, ">= 0.5.0").Status)
+	assert.Equal(t, check.OK, floorCheck(t, ">= 0.5.0").Status)
 }
 
 func TestSchemaFloorFlagsAFloorBelowTheKeysInUse(t *testing.T) {
 	got := floorCheck(t, ">= 0.1.0")
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Equal(t, check.Advice, got.Status)
 	assert.Contains(t, got.Message, "raise it to")
 }
 
 // No floor at all is advice naming the one to add, not silence.
 func TestSchemaFloorAdvisesWhenNoFloorIsDeclared(t *testing.T) {
 	got := floorCheck(t, "")
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Equal(t, check.Advice, got.Status)
 	assert.Contains(t, got.Message, `required_version: ">= 0.4.0"`)
 }
 
@@ -195,7 +196,7 @@ func TestSchemaFloorAdvisesWhenNoFloorIsDeclared(t *testing.T) {
 // passing: an unparseable floor is not a covered one.
 func TestSchemaFloorReportsAnUnevaluableConstraint(t *testing.T) {
 	got := floorCheck(t, "not-a-constraint")
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Equal(t, check.Advice, got.Status)
 	assert.Contains(t, got.Message, "not a constraint this check can evaluate")
 }
 
@@ -204,6 +205,6 @@ func TestSchemaFloorIsQuietWithoutGatedKeys(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte("concurrency: 2\n"), 0o600))
 	got := (&runner{root: dir}).checkSchemaFloor([]*types.Project{{Path: ".", Dir: dir}})
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.Contains(t, got.Message, "no version-gated magusfile keys")
 }

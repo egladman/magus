@@ -73,8 +73,8 @@ export fun build() > str {
     final dirs = magus\DirsOptions{ language = "go", depth = 2 };
     final path = m\PathOptions{ relations = [m\RelationID.imports] };
     final hood = magus\NeighborhoodOptions{ depth = 1 };
-    final check = magus\Check{};
-    final none = check.status == magus\CheckStatus.none;
+    final code = magus\DiagnosticCode{};
+    final none = code.origin == magus\DiagnosticOrigin.unknown;
     return "{dirs.language} {dirs.depth} {dirs.layer == ""} {path.relations[0].value} {hood.depth} {none}";
 }
 `))

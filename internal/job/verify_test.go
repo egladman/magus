@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -215,7 +216,7 @@ func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
 	}
 	rep := passingResult()
 	rep.Validation.OutputRef = ""
-	green := GreenGate{Commit: "c1", Projects: []string{".", "docs"}, Tier: types.RiskTrivial}
+	green := GreenGate{Commit: "c1", Projects: []string{".", "docs"}, Tier: check.RiskTrivial}
 
 	seen := claimed(rep)
 	seen.GreenGate = green
@@ -228,8 +229,8 @@ func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
 		gate GreenGate
 	}{
 		"no green gate":               {ciRow("ci", "."), GreenGate{}},
-		"a mechanical delta":          {ciRow("ci", "."), GreenGate{Commit: "c1", Projects: []string{"."}, Tier: types.RiskMechanical}},
-		"a scoped delta":              {ciRow("ci", "."), GreenGate{Commit: "c1", Projects: []string{"."}, Tier: types.RiskScoped}},
+		"a mechanical delta":          {ciRow("ci", "."), GreenGate{Commit: "c1", Projects: []string{"."}, Tier: check.RiskMechanical}},
+		"a scoped delta":              {ciRow("ci", "."), GreenGate{Commit: "c1", Projects: []string{"."}, Tier: check.RiskScoped}},
 		"a project the gate skipped":  {ciRow("ci", "site"), green},
 		"a check that is not ci":      {ciRow("go::go-test", "."), green},
 		"a spell-qualified ci target": {ciRow("go::ci", "."), green},

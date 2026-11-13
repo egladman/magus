@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -242,7 +242,7 @@ func TestOrderRanksAFullGroupBeforeALargerMechanicalOne(t *testing.T) {
 		orderFile("big2.go", orderHunk(0, 1, 5)),
 	}
 	for i := range big {
-		big[i].Tier = types.RiskMechanical
+		big[i].Tier = check.RiskMechanical
 	}
 	small := []OrderFile{
 		orderFile("small0.go", orderHunk(0, 1, 5, "S")),

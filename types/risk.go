@@ -2,75 +2,10 @@ package types
 
 import (
 	"context"
-	"fmt"
 	"strings"
+
+	"github.com/egladman/magus/types/check"
 )
-
-// Tier is how much of a change's gate magus can prove unnecessary, lowest
-// first. A tier is only ever assigned on proof; a path magus cannot bound is
-// RiskFull.
-type Tier string
-
-const (
-	// RiskTrivial needs no gate: prose nothing reads, and generated output whose
-	// generator the same change left untouched.
-	RiskTrivial Tier = "trivial"
-	// RiskMechanical changes no code semantics (comment-only, or code a prover showed
-	// equivalent to its base), so only the drift check and lint run.
-	RiskMechanical Tier = "mechanical"
-	// RiskScoped changes packages a prover placed, so the tests narrow to what can
-	// observe them.
-	RiskScoped Tier = "scoped"
-	// RiskFull runs the invoked target over every affected project.
-	RiskFull Tier = "full"
-)
-
-// Rank orders tiers lowest first, trivial at 0. An empty or unknown tier ranks
-// as full: a tier nobody proved bounds nothing.
-func (t Tier) Rank() int {
-	switch t {
-	case RiskTrivial:
-		return 0
-	case RiskMechanical:
-		return 1
-	case RiskScoped:
-		return 2
-	default:
-		return 3
-	}
-}
-
-// TierEvidence is one reason behind a TierReport. Path names a changed file,
-// its class and the tier it earned; without a Path, Project and Target name
-// the gate step the reason is about.
-type TierEvidence struct {
-	Path    string `json:"path,omitempty"    yaml:"path,omitempty"`
-	Project string `json:"project,omitempty" yaml:"project,omitempty"`
-	Target  string `json:"target,omitempty"  yaml:"target,omitempty"`
-	Class   string `json:"class,omitempty"   yaml:"class,omitempty"`
-	Tier    Tier   `json:"tier"              yaml:"tier"`
-	Why     string `json:"why"               yaml:"why"`
-	// Packages are the packages a scoped path put under test.
-	Packages []string `json:"packages,omitempty" yaml:"packages,omitempty"`
-}
-
-// Line renders the evidence as `<path>: <tier> (<class>: <why>)`, with the gate step as
-// its subject when it names no path, and no subject when it names neither.
-func (e TierEvidence) Line() string {
-	subject := e.Path
-	if subject == "" {
-		subject = strings.TrimSpace(fmt.Sprintf("%s %s", e.Project, e.Target))
-	}
-	why := e.Why
-	if e.Class != "" {
-		why = fmt.Sprintf("%s: %s", e.Class, why)
-	}
-	line := fmt.Sprintf("%s (%s)", string(e.Tier), why)
-	if subject == "" {
-		return line
-	}
-	return fmt.Sprintf("%s: %s", subject, line)
-}
 
 // TierGateStep is one runnable command of a sized gate. Argv is the whole
 // command line; the other fields are what it was built from.
@@ -91,10 +26,10 @@ type TierReport struct {
 	// Base is the revision the change was measured from.
 	Base     string         `json:"base"     yaml:"base"`
 	Target   string         `json:"target"   yaml:"target"`
-	Tier     Tier           `json:"tier"     yaml:"tier"`
-	Affected []string       `json:"affected" yaml:"affected"`
-	Evidence []TierEvidence `json:"evidence" yaml:"evidence"`
-	Gate     []TierGateStep `json:"gate"     yaml:"gate"`
+	Tier     check.Tier           `json:"tier"     yaml:"tier"`
+	Affected []string             `json:"affected" yaml:"affected"`
+	Evidence []check.TierEvidence `json:"evidence" yaml:"evidence"`
+	Gate     []TierGateStep       `json:"gate"     yaml:"gate"`
 }
 
 // TierOptions are what a change is assessed against.

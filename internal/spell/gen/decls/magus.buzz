@@ -7,27 +7,13 @@
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
 import "magus/agent";
+import "magus/check";
 import "magus/trail";
 
 export enum<str> DiagnosticOrigin {
     unknown = "",
     builtin = "builtin",
     workspace = "workspace",
-}
-
-export enum<str> CheckStatus {
-    none = "",
-    ok = "ok",
-    fail = "fail",
-    advice = "advice",
-}
-
-export enum<str> Evidence {
-    none = "",
-    measured = "measured",
-    declared = "declared",
-    inferred = "inferred",
-    unknown = "unknown",
 }
 
 export enum<str> SymbolIndexFreshness {
@@ -256,14 +242,6 @@ export enum<str> DuplicationShape {
     leave = "leave",
 }
 
-export enum<str> Tier {
-    none = "",
-    trivial = "trivial",
-    mechanical = "mechanical",
-    scoped = "scoped",
-    full = "full",
-}
-
 export enum<str> DiffWhyRelation {
     none = "",
     starts = "starts",
@@ -485,15 +463,6 @@ export object DiagnosticCode {
     origin: DiagnosticOrigin = DiagnosticOrigin.unknown,
 }
 
-export object Check {
-    name: str = "",
-    status: CheckStatus = CheckStatus.none,
-    message: str = "",
-    details: [str] = [],
-    evidence: Evidence = Evidence.none,
-    fix: [str] = [],
-}
-
 export object DoctorSummary {
     ok: int = 0,
     fail: int = 0,
@@ -503,7 +472,7 @@ export object DoctorSummary {
 
 export object DoctorReport {
     workspace: str = "",
-    checks: [Check] = [],
+    checks: [magus\check\Check] = [],
     summary: DoctorSummary = DoctorSummary{},
 }
 
@@ -1715,16 +1684,6 @@ export object TierOptions {
     checkout: str = "",
 }
 
-export object TierEvidence {
-    path: str = "",
-    project: str = "",
-    target: str = "",
-    class: str = "",
-    tier: Tier = Tier.none,
-    why: str = "",
-    packages: [str] = [],
-}
-
 export object TierGateStep {
     target: str = "",
     projects: [str] = [],
@@ -1736,9 +1695,9 @@ export object TierGateStep {
 export object TierReport {
     base: str = "",
     target: str = "",
-    tier: Tier = Tier.none,
+    tier: magus\check\Tier = magus\check\Tier.none,
     affected: [str] = [],
-    evidence: [TierEvidence] = [],
+    evidence: [magus\check\TierEvidence] = [],
     gate: [TierGateStep] = [],
 }
 
@@ -1781,7 +1740,7 @@ export object DiffSymbol {
     qualified: str = "",
     signature: str = "",
     baseSignature: str = "",
-    checks: [Check] = [],
+    checks: [magus\check\Check] = [],
     publicThrough: [DiffPublicPath] = [],
 }
 
@@ -1828,7 +1787,7 @@ export object DiffFile {
     coverage: ImpactCoverage? = null,
     symbols: [DiffSymbol] = [],
     hunks: [DiffHunk] = [],
-    layout: [Check] = [],
+    layout: [magus\check\Check] = [],
     visibility: str = "",
     touches: [DiffTouch] = [],
     readState: str = "",
@@ -1836,7 +1795,7 @@ export object DiffFile {
     noHistory: bool = false,
     reach: int? = null,
     threads: [DiffThreadRef] = [],
-    risk: TierEvidence? = null,
+    risk: magus\check\TierEvidence? = null,
 }
 
 export object ImpactProject {

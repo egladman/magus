@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,7 +78,7 @@ func TestCheckpointWiringAdvisesAGuardedHostThatRecordsNothing(t *testing.T) {
 
 	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Equal(t, check.Advice, got.Status)
 	assert.Contains(t, got.Message, "none recording a checkpoint")
 }
 
@@ -89,7 +89,7 @@ func TestCheckpointWiringPassesOnAHostThatRecordsOne(t *testing.T) {
 
 	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.Contains(t, got.Message, "1 of 1")
 }
 
@@ -102,7 +102,7 @@ func TestCheckpointWiringAcceptsTheCommandWithoutTheTemplate(t *testing.T) {
 
 	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 }
 
 // Nothing wired at all is guard-wiring's finding. Repeating it here would be a second
@@ -110,7 +110,7 @@ func TestCheckpointWiringAcceptsTheCommandWithoutTheTemplate(t *testing.T) {
 func TestCheckpointWiringStaysQuietWithNoHostAtAll(t *testing.T) {
 	got := checkCheckpointWiring(harnessProbeContext(), t.TempDir())
 
-	assert.Equal(t, types.Check{Status: types.CheckOK, Evidence: types.EvidenceUnknown}, withoutWording(got))
+	assert.Equal(t, check.Check{Status: check.OK, Evidence: check.EvidenceUnknown}, withoutWording(got))
 	assert.Contains(t, got.Message, "skipped")
 }
 
@@ -121,7 +121,7 @@ func TestCheckpointWiringReportsGuardedHostMissingManagedCheckpoint(t *testing.T
 
 	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Equal(t, check.Advice, got.Status)
 	assert.Contains(t, got.Message, "none recording a checkpoint")
 }
 
@@ -137,7 +137,7 @@ func TestCheckpointWiringFollowsNamedGuardScripts(t *testing.T) {
 
 	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
-	assert.Equal(t, types.CheckOK, got.Status, got.Message)
+	assert.Equal(t, check.OK, got.Status, got.Message)
 	assert.Contains(t, got.Message, "1 of 1")
 }
 
@@ -148,6 +148,6 @@ func TestCheckpointWiringIgnoresAConfigThatIsNotMagus(t *testing.T) {
 
 	got := checkCheckpointWiring(harnessProbeContext(), w.Root(), "test-host")
 
-	require.Equal(t, types.CheckOK, got.Status)
+	require.Equal(t, check.OK, got.Status)
 	assert.Contains(t, got.Message, "skipped")
 }

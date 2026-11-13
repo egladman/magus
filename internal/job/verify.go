@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // ResultSchema is the JSON Schema for [types.JobResult], embedded so a harness can give a
@@ -132,7 +133,7 @@ type GreenGate struct {
 	// Projects are the projects the gate covered.
 	Projects []string
 	// Tier is the tier of the change from Commit to the tree now.
-	Tier types.Tier
+	Tier check.Tier
 }
 
 // covers reports whether the gate vouches for a check that runs ci: the gate covered
@@ -144,7 +145,7 @@ func (g GreenGate) covers(c types.LeaseCheck) bool {
 	if c.Project == "" {
 		project = "."
 	}
-	return g.Commit != "" && c.Target == types.TargetCI && g.Tier == types.RiskTrivial && slices.Contains(g.Projects, project)
+	return g.Commit != "" && c.Target == types.TargetCI && g.Tier == check.RiskTrivial && slices.Contains(g.Projects, project)
 }
 
 // SymbolFact is what the graph knows about one symbol a gate named.

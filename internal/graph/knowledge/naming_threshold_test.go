@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 const thresholdFile = "internal/a/a.go"
@@ -73,11 +74,11 @@ func TestThresholdSuite(t *testing.T) {
 	suite.Run(t, new(ThresholdSuite))
 }
 
-func (s *ThresholdSuite) messages(checks []types.Check) []string {
+func (s *ThresholdSuite) messages(checks []check.Check) []string {
 	var out []string
 	for _, c := range checks {
 		s.Require().Equal(checkThreshold, c.Name)
-		s.Require().Equal(types.CheckAdvice, c.Status)
+		s.Require().Equal(check.Advice, c.Status)
 		out = append(out, c.Message)
 	}
 	return out
@@ -85,7 +86,7 @@ func (s *ThresholdSuite) messages(checks []types.Check) []string {
 
 // grown is what the check says of Frobnicate grown from was to now lines under a 52-line
 // anchor, for the change c names.
-func (s *ThresholdSuite) grown(was, now int, c ConformanceChange) map[string][]types.Check {
+func (s *ThresholdSuite) grown(was, now int, c ConformanceChange) map[string][]check.Check {
 	head, _ := thresholdGrowthGraph(now)
 	base, _ := thresholdGrowthGraph(was)
 	c.Base, c.Conformance = base, thresholdOptions(52)

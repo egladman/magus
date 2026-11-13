@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/egladman/magus/libs/termkit"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // minInteractiveHeight is the shortest terminal the interactive views still
@@ -29,7 +29,7 @@ const minInteractiveHeight = 15
 // and neither is the workspace: magus degrades to plain output on every one of
 // them. What a reader needs is to know WHICH way it degraded before they wonder
 // why the colors or the mouse are missing.
-func (r *runner) checkTerminal() types.Check {
+func (r *runner) checkTerminal() check.Check {
 	const name = "terminal-capabilities"
 
 	// The FORMAT decides this before the terminal gets a say. pretty and plain
@@ -42,9 +42,9 @@ func (r *runner) checkTerminal() types.Check {
 		format = "pretty"
 	}
 	if format != "pretty" && format != "plain" {
-		return types.Check{
+		return check.Check{
 			Name:    name,
-			Status:  types.CheckOK,
+			Status:  check.OK,
 			Message: fmt.Sprintf("log format is %q, so magus emits structured records and draws no interactive view", format),
 			Details: []string{formatSource(format), "set log.format to pretty for the pinned band, live status and notifications"},
 		}
@@ -55,9 +55,9 @@ func (r *runner) checkTerminal() types.Check {
 	canRender := termkit.CanRender(os.Stderr, termkit.SystemProbe)
 	canRead := termkit.IsTerminalReader(os.Stdin, termkit.SystemProbe)
 	if !canRender || !canRead {
-		return types.Check{
+		return check.Check{
 			Name:    name,
-			Status:  types.CheckOK,
+			Status:  check.OK,
 			Message: "not an interactive terminal; magus renders plain output",
 			Details: terminalDetails(canRender, canRead, false),
 		}
@@ -105,16 +105,16 @@ func (r *runner) checkTerminal() types.Check {
 		degraded = append(degraded, fmt.Sprintf("only %d rows; the pinned band needs a scrolling area above it and stands down below about %d", height, minInteractiveHeight))
 	}
 	if len(degraded) == 0 {
-		return types.Check{
+		return check.Check{
 			Name:    name,
-			Status:  types.CheckOK,
+			Status:  check.OK,
 			Message: "interactive terminal, fully capable",
 			Details: details,
 		}
 	}
-	return types.Check{
+	return check.Check{
 		Name:    name,
-		Status:  types.CheckAdvice,
+		Status:  check.Advice,
 		Message: "interactive terminal with reduced capability; magus degrades rather than failing",
 		Details: append(details, degraded...),
 	}

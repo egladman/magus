@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,14 +13,14 @@ import (
 func TestCheckSpellContract(t *testing.T) {
 	t.Run("no spells", func(t *testing.T) {
 		got := checkSpellContract(nil)
-		assert.Equal(t, types.Check{Name: "spell-contract", Status: types.CheckOK, Message: "no spells registered"}, got)
+		assert.Equal(t, check.Check{Name: "spell-contract", Status: check.OK, Message: "no spells registered"}, got)
 	})
 
 	// The one thing no spell can function without, and the only required half of the
 	// contract.
 	t.Run("unnamed spell", func(t *testing.T) {
 		got := checkSpellContract([]*spells.Spell{spells.NewSpell("")})
-		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, check.Fail, got.Status)
 		assert.Contains(t, got.Message, "do not satisfy the required mgs_ contract")
 		require.Len(t, got.Details, 1)
 		assert.Contains(t, got.Details[0], "<unnamed>: mgs_getName returned an empty name")
@@ -30,7 +30,7 @@ func TestCheckSpellContract(t *testing.T) {
 	// a magusfile exports, so it declares none statically and is entirely correct.
 	t.Run("targets supplied by the magusfile", func(t *testing.T) {
 		got := checkSpellContract([]*spells.Spell{spells.NewSpell("magusfile")})
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		require.Len(t, got.Details, 1)
 		assert.Contains(t, got.Details[0], "targets only (no optional hooks)")
 		assert.Contains(t, got.Details[0], "targets supplied by the magusfile, not the spell")
@@ -49,7 +49,7 @@ func TestCheckSpellContract(t *testing.T) {
 			spells.WithOpaque(),
 		)
 		got := checkSpellContract([]*spells.Spell{full})
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "1 spell(s) satisfy the required mgs_ contract")
 		require.Len(t, got.Details, 1)
 		assert.Equal(t, "go: needs, provides, ignore-dirs, version-probe, language, opaque", got.Details[0])

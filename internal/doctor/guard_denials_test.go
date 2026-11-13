@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // TestCheckRecurringGuardDenialsReportsNoTrailAsClean covers the common case: a
@@ -19,9 +19,9 @@ func TestCheckRecurringGuardDenialsReportsNoTrailAsClean(t *testing.T) {
 
 	got := (&runner{root: root}).checkRecurringGuardDenials()
 
-	assert.Equal(t, types.Check{
+	assert.Equal(t, check.Check{
 		Name:    "recurring-guard-denials",
-		Status:  types.CheckOK,
+		Status:  check.OK,
 		Message: "no guard denial has recurred across sessions",
 	}, got)
 }
@@ -35,9 +35,9 @@ func TestCheckRecurringGuardDenialsIgnoresAOneOffDenial(t *testing.T) {
 
 	got := (&runner{root: root}).checkRecurringGuardDenials()
 
-	assert.Equal(t, types.Check{
+	assert.Equal(t, check.Check{
 		Name:    "recurring-guard-denials",
-		Status:  types.CheckOK,
+		Status:  check.OK,
 		Message: "no guard denial has recurred across sessions",
 	}, got)
 }
@@ -59,10 +59,10 @@ func TestCheckRecurringGuardDenialsReportsFactsOnly(t *testing.T) {
 
 	got := (&runner{root: root}).checkRecurringGuardDenials()
 
-	assert.Equal(t, types.Check{
+	assert.Equal(t, check.Check{
 		Name:     "recurring-guard-denials",
-		Status:   types.CheckAdvice,
-		Evidence: types.EvidenceInferred,
+		Status:   check.Advice,
+		Evidence: check.EvidenceInferred,
 		Message:  "1 guard rule(s) denied the same shape more than once; the friction is real whether the rule is right or the reader is",
 		Details:  []string{"raw-tool on shell.command: 3 denial(s) across 1 session(s), followed 1/1"},
 	}, got)
@@ -79,10 +79,10 @@ func TestCheckRecurringGuardDenialsCountsTwoSessionsWithoutClaimingFollowUp(t *t
 
 	got := (&runner{root: root}).checkRecurringGuardDenials()
 
-	assert.Equal(t, types.Check{
+	assert.Equal(t, check.Check{
 		Name:     "recurring-guard-denials",
-		Status:   types.CheckAdvice,
-		Evidence: types.EvidenceInferred,
+		Status:   check.Advice,
+		Evidence: check.EvidenceInferred,
 		Message:  "1 guard rule(s) denied the same shape more than once; the friction is real whether the rule is right or the reader is",
 		Details:  []string{"raw-tool on shell.command: 2 denial(s) across 2 session(s), followed 0/2"},
 	}, got)

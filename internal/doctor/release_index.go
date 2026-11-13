@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // servedIndexPath is the tracked release index, relative to a workspace root. Only
@@ -33,37 +33,37 @@ const releaseIndexWarnWindow = 45 * 24 * time.Hour
 // `doctor --fix` may perform on someone's behalf. The Fix arms it used to carry named
 // `run release-index`, a target no workspace declares, so the first finding would have
 // failed `doctor --fix` outright.
-func (r *runner) checkReleaseIndexExpiry() types.Check {
+func (r *runner) checkReleaseIndexExpiry() check.Check {
 	const name = "release-index"
 
 	data, err := os.ReadFile(filepath.Join(r.root, servedIndexPath))
 	if os.IsNotExist(err) {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "not served from this workspace"}
+		return check.Check{Name: name, Status: check.OK, Message: "not served from this workspace"}
 	}
 	if err != nil {
-		return types.Check{Name: name, Status: types.CheckFail, Message: fmt.Sprintf("read %s: %v", servedIndexPath, err)}
+		return check.Check{Name: name, Status: check.Fail, Message: fmt.Sprintf("read %s: %v", servedIndexPath, err)}
 	}
 
 	var idx struct {
 		ExpiresAt string `json:"expires_at"`
 	}
 	if err := json.Unmarshal(data, &idx); err != nil {
-		return types.Check{
-			Name: name, Status: types.CheckFail,
+		return check.Check{
+			Name: name, Status: check.Fail,
 			Message: fmt.Sprintf("%s does not parse: %v", servedIndexPath, err),
 		}
 	}
 	if idx.ExpiresAt == "" {
-		return types.Check{
-			Name: name, Status: types.CheckFail,
+		return check.Check{
+			Name: name, Status: check.Fail,
 			Message: "the served index declares no expires_at, so a stale copy can be replayed indefinitely",
 			Details: []string{"re-sign it with the Release index workflow, then merge the pull request it opens"},
 		}
 	}
 	deadline, err := time.Parse(time.RFC3339, idx.ExpiresAt)
 	if err != nil {
-		return types.Check{
-			Name: name, Status: types.CheckFail,
+		return check.Check{
+			Name: name, Status: check.Fail,
 			Message: fmt.Sprintf("expires_at %q is not RFC3339, so no client can read the bound it sets", idx.ExpiresAt),
 		}
 	}
@@ -71,20 +71,20 @@ func (r *runner) checkReleaseIndexExpiry() types.Check {
 	left := time.Until(deadline)
 	switch {
 	case left <= 0:
-		return types.Check{
-			Name: name, Status: types.CheckFail,
+		return check.Check{
+			Name: name, Status: check.Fail,
 			Message: fmt.Sprintf("the served release index expired %s ago; every `%s` is refusing it", roughly(-left), hint.SelfUpdate),
 			Details: []string{"re-sign it with the Release index workflow, then merge the pull request it opens"},
 		}
 	case left <= releaseIndexWarnWindow:
-		return types.Check{
-			Name: name, Status: types.CheckAdvice,
+		return check.Check{
+			Name: name, Status: check.Advice,
 			Message: fmt.Sprintf("the served release index expires in %s (%s)", roughly(left), idx.ExpiresAt),
 			Details: []string{"a release re-signs it; the Release index workflow does too, if none is due"},
 		}
 	default:
-		return types.Check{
-			Name: name, Status: types.CheckOK,
+		return check.Check{
+			Name: name, Status: check.OK,
 			Message: fmt.Sprintf("signed and good for another %s", roughly(left)),
 		}
 	}

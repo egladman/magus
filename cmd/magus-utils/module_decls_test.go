@@ -110,7 +110,7 @@ func TestModuleRecordDeclsRunAlone(t *testing.T) {
 	sess.DeclareModuleTypes("magus", src)
 	require.NoError(t, sess.Exec(t.Context(), `
 export fun build() > str {
-    final none = Check{}.status == CheckStatus.none;
+    final none = DiagnosticCode{}.origin == DiagnosticOrigin.unknown;
     return "{DirsOptions{ language = "go", depth = 2 }.language} {none}";
 }
 `))

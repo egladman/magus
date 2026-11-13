@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/agent"
 )
 
@@ -74,7 +75,7 @@ func TestModelTierFitNamesTheLineThatRoutedAFailingTier(t *testing.T) {
 
 	got := r.checkModelTierFit(t.Context(), nil)
 
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Equal(t, check.Advice, got.Status)
 	assert.Contains(t, got.Message, "1 of 2")
 	require.Len(t, got.Details, 1)
 	detail := got.Details[0]
@@ -90,7 +91,7 @@ func TestModelTierFitIsQuietUntilAPairHasEnoughJobs(t *testing.T) {
 
 	got := r.checkModelTierFit(t.Context(), nil)
 
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.Empty(t, got.Details)
 }
 
@@ -101,7 +102,7 @@ func TestModelTierFitKeepsATierThatPasses(t *testing.T) {
 
 	got := r.checkModelTierFit(t.Context(), nil)
 
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.Contains(t, got.Message, "1 model tier and job kind pair(s)")
 }
 
@@ -112,7 +113,7 @@ func TestModelTierFitSkipsATierTheDeclarationDropped(t *testing.T) {
 
 	got := r.checkModelTierFit(t.Context(), nil)
 
-	assert.Equal(t, types.CheckOK, got.Status, "no line of the current declaration routes work to a tier it no longer names")
+	assert.Equal(t, check.OK, got.Status, "no line of the current declaration routes work to a tier it no longer names")
 	assert.Empty(t, got.Details)
 }
 
@@ -122,7 +123,7 @@ func TestModelTierFitHasNothingToSayWithoutADeclaration(t *testing.T) {
 	got := r.checkModelTierFit(t.Context(), nil)
 
 	want := got
-	want.Status, want.Evidence = types.CheckOK, types.EvidenceUnknown
+	want.Status, want.Evidence = check.OK, check.EvidenceUnknown
 	assert.Equal(t, want, got)
 	assert.Empty(t, got.Details)
 }

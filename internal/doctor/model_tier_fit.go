@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/agent"
 )
 
@@ -37,15 +38,15 @@ type modelTiered interface {
 // It only reports. A tier that fails one kind of job may be right for every other, and
 // moving work is a decision about cost the history cannot make, so nothing here edits a
 // declaration and nothing re-routes a job. Advice, never a failure.
-func (r *runner) checkModelTierFit(ctx context.Context, _ []*types.Project) types.Check {
+func (r *runner) checkModelTierFit(ctx context.Context, _ []*types.Project) check.Check {
 	const name = "model-tier-fit"
 
 	tiered, ok := r.ws.(modelTiered)
 	if !ok || tiered.ModelTiers(ctx) == nil {
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceUnknown,
+			Status:   check.OK,
+			Evidence: check.EvidenceUnknown,
 			Message:  "this workspace declares no model tiers, so no job is routed by one",
 		}
 	}
@@ -72,24 +73,24 @@ func (r *runner) checkModelTierFit(ctx context.Context, _ []*types.Project) type
 
 	switch {
 	case judged == 0:
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceMeasured,
+			Status:   check.OK,
+			Evidence: check.EvidenceMeasured,
 			Message:  fmt.Sprintf("no model tier has %d recorded jobs of one kind yet, so none is judged", modelTierFitJobs),
 		}
 	case len(details) == 0:
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceMeasured,
+			Status:   check.OK,
+			Evidence: check.EvidenceMeasured,
 			Message:  fmt.Sprintf("%d model tier and job kind pair(s) pass often enough to keep their tier", judged),
 		}
 	}
-	return types.Check{
+	return check.Check{
 		Name:     name,
-		Status:   types.CheckAdvice,
-		Evidence: types.EvidenceMeasured,
+		Status:   check.Advice,
+		Evidence: check.EvidenceMeasured,
 		Message: fmt.Sprintf("%d of %d model tier and job kind pair(s) passed too rarely to trust at that tier; magus changes none of them",
 			len(details), judged),
 		Details: details,

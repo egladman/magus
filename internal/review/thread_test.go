@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +54,7 @@ func putSymbol() diff.Symbol {
 		ID: "m internal/cache/Store#Put().", Label: "Put", Qualified: "Store.Put",
 		Signature: "func (s *Store) Put(k string) error", Change: diff.ChangeBody,
 		RefCount: 31, FileCount: 14, PublicTo: []string{"daemon", "docs"},
-		Checks: []types.Check{{Name: diff.CheckParamOrder, Status: types.CheckAdvice, Message: "Put takes (key, value) in the reverse of the usual order"}},
+		Checks: []check.Check{{Name: diff.CheckParamOrder, Status: check.Advice, Message: "Put takes (key, value) in the reverse of the usual order"}},
 		PublicThrough: []diff.PublicPath{
 			{ID: "m internal/daemon/Run().", Qualified: "Run", Via: []string{"Store.Flush"}, Boundary: diff.BoundaryProject},
 		},

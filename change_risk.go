@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // riskDefinition names the formula, so a reader of the answer need not know it.
@@ -1106,7 +1107,7 @@ func attachChangeRiskChecks(files []diff.File, risk types.ChangeRisk) {
 	}
 }
 
-func addCheck(sym *diff.Symbol, checks map[string]types.Check) {
+func addCheck(sym *diff.Symbol, checks map[string]check.Check) {
 	if c, ok := checks[sym.ID]; ok {
 		sym.Checks = append(sym.Checks, c)
 	}
@@ -1115,18 +1116,18 @@ func addCheck(sym *diff.Symbol, checks map[string]types.Check) {
 // riskCheck names the check on a DiffSymbol.
 const riskCheck = "change-risk"
 
-func riskChecks(risk types.ChangeRisk) map[string]types.Check {
-	out := map[string]types.Check{}
+func riskChecks(risk types.ChangeRisk) map[string]check.Check {
+	out := map[string]check.Check{}
 	for _, f := range risk.Functions {
-		out[f.Symbol] = types.Check{
-			Name: riskCheck, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
+		out[f.Symbol] = check.Check{
+			Name: riskCheck, Status: check.Advice, Evidence: check.EvidenceMeasured,
 			Message: fmt.Sprintf("change risk %.1f: complexity %d, %d of %d coverable units covered",
 				f.Score, f.Complexity, f.Covered, f.Coverable),
 		}
 	}
 	for _, g := range risk.Gaps {
-		out[g.Symbol] = types.Check{
-			Name: riskCheck, Status: types.CheckAdvice, Evidence: types.EvidenceUnknown,
+		out[g.Symbol] = check.Check{
+			Name: riskCheck, Status: check.Advice, Evidence: check.EvidenceUnknown,
 			Message: "change risk unmeasured: " + g.Reason,
 		}
 	}
