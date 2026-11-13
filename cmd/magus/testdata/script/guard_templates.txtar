@@ -892,13 +892,14 @@ exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claud
 ! stdout .
 ! stderr .
 
-# A proofread that is missing, or that fails, judged nothing, and the person is told: one
-# systemMessage per session naming the binary and its fix. The reply is never blocked.
+# A proofread that is missing, or that fails, judged nothing, and the agent is told: one
+# additionalContext per session naming the binary and its fix. The reply is never blocked.
 env TMPDIR=$WORK/n-proofread-missing
 env __PROOFREAD_BIN=$WORK/nonexistent-proofread
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
-stdout '"systemMessage":"proofread-reply judges no reply: .*nonexistent-proofread is not an executable file'
+stdout '"additionalContext":"proofread-reply judges no reply: .*nonexistent-proofread is not an executable file'
+! stdout '"systemMessage"'
 ! stdout '"decision"'
 
 # Once per session: the next turn of the same session is not told again.
@@ -910,7 +911,7 @@ env TMPDIR=$WORK/n-proofread-failing
 env __PROOFREAD_BIN=$WORK/failing-proofread
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
-stdout '"systemMessage":"proofread-reply judges no reply: .*failing-proofread exited 2: proofread: cannot judge'
+stdout '"additionalContext":"proofread-reply judges no reply: .*failing-proofread exited 2: proofread: cannot judge'
 ! stdout '"decision"'
 
 # An envelope with no reply has nothing to judge, so it is silent and exits 0.
