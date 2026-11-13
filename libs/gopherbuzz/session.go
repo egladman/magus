@@ -1325,7 +1325,7 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 	checkStart := time.Now()
 	s.syncHostTypes()
 	s.checkPrelude = s.checkPrelude.sync(s.importedTypes)
-	errs, checkWarnings := checkWithPrelude(s.withEntryTypes(prog), globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.declImports, s.importPrivateHint(), s.embedded, s.resolverBound, s.nestedImportsOf(prog))
+	errs, checkWarnings := checkWithPrelude(s.withEntryTypes(prog), globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.declImports, s.importPrivateHint(), s.embedded, s.resolverBound, s.programNestedImports(prog))
 	s.adviseImports(errs)
 	warnings = append(warnings, checkWarnings...)
 	if obs := s.compileObserver; obs != nil {
@@ -2630,9 +2630,9 @@ func (s *Session) adoptNamespacePrefix(name string, mod vmpackage.Value) {
 	}
 }
 
-// nestedImportsOf is the nested namespaces prog's own imports bind. An entry
-// chunk also names those an earlier entry chunk imported.
-func (s *Session) nestedImportsOf(prog *ast.Program) *chunkNamespaces {
+// programNestedImports is the nested namespaces prog's own imports
+// bind. An entry chunk also names those an earlier entry chunk imported.
+func (s *Session) programNestedImports(prog *ast.Program) *chunkNamespaces {
 	out := &chunkNamespaces{bound: map[string]bool{}, relatives: map[string]string{}}
 	if !s.collectImportPrivate {
 		maps.Copy(out.bound, s.entryNested)
