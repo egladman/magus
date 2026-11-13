@@ -184,19 +184,19 @@ This amends ADR 0035. Membership stays reach: no type and no namespace is listed
 - Docs, skills and the examples under `std/examples` are regenerated or swept in the
   same pull request.
 
-| Item                                                                        | State     |
-| --------------------------------------------------------------------------- | --------- |
-| gopherbuzz parses and binds a multi-segment declared namespace              | done      |
-| The checker resolves `a\b\T` in a type annotation and in a declaration file | done      |
-| `module` takes a slash path and defaults from the Go package                | done      |
-| One declaration file per namespace, each opening with `namespace`           | done      |
-| A declaration file imports the namespaces its signatures name               | done      |
-| A segment that is also a parent member is refused                           | done      |
-| `types/agent` mirrors under `magus\agent`; its 4 prefix `name` lines deleted | done      |
-| `types/diff` and `types/trail` mirror under their namespace                 | not built |
-| The other 28 prefix `name` lines deleted from `.buzzgen.yaml`               | not built |
-| The rule that bundles a root type into the module returning it deleted      | not built |
-| The stale comment on `std.Namespace` corrected                              | done      |
+| Item                                                                         | State                          |
+| ---------------------------------------------------------------------------- | ------------------------------ |
+| gopherbuzz parses and binds a multi-segment declared namespace               | done                           |
+| The checker resolves `a\b\T` in a type annotation and in a declaration file  | done                           |
+| `module` takes a slash path and defaults from the Go package                 | done                           |
+| One declaration file per namespace, each opening with `namespace`            | done                           |
+| A declaration file imports the namespaces its signatures name                | done                           |
+| A segment that is also a parent member is refused                            | done                           |
+| `types/agent` mirrors under `magus\agent`; its 4 prefix `name` lines deleted | done                           |
+| `types/trail` mirrors under `magus\trail`; its 6 prefix `name` lines deleted | done                           |
+| `types/diff` mirrors under `magus\diff`; its 22 prefix `name` lines deleted  | not built                      |
+| The rule that bundles a root type into the module returning it deleted       | not built (root types keep it) |
+| The stale comment on `std.Namespace` corrected                               | done                           |
 
 What the build found, 2026-11-12:
 
@@ -217,6 +217,21 @@ What the build found, 2026-11-12:
 - Deleting the bundling rule would move `fs\FileInfo`, `vcs\Commit` and the other root
   types bundled into a host module out of it, a break part 5's table does not list. Root
   types keep it.
+
+What the second build found, 2026-11-13:
+
+- `types/trail` moved with no extern moved. The handle is `magus\Session`, a root type
+  whose methods call `magus__Session__trail` and its siblings in `magus.buzz`. `Trail`
+  is a plain record. `magus.buzz` imports `magus/trail`, and `magus/trail` imports
+  nothing. The note above named the wrong record.
+- `types/diff` is not moved. Eli decided on 2026-11-13 that the root types its fields
+  name move to `types/diff` or to a lower package both import. The mirrors reach 10
+  root types: `Check`, `CheckStatus`, `Evidence`, `Diagnostic`, `ImpactCoverage`,
+  `ImpactProject`, `TierEvidence`, `Tier`, `ReleaseStage` and `VCSCheckpoint`.
+- None of the 10 can move to `types/diff`. Root `types` uses each one, and `types/diff`
+  imports `types`, so Go would refuse the cycle.
+- A lower package is a new name and a break the table does not list. Each of the 10
+  changes its Buzz spelling, and `types.Check` alone is named in 81 Go files.
 
 ### Principles checked
 
@@ -317,9 +332,10 @@ if a package is found whose types belong in two namespaces.
 
 ## Open questions
 
-- How `magus\diff` and `magus` stop importing each other: split the `magus` host
-  module's declarations from the root types', or let a declaration cycle resolve.
-- How a handle whose record lives in a nested namespace reaches its host's externs.
+- Which package the 10 root types `magus\diff` names move to, and under what name. A
+  package name is Eli's pick.
+- How a handle whose record lives in a nested namespace reaches its host's externs. No
+  moved package has needed it yet.
 - Whether upstream lets a function `shop\order` and a namespace `shop\order` coexist.
   If it does, the refusal in part 2 is narrower than it needs to be.
 - Whether `magus/figure` and `magus/spell/*` declare `namespace magus\figure` in the
