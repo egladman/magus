@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/guard/steprule"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
@@ -15,6 +16,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // buildGuard assembles magus\guard for a magusfile. shell() declares one
@@ -36,7 +38,8 @@ import (
 // spawn(), command(), write() and stop() each register the one function the guard calls on
 // every agent spawn and continuation, every agent shell command, every agent file write, or
 // every agent stop, with allow/advise/deny to build its answer and once/count for state that
-// lasts the calling session. See registerEventRules.
+// lasts the calling session. step() registers one per kind
+// of step an embedding program asks about. See registerEventRules.
 //
 // builtins() sets compiled rules by name; see registerBuiltins. profile() picks the level
 // those settings start from; see registerProfile.
@@ -305,6 +308,44 @@ func registerEventRules(ctx context.Context, sess *buzz.Session, obs buzz.Direct
 	} {
 		registerFunctionRule(ctx, sess, obs, guardMap, r)
 	}
+	registerStepRule(ctx, sess, obs, guardMap)
+}
+
+// registerStepRule binds magus\guard.step(kind, fun) onto guardMap. Each kind
+// has one rule, kept on the load's steprule.Set rather than its registry.
+// Refusals are MGS1045, as registerFunctionRule's are.
+func registerStepRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value) {
+	const name = `magus\guard.step`
+	// Per session, as registerFunctionRule counts.
+	registered := map[string]bool{}
+	guardMap.MapSet("step", directVal(obs, "magus.guard.step", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) != 2 || !args[0].IsString() || !args[1].IsFun() {
+			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				`%s: expected a kind and one function, step(kind: str, rule: fun(req: StepRequest) > GuardVerdict)`, name)
+		}
+		kind := args[0].AsString()
+		if err := types.ValidateGuardRuleName(kind); err != nil {
+			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared, `%s: kind: %v`, name, err)
+		}
+		if path, ok := interp.ProjectPathFromContext(ctx); ok && path != "" && path != "." {
+			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				`%s: called from the magusfile of %s; register it in the root magusfile, where a rule answering for every %s step in the workspace belongs`, name, path, kind)
+		}
+		if registered[kind] {
+			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				`%s: kind %q is already registered in this magusfile, and a workspace has one rule per kind; fold the second one into the first`, name, kind)
+		}
+		registered[kind] = true
+		set, reg := steprule.FromContext(ctx), workspace.WorkspaceRegistryFromContext(ctx)
+		if set != nil && reg != nil && sess != nil {
+			set.Set(kind, steprule.Rule(buzzRule(sess, args[1], "step", func(req agent.StepRequest, _ ffi.EnumCases) vm.Value {
+				return bindgen.ObjectStepRequest(req)
+			})))
+			// The registry releases the session the rule runs on.
+			reg.Keep(sess.Keep())
+		}
+		return vm.Null, nil
+	}))
 }
 
 // buzzRule adapts a registered Buzz function to the guard's rule type over requests of

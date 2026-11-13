@@ -3351,6 +3351,28 @@ func ObjectYAMLPositions(v types.YAMLPositions) vm.Value {
 	return out
 }
 
+func ObjectStep(v typesagent.Step) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("apiVersion", vm.StringValue(v.APIVersion))
+	out.MapSet("id", vm.StringValue(v.ID))
+	out.MapSet("kind", vm.StringValue(v.Kind))
+	out.MapSet("name", vm.StringValue(v.Name))
+	mappedInput := vm.NewMap()
+	for keyInput, itemInput := range v.Input {
+		mappedInput.MapSet(keyInput, ffi.AnyVal(itemInput))
+	}
+	out.MapSet("input", mappedInput)
+	out.MapSet("session", vm.StringValue(v.Session))
+	out.MapSet("agent", vm.StringValue(v.Agent))
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	formattedAt := ""
+	if !v.At.IsZero() {
+		formattedAt = v.At.Format(time.RFC3339Nano)
+	}
+	out.MapSet("at", vm.StringValue(formattedAt))
+	return out
+}
+
 func ObjectArtifactRequest(v types.ArtifactRequest) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StringValue(v.Project))
@@ -5071,6 +5093,24 @@ func ObjectStatusRecord(v types.StatusRecord) vm.Value {
 		itemsFiles[indexFiles] = ObjectPath(v.Files[indexFiles])
 	}
 	out.MapSet("files", vm.ListValue(itemsFiles))
+	return out
+}
+
+func ObjectStepRequest(v typesagent.StepRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("step", ObjectStep(v.Step))
+	itemsCapabilities := make([]vm.Value, len(v.Capabilities))
+	for indexCapabilities := range v.Capabilities {
+		itemsCapabilities[indexCapabilities] = vm.StringValue(v.Capabilities[indexCapabilities])
+	}
+	out.MapSet("capabilities", vm.ListValue(itemsCapabilities))
+	itemsPaths := make([]vm.Value, len(v.Paths))
+	for indexPaths := range v.Paths {
+		itemsPaths[indexPaths] = vm.StringValue(v.Paths[indexPaths])
+	}
+	out.MapSet("paths", vm.ListValue(itemsPaths))
+	out.MapSet("command", vm.StringValue(v.Command))
+	out.MapSet("lease", vm.StringValue(v.Lease))
 	return out
 }
 

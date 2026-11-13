@@ -65,6 +65,7 @@ packages:
       ModelTierSource: {config: {zeroCase: ""}}
       SkillVariant: {config: {zeroCase: ""}}
       Spec: {config: {name: AgentSpec, required: [worker]}}
+      Step: {config: {name: AgentStep}}
       Worker: {config: {name: AgentWorker, required: [type]}}
       WorkerType: {config: {zeroCase: ""}}
   github.com/egladman/magus/internal/queue/types:

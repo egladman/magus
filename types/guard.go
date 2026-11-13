@@ -132,7 +132,7 @@ type GuardVerdict struct {
 
 // reservedGuardRuleNames are the seams an unnamed verdict reports under; a rule named
 // after one would read as an unnamed answer.
-var reservedGuardRuleNames = []string{"command", "spawn", "write", "stop"}
+var reservedGuardRuleNames = []string{"command", "spawn", "write", "stop", "step"}
 
 // guardRuleName is a rule's name as written: lowercase words of letters and digits joined
 // by single hyphens. It is a label, never resolved through Normalize, so "rule2" stands as

@@ -496,14 +496,28 @@ var Magus = Module{
 					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.StopRequest) (types.GuardVerdict, error)) error)(nil),
 				},
 				{
+					Name: "step",
+					Doc: "Register the function the agent guard calls on every step of kind that a program " +
+						"embedding magus asks it to judge: fun(req: StepRequest) > GuardVerdict. kind is a row's " +
+						"kind, lowercase words joined by hyphens; a seam's name and step are refused. The rule runs " +
+						"after the built-in rules and the program's own Go rules, and the strictest decision wins. " +
+						"An unnamed verdict reports as workspace:step. Declared at the top level of the root " +
+						"magusfile, once per kind. Strengthen only and evaluated from both the committed and the " +
+						"working-tree sources, exactly as guard.command is. A rule that fails judges nothing and " +
+						"says so; a row nothing else judges is then denied. Registering a kind twice, from another " +
+						"project, or with a non-function is MGS1045. magus ships no rule.",
+					Args:   []Arg{{Name: "kind"}, {Name: "rule"}},
+					Extern: (func(ctx context.Context, kind string, rule func(ctx context.Context, req agent.StepRequest) (types.GuardVerdict, error)) error)(nil),
+				},
+				{
 					Name:    "allow",
-					Doc:     "The verdict a spawn, command, write or stop rule returns to add nothing.",
+					Doc:     "The verdict a spawn, command, write, stop or step rule returns to add nothing.",
 					Returns: []Ret{{Object: "GuardVerdict"}},
 					Extern:  (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name: "advise",
-					Doc: "The verdict a spawn, command, write or stop rule returns to let the call through with text for the agent. " +
+					Doc: "The verdict a spawn, command, write, stop or step rule returns to let the call through with text for the agent. " +
 						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>.",
 					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
 					Returns: []Ret{{Object: "GuardVerdict"}},
@@ -511,7 +525,7 @@ var Magus = Module{
 				},
 				{
 					Name: "deny",
-					Doc: "The verdict a spawn, command, write or stop rule returns to block the call, with text saying why. " +
+					Doc: "The verdict a spawn, command, write, stop or step rule returns to block the call, with text saying why. " +
 						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>, is stored, " +
 						"and a repeat in the same session shortens to its first line.",
 					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
@@ -559,7 +573,7 @@ var Magus = Module{
 			},
 			// Brief is no method's: a buzz-format spawn brief is one magus\Brief literal the
 			// guard type-checks against this declaration.
-			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "StopRequest", "GuardBinary", "Brief"},
+			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "StopRequest", "StepRequest", "AgentStep", "GuardBinary", "Brief"},
 		},
 		{
 			Name: "harness",

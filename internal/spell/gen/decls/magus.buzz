@@ -2410,6 +2410,26 @@ export object StopRequest {
     workspace: str = "",
 }
 
+export object AgentStep {
+    apiVersion: str = "",
+    id: str = "",
+    kind: str = "",
+    name: str = "",
+    input: {str: any?} = {},
+    session: str = "",
+    agent: str = "",
+    dir: str = "",
+    at: str = "",
+}
+
+export object StepRequest {
+    step: AgentStep = AgentStep{},
+    capabilities: [str] = [],
+    paths: [str] = [],
+    command: str = "",
+    lease: str = "",
+}
+
 export object BriefDecision {
     what: str = "",
     why: str = "",
@@ -2990,6 +3010,7 @@ export object guard {
     static extern fun shapes(command: str) > [str];
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: fun (req: SpawnRequest) > GuardVerdict !> any) > void;
+    static extern fun step(kind: str, rule: fun (req: StepRequest) > GuardVerdict !> any) > void;
     static extern fun stop(rule: fun (req: StopRequest) > GuardVerdict !> any) > void;
     static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;
 }
