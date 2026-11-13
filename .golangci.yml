@@ -184,6 +184,8 @@ linters:
           allow:
             - github.com/egladman/magus/spells$
             - github.com/egladman/magus/libs/diagnostics$
+            # The version header every record leads with; a leaf library itself.
+            - github.com/egladman/magus/libs/apiversion$
             - github.com/egladman/magus/internal/json$
             - github.com/egladman/magus/types/enum$
             - github.com/egladman/magus/types/agent$
@@ -397,7 +399,6 @@ linters:
           allow:
             - {file: "cmd/magus-*/*.go", reason: build-time codegen with no log display}
             - {file: cmd/langservice-manifest/*.go, reason: build-time codegen with no log display}
-            - {file: internal/config/generate/*.go, reason: build-time codegen with no log display}
             - {file: "benchmarks/*/main.go", reason: a standalone benchmark tool with no log display}
             - {file: "benchmarks/agent/cmd/*/main.go", reason: a standalone benchmark tool with no log display}
             - {file: libs/testkit/environ.go, reason: a test binary's TestMain reports before any display exists}

@@ -1,13 +1,10 @@
 package config
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/libs/clikit/generate"
 )
 
 // A retired variable is an error naming its replacement, one line per variable set, in
@@ -30,11 +27,7 @@ func TestRetiredEnvNamesEachReplacement(t *testing.T) {
 // sends somebody from one dead name to another.
 func TestRetiredEnvReplacementsAreKnown(t *testing.T) {
 	known := map[string]bool{}
-	for _, key := range KnownKeys() {
-		known[generate.EnvName("MAGUS", strings.Split(key, ".")...)] = true
-	}
-	// A key can carry a flat name of its own (sandbox.mode is MAGUS_SANDBOX).
-	for _, s := range Configuration.Spec.Settings {
+	for _, s := range Spec.Settings {
 		known[s.EnvVar] = true
 	}
 	for old, r := range retiredEnv {

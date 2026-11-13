@@ -31,12 +31,12 @@ func Offline() bool {
 var inheritedEnv = map[string]bool{"MAGUS_DAEMON_SOCKET": true}
 
 // KnownEnvVar reports whether magus reads name from its environment: a
-// variable Configuration lists, a per-VCS MAGUS_VCS_<NAME>_BASE_REF override,
+// variable Spec lists, a per-VCS MAGUS_VCS_<NAME>_BASE_REF override,
 // or one an older magus parent passes down. A retired variable is not known.
 // An unknown name is not necessarily wrong (see EnvVarProblem); doctor
 // reports every one.
 func KnownEnvVar(name string) bool {
-	if _, ok := Configuration.Spec.Variable(name); ok || inheritedEnv[name] {
+	if _, ok := Spec.Variable(name); ok || inheritedEnv[name] {
 		return true
 	}
 	vcsName, ok := strings.CutPrefix(name, "MAGUS_VCS_")
@@ -80,7 +80,7 @@ func nearestRegistered(suffix string) string {
 		budget = 2
 	}
 	best, bestDist := "", budget+1
-	for _, s := range Configuration.Spec.Settings {
+	for _, s := range Spec.Settings {
 		known, ok := strings.CutPrefix(s.EnvVar, envPrefix)
 		if !ok || strings.Contains(known, "<") {
 			continue

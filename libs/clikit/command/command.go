@@ -14,14 +14,14 @@ import (
 
 // CommandSpec is the spec of a Command record, a program's command tree:
 // the Command it embeds is the root, which names the program.
-type CommandSpec struct {
+type CommandSpec struct { //nolint:stutter // the Kubernetes JobSpec shape: a Kind's spec is <Kind>Spec
 	Command `yaml:",inline"`
 }
 
-// Kind is Command.
+// Kind names the record apiversion.New stamps around a CommandSpec.
 func (CommandSpec) Kind() apiversion.Kind { return "Command" }
 
-// APIVersion is clikit.command/v1alpha1.
+// APIVersion names the format group clikit owns for a command tree.
 func (CommandSpec) APIVersion() apiversion.APIVersion { return "clikit.command/v1alpha1" }
 
 // Command is one node of a command tree. The root names the program; its Flags are

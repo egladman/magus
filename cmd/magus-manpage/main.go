@@ -50,13 +50,13 @@ func main() {
 		if *out == "" {
 			*out = "manpage"
 		}
-		pages, err = generate.Roff(root, config.Configuration.Spec,*date, *ver)
+		pages, err = generate.Roff(root, config.Spec,*date, *ver)
 		ext = ".1"
 	case "md":
 		if *out == "" {
 			*out = "docs/reference/manpage"
 		}
-		pages, err = generate.Markdown(root, config.Configuration.Spec,"internal/commands/registry.go")
+		pages, err = generate.Markdown(root, config.Spec,"internal/commands/registry.go")
 		ext = ".md"
 	default:
 		fatalf("unknown -format %q; want roff or md", *format)

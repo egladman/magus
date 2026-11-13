@@ -43,29 +43,57 @@ func (s *SettingSuite) TestDescribeEnvOnly() {
 	s.Equal("Env: MAGUS_HINTS_ENABLED\nFlags: (env-only)\nConfig: hints.enabled", got)
 }
 
-type ConfigurationSpecSuite struct{ suite.Suite }
+type SpecSuite struct{ suite.Suite }
 
-func TestConfigurationSpecSuite(t *testing.T) { suite.Run(t, new(ConfigurationSpecSuite)) }
+func TestSpecSuite(t *testing.T) { suite.Run(t, new(SpecSuite)) }
 
 var spec = ConfigurationSpec{Settings: []Setting{
 	{YamlPath: "pinned"},
 	{EnvVar: "APP_LEVEL", Internal: true},
 }}
 
-func (s *ConfigurationSpecSuite) TestVariableFindsTheSettingByName() {
+func (s *SpecSuite) TestVariableFindsTheSettingByName() {
 	got, ok := spec.Variable("APP_LEVEL")
 	s.True(ok)
 	s.True(got.Internal)
 }
 
-func (s *ConfigurationSpecSuite) TestARecordNamesTheClikitConfigurationGroup() {
+func (s *SpecSuite) TestARecordNamesTheClikitConfigurationGroup() {
 	header := apiversion.SpecHeader[ConfigurationSpec]()
 	s.Equal(apiversion.APIVersion("clikit.configuration/v1alpha1"), header.APIVersion)
 	s.True(header.APIVersion.Valid())
 	s.Equal(apiversion.Kind("Configuration"), header.Kind)
 }
 
-func (s *ConfigurationSpecSuite) TestVariableFindsNoFileOnlyKey() {
+func (s *SpecSuite) TestParseSplitsAListOnCommas() {
+	got, err := Setting{Kind: command.StringList}.Parse("a, b,,c")
+	s.Require().NoError(err)
+	s.Equal([]string{"a", "b", "c"}, got)
+}
+
+func (s *SpecSuite) TestParseReadsAMapAsYAML() {
+	got, err := Setting{Kind: command.StringMap}.Parse("{X: Y}")
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"X": "Y"}, got)
+}
+
+func (s *SpecSuite) TestParseGivesAnOptionalBoolAPointer() {
+	got, err := Setting{Kind: command.OptionalBool}.Parse("yes")
+	s.Require().NoError(err)
+	s.Equal(new(true), got)
+}
+
+func (s *SpecSuite) TestParseRefusesABoolTypo() {
+	_, err := Setting{Kind: command.Bool}.Parse("ture")
+	s.ErrorContains(err, `invalid boolean "ture"`)
+}
+
+func (s *SpecSuite) TestParseRefusesAnUnknownKind() {
+	_, err := Setting{YamlPath: "x", Kind: "mystery"}.Parse("1")
+	s.ErrorContains(err, `x: unsupported kind "mystery"`)
+}
+
+func (s *SpecSuite) TestVariableFindsNoFileOnlyKey() {
 	_, ok := spec.Variable("")
 	s.False(ok)
 }

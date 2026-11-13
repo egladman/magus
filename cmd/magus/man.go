@@ -39,7 +39,7 @@ func manCommand(args []string) error {
 		}
 		dir = def
 	}
-	pages, err := generate.Roff(commands.Root.Spec.Command, config.Configuration.Spec, "", version)
+	pages, err := generate.Roff(commands.Root.Spec.Command, config.Spec, "", version)
 	if err != nil {
 		return fmt.Errorf("magus self man: %w", err)
 	}

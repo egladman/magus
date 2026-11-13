@@ -86,11 +86,21 @@ func RefuseVersion(want, got APIVersion, what, fix string) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, apiversion.ErrNewer):
-		return fmt.Errorf("%s: %w: upgrade magus", what, err)
+		return fmt.Errorf("%s: %w", what, refusal{err: err, fix: "upgrade magus"})
 	default:
-		return fmt.Errorf("%s: %w: %s", what, err, fix)
+		return fmt.Errorf("%s: %w", what, refusal{err: err, fix: fix})
 	}
 }
+
+// refusal is apiversion's refusal followed by what the person does next.
+type refusal struct {
+	err error
+	fix string
+}
+
+func (r refusal) Error() string { return fmt.Sprintf("%s: %s", r.err, r.fix) }
+
+func (r refusal) Unwrap() error { return r.err }
 
 type apiVersionComponents struct {
 	group        string

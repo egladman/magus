@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/stamp"
-	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/configuration"
 )
 
@@ -21,10 +18,10 @@ import (
 // takes the entry's actual name there.
 const nameSegment = configuration.NameSegment
 
-// KnownKeys returns every config key Configuration lists, sorted.
+// KnownKeys returns every config key Spec lists, sorted.
 func KnownKeys() []string {
 	var keys []string
-	for _, s := range Configuration.Spec.Settings {
+	for _, s := range Spec.Settings {
 		if s.YamlPath != "" {
 			keys = append(keys, s.YamlPath)
 		}
@@ -52,7 +49,7 @@ func Save(j stamp.Judge, path, key, value string) error {
 		return fmt.Errorf("unknown config key %q (run `magus config view -o name` for valid keys)", key)
 	}
 
-	typedVal, err := parseValue(setting.Kind, value)
+	typedVal, err := setting.Parse(value)
 	if err != nil {
 		return fmt.Errorf("key %s: %w", key, err)
 	}
@@ -143,7 +140,7 @@ func validateAfterMerge(data []byte) error {
 // matchKey finds the setting key names, and the list entry's name when key
 // addresses a field of one.
 func matchKey(key string) (configuration.Setting, string, bool) {
-	for _, s := range Configuration.Spec.Settings {
+	for _, s := range Spec.Settings {
 		if s.YamlPath == "" {
 			continue
 		}
@@ -292,63 +289,3 @@ func Init(j stamp.Judge, path string, force bool) (bool, error) {
 	return true, nil
 }
 
-// parseBool parses a permissive boolean (true/1/yes, false/0/no).
-func parseBool(value string) (bool, error) {
-	switch strings.ToLower(value) {
-	case "true", "1", "yes":
-		return true, nil
-	case "false", "0", "no":
-		return false, nil
-	}
-	return false, fmt.Errorf("invalid boolean %q (use true/false/1/0)", value)
-}
-
-// parseValue converts value into the Go type a setting of kind holds.
-func parseValue(kind command.Kind, value string) (interface{}, error) {
-	switch kind {
-	case command.String, command.Text:
-		return value, nil
-	case command.Int:
-		n, err := strconv.Atoi(value)
-		if err != nil {
-			return nil, fmt.Errorf("invalid integer %q", value)
-		}
-		return n, nil
-	case command.Float:
-		f, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid number %q", value)
-		}
-		return f, nil
-	case command.Duration:
-		d, err := time.ParseDuration(value)
-		if err != nil {
-			return nil, fmt.Errorf("invalid duration %q (e.g. \"6h\", \"30m\")", value)
-		}
-		// yaml.v3 round-trips time.Duration via its String() form ("6h0s").
-		return d, nil
-	case command.Bool:
-		return parseBool(value)
-	case command.OptionalBool:
-		b, err := parseBool(value)
-		if err != nil {
-			return nil, err
-		}
-		return &b, nil
-	case command.StringList:
-		var parts []string
-		for _, p := range strings.Split(value, ",") {
-			if p = strings.TrimSpace(p); p != "" {
-				parts = append(parts, p)
-			}
-		}
-		return parts, nil
-	case command.StringMap:
-		m := map[string]string{}
-		if err := yaml.Unmarshal([]byte(value), &m); err != nil {
-			return nil, fmt.Errorf("invalid map %q (YAML object, e.g. \"{X: Y}\"): %w", value, err)
-		}
-		return m, nil
-	}
-	return nil, fmt.Errorf("unsupported kind %q", kind)
-}
