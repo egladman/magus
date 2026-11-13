@@ -16,7 +16,7 @@ import (
 // A probe can come back six ways and only three of them are a comparison. The other three
 // must stay distinct, because an empty version reads as "not found", which is a claim about
 // a binary that may well be installed.
-func TestBuildToolRowSeparatesEveryProbeOutcome(t *testing.T) {
+func TestBuildToolStatusSeparatesEveryProbeOutcome(t *testing.T) {
 	tool := func(sup spells.VersionBounds) spells.Tool {
 		return spells.Tool{Probe: spells.Command{Bin: "node"}, Supported: sup}
 	}
@@ -70,7 +70,7 @@ func TestBuildToolRowSeparatesEveryProbeOutcome(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			want := tc.want
 			want.Project, want.Bin, want.Spell = "console", "node", "typescript"
-			assert.Equal(t, want, buildToolRow("console", "node", "typescript", tc.t, tc.projBounds, tc.raw, tc.err))
+			assert.Equal(t, want, buildToolStatus("console", "node", "typescript", tc.t, tc.projBounds, tc.raw, tc.err))
 		})
 	}
 }
@@ -78,11 +78,11 @@ func TestBuildToolRowSeparatesEveryProbeOutcome(t *testing.T) {
 // Two spells in one project can declare the same bin. Without the spell as a third key
 // their order is whatever the sort happened to do, and a read-only command's JSON output
 // would differ between runs on identical input.
-func TestSortToolRowsIsTotalOverTiedProjectAndBin(t *testing.T) {
-	order := func(rows []types.ToolStatus) []string {
-		sortToolRows(rows)
-		out := make([]string, len(rows))
-		for i, r := range rows {
+func TestSortToolStatusesIsTotalOverTiedProjectAndBin(t *testing.T) {
+	order := func(statuses []types.ToolStatus) []string {
+		sortToolStatuses(statuses)
+		out := make([]string, len(statuses))
+		for i, r := range statuses {
 			out[i] = fmt.Sprintf("%s/%s/%s", r.Project, r.Bin, r.Spell)
 		}
 		return out

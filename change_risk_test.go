@@ -225,7 +225,7 @@ func (s *ChangeRiskSuite) TestForwardLineKeepsTheLineAnInsertionFollows() {
 	s.Equal(5, moved)
 }
 
-func (s *ChangeRiskSuite) TestForwardLineKeepsAContextRowsLine() {
+func (s *ChangeRiskSuite) TestForwardLineKeepsAContextLine() {
 	moved, ok := forwardLine(6, parsedHunks("@@ -5,3 +5,4 @@\n a\n b\n+x\n c\n"))
 	s.Equal([2]any{6, true}, [2]any{moved, ok})
 }
