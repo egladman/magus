@@ -36,6 +36,45 @@ var jobMigrations = []migrate.Migration{
 	{Name: triesMoved, Up: dropTries},
 	{Name: "model tiers economy, standard and principal become routine, bounded and design", Up: fourModelTiers},
 	{Name: recordsEnveloped, Up: envelopeRow, Header: envelopeHeader},
+	{Name: "model tier source Row becomes Job", Up: modelTierSourceJob},
+}
+
+// modelTierSourceJob respells the stored model tier source "Row", the
+// wire spelling of the source before the domain dropped the word row.
+func modelTierSourceJob(e migrate.Entry) (migrate.Entry, error) {
+	raw, ok := e["status"]
+	if !ok {
+		return e, nil
+	}
+	var status map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &status); err != nil {
+		return nil, fmt.Errorf("reading status: %w", err)
+	}
+	var tier map[string]json.RawMessage
+	if body, ok := status["modelTier"]; ok {
+		if err := json.Unmarshal(body, &tier); err != nil {
+			return nil, fmt.Errorf("reading status.modelTier: %w", err)
+		}
+	}
+	var source string
+	if body, ok := tier["source"]; ok {
+		if err := json.Unmarshal(body, &source); err != nil {
+			return nil, fmt.Errorf("reading status.modelTier.source: %w", err)
+		}
+	}
+	if source != "Row" {
+		return e, nil
+	}
+	var err error
+	if tier["source"], err = json.Marshal(wireTierSource.wire[agent.ModelTierSourceJob]); err == nil {
+		if status["modelTier"], err = json.Marshal(tier); err == nil {
+			e["status"], err = json.Marshal(status)
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("writing status.modelTier.source: %w", err)
+	}
+	return e, nil
 }
 
 // recordsEnveloped names the migration [Store.migrate] rewrites
