@@ -1699,9 +1699,8 @@ func (s *agentSectionSuite) TestCriteriaAndATierNameMoveUnderAgent() {
 		Model:        agent.Model{Tier: "design"},
 		Worker:       agent.Worker{Type: agent.WorkerTypeResumed},
 	}, row.Agent)
-	s.Require().NotNil(row.ModelTier)
-	s.Equal("design", row.ModelTier.Name, "the resolved tier stays on the row, respelled by the four-tier migration")
-	s.Equal(agent.ModelTierSourceJob, row.ModelTier.Source, "the flat source row reads as job")
+	s.Equal(&agent.JobModelTier{Name: "design", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceJob}, row.ModelTier,
+		"the resolved tier stays, respelled by the four-tier migration, and the flat source row reads as job")
 }
 
 func (s *agentSectionSuite) TestAModelTheTierMappedBecomesAnID() {
