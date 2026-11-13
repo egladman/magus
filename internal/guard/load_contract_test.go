@@ -102,7 +102,7 @@ func (s *AuthorityContractSuite) SetupTest() {
 }
 
 func (s *AuthorityContractSuite) git(args ...string) string {
-	out, err := exec.Command("git", append([]string{"-C", s.root, "-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false"}, args...)...).CombinedOutput()
+	out, err := exec.Command("git", append([]string{"-C", s.root, "-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)...).CombinedOutput()
 	s.Require().NoError(err, string(out))
 	return strings.TrimSpace(string(out))
 }
@@ -186,7 +186,7 @@ func contractCheckout(t *testing.T) (root string, base, decls, doc string) {
 	root = t.TempDir()
 	git := func(args ...string) string {
 		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", root, "-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false"}, args...)...).CombinedOutput()
+		out, err := exec.Command("git", append([]string{"-C", root, "-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)...).CombinedOutput()
 		require.NoError(t, err, string(out))
 		return strings.TrimSpace(string(out))
 	}
