@@ -311,11 +311,11 @@ export fun mgs_getLimits() > Limits {
 // none: a workspace that declares no tiers of its own maps each case to the row naming it,
 // and the agents magus ships run on the routine row. alias is the short name the host takes
 // for the model in a spawn, matched exactly, "" for none.
-fun claude_model(id: str, tier: str, alias: str, window: int, price: Price) > ModelRow {
-    return ModelRow{id = id, tier = tier, alias = alias, window = window, price = price};
+fun claude_model(id: str, tier: str, alias: str, window: int, price: Price) > HarnessModel {
+    return HarnessModel{id = id, tier = tier, alias = alias, window = window, price = price};
 }
 
-fun claude_models() > [ModelRow] {
+fun claude_models() > [HarnessModel] {
     return [
         claude_model("claude-fable-5-1", tier: "", alias: "", window: 1000000,
             price: Price{input = 10.0, cacheWrite5m = 12.5, cacheWrite1h = 20.0, cacheRead = 0.25, output = 50.0}),
@@ -327,7 +327,7 @@ fun claude_models() > [ModelRow] {
             price: Price{input = 2.0, cacheWrite5m = 2.5, cacheWrite1h = 4.0, cacheRead = 0.1, output = 10.0}),
         // The one current model priced by prompt length: every category is 5x above 100000
         // prompt tokens, cache reads and writes included.
-        ModelRow{id = "claude-haiku-5-5", tier = "routine", alias = "haiku", window = 1000000,
+        HarnessModel{id = "claude-haiku-5-5", tier = "routine", alias = "haiku", window = 1000000,
             price = Price{input = 0.1, cacheWrite5m = 0.125, cacheWrite1h = 0.2, cacheRead = 0.01, output = 0.5},
             step = PriceStep{above = 100000, multiplier = 5.0}},
         claude_model("claude-haiku-4-5", tier: "", alias: "", window: 200000,
@@ -335,7 +335,7 @@ fun claude_models() > [ModelRow] {
     ];
 }
 
-export fun mgs_listModels() > [ModelRow] {
+export fun mgs_listModels() > [HarnessModel] {
     return claude_models();
 }
 
