@@ -231,6 +231,11 @@ type Session struct {
 	// sharing one namespace; gopherbuzz mirrors both (see bindNamespacePath),
 	// on top of its own basename/splat access conveniences.
 	declaredNamespaces map[string]string
+	// namespacePrefixes are names bound only to hold a nested namespace, a for
+	// a\b. Importing the module a merges into that map.
+	namespacePrefixes map[string]bool
+	// entryNested are the nested namespaces the entry's own imports bound.
+	entryNested map[string]bool
 	// ownNamespace is the ENTRY program's declared namespace, split on the
 	// separator. Imports bind relative to it; see bindNamespaceRelative.
 	ownNamespace []string
@@ -843,6 +848,10 @@ func (s *Session) execImport(ctx context.Context, code string) ([]string, error)
 	prevReplay := s.replaying
 	s.replaying = false
 	defer func() { s.replaying = prevReplay }()
+	// The module's own imports bind relative to its namespace, not the entry's.
+	prevNS := s.ownNamespace
+	s.ownNamespace = s.declaredNamespace(code)
+	defer func() { s.ownNamespace = prevNS }()
 	return s.exec(ctx, code)
 }
 
@@ -1310,7 +1319,7 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 	checkStart := time.Now()
 	s.syncHostTypes()
 	s.checkPrelude = s.checkPrelude.sync(s.importedTypes)
-	errs, checkWarnings := checkWithPrelude(s.withEntryTypes(prog), globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.declImports, s.importPrivateHint(), s.embedded, s.resolverBound)
+	errs, checkWarnings := checkWithPrelude(s.withEntryTypes(prog), globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.declImports, s.importPrivateHint(), s.embedded, s.resolverBound, s.nestedImportsOf(prog))
 	s.adviseImports(errs)
 	warnings = append(warnings, checkWarnings...)
 	if obs := s.compileObserver; obs != nil {
@@ -1700,11 +1709,25 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 	if imp.Alias != "" && imp.Alias != "_" {
 		boundName = imp.Alias
 	}
+	nested := s.nestedDeclNamespace(resolvePath, imp)
+	if nested != "" {
+		if !s.collectImportPrivate {
+			if s.entryNested == nil {
+				s.entryNested = map[string]bool{}
+			}
+			s.entryNested[nested] = true
+		}
+		if s.declaredNamespaces[nested] == resolvePath {
+			s.bindNestedRelative(nested, resolvePath)
+			return ImportBound, nil
+		}
+		boundName = nested
+	}
 	// A selective import binds its own names, not boundName, so "the module is already
 	// bound" says nothing about whether those names are; skip the guard for it, or
 	// `import "buzz:std"` followed by `import print from "buzz:std"` would bind nothing
 	// the second time.
-	if _, bound := s.env.Get(boundName); bound && len(imp.Only) == 0 {
+	if _, bound := s.env.Get(boundName); bound && len(imp.Only) == 0 && !s.namespacePrefixes[boundName] {
 		// A chunk compiled here was checked against the types that file declared,
 		// so it depends on the file as much as the import that first loaded it.
 		if len(s.importFrames) > 0 && !s.fileImportsDisabled {
@@ -1800,6 +1823,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 			}
 			return ImportNative, nil
 		}
+		s.adoptNamespacePrefix(boundName, v)
 		s.env.Define(boundName, v)
 		return ImportNative, nil
 	}
@@ -1828,7 +1852,9 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 				delete(s.loadedPaths, key)
 				return ImportDecls, err
 			}
-			s.collectProgram(boundName, prog)
+			// Upstream names a nested namespace's types only
+			// qualified, so they never shadow a bare name.
+			s.collectDecls(boundName, prog, nested == "")
 		}
 		exports, err := s.execImport(ctx, src)
 		if err != nil {
@@ -1845,6 +1871,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 				return ImportDecls, err
 			}
 		}
+		s.bindNestedRelative(nested, resolvePath)
 		return ImportDecls, nil
 	}
 
@@ -2062,14 +2089,15 @@ func (s *Session) collectDeclImports(key, path string, prog *ast.Program) error 
 		defer func() { s.declLoading = s.declLoading[:len(s.declLoading)-1] }()
 	}
 	quals := map[string]string{}
+	own := programNamespace(prog)
 	for _, stmt := range prog.Stmts {
 		imp, ok := stmt.(*ast.ImportStmt)
 		if !ok {
 			continue
 		}
-		name, binds := importNamespace(imp)
 		dep := strings.TrimPrefix(imp.Path, "buzz:")
 		src, isDecl := s.moduleDecls[dep]
+		name, binds := s.declImportName(imp, src, own)
 		if !binds || !isDecl {
 			continue
 		}
@@ -2088,7 +2116,7 @@ func (s *Session) collectDeclImports(key, path string, prog *ast.Program) error 
 		if err := s.collectDeclImports(declDepKey(dep), dep, depProg); err != nil {
 			return err
 		}
-		s.collectProgram(declDepKey(dep), depProg)
+		s.collectDecls(declDepKey(dep), depProg, len(programNamespace(depProg)) < 2)
 		if s.declDeps == nil {
 			s.declDeps = map[string]bool{}
 		}
@@ -2110,9 +2138,11 @@ func (s *Session) collectDeclImports(key, path string, prog *ast.Program) error 
 func (s *Session) checkDeclTypeNames(key, module string, prog *ast.Program) error {
 	imported := map[string]bool{}
 	var annots []string
+	own := programNamespace(prog)
 	for _, stmt := range prog.Stmts {
 		if imp, ok := stmt.(*ast.ImportStmt); ok {
-			if name, binds := importNamespace(imp); binds {
+			dep := s.moduleDecls[strings.TrimPrefix(imp.Path, "buzz:")]
+			if name, binds := s.declImportName(imp, dep, own); binds {
 				imported[name] = true
 			}
 		}
@@ -2132,15 +2162,93 @@ func (s *Session) checkDeclTypeNames(key, module string, prog *ast.Program) erro
 	}
 	for _, annot := range annots {
 		for name, qual := range qualifiedTypeNames(annot) {
-			if strings.IndexByte(qual, '\\') >= 0 {
-				continue
-			}
 			if !imported[qual] {
 				return bzz.Errorf(UnimportedNamespace, "buzz: module %s: undefined type \"%s\\%s\": no import binds %s in its declarations", module, qual, name, qual)
 			}
 			if !s.declaresType(s.declImports[key][qual], name) {
 				return bzz.Errorf(UndefinedType, "buzz: module %s: undefined type \"%s\\%s\": %s declares no type %s", module, qual, name, qual, name)
 			}
+		}
+	}
+	return nil
+}
+
+// declImportName is the qualifier a declaration declaring namespace own reaches
+// imp's types by. depSrc is the imported declaration source. A nested namespace
+// binds less the segments it shares with own, as upstream binds it.
+func (s *Session) declImportName(imp *ast.ImportStmt, depSrc string, own []string) (string, bool) {
+	name, binds := importNamespace(imp)
+	if !binds || imp.Alias != "" {
+		return name, binds
+	}
+	ns := s.declaredNamespace(depSrc)
+	if len(ns) < 2 {
+		return name, binds
+	}
+	shared := 0
+	for shared < len(ns)-1 && shared < len(own) && ns[shared] == own[shared] {
+		shared++
+	}
+	return strings.Join(ns[shared:], `\`), true
+}
+
+// bindNestedRelative binds the declaration module at path, bound as nested
+// namespace ns, under the part the importer's namespace does not share. So
+// shop\order is order inside shop. An existing binding wins.
+func (s *Session) bindNestedRelative(ns, path string) {
+	rel := s.relativeNamespace(ns)
+	cached := s.importCache["source:"+path]
+	if rel == "" || cached == nil {
+		return
+	}
+	segs := strings.Split(rel, `\`)
+	if _, taken := s.env.Get(segs[0]); taken {
+		return
+	}
+	prog, err := s.parse(cached.src)
+	if err != nil {
+		return
+	}
+	cur := vmpackage.NewMap()
+	for _, n := range cached.names {
+		if v, ok := cached.values.MapGet(n); ok {
+			cur.MapSet(n, v)
+			if v.IsObjectDef() {
+				s.env.Define(QualifiedTypeKey(rel, n), v)
+			}
+		}
+	}
+	for i := len(segs) - 1; i > 0; i-- {
+		parent := vmpackage.NewMap()
+		parent.MapSet(segs[i], cur)
+		cur = parent
+	}
+	s.env.Define(segs[0], cur)
+	s.collectDecls(rel, prog, false)
+}
+
+// relativeNamespace is ns less the segments it shares with the importing
+// module's namespace, or "" when it shares none or all of them.
+func (s *Session) relativeNamespace(ns string) string {
+	if ns == "" {
+		return ""
+	}
+	segs := strings.Split(ns, `\`)
+	shared := 0
+	for shared < len(segs) && shared < len(s.ownNamespace) && segs[shared] == s.ownNamespace[shared] {
+		shared++
+	}
+	if shared == 0 || shared == len(segs) {
+		return ""
+	}
+	return strings.Join(segs[shared:], `\`)
+}
+
+// programNamespace is the segments of prog's `namespace` statement, or nil.
+func programNamespace(prog *ast.Program) []string {
+	for _, stmt := range prog.Stmts {
+		if ns, ok := stmt.(*ast.NamespaceStmt); ok {
+			return strings.Split(ns.Name, `\`)
 		}
 	}
 	return nil
@@ -2317,10 +2425,14 @@ func (s *Session) bindQualifiedTypes(boundName string, prog *ast.Program) {
 // session-wide export set — keeps it correct when two modules export the same
 // identifier: each module's namespace object captures its own export.
 func (s *Session) bindNamespaceObject(name string, exports []string) {
-	if _, exists := s.env.Get(name); exists {
+	if strings.IndexByte(name, '\\') >= 0 {
+		return
+	}
+	if _, exists := s.env.Get(name); exists && !s.namespacePrefixes[name] {
 		return
 	}
 	m := vmpackage.NewMap()
+	s.adoptNamespacePrefix(name, m)
 	for _, n := range exports {
 		if v, ok := s.env.Get(n); ok {
 			m.MapSet(n, v)
@@ -2468,6 +2580,64 @@ func (s *Session) parse(src string) (*ast.Program, error) {
 // (e.g. the module's basename equals its namespace) is left as-is: the basename
 // object already resolves it. Returns an error on a duplicate namespace or a
 // segment that collides with a non-map binding.
+// adoptNamespacePrefix moves the nested namespaces a prefix map held for name
+// onto mod, the module now bound as name. A member mod declares wins.
+func (s *Session) adoptNamespacePrefix(name string, mod vmpackage.Value) {
+	if !s.namespacePrefixes[name] {
+		return
+	}
+	delete(s.namespacePrefixes, name)
+	prefix, ok := s.env.Get(name)
+	if !ok || !prefix.IsMap() {
+		return
+	}
+	for _, k := range prefix.MapKeys() {
+		if _, taken := mod.MapGet(k); taken {
+			continue
+		}
+		if child, ok := prefix.MapGet(k); ok {
+			mod.MapSet(k, child)
+		}
+	}
+}
+
+// nestedImportsOf is the set of nested namespaces prog's own imports bind. An
+// entry chunk also names those an earlier entry chunk imported.
+func (s *Session) nestedImportsOf(prog *ast.Program) map[string]bool {
+	out := map[string]bool{}
+	if !s.collectImportPrivate {
+		maps.Copy(out, s.entryNested)
+	}
+	for _, stmt := range prog.Stmts {
+		if imp, ok := stmt.(*ast.ImportStmt); ok {
+			if ns := s.nestedDeclNamespace(strings.TrimPrefix(imp.Path, "buzz:"), imp); ns != "" {
+				out[ns] = true
+			}
+		}
+	}
+	return out
+}
+
+// nestedDeclNamespace is the namespace of two or more segments a declaration
+// module at path declares, when imp binds it unaliased; else "". Upstream
+// binds such a module under that namespace alone.
+func (s *Session) nestedDeclNamespace(path string, imp *ast.ImportStmt) string {
+	if imp.Alias != "" || len(imp.Only) > 0 {
+		return ""
+	}
+	if _, native := s.nativeModules[path]; native {
+		return ""
+	}
+	src, ok := s.moduleDecls[path]
+	if !ok {
+		return ""
+	}
+	if ns := s.declaredNamespace(src); len(ns) > 1 {
+		return strings.Join(ns, `\`)
+	}
+	return ""
+}
+
 // bindNamespaceRelative binds an imported module's exports under the part of its
 // namespace that is NOT shared with the importing file's own.
 //
@@ -2553,6 +2723,10 @@ func (s *Session) bindNamespacePath(segments []string, exports []string, importP
 	} else {
 		cur = vmpackage.NewMap()
 		s.env.Define(head, cur)
+		if s.namespacePrefixes == nil {
+			s.namespacePrefixes = map[string]bool{}
+		}
+		s.namespacePrefixes[head] = true
 	}
 	for _, seg := range segments[1 : len(segments)-1] {
 		next, ok := cur.MapGet(seg)

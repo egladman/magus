@@ -159,6 +159,9 @@ type checker struct {
 	// valueImports names the imports the session's host resolver bound to a value
 	// (a remote spell handle) rather than a module; see Session.resolverBound.
 	valueImports map[string]bool
+	// nestedImports are the nested namespaces this chunk's own imports bind,
+	// since upstream imports are per file. nil checks no chunk's imports.
+	nestedImports map[string]bool
 	// base holds the builtins and imported types beneath scopes[0] and types; nil
 	// means those two hold everything. A check writes to it only to memoize a
 	// namespace type (see namespaceType).
@@ -308,21 +311,23 @@ func (c *checker) baseEntry(name string) (scopeEntry, bool) {
 // the missing `export` instead of a bare "undefined". embedded mirrors
 // Session.embedded (see checker.embedded).
 func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool, embedded bool) (errs []typeError, warnings []typeError) {
-	return checkWithPrelude(prog, extraGlobals, (*checkPrelude)(nil).sync(imported), moduleFuncs, moduleTypes, moduleVars, nil, private, embedded, nil)
+	return checkWithPrelude(prog, extraGlobals, (*checkPrelude)(nil).sync(imported), moduleFuncs, moduleTypes, moduleVars, nil, private, embedded, nil, nil)
 }
 
 // checkWithPrelude is checkWithGlobals with the builtins and imported types
 // already registered in prelude. The check reads prelude and adds to it only the
 // namespace types it builds. valueImports names the imports bound to a value
-// rather than a module, whose members are read with a dot.
+// rather than a module, whose members are read with a dot. nestedImports are
+// the nested namespaces the chunk's own imports bind.
 //
 // optimization: a session registers imported types and namespaces once, not per check.
 //
 //	measured: BenchmarkSessionImportedTypes -43% B/op, -77% allocs/op (benchstat, n=10).
 //	trade-off: a global resolves through two map layers (scopes[0], then base), and
 //	a type a check rewrites must be copied out of base first (ownBaseObject).
-func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPrelude, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, declImports map[string]map[string]string, private map[string]bool, embedded bool, valueImports map[string]bool) (errs []typeError, warnings []typeError) {
+func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPrelude, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, declImports map[string]map[string]string, private map[string]bool, embedded bool, valueImports, nestedImports map[string]bool) (errs []typeError, warnings []typeError) {
 	c := &checker{
+		nestedImports: nestedImports,
 		types:        map[string]types.Type{},
 		moduleFuncs:  moduleFuncs,
 		moduleTypes:  moduleTypes,

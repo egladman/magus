@@ -3145,3 +3145,139 @@ func (s *callingSessionSuite) TestAHostCallInAHostBuiltFiberFindsTheSession() {
 	s.Require().NoError(err)
 	s.Same(sess, found)
 }
+
+// nestedNamespaceSuite splits a host module into one declaration file per
+// namespace: shop declares a type naming shop\order's Step.
+type nestedNamespaceSuite struct{ suite.Suite }
+
+func TestNestedNamespaceSuite(t *testing.T) { suite.Run(t, new(nestedNamespaceSuite)) }
+
+const (
+	shopOrderDecls = `namespace shop\order;
+export object Step { sku: str = "" }
+`
+	shopDecls = `namespace shop;
+import "shop/order";
+export object Cart { step: order\Step = order\Step{} }
+`
+)
+
+func (s *nestedNamespaceSuite) eval(src string) (vm.Value, error) {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	sess.SetModuleDecls("shop", shopDecls)
+	return sess.Eval(context.Background(), src)
+}
+
+func (s *nestedNamespaceSuite) TestAFullyQualifiedTypeAnnotatesAParameter() {
+	v, err := s.eval(`import "shop/order";
+fun sku(step: shop\order\Step) > str { return step.sku; }
+return sku(shop\order\Step{ sku = "a" });`)
+	s.Require().NoError(err)
+	s.Equal("a", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestAnAliasedNamespaceAnnotatesAParameter() {
+	v, err := s.eval(`import "shop/order" as order;
+fun sku(step: order\Step) > str { return step.sku; }
+return sku(order\Step{ sku = "b" });`)
+	s.Require().NoError(err)
+	s.Equal("b", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestADeclarationFileNamesAnImportedNamespacesType() {
+	v, err := s.eval(`import "shop";
+import "shop/order";
+final cart = shop\Cart{ step = shop\order\Step{ sku = "c" } };
+return cart.step.sku;`)
+	s.Require().NoError(err)
+	s.Equal("c", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestTheChildImportedFirstMergesIntoTheParent() {
+	v, err := s.eval(`import "shop/order";
+import "shop";
+final cart = shop\Cart{ step = shop\order\Step{ sku = "d" } };
+return cart.step.sku;`)
+	s.Require().NoError(err)
+	s.Equal("d", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestAMismatchedNestedTypeFailsTheCheck() {
+	_, err := s.eval(`import "shop/order";
+fun sku(step: shop\order\Step) > str { return step.sku; }
+return sku("e");`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "Step")
+}
+
+func (s *nestedNamespaceSuite) TestAnotherModulesImportDoesNotBindANestedNamespace() {
+	_, err := s.eval(`import "shop";
+fun sku(step: shop\order\Step) > str { return step.sku; }`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `no import binds shop\order`)
+}
+
+func (s *nestedNamespaceSuite) TestTwoNestedNamespacesKeepTheirOwnStep() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	sess.SetModuleDecls("shop/cart", "namespace shop\\cart;\nexport object Step { line: int = 0 }\n")
+	_, err := sess.Eval(context.Background(), `import "shop/order";
+import "shop/cart";
+final step = shop\cart\Step{ sku = "f" };`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `has no field "sku"`)
+	v, err := sess.Eval(context.Background(), `fun line(step: shop\cart\Step) > int { return step.line; }
+return line(shop\cart\Step{ line = 2 }) + shop\order\Step{ sku = "ab" }.sku.len();`)
+	s.Require().NoError(err)
+	s.Equal(int64(4), v.AsInt())
+}
+
+func (s *nestedNamespaceSuite) TestAHostDeclarationNamesANestedType() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	sess.SetNativeModule("shop", vm.NewMap())
+	sess.DeclareModuleTypes("shop", shopDecls)
+	_, err := sess.Compile(`import "shop";
+fun sku(cart: shop\Cart) > int { return cart.step.sku; }`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "str")
+}
+
+func (s *nestedNamespaceSuite) TestADeclarationWithNoNamespaceNamesTheFullPath() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	sess.SetNativeModule("till", vm.NewMap())
+	sess.SetModuleDecls("shop/cart", "namespace shop\\cart;\nexport object Step { line: int = 0 }\n")
+	sess.SetModuleDecls("till", `import "shop/order";
+import "shop/cart";
+export extern fun last() > shop\order\Step;
+export extern fun next() > shop\cart\Step;
+`)
+	_, err := sess.Compile(`import "till";
+fun line() > int { return till\next().line; }
+fun sku() > str { return till\last().sku; }`)
+	s.Require().NoError(err)
+	_, err = sess.Compile(`import "till";
+fun sku() > int { return till\last().sku; }`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "str")
+}
+
+func (s *nestedNamespaceSuite) TestANestedNamespaceLeavesAModuleOfItsLastSegment() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	order := vm.NewMap()
+	order.MapSet("count", vm.IntValue(7))
+	sess.SetNativeModule("order", order)
+	v, err := sess.Eval(context.Background(), `import "order";
+import "shop/order";
+return order\count + shop\order\Step{ sku = "abc" }.sku.len();`)
+	s.Require().NoError(err)
+	s.Equal(int64(10), v.AsInt())
+}
