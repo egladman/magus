@@ -283,9 +283,10 @@ What the fourth build found, 2026-11-13:
 What the fifth build found, 2026-11-13:
 
 - The `magus\Change{}` literal constructs. A default compiles at the literal, so
-  `DeclareMagusTypes` imports each namespace the magus declarations import, which
-  declares its types qualified only, and `bindMagusRecords` binds those objects under
-  their qualified names.
+  `DeclareMagusTypes` declares each namespace the magus declarations import with
+  gopherbuzz's `Session.DeclareNamespaceTypes`, qualified only, and `bindMagusRecords`
+  binds those objects under their qualified names. Running the imports instead bound
+  `magus` as a bare namespace, which an aliased file import then read as the module.
 - `types/diff` still names `types.Diagnostic` and `types.Origin`. Eli keeps
   `Diagnostic` in plain `magus`, so a `magus\diff` declaration would import `magus`
   while `magus` imports it, the cycle gopherbuzz refuses. The move waits until both
