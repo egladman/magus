@@ -39,7 +39,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		return nil, errors.New("namewords: suffixes, short-forms and banned are all empty")
 	}
 	if err := validateBanned(opts.Banned); err != nil {
-		return nil, fmt.Errorf("namewords: %w", err)
+		return nil, fmt.Errorf("checking the banned rules: %w", err)
 	}
 	return &analysis.Analyzer{
 		Name: "namewords",
