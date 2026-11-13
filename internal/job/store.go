@@ -982,15 +982,24 @@ func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 // a live job's own checkout. Every checkout shares the file. A row only
 // taken here does not count: the root's own checkout is one.
 func (s *Store) refuseCheckoutMigration(found int, lines []file.Line) error {
-	if s.root == "" || found >= len(s.migrations) {
+	if found >= len(s.migrations) {
 		return nil
+	}
+	checkout := s.root
+	if checkout == "" {
+		// jobsPath keyed a store with no root on the working directory.
+		wd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("job: job store %s is behind this magus, and with no root and no working directory nothing says this is not a job's checkout, so it was not migrated: %w", s.path, err)
+		}
+		checkout = wd
 	}
 	rows, err := s.unmigratedRows(found, lines)
 	if err != nil {
 		return err
 	}
 	for _, row := range rows {
-		if !row.State.Live() || !row.Worktree.Standing() || !within(s.root, row.Worktree.Root) {
+		if !row.State.Live() || !row.Worktree.Standing() || !within(checkout, row.Worktree.Root) {
 			continue
 		}
 		return fmt.Errorf("job: job store %s is at migration %d, and this magus writes migration %d from %s, the checkout of live job %s:"+

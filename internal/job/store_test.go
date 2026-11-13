@@ -1586,20 +1586,21 @@ func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
 
 // checkoutStore is a store at root, behind its one migration, holding row a in
 // state with the members extra adds.
-func (s *jobSuite) checkoutStore(root, state string, extra map[string]any) (*Store, string, *bytes.Buffer) {
-	st := tempStore(s.T(), root)
+func checkoutStore(t *testing.T, root, state string, extra map[string]any) (*Store, string, *bytes.Buffer) {
+	t.Helper()
+	st := tempStore(t, root)
 	r := recordJob(types.Job{ID: "a", State: types.JobState(state), Created: 1, Updated: 1}, nil)
 	r.Spec.Unknown = map[string]json.RawMessage{"goal": json.RawMessage(`"ship it"`)}
 	line, err := json.Marshal(r)
-	s.Require().NoError(err)
+	require.NoError(t, err)
 	var row map[string]any
-	s.Require().NoError(json.Unmarshal(line, &row))
+	require.NoError(t, json.Unmarshal(line, &row))
 	maps.Copy(row["status"].(map[string]any), extra)
 	line, err = json.Marshal(row)
-	s.Require().NoError(err)
+	require.NoError(t, err)
 	notices := &bytes.Buffer{}
 	st.notices, st.migrations = notices, []migrate.Migration{renamed("goal", "parent")}
-	return st, plantRaw(s.T(), st, fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", RecordAPIVersion, line)), notices
+	return st, plantRaw(t, st, fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", RecordAPIVersion, line)), notices
 }
 
 // forkCheckout is the worktree member of a row whose fork made root.
@@ -1609,7 +1610,7 @@ func forkCheckout(root string) map[string]any {
 
 func (s *jobSuite) TestAJobCheckoutNeverMigratesTheSharedStore() {
 	root := s.T().TempDir()
-	st, path, notices := s.checkoutStore(root, "running", forkCheckout(root))
+	st, path, notices := checkoutStore(s.T(), root, "running", forkCheckout(root))
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
 
@@ -1628,7 +1629,7 @@ func (s *jobSuite) TestADirectoryInsideAJobCheckoutNeverMigratesTheSharedStore()
 	root := s.T().TempDir()
 	nested := filepath.Join(root, "sub")
 	s.Require().NoError(os.Mkdir(nested, 0o755))
-	st, _, _ := s.checkoutStore(nested, "declared", forkCheckout(root))
+	st, _, _ := checkoutStore(s.T(), nested, "declared", forkCheckout(root))
 
 	_, err := st.read()
 	s.Require().ErrorContains(err, "a job's checkout never migrates the store")
@@ -1636,7 +1637,7 @@ func (s *jobSuite) TestADirectoryInsideAJobCheckoutNeverMigratesTheSharedStore()
 
 func (s *jobSuite) TestTheCheckoutOfAnEndedJobMigrates() {
 	root := s.T().TempDir()
-	st, path, _ := s.checkoutStore(root, "pass", forkCheckout(root))
+	st, path, _ := checkoutStore(s.T(), root, "pass", forkCheckout(root))
 
 	f, err := st.read()
 	s.Require().NoError(err)
@@ -1645,7 +1646,7 @@ func (s *jobSuite) TestTheCheckoutOfAnEndedJobMigrates() {
 }
 
 func (s *jobSuite) TestTheRootMigratesWhileAJobHoldsAnotherCheckout() {
-	st, path, _ := s.checkoutStore(s.T().TempDir(), "running", forkCheckout(s.T().TempDir()))
+	st, path, _ := checkoutStore(s.T(), s.T().TempDir(), "running", forkCheckout(s.T().TempDir()))
 
 	_, err := st.read()
 	s.Require().NoError(err)
@@ -1656,7 +1657,7 @@ func (s *jobSuite) TestTheRootMigratesWhileAJobHoldsAnotherCheckout() {
 // checkout the root's, which migrates as before.
 func (s *jobSuite) TestACheckoutAJobWasOnlyTakenInMigrates() {
 	root := s.T().TempDir()
-	st, path, _ := s.checkoutStore(root, "running", map[string]any{"checkoutRoot": root})
+	st, path, _ := checkoutStore(s.T(), root, "running", map[string]any{"checkoutRoot": root})
 
 	_, err := st.read()
 	s.Require().NoError(err)

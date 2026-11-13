@@ -2,6 +2,7 @@ package job
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -122,4 +123,39 @@ func (s *pathsNestedSuite) TestTheHeaderLineIsKept() {
 
 	s.Require().NoError(err)
 	s.NotContains(got, "spec")
+}
+
+// rootlessMigrationSuite pins the migration refusal for a store opened with
+// no root, which keys on the working directory. It changes directory, so it
+// runs alone.
+type rootlessMigrationSuite struct {
+	suite.Suite
+}
+
+func TestRootlessMigrationSuite(t *testing.T) { suite.Run(t, new(rootlessMigrationSuite)) }
+
+func (s *rootlessMigrationSuite) TestAJobCheckoutRefusesAndWritesNothing() {
+	root := s.T().TempDir()
+	s.T().Chdir(root)
+	st, path, notices := checkoutStore(s.T(), "", "running", forkCheckout(root))
+	raw, err := os.ReadFile(path)
+	s.Require().NoError(err)
+
+	_, err = st.read()
+
+	s.Require().ErrorContains(err, "a job's checkout never migrates the store")
+	after, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	s.Equal(string(raw), string(after), "nothing was written")
+	s.Empty(notices.String())
+}
+
+func (s *rootlessMigrationSuite) TestAnotherCheckoutMigrates() {
+	s.T().Chdir(s.T().TempDir())
+	st, path, _ := checkoutStore(s.T(), "", "running", forkCheckout(s.T().TempDir()))
+
+	_, err := st.read()
+
+	s.Require().NoError(err)
+	s.InDelta(1, storedLines(s.T(), path)[0]["migration"], 0)
 }
