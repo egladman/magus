@@ -194,10 +194,12 @@ This amends ADR 0035. Membership stays reach: no type and no namespace is listed
 | A segment that is also a parent member is refused                            | done                           |
 | `types/agent` mirrors under `magus\agent`; its 4 prefix `name` lines deleted | done                           |
 | `types/trail` mirrors under `magus\trail`; its 6 prefix `name` lines deleted | done                           |
-| `types/diff` mirrors under `magus\diff`; its 22 prefix `name` lines deleted  | not built                      |
+| `types/diff` mirrors under `magus\diff`; its 22 prefix `name` lines deleted  | not built (see below)          |
 | `Check`, `Evidence`, `Tier` and kin move to `types/check` as `magus\check`   | done                           |
 | `ImpactCoverage` and `ImpactProject` move to `types/impact` as `magus\impact` | done                           |
-| `Diagnostic`, `ReleaseStage` and `VCSCheckpoint` move below `types`          | not built (packages to pick)   |
+| `VCSCheckpoint` moves to `types/vcs` as `magus\vcs`                          | done                           |
+| `ReleaseStage` moves to `types/release` as `magus\release`                   | done                           |
+| `Diagnostic` stays in `libs/diagnostics` and in `magus`                      | done (no module line)          |
 | The rule that bundles a root type into the module returning it deleted       | not built (root types keep it) |
 | The stale comment on `std.Namespace` corrected                               | done                           |
 
@@ -258,6 +260,25 @@ What the third build found, 2026-11-13:
   scoped package, so it needs `types/check` and `types/impact` added.
 - The checkout's own `./magus` predates `magus\check`. `hack/policy/mandate.buzz`
   imports it, so that binary cannot load the magusfile until it is rebuilt.
+
+What the fourth build found, 2026-11-13:
+
+- Eli picked the rest on 2026-11-13. `VCSCheckpoint` moves to a pure `types/vcs` as
+  `magus\vcs`, and `VCSTag` stays in `types`. `ReleaseStage` moves to a pure
+  `types/release` as `magus\release`. `Diagnostic` stays in `libs/diagnostics` and in
+  plain `magus`, with no `module` line.
+- The stutter rule refuses `vcs.VCSCheckpoint` and `release.ReleaseStage`, so the Go
+  names are `vcs.Checkpoint` and `release.Stage`.
+- `NewestReleaseStage` reads `types.VCSTag`, so it stays in `types` and returns a
+  `release.Stage`. `ParseCheckpointToken` stays in `types` beside `VCSTag`.
+- `types/diff` is not moved yet. Deleting its 22 `name` lines makes the provider op
+  records fail to generate: `internal/spell/target.go` names `ReviewTarget` in a
+  `go:generate` line, the mirror is now `magus\diff\ReviewTarget`, and the spell contract
+  files under `internal/spell/gen/types` import no namespace. Those records and
+  `cmd/magus-utils/provider_ops.go` move with it.
+- A script that builds a `magus\Change{}` literal fails with `unknown object type
+  "Checkpoint"`: the record's default `magus\vcs\Checkpoint{}` is bound by neither the
+  session nor the records `bindMagusRecords` runs.
 
 ### Principles checked
 
@@ -358,9 +379,6 @@ if a package is found whose types belong in two namespaces.
 
 ## Open questions
 
-- Which packages `Diagnostic`, `ReleaseStage` and `VCSCheckpoint` move to, and under
-  what names. `libs/diagnostics` with a `module` line, a new `types/vcs`, and a new
-  `types/release` are the candidates. A package name is Eli's pick.
 - How a handle whose record lives in a nested namespace reaches its host's externs. No
   moved package has needed it yet.
 - Whether upstream lets a function `shop\order` and a namespace `shop\order` coexist.

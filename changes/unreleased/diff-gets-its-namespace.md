@@ -16,3 +16,10 @@
   Buzz they are `magus\impact\Coverage` and `magus\impact\Project`, after
   `import "magus/impact";`. `ImpactResult`, `ImpactSymbol` and `ImpactFileCoverage`
   stay in `types` and `magus`.
+- **Breaking: `VCSCheckpoint` moved to `types/vcs` and the `magus\vcs` namespace.** In
+  Go it is `vcs.Checkpoint`, imported from `types/vcs`. In Buzz it is
+  `magus\vcs\Checkpoint`, after `import "magus/vcs";`. `VCSTag`, the other version
+  control records and `ParseCheckpointToken` stay in `types`.
+- **Breaking: `ReleaseStage` moved to `types/release` and the `magus\release`
+  namespace.** In Go it is `release.Stage`, and `types.NewestReleaseStage` returns it. In
+  Buzz it is `magus\release\Stage`, after `import "magus/release";`.
