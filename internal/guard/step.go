@@ -61,12 +61,12 @@ func NewStepTable(rows []typesagent.StepSpec, rules []StepRule) (StepTable, erro
 	for i, row := range rows {
 		r, err := newStepSpec(row)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("step row %d (kind %q): %w", i, row.Kind, err))
+			errs = append(errs, fmt.Errorf("step spec %d (kind %q): %w", i, row.Kind, err))
 			continue
 		}
 		key := [2]string{row.Kind, row.Name}
 		if seen[key] {
-			errs = append(errs, fmt.Errorf("step row %d repeats kind %q and name %q", i, row.Kind, row.Name))
+			errs = append(errs, fmt.Errorf("step spec %d repeats kind %q and name %q", i, row.Kind, row.Name))
 			continue
 		}
 		seen[key] = true
@@ -131,7 +131,7 @@ func (t StepTable) CheckJudged(kinds []string) error {
 	var errs []error
 	for i, r := range t.rows {
 		if t.unjudged(r) && !slices.Contains(kinds, r.Kind) {
-			errs = append(errs, fmt.Errorf("step row %d (kind %q): no built-in rule judges its capabilities and no step rule is registered: "+
+			errs = append(errs, fmt.Errorf("step spec %d (kind %q): no built-in rule judges its capabilities and no step rule is registered: "+
 				"declare it inert, give it runs, reads, writes or spawns, register a rule with magus.WithStepRule, "+
 				`or register one for the kind with magus\guard.step in the root magusfile`, i, r.Kind))
 		}
@@ -229,10 +229,10 @@ func JudgeStep(ctx context.Context, deps Dependencies, req Request, step typesag
 	row, ok := deps.Steps.covering(step.Kind, step.Name)
 	if !ok {
 		return gradeStepDeny(deps, judged, denyRuleUnjudgedStep, fmt.Sprintf(
-			"magus workspace: no step row covers kind %q, name %q: declare the kind with magus.WithStepRows.", step.Kind, step.Name)), nil
+			"magus workspace: no step spec covers kind %q, name %q: declare the kind with magus.WithStepSpecs.", step.Kind, step.Name)), nil
 	}
 	if row.readsDir() && step.Dir == "" {
-		return types.GuardJudgment{}, fmt.Errorf("step %s %q: dir is empty, and its row judges paths, a command or a spawn relative to it", step.Kind, step.Name)
+		return types.GuardJudgment{}, fmt.Errorf("step %s %q: dir is empty, and its spec judges paths, a command or a spawn relative to it", step.Kind, step.Name)
 	}
 	input := step.Input
 	if input == nil {

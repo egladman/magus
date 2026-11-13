@@ -32,11 +32,11 @@ type sdkOptionSuite struct{ suite.Suite }
 
 func TestSDKOption(t *testing.T) { suite.Run(t, new(sdkOptionSuite)) }
 
-func (s *sdkOptionSuite) TestWithStepRowsRecordsMisuseOnABareLoad() {
+func (s *sdkOptionSuite) TestWithStepSpecsRecordsMisuseOnABareLoad() {
 	l := &workspace.Load{}
 	s.NotPanics(func() { WithStepSpecs()(l) })
 	s.Require().Len(l.Misuse, 1)
-	s.EqualError(l.Misuse[0], "magus.WithStepRows sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
+	s.EqualError(l.Misuse[0], "magus.WithStepSpecs sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
 }
 
 func (s *sdkOptionSuite) TestWithStepRuleRecordsMisuseOnABareLoad() {
@@ -64,8 +64,8 @@ func (s *sdkOptionSuite) TestInspectReturnsRecordedMisuse() {
 }
 
 func (s *sdkOptionSuite) TestOpensOptionsTakeIt() {
-	o := collectOptions([]Option{WithStepSpecs(refundRow), WithSpawnRule(TierCeiling)})
-	s.Equal([]agent.StepSpec{refundRow}, o.stepSpecs)
+	o := collectOptions([]Option{WithStepSpecs(refundSpec), WithSpawnRule(TierCeiling)})
+	s.Equal([]agent.StepSpec{refundSpec}, o.stepSpecs)
 	s.NotNil(o.spawnRule)
 }
 
