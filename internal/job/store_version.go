@@ -62,7 +62,9 @@ func modelTierSourceJob(e migrate.Entry) (migrate.Entry, error) {
 			return nil, fmt.Errorf("reading status.modelTier.source: %w", err)
 		}
 	}
-	if source != "Row" {
+	// A flat entry enveloped since the rename keeps the domain value "row":
+	// the wire table no longer lists it.
+	if source != "Row" && source != "row" {
 		return e, nil
 	}
 	var err error
