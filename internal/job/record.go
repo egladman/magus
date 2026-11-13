@@ -201,7 +201,7 @@ func (r jobRecord) job() (types.Job, error) {
 	var bad wireReads
 	row := r.Spec.job(&bad)
 	r.Status.populate(&row, &bad)
-	if err := bad.err(); err != nil {
+	if err := bad.refusal(); err != nil {
 		return types.Job{}, fmt.Errorf("job %s: %w", r.Metadata.Name, err)
 	}
 	row.ID, row.Generation, row.State = r.Metadata.Name, int(r.Metadata.Generation), state
@@ -372,7 +372,7 @@ type wireEnum[T ~string] struct {
 // carrying one is refused with an error rather than read.
 type wireReads struct{ errs []error }
 
-func (r *wireReads) err() error { return errors.Join(r.errs...) }
+func (r *wireReads) refusal() error { return errors.Join(r.errs...) }
 
 func newWireEnum[T ~string](values ...T) wireEnum[T] {
 	e := wireEnum[T]{wire: map[T]string{}, gov: map[string]T{}}

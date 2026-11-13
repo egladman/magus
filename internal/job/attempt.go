@@ -134,7 +134,7 @@ func (r attemptRecord) attempt() (types.Attempt, error) {
 		Violations: st.Violations, FailingRefs: st.FailingRefs, DenialsKnown: st.DenialsKnown,
 		Retry: types.RetryVerdict{Retryable: st.Retry.Retryable, Change: wireRetryChange.read(st.Retry.Change, &bad), Reason: st.Retry.Reason, Code: st.Retry.Code},
 	}
-	if err := bad.err(); err != nil {
+	if err := bad.refusal(); err != nil {
 		return types.Attempt{}, fmt.Errorf("attempt %d of job %s: %w", r.Spec.N, r.Spec.Job, err)
 	}
 	for _, d := range st.Denials {
@@ -257,7 +257,7 @@ func (s *Store) Attempts() ([]types.Attempt, error) {
 		}
 		a, err := r.attempt()
 		if err != nil {
-			return nil, fmt.Errorf("job: %w", err)
+			return nil, fmt.Errorf("reading %s: %w", attemptsFileName, err)
 		}
 		out = append(out, a)
 	}

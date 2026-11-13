@@ -99,7 +99,7 @@ func newStepSpec(row typesagent.StepSpec) (stepSpec, error) {
 	if row.Command != "" {
 		ptr, err := parseJSONPointer(row.Command)
 		if err != nil {
-			return stepSpec{}, fmt.Errorf("command: %w", err)
+			return stepSpec{}, fmt.Errorf("the command pointer: %w", err)
 		}
 		r.command = ptr
 	}
