@@ -138,6 +138,44 @@ func (s *ConformanceBaseSuite) TestTheBaseTreeIsMadeInThePoliciesPrivateTempDir(
 	s.Equal(private, filepath.Dir(tree))
 }
 
+func (s *ConformanceBaseSuite) keep(body string) string {
+	entry := filepath.Join(s.T().TempDir(), "base.jsonl")
+	s.Require().NoError(os.WriteFile(entry, []byte(body+"\n"), 0o600))
+	return entry
+}
+
+func (s *ConformanceBaseSuite) TestAnEntryKeptUnderTheOldRowsKeyIsRefused() {
+	entry := s.keep(`{"rows":[],"answer":{"verdict":"found"}}`)
+
+	_, ok, err := readConformanceEntry(entry)
+
+	s.False(ok)
+	s.Require().Error(err)
+	s.Contains(err.Error(), entry)
+	s.Contains(err.Error(), "magus run conformance-base .")
+}
+
+func (s *ConformanceBaseSuite) TestAnEntryWithNeitherRowsNorDistributionsIsRefused() {
+	entry := s.keep(`{"answer":{"verdict":"absent"}}`)
+
+	_, ok, err := readConformanceEntry(entry)
+
+	s.False(ok)
+	s.Require().Error(err)
+	s.Contains(err.Error(), entry)
+	s.Contains(err.Error(), "magus run conformance-base .")
+}
+
+func (s *ConformanceBaseSuite) TestAnEntryWithDistributionsIsRead() {
+	entry := s.keep(`{"distributions":[{"key":{"metric":"file-split"},"n":1}],"answer":{"verdict":"found"}}`)
+
+	got, ok, err := readConformanceEntry(entry)
+
+	s.Require().NoError(err)
+	s.True(ok)
+	s.Len(got.Distributions, 1)
+}
+
 type ConformanceBaseBoxSuite struct {
 	suite.Suite
 }

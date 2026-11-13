@@ -182,6 +182,18 @@ func readConformanceEntry(entry string) (types.Conformance, bool, error) {
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return types.Conformance{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
 	}
+	var keys struct {
+		Rows          json.RawMessage `json:"rows"`
+		Distributions json.RawMessage `json:"distributions"`
+	}
+	if err := json.Unmarshal(raw, &keys); err != nil {
+		return types.Conformance{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
+	}
+	drifted := len(out.Distributions) == 0 && out.Answer.Verdict == types.VerdictFound
+	if drifted || (len(keys.Rows) == 0 && len(keys.Distributions) == 0) {
+		return types.Conformance{}, false, fmt.Errorf("conformance: %s holds no distributions, so it was kept in another shape; "+
+			"measure the base again with `magus run conformance-base .`", entry)
+	}
 	return out, true, nil
 }
 
