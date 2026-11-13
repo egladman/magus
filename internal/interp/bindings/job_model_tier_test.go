@@ -430,9 +430,9 @@ func TestModelTiersDefaultMapsTheHarnessRows(t *testing.T) {
 	rows := func(tiers ...string) spells.Option {
 		list := make([]string, len(tiers))
 		for i, tier := range tiers {
-			list[i] = fmt.Sprintf("ModelRow{id = %q, tier = %q}", "m-"+tier, tier)
+			list[i] = fmt.Sprintf("HarnessModel{id = %q, tier = %q}", "m-"+tier, tier)
 		}
-		return spells.WithFuncSource(fmt.Sprintf("import \"magus/spell\";\nexport fun mgs_listModels() > [ModelRow] { return [%s]; }\n", strings.Join(list, ", ")))
+		return spells.WithFuncSource(fmt.Sprintf("import \"magus/spell\";\nexport fun mgs_listModels() > [HarnessModel] { return [%s]; }\n", strings.Join(list, ", ")))
 	}
 	full := register.Spell(t, "tiered-test", rows("routine", "bounded", "design", "frontier"))
 	_, tiers, err := loadModelTiers(t, `import "magus";`, full)
@@ -458,10 +458,10 @@ func TestModelTiersDefaultMapsTheHarnessRows(t *testing.T) {
 // three of the four, and names the one it lacks.
 func TestModelTiersDefaultReadsOldTierNamesOnHarnessRows(t *testing.T) {
 	old := register.Spell(t, "old-tiered-test", spells.WithFuncSource(`import "magus/spell";
-export fun mgs_listModels() > [ModelRow] {
+export fun mgs_listModels() > [HarnessModel] {
     return [
-        ModelRow{id = "m-low", tier = "economy"}, ModelRow{id = "m-mid", tier = "standard"},
-        ModelRow{id = "m-high", tier = "principal"}, ModelRow{id = "m-top", tier = "frontier"},
+        HarnessModel{id = "m-low", tier = "economy"}, HarnessModel{id = "m-mid", tier = "standard"},
+        HarnessModel{id = "m-high", tier = "principal"}, HarnessModel{id = "m-top", tier = "frontier"},
     ];
 }
 `))
