@@ -19,8 +19,9 @@ parent's own words, and it names the row the child reads.
 ## Elsewhere
 
 A Kubernetes object's `spec` is the desired state its author declares, beside a
-`status` the system writes. A magus spec is the same half of a job row, kept in
-the row rather than nested under a `spec` member.
+`status` the system writes. A magus spec is the same half of a job row, and the
+stored record nests it under `spec` beside the store's `status`
+([ADR 0044](../decisions/0044-a-job-may-carry-an-agent.md)).
 
 ## Example
 

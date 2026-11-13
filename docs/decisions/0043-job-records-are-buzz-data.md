@@ -404,3 +404,14 @@ format setting, so there is no code to point at. render-brief.buzz was deleted i
 commit, and its replacement was added as hack/dev/job-view.buzz, since renamed to
 `hack/dev/show-job.buzz`, which section 2 names. Context is left as read on 2026-11-10,
 so its Markdown mentions of the old paths are history, not current references.
+
+### 2026-11-13: the row is split into spec and status after all
+
+[ADR 0044](0044-a-job-may-carry-an-agent.md) reopened the alternative "Split the row into
+`spec` and `status` fields". Its records are CRD-shaped: a stored Job carries the parent's
+half under `spec` and the store's half under `status`, and an Attempt files the result as
+its `status`. The CLI layout records `clikit.command/v1alpha1` and
+`clikit.configuration/v1alpha1` take the same envelope. The evidence the rejection lacked
+was that the declared half needed its own reader, the one ADR 0044 gives the agent
+section. Section 3's sentence that the row "is not split" and the alternative stay as
+written on 2026-11-10. In Go, `types.Job` stays flat; only the stored record nests.
