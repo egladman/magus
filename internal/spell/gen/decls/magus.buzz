@@ -620,7 +620,7 @@ export object JobClaim {
 
 export object JobDeferred {
     item: str = "",
-    row: str = "",
+    job: str = "",
     reason: str = "",
 }
 
@@ -1060,7 +1060,7 @@ export object JobUnmerged {
 
 export object JobUnmergedReport {
     branch: str = "",
-    rows: [JobUnmerged] = [],
+    jobs: [JobUnmerged] = [],
     risks: [JobUnmerged] = [],
     unknown: str = "",
 }
@@ -1113,7 +1113,7 @@ export object ModelTierRecord {
 
 export object ModelTiers {
     definition: str = "",
-    rows: [ModelTierRecord] = [],
+    models: [ModelTierRecord] = [],
 }
 
 export object GroupingRecord {
@@ -1137,7 +1137,7 @@ export object Grouping {
     definition: str = "",
     minSample: int = 0,
     unclassified: int = 0,
-    rows: [GroupingRecord] = [],
+    shapes: [GroupingRecord] = [],
 }
 
 export object VolatilityTarget {
@@ -1937,7 +1937,7 @@ export object ConformanceItem {
     imports: [ConformanceImport] = [],
 }
 
-export object ConformanceRow {
+export object ConformanceDistribution {
     key: ConformanceKey = ConformanceKey{},
     n: int = 0,
     p50: int = 0,
@@ -1972,7 +1972,7 @@ export object ConformancePackage {
 
 export object ConformanceReport {
     definition: str = "",
-    rows: [ConformanceRow] = [],
+    distributions: [ConformanceDistribution] = [],
     excluded: int = 0,
     answer: KnowledgeAnswer = KnowledgeAnswer{},
     base: str = "",
@@ -2638,7 +2638,7 @@ export object LifecycleStatus {
     detail: str = "",
 }
 
-export object ToolRow {
+export object ToolStatus {
     project: str = "",
     bin: str = "",
     spell: str = "",
@@ -2659,7 +2659,7 @@ export object ToolReport {
     workspace: str = "",
     count: int = 0,
     lifecycle: LifecycleStatus = LifecycleStatus{},
-    tools: [ToolRow] = [],
+    tools: [ToolStatus] = [],
 }
 
 export object ListedWorkspace {
