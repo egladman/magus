@@ -156,8 +156,8 @@ A row carries `id` and optionally `parent` (the job this one was forked from),
 `agent` (the model requested as `{id, tier}`, the `instructions` that are the
 prose half, the machine-checkable half being `goals`, and the `worker`, whose
 `type` is `resumed` or `new` with a `reason`), `checkpoint` (as
-`magus vcs checkpoint -o name` prints it), `paths.write`, `paths.deny`,
-`paths.read`, `depends_on`, `breaks`, `check`, `goals`,
+`magus vcs checkpoint -o name` prints it), `paths` (an object of `write`, `deny`
+and `read`), `depends_on`, `breaks`, `check`, `goals`,
 `state`, `read_only`, and `max_attempts` (see
 [attempts and generations](#attempts-and-generations)). A record naming no
 `state` is stored `declared`. The store adds `api_version`, the actor that
