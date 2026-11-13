@@ -1,11 +1,9 @@
 package types
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/libs/apiversion"
@@ -49,7 +47,7 @@ func (v APIVersion) String() string { return string(v) }
 
 // Group is `magus.job` in `magus.job/v1alpha1`. It is "" when v is
 // malformed.
-func (v APIVersion) Group() string { return v.components().group }
+func (v APIVersion) Group() string { return apiversion.APIVersion(v).Group() }
 
 // Version is `v1alpha1` in `magus.job/v1alpha1`. It is "" when v is
 // malformed.
@@ -62,18 +60,14 @@ func (v APIVersion) Version() string {
 }
 
 // Stability is alpha, beta or stable. It is "" when v is malformed.
-func (v APIVersion) Stability() Stability { return v.components().stability }
+func (v APIVersion) Stability() Stability {
+	return Stability(apiversion.APIVersion(v).Stability())
+}
 
 // Compare orders by group, then by version within the group. A
 // malformed version sorts first.
 func (v APIVersion) Compare(w APIVersion) int {
-	x, y := v.components(), w.components()
-	return cmp.Or(
-		cmp.Compare(x.group, y.group),
-		cmp.Compare(x.major, y.major),
-		cmp.Compare(stabilityRank(x.stability), stabilityRank(y.stability)),
-		cmp.Compare(x.minor, y.minor),
-	)
+	return apiversion.APIVersion(v).Compare(apiversion.APIVersion(w))
 }
 
 // RefuseVersion wraps apiversion's refusal of got where the reader reads
@@ -101,36 +95,3 @@ type refusal struct {
 func (r refusal) Error() string { return fmt.Sprintf("%s: %s", r.err, r.fix) }
 
 func (r refusal) Unwrap() error { return r.err }
-
-type apiVersionComponents struct {
-	group        string
-	major, minor int
-	stability    Stability
-}
-
-func (v APIVersion) components() apiVersionComponents {
-	m := apiVersionRe.FindStringSubmatch(string(v))
-	if m == nil {
-		return apiVersionComponents{}
-	}
-	p := apiVersionComponents{group: m[1], stability: StabilityStable}
-	p.major, _ = strconv.Atoi(m[2]) // apiVersionRe matched digits
-	if m[3] != "" {
-		p.stability = Stability(m[3])
-		p.minor, _ = strconv.Atoi(m[4]) // apiVersionRe matched digits
-	}
-	return p
-}
-
-func stabilityRank(s Stability) int {
-	switch s {
-	case StabilityAlpha:
-		return 1
-	case StabilityBeta:
-		return 2
-	case StabilityStable:
-		return 3
-	default:
-		return 0
-	}
-}
