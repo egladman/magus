@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/impact"
+	"github.com/egladman/magus/types/vcs"
 )
 
 // Review is the annotated changeset: every changed file with what the workspace already
@@ -611,7 +612,7 @@ func (v UncoveredReason) Sentence() string {
 // "nothing changed", and a client must not render it as reassurance.
 type Reviewed struct {
 	// At is the revision the reader last got through, oldest where receipts disagree.
-	At types.VCSCheckpoint `json:"at,omitzero" yaml:"at,omitzero"`
+	At vcs.Checkpoint `json:"at,omitzero" yaml:"at,omitzero"`
 	// Files is how many of this changeset's files that revision covers.
 	Files int `json:"files,omitempty" yaml:"files,omitempty"`
 }
@@ -1161,7 +1162,7 @@ func (r Diff) AttachChurn(files []types.FileHotspot, projects []types.TrendEntry
 //
 // A pointer receiver, unlike its neighbours: this writes a field on the Diff itself rather than on
 // the elements of a slice it holds, and a value receiver would drop it silently.
-func (r *Diff) AttachReviewed(at types.VCSCheckpoint, files int) {
+func (r *Diff) AttachReviewed(at vcs.Checkpoint, files int) {
 	r.Reviewed = Reviewed{At: at, Files: files}
 }
 

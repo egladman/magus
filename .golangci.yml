@@ -180,6 +180,7 @@ linters:
             - "${base-path}/types/agent/*.go"
             - "${base-path}/types/check/*.go"
             - "${base-path}/types/impact/*.go"
+            - "${base-path}/types/vcs/*.go"
             - "!$test"
           allow:
             - github.com/egladman/magus/spells$
@@ -191,6 +192,7 @@ linters:
             - github.com/egladman/magus/types/agent$
             - github.com/egladman/magus/types/check$
             - github.com/egladman/magus/types/impact$
+            - github.com/egladman/magus/types/vcs$
           deny:
             - pkg: os$
               desc: types is the near-leaf domain package and may not reach the world

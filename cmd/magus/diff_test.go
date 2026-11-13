@@ -33,6 +33,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/impact"
+	"github.com/egladman/magus/types/vcs"
 )
 
 // The viewer is the DEFAULT at a terminal, so this table is about FALLBACK rather than
@@ -2233,7 +2234,7 @@ func TestReviewedContentDigestsTheRevisionNotTheCheckout(t *testing.T) {
 
 	atRevision := reviewedContent{
 		root: root,
-		at:   types.VCSCheckpoint{Revision: "cafe1234", Branch: "feat/audience", VCS: "git"},
+		at:   vcs.Checkpoint{Revision: "cafe1234", Branch: "feat/audience", VCS: "git"},
 		read: func(rev, path string) (string, error) {
 			assert.Equal(t, "cafe1234", rev, "the resolved id is what gets read, never the branch name")
 			assert.Equal(t, "a.go", path)
@@ -2254,7 +2255,7 @@ func TestReviewedContentDigestsTheRevisionNotTheCheckout(t *testing.T) {
 func TestReviewedContentYieldsNothingForAFileAbsentAtTheRevision(t *testing.T) {
 	c := reviewedContent{
 		root: t.TempDir(),
-		at:   types.VCSCheckpoint{Revision: "cafe1234"},
+		at:   vcs.Checkpoint{Revision: "cafe1234"},
 		read: func(string, string) (string, error) { return "", fmt.Errorf("path does not exist at that revision") },
 	}
 
@@ -2269,7 +2270,7 @@ func TestReviewedContentYieldsNothingForAFileAbsentAtTheRevision(t *testing.T) {
 // that re-derived it would be the second lookup this join exists to prevent.
 func TestHintSinceLastReview(t *testing.T) {
 	rangeSrc := diffInput{kind: inputRevRange, base: "main", head: "topic", label: "the range main...topic"}
-	reviewed := func(at types.VCSCheckpoint, files int) diff.Diff {
+	reviewed := func(at vcs.Checkpoint, files int) diff.Diff {
 		rev := diff.Diff{Files: []diff.File{{Path: "a.go"}, {Path: "b.go"}}}
 		rev.AttachReviewed(at, files)
 		return rev
@@ -2277,7 +2278,7 @@ func TestHintSinceLastReview(t *testing.T) {
 
 	t.Run("an earlier pass names the revision and the command", func(t *testing.T) {
 		got := notices(t, func() {
-			hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{Revision: "0123456789abcdef0123", VCS: "git"}, 1), rangeSrc)
+			hintSinceLastReview(t.Context(), reviewed(vcs.Checkpoint{Revision: "0123456789abcdef0123", VCS: "git"}, 1), rangeSrc)
 		})
 		assert.Contains(t, got, "you last reviewed 1 of these 2 files")
 		assert.Contains(t, got, "0123456789ab", "the prose abbreviates")
@@ -2285,20 +2286,20 @@ func TestHintSinceLastReview(t *testing.T) {
 	})
 
 	t.Run("nothing to subtract prints nothing", func(t *testing.T) {
-		out := notices(t, func() { hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{}, 0), rangeSrc) })
+		out := notices(t, func() { hintSinceLastReview(t.Context(), reviewed(vcs.Checkpoint{}, 0), rangeSrc) })
 		assert.Empty(t, out, "a first pass has no earlier one")
 	})
 
 	t.Run("already looking at the reviewed revision prints nothing", func(t *testing.T) {
 		out := notices(t, func() {
-			hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{Revision: "main", VCS: "git"}, 1), rangeSrc)
+			hintSinceLastReview(t.Context(), reviewed(vcs.Checkpoint{Revision: "main", VCS: "git"}, 1), rangeSrc)
 		})
 		assert.Empty(t, out, "the reader is already seeing exactly the delta")
 	})
 
 	t.Run("a working-tree review has no earlier revision to name", func(t *testing.T) {
 		out := notices(t, func() {
-			hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{Revision: "0123456789abcdef0123"}, 1),
+			hintSinceLastReview(t.Context(), reviewed(vcs.Checkpoint{Revision: "0123456789abcdef0123"}, 1),
 				diffInput{kind: inputWorkingTree, label: "the working tree"})
 		})
 		assert.Empty(t, out)

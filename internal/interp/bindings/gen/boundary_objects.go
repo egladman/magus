@@ -15,6 +15,7 @@ import (
 	imagetypes "github.com/egladman/magus/types/image"
 	impacttypes "github.com/egladman/magus/types/impact"
 	"github.com/egladman/magus/types/trail"
+	vcstypes "github.com/egladman/magus/types/vcs"
 	"time"
 )
 
@@ -446,7 +447,7 @@ func ObjectSymbolIndexDigest(v types.SymbolIndexDigest, enums ffi.EnumCases) vm.
 	return enums.Instance("Graph", []string{"digest", "indexed", "projects", "gaps", "languages"}, []vm.Value{vm.StringValue(v.Digest), vm.BoolValue(v.Indexed), vm.ListValue(itemsProjects), vm.ListValue(itemsGaps), vm.ListValue(itemsLanguages)})
 }
 
-func ObjectVCSCheckpoint(v types.VCSCheckpoint) vm.Value {
+func ObjectVCSCheckpoint(v vcstypes.Checkpoint) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("revision", vm.StringValue(v.Revision))
 	out.MapSet("branch", vm.StringValue(v.Branch))

@@ -47,6 +47,7 @@ import (
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/impact"
+	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -3208,7 +3209,7 @@ func scopeAck(rev difftypes.Diff, paths []string) (difftypes.Diff, error) {
 type reviewedContent struct {
 	root string
 	// at is zero for the working tree, and otherwise the revision the content is read from.
-	at   types.VCSCheckpoint
+	at   typesvcs.Checkpoint
 	read func(rev, path string) (string, error)
 }
 

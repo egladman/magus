@@ -56,6 +56,7 @@ import (
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -1292,19 +1293,19 @@ func (m *Magus) Regions(ctx context.Context, base string, files []types.FileChan
 // caller recording what it read records something that still means the same thing after somebody
 // pushes to that branch. Dirty and PatchDigest stay zero, because a committed revision is not a
 // working tree and reporting it as clean-or-dirty would be answering a question nobody asked.
-func (m *Magus) RevisionCheckpoint(ctx context.Context, rev string) (types.VCSCheckpoint, error) {
+func (m *Magus) RevisionCheckpoint(ctx context.Context, rev string) (typesvcs.Checkpoint, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
-		return types.VCSCheckpoint{}, fmt.Errorf("%w: %w",
+		return typesvcs.Checkpoint{}, fmt.Errorf("%w: %w",
 			types.DiagnosticErrorf(types.VCSCapabilityMissing,
 				"this workspace has version control disabled, so %q names no revision", rev),
 			types.ErrVCSUnsupported)
 	}
 	commit, err := res.VCS.FindCommit(ctx, m.ws.Root, rev)
 	if err != nil {
-		return types.VCSCheckpoint{}, fmt.Errorf("resolving %q: %w", rev, err)
+		return typesvcs.Checkpoint{}, fmt.Errorf("resolving %q: %w", rev, err)
 	}
-	return types.VCSCheckpoint{Revision: commit.ID, Branch: rev, VCS: res.Name}, nil
+	return typesvcs.Checkpoint{Revision: commit.ID, Branch: rev, VCS: res.Name}, nil
 }
 
 // FileAt returns a repo-relative path's content at a revision.

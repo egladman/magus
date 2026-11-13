@@ -15,6 +15,7 @@ import (
 	imagetypes "github.com/egladman/magus/types/image"
 	impacttypes "github.com/egladman/magus/types/impact"
 	"github.com/egladman/magus/types/trail"
+	vcstypes "github.com/egladman/magus/types/vcs"
 )
 
 // RuntimeBoundaryTypes is every value magus encodes for Buzz, zero-valued and paired
@@ -56,6 +57,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "CharmTraceStep", Zero: spells.CharmTraceStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmTraceStep(v.(spells.CharmTraceStep)) }},
 	{Name: "Check", Zero: check.Check{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCheck(v.(check.Check), enums) }},
 	{Name: "CheckoutState", Zero: types.CheckoutState{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCheckoutState(v.(types.CheckoutState)) }},
+	{Name: "Checkpoint", Zero: vcstypes.Checkpoint{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSCheckpoint(v.(vcstypes.Checkpoint)) }},
 	{Name: "ClaimEvidence", Zero: types.ClaimEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectClaimEvidence(v.(types.ClaimEvidence), enums) }},
 	{Name: "CleanReport", Zero: types.CleanReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCleanReport(v.(types.CleanReport)) }},
 	{Name: "CoChange", Zero: types.CoChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCoChange(v.(types.CoChange)) }},
@@ -445,7 +447,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Unreferenced", Zero: types.Unreferenced{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUnreferenced(v.(types.Unreferenced), enums) }},
 	{Name: "UnreferencedEntry", Zero: types.UnreferencedEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUnreferencedEntry(v.(types.UnreferencedEntry)) }},
 	{Name: "UpdateRef", Zero: types.UpdateRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUpdateRef(v.(types.UpdateRef)) }},
-	{Name: "VCSCheckpoint", Zero: types.VCSCheckpoint{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSCheckpoint(v.(types.VCSCheckpoint)) }},
 	{Name: "VCSInvocation", Zero: types.VCSInvocation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSInvocation(v.(types.VCSInvocation)) }},
 	{Name: "VerificationEvidence", Zero: types.VerificationEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectVerificationEvidence(v.(types.VerificationEvidence))

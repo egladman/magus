@@ -25,6 +25,7 @@ import (
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
 	"github.com/egladman/magus/types/trail"
+	vcstypes "github.com/egladman/magus/types/vcs"
 )
 
 // DecodeAck decodes a Buzz Ack, an object instance or a map, into a types.Ack.
@@ -7950,69 +7951,6 @@ func decodeImageTree(v vm.Value, path string) (imagetypes.Tree, error) {
 	return out, nil
 }
 
-// DecodeVCSCheckpoint decodes a Buzz VCSCheckpoint, an object instance or a map, into a types.VCSCheckpoint.
-func DecodeVCSCheckpoint(v vm.Value) (types.VCSCheckpoint, error) {
-	return decodeVCSCheckpoint(v, "vcsCheckpoint")
-}
-
-func decodeVCSCheckpoint(v vm.Value, path string) (types.VCSCheckpoint, error) {
-	var out types.VCSCheckpoint
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "VCSCheckpoint", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "revision":
-			sRevision, err := decodeString(item, path+".revision")
-			if err != nil {
-				return out, err
-			}
-			out.Revision = sRevision
-		case "branch":
-			sBranch, err := decodeString(item, path+".branch")
-			if err != nil {
-				return out, err
-			}
-			out.Branch = sBranch
-		case "dirty":
-			bDirty, err := decodeBool(item, path+".dirty")
-			if err != nil {
-				return out, err
-			}
-			out.Dirty = bDirty
-		case "patchDigest":
-			sPatchDigest, err := decodeString(item, path+".patchDigest")
-			if err != nil {
-				return out, err
-			}
-			out.PatchDigest = sPatchDigest
-		case "untrackedDigest":
-			sUntrackedDigest, err := decodeString(item, path+".untrackedDigest")
-			if err != nil {
-				return out, err
-			}
-			out.UntrackedDigest = sUntrackedDigest
-		case "vcs":
-			sVCS, err := decodeString(item, path+".vcs")
-			if err != nil {
-				return out, err
-			}
-			out.VCS = sVCS
-		case "preserved":
-			sPreserved, err := decodeString(item, path+".preserved")
-			if err != nil {
-				return out, err
-			}
-			out.Preserved = sPreserved
-		default:
-			return out, unknownMember(path, "VCSCheckpoint", key)
-		}
-	}
-	return out, nil
-}
-
 // DecodeVerificationStatus decodes a Buzz VerificationStatus, an object instance or a map, into a types.VerificationStatus.
 func DecodeVerificationStatus(v vm.Value) (types.VerificationStatus, error) {
 	return decodeVerificationStatus(v, "verificationStatus")
@@ -8752,6 +8690,69 @@ func decodeTrailReadOptions(v vm.Value, path string) (trail.ReadOptions, error) 
 			out.Until = sUntil
 		default:
 			return out, unknownMember(path, "ReadOptions", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeVCSCheckpoint decodes a Buzz Checkpoint, an object instance or a map, into a vcstypes.Checkpoint.
+func DecodeVCSCheckpoint(v vm.Value) (vcstypes.Checkpoint, error) {
+	return decodeVCSCheckpoint(v, "checkpoint")
+}
+
+func decodeVCSCheckpoint(v vm.Value, path string) (vcstypes.Checkpoint, error) {
+	var out vcstypes.Checkpoint
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Checkpoint", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "revision":
+			sRevision, err := decodeString(item, path+".revision")
+			if err != nil {
+				return out, err
+			}
+			out.Revision = sRevision
+		case "branch":
+			sBranch, err := decodeString(item, path+".branch")
+			if err != nil {
+				return out, err
+			}
+			out.Branch = sBranch
+		case "dirty":
+			bDirty, err := decodeBool(item, path+".dirty")
+			if err != nil {
+				return out, err
+			}
+			out.Dirty = bDirty
+		case "patchDigest":
+			sPatchDigest, err := decodeString(item, path+".patchDigest")
+			if err != nil {
+				return out, err
+			}
+			out.PatchDigest = sPatchDigest
+		case "untrackedDigest":
+			sUntrackedDigest, err := decodeString(item, path+".untrackedDigest")
+			if err != nil {
+				return out, err
+			}
+			out.UntrackedDigest = sUntrackedDigest
+		case "vcs":
+			sVCS, err := decodeString(item, path+".vcs")
+			if err != nil {
+				return out, err
+			}
+			out.VCS = sVCS
+		case "preserved":
+			sPreserved, err := decodeString(item, path+".preserved")
+			if err != nil {
+				return out, err
+			}
+			out.Preserved = sPreserved
+		default:
+			return out, unknownMember(path, "Checkpoint", key)
 		}
 	}
 	return out, nil

@@ -10,6 +10,7 @@ import "magus/agent";
 import "magus/check";
 import "magus/impact";
 import "magus/trail";
+import "magus/vcs";
 
 export enum<str> DiagnosticOrigin {
     unknown = "",
@@ -392,21 +393,11 @@ export object ChangeOptions {
     patch: str = "",
 }
 
-export object VCSCheckpoint {
-    revision: str = "",
-    branch: str = "",
-    dirty: bool = false,
-    patchDigest: str = "",
-    untrackedDigest: str = "",
-    vcs: str = "",
-    preserved: str = "",
-}
-
 export object Change {
     base: str = "",
     rev: str = "",
     patch: str = "",
-    at: VCSCheckpoint = VCSCheckpoint{},
+    at: magus\vcs\Checkpoint = magus\vcs\Checkpoint{},
     files: {str: str} = {},
 
     fun tier(target: str, opts: TierOptions? = null) > TierReport !> any {
@@ -1857,7 +1848,7 @@ export object DiffOrder {
 }
 
 export object DiffReviewed {
-    at: VCSCheckpoint = VCSCheckpoint{},
+    at: magus\vcs\Checkpoint = magus\vcs\Checkpoint{},
     files: int = 0,
 }
 

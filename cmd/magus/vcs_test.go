@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -432,7 +433,7 @@ func TestHeldForOtherLeasesReadsTheCallersEnvironmentLease(t *testing.T) {
 // flag while one of the two spellings minted an object in the user's repository, so the
 // handle that reaches it appeared nowhere a caller was told to look.
 func TestCheckpointLineCarriesThePreservedHandle(t *testing.T) {
-	cp := types.VCSCheckpoint{Revision: "abc123", Branch: "main", Dirty: true, PatchDigest: "d1d1"}
+	cp := typesvcs.Checkpoint{Revision: "abc123", Branch: "main", Dirty: true, PatchDigest: "d1d1"}
 
 	assert.Equal(t, "abc123 main dirty d1d1", checkpointLine(cp),
 		"a checkpoint that preserved nothing gained a field")

@@ -15,6 +15,7 @@ import (
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
 	"github.com/egladman/magus/types/trail"
+	vcstypes "github.com/egladman/magus/types/vcs"
 )
 
 var inboundTypes = []inboundType{
@@ -157,7 +158,6 @@ var inboundTypes = []inboundType{
 	{Name: "TierOptions", Zero: types.TierOptions{}, Encode: func(v any) vm.Value { return ObjectTierOptions(v.(types.TierOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTierOptions(v) }},
 	{Name: "Tool", Zero: spells.Tool{}, Encode: func(v any) vm.Value { return ObjectTool(v.(spells.Tool), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTool(v) }},
 	{Name: "Tree", Zero: imagetypes.Tree{}, Encode: func(v any) vm.Value { return ObjectImageTree(v.(imagetypes.Tree), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageTree(v) }},
-	{Name: "VCSCheckpoint", Zero: types.VCSCheckpoint{}, Encode: func(v any) vm.Value { return ObjectVCSCheckpoint(v.(types.VCSCheckpoint)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVCSCheckpoint(v) }},
 	{Name: "VerificationStatus", Zero: types.VerificationStatus{}, Encode: func(v any) vm.Value { return ObjectVerificationStatus(v.(types.VerificationStatus)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVerificationStatus(v) }},
 	{Name: "VersionBounds", Zero: spells.VersionBounds{}, Encode: func(v any) vm.Value { return ObjectVersionBounds(v.(spells.VersionBounds)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVersionBounds(v) }},
 	{Name: "VersionKey", Zero: spells.VersionKey{}, Encode: func(v any) vm.Value { return ObjectVersionKey(v.(spells.VersionKey), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVersionKey(v) }},
@@ -173,6 +173,7 @@ var inboundTypes = []inboundType{
 	{Name: "magus\\agent\\Spec", Zero: typesagent.Spec{}, Encode: func(v any) vm.Value { return ObjectSpec(v.(typesagent.Spec), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSpec(v) }},
 	{Name: "magus\\agent\\Worker", Zero: typesagent.Worker{}, Encode: func(v any) vm.Value { return ObjectWorker(v.(typesagent.Worker), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeWorker(v) }},
 	{Name: "magus\\trail\\ReadOptions", Zero: trail.ReadOptions{}, Encode: func(v any) vm.Value { return ObjectTrailReadOptions(v.(trail.ReadOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTrailReadOptions(v) }},
+	{Name: "magus\\vcs\\Checkpoint", Zero: vcstypes.Checkpoint{}, Encode: func(v any) vm.Value { return ObjectVCSCheckpoint(v.(vcstypes.Checkpoint)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVCSCheckpoint(v) }},
 	{Name: "vcs\\CommandOptions", Zero: types.VCSCommandOptions{}, Encode: func(v any) vm.Value { return ObjectVCSCommandOptions(v.(types.VCSCommandOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVCSCommandOptions(v) }},
 }
 
