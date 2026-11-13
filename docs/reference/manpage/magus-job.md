@@ -103,10 +103,10 @@ them and magus describe job prints one job's terms.
 **--delivery** *string*
 : How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)
 
-**--deny-paths** *string*
+**--deny-paths** *value*
 : A path this job may not write, carved out of its write paths; repeatable or comma-separated
 
-**--depends-on** *string*
+**--depends-on** *value*
 : A job this one waits on; repeatable or comma-separated
 
 **--[no-]fix** (default: off)
@@ -127,7 +127,7 @@ them and magus describe job prints one job's terms.
 **--[no-]read-only** (default: off)
 : A job that gathers evidence and writes nothing
 
-**--read-paths** *string*
+**--read-paths** *value*
 : A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)
 
 **--[no-]schema** (default: off)
