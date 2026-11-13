@@ -695,6 +695,18 @@ export fun base() > str !> any { return magus\Change{}.mergeBase(); }`))
 	s.Contains(got.AsString(), "mergeBase")
 }
 
+func (s *magusRecordMethodsSuite) TestANestedNamespaceDefaultFillsItsFields() {
+	sess, err := s.session(privateMembersModule(s.T()))
+	s.Require().NoError(err)
+	s.Require().NoError(sess.Exec(s.T().Context(), `import "magus";
+export fun revision() > str { return magus\Change{}.at.revision; }`))
+
+	got, err := sess.CallValue(s.T().Context(), sess.Exports()["revision"], nil)
+
+	s.Require().NoError(err)
+	s.Empty(got.AsString())
+}
+
 func (s *magusRecordMethodsSuite) TestAModuleWithoutAPrivateMemberIsRefusedAtTheCall() {
 	sess, err := s.session(vm.NewMap())
 	s.Require().NoError(err)

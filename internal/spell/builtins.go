@@ -317,6 +317,15 @@ func DeclareMagusTypes(sess *buzz.Session, implements func(member string) bool) 
 	if err := SetNamespaceDecls(sess); err != nil {
 		return err
 	}
+	namespaces, err := magusNamespaces(decls)
+	if err != nil {
+		return err
+	}
+	// A default such as magus\vcs\Checkpoint{} compiles at the literal,
+	// which fills fields only from a type declared under its namespace.
+	for _, ns := range namespaces {
+		sess.DeclareModuleTypes(ns.name, ns.src)
+	}
 	sess.DeclareModuleTypes("magus", decls)
 	return bindMagusRecords(sess, decls)
 }
@@ -373,6 +382,8 @@ type magusRecord struct {
 	enum   bool
 	extern bool   // a private extern an object method calls
 	src    string // the declaration's own text
+	// namespace is the nested namespace declaring it, "" for magus.
+	namespace string
 }
 
 // magusRecords holds a runtime definition for every plain record and enum the magus
@@ -403,21 +414,81 @@ func compileRecords(decls string) ([]magusRecord, error) {
 	if err := sess.Exec(context.Background(), body); err != nil {
 		return nil, failingRecord(out, err)
 	}
+	nested, err := namespaceRecords(decls)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, nested...)
 	if err := readRecordValues(sess, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
+// magusNamespace is a nested namespace the magus declarations import.
+type magusNamespace struct {
+	name string // as a script spells it, such as magus\vcs
+	src  string // its declarations
+}
+
+// magusNamespaces are the nested namespaces decls imports, in import order.
+func magusNamespaces(decls string) ([]magusNamespace, error) {
+	prog, err := buzz.ParseEmbedded(decls)
+	if err != nil {
+		return nil, err
+	}
+	var out []magusNamespace
+	for _, stmt := range prog.Stmts {
+		imp, ok := stmt.(*ast.ImportStmt)
+		if !ok || !strings.HasPrefix(imp.Path, "magus/") {
+			continue
+		}
+		src, ok := ModuleDecls(imp.Path)
+		if !ok {
+			return nil, fmt.Errorf("magus declarations import %s, which has none", imp.Path)
+		}
+		out = append(out, magusNamespace{name: strings.ReplaceAll(imp.Path, "/", `\`), src: src})
+	}
+	return out, nil
+}
+
+// namespaceRecords are the objects of each nested namespace decls imports,
+// with no value yet. A magus record's default such as magus\vcs\Checkpoint{}
+// builds one in the session that constructs the record.
+func namespaceRecords(decls string) ([]magusRecord, error) {
+	namespaces, err := magusNamespaces(decls)
+	if err != nil {
+		return nil, err
+	}
+	var out []magusRecord
+	for _, ns := range namespaces {
+		_, records, err := recordDecls(ns.src)
+		if err != nil {
+			return nil, fmt.Errorf("magus declarations of %s: %w", ns.name, err)
+		}
+		for _, r := range records {
+			if !r.extern && !r.enum {
+				out = append(out, magusRecord{name: r.name, namespace: ns.name})
+			}
+		}
+	}
+	return out, nil
+}
+
 // readRecordValues fills each record's value from the session that ran it.
+// A nested namespace's object is read under the qualified key its import bound.
 func readRecordValues(sess *buzz.Session, records []magusRecord) error {
 	for i := range records {
 		if records[i].extern {
 			continue
 		}
-		records[i].value = sess.GetGlobal(records[i].name)
+		key := records[i].name
+		if records[i].namespace != "" {
+			key = buzz.QualifiedTypeKey(records[i].namespace, records[i].name)
+		}
+		records[i].value = sess.GetGlobal(key)
 		if records[i].value.IsNull() {
-			return fmt.Errorf("magus declaration %s defined no runtime value", records[i].name)
+			return fmt.Errorf("magus declaration %s defined no runtime value", key)
 		}
 	}
 	return nil
@@ -528,7 +599,11 @@ func bindMagusRecords(sess *buzz.Session, decls string) error {
 	if err != nil {
 		return err
 	}
-	if records, err = sessionRecords(sess, mod, records); err != nil {
+	nested, err := namespaceRecords(decls)
+	if err != nil {
+		return err
+	}
+	if records, err = sessionRecords(sess, mod, append(records, nested...)); err != nil {
 		return err
 	}
 	bindRecords(sess, mod, hasModule, records)
@@ -591,6 +666,10 @@ func bindRecords(sess *buzz.Session, mod vm.Value, hasModule bool, records []mag
 	globals := sess.Globals()
 	for _, r := range records {
 		if r.extern {
+			continue
+		}
+		if r.namespace != "" {
+			sess.SetGlobal(buzz.QualifiedTypeKey(r.namespace, r.name), r.value)
 			continue
 		}
 		if _, bound := globals[r.name]; !bound {
