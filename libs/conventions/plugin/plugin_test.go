@@ -36,10 +36,13 @@ func TestPluginsRegister(t *testing.T) {
 		"hostvocab":     map[string]any{"module": "", "files": []any{"internal/guard/*.go"}, "words": []any{"Read"}, "hint": "see docs"},
 		"jsonlstate":    map[string]any{"base": "origin/main", "state-segments": []any{".magus"}},
 		"nameoutput":    map[string]any{"module": "", "package": "a", "case-ident": "outputName", "emitters": []any{"emitNames"}, "hint": "see docs"},
-		"namewords":     map[string]any{"suffixes": []any{"Of"}, "short-forms": []any{"Cfg"}},
-		"providerio":    map[string]any{"module": "example.com/m", "dirs": []any{"cmd/app"}, "hint": "see docs"},
-		"ruletext":      map[string]any{"module": "", "files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:", "hint": "see docs"},
-		"secretfields":  map[string]any{"words": []any{"Token"}, "hint": "see docs"},
+		"namewords": map[string]any{
+			"suffixes": []any{"Of"}, "short-forms": []any{"Cfg"},
+			"banned": []any{map[string]any{"packages": []any{"example.com/m/types/..."}, "words": []any{"Row"}, "why": "say job"}},
+		},
+		"providerio":   map[string]any{"module": "example.com/m", "dirs": []any{"cmd/app"}, "hint": "see docs"},
+		"ruletext":     map[string]any{"module": "", "files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:", "hint": "see docs"},
+		"secretfields": map[string]any{"words": []any{"Token"}, "hint": "see docs"},
 		"stderrprint": map[string]any{
 			"module": "example.com/m", "usage-pattern": "(?i)usage$", "usage-fields": []any{"Usage"},
 			"callee-packages": []any{"example.com/m"}, "display": []any{"example.com/m/tty"},

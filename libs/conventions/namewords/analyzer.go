@@ -1,16 +1,8 @@
-// Package namewords holds function and method names to the words they may use:
-// a name says what it returns or does, so it never ends in a preposition such as
-// Of, For or To, and never shortens a word to a form such as Src or Cfg.
-//
-// Only a declared function or method is judged; variables, parameters, fields
-// and types are not. A test, benchmark, fuzz or example entry point reads as a
-// sentence and is skipped, as is a generated file and a method that satisfies a
-// standard library interface, whose name the interface chose (io.WriterTo's
-// WriteTo).
 package namewords
 
 import (
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/types"
 	"strings"
@@ -35,17 +27,23 @@ type Options struct {
 
 	// ShortForms are the abbreviations a name must not use as any of its words.
 	ShortForms []string `json:"short-forms"`
+
+	// Banned are the words some packages may not use in any declared name.
+	Banned []Banned `json:"banned"`
 }
 
-// New returns the analyzer configured by opts, erroring when both word lists
-// are empty.
+// New returns the analyzer configured by opts, erroring when every word list
+// is empty or a banned rule is incomplete.
 func New(opts Options) (*analysis.Analyzer, error) {
-	if len(opts.Suffixes) == 0 && len(opts.ShortForms) == 0 {
-		return nil, errors.New("namewords: suffixes and short-forms are both empty")
+	if len(opts.Suffixes) == 0 && len(opts.ShortForms) == 0 && len(opts.Banned) == 0 {
+		return nil, errors.New("namewords: suffixes, short-forms and banned are all empty")
+	}
+	if err := validateBanned(opts.Banned); err != nil {
+		return nil, fmt.Errorf("namewords: %w", err)
 	}
 	return &analysis.Analyzer{
 		Name: "namewords",
-		Doc:  "report function and method names ending in a preposition or using a short form",
+		Doc:  "report function and method names ending in a preposition or using a short form, and names carrying a word their package bans",
 		Run:  func(pass *analysis.Pass) (any, error) { return nil, run(pass, opts) },
 	}, nil
 }
@@ -56,11 +54,15 @@ func run(pass *analysis.Pass, opts Options) error {
 		return err
 	}
 	var stdlib map[string][]*types.Interface
+	banned := applicable(opts.Banned, pass.Pkg.Path())
 	for _, f := range files {
 		if ast.IsGenerated(f) {
 			continue
 		}
 		test := source.IsTest(pass, f)
+		if len(banned) > 0 {
+			checkBanned(pass, f, banned, test)
+		}
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok || test && fn.Recv == nil && isEntryPoint(fn.Name.Name) {
@@ -187,6 +189,127 @@ func stdlibMethods(pkg *types.Package) map[string][]*types.Interface {
 	}
 	visit(pkg)
 	return methods
+}
+
+const bannedMessage = "%s carries the word %q: %s"
+
+// Banned keeps a word out of every declared name in some packages, so a word
+// reserved for one layer cannot leak into the types above it.
+type Banned struct {
+	// Packages are import paths. One ending in /... covers every package below
+	// it too, and an external test package counts as the package it tests.
+	Packages []string `json:"packages"`
+
+	// Words are matched like [Options] words.
+	Words []string `json:"words"`
+
+	// Why is shown with each report: what to name the thing instead.
+	Why string `json:"why"`
+}
+
+func (b Banned) validate() error {
+	var errs []error
+	if len(b.Packages) == 0 {
+		errs = append(errs, errors.New("packages is empty"))
+	}
+	if len(b.Words) == 0 {
+		errs = append(errs, errors.New("words is empty"))
+	}
+	if b.Why == "" {
+		errs = append(errs, errors.New("why is empty: say what to name instead"))
+	}
+	return errors.Join(errs...)
+}
+
+func validateBanned(rules []Banned) error {
+	var errs []error
+	for i, r := range rules {
+		if err := r.validate(); err != nil {
+			errs = append(errs, fmt.Errorf("banned[%d]: %w", i, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (b Banned) covers(path string) bool {
+	path = strings.TrimSuffix(path, "_test")
+	for _, p := range b.Packages {
+		if base, below := strings.CutSuffix(p, "/..."); below {
+			if path == base || strings.HasPrefix(path, base+"/") {
+				return true
+			}
+		} else if path == p {
+			return true
+		}
+	}
+	return false
+}
+
+func applicable(rules []Banned, path string) []Banned {
+	var out []Banned
+	for _, r := range rules {
+		if r.covers(path) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// bannedWord is the first word of name that b bans, spelled as name spells it.
+func (b Banned) bannedWord(name string) string {
+	for _, w := range splitWords(name) {
+		for _, banned := range b.Words {
+			if strings.EqualFold(w, banned) {
+				return w
+			}
+		}
+	}
+	return ""
+}
+
+// checkBanned judges each top-level name of file, each struct field and each
+// interface method. A parameter, a local and an embedded field are not judged:
+// an embedded field takes its type's name.
+func checkBanned(pass *analysis.Pass, file *ast.File, rules []Banned, test bool) {
+	report := func(id *ast.Ident) {
+		for _, rule := range rules {
+			if w := rule.bannedWord(id.Name); w != "" {
+				pass.Reportf(id.Pos(), bannedMessage, id.Name, w, rule.Why)
+				return
+			}
+		}
+	}
+	for _, decl := range file.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if !test || d.Recv != nil || !isEntryPoint(d.Name.Name) {
+				report(d.Name)
+			}
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					report(s.Name)
+					reportMembers(s.Type, report)
+				case *ast.ValueSpec:
+					for _, name := range s.Names {
+						report(name)
+					}
+				}
+			}
+		}
+	}
+}
+
+func reportMembers(expr ast.Expr, report func(*ast.Ident)) {
+	ast.Inspect(expr, func(n ast.Node) bool {
+		if field, ok := n.(*ast.Field); ok {
+			for _, name := range field.Names {
+				report(name)
+			}
+		}
+		return true
+	})
 }
 
 // isStdlib reports whether path names a standard library package: its first
