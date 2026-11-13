@@ -178,6 +178,8 @@ linters:
           files:
             - "${base-path}/types/*.go"
             - "${base-path}/types/agent/*.go"
+            - "${base-path}/types/check/*.go"
+            - "${base-path}/types/impact/*.go"
             - "!$test"
           allow:
             - github.com/egladman/magus/spells$
@@ -185,6 +187,8 @@ linters:
             - github.com/egladman/magus/internal/json$
             - github.com/egladman/magus/types/enum$
             - github.com/egladman/magus/types/agent$
+            - github.com/egladman/magus/types/check$
+            - github.com/egladman/magus/types/impact$
           deny:
             - pkg: os$
               desc: types is the near-leaf domain package and may not reach the world
@@ -199,7 +203,7 @@ linters:
             - pkg: os/user$
               desc: types is the near-leaf domain package and may not reach the world
             - pkg: github.com/egladman/magus/
-              desc: types may depend on spells, libs/diagnostics, internal/json and types/enum, nothing else in magus
+              desc: types may depend on spells, libs/diagnostics, internal/json and its own domain packages, nothing else in magus
 
         # libs/conventions, libs/proofread and libs/testpairing are magus-repo policy, never shipped.
         root-imports-no-repo-policy:
