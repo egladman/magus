@@ -1,5 +1,5 @@
 ---
-title: "ADR 0043: job records are Buzz data, and Markdown is rendered from them"
+title: "ADR 0043: job records are Buzz data, and markdown is rendered from them"
 order: 43
 description: What a parent hands a child is the job row, and what a child hands back is the JobResult it files; both are Go types mirrored into Buzz by the one generator, and the only prose is rendered from them by one Buzz template, never written first and parsed later. The word brief goes; the parent's record is the job spec, and the rendered Markdown is a view of it. The guard holds a spawn to a complete, validated row and a leased child's stop to a filed result. agents.brief_format, magus\Brief, the buzz prompt format and StopRequest.reply are deleted as a deliberate break, and the change is judged against the spawn baseline collected before it.
 tags: [adr, decision, agents, jobs, guard, buzz, subagents, harness]
@@ -8,7 +8,7 @@ date: 2026-11-10
 supersedes: ADR 0036 sections 3 and 4 (the workspace-only stop rule and StopRequest.reply), and agents.brief_format
 ---
 
-# ADR 0043: job records are Buzz data, and Markdown is rendered from them
+# ADR 0043: job records are Buzz data, and markdown is rendered from them
 
 ## Context
 
