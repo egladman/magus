@@ -58,6 +58,7 @@ var inboundTypes = []inboundType{
 	{Name: "Harness", Zero: types.Harness{}, Encode: func(v any) vm.Value { return ObjectHarness(v.(types.Harness)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarness(v) }},
 	{Name: "HarnessAsset", Zero: types.HarnessAsset{}, Encode: func(v any) vm.Value { return ObjectHarnessAsset(v.(types.HarnessAsset)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarnessAsset(v) }},
 	{Name: "HarnessConfig", Zero: types.HarnessConfig{}, Encode: func(v any) vm.Value { return ObjectHarnessConfig(v.(types.HarnessConfig)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarnessConfig(v) }},
+	{Name: "HarnessModel", Zero: types.HarnessModel{}, Encode: func(v any) vm.Value { return ObjectHarnessModel(v.(types.HarnessModel)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarnessModel(v) }},
 	{Name: "HarnessSkills", Zero: types.HarnessSkills{}, Encode: func(v any) vm.Value { return ObjectHarnessSkills(v.(types.HarnessSkills), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarnessSkills(v) }},
 	{Name: "HarnessTool", Zero: types.HarnessTool{}, Encode: func(v any) vm.Value { return ObjectHarnessTool(v.(types.HarnessTool), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarnessTool(v) }},
 	{Name: "HarnessTools", Zero: types.HarnessTools{}, Encode: func(v any) vm.Value { return ObjectHarnessTools(v.(types.HarnessTools), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarnessTools(v) }},
@@ -87,7 +88,6 @@ var inboundTypes = []inboundType{
 	{Name: "ManagedEntries", Zero: types.ManagedEntries{}, Encode: func(v any) vm.Value { return ObjectManagedEntries(v.(types.ManagedEntries)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeManagedEntries(v) }},
 	{Name: "Manifest", Zero: spells.Manifest{}, Encode: func(v any) vm.Value { return ObjectManifest(v.(spells.Manifest), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeManifest(v) }},
 	{Name: "McpServer", Zero: types.McpServer{}, Encode: func(v any) vm.Value { return ObjectMcpServer(v.(types.McpServer), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMcpServer(v) }},
-	{Name: "ModelRow", Zero: types.ModelRow{}, Encode: func(v any) vm.Value { return ObjectModelRow(v.(types.ModelRow)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeModelRow(v) }},
 	{Name: "NeighborhoodOptions", Zero: types.KnowledgeNeighborhoodOptions{}, Encode: func(v any) vm.Value {
 		return ObjectKnowledgeNeighborhoodOptions(v.(types.KnowledgeNeighborhoodOptions), ffi.EnumBacking)
 	}, Decode: func(v vm.Value) (any, error) { return decode.DecodeKnowledgeNeighborhoodOptions(v) }},
@@ -198,7 +198,7 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.JobWriteProof]():        {"", "alone", "disjoint", "overlapping"},
 	reflect.TypeFor[types.McpTransport]():         {"", "stdio", "http"},
 	reflect.TypeFor[imagetypes.ModePolicy]():      {"", "fixed", "executable-bit"},
-	reflect.TypeFor[typesagent.ModelTierSource](): {"row", "matrix", "user-matrix", "default"},
+	reflect.TypeFor[typesagent.ModelTierSource](): {"job", "matrix", "user-matrix", "default"},
 	reflect.TypeFor[imagetypes.OS]():              {"", "linux"},
 	reflect.TypeFor[spells.PatchOpKind]():         {"", "add", "remove", "replace", "move", "copy", "test"},
 	reflect.TypeFor[types.RelationID]():           {"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"},

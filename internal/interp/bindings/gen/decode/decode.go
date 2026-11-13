@@ -2256,6 +2256,63 @@ func decodeHarnessConfig(v vm.Value, path string) (types.HarnessConfig, error) {
 	return out, nil
 }
 
+// DecodeHarnessModel decodes a Buzz HarnessModel, an object instance or a map, into a types.HarnessModel.
+func DecodeHarnessModel(v vm.Value) (types.HarnessModel, error) {
+	return decodeHarnessModel(v, "harnessModel")
+}
+
+func decodeHarnessModel(v vm.Value, path string) (types.HarnessModel, error) {
+	var out types.HarnessModel
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "HarnessModel", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			sID, err := decodeString(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "tier":
+			sTier, err := decodeString(item, path+".tier")
+			if err != nil {
+				return out, err
+			}
+			out.Tier = sTier
+		case "alias":
+			sAlias, err := decodeString(item, path+".alias")
+			if err != nil {
+				return out, err
+			}
+			out.Alias = sAlias
+		case "window":
+			nWindow, err := decodeInt(item, path+".window")
+			if err != nil {
+				return out, err
+			}
+			out.Window = nWindow
+		case "price":
+			xPrice, err := decodePrice(item, path+".price")
+			if err != nil {
+				return out, err
+			}
+			out.Price = xPrice
+		case "step":
+			xStep, err := decodePriceStep(item, path+".step")
+			if err != nil {
+				return out, err
+			}
+			out.Step = xStep
+		default:
+			return out, unknownMember(path, "HarnessModel", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeHarnessSkills decodes a Buzz HarnessSkills, an object instance or a map, into a types.HarnessSkills.
 func DecodeHarnessSkills(v vm.Value) (types.HarnessSkills, error) {
 	return decodeHarnessSkills(v, "harnessSkills")
@@ -2348,21 +2405,21 @@ func decodeHarnessTools(v vm.Value, path string) (types.HarnessTools, error) {
 				return out, err
 			}
 			out.Dir = sDir
-		case "rows":
-			listRows, err := decodeList(item, path+".rows", "[HarnessTool]")
+		case "tools":
+			listTools, err := decodeList(item, path+".tools", "[HarnessTool]")
 			if err != nil {
 				return out, err
 			}
-			if len(listRows) > 0 {
-				itemsRows := make([]types.HarnessTool, len(listRows))
-				for indexRows, itemRows := range listRows {
-					xRowsItem, err := decodeHarnessTool(itemRows, fmt.Sprintf("%s[%d]", path+".rows", indexRows))
+			if len(listTools) > 0 {
+				itemsTools := make([]types.HarnessTool, len(listTools))
+				for indexTools, itemTools := range listTools {
+					xToolsItem, err := decodeHarnessTool(itemTools, fmt.Sprintf("%s[%d]", path+".tools", indexTools))
 					if err != nil {
 						return out, err
 					}
-					itemsRows[indexRows] = xRowsItem
+					itemsTools[indexTools] = xToolsItem
 				}
-				out.Rows = itemsRows
+				out.Tools = itemsTools
 			}
 		default:
 			return out, unknownMember(path, "HarnessTools", key)
@@ -3354,12 +3411,12 @@ func decodeJobDeferred(v vm.Value, path string) (types.JobDeferred, error) {
 				return out, err
 			}
 			out.Item = sItem
-		case "row":
-			sRow, err := decodeString(item, path+".row")
+		case "job":
+			sJob, err := decodeString(item, path+".job")
 			if err != nil {
 				return out, err
 			}
-			out.Row = sRow
+			out.Job = sJob
 		case "reason":
 			sReason, err := decodeString(item, path+".reason")
 			if err != nil {
@@ -4248,63 +4305,6 @@ func decodeMcpServer(v vm.Value, path string) (types.McpServer, error) {
 			out.Register = strsRegister
 		default:
 			return out, unknownMember(path, "McpServer", key)
-		}
-	}
-	return out, nil
-}
-
-// DecodeModelRow decodes a Buzz ModelRow, an object instance or a map, into a types.ModelRow.
-func DecodeModelRow(v vm.Value) (types.ModelRow, error) {
-	return decodeModelRow(v, "modelRow")
-}
-
-func decodeModelRow(v vm.Value, path string) (types.ModelRow, error) {
-	var out types.ModelRow
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "ModelRow", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "id":
-			sID, err := decodeString(item, path+".id")
-			if err != nil {
-				return out, err
-			}
-			out.ID = sID
-		case "tier":
-			sTier, err := decodeString(item, path+".tier")
-			if err != nil {
-				return out, err
-			}
-			out.Tier = sTier
-		case "alias":
-			sAlias, err := decodeString(item, path+".alias")
-			if err != nil {
-				return out, err
-			}
-			out.Alias = sAlias
-		case "window":
-			nWindow, err := decodeInt(item, path+".window")
-			if err != nil {
-				return out, err
-			}
-			out.Window = nWindow
-		case "price":
-			xPrice, err := decodePrice(item, path+".price")
-			if err != nil {
-				return out, err
-			}
-			out.Price = xPrice
-		case "step":
-			xStep, err := decodePriceStep(item, path+".step")
-			if err != nil {
-				return out, err
-			}
-			out.Step = xStep
-		default:
-			return out, unknownMember(path, "ModelRow", key)
 		}
 	}
 	return out, nil
@@ -9269,7 +9269,7 @@ var enumJobStateValues = []string{"", "declared", "running", "exited", "pass", "
 var enumJobWriteProofValues = []string{"", "alone", "disjoint", "overlapping"}
 var enumMcpTransportValues = []string{"", "stdio", "http"}
 var enumModePolicyValues = []string{"", "fixed", "executable-bit"}
-var enumModelTierSourceValues = []string{"row", "matrix", "user-matrix", "default"}
+var enumModelTierSourceValues = []string{"job", "matrix", "user-matrix", "default"}
 var enumOSValues = []string{"", "linux"}
 var enumPatchOpKindValues = []string{"", "add", "remove", "replace", "move", "copy", "test"}
 var enumRelationIDValues = []string{"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"}
