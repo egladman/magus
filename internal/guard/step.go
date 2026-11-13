@@ -320,7 +320,7 @@ func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, ste
 	if unjudged && len(asked.answered) == 0 && judged.Decision != decisionDeny {
 		return gradeStepDeny(deps, judged, denyRuleUnjudgedStep, noStepRuleReason(step, asked.failures))
 	}
-	if note := stepFailureNote(asked); note != "" && judged.Decision != decisionDeny {
+	if note := seamFailureNote(seamStep, "this step stands on the other rules alone", asked); note != "" && judged.Decision != decisionDeny {
 		judged.Context = strings.Join(slices.DeleteFunc([]string{judged.Context, note}, func(s string) bool { return s == "" }), "\n\n")
 		if judged.Decision == decisionPass {
 			judged.Decision = decisionAdvise
@@ -332,26 +332,11 @@ func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, ste
 // noStepRuleReason is the deny for a step only a workspace rule judges when
 // none answered, naming each side that failed.
 func noStepRuleReason(step typesagent.Step, failures []trail.RuleFailure) string {
-	reason := fmt.Sprintf("magus workspace: no rule judged the %s step: its row has no capability a built-in rule judges, no magus.WithStepRule is registered, "+
-		`and no %s rule for kind %q answered. Nothing passes unjudged.`, step.Kind, seamStep.member(), step.Kind)
+	reason := fmt.Sprintf("magus workspace: no rule judged the %s step; only the %s rule for its kind judges it.", step.Kind, seamStep.member())
 	for _, f := range failures {
 		reason += fmt.Sprintf("\n  %s: %s", sideName(seamStep, f.Side), f.Error)
 	}
 	return reason
-}
-
-// stepFailureNote names each side of the step rule that judged nothing, ""
-// when every side answered.
-func stepFailureNote(asked rulesAnswer) string {
-	if len(asked.failures) == 0 {
-		return ""
-	}
-	lines := make([]string, len(asked.failures))
-	for i, f := range asked.failures {
-		lines[i] = fmt.Sprintf("%s: %s", sideName(seamStep, f.Side), f.Error)
-	}
-	return fmt.Sprintf("magus workspace: %s judged nothing, so this step stands on the other rules alone.\n%s",
-		seamStep.member(), strings.Join(lines, "\n"))
 }
 
 // stepInput is what a row's pointers read from one step's input.
