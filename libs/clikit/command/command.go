@@ -11,7 +11,7 @@ import (
 )
 
 // Command is one node of a command tree. The root names the program; its Flags are
-// the global flags, and its Env and Files fill the root man page.
+// the global flags, and its Files fill the root man page.
 type Command struct {
 	Name  string // command word
 	Short string // one-line summary for SYNOPSIS, help and cross-references
@@ -47,7 +47,6 @@ type Command struct {
 	// no section: a command that follows the 0/1/2 contract needs none.
 	ExitStatus []ExitCode
 
-	Env   []Env  // ENVIRONMENT section of the root page
 	Files []File // FILES section of the root page
 }
 
@@ -165,14 +164,6 @@ type Operand struct {
 type Example struct {
 	Comment string // e.g. "Build all Go projects"
 	Command string // e.g. "magus run build"
-}
-
-// Env documents one environment variable the program reads.
-type Env struct {
-	Name    string
-	Key     string // the config file key it mirrors; empty when it has none
-	Default string // human-readable; empty when unset
-	Doc     string
 }
 
 // File documents one file or directory the program reads or writes.

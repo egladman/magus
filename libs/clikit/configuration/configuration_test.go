@@ -41,3 +41,23 @@ func (s *SettingSuite) TestDescribeEnvOnly() {
 	got := Setting{YamlPath: "hints.enabled", EnvVar: "MAGUS_HINTS_ENABLED", Kind: command.OptionalBool}.Describe()
 	s.Equal("Env: MAGUS_HINTS_ENABLED\nFlags: (env-only)\nConfig: hints.enabled", got)
 }
+
+type ConfigurationSpecSuite struct{ suite.Suite }
+
+func TestConfigurationSpecSuite(t *testing.T) { suite.Run(t, new(ConfigurationSpecSuite)) }
+
+var spec = ConfigurationSpec{Settings: []Setting{
+	{YamlPath: "pinned"},
+	{EnvVar: "APP_LEVEL", Internal: true},
+}}
+
+func (s *ConfigurationSpecSuite) TestVariableFindsTheSettingByName() {
+	got, ok := spec.Variable("APP_LEVEL")
+	s.True(ok)
+	s.True(got.Internal)
+}
+
+func (s *ConfigurationSpecSuite) TestVariableFindsNoFileOnlyKey() {
+	_, ok := spec.Variable("")
+	s.False(ok)
+}

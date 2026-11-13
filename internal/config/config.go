@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/config/gen/settings"
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/configuration"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -1141,59 +1142,47 @@ type Report struct {
 	Filter []string `json:"filter" yaml:"filter"`
 }
 
-// EnvVars documents every MAGUS_* environment variable magus reads: one per config
-// field, from the generated schema with its built-in default, then the ones no field
-// carries.
+// Configuration is every setting magus reads: each Config field, from the
+// generated table, then the variables no config key carries. Those are
+// secrets kept out of committed files, overrides of build-time values, and
+// the Internal plumbing magus sets for its own children.
 //
-// KnownEnvVar and EnvVarProblem (MGS1046) answer from it, so a name missing here is
-// reported as unknown by doctor and can draw a did-you-mean refusal.
-// TestEveryReadMagusEnvVarIsRegistered fails when shipped code reads a name it lacks.
-func EnvVars() ([]command.Env, error) {
-	out := make([]command.Env, 0, len(settings.Settings)+len(envOnly))
-	for _, f := range settings.Settings {
-		if f.EnvVar != "" {
-			out = append(out, command.Env{Name: f.EnvVar, Key: f.YamlPath, Default: f.Default, Doc: f.Doc})
-		}
-	}
-	return append(out, envOnly...), nil
-}
-
-// envOnly are the variables no config field carries, so the schema cannot list them:
-// secrets kept out of committed files, overrides of build-time values, and the
-// plumbing magus sets for its own children.
-var envOnly = []command.Env{
-	{Name: "MAGUS_CACHE_SIGNING_KEY", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the Ed25519 seed that signs remote-cache writes (see `magus config cache-key`); env-only because a signing secret in a committed file is not a secret"},
-	{Name: "MAGUS_CACHE_TOOL_VERSION", Key: "", Default: "project", Doc: "Env-only, no magus.yaml equivalent: how tool versions key the cache: project (per project), workspace (once for the workspace), or off"},
-	{Name: "MAGUS_VCS_<NAME>_BASE_REF", Key: "", Default: "", Doc: "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
-	{Name: "MAGUS_PROC_SOCKET", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it"},
-	{Name: "MAGUS_PROC_TOKEN", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus"},
-	{Name: "MAGUS_PROC_TREE", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the ids of every bounded process tree a process descends from, inherited by every child so a command's leftovers are found; set by magus, never by hand"},
-	{Name: "MAGUS_SHARD", Key: "", Default: "", Doc: "CI matrix shard ID (e.g. \"0\"); equivalent to magus run --shard; set by .github/actions/magus"},
-	{Name: "MAGUS_N_SHARDS", Key: "", Default: "", Doc: "Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus"},
-	{Name: "MAGUS_UPDATE_URL", Key: "", Default: "https://eli.gladman.cc/magus/public/release/index.json", Doc: "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
-	{Name: "MAGUS_STAMPED_LEASE", Key: "", Default: "", Doc: "Set by a shared server on a script it forks for a remote caller, and by an authenticated MCP caller for a child magus: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant; never set it by hand"},
-	{Name: "MAGUS_NO_BOOTSTRAP_EXEC", Key: "", Default: "false", Doc: "Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself"},
-	{Name: "MAGUS_OFFLINE", Key: "", Default: "false", Doc: "Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote-spell fetch and every std/http request a script sends fail with a named error instead of sending a request, and the lifecycle provider is not asked: `magus describe tools` replays its stored answer or reads unknown (offline)"},
-	{Name: "MAGUS_DIFFTOOL", Key: "", Default: "$DIFFTOOL, then git diff --no-index", Doc: "Env-only, no magus.yaml equivalent: the command, taking two paths, that `--then file <path> diff` compares a cached artifact with"},
-	{Name: "MAGUS_LOG_VIEWER_URL", Key: "", Default: "the hosted log viewer", Doc: "Env-only, no magus.yaml equivalent: base URL of the log viewer page a live run opens, for a self-hosted mirror"},
-	{Name: "MAGUS_CONSOLE_DIR", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: directory of the built console the server serves at /console/ and the LAN share serves; unset serves none, and the workspace's own console/gen is never served unless this names it"},
-	{Name: "MAGUS_PPROF", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: write Go profiles for one invocation, as kind:path pairs (cpu, mem, trace), comma separated"},
-	{Name: "MAGUS_MCP_TOKEN", Key: "", Default: "", Doc: "Env-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable"},
-	{Name: "MAGUS_MCP_BUZZ_PURE", Key: "", Default: "", Doc: "Set internally by the buzz MCP tool for its forked transform worker; never set it by hand"},
-	{Name: "MAGUS_MCP_CLIENT", Key: "", Default: "", Doc: "Set internally by the client MCP tool for its forked worker; never set it by hand"},
-	{Name: "MAGUS_MCP_CLIENT_HOST", Key: "", Default: "", Doc: "Set internally by the client MCP tool: the calling client's name, stamped onto the worker's activity trail; never set it by hand"},
-	{Name: "MAGUS_MCP_CLIENT_LEASE", Key: "", Default: "", Doc: "Set internally by the client MCP tool: the calling client's job lease, or empty when the transport stamped none; never set it by hand"},
-	{Name: "MAGUS_S3_BUCKET", Key: "", Default: "", Doc: "Env-only: the bucket the aws/s3-cache spell stores remote-cache artifacts in"},
-	{Name: "MAGUS_S3_ENDPOINT", Key: "", Default: "https://s3.<region>.amazonaws.com", Doc: "Env-only: the S3-compatible endpoint the aws/s3-cache spell talks to"},
-	{Name: "MAGUS_LEVEL", Key: "", Default: "", Doc: "Set by magus for the processes it spawns: the magus recursion depth, like make's MAKELEVEL; never set it by hand"},
-	{Name: "MAGUS_INVOCATION_ANCESTORS", Key: "", Default: "", Doc: "Set by magus for the processes it spawns: the comma-separated invocations a nested magus runs underneath; never set it by hand"},
-	{Name: "MAGUS_BOOTSTRAP_EXEC_DONE", Key: "", Default: "", Doc: "Set by magus when it replaces itself with a workspace-local ./magus, so the replacement never hops again; never set it by hand"},
-	{Name: "MAGUS_SYMBOL_INDEX", Key: "", Default: "", Doc: "Set by magus for a spell's symbol indexer op: the path the indexer writes its SCIP index to; never set it by hand"},
-	{Name: "MAGUS_WORKSPACE_ROOT", Key: "", Default: "", Doc: "Set by magus for a spell's symbol indexer op: the workspace root the index's paths are relative to; never set it by hand"},
-	{Name: "MAGUS_INTERNAL_ADVICE_MODE", Key: "", Default: "", Doc: "Set by `magus diff` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice"},
-	{Name: "MAGUS_INTERNAL_ADVICE_BASE_BRANCH", Key: "", Default: "", Doc: "Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting"},
-	{Name: "MAGUS_DETACHED_REFRESH", Key: "", Default: "", Doc: "Set by magus on the detached symbol refresh a graph read starts, so that process exits rather than queues behind another refresh; never set it by hand"},
-}
+// KnownEnvVar, EnvVarProblem (MGS1046), KnownKeys, Save, the man page and
+// the config docs all read it. TestEveryReadMagusEnvVarIsRegistered fails
+// when shipped code reads a name it lacks.
+var Configuration = configuration.ConfigurationSpec{Settings: slices.Concat(settings.Settings, []configuration.Setting{
+	{EnvVar: "MAGUS_CACHE_SIGNING_KEY", Kind: command.String, Doc: "Env-only, no magus.yaml equivalent: the Ed25519 seed that signs remote-cache writes (see `magus config cache-key`); env-only because a signing secret in a committed file is not a secret"},
+	{EnvVar: "MAGUS_CACHE_TOOL_VERSION", Kind: command.String, Default: "project", Doc: "Env-only, no magus.yaml equivalent: how tool versions key the cache: project (per project), workspace (once for the workspace), or off"},
+	{EnvVar: "MAGUS_VCS_<NAME>_BASE_REF", Kind: command.String, Doc: "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
+	{EnvVar: "MAGUS_PROC_SOCKET", Kind: command.String, Internal: true, Doc: "The proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it"},
+	{EnvVar: "MAGUS_PROC_TOKEN", Kind: command.String, Internal: true, Doc: "The secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus"},
+	{EnvVar: "MAGUS_PROC_TREE", Kind: command.String, Internal: true, Doc: "The ids of every bounded process tree a process descends from, inherited by every child so a command's leftovers are found"},
+	{EnvVar: "MAGUS_SHARD", Kind: command.Int, Doc: "CI matrix shard ID (e.g. \"0\"); equivalent to magus run --shard; set by .github/actions/magus"},
+	{EnvVar: "MAGUS_N_SHARDS", Kind: command.Int, Doc: "Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus"},
+	{EnvVar: "MAGUS_UPDATE_URL", Kind: command.String, Default: "https://eli.gladman.cc/magus/public/release/index.json", Doc: "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
+	{EnvVar: "MAGUS_STAMPED_LEASE", Kind: command.String, Internal: true, Doc: "Set by a shared server on a script it forks for a remote caller, and by an authenticated MCP caller for a child magus: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant"},
+	{EnvVar: "MAGUS_NO_BOOTSTRAP_EXEC", Kind: command.Bool, Default: "false", Doc: "Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself"},
+	{EnvVar: "MAGUS_OFFLINE", Kind: command.Bool, Default: "false", Doc: "Env-only, no magus.yaml equivalent: when set to anything but 0 or false, a remote-spell fetch and every std/http request a script sends fail with a named error instead of sending a request, and the lifecycle provider is not asked: `magus describe tools` replays its stored answer or reads unknown (offline)"},
+	{EnvVar: "MAGUS_DIFFTOOL", Kind: command.String, Default: "$DIFFTOOL, then git diff --no-index", Doc: "Env-only, no magus.yaml equivalent: the command, taking two paths, that `--then file <path> diff` compares a cached artifact with"},
+	{EnvVar: "MAGUS_LOG_VIEWER_URL", Kind: command.String, Default: "the hosted log viewer", Doc: "Env-only, no magus.yaml equivalent: base URL of the log viewer page a live run opens, for a self-hosted mirror"},
+	{EnvVar: "MAGUS_CONSOLE_DIR", Kind: command.String, Doc: "Env-only, no magus.yaml equivalent: directory of the built console the server serves at /console/ and the LAN share serves; unset serves none, and the workspace's own console/gen is never served unless this names it"},
+	{EnvVar: "MAGUS_PPROF", Kind: command.String, Doc: "Env-only, no magus.yaml equivalent: write Go profiles for one invocation, as kind:path pairs (cpu, mem, trace), comma separated"},
+	{EnvVar: "MAGUS_MCP_TOKEN", Kind: command.String, Doc: "Env-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable"},
+	{EnvVar: "MAGUS_MCP_BUZZ_PURE", Kind: command.String, Internal: true, Doc: "Set by the buzz MCP tool for its forked transform worker"},
+	{EnvVar: "MAGUS_MCP_CLIENT", Kind: command.String, Internal: true, Doc: "Set by the client MCP tool for its forked worker"},
+	{EnvVar: "MAGUS_MCP_CLIENT_HOST", Kind: command.String, Internal: true, Doc: "Set by the client MCP tool: the calling client's name, stamped onto the worker's activity trail"},
+	{EnvVar: "MAGUS_MCP_CLIENT_LEASE", Kind: command.String, Internal: true, Doc: "Set by the client MCP tool: the calling client's job lease, or empty when the transport stamped none"},
+	{EnvVar: "MAGUS_S3_BUCKET", Kind: command.String, Doc: "Env-only: the bucket the aws/s3-cache spell stores remote-cache artifacts in"},
+	{EnvVar: "MAGUS_S3_ENDPOINT", Kind: command.String, Default: "https://s3.<region>.amazonaws.com", Doc: "Env-only: the S3-compatible endpoint the aws/s3-cache spell talks to"},
+	{EnvVar: "MAGUS_LEVEL", Kind: command.Int, Internal: true, Doc: "The magus recursion depth, like make's MAKELEVEL"},
+	{EnvVar: "MAGUS_INVOCATION_ANCESTORS", Kind: command.String, Internal: true, Doc: "The comma-separated invocations a nested magus runs underneath"},
+	{EnvVar: "MAGUS_BOOTSTRAP_EXEC_DONE", Kind: command.String, Internal: true, Doc: "Set when magus replaces itself with a workspace-local ./magus, so the replacement never hops again"},
+	{EnvVar: "MAGUS_SYMBOL_INDEX", Kind: command.String, Internal: true, Doc: "Set for a spell's symbol indexer op: the path the indexer writes its SCIP index to"},
+	{EnvVar: "MAGUS_WORKSPACE_ROOT", Kind: command.String, Internal: true, Doc: "Set for a spell's symbol indexer op: the workspace root the index's paths are relative to"},
+	{EnvVar: "MAGUS_INTERNAL_ADVICE_MODE", Kind: command.String, Internal: true, Doc: "Set by `magus diff` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice"},
+	{EnvVar: "MAGUS_INTERNAL_ADVICE_BASE_BRANCH", Kind: command.String, Internal: true, Doc: "Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting"},
+	{EnvVar: "MAGUS_DETACHED_REFRESH", Kind: command.String, Internal: true, Doc: "Set on the detached symbol refresh a graph read starts, so that process exits rather than queues behind another refresh"},
+})}
 
 // defaultShutdownGrace is shutdown_grace when nothing sets it. Long enough for
 // most test and build steps to finish. A supervisor that will not wait sends

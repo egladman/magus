@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/configuration"
 )
 
 // Page is one rendered page and the file name it belongs under.
@@ -17,11 +18,12 @@ type Page struct {
 }
 
 // Roff renders section 1 man pages for root: <name>.1 for the program and
-// <name>-<command>.1 for each top-level command. An empty date omits it from the
-// title line, and an empty version leaves the source field as the program name.
-func Roff(root command.Command, date, version string) ([]Page, error) {
+// <name>-<command>.1 for each top-level command. The program page's ENVIRONMENT
+// lists config's variables. An empty date omits it from the title line, and an
+// empty version leaves the source field as the program name.
+func Roff(root command.Command, config configuration.ConfigurationSpec, date, version string) ([]Page, error) {
 	pages := make([]Page, 0, 1+len(root.Children))
-	main, err := renderMainRoff(root, date, version)
+	main, err := renderMainRoff(root, config, date, version)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +38,7 @@ func Roff(root command.Command, date, version string) ([]Page, error) {
 	return pages, nil
 }
 
-func renderMainRoff(root command.Command, date, version string) ([]byte, error) {
+func renderMainRoff(root command.Command, config configuration.ConfigurationSpec, date, version string) ([]byte, error) {
 	var buf bytes.Buffer
 	w := newWriter(&buf)
 	w.TH(root.Name, "1", date, thSource(root.Name, version), root.Name+" Manual")
@@ -58,7 +60,7 @@ func renderMainRoff(root command.Command, date, version string) ([]byte, error) 
 		w.TP(w.B(command.Name), fmt.Sprintf(`%s. See %s.`, escape(command.Short), ref))
 	}
 	w.Dedent()
-	writeEnvSectionRoff(w, root.Env)
+	writeEnvSectionRoff(w, root.Name, config)
 	writeFilesSectionRoff(w, root.Files)
 	writeSeeAlsoRoff(w, &buf, root, "")
 	return buf.Bytes(), nil
@@ -192,23 +194,54 @@ func writeExitStatusRoff(w *writer, codes []command.ExitCode) {
 	w.Dedent()
 }
 
-func writeEnvSectionRoff(w *writer, env []command.Env) {
-	if len(env) == 0 {
+func writeEnvSectionRoff(w *writer, program string, config configuration.ConfigurationSpec) {
+	read, set := variables(config)
+	if len(read) == 0 && len(set) == 0 {
 		return
 	}
 	w.SH("Environment")
 	w.Indent()
-	for _, e := range env {
-		body := escape(e.Doc)
-		if e.Default != "" {
-			body += fmt.Sprintf(` (default: %s)`, escape(e.Default))
+	for _, s := range read {
+		body := escape(s.Doc)
+		if s.Default != "" {
+			body += fmt.Sprintf(` (default: %s)`, escape(s.Default))
 		}
-		if e.Key != "" {
-			body += fmt.Sprintf(`. Config file key: %s.`, w.B(e.Key))
+		if s.YamlPath != "" {
+			body += fmt.Sprintf(`. Config file key: %s.`, w.B(s.YamlPath))
 		}
-		w.TP(fmt.Sprintf(`\fB%s\fR`, e.Name), body)
+		w.TP(fmt.Sprintf(`\fB%s\fR`, s.EnvVar), body)
 	}
 	w.Dedent()
+	if len(set) == 0 {
+		return
+	}
+	w.SS(escapeHyphen(setByHeading(program)))
+	w.Indent()
+	for _, s := range set {
+		w.TP(fmt.Sprintf(`\fB%s\fR`, s.EnvVar), escape(s.Doc))
+	}
+	w.Dedent()
+}
+
+// variables splits config's variables into those a person may set and the
+// Internal ones the program sets for its children.
+func variables(config configuration.ConfigurationSpec) (read, set []configuration.Setting) {
+	for _, s := range config.Settings {
+		switch {
+		case s.EnvVar == "":
+		case s.Internal:
+			set = append(set, s)
+		default:
+			read = append(read, s)
+		}
+	}
+	return read, set
+}
+
+// setByHeading names the subsection of the variables program sets for the
+// processes it spawns.
+func setByHeading(program string) string {
+	return fmt.Sprintf("Set by %s for the processes it spawns, never by hand", program)
 }
 
 func writeFilesSectionRoff(w *writer, files []command.File) {

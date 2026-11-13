@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,6 +24,15 @@ func TestRenderNamesEveryField(t *testing.T) {
 			assert.Contains(t, page, fmt.Sprintf("`%s`", f.EnvVar))
 		}
 	}
+}
+
+func TestRenderListsWhatMagusSetsApart(t *testing.T) {
+	page, err := render()
+	require.NoError(t, err)
+	_, setByMagus, ok := strings.Cut(page, "## Set by magus")
+	require.True(t, ok)
+	assert.Contains(t, setByMagus, "`MAGUS_LEVEL`")
+	assert.NotContains(t, setByMagus, "`MAGUS_OFFLINE`")
 }
 
 func TestKindLabelNamesTheKindItCannotLabel(t *testing.T) {

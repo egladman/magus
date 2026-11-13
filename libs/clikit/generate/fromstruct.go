@@ -37,10 +37,6 @@ func FromStruct(defaults any, envPrefix, source string) ([]configuration.Setting
 	return w.out, nil
 }
 
-// NameSegment stands for a slice element's name key in a YamlPath, as in
-// "sandbox.allow.<name>.mode".
-const NameSegment = "<name>"
-
 // EnvName joins parts with "_" behind prefix and "_", turns "-" to "_" and
 // uppercases the result. An empty prefix adds nothing.
 func EnvName(prefix string, parts ...string) string {
@@ -111,7 +107,7 @@ func (w *structWalk) walk(t reflect.Type, v reflect.Value, at leafPath) {
 		case f.Type.Kind() == reflect.Struct:
 			w.walk(f.Type, fv, path)
 		case f.Type.Kind() == reflect.Slice && f.Type.Elem().Kind() == reflect.Struct && hasNameKey(f.Type.Elem()):
-			element := path.child(NameSegment, "[]", true)
+			element := path.child(configuration.NameSegment, "[]", true)
 			element.template = true
 			w.walk(f.Type.Elem(), reflect.Value{}, element)
 		}

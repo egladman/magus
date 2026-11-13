@@ -64,6 +64,9 @@ func SettingsTable(settings []configuration.Setting, pkg string) ([]byte, error)
 		if s.Floor {
 			b.WriteString("\t\tFloor: true,\n")
 		}
+		if s.Internal {
+			b.WriteString("\t\tInternal: true,\n")
+		}
 		b.WriteString("\t},\n")
 	}
 	b.WriteString("}\n")

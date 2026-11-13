@@ -7,15 +7,17 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/configuration"
 )
 
 // Markdown renders root's man pages as Markdown for a docs site: <name>.md and
 // <name>-<command>.md, each opening with YAML frontmatter (title, description,
 // tags) and naming source as the file it is generated from. The definition lists
-// use the PHP Markdown Extra syntax ("term\n: body").
-func Markdown(root command.Command, source string) ([]Page, error) {
+// use the PHP Markdown Extra syntax ("term\n: body"). The program page's
+// Environment lists config's variables.
+func Markdown(root command.Command, config configuration.ConfigurationSpec, source string) ([]Page, error) {
 	pages := make([]Page, 0, 1+len(root.Children))
-	main, err := renderMainMD(root, source)
+	main, err := renderMainMD(root, config, source)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +32,7 @@ func Markdown(root command.Command, source string) ([]Page, error) {
 	return pages, nil
 }
 
-func renderMainMD(root command.Command, source string) ([]byte, error) {
+func renderMainMD(root command.Command, config configuration.ConfigurationSpec, source string) ([]byte, error) {
 	var m mdBuf
 	m.frontmatter(root.Name+" command", root.Description, source, root.Tags)
 	m.h1(root.Name)
@@ -52,7 +54,7 @@ func renderMainMD(root command.Command, source string) ([]byte, error) {
 		ref := fmt.Sprintf("[%s(1)](%s-%s.md)", mdB(fmt.Sprintf("%s-%s", root.Name, command.Name)), root.Name, command.Name)
 		m.def(mdB(command.Name), fmt.Sprintf("%s. See %s.", mdEsc(command.Short), ref))
 	}
-	writeEnvSectionMD(&m, root.Env)
+	writeEnvSectionMD(&m, root.Name, config)
 	writeFilesSectionMD(&m, root.Files)
 	writeSeeAlsoMD(&m, root, "")
 	return m.bytes(), nil
@@ -161,20 +163,28 @@ func writeExitStatusMD(m *mdBuf, codes []command.ExitCode) {
 	}
 }
 
-func writeEnvSectionMD(m *mdBuf, env []command.Env) {
-	if len(env) == 0 {
+func writeEnvSectionMD(m *mdBuf, program string, config configuration.ConfigurationSpec) {
+	read, set := variables(config)
+	if len(read) == 0 && len(set) == 0 {
 		return
 	}
 	m.h2("Environment")
-	for _, e := range env {
-		body := mdEsc(e.Doc)
-		if e.Default != "" {
-			body += fmt.Sprintf(" (default: %s)", mdEsc(e.Default))
+	for _, s := range read {
+		body := mdEsc(s.Doc)
+		if s.Default != "" {
+			body += fmt.Sprintf(" (default: %s)", mdEsc(s.Default))
 		}
-		if e.Key != "" {
-			body += fmt.Sprintf(". Config file key: %s.", mdB(e.Key))
+		if s.YamlPath != "" {
+			body += fmt.Sprintf(". Config file key: %s.", mdB(s.YamlPath))
 		}
-		m.def(mdB(e.Name), body)
+		m.def(mdB(s.EnvVar), body)
+	}
+	if len(set) == 0 {
+		return
+	}
+	m.h3(setByHeading(program))
+	for _, s := range set {
+		m.def(mdB(s.EnvVar), mdEsc(s.Doc))
 	}
 }
 

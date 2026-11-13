@@ -35,17 +35,24 @@ func TestDefaults_ARunWaitsHalfAnHourForTheBudget(t *testing.T) {
 	assert.Equal(t, 30*time.Minute, Defaults().BudgetWait)
 }
 
-func TestEnvVarsListsEverySchemaVariable(t *testing.T) {
+func TestConfigurationStartsWithTheGeneratedTable(t *testing.T) {
 	t.Parallel()
-	docs, err := EnvVars()
-	require.NoError(t, err)
-	variables := 0
-	for _, f := range settings.Settings {
-		if f.EnvVar != "" {
-			variables++
-		}
-	}
-	assert.Len(t, docs, variables+len(envOnly))
+	assert.Equal(t, settings.Settings, Configuration.Settings[:len(settings.Settings)])
+}
+
+func TestAVariableNoKeyCarriesIsInTheConfiguration(t *testing.T) {
+	t.Parallel()
+	s, ok := Configuration.Variable("MAGUS_OFFLINE")
+	require.True(t, ok)
+	assert.Empty(t, s.YamlPath)
+	assert.False(t, s.Internal)
+}
+
+func TestAVariableMagusSetsForItsChildrenIsInternal(t *testing.T) {
+	t.Parallel()
+	s, ok := Configuration.Variable("MAGUS_LEVEL")
+	require.True(t, ok)
+	assert.True(t, s.Internal)
 }
 
 func TestJobsClaimBounds(t *testing.T) {

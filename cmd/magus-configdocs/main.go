@@ -1,12 +1,3 @@
-// Command magus-configdocs generates the magus.yaml configuration reference from
-// the code-generated schema inventory. Run it manually to refresh the committed
-// page:
-//
-//	go run ./cmd/magus-configdocs -out ./docs/config.md
-//
-// docs/config.md is committed; docs' generate target rewrites it and its drift gate
-// keeps it in lockstep with schema.Fields (which is itself generated from
-// internal/config/config.go). The site renders the committed file at /config/.
 package main
 
 import (
@@ -16,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/internal/config/gen/settings"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/libs/clikit/command"
@@ -36,7 +27,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "magus-configdocs:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("magus-configdocs: wrote %d config fields to %s\n", len(settings.Settings), *out)
+	fmt.Printf("magus-configdocs: wrote %d settings to %s\n", len(config.Configuration.Settings), *out)
 }
 
 // render builds the full Markdown page: frontmatter, intro, then one table per
@@ -56,8 +47,16 @@ func render() (string, error) {
 	// Group fields by their top-level yaml section (the segment before the first
 	// "."), so the reference reads section by section.
 	bySection := map[string][]configuration.Setting{}
-	for _, f := range settings.Settings {
-		bySection[topSection(f.YamlPath)] = append(bySection[topSection(f.YamlPath)], f)
+	var envOnly, setByMagus [][]string
+	for _, f := range config.Configuration.Settings {
+		switch {
+		case f.YamlPath != "":
+			bySection[topSection(f.YamlPath)] = append(bySection[topSection(f.YamlPath)], f)
+		case f.Internal:
+			setByMagus = append(setByMagus, []string{md.Code(f.EnvVar), f.Doc})
+		default:
+			envOnly = append(envOnly, []string{md.Code(f.EnvVar), f.Default, f.Doc})
+		}
 	}
 	sections := make([]string, 0, len(bySection))
 	for s := range bySection {
@@ -79,6 +78,10 @@ func render() (string, error) {
 		}
 		b.WriteString(md.Table([]string{"Config key", "Environment variable", "Flag", "Type"}, nil, rows))
 	}
+	fmt.Fprintf(&b, "## Environment only\n\nNo config key carries these variables.\n\n")
+	b.WriteString(md.Table([]string{"Environment variable", "Default", "Meaning"}, nil, envOnly))
+	fmt.Fprintf(&b, "## Set by magus\n\nmagus sets these for the processes it spawns. Never set one by hand.\n\n")
+	b.WriteString(md.Table([]string{"Environment variable", "Meaning"}, nil, setByMagus))
 	return b.String(), nil
 }
 

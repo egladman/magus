@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/configuration"
 )
 
 // tool is a small tree with every section the renderers emit.
@@ -19,7 +20,6 @@ var tool = command.Command{
 		{Name: "root", Kind: command.String, Doc: "Workspace `path`"},
 		{Name: "v", Kind: command.Bool, Doc: "Increase verbosity"},
 	},
-	Env:   []command.Env{{Name: "TOOL_DIR", Key: "dir", Default: ".tool", Doc: "Where the cache lives"}},
 	Files: []command.File{{Name: "tool.yaml", Doc: "Configuration."}},
 	Children: []command.Command{
 		{
@@ -49,6 +49,13 @@ var tool = command.Command{
 	},
 }
 
+// toolConfig is tool's settings: one a person sets, one tool sets itself.
+var toolConfig = configuration.ConfigurationSpec{Settings: []configuration.Setting{
+	{EnvVar: "TOOL_DIR", YamlPath: "dir", Default: ".tool", Doc: "Where the cache lives"},
+	{YamlPath: "pinned", Doc: "Set in the file alone"},
+	{EnvVar: "TOOL_LEVEL", Internal: true, Doc: "The nesting depth"},
+}}
+
 func pagesByName(pages []Page) map[string]string {
 	out := make(map[string]string, len(pages))
 	for _, page := range pages {
@@ -58,10 +65,12 @@ func pagesByName(pages []Page) map[string]string {
 }
 
 func TestRoff(t *testing.T) {
-	rendered, err := Roff(tool, "2026-07-26", "v1.2.3")
+	rendered, err := Roff(tool, toolConfig, "2026-07-26", "v1.2.3")
 	noError(t, err)
 	pages := pagesByName(rendered)
 	equal(t, 1+len(tool.Children), len(pages))
+	contains(t, pages["tool.1"], ".SS Set by tool for the processes it spawns, never by hand\n.RS\n.TP\n\\fBTOOL_LEVEL\\fR\nThe nesting depth")
+	notContains(t, pages["tool.1"], "Set in the file alone")
 
 	contains(t, pages["tool.1"], `.TH TOOL 1 "2026-07-26" "tool v1.2.3" "tool Manual"`)
 	contains(t, pages["tool.1"], ".SH GLOBAL FLAGS")
@@ -85,7 +94,7 @@ func TestRoff(t *testing.T) {
 // TestRoffSynopsisNamesTheCommand pins that SYNOPSIS splits the program from its
 // arguments rather than emitting a bare ".B " line.
 func TestRoffSynopsisNamesTheCommand(t *testing.T) {
-	rendered, err := Roff(tool, "", "")
+	rendered, err := Roff(tool, toolConfig, "", "")
 	noError(t, err)
 	content := pagesByName(rendered)["tool-init.1"]
 	notContains(t, content, ".SH SYNOPSIS\n.B \n")
@@ -120,9 +129,9 @@ func TestRoffExitStatusSectionIsOptional(t *testing.T) {
 }
 
 func TestRoffIsDeterministic(t *testing.T) {
-	first, err := Roff(tool, "", "")
+	first, err := Roff(tool, toolConfig, "", "")
 	noError(t, err)
-	second, err := Roff(tool, "", "")
+	second, err := Roff(tool, toolConfig, "", "")
 	noError(t, err)
 	equal(t, first, second)
 }
@@ -131,7 +140,7 @@ func TestRoffNamesTheFlagItCannotBind(t *testing.T) {
 	broken := command.Command{Name: "tool", Children: []command.Command{
 		{Name: "run", Flags: []command.Flag{{Name: "n", Kind: command.Int, Default: "8"}}},
 	}}
-	_, err := Roff(broken, "", "")
+	_, err := Roff(broken, configuration.ConfigurationSpec{}, "", "")
 	isError(t, err)
 	contains(t, err.Error(), "flag --n is int but its default 8 is a string")
 }

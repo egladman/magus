@@ -39,13 +39,7 @@ func manCommand(args []string) error {
 		}
 		dir = def
 	}
-	root := commands.Root
-	env, err := config.EnvVars()
-	if err != nil {
-		return fmt.Errorf("magus self man: %w", err)
-	}
-	root.Env = env
-	pages, err := generate.Roff(root, "", version)
+	pages, err := generate.Roff(commands.Root, config.Configuration, "", version)
 	if err != nil {
 		return fmt.Errorf("magus self man: %w", err)
 	}

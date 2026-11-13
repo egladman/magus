@@ -29,6 +29,30 @@ type Setting struct {
 	// Floor lets the variable raise a Text value and never lower it, by
 	// the type's WeakerThan: a value a parent hands its children.
 	Floor bool
+
+	// Internal marks a variable the program sets for the processes it
+	// spawns. Docs list it as set by the program, never to set by hand.
+	Internal bool
+}
+
+// NameSegment stands for a list entry's name key in a YamlPath, as in
+// "sandbox.allow.<name>.mode".
+const NameSegment = "<name>"
+
+// ConfigurationSpec is every setting a program reads: the one inventory
+// its flags, variables, config keys and docs come from.
+type ConfigurationSpec struct {
+	Settings []Setting
+}
+
+// Variable returns the setting the environment variable name sets.
+func (c ConfigurationSpec) Variable(name string) (Setting, bool) {
+	for _, s := range c.Settings {
+		if s.EnvVar == name && name != "" {
+			return s, true
+		}
+	}
+	return Setting{}, false
 }
 
 // String returns a single-line summary suitable for log output and %v
