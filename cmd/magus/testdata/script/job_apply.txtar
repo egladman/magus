@@ -51,13 +51,12 @@ exec magus describe job wave/b -o json
 
 # The edit loop is describe, edit, apply: the record describe prints carries the store's own
 # members (write_proof, created, updated, checkout_root and the like), and apply takes them
-# back and ignores them. The stored job names no api_version, so the edit adds the one apply
-# reads. A misspelled declared member is still refused.
+# back and ignores them. A misspelled declared member is still refused.
 exec magus describe job wave/a -o 'template={{toJson .job}}'
 stdout '"created"'
 stdout '"write_proof"'
 stdout '"model_tier"'
-! stdout 'api_version'
+cp stdout $WORK/roundtrip.json
 exec magus job apply -f $WORK/roundtrip.json
 stdout '(unchanged|updated) wave/a'
 ! stderr 'unknown object member'
@@ -72,8 +71,6 @@ stdout '^  agent '
 exec magus job apply -f $WORK/fresh.json
 stdout '^unchanged wave/a'
 
--- roundtrip.json --
-{"api_version":"magus.job/v1alpha1","id":"wave/a","write_paths":["src/pkg/code.go","src/pkg/other.go"],"check":{"project":".","target":"test"},"created":1794534712,"updated":1794534712,"generation":1,"state":"declared","write_proof":"alone","model_tier":{"name":"bounded","rank":1,"source":"default"},"registered_by":{"entry_point":"cli","uid":"501","user":"x"}}
 -- code.go --
 package pkg
 -- widen.jsonl --

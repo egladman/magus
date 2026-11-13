@@ -3121,3 +3121,56 @@ func (s *ForkProvisionContractSuite) TestAnyBinaryReadsATreeCarryingNoContract()
 	s.True(readsTree(s.T().Context(), s.binary(""), s.root))
 	s.False(readsTree(s.T().Context(), "", s.root))
 }
+
+type DescribeJobRecordSuite struct {
+	suite.Suite
+	out describeJobOutput
+}
+
+func TestDescribeJobRecordSuite(t *testing.T) { suite.Run(t, new(DescribeJobRecordSuite)) }
+
+func (s *DescribeJobRecordSuite) SetupTest() {
+	s.out = describeJobOutput{Terms: job.Terms{Lease: types.Job{
+		ID:         "wave/a",
+		WritePaths: []string{"a.go"},
+		Check:      &types.LeaseCheck{Target: "test", Project: "."},
+		State:      types.StateDeclared,
+	}}}
+}
+
+func (s *DescribeJobRecordSuite) printed() map[string]json.RawMessage {
+	raw, err := json.Marshal(s.out)
+	s.Require().NoError(err)
+	var members map[string]json.RawMessage
+	s.Require().NoError(json.Unmarshal(raw, &members))
+	return members
+}
+
+func (s *DescribeJobRecordSuite) TestTheJobNamesTheAPIVersionApplyReads() {
+	var row map[string]json.RawMessage
+	s.Require().NoError(json.Unmarshal(s.printed()["job"], &row))
+	s.JSONEq(fmt.Sprintf("%q", types.JobAPIVersion), string(row["api_version"]))
+}
+
+func (s *DescribeJobRecordSuite) TestTheTermsAndGoalsStayBesideTheJob() {
+	members := s.printed()
+	s.Contains(members, "goals")
+	s.Contains(members, "stage")
+	s.Contains(members, "job")
+}
+
+func (s *DescribeJobRecordSuite) TestTheWholeRecordRoundTripsThroughApply() {
+	raw, err := json.Marshal(s.out)
+	s.Require().NoError(err)
+	rows, err := job.DecodeDeclarations(bytes.NewReader(raw))
+	s.Require().NoError(err)
+	s.Require().Len(rows, 1)
+	s.Equal("wave/a", rows[0].ID)
+}
+
+func (s *DescribeJobRecordSuite) TestTheJobMemberAloneRoundTripsThroughApply() {
+	rows, err := job.DecodeDeclarations(bytes.NewReader(s.printed()["job"]))
+	s.Require().NoError(err)
+	s.Require().Len(rows, 1)
+	s.Equal([]string{"a.go"}, rows[0].WritePaths)
+}

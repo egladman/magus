@@ -39,6 +39,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
@@ -1074,6 +1075,27 @@ type describeJobOutput struct {
 	// advances a job and never blocks the holder still working on it. It is the same
 	// grading `job wait` does, so the two cannot disagree.
 	Goals types.JobStatus `json:"goals" yaml:"goals"`
+}
+
+// describedJob is the job as `job apply` reads it. The stored row names no
+// api_version, so the record adds it.
+type describedJob struct {
+	APIVersion types.APIVersion `json:"api_version"`
+	types.Job
+}
+
+// MarshalJSON prints the job member as a describedJob. The shallower job
+// member shadows Terms' own. YAML is no apply input and keeps the stored row.
+func (o describeJobOutput) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Lease describedJob `json:"job"`
+		job.Terms
+		Goals types.JobStatus `json:"goals"`
+	}{
+		Lease: describedJob{APIVersion: types.JobAPIVersion, Job: o.Terms.Lease},
+		Terms: o.Terms,
+		Goals: o.Goals,
+	})
 }
 
 // checkoutBaseToken is the base this checkout is on, in the one form the store compares
