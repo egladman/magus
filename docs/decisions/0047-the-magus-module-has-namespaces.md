@@ -194,7 +194,7 @@ This amends ADR 0035. Membership stays reach: no type and no namespace is listed
 | A segment that is also a parent member is refused                            | done                           |
 | `types/agent` mirrors under `magus\agent`; its 4 prefix `name` lines deleted | done                           |
 | `types/trail` mirrors under `magus\trail`; its 6 prefix `name` lines deleted | done                           |
-| `types/diff` mirrors under `magus\diff`; its 22 prefix `name` lines deleted  | not built (see below)          |
+| `types/diff` mirrors under `magus\diff`; its 22 prefix `name` lines deleted  | waits on Diagnostic and Origin |
 | `Check`, `Evidence`, `Tier` and kin move to `types/check` as `magus\check`   | done                           |
 | `ImpactCoverage` and `ImpactProject` move to `types/impact` as `magus\impact` | done                           |
 | `VCSCheckpoint` moves to `types/vcs` as `magus\vcs`                          | done                           |
@@ -279,6 +279,16 @@ What the fourth build found, 2026-11-13:
 - A script that builds a `magus\Change{}` literal fails with `unknown object type
   "Checkpoint"`: the record's default `magus\vcs\Checkpoint{}` is bound by neither the
   session nor the records `bindMagusRecords` runs.
+
+What the fifth build found, 2026-11-13:
+
+- The `magus\Change{}` literal constructs. A default compiles at the literal, so
+  `DeclareMagusTypes` declares each namespace the magus declarations import under its
+  own name, and `bindMagusRecords` binds those objects under their qualified names.
+- `types/diff` still names `types.Diagnostic` and `types.Origin`. Eli keeps
+  `Diagnostic` in plain `magus`, so a `magus\diff` declaration would import `magus`
+  while `magus` imports it, the cycle gopherbuzz refuses. The move waits until both
+  have an owner below `types`, and the 22 `name` lines stay in `.buzzgen.yaml`.
 
 ### Principles checked
 
@@ -378,6 +388,9 @@ if a package is found whose types belong in two namespaces.
   program's own type and need no eager declaration.
 
 ## Open questions
+
+- Which package below `types` owns `Diagnostic` and `Origin`, so `types/diff` can move
+  to `magus\diff` without the declarations importing each other.
 
 - How a handle whose record lives in a nested namespace reaches its host's externs. No
   moved package has needed it yet.
