@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +15,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
 
+	"github.com/egladman/magus/internal/config/gen/settings"
 	"github.com/egladman/magus/internal/stamp"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -379,4 +382,52 @@ func (s *SymbolIndexersSuite) TestValidateRefusesADuplicate() {
 	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs, Console: Defaults().Console,
 		Spells: SpellsConfig{SymbolIndexers: []string{"typescript", "typescript"}}}
 	s.ErrorContains(Validate(cfg), "spells.symbol_indexers")
+}
+
+// SettingsSuite pins the generated settings table against config.go.
+type SettingsSuite struct{ suite.Suite }
+
+func TestSettingsSuite(t *testing.T) { suite.Run(t, new(SettingsSuite)) }
+
+func (s *SettingsSuite) TestTableIsNotEmpty() {
+	s.NotEmpty(settings.Settings)
+}
+
+func (s *SettingsSuite) TestEveryEnvVarStartsWithMAGUS() {
+	for _, f := range settings.Settings {
+		s.Truef(strings.HasPrefix(f.EnvVar, "MAGUS_"), "%s: EnvVar %q", f.GoPath, f.EnvVar)
+	}
+}
+
+func (s *SettingsSuite) TestNoEnvVarRepeats() {
+	seen := make(map[string]string, len(settings.Settings))
+	for _, f := range settings.Settings {
+		prev, ok := seen[f.EnvVar]
+		s.Falsef(ok, "%s names both %s and %s", f.EnvVar, prev, f.GoPath)
+		seen[f.EnvVar] = f.GoPath
+	}
+}
+
+func (s *SettingsSuite) TestNoGoPathRepeats() {
+	seen := make(map[string]bool, len(settings.Settings))
+	for _, f := range settings.Settings {
+		s.Falsef(seen[f.GoPath], "%s repeats", f.GoPath)
+		seen[f.GoPath] = true
+	}
+}
+
+func (s *SettingsSuite) TestOptionalBoolHasNoFlag() {
+	for _, f := range settings.Settings {
+		if f.Kind == command.OptionalBool {
+			s.Emptyf(f.Flag.Long, "%s is an optional bool", f.GoPath)
+		}
+	}
+}
+
+func (s *SettingsSuite) TestADurationSettingIsFound() {
+	found := false
+	for _, f := range settings.Settings {
+		found = found || f.Kind == command.Duration
+	}
+	s.True(found, "no duration setting: the generator lost time.Duration")
 }
