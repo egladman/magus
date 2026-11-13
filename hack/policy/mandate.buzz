@@ -14,6 +14,7 @@ import "fs";
 import "os";
 import "encoding/json";
 import "magus";
+import "magus/check";
 import "vcs";
 import "./hack/magusfile/branch-stack" as branchstack;
 import "./hack/policy/helpers" as helpers;
@@ -108,7 +109,7 @@ export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > TierReport !> 
     var reviewable = 0;
     foreach (e in report.evidence) {
         final n = changed[e.path] ?? 0;
-        if (e.path != "" and (e.tier == magus\Tier.scoped or e.tier == magus\Tier.full)) {
+        if (e.path != "" and (e.tier == magus\check\Tier.scoped or e.tier == magus\check\Tier.full)) {
             reviewable = reviewable + n;
             lines.append("{evidenceLine(e)}, {n} lines");
         } else {
@@ -134,7 +135,7 @@ export fun measured(row: Row) > TierReport !> any {
 }
 
 // evidenceLine renders e as `magus affected ci` prints it: `<path>: <tier> (<class>: <why>)`.
-fun evidenceLine(e: TierEvidence) > str {
+fun evidenceLine(e: magus\check\TierEvidence) > str {
     var subject = e.path;
     if (subject == "") {
         subject = "{e.project} {e.target}".trim();
@@ -923,7 +924,7 @@ test "a job's tier is measured in its checkout from its checkpoint, and anything
     final asked = mut [<str>];
     final mechanical = fun (row: Row) > TierReport !> any {
         asked.append("{row.checkoutRoot}@{row.checkpoint}");
-        return TierReport{ tier = magus\Tier.mechanical, evidence = [TierEvidence{ path = "x.go", tier = magus\Tier.mechanical, class = "comment", why = "comments only" }] };
+        return TierReport{ tier = magus\check\Tier.mechanical, evidence = [magus\check\TierEvidence{ path = "x.go", tier = magus\check\Tier.mechanical, class = "comment", why = "comments only" }] };
     };
     final none = fun (row: Row) > {str: int} !> any {
         return {"x.go": 7};
