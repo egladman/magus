@@ -582,6 +582,13 @@ export object History {
     }
 }
 
+export object JobPaths {
+    write: [str] = [],
+    read: [str] = [],
+    deny: [str] = [],
+    soft: [str] = [],
+}
+
 export object ClaimEvidence {
     kind: ClaimKind = ClaimKind.none,
     subject: str = "",
@@ -749,10 +756,7 @@ export object Job {
     parent: str = "",
     agent: magus\agent\Spec? = null,
     checkpoint: str = "",
-    writePaths: [str] = [],
-    denyPaths: [str] = [],
-    softPaths: [str] = [],
-    readPaths: [str] = [],
+    paths: JobPaths = JobPaths{},
     dependsOn: [str] = [],
     integrates: [str] = [],
     breaks: [str] = [],

@@ -37,6 +37,42 @@ var jobMigrations = []migrate.Migration{
 	{Name: "model tiers economy, standard and principal become routine, bounded and design", Up: fourModelTiers},
 	{Name: recordsEnveloped, Up: envelopeRow, Header: envelopeHeader},
 	{Name: "model tier source Row becomes Job", Up: modelTierSourceJob},
+	{Name: "write, read, deny and soft paths move under spec.paths", Up: pathsNested},
+}
+
+// specPathsMoved pairs each flat spec member with its name under spec.paths.
+var specPathsMoved = []struct{ flat, nested string }{
+	{"writePaths", "write"}, {"readPaths", "read"}, {"denyPaths", "deny"}, {"softPaths", "soft"},
+}
+
+// pathsNested moves a row's flat spec path members under spec.paths.
+func pathsNested(e migrate.Entry) (migrate.Entry, error) {
+	raw, ok := e["spec"]
+	if !ok {
+		return e, nil
+	}
+	var spec map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		return nil, fmt.Errorf("reading spec: %w", err)
+	}
+	paths := map[string]json.RawMessage{}
+	for _, m := range specPathsMoved {
+		if v, ok := spec[m.flat]; ok {
+			paths[m.nested] = v
+			delete(spec, m.flat)
+		}
+	}
+	if len(paths) == 0 {
+		return e, nil
+	}
+	var err error
+	if spec["paths"], err = json.Marshal(paths); err == nil {
+		e["spec"], err = json.Marshal(spec)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("writing spec.paths: %w", err)
+	}
+	return e, nil
 }
 
 // modelTierSourceJob respells the stored model tier source "Row", the
@@ -93,7 +129,8 @@ func headerEntry(e migrate.Entry) bool {
 
 // envelopeRow rewrites a flat row as its [jobRecord]. A server's row is
 // told by its registration once holder goes. A member types.Job does not
-// declare is kept on the record as it was.
+// declare is kept on the record as it was. The flat row spelled its paths
+// before they nested, so flat reads them.
 func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 	text, err := json.Marshal(e)
 	if err != nil {
@@ -103,6 +140,10 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 	var flat struct {
 		Holder     string           `json:"holder"`
 		APIVersion types.APIVersion `json:"api_version"`
+		WritePaths []string         `json:"write_paths"`
+		ReadPaths  []string         `json:"read_paths"`
+		DenyPaths  []string         `json:"deny_paths"`
+		SoftPaths  []string         `json:"soft_paths"`
 	}
 	if err := json.Unmarshal(text, &row); err != nil {
 		return nil, fmt.Errorf("reading the row: %w", err)
@@ -117,10 +158,11 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 	if holder.Holder == "server" {
 		row.RegisteredBy.EntryPoint = types.EntryPointServer
 	}
+	row.Paths = types.JobPaths{Write: flat.WritePaths, Read: flat.ReadPaths, Deny: flat.DenyPaths, Soft: flat.SoftPaths}
 	r := recordJob(row, nil)
-	declared := jsonNames(reflect.TypeFor[types.Job]())
+	declared, read := jsonNames(reflect.TypeFor[types.Job]()), jsonNames(reflect.TypeOf(flat))
 	for k, v := range e {
-		if !declared[k] && k != "holder" && k != "api_version" {
+		if !declared[k] && !read[k] {
 			if r.Unknown == nil {
 				r.Unknown = map[string]json.RawMessage{}
 			}

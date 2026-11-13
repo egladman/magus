@@ -30,9 +30,7 @@ type JobPut struct {
 	State *JobState `json:"state,omitempty"`
 	// Check is the declared check; one with neither a target nor a script clears it.
 	Check      *LeaseCheck `json:"check,omitempty"`
-	WritePaths *[]string   `json:"write_paths,omitempty"`
-	DenyPaths  *[]string   `json:"deny_paths,omitempty"`
-	ReadPaths  *[]string   `json:"read_paths,omitempty"`
+	Paths      JobPathsPut `json:"paths,omitzero"`
 	DependsOn  *[]string   `json:"depends_on,omitempty"`
 	Breaks     *[]string   `json:"breaks,omitempty"`
 	Goals      *[]Goal     `json:"goals,omitempty"`
@@ -46,4 +44,12 @@ type JobPut struct {
 	MaxClaims *int `json:"max_claims,omitempty"`
 	// Weight is the job's lean on the machine budget, in (0,1]. See [Job.Weight].
 	Weight *float64 `json:"weight,omitempty"`
+}
+
+// JobPathsPut is the paths a put changes, each left, written or cleared as a
+// [JobPut] field is. A put never sets soft paths: only the store narrows them.
+type JobPathsPut struct {
+	Write *[]string `json:"write,omitempty"`
+	Read  *[]string `json:"read,omitempty"`
+	Deny  *[]string `json:"deny,omitempty"`
 }

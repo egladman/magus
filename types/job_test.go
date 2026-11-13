@@ -54,7 +54,7 @@ func TestValidJobID(t *testing.T) {
 }
 
 func owner(id string, state JobState, paths ...string) Job {
-	return Job{ID: id, State: state, WritePaths: paths}
+	return Job{ID: id, State: state, Paths: JobPaths{Write: paths}}
 }
 
 func TestJobOverlaps(t *testing.T) {
@@ -313,8 +313,10 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 
 	orig := Job{
 		ID:           "a",
-		WritePaths:   append(make([]string, 0, 4), "types/"),
-		DenyPaths:    append(make([]string, 0, 4), "gen/"),
+		Paths: JobPaths{
+Write: append(make([]string, 0, 4), "types/"),
+Deny: append(make([]string, 0, 4), "gen/"),
+},
 		DependsOn:    append(make([]string, 0, 4), "b"),
 		Breaks:       append(make([]string, 0, 4), "--old-flag"),
 		Goals:        append(make([]Goal, 0, 4), Goal{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}),
@@ -324,8 +326,8 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	}
 
 	first, second := orig.Clone(), orig.Clone()
-	first.WritePaths = append(first.WritePaths, "first/")
-	first.DenyPaths = append(first.DenyPaths, "first/")
+	first.Paths.Write = append(first.Paths.Write, "first/")
+	first.Paths.Deny = append(first.Paths.Deny, "first/")
 	first.DependsOn = append(first.DependsOn, "first")
 	first.Breaks = append(first.Breaks, "first")
 	first.Goals[0].DependsOn = append(first.Goals[0].DependsOn, "first")
@@ -333,8 +335,8 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	first.Releases = append(first.Releases, JobRelease{Path: "first/z.go"})
 	first.Unattributed = append(first.Unattributed, JobUnattributedWrite{Path: "first/z.go"})
 
-	second.WritePaths = append(second.WritePaths, "second/")
-	second.DenyPaths = append(second.DenyPaths, "second/")
+	second.Paths.Write = append(second.Paths.Write, "second/")
+	second.Paths.Deny = append(second.Paths.Deny, "second/")
 	second.DependsOn = append(second.DependsOn, "second")
 	second.Breaks = append(second.Breaks, "second")
 	second.Goals[0].DependsOn = append(second.Goals[0].DependsOn, "second")
@@ -345,8 +347,10 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	// Clone resolves each gate's kind and expectation, so the clone's gate carries both.
 	assert.Equal(t, Job{
 		ID:           "a",
-		WritePaths:   []string{"types/", "first/"},
-		DenyPaths:    []string{"gen/", "first/"},
+		Paths: JobPaths{
+Write: []string{"types/", "first/"},
+Deny: []string{"gen/", "first/"},
+},
 		DependsOn:    []string{"b", "first"},
 		Breaks:       []string{"--old-flag", "first"},
 		Goals:        []Goal{{ID: "unit", Kind: GoalKindCheck, Expect: ExpectPassed, Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check", "first"}}},
@@ -359,8 +363,10 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	// hold exactly what it held.
 	assert.Equal(t, Job{
 		ID:           "a",
-		WritePaths:   []string{"types/"},
-		DenyPaths:    []string{"gen/"},
+		Paths: JobPaths{
+Write: []string{"types/"},
+Deny: []string{"gen/"},
+},
 		DependsOn:    []string{"b"},
 		Breaks:       []string{"--old-flag"},
 		Goals:        []Goal{{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}},
@@ -528,16 +534,16 @@ func TestDeclarationRefusesAPathOutsideTheWorkspace(t *testing.T) {
 		decl Declaration
 		want string
 	}{
-		{Declaration{ID: "j", WritePaths: []string{"~/.claude/plans/**"}}, `write_paths[0] "~/.claude/plans/**" begins with ~`},
-		{Declaration{ID: "j", WritePaths: []string{"api/**", "/abs/**"}}, `write_paths[1] "/abs/**" is absolute`},
-		{Declaration{ID: "j", DenyPaths: []string{"../wt/**"}}, `deny_paths[0] "../wt/**" climbs out of the workspace`},
-		{Declaration{ID: "j", ReadPaths: []string{"docs/../../x"}}, `read_paths[0] "docs/../../x" climbs out`},
+		{Declaration{ID: "j", Paths: JobPaths{Write: []string{"~/.claude/plans/**"}}}, `paths.write[0] "~/.claude/plans/**" begins with ~`},
+		{Declaration{ID: "j", Paths: JobPaths{Write: []string{"api/**", "/abs/**"}}}, `paths.write[1] "/abs/**" is absolute`},
+		{Declaration{ID: "j", Paths: JobPaths{Deny: []string{"../wt/**"}}}, `paths.deny[0] "../wt/**" climbs out of the workspace`},
+		{Declaration{ID: "j", Paths: JobPaths{Read: []string{"docs/../../x"}}}, `paths.read[0] "docs/../../x" climbs out`},
 	} {
 		err := tt.decl.Validate()
 		require.Error(t, err, tt.want)
 		assert.Contains(t, err.Error(), tt.want)
 	}
-	assert.NoError(t, Declaration{ID: "j", ReadOnly: true, ReadPaths: []string{"docs/../api/**"}}.Validate(),
+	assert.NoError(t, Declaration{ID: "j", ReadOnly: true, Paths: JobPaths{Read: []string{"docs/../api/**"}}}.Validate(),
 		"a path that cleans to one inside the workspace stands")
 }
 
@@ -646,7 +652,7 @@ func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
 
 	schema := Schema{Version: JobAPIVersion}
 	require.NoError(t, Declaration{Schema: schema, ID: "worker", Enter: "a.go"}.Validate())
-	err := Declaration{Schema: schema, ID: "worker", Enter: "a.go", WritePaths: []string{"**"}}.Validate()
+	err := Declaration{Schema: schema, ID: "worker", Enter: "a.go", Paths: JobPaths{Write: []string{"**"}}}.Validate()
 	assert.ErrorContains(t, err, "carries only api_version, id and enter")
 }
 
@@ -816,7 +822,7 @@ func TestJobIdleSinceStartsAtAnExitedDependency(t *testing.T) {
 }
 
 func dependent(id string, state JobState, dependsOn string, paths ...string) Job {
-	return Job{ID: id, State: state, WritePaths: paths, DependsOn: []string{dependsOn}}
+	return Job{ID: id, State: state, Paths: JobPaths{Write: paths}, DependsOn: []string{dependsOn}}
 }
 
 func TestJobOverlapsOmitsADependentThatIsNotReady(t *testing.T) {
@@ -850,7 +856,7 @@ func TestJobOverlapsReportsADependentOnceEveryDependencyPasses(t *testing.T) {
 
 	rows := []Job{
 		owner("dep", StateRunning, "types"),
-		{ID: "waiter", State: StateDeclared, WritePaths: []string{"internal/job"}, DependsOn: []string{"dep", "dep2"}},
+		{ID: "waiter", State: StateDeclared, Paths: JobPaths{Write: []string{"internal/job"}}, DependsOn: []string{"dep", "dep2"}},
 		owner("dep2", StatePass),
 		owner("other", StateRunning, "internal/job"),
 	}
@@ -986,7 +992,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		Timeout:     "soon",
 		MaxAttempts: -1,
 		Checkout:    "rel/dir",
-		WritePaths:  []string{"a.go", "../b.go"},
+		Paths: JobPaths{Write: []string{"a.go", "../b.go"}},
 		Breaks:      []string{" "},
 		Check:       &LeaseCheck{Target: "test", Project: "."},
 		Validation:  "magus run test .",
@@ -1016,7 +1022,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		"MGS3037 timeout",
 		"MGS3037 max_attempts",
 		"MGS3037 checkout",
-		"MGS3037 write_paths[1]",
+		"MGS3037 paths.write[1]",
 		"MGS3037 validation",
 		"MGS3037 breaks[0]",
 		"MGS3037 deviations[0].code",
@@ -1035,7 +1041,7 @@ func TestDeclarationProblemsOfAValidRecordIsEmpty(t *testing.T) {
 	t.Parallel()
 	d := Declaration{
 		ID:         "wave/a",
-		WritePaths: []string{"types/job.go"},
+		Paths: JobPaths{Write: []string{"types/job.go"}},
 		Check:      &LeaseCheck{Target: "go-test", Project: "."},
 		Deviations: []Deviation{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}},
 		Goals:      []Goal{{ID: "names", Kind: GoalKindSymbol, Symbols: []string{"X"}, DependsOn: []string{PrimaryGoalID}}},
@@ -1263,6 +1269,6 @@ func TestHoldsNoBuildSeat(t *testing.T) {
 	check := Goal{Kind: GoalKindCheck, Check: LeaseCheck{Target: "test", Project: "."}}
 	assert.True(t, Job{ReadOnly: true}.HoldsNoBuildSeat())
 	assert.False(t, Job{ReadOnly: true, Goals: []Goal{check}}.HoldsNoBuildSeat(), "a check runs a target")
-	assert.False(t, Job{ReadOnly: true, WritePaths: []string{"a/**"}}.HoldsNoBuildSeat())
+	assert.False(t, Job{ReadOnly: true, Paths: JobPaths{Write: []string{"a/**"}}}.HoldsNoBuildSeat())
 	assert.False(t, Job{}.HoldsNoBuildSeat(), "a writer is not read-only")
 }

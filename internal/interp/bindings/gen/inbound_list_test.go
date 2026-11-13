@@ -75,6 +75,7 @@ var inboundTypes = []inboundType{
 	{Name: "JobEntry", Zero: types.JobEntry{}, Encode: func(v any) vm.Value { return ObjectJobEntry(v.(types.JobEntry), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobEntry(v) }},
 	{Name: "JobGateAttempt", Zero: types.JobGateAttempt{}, Encode: func(v any) vm.Value { return ObjectJobGateAttempt(v.(types.JobGateAttempt)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobGateAttempt(v) }},
 	{Name: "JobIntegration", Zero: types.JobIntegration{}, Encode: func(v any) vm.Value { return ObjectJobIntegration(v.(types.JobIntegration)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobIntegration(v) }},
+	{Name: "JobPaths", Zero: types.JobPaths{}, Encode: func(v any) vm.Value { return ObjectJobPaths(v.(types.JobPaths)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobPaths(v) }},
 	{Name: "JobRejection", Zero: types.JobRejection{}, Encode: func(v any) vm.Value { return ObjectJobRejection(v.(types.JobRejection)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobRejection(v) }},
 	{Name: "JobRelease", Zero: types.JobRelease{}, Encode: func(v any) vm.Value { return ObjectJobRelease(v.(types.JobRelease)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobRelease(v) }},
 	{Name: "JobRun", Zero: types.JobRun{}, Encode: func(v any) vm.Value { return ObjectJobRun(v.(types.JobRun)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobRun(v) }},

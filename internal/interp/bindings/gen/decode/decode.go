@@ -2786,30 +2786,12 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.Checkpoint = sCheckpoint
-		case "writePaths":
-			strsWritePaths, err := decodeStringList(item, path+".writePaths")
+		case "paths":
+			xPaths, err := decodeJobPaths(item, path+".paths")
 			if err != nil {
 				return out, err
 			}
-			out.WritePaths = strsWritePaths
-		case "denyPaths":
-			strsDenyPaths, err := decodeStringList(item, path+".denyPaths")
-			if err != nil {
-				return out, err
-			}
-			out.DenyPaths = strsDenyPaths
-		case "softPaths":
-			strsSoftPaths, err := decodeStringList(item, path+".softPaths")
-			if err != nil {
-				return out, err
-			}
-			out.SoftPaths = strsSoftPaths
-		case "readPaths":
-			strsReadPaths, err := decodeStringList(item, path+".readPaths")
-			if err != nil {
-				return out, err
-			}
-			out.ReadPaths = strsReadPaths
+			out.Paths = xPaths
 		case "dependsOn":
 			strsDependsOn, err := decodeStringList(item, path+".dependsOn")
 			if err != nil {
@@ -3564,6 +3546,51 @@ func decodeJobIntegration(v vm.Value, path string) (types.JobIntegration, error)
 			out.ObservedGeneration = int(nObservedGeneration)
 		default:
 			return out, unknownMember(path, "JobIntegration", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeJobPaths decodes a Buzz JobPaths, an object instance or a map, into a types.JobPaths.
+func DecodeJobPaths(v vm.Value) (types.JobPaths, error) {
+	return decodeJobPaths(v, "jobPaths")
+}
+
+func decodeJobPaths(v vm.Value, path string) (types.JobPaths, error) {
+	var out types.JobPaths
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "JobPaths", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "write":
+			strsWrite, err := decodeStringList(item, path+".write")
+			if err != nil {
+				return out, err
+			}
+			out.Write = strsWrite
+		case "read":
+			strsRead, err := decodeStringList(item, path+".read")
+			if err != nil {
+				return out, err
+			}
+			out.Read = strsRead
+		case "deny":
+			strsDeny, err := decodeStringList(item, path+".deny")
+			if err != nil {
+				return out, err
+			}
+			out.Deny = strsDeny
+		case "soft":
+			strsSoft, err := decodeStringList(item, path+".soft")
+			if err != nil {
+				return out, err
+			}
+			out.Soft = strsSoft
+		default:
+			return out, unknownMember(path, "JobPaths", key)
 		}
 	}
 	return out, nil

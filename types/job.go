@@ -695,10 +695,26 @@ func (a JobAttempt) String() string {
 	return LeaseCheck{Target: target, Project: a.Project, Args: a.ExtraArgs}.String()
 }
 
+// JobPaths is a job's declared boundary. Write and Deny bound what its lease
+// writes, and are empty on a read-only lease by design. Read widens what it
+// reads, each entry to its project's dependencies. Read is its own list
+// because a worker that must read a shared library must not be handed the
+// right to write it.
+type JobPaths struct {
+	// Write entries of the form `<file>#<declaration>` claim one
+	// declaration of the file (see SplitClaim).
+	Write []string `json:"write,omitempty" yaml:"write,omitempty" schema:"writepath"`
+	Read  []string `json:"read,omitempty" yaml:"read,omitempty" schema:"writepath"`
+	Deny  []string `json:"deny,omitempty" yaml:"deny,omitempty" schema:"writepath"`
+	// Soft are the Write entries that overlap nothing until the diff
+	// touches them. The store then drops them from Soft.
+	Soft []string `json:"soft,omitempty" yaml:"soft,omitempty" schema:"writepath"`
+}
+
 // Job is one lease in an orchestrating agent's ledger. It holds what that
 // agent DECLARED about a piece of work it handed out.
 //
-// FACTS ONLY, NEVER ENFORCEMENT. WritePaths and DenyPaths are intent, not a
+// FACTS ONLY, NEVER ENFORCEMENT. Paths.Write and Paths.Deny are intent, not a
 // boundary this store checks. The agent guard reads them to grade a write.
 // The field set mirrors the magus-multi-agent skill's ledger table.
 type Job struct {
@@ -724,25 +740,8 @@ type Job struct {
 	// when the tree was not clean. A string, the form an orchestrator has at
 	// spawn time and `magus graph diff --rev` takes.
 	Checkpoint string `json:"checkpoint,omitempty" yaml:"checkpoint,omitempty"`
-	// WritePaths and DenyPaths are the declared write boundary. Empty on a
-	// read-only lease BY DESIGN (see ReadOnly), which is why neither is required. A write
-	// path `<file>#<declaration>` claims one declaration of the file (see SplitClaim).
-	WritePaths []string `json:"write_paths,omitempty" yaml:"write_paths,omitempty"`
-	DenyPaths  []string `json:"deny_paths,omitempty" yaml:"deny_paths,omitempty"`
-	// SoftPaths are the WritePaths entries that overlap nothing until the holder's diff
-	// touches them; the store then drops them from here. Always a subset of WritePaths.
-	SoftPaths []string `json:"soft_paths,omitempty" yaml:"soft_paths,omitempty"`
-	// ReadPaths widens what this lease may read beyond its WritePaths: the paths whose
-	// projects it may also read, each widened to those projects' own dependencies when the
-	// guard resolves it. A lease always reads what it writes.
-	//
-	// A separate field rather than a wider WritePaths, and the separation is the
-	// point: a worker that has to READ a shared library must not be handed the right
-	// to WRITE it, and one list cannot say both. It is also the only way to widen the
-	// boundary, which is deliberate. An environment variable that switched the rule
-	// off would be set once, in a wrapper, by the first worker it inconvenienced, and
-	// nothing afterwards would say the boundary had stopped being checked.
-	ReadPaths []string `json:"read_paths,omitempty" yaml:"read_paths,omitempty"`
+	// Paths are the declared write and read boundary. See [JobPaths].
+	Paths JobPaths `json:"paths,omitzero" yaml:"paths,omitempty"`
 	// DependsOn are the ids of leases that must land before this one, so a reader can
 	// see the ordering the orchestrator committed to.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
@@ -1023,17 +1022,8 @@ type Declaration struct {
 	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
 	// name` prints it.
 	Checkpoint string `json:"checkpoint,omitempty"`
-	// WritePaths is what this lease may write, empty on a read-only job by
-	// design. An entry `<file>#<declaration>` claims one declaration of the
-	// file (see SplitClaim).
-	WritePaths []string `json:"write_paths,omitempty" schema:"writepath"`
-	// DenyPaths are the paths inside those this lease may not write.
-	DenyPaths []string `json:"deny_paths,omitempty" schema:"writepath"`
-	// SoftPaths are the entries of WritePaths that are soft claims (see [Job.SoftPaths]).
-	SoftPaths []string `json:"soft_paths,omitempty" schema:"writepath"`
-	// ReadPaths is what it may READ, widened to those projects' dependencies by the
-	// guard. Empty means write_paths stands in.
-	ReadPaths []string `json:"read_paths,omitempty" schema:"writepath"`
+	// Paths are what this lease may write and read. See [JobPaths].
+	Paths JobPaths `json:"paths,omitzero"`
 	// DependsOn names the lease ids that must land before this one.
 	DependsOn []string `json:"depends_on,omitempty" schema:"leaseid"`
 	// Integrates names the branches this job merges; see [Job.Integrates].
@@ -1061,9 +1051,11 @@ type Declaration struct {
 	// or forbidden_paths): see Declaration. Observe it by grepping the
 	// leases-*.json archives and the trail for the old keys.
 	LegacyWritePaths []string `json:"owned_paths,omitempty"`
-	// LegacyDenyPaths is the pre-rename spelling of deny_paths. compat: see LegacyWritePaths.
+	// LegacyDenyPaths is the pre-rename spelling of paths.deny.
+	// compat: see LegacyWritePaths.
 	LegacyDenyPaths []string `json:"forbidden_paths,omitempty"`
-	// LegacyReadPaths is the pre-rename spelling of read_paths. compat: see LegacyWritePaths.
+	// LegacyReadPaths is the pre-rename spelling of paths.read.
+	// compat: see LegacyWritePaths.
 	LegacyReadPaths []string `json:"focus,omitempty"`
 	// Check is the one check this lease runs, and acceptance binds a worker's evidence
 	// to it.
@@ -1271,9 +1263,9 @@ func (r *Declaration) FoldLegacyNames() error {
 			*into = from
 		}
 	}
-	fold("owned_paths", &r.WritePaths, r.LegacyWritePaths)
-	fold("forbidden_paths", &r.DenyPaths, r.LegacyDenyPaths)
-	fold("focus", &r.ReadPaths, r.LegacyReadPaths)
+	fold("owned_paths", &r.Paths.Write, r.LegacyWritePaths)
+	fold("forbidden_paths", &r.Paths.Deny, r.LegacyDenyPaths)
+	fold("focus", &r.Paths.Read, r.LegacyReadPaths)
 	r.LegacyWritePaths, r.LegacyDenyPaths, r.LegacyReadPaths = nil, nil, nil
 	return err
 }
@@ -1385,7 +1377,7 @@ func (r Declaration) Problems() JobProblems {
 	for _, field := range []struct {
 		name  string
 		paths []string
-	}{{"write_paths", r.WritePaths}, {"deny_paths", r.DenyPaths}, {"read_paths", r.ReadPaths}} {
+	}{{"paths.write", r.Paths.Write}, {"paths.deny", r.Paths.Deny}, {"paths.read", r.Paths.Read}} {
 		for i, p := range field.paths {
 			if why := pathOutsideWorkspace(p); why != "" {
 				at := fmt.Sprintf("%s[%d]", field.name, i)
@@ -1394,11 +1386,11 @@ func (r Declaration) Problems() JobProblems {
 			}
 		}
 	}
-	for i, p := range r.SoftPaths {
-		if !slices.Contains(r.WritePaths, p) {
-			at := fmt.Sprintf("soft_paths[%d]", i)
-			invalid(at, fmt.Sprintf("%s %q is not in write_paths, and a soft path is a write path that overlaps nothing", at, p),
-				"name an entry of write_paths, or drop it")
+	for i, p := range r.Paths.Soft {
+		if !slices.Contains(r.Paths.Write, p) {
+			at := fmt.Sprintf("paths.soft[%d]", i)
+			invalid(at, fmt.Sprintf("%s %q is not in paths.write, and a soft path is a write path that overlaps nothing", at, p),
+				"name an entry of paths.write, or drop it")
 		}
 	}
 	_, declared, checkProblems := r.check()
@@ -1823,10 +1815,10 @@ func JobStateVocabulary() string {
 func (r Declaration) Apply(u *Job) {
 	u.Parent = strings.TrimSpace(r.Parent)
 	u.Checkpoint = strings.TrimSpace(r.Checkpoint)
-	u.WritePaths = trimmedNonEmpty(r.WritePaths)
-	u.DenyPaths = trimmedNonEmpty(r.DenyPaths)
-	u.SoftPaths = trimmedNonEmpty(r.SoftPaths)
-	u.ReadPaths = trimmedNonEmpty(r.ReadPaths)
+	u.Paths.Write = trimmedNonEmpty(r.Paths.Write)
+	u.Paths.Deny = trimmedNonEmpty(r.Paths.Deny)
+	u.Paths.Soft = trimmedNonEmpty(r.Paths.Soft)
+	u.Paths.Read = trimmedNonEmpty(r.Paths.Read)
 	u.DependsOn = trimmedNonEmpty(r.DependsOn)
 	u.Integrates = trimmedNonEmpty(r.Integrates)
 	u.Breaks = trimmedNonEmpty(r.Breaks)
@@ -1957,7 +1949,7 @@ type JobRelease struct {
 	TakenBy     string `json:"taken_by,omitempty"     yaml:"taken_by,omitempty"`
 	DeadBecause string `json:"dead_because,omitempty" yaml:"dead_because,omitempty"`
 	// Narrowed marks a file the store narrowed to the holder's claims.
-	// Its entry stays in write_paths; a re-fork ends the narrowing.
+	// Its entry stays in paths.write; a re-fork ends the narrowing.
 	Narrowed bool `json:"narrowed,omitempty" yaml:"narrowed,omitempty"`
 }
 
@@ -2494,10 +2486,10 @@ func unsplittableGlob(glob string) bool {
 // cleaned path itself when it holds no glob metacharacter, and everything above the
 // first segment that does when it holds one.
 //
-// Exported because the focus rule asks the same question of the same declarations:
-// which project a lease's write_paths land in cannot be answered by a wildcard, and
-// two packages deriving that prefix by their own rules would disagree about a
-// declaration on the day the rules drifted. A claimed declaration (see SplitClaim) is
+// Exported because the focus rule asks the same question of the same
+// declarations. A wildcard cannot say which project a write path lands in.
+// Two packages deriving that prefix by their own rules would disagree the
+// day the rules drifted. A claimed declaration (see SplitClaim) is
 // not part of the path and is dropped.
 func LiteralPrefix(p string) string {
 	p, _ = SplitClaim(p)
@@ -2616,10 +2608,10 @@ func ValidIntegratedBranch(b string) bool {
 // against other jobs. A reader asking who owns a path reads this. A reader
 // asking what this job may write reads WritePaths.
 func (u Job) HardPaths() []string {
-	if len(u.SoftPaths) == 0 {
-		return u.WritePaths
+	if len(u.Paths.Soft) == 0 {
+		return u.Paths.Write
 	}
-	return slices.DeleteFunc(slices.Clone(u.WritePaths), func(p string) bool { return slices.Contains(u.SoftPaths, p) })
+	return slices.DeleteFunc(slices.Clone(u.Paths.Write), func(p string) bool { return slices.Contains(u.Paths.Soft, p) })
 }
 
 // JobFeatures are the Requires entries this build implements, sorted. A
@@ -2660,10 +2652,10 @@ func (u Job) Clone() Job {
 	c := u
 	c.Requires = slices.Clone(u.Requires)
 	c.Unknown = slices.Clone(u.Unknown)
-	c.WritePaths = slices.Clone(u.WritePaths)
-	c.DenyPaths = slices.Clone(u.DenyPaths)
-	c.SoftPaths = slices.Clone(u.SoftPaths)
-	c.ReadPaths = slices.Clone(u.ReadPaths)
+	c.Paths.Write = slices.Clone(u.Paths.Write)
+	c.Paths.Deny = slices.Clone(u.Paths.Deny)
+	c.Paths.Soft = slices.Clone(u.Paths.Soft)
+	c.Paths.Read = slices.Clone(u.Paths.Read)
 	c.DependsOn = slices.Clone(u.DependsOn)
 	c.Integrates = slices.Clone(u.Integrates)
 	c.Breaks = slices.Clone(u.Breaks)
@@ -2752,7 +2744,7 @@ func ParsePauseUntil(raw string, now time.Time) (int64, error) {
 // HoldsNoBuildSeat reports whether the worker for u can never take a build
 // seat. It writes nothing and declares no check, so it runs no target.
 func (u Job) HoldsNoBuildSeat() bool {
-	if !u.ReadOnly || len(u.WritePaths) > 0 {
+	if !u.ReadOnly || len(u.Paths.Write) > 0 {
 		return false
 	}
 	return !slices.ContainsFunc(u.EffectiveGoals(), func(g Goal) bool { return g.Resolve().Kind == GoalKindCheck })

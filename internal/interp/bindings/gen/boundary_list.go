@@ -223,6 +223,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "JobOverlapFootprint", Zero: types.JobOverlapFootprint{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectJobOverlapFootprint(v.(types.JobOverlapFootprint))
 	}},
+	{Name: "JobPaths", Zero: types.JobPaths{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobPaths(v.(types.JobPaths)) }},
 	{Name: "JobReadOnly", Zero: types.JobReadOnly{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobReadOnly(v.(types.JobReadOnly)) }},
 	{Name: "JobRegistration", Zero: types.JobRegistration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectJobRegistration(v.(types.JobRegistration), enums)

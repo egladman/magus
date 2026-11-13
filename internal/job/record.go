@@ -31,11 +31,8 @@ type jobSpec struct {
 	Parent       string                     `json:"parent,omitempty"`
 	Agent        *agentRecord               `json:"agent,omitempty"`
 	Checkpoint   string                     `json:"checkpoint,omitempty"`
-	WritePaths   []string                   `json:"writePaths,omitempty"`
-	DenyPaths    []string                   `json:"denyPaths,omitempty"`
-	SoftPaths    []string                   `json:"softPaths,omitempty"`
-	ReadPaths    []string                   `json:"readPaths,omitempty"`
-	DependsOn    []string                   `json:"dependsOn,omitempty"`
+	Paths        types.JobPaths             `json:"paths,omitzero"`
+	DependsOn   []string                   `json:"dependsOn,omitempty"`
 	Integrates   []string                   `json:"integrates,omitempty"`
 	Breaks       []string                   `json:"breaks,omitempty"`
 	BriefFormat  string                     `json:"briefFormat,omitempty"`
@@ -117,7 +114,7 @@ func recordJob(row types.Job, stored *jobRecord) jobRecord {
 func recordSpec(row types.Job, unknown map[string]json.RawMessage) jobSpec {
 	spec := jobSpec{
 		Parent: row.Parent, Agent: recordAgent(row.Agent), Checkpoint: row.Checkpoint,
-		WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, SoftPaths: row.SoftPaths, ReadPaths: row.ReadPaths,
+		Paths:     row.Paths,
 		DependsOn: row.DependsOn, Integrates: row.Integrates, Breaks: row.Breaks,
 		BriefFormat: wireBriefFormat.spell(row.BriefFormat), Delivery: row.Delivery, ParentHead: row.ParentHead,
 		Follows: row.Follows, MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims,
@@ -216,7 +213,7 @@ func (r jobRecord) job() (types.Job, error) {
 func (s jobSpec) job(bad *wireReads) types.Job {
 	row := types.Job{
 		Parent: s.Parent, Agent: s.Agent.spec(bad), Checkpoint: s.Checkpoint,
-		WritePaths: s.WritePaths, DenyPaths: s.DenyPaths, SoftPaths: s.SoftPaths, ReadPaths: s.ReadPaths,
+		Paths:     s.Paths,
 		DependsOn: s.DependsOn, Integrates: s.Integrates, Breaks: s.Breaks,
 		BriefFormat: wireBriefFormat.read(s.BriefFormat, bad), Delivery: s.Delivery, ParentHead: s.ParentHead,
 		Follows: s.Follows, MaxAttempts: s.MaxAttempts, MaxClaims: s.MaxClaims,

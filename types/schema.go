@@ -90,8 +90,9 @@ var DeclarationSchema = FormatLedger{
 	Version: JobAPIVersion,
 	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
 	// refused as an unknown member.
-	Reserved: []string{"completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "tier"},
-	Added:    map[string]APIVersion{"agent": JobAPIVersion},
+	Reserved: []string{"completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "tier",
+		"write_paths", "deny_paths", "read_paths", "soft_paths"},
+	Added: map[string]APIVersion{"agent": JobAPIVersion, "paths": JobAPIVersion},
 	Requires: map[string]APIVersion{
 		"dead-job-end":       JobAPIVersion,
 		"claim-declarations": JobAPIVersion,
