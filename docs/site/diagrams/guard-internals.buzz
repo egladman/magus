@@ -21,13 +21,13 @@ export fun guardInternalsFigure() > figure\Figure !> any {
                 + "config says which rules are denied, advised or off. The interpreter runs the "
                 + "workspace's Buzz rule. To judge a call the guard reads the job store for the "
                 + "lease the call acts as and the session record for what the session already did. "
-                + "It writes each judgement to the trail and names the command to run instead "
+                + "It writes each judgment to the trail and names the command to run instead "
                 + "through the hint package.")
         .box(guard, label: "Guard", sub: "one verdict per call", focal: true)
         .box(catalog, label: "Rule catalog", sub: "ids, grades")
         .group([workspace, config], label: "Policy", sub: "loaded rules, grades")
         .box(interp, label: "Interpreter", sub: "runs the Buzz rule")
-        .group([jobs, sessions, trail], label: "Stores", sub: "lease, session, judgement", look: figure\Look.store)
+        .group([jobs, sessions, trail], label: "Stores", sub: "lease, session, judgment", look: figure\Look.store)
         .box(hint, label: "Hints", sub: "next: breadcrumbs")
         .edgesFromGraph()
         .hideEdges([workspace, config, jobs, sessions, trail, interp],
