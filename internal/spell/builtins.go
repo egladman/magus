@@ -314,7 +314,9 @@ func DeclareMagusTypes(sess *buzz.Session, implements func(member string) bool) 
 	if implements != nil {
 		decls = filterMagusDecls(decls, implements)
 	}
-
+	if err := SetNamespaceDecls(sess); err != nil {
+		return err
+	}
 	sess.DeclareModuleTypes("magus", decls)
 	return bindMagusRecords(sess, decls)
 }
@@ -390,6 +392,9 @@ func compileRecords(decls string) ([]magusRecord, error) {
 	// Never closed: every later session reads these values, and Close would
 	// release their heap slots out from under it.
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	if err := SetNamespaceDecls(sess); err != nil {
+		return nil, err
+	}
 	for _, r := range out {
 		if r.extern {
 			sess.SetGlobal(r.name, dispatchExtern(r.name))
@@ -425,6 +430,9 @@ func failingRecord(records []magusRecord, whole error) error {
 	for _, r := range records {
 		src += r.src
 		sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+		if err := SetNamespaceDecls(sess); err != nil {
+			return err
+		}
 		err := sess.Exec(context.Background(), src)
 		_ = sess.Close()
 		if err != nil {
@@ -452,6 +460,15 @@ func recordDecls(src string) (string, []magusRecord, error) {
 	var body strings.Builder
 	var out []magusRecord
 	seen := map[string]bool{}
+	// A record names a nested namespace's type only through the import, so
+	// the first record carries every import with it.
+	var imports strings.Builder
+	for _, stmt := range prog.Stmts {
+		if imp, ok := stmt.(*ast.ImportStmt); ok && !seen["import "+imp.Path] {
+			seen["import "+imp.Path] = true
+			fmt.Fprintf(&imports, "import %q;\n", imp.Path)
+		}
+	}
 	for i, stmt := range prog.Stmts {
 		r, ok := declRecord(stmt)
 		if !ok || seen[r.name] {
@@ -463,6 +480,9 @@ func recordDecls(src string) (string, []magusRecord, error) {
 			end = ast.NodePos(prog.Stmts[i+1]).Line - 1
 		}
 		r.src = strings.Join(lines[ast.NodePos(stmt).Line-1:end], "\n") + "\n"
+		if len(out) == 0 {
+			r.src = imports.String() + r.src
+		}
 		body.WriteString(r.src)
 		out = append(out, r)
 	}
@@ -542,6 +562,9 @@ func sessionRecords(sess *buzz.Session, mod vm.Value, shared []magusRecord) ([]m
 	child := sess.NewChild()
 	// Close only ends its context: sess owns what it defined.
 	defer func() { _ = child.Close() }()
+	if err := SetNamespaceDecls(child); err != nil {
+		return nil, err
+	}
 	var body strings.Builder
 	out := slices.Clone(shared)
 	for _, r := range out {

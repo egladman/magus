@@ -54,6 +54,7 @@ Copy the module into the root magusfile and change what you need:
 
 ```buzz
 import "magus";
+import "magus/agent";
 import "spells/harness/claude-code" as claudecode;
 
 enum ModelTier { routine, bounded, design, frontier }
@@ -67,21 +68,21 @@ fun claudeCode(tier: ModelTier) > str {
     };
 }
 
-fun bounds(tier: ModelTier) > magus\ModelTierBounds {
+fun bounds(tier: ModelTier) > magus\agent\ModelTierBounds {
     return match (tier) {
-        .routine -> magus\ModelTierBounds{ maxContext = 100000 },
-        .bounded -> magus\ModelTierBounds{},
-        .design -> magus\ModelTierBounds{},
-        .frontier -> magus\ModelTierBounds{ maxLive = 1 },
+        .routine -> magus\agent\ModelTierBounds{ maxContext = 100000 },
+        .bounded -> magus\agent\ModelTierBounds{},
+        .design -> magus\agent\ModelTierBounds{},
+        .frontier -> magus\agent\ModelTierBounds{ maxLive = 1 },
     };
 }
 
-fun skills(tier: ModelTier) > magus\SkillVariant {
+fun skills(tier: ModelTier) > magus\agent\SkillVariant {
     return match (tier) {
-        .routine -> magus\SkillVariant.full,
-        .bounded -> magus\SkillVariant.short,
-        .design -> magus\SkillVariant.short,
-        .frontier -> magus\SkillVariant.short,
+        .routine -> magus\agent\SkillVariant.full,
+        .bounded -> magus\agent\SkillVariant.short,
+        .design -> magus\agent\SkillVariant.short,
+        .frontier -> magus\agent\SkillVariant.short,
     };
 }
 
@@ -176,9 +177,10 @@ the fork.
 
 ```buzz
 import "magus";
+import "magus/agent";
 import "magus/modeltiers" as modeltiers;
 
-object Choice { tier: modeltiers\ModelTier, skills: magus\SkillVariant, reason: str }
+object Choice { tier: modeltiers\ModelTier, skills: magus\agent\SkillVariant, reason: str }
 
 fun routineHolds(req: ModelTierRequest) > bool {
     foreach (r in req.history) {
@@ -192,13 +194,13 @@ fun choose(req: ModelTierRequest) > Choice? {
     if (req.writeFiles <= 3 and req.writeProjects.len() == 1 and routineHolds(req)) {
         return Choice{
             tier = modeltiers\ModelTier.routine,
-            skills = magus\SkillVariant.full,
+            skills = magus\agent\SkillVariant.full,
             reason = "{req.kind.value} job, {req.writeFiles} files",
         };
     }
     return Choice{
         tier = modeltiers\ModelTier.bounded,
-        skills = magus\SkillVariant.short,
+        skills = magus\agent\SkillVariant.short,
         reason = "wide write set, or routine failing {req.kind.value}",
     };
 }

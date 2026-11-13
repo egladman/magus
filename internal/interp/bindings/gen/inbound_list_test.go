@@ -20,9 +20,6 @@ import (
 var inboundTypes = []inboundType{
 	{Name: "Ack", Zero: types.Ack{}, Encode: func(v any) vm.Value { return ObjectAck(v.(types.Ack)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeAck(v) }},
 	{Name: "AgentFile", Zero: types.AgentFile{}, Encode: func(v any) vm.Value { return ObjectAgentFile(v.(types.AgentFile)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeAgentFile(v) }},
-	{Name: "AgentModel", Zero: typesagent.Model{}, Encode: func(v any) vm.Value { return ObjectModel(v.(typesagent.Model)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeModel(v) }},
-	{Name: "AgentSpec", Zero: typesagent.Spec{}, Encode: func(v any) vm.Value { return ObjectSpec(v.(typesagent.Spec), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSpec(v) }},
-	{Name: "AgentWorker", Zero: typesagent.Worker{}, Encode: func(v any) vm.Value { return ObjectWorker(v.(typesagent.Worker), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeWorker(v) }},
 	{Name: "BaseBranch", Zero: types.BaseBranch{}, Encode: func(v any) vm.Value { return ObjectBaseBranch(v.(types.BaseBranch)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeBaseBranch(v) }},
 	{Name: "BaseCommit", Zero: types.BaseCommit{}, Encode: func(v any) vm.Value { return ObjectBaseCommit(v.(types.BaseCommit)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeBaseCommit(v) }},
 	{Name: "Change", Zero: types.Change{}, Encode: func(v any) vm.Value { return ObjectChange(v.(types.Change), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeChange(v) }},
@@ -76,7 +73,6 @@ var inboundTypes = []inboundType{
 	{Name: "JobEntry", Zero: types.JobEntry{}, Encode: func(v any) vm.Value { return ObjectJobEntry(v.(types.JobEntry), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobEntry(v) }},
 	{Name: "JobGateAttempt", Zero: types.JobGateAttempt{}, Encode: func(v any) vm.Value { return ObjectJobGateAttempt(v.(types.JobGateAttempt)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobGateAttempt(v) }},
 	{Name: "JobIntegration", Zero: types.JobIntegration{}, Encode: func(v any) vm.Value { return ObjectJobIntegration(v.(types.JobIntegration)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobIntegration(v) }},
-	{Name: "JobModelTier", Zero: typesagent.JobModelTier{}, Encode: func(v any) vm.Value { return ObjectJobModelTier(v.(typesagent.JobModelTier), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobModelTier(v) }},
 	{Name: "JobRejection", Zero: types.JobRejection{}, Encode: func(v any) vm.Value { return ObjectJobRejection(v.(types.JobRejection)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobRejection(v) }},
 	{Name: "JobRelease", Zero: types.JobRelease{}, Encode: func(v any) vm.Value { return ObjectJobRelease(v.(types.JobRelease)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobRelease(v) }},
 	{Name: "JobRun", Zero: types.JobRun{}, Encode: func(v any) vm.Value { return ObjectJobRun(v.(types.JobRun)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobRun(v) }},
@@ -173,6 +169,10 @@ var inboundTypes = []inboundType{
 	{Name: "http\\ServerOptions", Zero: types.HTTPServerOptions{}, Encode: func(v any) vm.Value { return ObjectHTTPServerOptions(v.(types.HTTPServerOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHTTPServerOptions(v) }},
 	{Name: "magus\\CommandOptions", Zero: types.MagusCommandOptions{}, Encode: func(v any) vm.Value { return ObjectMagusCommandOptions(v.(types.MagusCommandOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMagusCommandOptions(v) }},
 	{Name: "magus\\DiffOptions", Zero: types.MagusDiffOptions{}, Encode: func(v any) vm.Value { return ObjectMagusDiffOptions(v.(types.MagusDiffOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMagusDiffOptions(v) }},
+	{Name: "magus\\agent\\JobModelTier", Zero: typesagent.JobModelTier{}, Encode: func(v any) vm.Value { return ObjectJobModelTier(v.(typesagent.JobModelTier), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobModelTier(v) }},
+	{Name: "magus\\agent\\Model", Zero: typesagent.Model{}, Encode: func(v any) vm.Value { return ObjectModel(v.(typesagent.Model)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeModel(v) }},
+	{Name: "magus\\agent\\Spec", Zero: typesagent.Spec{}, Encode: func(v any) vm.Value { return ObjectSpec(v.(typesagent.Spec), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSpec(v) }},
+	{Name: "magus\\agent\\Worker", Zero: typesagent.Worker{}, Encode: func(v any) vm.Value { return ObjectWorker(v.(typesagent.Worker), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeWorker(v) }},
 	{Name: "vcs\\CommandOptions", Zero: types.VCSCommandOptions{}, Encode: func(v any) vm.Value { return ObjectVCSCommandOptions(v.(types.VCSCommandOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVCSCommandOptions(v) }},
 }
 

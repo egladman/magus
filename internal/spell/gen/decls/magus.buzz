@@ -6,6 +6,8 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+import "magus/agent";
+
 export enum<str> DiagnosticOrigin {
     unknown = "",
     builtin = "builtin",
@@ -33,23 +35,6 @@ export enum<str> SymbolIndexFreshness {
     outOfDate = "out-of-date",
     notIndexed = "not-indexed",
     unvouched = "unvouched",
-}
-
-export enum<str> WorkerType {
-    resumed = "resumed",
-    new = "new",
-}
-
-export enum<str> SkillVariant {
-    short = "short",
-    full = "full",
-}
-
-export enum<str> ModelTierSource {
-    row = "row",
-    matrix = "matrix",
-    userMatrix = "user-matrix",
-    default = "default",
 }
 
 export enum<str> ClaimKind {
@@ -650,33 +635,6 @@ export object History {
     }
 }
 
-export object AgentModel {
-    id: str = "",
-    tier: str = "",
-}
-
-export object AgentWorker {
-    @"type": WorkerType,
-    reason: str = "",
-}
-
-export object AgentSpec {
-    model: AgentModel = AgentModel{},
-    instructions: str = "",
-    worker: AgentWorker,
-}
-
-export object JobModelTier {
-    name: str = "",
-    rank: int = 0,
-    skills: SkillVariant = SkillVariant.short,
-    source: ModelTierSource = ModelTierSource.row,
-    reason: str = "",
-    site: str = "",
-    model: str = "",
-    shared: [str] = [],
-}
-
 export object ClaimEvidence {
     kind: ClaimKind = ClaimKind.none,
     subject: str = "",
@@ -842,7 +800,7 @@ export object Job {
     unknown: [str] = [],
     id: str = "",
     parent: str = "",
-    agent: AgentSpec? = null,
+    agent: magus\agent\Spec? = null,
     checkpoint: str = "",
     writePaths: [str] = [],
     denyPaths: [str] = [],
@@ -851,7 +809,7 @@ export object Job {
     dependsOn: [str] = [],
     integrates: [str] = [],
     breaks: [str] = [],
-    modelTier: JobModelTier? = null,
+    modelTier: magus\agent\JobModelTier? = null,
     briefFormat: BriefFormat = BriefFormat.none,
     delivery: str = "",
     parentHead: str = "",
@@ -2324,7 +2282,7 @@ export object SpawnRequest {
     parent: str = "",
     role: AgentRole = AgentRole.none,
     lease: Job? = null,
-    modelTier: JobModelTier? = null,
+    modelTier: magus\agent\JobModelTier? = null,
     thread: AgentThread = AgentThread.none,
     threadFrom: ThreadSource = ThreadSource.none,
     orchestration: Orchestration = Orchestration.none,
@@ -2408,26 +2366,6 @@ export object StopRequest {
     checkout: CheckoutState? = null,
     dir: str = "",
     workspace: str = "",
-}
-
-export object AgentStep {
-    apiVersion: str = "",
-    id: str = "",
-    kind: str = "",
-    name: str = "",
-    input: {str: any?} = {},
-    session: str = "",
-    agent: str = "",
-    dir: str = "",
-    at: str = "",
-}
-
-export object StepRequest {
-    step: AgentStep = AgentStep{},
-    capabilities: [str] = [],
-    paths: [str] = [],
-    command: str = "",
-    lease: str = "",
 }
 
 export object BriefDecision {
@@ -2895,13 +2833,8 @@ export object ModelTierRequest {
     writeFiles: int = 0,
     parentRank: int? = null,
     declaredRank: int? = null,
-    model: AgentModel = AgentModel{},
+    model: magus\agent\Model = magus\agent\Model{},
     history: [ModelTierRecord] = [],
-}
-
-export object ModelTierBounds {
-    maxLive: int = 0,
-    maxContext: int = 0,
 }
 
 extern fun magus__Workspace__jobs(recv: Workspace) > JobList !> any;
@@ -3010,7 +2943,7 @@ export object guard {
     static extern fun shapes(command: str) > [str];
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: fun (req: SpawnRequest) > GuardVerdict !> any) > void;
-    static extern fun step(kind: str, rule: fun (req: StepRequest) > GuardVerdict !> any) > void;
+    static extern fun step(kind: str, rule: fun (req: magus\agent\StepRequest) > GuardVerdict !> any) > void;
     static extern fun stop(rule: fun (req: StopRequest) > GuardVerdict !> any) > void;
     static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;
 }

@@ -4,6 +4,7 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
+import "magus/agent";
 import "magus/figure";
 import "result";
 import "std";
@@ -302,7 +303,7 @@ fun fixture() > result\Result::<JobTree> {
             foreach (p in j["writePaths"] ?? []) { paths.append(p); }
             final target = j["check"] ?? "";
             jobs.append(magus\Job{
-                id = j["id"], parent = j["parent"] ?? "", dependsOn = deps, agent = magus\AgentSpec{ model = magus\AgentModel{ id = j["model"] ?? "" }, worker = magus\AgentWorker{ @"type" = magus\WorkerType.resumed } }, state = magus\JobState(j["state"] ?? ""),
+                id = j["id"], parent = j["parent"] ?? "", dependsOn = deps, agent = magus\agent\Spec{ model = magus\agent\Model{ id = j["model"] ?? "" }, worker = magus\agent\Worker{ @"type" = magus\agent\WorkerType.resumed } }, state = magus\JobState(j["state"] ?? ""),
                 writePaths = paths, created = std\toInt(j["created"] ?? 0),
                 check = if (target != "") magus\LeaseCheck{ target = target, project = "." } else null,
             });

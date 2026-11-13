@@ -30,7 +30,7 @@ export fun sameFile(a: str, b: str) > bool {
 final stampGlobs = [
     "internal/guard/*.go", "internal/interp/bindings/guard_*.go", "cmd/magus/shell*.go",
     "cmd/magus/guard_*.go", "internal/agent/*.go", "internal/agent/skills/*/SKILL.md",
-    "internal/spell/gen/decls/*.buzz", "spells/*/*.buzz",
+    "internal/spell/gen/decls/**/*.buzz", "spells/*/*.buzz",
 ];
 
 // stampFiles are the stamped files under root, root-relative, tests left out: a test is

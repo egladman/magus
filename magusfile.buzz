@@ -781,7 +781,7 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
         "libs/clikit/**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
-        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json"]);
+        "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json"]);
     ctx.writesFiles(["manpage/*.1", "internal/commands/testdata/api.lock"]);
     fs\mkdirAll("manpage");
     _ = proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
@@ -798,7 +798,7 @@ export fun go_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["cmd/magus-utils/**/*.go", "*.go", "types/**/*.go", "libs/testkit/**/*.go", "libs/clikit/**/*.go",
         "internal/**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
-        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json"]);
+        "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json"]);
     ctx.writesFiles(["internal/commands/testdata/api-go.lock"]);
     _ = proc\exec("go", ["run", "./cmd/magus-utils", "goapi", "-out", "internal/commands/testdata/api-go.lock"]);
 }
@@ -998,7 +998,7 @@ export fun buzz_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate);
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
-        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json"]);
+        "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json"]);
     ctx.writesFiles(["internal/interp/bindings/gen/*.go",
         "!internal/interp/bindings/gen/*_test.go",
         "!internal/interp/bindings/gen/boundary_*.go",
@@ -1040,7 +1040,7 @@ export fun mcp_tools_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(spells_generate, job_generate, langservice_generate);
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
-        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json"]);
+        "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json"]);
     ctx.writesFiles(["internal/handler/mcp/gen/registry.go"]);
     _ = proc\exec("go", ["generate", "./internal/handler/mcp"]);
 }
@@ -1052,7 +1052,7 @@ export fun job_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate);
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
-        "internal/spell/gen/decls/*.buzz"]);
+        "internal/spell/gen/decls/**/*.buzz"]);
     ctx.writesFiles(["internal/job/gen/*.json"]);
     _ = proc\exec("go", ["run", "./cmd/magus-utils", "jobschema", "-out", "internal/job/gen"]);
 }
@@ -1062,7 +1062,7 @@ export fun job_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
     ctx.writesFiles(["internal/spell/gen/types/*.buzz",
-                     "internal/spell/gen/decls/*.buzz"]);
+                     "internal/spell/gen/decls/**/*.buzz"]);
     _ = proc\exec("go", ["run", "./cmd/magus-utils", "types",
         "-from", "internal/spell/builtins.go",
         "-from", "internal/spell/target.go",
@@ -1080,7 +1080,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", ".mockery.yaml",
         "hack/magusfile/mockassert.buzz",
         "internal/spell/gen/types/*.buzz",
-        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json",
+        "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json",
         "internal/interp/bindings/gen/*.go", "internal/config/gen/*.go"]);
     ctx.writesFiles(["**/gen/*test/*.go", "**/mocks_test.go"]);
     _ = proc\exec("go", ["tool", "mockery"]);
@@ -1156,7 +1156,7 @@ export fun config_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate);
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
-        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json"]);
+        "internal/spell/gen/decls/**/*.buzz", "internal/job/gen/*.json"]);
     ctx.writesFiles(["cmd/magus/gen/*.go", "internal/config/gen/settings/*.go", "internal/config/gen/*.go",
                 "cmd/magus/completions/*"]);
     _ = proc\exec("go", ["generate", "./cmd/magus/..."]);

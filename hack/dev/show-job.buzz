@@ -2,6 +2,7 @@ namespace jobview;
 
 import "flags";
 import "magus";
+import "magus/agent";
 import "result";
 import "std";
 import "template";
@@ -473,9 +474,9 @@ export fun fixtureRow() > magus\Job {
     final check = magus\LeaseCheck{ target = "go::go-test", project = ".", args = ["-run", "Quote|Shell"] };
     return magus\Job{
         id = "guard-shell-quoting",
-        agent = magus\AgentSpec{
+        agent = magus\agent\Spec{
             instructions = "magus shell judges a quoted pipe as one word; a regression test pins it",
-            worker = magus\AgentWorker{ @"type" = magus\WorkerType.resumed },
+            worker = magus\agent\Worker{ @"type" = magus\agent\WorkerType.resumed },
         },
         checkpoint = "7472f16fc709ab3827cd38ff281fecc0a217ca88",
         writePaths = ["internal/guard/quote.go", "internal/guard/quote_test.go"],

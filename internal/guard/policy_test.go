@@ -384,8 +384,9 @@ func (s *PolicySnapshotSuite) TestAHitJudgesWithoutALoad() {
 
 func (s *PolicySnapshotSuite) TestAHitKeepsTheStepRulesKinds() {
 	s.repo.Commit("step", map[string]string{"magusfile.buzz": `import "magus";
+import "magus/agent";
 
-magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict => magus\guard.deny("No {req.step.name} refunds."));
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.deny("No {req.step.name} refunds."));
 `})
 	s.warm(s.repo)
 

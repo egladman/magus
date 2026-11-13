@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 
@@ -103,9 +104,9 @@ type boundaryRoot struct {
 // boundaryType is one Go struct that crosses into Buzz.
 type boundaryType struct {
 	Name string
-	// Module scopes Name to one host module's declarations, for a mirror whose name
-	// another module's mirror also takes: magus\CommandOptions and vcs\CommandOptions.
-	// Empty declares Name for every module.
+	// Module is the import path Name is declared in, as for vcs\CommandOptions.
+	// A nested one, magus/agent, has its own file. Empty declares Name in
+	// each module reaching it.
 	Module string
 	Type   reflect.Type
 	// Outbound marks a type Go hands to Buzz, which needs an encoder.
@@ -119,13 +120,29 @@ type boundaryType struct {
 	Required []string
 }
 
-// key is the registry's name for the entry: Name, qualified as module\Name when Module
-// scopes it.
-func (b boundaryType) key() string {
-	if b.Module == "" {
-		return b.Name
+// key is the registry's name for the entry: Name, qualified by its
+// namespace when Module scopes it.
+func (b boundaryType) key() string { return qualifiedName(b.Module, b.Name) }
+
+// nested reports whether the entry is declared in a nested namespace's file.
+func (b boundaryType) nested() bool { return strings.Contains(b.Module, "/") }
+
+// qualifiedName spells name in the namespace of the module at path, or bare
+// for no module.
+func qualifiedName(module, name string) string {
+	if module == "" {
+		return name
 	}
-	return fmt.Sprintf(`%s\%s`, b.Module, b.Name)
+	return fmt.Sprintf(`%s\%s`, strings.ReplaceAll(module, "/", `\`), name)
+}
+
+// nameIn is how a declaration in the module at path spells the entry: bare
+// in its own namespace or when bundled, else qualified.
+func (b boundaryType) nameIn(module string) string {
+	if b.nested() && b.Module != module {
+		return b.key()
+	}
+	return b.Name
 }
 
 // boundarySet is every type that crosses, derived once from the host
@@ -215,7 +232,25 @@ func deriveBoundary() (boundarySet, error) {
 		claims = append(claims, buzzgen.Claim{Key: e.key(), Type: e.Type})
 		enumKeys = append(enumKeys, e.goKey)
 	}
-	return set, errors.Join(r.CheckNames(claims), r.CheckListed(enumKeys...))
+	return set, errors.Join(r.CheckNames(claims), r.CheckListed(enumKeys...), r.CheckNamespaces(hostMembers))
+}
+
+// hostMembers lists the functions and member groups of the host module at
+// path, the names a nested namespace under it may not take.
+func hostMembers(path string) []string {
+	var out []string
+	for _, mod := range hostmodules.All() {
+		if mod.Name != path {
+			continue
+		}
+		for _, m := range mod.Methods {
+			out = append(out, m.Name, std.CamelCase(m.Name), m.BuzzName)
+		}
+		for _, n := range mod.Namespaces {
+			out = append(out, n.Name)
+		}
+	}
+	return out
 }
 
 // hostSignature is one method's Go func type and the member that owns it.
@@ -323,13 +358,20 @@ type boundaryEnum struct {
 	goKey string
 }
 
-// key is the enum's Buzz name, qualified as module\Name when Module scopes
+// key is the enum's Buzz name, qualified by its namespace when Module scopes
 // it, as boundaryType.key is.
-func (e boundaryEnum) key() string {
-	if e.Module == "" {
-		return e.Name
+func (e boundaryEnum) key() string { return qualifiedName(e.Module, e.Name) }
+
+// nested reports whether the enum is declared in a nested namespace's own file.
+func (e boundaryEnum) nested() bool { return strings.Contains(e.Module, "/") }
+
+// nameIn is how a declaration in the module at path spells the enum, as
+// boundaryType.nameIn spells a mirror.
+func (e boundaryEnum) nameIn(module string) string {
+	if e.nested() && e.Module != module {
+		return e.key()
 	}
-	return fmt.Sprintf(`%s\%s`, e.Module, e.Name)
+	return e.Name
 }
 
 // enumCase is one case: the Buzz identifier and the string it carries.
@@ -351,10 +393,13 @@ func buzzEnum(rt reflect.Type) (boundaryEnum, bool) {
 // buzzName returns the Buzz name a Go type mirrors as: its registry key,
 // not always its Go name (types.ProjectsOutput is `Projects`). An
 // unclaimed type falls back to its Go name, which the caller reports.
-func buzzName(rt reflect.Type) string {
+func buzzName(rt reflect.Type) string { return buzzNameIn("", rt) }
+
+// buzzNameIn is buzzName as a declaration in the module at path spells it.
+func buzzNameIn(module string, rt reflect.Type) string {
 	for _, entry := range boundaryTypes() {
 		if entry.Type == rt {
-			return entry.Name
+			return entry.nameIn(module)
 		}
 	}
 	return rt.Name()
@@ -407,7 +452,7 @@ func boundaryTypeNamed(key string) (boundaryType, bool) {
 // boundaryTypeIn finds the entry name means inside module's declarations: the one module
 // scopes, else the workspace-wide one.
 func boundaryTypeIn(module, name string) (boundaryType, bool) {
-	if entry, ok := boundaryTypeNamed(fmt.Sprintf(`%s\%s`, module, name)); ok {
+	if entry, ok := boundaryTypeNamed(qualifiedName(module, name)); ok {
 		return entry, true
 	}
 	return boundaryTypeNamed(name)
@@ -418,9 +463,27 @@ func boundaryTypeIn(module, name string) (boundaryType, bool) {
 // references.
 func boundaryEnumNamed(name string) (boundaryEnum, bool) {
 	for _, e := range boundaryEnumList() {
-		if e.Name == name {
+		if e.Name == name || e.key() == name {
 			return e, true
 		}
 	}
 	return boundaryEnum{}, false
+}
+
+// nestedModules lists, sorted, the import path of every nested namespace a
+// crossing type or enum is declared in.
+func nestedModules() []string {
+	var out []string
+	for _, entry := range boundaryTypes() {
+		if entry.nested() && !slices.Contains(out, entry.Module) {
+			out = append(out, entry.Module)
+		}
+	}
+	for _, e := range boundaryEnumList() {
+		if e.nested() && !slices.Contains(out, e.Module) {
+			out = append(out, e.Module)
+		}
+	}
+	slices.Sort(out)
+	return out
 }

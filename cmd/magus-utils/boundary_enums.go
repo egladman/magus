@@ -35,7 +35,8 @@ func deriveEnums(r *buzzgen.Reach, prog *buzzgen.Program, open map[reflect.Type]
 		enums = append(enums, newBoundaryEnum(e, t, ref))
 	}
 	for _, ref := range prog.Config.Types() {
-		if ref.Settings.Module == nil || derived[goKey(ref)] || ref.OpenReason() != "" {
+		own := prog.Config.Packages[ref.Package].Types[ref.Name].Config.Module
+		if own == nil || derived[goKey(ref)] || ref.OpenReason() != "" {
 			continue
 		}
 		named, err := prog.Named(ref)

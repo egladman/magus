@@ -23,10 +23,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	}},
 	{Name: "Affected", Zero: types.AffectedResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffectedResult(v.(types.AffectedResult)) }},
 	{Name: "Affinity", Zero: types.Affinity{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffinity(v.(types.Affinity)) }},
-	{Name: "AgentModel", Zero: typesagent.Model{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModel(v.(typesagent.Model)) }},
-	{Name: "AgentSpec", Zero: typesagent.Spec{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpec(v.(typesagent.Spec), enums) }},
-	{Name: "AgentStep", Zero: typesagent.Step{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStep(v.(typesagent.Step)) }},
-	{Name: "AgentWorker", Zero: typesagent.Worker{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWorker(v.(typesagent.Worker), enums) }},
 	{Name: "ArchiveEntry", Zero: types.ArchiveEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectArchiveEntry(v.(types.ArchiveEntry)) }},
 	{Name: "Artifact", Zero: types.TargetArtifact{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetArtifact(v.(types.TargetArtifact)) }},
 	{Name: "ArtifactRequest", Zero: types.ArtifactRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectArtifactRequest(v.(types.ArtifactRequest)) }},
@@ -279,6 +275,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "MCPToolParam", Zero: types.MCPToolParam{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMCPToolParam(v.(types.MCPToolParam)) }},
 	{Name: "MarkdownSection", Zero: types.MarkdownSection{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMarkdownSection(v.(types.MarkdownSection)) }},
 	{Name: "Match", Zero: types.KnowledgeMatch{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectKnowledgeMatch(v.(types.KnowledgeMatch)) }},
+	{Name: "Model", Zero: typesagent.Model{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModel(v.(typesagent.Model)) }},
 	{Name: "ModelTierRecord", Zero: types.ModelTierRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectModelTierRecord(v.(types.ModelTierRecord), enums)
 	}},
@@ -398,11 +395,13 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Skill", Zero: types.Skill{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSkill(v.(types.Skill)) }},
 	{Name: "SpawnRequest", Zero: types.SpawnRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnRequest(v.(types.SpawnRequest), enums) }},
 	{Name: "SpawnTarget", Zero: types.SpawnTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpawnTarget(v.(types.SpawnTarget), enums) }},
+	{Name: "Spec", Zero: typesagent.Spec{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpec(v.(typesagent.Spec), enums) }},
 	{Name: "Spell", Zero: types.Spell{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpell(v.(types.Spell)) }},
 	{Name: "SpellCache", Zero: types.SpellCache{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellCache(v.(types.SpellCache)) }},
 	{Name: "SpellToolchain", Zero: types.SpellToolchain{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellToolchain(v.(types.SpellToolchain)) }},
 	{Name: "SpellVersion", Zero: types.SpellVersion{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellVersion(v.(types.SpellVersion)) }},
 	{Name: "Status", Zero: types.StatusRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRecord(v.(types.StatusRecord)) }},
+	{Name: "Step", Zero: typesagent.Step{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStep(v.(typesagent.Step)) }},
 	{Name: "StepRequest", Zero: typesagent.StepRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStepRequest(v.(typesagent.StepRequest)) }},
 	{Name: "StopRequest", Zero: types.StopRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStopRequest(v.(types.StopRequest), enums) }},
 	{Name: "StubSyntax", Zero: spells.StubSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStubSyntax(v.(spells.StubSyntax)) }},
@@ -452,6 +451,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	}},
 	{Name: "Volatility", Zero: types.Volatility{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatility(v.(types.Volatility)) }},
 	{Name: "VolatilityTarget", Zero: types.VolatilityTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatilityTarget(v.(types.VolatilityTarget)) }},
+	{Name: "Worker", Zero: typesagent.Worker{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWorker(v.(typesagent.Worker), enums) }},
 	{Name: "Workspace", Zero: types.MagusWorkspace{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectMagusWorkspace(v.(types.MagusWorkspace), enums)
 	}},

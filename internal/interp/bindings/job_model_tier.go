@@ -201,11 +201,11 @@ func declareModelTiers(ctx context.Context, sess *buzz.Session, tiers, def, host
 	}
 	if !bounds.IsFun() {
 		return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember,
-			"bounds must be a function from a %s to magus\\ModelTierBounds, got %s", enum, bounds.Kind())
+			"bounds must be a function from a %s to magus\\agent\\ModelTierBounds, got %s", enum, bounds.Kind())
 	}
 	if !skills.IsFun() {
 		return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember,
-			"skills must be a function from a %s to magus\\SkillVariant, got %s", enum, skills.Kind())
+			"skills must be a function from a %s to magus\\agent\\SkillVariant, got %s", enum, skills.Kind())
 	}
 	caseValues, err := enumCaseValues(ctx, sess, tiers, cases)
 	if err != nil {
@@ -296,7 +296,7 @@ func decodeTierBounds(enum, tier string, v vm.Value) (agent.ModelTierBounds, err
 	fields, ok := v.MapView()
 	if !ok {
 		return agent.ModelTierBounds{}, modelTierUnusable(modelTiersMember,
-			"bounds answered %s for %s.%s, and it must answer a magus\\ModelTierBounds", v.Kind(), enum, tier)
+			"bounds answered %s for %s.%s, and it must answer a magus\\agent\\ModelTierBounds", v.Kind(), enum, tier)
 	}
 	var out agent.ModelTierBounds
 	for _, field := range []struct {
@@ -322,7 +322,7 @@ func decodeTierBounds(enum, tier string, v vm.Value) (agent.ModelTierBounds, err
 func decodeSkillVariant(v vm.Value) (agent.SkillVariant, error) {
 	enum, name, ok := v.EnumCase()
 	if !ok || enum != skillVariantEnum {
-		return "", fmt.Errorf("%s is not a magus\\SkillVariant, short or full", describeValue(v))
+		return "", fmt.Errorf("%s is not a magus\\agent\\SkillVariant, short or full", describeValue(v))
 	}
 	variant := agent.SkillVariant(name)
 	if !variant.Valid() {
@@ -504,7 +504,7 @@ func decodeModelTierChoice(set *agent.ModelTierSet, v vm.Value, site string, sou
 	}
 	skillsValue, present := fields.MapGet("skills")
 	if !present || skillsValue.IsNull() {
-		return nil, fmt.Errorf("%s: the matrix's answer has no skills, a magus\\SkillVariant", modelTierMember)
+		return nil, fmt.Errorf("%s: the matrix's answer has no skills, a magus\\agent\\SkillVariant", modelTierMember)
 	}
 	skills, err := decodeSkillVariant(skillsValue)
 	if err != nil {

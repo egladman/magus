@@ -165,36 +165,58 @@ This amends ADR 0035. Membership stays reach: no type and no namespace is listed
 | `types/trail` | `magus\trail` | `TrailMark`, `SessionOptions`  | `magus\trail\Mark`, `…\ReadOptions`   |
 | `types`       | `magus`       | `Job`, `Graph`, `GuardVerdict` | unchanged                             |
 
-- `types` sets `module: magus`. `types/image` sets `module: image`, so `image\Platform`
-  keeps its spelling beside the `image` functions.
-- 32 `name` lines are deleted from `.buzzgen.yaml`: 22 for diff, 6 for trail and 4 for
-  agent.
+- The config's top level sets `module: magus`. `types/image` sets `module: ""`, so
+  `image\Platform` keeps its spelling beside the `image` functions.
+- 32 `name` lines are to be deleted from `.buzzgen.yaml`: 22 for diff, 6 for trail and 4
+  for agent. The 4 for agent are deleted; see the State table for diff and trail.
 
 ### 6. The deliberate break
 
 - Every renamed type changes spelling with no alias and no dual reader. The API locks
   are regenerated in the same pull request, and a changelog fragment records the
   break.
-- The change rides the pull request already queued for the one-dialect change and the
-  `magusfiles/` move, so each magusfile Buzz file is rewritten once. That change makes
-  every exporting file declare a namespace, which this one needs anyway.
+- The change is built in its own pull request, ahead of the one-dialect change and the
+  `magusfiles/` move (Eli, 2026-11-12). A magusfile that names a moved type gains one
+  import line now.
 - The callers are found from the symbol index, not by hand. Eleven of the renamed names
   were sampled with `magus refs`, and each is referenced only by the generated file.
   The index was stale at the time, so the build job measures again before it edits.
 - Docs, skills and the examples under `std/examples` are regenerated or swept in the
   same pull request.
 
-| Item                                                                       | State     |
-| -------------------------------------------------------------------------- | --------- |
-| gopherbuzz parses and binds a multi-segment declared namespace             | done      |
-| The checker resolves `a\b\T` in a type annotation and in a declaration file | proposed  |
-| `module` takes a slash path and defaults from the Go package               | not built |
-| One declaration file per namespace, each opening with `namespace`          | not built |
-| A declaration file imports the namespaces its signatures name              | not built |
-| A segment that is also a parent member is refused                          | not built |
-| `types/agent`, `types/diff` and `types/trail` mirror under their namespace | not built |
-| 32 prefix `name` lines deleted from `.buzzgen.yaml`                        | not built |
-| The stale comment on `std.Namespace` corrected                             | not built |
+| Item                                                                        | State     |
+| --------------------------------------------------------------------------- | --------- |
+| gopherbuzz parses and binds a multi-segment declared namespace              | done      |
+| The checker resolves `a\b\T` in a type annotation and in a declaration file | done      |
+| `module` takes a slash path and defaults from the Go package                | done      |
+| One declaration file per namespace, each opening with `namespace`           | done      |
+| A declaration file imports the namespaces its signatures name               | done      |
+| A segment that is also a parent member is refused                           | done      |
+| `types/agent` mirrors under `magus\agent`; its 4 prefix `name` lines deleted | done      |
+| `types/diff` and `types/trail` mirror under their namespace                 | not built |
+| The other 28 prefix `name` lines deleted from `.buzzgen.yaml`               | not built |
+| The rule that bundles a root type into the module returning it deleted      | not built |
+| The stale comment on `std.Namespace` corrected                              | done      |
+
+What the build found, 2026-11-12:
+
+- The checker read `a\b\T` by its last segment only, so two nested `Step` types were one
+  type to it. A declaration module that declares a nested namespace is now collected
+  under that namespace, binds under it alone and not under its last segment, and is
+  visible to a file only through that file's own import, as upstream binds it. Type
+  identity is still the bare name in `types.Compat`, so `shop\order\Step` passes where
+  `shop\cart\Step` is wanted. That predates this record: `magus\CommandOptions` and
+  `vcs\CommandOptions` compare the same way.
+- `types/diff` cannot move yet. Its fields name root types (`types.Check`,
+  `types.ImpactCoverage`, `types.VCSCheckpoint` and others), and `magus` functions return
+  `diff.Diff`, so `magus.buzz` and `magus/diff.buzz` would import each other. gopherbuzz
+  refuses a cycle between declaration modules. The Go packages have no cycle because the
+  `magus` host module is `std`, not `types`.
+- `types/trail` cannot move yet. `trail.Trail` is a `magus` handle whose methods call the
+  `magus` module's private externs, which a separate declaration file cannot reach.
+- Deleting the bundling rule would move `fs\FileInfo`, `vcs\Commit` and the other root
+  types bundled into a host module out of it, a break part 5's table does not list. Root
+  types keep it.
 
 ### Principles checked
 
@@ -295,11 +317,9 @@ if a package is found whose types belong in two namespaces.
 
 ## Open questions
 
-- Whether gopherbuzz's checker resolves `magus\agent\Step` in an annotation, in an
-  object literal and inside a declaration file that imports it. The binding is tested
-  at run time only. A gap is fixed to match upstream, never worked around.
-- Whether `import "magus/agent";` before `import "magus";` binds both. The first
-  creates `magus` as a bare map, and the second must merge into it.
+- How `magus\diff` and `magus` stop importing each other: split the `magus` host
+  module's declarations from the root types', or let a declaration cycle resolve.
+- How a handle whose record lives in a nested namespace reaches its host's externs.
 - Whether upstream lets a function `shop\order` and a namespace `shop\order` coexist.
   If it does, the refusal in part 2 is narrower than it needs to be.
 - Whether `magus/figure` and `magus/spell/*` declare `namespace magus\figure` in the

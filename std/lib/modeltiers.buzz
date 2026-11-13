@@ -8,7 +8,7 @@
 /// tiers to its own models.
 namespace modeltiers;
 
-import "magus";
+import "magus/agent";
 
 export enum ModelTier { routine, bounded, design, frontier }
 
@@ -18,23 +18,23 @@ export final defaultTier = ModelTier.bounded;
 /// live jobs: a default that refused a workspace's next fork would surprise
 /// everyone who never asked for a cap, so maxLive is set only by a magusfile
 /// that declares one.
-export fun bounds(tier: ModelTier) > magus\ModelTierBounds {
+export fun bounds(tier: ModelTier) > magus\agent\ModelTierBounds {
     return match (tier) {
-        .routine -> magus\ModelTierBounds{ maxContext = 100000 },
-        .bounded -> magus\ModelTierBounds{},
-        .design -> magus\ModelTierBounds{},
-        .frontier -> magus\ModelTierBounds{},
+        .routine -> magus\agent\ModelTierBounds{ maxContext = 100000 },
+        .bounded -> magus\agent\ModelTierBounds{},
+        .design -> magus\agent\ModelTierBounds{},
+        .frontier -> magus\agent\ModelTierBounds{},
     };
 }
 
 /// skills is the skill variant a tier's workers load. Routine gets the
 /// full bodies: a smaller model is the reader least able to re-derive the
 /// steps the short form drops.
-export fun skills(tier: ModelTier) > magus\SkillVariant {
+export fun skills(tier: ModelTier) > magus\agent\SkillVariant {
     return match (tier) {
-        .routine -> magus\SkillVariant.full,
-        .bounded -> magus\SkillVariant.short,
-        .design -> magus\SkillVariant.short,
-        .frontier -> magus\SkillVariant.short,
+        .routine -> magus\agent\SkillVariant.full,
+        .bounded -> magus\agent\SkillVariant.short,
+        .design -> magus\agent\SkillVariant.short,
+        .frontier -> magus\agent\SkillVariant.short,
     };
 }

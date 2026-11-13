@@ -3,9 +3,11 @@ package interp
 import (
 	"maps"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/parsecache"
+	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 )
@@ -13,7 +15,7 @@ import (
 // guardRulesFilterID names guardRulesFilter in bytecode keys. Change it with
 // any change to what the filter keeps, so no chunk the old filter compiled is
 // served to the new one.
-const guardRulesFilterID = "magus-guard-rules/2"
+const guardRulesFilterID = "magus-guard-rules/3"
 
 // guardRulesFilter limits an entry magusfile to its magus\guard registrations
 // and the names those registrations reach. Descent goes through ast.Inspect, so
@@ -449,7 +451,14 @@ func importNames(imp *ast.ImportStmt) []string {
 	if imp.Alias != "" {
 		return []string{imp.Alias}
 	}
-	return []string{path.Base(strings.TrimPrefix(imp.Path, "buzz:"))}
+	p := strings.TrimPrefix(imp.Path, "buzz:")
+	// A nested namespace binds its first segment: magus\agent is magus. A
+	// list that cannot be read keeps the import, as the filter fails closed.
+	if nested, err := spell.NamespaceModules(); err != nil || slices.Contains(nested, p) {
+		head, _, _ := strings.Cut(p, "/")
+		return []string{head, path.Base(p)}
+	}
+	return []string{path.Base(p)}
 }
 
 // importUsed reports whether the kept statements reference what imp binds.

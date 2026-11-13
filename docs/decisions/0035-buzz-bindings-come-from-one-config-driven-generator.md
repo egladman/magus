@@ -601,3 +601,43 @@ Principles checked:
 - [No silent defaults](../design/judgment/no-silent-defaults.md): a collision, an
   unexported or undeclared internal type, and a dead config line each fail with what to
   change.
+
+### 2026-11-12: a child package is a nested namespace
+
+ADR 0047 decides that a Go package is a Buzz namespace. This amendment is how buzzgen
+builds that, with invented names first. A config sets `module: shop` at the top level.
+
+- `module` is an import path. `http` is a host module, and `shop/order` is the nested
+  namespace `shop\order`.
+- A package whose parent package the config lists, and whose own config sets no
+  `module`, derives one: the top-level `module`, a slash and the package's last path
+  element. `shop/types/order` becomes `shop/order`. The top-level `module` is the root
+  of that derivation and never a default, so the root package's types keep the
+  placement they have.
+- A package config may set `module: ""` to keep its types bundled where they are
+  reached, as they were before. A type's own `module` still wins.
+- A nested module is one declaration file, `<decls>/shop/order.buzz`. It opens with
+  `namespace shop\order;` and holds the module's enums and mirrors, leaf first.
+- A file whose declarations name a nested module's type imports it and writes the type
+  qualified. `shop.buzz` declares no namespace, so it writes `import "shop/order";` and
+  `shop\order\Step`.
+- A nested module whose last segment is a function or member group of its parent is
+  refused, naming both. Two packages deriving one module are refused, naming the
+  `module` line to add.
+- An encoder names a nested enum by its qualified name, `shop\order\Size`, and the
+  session reads its cases through `import "shop/order"`.
+
+In magus, `types/agent` is the namespace `magus\agent`. Three packages keep `module: ""`.
+`types/diff` has a field naming a `magus` type, and `magus`'s functions return `diff`
+types, so the two declaration files would import each other. `types/trail` declares the
+`Trail` handle, whose methods call the `magus` module's private externs. `types/daemon`
+is not in ADR 0047's scope. `types/image` keeps `module: ""` as well:
+`TestTwoModulesShareAnObjectMethodName` pins its records bundling into any module.
+
+| Item                                                                           | State     |
+| ------------------------------------------------------------------------------ | --------- |
+| `module` takes a slash path and a child package derives it                     | done      |
+| One declaration file per nested namespace, opening with `namespace`            | done      |
+| A declaration file imports the nested namespaces it names                      | done      |
+| A nested segment that is also a parent member is refused                       | done      |
+| `types/diff` and `types/trail` move to `magus\diff` and `magus\trail`          | not built |

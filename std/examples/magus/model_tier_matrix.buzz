@@ -1,7 +1,8 @@
 import "magus";
+import "magus/agent";
 import "magus/modeltiers" as modeltiers;
 
-object Choice { tier: modeltiers\ModelTier, skills: magus\SkillVariant, reason: str }
+object Choice { tier: modeltiers\ModelTier, skills: magus\agent\SkillVariant, reason: str }
 
 // Routine stops taking a kind of job once ten of them are recorded
 // and fewer than half passed.
@@ -17,13 +18,13 @@ fun choose(req: ModelTierRequest) > Choice? {
     if (req.writeFiles <= 3 and req.writeProjects.len() == 1 and routineHolds(req)) {
         return Choice{
             tier = modeltiers\ModelTier.routine,
-            skills = magus\SkillVariant.full,
+            skills = magus\agent\SkillVariant.full,
             reason = "{req.kind.value} job, {req.writeFiles} files",
         };
     }
     return Choice{
         tier = modeltiers\ModelTier.bounded,
-        skills = magus\SkillVariant.short,
+        skills = magus\agent\SkillVariant.short,
         reason = "wide write set, or routine failing {req.kind.value}",
     };
 }

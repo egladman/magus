@@ -304,8 +304,8 @@ var Magus = Module{
 				"which magus reads once at load. tiers is that enum and default one of its cases. " +
 				"hosts maps each harness the magusfile wired, keyed by the harness id " +
 				"magus\\harness.provider returns, to a function from a tier to the model alias that harness spawns; " +
-				"bounds maps a tier to its magus\\ModelTierBounds (maxLive, maxContext; a zero field is " +
-				"no cap); skills maps a tier to the magus\\SkillVariant its workers load. Write each " +
+				"bounds maps a tier to its magus\\agent\\ModelTierBounds (maxLive, maxContext; a zero field is " +
+				"no cap); skills maps a tier to the magus\\agent\\SkillVariant its workers load. Write each " +
 				"function as an exhaustive match over the enum, so a tier added later fails " +
 				"`magus check` until every function covers it. No model name is magus's: the aliases " +
 				"are yours. hosts, bounds and skills are checked at load against the enum, and the " +
@@ -342,7 +342,7 @@ var Magus = Module{
 	},
 	// The objects a modelTiers declaration and a modelTier function take,
 	// which no signature names.
-	CallbackObjects: []string{"ModelTierRequest", "ModelTierBounds", "JobModelTier"},
+	CallbackObjects: []string{"ModelTierRequest", `magus\agent\ModelTierBounds`, `magus\agent\JobModelTier`},
 	Objects:         magusObjects,
 	// Each namespace below is reached THROUGH rather than called
 	// (`magus\cache.remote(<spell>)`), so it is declared as an object with static
@@ -573,7 +573,7 @@ var Magus = Module{
 			},
 			// Brief is no method's: a buzz-format spawn brief is one magus\Brief literal the
 			// guard type-checks against this declaration.
-			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "StopRequest", "StepRequest", "AgentStep", "GuardBinary", "Brief"},
+			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "StopRequest", `magus\agent\StepRequest`, `magus\agent\Step`, "GuardBinary", "Brief"},
 		},
 		{
 			Name: "harness",

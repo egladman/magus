@@ -756,8 +756,9 @@ func (s *StepRuleBindingSuite) testContext() context.Context {
 func (s *StepRuleBindingSuite) TestTheRuleSeesTheStepAfterTheLoadCloses() {
 	s.Require().NoError(s.sess.Exec(s.testContext(), `
 import "magus";
+import "magus/agent";
 
-magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict {
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict {
     return magus\guard.deny("{req.step.kind}|{req.step.name}|{req.step.dir}|{req.capabilities.join(",")}|{req.lease}|{req.step.input["amount"]}");
 });
 `))
@@ -776,9 +777,10 @@ magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict {
 func (s *StepRuleBindingSuite) TestEachKindKeepsItsOwnRule() {
 	s.Require().NoError(s.sess.Exec(s.testContext(), `
 import "magus";
+import "magus/agent";
 
-magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict => magus\guard.allow());
-magus\guard.step("egress", fun (req: StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("egress", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
 `))
 	s.Equal([]string{"egress", "refund"}, s.steps.Kinds())
 }
@@ -786,9 +788,10 @@ magus\guard.step("egress", fun (req: StepRequest) > GuardVerdict => magus\guard.
 func (s *StepRuleBindingSuite) TestRegisteringAKindTwiceIsMisdeclared() {
 	err := s.sess.Exec(s.testContext(), `
 import "magus";
+import "magus/agent";
 
-magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict => magus\guard.allow());
-magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
 `)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "MGS1045")
@@ -798,8 +801,9 @@ magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict => magus\guard.
 func (s *StepRuleBindingSuite) TestAKindNamedForASeamIsMisdeclared() {
 	err := s.sess.Exec(s.testContext(), `
 import "magus";
+import "magus/agent";
 
-magus\guard.step("step", fun (req: StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("step", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
 `)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "MGS1045")
@@ -813,8 +817,9 @@ func (s *StepRuleBindingSuite) TestAProjectMagusfileIsMisdeclared() {
 	registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
 	err := sess.Exec(ctx, `
 import "magus";
+import "magus/agent";
 
-magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
 `)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "MGS1045")

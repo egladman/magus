@@ -82,9 +82,9 @@ func (s *sessionEnums) Instance(object string, names []string, fields []vm.Value
 			params[i] = fmt.Sprintf("f%d: any", i)
 			inits[i] = fmt.Sprintf("%s = f%d", name, i)
 		}
-		fn := "__object_" + object
+		fn := "__object_" + strings.ReplaceAll(object, `\`, "_")
 		decl := fmt.Sprintf("import %q; fun %s(%s) > any { return %s{ %s }; }",
-			s.module, fn, strings.Join(params, ", "), s.qualify(object), strings.Join(inits, ", "))
+			s.importPath(object), fn, strings.Join(params, ", "), s.qualify(object), strings.Join(inits, ", "))
 		if _, err := s.sess.Eval(s.ctx, decl); err != nil {
 			panic(fmt.Sprintf("declaring %s's constructor: %v", s.qualify(object), err))
 		}
@@ -127,9 +127,20 @@ func (s *sessionEnums) Case(enum, value string) vm.Value {
 }
 
 // qualify spells enum as a call site does: Buzz binds a slash-path import under its
-// last segment.
+// last segment. A nested namespace's enum comes qualified.
 func (s *sessionEnums) qualify(enum string) string {
+	if strings.Contains(enum, `\`) {
+		return enum
+	}
 	return fmt.Sprintf(`%s\%s`, s.module[strings.LastIndex(s.module, "/")+1:], enum)
+}
+
+// importPath is the module the expression qualify spells is read from.
+func (s *sessionEnums) importPath(enum string) string {
+	if i := strings.LastIndex(enum, `\`); i >= 0 {
+		return strings.ReplaceAll(enum[:i], `\`, "/")
+	}
+	return s.module
 }
 
 // definition is the enum's definition on the module value the session registered.
@@ -172,8 +183,8 @@ func (s *sessionEnums) read(enum string) (map[string]vm.Value, error) {
 // rejects a top-level return. Redeclaring the function for a second reader of the same
 // session replaces the first, which is what the same expression asks for.
 func (s *sessionEnums) value(part, enum, expr string) (vm.Value, error) {
-	name := fmt.Sprintf("__enum_%s_%s", part, enum)
-	decl := fmt.Sprintf("import %q; fun %s() > any { return %s; }", s.module, name, expr)
+	name := fmt.Sprintf("__enum_%s_%s", part, strings.ReplaceAll(enum, `\`, "_"))
+	decl := fmt.Sprintf("import %q; fun %s() > any { return %s; }", s.importPath(enum), name, expr)
 	if _, err := s.sess.Eval(s.ctx, decl); err != nil {
 		return vm.Null, err
 	}

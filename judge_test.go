@@ -523,8 +523,9 @@ func (s *buzzStepRuleSuite) refund(m *Magus, amount float64) agent.Step {
 }
 
 const refundRule = `import "magus";
+import "magus/agent";
 
-magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict {
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict {
     if (req.step.name == "card") {
         return magus\guard.deny("Card refunds need a person.");
     }
@@ -544,8 +545,9 @@ func (s *buzzStepRuleSuite) TestABuzzRuleJudgesAKindMagusNeverShips() {
 
 func (s *buzzStepRuleSuite) TestANamedVerdictReportsUnderItsName() {
 	m, err := s.open(`import "magus";
+import "magus/agent";
 
-magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict => magus\guard.deny("No refunds.", {"rule": "refund-limit"}));
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.deny("No refunds.", {"rule": "refund-limit"}));
 `)
 	s.Require().NoError(err)
 
@@ -557,8 +559,9 @@ magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict => magus\guard.
 
 func (s *buzzStepRuleSuite) TestTheStricterOfTheGoAndTheBuzzRuleWins() {
 	m, err := s.open(`import "magus";
+import "magus/agent";
 
-magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict => magus\guard.advise("Log the refund."));
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.advise("Log the refund."));
 `, WithStepRule(refundLimit))
 	s.Require().NoError(err)
 
@@ -573,7 +576,7 @@ func (s *buzzStepRuleSuite) TestAnUncommittedLooseningWaitsOnApproval() {
 	m, err := Open(s.T().Context(), repo.Root(), WithStepRows(refundRow), WithSpawnRule(TierCeiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
-	loosened := "import \"magus\";\n\nmagus\\guard.step(\"refund\", fun (req: StepRequest) > GuardVerdict => magus\\guard.allow());\n"
+	loosened := "import \"magus\";\nimport \"magus/agent\";\n\nmagus\\guard.step(\"refund\", fun (req: magus\\agent\\StepRequest) > GuardVerdict => magus\\guard.allow());\n"
 	s.Require().NoError(os.WriteFile(filepath.Join(m.Root(), "magusfile.buzz"), []byte(loosened), 0o644))
 
 	j, err := m.Judge(s.T().Context(), s.refund(m, 250))
@@ -584,8 +587,9 @@ func (s *buzzStepRuleSuite) TestAnUncommittedLooseningWaitsOnApproval() {
 
 func (s *buzzStepRuleSuite) TestARuleForAnotherKindLeavesTheRowUnjudgedAtOpen() {
 	_, err := s.open(`import "magus";
+import "magus/agent";
 
-magus\guard.step("egress", fun (req: StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("egress", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
 `)
 
 	s.ErrorContains(err, `magus\guard.step`)
@@ -594,8 +598,9 @@ magus\guard.step("egress", fun (req: StepRequest) > GuardVerdict => magus\guard.
 
 func (s *buzzStepRuleSuite) TestARuleThatRaisesDeniesARowOnlyItJudges() {
 	m, err := s.open(`import "magus";
+import "magus/agent";
 
-magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict {
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict {
     if (req.step.name == "card") { throw "ledger unreachable"; }
     return magus\guard.allow();
 });

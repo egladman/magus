@@ -477,7 +477,7 @@ func ObjectModel(v typesagent.Model) vm.Value {
 
 func ObjectWorker(v typesagent.Worker, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("type", enums.Case("WorkerType", string(v.Type)))
+	out.MapSet("type", enums.Case("magus\\agent\\WorkerType", string(v.Type)))
 	out.MapSet("reason", vm.StringValue(v.Reason))
 	return out
 }
@@ -494,8 +494,8 @@ func ObjectJobModelTier(v typesagent.JobModelTier, enums ffi.EnumCases) vm.Value
 	out := vm.NewMap()
 	out.MapSet("name", vm.StringValue(v.Name))
 	out.MapSet("rank", vm.IntValue(int64(v.Rank)))
-	out.MapSet("skills", enums.Case("SkillVariant", string(v.Skills)))
-	out.MapSet("source", enums.Case("ModelTierSource", string(v.Source)))
+	out.MapSet("skills", enums.Case("magus\\agent\\SkillVariant", string(v.Skills)))
+	out.MapSet("source", enums.Case("magus\\agent\\ModelTierSource", string(v.Source)))
 	out.MapSet("reason", vm.StringValue(v.Reason))
 	out.MapSet("site", vm.StringValue(v.Site))
 	out.MapSet("model", vm.StringValue(v.Model))
@@ -3351,28 +3351,6 @@ func ObjectYAMLPositions(v types.YAMLPositions) vm.Value {
 	return out
 }
 
-func ObjectStep(v typesagent.Step) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("apiVersion", vm.StringValue(v.APIVersion))
-	out.MapSet("id", vm.StringValue(v.ID))
-	out.MapSet("kind", vm.StringValue(v.Kind))
-	out.MapSet("name", vm.StringValue(v.Name))
-	mappedInput := vm.NewMap()
-	for keyInput, itemInput := range v.Input {
-		mappedInput.MapSet(keyInput, ffi.AnyVal(itemInput))
-	}
-	out.MapSet("input", mappedInput)
-	out.MapSet("session", vm.StringValue(v.Session))
-	out.MapSet("agent", vm.StringValue(v.Agent))
-	out.MapSet("dir", vm.StringValue(v.Dir))
-	formattedAt := ""
-	if !v.At.IsZero() {
-		formattedAt = v.At.Format(time.RFC3339Nano)
-	}
-	out.MapSet("at", vm.StringValue(formattedAt))
-	return out
-}
-
 func ObjectArtifactRequest(v types.ArtifactRequest) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StringValue(v.Project))
@@ -5096,24 +5074,6 @@ func ObjectStatusRecord(v types.StatusRecord) vm.Value {
 	return out
 }
 
-func ObjectStepRequest(v typesagent.StepRequest) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("step", ObjectStep(v.Step))
-	itemsCapabilities := make([]vm.Value, len(v.Capabilities))
-	for indexCapabilities := range v.Capabilities {
-		itemsCapabilities[indexCapabilities] = vm.StringValue(v.Capabilities[indexCapabilities])
-	}
-	out.MapSet("capabilities", vm.ListValue(itemsCapabilities))
-	itemsPaths := make([]vm.Value, len(v.Paths))
-	for indexPaths := range v.Paths {
-		itemsPaths[indexPaths] = vm.StringValue(v.Paths[indexPaths])
-	}
-	out.MapSet("paths", vm.ListValue(itemsPaths))
-	out.MapSet("command", vm.StringValue(v.Command))
-	out.MapSet("lease", vm.StringValue(v.Lease))
-	return out
-}
-
 func ObjectStopRequest(v types.StopRequest, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("host", vm.StringValue(v.Host))
@@ -5385,6 +5345,46 @@ func ObjectWriteRequest(v types.WriteRequest, enums ffi.EnumCases) vm.Value {
 	out.MapSet("content", vm.StringValue(v.Content))
 	out.MapSet("oldText", vm.StringValue(v.OldText))
 	out.MapSet("newText", vm.StringValue(v.NewText))
+	return out
+}
+
+func ObjectStep(v typesagent.Step) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("apiVersion", vm.StringValue(v.APIVersion))
+	out.MapSet("id", vm.StringValue(v.ID))
+	out.MapSet("kind", vm.StringValue(v.Kind))
+	out.MapSet("name", vm.StringValue(v.Name))
+	mappedInput := vm.NewMap()
+	for keyInput, itemInput := range v.Input {
+		mappedInput.MapSet(keyInput, ffi.AnyVal(itemInput))
+	}
+	out.MapSet("input", mappedInput)
+	out.MapSet("session", vm.StringValue(v.Session))
+	out.MapSet("agent", vm.StringValue(v.Agent))
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	formattedAt := ""
+	if !v.At.IsZero() {
+		formattedAt = v.At.Format(time.RFC3339Nano)
+	}
+	out.MapSet("at", vm.StringValue(formattedAt))
+	return out
+}
+
+func ObjectStepRequest(v typesagent.StepRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("step", ObjectStep(v.Step))
+	itemsCapabilities := make([]vm.Value, len(v.Capabilities))
+	for indexCapabilities := range v.Capabilities {
+		itemsCapabilities[indexCapabilities] = vm.StringValue(v.Capabilities[indexCapabilities])
+	}
+	out.MapSet("capabilities", vm.ListValue(itemsCapabilities))
+	itemsPaths := make([]vm.Value, len(v.Paths))
+	for indexPaths := range v.Paths {
+		itemsPaths[indexPaths] = vm.StringValue(v.Paths[indexPaths])
+	}
+	out.MapSet("paths", vm.ListValue(itemsPaths))
+	out.MapSet("command", vm.StringValue(v.Command))
+	out.MapSet("lease", vm.StringValue(v.Lease))
 	return out
 }
 

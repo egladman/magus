@@ -53,6 +53,7 @@ func execModelTiers(t *testing.T, ctx context.Context, src string) error {
 
 const levelsDecl = `
 import "magus";
+import "magus/agent";
 
 enum Level { low, high }
 
@@ -60,17 +61,17 @@ fun model(level: Level) > str {
     return match (level) { .low -> "small", .high -> "big" };
 }
 
-fun bounds(level: Level) > magus\ModelTierBounds {
+fun bounds(level: Level) > magus\agent\ModelTierBounds {
     return match (level) {
-        .low -> magus\ModelTierBounds{ maxLive = 3, maxContext = 5000 },
-        .high -> magus\ModelTierBounds{ maxLive = 1 },
+        .low -> magus\agent\ModelTierBounds{ maxLive = 3, maxContext = 5000 },
+        .high -> magus\agent\ModelTierBounds{ maxLive = 1 },
     };
 }
 
-fun skills(level: Level) > magus\SkillVariant {
+fun skills(level: Level) > magus\agent\SkillVariant {
     return match (level) {
-        .low -> magus\SkillVariant.full,
-        .high -> magus\SkillVariant.short,
+        .low -> magus\agent\SkillVariant.full,
+        .high -> magus\agent\SkillVariant.short,
     };
 }
 `
@@ -202,8 +203,8 @@ magus\modelTiers(Level, default: Other.low, bounds: bounds, skills: skills);`,
 		{"two tiers apart with one alias", `
 enum Spread { low, mid, high }
 fun spreadModel(s: Spread) > str { return match (s) { .low -> "one", .mid -> "two", .high -> "one" }; }
-fun spreadBounds(s: Spread) > magus\ModelTierBounds { return magus\ModelTierBounds{}; }
-fun spreadSkills(s: Spread) > magus\SkillVariant { return magus\SkillVariant.short; }
+fun spreadBounds(s: Spread) > magus\agent\ModelTierBounds { return magus\agent\ModelTierBounds{}; }
+fun spreadSkills(s: Spread) > magus\agent\SkillVariant { return magus\agent\SkillVariant.short; }
 magus\modelTiers(Spread, default: Spread.low,
     hosts: {"claude-code": spreadModel}, bounds: spreadBounds, skills: spreadSkills);`,
 			"only adjacent tiers may share an id", []string{"claude-code"}},
@@ -213,11 +214,11 @@ magus\modelTiers(Level, default: Level.low,
     hosts: {"claude-code": none}, bounds: bounds, skills: skills);`,
 			"empty alias", []string{"claude-code"}},
 		{"a negative bound", `
-fun negative(level: Level) > magus\ModelTierBounds { return magus\ModelTierBounds{ maxLive = -1 }; }
+fun negative(level: Level) > magus\agent\ModelTierBounds { return magus\agent\ModelTierBounds{ maxLive = -1 }; }
 magus\modelTiers(Level, default: Level.low, bounds: negative, skills: skills);`,
 			"negative", nil},
 		{"a mapping that raises", `
-fun broken(level: Level) > magus\SkillVariant !> str { throw "no skills"; }
+fun broken(level: Level) > magus\agent\SkillVariant !> str { throw "no skills"; }
 magus\modelTiers(Level, default: Level.low, bounds: bounds, skills: broken);`,
 			"skills raised for Level.low", nil},
 		{"declared twice", `
@@ -259,7 +260,7 @@ magus\modelTiers(null);
 }
 
 const matrixDecl = levelsDecl + `
-object Choice { tier: Level, skills: magus\SkillVariant, reason: str }
+object Choice { tier: Level, skills: magus\agent\SkillVariant, reason: str }
 
 magus\modelTiers(Level, default: Level.low,
     hosts: {"claude-code": model}, bounds: bounds, skills: skills);
@@ -269,7 +270,7 @@ func TestModelTierMatrixChoosesAfterTheLoadCloses(t *testing.T) {
 	reg, _, err := loadModelTiers(t, matrixDecl+`
 magus\modelTier(fun (req: ModelTierRequest) > Choice? {
     if (req.id == "default-me") { return null; }
-    return Choice{ tier = Level.high, skills = magus\SkillVariant.full, reason = "{req.id}: {req.kind.value}" };
+    return Choice{ tier = Level.high, skills = magus\agent\SkillVariant.full, reason = "{req.id}: {req.kind.value}" };
 });
 `, "claude-code")
 	require.NoError(t, err)
@@ -292,8 +293,8 @@ func TestModelTierMatrixAnswersAreChecked(t *testing.T) {
 	cases := []struct {
 		name, body, want string
 	}{
-		{"no reason", `return Choice{ tier = Level.low, skills = magus\SkillVariant.short, reason = "  " };`, "no reason"},
-		{"another enum's case", `return .{ tier = Other.a, skills = magus\SkillVariant.short, reason = "x" };`, "tier"},
+		{"no reason", `return Choice{ tier = Level.low, skills = magus\agent\SkillVariant.short, reason = "  " };`, "no reason"},
+		{"another enum's case", `return .{ tier = Other.a, skills = magus\agent\SkillVariant.short, reason = "x" };`, "tier"},
 		{"not an object", `return "high";`, "not null or an object"},
 		{"raises", `throw "boom";`, "the matrix raised"},
 	}
@@ -327,6 +328,7 @@ func userMatrixModule(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "matrix.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(`import "magus";
+import "magus/agent";
 enum Level { low, middle, high }
 export fun choose(req: ModelTierRequest) > any {
 %s
@@ -345,7 +347,7 @@ func TestUserModelTierMatrix(t *testing.T) {
 	}
 
 	t.Run("answers carry the user source", func(t *testing.T) {
-		path := userMatrixModule(t, `return .{ tier = Level.high, skills = magus\SkillVariant.short, reason = "mine" };`)
+		path := userMatrixModule(t, `return .{ tier = Level.high, skills = magus\agent\SkillVariant.short, reason = "mine" };`)
 		got, err := ask(t, path, tiers)
 		require.NoError(t, err)
 		assert.Equal(t, &agent.JobModelTier{
@@ -359,7 +361,7 @@ func TestUserModelTierMatrix(t *testing.T) {
 		assert.Nil(t, got)
 	})
 	t.Run("a tier the workspace lacks fails", func(t *testing.T) {
-		path := userMatrixModule(t, `return .{ tier = Level.middle, skills = magus\SkillVariant.short, reason = "x" };`)
+		path := userMatrixModule(t, `return .{ tier = Level.middle, skills = magus\agent\SkillVariant.short, reason = "x" };`)
 		_, err := ask(t, path, tiers)
 		require.ErrorContains(t, err, "middle")
 	})

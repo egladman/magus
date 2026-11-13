@@ -4,7 +4,11 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"slices"
+	"strings"
 	"sync"
+
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 )
 
 // This file holds the generated Buzz DECLARATIONS of every host module: the object
@@ -62,3 +66,49 @@ type moduleDecl struct {
 }
 
 var moduleDecls sync.Map
+
+// NamespaceModules lists, sorted, the import path of every nested namespace
+// with generated declarations, such as magus/agent. Its declarations are
+// ModuleDecls of that path, and a module's declarations import it by path.
+var NamespaceModules = sync.OnceValues(func() ([]string, error) {
+	var out []string
+	err := fs.WalkDir(hostDeclsFS, "gen/decls", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, ok := strings.CutPrefix(path, "gen/decls/")
+		if !ok || d.IsDir() || !strings.Contains(rel, "/") {
+			return nil
+		}
+		if module, isBuzz := strings.CutSuffix(rel, ".buzz"); isBuzz {
+			out = append(out, module)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("spell: walk the embedded declarations: %w", err)
+	}
+	slices.Sort(out)
+	return out, nil
+})
+
+// SetNamespaceDecls registers the declarations of every NamespaceModules
+// path into sess, so `import "magus/agent";` resolves. A path sess already
+// holds is left as it is.
+func SetNamespaceDecls(sess *buzz.Session) error {
+	paths, err := NamespaceModules()
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		if sess.HasModuleDecls(path) {
+			continue
+		}
+		src, ok := ModuleDecls(path)
+		if !ok {
+			return fmt.Errorf("spell: namespace %s has no declarations", path)
+		}
+		sess.SetModuleDecls(path, src)
+	}
+	return nil
+}

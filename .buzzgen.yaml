@@ -2,10 +2,16 @@
 # reads it; ADR 0035 records the design. Membership is not listed here: a
 # type crosses when a host signature, a provider op or a declared root
 # reaches it. Settings layer: the top level, then a package's config, then a
-# type's config.
+# type's config. A package below a listed one is the namespace
+# magus\<package> unless its config sets module; "" keeps it in magus.
 version: v1alpha1
+module: magus
 packages:
+  github.com/egladman/magus/types/daemon:
+    config: {module: ""}
   github.com/egladman/magus/types/diff:
+    # magus\diff and magus import each other: diff fields name magus types.
+    config: {module: ""}
     types:
       API: {config: {name: DiffAPI}}
       Churn: {config: {name: DiffChurn}}
@@ -30,6 +36,8 @@ packages:
       Why: {config: {name: DiffWhy}}
       WhyRelation: {config: {name: DiffWhyRelation}}
   github.com/egladman/magus/types/trail:
+    # Trail is a magus handle: its methods call the magus module's externs.
+    config: {module: ""}
     types:
       Mark: {config: {name: TrailMark}}
       Observation: {config: {name: TrailObservation}}
@@ -49,6 +57,7 @@ packages:
       External: {config: {cases: {"reads-external": reads, "mutates-external": mutates}}}
       ProvidedProject: {config: {name: Project}}
   github.com/egladman/magus/types/image:
+    config: {module: ""}
     types:
       Document: {config: {required: [path, descriptor]}}
       Directory: {config: {required: [path, mode]}}
@@ -61,12 +70,10 @@ packages:
       Tree: {config: {required: [source, path, modePolicy, symlinks]}}
   github.com/egladman/magus/types/agent:
     types:
-      Model: {config: {name: AgentModel}}
       ModelTierSource: {config: {zeroCase: ""}}
       SkillVariant: {config: {zeroCase: ""}}
-      Spec: {config: {name: AgentSpec, required: [worker]}}
-      Step: {config: {name: AgentStep}}
-      Worker: {config: {name: AgentWorker, required: [type]}}
+      Spec: {config: {required: [worker]}}
+      Worker: {config: {required: [type]}}
       WorkerType: {config: {zeroCase: ""}}
   github.com/egladman/magus/internal/queue/types:
     config:

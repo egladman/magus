@@ -924,7 +924,7 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 	}
 
 	if en, ok := buzzEnum(t); ok {
-		return fmt.Sprintf("enums.Case(%q, string(%s))", en.Name, value), nil
+		return fmt.Sprintf("enums.Case(%q, string(%s))", en.nameIn(""), value), nil
 	}
 
 	switch t.Kind() {

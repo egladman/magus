@@ -59,15 +59,16 @@ stdout '^model tier: routine \(rank 0\), matrix: "1 file in 1 project" at magusf
 
 -- matrix.buzz --
 import "magus";
+import "magus/agent";
 import "magus/modeltiers" as modeltiers;
 
-object Choice { tier: modeltiers\ModelTier, skills: magus\SkillVariant, reason: str }
+object Choice { tier: modeltiers\ModelTier, skills: magus\agent\SkillVariant, reason: str }
 
 fun choose(req: ModelTierRequest) > Choice? {
     if (req.writeFiles != 1 or req.writeProjects.len() != 1) { return null; }
     return Choice{
         tier = modeltiers\ModelTier.routine,
-        skills = magus\SkillVariant.full,
+        skills = magus\agent\SkillVariant.full,
         reason = "{req.writeFiles} file in {req.writeProjects.len()} project",
     };
 }

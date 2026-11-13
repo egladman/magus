@@ -93,121 +93,6 @@ func decodeAgentFile(v vm.Value, path string) (types.AgentFile, error) {
 	return out, nil
 }
 
-// DecodeModel decodes a Buzz AgentModel, an object instance or a map, into a typesagent.Model.
-func DecodeModel(v vm.Value) (typesagent.Model, error) {
-	return decodeModel(v, "agentModel")
-}
-
-func decodeModel(v vm.Value, path string) (typesagent.Model, error) {
-	var out typesagent.Model
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "AgentModel", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "id":
-			sID, err := decodeString(item, path+".id")
-			if err != nil {
-				return out, err
-			}
-			out.ID = sID
-		case "tier":
-			sTier, err := decodeString(item, path+".tier")
-			if err != nil {
-				return out, err
-			}
-			out.Tier = sTier
-		default:
-			return out, unknownMember(path, "AgentModel", key)
-		}
-	}
-	return out, nil
-}
-
-// DecodeSpec decodes a Buzz AgentSpec, an object instance or a map, into a typesagent.Spec.
-func DecodeSpec(v vm.Value) (typesagent.Spec, error) {
-	return decodeSpec(v, "agentSpec")
-}
-
-func decodeSpec(v vm.Value, path string) (typesagent.Spec, error) {
-	var out typesagent.Spec
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "AgentSpec", v)
-	}
-	hasWorker := false
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "model":
-			xModel, err := decodeModel(item, path+".model")
-			if err != nil {
-				return out, err
-			}
-			out.Model = xModel
-		case "instructions":
-			sInstructions, err := decodeString(item, path+".instructions")
-			if err != nil {
-				return out, err
-			}
-			out.Instructions = sInstructions
-		case "worker":
-			hasWorker = true
-			xWorker, err := decodeWorker(item, path+".worker")
-			if err != nil {
-				return out, err
-			}
-			out.Worker = xWorker
-		default:
-			return out, unknownMember(path, "AgentSpec", key)
-		}
-	}
-	if !hasWorker {
-		return out, missingMember(path, "AgentSpec", "worker")
-	}
-	return out, nil
-}
-
-// DecodeWorker decodes a Buzz AgentWorker, an object instance or a map, into a typesagent.Worker.
-func DecodeWorker(v vm.Value) (typesagent.Worker, error) {
-	return decodeWorker(v, "agentWorker")
-}
-
-func decodeWorker(v vm.Value, path string) (typesagent.Worker, error) {
-	var out typesagent.Worker
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "AgentWorker", v)
-	}
-	hasType := false
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "type":
-			hasType = true
-			sType, err := decodeEnum(item, path+".type", "WorkerType", enumWorkerTypeValues)
-			if err != nil {
-				return out, err
-			}
-			out.Type = typesagent.WorkerType(sType)
-		case "reason":
-			sReason, err := decodeString(item, path+".reason")
-			if err != nil {
-				return out, err
-			}
-			out.Reason = sReason
-		default:
-			return out, unknownMember(path, "AgentWorker", key)
-		}
-	}
-	if !hasType {
-		return out, missingMember(path, "AgentWorker", "type")
-	}
-	return out, nil
-}
-
 // DecodeBaseBranch decodes a Buzz BaseBranch, an object instance or a map, into a types.BaseBranch.
 func DecodeBaseBranch(v vm.Value) (types.BaseBranch, error) {
 	return decodeBaseBranch(v, "baseBranch")
@@ -3621,75 +3506,6 @@ func decodeJobIntegration(v vm.Value, path string) (types.JobIntegration, error)
 			out.ObservedGeneration = int(nObservedGeneration)
 		default:
 			return out, unknownMember(path, "JobIntegration", key)
-		}
-	}
-	return out, nil
-}
-
-// DecodeJobModelTier decodes a Buzz JobModelTier, an object instance or a map, into a typesagent.JobModelTier.
-func DecodeJobModelTier(v vm.Value) (typesagent.JobModelTier, error) {
-	return decodeJobModelTier(v, "jobModelTier")
-}
-
-func decodeJobModelTier(v vm.Value, path string) (typesagent.JobModelTier, error) {
-	var out typesagent.JobModelTier
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "JobModelTier", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "name":
-			sName, err := decodeString(item, path+".name")
-			if err != nil {
-				return out, err
-			}
-			out.Name = sName
-		case "rank":
-			nRank, err := decodeInt(item, path+".rank")
-			if err != nil {
-				return out, err
-			}
-			out.Rank = int(nRank)
-		case "skills":
-			sSkills, err := decodeEnum(item, path+".skills", "SkillVariant", enumSkillVariantValues)
-			if err != nil {
-				return out, err
-			}
-			out.Skills = typesagent.SkillVariant(sSkills)
-		case "source":
-			sSource, err := decodeEnum(item, path+".source", "ModelTierSource", enumModelTierSourceValues)
-			if err != nil {
-				return out, err
-			}
-			out.Source = typesagent.ModelTierSource(sSource)
-		case "reason":
-			sReason, err := decodeString(item, path+".reason")
-			if err != nil {
-				return out, err
-			}
-			out.Reason = sReason
-		case "site":
-			sSite, err := decodeString(item, path+".site")
-			if err != nil {
-				return out, err
-			}
-			out.Site = sSite
-		case "model":
-			sModel, err := decodeString(item, path+".model")
-			if err != nil {
-				return out, err
-			}
-			out.Model = sModel
-		case "shared":
-			strsShared, err := decodeStringList(item, path+".shared")
-			if err != nil {
-				return out, err
-			}
-			out.Shared = strsShared
-		default:
-			return out, unknownMember(path, "JobModelTier", key)
 		}
 	}
 	return out, nil
@@ -8753,6 +8569,190 @@ func decodeMagusDiffOptions(v vm.Value, path string) (types.MagusDiffOptions, er
 		default:
 			return out, unknownMember(path, "DiffOptions", key)
 		}
+	}
+	return out, nil
+}
+
+// DecodeJobModelTier decodes a Buzz JobModelTier, an object instance or a map, into a typesagent.JobModelTier.
+func DecodeJobModelTier(v vm.Value) (typesagent.JobModelTier, error) {
+	return decodeJobModelTier(v, "jobModelTier")
+}
+
+func decodeJobModelTier(v vm.Value, path string) (typesagent.JobModelTier, error) {
+	var out typesagent.JobModelTier
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "JobModelTier", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			sName, err := decodeString(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "rank":
+			nRank, err := decodeInt(item, path+".rank")
+			if err != nil {
+				return out, err
+			}
+			out.Rank = int(nRank)
+		case "skills":
+			sSkills, err := decodeEnum(item, path+".skills", "SkillVariant", enumSkillVariantValues)
+			if err != nil {
+				return out, err
+			}
+			out.Skills = typesagent.SkillVariant(sSkills)
+		case "source":
+			sSource, err := decodeEnum(item, path+".source", "ModelTierSource", enumModelTierSourceValues)
+			if err != nil {
+				return out, err
+			}
+			out.Source = typesagent.ModelTierSource(sSource)
+		case "reason":
+			sReason, err := decodeString(item, path+".reason")
+			if err != nil {
+				return out, err
+			}
+			out.Reason = sReason
+		case "site":
+			sSite, err := decodeString(item, path+".site")
+			if err != nil {
+				return out, err
+			}
+			out.Site = sSite
+		case "model":
+			sModel, err := decodeString(item, path+".model")
+			if err != nil {
+				return out, err
+			}
+			out.Model = sModel
+		case "shared":
+			strsShared, err := decodeStringList(item, path+".shared")
+			if err != nil {
+				return out, err
+			}
+			out.Shared = strsShared
+		default:
+			return out, unknownMember(path, "JobModelTier", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeModel decodes a Buzz Model, an object instance or a map, into a typesagent.Model.
+func DecodeModel(v vm.Value) (typesagent.Model, error) {
+	return decodeModel(v, "model")
+}
+
+func decodeModel(v vm.Value, path string) (typesagent.Model, error) {
+	var out typesagent.Model
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Model", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "id":
+			sID, err := decodeString(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "tier":
+			sTier, err := decodeString(item, path+".tier")
+			if err != nil {
+				return out, err
+			}
+			out.Tier = sTier
+		default:
+			return out, unknownMember(path, "Model", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeSpec decodes a Buzz Spec, an object instance or a map, into a typesagent.Spec.
+func DecodeSpec(v vm.Value) (typesagent.Spec, error) {
+	return decodeSpec(v, "spec")
+}
+
+func decodeSpec(v vm.Value, path string) (typesagent.Spec, error) {
+	var out typesagent.Spec
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Spec", v)
+	}
+	hasWorker := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "model":
+			xModel, err := decodeModel(item, path+".model")
+			if err != nil {
+				return out, err
+			}
+			out.Model = xModel
+		case "instructions":
+			sInstructions, err := decodeString(item, path+".instructions")
+			if err != nil {
+				return out, err
+			}
+			out.Instructions = sInstructions
+		case "worker":
+			hasWorker = true
+			xWorker, err := decodeWorker(item, path+".worker")
+			if err != nil {
+				return out, err
+			}
+			out.Worker = xWorker
+		default:
+			return out, unknownMember(path, "Spec", key)
+		}
+	}
+	if !hasWorker {
+		return out, missingMember(path, "Spec", "worker")
+	}
+	return out, nil
+}
+
+// DecodeWorker decodes a Buzz Worker, an object instance or a map, into a typesagent.Worker.
+func DecodeWorker(v vm.Value) (typesagent.Worker, error) {
+	return decodeWorker(v, "worker")
+}
+
+func decodeWorker(v vm.Value, path string) (typesagent.Worker, error) {
+	var out typesagent.Worker
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Worker", v)
+	}
+	hasType := false
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "type":
+			hasType = true
+			sType, err := decodeEnum(item, path+".type", "WorkerType", enumWorkerTypeValues)
+			if err != nil {
+				return out, err
+			}
+			out.Type = typesagent.WorkerType(sType)
+		case "reason":
+			sReason, err := decodeString(item, path+".reason")
+			if err != nil {
+				return out, err
+			}
+			out.Reason = sReason
+		default:
+			return out, unknownMember(path, "Worker", key)
+		}
+	}
+	if !hasType {
+		return out, missingMember(path, "Worker", "type")
 	}
 	return out, nil
 }
