@@ -76,6 +76,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ConformanceCeiling", Zero: types.ConformanceCeiling{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectConformanceCeiling(v.(types.ConformanceCeiling), enums)
 	}},
+	{Name: "ConformanceDistribution", Zero: types.ConformanceDistribution{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectConformanceDistribution(v.(types.ConformanceDistribution), enums)
+	}},
 	{Name: "ConformanceImport", Zero: types.ConformanceImport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceImport(v.(types.ConformanceImport)) }},
 	{Name: "ConformanceItem", Zero: types.ConformanceItem{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectConformanceItem(v.(types.ConformanceItem)) }},
 	{Name: "ConformanceKey", Zero: types.ConformanceKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -86,9 +89,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	}},
 	{Name: "ConformanceReport", Zero: types.ConformanceReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectConformanceReport(v.(types.ConformanceReport), enums)
-	}},
-	{Name: "ConformanceRow", Zero: types.ConformanceRow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectConformanceRow(v.(types.ConformanceRow), enums)
 	}},
 	{Name: "ConformanceUnmeasured", Zero: types.ConformanceUnmeasured{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectConformanceUnmeasured(v.(types.ConformanceUnmeasured))
@@ -438,7 +438,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "TierGateStep", Zero: types.TierGateStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierGateStep(v.(types.TierGateStep)) }},
 	{Name: "TierReport", Zero: types.TierReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierReport(v.(types.TierReport), enums) }},
 	{Name: "ToolReport", Zero: types.ToolReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolReport(v.(types.ToolReport)) }},
-	{Name: "ToolRow", Zero: types.ToolRow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolRow(v.(types.ToolRow)) }},
+	{Name: "ToolStatus", Zero: types.ToolStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolStatus(v.(types.ToolStatus)) }},
 	{Name: "Trail", Zero: trail.Trail{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrail(v.(trail.Trail)) }},
 	{Name: "Trend", Zero: types.Trend{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrend(v.(types.Trend)) }},
 	{Name: "TrendEntry", Zero: types.TrendEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrendEntry(v.(types.TrendEntry)) }},

@@ -560,7 +560,7 @@ func ObjectJobClaim(v types.JobClaim, enums ffi.EnumCases) vm.Value {
 func ObjectJobDeferred(v types.JobDeferred) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("item", vm.StringValue(v.Item))
-	out.MapSet("row", vm.StringValue(v.Row))
+	out.MapSet("job", vm.StringValue(v.Job))
 	out.MapSet("reason", vm.StringValue(v.Reason))
 	return out
 }
@@ -1117,11 +1117,11 @@ func ObjectJobUnmerged(v types.JobUnmerged) vm.Value {
 func ObjectJobUnmergedReport(v types.JobUnmergedReport) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("branch", vm.StringValue(v.Branch))
-	itemsRows := make([]vm.Value, len(v.Rows))
-	for indexRows := range v.Rows {
-		itemsRows[indexRows] = ObjectJobUnmerged(v.Rows[indexRows])
+	itemsJobs := make([]vm.Value, len(v.Jobs))
+	for indexJobs := range v.Jobs {
+		itemsJobs[indexJobs] = ObjectJobUnmerged(v.Jobs[indexJobs])
 	}
-	out.MapSet("rows", vm.ListValue(itemsRows))
+	out.MapSet("jobs", vm.ListValue(itemsJobs))
 	itemsRisks := make([]vm.Value, len(v.Risks))
 	for indexRisks := range v.Risks {
 		itemsRisks[indexRisks] = ObjectJobUnmerged(v.Risks[indexRisks])
@@ -1246,11 +1246,11 @@ func ObjectModelTierRecord(v types.ModelTierRecord, enums ffi.EnumCases) vm.Valu
 func ObjectModelTiers(v types.ModelTiers, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
-	itemsRows := make([]vm.Value, len(v.Rows))
-	for indexRows := range v.Rows {
-		itemsRows[indexRows] = ObjectModelTierRecord(v.Rows[indexRows], enums)
+	itemsModels := make([]vm.Value, len(v.Models))
+	for indexModels := range v.Models {
+		itemsModels[indexModels] = ObjectModelTierRecord(v.Models[indexModels], enums)
 	}
-	out.MapSet("rows", vm.ListValue(itemsRows))
+	out.MapSet("models", vm.ListValue(itemsModels))
 	return out
 }
 
@@ -1314,11 +1314,11 @@ func ObjectGrouping(v types.Grouping, enums ffi.EnumCases) vm.Value {
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	out.MapSet("minSample", vm.IntValue(int64(v.MinSample)))
 	out.MapSet("unclassified", vm.IntValue(int64(v.Unclassified)))
-	itemsRows := make([]vm.Value, len(v.Rows))
-	for indexRows := range v.Rows {
-		itemsRows[indexRows] = ObjectGroupingRecord(v.Rows[indexRows], enums)
+	itemsShapes := make([]vm.Value, len(v.Shapes))
+	for indexShapes := range v.Shapes {
+		itemsShapes[indexShapes] = ObjectGroupingRecord(v.Shapes[indexShapes], enums)
 	}
-	out.MapSet("rows", vm.ListValue(itemsRows))
+	out.MapSet("shapes", vm.ListValue(itemsShapes))
 	return out
 }
 
@@ -2777,7 +2777,7 @@ func ObjectConformanceItem(v types.ConformanceItem) vm.Value {
 	return out
 }
 
-func ObjectConformanceRow(v types.ConformanceRow, enums ffi.EnumCases) vm.Value {
+func ObjectConformanceDistribution(v types.ConformanceDistribution, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("key", ObjectConformanceKey(v.Key, enums))
 	out.MapSet("n", vm.IntValue(int64(v.N)))
@@ -2837,11 +2837,11 @@ func ObjectConformancePackage(v types.ConformancePackage) vm.Value {
 func ObjectConformanceReport(v types.ConformanceReport, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Conformance.Definition))
-	itemsRows := make([]vm.Value, len(v.Conformance.Rows))
-	for indexRows := range v.Conformance.Rows {
-		itemsRows[indexRows] = ObjectConformanceRow(v.Conformance.Rows[indexRows], enums)
+	itemsDistributions := make([]vm.Value, len(v.Conformance.Distributions))
+	for indexDistributions := range v.Conformance.Distributions {
+		itemsDistributions[indexDistributions] = ObjectConformanceDistribution(v.Conformance.Distributions[indexDistributions], enums)
 	}
-	out.MapSet("rows", vm.ListValue(itemsRows))
+	out.MapSet("distributions", vm.ListValue(itemsDistributions))
 	out.MapSet("excluded", vm.IntValue(int64(v.Conformance.Excluded)))
 	out.MapSet("answer", ObjectKnowledgeAnswer(v.Conformance.Answer, enums))
 	out.MapSet("base", vm.StringValue(v.Conformance.Base))
@@ -3698,11 +3698,11 @@ func ObjectCommitRecord(v types.CommitRecord) vm.Value {
 func ObjectConformance(v types.Conformance, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
-	itemsRows := make([]vm.Value, len(v.Rows))
-	for indexRows := range v.Rows {
-		itemsRows[indexRows] = ObjectConformanceRow(v.Rows[indexRows], enums)
+	itemsDistributions := make([]vm.Value, len(v.Distributions))
+	for indexDistributions := range v.Distributions {
+		itemsDistributions[indexDistributions] = ObjectConformanceDistribution(v.Distributions[indexDistributions], enums)
 	}
-	out.MapSet("rows", vm.ListValue(itemsRows))
+	out.MapSet("distributions", vm.ListValue(itemsDistributions))
 	out.MapSet("excluded", vm.IntValue(int64(v.Excluded)))
 	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer, enums))
 	out.MapSet("base", vm.StringValue(v.Base))
@@ -5277,7 +5277,7 @@ func ObjectTargetGraphOutput(v types.TargetGraphOutput) vm.Value {
 	return out
 }
 
-func ObjectToolRow(v types.ToolRow) vm.Value {
+func ObjectToolStatus(v types.ToolStatus) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StringValue(v.Project))
 	out.MapSet("bin", vm.StringValue(v.Bin))
@@ -5303,7 +5303,7 @@ func ObjectToolReport(v types.ToolReport) vm.Value {
 	out.MapSet("lifecycle", ObjectLifecycleStatus(v.Lifecycle))
 	itemsTools := make([]vm.Value, len(v.Tools))
 	for indexTools := range v.Tools {
-		itemsTools[indexTools] = ObjectToolRow(v.Tools[indexTools])
+		itemsTools[indexTools] = ObjectToolStatus(v.Tools[indexTools])
 	}
 	out.MapSet("tools", vm.ListValue(itemsTools))
 	return out
@@ -5691,6 +5691,34 @@ func ObjectHarness(v types.Harness) vm.Value {
 	return out
 }
 
+func ObjectPrice(v types.Price) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("input", vm.FloatValue(float64(v.Input)))
+	out.MapSet("cacheWrite5m", vm.FloatValue(float64(v.CacheWrite5m)))
+	out.MapSet("cacheWrite1h", vm.FloatValue(float64(v.CacheWrite1h)))
+	out.MapSet("cacheRead", vm.FloatValue(float64(v.CacheRead)))
+	out.MapSet("output", vm.FloatValue(float64(v.Output)))
+	return out
+}
+
+func ObjectPriceStep(v types.PriceStep) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("above", vm.IntValue(int64(v.Above)))
+	out.MapSet("multiplier", vm.FloatValue(float64(v.Multiplier)))
+	return out
+}
+
+func ObjectHarnessModel(v types.HarnessModel) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StringValue(v.ID))
+	out.MapSet("tier", vm.StringValue(v.Tier))
+	out.MapSet("alias", vm.StringValue(v.Alias))
+	out.MapSet("window", vm.IntValue(int64(v.Window)))
+	out.MapSet("price", ObjectPrice(v.Price))
+	out.MapSet("step", ObjectPriceStep(v.Step))
+	return out
+}
+
 func ObjectHarnessSkills(v types.HarnessSkills, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	itemsPaths := make([]vm.Value, len(v.Paths))
@@ -5713,11 +5741,11 @@ func ObjectHarnessTool(v types.HarnessTool, enums ffi.EnumCases) vm.Value {
 func ObjectHarnessTools(v types.HarnessTools, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("dir", vm.StringValue(v.Dir))
-	itemsRows := make([]vm.Value, len(v.Rows))
-	for indexRows := range v.Rows {
-		itemsRows[indexRows] = ObjectHarnessTool(v.Rows[indexRows], enums)
+	itemsTools := make([]vm.Value, len(v.Tools))
+	for indexTools := range v.Tools {
+		itemsTools[indexTools] = ObjectHarnessTool(v.Tools[indexTools], enums)
 	}
-	out.MapSet("rows", vm.ListValue(itemsRows))
+	out.MapSet("tools", vm.ListValue(itemsTools))
 	return out
 }
 
@@ -5894,34 +5922,6 @@ func ObjectMcpServer(v types.McpServer, enums ffi.EnumCases) vm.Value {
 		itemsRegister[indexRegister] = vm.StringValue(v.Register[indexRegister])
 	}
 	out.MapSet("register", vm.ListValue(itemsRegister))
-	return out
-}
-
-func ObjectPrice(v types.Price) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("input", vm.FloatValue(float64(v.Input)))
-	out.MapSet("cacheWrite5m", vm.FloatValue(float64(v.CacheWrite5m)))
-	out.MapSet("cacheWrite1h", vm.FloatValue(float64(v.CacheWrite1h)))
-	out.MapSet("cacheRead", vm.FloatValue(float64(v.CacheRead)))
-	out.MapSet("output", vm.FloatValue(float64(v.Output)))
-	return out
-}
-
-func ObjectPriceStep(v types.PriceStep) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("above", vm.IntValue(int64(v.Above)))
-	out.MapSet("multiplier", vm.FloatValue(float64(v.Multiplier)))
-	return out
-}
-
-func ObjectModelRow(v types.ModelRow) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("id", vm.StringValue(v.ID))
-	out.MapSet("tier", vm.StringValue(v.Tier))
-	out.MapSet("alias", vm.StringValue(v.Alias))
-	out.MapSet("window", vm.IntValue(int64(v.Window)))
-	out.MapSet("price", ObjectPrice(v.Price))
-	out.MapSet("step", ObjectPriceStep(v.Step))
 	return out
 }
 
