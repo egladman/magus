@@ -1,6 +1,7 @@
 package job
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -34,6 +35,19 @@ func (s *jobRecordReadSuite) TestAListedSpellingReadsAsItsValue() {
 
 	s.Require().NoError(err)
 	s.Equal(agent.ModelTierSourceMatrix, got.ModelTier.Source)
+}
+
+func (s *jobRecordReadSuite) TestAFlatRowSourceMigratesToJob() {
+	st := tempStore(s.T(), s.T().TempDir())
+	st.notices, st.migrations = &bytes.Buffer{}, jobMigrations
+	plantRaw(s.T(), st, `{"api_version":"magus.job/v1alpha1"}`+"\n"+
+		`{"id":"a","state":"running","created":1,"updated":1,"model_tier":{"name":"bounded","rank":1,"skills":"short","source":"row"}}`)
+
+	f, err := st.read()
+
+	s.Require().NoError(err)
+	s.Require().Len(f.Jobs, 1)
+	s.Equal(&agent.JobModelTier{Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceJob}, f.Jobs[0].ModelTier)
 }
 
 func (s *jobRecordReadSuite) TestAnEmptySpellingReadsEmpty() {
