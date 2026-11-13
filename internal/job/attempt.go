@@ -122,21 +122,25 @@ func recordAttempt(a types.Attempt) attemptRecord {
 	return attemptRecord{TypeMeta: attemptType, Spec: attemptSpec{Job: a.Job, N: a.N}, Status: st}
 }
 
-// attempt is r as the domain type.
-func (r attemptRecord) attempt() types.Attempt {
+// attempt is r as the domain type, refusing a stored spelling no enum lists.
+func (r attemptRecord) attempt() (types.Attempt, error) {
 	st := r.Status
+	var bad wireReads
 	s := types.AttemptStatus{
-		Started: st.Started, Ended: st.Ended, End: wireAttemptEnd.read(st.End), Result: st.Result.result(),
-		State: wireJobState.read(st.JobState), ObservedGeneration: st.ObservedGeneration, EndReason: st.EndReason,
+		Started: st.Started, Ended: st.Ended, End: wireAttemptEnd.read(st.End, &bad), Result: st.Result.result(),
+		State: wireJobState.read(st.JobState, &bad), ObservedGeneration: st.ObservedGeneration, EndReason: st.EndReason,
 		ModelTier: st.ModelTier, Checkpoint: st.Checkpoint, ReportedBase: st.ReportedBase,
 		ReworkRounds: st.ReworkRounds, Widenings: st.Widenings, Unmet: verifications(st.Unmet),
 		Violations: st.Violations, FailingRefs: st.FailingRefs, DenialsKnown: st.DenialsKnown,
-		Retry: types.RetryVerdict{Retryable: st.Retry.Retryable, Change: wireRetryChange.read(st.Retry.Change), Reason: st.Retry.Reason, Code: st.Retry.Code},
+		Retry: types.RetryVerdict{Retryable: st.Retry.Retryable, Change: wireRetryChange.read(st.Retry.Change, &bad), Reason: st.Retry.Reason, Code: st.Retry.Code},
+	}
+	if err := bad.err(); err != nil {
+		return types.Attempt{}, fmt.Errorf("attempt %d of job %s: %w", r.Spec.N, r.Spec.Job, err)
 	}
 	for _, d := range st.Denials {
 		s.Denials = append(s.Denials, types.JobDenial(d))
 	}
-	return types.Attempt{Job: r.Spec.Job, N: r.Spec.N, Status: s}.Clone()
+	return types.Attempt{Job: r.Spec.Job, N: r.Spec.N, Status: s}.Clone(), nil
 }
 
 func recordResult(r *types.JobResult) *resultRecord {
@@ -251,7 +255,11 @@ func (s *Store) Attempts() ([]types.Attempt, error) {
 		if err := refuseAttemptVersion(r); err != nil {
 			return nil, err
 		}
-		out = append(out, r.attempt())
+		a, err := r.attempt()
+		if err != nil {
+			return nil, fmt.Errorf("job: %w", err)
+		}
+		out = append(out, a)
 	}
 	return out, nil
 }
@@ -287,7 +295,11 @@ func (s *Store) changeLiveAttempt(ctx context.Context, id string, change func(*t
 			if failed = refuseAttemptVersion(r); failed != nil {
 				return nil
 			}
-			all = append(all, r.attempt())
+			var a types.Attempt
+			if a, failed = r.attempt(); failed != nil {
+				return nil
+			}
+			all = append(all, a)
 		}
 		live = types.NewJobAttempts(all).Live(id)
 		if !change(&live) {

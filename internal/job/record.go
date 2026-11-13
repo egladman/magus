@@ -1,7 +1,9 @@
 package job
 
 import (
+	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -196,8 +198,12 @@ func (r jobRecord) job() (types.Job, error) {
 	if err != nil {
 		return types.Job{}, fmt.Errorf("job %s: %w", r.Metadata.Name, err)
 	}
-	row := r.Spec.job()
-	r.Status.populate(&row)
+	var bad wireReads
+	row := r.Spec.job(&bad)
+	r.Status.populate(&row, &bad)
+	if err := bad.err(); err != nil {
+		return types.Job{}, fmt.Errorf("job %s: %w", r.Metadata.Name, err)
+	}
 	row.ID, row.Generation, row.State = r.Metadata.Name, int(r.Metadata.Generation), state
 	for _, f := range r.Metadata.Requires(recordGroup) {
 		row.Requires = append(row.Requires, string(f))
@@ -207,12 +213,12 @@ func (r jobRecord) job() (types.Job, error) {
 }
 
 // job is s as the declared members of a domain row.
-func (s jobSpec) job() types.Job {
+func (s jobSpec) job(bad *wireReads) types.Job {
 	row := types.Job{
-		Parent: s.Parent, Agent: s.Agent.spec(), Checkpoint: s.Checkpoint,
+		Parent: s.Parent, Agent: s.Agent.spec(bad), Checkpoint: s.Checkpoint,
 		WritePaths: s.WritePaths, DenyPaths: s.DenyPaths, SoftPaths: s.SoftPaths, ReadPaths: s.ReadPaths,
 		DependsOn: s.DependsOn, Integrates: s.Integrates, Breaks: s.Breaks,
-		BriefFormat: wireBriefFormat.read(s.BriefFormat), Delivery: s.Delivery, ParentHead: s.ParentHead,
+		BriefFormat: wireBriefFormat.read(s.BriefFormat, bad), Delivery: s.Delivery, ParentHead: s.ParentHead,
 		Follows: s.Follows, MaxAttempts: s.MaxAttempts, MaxClaims: s.MaxClaims,
 		Deferred: s.Deferred, LeftUnmerged: s.LeftUnmerged, Weight: s.Weight,
 		Validation: s.Validation, ReadOnly: s.ReadOnly, Deviations: s.Deviations,
@@ -222,35 +228,35 @@ func (s jobSpec) job() types.Job {
 		row.Check = &c
 	}
 	for _, g := range s.Goals {
-		row.Goals = append(row.Goals, g.goal())
+		row.Goals = append(row.Goals, g.goal(bad))
 	}
 	return row
 }
 
 // populate sets the computed members of row from st.
-func (st jobStatus) populate(row *types.Job) {
-	row.ModelTier = st.ModelTier.tier()
+func (st jobStatus) populate(row *types.Job, bad *wireReads) {
+	row.ModelTier = st.ModelTier.tier(bad)
 	row.ReworkRounds, row.Widenings, row.Landed = st.ReworkRounds, st.Widenings, st.Landed
-	row.Paused, row.PausedBy, row.PauseReason, row.PausedUntil = st.Paused, st.PausedBy.origin(), st.PauseReason, st.PausedUntil
+	row.Paused, row.PausedBy, row.PauseReason, row.PausedUntil = st.Paused, st.PausedBy.origin(bad), st.PauseReason, st.PausedUntil
 	row.Rejection = st.Rejection.rejection()
 	row.Unattributed, row.ReleaseRequests = st.Unattributed, st.ReleaseRequests
-	row.WriteProof, row.Validated = wireWriteProof.read(st.WriteProof), st.Validated
-	row.ReportedBase, row.BaseVerdict = st.ReportedBase, wireBaseVerdict.read(st.BaseVerdict)
-	row.RegisteredBy, row.Authority, row.Registered = st.RegisteredBy.origin(), st.Authority, st.Registered
+	row.WriteProof, row.Validated = wireWriteProof.read(st.WriteProof, bad), st.Validated
+	row.ReportedBase, row.BaseVerdict = st.ReportedBase, wireBaseVerdict.read(st.BaseVerdict, bad)
+	row.RegisteredBy, row.Authority, row.Registered = st.RegisteredBy.origin(bad), st.Authority, st.Registered
 	row.HolderStopped, row.CheckoutRoot, row.EndReason = st.HolderStopped, st.CheckoutRoot, st.EndReason
 	row.Created, row.Updated, row.Deadline = st.Created, st.Updated, st.Deadline
 	row.Integration, row.WaiterEvidence = st.Integration.integration(), st.WaiterEvidence.integration()
 	for _, c := range st.Claims {
 		row.Claims = append(row.Claims, types.JobClaim{
-			Path: c.Path, Evidence: types.ClaimEvidence{Kind: wireClaimKind.read(c.Evidence.Kind), Subject: c.Evidence.Subject},
-			Proof: c.Proof, At: c.At, By: c.By.origin(),
+			Path: c.Path, Evidence: types.ClaimEvidence{Kind: wireClaimKind.read(c.Evidence.Kind, bad), Subject: c.Evidence.Subject},
+			Proof: c.Proof, At: c.At, By: c.By.origin(bad),
 		})
 	}
 	for _, rel := range st.Releases {
 		row.Releases = append(row.Releases, types.JobRelease(rel))
 	}
 	for _, e := range st.Entries {
-		row.Entries = append(row.Entries, types.JobEntry{Path: e.Path, By: e.By.origin(), At: e.At, Consumed: e.Consumed})
+		row.Entries = append(row.Entries, types.JobEntry{Path: e.Path, By: e.By.origin(bad), At: e.At, Consumed: e.Consumed})
 	}
 	if st.Worktree != nil {
 		w := types.JobWorktree(*st.Worktree)
@@ -356,11 +362,17 @@ func lifecycleState(conditions []apiversion.Condition) (types.JobState, error) {
 }
 
 // wireEnum spells an enum's lowercase Go values in CamelCase on a record.
-// A value it does not list passes through both ways unchanged.
+// It writes a value it does not list unchanged, and refuses to read one.
 type wireEnum[T ~string] struct {
 	wire map[T]string
 	gov  map[string]T
 }
+
+// wireReads collects the stored spellings no wireEnum lists, so a record
+// carrying one is refused with an error rather than read.
+type wireReads struct{ errs []error }
+
+func (r *wireReads) err() error { return errors.Join(r.errs...) }
 
 func newWireEnum[T ~string](values ...T) wireEnum[T] {
 	e := wireEnum[T]{wire: map[T]string{}, gov: map[string]T{}}
@@ -378,11 +390,14 @@ func (e wireEnum[T]) spell(v T) string {
 	return string(v)
 }
 
-func (e wireEnum[T]) read(w string) T {
-	if v, ok := e.gov[w]; ok {
+// read is the value w spells, empty for an empty w. A spelling e does not
+// list goes on bad: passed on, it reached a Buzz enum conversion that panics.
+func (e wireEnum[T]) read(w string, bad *wireReads) T {
+	if v, ok := e.gov[w]; ok || w == "" {
 		return v
 	}
-	return T(w)
+	bad.errs = append(bad.errs, fmt.Errorf("%q is not a stored %s", w, reflect.TypeFor[T]().Name()))
+	return ""
 }
 
 // camelCase spells words joined by '_' or '-' as one CamelCase word.
@@ -430,12 +445,12 @@ func recordAgent(s *agent.Spec) *agentRecord {
 		Worker: workerRecord{Type: wireWorkerType.spell(s.Worker.Type), Reason: s.Worker.Reason}}
 }
 
-func (r *agentRecord) spec() *agent.Spec {
+func (r *agentRecord) spec(bad *wireReads) *agent.Spec {
 	if r == nil {
 		return nil
 	}
 	return &agent.Spec{Model: r.Model, Instructions: r.Instructions,
-		Worker: agent.Worker{Type: wireWorkerType.read(r.Worker.Type), Reason: r.Worker.Reason}}
+		Worker: agent.Worker{Type: wireWorkerType.read(r.Worker.Type, bad), Reason: r.Worker.Reason}}
 }
 
 type leaseCheckRecord struct {
@@ -465,9 +480,9 @@ func recordGoal(g types.Goal) goalRecord {
 		Paths: g.Paths, Symbols: g.Symbols, Signature: g.Signature}
 }
 
-func (r goalRecord) goal() types.Goal {
+func (r goalRecord) goal(bad *wireReads) types.Goal {
 	return types.Goal{ID: r.ID, Description: r.Description, DependsOn: r.DependsOn,
-		Kind: wireGoalKind.read(r.Kind), Expect: wireGoalExpect.read(r.Expect), Check: types.LeaseCheck(r.Check),
+		Kind: wireGoalKind.read(r.Kind, bad), Expect: wireGoalExpect.read(r.Expect, bad), Check: types.LeaseCheck(r.Check),
 		Paths: r.Paths, Symbols: r.Symbols, Signature: r.Signature}
 }
 
@@ -490,11 +505,11 @@ func recordModelTier(t *agent.JobModelTier) *modelTierRecord {
 		Reason: t.Reason, Site: t.Site, Model: t.Model, Shared: t.Shared}
 }
 
-func (r *modelTierRecord) tier() *agent.JobModelTier {
+func (r *modelTierRecord) tier(bad *wireReads) *agent.JobModelTier {
 	if r == nil {
 		return nil
 	}
-	return &agent.JobModelTier{Name: r.Name, Rank: r.Rank, Skills: wireSkills.read(r.Skills), Source: wireTierSource.read(r.Source),
+	return &agent.JobModelTier{Name: r.Name, Rank: r.Rank, Skills: wireSkills.read(r.Skills, bad), Source: wireTierSource.read(r.Source, bad),
 		Reason: r.Reason, Site: r.Site, Model: r.Model, Shared: r.Shared}
 }
 
@@ -522,10 +537,10 @@ func recordOrigin(o types.Origin) originRecord {
 		}}
 }
 
-func (r originRecord) origin() types.Origin {
-	return types.Origin{User: r.User, UID: r.UID, EntryPoint: wireEntryPoint.read(r.EntryPoint), Host: r.Host,
+func (r originRecord) origin(bad *wireReads) types.Origin {
+	return types.Origin{User: r.User, UID: r.UID, EntryPoint: wireEntryPoint.read(r.EntryPoint, bad), Host: r.Host,
 		Session: r.Session, Agent: r.Agent, Credential: types.Credential{
-			Kind: wireCredential.read(r.Credential.Kind), ID: r.Credential.ID, Name: r.Credential.Name, Grant: r.Credential.Grant,
+			Kind: wireCredential.read(r.Credential.Kind, bad), ID: r.Credential.ID, Name: r.Credential.Name, Grant: r.Credential.Grant,
 		}}
 }
 
