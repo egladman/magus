@@ -1701,13 +1701,7 @@ func (s *agentSectionSuite) TestCriteriaAndATierNameMoveUnderAgent() {
 	}, row.Agent)
 	s.Require().NotNil(row.ModelTier)
 	s.Equal("design", row.ModelTier.Name, "the resolved tier stays on the row, respelled by the four-tier migration")
-}
-
-func (s *agentSectionSuite) TestAFlatRowSourceReadsAsTheJobSource() {
-	row := s.migrated(`{"id":"a","state":"running","created":1,"updated":1,"model":"principal",` +
-		`"model_tier":{"name":"principal","rank":2,"skills":"short","source":"row"}}`)
-	s.Require().NotNil(row.ModelTier)
-	s.Equal(agent.ModelTierSourceJob, row.ModelTier.Source)
+	s.Equal(agent.ModelTierSourceJob, row.ModelTier.Source, "the flat source row reads as job")
 }
 
 func (s *agentSectionSuite) TestAModelTheTierMappedBecomesAnID() {
