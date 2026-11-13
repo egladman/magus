@@ -36,8 +36,8 @@ type Settings struct {
 	// Name is the Buzz name, when it differs from the Go name. Only a
 	// type may set it.
 	Name *string `yaml:"name,omitempty"`
-	// Module scopes a mirror to one host module, for two mirrors sharing
-	// a Buzz name.
+	// Module is the import path of the Buzz module a mirror is declared in,
+	// such as http or magus/agent. Empty bundles it where it is reached.
 	Module *string `yaml:"module,omitempty"`
 	// Open is why a named string type crosses as str, not as an enum.
 	Open *string `yaml:"open,omitempty"`
@@ -268,7 +268,7 @@ func (c Config) Types() []TypeRef {
 	var refs []TypeRef
 	for _, path := range sortedKeys(c.Packages) {
 		pkg := c.Packages[path]
-		base := c.Settings.over(pkg.Config)
+		base := c.packageSettings(path)
 		for _, name := range sortedKeys(pkg.Types) {
 			refs = append(refs, TypeRef{Package: path, Name: name, Settings: base.over(pkg.Types[name].Config)})
 		}
@@ -279,8 +279,53 @@ func (c Config) Types() []TypeRef {
 // Ref is the type pkg.name with its settings layered. A type the config
 // does not list takes its package's and the top level's settings.
 func (c Config) Ref(pkg, name string) TypeRef {
-	p := c.Packages[pkg]
-	return TypeRef{Package: pkg, Name: name, Settings: c.Settings.over(p.Config).over(p.Types[name].Config)}
+	return TypeRef{Package: pkg, Name: name, Settings: c.packageSettings(pkg).over(c.Packages[pkg].Types[name].Config)}
+}
+
+// packageSettings layers the top level under the package's config. The top
+// level's module is the root a package's namespace derives from, never a
+// default, so it is dropped.
+func (c Config) packageSettings(path string) Settings {
+	top := c.Settings
+	top.Module = nil
+	out := top.over(c.Packages[path].Config)
+	if out.Module == nil {
+		if derived, ok := c.DerivedModule(path); ok {
+			out.Module = &derived
+		}
+	}
+	return out
+}
+
+// DerivedModule is the module of a package whose config sets none: the
+// top-level module, a slash and the package's last path element. Only a
+// package whose parent package the config lists derives one.
+func (c Config) DerivedModule(path string) (string, bool) {
+	if c.Settings.Module == nil || *c.Settings.Module == "" {
+		return "", false
+	}
+	parent, name, ok := cutLast(path, "/")
+	if _, listed := c.Packages[parent]; !ok || !listed {
+		return "", false
+	}
+	return *c.Settings.Module + "/" + name, true
+}
+
+func cutLast(s, sep string) (before, after string, found bool) {
+	i := strings.LastIndex(s, sep)
+	if i < 0 {
+		return "", s, false
+	}
+	return s[:i], s[i+len(sep):], true
+}
+
+// Namespace is the Buzz namespace the type is declared in, module with each
+// slash a backslash, or "" when it is bundled where it is reached.
+func (r TypeRef) Namespace() string {
+	if r.Settings.Module == nil {
+		return ""
+	}
+	return strings.ReplaceAll(*r.Settings.Module, "/", `\`)
 }
 
 // MirrorName is the struct whose mirror the type crosses as, or "".

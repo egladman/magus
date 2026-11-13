@@ -137,6 +137,31 @@ func (s *ReachSuite) TestAModuleSettingKeepsTwoNamesApart() {
 	s.NoError(r.CheckNames(s.claims(r)))
 }
 
+const derivedReach = "module: shop\npackages:\n  github.com/egladman/magus/libs/gopherbuzz: {}\n"
+
+func (s *ReachSuite) TestADerivedNamespaceQualifiesTheKey() {
+	r := s.reach(derivedReach)
+	r.Walk(reflect.TypeFor[ReachLeaf](), Outbound, "root")
+
+	leaf, ok := s.member(r, reflect.TypeFor[ReachLeaf]())
+	s.Require().True(ok)
+	s.Equal(`shop\buzzgen\ReachLeaf`, leaf.Key())
+	s.NoError(r.CheckNamespaces(func(string) []string { return []string{"other"} }))
+}
+
+func (s *ReachSuite) TestANamespaceThatIsAlsoAParentMemberIsRefused() {
+	r := s.reach(derivedReach)
+	r.Walk(reflect.TypeFor[ReachLeaf](), Outbound, "root")
+
+	var asked string
+	err := r.CheckNamespaces(func(module string) []string {
+		asked = module
+		return []string{"buzzgen"}
+	})
+	s.Equal("shop", asked)
+	s.ErrorContains(err, `namespace shop\buzzgen (reached from root) is also the member buzzgen of module shop`)
+}
+
 func (s *ReachSuite) TestALineForATypeNothingReachesIsRefused() {
 	r := s.reach("packages:\n  " + reachPackage + ":\n    types:\n      ReachResult: {config: {name: Result2}}\n")
 	r.Walk(reflect.TypeFor[ReachLeaf](), Outbound, "root")

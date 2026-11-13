@@ -67,6 +67,49 @@ func (s *ConfigSuite) TestAnUnlistedTypeTakesItsPackageSettings() {
 	s.Equal("WalkStep", cfg.Ref("example.com/a", "Step").BuzzName())
 }
 
+const namespacedConfig = `version: v1alpha1
+module: shop
+packages:
+  example.com/types:
+    types:
+      Job: {}
+  example.com/types/order:
+    types:
+      Step: {}
+  example.com/types/cart:
+    config: {module: ""}
+  example.com/types/image:
+    config: {module: image}
+  example.com/types/till:
+    types:
+      Line: {config: {module: http}}
+`
+
+func (s *ConfigSuite) TestAChildPackageDerivesItsNamespace() {
+	cfg, err := s.parse(namespacedConfig)
+	s.Require().NoError(err)
+	step := cfg.Ref("example.com/types/order", "Step")
+	s.Equal("shop/order", *step.Settings.Module)
+	s.Equal(`shop\order`, step.Namespace())
+	s.Equal(`shop\order`, cfg.Ref("example.com/types/order", "Unlisted").Namespace())
+}
+
+func (s *ConfigSuite) TestTheTopLevelModuleIsNoDefault() {
+	cfg, err := s.parse(namespacedConfig)
+	s.Require().NoError(err)
+	s.Empty(cfg.Ref("example.com/types", "Job").Namespace())
+	s.Empty(cfg.Ref("example.org/other", "T").Namespace(), "a package whose parent is unlisted derives nothing")
+}
+
+func (s *ConfigSuite) TestAPackageModuleWinsOverTheDerivedOne() {
+	cfg, err := s.parse(namespacedConfig)
+	s.Require().NoError(err)
+	s.Equal("image", cfg.Ref("example.com/types/image", "Platform").Namespace())
+	s.Empty(cfg.Ref("example.com/types/cart", "Line").Namespace(), "an empty module keeps the type bundled")
+	s.Equal("http", cfg.Ref("example.com/types/till", "Line").Namespace())
+	s.Equal(`shop\till`, cfg.Ref("example.com/types/till", "Other").Namespace())
+}
+
 func (s *ConfigSuite) TestAMirrorNamesTheRecordATypeCrossesAs() {
 	cfg, err := s.parse("version: v1alpha1\npackages: {p: {types: {Status: {config: {mirror: StatusRecord}}}}}\n")
 	s.Require().NoError(err)

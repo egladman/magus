@@ -190,13 +190,13 @@ type Member struct {
 	Outbound bool
 }
 
-// Key is the member's Buzz name, qualified as module\Name when a module
-// setting scopes it.
+// Key is the member's Buzz name, qualified by its namespace when a module
+// setting scopes it: http\Options, magus\agent\Step.
 func (m Member) Key() string {
-	if m.Ref.Settings.Module == nil || *m.Ref.Settings.Module == "" {
-		return m.Ref.BuzzName()
+	if ns := m.Ref.Namespace(); ns != "" {
+		return fmt.Sprintf(`%s\%s`, ns, m.Ref.BuzzName())
 	}
-	return fmt.Sprintf(`%s\%s`, *m.Ref.Settings.Module, m.Ref.BuzzName())
+	return m.Ref.BuzzName()
 }
 
 // Members is every reached struct, ordered by Key.
@@ -246,6 +246,53 @@ func (r *Reach) CheckNames(claims []Claim) error {
 		owner[c.Key] = c.Type
 	}
 	return errors.Join(errs...)
+}
+
+// CheckNamespaces refuses two packages that derive one module, and a nested
+// module whose last segment members says its parent module already declares.
+// members lists a module's functions and member groups by import path.
+func (r *Reach) CheckNamespaces(members func(module string) []string) error {
+	derivedBy := map[string]string{}
+	modules := map[string]reflect.Type{}
+	var errs []error
+	for _, t := range sortedTypes(r.from) {
+		pkg := t.PkgPath()
+		module := r.cfg.Ref(pkg, goName(t)).Settings.Module
+		if module == nil || *module == "" {
+			continue
+		}
+		if _, seen := modules[*module]; !seen {
+			modules[*module] = t
+		}
+		derived, ok := r.cfg.DerivedModule(pkg)
+		if !ok || r.cfg.Packages[pkg].Config.Module != nil {
+			continue
+		}
+		if prev, taken := derivedBy[derived]; taken && prev != pkg {
+			errs = append(errs, fmt.Errorf("packages %s and %s both derive module %s: set packages.%s.config.module", prev, pkg, derived, pkg))
+			continue
+		}
+		derivedBy[derived] = pkg
+	}
+	for _, module := range sortedKeys(modules) {
+		parent, last, nested := cutLast(module, "/")
+		if nested && slices.Contains(members(parent), last) {
+			errs = append(errs, fmt.Errorf("namespace %s (reached from %s) is also the member %s of module %s: rename one, or set module on the package",
+				strings.ReplaceAll(module, "/", `\`), r.from[modules[module]], last, parent))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func sortedTypes(m map[reflect.Type]string) []reflect.Type {
+	out := make([]reflect.Type, 0, len(m))
+	for t := range m {
+		out = append(out, t)
+	}
+	slices.SortFunc(out, func(a, b reflect.Type) int {
+		return strings.Compare(a.PkgPath()+"."+a.Name(), b.PkgPath()+"."+b.Name())
+	})
+	return out
 }
 
 // CheckListed refuses a config line for a type that does not cross, since
