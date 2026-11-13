@@ -244,7 +244,7 @@ func TestFieldsTemplateNamesTheFieldAndKindItCannotMap(t *testing.T) {
 	var buf strings.Builder
 	err := fieldsTmpl.Execute(&buf, tmplData{Package: "p", Defs: []FlagDef{{YamlPath: "cache.dir", Kind: "mystery"}}})
 	require.Error(t, err)
-	assert.ErrorContains(t, err, `config: field cache.dir has kind "mystery", which has no command.Kind`)
+	assert.ErrorContains(t, err, `render field cache.dir: kind "mystery" has no command.Kind`)
 }
 
 func TestBindOnlyFieldsDropsBoolPtr(t *testing.T) {
