@@ -34,8 +34,8 @@ import (
 	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
@@ -1889,7 +1889,7 @@ func TestJobApplyHelpIsItsRegistryEntry(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 
 	children := jobCommandSpec().Children
-	spec := children[slices.IndexFunc(children, func(c cmdline.Command) bool { return c.Name == "apply" })]
+	spec := children[slices.IndexFunc(children, func(c command.Command) bool { return c.Name == "apply" })]
 	var err error
 	help := captureStderr(t, func() { err = jobApply(t.Context(), "", []string{"-h"}) })
 	require.ErrorIs(t, err, flag.ErrHelp)

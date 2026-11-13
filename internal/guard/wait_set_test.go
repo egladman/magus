@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 type WaitSetSuite struct {
@@ -76,16 +76,16 @@ func (s *WaitSetSuite) TestAnArgvWithNoSubcommandIsNotServed() {
 }
 
 func (s *WaitSetSuite) TestEveryWaitLeafTheTreeDeclaresIsServed() {
-	cmdline.Walk(commands.Root, func(path string, c cmdline.Command) {
+	command.Walk(commands.Root, func(path string, c command.Command) {
 		if len(c.Children) > 0 {
 			return
 		}
 		argv := append([]string{"magus"}, strings.Fields(path)...)
-		if c.Effect == cmdline.EffectWait {
+		if c.Effect == command.EffectWait {
 			s.True(servesWait(argv), path)
 		}
 		for _, f := range c.Flags {
-			if f.Effect == cmdline.EffectWait {
+			if f.Effect == command.EffectWait {
 				s.True(servesWait(append(argv, "--"+f.Name, "1m")), fmt.Sprintf("%s --%s", path, f.Name))
 			}
 		}
@@ -94,7 +94,7 @@ func (s *WaitSetSuite) TestEveryWaitLeafTheTreeDeclaresIsServed() {
 
 func (s *WaitSetSuite) TestTheUndeclaredFormsAreLeavesOfTheTree() {
 	leaf := map[string]bool{}
-	cmdline.Walk(commands.Root, func(path string, c cmdline.Command) {
+	command.Walk(commands.Root, func(path string, c command.Command) {
 		leaf[path] = len(c.Children) == 0
 	})
 	for _, f := range []waitForm{budgetRunForm, budgetAffectedForm, noticeForm} {

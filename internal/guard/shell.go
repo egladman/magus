@@ -23,7 +23,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
@@ -1739,7 +1739,7 @@ func magusHelpRequest(args []string) bool {
 		if a == "help" {
 			return depth <= 1 || len(level) > 0
 		}
-		j := slices.IndexFunc(level, func(cmd cmdline.Command) bool { return cmd.Name == a })
+		j := slices.IndexFunc(level, func(cmd command.Command) bool { return cmd.Name == a })
 		if j < 0 {
 			return false
 		}

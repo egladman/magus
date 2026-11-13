@@ -10,8 +10,8 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/generate/emit"
-	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/generate"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/generate"
 )
 
 // The completion scripts are hand-written shell in four dialects, and the LOGIC in
@@ -39,11 +39,11 @@ func runCompletions(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	return writeCompletions(*outDir, slices.Concat(commands.Root.Children, []cmdline.Command{commands.Help}))
+	return writeCompletions(*outDir, slices.Concat(commands.Root.Children, []command.Command{commands.Help}))
 }
 
 // writeCompletions fills the marked region of each completion script in dir with subs.
-func writeCompletions(dir string, subs []cmdline.Command) error {
+func writeCompletions(dir string, subs []command.Command) error {
 	if len(subs) == 0 {
 		return errors.New("completions: no subcommands to write")
 	}

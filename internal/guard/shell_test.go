@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -2462,9 +2462,9 @@ func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
 	for _, inv := range credentialInvocations {
 		spelled := strings.Join(inv.words, " ")
 		cmds := commands.Root.Children
-		var found *cmdline.Command
+		var found *command.Command
 		for _, w := range inv.words {
-			i := slices.IndexFunc(cmds, func(c cmdline.Command) bool { return c.Name == w })
+			i := slices.IndexFunc(cmds, func(c command.Command) bool { return c.Name == w })
 			if !assert.GreaterOrEqual(t, i, 0, "%q: no command %q in the registry", spelled, w) {
 				found = nil
 				break
@@ -2475,7 +2475,7 @@ func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
 		if found == nil || inv.flag == "" {
 			continue
 		}
-		assert.True(t, slices.ContainsFunc(found.Flags, func(f cmdline.Flag) bool { return f.Name == inv.flag }),
+		assert.True(t, slices.ContainsFunc(found.Flags, func(f command.Flag) bool { return f.Name == inv.flag }),
 			"%q: no flag --%s in the registry", spelled, inv.flag)
 	}
 }

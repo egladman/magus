@@ -10,15 +10,15 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
 )
 
 // jobPinOrAdvance is `magus job pin` and `magus job advance`, which verb says.
 func jobPinOrAdvance(ctx context.Context, root, verb string, args []string) error {
 	spec := jobCommandSpec()
-	child := spec.Children[slices.IndexFunc(spec.Children, func(c cmdline.Command) bool { return c.Name == verb })]
+	child := spec.Children[slices.IndexFunc(spec.Children, func(c command.Command) bool { return c.Name == verb })]
 	ids, err := commandParse("job "+verb, args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: "+child.Usage)

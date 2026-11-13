@@ -60,7 +60,7 @@ Read from the comments beside the keys, 2026-11-07:
 | root    | `libs/figure`                                                              | go-build embeds `figure.buzz`                                                |
 | root    | `libs/embed`                                                               | `go.mod` replaces it with the local module, so its Go builds into magus      |
 | docs    | `../proto`, `../libs/figure`, `../libs/kustomize`                          | API docs, the render and the figures read their files                        |
-| docs    | `../libs/cmdline`, `diagnostics`, `embed`, `scipbuzz`, `xdg`, `gopherbuzz` | generators compile these Go libs into the binaries they run                  |
+| docs    | `../libs/clikit`, `diagnostics`, `embed`, `scipbuzz`, `xdg`, `gopherbuzz`  | generators compile these Go libs into the binaries they run                  |
 
 None of these is "run that project first". Each is either a target the downstream
 needs (proto's `generate`) or files the downstream reads (a Go module, one `.buzz`

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // Page is one rendered page and the file name it belongs under.
@@ -19,7 +19,7 @@ type Page struct {
 // Roff renders section 1 man pages for root: <name>.1 for the program and
 // <name>-<command>.1 for each top-level command. An empty date omits it from the
 // title line, and an empty version leaves the source field as the program name.
-func Roff(root cmdline.Command, date, version string) []Page {
+func Roff(root command.Command, date, version string) []Page {
 	pages := make([]Page, 0, 1+len(root.Children))
 	pages = append(pages, Page{Name: root.Name + ".1", Content: renderMainRoff(root, date, version)})
 	for _, command := range root.Children {
@@ -31,7 +31,7 @@ func Roff(root cmdline.Command, date, version string) []Page {
 	return pages
 }
 
-func renderMainRoff(root cmdline.Command, date, version string) []byte {
+func renderMainRoff(root command.Command, date, version string) []byte {
 	var buf bytes.Buffer
 	w := newWriter(&buf)
 	w.TH(root.Name, "1", date, thSource(root.Name, version), root.Name+" Manual")
@@ -57,7 +57,7 @@ func renderMainRoff(root cmdline.Command, date, version string) []byte {
 	return buf.Bytes()
 }
 
-func renderCommandRoff(root, command cmdline.Command, date, version string) []byte {
+func renderCommandRoff(root, command command.Command, date, version string) []byte {
 	var buf bytes.Buffer
 	w := newWriter(&buf)
 	pageName := fmt.Sprintf("%s-%s", root.Name, command.Name)
@@ -121,7 +121,7 @@ func writeSynopsisRoff(buf *bytes.Buffer, usage string) {
 
 // writeChildFlagsRoff emits an options section for every descendant that
 // declares flags, naming each by its full path.
-func writeChildFlagsRoff(w *writer, path string, children []cmdline.Command) {
+func writeChildFlagsRoff(w *writer, path string, children []command.Command) {
 	for _, child := range children {
 		sub := fmt.Sprintf("%s %s", path, child.Name)
 		if len(child.Flags) > 0 {
@@ -132,7 +132,7 @@ func writeChildFlagsRoff(w *writer, path string, children []cmdline.Command) {
 	}
 }
 
-func writeFlagListRoff(w *writer, command cmdline.Command) {
+func writeFlagListRoff(w *writer, command command.Command) {
 	w.Indent()
 	for _, h := range flagHelp(command) {
 		w.TP(roffFlagLabel(h), escape(h.Usage))
@@ -140,21 +140,21 @@ func writeFlagListRoff(w *writer, command cmdline.Command) {
 	w.Dedent()
 }
 
-// flagHelp binds command's flags on a throwaway FlagSet and describes them sorted.
-func flagHelp(command cmdline.Command) []cmdline.Help {
-	fs := flag.NewFlagSet(command.Name, flag.ContinueOnError)
-	command.BindFlags(fs)
-	return cmdline.FlagHelp(fs, nil)
+// flagHelp binds c's flags on a throwaway FlagSet and describes them sorted.
+func flagHelp(c command.Command) []command.Help {
+	fs := flag.NewFlagSet(c.Name, flag.ContinueOnError)
+	c.BindFlags(fs)
+	return command.FlagHelp(fs, nil)
 }
 
 // visitFlags binds command's flags on a throwaway FlagSet and visits them sorted.
-func visitFlags(command cmdline.Command, visit func(*flag.Flag)) {
+func visitFlags(command command.Command, visit func(*flag.Flag)) {
 	fs := flag.NewFlagSet(command.Name, flag.ContinueOnError)
 	command.BindFlags(fs)
 	fs.VisitAll(visit)
 }
 
-func writeExitStatusRoff(w *writer, codes []cmdline.ExitCode) {
+func writeExitStatusRoff(w *writer, codes []command.ExitCode) {
 	if len(codes) == 0 {
 		return
 	}
@@ -166,7 +166,7 @@ func writeExitStatusRoff(w *writer, codes []cmdline.ExitCode) {
 	w.Dedent()
 }
 
-func writeEnvSectionRoff(w *writer, env []cmdline.Env) {
+func writeEnvSectionRoff(w *writer, env []command.Env) {
 	if len(env) == 0 {
 		return
 	}
@@ -185,7 +185,7 @@ func writeEnvSectionRoff(w *writer, env []cmdline.Env) {
 	w.Dedent()
 }
 
-func writeFilesSectionRoff(w *writer, files []cmdline.File) {
+func writeFilesSectionRoff(w *writer, files []command.File) {
 	if len(files) == 0 {
 		return
 	}
@@ -195,7 +195,7 @@ func writeFilesSectionRoff(w *writer, files []cmdline.File) {
 	}
 }
 
-func writeSeeAlsoRoff(w *writer, buf *bytes.Buffer, root cmdline.Command, current string) {
+func writeSeeAlsoRoff(w *writer, buf *bytes.Buffer, root command.Command, current string) {
 	w.SH("See Also")
 	refs := make([]string, 0, 1+len(root.Children))
 	if current != "" {
@@ -217,7 +217,7 @@ func thSource(name, version string) string {
 	return fmt.Sprintf("%s %s", name, version)
 }
 
-func roffFlagLabel(h cmdline.Help) string {
+func roffFlagLabel(h command.Help) string {
 	label := fmt.Sprintf(`\fB%s\fR`, escapeHyphen(h.Name))
 	if h.Value != "" {
 		label += fmt.Sprintf(` \fI%s\fR`, h.Value)

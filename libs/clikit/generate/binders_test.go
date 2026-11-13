@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 func TestGoIdent(t *testing.T) {
@@ -49,11 +49,11 @@ func TestAliasGroupSpellings(t *testing.T) {
 }
 
 func TestGroupAliasesFoldsAnAliasIntoItsPrimary(t *testing.T) {
-	explain := cmdline.Flag{Name: "explain", Kind: cmdline.Bool}
-	base := cmdline.Flag{Name: "base", Kind: cmdline.String}
-	groups := groupAliases("demo", []cmdline.Flag{
+	explain := command.Flag{Name: "explain", Kind: command.Bool}
+	base := command.Flag{Name: "base", Kind: command.String}
+	groups := groupAliases("demo", []command.Flag{
 		explain,
-		{Name: "e", Kind: cmdline.Bool, AliasOf: "explain"},
+		{Name: "e", Kind: command.Bool, AliasOf: "explain"},
 		base,
 	})
 
@@ -67,9 +67,9 @@ func TestGroupAliasesFoldsAnAliasIntoItsPrimary(t *testing.T) {
 // TestGroupAliasesNamesTheFieldForTheLongestSpelling covers the {t, test} case from the
 // doc comment: naming the field after the PRIMARY would hand every read site f.T.
 func TestGroupAliasesNamesTheFieldForTheLongestSpelling(t *testing.T) {
-	groups := groupAliases("demo", []cmdline.Flag{
-		{Name: "t", Kind: cmdline.Bool},
-		{Name: "test", Kind: cmdline.Bool, AliasOf: "t"},
+	groups := groupAliases("demo", []command.Flag{
+		{Name: "t", Kind: command.Bool},
+		{Name: "test", Kind: command.Bool, AliasOf: "t"},
 	})
 	equal(t, 1, len(groups))
 	equal(t, "Test", groups[0].field)
@@ -83,8 +83,8 @@ func TestGroupAliasesPanics(t *testing.T) {
 		panicsWith(t,
 			`binders: demo --x is AliasOf "nope", which it does not declare`,
 			func() {
-				groupAliases("demo", []cmdline.Flag{
-					{Name: "x", Kind: cmdline.Bool, AliasOf: "nope"},
+				groupAliases("demo", []command.Flag{
+					{Name: "x", Kind: command.Bool, AliasOf: "nope"},
 				})
 			})
 	})
@@ -93,10 +93,10 @@ func TestGroupAliasesPanics(t *testing.T) {
 		panicsWith(t,
 			"binders: demo --z aliases --y, which is itself an alias",
 			func() {
-				groupAliases("demo", []cmdline.Flag{
-					{Name: "a", Kind: cmdline.Bool},
-					{Name: "y", Kind: cmdline.Bool, AliasOf: "a"},
-					{Name: "z", Kind: cmdline.Bool, AliasOf: "y"},
+				groupAliases("demo", []command.Flag{
+					{Name: "a", Kind: command.Bool},
+					{Name: "y", Kind: command.Bool, AliasOf: "a"},
+					{Name: "z", Kind: command.Bool, AliasOf: "y"},
 				})
 			})
 	})
@@ -105,34 +105,34 @@ func TestGroupAliasesPanics(t *testing.T) {
 		panicsWith(t,
 			"binders: demo --b is string but aliases --a, which is bool",
 			func() {
-				groupAliases("demo", []cmdline.Flag{
-					{Name: "a", Kind: cmdline.Bool},
-					{Name: "b", Kind: cmdline.String, AliasOf: "a"},
+				groupAliases("demo", []command.Flag{
+					{Name: "a", Kind: command.Bool},
+					{Name: "b", Kind: command.String, AliasOf: "a"},
 				})
 			})
 	})
 }
 
 func TestModesOfListsTheBaseFirst(t *testing.T) {
-	flags := []cmdline.Flag{
-		{Name: "no-cache", Kind: cmdline.Bool},
-		{Name: "detail", Kind: cmdline.Bool, Modes: []string{"plan"}},
-		{Name: "base", Kind: cmdline.String, Modes: []string{"plan", "impact"}},
+	flags := []command.Flag{
+		{Name: "no-cache", Kind: command.Bool},
+		{Name: "detail", Kind: command.Bool, Modes: []string{"plan"}},
+		{Name: "base", Kind: command.String, Modes: []string{"plan", "impact"}},
 	}
 	equal(t, []string{"", "plan", "impact"}, flagModes(flags))
 
 	// A command declaring no modes keeps a single binder.
-	equal(t, []string{""}, flagModes([]cmdline.Flag{{Name: "x", Kind: cmdline.Bool}}))
+	equal(t, []string{""}, flagModes([]command.Flag{{Name: "x", Kind: command.Bool}}))
 }
 
 func TestFlagsForMode(t *testing.T) {
-	flags := []cmdline.Flag{
-		{Name: "no-cache", Kind: cmdline.Bool},
-		{Name: "detail", Kind: cmdline.Bool, Modes: []string{"plan"}},
-		{Name: "base", Kind: cmdline.String, Modes: []string{"plan", "impact"}},
+	flags := []command.Flag{
+		{Name: "no-cache", Kind: command.Bool},
+		{Name: "detail", Kind: command.Bool, Modes: []string{"plan"}},
+		{Name: "base", Kind: command.String, Modes: []string{"plan", "impact"}},
 	}
 
-	names := func(fs []cmdline.Flag) []string {
+	names := func(fs []command.Flag) []string {
 		out := make([]string, 0, len(fs))
 		for _, f := range fs {
 			out = append(out, f.Name)
@@ -149,52 +149,52 @@ func TestFlagsForMode(t *testing.T) {
 }
 
 func TestFlagDoc(t *testing.T) {
-	flags := []cmdline.Flag{{Name: "watch", Kind: cmdline.Bool, Doc: "Watch it"}}
+	flags := []command.Flag{{Name: "watch", Kind: command.Bool, Doc: "Watch it"}}
 	equal(t, "Watch it", flagDoc(flags, "watch"))
 	equal(t, "", flagDoc(flags, "absent"))
 }
 
 func TestGoTypeAndBindMethodCoverEveryBoundKind(t *testing.T) {
 	cases := []struct {
-		kind       cmdline.Kind
+		kind       command.Kind
 		goType     string
 		bindMethod string
 	}{
-		{cmdline.Bool, "bool", "Bool"},
-		{cmdline.Int, "int", "Int"},
-		{cmdline.Duration, "time.Duration", "Duration"},
-		{cmdline.String, "string", "String"},
+		{command.Bool, "bool", "Bool"},
+		{command.Int, "int", "Int"},
+		{command.Duration, "time.Duration", "Duration"},
+		{command.String, "string", "String"},
 	}
 	for _, c := range cases {
 		equal(t, c.goType, goType(c.kind))
 		equal(t, c.bindMethod, bindMethod(c.kind))
 	}
-	equal(t, "[]string", goType(cmdline.StringList))
+	equal(t, "[]string", goType(command.StringList))
 
 	// FlagCustom is declared but never bound, so reaching either of these with it
 	// means writeBinder's filter stopped working.
-	panics(t, func() { goType(cmdline.Custom) })
-	panics(t, func() { bindMethod(cmdline.Custom) })
+	panics(t, func() { goType(command.Custom) })
+	panics(t, func() { bindMethod(command.Custom) })
 }
 
 func TestFlagDefaultLiteral(t *testing.T) {
 	cases := []struct {
 		name string
-		flag cmdline.Flag
+		flag command.Flag
 		want string
 	}{
-		{"bool true", cmdline.Flag{Kind: cmdline.Bool, Default: true}, "true"},
-		{"bool false", cmdline.Flag{Kind: cmdline.Bool, Default: false}, "false"},
-		{"bool nil default", cmdline.Flag{Kind: cmdline.Bool}, "false"},
-		{"int", cmdline.Flag{Kind: cmdline.Int, Default: 8}, "8"},
-		{"int nil default", cmdline.Flag{Kind: cmdline.Int}, "0"},
+		{"bool true", command.Flag{Kind: command.Bool, Default: true}, "true"},
+		{"bool false", command.Flag{Kind: command.Bool, Default: false}, "false"},
+		{"bool nil default", command.Flag{Kind: command.Bool}, "false"},
+		{"int", command.Flag{Kind: command.Int, Default: 8}, "8"},
+		{"int nil default", command.Flag{Kind: command.Int}, "0"},
 		// Rendered as the nanosecond count rather than "5s": the generated file is Go
 		// source, and a duration literal has no untyped spelling.
-		{"duration", cmdline.Flag{Kind: cmdline.Duration, Default: 5 * time.Second}, "time.Duration(5000000000)"},
-		{"duration nil default", cmdline.Flag{Kind: cmdline.Duration}, "0"},
-		{"string", cmdline.Flag{Kind: cmdline.String, Default: "test"}, `"test"`},
-		{"string nil default", cmdline.Flag{Kind: cmdline.String}, `""`},
-		{"string list", cmdline.Flag{Kind: cmdline.StringList}, "nil"},
+		{"duration", command.Flag{Kind: command.Duration, Default: 5 * time.Second}, "time.Duration(5000000000)"},
+		{"duration nil default", command.Flag{Kind: command.Duration}, "0"},
+		{"string", command.Flag{Kind: command.String, Default: "test"}, `"test"`},
+		{"string nil default", command.Flag{Kind: command.String}, `""`},
+		{"string list", command.Flag{Kind: command.StringList}, "nil"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -202,15 +202,15 @@ func TestFlagDefaultLiteral(t *testing.T) {
 		})
 	}
 
-	panics(t, func() { flagDefaultLiteral(cmdline.Flag{Kind: cmdline.Custom}) })
-	panics(t, func() { flagDefaultLiteral(cmdline.Flag{Name: "n", Kind: cmdline.Int, Default: "8"}) })
+	panics(t, func() { flagDefaultLiteral(command.Flag{Kind: command.Custom}) })
+	panics(t, func() { flagDefaultLiteral(command.Flag{Name: "n", Kind: command.Int, Default: "8"}) })
 }
 
 func TestRenderConsts(t *testing.T) {
 	seen := map[string]string{}
-	got := renderConsts("demo", []cmdline.Flag{
-		{Name: "watch", Kind: cmdline.Bool},
-		{Name: "no-cache", Kind: cmdline.Bool},
+	got := renderConsts("demo", []command.Flag{
+		{Name: "watch", Kind: command.Bool},
+		{Name: "no-cache", Kind: command.Bool},
 	}, seen)
 
 	equal(t, []string{
@@ -220,7 +220,7 @@ func TestRenderConsts(t *testing.T) {
 
 	// A command visited twice must not emit the constant twice: the second run is a
 	// duplicate declaration, not a collision.
-	again := renderConsts("demo", []cmdline.Flag{{Name: "watch", Kind: cmdline.Bool}}, seen)
+	again := renderConsts("demo", []command.Flag{{Name: "watch", Kind: command.Bool}}, seen)
 	empty(t, again)
 }
 
@@ -230,18 +230,18 @@ func TestRenderConstsRefusesTwoFlagsUnderOneName(t *testing.T) {
 	panicsWith(t,
 		`binders: FlagDemoC would name both "c" and "C"`,
 		func() {
-			renderConsts("demo", []cmdline.Flag{
-				{Name: "c", Kind: cmdline.Bool},
-				{Name: "C", Kind: cmdline.Bool},
+			renderConsts("demo", []command.Flag{
+				{Name: "c", Kind: command.Bool},
+				{Name: "C", Kind: command.Bool},
 			}, map[string]string{})
 		})
 }
 
 func TestWriteBinderEmitsTheStructAndOneBindPerSpelling(t *testing.T) {
 	var b bytes.Buffer
-	writeBinder(&b, "demo", "demo", []cmdline.Flag{
-		{Name: "watch", Kind: cmdline.Bool, Default: false, Doc: "Watch it"},
-		{Name: "W", Kind: cmdline.Bool, AliasOf: "watch", Doc: "Short for --watch"},
+	writeBinder(&b, "demo", "demo", []command.Flag{
+		{Name: "watch", Kind: command.Bool, Default: false, Doc: "Watch it"},
+		{Name: "W", Kind: command.Bool, AliasOf: "watch", Doc: "Short for --watch"},
 	})
 	got := b.String()
 
@@ -252,7 +252,7 @@ func TestWriteBinderEmitsTheStructAndOneBindPerSpelling(t *testing.T) {
 	// Both spellings write to the one destination; dropping either leaves a flag that
 	// parses and does nothing.
 	contains(t, got, `fs.BoolVar(&f.Watch, FlagDemoWatch, false, "Watch it")`)
-	contains(t, got, "cmdline.NegatedBoolVar(fs, &f.Watch, FlagDemoWatch)")
+	contains(t, got, "command.NegatedBoolVar(fs, &f.Watch, FlagDemoWatch)")
 	notContains(t, got, "FlagDemoNoWatch", "the negation is derived, never a constant")
 	notContains(t, got, "NegatedBoolVar(fs, &f.Watch, FlagDemoW)", "an alias gets no --no- form")
 	contains(t, got, `fs.BoolVar(&f.Watch, FlagDemoW, false, "Short for --watch")`)
@@ -262,13 +262,13 @@ func TestWriteBinderEmitsTheStructAndOneBindPerSpelling(t *testing.T) {
 
 func TestWriteBinderBindsAStringListWithItsVar(t *testing.T) {
 	var b bytes.Buffer
-	writeBinder(&b, "demo", "demo", []cmdline.Flag{
-		{Name: "add-path", Kind: cmdline.StringList, Doc: "A path to add; repeatable"},
+	writeBinder(&b, "demo", "demo", []command.Flag{
+		{Name: "add-path", Kind: command.StringList, Doc: "A path to add; repeatable"},
 	})
 	got := b.String()
 
 	contains(t, got, "\tAddPath []string // --add-path")
-	contains(t, got, `cmdline.StringListVar(fs, &f.AddPath, FlagDemoAddPath, "A path to add; repeatable")`)
+	contains(t, got, `command.StringListVar(fs, &f.AddPath, FlagDemoAddPath, "A path to add; repeatable")`)
 	notContains(t, got, "does NOT carry", "a StringList is bound by the binder")
 }
 
@@ -276,9 +276,9 @@ func TestWriteBinderBindsAStringListWithItsVar(t *testing.T) {
 // generated binders from hardcoding a number the live binding disagreed with.
 func TestWriteBinderEmitsDefaultsForARuntimeDefault(t *testing.T) {
 	var b bytes.Buffer
-	writeBinder(&b, "affected plan", "affected", []cmdline.Flag{
-		{Name: "max-shards", Kind: cmdline.Int, Default: 8, DefaultAtBind: true, Doc: "Maximum CI shards"},
-		{Name: "detail", Kind: cmdline.Bool, Doc: "Per-shard detail"},
+	writeBinder(&b, "affected plan", "affected", []command.Flag{
+		{Name: "max-shards", Kind: command.Int, Default: 8, DefaultAtBind: true, Doc: "Maximum CI shards"},
+		{Name: "detail", Kind: command.Bool, Doc: "Per-shard detail"},
 	})
 	got := b.String()
 
@@ -306,7 +306,7 @@ func TestWriteBinderEmitsNothingWithoutABindableFlag(t *testing.T) {
 	// would panic at parse time with "flag redefined".
 	t.Run("only custom flags", func(t *testing.T) {
 		var b bytes.Buffer
-		writeBinder(&b, "demo", "demo", []cmdline.Flag{{Name: "ignore", Kind: cmdline.Custom}})
+		writeBinder(&b, "demo", "demo", []command.Flag{{Name: "ignore", Kind: command.Custom}})
 		empty(t, b.String())
 	})
 }
@@ -315,10 +315,10 @@ func TestWriteBinderEmitsNothingWithoutABindableFlag(t *testing.T) {
 // hand-binding with it and produces a command that cannot declare write paths, compiling.
 func TestWriteBinderNamesTheFlagsItCannotCarry(t *testing.T) {
 	var b bytes.Buffer
-	writeBinder(&b, "demo", "demo", []cmdline.Flag{
-		{Name: "criteria", Kind: cmdline.String},
-		{Name: "write-paths", Kind: cmdline.Custom},
-		{Name: "deny-paths", Kind: cmdline.Custom},
+	writeBinder(&b, "demo", "demo", []command.Flag{
+		{Name: "criteria", Kind: command.String},
+		{Name: "write-paths", Kind: command.Custom},
+		{Name: "deny-paths", Kind: command.Custom},
 	})
 
 	got := b.String()
@@ -332,10 +332,10 @@ func TestWriteBinderEmitsParsableGo(t *testing.T) {
 	var b bytes.Buffer
 	b.WriteString("package flaggen\n\nimport (\n\t\"flag\"\n\t\"time\"\n)\n\n")
 	b.WriteString("const (\n\tFlagDemoTimeout = \"timeout\"\n\tFlagDemoName = \"name\"\n\tFlagDemoDepth = \"depth\"\n)\n")
-	writeBinder(&b, "demo", "demo", []cmdline.Flag{
-		{Name: "timeout", Kind: cmdline.Duration, Unit: "s", Default: 90 * time.Second, Doc: "Give up after this long"},
-		{Name: "name", Kind: cmdline.String, Default: "main", Doc: "Which one"},
-		{Name: "depth", Kind: cmdline.Int, Doc: "How deep"},
+	writeBinder(&b, "demo", "demo", []command.Flag{
+		{Name: "timeout", Kind: command.Duration, Unit: "s", Default: 90 * time.Second, Doc: "Give up after this long"},
+		{Name: "name", Kind: command.String, Default: "main", Doc: "Which one"},
+		{Name: "depth", Kind: command.Int, Doc: "How deep"},
 	})
 
 	_, err := format.Source(b.Bytes())
@@ -345,17 +345,17 @@ func TestWriteBinderEmitsParsableGo(t *testing.T) {
 }
 
 func TestBindersRefusesWhatTheConventionForbids(t *testing.T) {
-	tree := func(f cmdline.Flag) cmdline.Command {
-		return cmdline.Command{Name: "tool", Children: []cmdline.Command{{Name: "run", Flags: []cmdline.Flag{f}}}}
+	tree := func(f command.Flag) command.Command {
+		return command.Command{Name: "tool", Children: []command.Command{{Name: "run", Flags: []command.Flag{f}}}}
 	}
 	cases := []struct {
 		name string
-		flag cmdline.Flag
+		flag command.Flag
 		want string
 	}{
-		{"a bool named no-x", cmdline.Flag{Name: "no-cache", Kind: cmdline.Bool, Default: false}, "declare the positive name"},
-		{"a bool with no default", cmdline.Flag{Name: "cache", Kind: cmdline.Bool}, "bool with no Default"},
-		{"a Duration with no Unit", cmdline.Flag{Name: "timeout", Kind: cmdline.Duration}, "no Unit"},
+		{"a bool named no-x", command.Flag{Name: "no-cache", Kind: command.Bool, Default: false}, "declare the positive name"},
+		{"a bool with no default", command.Flag{Name: "cache", Kind: command.Bool}, "bool with no Default"},
+		{"a Duration with no Unit", command.Flag{Name: "timeout", Kind: command.Duration}, "no Unit"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -366,9 +366,9 @@ func TestBindersRefusesWhatTheConventionForbids(t *testing.T) {
 	}
 
 	t.Run("a bool whose negation another flag takes", func(t *testing.T) {
-		root := cmdline.Command{Name: "tool", Children: []cmdline.Command{{Name: "run", Flags: []cmdline.Flag{
-			{Name: "cache", Kind: cmdline.Bool, Default: true},
-			{Name: "no-cache", Kind: cmdline.String},
+		root := command.Command{Name: "tool", Children: []command.Command{{Name: "run", Flags: []command.Flag{
+			{Name: "cache", Kind: command.Bool, Default: true},
+			{Name: "no-cache", Kind: command.String},
 		}}}}
 		_, err := Binders(root, "gen")
 		isError(t, err)
@@ -377,12 +377,12 @@ func TestBindersRefusesWhatTheConventionForbids(t *testing.T) {
 }
 
 func TestBindersAcceptsADeclaredPositiveBool(t *testing.T) {
-	root := cmdline.Command{Name: "tool", Children: []cmdline.Command{{Name: "run", Flags: []cmdline.Flag{
-		{Name: "cache", Kind: cmdline.Bool, Default: true, Doc: "Replay hits"},
+	root := command.Command{Name: "tool", Children: []command.Command{{Name: "run", Flags: []command.Flag{
+		{Name: "cache", Kind: command.Bool, Default: true, Doc: "Replay hits"},
 	}}}}
 	got, err := Binders(root, "gen")
 	noError(t, err)
 	contains(t, string(got), `fs.BoolVar(&f.Cache, FlagRunCache, true, "Replay hits")`)
-	contains(t, string(got), "cmdline.NegatedBoolVar(fs, &f.Cache, FlagRunCache)")
+	contains(t, string(got), "command.NegatedBoolVar(fs, &f.Cache, FlagRunCache)")
 	contains(t, string(got), "Cache bool // --[no-]cache")
 }

@@ -4,18 +4,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // awkward carries the two characters that have broken a generated script: a colon
 // ends zsh's name:description pair, and an apostrophe closes the single-quoted
 // string in zsh, fish and PowerShell alike.
-var awkward = []cmdline.Command{
+var awkward = []command.Command{
 	{Name: "run", Short: "Run it"},
 	{Name: "query", Short: "a node's neighborhood: really"},
 }
 
-func completion(t *testing.T, shell string, commands []cmdline.Command) string {
+func completion(t *testing.T, shell string, commands []command.Command) string {
 	t.Helper()
 	got, err := Completion(shell, commands)
 	noError(t, err)
@@ -41,9 +41,9 @@ func TestCompletionFishPadsToTheWidestNameAndDropsTheLastContinuation(t *testing
 }
 
 func TestCompletionPowerShellBreaksAtSix(t *testing.T) {
-	var commands []cmdline.Command
+	var commands []command.Command
 	for _, name := range strings.Split("abcdefg", "") {
-		commands = append(commands, cmdline.Command{Name: name})
+		commands = append(commands, command.Command{Name: name})
 	}
 	want := "    $subcommands = 'a', 'b', 'c', 'd', 'e', 'f',\n" +
 		"                   'g'"

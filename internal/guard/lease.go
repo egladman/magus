@@ -27,7 +27,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -1002,8 +1002,8 @@ func verbFlagTakesValue(verb, name string) bool {
 		if cmd.Name != verb {
 			continue
 		}
-		if i := slices.IndexFunc(cmd.Flags, func(f cmdline.Flag) bool { return f.Name == name }); i >= 0 {
-			return cmd.Flags[i].Kind != cmdline.Bool
+		if i := slices.IndexFunc(cmd.Flags, func(f command.Flag) bool { return f.Name == name }); i >= 0 {
+			return cmd.Flags[i].Kind != command.Bool
 		}
 	}
 	takes, _ := MagusFlagTakesValue(name)
@@ -2172,7 +2172,7 @@ func verbArgv(args []string, verb hint.Command) (operands []string, flags map[st
 		name, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
 		takes, _ := MagusFlagTakesValue(name)
 		if own, ok := verbFlag(verb, name); ok {
-			takes = own.Kind != cmdline.Bool
+			takes = own.Kind != command.Bool
 		}
 		switch {
 		case joined:
@@ -2188,7 +2188,7 @@ func verbArgv(args []string, verb hint.Command) (operands []string, flags map[st
 }
 
 // verbFlag looks name up among verb's own flags in the registry the CLI parses with.
-func verbFlag(verb hint.Command, name string) (cmdline.Flag, bool) {
+func verbFlag(verb hint.Command, name string) (command.Flag, bool) {
 	for _, group := range commands.Root.Children {
 		if group.Name != verb.Head() {
 			continue
@@ -2197,12 +2197,12 @@ func verbFlag(verb hint.Command, name string) (cmdline.Flag, bool) {
 			if sub.Name != verb.Leaf() {
 				continue
 			}
-			if i := slices.IndexFunc(sub.Flags, func(f cmdline.Flag) bool { return f.Name == name }); i >= 0 {
+			if i := slices.IndexFunc(sub.Flags, func(f command.Flag) bool { return f.Name == name }); i >= 0 {
 				return sub.Flags[i], true
 			}
 		}
 	}
-	return cmdline.Flag{}, false
+	return command.Flag{}, false
 }
 
 // stdinRecord is the text a statement feeds its command from a heredoc or a here-string,

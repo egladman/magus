@@ -27,7 +27,7 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/libs/cmdline/generate"
+	"github.com/egladman/magus/libs/clikit/generate"
 )
 
 func main() {

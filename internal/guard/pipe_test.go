@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/commands"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +30,7 @@ func TestPipeRecordsNameRealFields(t *testing.T) {
 	}
 	for verb, rec := range pipeRecords {
 		if verb == "ls" {
-			i := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == "ls" })
+			i := slices.IndexFunc(commands.Root.Children, func(c command.Command) bool { return c.Name == "ls" })
 			require.GreaterOrEqual(t, i, 0)
 			example := strings.Join(exampleCommands(commands.Root.Children[i]), "\n")
 			assert.Contains(t, example, fmt.Sprintf("{{range .%s}}{{.%s}}", rec.list, rec.id), verb)
@@ -59,7 +59,7 @@ func TestPipeRecordsNameRealFields(t *testing.T) {
 	}
 }
 
-func exampleCommands(c cmdline.Command) []string {
+func exampleCommands(c command.Command) []string {
 	var out []string
 	for _, e := range c.Examples {
 		out = append(out, e.Command)

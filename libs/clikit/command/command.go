@@ -1,4 +1,4 @@
-package cmdline
+package command
 
 import (
 	"errors"
@@ -221,7 +221,7 @@ func (c Command) BindFlags(fs *flag.FlagSet) {
 		case StringList:
 			StringListVar(fs, new([]string), f.Name, f.Doc)
 		default:
-			panic(fmt.Sprintf("cmdline: flag --%s has unknown kind %s", f.Name, string(f.Kind)))
+			panic(fmt.Sprintf("command:flag --%s has unknown kind %s", f.Name, string(f.Kind)))
 		}
 	}
 }
@@ -242,11 +242,11 @@ func Check(root Command) error {
 func checkEffects(command string, c Command) error {
 	var errs error
 	if c.Effect != "" && !slices.Contains(Effects, c.Effect) {
-		errs = errors.Join(errs, fmt.Errorf("cmdline: %s declares Effect %q, which is none of %v", command, c.Effect, Effects))
+		errs = errors.Join(errs, fmt.Errorf("command:%s declares Effect %q, which is none of %v", command, c.Effect, Effects))
 	}
 	for _, f := range c.Flags {
 		if f.Effect != "" && !slices.Contains(Effects, f.Effect) {
-			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s declares Effect %q, which is none of %v", command, f.Name, f.Effect, Effects))
+			errs = errors.Join(errs, fmt.Errorf("command:%s --%s declares Effect %q, which is none of %v", command, f.Name, f.Effect, Effects))
 		}
 	}
 	return errs
@@ -260,28 +260,28 @@ func checkFlags(command string, flags []Flag) error {
 	var errs error
 	for _, f := range flags {
 		if f.Kind == Duration && f.AliasOf == "" && f.Unit == "" {
-			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s is a Duration with no Unit: declare the unit bare numbers take (ms, s, m, h), so help can name it", command, f.Name))
+			errs = errors.Join(errs, fmt.Errorf("command:%s --%s is a Duration with no Unit: declare the unit bare numbers take (ms, s, m, h), so help can name it", command, f.Name))
 		}
 		if f.Kind != Duration && f.Unit != "" {
-			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s sets Unit %q on a %s flag: Unit is only for Duration", command, f.Name, f.Unit, f.Kind))
+			errs = errors.Join(errs, fmt.Errorf("command:%s --%s sets Unit %q on a %s flag: Unit is only for Duration", command, f.Name, f.Unit, f.Kind))
 		}
 		if f.Kind == Duration && f.Unit != "" && unitPhrase[f.Unit] == "" {
-			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s Unit %q is not one of ns, us, µs, ms, s, m, h", command, f.Name, f.Unit))
+			errs = errors.Join(errs, fmt.Errorf("command:%s --%s Unit %q is not one of ns, us, µs, ms, s, m, h", command, f.Name, f.Unit))
 		}
 		if f.Kind == StringList && f.Default != nil {
-			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s is a StringList with a Default: a repeatable flag starts empty", command, f.Name))
+			errs = errors.Join(errs, fmt.Errorf("command:%s --%s is a StringList with a Default: a repeatable flag starts empty", command, f.Name))
 		}
 		if f.Kind != Bool {
 			continue
 		}
 		if strings.HasPrefix(f.Name, NegationPrefix) {
-			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s is a bool named with %q: declare the positive name and let the generator emit the negation", command, f.Name, NegationPrefix))
+			errs = errors.Join(errs, fmt.Errorf("command:%s --%s is a bool named with %q: declare the positive name and let the generator emit the negation", command, f.Name, NegationPrefix))
 		}
 		if f.Default == nil && f.AliasOf == "" && negatable(f.Name) {
-			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s is a bool with no Default: declare true or false", command, f.Name))
+			errs = errors.Join(errs, fmt.Errorf("command:%s --%s is a bool with no Default: declare true or false", command, f.Name))
 		}
 		if f.AliasOf == "" && negatable(f.Name) && declared[NegationPrefix+f.Name] {
-			errs = errors.Join(errs, fmt.Errorf("cmdline: %s declares --%s, which is the negation of bool --%s", command, NegationPrefix+f.Name, f.Name))
+			errs = errors.Join(errs, fmt.Errorf("command:%s declares --%s, which is the negation of bool --%s", command, NegationPrefix+f.Name, f.Name))
 		}
 	}
 	return errs
@@ -414,7 +414,7 @@ func TypedDefault[T any](f Flag) T {
 	}
 	v, ok := f.Default.(T)
 	if !ok {
-		panic(fmt.Sprintf("cmdline: flag --%s is %s but its default %v is a %T", f.Name, f.Kind, f.Default, f.Default))
+		panic(fmt.Sprintf("command:flag --%s is %s but its default %v is a %T", f.Name, f.Kind, f.Default, f.Default))
 	}
 	return v
 }

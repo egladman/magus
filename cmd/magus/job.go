@@ -47,9 +47,9 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/exit"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -108,8 +108,8 @@ func jobCommand(ctx context.Context, root string, args []string) error {
 }
 
 // jobCommandSpec is `magus job` as the command registry declares it.
-func jobCommandSpec() cmdline.Command {
-	i := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == "job" })
+func jobCommandSpec() command.Command {
+	i := slices.IndexFunc(commands.Root.Children, func(c command.Command) bool { return c.Name == "job" })
 	return commands.Root.Children[i]
 }
 
@@ -2130,8 +2130,8 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	pos, err := commandParse("job exit", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a result must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read this job's result from stdin; without it the job ends with no result filed")
-		cmdline.NegatedBoolVar(fs, &schema, "schema")
-		cmdline.NegatedBoolVar(fs, &stdin, "stdin")
+		command.NegatedBoolVar(fs, &schema, "schema")
+		command.NegatedBoolVar(fs, &stdin, "stdin")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job exit <job> --stdin < result.json")
 			fmt.Fprintln(os.Stderr, "       magus job exit <job>...")
@@ -2590,9 +2590,9 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a result must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read the result from stdin instead of from the job, for one that was never filed")
 		fs.BoolVar(&integration, "integration", false, "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state")
-		cmdline.NegatedBoolVar(fs, &schema, "schema")
-		cmdline.NegatedBoolVar(fs, &stdin, "stdin")
-		cmdline.NegatedBoolVar(fs, &integration, "integration")
+		command.NegatedBoolVar(fs, &schema, "schema")
+		command.NegatedBoolVar(fs, &stdin, "stdin")
+		command.NegatedBoolVar(fs, &integration, "integration")
 		fs.Var(evidence, "evidence", evidenceFlagDoc)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job wait <job>")
@@ -3046,7 +3046,7 @@ func refusePaused(store *job.Store, id string) error {
 // jobPause is `magus job pause` and `magus job resume`, which verb says.
 func jobPause(ctx context.Context, root, verb string, args []string) error {
 	spec := jobCommandSpec()
-	child := spec.Children[slices.IndexFunc(spec.Children, func(c cmdline.Command) bool { return c.Name == verb })]
+	child := spec.Children[slices.IndexFunc(spec.Children, func(c command.Command) bool { return c.Name == verb })]
 	var reason, until string
 	ids, err := commandParse("job "+verb, args, func(fs *flag.FlagSet) {
 		if verb == "pause" {
@@ -3124,7 +3124,7 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 	var force bool
 	pos, err := commandParse("job rm", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&force, "force", false, "Remove a row that already ended, destroying the record of what happened")
-		cmdline.NegatedBoolVar(fs, &force, "force")
+		command.NegatedBoolVar(fs, &force, "force")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job rm <job> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -3460,7 +3460,7 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 	var all bool
 	pos, err := commandParse("job prune", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&all, "all", false, "Also end a job a holder took and nobody touched within jobs.stale_after")
-		cmdline.NegatedBoolVar(fs, &all, "all")
+		command.NegatedBoolVar(fs, &all, "all")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job prune [--all] [<job>...] [flags]")
 			fmt.Fprintln(os.Stderr, "")

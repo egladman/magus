@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/commands"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // This file teaches the browser terminal the REAL magus CLI, read from
@@ -14,7 +14,7 @@ import (
 // are generated from.
 //
 // It is a read of a declaration, not a second copy of one. internal/commands is
-// data over libs/cmdline, which imports only the standard library, so it compiles to
+// data over libs/clikit/command, which imports only the standard library, so it compiles to
 // js/wasm unchanged and the console gets every subcommand and flag magus actually
 // has without listing any of them here.
 //
@@ -70,13 +70,13 @@ func completableCommands() []string {
 }
 
 // cliCommand finds a registry command by name.
-func cliCommand(name string) (cmdline.Command, bool) {
+func cliCommand(name string) (command.Command, bool) {
 	for _, c := range commands.Root.Children {
 		if c.Name == name {
 			return c, true
 		}
 	}
-	return cmdline.Command{}, false
+	return command.Command{}, false
 }
 
 // cliFlagNames returns the flag spellings a subcommand declares, each with its
@@ -90,8 +90,8 @@ func cliFlagNames(name string) []string {
 	out := make([]string, 0, len(c.Flags))
 	for _, f := range c.Flags {
 		out = append(out, dashPrefix(f.Name)+f.Name)
-		if f.Kind == cmdline.Bool && f.AliasOf == "" && len(f.Name) > 1 {
-			out = append(out, fmt.Sprintf("--%s%s", cmdline.NegationPrefix, f.Name))
+		if f.Kind == command.Bool && f.AliasOf == "" && len(f.Name) > 1 {
+			out = append(out, fmt.Sprintf("--%s%s", command.NegationPrefix, f.Name))
 		}
 	}
 	sort.Strings(out)

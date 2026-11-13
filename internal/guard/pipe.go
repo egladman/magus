@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/commands"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // pipeRecord is a verb's structured output in -o template's json keys: the list a text
@@ -72,7 +72,7 @@ func parsePipeRecord(args []string) (rec pipeRecord, ok bool) {
 func registryCommand(words []string) bool {
 	level := commands.Root.Children
 	for _, w := range words {
-		i := slices.IndexFunc(level, func(c cmdline.Command) bool { return c.Name == w })
+		i := slices.IndexFunc(level, func(c command.Command) bool { return c.Name == w })
 		if i < 0 {
 			return false
 		}

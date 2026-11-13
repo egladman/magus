@@ -9,7 +9,7 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/internal/guard/builtin"
-	"github.com/egladman/magus/libs/cmdline/generate"
+	"github.com/egladman/magus/libs/clikit/generate"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )

@@ -6,14 +6,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // Markdown renders root's man pages as Markdown for a docs site: <name>.md and
 // <name>-<command>.md, each opening with YAML frontmatter (title, description,
 // tags) and naming source as the file it is generated from. The definition lists
 // use the PHP Markdown Extra syntax ("term\n: body").
-func Markdown(root cmdline.Command, source string) []Page {
+func Markdown(root command.Command, source string) []Page {
 	pages := make([]Page, 0, 1+len(root.Children))
 	pages = append(pages, Page{Name: root.Name + ".md", Content: renderMainMD(root, source)})
 	for _, command := range root.Children {
@@ -25,7 +25,7 @@ func Markdown(root cmdline.Command, source string) []Page {
 	return pages
 }
 
-func renderMainMD(root cmdline.Command, source string) []byte {
+func renderMainMD(root command.Command, source string) []byte {
 	var m mdBuf
 	m.frontmatter(root.Name+" command", root.Description, source, root.Tags)
 	m.h1(root.Name)
@@ -51,7 +51,7 @@ func renderMainMD(root cmdline.Command, source string) []byte {
 	return m.bytes()
 }
 
-func renderCommandMD(root, command cmdline.Command, source string) []byte {
+func renderCommandMD(root, command command.Command, source string) []byte {
 	var m mdBuf
 	desc := command.Description
 	if desc == "" {
@@ -113,7 +113,7 @@ func synopsisMD(usage string) string {
 }
 
 // writeChildFlagsMD emits an options block for every descendant declaring flags.
-func writeChildFlagsMD(m *mdBuf, path string, children []cmdline.Command) {
+func writeChildFlagsMD(m *mdBuf, path string, children []command.Command) {
 	for _, child := range children {
 		sub := fmt.Sprintf("%s %s", path, child.Name)
 		if len(child.Flags) > 0 {
@@ -124,13 +124,13 @@ func writeChildFlagsMD(m *mdBuf, path string, children []cmdline.Command) {
 	}
 }
 
-func writeFlagListMD(m *mdBuf, command cmdline.Command) {
+func writeFlagListMD(m *mdBuf, command command.Command) {
 	for _, h := range flagHelp(command) {
 		m.def(flagLabelMD(h), mdEsc(h.Usage))
 	}
 }
 
-func writeExitStatusMD(m *mdBuf, codes []cmdline.ExitCode) {
+func writeExitStatusMD(m *mdBuf, codes []command.ExitCode) {
 	if len(codes) == 0 {
 		return
 	}
@@ -140,7 +140,7 @@ func writeExitStatusMD(m *mdBuf, codes []cmdline.ExitCode) {
 	}
 }
 
-func writeEnvSectionMD(m *mdBuf, env []cmdline.Env) {
+func writeEnvSectionMD(m *mdBuf, env []command.Env) {
 	if len(env) == 0 {
 		return
 	}
@@ -157,7 +157,7 @@ func writeEnvSectionMD(m *mdBuf, env []cmdline.Env) {
 	}
 }
 
-func writeFilesSectionMD(m *mdBuf, files []cmdline.File) {
+func writeFilesSectionMD(m *mdBuf, files []command.File) {
 	if len(files) == 0 {
 		return
 	}
@@ -167,7 +167,7 @@ func writeFilesSectionMD(m *mdBuf, files []cmdline.File) {
 	}
 }
 
-func writeSeeAlsoMD(m *mdBuf, root cmdline.Command, current string) {
+func writeSeeAlsoMD(m *mdBuf, root command.Command, current string) {
 	m.h2("See Also")
 	var refs []string
 	if current != "" {
@@ -182,7 +182,7 @@ func writeSeeAlsoMD(m *mdBuf, root cmdline.Command, current string) {
 }
 
 // flagLabelMD builds the definition-list term for a flag.
-func flagLabelMD(h cmdline.Help) string {
+func flagLabelMD(h command.Help) string {
 	label := mdB(h.Name)
 	if h.Value != "" {
 		label += " " + mdI(h.Value)

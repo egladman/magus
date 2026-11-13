@@ -6,42 +6,42 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // tool is a small tree with every section the renderers emit.
-var tool = cmdline.Command{
+var tool = command.Command{
 	Name:  "tool",
 	Short: "do things to a workspace",
 	Usage: "tool [flags] <subcommand> [args]",
 	Long:  "tool does things.\n\nIt reads its config first.",
-	Flags: []cmdline.Flag{
-		{Name: "root", Kind: cmdline.String, Doc: "Workspace `path`"},
-		{Name: "v", Kind: cmdline.Bool, Doc: "Increase verbosity"},
+	Flags: []command.Flag{
+		{Name: "root", Kind: command.String, Doc: "Workspace `path`"},
+		{Name: "v", Kind: command.Bool, Doc: "Increase verbosity"},
 	},
-	Env:   []cmdline.Env{{Name: "TOOL_DIR", Key: "dir", Default: ".tool", Doc: "Where the cache lives"}},
-	Files: []cmdline.File{{Name: "tool.yaml", Doc: "Configuration."}},
-	Children: []cmdline.Command{
+	Env:   []command.Env{{Name: "TOOL_DIR", Key: "dir", Default: ".tool", Doc: "Where the cache lives"}},
+	Files: []command.File{{Name: "tool.yaml", Doc: "Configuration."}},
+	Children: []command.Command{
 		{
 			Name:  "run",
 			Short: "run a target",
 			Usage: "tool run <target> [flags]",
-			Flags: []cmdline.Flag{
-				{Name: "dry-run", Kind: cmdline.Bool, Default: false, Doc: "Print what would run"},
-				{Name: "jobs", Kind: cmdline.Int, Default: 4, Doc: "Run at most `N` at once"},
+			Flags: []command.Flag{
+				{Name: "dry-run", Kind: command.Bool, Default: false, Doc: "Print what would run"},
+				{Name: "jobs", Kind: command.Int, Default: 4, Doc: "Run at most `N` at once"},
 			},
-			Operands: []cmdline.Operand{{Name: "build", Short: "Build it"}},
-			Examples: []cmdline.Example{{Comment: "Build everything", Command: "tool run build"}},
+			Operands: []command.Operand{{Name: "build", Short: "Build it"}},
+			Examples: []command.Example{{Comment: "Build everything", Command: "tool run build"}},
 		},
 		{
 			Name:  "config",
 			Short: "view or change config",
 			Usage: "tool config <subcommand>",
-			Children: []cmdline.Command{{
+			Children: []command.Command{{
 				Name: "cache", Short: "the cache",
-				Children: []cmdline.Command{{
+				Children: []command.Command{{
 					Name: "prune", Short: "prune it",
-					Flags: []cmdline.Flag{{Name: "older-than", Kind: cmdline.Duration, Unit: "h", Doc: "Prune entries older than this"}},
+					Flags: []command.Flag{{Name: "older-than", Kind: command.Duration, Unit: "h", Doc: "Prune entries older than this"}},
 				}},
 			}},
 		},
@@ -91,11 +91,11 @@ func TestRoffSynopsisNamesTheCommand(t *testing.T) {
 // TestRoffExitStatusSectionIsOptional pins both halves of the contract: a command
 // declaring codes gets the section, and one declaring none gets no empty heading.
 func TestRoffExitStatusSectionIsOptional(t *testing.T) {
-	with := cmdline.Command{
+	with := command.Command{
 		Name:  "guard",
 		Short: "judge one command",
 		Usage: "tool guard [flags]",
-		ExitStatus: []cmdline.ExitCode{
+		ExitStatus: []command.ExitCode{
 			{Code: 0, Meaning: "allowed"},
 			{Code: 2, Meaning: "denied, and also a well-formed call it could not parse"},
 		},
@@ -108,7 +108,7 @@ func TestRoffExitStatusSectionIsOptional(t *testing.T) {
 	// soft-hyphen break rather than a minus.
 	contains(t, rendered, `well\-formed`)
 
-	without := cmdline.Command{Name: "guard", Short: "judge one command", Usage: "tool guard [flags]"}
+	without := command.Command{Name: "guard", Short: "judge one command", Usage: "tool guard [flags]"}
 	notContains(t, string(renderCommandRoff(tool, without, "2026-07-26", "v1.2.3")), "EXIT STATUS")
 }
 

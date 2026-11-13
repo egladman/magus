@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // TestCLICommandHeadsAreRealSubcommands guards against the drift that shipped a
@@ -59,7 +59,7 @@ func TestCLICommandPathsResolve(t *testing.T) {
 func resolveCommandPath(tokens []string) error {
 	children := commands.Root.Children
 	for i, tok := range tokens {
-		idx := slices.IndexFunc(children, func(c cmdline.Command) bool { return c.Name == tok })
+		idx := slices.IndexFunc(children, func(c command.Command) bool { return c.Name == tok })
 		if idx < 0 {
 			parent := "magus " + strings.Join(tokens[:i], " ")
 			return fmt.Errorf("%q is not a subcommand of %q - fix the hint, or add the entry to internal/commands/registry.go",
@@ -114,11 +114,11 @@ func TestCLIDescribeNounsAreAccepted(t *testing.T) {
 	}
 }
 
-func childNames(t *testing.T, command string) []string {
+func childNames(t *testing.T, parent string) []string {
 	t.Helper()
-	idx := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == command })
+	idx := slices.IndexFunc(commands.Root.Children, func(c command.Command) bool { return c.Name == parent })
 	if idx < 0 {
-		t.Fatalf("no commands.Root.Children entry for %q", command)
+		t.Fatalf("no commands.Root.Children entry for %q", parent)
 	}
 	names := make([]string, 0, len(commands.Root.Children[idx].Children))
 	for _, child := range commands.Root.Children[idx].Children {
@@ -255,7 +255,7 @@ func dispatcherCases(t *testing.T, file, funcName string) []string {
 func registryChildren(t *testing.T, path ...string) []string {
 	t.Helper()
 	cmds := commands.Root.Children
-	var cur cmdline.Command
+	var cur command.Command
 	found := false
 	for i, name := range path {
 		found = false
@@ -387,7 +387,7 @@ func TestServerDispatcherChildrenAreDeclared(t *testing.T) {
 // walkRegistryCommands visits every node in the recursive registry tree
 // (internal/commands.Root.Children plus every Children entry, at any depth), calling visit
 // with the dotted path of command words leading to it.
-func walkRegistryCommands(cmds []cmdline.Command, prefix []string, visit func(path []string, c cmdline.Command)) {
+func walkRegistryCommands(cmds []command.Command, prefix []string, visit func(path []string, c command.Command)) {
 	for _, c := range cmds {
 		path := append(append([]string{}, prefix...), c.Name)
 		visit(path, c)
@@ -422,7 +422,7 @@ func walkRegistryCommands(cmds []cmdline.Command, prefix []string, visit func(pa
 // gives the real CLI. A token that is neither a known global flag nor a
 // matching child name stops the walk; per-command flags are never expected
 // to precede their own subcommand in these examples.
-func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []cmdline.Command, matched bool) {
+func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []command.Command, matched bool) {
 	cmds := commands.Root.Children
 	for i := 0; i < len(args); {
 		tok := args[i]
@@ -466,7 +466,7 @@ func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []cmdline.
 // section shows it in context); flag.FlagSet panics on a duplicate Var call,
 // so this is the one safe way to layer several nodes' declared flags onto one
 // FlagSet without assuming which level actually owns a given name.
-func bindUnlessRegistered(fs *flag.FlagSet, node cmdline.Command) {
+func bindUnlessRegistered(fs *flag.FlagSet, node command.Command) {
 	if len(node.Flags) == 0 {
 		return
 	}
@@ -509,7 +509,7 @@ func TestRegistryExamplesParse(t *testing.T) {
 	// example like `--tee build.jsonl` leaks global.tee into every later test in
 	// the package, and the next config-view test faithfully tees into the cwd.
 	t.Cleanup(snapshotGlobals())
-	walkRegistryCommands(commands.Root.Children, nil, func(path []string, c cmdline.Command) {
+	walkRegistryCommands(commands.Root.Children, nil, func(path []string, c command.Command) {
 		for _, ex := range c.Examples {
 			t.Run(fmt.Sprintf("%s/%s", strings.Join(path, "_"), ex.Comment), func(t *testing.T) {
 				if knownBrokenExamples[ex.Command] {

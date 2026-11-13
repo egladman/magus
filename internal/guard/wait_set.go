@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // waitForm is a command the wait rules may serve as the way to wait.
@@ -45,16 +45,16 @@ func (f waitForm) serves(words, flags []string) bool {
 // leaves and flags, then the forms the tree cannot declare.
 var waitRemedies = sync.OnceValue(func() []waitForm {
 	var forms []waitForm
-	cmdline.Walk(commands.Root, func(path string, c cmdline.Command) {
+	command.Walk(commands.Root, func(path string, c command.Command) {
 		if len(c.Children) > 0 {
 			return
 		}
 		words := strings.Fields(path)
-		if c.Effect == cmdline.EffectWait {
+		if c.Effect == command.EffectWait {
 			forms = append(forms, waitForm{words: words})
 		}
 		for _, f := range c.Flags {
-			if f.Effect == cmdline.EffectWait {
+			if f.Effect == command.EffectWait {
 				forms = append(forms, waitForm{words: words, flag: f.Name})
 			}
 		}

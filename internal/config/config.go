@@ -15,7 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	queuetypes "github.com/egladman/magus/internal/queue/types"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/schema"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -1149,11 +1149,11 @@ type Report struct {
 // KnownEnvVar and EnvVarProblem (MGS1046) answer from it, so a name missing here is
 // reported as unknown by doctor and can draw a did-you-mean refusal.
 // TestEveryReadMagusEnvVarIsRegistered fails when shipped code reads a name it lacks.
-func EnvVars() []cmdline.Env {
+func EnvVars() []command.Env {
 	defaults := reflect.ValueOf(Defaults())
-	out := make([]cmdline.Env, 0, len(schema.Fields)+len(envOnly))
+	out := make([]command.Env, 0, len(schema.Fields)+len(envOnly))
 	for _, f := range schema.Fields {
-		out = append(out, cmdline.Env{Name: f.EnvVar, Key: f.YamlPath, Default: defaultText(defaults, f.GoPath), Doc: f.Doc})
+		out = append(out, command.Env{Name: f.EnvVar, Key: f.YamlPath, Default: defaultText(defaults, f.GoPath), Doc: f.Doc})
 	}
 	return append(out, envOnly...)
 }
@@ -1199,7 +1199,7 @@ func defaultText(defaults reflect.Value, goPath string) string {
 // envOnly are the variables no config field carries, so the schema cannot list them:
 // secrets kept out of committed files, overrides of build-time values, and the
 // plumbing magus sets for its own children.
-var envOnly = []cmdline.Env{
+var envOnly = []command.Env{
 	{Name: "MAGUS_CACHE_SIGNING_KEY", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the Ed25519 seed that signs remote-cache writes (see `magus config cache-key`); env-only because a signing secret in a committed file is not a secret"},
 	{Name: "MAGUS_CACHE_TOOL_VERSION", Key: "", Default: "project", Doc: "Env-only, no magus.yaml equivalent: how tool versions key the cache: project (per project), workspace (once for the workspace), or off"},
 	{Name: "MAGUS_VCS_<NAME>_BASE_REF", Key: "", Default: "", Doc: "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},

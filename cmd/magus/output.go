@@ -17,9 +17,9 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/exit"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/clikit/output"
 )
 
 // The -o formats only magus's graph commands accept, passed to output.Parse as extras.
@@ -243,7 +243,7 @@ func templateJoin(list any, sep string) string {
 // the command tree's decision about who owns stdout.
 func unstructuredCommand(name string) bool {
 	var raw bool
-	cmdline.Walk(commands.Root, func(path string, c cmdline.Command) {
+	command.Walk(commands.Root, func(path string, c command.Command) {
 		if path == name {
 			raw = c.UnstructuredOutput
 		}
@@ -293,7 +293,7 @@ func commandPath(args []string) string {
 		if arg == "--" {
 			break
 		}
-		i := slices.IndexFunc(children, func(c cmdline.Command) bool { return c.Name == arg })
+		i := slices.IndexFunc(children, func(c command.Command) bool { return c.Name == arg })
 		if i < 0 {
 			continue
 		}

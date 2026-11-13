@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/types"
 )
 
@@ -181,8 +181,8 @@ func execFlagTakesValue(name string) bool {
 			if verb.Name != hint.JobExec.Leaf() {
 				continue
 			}
-			i := slices.IndexFunc(verb.Flags, func(f cmdline.Flag) bool { return f.Name == name })
-			return i >= 0 && verb.Flags[i].Kind != cmdline.Bool
+			i := slices.IndexFunc(verb.Flags, func(f command.Flag) bool { return f.Name == name })
+			return i >= 0 && verb.Flags[i].Kind != command.Bool
 		}
 	}
 	return false

@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // closedGroupUsage matches a usage line that enumerates its subcommands.
@@ -68,9 +68,9 @@ func resolveUnknownArgv(args []string) (unknownArgv, bool) {
 	}
 	level := commands.Root.Children
 	var path []string
-	var chain []cmdline.Command
+	var chain []command.Command
 	for _, w := range words {
-		i := slices.IndexFunc(level, func(c cmdline.Command) bool { return c.Name == w })
+		i := slices.IndexFunc(level, func(c command.Command) bool { return c.Name == w })
 		if i < 0 {
 			if len(chain) > 0 && !closedGroupUsage.MatchString(chain[len(chain)-1].Usage) {
 				break
@@ -101,9 +101,9 @@ func resolveUnknownArgv(args []string) (unknownArgv, bool) {
 
 // unboundFlag returns the first flag in args that no command on the path,
 // no global flag and no help flag binds.
-func unboundFlag(args []string, chain []cmdline.Command) (string, bool) {
-	bound := map[string]cmdline.Flag{}
-	for _, c := range slices.Concat([]cmdline.Command{commands.Root}, chain) {
+func unboundFlag(args []string, chain []command.Command) (string, bool) {
+	bound := map[string]command.Flag{}
+	for _, c := range slices.Concat([]command.Command{commands.Root}, chain) {
 		for _, f := range c.Flags {
 			bound[f.Name] = f
 		}
@@ -120,7 +120,7 @@ func unboundFlag(args []string, chain []cmdline.Command) (string, bool) {
 		takes, global := MagusFlagTakesValue(name)
 		f, own := bound[name]
 		if own {
-			takes = f.Kind != cmdline.Bool && f.Kind != cmdline.Custom
+			takes = f.Kind != command.Bool && f.Kind != command.Custom
 		}
 		if !own && !global {
 			base := strings.TrimPrefix(name, "no-")
@@ -128,7 +128,7 @@ func unboundFlag(args []string, chain []cmdline.Command) (string, bool) {
 			_, globalBase := MagusFlagTakesValue(base)
 			switch {
 			case name == "h" || name == "help" || verbosityFlag.MatchString(name):
-			case negates && base != name && bf.Kind == cmdline.Bool:
+			case negates && base != name && bf.Kind == command.Bool:
 			case globalBase && base != name:
 			default:
 				return name, true

@@ -6,7 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/generate/emit"
-	"github.com/egladman/magus/libs/cmdline/generate"
+	"github.com/egladman/magus/libs/clikit/generate"
 )
 
 // runCLIFlags writes the flag-name constants and binders generate.Binders renders

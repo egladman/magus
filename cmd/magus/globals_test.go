@@ -13,8 +13,8 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
-	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -244,7 +244,7 @@ func TestManpageFlagsMatchTheCLI(t *testing.T) {
 // flag takes no value; a flag the command binds differently leaves the guard reading a
 // value as an operand, or an operand as a value.
 func TestJobForkRegistryFlagsAreTheFlagsItBinds(t *testing.T) {
-	var fork cmdline.Command
+	var fork command.Command
 	for _, group := range commands.Root.Children {
 		for _, child := range group.Children {
 			if group.Name == "job" && child.Name == "fork" {
@@ -266,7 +266,7 @@ func TestJobForkRegistryFlagsAreTheFlagsItBinds(t *testing.T) {
 		if !assert.True(t, ok, "--%s is in the registry and not bound", declared.Name) {
 			continue
 		}
-		want := recordedFlag{Name: declared.Name, Usage: cmdline.DurationUsage(declared), Bool: declared.Kind == cmdline.Bool}
+		want := recordedFlag{Name: declared.Name, Usage: command.DurationUsage(declared), Bool: declared.Kind == command.Bool}
 		assert.Equal(t, want, got, "--%s: its doc, and whether it takes a value", declared.Name)
 	}
 }
@@ -340,7 +340,7 @@ func recordedFlagsUnder(name string) ([]recordedFlag, bool) {
 func flaggedChildren(name string) map[string]bool {
 	cmds := commands.Root.Children
 	for _, word := range strings.Fields(name) {
-		i := slices.IndexFunc(cmds, func(c cmdline.Command) bool { return c.Name == word })
+		i := slices.IndexFunc(cmds, func(c command.Command) bool { return c.Name == word })
 		if i < 0 {
 			return nil
 		}
@@ -358,7 +358,7 @@ func flaggedChildren(name string) map[string]bool {
 // flagProbes expands one man-page command into the invocations that actually bind flags.
 // A command with subcommands binds nothing itself (`magus server -h` prints its own
 // usage and parses nothing), so its children are what get probed.
-func flagProbes(cmd cmdline.Command) []flagProbe {
+func flagProbes(cmd command.Command) []flagProbe {
 	if len(cmd.Children) == 0 {
 		if len(cmd.Flags) == 0 {
 			return nil
@@ -461,12 +461,12 @@ func TestGraphExportHasNoStaticAlias(t *testing.T) {
 }
 
 // documentedFlagNames lists the non-global flag names a BuildFlags closure declares.
-func documentedFlagNames(command string, build func(*flag.FlagSet), globals map[string]bool) []string {
+func documentedFlagNames(cmdPath string, build func(*flag.FlagSet), globals map[string]bool) []string {
 	fs := flag.NewFlagSet("doc", flag.ContinueOnError)
 	build(fs)
 	var out []string
 	fs.VisitAll(func(f *flag.Flag) {
-		if !globals[f.Name] && !modeSelectors[command][strings.TrimPrefix(f.Name, cmdline.NegationPrefix)] {
+		if !globals[f.Name] && !modeSelectors[cmdPath][strings.TrimPrefix(f.Name, command.NegationPrefix)] {
 			out = append(out, f.Name)
 		}
 	})

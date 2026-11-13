@@ -16,7 +16,7 @@ import "hack/magusfile/conformance-ceiling" as ceiling;
 export fun reads() > [str] {
     return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
         "libs/figure/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/text/**/*.go", "libs/xdg/**/*.go",
-        "libs/cmdline/**/*.go", "hack/magusfile/conformance-ceiling.buzz", "magus.yaml"];
+        "libs/clikit/**/*.go", "hack/magusfile/conformance-ceiling.buzz", "magus.yaml"];
 }
 
 // check fails each conformance ceiling the change crossed and an index the lens could not

@@ -40,7 +40,7 @@ magus\project({
     // The catalog and reference generators compile the Go libs below into the binaries
     // they run, so each is named here instead of globbing its tree.
     // The rest are projects whose targets these targets ctx.needs (MGS1062).
-    "depends_on": ["../proto", "../libs/figure", "../libs/kustomize", "../libs/cmdline",
+    "depends_on": ["../proto", "../libs/figure", "../libs/kustomize", "../libs/clikit",
                    "../libs/diagnostics", "../libs/embed", "../libs/scipbuzz", "../libs/xdg", "../libs/text",
                    "../libs/gopherbuzz", "../libs/proofread", "../libs/textsearch",
                    "../libs/ssg", "./guides/integrations/agents"],

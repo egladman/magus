@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // Completion renders the subcommand list of a shell completion script: the
 // assignment the script's own logic completes from, for bash, zsh, fish or
 // powershell. The logic around it is hand-written and stable; the list is the part
 // that drifts. An unknown shell is an error.
-func Completion(shell string, commands []cmdline.Command) (string, error) {
+func Completion(shell string, commands []command.Command) (string, error) {
 	switch shell {
 	case "bash":
 		return bashList(commands), nil
@@ -25,7 +25,7 @@ func Completion(shell string, commands []cmdline.Command) (string, error) {
 	return "", fmt.Errorf("completion: no renderer for shell %q, want bash, zsh, fish or powershell", shell)
 }
 
-func bashList(commands []cmdline.Command) string {
+func bashList(commands []command.Command) string {
 	names := make([]string, len(commands))
 	for i, c := range commands {
 		names[i] = c.Name
@@ -33,7 +33,7 @@ func bashList(commands []cmdline.Command) string {
 	return fmt.Sprintf(`    local subcommands="%s"`, strings.Join(names, " "))
 }
 
-func zshList(commands []cmdline.Command) string {
+func zshList(commands []command.Command) string {
 	// The list is the whole assignment, not just the entries: zsh does not treat "#"
 	// as a comment inside an array literal, so a marker between the parens would be
 	// parsed as an element.
@@ -50,7 +50,7 @@ func zshList(commands []cmdline.Command) string {
 	return b.String()
 }
 
-func fishList(commands []cmdline.Command) string {
+func fishList(commands []command.Command) string {
 	var b strings.Builder
 	width := 0
 	for _, c := range commands {
@@ -69,7 +69,7 @@ func fishList(commands []cmdline.Command) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func powerShellList(commands []cmdline.Command) string {
+func powerShellList(commands []command.Command) string {
 	// PowerShell needs the continuation commas, and only the first line carries the
 	// variable name, so this emits the assignment itself.
 	var lines []string

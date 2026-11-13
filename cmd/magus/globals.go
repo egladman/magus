@@ -11,12 +11,12 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/output"
 )
 
 // The -o formats under the names every command's switch spells them (case outputJSON);
-// the values are libs/cmdline/output's.
+// the values are libs/clikit/output's.
 const (
 	outputText     = output.Text
 	outputJSON     = output.JSON
@@ -103,12 +103,12 @@ func commandParse(name string, args []string, local func(*flag.FlagSet)) ([]stri
 
 // commandAt is the tree's node for a FlagSet's name, or false for a name that
 // is no path, such as "run build".
-func commandAt(name string) (cmdline.Command, bool) {
+func commandAt(name string) (command.Command, bool) {
 	node := commands.Root
 	for word := range strings.FieldsSeq(name) {
-		i := slices.IndexFunc(node.Children, func(c cmdline.Command) bool { return c.Name == word })
+		i := slices.IndexFunc(node.Children, func(c command.Command) bool { return c.Name == word })
 		if i < 0 {
-			return cmdline.Command{}, false
+			return command.Command{}, false
 		}
 		node = node.Children[i]
 	}
@@ -272,12 +272,12 @@ func recordFlagSet(name string, fs *flag.FlagSet) {
 // accepts the globals and `magus -h` lists them once; repeating them under each command
 // buried its few own flags in about a thousand lines of help.
 //
-// It prints through cmdline.FlagHelp, the formatter behind the man page, so a bool reads
+// It prints through command.FlagHelp, the formatter behind the man page, so a bool reads
 // --[no-]name (default: on|off) in both. flag.PrintDefaults prints a single dash and
 // lifts a backquoted word out of the usage as the value's name.
 func printOwnDefaults(fs *flag.FlagSet) {
 	globals := globalFlagNames()
-	help := cmdline.FlagHelp(fs, func(name string) bool { return globals[name] })
+	help := command.FlagHelp(fs, func(name string) bool { return globals[name] })
 	cmd, known := commandAt(fs.Name())
 	if !known {
 		printFlagHelp(fs.Output(), help)
@@ -287,7 +287,7 @@ func printOwnDefaults(fs *flag.FlagSet) {
 	printExamples(fs.Output(), cmd.Examples)
 }
 
-func printExamples(w io.Writer, examples []cmdline.Example) {
+func printExamples(w io.Writer, examples []command.Example) {
 	if len(examples) > 0 {
 		fmt.Fprintln(w, "\nExamples:")
 	}
@@ -298,7 +298,7 @@ func printExamples(w io.Writer, examples []cmdline.Example) {
 
 // printGroupedFlagHelp prints the flags no group claims, then each group's
 // under its heading, in the order the tree declares them.
-func printGroupedFlagHelp(w io.Writer, help []cmdline.Help, declared []cmdline.Flag) {
+func printGroupedFlagHelp(w io.Writer, help []command.Help, declared []command.Flag) {
 	groupOf := map[string]string{}
 	var groups []string
 	for _, f := range declared {
@@ -307,8 +307,8 @@ func printGroupedFlagHelp(w io.Writer, help []cmdline.Help, declared []cmdline.F
 			groups = append(groups, f.Group)
 		}
 	}
-	inGroup := func(group string) []cmdline.Help {
-		return slices.DeleteFunc(slices.Clone(help), func(h cmdline.Help) bool {
+	inGroup := func(group string) []command.Help {
+		return slices.DeleteFunc(slices.Clone(help), func(h command.Help) bool {
 			return groupOf[strings.TrimLeft(strings.TrimPrefix(h.Name, "--[no-]"), "-")] != group
 		})
 	}
@@ -325,10 +325,10 @@ func printRootFlags(w io.Writer) {
 	// help, which lists the display flags itself; it parses nothing.
 	fs := flag.NewFlagSet(commands.Root.Name, flag.ContinueOnError)
 	commands.Root.BindFlags(fs)
-	printFlagHelp(w, cmdline.FlagHelp(fs, nil))
+	printFlagHelp(w, command.FlagHelp(fs, nil))
 }
 
-func printFlagHelp(w io.Writer, flags []cmdline.Help) {
+func printFlagHelp(w io.Writer, flags []command.Help) {
 	for _, h := range flags {
 		label := "  " + h.Name
 		if h.Value != "" {

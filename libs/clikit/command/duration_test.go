@@ -1,4 +1,4 @@
-package cmdline
+package command
 
 import (
 	"flag"

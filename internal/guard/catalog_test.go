@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -617,19 +617,19 @@ func treeMiss(args []string) string {
 	return ""
 }
 
-func childNamed(node cmdline.Command, name string) (cmdline.Command, bool) {
+func childNamed(node command.Command, name string) (command.Command, bool) {
 	for _, c := range node.Children {
 		if c.Name == name {
 			return c, true
 		}
 	}
-	return cmdline.Command{}, false
+	return command.Command{}, false
 }
 
-func takesValue(node cmdline.Command, name string) bool {
+func takesValue(node command.Command, name string) bool {
 	for _, f := range node.Flags {
 		if f.Name == name {
-			return f.Kind != cmdline.Bool
+			return f.Kind != command.Bool
 		}
 	}
 	return false
