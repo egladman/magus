@@ -194,7 +194,7 @@ This amends ADR 0035. Membership stays reach: no type and no namespace is listed
 | A segment that is also a parent member is refused                            | done                           |
 | `types/agent` mirrors under `magus\agent`; its 4 prefix `name` lines deleted | done                           |
 | `types/trail` mirrors under `magus\trail`; its 6 prefix `name` lines deleted | done                           |
-| `types/diff` mirrors under `magus\diff`; its 22 prefix `name` lines deleted  | waits on Diagnostic and Origin |
+| `types/diff` mirrors under `magus\diff`; its 22 prefix `name` lines deleted  | not built (Diagnostic, Origin) |
 | `Check`, `Evidence`, `Tier` and kin move to `types/check` as `magus\check`   | done                           |
 | `ImpactCoverage` and `ImpactProject` move to `types/impact` as `magus\impact` | done                           |
 | `VCSCheckpoint` moves to `types/vcs` as `magus\vcs`                          | done                           |

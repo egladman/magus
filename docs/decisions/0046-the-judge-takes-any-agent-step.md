@@ -532,7 +532,7 @@ Still proposed: a host's own envelope is handed to no step rule. A `tool` step n
 covers is still judged as its envelope, so `magus\guard.step("tool", ...)` judges only
 the tool steps a row declares.
 
-## Amendment 2026-11-13
+### 2026-11-13: a domain type says no row
 
 A domain type says no row, so `agent.StepRow` is `agent.StepSpec` and `WithStepRows` is
 `WithStepSpecs`. The text above keeps the names it was decided under.
