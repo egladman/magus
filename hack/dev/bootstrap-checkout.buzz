@@ -17,10 +17,9 @@
 // The daemon stops before a build, so a project lock it holds cannot fail the build with exit 75.
 // --here builds in the current checkout, which must be clean. --restart ends with the daemon
 // started on the new binary (outside --verify-ready, it checks `version`
-// again), since the
-// daemon has no hot reload. When the checkout has a mise.toml and mise is on PATH, it runs
-// `mise trust <dir>/mise.toml` first, because untrusted config fails the build without
-// naming mise.
+// again), since the daemon has no hot reload.
+// A checkout with a mise.toml gets `mise trust <dir>/mise.toml` first when mise
+// is on PATH, because untrusted config fails the build without naming mise.
 //
 // A build that fails to compile may only need its generated bindings refreshed,
 // which no magus can do while none builds. It then runs the //go:generate lines
