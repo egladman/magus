@@ -586,6 +586,12 @@ linters:
               Impl,
               Repo,
             ]
+          # ADR 0030: row is a persistence word. The SDK and the domain types name
+          # the thing a row stores.
+          banned:
+            - packages: [github.com/egladman/magus, github.com/egladman/magus/types/...]
+              words: [Row, Rows]
+              why: row names only the persistence layer, so say job, spec or record
 
       testisolation:
         type: module
