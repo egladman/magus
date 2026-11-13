@@ -4465,6 +4465,8 @@ github.com/egladman/magus/types.RevisionFetcher.FetchCommit imethod func(ctx con
 github.com/egladman/magus/types.RevisionFetcher.FetchRef imethod func(ctx context.Context, root string, remote string, ref string) (string, error)
 github.com/egladman/magus/types.RevisionFileReader type interface
 github.com/egladman/magus/types.RevisionFileReader.ReadFileAt imethod func(ctx context.Context, root string, rev string, path string) (string, error)
+github.com/egladman/magus/types.RevisionLister type interface
+github.com/egladman/magus/types.RevisionLister.ListFilesAt imethod func(ctx context.Context, root string, rev string, dir string) ([]string, error)
 github.com/egladman/magus/types.RevisionReader type interface
 github.com/egladman/magus/types.RevisionReader.embeds Bisector
 github.com/egladman/magus/types.RevisionReader.embeds GeneratedPathReporter

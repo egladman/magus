@@ -458,11 +458,6 @@ tags/magus-status/
 tags/monitoring/
 tags/pool/
 tags/status/
-# The *-unbriefed and brief-* guard rules became *-before-skill and spawn-* in #730. A
-# rule page is generated per rule, so the old pages retire, now at
-# reference/rules/{architecture,buzz,spawn}-before-skill/ and reference/rules/spawn-*/.
-reference/rules/architecture-unbriefed/
-reference/rules/brief-command/
-reference/rules/brief-plain-commands/
-reference/rules/buzz-unbriefed/
-reference/rules/spawn-unbriefed/
+# unjudged-tool became unjudged-step (ADR 0046): the judge rules on any agent step, not
+# only a host's tool call. The rule page is generated per rule, so the old page retires.
+reference/rules/unjudged-tool/

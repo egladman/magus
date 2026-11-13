@@ -479,7 +479,7 @@ guard-rule symbol-search
 guard-rule throwaway-copy
 guard-rule timed-magus
 guard-rule token-state
-guard-rule unjudged-tool
+guard-rule unjudged-step
 guard-rule unknown-env
 guard-rule unknown-magus-argv
 guard-rule unleased-write
