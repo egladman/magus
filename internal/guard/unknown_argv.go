@@ -66,7 +66,7 @@ func resolveUnknownArgv(args []string) (unknownArgv, bool) {
 	if len(words) == 0 || words[0] == commands.Help.Name {
 		return unknownArgv{}, false
 	}
-	level := commands.Root.Children
+	level := commands.Root.Spec.Children
 	var path []string
 	var chain []command.Command
 	for _, w := range words {
@@ -103,7 +103,7 @@ func resolveUnknownArgv(args []string) (unknownArgv, bool) {
 // no global flag and no help flag binds.
 func unboundFlag(args []string, chain []command.Command) (string, bool) {
 	bound := map[string]command.Flag{}
-	for _, c := range slices.Concat([]command.Command{commands.Root}, chain) {
+	for _, c := range slices.Concat([]command.Command{commands.Root.Spec.Command}, chain) {
 		for _, f := range c.Flags {
 			bound[f.Name] = f
 		}

@@ -207,7 +207,7 @@ func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
 func TestManpageFlagsMatchTheCLI(t *testing.T) {
 	globals := globalFlagNames()
 
-	for _, cmd := range commands.Root.Children {
+	for _, cmd := range commands.Root.Spec.Children {
 		for _, probe := range flagProbes(cmd) {
 			t.Run(strings.ReplaceAll(probe.name, " ", "_"), func(t *testing.T) {
 				documented := documentedFlagNames(t, probe.name, probe.buildFlags, globals)
@@ -245,7 +245,7 @@ func TestManpageFlagsMatchTheCLI(t *testing.T) {
 // value as an operand, or an operand as a value.
 func TestJobForkRegistryFlagsAreTheFlagsItBinds(t *testing.T) {
 	var fork command.Command
-	for _, group := range commands.Root.Children {
+	for _, group := range commands.Root.Spec.Children {
 		for _, child := range group.Children {
 			if group.Name == "job" && child.Name == "fork" {
 				fork = child
@@ -338,7 +338,7 @@ func recordedFlagsUnder(name string) ([]recordedFlag, bool) {
 
 // flaggedChildren names the subcommands of name that declare their own flags.
 func flaggedChildren(name string) map[string]bool {
-	cmds := commands.Root.Children
+	cmds := commands.Root.Spec.Children
 	for _, word := range strings.Fields(name) {
 		i := slices.IndexFunc(cmds, func(c command.Command) bool { return c.Name == word })
 		if i < 0 {

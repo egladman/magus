@@ -998,7 +998,7 @@ func parseTargetRun(c hint.Invocation) (targetRun, bool) {
 // verbFlagTakesValue reports whether a flag consumes the next word, asking verb's own flags
 // in the registry the CLI parses with before magus's global set.
 func verbFlagTakesValue(verb, name string) bool {
-	for _, cmd := range commands.Root.Children {
+	for _, cmd := range commands.Root.Spec.Children {
 		if cmd.Name != verb {
 			continue
 		}
@@ -2189,7 +2189,7 @@ func verbArgv(args []string, verb hint.Command) (operands []string, flags map[st
 
 // verbFlag looks name up among verb's own flags in the registry the CLI parses with.
 func verbFlag(verb hint.Command, name string) (command.Flag, bool) {
-	for _, group := range commands.Root.Children {
+	for _, group := range commands.Root.Spec.Children {
 		if group.Name != verb.Head() {
 			continue
 		}

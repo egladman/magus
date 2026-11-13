@@ -784,7 +784,7 @@ func (s *outputFormatsSuite) reach(fn string, stop map[string]bool) map[string]b
 func (s *outputFormatsSuite) othersHandlers(leaf string) map[string]bool {
 	mine, _ := s.handler(leaf)
 	others := map[string]bool{}
-	command.Walk(commands.Root, func(other string, c command.Command) {
+	command.Walk(commands.Root.Spec.Command, func(other string, c command.Command) {
 		if fn, ok := s.handler(other); ok && fn != mine && len(c.Children) == 0 {
 			others[fn] = true
 		}
@@ -793,7 +793,7 @@ func (s *outputFormatsSuite) othersHandlers(leaf string) map[string]bool {
 }
 
 func (s *outputFormatsSuite) TestEveryLeafRendersEveryFormatOrRefusesThem() {
-	command.Walk(commands.Root, func(leaf string, c command.Command) {
+	command.Walk(commands.Root.Spec.Command, func(leaf string, c command.Command) {
 		if len(c.Children) > 0 || c.UnstructuredOutput {
 			return
 		}
@@ -863,7 +863,7 @@ func (s *outputFormatsSuite) TestASiblingsPrinterDoesNotReachALeaf() {
 }
 
 func (s *outputFormatsSuite) TestEveryUnstructuredCommandRefusesOutput() {
-	command.Walk(commands.Root, func(path string, c command.Command) {
+	command.Walk(commands.Root.Spec.Command, func(path string, c command.Command) {
 		if !c.UnstructuredOutput {
 			return
 		}
@@ -1164,7 +1164,7 @@ func TestOutputMetadata(t *testing.T) { suite.Run(t, new(outputMetadataSuite)) }
 func (s *outputMetadataSuite) SetupTest() {
 	original := commands.Root
 	s.T().Cleanup(func() { commands.Root = original })
-	commands.Root = command.Command{Children: []command.Command{
+	commands.Root.Spec.Command = command.Command{Children: []command.Command{
 		{Name: "raw-example", UnstructuredOutput: true, Children: []command.Command{{Name: "record"}}},
 		{Name: "server", Children: []command.Command{{Name: "start"}}},
 	}}

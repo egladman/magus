@@ -109,8 +109,8 @@ func jobCommand(ctx context.Context, root string, args []string) error {
 
 // jobCommandSpec is `magus job` as the command registry declares it.
 func jobCommandSpec() command.Command {
-	i := slices.IndexFunc(commands.Root.Children, func(c command.Command) bool { return c.Name == "job" })
-	return commands.Root.Children[i]
+	i := slices.IndexFunc(commands.Root.Spec.Children, func(c command.Command) bool { return c.Name == "job" })
+	return commands.Root.Spec.Children[i]
 }
 
 // printRegisteredHelp prints fs's command help from its registry entry,

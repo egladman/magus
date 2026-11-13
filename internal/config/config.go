@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/config/gen/settings"
 	queuetypes "github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/configuration"
 	"github.com/egladman/magus/spells"
@@ -1150,7 +1151,7 @@ type Report struct {
 // KnownEnvVar, EnvVarProblem (MGS1046), KnownKeys, Save, the man page and
 // the config docs all read it. TestEveryReadMagusEnvVarIsRegistered fails
 // when shipped code reads a name it lacks.
-var Configuration = configuration.ConfigurationSpec{Settings: slices.Concat(settings.Settings, []configuration.Setting{
+var Configuration = apiversion.New(apiversion.Metadata{Name: "magus"}, configuration.ConfigurationSpec{Settings: slices.Concat(settings.Settings, []configuration.Setting{
 	{EnvVar: "MAGUS_CACHE_SIGNING_KEY", Kind: command.String, Doc: "Env-only, no magus.yaml equivalent: the Ed25519 seed that signs remote-cache writes (see `magus config cache-key`); env-only because a signing secret in a committed file is not a secret"},
 	{EnvVar: "MAGUS_CACHE_TOOL_VERSION", Kind: command.String, Default: "project", Doc: "Env-only, no magus.yaml equivalent: how tool versions key the cache: project (per project), workspace (once for the workspace), or off"},
 	{EnvVar: "MAGUS_VCS_<NAME>_BASE_REF", Kind: command.String, Doc: "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
@@ -1182,7 +1183,7 @@ var Configuration = configuration.ConfigurationSpec{Settings: slices.Concat(sett
 	{EnvVar: "MAGUS_INTERNAL_ADVICE_MODE", Kind: command.String, Internal: true, Doc: "Set by `magus diff` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice"},
 	{EnvVar: "MAGUS_INTERNAL_ADVICE_BASE_BRANCH", Kind: command.String, Internal: true, Doc: "Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting"},
 	{EnvVar: "MAGUS_DETACHED_REFRESH", Kind: command.String, Internal: true, Doc: "Set on the detached symbol refresh a graph read starts, so that process exits rather than queues behind another refresh"},
-})}
+})})
 
 // defaultShutdownGrace is shutdown_grace when nothing sets it. Long enough for
 // most test and build steps to finish. A supervisor that will not wait sends

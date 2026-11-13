@@ -27,7 +27,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "magus-configdocs:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("magus-configdocs: wrote %d settings to %s\n", len(config.Configuration.Settings), *out)
+	fmt.Printf("magus-configdocs: wrote %d settings to %s\n", len(config.Configuration.Spec.Settings), *out)
 }
 
 // render builds the full Markdown page: frontmatter, intro, then one table per
@@ -48,7 +48,7 @@ func render() (string, error) {
 	// "."), so the reference reads section by section.
 	bySection := map[string][]configuration.Setting{}
 	var envOnly, setByMagus [][]string
-	for _, f := range config.Configuration.Settings {
+	for _, f := range config.Configuration.Spec.Settings {
 		switch {
 		case f.YamlPath != "":
 			bySection[topSection(f.YamlPath)] = append(bySection[topSection(f.YamlPath)], f)

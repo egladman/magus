@@ -173,7 +173,7 @@ func execFlagTakesValue(name string) bool {
 	if takes, known := MagusFlagTakesValue(name); known {
 		return takes
 	}
-	for _, group := range commands.Root.Children {
+	for _, group := range commands.Root.Spec.Children {
 		if group.Name != hint.JobExec.Head() {
 			continue
 		}

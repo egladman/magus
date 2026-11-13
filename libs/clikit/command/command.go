@@ -8,7 +8,21 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/egladman/magus/libs/apiversion"
 )
+
+// CommandSpec is the spec of a Command record, a program's command tree:
+// the Command it embeds is the root, which names the program.
+type CommandSpec struct {
+	Command `yaml:",inline"`
+}
+
+// Kind is Command.
+func (CommandSpec) Kind() apiversion.Kind { return "Command" }
+
+// APIVersion is clikit.command/v1alpha1.
+func (CommandSpec) APIVersion() apiversion.APIVersion { return "clikit.command/v1alpha1" }
 
 // Command is one node of a command tree. The root names the program; its Flags are
 // the global flags, and its Files fill the root man page.

@@ -589,7 +589,7 @@ func assertRunsOnTheTree(t *testing.T, run string) {
 // past a leaf or a command taking operands. Only the root's flags take a
 // value before the subcommand.
 func treeMiss(args []string) string {
-	node := commands.Root
+	node := commands.Root.Spec.Command
 	for i := 0; i < len(args); i++ {
 		word := args[i]
 		if word == "--" {
@@ -597,7 +597,7 @@ func treeMiss(args []string) string {
 		}
 		if strings.HasPrefix(word, "-") {
 			flag := strings.TrimLeft(word, "-")
-			if node.Name == commands.Root.Name && !strings.Contains(word, "=") && takesValue(node, flag) {
+			if node.Name == commands.Root.Spec.Name && !strings.Contains(word, "=") && takesValue(node, flag) {
 				i++
 			}
 			continue

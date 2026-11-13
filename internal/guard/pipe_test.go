@@ -30,9 +30,9 @@ func TestPipeRecordsNameRealFields(t *testing.T) {
 	}
 	for verb, rec := range pipeRecords {
 		if verb == "ls" {
-			i := slices.IndexFunc(commands.Root.Children, func(c command.Command) bool { return c.Name == "ls" })
+			i := slices.IndexFunc(commands.Root.Spec.Children, func(c command.Command) bool { return c.Name == "ls" })
 			require.GreaterOrEqual(t, i, 0)
-			example := strings.Join(exampleCommands(commands.Root.Children[i]), "\n")
+			example := strings.Join(exampleCommands(commands.Root.Spec.Children[i]), "\n")
 			assert.Contains(t, example, fmt.Sprintf("{{range .%s}}{{.%s}}", rec.list, rec.id), verb)
 			assert.Empty(t, rec.count, "ls has no count field the registry documents")
 			continue

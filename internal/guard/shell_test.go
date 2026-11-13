@@ -2461,7 +2461,7 @@ func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
 	for _, inv := range credentialInvocations {
 		spelled := strings.Join(inv.words, " ")
-		cmds := commands.Root.Children
+		cmds := commands.Root.Spec.Children
 		var found *command.Command
 		for _, w := range inv.words {
 			i := slices.IndexFunc(cmds, func(c command.Command) bool { return c.Name == w })

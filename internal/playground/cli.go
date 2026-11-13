@@ -36,8 +36,8 @@ var playgroundVerbs = []string{"help", "ls", "targets", "graph", "run", "eval", 
 
 // cliCommands returns every real magus subcommand name, sorted.
 func cliCommands() []string {
-	out := make([]string, 0, len(commands.Root.Children))
-	for _, c := range commands.Root.Children {
+	out := make([]string, 0, len(commands.Root.Spec.Children))
+	for _, c := range commands.Root.Spec.Children {
 		out = append(out, c.Name)
 	}
 	sort.Strings(out)
@@ -71,7 +71,7 @@ func completableCommands() []string {
 
 // cliCommand finds a registry command by name.
 func cliCommand(name string) (command.Command, bool) {
-	for _, c := range commands.Root.Children {
+	for _, c := range commands.Root.Spec.Children {
 		if c.Name == name {
 			return c, true
 		}

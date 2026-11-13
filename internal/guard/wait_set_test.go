@@ -76,7 +76,7 @@ func (s *WaitSetSuite) TestAnArgvWithNoSubcommandIsNotServed() {
 }
 
 func (s *WaitSetSuite) TestEveryWaitLeafTheTreeDeclaresIsServed() {
-	command.Walk(commands.Root, func(path string, c command.Command) {
+	command.Walk(commands.Root.Spec.Command, func(path string, c command.Command) {
 		if len(c.Children) > 0 {
 			return
 		}
@@ -94,7 +94,7 @@ func (s *WaitSetSuite) TestEveryWaitLeafTheTreeDeclaresIsServed() {
 
 func (s *WaitSetSuite) TestTheUndeclaredFormsAreLeavesOfTheTree() {
 	leaf := map[string]bool{}
-	command.Walk(commands.Root, func(path string, c command.Command) {
+	command.Walk(commands.Root.Spec.Command, func(path string, c command.Command) {
 		leaf[path] = len(c.Children) == 0
 	})
 	for _, f := range []waitForm{budgetRunForm, budgetAffectedForm, noticeForm} {

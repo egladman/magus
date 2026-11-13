@@ -39,7 +39,7 @@ func runCompletions(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	return writeCompletions(*outDir, slices.Concat(commands.Root.Children, []command.Command{commands.Help}))
+	return writeCompletions(*outDir, slices.Concat(commands.Root.Spec.Children, []command.Command{commands.Help}))
 }
 
 // writeCompletions fills the marked region of each completion script in dir with subs.

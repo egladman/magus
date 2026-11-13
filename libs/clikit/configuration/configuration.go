@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/clikit/command"
 )
 
@@ -43,6 +44,14 @@ const NameSegment = "<name>"
 // its flags, variables, config keys and docs come from.
 type ConfigurationSpec struct {
 	Settings []Setting
+}
+
+// Kind is Configuration.
+func (ConfigurationSpec) Kind() apiversion.Kind { return "Configuration" }
+
+// APIVersion is clikit.configuration/v1alpha1.
+func (ConfigurationSpec) APIVersion() apiversion.APIVersion {
+	return "clikit.configuration/v1alpha1"
 }
 
 // Variable returns the setting the environment variable name sets.

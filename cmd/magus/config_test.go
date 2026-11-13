@@ -253,7 +253,7 @@ func TestRunAffectedFlagParity(t *testing.T) {
 // vacuously if it were not for its own emptiness check.
 func registryFlagNames(t *testing.T, command string) map[string]struct{} {
 	t.Helper()
-	for _, c := range commands.Root.Children {
+	for _, c := range commands.Root.Spec.Children {
 		if c.Name != command {
 			continue
 		}

@@ -41,7 +41,7 @@ func main() {
 	ver := flag.String("version", "", "version for the .TH source field, e.g. v0.2.0; empty (the default) stays version-neutral for committed pages (roff mode)")
 	flag.Parse()
 
-	root := commands.Root
+	root := commands.Root.Spec.Command
 	var pages []generate.Page
 	var ext string
 	var err error
@@ -50,13 +50,13 @@ func main() {
 		if *out == "" {
 			*out = "manpage"
 		}
-		pages, err = generate.Roff(root, config.Configuration, *date, *ver)
+		pages, err = generate.Roff(root, config.Configuration.Spec,*date, *ver)
 		ext = ".1"
 	case "md":
 		if *out == "" {
 			*out = "docs/reference/manpage"
 		}
-		pages, err = generate.Markdown(root, config.Configuration, "internal/commands/registry.go")
+		pages, err = generate.Markdown(root, config.Configuration.Spec,"internal/commands/registry.go")
 		ext = ".md"
 	default:
 		fatalf("unknown -format %q; want roff or md", *format)

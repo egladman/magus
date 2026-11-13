@@ -1071,7 +1071,7 @@ func logForwardFallback(ctx context.Context, log *slog.Logger, err error) {
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
 	group := ""
-	for _, c := range commands.Root.Children {
+	for _, c := range commands.Root.Spec.Children {
 		if c.Group != group {
 			group = c.Group
 			fmt.Fprintf(os.Stderr, "\n%s:\n", group)

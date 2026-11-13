@@ -24,7 +24,7 @@ const nameSegment = configuration.NameSegment
 // KnownKeys returns every config key Configuration lists, sorted.
 func KnownKeys() []string {
 	var keys []string
-	for _, s := range Configuration.Settings {
+	for _, s := range Configuration.Spec.Settings {
 		if s.YamlPath != "" {
 			keys = append(keys, s.YamlPath)
 		}
@@ -143,7 +143,7 @@ func validateAfterMerge(data []byte) error {
 // matchKey finds the setting key names, and the list entry's name when key
 // addresses a field of one.
 func matchKey(key string) (configuration.Setting, string, bool) {
-	for _, s := range Configuration.Settings {
+	for _, s := range Configuration.Spec.Settings {
 		if s.YamlPath == "" {
 			continue
 		}

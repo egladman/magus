@@ -70,7 +70,7 @@ func parsePipeRecord(args []string) (rec pipeRecord, ok bool) {
 
 // registryCommand reports whether words walk the CLI registry down to a command.
 func registryCommand(words []string) bool {
-	level := commands.Root.Children
+	level := commands.Root.Spec.Children
 	for _, w := range words {
 		i := slices.IndexFunc(level, func(c command.Command) bool { return c.Name == w })
 		if i < 0 {

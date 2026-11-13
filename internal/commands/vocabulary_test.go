@@ -23,8 +23,8 @@ func registryFlags() []string {
 			}
 		}
 	}
-	collect(Root.Flags)
-	command.Walk(Root, func(_ string, c command.Command) { collect(c.Flags) })
+	collect(Root.Spec.Flags)
+	command.Walk(Root.Spec.Command, func(_ string, c command.Command) { collect(c.Flags) })
 	names := make([]string, 0, len(seen))
 	for n := range seen {
 		names = append(names, n)
@@ -34,7 +34,7 @@ func registryFlags() []string {
 }
 
 func TestRegistryFlagsPassTheGeneratorRefusals(t *testing.T) {
-	if err := command.Check(Root); err != nil {
+	if err := command.Check(Root.Spec.Command); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -127,7 +127,7 @@ func TestEffect(t *testing.T) { suite.Run(t, new(effectSuite)) }
 
 // A new leaf cannot reach a reader of the tree unclassified.
 func (s *effectSuite) TestEveryLeafDeclaresAnEffect() {
-	command.Walk(Root, func(path string, c command.Command) {
+	command.Walk(Root.Spec.Command, func(path string, c command.Command) {
 		if len(c.Children) == 0 {
 			s.NotEmpty(c.Effect, "magus %s declares no Effect: set one of %v", path, command.Effects)
 		}

@@ -1722,7 +1722,7 @@ func magusHelpRequest(args []string) bool {
 			return true
 		}
 	}
-	level, depth := commands.Root.Children, 0
+	level, depth := commands.Root.Spec.Children, 0
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if depth == 0 && strings.HasPrefix(a, "-") {

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/libs/apiversion"
 )
 
 func ExampleWalk() {
@@ -205,5 +207,18 @@ func TestCheckRefusesAStringListDefault(t *testing.T) {
 	err := Check(Command{Name: "tool", Flags: flags})
 	if err == nil || !strings.Contains(err.Error(), "--path is a StringList with a Default") {
 		t.Errorf("want a refusal naming --path's Default, got %v", err)
+	}
+}
+
+func TestACommandRecordNamesTheClikitCommandGroup(t *testing.T) {
+	record := apiversion.New(apiversion.Metadata{Name: "tool"}, CommandSpec{Command: Command{Name: "tool"}})
+	if got := record.APIVersion; got != "clikit.command/v1alpha1" || !got.Valid() {
+		t.Errorf("apiVersion %q, want a valid clikit.command/v1alpha1", got)
+	}
+	if record.Kind != "Command" {
+		t.Errorf("kind %q, want Command", record.Kind)
+	}
+	if record.Spec.Name != "tool" {
+		t.Errorf("the spec's root is %q, want tool", record.Spec.Name)
 	}
 }

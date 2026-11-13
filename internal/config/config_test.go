@@ -37,12 +37,18 @@ func TestDefaults_ARunWaitsHalfAnHourForTheBudget(t *testing.T) {
 
 func TestConfigurationStartsWithTheGeneratedTable(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, settings.Settings, Configuration.Settings[:len(settings.Settings)])
+	assert.Equal(t, settings.Settings, Configuration.Spec.Settings[:len(settings.Settings)])
+}
+
+func TestConfigurationIsAConfigurationRecord(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "clikit.configuration/v1alpha1", Configuration.APIVersion.String())
+	assert.Equal(t, "Configuration", string(Configuration.Kind))
 }
 
 func TestAVariableNoKeyCarriesIsInTheConfiguration(t *testing.T) {
 	t.Parallel()
-	s, ok := Configuration.Variable("MAGUS_OFFLINE")
+	s, ok := Configuration.Spec.Variable("MAGUS_OFFLINE")
 	require.True(t, ok)
 	assert.Empty(t, s.YamlPath)
 	assert.False(t, s.Internal)
@@ -50,7 +56,7 @@ func TestAVariableNoKeyCarriesIsInTheConfiguration(t *testing.T) {
 
 func TestAVariableMagusSetsForItsChildrenIsInternal(t *testing.T) {
 	t.Parallel()
-	s, ok := Configuration.Variable("MAGUS_LEVEL")
+	s, ok := Configuration.Spec.Variable("MAGUS_LEVEL")
 	require.True(t, ok)
 	assert.True(t, s.Internal)
 }

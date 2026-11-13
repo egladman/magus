@@ -243,7 +243,7 @@ func templateJoin(list any, sep string) string {
 // the command tree's decision about who owns stdout.
 func unstructuredCommand(name string) bool {
 	var raw bool
-	command.Walk(commands.Root, func(path string, c command.Command) {
+	command.Walk(commands.Root.Spec.Command, func(path string, c command.Command) {
 		if path == name {
 			raw = c.UnstructuredOutput
 		}
@@ -288,7 +288,7 @@ func refuseOutputOnPath(output string, args []string) error {
 // "config cache prune". Flags and words no child answers to are skipped.
 func commandPath(args []string) string {
 	var path []string
-	children := commands.Root.Children
+	children := commands.Root.Spec.Children
 	for _, arg := range args {
 		if arg == "--" {
 			break

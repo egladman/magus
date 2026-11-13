@@ -28,7 +28,7 @@ var storeFormats = []types.APIVersion{
 // store format and "spell <name>" per shipped spell. configKeys comes from
 // config.KnownKeys, which this package does not import.
 func API(configKeys []string) ([]string, error) {
-	out, err := generate.Lock(Root)
+	out, err := generate.Lock(Root.Spec.Command)
 	if err != nil {
 		return nil, fmt.Errorf("list the command tree: %w", err)
 	}

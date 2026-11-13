@@ -22,7 +22,7 @@ func runCLIFlags(args []string) error {
 	if *pkg == "" {
 		return errors.New("usage: magus-utils cliflags -out <file> -pkg <package>")
 	}
-	data, err := generate.Binders(commands.Root, *pkg, generate.WithSettings(settings.Settings, configTarget))
+	data, err := generate.Binders(commands.Root.Spec.Command,*pkg, generate.WithSettings(settings.Settings, configTarget))
 	if err != nil {
 		return err
 	}

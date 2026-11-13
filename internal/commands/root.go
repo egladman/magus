@@ -3,14 +3,15 @@ package commands
 import (
 	"slices"
 
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/clikit/command"
 )
 
-// Root is magus's command tree: the program, its global flags, and its top-level
-// commands in the order `magus help` lists them. Its Env is left for the caller to
-// fill from internal/config, which this package does not import so the browser
-// terminal can compile it to js/wasm.
-var Root = command.Command{
+// Root is magus's command tree as a Command record: the program, its global
+// flags, and its top-level commands in the order `magus help` lists them.
+// The variables it reads are internal/config's Configuration, which this
+// package does not import so the browser terminal compiles it to js/wasm.
+var Root = apiversion.New(apiversion.Metadata{Name: "magus"}, command.CommandSpec{Command: command.Command{
 	Name:        "magus",
 	Short:       "workspace-aware build orchestrator and content-addressed cache",
 	Usage:       "magus [flags] <subcommand> [args]",
@@ -51,7 +52,7 @@ dot-prefixed names are accepted; having both in the same directory is an error.`
 		group("Setup and maintenance", initCommand, doctorCommand, configCommand, selfCommand,
 			versionCommand),
 	),
-}
+}})
 
 // Help is `magus help`: help lists it and the shells complete it, but it is not in
 // Root because it prints what a bare `magus` prints and has no man page.

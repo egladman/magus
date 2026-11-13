@@ -131,7 +131,7 @@ func (s *UnknownMagusArgvSuite) TestOtherProgramsAreNotJudged() {
 }
 
 func (s *UnknownMagusArgvSuite) TestEveryDeclaredCommandAndFlagIsBound() {
-	command.Walk(commands.Root, func(path string, c command.Command) {
+	command.Walk(commands.Root.Spec.Command, func(path string, c command.Command) {
 		if len(c.Children) > 0 {
 			return
 		}

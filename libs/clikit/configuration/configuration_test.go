@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/clikit/command"
 )
 
@@ -55,6 +56,13 @@ func (s *ConfigurationSpecSuite) TestVariableFindsTheSettingByName() {
 	got, ok := spec.Variable("APP_LEVEL")
 	s.True(ok)
 	s.True(got.Internal)
+}
+
+func (s *ConfigurationSpecSuite) TestARecordNamesTheClikitConfigurationGroup() {
+	header := apiversion.SpecHeader[ConfigurationSpec]()
+	s.Equal(apiversion.APIVersion("clikit.configuration/v1alpha1"), header.APIVersion)
+	s.True(header.APIVersion.Valid())
+	s.Equal(apiversion.Kind("Configuration"), header.Kind)
 }
 
 func (s *ConfigurationSpecSuite) TestVariableFindsNoFileOnlyKey() {
