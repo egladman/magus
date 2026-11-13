@@ -242,7 +242,7 @@ linters:
           # never builds dot directories or testdata, so they need no entry.
           # proofread is skipped too: its attribution rule names the tools whose
           # credit it refuses, which is this repository's policy, not magus naming a host.
-          skip-dirs: [gen, docs, schema, proofread]
+          skip-dirs: [gen, docs, proofread]
           hosts: [claude, opencode, codex, aider, windsurf]
           # Cursor is a terminal position and a pagination token far more often
           # than the host, so only the shapes that mean the host are matched: the

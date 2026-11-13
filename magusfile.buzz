@@ -1157,7 +1157,7 @@ export fun config_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json"]);
-    ctx.writesFiles(["cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go",
+    ctx.writesFiles(["cmd/magus/gen/*.go", "internal/config/gen/settings/*.go", "internal/config/gen/*.go",
                 "cmd/magus/completions/*"]);
     _ = proc\exec("go", ["generate", "./cmd/magus/..."]);
 }

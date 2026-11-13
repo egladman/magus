@@ -23,7 +23,7 @@
 //
 // Run any subcommand with -h/--help for its own flag list.
 //
-//go:generate go run ../magus-utils config -config ../../internal/config/config.go -fields-out ../../schema/gen/fields.go -fields-pkg schemagen -bind-out gen/bind.go -bind-pkg flaggen -apply-env-out ../../internal/config/gen/env.go -apply-env-pkg configgen
+//go:generate go run ../magus-utils config -config ../../internal/config/config.go -fields-out ../../internal/config/gen/settings/settings.go -fields-pkg settings -bind-out gen/bind.go -bind-pkg flaggen -apply-env-out ../../internal/config/gen/env.go -apply-env-pkg configgen
 //go:generate go run ../magus-utils cliflags -out gen/cli_flags.go -pkg flaggen
 //go:generate go run ../magus-utils completions -out completions
 package main

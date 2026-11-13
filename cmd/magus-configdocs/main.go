@@ -16,9 +16,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/egladman/magus/internal/config/gen/settings"
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/internal/render/md"
-	"github.com/egladman/magus/schema"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/configuration"
 )
 
 func main() {
@@ -29,7 +31,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "magus-configdocs:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("magus-configdocs: wrote %d config fields to %s\n", len(schema.Fields), *out)
+	fmt.Printf("magus-configdocs: wrote %d config fields to %s\n", len(settings.Settings), *out)
 }
 
 // render builds the full Markdown page: frontmatter, intro, then one table per
@@ -48,8 +50,8 @@ func render() string {
 
 	// Group fields by their top-level yaml section (the segment before the first
 	// "."), so the reference reads section by section.
-	bySection := map[string][]schema.Field{}
-	for _, f := range schema.Fields {
+	bySection := map[string][]configuration.Setting{}
+	for _, f := range settings.Settings {
 		bySection[topSection(f.YamlPath)] = append(bySection[topSection(f.YamlPath)], f)
 	}
 	sections := make([]string, 0, len(bySection))
@@ -84,7 +86,7 @@ func topSection(yamlPath string) string {
 
 // flagCell renders the CLI flag for a table cell: the long form (plus short when
 // present), or an italic "(env only)" for fields with no flag.
-func flagCell(f schema.FlagNames) string {
+func flagCell(f configuration.FlagNames) string {
 	if f.Long == "" {
 		return "_(env only)_"
 	}
@@ -94,24 +96,23 @@ func flagCell(f schema.FlagNames) string {
 	return fmt.Sprintf("`--%s`", f.Long)
 }
 
-// kindLabel maps a schema.Kind to a reader-facing type name.
-func kindLabel(k schema.Kind) string {
+// kindLabel maps a setting's command.Kind to a reader-facing type name.
+func kindLabel(k command.Kind) string {
 	switch k {
-	case schema.KindString:
+	case command.String:
 		return "string"
-	case schema.KindInt:
+	case command.Int:
 		return "int"
-	case schema.KindBool:
+	case command.Bool:
 		return "bool"
-	case schema.KindFloat64:
+	case command.Float:
 		return "float"
-	case schema.KindBoolPtr:
+	case command.OptionalBool:
 		return "bool _(env only)_"
-	case schema.KindDuration:
+	case command.Duration:
 		return "duration"
-	case schema.KindStringSlice:
+	case command.StringList:
 		return "list _(comma-separated, env only)_"
-	default:
-		return "string"
 	}
+	panic(fmt.Sprintf("magus-configdocs: no label for setting kind %q", k))
 }

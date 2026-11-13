@@ -66,6 +66,11 @@ const (
 	String   Kind = "string"
 	Int      Kind = "int"
 	Duration Kind = "duration"
+	Float    Kind = "float"
+
+	// OptionalBool is a three-state setting: unset, true or false.
+	// No flag binds it, since a flag cannot say unset.
+	OptionalBool Kind = "optional-bool"
 
 	// StringList is a repeatable flag: each occurrence appends its value whole,
 	// commas included, so a caller that splits a value decides how. It starts

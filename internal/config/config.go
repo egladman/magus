@@ -14,9 +14,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/egladman/magus/internal/config/gen/settings"
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/clikit/command"
-	"github.com/egladman/magus/schema"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -1151,8 +1151,8 @@ type Report struct {
 // TestEveryReadMagusEnvVarIsRegistered fails when shipped code reads a name it lacks.
 func EnvVars() []command.Env {
 	defaults := reflect.ValueOf(Defaults())
-	out := make([]command.Env, 0, len(schema.Fields)+len(envOnly))
-	for _, f := range schema.Fields {
+	out := make([]command.Env, 0, len(settings.Settings)+len(envOnly))
+	for _, f := range settings.Settings {
 		out = append(out, command.Env{Name: f.EnvVar, Key: f.YamlPath, Default: defaultText(defaults, f.GoPath), Doc: f.Doc})
 	}
 	return append(out, envOnly...)
@@ -1166,7 +1166,7 @@ func defaultText(defaults reflect.Value, goPath string) string {
 	for _, name := range strings.Split(goPath, ".") {
 		v = v.FieldByName(name)
 		if !v.IsValid() {
-			panic(fmt.Sprintf("config: schema field %s is not in Config; regenerate schema/gen", goPath))
+			panic(fmt.Sprintf("config: schema field %s is not in Config; regenerate internal/config/gen/settings", goPath))
 		}
 	}
 	if v.IsZero() {

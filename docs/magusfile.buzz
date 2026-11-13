@@ -203,7 +203,7 @@ export fun design_index_generate(ctx: magus\Context, args: [str]) > void !> any 
 export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles([workspace\file("*.go"), workspace\file("internal/**/*.go"),
         workspace\file("types/**/*.go"), workspace\file("std/**/*.go"),
-        workspace\file("host/**/*.go"), workspace\file("schema/**/*.go"),
+        workspace\file("host/**/*.go"),
         workspace\file("libs/**/*.go"), workspace\file("libs/**/go.mod"), workspace\file("libs/**/go.sum"),
         workspace\file("go.mod"), workspace\file("go.sum"), workspace\file("go.work"), workspace\file("go.work.sum"),
         workspace\file("spells/**"),
@@ -223,7 +223,7 @@ export fun catalog_docs_generate(ctx: magus\Context, args: [str]) > void !> any 
         workspace\file("hack/magusfile/ruledocs.buzz"),
         "concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
         "!../internal/**/*_test.go", "!../libs/**/*_test.go", "!../cmd/**/*_test.go",
-        "!../std/**/*_test.go", "!../host/**/*_test.go", "!../types/**/*_test.go", "!../schema/**/*_test.go", "!../*_test.go"]);
+        "!../std/**/*_test.go", "!../host/**/*_test.go", "!../types/**/*_test.go", "!../*_test.go"]);
     // "reference/config *.md" matches only the Finder copies pruneContentPageCopies deletes.
     ctx.writesFiles(["reference/buzz/*.md", "reference/config.md", "reference/spell-contract.md",
         "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/config *.md"]);
