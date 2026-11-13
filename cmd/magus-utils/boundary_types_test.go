@@ -81,13 +81,13 @@ func (s *BoundaryWiringSuite) config(text string) buzzgen.Config {
 func (s *BoundaryWiringSuite) TestAnUnlistedInternalPackageIsRefused() {
 	r := buzzgen.NewReach(s.config(""))
 	r.Walk(reflect.TypeFor[ReachInternal](), buzzgen.Outbound, "root")
-	s.ErrorContains(r.Err(), "root reaches types.Change from internal package github.com/egladman/magus/internal/queue/types")
+	s.ErrorContains(r.Refused(), "root reaches types.Change from internal package github.com/egladman/magus/internal/queue/types")
 }
 
 func (s *BoundaryWiringSuite) TestAListedInternalPackageCrosses() {
 	r := buzzgen.NewReach(s.config("packages:\n  github.com/egladman/magus/internal/queue/types:\n    config: {open: test}\n"))
 	r.Walk(reflect.TypeFor[ReachInternal](), buzzgen.Outbound, "root")
-	s.NoError(r.Err())
+	s.NoError(r.Refused())
 }
 
 func (s *BoundaryWiringSuite) TestAHostSignatureNamesItsOwner() {

@@ -161,8 +161,8 @@ func goName(t reflect.Type) string {
 	return name
 }
 
-// Err is every type the walks refused, joined.
-func (r *Reach) Err() error { return errors.Join(r.errs...) }
+// Refused is every type the walks refused, joined.
+func (r *Reach) Refused() error { return errors.Join(r.errs...) }
 
 // From is the root that first reached t, or "".
 func (r *Reach) From(t reflect.Type) string { return r.from[t] }

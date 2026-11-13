@@ -209,7 +209,7 @@ What the build found, 2026-11-12:
   `vcs\CommandOptions` compare the same way.
 - `types/diff` cannot move yet. Its fields name root types (`types.Check`,
   `types.ImpactCoverage`, `types.VCSCheckpoint` and others), and `magus` functions return
-  `diff.Diff`, so `magus.buzz` and `magus/diff.buzz` would import each other. gopherbuzz
+  `diff.Diff`, so the `magus` and `magus\diff` declarations would import each other. gopherbuzz
   refuses a cycle between declaration modules. The Go packages have no cycle because the
   `magus` host module is `std`, not `types`.
 - `types/trail` cannot move yet. `trail.Trail` is a `magus` handle whose methods call the

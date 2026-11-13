@@ -213,7 +213,7 @@ func deriveBoundary() (boundarySet, error) {
 			r.Walk(rt.Type, buzzgen.Outbound, label)
 		}
 	}
-	if err := r.Err(); err != nil {
+	if err := r.Refused(); err != nil {
 		return boundarySet{}, err
 	}
 	set := boundarySet{types: boundaryMembers(r.Members()), open: map[reflect.Type]string{}}

@@ -67,7 +67,7 @@ func (s *ReachSuite) claims(r *Reach) []Claim {
 func (s *ReachSuite) TestAParameterCrossesInAndAResultOut() {
 	r := s.reach("")
 	r.Walk(reflect.TypeOf(func(context.Context, ReachArg) (ReachResult, error) { return ReachResult{}, nil }), Outbound, "m.f")
-	s.Require().NoError(r.Err())
+	s.Require().NoError(r.Refused())
 
 	arg, ok := s.member(r, reflect.TypeFor[ReachArg]())
 	s.Require().True(ok)
@@ -114,7 +114,7 @@ func (s *ReachSuite) TestAnUnexportedTypeIsRefused() {
 	r := s.reach("")
 	r.Walk(reflect.TypeFor[ReachLeaky](), Outbound, "root")
 
-	s.ErrorContains(r.Err(), "root reaches unexported type buzzgen.reachHidden")
+	s.ErrorContains(r.Refused(), "root reaches unexported type buzzgen.reachHidden")
 }
 
 func (s *ReachSuite) TestTwoTypesTakingOneNameAreRefused() {

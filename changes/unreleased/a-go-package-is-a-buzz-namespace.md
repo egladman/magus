@@ -11,6 +11,6 @@
   under that namespace only.** `import "shop/order";` for a module declaring
   `namespace shop\order;` binds `shop\order`, not `order`, and a file names its types only
   through its own import, as upstream Buzz binds them.
-- `.buzzgen.yaml` takes a top-level `module`. A package below a listed one is the nested
-  namespace `<module>\<package>` unless its config sets `module`, and `module: ""` keeps
-  its types where they are reached.
+- **`.buzzgen.yaml` takes a top-level `module`.** A package below a listed one is the
+  nested namespace `<module>\<package>` unless its config sets `module`, and `module: ""`
+  keeps its types where they are reached.
