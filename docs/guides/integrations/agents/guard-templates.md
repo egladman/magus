@@ -2103,8 +2103,9 @@ It declares no `magus-guard-coverage` line, for the reason
 //
 // A proofread that is missing, stale, exits 2 or prints unreadable JSON
 // judged nothing. That gets one notice per session naming the binary and its
-// fix, a systemMessage on claude-code and codex, else stderr. The reply is
-// never blocked. It always exits 0.
+// fix. claude-code gets it as additionalContext, which only the agent reads.
+// codex prints none, since its Stop output has no such field. Else stderr.
+// The reply is never blocked. It always exits 0.
 //
 // In a checkout of magus the proofread it builds judges, checked for
 // staleness by that checkout's own proofread module.
@@ -2352,13 +2353,15 @@ fun judge(bin: str, decisions: str, reply: str) > Judgment {
     return Judgment{ found = found! };
 }
 
-// noticeReply tells the person, once per session, that replies go unjudged.
-// The reply stays unblocked. Only Claude Code and Codex show a Stop notice.
-fun noticeReply(host: str, session: str, why: str, fix: str) > str {
+// noticeReply tells the agent, once per session, that replies go unjudged.
+// The reply stays unblocked. Codex has no field only the agent reads, so it
+// prints nothing there and takes no once-mark.
+fun noticeReply(host: str, event: str, session: str, why: str, fix: str) > str {
+    if (host == CODEX) { return ""; }
     if (!hook\noticeOnce(session, family: "proofread-reply", file: "proofread-reply.buzz")) { return ""; }
     final text = "proofread-reply judges no reply: {why}. {fix}";
-    if (host == CLAUDE_CODE or host == CODEX) {
-        return json\stringify({"systemMessage": text}) catch "";
+    if (host == CLAUDE_CODE) {
+        return json\stringify({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}) catch "";
     }
     warn(text);
     return "";
@@ -2564,11 +2567,11 @@ fun main(args: [str]) > void {
 
     var printed = "";
     if (reader.why != "") {
-        printed = noticeReply(host, session: session, why: reader.why, fix: reader.fix);
+        printed = noticeReply(host, event: "Stop", session: session, why: reader.why, fix: reader.fix);
     } else {
         final judgment = judge(reader.bin, decisions: decisions, reply: stop.reply);
         if (judgment.failure != "") {
-            printed = noticeReply(host, session: session, why: judgment.failure,
+            printed = noticeReply(host, event: "Stop", session: session, why: judgment.failure,
                 fix: "Run `{reader.bin} agent-reply --stdin` on a reply and read why.");
         } else {
             printed = held(pendingStore(), host: host, session: session,
@@ -2730,12 +2733,30 @@ test "a binary that is missing or fails says why it judged nothing" {
     std\assert(named.why.indexOf("not an executable") != null and named.fix == RELEASE_FIX, message: named.why);
 }
 
-test "the notice reaches the person once per session and never blocks" {
+test "the notice at Stop reaches the agent alone, once per session, and never blocks" {
     final session = "proofread-reply-{std\random(min: 0, max: 1000000)}";
-    final first: {str: any} = json\parse(noticeReply(CLAUDE_CODE, session: session, why: "w", fix: "f")) catch {<str: any>};
-    std\assert(first["systemMessage"] == "proofread-reply judges no reply: w. f", message: "{first}");
+    final first: {str: any} = json\parse(noticeReply(CLAUDE_CODE, event: "Stop", session: session, why: "w", fix: "f")) catch {<str: any>};
+    final hooked: {str: any} = first["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(hooked["hookEventName"] == "Stop", message: "{first}");
+    std\assert(hooked["additionalContext"] == "proofread-reply judges no reply: w. f", message: "{first}");
+    std\assert(first["systemMessage"] == null, message: "the person is not shown the notice: {first}");
     std\assert(first["decision"] == null, message: "the reply is never blocked");
-    std\assert(noticeReply(CLAUDE_CODE, session: session, why: "w", fix: "f") == "", message: "once per session");
+    std\assert(noticeReply(CLAUDE_CODE, event: "Stop", session: session, why: "w", fix: "f") == "", message: "once per session");
+}
+
+test "the notice at UserPromptSubmit names that event and reaches the agent alone" {
+    final session = "proofread-reply-{std\random(min: 0, max: 1000000)}";
+    final printed: {str: any} = json\parse(noticeReply(CLAUDE_CODE, event: "UserPromptSubmit", session: session, why: "w", fix: "f")) catch {<str: any>};
+    final hooked: {str: any} = printed["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(hooked["hookEventName"] == "UserPromptSubmit", message: "{printed}");
+    std\assert(hooked["additionalContext"] == "proofread-reply judges no reply: w. f", message: "{printed}");
+    std\assert(printed["systemMessage"] == null, message: "the person is not shown the notice: {printed}");
+}
+
+test "codex prints no notice and does not spend the session's once" {
+    final session = "proofread-reply-{std\random(min: 0, max: 1000000)}";
+    std\assert(noticeReply(CODEX, event: "Stop", session: session, why: "w", fix: "f") == "", message: "codex prints nothing");
+    std\assert(noticeReply(CLAUDE_CODE, event: "Stop", session: session, why: "w", fix: "f") != "", message: "claude-code still gets the notice");
 }
 
 test "a checkout's own proofread is checked for staleness by its magus" {
