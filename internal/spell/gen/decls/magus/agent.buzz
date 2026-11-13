@@ -12,7 +12,7 @@ export enum<str> SkillVariant {
 }
 
 export enum<str> ModelTierSource {
-    row = "row",
+    job = "job",
     matrix = "matrix",
     userMatrix = "user-matrix",
     default = "default",
@@ -27,7 +27,7 @@ export object JobModelTier {
     name: str = "",
     rank: int = 0,
     skills: SkillVariant = SkillVariant.short,
-    source: ModelTierSource = ModelTierSource.row,
+    source: ModelTierSource = ModelTierSource.job,
     reason: str = "",
     site: str = "",
     model: str = "",
