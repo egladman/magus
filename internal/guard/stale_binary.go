@@ -153,7 +153,9 @@ func openRevision(ctx context.Context, root, rev string) (revisionTree, error) {
 	tree := revisionTree{RevisionFileReader: res.VCS, RevisionLister: lister, rev: rev}
 	if opener, ok := res.VCS.(vcs.ObjectBatchOpener); ok {
 		// Without a batch each file is read on its own: slower, same answer.
-		tree.batch, _ = opener.OpenObjectBatch(ctx, root, rev)
+		if batch, err := opener.OpenObjectBatch(ctx, root, rev); err == nil {
+			tree.batch = batch
+		}
 	}
 	return tree, nil
 }
