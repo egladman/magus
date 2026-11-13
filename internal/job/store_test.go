@@ -694,7 +694,7 @@ func TestStoreKeepsANewerRowWhole(t *testing.T) {
 	s := tempStore(t, t.TempDir())
 	future := recordLine("future", "Running", "Running", `"futureSpec":{"x":1}`, `,"futureStatus":2`)
 	future = strings.Replace(future, `"spec"`, `"futureTop":true,"spec"`, 1)
-	path := plantRaw(t, s, headerLine("")+"\n"+future+"\n"+recordLine("other", "Running", "Running", "", ""))
+	path := plantRaw(t, s, fmt.Sprintf("%s\n%s\n%s", headerLine(""), future, recordLine("other", "Running", "Running", "", "")))
 	want := map[string]any{"x": float64(1)}
 	kept := func(msg string) {
 		t.Helper()
@@ -730,8 +730,8 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 	s, notices := sweepStore(t, 10_000, time.Hour)
 	future := strings.Replace(recordLine("future", "Declared", "Declared", "", ""),
 		`"metadata":{"name":"future"}`, `"metadata":{"name":"future","annotations":{"batch.magus/requires":"never-implemented"}}`, 1)
-	path := plantRaw(t, s, headerLine("")+"\n"+future+"\n"+
-		strings.ReplaceAll(recordLine("other", "Running", "Running", "", ""), `"created":1,"updated":1`, `"created":9999,"updated":9999`))
+	other := strings.ReplaceAll(recordLine("other", "Running", "Running", "", ""), `"created":1,"updated":1`, `"created":9999,"updated":9999`)
+	path := plantRaw(t, s, fmt.Sprintf("%s\n%s\n%s", headerLine(""), future, other))
 	before := storedRow(t, path, "future")
 
 	rows, err := s.List()
@@ -1502,8 +1502,8 @@ func renamed(from, to string) migrate.Migration {
 // unmigrated is a header behind every migration, and row a running
 // with spec member name.
 func unmigrated(name string) string {
-	return fmt.Sprintf(`{"apiVersion":%q,"kind":"JobList"}`, RecordAPIVersion) + "\n" +
-		recordLine("a", "Running", "Running", fmt.Sprintf(`%q:"ship it"`, name), "")
+	return fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\"}\n%s", RecordAPIVersion,
+		recordLine("a", "Running", "Running", fmt.Sprintf(`%q:"ship it"`, name), ""))
 }
 
 func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
@@ -1535,7 +1535,7 @@ func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
 }
 
 func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
-	body := fmt.Sprintf(`{"apiVersion":%q,"kind":"JobList","migration":1}`, RecordAPIVersion) + "\n" + recordLine("a", "Running", "Running", "", "")
+	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":1}\n%s", RecordAPIVersion, recordLine("a", "Running", "Running", "", ""))
 	st, path, notices := s.migratingStore(body, migrate.Migration{Name: "never", Up: func(migrate.Entry) (migrate.Entry, error) {
 		return nil, errors.New("ran")
 	}})
@@ -1549,7 +1549,7 @@ func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
 }
 
 func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
-	body := fmt.Sprintf(`{"apiVersion":%q,"kind":"JobList","migration":3}`, RecordAPIVersion) + "\n" + recordLine("a", "Running", "Running", "", "")
+	body := fmt.Sprintf("{\"apiVersion\":%q,\"kind\":\"JobList\",\"migration\":3}\n%s", RecordAPIVersion, recordLine("a", "Running", "Running", "", ""))
 	st, path, _ := s.migratingStore(body, renamed("goal", "parent"))
 
 	_, err := st.read()

@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -200,8 +201,8 @@ func (s *attemptStoreSuite) TestEnvelopingAttemptsRewritesTheOlderLines() {
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
 	current, err := json.Marshal(recordAttempt(types.Attempt{Job: "b", N: 1, Status: types.AttemptStatus{Started: 3}}))
 	s.Require().NoError(err)
-	s.Require().NoError(os.WriteFile(path, []byte(`{"api_version":"magus.job/v1alpha1","job":"a","n":2,"status":{"state":"no_return","ended":5,"end":"job"},"dropped":true}`+"\n"+
-		string(current)+"\n"), 0o600))
+	s.Require().NoError(os.WriteFile(path, []byte(fmt.Sprintf("%s\n%s\n",
+		`{"api_version":"magus.job/v1alpha1","job":"a","n":2,"status":{"state":"no_return","ended":5,"end":"job"},"dropped":true}`, current)), 0o600))
 
 	s.Require().NoError(s.store.envelopeAttempts())
 	s.Require().NoError(s.store.envelopeAttempts())

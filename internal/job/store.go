@@ -781,7 +781,10 @@ func (r jobRecord) job() (types.Job, error) {
 // unknownMembers names the members of top, spec and status, as
 // [types.Job.Unknown] spells them.
 func unknownMembers(top, spec, status map[string]json.RawMessage) []string {
-	var out []string
+	if len(top)+len(spec)+len(status) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(top)+len(spec)+len(status))
 	for k := range top {
 		out = append(out, k)
 	}
@@ -1075,7 +1078,10 @@ type verificationRecord struct {
 }
 
 func recordVerifications(in []types.VerificationStatus) []verificationRecord {
-	var out []verificationRecord
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]verificationRecord, 0, len(in))
 	for _, v := range in {
 		out = append(out, verificationRecord(v))
 	}
@@ -1083,7 +1089,10 @@ func recordVerifications(in []types.VerificationStatus) []verificationRecord {
 }
 
 func verifications(in []verificationRecord) []types.VerificationStatus {
-	var out []types.VerificationStatus
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]types.VerificationStatus, 0, len(in))
 	for _, v := range in {
 		out = append(out, types.VerificationStatus(v))
 	}
