@@ -68,6 +68,8 @@ export fun bootstrapFigure() > figure\Figure !> any {
             why: "docs generators and the browser playground, each built by its own target once ./magus exists; go-build links ./cmd/magus alone")
         .except([magus\graph().dir("internal/guard/builtin")],
             why: "each built-in rule's grade; the raw-tool advisory this figure draws is graded there like every other rule")
+        .except([magus\graph().dir("internal/guard/steps")],
+            why: "the step rules an SDK embedder registers; a bootstrap judges no step")
         .except([magus\graph().dir("cmd/magus-utils")],
             why: "the type generator spells-generate runs through go generate; the Spell bytecode actor stands for that step")
         .except(figure\without(packages\goPackages("internal/interp/**"), drop: [stamp]),

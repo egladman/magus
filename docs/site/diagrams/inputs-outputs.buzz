@@ -53,6 +53,8 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
             why: "copies files in and out of the store; it reads no glob and keys nothing")
         .except([magus\graph().dir("internal/cache/remotetest")], why: "a fake remote cache for tests")
         .except([magus\graph().dir("types/enum"), magus\graph().dir("types/daemon"), magus\graph().dir("types/diff"),
-                 magus\graph().dir("types/events"), magus\graph().dir("types/image"), magus\graph().dir("types/trail")],
+                 magus\graph().dir("types/events"), magus\graph().dir("types/image"), magus\graph().dir("types/trail"),
+                 magus\graph().dir("types/agent"), magus\graph().dir("types/check"), magus\graph().dir("types/impact"),
+                 magus\graph().dir("types/release"), magus\graph().dir("types/vcs")],
             why: "the closed string sets every package checks values against, and data-type packages the figure does not trace; no claim rule");
 }
