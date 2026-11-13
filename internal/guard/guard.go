@@ -23,6 +23,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/guard/steprule"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -92,6 +93,11 @@ type Dependencies struct {
 	StopRule workspace.StopRule
 	// ApprovedStopRule is ApprovedSpawnRule for the stop rule, resolved per judgment.
 	ApprovedStopRule func(ctx context.Context) (workspace.StopRule, error)
+	// StepRule is the working tree's magus\guard.step rule for kind,
+	// nil when none is registered for it.
+	StepRule func(kind string) steprule.Rule
+	// ApprovedStepRule is ApprovedSpawnRule for the step rule of kind.
+	ApprovedStepRule func(ctx context.Context, kind string) (steprule.Rule, error)
 	// ModelRows yields the model rows the workspace's harnesses publish through
 	// mgs_listModels, nil when none does. It can load the workspace and its harness
 	// spells, so it must load them once however often it is called; the guard calls it

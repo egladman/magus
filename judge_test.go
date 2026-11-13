@@ -496,6 +496,119 @@ func (s *judgeStepSuite) TestASpawnsStepWithNoPromptIsDeniedNamingIt() {
 	s.Contains(j.Reason, "spawn prompt")
 }
 
+// buzzStepRuleSuite pins magus\guard.step: the workspace's rule for a kind
+// feeds the judgment Judge returns.
+type buzzStepRuleSuite struct {
+	suite.Suite
+}
+
+func TestBuzzStepRule(t *testing.T) { suite.Run(t, new(buzzStepRuleSuite)) }
+
+func (s *buzzStepRuleSuite) SetupTest() { testkit.Isolate(s.T()) }
+
+// open opens a workspace whose root magusfile is src, with refundRow declared.
+func (s *buzzStepRuleSuite) open(src string, opts ...Option) (*Magus, error) {
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile(src)
+	m, err := Open(s.T().Context(), w.Root(), append(opts, WithStepRows(refundRow), WithSpawnRule(TierCeiling))...)
+	if m != nil {
+		s.T().Cleanup(func() { _ = m.Close() })
+	}
+	return m, err
+}
+
+func (s *buzzStepRuleSuite) refund(m *Magus, amount float64) agent.Step {
+	return agent.Step{APIVersion: agent.StepAPIVersion, Kind: "refund", Name: "card", Session: "s1", Dir: m.Root(),
+		Input: map[string]any{"amount": amount}}
+}
+
+const refundRule = `import "magus";
+
+magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict {
+    if (req.step.name == "card") {
+        return magus\guard.deny("Card refunds need a person.");
+    }
+    return magus\guard.allow();
+});
+`
+
+func (s *buzzStepRuleSuite) TestABuzzRuleJudgesAKindMagusNeverShips() {
+	m, err := s.open(refundRule)
+	s.Require().NoError(err)
+
+	j, err := m.Judge(s.T().Context(), s.refund(m, 250))
+
+	s.Require().NoError(err)
+	s.Equal(stepDenied("workspace:step", "Card refunds need a person."), j)
+}
+
+func (s *buzzStepRuleSuite) TestANamedVerdictReportsUnderItsName() {
+	m, err := s.open(`import "magus";
+
+magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict => magus\guard.deny("No refunds.", {"rule": "refund-limit"}));
+`)
+	s.Require().NoError(err)
+
+	j, err := m.Judge(s.T().Context(), s.refund(m, 250))
+
+	s.Require().NoError(err)
+	s.Equal(stepDenied("workspace:refund-limit", "No refunds."), j)
+}
+
+func (s *buzzStepRuleSuite) TestTheStricterOfTheGoAndTheBuzzRuleWins() {
+	m, err := s.open(`import "magus";
+
+magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict => magus\guard.advise("Log the refund."));
+`, WithStepRule(refundLimit))
+	s.Require().NoError(err)
+
+	j, err := m.Judge(s.T().Context(), s.refund(m, 250))
+
+	s.Require().NoError(err)
+	s.Equal(stepDenied("step:refund-limit", "Refunds over 100 need a person."), j)
+}
+
+func (s *buzzStepRuleSuite) TestAnUncommittedLooseningWaitsOnApproval() {
+	repo := testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": refundRule})
+	m, err := Open(s.T().Context(), repo.Root(), WithStepRows(refundRow), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	loosened := "import \"magus\";\n\nmagus\\guard.step(\"refund\", fun (req: StepRequest) > GuardVerdict => magus\\guard.allow());\n"
+	s.Require().NoError(os.WriteFile(filepath.Join(m.Root(), "magusfile.buzz"), []byte(loosened), 0o644))
+
+	j, err := m.Judge(s.T().Context(), s.refund(m, 250))
+
+	s.Require().NoError(err)
+	s.Equal(stepDenied("workspace:step", "Card refunds need a person."), j)
+}
+
+func (s *buzzStepRuleSuite) TestARuleForAnotherKindLeavesTheRowUnjudgedAtOpen() {
+	_, err := s.open(`import "magus";
+
+magus\guard.step("egress", fun (req: StepRequest) > GuardVerdict => magus\guard.allow());
+`)
+
+	s.ErrorContains(err, `magus\guard.step`)
+	s.ErrorContains(err, `kind "refund"`)
+}
+
+func (s *buzzStepRuleSuite) TestARuleThatRaisesDeniesARowOnlyItJudges() {
+	m, err := s.open(`import "magus";
+
+magus\guard.step("refund", fun (req: StepRequest) > GuardVerdict {
+    if (req.step.name == "card") { throw "ledger unreachable"; }
+    return magus\guard.allow();
+});
+`)
+	s.Require().NoError(err)
+
+	j, err := m.Judge(s.T().Context(), s.refund(m, 250))
+
+	s.Require().NoError(err)
+	s.Equal(stepDenied("unjudged-step", j.Reason), j)
+	s.Contains(j.Reason, "ledger unreachable")
+}
+
 // stepRemedySuite pins that a step's built-in deny serves the remedy the
 // same command line gets from the hook.
 type stepRemedySuite struct {

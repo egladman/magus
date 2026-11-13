@@ -13,7 +13,10 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/guard/steprule"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
 )
@@ -43,8 +46,9 @@ type stepRow struct {
 	schema      *jsonschema.Resolved
 }
 
-// NewStepTable checks rows against rules. A malformed row is an error, and
-// so is a row no built-in rule and no step rule would judge.
+// NewStepTable checks rows against rules. A malformed row is an error. A
+// row nothing would judge is left to CheckJudged, once the workspace's own
+// rules are known.
 func NewStepTable(rows []typesagent.StepRow, rules []StepRule) (StepTable, error) {
 	for _, r := range rules {
 		if r == nil {
@@ -55,7 +59,7 @@ func NewStepTable(rows []typesagent.StepRow, rules []StepRule) (StepTable, error
 	seen := map[[2]string]bool{}
 	var errs []error
 	for i, row := range rows {
-		r, err := newStepRow(row, len(rules) > 0)
+		r, err := newStepRow(row)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("step row %d (kind %q): %w", i, row.Kind, err))
 			continue
@@ -74,7 +78,7 @@ func NewStepTable(rows []typesagent.StepRow, rules []StepRule) (StepTable, error
 	return t, nil
 }
 
-func newStepRow(row typesagent.StepRow, ruled bool) (stepRow, error) {
+func newStepRow(row typesagent.StepRow) (stepRow, error) {
 	if row.Kind == "" {
 		return stepRow{}, errors.New("no kind")
 	}
@@ -117,11 +121,35 @@ func newStepRow(row typesagent.StepRow, ruled bool) (stepRow, error) {
 		}
 		r.schema = resolved
 	}
-	if !ruled && !r.has(types.ToolInert) && !r.builtinJudged() {
-		return stepRow{}, errors.New("no built-in rule judges its capabilities and no step rule is registered: " +
-			"declare it inert, give it runs, reads, writes or spawns, or register a rule with magus.WithStepRule")
-	}
 	return r, nil
+}
+
+// CheckJudged refuses each row no rule would judge: not inert, no capability
+// a built-in rule judges, no Go step rule, and no kind in kinds. kinds are
+// what magus\guard.step registered.
+func (t StepTable) CheckJudged(kinds []string) error {
+	var errs []error
+	for i, r := range t.rows {
+		if t.unjudged(r) && !slices.Contains(kinds, r.Kind) {
+			errs = append(errs, fmt.Errorf("step row %d (kind %q): no built-in rule judges its capabilities and no step rule is registered: "+
+				"declare it inert, give it runs, reads, writes or spawns, register a rule with magus.WithStepRule, "+
+				`or register one for the kind with magus\guard.step in the root magusfile`, i, r.Kind))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// unjudged reports a row only a workspace's magus\guard.step rule judges.
+func (t StepTable) unjudged(r stepRow) bool {
+	return len(t.rules) == 0 && !r.has(types.ToolInert) && !r.builtinJudged()
+}
+
+// changes reports a row whose step may change state: anything but inert
+// or a read.
+func (r stepRow) changes() bool {
+	return len(r.Capabilities) == 0 || slices.ContainsFunc(r.Capabilities, func(c string) bool {
+		return c != string(types.ToolInert) && c != string(types.ToolReads)
+	})
 }
 
 // checkCapabilities refuses a row whose capabilities and pointers disagree,
@@ -236,7 +264,94 @@ func JudgeStep(ctx context.Context, deps Dependencies, req Request, step typesag
 		}
 		judged = stricterStep(judged, ruled)
 	}
-	return judged, nil
+	return gradeWorkspaceStep(ctx, deps, req, stepReq, row, judged), nil
+}
+
+// seamStep is the magus\guard.step seam.
+const seamStep functionSeam = "step"
+
+// workspaceStepRule is the GuardJudgment.Rule an unnamed magus\guard.step
+// answer carries.
+const workspaceStepRule = workspaceShellPrefix + "step"
+
+// gradeWorkspaceStep asks the workspace's magus\guard.step rule for the
+// step's kind on both sides, strengthen only. A rule that fails judges
+// nothing and says so. A row only that rule judges is denied when no side
+// answers.
+func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, stepReq typesagent.StepRequest, row stepRow, judged types.GuardJudgment) types.GuardJudgment {
+	step := stepReq.Step
+	unjudged := deps.Steps.unjudged(row)
+	if judged.Decision == decisionDeny {
+		return judged
+	}
+	var worktree steprule.Rule
+	if deps.StepRule != nil {
+		worktree = deps.StepRule(step.Kind)
+	}
+	if worktree == nil && deps.ApprovedStepRule == nil {
+		if unjudged {
+			return gradeStepDeny(deps, judged, denyRuleUnjudgedStep, noStepRuleReason(step, nil))
+		}
+		return judged
+	}
+	at := hookLocationAt(deps, step.Dir)
+	who := hookAttribution{Host: req.Host, Form: req.Form, Session: cmp.Or(step.Session, req.Session), Agent: cmp.Or(step.Agent, req.Agent), Window: req.Window}
+	facts := hint.NewGate(at.cacheDir, who.factsKey())
+	bind := func(rule steprule.Rule) ruleCall {
+		if rule == nil {
+			return nil
+		}
+		return func(ctx context.Context) (types.GuardVerdict, error) { return rule(ctx, stepReq, facts) }
+	}
+	var resolve func(context.Context) (ruleCall, error)
+	if deps.ApprovedStepRule != nil {
+		resolve = func(ctx context.Context) (ruleCall, error) {
+			rule, err := deps.ApprovedStepRule(ctx, step.Kind)
+			return bind(rule), err
+		}
+	}
+	asked := askWorkspaceRules(ctx, seamStep, deps, resolve, bind(worktree))
+	denyLapse(&asked, judgedCall{seam: seamStep, changes: row.changes(), what: fmt.Sprintf("this %s step", step.Kind), lease: judged.Lease})
+	decided := ""
+	if judged.Decision != decisionPass {
+		decided = decidedByBuiltin
+	}
+	judged, _ = applyWorkspaceAnswer(judged, decided, asked, workspaceStepRule)
+	if unjudged && len(asked.answered) == 0 && judged.Decision != decisionDeny {
+		return gradeStepDeny(deps, judged, denyRuleUnjudgedStep, noStepRuleReason(step, asked.failures))
+	}
+	if note := stepFailureNote(asked); note != "" && judged.Decision != decisionDeny {
+		judged.Context = strings.Join(slices.DeleteFunc([]string{judged.Context, note}, func(s string) bool { return s == "" }), "\n\n")
+		if judged.Decision == decisionPass {
+			judged.Decision = decisionAdvise
+		}
+	}
+	return judged
+}
+
+// noStepRuleReason is the deny for a step only a workspace rule judges when
+// none answered, naming each side that failed.
+func noStepRuleReason(step typesagent.Step, failures []trail.RuleFailure) string {
+	reason := fmt.Sprintf("magus workspace: no rule judged the %s step: its row has no capability a built-in rule judges, no magus.WithStepRule is registered, "+
+		`and no %s rule for kind %q answered. Nothing passes unjudged.`, step.Kind, seamStep.member(), step.Kind)
+	for _, f := range failures {
+		reason += fmt.Sprintf("\n  %s: %s", sideName(seamStep, f.Side), f.Error)
+	}
+	return reason
+}
+
+// stepFailureNote names each side of the step rule that judged nothing, ""
+// when every side answered.
+func stepFailureNote(asked rulesAnswer) string {
+	if len(asked.failures) == 0 {
+		return ""
+	}
+	lines := make([]string, len(asked.failures))
+	for i, f := range asked.failures {
+		lines[i] = fmt.Sprintf("%s: %s", sideName(seamStep, f.Side), f.Error)
+	}
+	return fmt.Sprintf("magus workspace: %s judged nothing, so this step stands on the other rules alone.\n%s",
+		seamStep.member(), strings.Join(lines, "\n"))
 }
 
 // stepInput is what a row's pointers read from one step's input.

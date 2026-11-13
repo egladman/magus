@@ -1913,13 +1913,13 @@ func TestEffectiveBuiltinsWithoutAnApprovalAuthority(t *testing.T) {
 // A builtins declaration is policy: the digest moves with it, and declaring one alone is
 // enough for there to be one.
 func TestPolicyDigestCoversBuiltins(t *testing.T) {
-	none := buildPolicy(nil, false, false, false, false, nil, nil)
+	none := buildPolicy(nil, false, false, false, false, nil, nil, nil)
 	assert.Empty(t, none.Digest)
 
-	off := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil)
-	deny := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}}, nil)
-	lines := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}}, nil)
-	moreLines := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}}, nil)
+	off := buildPolicy(nil, false, false, false, false, nil, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil)
+	deny := buildPolicy(nil, false, false, false, false, nil, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}}, nil)
+	lines := buildPolicy(nil, false, false, false, false, nil, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}}, nil)
+	moreLines := buildPolicy(nil, false, false, false, false, nil, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}}, nil)
 	assert.NotEmpty(t, off.Digest)
 	assert.Equal(t, 1, off.Builtins)
 	assert.NotEqual(t, off.Digest, deny.Digest)
@@ -1927,8 +1927,23 @@ func TestPolicyDigestCoversBuiltins(t *testing.T) {
 
 	shell := []workspace.ShellRule{{Name: "x", Decision: "deny", Program: "curl", Reason: "r"}}
 	assert.NotEqual(t,
-		buildPolicy(shell, false, false, false, false, nil, nil).Digest,
-		buildPolicy(shell, false, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil).Digest)
+		buildPolicy(shell, false, false, false, false, nil, nil, nil).Digest,
+		buildPolicy(shell, false, false, false, false, nil, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil).Digest)
+}
+
+// A step rule is code: registering one is a policy, and its kind names it.
+func TestPolicyDigestCoversStepRules(t *testing.T) {
+	refund := buildPolicy(nil, false, false, false, false, []string{"refund"}, nil, nil)
+	egress := buildPolicy(nil, false, false, false, false, []string{"egress"}, nil, nil)
+	assert.NotEmpty(t, refund.Digest)
+	assert.Equal(t, []string{"refund"}, refund.StepRules)
+	assert.NotEqual(t, refund.Digest, egress.Digest)
+}
+
+func TestARemovedStepRuleWaitsOnApproval(t *testing.T) {
+	prev := policyMarker{Digest: "a", StepRules: []string{"refund"}}
+	assert.Equal(t, PolicyLoosenPending, classifyPolicy(prev, true, PolicyState{Digest: "b"}, true))
+	assert.Equal(t, PolicyTightened, classifyPolicy(policyMarker{Digest: "a"}, true, PolicyState{Digest: "b", StepRules: []string{"refund"}}, true))
 }
 
 func TestPendingSetCoversFilesUnderAnUntrackedDirectory(t *testing.T) {

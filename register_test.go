@@ -26,6 +26,31 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+// sdkOptionSuite pins that an option only Open and Inspect read fails loudly
+// on a bare workspace.Load, whose reader reads none of it.
+type sdkOptionSuite struct{ suite.Suite }
+
+func TestSDKOption(t *testing.T) { suite.Run(t, new(sdkOptionSuite)) }
+
+func (s *sdkOptionSuite) TestWithStepRowsPanicsOnABareLoad() {
+	s.PanicsWithValue("magus.WithStepRows sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it",
+		func() { WithStepRows()(&workspace.Load{}) })
+}
+
+func (s *sdkOptionSuite) TestWithStepRulePanicsOnABareLoad() {
+	s.Panics(func() { WithStepRule(refundLimit)(&workspace.Load{}) })
+}
+
+func (s *sdkOptionSuite) TestWithSpawnRulePanicsOnABareLoad() {
+	s.Panics(func() { WithSpawnRule(TierCeiling)(&workspace.Load{}) })
+}
+
+func (s *sdkOptionSuite) TestOpensOptionsTakeIt() {
+	o := collectOptions([]Option{WithStepRows(refundRow), WithSpawnRule(TierCeiling)})
+	s.Equal([]agent.StepRow{refundRow}, o.stepRows)
+	s.NotNil(o.spawnRule)
+}
+
 // makeWorkspaceRoot lays down project manifest stubs and returns the
 // temp directory path. Does not call Open — lets the caller register
 // options first.

@@ -195,6 +195,7 @@ func ForeignJudgeDeps(deps Dependencies, root, binary string) Dependencies {
 	deps.CommandRule, deps.ApprovedCommandRule = nil, nil
 	deps.WriteRule, deps.ApprovedWriteRule = nil, nil
 	deps.StopRule, deps.ApprovedStopRule = nil, nil
+	deps.StepRule, deps.ApprovedStepRule = nil, nil
 	return deps
 }
 

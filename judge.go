@@ -48,7 +48,8 @@ func (m *Magus) JudgeWrite(ctx context.Context, session, dir, path string) (type
 
 // Judge judges step against the rows WithStepRows declared. The built-in
 // rules judge the command and paths its row points at, then each StepRule
-// judges it, and the strictest decision wins. Judge never changes, holds
+// judges it, then the workspace's magus\guard.step rule for its kind, beside
+// its approved copy. The strictest decision wins. Judge never changes, holds
 // or takes the step. An undeclared kind is a deny. The error is a step
 // that cannot be judged, or a failed StepRule.
 func (m *Magus) Judge(ctx context.Context, step agent.Step) (types.GuardJudgment, error) {

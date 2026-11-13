@@ -34,6 +34,7 @@ import (
 	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/guard/steprule"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/log/attr"
@@ -211,6 +212,9 @@ type Magus struct {
 	steps guard.StepTable
 	// modelTiers is what the root magusfile's magus\modelTiers declared.
 	modelTiers agent.ModelTierState
+	// stepRules is what the root magusfile's magus\guard.step registered.
+	// Load checks the step rows against its kinds.
+	stepRules steprule.Set
 }
 
 // env reads key from the environment WithEnv gave, "" for a key unset there or with no
@@ -417,6 +421,9 @@ func (m *Magus) load(ctx context.Context) error {
 		return errors.Join(err, m.spellShadows())
 	}
 	m.magusfileExports = customTargets
+	if err := m.steps.CheckJudged(m.stepRules.Kinds()); err != nil {
+		return fmt.Errorf("magus: WithStepRows: %w", err)
+	}
 	// Workspace providers run HERE, where both facts they need hold.
 	// The magusfiles ran, so magus\workspaceProvider named its spells.
 	// The registry waits, so magus\project still layers on top.

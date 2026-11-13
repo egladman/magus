@@ -18,13 +18,14 @@ func WithJobReader(r types.JobReader) Option {
 
 // WithStepRows declares each kind of step Judge is asked about; a step no
 // row covers is denied. Open fails on a malformed row, and on a row that
-// is not inert when neither a built-in rule nor a StepRule judges it.
-// Repeated options add rows.
+// is not inert when no built-in rule, StepRule or magus\guard.step rule
+// for its kind judges it. Repeated options add rows.
 func WithStepRows(rows ...agent.StepRow) Option {
-	return sdkOption(func(o *options) { o.stepRows = append(o.stepRows, rows...) })
+	return sdkOption("WithStepRows", func(o *options) { o.stepRows = append(o.stepRows, rows...) })
 }
 
-// StepRule judges a step Judge was asked about, after the built-in rules.
+// StepRule judges a step Judge was asked about, after the built-in rules
+// and before the workspace's magus\guard.step rule for its kind.
 // It is called for every step, whatever its kind, and the strictest
 // decision wins. An error means it judged nothing, and Judge returns it.
 // A verdict reports under step:<rule>, or step:<kind> with no rule named.
@@ -33,5 +34,5 @@ type StepRule func(ctx context.Context, req agent.StepRequest) (types.GuardVerdi
 // WithStepRule adds rule to the ones Judge runs, in the order given. Open
 // fails on a nil rule.
 func WithStepRule(rule StepRule) Option {
-	return sdkOption(func(o *options) { o.stepRules = append(o.stepRules, rule) })
+	return sdkOption("WithStepRule", func(o *options) { o.stepRules = append(o.stepRules, rule) })
 }

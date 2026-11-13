@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/guard/steprule"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -26,13 +27,16 @@ type options struct {
 	stepRules []StepRule
 }
 
-// sdkOption sets what only this package reads. Set on a bare Load, it
-// sets nothing: that Load's reader reads none of it.
-func sdkOption(set func(*options)) Option {
+// sdkOption sets what only this package reads. On a bare Load it panics,
+// naming the option: an Option returns no error, and that Load's reader
+// would read none of it.
+func sdkOption(name string, set func(*options)) Option {
 	return func(o workspace.Options) {
-		if own, ok := o.(*options); ok {
-			set(own)
+		own, ok := o.(*options)
+		if !ok {
+			panic(fmt.Sprintf("magus.%s sets what only magus.Open and magus.Inspect read, and was applied to a %T, which reads none of it", name, o))
 		}
+		set(own)
 	}
 }
 
@@ -125,7 +129,7 @@ func TierCeiling(parent, child agent.ModelTier) error {
 // there is no default rule, so Open and Inspect fail without one or on a nil one, naming
 // TierCeiling, the reference rule the CLI passes.
 func WithSpawnRule(rule SpawnRule) Option {
-	return sdkOption(func(o *options) { o.spawnRule = rule })
+	return sdkOption("WithSpawnRule", func(o *options) { o.spawnRule = rule })
 }
 
 // WithVersion supplies the running build's version so Open and Inspect can check it
@@ -203,9 +207,10 @@ func WorkspaceRegistryFromContext(ctx context.Context) *WorkspaceRegistry {
 }
 
 // installWorkspaceRegistry puts what a magusfile declares into on ctx: the
-// registry, and the model tiers m holds.
+// registry, and the model tiers and step rules m holds.
 func (m *Magus) installWorkspaceRegistry(ctx context.Context) context.Context {
-	return agent.WithModelTierState(workspace.ContextWithRegistry(ctx, m.wsReg), &m.modelTiers)
+	ctx = agent.WithModelTierState(workspace.ContextWithRegistry(ctx, m.wsReg), &m.modelTiers)
+	return steprule.WithSet(ctx, &m.stepRules)
 }
 
 // ProjectOption mutates a Project at registration time. A non-nil error aborts Open.
