@@ -411,6 +411,10 @@ rather than guessed. The same record keeps the model the spawn
 named, and, when the spawn's `description` reads `<parent>/<role> <job>` for a
 live job, the job its later calls are graded under, in its own worktree too.
 
+A guard verdict at `Stop` or `SubagentStop` reaches the agent alone. A deny blocks
+the stop with its reason, and advice rides `hookSpecificOutput.additionalContext`,
+which the host hands the model and does not show you.
+
 The `SubagentStop` entry also measures the subagent. Its payload names the finished
 subagent's `agent_id` and `agent_transcript_path`; magus reads the last usage
 record in that transcript's final 512 KiB and files input plus cache-read plus

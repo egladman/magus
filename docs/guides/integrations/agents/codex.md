@@ -535,7 +535,8 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do; s
   call continues, so the push prompt comes from the rules file. `Stop` output takes
   `decision: "block"` and its reason, no `hookSpecificOutput`, so advice from a reply
   check cannot ride a `Stop` reply; it reaches the model only as the prompt of the
-  continuation turn.
+  continuation turn. A guard advise at `Stop` prints nothing, rather than a
+  `systemMessage` that would show it to you.
 
 ### Events
 
