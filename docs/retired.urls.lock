@@ -461,3 +461,5 @@ tags/status/
 # unjudged-tool became unjudged-step (ADR 0046): the judge rules on any agent step, not
 # only a host's tool call. The rule page is generated per rule, so the old page retires.
 reference/rules/unjudged-tool/
+# libs/cmdline became libs/clikit; its generated development page went with the old path.
+development/libs-cmdline/

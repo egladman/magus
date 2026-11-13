@@ -56,7 +56,9 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
         .except([magus\graph().dir("libs/testkit")], why: "fixtures for magus's Go tests")
         .except([magus\graph().dir("libs/scipbuzz")],
             why: "the Buzz symbol indexer; it feeds the knowledge graph, not a figure")
-        .except([magus\graph().dir("libs/clikit")],
+        .except([magus\graph().dir("libs/clikit/command"), magus\graph().dir("libs/clikit/configuration"),
+                 magus\graph().dir("libs/clikit/exit"), magus\graph().dir("libs/clikit/generate"),
+                 magus\graph().dir("libs/clikit/output")],
             why: "the command tree magus's generators read; no figure passes through it")
         .except([magus\graph().dir("libs/proofread")],
             why: "the prose judge; a figure's text is not judged by it")
