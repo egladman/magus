@@ -195,6 +195,9 @@ This amends ADR 0035. Membership stays reach: no type and no namespace is listed
 | `types/agent` mirrors under `magus\agent`; its 4 prefix `name` lines deleted | done                           |
 | `types/trail` mirrors under `magus\trail`; its 6 prefix `name` lines deleted | done                           |
 | `types/diff` mirrors under `magus\diff`; its 22 prefix `name` lines deleted  | not built                      |
+| `Check`, `Evidence`, `Tier` and kin move to `types/check` as `magus\check`   | done                           |
+| `ImpactCoverage` and `ImpactProject` move to `types/impact` as `magus\impact` | done                           |
+| `Diagnostic`, `ReleaseStage` and `VCSCheckpoint` move below `types`          | not built (packages to pick)   |
 | The rule that bundles a root type into the module returning it deleted       | not built (root types keep it) |
 | The stale comment on `std.Namespace` corrected                               | done                           |
 
@@ -232,6 +235,29 @@ What the second build found, 2026-11-13:
   imports `types`, so Go would refuse the cycle.
 - A lower package is a new name and a break the table does not list. Each of the 10
   changes its Buzz spelling, and `types.Check` alone is named in 81 Go files.
+
+What the third build found, 2026-11-13:
+
+- Eli split the 10 by meaning: `types/check` takes `Check`, `CheckStatus`, `Evidence`,
+  `TierEvidence` and `Tier`, and `types/impact` takes `ImpactCoverage` and
+  `ImpactProject`. Both are built. buzzgen derives `magus\check` and `magus\impact`
+  with no config line.
+- The stutter rule refuses `check.CheckStatus`, so the Go names drop the package's
+  name: `check.Status`, `check.OK`, `impact.Coverage` and `impact.Project`. The Buzz
+  names follow the Go names.
+- `Diagnostic` has an owner, `libs/diagnostics`. `types` already imports it, and it
+  imports nothing of magus. Its parent `libs` is not listed in `.buzzgen.yaml`, so no
+  namespace derives for it, and it would stay in `magus` until its package sets
+  `module`.
+- `VCSCheckpoint` has no owner below `types`. The `vcs` package imports `types`, and
+  `types/job.go` and `types/magus_handle.go` name the checkpoint.
+- `ReleaseStage` has no owner below `types`. `internal/release` imports `types` and
+  the interpreter. `NewestReleaseStage` reads `types.VCSTag`, so it stays in `types`
+  unless `VCSTag` moves with it.
+- The depguard list `types-pure-domain` lets `types` import `types/agent` and no other
+  scoped package, so it needs `types/check` and `types/impact` added.
+- The checkout's own `./magus` predates `magus\check`. `hack/policy/mandate.buzz`
+  imports it, so that binary cannot load the magusfile until it is rebuilt.
 
 ### Principles checked
 
@@ -332,8 +358,9 @@ if a package is found whose types belong in two namespaces.
 
 ## Open questions
 
-- Which package the 10 root types `magus\diff` names move to, and under what name. A
-  package name is Eli's pick.
+- Which packages `Diagnostic`, `ReleaseStage` and `VCSCheckpoint` move to, and under
+  what names. `libs/diagnostics` with a `module` line, a new `types/vcs`, and a new
+  `types/release` are the candidates. A package name is Eli's pick.
 - How a handle whose record lives in a nested namespace reaches its host's externs. No
   moved package has needed it yet.
 - Whether upstream lets a function `shop\order` and a namespace `shop\order` coexist.
