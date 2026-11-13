@@ -49,7 +49,7 @@ func (v APIVersion) String() string { return string(v) }
 
 // Group is `magus.job` in `magus.job/v1alpha1`. It is "" when v is
 // malformed.
-func (v APIVersion) Group() string { return v.parts().group }
+func (v APIVersion) Group() string { return v.components().group }
 
 // Version is `v1alpha1` in `magus.job/v1alpha1`. It is "" when v is
 // malformed.
@@ -62,12 +62,12 @@ func (v APIVersion) Version() string {
 }
 
 // Stability is alpha, beta or stable. It is "" when v is malformed.
-func (v APIVersion) Stability() Stability { return v.parts().stability }
+func (v APIVersion) Stability() Stability { return v.components().stability }
 
 // Compare orders by group, then by version within the group. A
 // malformed version sorts first.
 func (v APIVersion) Compare(w APIVersion) int {
-	x, y := v.parts(), w.parts()
+	x, y := v.components(), w.components()
 	return cmp.Or(
 		cmp.Compare(x.group, y.group),
 		cmp.Compare(x.major, y.major),
@@ -92,18 +92,18 @@ func RefuseVersion(want, got APIVersion, what, fix string) error {
 	}
 }
 
-type apiVersionParts struct {
+type apiVersionComponents struct {
 	group        string
 	major, minor int
 	stability    Stability
 }
 
-func (v APIVersion) parts() apiVersionParts {
+func (v APIVersion) components() apiVersionComponents {
 	m := apiVersionRe.FindStringSubmatch(string(v))
 	if m == nil {
-		return apiVersionParts{}
+		return apiVersionComponents{}
 	}
-	p := apiVersionParts{group: m[1], stability: StabilityStable}
+	p := apiVersionComponents{group: m[1], stability: StabilityStable}
 	p.major, _ = strconv.Atoi(m[2]) // apiVersionRe matched digits
 	if m[3] != "" {
 		p.stability = Stability(m[3])
