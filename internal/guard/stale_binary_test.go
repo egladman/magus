@@ -250,6 +250,7 @@ func (s *StaleBinaryRemedySuite) SetupTest() {
 	s.root = ownCheckout(s.T(), s.layers.of(s.T()), true)
 	declareGuardRule(s.T(), s.root)
 	servesPlacement(s.T(), s.root)
+	commitAuthority(s.T(), s.layers.of(s.T()), s.root)
 	s.deps = unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 }
 
@@ -788,6 +789,7 @@ func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
 	servesPlacement(t, root)
+	commitAuthority(t, ctx, root)
 	deps := unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
 	worker := Judge(ctx, deps, Request{Input: mcpEnvelope(t, "client", map[string]any{"script": "x"}), Host: "claude-code", Session: "s1", Lease: "lease-a"})

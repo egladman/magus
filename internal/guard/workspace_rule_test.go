@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
@@ -108,6 +110,24 @@ func ownCheckout(t *testing.T, ctx context.Context, hasBinary bool) string {
 	return root
 }
 
+// commitAuthority commits root's tree and advances every row's Authority
+// to it. A leased call reads the contract at its authority, so a worker's
+// fixture commits what ownCheckout wrote.
+func commitAuthority(t *testing.T, ctx context.Context, root string) {
+	t.Helper()
+	for _, args := range [][]string{{"add", "-A"}, {"commit", "-q", "-m", "contract"}} {
+		out, err := exec.Command("git", append([]string{"-C", root, "-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false"}, args...)...).CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	store := job.NewStore(hookLocation(ctx, Dependencies{}).jobs())
+	rows, err := store.List()
+	require.NoError(t, err)
+	for _, row := range rows {
+		_, err := store.AdvanceAuthority(ctx, row.ID)
+		require.NoError(t, err)
+	}
+}
+
 // carryContract writes lock as root's api.lock, the contract file a
 // checkout of magus carries.
 func carryContract(t *testing.T, root, lock string) {
@@ -187,6 +207,7 @@ func TestLoadFailureDenyNamesThePlacementForALeasedWorker(t *testing.T) {
 	recordLoadedPolicy(t, cacheDir)
 	root := ownCheckout(t, ctx, true)
 	servesPlacement(t, root)
+	commitAuthority(t, ctx, root)
 
 	v := Judge(ctx, unloadedDeps(), Request{Input: "git push", Host: "claude-code", Session: "s1", Lease: "lease-a"})
 	want := verdictWithRule(decisionDeny, string(denyRuleStaleBinary))
