@@ -128,14 +128,14 @@ func TestBroadClaimIntegration(t *testing.T) { suite.Run(t, new(broadClaimIntegr
 
 func (s *broadClaimIntegrationSuite) TestSkipsAnIntegrationRow() {
 	root := breadthWorkspace(s.T())
-	row := types.Job{ID: "merge", Integrates: []string{"a"}, Paths: types.JobPaths{Write: []string{"**/*.go"}, Soft: []string{"**/*.go"}}, }
+	row := types.Job{ID: "merge", Integrates: []string{"a"}, Paths: types.JobPaths{Write: []string{"**/*.go"}, Soft: []string{"**/*.go"}}}
 
 	s.Empty(broadClaimProblems(s.T().Context(), root, row, Workspace{}, nil))
 }
 
 func (s *broadClaimIntegrationSuite) TestStillRefusesTheSameGlobWithoutIntegrates() {
 	root := breadthWorkspace(s.T())
-	row := types.Job{ID: "sweep", Paths: types.JobPaths{Write: []string{"**/*.go"}, Soft: []string{"**/*.go"}}, }
+	row := types.Job{ID: "sweep", Paths: types.JobPaths{Write: []string{"**/*.go"}, Soft: []string{"**/*.go"}}}
 
 	got := broadClaimProblems(s.T().Context(), root, row, Workspace{}, nil)
 
@@ -173,10 +173,10 @@ func TestBroadClaimPermittedPathPassesThroughPermit(t *testing.T) {
 func TestBroadClaimFixSaysTheGraphDidNotAnswer(t *testing.T) {
 	root := breadthWorkspace(t)
 	row := types.Job{
-		ID:         "sweep",
+		ID:    "sweep",
 		Paths: types.JobPaths{Write: []string{"**/*.go"}},
-		Agent:      agent.Instructed("Fill (web/x.go:12)."),
-		Goals:      []types.Goal{{ID: "funcs", Kind: types.GoalKindSymbol, Symbols: []string{"Missing"}}},
+		Agent: agent.Instructed("Fill (web/x.go:12)."),
+		Goals: []types.Goal{{ID: "funcs", Kind: types.GoalKindSymbol, Symbols: []string{"Missing"}}},
 	}
 
 	for name, read := range map[string]SymbolReader{"no reader": nil, "unanswered": symbolsAt(nil)} {

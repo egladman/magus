@@ -224,15 +224,15 @@ func TestClientJobWritesReachTheRebindRule(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
 	me := narrowLease().ID
 	for script, what := range map[string]string{
-		`import "magus"; magus\workspace().putJob("harness/other", opts: {"paths": {"write": ["**"]}});`:                "is outside lease",
+		`import "magus"; magus\workspace().putJob("harness/other", opts: {"paths": {"write": ["**"]}});`:                  "is outside lease",
 		fmt.Sprintf("import \"magus\"; magus\\workspace().putJob(\"%s\", opts: {\"paths\": {\"write\": [\"**\"]}});", me): "rewrite the job it holds",
-		`import "magus"; magus\workspace().clearJobs();`:                                                           "drop every job",
-		`import "magus"; magus\job("harness/other").register();`:                                                   "write another job",
-		`import "magus"; magus\cmd("job", ["exec", "harness/other"]);`:                                             "take the lease on another job",
-		`import "magus"; final j = magus\job; j.clear();`:                                                          "cannot read",
-		`import "magus" as m; m\workspace().putJob("harness/other", opts: {"paths": {"write": ["**"]}});`:               "is outside lease",
-		`import "magus"; magus\workspace()\putJob("harness/other", opts: {"paths": {"write": ["**"]}});`:                "is outside lease",
-		`import "magus" as _; workspace().putJob("harness/other", opts: {"paths": {"write": ["**"]}});`:                 "is outside lease",
+		`import "magus"; magus\workspace().clearJobs();`:                                                                  "drop every job",
+		`import "magus"; magus\job("harness/other").register();`:                                                          "write another job",
+		`import "magus"; magus\cmd("job", ["exec", "harness/other"]);`:                                                    "take the lease on another job",
+		`import "magus"; final j = magus\job; j.clear();`:                                                                 "cannot read",
+		`import "magus" as m; m\workspace().putJob("harness/other", opts: {"paths": {"write": ["**"]}});`:                 "is outside lease",
+		`import "magus"; magus\workspace()\putJob("harness/other", opts: {"paths": {"write": ["**"]}});`:                  "is outside lease",
+		`import "magus" as _; workspace().putJob("harness/other", opts: {"paths": {"write": ["**"]}});`:                   "is outside lease",
 	} {
 		line := buildCall(hint.ToolClient.String(), clientScript(script), "")
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, line).Say, what, "%q renders %q", script, line)

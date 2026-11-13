@@ -92,7 +92,7 @@ func TestRefuseUngradableClaims(t *testing.T) {
 	t.Run("every bad entry is its own problem", func(t *testing.T) {
 		t.Parallel()
 		ps := ungradableClaimProblems(context.Background(), NewStore(tempLocation(t, root)), types.Job{ID: "wave/job",
-			Paths: types.JobPaths{Write: []string{"run.go", "run.go#", "notes.txt#Intro"}, Deny: []string{"*.go#x"}}, })
+			Paths: types.JobPaths{Write: []string{"run.go", "run.go#", "notes.txt#Intro"}, Deny: []string{"*.go#x"}}})
 		fields := make([]string, len(ps))
 		for i, p := range ps {
 			fields[i] = p.Field
@@ -265,7 +265,7 @@ func TestSoftPathsHardenAtTheFirstWrite(t *testing.T) {
 	aRev := aRepo.Head()
 
 	s := NewStore(tempLocation(t, bRoot))
-	seed(t, s, types.Job{ID: "A", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run_test.go"}, Soft: []string{"run_test.go"}}, 
+	seed(t, s, types.Job{ID: "A", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run_test.go"}, Soft: []string{"run_test.go"}},
 		Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
 	fork := func(soft []string) types.JobValidation {
 		rows, err := s.List()
@@ -291,7 +291,7 @@ func TestSoftPathsHardenAtTheFirstWrite(t *testing.T) {
 	assert.Empty(t, rows[0].Paths.Soft, "the hardening is recorded on the row")
 	assert.Equal(t, []string{"run_test.go"}, rows[0].Paths.Write)
 
-	seed(t, s, types.Job{ID: "A", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run_test.go"}, Soft: []string{"run_test.go"}}, 
+	seed(t, s, types.Job{ID: "A", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run_test.go"}, Soft: []string{"run_test.go"}},
 		Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
 	assert.Contains(t, codes(fork(nil).Problems), types.WritePathFileShared, "re-declaring the row does not soften what it wrote")
 }

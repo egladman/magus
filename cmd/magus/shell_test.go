@@ -98,7 +98,7 @@ func narrowLease() types.Job {
 	return types.Job{
 		ID:         "harness/lease-scoped-deny",
 		Agent:      typesagent.Instructed("lease-scoped denies in the guard"),
-		Paths: types.JobPaths{Write: []string{"cmd/magus/**"}},
+		Paths:      types.JobPaths{Write: []string{"cmd/magus/**"}},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
 		State:      types.StateRunning,
 		Registered: 1,

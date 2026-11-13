@@ -312,11 +312,11 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	t.Parallel()
 
 	orig := Job{
-		ID:           "a",
+		ID: "a",
 		Paths: JobPaths{
-Write: append(make([]string, 0, 4), "types/"),
-Deny: append(make([]string, 0, 4), "gen/"),
-},
+			Write: append(make([]string, 0, 4), "types/"),
+			Deny:  append(make([]string, 0, 4), "gen/"),
+		},
 		DependsOn:    append(make([]string, 0, 4), "b"),
 		Breaks:       append(make([]string, 0, 4), "--old-flag"),
 		Goals:        append(make([]Goal, 0, 4), Goal{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}),
@@ -346,11 +346,11 @@ Deny: append(make([]string, 0, 4), "gen/"),
 
 	// Clone resolves each gate's kind and expectation, so the clone's gate carries both.
 	assert.Equal(t, Job{
-		ID:           "a",
+		ID: "a",
 		Paths: JobPaths{
-Write: []string{"types/", "first/"},
-Deny: []string{"gen/", "first/"},
-},
+			Write: []string{"types/", "first/"},
+			Deny:  []string{"gen/", "first/"},
+		},
 		DependsOn:    []string{"b", "first"},
 		Breaks:       []string{"--old-flag", "first"},
 		Goals:        []Goal{{ID: "unit", Kind: GoalKindCheck, Expect: ExpectPassed, Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check", "first"}}},
@@ -362,11 +362,11 @@ Deny: []string{"gen/", "first/"},
 	// The original is the store's row and nobody appended through it, so it must still
 	// hold exactly what it held.
 	assert.Equal(t, Job{
-		ID:           "a",
+		ID: "a",
 		Paths: JobPaths{
-Write: []string{"types/"},
-Deny: []string{"gen/"},
-},
+			Write: []string{"types/"},
+			Deny:  []string{"gen/"},
+		},
 		DependsOn:    []string{"b"},
 		Breaks:       []string{"--old-flag"},
 		Goals:        []Goal{{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}},
@@ -992,7 +992,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		Timeout:     "soon",
 		MaxAttempts: -1,
 		Checkout:    "rel/dir",
-		Paths: JobPaths{Write: []string{"a.go", "../b.go"}},
+		Paths:       JobPaths{Write: []string{"a.go", "../b.go"}},
 		Breaks:      []string{" "},
 		Check:       &LeaseCheck{Target: "test", Project: "."},
 		Validation:  "magus run test .",
@@ -1041,7 +1041,7 @@ func TestDeclarationProblemsOfAValidRecordIsEmpty(t *testing.T) {
 	t.Parallel()
 	d := Declaration{
 		ID:         "wave/a",
-		Paths: JobPaths{Write: []string{"types/job.go"}},
+		Paths:      JobPaths{Write: []string{"types/job.go"}},
 		Check:      &LeaseCheck{Target: "go-test", Project: "."},
 		Deviations: []Deviation{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}},
 		Goals:      []Goal{{ID: "names", Kind: GoalKindSymbol, Symbols: []string{"X"}, DependsOn: []string{PrimaryGoalID}}},

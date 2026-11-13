@@ -67,7 +67,7 @@ func acceptRow() types.Job {
 	check := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
 	return types.Job{
 		ID:         "harness/ledger-accept",
-		Paths: types.JobPaths{Write: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"}},
+		Paths:      types.JobPaths{Write: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"}},
 		Check:      &check,
 		Validation: check.String(),
 		State:      types.StateRunning,
@@ -104,9 +104,9 @@ func claimed(rep types.JobResult) Observed {
 
 func goalRow() types.Job {
 	return types.Job{
-		ID:         "harness/gated",
+		ID:    "harness/gated",
 		Paths: types.JobPaths{Write: []string{"internal/job"}},
-		State:      types.StateRunning,
+		State: types.StateRunning,
 		Goals: []types.Goal{
 			{ID: "unit", Description: "job package tests pass", Check: types.LeaseCheck{Target: "go::go-test", Project: "."}},
 			{ID: "docs", Description: "docs checks pass", Check: types.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"unit"}},

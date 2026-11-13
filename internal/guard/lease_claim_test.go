@@ -23,7 +23,7 @@ func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
 		ID:         "cli-ls-files",
 		Agent:      agent.Instructed("add vcs ls-files"),
 		State:      types.StateRunning,
-		Paths: types.JobPaths{Write: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"}},
+		Paths:      types.JobPaths{Write: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"}},
 		Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)

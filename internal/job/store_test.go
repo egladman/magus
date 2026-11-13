@@ -57,10 +57,7 @@ func lease(id string) types.Job {
 		ID:         id,
 		Agent:      &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: "bounded"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
 		Checkpoint: "abc123",
-		Paths: types.JobPaths{
-Write: []string{"internal/" + id},
-Deny: []string{"MAGUS.md"},
-},
+		Paths:      types.JobPaths{Write: []string{"internal/" + id}, Deny: []string{"MAGUS.md"}},
 		Validation: "magus run test",
 		State:      types.StateDeclared,
 	}
@@ -80,7 +77,7 @@ func TestSoftPathsClaimNothingOfTheirOwn(t *testing.T) {
 
 	s := NewStore(tempLocation(t, t.TempDir()))
 	soft := func(id string, hard, soft []string) types.Job {
-		return types.Job{ID: id, State: types.StateRunning, Paths: types.JobPaths{Write: append(slices.Clone(hard), soft...), Soft: soft}, }
+		return types.Job{ID: id, State: types.StateRunning, Paths: types.JobPaths{Write: append(slices.Clone(hard), soft...), Soft: soft}}
 	}
 	seed(t, s, soft("A", []string{"a.go"}, []string{"a_test.go"}))
 	seed(t, s, soft("B", []string{"b.go"}, []string{"a_test.go"}))
@@ -372,18 +369,18 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 
 	s := tempStore(t, root)
 	seed(t, s, types.Job{
-		ID:         "u1",
+		ID:    "u1",
 		Paths: types.JobPaths{Write: []string{"kept.go", "released.go", "pkg", "gone.go"}},
-		State:      types.StateRunning,
+		State: types.StateRunning,
 	})
 	before, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, before[0].Releases, "declaring a lease releases nothing")
 
 	stored := seed(t, s, types.Job{
-		ID:         "u1",
+		ID:    "u1",
 		Paths: types.JobPaths{Write: []string{"kept.go"}},
-		State:      types.StateRunning,
+		State: types.StateRunning,
 	})
 
 	require.Len(t, stored.Releases, 3, "every path the put dropped is recorded, in the order it was owned")
@@ -547,10 +544,7 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 				ID:           "a",
 				Agent:        agent.Instructed(tc.criteria),
 				Checkpoint:   "abc123",
-				Paths: types.JobPaths{
-Write: stored.Paths.Write,
-Read: stored.Paths.Read,
-}, // order is not what this test pins
+				Paths:        types.JobPaths{Write: stored.Paths.Write, Read: stored.Paths.Read}, // order is not what this test pins
 				State:        tc.want,
 				ReportedBase: taken.ReportedBase,
 				BaseVerdict:  taken.BaseVerdict,
@@ -605,7 +599,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 				ID:           "a",
 				Agent:        agent.Instructed("goal"),
 				Checkpoint:   head,
-				Paths: types.JobPaths{Write: []string{"a.go"}},
+				Paths:        types.JobPaths{Write: []string{"a.go"}},
 				Check:        &check,
 				Validation:   check.String(),
 				State:        types.StateDeclared,

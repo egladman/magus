@@ -394,7 +394,7 @@ func narrowLease() types.Job {
 	return types.Job{
 		ID:         "harness/lease-scoped-deny",
 		Agent:      agent.Instructed("lease-scoped denies in the guard"),
-		Paths: types.JobPaths{Write: []string{"cmd/magus/**"}},
+		Paths:      types.JobPaths{Write: []string{"cmd/magus/**"}},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
 		State:      types.StateRunning,
 		Registered: 1,
@@ -754,7 +754,7 @@ func figuresLease() types.Job {
 	return types.Job{
 		ID:         "figures/flow",
 		Agent:      agent.Instructed("draw the flow figure"),
-		Paths: types.JobPaths{Write: []string{"docs/figures/flow.md", "docs/gen/figures/flow.svg"}},
+		Paths:      types.JobPaths{Write: []string{"docs/figures/flow.md", "docs/gen/figures/flow.svg"}},
 		Check:      &types.LeaseCheck{Target: "diagrams_generate", Project: "docs"},
 		State:      types.StateRunning,
 		Registered: 1,
@@ -795,7 +795,7 @@ func testCheckLease() types.Job {
 	return types.Job{
 		ID:         "guard/fix",
 		Agent:      agent.Instructed("fix a guard rule"),
-		Paths: types.JobPaths{Write: []string{"internal/guard/**"}},
+		Paths:      types.JobPaths{Write: []string{"internal/guard/**"}},
 		Check:      &types.LeaseCheck{Target: "test", Project: "."},
 		State:      types.StateRunning,
 		Registered: 1,
@@ -3438,17 +3438,17 @@ func writePathFleet() []types.Job {
 		{
 			ID:         "lease-a",
 			Agent:      agent.Instructed("own the ledger store"),
-			Paths: types.JobPaths{Write: []string{"internal/ledger"}},
+			Paths:      types.JobPaths{Write: []string{"internal/ledger"}},
 			State:      types.StateRunning,
 			Registered: 1,
 		},
 		{
-			ID:         "lease-b",
-			Agent:      agent.Instructed("grade writes in the guard"),
+			ID:    "lease-b",
+			Agent: agent.Instructed("grade writes in the guard"),
 			Paths: types.JobPaths{
-Write: []string{"cmd/magus"},
-Deny: []string{"cmd/magus/gen"},
-},
+				Write: []string{"cmd/magus"},
+				Deny:  []string{"cmd/magus/gen"},
+			},
 			State:      types.StateRunning,
 			Registered: 1,
 		},

@@ -131,7 +131,7 @@ func TestNarrowToLeaseGrantsOnlyTheWritePaths(t *testing.T) {
 func TestNarrowToLeaseRefusesAForbiddenPathInsideAnOwnedOne(t *testing.T) {
 	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
-		Paths: types.JobPaths{Write: []string{"pkg/**"}, Deny: []string{"pkg/a/gen"}}, 
+		Paths: types.JobPaths{Write: []string{"pkg/**"}, Deny: []string{"pkg/a/gen"}},
 	})
 	p := narrowed(t, root, cacheDir, "fleet/w1")
 	ctx := t.Context()

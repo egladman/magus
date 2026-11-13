@@ -38,9 +38,9 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 
 	s := tempStore(t, root)
 	seed(t, s, types.Job{
-		ID:         "u1",
+		ID:    "u1",
 		Paths: types.JobPaths{Write: []string{"escape.go", "pipe", "big.bin"}},
-		State:      types.StateRunning,
+		State: types.StateRunning,
 	})
 
 	// Released off the test goroutine with a deadline, because the failure this is

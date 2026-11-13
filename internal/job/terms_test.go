@@ -61,9 +61,9 @@ func briefRow() types.Job {
 		},
 		Checkpoint: "cf5509d09",
 		Paths: types.JobPaths{
-Write: []string{"internal/ledger", "cmd/magus/ledger.go"},
-Deny: []string{"MAGUS.md", "docs/gen"},
-},
+			Write: []string{"internal/ledger", "cmd/magus/ledger.go"},
+			Deny:  []string{"MAGUS.md", "docs/gen"},
+		},
 		DependsOn:  []string{"harness/session-load"},
 		Validation: "magus run test internal/ledger",
 		State:      types.StateDeclared,

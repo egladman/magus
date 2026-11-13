@@ -41,13 +41,13 @@ func TestDecodeDeclarationReadsAFieldUnderItsOldName(t *testing.T) {
 		`"forbidden_paths":["MAGUS.md"]`, `"focus":["internal/hint"]`))
 	require.NoError(t, err)
 	require.Equal(t, types.Declaration{
-		Schema:     types.Schema{Version: types.JobAPIVersion},
-		ID:         "adj/ledger",
+		Schema: types.Schema{Version: types.JobAPIVersion},
+		ID:     "adj/ledger",
 		Paths: types.JobPaths{
-Write: []string{"internal/ledger"},
-Read: []string{"internal/hint"},
-Deny: []string{"MAGUS.md"},
-},
+			Write: []string{"internal/ledger"},
+			Read:  []string{"internal/hint"},
+			Deny:  []string{"MAGUS.md"},
+		},
 	}, row)
 }
 
@@ -320,7 +320,7 @@ func TestDeclarationApplyDeclaresRatherThanMerges(t *testing.T) {
 
 	stored := types.Job{
 		ID: "adj/store", Agent: &agent.Spec{Instructions: "old", Model: agent.Model{Tier: "design"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
-		Paths: types.JobPaths{Write: []string{"internal/ledger"}},
+		Paths:      types.JobPaths{Write: []string{"internal/ledger"}},
 		Registered: 42,
 	}
 	types.Declaration{ID: "adj/store", Agent: agent.Instructed("new")}.Apply(&stored)

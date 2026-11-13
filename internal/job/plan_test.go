@@ -119,9 +119,9 @@ func TestResultShape(t *testing.T) { suite.Run(t, new(resultShapeSuite)) }
 
 func (s *resultShapeSuite) row() types.Job {
 	return types.Job{
-		ID:         "w",
+		ID:    "w",
 		Paths: types.JobPaths{Write: []string{"a.go"}},
-		Check:      &types.LeaseCheck{Target: "go-vet", Project: "."},
+		Check: &types.LeaseCheck{Target: "go-vet", Project: "."},
 		Goals: []types.Goal{
 			{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
 		},
@@ -1201,7 +1201,7 @@ func TestApplyCreatesANewJob(t *testing.T) {
 	assert.Equal(t, stamped(types.Job{
 		ID:         "fresh",
 		Checkpoint: "rev-1",
-		Paths: types.JobPaths{Write: []string{"internal/job/store.go"}},
+		Paths:      types.JobPaths{Write: []string{"internal/job/store.go"}},
 		Check:      forkCheck(),
 		Validation: forkCheck().String(),
 		State:      types.StateDeclared,

@@ -29,9 +29,9 @@ func TestPathsGateReadsTheDiffAndNotTheReport(t *testing.T) {
 	t.Parallel()
 
 	row := types.Job{
-		ID:         "unit",
-		Created:    1,
-		Paths: types.JobPaths{Write: []string{"db", "api"}},
+		ID:      "unit",
+		Created: 1,
+		Paths:   types.JobPaths{Write: []string{"db", "api"}},
 		Goals: []types.Goal{
 			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**"}},
 		},
@@ -49,9 +49,9 @@ func TestPathsGateVerifiesWhenTheDiffCoversEveryGlob(t *testing.T) {
 	t.Parallel()
 
 	row := types.Job{
-		ID:         "unit",
-		Created:    1,
-		Paths: types.JobPaths{Write: []string{"db", "api"}},
+		ID:      "unit",
+		Created: 1,
+		Paths:   types.JobPaths{Write: []string{"db", "api"}},
 		Goals: []types.Goal{
 			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**", "api"}},
 		},
@@ -70,9 +70,9 @@ func TestPathsGateNamesEveryUnmetGlob(t *testing.T) {
 	t.Parallel()
 
 	row := types.Job{
-		ID:         "unit",
-		Created:    1,
-		Paths: types.JobPaths{Write: []string{"db"}},
+		ID:      "unit",
+		Created: 1,
+		Paths:   types.JobPaths{Write: []string{"db"}},
 		Goals: []types.Goal{
 			{ID: "both", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**", "db/schema.sql", "db/seed.sql"}},
 		},
@@ -93,9 +93,9 @@ func TestPathsGateRefusesWhenTheDiffCouldNotBeRead(t *testing.T) {
 	t.Parallel()
 
 	row := types.Job{
-		ID:         "unit",
-		Created:    1,
-		Paths: types.JobPaths{Write: []string{"db"}},
+		ID:      "unit",
+		Created: 1,
+		Paths:   types.JobPaths{Write: []string{"db"}},
 		Goals: []types.Goal{
 			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**"}},
 		},
@@ -185,10 +185,10 @@ func TestGradeGatesReportsAPrimaryCheck(t *testing.T) {
 	t.Parallel()
 
 	row := types.Job{
-		ID:         "unit",
-		Created:    1,
-		Paths: types.JobPaths{Write: []string{"api"}},
-		Check:      &types.LeaseCheck{Target: "go-test", Project: "api"},
+		ID:      "unit",
+		Created: 1,
+		Paths:   types.JobPaths{Write: []string{"api"}},
+		Check:   &types.LeaseCheck{Target: "go-test", Project: "api"},
 	}
 	status := VerifyGates(row, types.JobResult{Job: "unit", ChangedPaths: []string{"api/x.go"}},
 		types.JobAttempt{}, nil, []types.Job{row}, Observed{})

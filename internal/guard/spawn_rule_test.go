@@ -1004,7 +1004,7 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 	assert.NotEqual(t, head, got.Authority)
 	assert.Equal(t, types.Job{
 		ID:           row.ID,
-		Paths: types.JobPaths{Write: row.Paths.Write},
+		Paths:        types.JobPaths{Write: row.Paths.Write},
 		State:        types.StateRunning,
 		ReportedBase: head,
 		BaseVerdict:  got.BaseVerdict,

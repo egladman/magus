@@ -32,7 +32,7 @@ type jobSpec struct {
 	Agent        *agentRecord               `json:"agent,omitempty"`
 	Checkpoint   string                     `json:"checkpoint,omitempty"`
 	Paths        types.JobPaths             `json:"paths,omitzero"`
-	DependsOn   []string                   `json:"dependsOn,omitempty"`
+	DependsOn    []string                   `json:"dependsOn,omitempty"`
 	Integrates   []string                   `json:"integrates,omitempty"`
 	Breaks       []string                   `json:"breaks,omitempty"`
 	BriefFormat  string                     `json:"briefFormat,omitempty"`

@@ -58,7 +58,7 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 		if decl != "" || !types.IsGlobMeta(file) {
 			continue
 		}
-		files := writtenFiles(root, types.Job{Paths: types.JobPaths{Write: []string{wp}, Deny: row.Paths.Deny}, })
+		files := writtenFiles(root, types.Job{Paths: types.JobPaths{Write: []string{wp}, Deny: row.Paths.Deny}})
 		if ws.Ignored != nil {
 			ignored := ws.Ignored(files)
 			files = slices.DeleteFunc(files, func(f string) bool { return slices.Contains(ignored, f) })

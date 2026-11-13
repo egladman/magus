@@ -371,7 +371,7 @@ func TestIntegratorDeviationsAcceptEveryOutputButADeniedOne(t *testing.T) {
 	t.Parallel()
 
 	root, projects := regeneratedWorkspace(t)
-	row := types.Job{Paths: types.JobPaths{Write: []string{"cli/registry.go"}, Deny: []string{"cli/testdata/api.lock"}}, }
+	row := types.Job{Paths: types.JobPaths{Write: []string{"cli/registry.go"}, Deny: []string{"cli/testdata/api.lock"}}}
 
 	got := IntegratorDeviations(root, row, projects, ignoresCoverage)
 
@@ -393,7 +393,7 @@ func TestExtendFootprintAddsSiblingTests(t *testing.T) {
 	t.Parallel()
 
 	root, projects := regeneratedWorkspace(t)
-	row := types.Job{Paths: types.JobPaths{Write: []string{"cli/registry.go"}, Deny: []string{"cli/testdata/api.lock"}}, }
+	row := types.Job{Paths: types.JobPaths{Write: []string{"cli/registry.go"}, Deny: []string{"cli/testdata/api.lock"}}}
 	referrers := func(file, _ string) map[string]int {
 		if file != "cli/registry.go" {
 			return nil

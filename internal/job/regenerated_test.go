@@ -112,7 +112,7 @@ func TestRegeneratedOutside(t *testing.T) {
 		},
 		{
 			name:    "a deny path takes an output back out of a covering write path",
-			row:     types.Job{Paths: types.JobPaths{Write: []string{"docs/**", "cli/registry.go"}, Deny: []string{"docs/manpage/*.md"}}, },
+			row:     types.Job{Paths: types.JobPaths{Write: []string{"docs/**", "cli/registry.go"}, Deny: []string{"docs/manpage/*.md"}}},
 			ignored: ignoresCoverage,
 			want:    []RegeneratedOutput{apiLock, manpage, cliFlags, typesGen},
 		},

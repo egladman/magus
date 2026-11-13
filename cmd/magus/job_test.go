@@ -3129,10 +3129,10 @@ func TestDescribeJobRecordSuite(t *testing.T) { suite.Run(t, new(DescribeJobReco
 
 func (s *DescribeJobRecordSuite) SetupTest() {
 	s.out = describeJobOutput{Terms: job.Terms{Lease: types.Job{
-		ID:         "wave/a",
+		ID:    "wave/a",
 		Paths: types.JobPaths{Write: []string{"a.go"}},
-		Check:      &types.LeaseCheck{Target: "test", Project: "."},
-		State:      types.StateDeclared,
+		Check: &types.LeaseCheck{Target: "test", Project: "."},
+		State: types.StateDeclared,
 	}}}
 }
 

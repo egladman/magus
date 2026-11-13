@@ -54,12 +54,12 @@ func claimTree(t *testing.T) (string, types.Job, Observed, []*types.Project) {
 		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
 	}
 	row := types.Job{
-		ID:         "cli-ls-files",
-		State:      types.StateRunning,
+		ID:    "cli-ls-files",
+		State: types.StateRunning,
 		Paths: types.JobPaths{
-Write: []string{"internal/hint/cli_command.go", "internal/hint/printer.go", "cmd/magus/vcs.go", "internal/commands/registry.go", "internal/lease/held.go"},
-Deny: []string{"internal/guard/shell_test.go"},
-},
+			Write: []string{"internal/hint/cli_command.go", "internal/hint/printer.go", "cmd/magus/vcs.go", "internal/commands/registry.go", "internal/lease/held.go"},
+			Deny:  []string{"internal/guard/shell_test.go"},
+		},
 		Registered: 100,
 	}
 	region := func(file string, side types.RegionSide, lines [2]int, decl string) types.RegionChange {

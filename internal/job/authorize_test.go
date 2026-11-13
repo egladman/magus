@@ -31,7 +31,7 @@ func workerRow() types.Job {
 	return types.Job{
 		ID:         "adj/store",
 		Agent:      agent.Instructed("the store is the enforcement point"),
-		Paths: types.JobPaths{Write: []string{"internal/ledger", "types/lease.go"}},
+		Paths:      types.JobPaths{Write: []string{"internal/ledger", "types/lease.go"}},
 		Validation: "magus run test internal/ledger",
 		State:      types.StateRunning,
 	}
@@ -204,13 +204,13 @@ func TestChildCarriesEveryWritePathOfItsParent(t *testing.T) {
 	t.Parallel()
 
 	parent := types.Job{
-		ID:         "adj/store",
+		ID: "adj/store",
 		Paths: types.JobPaths{
-Write: []string{"internal/ledger", "types/lease.go"},
-Read: []string{"internal/ledger", "internal/hint"},
-Deny: []string{"MAGUS.md"},
-},
-		State:      types.StateRunning,
+			Write: []string{"internal/ledger", "types/lease.go"},
+			Read:  []string{"internal/ledger", "internal/hint"},
+			Deny:  []string{"MAGUS.md"},
+		},
+		State: types.StateRunning,
 	}
 	loc := declared(t, parent)
 
@@ -221,15 +221,15 @@ Deny: []string{"MAGUS.md"},
 	}{
 		{
 			name:  "inside every boundary",
-			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}, Read: []string{"internal/hint"}, Deny: []string{"MAGUS.md", "go.mod"}}, },
+			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}, Read: []string{"internal/hint"}, Deny: []string{"MAGUS.md", "go.mod"}}},
 		},
 		{
 			name:  "no focus of its own reads the paths it was handed",
-			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}}, },
+			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}}},
 		},
 		{
 			name:  "a wider read boundary",
-			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}, Read: []string{"/"}, Deny: []string{"MAGUS.md"}}, },
+			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}, Read: []string{"/"}, Deny: []string{"MAGUS.md"}}},
 			want:  "may only read what its parent reads",
 		},
 		{
@@ -251,7 +251,7 @@ Deny: []string{"MAGUS.md"},
 			// declaring one would be minting a capability its parent does not hold.
 			name: "a check the parent's does not name",
 			child: types.Job{
-				Paths: types.JobPaths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}}, 
+				Paths: types.JobPaths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}},
 				Check: &types.LeaseCheck{Target: types.TargetCI, Project: "."},
 			},
 			want: "only a lease whose parent runs the gate runs the gate",
@@ -259,7 +259,7 @@ Deny: []string{"MAGUS.md"},
 		{
 			name: "a check of its own that is not the gate",
 			child: types.Job{
-				Paths: types.JobPaths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}}, 
+				Paths: types.JobPaths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}},
 				Check: &types.LeaseCheck{Target: "test", Project: "internal/ledger"},
 			},
 		},

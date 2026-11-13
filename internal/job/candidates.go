@@ -132,7 +132,7 @@ func ReferencedOutside(root string, row types.Job, projects []*types.Project, re
 			add(entry, referrers(path.Clean(p), decl))
 			continue
 		}
-		for _, file := range writtenFiles(root, types.Job{Paths: types.JobPaths{Write: []string{entry}, Deny: row.Paths.Deny}, }) {
+		for _, file := range writtenFiles(root, types.Job{Paths: types.JobPaths{Write: []string{entry}, Deny: row.Paths.Deny}}) {
 			add(file, referrers(file, ""))
 		}
 	}

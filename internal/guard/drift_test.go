@@ -157,8 +157,8 @@ func TestLeaseCoversWrite(t *testing.T) {
 	location := location{cacheDir: base, workspace: root}
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: base, Root: root})
 	row := types.Job{
-		ID:         "unit-a",
-		State:      types.StateRunning,
+		ID:    "unit-a",
+		State: types.StateRunning,
 		Paths: types.JobPaths{Write: []string{"libs/ui", "app/api"}},
 	}
 	_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })

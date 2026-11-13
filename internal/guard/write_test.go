@@ -1508,7 +1508,7 @@ func TestASoftPathItsHolderWroteIsOwned(t *testing.T) {
 	_, cacheDir := fixture.SeedLeases(t)
 	holder := testkit.NewRepository(t, files)
 	root := holder.Root()
-	row := types.Job{ID: "holder", State: types.StateRunning, Paths: types.JobPaths{Write: []string{rel}, Soft: []string{rel}}, 
+	row := types.Job{ID: "holder", State: types.StateRunning, Paths: types.JobPaths{Write: []string{rel}, Soft: []string{rel}},
 		Checkpoint: holder.Head(), CheckoutRoot: root, Registered: 1, Validated: 1}
 	_, err := job.NewStore(job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t), Root: root}).
 		Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })

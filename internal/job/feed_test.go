@@ -60,9 +60,9 @@ func TestAttributeWriteHonoursTheJobsOwnDenyPaths(t *testing.T) {
 	rows := []types.Job{{
 		ID: "pwa/job-watch", State: types.StateRunning,
 		Paths: types.JobPaths{
-Write: []string{"internal"},
-Deny: []string{"internal/agent"},
-},
+			Write: []string{"internal"},
+			Deny:  []string{"internal/agent"},
+		},
 	}}
 
 	_, ok := AttributeWrite(rows, "internal/agent/catalog.go")
@@ -79,9 +79,9 @@ func TestAttributeWriteKeepsAFileWithADeniedDeclaration(t *testing.T) {
 	rows := []types.Job{{
 		ID: "pwa/job-watch", State: types.StateRunning,
 		Paths: types.JobPaths{
-Write: []string{"internal/trail"},
-Deny: []string{"internal/trail/trail.go#Record", "internal/trail/*.go#Spawn"},
-},
+			Write: []string{"internal/trail"},
+			Deny:  []string{"internal/trail/trail.go#Record", "internal/trail/*.go#Spawn"},
+		},
 	}}
 
 	_, ok := AttributeWrite(rows, "internal/trail/trail.go")

@@ -98,11 +98,11 @@ func TestExtendedFootprintRecordsSiblingTestsAsSoftPaths(t *testing.T) {
 		types.Declaration{ID: "w", Paths: types.JobPaths{Write: []string{"cli/registry.go"}}}, ws)
 
 	assert.Equal(t, types.Declaration{
-		ID:         "w",
+		ID: "w",
 		Paths: types.JobPaths{
-Write: []string{"cli/registry.go", "cli/registry_test.go"},
-Soft: []string{"cli/registry_test.go"},
-},
+			Write: []string{"cli/registry.go", "cli/registry_test.go"},
+			Soft:  []string{"cli/registry_test.go"},
+		},
 	}, rec)
 	assert.Len(t, notes, 1)
 }

@@ -29,11 +29,11 @@ type JobPut struct {
 	Enter *string   `json:"enter,omitempty"`
 	State *JobState `json:"state,omitempty"`
 	// Check is the declared check; one with neither a target nor a script clears it.
-	Check      *LeaseCheck `json:"check,omitempty"`
-	Paths      JobPathsPut `json:"paths,omitzero"`
-	DependsOn  *[]string   `json:"depends_on,omitempty"`
-	Breaks     *[]string   `json:"breaks,omitempty"`
-	Goals      *[]Goal     `json:"goals,omitempty"`
+	Check     *LeaseCheck `json:"check,omitempty"`
+	Paths     JobPathsPut `json:"paths,omitzero"`
+	DependsOn *[]string   `json:"depends_on,omitempty"`
+	Breaks    *[]string   `json:"breaks,omitempty"`
+	Goals     *[]Goal     `json:"goals,omitempty"`
 	// Deviations replaces the row's deviations; each is validated as a declaration's would be.
 	Deviations *[]Deviation `json:"deviations,omitempty"`
 	ReadOnly   *bool        `json:"read_only,omitempty"`
