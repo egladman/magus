@@ -55,7 +55,7 @@ func render() (string, error) {
 		case f.Internal:
 			setByMagus = append(setByMagus, []string{md.Code(f.EnvVar), f.Doc})
 		default:
-			envOnly = append(envOnly, []string{md.Code(f.EnvVar), f.Default, f.Doc})
+			envOnly = append(envOnly, []string{md.Code(f.EnvVar), defaultCell(f.Default), f.Doc})
 		}
 	}
 	sections := make([]string, 0, len(bySection))
@@ -104,6 +104,15 @@ func envCell(name string) string {
 		return fileOnly
 	}
 	return md.Code(name)
+}
+
+// defaultCell sets a URL default in code, so the page links nothing it
+// only names.
+func defaultCell(value string) string {
+	if strings.Contains(value, "://") {
+		return md.Code(value)
+	}
+	return value
 }
 
 // flagCell renders the CLI flag for a table cell: the long form (plus short when

@@ -35,6 +35,14 @@ func TestRenderListsWhatMagusSetsApart(t *testing.T) {
 	assert.NotContains(t, setByMagus, "`MAGUS_OFFLINE`")
 }
 
+func TestDefaultCellSetsAURLInCode(t *testing.T) {
+	assert.Equal(t, "`https://s3.example.com`", defaultCell("https://s3.example.com"))
+}
+
+func TestDefaultCellLeavesProseAsItIs(t *testing.T) {
+	assert.Equal(t, "the hosted log viewer", defaultCell("the hosted log viewer"))
+}
+
 func TestKindLabelNamesTheKindItCannotLabel(t *testing.T) {
 	_, err := kindLabel(command.Kind("mystery"))
 	require.Error(t, err)
