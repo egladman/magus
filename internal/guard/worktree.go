@@ -248,28 +248,11 @@ func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callD
 		return fail(why)
 	}
 
-	opts := deps.VCS
-	opts.Name = "git"
-	res, err := vcs.Resolve(ctx, s.gitDir, "", opts)
-	if err != nil || res.VCS == nil {
-		return fail("version control is disabled or unresolvable for this workspace, so nothing about the worktree can be read")
+	res, co, why := removableCheckout(ctx, deps, callDir, s)
+	if why != "" {
+		return fail(why)
 	}
 	drv := res.VCS
-	all, err := drv.RegisteredCheckouts(ctx, s.gitDir)
-	if err != nil {
-		return fail("the registered worktrees cannot be read (`git worktree list --porcelain`): " + err.Error())
-	}
-	i := slices.IndexFunc(all, func(co types.RegisteredCheckout) bool { return samePath(co.Root, s.target) })
-	switch {
-	case i < 0:
-		return fail("it is not a worktree of this repository (`git worktree list`)")
-	case all[i].Primary:
-		return fail("it is the main worktree, which holds the repository itself (`git worktree list`)")
-	}
-	co := all[i]
-	if within(callDir, co.Root) || within(s.gitDir, co.Root) {
-		return fail("this session runs in it; remove it from another checkout")
-	}
 
 	r.failed = append(r.failed, checkoutStateFailures(ctx, drv, co)...)
 	rows, err := jobRowsAt(ctx, at)
@@ -293,6 +276,34 @@ func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callD
 	}
 	r.addRemedy(scan, lock)
 	return r
+}
+
+// removableCheckout resolves the version control and the registered
+// checkout s names. why is "" when it is a linked worktree that this
+// session does not run in.
+func removableCheckout(ctx context.Context, deps Dependencies, callDir string, s removalSite) (res types.VCSResolution, co types.RegisteredCheckout, why string) {
+	opts := deps.VCS
+	opts.Name = "git"
+	res, err := vcs.Resolve(ctx, s.gitDir, "", opts)
+	if err != nil || res.VCS == nil {
+		return res, co, "version control is disabled or unresolvable for this workspace, so nothing about the worktree can be read"
+	}
+	all, err := res.VCS.RegisteredCheckouts(ctx, s.gitDir)
+	if err != nil {
+		return res, co, "the registered worktrees cannot be read (`git worktree list --porcelain`): " + err.Error()
+	}
+	i := slices.IndexFunc(all, func(co types.RegisteredCheckout) bool { return samePath(co.Root, s.target) })
+	switch {
+	case i < 0:
+		return res, co, "it is not a worktree of this repository (`git worktree list`)"
+	case all[i].Primary:
+		return res, co, "it is the main worktree, which holds the repository itself (`git worktree list`)"
+	}
+	co = all[i]
+	if within(callDir, co.Root) || within(s.gitDir, co.Root) {
+		return res, co, "this session runs in it; remove it from another checkout"
+	}
+	return res, co, ""
 }
 
 // checkoutStateFailures are the conditions co fails by its directory: gone,
