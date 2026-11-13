@@ -29,12 +29,12 @@ func committedRepository(t *testing.T) (root, head string) {
 
 func checkpointMerge(token string) func(*types.Job) {
 	return func(u *types.Job) {
-		u.Check, u.State, u.WritePaths, u.Checkpoint = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}, token
+		u.Check, u.State, u.Paths.Write, u.Checkpoint = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}, token
 	}
 }
 
 func checkpointRecord(id, token string) types.Declaration {
-	return types.Declaration{ID: id, WritePaths: []string{"internal/job/store.go"}, Check: forkCheck(), Checkpoint: token}
+	return types.Declaration{ID: id, Paths: types.JobPaths{Write: []string{"internal/job/store.go"}}, Check: forkCheck(), Checkpoint: token}
 }
 
 // The defect: a fork named a full-length revision the repository never held, and nothing

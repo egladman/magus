@@ -351,9 +351,9 @@ func reclaimForRework(row *types.Job, filed *types.JobResult, rows []types.Job) 
 	if row.State != types.StateExited {
 		return ""
 	}
-	kept := make([]string, 0, len(row.WritePaths))
+	kept := make([]string, 0, len(row.Paths.Write))
 	var gaveUp []string
-	for _, entry := range row.WritePaths {
+	for _, entry := range row.Paths.Write {
 		file, _ := types.SplitClaim(entry)
 		err := checkClaimPath(types.Job{ID: row.ID}, file, rows)
 		switch {
@@ -370,7 +370,7 @@ func reclaimForRework(row *types.Job, filed *types.JobResult, rows []types.Job) 
 	if len(gaveUp) == 0 {
 		return fmt.Sprintf("%s is running again and holds its write paths again for its rework", row.ID)
 	}
-	row.WritePaths = kept
+	row.Paths.Write = kept
 	return fmt.Sprintf("%s is running again for its rework and gave up what it never touched and another job took: %s", row.ID, strings.Join(gaveUp, "; "))
 }
 

@@ -13,7 +13,7 @@ var magusObjects = []Object{
 				Name: "jobs",
 				Doc: "Every row of the job store as one typed report: {jobs, overlaps}. jobs are in the order " +
 					"they were declared; overlaps are derived on this read - every pair of live (non-terminal) " +
-					"jobs whose declared write_paths intersect, the derivation the console's JobService.ListJobs " +
+					"jobs whose declared paths.write intersect, the derivation the console's JobService.ListJobs " +
 					"uses too. Read straight off the workspace already open on the context - no subprocess. " +
 					"Inside a magus\\guard.spawn, command, write or stop rule it answers from the rows the guard " +
 					"read for that call, and every other job member raises there: the store is read-only to a rule.",
@@ -24,7 +24,7 @@ var magusObjects = []Object{
 			{
 				Name: "putJob",
 				Doc: "Record or advance one row, merging only the fields opts names: parent, criteria, checkpoint, " +
-					"write_paths, deny_paths, read_paths, depends_on, model, check (`<target> <project> [-- args]`), " +
+					"paths (an object of write, deny and read), depends_on, model, check (`<target> <project> [-- args]`), " +
 					"state (declared, running, exited, pass, fail, no_return), read_only, max_attempts. A key opts " +
 					"omits is left untouched, so a later put advances a row without erasing what an earlier put " +
 					"declared; a key present with an empty value is an explicit clear. id is the row's identity to " +
@@ -32,7 +32,7 @@ var magusObjects = []Object{
 					"cannot be set here. A put is validated whole before anything is stored, and raises every " +
 					"problem at once (MGS3037 through MGS3046), each with its field and the fix. The record's " +
 					"schema is what `magus job fork --schema` prints. A put that CREATES a row raises when its " +
-					"write_paths cover a file the workspace has to load while another live job with write paths is " +
+					"paths.write cover a file the workspace has to load while another live job with write paths is " +
 					"bound to this checkout. Returns the stored row.",
 				Args: []Arg{
 					{Name: "id"},

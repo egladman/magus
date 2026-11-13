@@ -188,7 +188,7 @@ func (s *JJFollowCheckpointSuite) SetupTest() {
 	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w1", dir, base, "")
 	s.Require().NoError(err)
 	s.Require().True(made)
-	seed(s.T(), s.store, types.Job{ID: "w1", State: types.StateDeclared, WritePaths: []string{"a.txt"}})
+	seed(s.T(), s.store, types.Job{ID: "w1", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.txt"}}})
 	s.row, err = s.store.RecordWorktree(s.T().Context(), "w1", wt)
 	s.Require().NoError(err)
 }
@@ -236,14 +236,14 @@ func TestInstallProjectsNamesOwnersWithAnInstallTarget(t *testing.T) {
 		{Path: "docs", MagusfileTargets: []string{"install"}},
 		{Path: "libs/xdg"},
 	}
-	row := types.Job{WritePaths: []string{"docs/a.md", "docs/b.md", "libs/xdg/x.go", "main.go"}}
+	row := types.Job{Paths: types.JobPaths{Write: []string{"docs/a.md", "docs/b.md", "libs/xdg/x.go", "main.go"}}}
 	assert.Equal(t, "docs", InstallProjects(t.TempDir(), row, projects))
 }
 
 func TestInstallProjectsSaysNoneForAGoOnlyJob(t *testing.T) {
 	t.Parallel()
 	projects := []*types.Project{{Path: "."}, {Path: "docs", MagusfileTargets: []string{"install"}}}
-	assert.Equal(t, "none", InstallProjects(t.TempDir(), types.Job{WritePaths: []string{"main.go"}}, projects))
+	assert.Equal(t, "none", InstallProjects(t.TempDir(), types.Job{Paths: types.JobPaths{Write: []string{"main.go"}}}, projects))
 }
 
 func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
@@ -251,7 +251,7 @@ func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	var notes strings.Builder
 	s.notices = &notes
-	merge := func(u *types.Job) { u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck() }
+	merge := func(u *types.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
 
 	_, err := validateDryFork(t.Context(), s.Quiet(), "w", merge)
 	require.NoError(t, err)
@@ -277,17 +277,17 @@ func TestPlaceBuiltBinaryFindsNoneWhenExeCannotAnswer(t *testing.T) {
 func TestSoftPathsRaiseNoWorkspaceProblem(t *testing.T) {
 	t.Parallel()
 	store, _ := validateWorkspace(t)
-	cold := types.Job{ID: "w", WritePaths: []string{"docs/site/page.buzz"}, ReadOnly: false, Check: &types.LeaseCheck{Target: "site-generate", Project: "docs"}}
+	cold := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"docs/site/page.buzz"}}, ReadOnly: false, Check: &types.LeaseCheck{Target: "site-generate", Project: "docs"}}
 	warm := cold.Clone()
-	warm.WritePaths = append(warm.WritePaths, "cli/registry_test.go")
-	warm.SoftPaths = []string{"cli/registry_test.go"}
+	warm.Paths.Write = append(warm.Paths.Write, "cli/registry_test.go")
+	warm.Paths.Soft = []string{"cli/registry_test.go"}
 
 	coldList, _ := workspaceProblems(t.Context(), store, nil, cold, cold, false, nil)
 	warmList, _ := workspaceProblems(t.Context(), store, nil, warm, warm, false, nil)
 	assert.Equal(t, codes(coldList), codes(warmList))
 	assert.NotContains(t, codes(warmList), types.GateNotRun)
 
-	warm.SoftPaths = nil
+	warm.Paths.Soft = nil
 	declared, _ := workspaceProblems(t.Context(), store, nil, warm, warm, false, nil)
 	assert.Contains(t, codes(declared), types.GateNotRun, "the same path, declared, raises its gate")
 }
@@ -307,7 +307,7 @@ func forkInto(t *testing.T, s *Store, id, binary string) types.Job {
 	wt, made, err := s.ForkWorktree(t.Context(), id, filepath.Join(t.TempDir(), id), "", binary)
 	require.NoError(t, err)
 	require.True(t, made)
-	seed(t, s, types.Job{ID: id, State: types.StateDeclared, WritePaths: []string{"a.txt"}})
+	seed(t, s, types.Job{ID: id, State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.txt"}}})
 	row, err := s.RecordWorktree(t.Context(), id, wt)
 	require.NoError(t, err)
 	return row
@@ -369,7 +369,7 @@ func TestForkWorktreeAdoptsALinkedCheckoutThatAlreadyStands(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, primary)
 
-	seed(t, s, types.Job{ID: "finish", State: types.StateDeclared, WritePaths: []string{"a.txt"}})
+	seed(t, s, types.Job{ID: "finish", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.txt"}}})
 	_, err = s.RecordWorktree(ctx, "finish", wt)
 	require.NoError(t, err)
 	owned, err := s.OwnedCheckout(dir)
@@ -604,7 +604,7 @@ func TestExecBindsAnUntakenAdoptedJobToAFreshCheckoutAtItsCheckpoint(t *testing.
 	}
 	landing := linked("landing", checkpoint)
 	for _, id := range []string{"w1", "w2"} {
-		seed(t, s, types.Job{ID: id, State: types.StateDeclared, Checkpoint: checkpoint, WritePaths: []string{"a.txt"}})
+		seed(t, s, types.Job{ID: id, State: types.StateDeclared, Checkpoint: checkpoint, Paths: types.JobPaths{Write: []string{"a.txt"}}})
 		wt, made, err := s.ForkWorktree(ctx, id, landing, "", "")
 		require.NoError(t, err)
 		require.False(t, made)

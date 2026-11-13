@@ -93,7 +93,7 @@ func TestStopUnfiledSuite(t *testing.T) { suite.Run(t, new(StopUnfiledSuite)) }
 func (s *StopUnfiledSuite) SetupTest() { s.tries = nil }
 
 func (s *StopUnfiledSuite) row() types.Job {
-	return types.Job{ID: "spec/worker", Agent: agent.Instructed("build the spec"), WritePaths: []string{"types/**"},
+	return types.Job{ID: "spec/worker", Agent: agent.Instructed("build the spec"), Paths: types.JobPaths{Write: []string{"types/**"}},
 		State: types.StateRunning, Registered: 1}
 }
 
@@ -132,7 +132,7 @@ func (s *StopUnfiledSuite) TestAnUnfiledLeasedChildIsRefusedNamingTheExit() {
 
 func (s *StopUnfiledSuite) TestAReadOnlyRowFilesAnEmptyChangeList() {
 	row := s.row()
-	row.ReadOnly, row.WritePaths = true, nil
+	row.ReadOnly, row.Paths.Write = true, nil
 	v := s.stop(row, "SubagentStop", s.subagent())
 	s.Equal(decisionDeny, v.Decision)
 	s.Contains(v.Reason, `"changed_paths": []`)

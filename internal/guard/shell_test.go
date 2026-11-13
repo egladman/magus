@@ -2722,7 +2722,7 @@ func (s *PersonLeaseSuite) SetupTest() {
 func (s *PersonLeaseSuite) holdHere(id string, paths ...string) {
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: hookLocation(s.testContext(), Dependencies{}).cacheDir, Root: s.root})
 	_, err := store.Update(s.T().Context(), id, func(cur *types.Job) {
-		*cur = types.Job{ID: id, WritePaths: paths, State: types.StateRunning, CheckoutRoot: s.root}
+		*cur = types.Job{ID: id, Paths: types.JobPaths{Write: paths}, State: types.StateRunning, CheckoutRoot: s.root}
 	})
 	s.Require().NoError(err)
 }

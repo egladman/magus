@@ -81,7 +81,7 @@ tax() { echo $(( $1 / 10 )); }
 -- release.json --
 {"api_version": "magus.job/v1alpha1", "id": "cents",
  "agent": {"instructions": "prices are integers of cents", "worker": {"type": "resumed"}},
- "write_paths": ["pricing/total.sh"],
+ "paths": {"write": ["pricing/total.sh"]},
  "check": {"target": "test", "project": "."}}
 -- fork.out --
 forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
@@ -104,7 +104,7 @@ overlaps
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- apply.out --
 updated cents, still running:
-  write_paths -pricing/format.sh
+  paths.write -pricing/format.sh
 -- ls-handed.out --
 JOB       HOLDER  STATE    MODEL    PATHS  PROOF  CHECK
 cents     ana     running  bounded  1      alone  magus run test .

@@ -60,9 +60,11 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	}
 	str("timeout", &put.Timeout)
 	str("enter", &put.Enter)
-	list("write_paths", &put.WritePaths)
-	list("deny_paths", &put.DenyPaths)
-	list("read_paths", &put.ReadPaths)
+	if paths, e := decodePutPaths(params); e != nil {
+		err = errors.Join(err, e)
+	} else {
+		put.Paths = paths
+	}
 	list("depends_on", &put.DependsOn)
 	list("breaks", &put.Breaks)
 	if goals, ok, e := decodeObjects[types.Goal](params, "goals", "goals"); e != nil {
@@ -203,9 +205,9 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 		v     *[]string
 		apply func(*types.Job, []string)
 	}{
-		{p.WritePaths, func(u *types.Job, v []string) { u.WritePaths = v }},
-		{p.DenyPaths, func(u *types.Job, v []string) { u.DenyPaths = v }},
-		{p.ReadPaths, func(u *types.Job, v []string) { u.ReadPaths = v }},
+		{p.Paths.Write, func(u *types.Job, v []string) { u.Paths.Write = v }},
+		{p.Paths.Deny, func(u *types.Job, v []string) { u.Paths.Deny = v }},
+		{p.Paths.Read, func(u *types.Job, v []string) { u.Paths.Read = v }},
 		{p.DependsOn, func(u *types.Job, v []string) { u.DependsOn = v }},
 		{p.Breaks, func(u *types.Job, v []string) { u.Breaks = v }},
 	} {
@@ -335,8 +337,8 @@ func declaredKeys(p types.JobPut) []string {
 	}{
 		{"parent", p.Parent != nil}, {"agent", p.Agent != nil}, {"checkpoint", p.Checkpoint != nil},
 		{"brief_format", p.BriefFormat != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
-		{"check", p.Check != nil}, {"write_paths", p.WritePaths != nil}, {"deny_paths", p.DenyPaths != nil},
-		{"read_paths", p.ReadPaths != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
+		{"check", p.Check != nil}, {"paths.write", p.Paths.Write != nil}, {"paths.deny", p.Paths.Deny != nil},
+		{"paths.read", p.Paths.Read != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
 		{"goals", p.Goals != nil}, {"deviations", p.Deviations != nil}, {"read_only", p.ReadOnly != nil},
 		{"max_attempts", p.MaxAttempts != nil}, {"max_claims", p.MaxClaims != nil}, {"follows", p.Follows != nil},
 		{"weight", p.Weight != nil}, {"delivery", p.Delivery != nil}, {"parent_head", p.ParentHead != nil},
@@ -351,7 +353,7 @@ func declaredKeys(p types.JobPut) []string {
 // mergeFields are the row fields a put may carry. `op` and `id` ride alongside them
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
-	"parent", "agent", "checkpoint", "write_paths", "deny_paths", "read_paths",
+	"parent", "agent", "checkpoint", "paths",
 	"depends_on", "breaks", "brief_format", "check", "validation", "goals", "deviations", "state", "read_only",
 	"timeout", "max_attempts", "max_claims", "weight", "enter", "follows",
 	"delivery", "parent_head",
@@ -463,6 +465,52 @@ func mergeList(params map[string]any, key string) ([]string, bool, error) {
 		return out, true, nil
 	}
 	return nil, false, badType
+}
+
+// putPathKeys are the members a put's paths may carry. Soft paths are absent
+// because only the store narrows them.
+var putPathKeys = []string{"write", "read", "deny"}
+
+// decodePutPaths reads a put's paths, an object or the JSON string of one.
+// Each member reads as [mergeList] reads a list, named paths.<member>.
+func decodePutPaths(params map[string]any) (types.JobPathsPut, error) {
+	var put types.JobPathsPut
+	v, present := params["paths"]
+	if !present {
+		return put, nil
+	}
+	if s, ok := v.(string); ok {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(s), &m); err != nil {
+			return put, fmt.Errorf("job: paths must be an object of %s: %w", strings.Join(putPathKeys, ", "), err)
+		}
+		v = m
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return put, fmt.Errorf("job: paths must be an object of %s", strings.Join(putPathKeys, ", "))
+	}
+	named := make(map[string]any, len(m))
+	var err error
+	for key, value := range m {
+		if !slices.Contains(putPathKeys, key) {
+			err = errors.Join(err, fmt.Errorf("job: a put's paths carry %s, not %s", strings.Join(putPathKeys, ", "), key))
+		}
+		named["paths."+key] = value
+	}
+	for _, f := range []struct {
+		key string
+		dst **[]string
+	}{{"write", &put.Write}, {"read", &put.Read}, {"deny", &put.Deny}} {
+		list, ok, e := mergeList(named, "paths."+f.key)
+		switch {
+		case e != nil:
+			err = errors.Join(err, e)
+		case ok:
+			*f.dst = &list
+		}
+	}
+	return put, err
 }
 
 // decodeAgent reads the agent section, strictly. It also takes the section

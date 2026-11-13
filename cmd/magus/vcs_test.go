@@ -399,10 +399,10 @@ func TestSplitExplainedOutputsCountsCommittedSources(t *testing.T) {
 func TestOtherLeasesPaths(t *testing.T) {
 	root := t.TempDir()
 	rows := []types.Job{
-		{ID: "mine", State: types.StateRunning, CheckoutRoot: root, WritePaths: []string{"api/**"}},
-		{ID: "sibling", State: types.StateRunning, CheckoutRoot: root, WritePaths: []string{"web/**"}},
-		{ID: "elsewhere", State: types.StateRunning, CheckoutRoot: t.TempDir(), WritePaths: []string{"docs/**"}},
-		{ID: "ended", State: types.StatePass, CheckoutRoot: root, WritePaths: []string{"cli/**"}},
+		{ID: "mine", State: types.StateRunning, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"api/**"}}},
+		{ID: "sibling", State: types.StateRunning, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"web/**"}}},
+		{ID: "elsewhere", State: types.StateRunning, CheckoutRoot: t.TempDir(), Paths: types.JobPaths{Write: []string{"docs/**"}}},
+		{ID: "ended", State: types.StatePass, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"cli/**"}}},
 	}
 	paths := []string{"api/a.go", "web/b.ts", "docs/c.md", "cli/d.go", "README.md"}
 
@@ -417,9 +417,9 @@ func TestHeldForOtherLeasesReadsTheCallersEnvironmentLease(t *testing.T) {
 	repo, _ := execRepositoryFixture(t)
 	root := repo.Root()
 	mine := leaseRow("mine", "")
-	mine.CheckoutRoot, mine.WritePaths = root, []string{"api/**"}
+	mine.CheckoutRoot, mine.Paths.Write = root, []string{"api/**"}
 	sibling := leaseRow("sibling", "")
-	sibling.CheckoutRoot, sibling.WritePaths = root, []string{"web/**"}
+	sibling.CheckoutRoot, sibling.Paths.Write = root, []string{"web/**"}
 	seedJobStore(t, root, mine, sibling)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=mine")
 
@@ -447,9 +447,9 @@ func TestCheckpointLineCarriesThePreservedHandle(t *testing.T) {
 // claims by declaration is asked about at all.
 func TestJobsWriting(t *testing.T) {
 	rows := []types.Job{
-		{ID: "a", WritePaths: []string{"a.go#A"}},
-		{ID: "glob", WritePaths: []string{"**/*.go"}},
-		{ID: "other", WritePaths: []string{"b.go#B", "docs/**"}},
+		{ID: "a", Paths: types.JobPaths{Write: []string{"a.go#A"}}},
+		{ID: "glob", Paths: types.JobPaths{Write: []string{"**/*.go"}}},
+		{ID: "other", Paths: types.JobPaths{Write: []string{"b.go#B", "docs/**"}}},
 	}
 	writers, claimed := jobsWriting(rows, "a.go")
 	assert.True(t, claimed)

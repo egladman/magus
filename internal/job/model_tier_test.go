@@ -130,7 +130,7 @@ func TestNewModelTierRequestDerivesKindFromTheRow(t *testing.T) {
 func TestNewModelTierRequestCountsFilesOnce(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{WritePaths: []string{"internal/job/*.go", "run.go#func A", "run.go#func B", "docs", "docs"}}
+	row := types.Job{Paths: types.JobPaths{Write: []string{"internal/job/*.go", "run.go#func A", "run.go#func B", "docs", "docs"}}}
 	assert.Equal(t, 3, newModelTierRequest(row, nil, nil, nil, nil).WriteFiles,
 		"a glob is one, and two claims in one file are that file once")
 }
@@ -152,7 +152,7 @@ func TestNewModelTierRequestCarriesTheRowAndItsParentsRank(t *testing.T) {
 	parent := types.Job{ID: "wave", ModelTier: &agent.JobModelTier{Name: "design", Rank: 2}}
 	row := types.Job{
 		ID: "wave/a", Parent: "wave", Agent: &agent.Spec{Instructions: "do it", Model: agent.Model{Tier: "routine"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, ReadOnly: false,
-		WritePaths: []string{"a.go"}, ReadPaths: []string{"b"}, DependsOn: []string{"wave/b"},
+		Paths: types.JobPaths{Write: []string{"a.go"}, Read: []string{"b"}}, DependsOn: []string{"wave/b"},
 		Check: &types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "X"}},
 		Goals: []types.Goal{{ID: "g", Kind: types.GoalKindPaths, Paths: []string{"a.go"}}},
 	}
@@ -354,7 +354,7 @@ func TestAssignModelTierHandsTheMatrixItsRequest(t *testing.T) {
 	t.Parallel()
 
 	set := tierSet(t)
-	row := types.Job{ID: "a", WritePaths: []string{"a.go"}, Check: &types.LeaseCheck{Target: "test", Project: "."}}
+	row := types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}, Check: &types.LeaseCheck{Target: "test", Project: "."}}
 	matrix := countingMatrix{}
 	req := newModelTierRequest(row, nil, set, nil, nil)
 	_, err := resolveModelTier(t.Context(), set, nil, matrix.choose, req, row)
@@ -588,7 +588,7 @@ func TestApplyDryRunAssignsNothingAndRunsNoMatrix(t *testing.T) {
 
 	matrix := countingMatrix{answer: routineAnswer()}
 	s := tieredStore(t, tierSet(t), matrix.choose)
-	record := types.Declaration{ID: "wave/job", WritePaths: []string{"a.go"}, Check: forkCheck()}
+	record := types.Declaration{ID: "wave/job", Paths: types.JobPaths{Write: []string{"a.go"}}, Check: forkCheck()}
 
 	plan, err := Apply(t.Context(), s, []types.Declaration{record}, config.Jobs{}, nil, nil, true)
 	require.NoError(t, err)
@@ -621,7 +621,7 @@ func TestStoreFillsTheMatrixRequestWithTheProjectsThatOwnTheWritePaths(t *testin
 
 	row := lease("a")
 	row.Agent.Model = agent.Model{}
-	row.WritePaths = []string{"pkg/a/run.go#func A", "pkg/a/*.go"}
+	row.Paths.Write = []string{"pkg/a/run.go#func A", "pkg/a/*.go"}
 	seed(t, s, row)
 
 	assert.Equal(t, [][]string{{"pkg/a/run.go", "pkg/a/*.go"}}, asked, "a claim is asked about as its file")

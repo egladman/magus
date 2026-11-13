@@ -21,7 +21,7 @@ func TestFixForkAppliesEveryMechanicalEditAndLeavesJudgment(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	row := types.Declaration{ID: "w", WritePaths: []string{"cli", "cli/registry.go"}, Check: forkCheck()}
+	row := types.Declaration{ID: "w", Paths: types.JobPaths{Write: []string{"cli", "cli/registry.go"}}, Check: forkCheck()}
 	before, err := validateDryFork(t.Context(), s, row.ID, fixMerge(row))
 	require.NoError(t, err)
 	require.NotZero(t, before.Problems.Fixable(), "the record starts with mechanical problems: %v", codes(before.Problems))
@@ -35,7 +35,7 @@ func TestFixForkAppliesEveryMechanicalEditAndLeavesJudgment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, after.Problems.Fixable(), "nothing mechanical is left: %v", after.Problems)
 	assert.Equal(t, types.WritePathIsDirectory, problemAt(t, after.Problems, types.WritePathIsDirectory).Code, "a directory write path is a judgment, left alone")
-	assert.Equal(t, "cli", fixed.WritePaths[0])
+	assert.Equal(t, "cli", fixed.Paths.Write[0])
 
 	again, more, err := FixFork(t.Context(), s, fixed, fixMerge, config.Jobs{}, nil)
 	require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestFixApplyFixesEachRecord(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	records := []types.Declaration{{ID: "a", WritePaths: []string{"cli/registry.go"}, Check: forkCheck()}}
+	records := []types.Declaration{{ID: "a", Paths: types.JobPaths{Write: []string{"cli/registry.go"}}, Check: forkCheck()}}
 
 	fixed, edits := FixApply(t.Context(), s, records, config.Jobs{}, nil, nil)
 
@@ -135,7 +135,7 @@ func TestFixForkLeavesNoGateNeedingADeviationForAGoJob(t *testing.T) {
 		}
 		return CheckVerdict{}
 	}
-	row := types.Declaration{ID: "w", WritePaths: []string{"cli/registry.go"}, Check: &types.LeaseCheck{Target: "vet", Project: "."}}
+	row := types.Declaration{ID: "w", Paths: types.JobPaths{Write: []string{"cli/registry.go"}}, Check: &types.LeaseCheck{Target: "vet", Project: "."}}
 
 	before, err := validateDryFork(t.Context(), s, row.ID, fixMerge(row))
 	require.NoError(t, err)
@@ -181,7 +181,7 @@ func (s *declaredGateSuite) writeConfig(body string) {
 }
 
 func (s *declaredGateSuite) record() types.Declaration {
-	return types.Declaration{ID: "w", WritePaths: []string{"cli/registry.go"}, Check: &types.LeaseCheck{Target: "vet", Project: "."}}
+	return types.Declaration{ID: "w", Paths: types.JobPaths{Write: []string{"cli/registry.go"}}, Check: &types.LeaseCheck{Target: "vet", Project: "."}}
 }
 
 func (s *declaredGateSuite) fix(row types.Declaration) (types.Declaration, []types.JobEdit) {
@@ -196,7 +196,7 @@ func (s *declaredGateSuite) TestRemoteGateRecordsTheDeviationAndAddsNoGoal() {
 	fixed, _ := s.fix(s.record())
 
 	s.Empty(fixed.Goals, "no ci goal is added for a worker")
-	s.Equal([]string{"cli/registry.go"}, fixed.WritePaths, "no output widens the write paths")
+	s.Equal([]string{"cli/registry.go"}, fixed.Paths.Write, "no output widens the write paths")
 	s.Contains(fixed.Deviations, types.Deviation{Code: types.GateNotRun, Subject: "unit .", Reason: "github-actions runs it"})
 	s.Contains(fixed.Deviations, types.Deviation{Code: types.OutputOutsideWritePaths, Subject: "docs/manpage/*.md", Reason: integratorRegenerates})
 	after, err := validateDryFork(s.T().Context(), s.store, fixed.ID, fixMerge(fixed))

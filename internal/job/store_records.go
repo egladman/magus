@@ -31,13 +31,13 @@ func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, r
 		// A narrowed release outlives its entry; a re-fork ends it.
 		case r.Narrowed && refork:
 			return true
-		case r.Narrowed && slices.Contains(prev.WritePaths, r.Path):
+		case r.Narrowed && slices.Contains(prev.Paths.Write, r.Path):
 			return false
 		}
-		return slices.Contains(next.WritePaths, r.Path)
+		return slices.Contains(next.Paths.Write, r.Path)
 	})
-	for _, p := range prev.WritePaths {
-		if slices.Contains(next.WritePaths, p) || slices.Contains(prev.SoftPaths, p) {
+	for _, p := range prev.Paths.Write {
+		if slices.Contains(next.Paths.Write, p) || slices.Contains(prev.Paths.Soft, p) {
 			continue
 		}
 		rel := types.JobRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now, Revoked: revoked}
@@ -63,7 +63,7 @@ func ReleasedUnderPattern(row types.Job) []string {
 			notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it: only its claims do (%s)", file, strings.Join(claims, ", ")))
 			continue
 		}
-		notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until write_paths name `%s#<declaration>`", file, file))
+		notes = append(notes, fmt.Sprintf("%s stays released, so the pattern naming it does not hold it and neither does a claim: this job cannot write it until paths.write name `%s#<declaration>`", file, file))
 	}
 	return notes
 }

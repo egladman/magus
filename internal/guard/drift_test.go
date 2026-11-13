@@ -159,7 +159,7 @@ func TestLeaseCoversWrite(t *testing.T) {
 	row := types.Job{
 		ID:         "unit-a",
 		State:      types.StateRunning,
-		WritePaths: []string{"libs/ui", "app/api"},
+		Paths: types.JobPaths{Write: []string{"libs/ui", "app/api"}},
 	}
 	_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)

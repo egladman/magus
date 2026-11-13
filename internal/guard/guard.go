@@ -2621,7 +2621,7 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 func hardenCovering(rows []types.Job, rel string, harden func([]types.Job) []types.Job) []types.Job {
 	narrowed := slices.Clone(rows)
 	for i, row := range rows {
-		narrowed[i].SoftPaths = slices.DeleteFunc(slices.Clone(row.SoftPaths), func(entry string) bool {
+		narrowed[i].Paths.Soft = slices.DeleteFunc(slices.Clone(row.Paths.Soft), func(entry string) bool {
 			_, covers, _ := declarationCovering([]string{entry}, rel)
 			return !covers
 		})
@@ -2629,11 +2629,11 @@ func hardenCovering(rows []types.Job, rel string, harden func([]types.Job) []typ
 	hardened := harden(narrowed)
 	out := slices.Clone(rows)
 	for i := range out {
-		made := slices.DeleteFunc(slices.Clone(narrowed[i].SoftPaths), func(entry string) bool {
-			return slices.Contains(hardened[i].SoftPaths, entry)
+		made := slices.DeleteFunc(slices.Clone(narrowed[i].Paths.Soft), func(entry string) bool {
+			return slices.Contains(hardened[i].Paths.Soft, entry)
 		})
 		if len(made) > 0 {
-			out[i].SoftPaths = slices.DeleteFunc(slices.Clone(rows[i].SoftPaths), func(entry string) bool { return slices.Contains(made, entry) })
+			out[i].Paths.Soft = slices.DeleteFunc(slices.Clone(rows[i].Paths.Soft), func(entry string) bool { return slices.Contains(made, entry) })
 		}
 	}
 	return out

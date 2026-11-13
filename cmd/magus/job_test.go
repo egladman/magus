@@ -94,10 +94,10 @@ func TestPrintLedgerTreeRendersOverlaps(t *testing.T) {
 	t.Parallel()
 
 	parent := leaseRow("plan", "")
-	parent.WritePaths = []string{"internal/ledger"}
+	parent.Paths.Write = []string{"internal/ledger"}
 	parent.Validation = "magus run test internal/ledger"
 	child := leaseRow("plan/cli", "plan")
-	child.WritePaths = []string{"internal/ledger/store.go"}
+	child.Paths.Write = []string{"internal/ledger/store.go"}
 
 	var out strings.Builder
 	printJobTree(&out, types.NewJobList([]types.Job{parent, child}))
@@ -203,10 +203,10 @@ func (s *LeasedBoundarySuite) owners(row types.Job, rows []types.Job) []string {
 
 func (s *LeasedBoundarySuite) TestSkipsTheRowsAncestors() {
 	rows := []types.Job{
-		{ID: "root", State: types.StateRunning, WritePaths: []string{"internal"}},
-		{ID: "root/a", Parent: "root", State: types.StateRunning, WritePaths: []string{"internal/job"}},
-		{ID: "root/a/leaf", Parent: "root/a", State: types.StateRunning, WritePaths: []string{"internal/job/plan.go"}},
-		{ID: "root/b", Parent: "root", State: types.StateRunning, WritePaths: []string{"internal/guard"}},
+		{ID: "root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal"}}},
+		{ID: "root/a", Parent: "root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job"}}},
+		{ID: "root/a/leaf", Parent: "root/a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan.go"}}},
+		{ID: "root/b", Parent: "root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard"}}},
 	}
 	s.Equal([]string{"internal/guard"}, s.owners(rows[2], rows), "a sibling's boundary is off limits, an ancestor's is where the leaf was forked")
 }
@@ -214,36 +214,36 @@ func (s *LeasedBoundarySuite) TestSkipsTheRowsAncestors() {
 // An exited holder returned, so a sibling's terms no longer put its paths out of reach.
 func (s *LeasedBoundarySuite) TestSkipsAnExitedRow() {
 	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, WritePaths: []string{"internal/job"}},
-		{ID: "b", State: types.StateExited, WritePaths: []string{"internal/guard"}},
-		{ID: "c", State: types.StateDeclared, WritePaths: []string{"internal/hint"}},
+		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job"}}},
+		{ID: "b", State: types.StateExited, Paths: types.JobPaths{Write: []string{"internal/guard"}}},
+		{ID: "c", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/hint"}}},
 	}
 	s.Equal([]string{"internal/hint"}, s.owners(rows[0], rows))
 }
 
 // A soft path is free until its holder writes it, so a sibling's terms leave it in reach.
 func (s *LeasedBoundarySuite) TestSkipsASoftPath() {
-	soft := types.Job{ID: "b", State: types.StateRunning, WritePaths: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}
-	soft.SoftPaths = []string{"internal/job/plan_test.go"}
-	me := types.Job{ID: "a", State: types.StateRunning, WritePaths: []string{"internal/job/plan_test.go"}}
+	soft := types.Job{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}}
+	soft.Paths.Soft = []string{"internal/job/plan_test.go"}
+	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan_test.go"}}}
 	s.Equal([]string{"internal/job/plan.go"}, s.owners(me, []types.Job{me, soft}))
 }
 
 func (s *LeasedBoundarySuite) TestListsAHardenedPath() {
-	held := types.Job{ID: "b", State: types.StateRunning, WritePaths: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}
-	me := types.Job{ID: "a", State: types.StateRunning, WritePaths: []string{"internal/job/plan_test.go"}}
+	held := types.Job{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan.go", "internal/job/plan_test.go"}}}
+	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/job/plan_test.go"}}}
 	s.Equal([]string{"internal/job/plan.go", "internal/job/plan_test.go"}, s.owners(me, []types.Job{me, held}))
 }
 
 func (s *LeasedBoundarySuite) TestSkipsAGeneratedOutputAnotherCheckoutHolds() {
-	other := types.Job{ID: "b", State: types.StateRunning, CheckoutRoot: "/repos/mandate", WritePaths: []string{"gen/decode.go", "run.go"}}
-	me := types.Job{ID: "a", State: types.StateRunning, WritePaths: []string{"gen/decode.go"}}
+	other := types.Job{ID: "b", State: types.StateRunning, CheckoutRoot: "/repos/mandate", Paths: types.JobPaths{Write: []string{"gen/decode.go", "run.go"}}}
+	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"gen/decode.go"}}}
 	s.Equal([]string{"run.go"}, s.owners(me, []types.Job{me, other}), "each checkout regenerates its own gen/decode.go")
 }
 
 func (s *LeasedBoundarySuite) TestListsAGeneratedOutputHeldInTheSameCheckout() {
-	other := types.Job{ID: "b", State: types.StateRunning, CheckoutRoot: "/repos/landing", WritePaths: []string{"gen/decode.go"}}
-	me := types.Job{ID: "a", State: types.StateRunning, WritePaths: []string{"gen/decode.go"}}
+	other := types.Job{ID: "b", State: types.StateRunning, CheckoutRoot: "/repos/landing", Paths: types.JobPaths{Write: []string{"gen/decode.go"}}}
+	me := types.Job{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"gen/decode.go"}}}
 	s.Equal([]string{"gen/decode.go"}, s.owners(me, []types.Job{me, other}))
 }
 
@@ -338,8 +338,8 @@ func TestPrintJobTreeRendersTheClaimsVerdict(t *testing.T) {
 	t.Parallel()
 
 	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, WritePaths: []string{"run.go#executeStages"}},
-		{ID: "b", State: types.StateRunning, WritePaths: []string{"run.go#RunCI"}},
+		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run.go#executeStages"}}},
+		{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run.go#RunCI"}}},
 	}
 	var out strings.Builder
 	printJobTree(&out, types.NewJobList(rows))
@@ -358,8 +358,8 @@ func TestPrintJobTreeRendersEachFootprintVerdict(t *testing.T) {
 		return types.JobOverlap{JobA: "a", JobB: "b", PathsA: []string{"api"}, PathsB: []string{"api/x.go"}, Footprint: f}
 	}
 	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, WritePaths: []string{"api"}},
-		{ID: "b", State: types.StateRunning, WritePaths: []string{"api/x.go"}},
+		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"api"}}},
+		{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"api/x.go"}}},
 	}
 	for _, tc := range []struct {
 		name string
@@ -460,9 +460,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	  "parent": "adjacency",
 	  "agent": {"model": {"tier": "design"}, "instructions": "the store is the enforcement point", "worker": {"type": "resumed"}},
 	  "checkpoint": "cf5509d09",
-	  "write_paths": ["internal/ledger", "types/lease.go"],
-	  "deny_paths": ["MAGUS.md"],
-	  "read_paths": ["internal/trail"],
+	  "paths": {"write": ["internal/ledger", "types/lease.go"], "read": ["internal/trail"], "deny": ["MAGUS.md"]},
 	  "depends_on": ["adj/guard"],
 	  "validation": "magus run test internal/ledger",
 	  "brief_format": "buzz"
@@ -661,7 +659,7 @@ func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a refused fork writes no row")
-	assert.Equal(t, []any{"accepted", []string{"run.go#A"}}, []any{rows[0].ID, rows[0].DenyPaths})
+	assert.Equal(t, []any{"accepted", []string{"run.go#A"}}, []any{rows[0].ID, rows[0].Paths.Deny})
 }
 
 // A retry names the id alone and forks the job again as it was declared; a spec flag
@@ -777,7 +775,7 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	resetWorkspaceMemo(t)
 	repo, cacheDir := execRepositoryFixture(t, types.Job{
-		ID: "live", State: types.StateRunning, WritePaths: []string{"a.go"},
+		ID: "live", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.go"}},
 		Check: &types.LeaseCheck{Target: "test", Project: "."},
 	})
 	root := repo.Root()
@@ -785,7 +783,7 @@ func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	_, err := store.Exec(t.Context(), "live")
 	require.NoError(t, err)
 	record := func(id, checkout string) string {
-		return fmt.Sprintf(`{"api_version": %q, "id": %q, "checkout": %q, "write_paths": ["magus.yaml"],`+
+		return fmt.Sprintf(`{"api_version": %q, "id": %q, "checkout": %q, "paths": {"write": ["magus.yaml"]},`+
 			` "check": {"target": "test", "project": "."}}`, types.JobAPIVersion, id, checkout)
 	}
 	fork := func(stdin string, args ...string) error {
@@ -826,7 +824,7 @@ func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 		return jobFork(t.Context(), at, append([]string{"--stdin"}, args...))
 	}
 	record := func(id, path string) string {
-		return fmt.Sprintf(`{"api_version": %q, "id": %q, "write_paths": [%q], "check": {"target": "test", "project": "."}}`,
+		return fmt.Sprintf(`{"api_version": %q, "id": %q, "paths": {"write": [%q]}, "check": {"target": "test", "project": "."}}`,
 			types.JobAPIVersion, id, path)
 	}
 
@@ -879,7 +877,7 @@ func TestJobForkIntegrationIntoAStandingCheckoutRecordsTheCheckoutsRevision(t *t
 	require.NoError(t, err)
 	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == "merge" })
 	require.GreaterOrEqual(t, i, 0)
-	assert.Equal(t, []string{checkoutHead, "pricing.txt"}, []string{rows[i].Checkpoint, strings.Join(rows[i].WritePaths, ",")})
+	assert.Equal(t, []string{checkoutHead, "pricing.txt"}, []string{rows[i].Checkpoint, strings.Join(rows[i].Paths.Write, ",")})
 }
 
 // IntegrationStandingCheckoutSuite forks an integration row into a checkout
@@ -923,7 +921,7 @@ func (s *IntegrationStandingCheckoutSuite) row() types.Job {
 }
 
 func (s *IntegrationStandingCheckoutSuite) TestWritePathsAreWhatTheBranchChangedSinceTheCheckout() {
-	s.Equal([]string{"pricing.txt"}, s.row().WritePaths)
+	s.Equal([]string{"pricing.txt"}, s.row().Paths.Write)
 }
 
 func (s *IntegrationStandingCheckoutSuite) TestTheCheckpointIsTheCheckoutsRevision() {
@@ -956,7 +954,7 @@ func TestJobForkTakesAnUnfinishedIntegrationAgain(t *testing.T) {
 	rows, err := store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, []string{"pricing.txt"}, rows[0].WritePaths, "the re-fork keeps the paths the row held")
+	assert.Equal(t, []string{"pricing.txt"}, rows[0].Paths.Write, "the re-fork keeps the paths the row held")
 
 	_, err = store.Delete(t.Context(), "merge", true)
 	require.NoError(t, err)
@@ -1051,7 +1049,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
-	writeStdin(t, `{"api_version": "magus.job/v1alpha1", "id": "wave/opus", "write_paths": ["a.go"], "agent": {"model": {"id": "opus"}, "worker": {"type": "resumed"}},`+
+	writeStdin(t, `{"api_version": "magus.job/v1alpha1", "id": "wave/opus", "paths": {"write": ["a.go"]}, "agent": {"model": {"id": "opus"}, "worker": {"type": "resumed"}},`+
 		` "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
 
 	out := captureStdout(t, func() {
@@ -1097,7 +1095,7 @@ func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, made)
 			_, err = store.Update(t.Context(), "w", func(cur *types.Job) {
-				*cur = types.Job{ID: "w", State: types.StatePass, WritePaths: []string{"a.go"}}
+				*cur = types.Job{ID: "w", State: types.StatePass, Paths: types.JobPaths{Write: []string{"a.go"}}}
 			})
 			require.NoError(t, err)
 			_, err = store.RecordWorktree(t.Context(), "w", wt)
@@ -1159,7 +1157,7 @@ func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 	assert.False(t, missed.Found, "the waiter's resolver reads its own store alone")
 
 	row := types.Job{
-		ID: "w", Created: 1, State: types.StateExited, WritePaths: []string{"a.go"}, CheckoutRoot: holder.Root(),
+		ID: "w", Created: 1, State: types.StateExited, Paths: types.JobPaths{Write: []string{"a.go"}}, CheckoutRoot: holder.Root(),
 		Check:   &types.LeaseCheck{Target: "go-test", Project: "."},
 		Attempt: &types.JobAttempt{Found: true, Ref: "failed", Project: ".", Target: "go-test", Failed: true, TimestampMs: 2_000},
 	}
@@ -1212,7 +1210,7 @@ func TestJobPrunePrintsEachRowAndTheCount(t *testing.T) {
 // so as a notice: stdout stays the record the guides compare.
 func TestJobExitTellsTheHolderItStaysBound(t *testing.T) {
 	row := leaseRow("held", "")
-	row.WritePaths, row.Registered = []string{"a/**"}, time.Now().Unix()
+	row.Paths.Write, row.Registered = []string{"a/**"}, time.Now().Unix()
 	root, _ := execFixture(t, row)
 	writeStdin(t, `{"api_version":"magus.job-result/v1alpha1","changed_paths":["a/x.go"],"unresolved_risks":[]}`)
 
@@ -1239,7 +1237,7 @@ func TestJobExitShape(t *testing.T) { suite.Run(t, new(jobExitShapeSuite)) }
 func (s *jobExitShapeSuite) refusal(stdin string) string {
 	t := s.T()
 	row := leaseRow("held", "")
-	row.WritePaths, row.Registered = []string{"a/**"}, time.Now().Unix()
+	row.Paths.Write, row.Registered = []string{"a/**"}, time.Now().Unix()
 	root, _ := execFixture(t, row)
 	writeStdin(t, stdin)
 	err := jobExit(t.Context(), root, []string{"held", "--stdin"})
@@ -1270,19 +1268,19 @@ func TestJobApplyState(t *testing.T) { suite.Run(t, new(jobApplyStateSuite)) }
 func (s *jobApplyStateSuite) printed(from, to types.JobState, dryRun bool) string {
 	var out bytes.Buffer
 	printJobApply(&out, []job.Applied{{
-		Prev:    types.Job{ID: "w", State: from, WritePaths: []string{"a.go"}},
-		Next:    types.Job{ID: "w", State: to, WritePaths: []string{"a.go", "b.go"}},
-		Changed: []string{"write_paths"},
+		Prev:    types.Job{ID: "w", State: from, Paths: types.JobPaths{Write: []string{"a.go"}}},
+		Next:    types.Job{ID: "w", State: to, Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}},
+		Changed: []string{"paths.write"},
 	}}, nil, dryRun)
 	return out.String()
 }
 
 func (s *jobApplyStateSuite) TestAKeptStateReadsStill() {
-	s.Contains(s.printed(types.StateRunning, types.StateRunning, false), "updated w, still running:\n  write_paths +b.go\n")
+	s.Contains(s.printed(types.StateRunning, types.StateRunning, false), "updated w, still running:\n  paths.write +b.go\n")
 }
 
 func (s *jobApplyStateSuite) TestAMovedStateNamesBoth() {
-	s.Contains(s.printed(types.StateExited, types.StateDeclared, false), "updated w, exited to declared, so its holder takes it with `magus job exec w`:\n  write_paths +b.go\n")
+	s.Contains(s.printed(types.StateExited, types.StateDeclared, false), "updated w, exited to declared, so its holder takes it with `magus job exec w`:\n  paths.write +b.go\n")
 }
 
 func (s *jobApplyStateSuite) TestADryRunNamesTheMoveItWouldMake() {
@@ -1291,7 +1289,7 @@ func (s *jobApplyStateSuite) TestADryRunNamesTheMoveItWouldMake() {
 
 func (s *jobApplyStateSuite) TestAReleaseAPatternStillNamesIsNoted() {
 	row := leaseRow("w", "")
-	row.State, row.WritePaths = types.StateRunning, []string{"src/*.go"}
+	row.State, row.Paths.Write = types.StateRunning, []string{"src/*.go"}
 	row.Releases = []types.JobRelease{{Path: "src/a.go", Digest: types.DigestAbsent, ReleasedAt: 1}}
 	root, cacheDir := execFixture(s.T(), row)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
@@ -1306,13 +1304,13 @@ func (s *jobApplyStateSuite) TestAReleaseAPatternStillNamesIsNoted() {
 // either way.
 func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
 	row := leaseRow("w", "")
-	row.State, row.WritePaths, row.Check = types.StateRunning, []string{"a.go", "b.go"}, &types.LeaseCheck{Target: "test", Project: "."}
+	row.State, row.Paths.Write, row.Check = types.StateRunning, []string{"a.go", "b.go"}, &types.LeaseCheck{Target: "test", Project: "."}
 	row.Validation = row.Check.String()
 	root, cacheDir := execFixture(t, row)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	record := filepath.Join(t.TempDir(), "w.json")
 	require.NoError(t, os.WriteFile(record, fmt.Appendf(nil,
-		`{"api_version":%q,"id":"w","agent":{"model":{"tier":"bounded"},"worker":{"type":"resumed"}},"write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
+		`{"api_version":%q,"id":"w","agent":{"model":{"tier":"bounded"},"worker":{"type":"resumed"}},"paths":{"write":["b.go","c.go"]},"check":{"target":"test","project":"."}}`,
 		types.JobAPIVersion), 0o644))
 	args := []string{"-f", record}
 
@@ -1320,18 +1318,18 @@ func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
 	t.Cleanup(func() { globalCfg.DryRun = false })
 	out := captureStdout(t, func() { require.NoError(t, jobApply(t.Context(), root, args)) })
 	assert.Equal(t, "would update w, still running:\n"+
-		"  write_paths +c.go -a.go\n"+
+		"  paths.write +c.go -a.go\n"+
 		"dry run: nothing written; rerun without --dry-run to write it\n", out)
 	rows, err := store.List()
 	require.NoError(t, err)
-	assert.Equal(t, []string{"a.go", "b.go"}, rows[0].WritePaths)
+	assert.Equal(t, []string{"a.go", "b.go"}, rows[0].Paths.Write)
 
 	globalCfg.DryRun = false
 	out = captureStdout(t, func() { require.NoError(t, jobApply(t.Context(), root, args)) })
-	assert.True(t, strings.HasPrefix(out, "updated w, still running:\n  write_paths +c.go -a.go\n"), out)
+	assert.True(t, strings.HasPrefix(out, "updated w, still running:\n  paths.write +c.go -a.go\n"), out)
 	rows, err = store.List()
 	require.NoError(t, err)
-	assert.Equal(t, []any{[]string{"b.go", "c.go"}, types.StateRunning}, []any{rows[0].WritePaths, rows[0].State})
+	assert.Equal(t, []any{[]string{"b.go", "c.go"}, types.StateRunning}, []any{rows[0].Paths.Write, rows[0].State})
 
 	require.Error(t, jobApply(t.Context(), root, nil), "an apply naming no records is a usage error")
 }
@@ -1343,7 +1341,7 @@ func TestDescribeAndWaitGradeSymbolsAlike(t *testing.T) {
 	t.Parallel()
 
 	g := deltaGraph(map[string]string{"Present": "code.go:3"})
-	row := types.Job{ID: "wave/sym", WritePaths: []string{"code.go"}, Goals: []types.Goal{
+	row := types.Job{ID: "wave/sym", Paths: types.JobPaths{Write: []string{"code.go"}}, Goals: []types.Goal{
 		{ID: "here", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Present"}},
 		{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Removed"}},
 	}}
@@ -1453,7 +1451,7 @@ func TestDeletionCandidatesAskNothingOfARowThatWritesNothing(t *testing.T) {
 		t.Fatal("a row that writes nothing loaded the graph")
 		return nil
 	}
-	assert.Nil(t, deletionCandidates(t.Context(), load, types.Job{ReadOnly: true, WritePaths: []string{"a.go"}}))
+	assert.Nil(t, deletionCandidates(t.Context(), load, types.Job{ReadOnly: true, Paths: types.JobPaths{Write: []string{"a.go"}}}))
 	assert.Nil(t, deletionCandidates(t.Context(), load, types.Job{}))
 }
 
@@ -2100,7 +2098,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	global = globalFlags{}
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
-	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 	elsewhere := filepath.Join(t.TempDir(), "elsewhere")
 	require.NoError(t, os.MkdirAll(elsewhere, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(elsewhere, "magus.yaml"), []byte("{}\n"), 0o644))
@@ -2153,7 +2151,7 @@ func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
-	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 	grade := newCheckGrader()
 
 	before := grade(t.Context(), root, row)
@@ -2193,7 +2191,7 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	ci := &types.LeaseCheck{Target: types.TargetCI, Project: "."}
-	held := types.Job{ID: "w", State: types.StateDeclared, WritePaths: []string{"run.go"}, Check: ci, Worktree: &types.JobWorktree{Root: own}}
+	held := types.Job{ID: "w", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"run.go"}}, Check: ci, Worktree: &types.JobWorktree{Root: own}}
 	shared := held
 	shared.Worktree = nil
 	deps := guardDependencies(t.Context(), root)
@@ -2242,7 +2240,7 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	root := testkit.NewRepository(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
-	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 
 	verdict := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
 
@@ -2509,7 +2507,7 @@ func (s *GradeCheckLapseSuite) TestALapseDefersTheGrade() {
 	global = globalFlags{}
 	root := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(s.T())
-	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 	ctx, cancel := context.WithTimeout(s.T().Context(), time.Second)
 	defer cancel()
 	release := make(chan struct{})
@@ -2588,7 +2586,7 @@ func TestJobApplyAddWritePath(t *testing.T) { suite.Run(t, new(jobApplyAddWriteP
 
 func (s *jobApplyAddWritePathSuite) SetupTest() {
 	row := leaseRow("w", "")
-	row.State, row.WritePaths = types.StateRunning, []string{"a.go"}
+	row.State, row.Paths.Write = types.StateRunning, []string{"a.go"}
 	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
 	row.Validation = row.Check.String()
 	root, cacheDir := execFixture(s.T(), row)
@@ -2608,7 +2606,7 @@ func (s *jobApplyAddWritePathSuite) TestARunningRowWidenedStaysRunningWithTheNew
 	before, err := s.store.List()
 	s.Require().NoError(err)
 	want := before[0]
-	want.WritePaths, want.Widenings = []string{"a.go", "b.go", "c.go"}, 1
+	want.Paths.Write, want.Widenings = []string{"a.go", "b.go", "c.go"}, 1
 
 	applied := s.apply("b.go", "c.go")
 
@@ -2772,14 +2770,14 @@ func (s *jobApplyContractSuite) integration(integrates ...string) (string, *job.
 	s.T().Helper()
 	resetWorkspaceMemo(s.T())
 	row := leaseRow("integration", "")
-	row.WritePaths = []string{"magus.yaml"}
+	row.Paths.Write = []string{"magus.yaml"}
 	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
 	row.Validation = row.Check.String()
 	root, cacheDir := execFixture(s.T(), row)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
 	return root, store, types.Declaration{
 		Schema: types.Schema{Version: types.JobAPIVersion}, ID: row.ID,
-		Agent: row.Agent.Clone(), WritePaths: row.WritePaths, Check: row.Check, Integrates: integrates,
+		Agent: row.Agent.Clone(), Paths: types.JobPaths{Write: row.Paths.Write}, Check: row.Check, Integrates: integrates,
 	}
 }
 
@@ -3005,7 +3003,7 @@ func TestJobApplyReleaseWritePath(t *testing.T) { suite.Run(t, new(jobApplyRelea
 
 func (s *jobApplyReleaseWritePathSuite) SetupTest() {
 	row := leaseRow("w", "")
-	row.State, row.WritePaths = types.StateRunning, []string{"a.go", "b.go", "c.go#Run"}
+	row.State, row.Paths.Write = types.StateRunning, []string{"a.go", "b.go", "c.go#Run"}
 	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
 	row.Validation = row.Check.String()
 	row.Goals = []types.Goal{{ID: "g", Kind: types.GoalKindPaths, Paths: []string{"a.go"}}}
@@ -3025,13 +3023,13 @@ func (s *jobApplyReleaseWritePathSuite) release(paths ...string) types.Declarati
 func (s *jobApplyReleaseWritePathSuite) TestAReleasedPathLeavesTheRestOfTheSpec() {
 	rec := s.release("b.go")
 
-	s.Equal([]string{"a.go", "c.go#Run"}, rec.WritePaths)
+	s.Equal([]string{"a.go", "c.go#Run"}, rec.Paths.Write)
 	s.Len(rec.Goals, 1)
 	s.NotNil(rec.Check)
 }
 
 func (s *jobApplyReleaseWritePathSuite) TestADeclarationClaimIsReleasedByItsWholeValue() {
-	s.Equal([]string{"a.go", "b.go"}, s.release("c.go#Run").WritePaths)
+	s.Equal([]string{"a.go", "b.go"}, s.release("c.go#Run").Paths.Write)
 }
 
 func (s *jobApplyReleaseWritePathSuite) TestAPathTheJobLacksIsAUsageError() {
@@ -3132,7 +3130,7 @@ func TestDescribeJobRecordSuite(t *testing.T) { suite.Run(t, new(DescribeJobReco
 func (s *DescribeJobRecordSuite) SetupTest() {
 	s.out = describeJobOutput{Terms: job.Terms{Lease: types.Job{
 		ID:         "wave/a",
-		WritePaths: []string{"a.go"},
+		Paths: types.JobPaths{Write: []string{"a.go"}},
 		Check:      &types.LeaseCheck{Target: "test", Project: "."},
 		State:      types.StateDeclared,
 	}}}
@@ -3172,5 +3170,5 @@ func (s *DescribeJobRecordSuite) TestTheJobMemberAloneRoundTripsThroughApply() {
 	rows, err := job.DecodeDeclarations(bytes.NewReader(s.printed()["job"]))
 	s.Require().NoError(err)
 	s.Require().Len(rows, 1)
-	s.Equal([]string{"a.go"}, rows[0].WritePaths)
+	s.Equal([]string{"a.go"}, rows[0].Paths.Write)
 }

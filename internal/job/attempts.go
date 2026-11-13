@@ -46,8 +46,8 @@ func nextGeneration(prev, row types.Job, exists bool, kind grading) int {
 // that each hold every path prev held.
 func changesSpec(prev, row types.Job) bool {
 	changes := specChanges(prev, row)
-	if len(changes) == 1 && changes[0] == "write_paths" {
-		return !widens(prev.WritePaths, row.WritePaths)
+	if len(changes) == 1 && changes[0] == "paths.write" {
+		return !widens(prev.Paths.Write, row.Paths.Write)
 	}
 	return len(changes) > 0
 }

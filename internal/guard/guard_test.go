@@ -198,11 +198,11 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 // rather than both running ungraded.
 func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 	one := types.Job{
-		ID: "wave/one", Agent: typesagent.Instructed("the store"), WritePaths: []string{"internal/job/**"},
+		ID: "wave/one", Agent: typesagent.Instructed("the store"), Paths: types.JobPaths{Write: []string{"internal/job/**"}},
 		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
 	}
 	two := types.Job{
-		ID: "wave/two", Agent: typesagent.Instructed("the guard"), WritePaths: []string{"internal/guard/**"},
+		ID: "wave/two", Agent: typesagent.Instructed("the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}},
 		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
 	}
 	ctx, _ := fleetFixture(t, one, two)
@@ -351,10 +351,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "pr-watch", name: "one read of a pull request's state", input: bash("gh pr view 300 --json state,autoMergeRequest"), decision: decisionPass},
 		{rule: "worker-runs-gate", name: "a review worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/review footprint", decision: decisionDeny, reason: "integrate"},
 		{rule: "worker-runs-gate", name: "the checkout's integrator runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint",
-			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, WritePaths: []string{"docs/**"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
+			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/**"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
 		{rule: "worker-runs-gate", name: "an integrate title with no lease taken here", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint", decision: decisionDeny, reason: "integrate"},
 		{rule: "worker-builds-magus", name: "the checkout's integrator builds magus", input: bash("./magus run go-build ."), worker: "root/integrate footprint",
-			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, WritePaths: []string{"docs/**"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
+			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/**"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
 		{rule: "detached-push-unqualified", name: "a detached push to a new branch", input: bash("git push origin HEAD:guard-pr-polling"),
 			checkout: &types.CheckoutState{RemoteBranches: []string{"origin/main"}}, decision: decisionDeny, reason: "HEAD:refs/heads/guard-pr-polling"},
 		{rule: "push-authority", name: "a subagent opens a pull request", input: bash(`gh pr create --title "fix: pin the key" --body "Pins it."`),
@@ -984,7 +984,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 		{
 			name: "an unregistered worker's first write",
 			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
-				ctx, root := fleetFixture(t, types.Job{ID: "worker", State: types.StateRunning, WritePaths: []string{"app/**"}})
+				ctx, root := fleetFixture(t, types.Job{ID: "worker", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"app/**"}}})
 				bindCaller(t, ctx, hookAttribution{}, "worker")
 				// An edit of a file already there, so no new-directory or new-file rule speaks.
 				require.NoError(t, os.MkdirAll(filepath.Join(root, "app"), 0o755))
@@ -1277,7 +1277,7 @@ func BenchmarkWithJobStoreRows(b *testing.B) {
 	for i := range 300 {
 		row := types.Job{
 			ID: fmt.Sprintf("root-%d/job-%d", i%20, i), Parent: fmt.Sprintf("root-%d", i%20),
-			State: states[i%len(states)], WritePaths: []string{"internal/guard/guard.go"},
+			State: states[i%len(states)], Paths: types.JobPaths{Write: []string{"internal/guard/guard.go"}},
 		}
 		_, err := store.Update(b.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(b, err)
@@ -1312,7 +1312,7 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 		return ids
 	}
 
-	put(types.Job{ID: "a", State: types.StateDeclared, WritePaths: []string{"x.go"}, Agent: &typesagent.Spec{Model: typesagent.Model{ID: "sonnet"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}})
+	put(types.Job{ID: "a", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"x.go"}}, Agent: &typesagent.Spec{Model: typesagent.Model{ID: "sonnet"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}})
 	assert.Equal(t, []string{"a"}, rowsOf())
 	put(types.Job{ID: "b", State: types.StateDeclared})
 	assert.Equal(t, []string{"a", "b"}, rowsOf())

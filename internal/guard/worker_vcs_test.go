@@ -64,7 +64,7 @@ func (s *commitGradeRoutesSuite) TestContinuingAPickPasses() {
 func (s *commitGradeRoutesSuite) TestAnIntegrationRowPicksWhatItsWritePathsCover() {
 	picked := s.repo.commitFiles(s.repo.main, map[string]string{"gen.json": "x\n"})
 	row := s.worker
-	row.WritePaths = append(row.WritePaths, "gen.json")
+	row.Paths.Write = append(row.Paths.Write, "gen.json")
 	row.Integrates = []string{"other"}
 	ctx, _ := fleetFixture(s.T(), row)
 	s.Empty(denyLeaseScopedVCS(ctx, Dependencies{callDir: s.dir}, row.ID, "git cherry-pick "+picked))
@@ -736,7 +736,7 @@ type LeaseWriteMoveSuite struct {
 func TestLeaseWriteMoveSuite(t *testing.T) { suite.Run(t, new(LeaseWriteMoveSuite)) }
 
 func (s *LeaseWriteMoveSuite) hold(writes []string, denies ...string) {
-	layers, root := fleetLayers(s.T(), types.Job{ID: "mover", WritePaths: writes, DenyPaths: denies, State: types.StateRunning, Registered: 1})
+	layers, root := fleetLayers(s.T(), types.Job{ID: "mover", Paths: types.JobPaths{Write: writes, Deny: denies}, State: types.StateRunning, Registered: 1})
 	s.layers = layers
 	for _, file := range []string{"libs/old/a.go", "libs/old/sub/b.go"} {
 		s.Require().NoError(os.MkdirAll(filepath.Join(root, filepath.Dir(file)), 0o755))

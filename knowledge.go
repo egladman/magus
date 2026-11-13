@@ -95,7 +95,7 @@ func init() { //nolint:gochecknoinits // workspacegraph cannot import this packa
 					if row.ID != lease || !row.State.Live() {
 						continue
 					}
-					for _, wp := range row.WritePaths {
+					for _, wp := range row.Paths.Write {
 						// A claim names a declaration in a file; a glob, its directory.
 						wp, _, _ = strings.Cut(wp, "#")
 						if i := strings.IndexAny(wp, "*?[{"); i >= 0 {

@@ -372,7 +372,7 @@ func readOnly(row types.Job) error {
 // readOnly refused that write.
 func requiredFeatures(row types.Job) []string {
 	var out []string
-	if slices.ContainsFunc(slices.Concat(row.WritePaths, row.DenyPaths), types.HasClaim) {
+	if slices.ContainsFunc(slices.Concat(row.Paths.Write, row.Paths.Deny), types.HasClaim) {
 		out = append(out, "claim-declarations")
 	}
 	if slices.ContainsFunc(row.Goals, func(g types.Goal) bool { return g.Resolve().Expect == types.ExpectSignature }) {
@@ -542,9 +542,9 @@ func authorizeEntry(actor Actor, id string, prev, next types.Job, exists bool, r
 	case !prev.State.Live():
 		return fmt.Errorf("job: %s is %s, so its paths are free to write and there is nothing to enter", id, prev.State)
 	}
-	if _, ok := matching(prev.WritePaths, entry.Path); !ok {
+	if _, ok := matching(prev.Paths.Write, entry.Path); !ok {
 		return fmt.Errorf("job: %s is outside the write paths of %s (%s), a path the job does not own is widened into it, never entered",
-			entry.Path, id, strings.Join(prev.WritePaths, ", "))
+			entry.Path, id, strings.Join(prev.Paths.Write, ", "))
 	}
 	if open, ok := OpenEntry(prev, entry.Path); ok {
 		return fmt.Errorf("job: %s already has an entry for %s, recorded at %s and not yet written, write it before entering again",
@@ -605,7 +605,7 @@ func (s *Store) ConsumeEntry(ctx context.Context, id, rel string) error {
 
 // boundaryFields are the declared fields a widen or narrow changes, in changedFields'
 // spelling.
-var boundaryFields = []string{"write_paths", "deny_paths", "read_paths"}
+var boundaryFields = []string{"paths.write", "paths.deny", "paths.read"}
 
 // widensInPlace reports a declaration that changes a live row's boundaries and nothing
 // else it declares, while resetting a state its holder already moved past declared: a
@@ -629,14 +629,15 @@ func widensInPlace(prev, next types.Job) bool {
 	return moved
 }
 
-// keepDerived carries what the fork derived for prev onto a whole-row record that omits it,
-// so a projection never hardens a path no person decided: prev's soft paths row still
-// writes, unless row names soft_paths for a path prev held, and the [IntegratorDeviations].
+// keepDerived carries what the fork derived for prev onto a whole-row
+// record that omits it, so a projection never hardens a path. That is prev's
+// soft paths, unless row names paths.soft for one, and the
+// [IntegratorDeviations].
 func keepDerived(row *types.Job, prev types.Job) {
-	if !slices.ContainsFunc(row.SoftPaths, func(p string) bool { return slices.Contains(prev.WritePaths, p) }) {
-		for _, p := range prev.SoftPaths {
-			if slices.Contains(row.WritePaths, p) && !slices.Contains(row.SoftPaths, p) {
-				row.SoftPaths = append(row.SoftPaths, p)
+	if !slices.ContainsFunc(row.Paths.Soft, func(p string) bool { return slices.Contains(prev.Paths.Write, p) }) {
+		for _, p := range prev.Paths.Soft {
+			if slices.Contains(row.Paths.Write, p) && !slices.Contains(row.Paths.Soft, p) {
+				row.Paths.Soft = append(row.Paths.Soft, p)
 			}
 		}
 	}

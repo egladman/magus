@@ -117,7 +117,7 @@ func uncommitted(ctx context.Context, root string, row types.Job) ([]string, str
 		return nil, fmt.Sprintf("the status of %s cannot be read: %s", root, err.Error())
 	}
 	return slices.DeleteFunc(dirty, func(p string) bool {
-		return !slices.ContainsFunc(row.WritePaths, func(w string) bool { return covers(w, p) })
+		return !slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, p) })
 	}), ""
 }
 

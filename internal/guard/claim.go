@@ -97,7 +97,7 @@ func gradeNarrowedHold(ctx context.Context, at location, checkout string, me typ
 		return writeGrade{}
 	}
 	now := time.Now().Unix()
-	mine := claimsOn(me.WritePaths, rel)
+	mine := claimsOn(me.Paths.Write, rel)
 	var touched []string
 	for _, decl := range changed {
 		if decl == types.Preamble || namedBy(mine, decl) || slices.Contains(touched, decl) {
@@ -138,12 +138,12 @@ func growNarrowedHold(ctx context.Context, at location, checkout string, me type
 	case narrowed:
 		return writeGrade{Decision: decisionAdvise,
 			Context: fmt.Sprintf("magus workspace: lease %s's hold on %s grew by %s; it now holds the file by %s.",
-				me.ID, rel, quotedPaths(added), quotedClaims(rel, claimsOn(row.WritePaths, rel))),
+				me.ID, rel, quotedPaths(added), quotedClaims(rel, claimsOn(row.Paths.Write, rel))),
 			Why: fmt.Sprintf("magus narrowed your hold on %s to the declarations you change. A write to one nobody claims adds it to your claims, and `magus job wait` grades your changes against them.", rel)}
 	}
 	return writeGrade{Decision: decisionAdvise,
 		Context: fmt.Sprintf("magus workspace: lease %s now holds %s by %s; the rest of the file is released for other jobs to claim.",
-			me.ID, rel, quotedClaims(rel, claimsOn(row.WritePaths, rel))),
+			me.ID, rel, quotedClaims(rel, claimsOn(row.Paths.Write, rel))),
 		Why: fmt.Sprintf("Your write paths cover %s only through a pattern, so magus narrows the hold to the declarations you change, on the first write to each. `magus job wait` grades your changes to it against these claims.", rel)}
 }
 
@@ -160,7 +160,7 @@ func quotedPaths(paths []string) string {
 // rel and no literal one does.
 func coveredOnlyByPattern(me types.Job, rel string) bool {
 	byPattern := false
-	for _, entry := range me.WritePaths {
+	for _, entry := range me.Paths.Write {
 		p, decl := types.SplitClaim(entry)
 		if decl != "" {
 			continue

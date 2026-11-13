@@ -27,10 +27,10 @@ func newModelTierRequest(row types.Job, rows []types.Job, set *agent.ModelTierSe
 		ReadOnly:     row.ReadOnly,
 		Goals:        slices.Clone(row.Goals),
 		Kind:         modelTierKind(row),
-		WritePaths:   slices.Clone(row.WritePaths),
-		ReadPaths:    slices.Clone(row.ReadPaths),
+		WritePaths:   slices.Clone(row.Paths.Write),
+		ReadPaths:    slices.Clone(row.Paths.Read),
 		DependsOn:    slices.Clone(row.DependsOn),
-		WriteFiles:   writeFileCount(row.WritePaths),
+		WriteFiles:   writeFileCount(row.Paths.Write),
 		Model:        row.Agent.RequestedModel(),
 		History:      slices.Clone(history),
 	}
@@ -262,7 +262,7 @@ func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types
 		models = s.modelRows()
 	}
 	req := newModelTierRequest(row, plan, s.modelTiers, models, nil)
-	if s.modelTierMatrix != nil && s.owners != nil && row.Agent.RequestedModel().IsZero() && len(row.WritePaths) > 0 {
+	if s.modelTierMatrix != nil && s.owners != nil && row.Agent.RequestedModel().IsZero() && len(row.Paths.Write) > 0 {
 		projects, err := s.writeProjects(ctx, row)
 		if err != nil {
 			return agent.JobModelTier{}, fmt.Errorf("finding the projects %s writes in: %w", row.ID, err)
@@ -286,8 +286,8 @@ func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types
 // writeProjects is the projects row's write paths fall in, through Location.Owners, which
 // the caller has checked is set.
 func (s *Store) writeProjects(ctx context.Context, row types.Job) ([]string, error) {
-	files := make([]string, len(row.WritePaths))
-	for i, p := range row.WritePaths {
+	files := make([]string, len(row.Paths.Write))
+	for i, p := range row.Paths.Write {
 		files[i], _ = types.SplitClaim(p)
 	}
 	return s.owners(ctx, files)

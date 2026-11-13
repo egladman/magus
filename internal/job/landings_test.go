@@ -166,7 +166,7 @@ func TestLandedJobsEndWhenSquashedIntoOneBaseCommit(t *testing.T) {
 	s.notices = &notices
 	exited := func(id string, wt *testkit.Repo, file string) types.Job {
 		return types.Job{ID: id, State: types.StateExited, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
-			WritePaths: []string{file}, Updated: 1}
+			Paths: types.JobPaths{Write: []string{file}}, Updated: 1}
 	}
 	plant(t, s, exited("job-a", wa, "a.go"), exited("job-b", wb, "b.go"), exited("job-c", wc, "c.go"), exited("job-d", wd, "d.go"))
 
@@ -208,7 +208,7 @@ func TestALandedSubsetOfTheWorkLeavesTheJobExited(t *testing.T) {
 	s := tempStore(t, repo.Root())
 	s.notices = io.Discard
 	plant(t, s, types.Job{ID: "job", State: types.StateExited, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
-		WritePaths: []string{"a.go", "b.go"}, Updated: 1})
+		Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}, Updated: 1})
 	fileTry(t, s, "job", &types.JobResult{ChangedPaths: []string{"a.go"}})
 
 	assert.Equal(t, types.StateExited, states(t, s)["job"].State)
@@ -234,7 +234,7 @@ func landedWithNoResult(t *testing.T, dirty, differs bool) types.Job {
 	s := tempStore(t, repo.Root())
 	s.notices = io.Discard
 	plant(t, s, types.Job{ID: "job", State: types.StateRunning, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
-		WritePaths: []string{"a.go"}, Updated: 1})
+		Paths: types.JobPaths{Write: []string{"a.go"}}, Updated: 1})
 	return states(t, s)["job"]
 }
 
@@ -269,7 +269,7 @@ func TestARowEndsWhenTheBaseEditedItsLandedFileSince(t *testing.T) {
 	s := tempStore(t, repo.Root())
 	s.notices = io.Discard
 	plant(t, s, types.Job{ID: "job", State: types.StateRunning, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
-		WritePaths: []string{"a.go"}, Updated: 1})
+		Paths: types.JobPaths{Write: []string{"a.go"}}, Updated: 1})
 	got := states(t, s)["job"]
 
 	assert.Equal(t, types.StateNoReturn, got.State)
@@ -319,7 +319,7 @@ func workerMergedIntoIntegration(t *testing.T, state types.JobState, dirty bool)
 	s.notices = &notices
 	exited := func(id string, wt *testkit.Repo, file string) types.Job {
 		return types.Job{ID: id, State: state, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
-			WritePaths: []string{file}, Updated: 1}
+			Paths: types.JobPaths{Write: []string{file}}, Updated: 1}
 	}
 	plant(t, s, exited("job-a", wa, "a.go"), exited("job-b", wb, "b.go"),
 		types.Job{ID: "integration", State: types.StateRunning, Checkpoint: seedRev, CheckoutRoot: integration.Root(),
@@ -632,7 +632,7 @@ func (s *unmergedSuite) TestAFiledCheckoutHoldingUncommittedChangesCounts() {
 	where := filepath.Join(s.T().TempDir(), "w")
 	s.repo.Git("worktree", "add", "-q", where, "-b", "w")
 	s.Require().NoError(os.WriteFile(filepath.Join(where, "w.txt"), []byte("dirty\n"), 0o644))
-	row := types.Job{ID: "w", State: types.StateExited, WritePaths: []string{"w.txt"}, CheckoutRoot: where}
+	row := types.Job{ID: "w", State: types.StateExited, Paths: types.JobPaths{Write: []string{"w.txt"}}, CheckoutRoot: where}
 	s.filed("w", &types.JobResult{ChangedPaths: []string{"w.txt"}})
 
 	got := s.unmerged(row)

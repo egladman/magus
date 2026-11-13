@@ -20,7 +20,7 @@ func pinCheckoutBinary(t *testing.T, session, bin string) {
 	t.Helper()
 	digest, err := job.BinaryDigest(bin)
 	require.NoError(t, err)
-	_, cacheDir := seedJobStore(t, session, types.Job{ID: "pinned", State: types.StateDeclared, WritePaths: []string{"a.go"}})
+	_, cacheDir := seedJobStore(t, session, types.Job{ID: "pinned", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.go"}}})
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: session})
 	_, err = store.RecordWorktree(t.Context(), "pinned", types.JobWorktree{Root: filepath.Dir(bin), Binary: bin, BinaryDigest: digest})
 	require.NoError(t, err)

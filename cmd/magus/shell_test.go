@@ -98,7 +98,7 @@ func narrowLease() types.Job {
 	return types.Job{
 		ID:         "harness/lease-scoped-deny",
 		Agent:      typesagent.Instructed("lease-scoped denies in the guard"),
-		WritePaths: []string{"cmd/magus/**"},
+		Paths: types.JobPaths{Write: []string{"cmd/magus/**"}},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
 		State:      types.StateRunning,
 		Registered: 1,
@@ -1103,7 +1103,7 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	lease := narrowLease()
-	lease.WritePaths = []string{"**"}
+	lease.Paths.Write = []string{"**"}
 	// Unregistered, so the write-path rule has a denial of its own to be outranked BY. A
 	// boundary that covers the path and says nothing leaves the rank unobserved.
 	lease.Registered = 0
@@ -1207,7 +1207,7 @@ func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	wide := narrowLease()
-	wide.WritePaths = []string{"cmd/magus/**", "internal/hint/**"}
+	wide.Paths.Write = []string{"cmd/magus/**", "internal/hint/**"}
 	ctx, _, _ := fleetFixture(t, wide)
 
 	client := func(script string) string {
@@ -1218,16 +1218,16 @@ func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 		toolInput string
 		want      string
 	}{
-		"fork on another row":   {client(`magus\workspace().putJob("harness/other", opts: {"write_paths": ["**"]});`), "deny\n"},
-		"fork widening its own": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"**\"]});", own)), "deny\n"},
+		"fork on another row":   {client(`magus\workspace().putJob("harness/other", opts: {"paths": {"write": ["**"]}});`), "deny\n"},
+		"fork widening its own": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"**\"]}});", own)), "deny\n"},
 		"clearing the board":    {client(`magus\workspace().clearJobs();`), "deny\n"},
 		"exec elsewhere":        {client(`magus\job("harness/other").register();`), "deny\n"},
 		"exec its own":          {client(fmt.Sprintf("magus\\job(%s).register();", own)), "pass\n"},
 		"listing the plan":      {client(`magus\workspace().jobs();`), "pass\n"},
-		"giving paths back":     {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"]});", own)), "pass\n"},
+		"giving paths back":     {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"cmd/magus/**\"]}});", own)), "pass\n"},
 		// A shrink beside a forged checkpoint or rewritten criteria is not a plain shrink.
-		"forging its own base":   {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"checkpoint\": \"deadbeef\"});", own)), "deny\n"},
-		"rewriting its criteria": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"criteria\": \"something else\"});", own)), "deny\n"},
+		"forging its own base":   {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"cmd/magus/**\"]}, \"checkpoint\": \"deadbeef\"});", own)), "deny\n"},
+		"rewriting its criteria": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"cmd/magus/**\"]}, \"criteria\": \"something else\"});", own)), "deny\n"},
 	} {
 		envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"mcp-%s\",\"tool_name\":\"mcp__magus__client\",\"tool_input\":%s}", name, tc.toolInput)
 		var out bytes.Buffer
@@ -1448,7 +1448,7 @@ func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	lease := narrowLease()
-	lease.WritePaths = []string{".claude/**", "cmd/magus/**"}
+	lease.Paths.Write = []string{".claude/**", "cmd/magus/**"}
 	ctx, _, _ := fleetFixture(t, lease)
 
 	var denied bytes.Buffer
@@ -1674,7 +1674,7 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	global = globalFlags{}
 	testkit.Isolate(t)
 	root, cacheDir := testkit.NewRepository(t, nil).Root(), t.TempDir()
-	row := types.Job{ID: "worker", WritePaths: []string{"a.go"}, Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1}
+	row := types.Job{ID: "worker", Paths: types.JobPaths{Write: []string{"a.go"}}, Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1}
 	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 	ctx := guard.WithLocation(t.Context(), cacheDir, root, "")

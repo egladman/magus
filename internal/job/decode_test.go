@@ -43,16 +43,18 @@ func TestDecodeDeclarationReadsAFieldUnderItsOldName(t *testing.T) {
 	require.Equal(t, types.Declaration{
 		Schema:     types.Schema{Version: types.JobAPIVersion},
 		ID:         "adj/ledger",
-		WritePaths: []string{"internal/ledger"},
-		DenyPaths:  []string{"MAGUS.md"},
-		ReadPaths:  []string{"internal/hint"},
+		Paths: types.JobPaths{
+Write: []string{"internal/ledger"},
+Read: []string{"internal/hint"},
+Deny: []string{"MAGUS.md"},
+},
 	}, row)
 }
 
 func TestDecodeDeclarationRefusesAFieldSpelledBothWays(t *testing.T) {
 	t.Parallel()
 
-	_, err := decodeDeclaration(declaration(`"id":"adj/ledger"`, `"owned_paths":["a"]`, `"write_paths":["b"]`))
+	_, err := decodeDeclaration(declaration(`"id":"adj/ledger"`, `"owned_paths":["a"]`, `"paths":{"write":["b"]}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "owned_paths")
 }
@@ -163,7 +165,7 @@ func TestDecodeDeclarationValidatesWhatItRead(t *testing.T) {
 	assert.Contains(t, err.Error(), "no_return")
 
 	row, err := decodeDeclaration(declaration(
-		`"id":"adj/store"`, `"write_paths":["internal/ledger"]`, `"state":"declared"`))
+		`"id":"adj/store"`, `"paths":{"write":["internal/ledger"]}`, `"state":"declared"`))
 	require.NoError(t, err)
 	assert.Equal(t, types.StateDeclared, row.State)
 }
@@ -220,19 +222,19 @@ func TestStoreStampedIsWhatJobHasAndDeclarationLacks(t *testing.T) {
 func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
 	t.Parallel()
 
-	stored := fmt.Sprintf(`{"api_version":%q,"id":"a","write_paths":["internal/job"],"state":"declared",`+
+	stored := fmt.Sprintf(`{"api_version":%q,"id":"a","paths":{"write":["internal/job"]},"state":"declared",`+
 		`"created":1,"updated":2,"deadline":3,"registered":4,"registered_by":{"session":"s"},`+
 		`"write_proof":{},"reported_base":"abc","base_verdict":"match","checkout_root":"/w",`+
 		`"unknown":["spec.x"],"releases":[],"model_tier":{"name":"routine","rank":0,"skills":"full","source":"default"}}`, types.JobAPIVersion)
 	rows, err := DecodeDeclarations(strings.NewReader(stored))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, []string{"internal/job"}, rows[0].WritePaths)
+	assert.Equal(t, []string{"internal/job"}, rows[0].Paths.Write)
 	assert.Empty(t, rows[0].State, "the status a described row prints is the store's, and apply never writes one")
 
-	typo := strings.Replace(stored, `"write_paths"`, `"write_pathz"`, 1)
+	typo := strings.Replace(stored, `"paths"`, `"pathz"`, 1)
 	_, err = DecodeDeclarations(strings.NewReader(typo))
-	require.ErrorContains(t, err, "write_pathz")
+	require.ErrorContains(t, err, "pathz")
 
 	_, err = decodeDeclaration(strings.NewReader(stored))
 	require.ErrorContains(t, err, "unknown", "fork's decoder stays strict")
@@ -244,10 +246,10 @@ func TestDecodeDeclarationsUnwrapsADescribedRecord(t *testing.T) {
 	t.Parallel()
 
 	plain, err := DecodeDeclarations(strings.NewReader(fmt.Sprintf(
-		`{"api_version":%q,"id":"a","write_paths":["internal/job"]}`, types.JobAPIVersion)))
+		`{"api_version":%q,"id":"a","paths":{"write":["internal/job"]}}`, types.JobAPIVersion)))
 	require.NoError(t, err)
 
-	described := `{"job":{"id":"a","write_paths":["internal/job"],"state":"declared","created":1},` +
+	described := `{"job":{"id":"a","paths":{"write":["internal/job"]},"state":"declared","created":1},` +
 		`"projects":["."],"graph_cold":true,"goals":{"id":"a"}}`
 	rows, err := DecodeDeclarations(strings.NewReader(described))
 	require.NoError(t, err)
@@ -264,7 +266,7 @@ func TestDecodeDeclarationsUnwrapsADescribedRecord(t *testing.T) {
 func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
 	t.Parallel()
 
-	stored := fmt.Sprintf(`{"api_version":%q,"id":"a","write_paths":["internal/job/store.go"],`+
+	stored := fmt.Sprintf(`{"api_version":%q,"id":"a","paths":{"write":["internal/job/store.go"]},`+
 		`"check":{"target":"go-test","project":"."},"validation":"magus run go-test ."}`, types.JobAPIVersion)
 	rows, err := DecodeDeclarations(strings.NewReader(stored))
 	require.NoError(t, err)
@@ -273,7 +275,7 @@ func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
 	assert.Equal(t, "go-test", rows[0].Check.Target)
 	assert.Empty(t, rows[0].Validation)
 
-	line := fmt.Sprintf(`{"api_version":%q,"id":"a","write_paths":["internal/job/store.go"],"validation":"magus run go-test ."}`, types.JobAPIVersion)
+	line := fmt.Sprintf(`{"api_version":%q,"id":"a","paths":{"write":["internal/job/store.go"]},"validation":"magus run go-test ."}`, types.JobAPIVersion)
 	rows, err = DecodeDeclarations(strings.NewReader(line))
 	require.NoError(t, err)
 	assert.Equal(t, "magus run go-test .", rows[0].Validation, "a line alone is the declaration's own check")
@@ -318,7 +320,7 @@ func TestDeclarationApplyDeclaresRatherThanMerges(t *testing.T) {
 
 	stored := types.Job{
 		ID: "adj/store", Agent: &agent.Spec{Instructions: "old", Model: agent.Model{Tier: "design"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
-		WritePaths: []string{"internal/ledger"},
+		Paths: types.JobPaths{Write: []string{"internal/ledger"}},
 		Registered: 42,
 	}
 	types.Declaration{ID: "adj/store", Agent: agent.Instructed("new")}.Apply(&stored)
@@ -402,12 +404,10 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	t.Parallel()
 
 	legacy := map[string]bool{"owned_paths": true, "forbidden_paths": true, "focus": true, "tier": true}
-	// The envelope and the key, which a put names outside its map, decode.go's own legacy
-	// compat, checkout, soft_paths and integrates, which only a fork makes, and claim, which
-	// only apply proves.
-	// A settlement's fields too: only apply writes them.
+	// Skipped: the envelope, the key, legacy spellings and what only a
+	// fork or apply makes.
 	skipped := func(field string) bool {
-		return field == "api_version" || field == "requires" || field == "id" || field == "checkout" || field == "soft_paths" ||
+		return field == "api_version" || field == "requires" || field == "id" || field == "checkout" ||
 			field == "integrates" || field == "claim" || field == "deferred" || field == "left_unmerged" || legacy[field]
 	}
 	_, err := DecodePut(map[string]any{"checkout": "/tmp/co"})
@@ -422,8 +422,10 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 		}
 		var value any = "declared"
 		switch field {
-		case "write_paths", "deny_paths", "read_paths", "depends_on", "breaks":
+		case "depends_on", "breaks":
 			value = []any{"internal/job"}
+		case "paths":
+			value = map[string]any{"write": []any{"internal/job"}, "read": []any{"internal"}, "deny": []any{"internal/job/gen"}}
 		case "agent":
 			value = map[string]any{"instructions": "x", "worker": map[string]any{"type": "resumed"}}
 		case "read_only":

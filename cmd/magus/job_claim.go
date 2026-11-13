@@ -196,7 +196,7 @@ func goPackageName(root, rel string) string {
 // its whole file.
 func heldClaim(row types.Job, claim string) bool {
 	file, _ := types.SplitClaim(claim)
-	return slices.ContainsFunc(row.WritePaths, func(w string) bool {
+	return slices.ContainsFunc(row.Paths.Write, func(w string) bool {
 		_, word := types.SplitClaim(w)
 		return w == claim || word == "" && job.Covers(w, file)
 	})

@@ -377,7 +377,7 @@ func HeldIn(rows []types.Job, root string) []types.Job {
 	for _, row := range rows {
 		// A row that is over holds nothing, or a checkout would stay refused over every job
 		// that ever passed in it.
-		if row.CheckoutRoot == abs && Editing(row) && len(row.WritePaths) > 0 {
+		if row.CheckoutRoot == abs && Editing(row) && len(row.Paths.Write) > 0 {
 			out = append(out, row)
 		}
 	}
@@ -413,7 +413,7 @@ func heldHere(rows []types.Job, root, forking string) []types.Job {
 // nothing about a job whose write paths cover no load file. Refusing more than magus can
 // prove is how a guard becomes something to route around.
 func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types.JobProblems {
-	if store == nil || len(row.WritePaths) == 0 {
+	if store == nil || len(row.Paths.Write) == 0 {
 		return nil
 	}
 	held := heldHere(rows, WorkingCheckout(store.root, row), row.ID)
@@ -432,7 +432,7 @@ func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types
 	// Read only once something else holds the checkout: the walk touches the tree, and a
 	// fork into an unshared checkout is the common case and must stay free.
 	for _, load := range describe.WorkspaceLoadFiles(store.root) {
-		declared, covered := writePathCovering(row.WritePaths, load)
+		declared, covered := writePathCovering(row.Paths.Write, load)
 		if !covered || reported[declared] {
 			continue
 		}
@@ -443,13 +443,13 @@ func sharedCheckoutProblems(store *Store, rows []types.Job, row types.Job) types
 		store.requestRelease(ctx, holder.ID, load, []string{declared}, unused)
 		ps = append(ps, types.JobProblem{
 			Code:  types.CheckoutConfigHeld,
-			Field: fmt.Sprintf("write_paths[%d]", slices.Index(row.WritePaths, declared)),
+			Field: fmt.Sprintf("paths.write[%d]", slices.Index(row.Paths.Write, declared)),
 			Message: fmt.Sprintf("%s declares %q, which covers %s, and %s is live in this checkout (%s; %s, updated %s ago):"+
 				" a magusfile, magus.yaml or spell source that is half-saved stops the whole workspace loading,"+
 				" so every job here loses `magus run` until it lands, not just this one. %s",
 				row.ID, declared, load, holder.ID, store.root, holder.State, updatedAgo(holder), describeUnused(holder.ID, unused)),
 			Fix: fmt.Sprintf("fork %s into its own worktree with `%s`, fork it with `--depends-on %s` to wait for the holder,"+
-				" or drop %q from write_paths (`%s` names what else it covers)%s",
+				" or drop %q from paths.write (`%s` names what else it covers)%s",
 				row.ID, hint.JobFork.With(row.ID, "--checkout", "<dir>"), holder.ID, declared, hint.DescribeFile.With(load),
 				narrowAdvice(holder.ID, unused)),
 		})
@@ -479,7 +479,7 @@ func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 		return nil
 	}
 	var ps types.JobProblems
-	for i, decl := range row.WritePaths {
+	for i, decl := range row.Paths.Write {
 		for _, dir := range claimedDirs(store.root, decl) {
 			stray, generated := nonOutputFile(store, dir)
 			if generated {
@@ -503,7 +503,7 @@ func directoryWritePathProblems(store *Store, row types.Job) types.JobProblems {
 			}
 			ps = append(ps, types.JobProblem{
 				Code:    types.WritePathIsDirectory,
-				Field:   fmt.Sprintf("write_paths[%d]", i),
+				Field:   fmt.Sprintf("paths.write[%d]", i),
 				Message: fmt.Sprintf("%s is a directory, and a write path names files: a directory claims every file under it, so the job would overlap every job editing anything there%s", named, why),
 				Fix:     "list the files the job will edit in its place, and name each file it creates by its path",
 			})
@@ -659,7 +659,7 @@ func HardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.
 	var driver types.VCSDriver
 	out := slices.Clone(rows)
 	for i, row := range rows {
-		if len(row.SoftPaths) == 0 || !Editing(row) || row.CheckoutRoot == "" {
+		if len(row.Paths.Soft) == 0 || !Editing(row) || row.CheckoutRoot == "" {
 			continue
 		}
 		if driver == nil {
@@ -671,7 +671,7 @@ func HardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.
 		}
 		used := indexRegions(fp.regions)
 		written := map[string]bool{}
-		for _, entry := range row.SoftPaths {
+		for _, entry := range row.Paths.Soft {
 			if used.uses(entry) {
 				written[entry] = true
 			}
@@ -682,13 +682,13 @@ func HardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.
 		harden := func(soft []string) []string {
 			return slices.DeleteFunc(slices.Clone(soft), func(p string) bool { return written[p] })
 		}
-		out[i].SoftPaths = harden(row.SoftPaths)
+		out[i].Paths.Soft = harden(row.Paths.Soft)
 		if store.dryRun {
 			continue
 		}
 		_, _ = store.mutate(ctx, row.ID, asObservation, func(cur *types.Job, exists bool, _ int64) error {
 			if exists {
-				cur.SoftPaths = harden(cur.SoftPaths)
+				cur.Paths.Soft = harden(cur.Paths.Soft)
 			}
 			return nil
 		})
@@ -698,7 +698,7 @@ func HardenWritten(ctx context.Context, store *Store, rows []types.Job) []types.
 
 // claiming is row as the checks that read WritePaths for a collision see it: soft paths out.
 func claiming(row types.Job) types.Job {
-	row.WritePaths = row.HardPaths()
+	row.Paths.Write = row.HardPaths()
 	return row
 }
 
@@ -784,13 +784,13 @@ func IntegrationOverlaps(rows []types.Job, row types.Job) []string {
 			slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == holder.ID }) {
 			continue
 		}
-		for _, mine := range row.WritePaths {
-			i := slices.IndexFunc(holder.WritePaths, func(theirs string) bool { return types.PathsIntersect(mine, theirs) })
+		for _, mine := range row.Paths.Write {
+			i := slices.IndexFunc(holder.Paths.Write, func(theirs string) bool { return types.PathsIntersect(mine, theirs) })
 			if i < 0 {
 				continue
 			}
-			theirs, kind := holder.WritePaths[i], "holds"
-			if slices.Contains(holder.SoftPaths, theirs) {
+			theirs, kind := holder.Paths.Write[i], "holds"
+			if slices.Contains(holder.Paths.Soft, theirs) {
 				kind = "soft-claims"
 			}
 			notes = append(notes, fmt.Sprintf("%s (%s) %s %q, which the merge writes as %q: the merge settles it, so tell %s before it edits that file again",

@@ -77,17 +77,17 @@ magus\modelTier(choose);
 -- code.go --
 package pkg
 -- small.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/small", "write_paths": ["a.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/small", "paths": {"write": ["a.go"]},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}
 -- wide.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/wide", "write_paths": ["b.go", "c.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/wide", "paths": {"write": ["b.go", "c.go"]},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["b.go", "c.go"]}]}
 -- named.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/named", "write_paths": ["d.go"], "agent": {"model": {"tier": "design"}, "worker": {"type": "resumed"}},
+{"api_version": "magus.job/v1alpha1", "id": "wave/named", "paths": {"write": ["d.go"]}, "agent": {"model": {"tier": "design"}, "worker": {"type": "resumed"}},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["d.go"]}]}
 -- model.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/model", "write_paths": ["e.go"], "agent": {"model": {"id": "haiku"}, "worker": {"type": "resumed"}},
+{"api_version": "magus.job/v1alpha1", "id": "wave/model", "paths": {"write": ["e.go"]}, "agent": {"model": {"id": "haiku"}, "worker": {"type": "resumed"}},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["e.go"]}]}
 -- applied.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/applied", "write_paths": ["f.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/applied", "paths": {"write": ["f.go"]},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["f.go"]}]}

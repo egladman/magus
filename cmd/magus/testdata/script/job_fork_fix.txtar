@@ -15,14 +15,14 @@ exec git commit -q -m 'pricing and its guide'
 
 ! exec magus job fork pricing --write-paths 'docs/guide.md,pricing' --check 'test .'
 stderr '^\[error\] 2 problems:$'
-stderr '\[MGS3018\] write_paths\[1\]'
+stderr '\[MGS3018\] paths.write\[1\]'
 stderr '\[MGS3045\] goals: ci runs `check-docs \.`'
 stderr '^--fix would apply 1 of them$'
 
 ! exec magus job fork pricing --write-paths 'docs/guide.md,pricing' --check 'test .' --fix
 stderr '^fixed: added the goal "check-docs" \(magus run check-docs \.\)$'
 stderr '^\[error\] 1 problem:$'
-stderr '\[MGS3018\] write_paths\[1\]'
+stderr '\[MGS3018\] paths.write\[1\]'
 ! stderr 'MGS3045'
 ! stderr '--fix would apply'
 exec magus ls jobs -o name
@@ -41,7 +41,7 @@ stderr '^fixed: added the goal "check-docs"'
 stdout '^forked guide, declared, with 1 write path\(s\)\.'
 
 -- guide.json --
-{"id": "guide", "write_paths": ["docs/faq.md"], "check": {"target": "test", "project": "."}}
+{"id": "guide", "paths": {"write": ["docs/faq.md"]}, "check": {"target": "test", "project": "."}}
 -- .gitignore --
 .magus/
 -- magus.yaml --

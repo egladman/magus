@@ -44,14 +44,14 @@ func narrowedTestProblems(store *Store, row types.Job) types.JobProblems {
 	}
 	var ps types.JobProblems
 	for _, g := range row.EffectiveGoals() {
-		if g.Kind != types.GoalKindCheck || scopedToWritePackages(store.root, g.Check, row.WritePaths, store.testSelection()) {
+		if g.Kind != types.GoalKindCheck || scopedToWritePackages(store.root, g.Check, row.Paths.Write, store.testSelection()) {
 			continue
 		}
 		named := fmt.Sprintf("%s's check", row.ID)
 		if g.ID != types.PrimaryGoalID {
 			named = fmt.Sprintf("%s's goal %q", row.ID, g.ID)
 		}
-		if p, ok := narrowedCheckProblem(store.root, named, g.Check, row.WritePaths, store.testSelection()); ok {
+		if p, ok := narrowedCheckProblem(store.root, named, g.Check, row.Paths.Write, store.testSelection()); ok {
 			p.Field = goalCheckField(row, g)
 			ps = append(ps, p)
 		}

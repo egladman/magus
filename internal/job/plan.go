@@ -128,12 +128,12 @@ type Applied struct {
 // and lost, or the field's name for a value that changed.
 func (a Applied) ChangeLines() []string {
 	lists := map[string][2][]string{
-		"write_paths": {a.Prev.WritePaths, a.Next.WritePaths},
-		"deny_paths":  {a.Prev.DenyPaths, a.Next.DenyPaths},
-		"read_paths":  {a.Prev.ReadPaths, a.Next.ReadPaths},
+		"paths.write": {a.Prev.Paths.Write, a.Next.Paths.Write},
+		"paths.deny":  {a.Prev.Paths.Deny, a.Next.Paths.Deny},
+		"paths.read":  {a.Prev.Paths.Read, a.Next.Paths.Read},
 		"depends_on":  {a.Prev.DependsOn, a.Next.DependsOn},
 		"integrates":  {a.Prev.Integrates, a.Next.Integrates},
-		"soft_paths":  {a.Prev.SoftPaths, a.Next.SoftPaths},
+		"paths.soft":  {a.Prev.Paths.Soft, a.Next.Paths.Soft},
 		"breaks":      {a.Prev.Breaks, a.Next.Breaks},
 		"goals":       {goalIDs(a.Prev.Goals), goalIDs(a.Next.Goals)},
 	}
@@ -233,7 +233,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 				fmt.Sprintf("feed it to `%s`, which records an entry", hint.JobFork.With("--stdin")))
 		case ended && !redeclares:
 			invalid("id", fmt.Sprintf("%s already ended %s, and apply changes a live job or widens an ended one", rec.ID, prev.State),
-				fmt.Sprintf("widen its write_paths to hand it back to its holder, or fork a new job with `%s`", hint.JobFork.With("--stdin")))
+				fmt.Sprintf("widen its paths.write to hand it back to its holder, or fork a new job with `%s`", hint.JobFork.With("--stdin")))
 		}
 		if rec.Enter != "" || ended && !redeclares {
 			problems = append(problems, prefixed(rec.ID, ps)...)
@@ -263,8 +263,8 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		}
 		// An empty write set is no boundary at all (the guard scopes nothing by it), so
 		// dropping the last path would free the job rather than stop it.
-		if i >= 0 && len(prev.WritePaths) > 0 && len(next.WritePaths) == 0 && !next.ReadOnly {
-			invalid("write_paths", fmt.Sprintf("the record drops every write path %s holds, which leaves it bounded by nothing", rec.ID),
+		if i >= 0 && len(prev.Paths.Write) > 0 && len(next.Paths.Write) == 0 && !next.ReadOnly {
+			invalid("paths.write", fmt.Sprintf("the record drops every write path %s holds, which leaves it bounded by nothing", rec.ID),
 				fmt.Sprintf("keep a write path, or end the job with `%s`", hint.JobExit.With(rec.ID)))
 		}
 		if i >= 0 {
@@ -312,7 +312,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 // droppedGoalProblems is one problem per goal next lacks, when it also
 // gives up a write path. Each edit restores one, so --fix restores all.
 func droppedGoalProblems(prev, next types.Job) types.JobProblems {
-	if subset(prev.WritePaths, next.WritePaths) {
+	if subset(prev.Paths.Write, next.Paths.Write) {
 		return nil
 	}
 	var ps types.JobProblems
@@ -353,7 +353,7 @@ func differentCheckout(rec types.Declaration, bound string) (message, fix string
 func widensWritePaths(prev types.Job, rec types.Declaration) bool {
 	var next types.Job
 	rec.ApplySpec(&next)
-	return !subset(next.WritePaths, prev.WritePaths)
+	return !subset(next.Paths.Write, prev.Paths.Write)
 }
 
 // specMerge is rec's spec as a merge: [types.Declaration.ApplySpec], plus the checkpoint a
@@ -367,10 +367,10 @@ func specMerge(rec types.Declaration, creates bool, checkpoint func() string) fu
 	}
 	return func(u *types.Job) {
 		rec.ApplySpec(u)
-		if soft := slices.DeleteFunc(slices.Clone(u.SoftPaths), func(p string) bool { return !slices.Contains(u.WritePaths, p) }); len(soft) != len(u.SoftPaths) {
-			u.SoftPaths = soft
+		if soft := slices.DeleteFunc(slices.Clone(u.Paths.Soft), func(p string) bool { return !slices.Contains(u.Paths.Write, p) }); len(soft) != len(u.Paths.Soft) {
+			u.Paths.Soft = soft
 			if len(soft) == 0 {
-				u.SoftPaths = nil
+				u.Paths.Soft = nil
 			}
 		}
 		if cp != "" {
@@ -449,7 +449,7 @@ func ResolveSymbolGoals(ctx context.Context, row types.Job, read SymbolReader) (
 		return types.Job{}, nil, fmt.Errorf("job: %s", strings.Join(refused, "; "))
 	}
 	slices.Sort(claims)
-	row.WritePaths = append(row.WritePaths, claims...)
+	row.Paths.Write = append(row.Paths.Write, claims...)
 	return row, claims, nil
 }
 
@@ -491,7 +491,7 @@ func derivedClaim(row types.Job, expect types.GoalExpect, read bool, fact Symbol
 	if word == "" || strings.Contains(file, "#") {
 		return ""
 	}
-	for _, entry := range row.WritePaths {
+	for _, entry := range row.Paths.Write {
 		p, decl := types.SplitClaim(entry)
 		switch {
 		case decl == "" && coversPath(p, file) && (path.Clean(p) != file || strings.ContainsAny(p, globMeta)):
@@ -557,9 +557,9 @@ func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string
 		return nil, err
 	}
 	goals := resolved.Goals
-	paths := append(slices.Clone(probe.WritePaths), placed...)
+	paths := append(slices.Clone(probe.Paths.Write), placed...)
 	if ws, why := store.loadedWorkspace(); why == "" {
-		probe.Goals, probe.WritePaths = goals, paths
+		probe.Goals, probe.Paths.Write = goals, paths
 		if added := lintGoals(store.root, probe, ws, store.checkGrader()); len(added) > 0 {
 			goals = append(slices.Clone(goals), added...)
 			out := store.notices
@@ -573,7 +573,7 @@ func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string
 	}
 	return func(u *types.Job) {
 		merge(u)
-		u.Goals, u.WritePaths = goals, paths
+		u.Goals, u.Paths.Write = goals, paths
 	}, nil
 }
 
@@ -624,7 +624,7 @@ func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]
 	}
 	if len(refused) > 0 {
 		return nil, types.DiagnosticErrorf(types.WritePathClaimUngradable,
-			"a claim derived from a symbol goal must name exactly one declaration: %s. Claim the declaration in write_paths instead, or fix what is named",
+			"a claim derived from a symbol goal must name exactly one declaration: %s. Claim the declaration in paths.write instead, or fix what is named",
 			strings.Join(refused, "; "))
 	}
 	return kept, nil
@@ -728,7 +728,7 @@ func RenderFiled(out io.Writer, row types.Job) {
 func rewroteOutside(row types.Job, projects []*types.Project, target string, dirty []string) []string {
 	var out []string
 	for _, p := range dirty {
-		if _, held := matching(row.WritePaths, p); held {
+		if _, held := matching(row.Paths.Write, p); held {
 			continue
 		}
 		for _, project := range projects {

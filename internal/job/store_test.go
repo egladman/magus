@@ -57,8 +57,10 @@ func lease(id string) types.Job {
 		ID:         id,
 		Agent:      &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: "bounded"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}},
 		Checkpoint: "abc123",
-		WritePaths: []string{"internal/" + id},
-		DenyPaths:  []string{"MAGUS.md"},
+		Paths: types.JobPaths{
+Write: []string{"internal/" + id},
+Deny: []string{"MAGUS.md"},
+},
 		Validation: "magus run test",
 		State:      types.StateDeclared,
 	}
@@ -78,7 +80,7 @@ func TestSoftPathsClaimNothingOfTheirOwn(t *testing.T) {
 
 	s := NewStore(tempLocation(t, t.TempDir()))
 	soft := func(id string, hard, soft []string) types.Job {
-		return types.Job{ID: id, State: types.StateRunning, WritePaths: append(slices.Clone(hard), soft...), SoftPaths: soft}
+		return types.Job{ID: id, State: types.StateRunning, Paths: types.JobPaths{Write: append(slices.Clone(hard), soft...), Soft: soft}, }
 	}
 	seed(t, s, soft("A", []string{"a.go"}, []string{"a_test.go"}))
 	seed(t, s, soft("B", []string{"b.go"}, []string{"a_test.go"}))
@@ -99,7 +101,7 @@ func TestSoftPathsClaimNothingOfTheirOwn(t *testing.T) {
 
 	t.Run("dropping an unwritten soft path records no release", func(t *testing.T) {
 		t.Parallel()
-		kept, err := s.Update(t.Context(), "A", func(cur *types.Job) { cur.WritePaths, cur.SoftPaths = nil, nil })
+		kept, err := s.Update(t.Context(), "A", func(cur *types.Job) { cur.Paths.Write, cur.Paths.Soft = nil, nil })
 		require.NoError(t, err)
 		assert.Equal(t, []string{"a.go"}, releasedPaths(kept), "a.go was held; a_test.go never was")
 	})
@@ -356,10 +358,10 @@ func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoID, "a merge with no id has no row to address")
 }
 
-// TestStorePutRecordsReleasedPaths is the early-release rule the skill teaches, seen
-// from the store: a worker that has finished editing a contested path shrinks its
-// write_paths, and the row then has to say WHICH version of that path the waiting lease
-// inherits. A release with no digest would leave the waiter guessing.
+// TestStorePutRecordsReleasedPaths is the early-release rule the skill
+// teaches, seen from the store. A worker done with a contested path shrinks
+// its paths.write. The row then says WHICH version of that path the waiting
+// lease inherits. A release with no digest would leave the waiter guessing.
 func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	t.Parallel()
 
@@ -371,7 +373,7 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	s := tempStore(t, root)
 	seed(t, s, types.Job{
 		ID:         "u1",
-		WritePaths: []string{"kept.go", "released.go", "pkg", "gone.go"},
+		Paths: types.JobPaths{Write: []string{"kept.go", "released.go", "pkg", "gone.go"}},
 		State:      types.StateRunning,
 	})
 	before, err := s.List()
@@ -380,7 +382,7 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 
 	stored := seed(t, s, types.Job{
 		ID:         "u1",
-		WritePaths: []string{"kept.go"},
+		Paths: types.JobPaths{Write: []string{"kept.go"}},
 		State:      types.StateRunning,
 	})
 
@@ -412,9 +414,9 @@ func TestStorePutReleasesADeclaration(t *testing.T) {
 	const src = "package run\n\nfunc A() {\n\ta()\n}\n\nfunc B() {\n\tb()\n}\n"
 	root := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": src}).Root()
 	s := tempStore(t, root)
-	seed(t, s, types.Job{ID: "u1", WritePaths: []string{"run.go#A", "run.go#B", "run.go#Gone"}, State: types.StateRunning})
+	seed(t, s, types.Job{ID: "u1", Paths: types.JobPaths{Write: []string{"run.go#A", "run.go#B", "run.go#Gone"}}, State: types.StateRunning})
 
-	stored := seed(t, s, types.Job{ID: "u1", WritePaths: []string{"run.go#B"}, State: types.StateRunning})
+	stored := seed(t, s, types.Job{ID: "u1", Paths: types.JobPaths{Write: []string{"run.go#B"}}, State: types.StateRunning})
 
 	require.Len(t, stored.Releases, 2)
 	sum := sha256.Sum256([]byte("func A() {\n\ta()\n}\n\n"))
@@ -423,9 +425,9 @@ func TestStorePutReleasesADeclaration(t *testing.T) {
 	assert.Equal(t, types.DigestAbsent, stored.Releases[1].Digest, "a declaration no line is placed in any more is absent")
 }
 
-// A release is the store's to say, not the caller's: a put that does not name
-// write_paths releases nothing, and one that owns a path again stops claiming to have
-// released it.
+// A release is the store's to say, not the caller's. A put that does not
+// name paths.write releases nothing. One that owns a path again stops
+// claiming to have released it.
 func TestStoreReleasesFollowTheWriteSet(t *testing.T) {
 	t.Parallel()
 
@@ -434,9 +436,9 @@ func TestStoreReleasesFollowTheWriteSet(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("one\n"), 0o644))
 
 	s := tempStore(t, root)
-	seed(t, s, types.Job{ID: "u1", WritePaths: []string{"a.go"}})
+	seed(t, s, types.Job{ID: "u1", Paths: types.JobPaths{Write: []string{"a.go"}}})
 
-	released, err := s.Update(ctx, "u1", func(u *types.Job) { u.WritePaths = nil })
+	released, err := s.Update(ctx, "u1", func(u *types.Job) { u.Paths.Write = nil })
 	require.NoError(t, err)
 	require.Len(t, released.Releases, 1)
 	first := released.Releases[0].Digest
@@ -447,14 +449,14 @@ func TestStoreReleasesFollowTheWriteSet(t *testing.T) {
 
 	// Owned again, edited, released again: the row keeps ONE entry, carrying the version
 	// the next agent actually inherits.
-	_, err = s.Update(ctx, "u1", func(u *types.Job) { u.WritePaths = []string{"a.go"} })
+	_, err = s.Update(ctx, "u1", func(u *types.Job) { u.Paths.Write = []string{"a.go"} })
 	require.NoError(t, err)
 	reowned, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, reowned[0].Releases, "a path the lease owns again is not a path it released")
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("two\n"), 0o644))
-	again, err := s.Update(ctx, "u1", func(u *types.Job) { u.WritePaths = nil })
+	again, err := s.Update(ctx, "u1", func(u *types.Job) { u.Paths.Write = nil })
 	require.NoError(t, err)
 	require.Len(t, again.Releases, 1)
 	assert.NotEqual(t, first, again.Releases[0].Digest, "the second release digests the file as it stands now")
@@ -508,7 +510,7 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 
 	fork := func(criteria string, write, read []string) func(*types.Job) {
 		return Declare(types.Declaration{
-			ID: "a", Agent: agent.Instructed(criteria), Checkpoint: "abc123", WritePaths: write, ReadPaths: read, State: types.StateDeclared,
+			ID: "a", Agent: agent.Instructed(criteria), Checkpoint: "abc123", Paths: types.JobPaths{Write: write, Read: read}, State: types.StateDeclared,
 		}, 0)
 	}
 	for _, tc := range []struct {
@@ -539,14 +541,16 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 
 			stored, err := s.Update(ctx, "a", fork(tc.criteria, tc.write, tc.read))
 			require.NoError(t, err)
-			assert.ElementsMatch(t, tc.write, stored.WritePaths)
-			assert.ElementsMatch(t, tc.read, stored.ReadPaths)
+			assert.ElementsMatch(t, tc.write, stored.Paths.Write)
+			assert.ElementsMatch(t, tc.read, stored.Paths.Read)
 			assert.Equal(t, stamped(types.Job{
 				ID:           "a",
 				Agent:        agent.Instructed(tc.criteria),
 				Checkpoint:   "abc123",
-				WritePaths:   stored.WritePaths, // order is not what this test pins
-				ReadPaths:    stored.ReadPaths,
+				Paths: types.JobPaths{
+Write: stored.Paths.Write,
+Read: stored.Paths.Read,
+}, // order is not what this test pins
 				State:        tc.want,
 				ReportedBase: taken.ReportedBase,
 				BaseVerdict:  taken.BaseVerdict,
@@ -574,14 +578,14 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 	}{
 		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			row, err := decodeDeclaration(strings.NewReader(fmt.Sprintf(
-				`{"api_version":%q,"id":"a","agent":{"instructions": "goal", "worker": {"type": "resumed"}},"checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
+				`{"api_version":%q,"id":"a","agent":{"instructions": "goal", "worker": {"type": "resumed"}},"checkpoint":%q,"paths":{"write":["a.go"]},"check":{"target":"go-test","project":"."}}`,
 				types.JobAPIVersion, checkpoint)))
 			require.NoError(t, err)
 			return s.Update(t.Context(), row.ID, Declare(row, 0))
 		}},
 		{name: "magus\\workspace().putJob", proof: types.WriteProofAlone, validated: true, fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			put, err := DecodePut(map[string]any{
-				"agent": map[string]any{"instructions": "goal", "worker": map[string]any{"type": "resumed"}}, "checkpoint": checkpoint, "write_paths": []any{"a.go"}, "check": "go-test .",
+				"agent": map[string]any{"instructions": "goal", "worker": map[string]any{"type": "resumed"}}, "checkpoint": checkpoint, "paths": map[string]any{"write": []any{"a.go"}}, "check": "go-test .",
 			})
 			require.NoError(t, err)
 			merge, err := PutMerge(put)
@@ -601,7 +605,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 				ID:           "a",
 				Agent:        agent.Instructed("goal"),
 				Checkpoint:   head,
-				WritePaths:   []string{"a.go"},
+				Paths: types.JobPaths{Write: []string{"a.go"}},
 				Check:        &check,
 				Validation:   check.String(),
 				State:        types.StateDeclared,
@@ -1042,7 +1046,7 @@ func TestStoreListReturnsCopies(t *testing.T) {
 
 	got, err := s.List()
 	require.NoError(t, err)
-	got[0].WritePaths[0] = "mutated"
+	got[0].Paths.Write[0] = "mutated"
 	got[0].Agent = agent.Instructed("mutated")
 
 	again, err := s.List()
@@ -1070,7 +1074,7 @@ func TestRecordUnattributedWrite(t *testing.T) {
 	s := tempStore(t, root)
 	ctx := t.Context()
 
-	seed(t, s, types.Job{ID: "worker-1", WritePaths: []string{"a.go"}})
+	seed(t, s, types.Job{ID: "worker-1", Paths: types.JobPaths{Write: []string{"a.go"}}})
 
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
 
@@ -1094,7 +1098,7 @@ func TestRecordUnattributedWriteKeepsOneRowPerPath(t *testing.T) {
 	s := tempStore(t, root)
 	ctx := t.Context()
 
-	seed(t, s, types.Job{ID: "worker-1", WritePaths: []string{"a.go"}})
+	seed(t, s, types.Job{ID: "worker-1", Paths: types.JobPaths{Write: []string{"a.go"}}})
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
 
 	rows, err := s.List()
@@ -1122,7 +1126,7 @@ func TestRecordUnattributedWriteIsBounded(t *testing.T) {
 	for i := range MaxUnattributedWrites + over {
 		owned = append(owned, fmt.Sprintf("f%d.go", i))
 	}
-	seed(t, s, types.Job{ID: "worker-1", WritePaths: owned})
+	seed(t, s, types.Job{ID: "worker-1", Paths: types.JobPaths{Write: owned}})
 	for _, p := range owned {
 		require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", p))
 	}
@@ -1177,19 +1181,19 @@ func TestStoreKeepsTheGenerationWhenWritePathsOnlyWiden(t *testing.T) {
 
 	s := tempStore(t, t.TempDir())
 	row := lease("a")
-	row.WritePaths = []string{"internal/job/plan.go"}
+	row.Paths.Write = []string{"internal/job/plan.go"}
 	assert.Equal(t, 1, seed(t, s, row).Generation)
 
-	row.WritePaths = []string{"internal/job/plan.go", "internal/job/plan_test.go"}
+	row.Paths.Write = []string{"internal/job/plan.go", "internal/job/plan_test.go"}
 	assert.Equal(t, 1, seed(t, s, row).Generation, "an added path asks nothing the evidence did not answer")
 
-	row.WritePaths = []string{"internal/job"}
+	row.Paths.Write = []string{"internal/job"}
 	assert.Equal(t, 1, seed(t, s, row).Generation, "a path replaced by one holding it widens")
 
-	row.WritePaths = []string{"cmd/magus/job.go"}
+	row.Paths.Write = []string{"cmd/magus/job.go"}
 	assert.Equal(t, 2, seed(t, s, row).Generation, "narrowing or moving the paths is a new spec")
 
-	row.WritePaths = []string{"cmd/magus/job.go", "types/job.go"}
+	row.Paths.Write = []string{"cmd/magus/job.go", "types/job.go"}
 	row.Agent = agent.Instructed("a sharper goal")
 	assert.Equal(t, 3, seed(t, s, row).Generation, "a widening beside another change still counts")
 }
@@ -1366,7 +1370,7 @@ func realSizedRows(n int, now int64, checkout string) []types.Job {
 			Updated:      now - age,
 		}
 		for p := range 8 {
-			row.WritePaths = append(row.WritePaths, fmt.Sprintf("internal/p%d/file%d.go", i, p))
+			row.Paths.Write = append(row.Paths.Write, fmt.Sprintf("internal/p%d/file%d.go", i, p))
 		}
 		switch r := i % 100; {
 		case r < 50:
@@ -1820,7 +1824,7 @@ func (s *authoritySuite) fork(st *Store, row types.Job) (types.Job, error) {
 }
 
 func (s *authoritySuite) TestARootForkRecordsTheRootCheckoutsCommittedRevision() {
-	stored, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}})
+	stored, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}})
 	s.Require().NoError(err)
 	s.Equal(s.repo.Head(), stored.Authority)
 }
@@ -1834,44 +1838,44 @@ func (s *authoritySuite) TestNeitherADeclaredCheckpointNorASentAuthoritySetsIt()
 }
 
 func (s *authoritySuite) TestAWorkersChildTakesItsParentsAuthority() {
-	parent, err := s.fork(NewStore(s.loc), types.Job{ID: "p", WritePaths: []string{"a.go"}, State: types.StateRunning})
+	parent, err := s.fork(NewStore(s.loc), types.Job{ID: "p", Paths: types.JobPaths{Write: []string{"a.go"}}, State: types.StateRunning})
 	s.Require().NoError(err)
 	worktree := s.repo.AddWorktree("p")
 	worktree.Commit("the worker's own", map[string]string{"a.go": "package a\n"})
 	worker := s.loc
 	worker.Root, worker.Actor = worktree.Root(), &Actor{Lease: "p"}
 
-	child, err := s.fork(NewStore(worker), types.Job{ID: "p/c", Parent: "p", WritePaths: []string{"a.go"}})
+	child, err := s.fork(NewStore(worker), types.Job{ID: "p/c", Parent: "p", Paths: types.JobPaths{Write: []string{"a.go"}}})
 	s.Require().NoError(err)
 	s.Equal(parent.Authority, child.Authority, "the child's checkout HEAD is the worker's commit, never its authority")
 }
 
 func (s *authoritySuite) TestALaterWriteCarriesTheAuthorityForward() {
-	first, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}})
+	first, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}})
 	s.Require().NoError(err)
 	s.repo.Commit("later", map[string]string{"b.txt": "b\n"})
-	again, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go", "b.go"}})
+	again, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}})
 	s.Require().NoError(err)
 	s.Equal(first.Authority, again.Authority)
 }
 
 func (s *authoritySuite) TestAForkOfTheNextAttemptRecordsTheRootsHeadThen() {
-	_, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}, State: types.StateFail})
+	_, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}, State: types.StateFail})
 	s.Require().NoError(err)
 	later := s.repo.Commit("later", map[string]string{"b.txt": "b\n"})
-	again, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}, State: types.StateDeclared})
+	again, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}, State: types.StateDeclared})
 	s.Require().NoError(err)
 	s.Equal(later, again.Authority)
 }
 
 func (s *authoritySuite) TestAForkWhereNoVersionControlAnswersRecordsNone() {
-	stored, err := s.fork(tempStore(s.T(), s.T().TempDir()), types.Job{ID: "a", WritePaths: []string{"a.go"}})
+	stored, err := s.fork(tempStore(s.T(), s.T().TempDir()), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}})
 	s.Require().NoError(err)
 	s.Empty(stored.Authority)
 }
 
 func (s *authoritySuite) TestTheRootAdvancesARowsAuthority() {
-	_, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}})
+	_, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}})
 	s.Require().NoError(err)
 	later := s.repo.Commit("merged", map[string]string{"b.txt": "b\n"})
 	advanced, err := NewStore(s.loc).AdvanceAuthority(s.T().Context(), "a")
@@ -1880,7 +1884,7 @@ func (s *authoritySuite) TestTheRootAdvancesARowsAuthority() {
 }
 
 func (s *authoritySuite) TestALeasedCallerCannotAdvanceItsOwnAuthority() {
-	first, err := s.fork(NewStore(s.loc), types.Job{ID: "a", WritePaths: []string{"a.go"}, State: types.StateRunning})
+	first, err := s.fork(NewStore(s.loc), types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}, State: types.StateRunning})
 	s.Require().NoError(err)
 	s.repo.Commit("the worker's own", map[string]string{"b.txt": "b\n"})
 	_, err = boundStore(s.loc, "a").AdvanceAuthority(s.T().Context(), "a")

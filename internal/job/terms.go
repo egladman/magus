@@ -190,8 +190,8 @@ func (b Terms) String() string {
 		writeList(&s, "release stage", []string{stageLine(b.Stage)})
 	}
 	writeList(&s, deletionHeading, deletionLines(b.DeletionCandidates))
-	writeList(&s, "write paths", b.Lease.WritePaths)
-	writeList(&s, "deny paths", b.Lease.DenyPaths)
+	writeList(&s, "write paths", b.Lease.Paths.Write)
+	writeList(&s, "deny paths", b.Lease.Paths.Deny)
 	writeList(&s, referencedHeading, referencedLines(b.ReferencedOutside, b.ReferencedOutsideGap))
 	writeList(&s, "projects", b.Projects)
 

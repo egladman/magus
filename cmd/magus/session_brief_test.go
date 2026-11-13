@@ -248,7 +248,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 		State:        types.StateRunning,
 		Agent:        typesagent.Instructed("hold the boundary\nsecond line nobody reads here"),
 		Validation:   "magus run test internal/ledger",
-		WritePaths:   []string{"internal/ledger"},
+		Paths: types.JobPaths{Write: []string{"internal/ledger"}},
 		CheckoutRoot: root,
 	}
 	_, err = store.Update(ctx, guardRow.ID, func(cur *types.Job) { *cur = guardRow })

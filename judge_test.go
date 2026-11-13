@@ -235,7 +235,7 @@ func (s *jobReaderSuite) SetupTest() {
 }
 
 func (s *jobReaderSuite) judge(authority string) types.GuardJudgment {
-	task := types.Job{ID: "task", State: types.StateRunning, WritePaths: []string{"a.go"}, Authority: authority}
+	task := types.Job{ID: "task", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.go"}}, Authority: authority}
 	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(TierCeiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })

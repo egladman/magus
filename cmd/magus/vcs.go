@@ -404,7 +404,7 @@ func settleByClaims(ctx context.Context, m *magus.Magus, drv types.VCSDriver, ou
 func jobsWriting(rows []types.Job, p string) (writers []types.Job, claimed bool) {
 	for _, row := range rows {
 		writes := false
-		for _, e := range row.WritePaths {
+		for _, e := range row.Paths.Write {
 			if types.PathsIntersect(e, p) {
 				writes = true
 				claimed = claimed || types.HasClaim(e)
@@ -477,7 +477,7 @@ func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job)
 			if row.State != types.StatePass {
 				return nil, "", unsettledf("job %s is %s, not recorded pass by `magus job wait`", row.ID, cmp.Or(row.State, types.StateDeclared))
 			}
-			for _, e := range row.WritePaths {
+			for _, e := range row.Paths.Write {
 				if !types.PathsIntersect(e, p) {
 					continue
 				}

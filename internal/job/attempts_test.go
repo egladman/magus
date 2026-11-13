@@ -81,7 +81,7 @@ func (s *AttemptsSuite) TestWideningRulesAreRulesTheGuardCatalogs() {
 
 // The violation classifyAttempt reads as a widening is the one VerifyGates words.
 func (s *AttemptsSuite) TestVerifyGatesWordsAnOutsidePathAsClassifyAttemptReadsIt() {
-	status := VerifyGates(types.Job{ID: "a", WritePaths: []string{"a.go"}}, types.JobResult{ChangedPaths: []string{"b.go"}},
+	status := VerifyGates(types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"a.go"}}}, types.JobResult{ChangedPaths: []string{"b.go"}},
 		types.JobAttempt{}, nil, nil, Observed{})
 	got := classifyAttempt(tried(1, types.AttemptStatus{Violations: status.Violations}), nil)
 	s.Equal(types.RetryAfterWidening, got.Change)

@@ -95,12 +95,14 @@ func TestExtendedFootprintRecordsSiblingTestsAsSoftPaths(t *testing.T) {
 	ws := job.Workspace{Projects: []*types.Project{{Path: ".", Sources: types.MustParseGlobs("**/*.go")}}}
 
 	rec, notes := extendedFootprint(t.Context(), store, graph, root,
-		types.Declaration{ID: "w", WritePaths: []string{"cli/registry.go"}}, ws)
+		types.Declaration{ID: "w", Paths: types.JobPaths{Write: []string{"cli/registry.go"}}}, ws)
 
 	assert.Equal(t, types.Declaration{
 		ID:         "w",
-		WritePaths: []string{"cli/registry.go", "cli/registry_test.go"},
-		SoftPaths:  []string{"cli/registry_test.go"},
+		Paths: types.JobPaths{
+Write: []string{"cli/registry.go", "cli/registry_test.go"},
+Soft: []string{"cli/registry_test.go"},
+},
 	}, rec)
 	assert.Len(t, notes, 1)
 }
@@ -263,7 +265,7 @@ func (s *ForkGraphSuite) footprint(paths ...string) {
 	}}
 	store := job.NewStore(job.Location{StateBase: s.T().TempDir(), Root: s.root})
 	ws := job.Workspace{Projects: []*types.Project{{Name: ".", Path: "."}}}
-	extendedFootprint(s.T().Context(), store, graph, s.root, types.Declaration{ID: "w", WritePaths: paths}, ws)
+	extendedFootprint(s.T().Context(), store, graph, s.root, types.Declaration{ID: "w", Paths: types.JobPaths{Write: paths}}, ws)
 }
 
 func (s *ForkGraphSuite) TestARowWritingDocsLoadsNoGraph() {

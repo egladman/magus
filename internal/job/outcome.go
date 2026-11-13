@@ -30,7 +30,7 @@ func newJobOutcome(row types.Job, tries types.JobAttempts, ended int64) types.Jo
 		Job:          row.ID,
 		Kind:         modelTierKind(row),
 		Model:        row.Agent.RequestedModel().String(),
-		WriteFiles:   writeFileCount(row.WritePaths),
+		WriteFiles:   writeFileCount(row.Paths.Write),
 		State:        row.State,
 		ChecksRun:    len(row.GateAttempts),
 		Ended:        ended,
@@ -269,7 +269,7 @@ func (e endings) record(ctx context.Context, ended int64) error {
 func (s *Store) endedOutcome(ctx context.Context, h heldOutcome, ended int64) types.JobOutcome {
 	out := newJobOutcome(h.row, h.tries, ended)
 	out.ParentAttempt = h.parentAttempt
-	if s.owners != nil && len(h.row.WritePaths) > 0 {
+	if s.owners != nil && len(h.row.Paths.Write) > 0 {
 		if projects, err := s.writeProjects(ctx, h.row); err == nil {
 			out.Projects = projects
 		}

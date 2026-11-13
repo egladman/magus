@@ -89,18 +89,18 @@ func TestRegeneratedOutside(t *testing.T) {
 	}{
 		{
 			name:    "outputs outside the paths, most specific read first, project baseline last, ignored dropped",
-			row:     types.Job{WritePaths: []string{"cmd/*.go", "cli/*.go", "docs/rules/*.md"}},
+			row:     types.Job{Paths: types.JobPaths{Write: []string{"cmd/*.go", "cli/*.go", "docs/rules/*.md"}}},
 			ignored: ignoresCoverage,
 			want:    []RegeneratedOutput{apiLock, manpage, cliFlags, typesGen},
 		},
 		{
 			name: "no ignore answer drops nothing",
-			row:  types.Job{WritePaths: []string{"cmd/*.go", "cli/*.go", "docs/rules/*.md"}},
+			row:  types.Job{Paths: types.JobPaths{Write: []string{"cmd/*.go", "cli/*.go", "docs/rules/*.md"}}},
 			want: []RegeneratedOutput{apiLock, manpage, cliFlags, coverage, typesGen},
 		},
 		{
 			name:    "a literal path the job will create counts as written",
-			row:     types.Job{WritePaths: []string{"cli/shell_flags.go"}},
+			row:     types.Job{Paths: types.JobPaths{Write: []string{"cli/shell_flags.go"}}},
 			ignored: ignoresCoverage,
 			want: []RegeneratedOutput{
 				apiLock,
@@ -112,13 +112,13 @@ func TestRegeneratedOutside(t *testing.T) {
 		},
 		{
 			name:    "a deny path takes an output back out of a covering write path",
-			row:     types.Job{WritePaths: []string{"docs/**", "cli/registry.go"}, DenyPaths: []string{"docs/manpage/*.md"}},
+			row:     types.Job{Paths: types.JobPaths{Write: []string{"docs/**", "cli/registry.go"}, Deny: []string{"docs/manpage/*.md"}}, },
 			ignored: ignoresCoverage,
 			want:    []RegeneratedOutput{apiLock, manpage, cliFlags, typesGen},
 		},
 		{
 			name:    "sources outside the paths name nothing",
-			row:     types.Job{WritePaths: []string{"docs/rules/guard.md"}},
+			row:     types.Job{Paths: types.JobPaths{Write: []string{"docs/rules/guard.md"}}},
 			ignored: ignoresCoverage,
 		},
 		{

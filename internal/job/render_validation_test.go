@@ -51,7 +51,7 @@ func TestApplyValidationsGroupsApplysProblemsByRecord(t *testing.T) {
 func TestRenderValidationDryRunPrintsTheRecordItWouldStore(t *testing.T) {
 	t.Parallel()
 
-	v := types.JobValidation{Job: types.Job{ID: "j", WritePaths: []string{"a.go"}}}
+	v := types.JobValidation{Job: types.Job{ID: "j", Paths: types.JobPaths{Write: []string{"a.go"}}}}
 	var buf bytes.Buffer
 	RenderValidation(&buf, v, true)
 	out := buf.String()
@@ -71,7 +71,7 @@ func TestRenderValidationSummarizesDeviationsAndKeepsUnchecked(t *testing.T) {
 			ID:         "j",
 			Deviations: []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "docs/x.md", Reason: "the root regenerates it"}},
 		},
-		Permitted: types.JobProblems{{Code: types.OutputOutsideWritePaths, Field: "write_paths", Subject: "docs/x.md", Message: "x regenerates docs/x.md"}},
+		Permitted: types.JobProblems{{Code: types.OutputOutsideWritePaths, Field: "paths.write", Subject: "docs/x.md", Message: "x regenerates docs/x.md"}},
 		Unchecked: []string{"write path breadth: the workspace did not load"},
 	}
 	var buf bytes.Buffer

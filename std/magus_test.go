@@ -407,7 +407,7 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	_, err := MagusPutJob(ws, "on-disk", types.JobPut{Agent: agent.Instructed("not what the guard read"), ReadOnly: new(true)})
 	require.NoError(t, err)
 
-	pinned := types.Job{ID: "orchestrator/guard-facts", Agent: agent.Instructed("the seam"), State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	pinned := types.Job{ID: "orchestrator/guard-facts", Agent: agent.Instructed("the seam"), State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
 	// listed is the list of rows a pinned snapshot holding no tries answers.
 	listed := func(rows []types.Job) types.JobList {
 		l := types.NewJobList(rows)
@@ -476,7 +476,7 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	check, err := types.ParseLeaseCheck("test .")
 	require.NoError(t, err)
 	for id, paths := range map[string][]string{"a": {"api/*.go"}, "b": {"api/x.go"}} {
-		_, err := MagusPutJob(ctx, id, types.JobPut{Checkpoint: new(rev), WritePaths: new(paths), Check: new(check), State: new(types.StateRunning)})
+		_, err := MagusPutJob(ctx, id, types.JobPut{Checkpoint: new(rev), Paths: types.JobPathsPut{Write: new(paths)}, Check: new(check), State: new(types.StateRunning)})
 		require.NoError(t, err)
 		_, _, err = MagusRegisterJob(ctx, id)
 		require.NoError(t, err)
@@ -558,14 +558,14 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"agent": map[string]any{"instructions": "the declared goal", "worker": map[string]any{"type": "resumed"}}, "write_paths": "internal/job", "check": "test ."}))
+	_, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"agent": map[string]any{"instructions": "the declared goal", "worker": map[string]any{"type": "resumed"}}, "paths": map[string]any{"write": "internal/job"}, "check": "test ."}))
 	require.NoError(t, err)
 
 	got, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"state": "pass"}))
 	require.NoError(t, err)
 	assert.Equal(t, types.StatePass, got.State) //nolint:fieldwise // a stored job row carries store-stamped schema, origin, checkout root and timestamps this test does not construct
 	assert.Equal(t, "the declared goal", got.Instructions(), "the state advance must not erase the row")
-	assert.Equal(t, []string{"internal/job"}, got.WritePaths)
+	assert.Equal(t, []string{"internal/job"}, got.Paths.Write)
 	require.NotNil(t, got.Check, "the state advance must not erase the check")
 }
 
@@ -954,7 +954,7 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	put := func(check string) error {
 		c, err := types.ParseLeaseCheck(check)
 		require.NoError(t, err)
-		_, err = MagusPutJob(ctx, "w", types.JobPut{WritePaths: new([]string{"run.go"}), Check: &c})
+		_, err = MagusPutJob(ctx, "w", types.JobPut{Paths: types.JobPathsPut{Write: new([]string{"run.go"})}, Check: &c})
 		return err
 	}
 
@@ -982,7 +982,7 @@ func TestMagusPutJobRaisesEveryProblemAtOnce(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(root, "src"), 0o755))
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
 
-	_, err := MagusPutJob(ctx, "u1", types.JobPut{WritePaths: new([]string{"src"})})
+	_, err := MagusPutJob(ctx, "u1", types.JobPut{Paths: types.JobPathsPut{Write: new([]string{"src"})}})
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, types.WritePathIsDirectory, "the directory is named")

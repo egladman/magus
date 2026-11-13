@@ -52,7 +52,7 @@ func TestNewJobOutcomeReadsTheEndedRow(t *testing.T) {
 	row.State = types.StateFail
 	row.Created = 100
 	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
-	row.WritePaths = []string{"pkg/a.go#func A", "pkg/a.go#func B", "pkg/b.go"}
+	row.Paths.Write = []string{"pkg/a.go#func A", "pkg/a.go#func B", "pkg/b.go"}
 	row.Attempt = &types.JobAttempt{}
 	row.GateAttempts = []types.JobGateAttempt{{}, {}}
 	row.ReworkRounds, row.Widenings = 2, 1
@@ -301,7 +301,7 @@ func TestStoreCountsAWideningOnlyForATakenRowThatGainsWritePaths(t *testing.T) {
 	row := lease("a")
 
 	declared := seed(t, s, row)
-	row.WritePaths = []string{"internal/a", "internal/more"}
+	row.Paths.Write = []string{"internal/a", "internal/more"}
 	row.State = types.StateDeclared
 	stillDeclared := seed(t, s, row)
 	assert.Zero(t, declared.Widenings)
@@ -311,11 +311,11 @@ func TestStoreCountsAWideningOnlyForATakenRowThatGainsWritePaths(t *testing.T) {
 	taken := seed(t, s, row)
 	assert.Zero(t, taken.Widenings, "taking a row adds no path")
 
-	row.WritePaths = []string{"internal/a", "internal/more", "internal/other"}
+	row.Paths.Write = []string{"internal/a", "internal/more", "internal/other"}
 	widened := seed(t, s, row)
 	assert.Equal(t, 1, widened.Widenings)
 
-	row.WritePaths = []string{"internal/a"}
+	row.Paths.Write = []string{"internal/a"}
 	narrowed := seed(t, s, row)
 	assert.Equal(t, 1, narrowed.Widenings, "giving a path up is not a widening")
 
@@ -324,7 +324,7 @@ func TestStoreCountsAWideningOnlyForATakenRowThatGainsWritePaths(t *testing.T) {
 	assert.Equal(t, 1, forged.Widenings, "a caller cannot set the counter")
 
 	row.State = types.StateExited
-	row.WritePaths = []string{"internal/a", "internal/late"}
+	row.Paths.Write = []string{"internal/a", "internal/late"}
 	exited := seed(t, s, row)
 	assert.Equal(t, 2, exited.Widenings, "an exited row has been taken too")
 }

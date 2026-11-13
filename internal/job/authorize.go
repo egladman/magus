@@ -231,9 +231,9 @@ func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, ex
 	}
 	for _, field := range changedFields(prev, next) {
 		switch field {
-		case "write_paths":
-			if !subset(next.WritePaths, prev.WritePaths) {
-				return refuse(actor, id, "a worker may only SHRINK write_paths, which is how it releases a path, and this write widens them")
+		case "paths.write":
+			if !subset(next.Paths.Write, prev.Paths.Write) {
+				return refuse(actor, id, "a worker may only SHRINK paths.write, which is how it releases a path, and this write widens them")
 			}
 		case "state":
 			// Taking a declared job is what starts it, so the exec carries that move.
@@ -298,13 +298,13 @@ func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []
 	}
 	parent := rows[own]
 	switch {
-	case !subset(next.WritePaths, parent.WritePaths):
+	case !subset(next.Paths.Write, parent.Paths.Write):
 		return refuse(actor, id, "a child may only be handed paths its parent owns, and this one claims more")
 	case !subset(ReadBoundary(next), ReadBoundary(parent)):
 		return refuse(actor, id, "a child may only read what its parent reads, and this one's read paths reach further")
 	case !listedIn(next.Breaks, parent.Breaks):
 		return refuse(actor, id, "a child may only break what its parent may break, and this one's breaks reach further")
-	case !subset(parent.DenyPaths, next.DenyPaths):
+	case !subset(parent.Paths.Deny, next.Paths.Deny):
 		return refuse(actor, id, "a child carries every deny_path its parent carries, and this one drops some")
 	case next.State != "" && next.State != types.StateDeclared:
 		return refuse(actor, id, fmt.Sprintf("a child is handed out %s or with no state at all, never %s: grading a row is the orchestrator's",
@@ -358,10 +358,10 @@ func checkLine(row types.Job) string {
 // ReadBoundary is the declarations a row may read: its write paths plus its read paths.
 // The guard's focus-read deny and the store's subset check both use it.
 func ReadBoundary(row types.Job) []string {
-	if len(row.ReadPaths) == 0 {
-		return row.WritePaths
+	if len(row.Paths.Read) == 0 {
+		return row.Paths.Write
 	}
-	return append(slices.Clone(row.ReadPaths), row.WritePaths...)
+	return append(slices.Clone(row.Paths.Read), row.Paths.Write...)
 }
 
 // authorizeClear grades wiping the book. A worker never does: clear drops rows it did
@@ -386,12 +386,12 @@ func changedFields(prev, next types.Job) []string {
 	add("parent", prev.Parent != next.Parent)
 	out = append(out, changedAgentFields(prev.Agent, next.Agent)...)
 	add("checkpoint", prev.Checkpoint != next.Checkpoint)
-	add("write_paths", !slices.Equal(prev.WritePaths, next.WritePaths))
-	add("deny_paths", !slices.Equal(prev.DenyPaths, next.DenyPaths))
-	add("read_paths", !slices.Equal(prev.ReadPaths, next.ReadPaths))
+	add("paths.write", !slices.Equal(prev.Paths.Write, next.Paths.Write))
+	add("paths.deny", !slices.Equal(prev.Paths.Deny, next.Paths.Deny))
+	add("paths.read", !slices.Equal(prev.Paths.Read, next.Paths.Read))
 	add("depends_on", !slices.Equal(prev.DependsOn, next.DependsOn))
 	add("integrates", !slices.Equal(prev.Integrates, next.Integrates))
-	add("soft_paths", !slices.Equal(prev.SoftPaths, next.SoftPaths))
+	add("paths.soft", !slices.Equal(prev.Paths.Soft, next.Paths.Soft))
 	add("breaks", !slices.Equal(prev.Breaks, next.Breaks))
 	add("follows", prev.Follows != next.Follows)
 	add("brief_format", prev.BriefFormat != next.BriefFormat)

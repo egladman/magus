@@ -60,8 +60,10 @@ func briefRow() types.Job {
 			Worker: agent.Worker{Type: agent.WorkerTypeResumed},
 		},
 		Checkpoint: "cf5509d09",
-		WritePaths: []string{"internal/ledger", "cmd/magus/ledger.go"},
-		DenyPaths:  []string{"MAGUS.md", "docs/gen"},
+		Paths: types.JobPaths{
+Write: []string{"internal/ledger", "cmd/magus/ledger.go"},
+Deny: []string{"MAGUS.md", "docs/gen"},
+},
 		DependsOn:  []string{"harness/session-load"},
 		Validation: "magus run test internal/ledger",
 		State:      types.StateDeclared,
@@ -213,7 +215,7 @@ func TestTermsRendersOnlyTheRow(t *testing.T) {
 	t.Parallel()
 
 	row := briefRow()
-	row.Agent, row.DependsOn, row.DenyPaths = nil, nil, nil
+	row.Agent, row.DependsOn, row.Paths.Deny = nil, nil, nil
 	got := NewTerms(row, TermsFacts{}).String()
 
 	assert.NotContains(t, got, "goal")
@@ -263,7 +265,7 @@ func TestTermsPrintsNoModelTierForARowWithout(t *testing.T) {
 // retriedRow is a job on its third attempt of four.
 func retriedRow() types.Job {
 	row := types.Job{ID: "harness/retry", Agent: agent.Instructed("Retry the store."), State: types.StateDeclared}
-	row.WritePaths = []string{"internal/ledger"}
+	row.Paths.Write = []string{"internal/ledger"}
 	row.Validation = "magus run test internal/ledger"
 	row.MaxAttempts = 4
 	return row

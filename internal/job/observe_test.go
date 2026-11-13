@@ -31,7 +31,7 @@ func TestPathsGateReadsTheDiffAndNotTheReport(t *testing.T) {
 	row := types.Job{
 		ID:         "unit",
 		Created:    1,
-		WritePaths: []string{"db", "api"},
+		Paths: types.JobPaths{Write: []string{"db", "api"}},
 		Goals: []types.Goal{
 			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**"}},
 		},
@@ -51,7 +51,7 @@ func TestPathsGateVerifiesWhenTheDiffCoversEveryGlob(t *testing.T) {
 	row := types.Job{
 		ID:         "unit",
 		Created:    1,
-		WritePaths: []string{"db", "api"},
+		Paths: types.JobPaths{Write: []string{"db", "api"}},
 		Goals: []types.Goal{
 			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**", "api"}},
 		},
@@ -72,7 +72,7 @@ func TestPathsGateNamesEveryUnmetGlob(t *testing.T) {
 	row := types.Job{
 		ID:         "unit",
 		Created:    1,
-		WritePaths: []string{"db"},
+		Paths: types.JobPaths{Write: []string{"db"}},
 		Goals: []types.Goal{
 			{ID: "both", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**", "db/schema.sql", "db/seed.sql"}},
 		},
@@ -95,7 +95,7 @@ func TestPathsGateRefusesWhenTheDiffCouldNotBeRead(t *testing.T) {
 	row := types.Job{
 		ID:         "unit",
 		Created:    1,
-		WritePaths: []string{"db"},
+		Paths: types.JobPaths{Write: []string{"db"}},
 		Goals: []types.Goal{
 			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**"}},
 		},
@@ -187,7 +187,7 @@ func TestGradeGatesReportsAPrimaryCheck(t *testing.T) {
 	row := types.Job{
 		ID:         "unit",
 		Created:    1,
-		WritePaths: []string{"api"},
+		Paths: types.JobPaths{Write: []string{"api"}},
 		Check:      &types.LeaseCheck{Target: "go-test", Project: "api"},
 	}
 	status := VerifyGates(row, types.JobResult{Job: "unit", ChangedPaths: []string{"api/x.go"}},
@@ -363,7 +363,7 @@ func TestDiffBaseFallsBackToTheReportedBase(t *testing.T) {
 func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "unit", Created: 1, WritePaths: []string{"api"}, Check: &types.LeaseCheck{Target: "go-test", Project: "api"}}
+	row := types.Job{ID: "unit", Created: 1, Paths: types.JobPaths{Write: []string{"api"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "api"}}
 	regions := []types.RegionChange{{File: types.FileChange{Path: "api/x.go"}, Side: types.RegionNew, Lines: [2]int{1, 3}, Declaration: "func Y() {"}}
 	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"api/x.go"}}
 	base := Observed{Changed: []string{"api/x.go"}, ChangedKnown: true, ChangedFrom: "abc1234"}
@@ -392,7 +392,7 @@ func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 func TestVerifyGatesReportsTheSymbolDeltaAndGradesNothingOnIt(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "unit", Created: 1, WritePaths: []string{"api"}, Check: &types.LeaseCheck{Target: "go-test", Project: "api"},
+	row := types.Job{ID: "unit", Created: 1, Paths: types.JobPaths{Write: []string{"api"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "api"},
 		Goals: []types.Goal{
 			{ID: "new", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Declared"}},
 			{ID: "root/field", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Goal#Signature"}},
@@ -435,7 +435,7 @@ func (s *landedSuite) SetupTest() {
 	s.wt = s.repo.AddWorktree("job")
 	s.row = types.Job{
 		ID: "job", Created: 1, Parent: strings.TrimSpace(s.repo.Git("branch", "--show-current")),
-		WritePaths: []string{"a.go"}, Checkpoint: checkpoint, CheckoutRoot: s.wt.Root(),
+		Paths: types.JobPaths{Write: []string{"a.go"}}, Checkpoint: checkpoint, CheckoutRoot: s.wt.Root(),
 		Worktree: &types.JobWorktree{Root: s.wt.Root()},
 	}
 }
@@ -467,8 +467,8 @@ func (s *landedSuite) TestAPathTheLeaseHoldsPasses() {
 }
 
 func (s *landedSuite) TestADeniedPathTheResultLeavesOutIsGraded() {
-	s.row.WritePaths = []string{"a.go", "out.txt"}
-	s.row.DenyPaths = []string{"out.txt"}
+	s.row.Paths.Write = []string{"a.go", "out.txt"}
+	s.row.Paths.Deny = []string{"out.txt"}
 	s.commitOwn("a.go", "package a // own\n")
 	s.commitOwn("out.txt", "own\n")
 	s.Contains(s.violations(), `changed path "out.txt" is one the job is denied`)
@@ -647,8 +647,8 @@ func newOverlapFixture(t *testing.T) overlapFixture {
 	t.Helper()
 	f := overlapFixture{root: t.TempDir(), other: t.TempDir(), driver: typestest.NewMockVCSDriver(t)}
 	f.rows = []types.Job{
-		{ID: "a", Checkpoint: "reva", WritePaths: []string{"api"}, State: types.StateRunning, CheckoutRoot: f.root},
-		{ID: "b", Checkpoint: "revb+digest", WritePaths: []string{"api/x.go"}, State: types.StateRunning, CheckoutRoot: f.other},
+		{ID: "a", Checkpoint: "reva", Paths: types.JobPaths{Write: []string{"api"}}, State: types.StateRunning, CheckoutRoot: f.root},
+		{ID: "b", Checkpoint: "revb+digest", Paths: types.JobPaths{Write: []string{"api/x.go"}}, State: types.StateRunning, CheckoutRoot: f.other},
 	}
 	return f
 }
@@ -795,8 +795,8 @@ func TestMeasureOverlaps(t *testing.T) {
 	rev := repo.Head()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
 	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, WritePaths: []string{"api"}},
-		{ID: "b", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, WritePaths: []string{"api/x.go"}},
+		{ID: "a", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"api"}}},
+		{ID: "b", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"api/x.go"}}},
 	}
 	overlaps := types.NewJobList(rows).Overlaps
 	require.Len(t, overlaps, 1)
@@ -826,7 +826,7 @@ func TestReportSkipsFootprintsOfStaleRows(t *testing.T) {
 	s, _ := sweepStore(t, now, 2*time.Hour)
 	s.root = root
 	held := func(id, path string, updated int64) types.Job {
-		return types.Job{ID: id, State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, WritePaths: []string{path},
+		return types.Job{ID: id, State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{path}},
 			Registered: updated, Created: updated, Updated: updated}
 	}
 	plant(t, s, held("old", "api", now-3*hour), held("a", "api", now), held("b", "api/x.go", now))
@@ -929,8 +929,8 @@ func overlapCheckouts(t testing.TB) (a, b *testkit.Repo, rows []types.Job, overl
 	b = a.AddWorktree("b")
 	rev := a.Head()
 	rows = []types.Job{
-		{ID: "a", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: a.Root(), WritePaths: []string{"api/x.go"}, Updated: 1},
-		{ID: "b", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: b.Root(), WritePaths: []string{"api/x.go"}, Updated: 1},
+		{ID: "a", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: a.Root(), Paths: types.JobPaths{Write: []string{"api/x.go"}}, Updated: 1},
+		{ID: "b", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: b.Root(), Paths: types.JobPaths{Write: []string{"api/x.go"}}, Updated: 1},
 	}
 	overlaps = types.NewJobList(rows).Overlaps
 	require.Len(t, overlaps, 1)
@@ -1256,7 +1256,7 @@ func editedCheckouts(b *testing.B) (rows []types.Job, overlaps []types.JobOverla
 	}
 	for i := range rows {
 		rows[i].Checkpoint = rev
-		rows[i].WritePaths = []string{"api/*.go"}
+		rows[i].Paths.Write = []string{"api/*.go"}
 	}
 	return rows, types.NewJobList(rows).Overlaps, a.Root(), rev, files
 }

@@ -69,10 +69,10 @@ func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseI
 
 	b := &leaseBoundary{id: row.ID, from: from, root: filesystem.ResolveRulePath(loc.Root), cacheDir: loc.CacheDir}
 	if !row.ReadOnly {
-		b.granted = grantedPaths(loc.Root, slices.Concat(row.WritePaths, products), row.DenyPaths)
+		b.granted = grantedPaths(loc.Root, slices.Concat(row.Paths.Write, products), row.Paths.Deny)
 	}
 	slog.With(attr.Component("magus")).InfoContext(ctx, "narrowed the sandbox write grant to a lease boundary",
-		"lease", row.ID, "parent", row.Parent, "write_paths", len(row.WritePaths), "write_rules", len(b.granted))
+		"lease", row.ID, "parent", row.Parent, "paths.write", len(row.Paths.Write), "write_rules", len(b.granted))
 	return b.apply(policy), nil
 }
 
@@ -134,7 +134,7 @@ func workerLease(rows []types.Job, leaseID string) (types.Job, bool) {
 		if l.ReadOnly {
 			return l, true
 		}
-		if l.Parent == "" || len(l.WritePaths) == 0 {
+		if l.Parent == "" || len(l.Paths.Write) == 0 {
 			return types.Job{}, false
 		}
 		return l, true

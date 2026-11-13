@@ -580,7 +580,7 @@ func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
 		Lease: "pwa/elsewhere", Origin: types.Origin{Session: "s2"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
 	})
 	rows := []types.Job{{
-		ID: "pwa/job-watch", State: types.StateRunning, WritePaths: []string{"internal/trail"},
+		ID: "pwa/job-watch", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/trail"}},
 		Attempt: &types.JobAttempt{Found: true, Ref: "out1a2b3c", TimestampMs: 12, Target: "go-test", Project: "."},
 	}}
 	files := make(chan job.FeedEvent, 1)

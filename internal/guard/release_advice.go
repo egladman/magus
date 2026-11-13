@@ -27,7 +27,7 @@ func adviseLeaseNarrowed(row types.Job) advice {
 			continue
 		}
 		var held []string
-		for _, entry := range row.WritePaths {
+		for _, entry := range row.Paths.Write {
 			if p, decl := types.SplitClaim(entry); decl != "" && p == rel.Path {
 				held = append(held, entry)
 			}

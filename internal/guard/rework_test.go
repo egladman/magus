@@ -37,7 +37,7 @@ func newReworkFixture(t *testing.T) reworkFixture {
 
 func (f reworkFixture) putJob(t *testing.T, state types.JobState) {
 	t.Helper()
-	row := types.Job{ID: "guard-facts", Agent: agent.Instructed("prove it"), WritePaths: []string{"a.go"}, Validation: "magus run test", State: state}
+	row := types.Job{ID: "guard-facts", Agent: agent.Instructed("prove it"), Paths: types.JobPaths{Write: []string{"a.go"}}, Validation: "magus run test", State: state}
 	_, err := f.store.Update(f.testContext(t), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 }

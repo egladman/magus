@@ -863,7 +863,7 @@ func printJobTree(out io.Writer, report types.JobList) {
 		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			strings.Repeat("  ", line.Depth), row.ID,
 			jobHolderCell(row), state, jobModelCell(row),
-			len(row.WritePaths), orDash(string(row.WriteProof)), orDash(row.Validation))
+			len(row.Paths.Write), orDash(string(row.WriteProof)), orDash(row.Validation))
 	}
 	_ = w.Flush()
 
@@ -1020,7 +1020,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	graph := newJobGraph(root, false)
 	facts := leaseBoundary(ctx, root, store, row, leases, graph)
 	waiting.Stop()
-	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, graph, row.WritePaths)
+	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, graph, row.Paths.Write)
 	tries, err := store.Attempts()
 	if err != nil {
 		return err
@@ -1214,9 +1214,9 @@ func (e evidenceFlag) Set(value string) error {
 // list flags it leaves to the command land on d, the record --stdin decodes.
 func bindForkSpec(fs *flag.FlagSet, d *types.Declaration) *flaggen.JobForkFlags {
 	f := flaggen.BindJobFork(fs)
-	fs.Var((*listFlag)(&d.WritePaths), "write-paths", "A path this job may write, or `<file>#<declaration>` to claim one declaration of a file (a path holding a literal # is spelled `./a#b.md` or `a\\#b.md`); repeatable or comma-separated")
-	fs.Var((*listFlag)(&d.DenyPaths), "deny-paths", "A path this job may not write, carved out of its write paths; repeatable or comma-separated")
-	fs.Var((*listFlag)(&d.ReadPaths), "read-paths", "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)")
+	fs.Var((*listFlag)(&d.Paths.Write), "write-paths", "A path this job may write, or `<file>#<declaration>` to claim one declaration of a file (a path holding a literal # is spelled `./a#b.md` or `a\\#b.md`); repeatable or comma-separated")
+	fs.Var((*listFlag)(&d.Paths.Deny), "deny-paths", "A path this job may not write, carved out of its write paths; repeatable or comma-separated")
+	fs.Var((*listFlag)(&d.Paths.Read), "read-paths", "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)")
 	fs.Var((*listFlag)(&d.DependsOn), "depends-on", "A job this one waits on; repeatable or comma-separated")
 	return f
 }
@@ -1416,8 +1416,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return exit.Usagef("magus job fork: %w", err)
 	}
 	if len(row.Integrates) > 0 {
-		if len(row.WritePaths) > 0 {
-			return exit.Usagef("magus job fork: an integration job's write paths are the files its branches changed, computed here, so the record names none: drop write_paths")
+		if len(row.Paths.Write) > 0 {
+			return exit.Usagef("magus job fork: an integration job's write paths are the files its branches changed, computed here, so the record names none: drop paths.write")
 		}
 		// A checkout that already stands is where the merge happens, so its revision is the
 		// one the branches are compared with, not the forker's.
@@ -1451,7 +1451,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			slog.InfoContext(ctx, fmt.Sprintf("checkout %s stands at %s, so the branches were compared with that revision instead of the checkpoint %s, and the job starts there", at, base, row.Checkpoint), attr.Notice("note"))
 			row.Checkpoint = base
 		}
-		row.WritePaths, row.SoftPaths = job.IntegrationOutputs(jobWS, paths)
+		row.Paths.Write, row.Paths.Soft = job.IntegrationOutputs(jobWS, paths)
 		if jobWS.Unavailable != "" {
 			slog.InfoContext(ctx, fmt.Sprintf("the workspace did not load (%s), so the job holds only the files its branches changed, and no declared output", jobWS.Unavailable), attr.Notice("note"))
 		}
@@ -1581,11 +1581,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	}
 	var asked types.Job
 	row.Apply(&asked)
-	derived := slices.DeleteFunc(slices.Clone(stored.WritePaths), func(p string) bool { return slices.Contains(asked.WritePaths, p) })
+	derived := slices.DeleteFunc(slices.Clone(stored.Paths.Write), func(p string) bool { return slices.Contains(asked.Paths.Write, p) })
 	wholeHeld := map[string][]string{}
 	for _, claim := range derived {
 		file, decl := types.SplitClaim(claim)
-		if slices.ContainsFunc(asked.WritePaths, func(entry string) bool {
+		if slices.ContainsFunc(asked.Paths.Write, func(entry string) bool {
 			p, d := types.SplitClaim(entry)
 			return d == "" && !strings.ContainsAny(p, "*?[{") && filepath.ToSlash(filepath.Clean(p)) == file
 		}) {
@@ -1616,7 +1616,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	var overrun *job.ForegroundOverrun
-	if !stored.ReadOnly && len(stored.WritePaths) > 0 {
+	if !stored.ReadOnly && len(stored.Paths.Write) > 0 {
 		overrun, err = forkOverrun(ctx, root, stored)
 		switch {
 		case err != nil:
@@ -1625,11 +1625,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			warnWorkspaceUnloaded(ctx, errors.New(jobWS.Unavailable))
 		}
 	}
-	referenced, referencedGap := referencedOutside(ctx, graph.loadScoped(stored.WritePaths), root, stored, jobWS.Projects)
+	referenced, referencedGap := referencedOutside(ctx, graph.loadScoped(stored.Paths.Write), root, stored, jobWS.Projects)
 	switch opts.Format {
 	case outputText:
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
-			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
+			stored.ID, orDash(string(stored.State)), len(stored.Paths.Write),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
 		if stored.ModelTier != nil {
 			fmt.Printf("model tier: %s\n", stored.ModelTier)
@@ -1645,7 +1645,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover: -o json lists each\n", len(derived))
 		}
-		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.loadScoped(stored.WritePaths), stored))
+		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.loadScoped(stored.Paths.Write), stored))
 		job.RenderReferencedOutside(os.Stdout, referenced, referencedGap)
 		job.RenderForegroundOverrun(os.Stdout, overrun)
 		// The forker waits for the budget so the holder never does.
@@ -1663,7 +1663,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return emitFormatted(opts, forkReport{
 			forkOutput{
 				Job:                  stored,
-				DeletionCandidates:   deletionCandidates(ctx, graph.loadScoped(stored.WritePaths), stored),
+				DeletionCandidates:   deletionCandidates(ctx, graph.loadScoped(stored.Paths.Write), stored),
 				ReferencedOutside:    referenced,
 				ReferencedOutsideGap: referencedGap,
 				ForegroundOverrun:    overrun,
@@ -1808,7 +1808,7 @@ func unfinishedIntegration(ctx context.Context, root string, store *job.Store, r
 		return nil, err
 	}
 	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.ID })
-	if i < 0 || len(rows[i].Integrates) == 0 || len(rows[i].WritePaths) == 0 {
+	if i < 0 || len(rows[i].Integrates) == 0 || len(rows[i].Paths.Write) == 0 {
 		return nil, nil
 	}
 	status, err := job.GradeGates(ctx, store, row.ID, jobObserver(root, graphsByTree(root, newJobGraph(root, false), false)))
@@ -1818,7 +1818,7 @@ func unfinishedIntegration(ctx context.Context, root string, store *job.Store, r
 	if !slices.ContainsFunc(status.Gates, func(g types.VerificationStatus) bool { return !g.Verified }) {
 		return nil, nil
 	}
-	return slices.Clone(rows[i].WritePaths), nil
+	return slices.Clone(rows[i].Paths.Write), nil
 }
 
 // printClaimNotes prints each of a fork's claim notes on a line of its own.
@@ -1829,7 +1829,7 @@ func printClaimNotes(out io.Writer, notes []string) {
 }
 
 // forkReport is forkOutput with the write path claims the fork derived from its symbol
-// goals, which are computed at the fork and never stored apart from write_paths.
+// goals. The fork computes them, and only paths.write stores them.
 type forkReport struct {
 	forkOutput    `yaml:",inline"`
 	DerivedClaims []string `json:"derived_claims,omitempty" yaml:"derived_claims,omitempty"`
@@ -3311,7 +3311,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		}
 		return listedProblems{list: list.String(), err: err}
 	}
-	if jobWS.Unavailable != "" && slices.ContainsFunc(applied, func(a job.Applied) bool { return !a.Next.ReadOnly && len(a.Next.WritePaths) > 0 }) {
+	if jobWS.Unavailable != "" && slices.ContainsFunc(applied, func(a job.Applied) bool { return !a.Next.ReadOnly && len(a.Next.Paths.Write) > 0 }) {
 		warnWorkspaceUnloaded(ctx, errors.New(jobWS.Unavailable))
 	}
 
@@ -3353,10 +3353,10 @@ func widenedDeclaration(store *job.Store, id string, add []string) (types.Declar
 		return types.Declaration{}, exit.Usagef("no job %s to widen; `%s` lists them", id, hint.LsJobs)
 	}
 	rec := job.RetryDeclaration(rows[i])
-	rec.WritePaths = slices.Clone(rec.WritePaths)
+	rec.Paths.Write = slices.Clone(rec.Paths.Write)
 	for _, p := range add {
-		if !slices.Contains(rec.WritePaths, p) {
-			rec.WritePaths = append(rec.WritePaths, p)
+		if !slices.Contains(rec.Paths.Write, p) {
+			rec.Paths.Write = append(rec.Paths.Write, p)
 		}
 	}
 	return rec, nil
@@ -3365,13 +3365,13 @@ func widenedDeclaration(store *job.Store, id string, add []string) (types.Declar
 // narrowedDeclaration is rec without the paths in release; goals stay.
 // A path the job does not hold is refused, so a typo is never a no-op.
 func narrowedDeclaration(rec types.Declaration, id string, release []string) (types.Declaration, error) {
-	rec.WritePaths = slices.Clone(rec.WritePaths)
+	rec.Paths.Write = slices.Clone(rec.Paths.Write)
 	for _, p := range release {
-		i := slices.Index(rec.WritePaths, p)
+		i := slices.Index(rec.Paths.Write, p)
 		if i < 0 {
 			return types.Declaration{}, exit.Usagef("%s holds no write path %q to release", id, p)
 		}
-		rec.WritePaths = slices.Delete(rec.WritePaths, i, i+1)
+		rec.Paths.Write = slices.Delete(rec.Paths.Write, i, i+1)
 	}
 	return rec, nil
 }
@@ -3424,9 +3424,9 @@ func printJobApply(out io.Writer, applied []job.Applied, claims map[string][]str
 	for _, a := range applied {
 		switch {
 		case a.Created && dryRun:
-			fmt.Fprintf(out, "would create %s with %d write path(s)\n", a.Next.ID, len(a.Next.WritePaths))
+			fmt.Fprintf(out, "would create %s with %d write path(s)\n", a.Next.ID, len(a.Next.Paths.Write))
 		case a.Created:
-			fmt.Fprintf(out, "created %s, %s, with %d write path(s)\n", a.Next.ID, a.Next.State, len(a.Next.WritePaths))
+			fmt.Fprintf(out, "created %s, %s, with %d write path(s)\n", a.Next.ID, a.Next.State, len(a.Next.Paths.Write))
 			if a.Next.ModelTier != nil {
 				fmt.Fprintf(out, "model tier: %s\n", a.Next.ModelTier)
 			}

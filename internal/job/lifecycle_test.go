@@ -124,8 +124,8 @@ func TestWaitIgnoresASoftPathNobodyWrote(t *testing.T) {
 	t.Parallel()
 
 	row := coveredRow()
-	row.WritePaths = append(row.WritePaths, "docs/unwritten_test.go")
-	row.SoftPaths = []string{"docs/unwritten_test.go"}
+	row.Paths.Write = append(row.Paths.Write, "docs/unwritten_test.go")
+	row.Paths.Soft = []string{"docs/unwritten_test.go"}
 	loc := declared(t, row)
 	result := passingResult()
 	attempt := passingRun
@@ -174,7 +174,7 @@ func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
 // nothing and the spec keeps its generation.
 func coveredRow() types.Job {
 	row := acceptRow()
-	row.WritePaths = []string{"internal/ledger", "cmd/magus/ledger.go"}
+	row.Paths.Write = []string{"internal/ledger", "cmd/magus/ledger.go"}
 	return row
 }
 
@@ -407,7 +407,7 @@ func (s *rowKeepsItsPathsSuite) TestExitKeepsAPathTheResultDoesNotName() {
 
 	exited := s.exit(loc, row.ID, result)
 
-	s.Equal(row.WritePaths, exited.WritePaths)
+	s.Equal(row.Paths.Write, exited.Paths.Write)
 	s.Empty(exited.Releases)
 
 	status, err := Wait(s.T().Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result), nil)
@@ -420,11 +420,11 @@ func (s *rowKeepsItsPathsSuite) TestAbandonmentKeepsEveryPath() {
 	loc := declared(s.T(), kept)
 	stored, err := Exit(s.T().Context(), boundStore(loc, kept.ID), kept.ID, nil, nil)
 	s.Require().NoError(err)
-	s.Equal(kept.WritePaths, stored.WritePaths)
+	s.Equal(kept.Paths.Write, stored.Paths.Write)
 }
 
 func (s *rowKeepsItsPathsSuite) TestRejectionGivesUpOnlyAnUntouchedPathAnotherJobTook() {
-	taker := types.Job{ID: "taker", Agent: agent.Instructed("c"), WritePaths: []string{"docs/reference/*.md"}, State: types.StateRunning}
+	taker := types.Job{ID: "taker", Agent: agent.Instructed("c"), Paths: types.JobPaths{Write: []string{"docs/reference/*.md"}}, State: types.StateRunning}
 	row := acceptRow()
 	loc := declared(s.T(), row, taker)
 	result := passingResult()
@@ -442,7 +442,7 @@ func (s *rowKeepsItsPathsSuite) TestRejectionGivesUpOnlyAnUntouchedPathAnotherJo
 	s.Require().NoError(err)
 	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.ID })
 	s.Equal(types.StateRunning, rows[i].State)
-	s.Equal([]string{"internal/ledger", "cmd/magus/ledger.go"}, rows[i].WritePaths)
+	s.Equal([]string{"internal/ledger", "cmd/magus/ledger.go"}, rows[i].Paths.Write)
 }
 
 func TestWaitKeepsARejectedJobOpen(t *testing.T) {
@@ -899,7 +899,7 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 func TestUnattributedWritesLeaveUpdatedAlone(t *testing.T) {
 	root := t.TempDir()
 	s := tempStore(t, root)
-	plant(t, s, types.Job{ID: "w", State: types.StateRunning, WritePaths: []string{"a.go"}, Created: 50, Updated: 50})
+	plant(t, s, types.Job{ID: "w", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.go"}}, Created: 50, Updated: 50})
 
 	require.NoError(t, s.RecordUnattributedWrite(t.Context(), "w", "a.go"))
 
@@ -1117,7 +1117,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 			t.Parallel()
 
 			row := types.Job{
-				ID: "goal", Agent: agent.Instructed("the goal holds"), WritePaths: []string{"."}, State: types.StateRunning, Created: 1,
+				ID: "goal", Agent: agent.Instructed("the goal holds"), Paths: types.JobPaths{Write: []string{"."}}, State: types.StateRunning, Created: 1,
 				Checkpoint: cmp.Or(tc.checkpoint, checkpoint), CheckoutRoot: cmp.Or(tc.checkout, worker),
 				Goals: []types.Goal{tc.goal.Resolve()},
 			}

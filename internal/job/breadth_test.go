@@ -45,17 +45,17 @@ func symbolsAt(defs map[string][]string) SymbolReader {
 
 func TestBroadClaimRefusesAGlobAcrossProjects(t *testing.T) {
 	root := breadthWorkspace(t)
-	row := types.Job{ID: "sweep", WritePaths: []string{"pkg/a.go", "**/*.go"}, Agent: agent.Instructed("Edit `pkg/b.go`.")}
+	row := types.Job{ID: "sweep", Paths: types.JobPaths{Write: []string{"pkg/a.go", "**/*.go"}}, Agent: agent.Instructed("Edit `pkg/b.go`.")}
 
 	got := broadClaimProblems(context.Background(), root, row, Workspace{}, nil)
 
 	assert.Equal(t, types.JobProblems{{
 		Code:    types.WritePathTooBroad,
-		Field:   "write_paths[1]",
+		Field:   "paths.write[1]",
 		Subject: "**/*.go",
 		Message: `write path "**/*.go" matches 4 files in 2 projects: more than 1 project, ` +
 			"a leading `**`, which reaches every directory of the workspace",
-		Fix: `replace "**/*.go" with the files the goals and criteria name: "write_paths": ["pkg/b.go"]; ` +
+		Fix: `replace "**/*.go" with the files the goals and criteria name: "paths": {"write": ["pkg/b.go"]}; ` +
 			`or keep it with the deviation {"code":"MGS3043","subject":"**/*.go","reason":"<why this job needs all of it>"}`,
 	}}, got)
 }
@@ -66,7 +66,7 @@ func TestBroadClaimRefusesAGlobPastTheFileLimit(t *testing.T) {
 		many = append(many, fmt.Sprintf("pkg/gen/f%02d.txt", i))
 	}
 	root := breadthWorkspace(t, many...)
-	row := types.Job{ID: "gen", WritePaths: []string{"pkg/gen/*.txt"}}
+	row := types.Job{ID: "gen", Paths: types.JobPaths{Write: []string{"pkg/gen/*.txt"}}}
 
 	got := broadClaimProblems(context.Background(), root, row, Workspace{}, nil)
 
@@ -77,9 +77,9 @@ func TestBroadClaimRefusesAGlobPastTheFileLimit(t *testing.T) {
 
 func TestBroadClaimReadsTheWorkspaceBounds(t *testing.T) {
 	ctx := context.Background()
-	across := types.Job{ID: "both", WritePaths: []string{"*/*.go"}}
+	across := types.Job{ID: "both", Paths: types.JobPaths{Write: []string{"*/*.go"}}}
 	ws := Workspace{Projects: []*types.Project{{Path: "."}, {Path: "web"}}}
-	inPkg := types.Job{ID: "pkg", WritePaths: []string{"pkg/*.go"}}
+	inPkg := types.Job{ID: "pkg", Paths: types.JobPaths{Write: []string{"pkg/*.go"}}}
 
 	t.Run("max_claim_projects raised admits two projects", func(t *testing.T) {
 		root := breadthWorkspace(t)
@@ -107,7 +107,7 @@ func TestBroadClaimReadsTheWorkspaceBounds(t *testing.T) {
 
 func TestBroadClaimPassesAGlobInOneProject(t *testing.T) {
 	root := breadthWorkspace(t)
-	row := types.Job{ID: "pkg", WritePaths: []string{"pkg/*.go"}}
+	row := types.Job{ID: "pkg", Paths: types.JobPaths{Write: []string{"pkg/*.go"}}}
 
 	assert.Empty(t, broadClaimProblems(context.Background(), root, row, Workspace{}, nil))
 }
@@ -116,8 +116,8 @@ func TestBroadClaimNeverMeasuresAClaimALiteralOrAReadOnlyRow(t *testing.T) {
 	root := breadthWorkspace(t)
 	ctx := context.Background()
 
-	assert.Empty(t, broadClaimProblems(ctx, root, types.Job{ID: "claim", WritePaths: []string{"pkg/a.go#Foo", "web/x.go"}}, Workspace{}, nil))
-	assert.Empty(t, broadClaimProblems(ctx, root, types.Job{ID: "scout", ReadOnly: true, WritePaths: []string{"**/*.go"}}, Workspace{}, nil))
+	assert.Empty(t, broadClaimProblems(ctx, root, types.Job{ID: "claim", Paths: types.JobPaths{Write: []string{"pkg/a.go#Foo", "web/x.go"}}}, Workspace{}, nil))
+	assert.Empty(t, broadClaimProblems(ctx, root, types.Job{ID: "scout", ReadOnly: true, Paths: types.JobPaths{Write: []string{"**/*.go"}}}, Workspace{}, nil))
 }
 
 type broadClaimIntegrationSuite struct {
@@ -128,14 +128,14 @@ func TestBroadClaimIntegration(t *testing.T) { suite.Run(t, new(broadClaimIntegr
 
 func (s *broadClaimIntegrationSuite) TestSkipsAnIntegrationRow() {
 	root := breadthWorkspace(s.T())
-	row := types.Job{ID: "merge", Integrates: []string{"a"}, WritePaths: []string{"**/*.go"}, SoftPaths: []string{"**/*.go"}}
+	row := types.Job{ID: "merge", Integrates: []string{"a"}, Paths: types.JobPaths{Write: []string{"**/*.go"}, Soft: []string{"**/*.go"}}, }
 
 	s.Empty(broadClaimProblems(s.T().Context(), root, row, Workspace{}, nil))
 }
 
 func (s *broadClaimIntegrationSuite) TestStillRefusesTheSameGlobWithoutIntegrates() {
 	root := breadthWorkspace(s.T())
-	row := types.Job{ID: "sweep", WritePaths: []string{"**/*.go"}, SoftPaths: []string{"**/*.go"}}
+	row := types.Job{ID: "sweep", Paths: types.JobPaths{Write: []string{"**/*.go"}, Soft: []string{"**/*.go"}}, }
 
 	got := broadClaimProblems(s.T().Context(), root, row, Workspace{}, nil)
 
@@ -145,7 +145,7 @@ func (s *broadClaimIntegrationSuite) TestStillRefusesTheSameGlobWithoutIntegrate
 
 func TestBroadClaimDropsIgnoredFilesAndReadsTheLoadedProjects(t *testing.T) {
 	root := breadthWorkspace(t)
-	row := types.Job{ID: "both", WritePaths: []string{"*/*.go"}}
+	row := types.Job{ID: "both", Paths: types.JobPaths{Write: []string{"*/*.go"}}}
 	ws := Workspace{Projects: []*types.Project{{Path: "."}, {Path: "web"}}}
 
 	got := broadClaimProblems(context.Background(), root, row, ws, nil)
@@ -160,7 +160,7 @@ func TestBroadClaimDropsIgnoredFilesAndReadsTheLoadedProjects(t *testing.T) {
 
 func TestBroadClaimPermittedPathPassesThroughPermit(t *testing.T) {
 	root := breadthWorkspace(t)
-	row := types.Job{ID: "sweep", WritePaths: []string{"**/*.go"}}
+	row := types.Job{ID: "sweep", Paths: types.JobPaths{Write: []string{"**/*.go"}}}
 
 	kept, permitted := broadClaimProblems(context.Background(), root, row, Workspace{}, nil).
 		Permit([]types.Deviation{{Code: types.WritePathTooBroad, Subject: "**/*.go", Reason: "a rename touches every package"}})
@@ -174,7 +174,7 @@ func TestBroadClaimFixSaysTheGraphDidNotAnswer(t *testing.T) {
 	root := breadthWorkspace(t)
 	row := types.Job{
 		ID:         "sweep",
-		WritePaths: []string{"**/*.go"},
+		Paths: types.JobPaths{Write: []string{"**/*.go"}},
 		Agent:      agent.Instructed("Fill (web/x.go:12)."),
 		Goals:      []types.Goal{{ID: "funcs", Kind: types.GoalKindSymbol, Symbols: []string{"Missing"}}},
 	}
@@ -183,7 +183,7 @@ func TestBroadClaimFixSaysTheGraphDidNotAnswer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := broadClaimProblems(context.Background(), root, row, Workspace{}, read)
 			require.Len(t, got, 1)
-			assert.Contains(t, got[0].Fix, `"write_paths": ["web/x.go"] (the knowledge graph did not answer the symbol goals`)
+			assert.Contains(t, got[0].Fix, `"paths": {"write": ["web/x.go"]} (the knowledge graph did not answer the symbol goals`)
 		})
 	}
 }

@@ -220,9 +220,9 @@ func (w *rowWrite) settlePaths() {
 	}
 	// Hardening is one-way: a re-declaration cannot soften a path the holder
 	// wrote, and a soft path that is no write path claims nothing.
-	row.SoftPaths = slices.DeleteFunc(row.SoftPaths, func(p string) bool {
-		return !slices.Contains(row.WritePaths, p) ||
-			w.exists() && slices.Contains(prev.WritePaths, p) && !slices.Contains(prev.SoftPaths, p)
+	row.Paths.Soft = slices.DeleteFunc(row.Paths.Soft, func(p string) bool {
+		return !slices.Contains(row.Paths.Write, p) ||
+			w.exists() && slices.Contains(prev.Paths.Write, p) && !slices.Contains(prev.Paths.Soft, p)
 	})
 }
 
@@ -306,7 +306,7 @@ func (w *rowWrite) count() {
 		row.ReworkRounds = prev.ReworkRounds
 	}
 	if w.kind != asNarrowing && w.exists() && (prev.State == types.StateRunning || prev.State == types.StateExited) &&
-		slices.ContainsFunc(row.WritePaths, func(p string) bool { return !slices.Contains(prev.WritePaths, p) }) {
+		slices.ContainsFunc(row.Paths.Write, func(p string) bool { return !slices.Contains(prev.Paths.Write, p) }) {
 		row.Widenings++
 	}
 }

@@ -94,7 +94,7 @@ stdout '^wave/slots$'
 stdout '^wave/targets$'
 
 -- cfg.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/cfg", "agent": {"instructions": "tune buzz", "worker": {"type": "resumed"}}, "write_paths": ["**/*.buzz"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/cfg", "agent": {"instructions": "tune buzz", "worker": {"type": "resumed"}}, "paths": {"write": ["**/*.buzz"]},
  "check": {"target": "lint", "project": "."},
  "deviations": [{"code": "MGS3043", "subject": "**/*.buzz", "reason": "the job tunes every magusfile"}]}
 -- site/.gitignore --
@@ -164,8 +164,8 @@ func C() {
 	c()
 }
 -- c.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/b", "agent": {"instructions": "change C", "worker": {"type": "resumed"}}, "write_paths": ["run.go"], "check": {"target": "lint", "project": "."},
+{"api_version": "magus.job/v1alpha1", "id": "wave/b", "agent": {"instructions": "change C", "worker": {"type": "resumed"}}, "paths": {"write": ["run.go"]}, "check": {"target": "lint", "project": "."},
  "goals": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}
 -- a.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/b", "agent": {"instructions": "change A again", "worker": {"type": "resumed"}}, "write_paths": ["run.go"], "check": {"target": "lint", "project": "."},
+{"api_version": "magus.job/v1alpha1", "id": "wave/b", "agent": {"instructions": "change A again", "worker": {"type": "resumed"}}, "paths": {"write": ["run.go"]}, "check": {"target": "lint", "project": "."},
  "goals": [{"id": "a", "kind": "symbol", "expect": "changed", "symbols": ["A"]}]}

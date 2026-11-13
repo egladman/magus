@@ -145,8 +145,8 @@ func continuationLink(row, ended types.Job) string {
 	if row.Follows == ended.ID {
 		return "follows " + ended.ID
 	}
-	for _, p := range row.WritePaths {
-		if slices.ContainsFunc(ended.WritePaths, func(q string) bool { return types.PathsIntersect(p, q) }) {
+	for _, p := range row.Paths.Write {
+		if slices.ContainsFunc(ended.Paths.Write, func(q string) bool { return types.PathsIntersect(p, q) }) {
 			return fmt.Sprintf("shares %s with %s", p, ended.ID)
 		}
 	}

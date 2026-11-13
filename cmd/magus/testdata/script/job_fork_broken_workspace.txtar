@@ -55,8 +55,8 @@ magus\noSuchCall();
 -- code.go --
 package pkg
 -- fix.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/fix", "write_paths": ["a.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/fix", "paths": {"write": ["a.go"]},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}
 -- applied.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/applied", "write_paths": ["b.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/applied", "paths": {"write": ["b.go"]},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["b.go"]}]}

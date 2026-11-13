@@ -23,7 +23,7 @@ func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
 		ID:         "cli-ls-files",
 		Agent:      agent.Instructed("add vcs ls-files"),
 		State:      types.StateRunning,
-		WritePaths: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"},
+		Paths: types.JobPaths{Write: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"}},
 		Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
@@ -36,7 +36,7 @@ func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
 		CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, StateBase: fixture.StateBase(t), Root: root,
 		Actor: &job.Actor{Lease: row.ID},
 	})
-	stored, err := held.Update(ctx, row.ID, func(u *types.Job) { u.WritePaths = []string{"cmd/magus/vcs.go"} })
+	stored, err := held.Update(ctx, row.ID, func(u *types.Job) { u.Paths.Write = []string{"cmd/magus/vcs.go"} })
 	require.NoError(t, err)
 	require.Len(t, stored.Releases, 1)
 	return ctx, root, stored

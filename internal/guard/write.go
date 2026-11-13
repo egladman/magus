@@ -335,7 +335,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	// A soft path its holder already wrote is owned, and only that holder's diff says so;
 	// the read costs a footprint, so it runs only for a write landing in someone's soft path.
 	if slices.ContainsFunc(live, func(u types.Job) bool {
-		_, soft, _ := declarationCovering(u.SoftPaths, rel)
+		_, soft, _ := declarationCovering(u.Paths.Soft, rel)
 		return soft && u.ID != graded
 	}) {
 		loc := location.jobs()
@@ -532,7 +532,7 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 			Say: fmt.Sprintf("magus workspace: lease %s is read_only and writes nothing; put what you found in your report instead.", me.ID),
 			Why: fmt.Sprintf("If it must write, %s\n"+
 				"Lease %s (%s) is declared read_only, so it has no write boundary at all and %s is outside it. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n%s",
-				leaseActorClause(fmt.Sprintf("clear read_only and declare write_paths for lease %s", me.ID)),
+				leaseActorClause(fmt.Sprintf("clear read_only and declare paths.write for lease %s", me.ID)),
 				me.ID, criteriaLine(me), rel, leaseActorWhy),
 		}.full()}
 	}
@@ -556,7 +556,7 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	}
 	// A deny naming one declaration of rel is gradeDeniedDeclarations' to judge: at this,
 	// the path, level it would deny every edit to the file.
-	decl, denied, err := declarationCovering(job.WholeFileDenies(me.DenyPaths, rel), rel)
+	decl, denied, err := declarationCovering(job.WholeFileDenies(me.Paths.Deny, rel), rel)
 	if err != nil {
 		return adviseMalformedDeclaration(fmt.Errorf("lease %s: %w", me.ID, err))
 	}
@@ -567,7 +567,7 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 				me.ID, criteriaLine(me)),
 		}.full()}
 	}
-	_, mine, err := declarationCovering(me.WritePaths, rel)
+	_, mine, err := declarationCovering(me.Paths.Write, rel)
 	if err != nil {
 		return adviseMalformedDeclaration(fmt.Errorf("lease %s: %w", me.ID, err))
 	}
@@ -606,9 +606,9 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 		say := fmt.Sprintf("%s is owned by lease %s (%s right now)", rel, owner.ID, owner.State)
 		if decl, ok := soleClaim(owner, rel); ok {
 			ownership = fmt.Sprintf("%s is outside the paths lease %s was given (%s), and lease %s (%s) claims %s in it",
-				rel, me.ID, cmp.Or(strings.Join(me.WritePaths, ", "), "none"), owner.ID, criteriaLine(owner), decl)
+				rel, me.ID, cmp.Or(strings.Join(me.Paths.Write, ", "), "none"), owner.ID, criteriaLine(owner), decl)
 			say = fmt.Sprintf("%s is outside the paths lease %s was given (%s), and lease %s claims %s in it (%s right now)",
-				rel, me.ID, cmp.Or(strings.Join(me.WritePaths, ", "), "none"), owner.ID, decl, owner.State)
+				rel, me.ID, cmp.Or(strings.Join(me.Paths.Write, ", "), "none"), owner.ID, decl, owner.State)
 		}
 		ago := time.Since(time.Unix(owner.Updated, 0)).Round(time.Second)
 		release := fmt.Sprintf("Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.", owner.ID, ago, hint.JobExit.With(owner.ID))
@@ -625,7 +625,7 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 				ownership, owner.State, me.ID, release, enterCall(owner.ID, rel), job.MaxJobEntries),
 		}.full()}
 	}
-	if len(me.WritePaths) == 0 {
+	if len(me.Paths.Write) == 0 {
 		return writeGrade{}
 	}
 	if me.State == types.StateExited {
@@ -643,7 +643,7 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	return writeGrade{Decision: decisionDeny, Reason: denial{
 		Say: fmt.Sprintf("magus workspace: %s is outside the paths lease %s was given (%s), and magus did not claim it on its own: %s; "+leaseActorClause("widen these write paths"),
 			rel, me.ID, nearestWritePaths(me, rel), stop),
-		Why: fmt.Sprintf("%s%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
+		Why: fmt.Sprintf("%s%s is outside every entry in the paths.write lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
 			"`%s` shows what the job holds; ask the job's owner, whoever forked it, if it needs %s.\n"+
 			leaseActorWhy,
 			revoked, rel, me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID), rel),
@@ -670,7 +670,7 @@ const nearestWriteShown = 3
 // nearestWritePaths names the write paths of me sharing the longest prefix with
 // rel, then counts the rest and names the command that lists them.
 func nearestWritePaths(me types.Job, rel string) string {
-	paths := slices.Clone(me.WritePaths)
+	paths := slices.Clone(me.Paths.Write)
 	if len(paths) <= nearestWriteShown {
 		return strings.Join(paths, ", ")
 	}
@@ -708,7 +708,7 @@ func revokedCovering(me types.Job, rel string) (types.JobRelease, bool) {
 // verdict, this one does too, and for a deny that verdict is the whole file: a write magus
 // cannot place may change the declaration, so it is denied.
 func gradeDeniedDeclarations(ctx context.Context, checkout string, me types.Job, rel string, fields writeFields) writeGrade {
-	denied := job.DeniedDeclarations(me.DenyPaths, rel)
+	denied := job.DeniedDeclarations(me.Paths.Deny, rel)
 	if len(denied) == 0 {
 		return writeGrade{}
 	}

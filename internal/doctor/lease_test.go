@@ -276,7 +276,7 @@ func TestCheckJobTreePassesAHealthyPlan(t *testing.T) {
 func TestCheckJobTreeNamesJobsBlockedOnAnEndedDependency(t *testing.T) {
 	_, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "dep", State: types.StateFail})
-	seed(t, store, types.Job{ID: "waiter", State: types.StateDeclared, DependsOn: []string{"dep"}, WritePaths: []string{"internal/job"}})
+	seed(t, store, types.Job{ID: "waiter", State: types.StateDeclared, DependsOn: []string{"dep"}, Paths: types.JobPaths{Write: []string{"internal/job"}}})
 	seed(t, store, types.Job{ID: "queued", State: types.StateDeclared, DependsOn: []string{"live"}})
 	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
 

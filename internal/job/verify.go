@@ -434,7 +434,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		// The change is the merge range, and its write paths were computed from it at fork.
 	default:
 		for _, p := range rep.ChangedPaths {
-			if _, ok := matching(row.WritePaths, p); ok {
+			if _, ok := matching(row.Paths.Write, p); ok {
 				continue
 			}
 			// magus rewrites such a file beside a job's change (the merge driver writes
@@ -444,7 +444,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 					" regenerated beside the change, so it was not graded against them", p))
 				continue
 			}
-			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is %s (%s)", p, outsideWritePaths, strings.Join(row.WritePaths, ", ")))
+			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is %s (%s)", p, outsideWritePaths, strings.Join(row.Paths.Write, ", ")))
 		}
 	}
 	if !row.ReadOnly && !row.Integrating() {
@@ -688,11 +688,11 @@ func unnamedLanded(rep types.JobResult, seen Observed) []string {
 func landedViolations(row types.Job, unnamed []string, seen Observed) []string {
 	var out []string
 	for _, p := range unnamed {
-		if _, ok := matching(row.WritePaths, p); ok || types.IsMagusMaintained(p) {
+		if _, ok := matching(row.Paths.Write, p); ok || types.IsMagusMaintained(p) {
 			continue
 		}
 		out = append(out, fmt.Sprintf("the branch committed %q since %s, the result leaves it out, and it is %s (%s): take it off the branch, or ask your orchestrator to widen the row",
-			p, cmp.Or(seen.ChangedFrom, "the job's checkpoint"), outsideWritePaths, strings.Join(row.WritePaths, ", ")))
+			p, cmp.Or(seen.ChangedFrom, "the job's checkpoint"), outsideWritePaths, strings.Join(row.Paths.Write, ", ")))
 	}
 	return out
 }
@@ -715,8 +715,8 @@ func diffViolations(row types.Job, rep types.JobResult, seen Observed) []string 
 			out = append(out, fmt.Sprintf("the result claims %q changed, and the diff since %s does not show it", p, from))
 		}
 	}
-	if !slices.ContainsFunc(seen.Changed, func(c string) bool { _, ok := matching(row.WritePaths, c); return ok }) {
-		out = append(out, fmt.Sprintf("nothing in the diff since %s is inside its write paths (%s)", from, strings.Join(row.WritePaths, ", ")))
+	if !slices.ContainsFunc(seen.Changed, func(c string) bool { _, ok := matching(row.Paths.Write, c); return ok }) {
+		out = append(out, fmt.Sprintf("nothing in the diff since %s is inside its write paths (%s)", from, strings.Join(row.Paths.Write, ", ")))
 	}
 	return out
 }
@@ -1072,7 +1072,7 @@ func splitCharms(target string) (string, []string) {
 // to the declaration below them and Go var/const/type got a name), above the 80% a verdict
 // needs.
 func claimViolations(row types.Job, seen Observed, unclaimed []string) []string {
-	if !slices.ContainsFunc(row.WritePaths, func(p string) bool { _, d := types.SplitClaim(p); return d != "" }) {
+	if !slices.ContainsFunc(row.Paths.Write, func(p string) bool { _, d := types.SplitClaim(p); return d != "" }) {
 		return nil
 	}
 	from := seen.ChangedFrom
@@ -1125,11 +1125,11 @@ func unclaimedFootprint(row types.Job, regions []types.RegionChange) []string {
 func denyViolations(row types.Job, rep types.JobResult, seen Observed) []string {
 	var out []string
 	for _, p := range rep.ChangedPaths {
-		if d, ok := matching(WholeFileDenies(row.DenyPaths, p), p); ok {
+		if d, ok := matching(WholeFileDenies(row.Paths.Deny, p), p); ok {
 			out = append(out, fmt.Sprintf("changed path %q is one the job is denied (%s)", p, d))
 			continue
 		}
-		denied := DeniedDeclarations(row.DenyPaths, p)
+		denied := DeniedDeclarations(row.Paths.Deny, p)
 		if len(denied) == 0 {
 			continue
 		}
@@ -1192,7 +1192,7 @@ func DeniedDeclarations(denyPaths []string, file string) []string {
 func ClaimedDeclarations(row types.Job, file string) []string {
 	var decls []string
 	stopped := false
-	for _, entry := range row.WritePaths {
+	for _, entry := range row.Paths.Write {
 		p, decl := types.SplitClaim(entry)
 		switch {
 		case decl == "" && coversPath(p, file):

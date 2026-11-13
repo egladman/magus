@@ -49,11 +49,49 @@ func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
 func TestMergeListAcceptsBothWireForms(t *testing.T) {
 	t.Parallel()
 
-	spaceForm := applyMerge(t, map[string]any{"write_paths": "a/b c/d"}, types.Job{})
-	assert.Equal(t, []string{"a/b", "c/d"}, spaceForm.WritePaths)
+	spaceForm := applyMerge(t, map[string]any{"paths": map[string]any{"write": "a/b c/d"}}, types.Job{})
+	assert.Equal(t, []string{"a/b", "c/d"}, spaceForm.Paths.Write)
 
-	arrayForm := applyMerge(t, map[string]any{"write_paths": []any{"a/b", "c/d"}}, types.Job{})
-	assert.Equal(t, []string{"a/b", "c/d"}, arrayForm.WritePaths)
+	arrayForm := applyMerge(t, map[string]any{"paths": map[string]any{"write": []any{"a/b", "c/d"}}}, types.Job{})
+	assert.Equal(t, []string{"a/b", "c/d"}, arrayForm.Paths.Write)
+}
+
+type putPathsSuite struct {
+	suite.Suite
+}
+
+func TestPutPathsSuite(t *testing.T) { suite.Run(t, new(putPathsSuite)) }
+
+func (s *putPathsSuite) TestEachMemberIsSetAlone() {
+	got := applyMerge(s.T(), map[string]any{"paths": map[string]any{"read": []any{"docs"}}},
+		types.Job{Paths: types.JobPaths{Write: []string{"a.go"}, Deny: []string{"gen"}}})
+
+	s.Equal(types.JobPaths{Write: []string{"a.go"}, Read: []string{"docs"}, Deny: []string{"gen"}}, got.Paths)
+}
+
+func (s *putPathsSuite) TestAJSONStringIsAnObject() {
+	put, err := DecodePut(map[string]any{"paths": `{"write":["a.go"],"deny":["gen"]}`})
+
+	s.Require().NoError(err)
+	s.Equal(types.JobPathsPut{Write: &[]string{"a.go"}, Deny: &[]string{"gen"}}, put.Paths)
+}
+
+func (s *putPathsSuite) TestSoftPathsAreRefused() {
+	_, err := DecodePut(map[string]any{"paths": map[string]any{"soft": []any{"a.go"}}})
+
+	s.ErrorContains(err, "carry write, read, deny, not soft")
+}
+
+func (s *putPathsSuite) TestAFlatKeyIsRefused() {
+	_, err := DecodePut(map[string]any{"write_paths": []any{"a.go"}})
+
+	s.ErrorContains(err, "no field of a job row is named write_paths")
+}
+
+func (s *putPathsSuite) TestAListIsNotAnObject() {
+	_, err := DecodePut(map[string]any{"paths": []any{"a.go"}})
+
+	s.ErrorContains(err, "paths must be an object of write, read, deny")
 }
 
 // compat: see the legacy fields on Row.
@@ -86,7 +124,7 @@ func TestMergeRejectsAKeyNoRowCarries(t *testing.T) {
 	_, err := DecodePut(map[string]any{"op": "put", "id": "u1", "state": "running", "passsed": true})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "passsed")
-	assert.Contains(t, err.Error(), "write_paths", "the message names what a put does carry")
+	assert.Contains(t, err.Error(), "paths,", "the message names what a put does carry")
 
 	_, err = DecodePut(map[string]any{"op": "put", "id": "u1", "state": "running"})
 	require.NoError(t, err, "op and id name the call rather than a field")

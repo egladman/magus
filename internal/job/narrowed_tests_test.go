@@ -72,7 +72,7 @@ func TestRefuseNarrowedTestsListsWhatTheCheckLeavesOut(t *testing.T) {
 	t.Parallel()
 
 	root := testRoot(t).Root()
-	row := types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha")}
+	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: goTestCheck("-run", "Alpha")}
 
 	err := refuseNarrowedIn(root, row)
 	require.Error(t, err)
@@ -130,7 +130,7 @@ func TestRefuseNarrowedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: tc.check})
+			err := refuseNarrowedIn(root, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: tc.check})
 			if tc.refused == "" {
 				require.NoError(t, err)
 				return
@@ -164,7 +164,7 @@ func TestRefuseNarrowedTestsFindsPackagesFromWritePaths(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: tc.paths, Check: narrow})
+			err := refuseNarrowedIn(root, types.Job{ID: "w", Paths: types.JobPaths{Write: tc.paths}, Check: narrow})
 			if tc.refused == "" {
 				require.NoError(t, err)
 				return
@@ -176,8 +176,8 @@ func TestRefuseNarrowedTestsFindsPackagesFromWritePaths(t *testing.T) {
 	t.Run("no root", func(t *testing.T) {
 		t.Parallel()
 
-		require.NoError(t, refuseNarrowedIn("", types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}))
-		assert.Empty(t, narrowedTestProblems(nil, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}), "nor a nil store")
+		require.NoError(t, refuseNarrowedIn("", types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: narrow}))
+		assert.Empty(t, narrowedTestProblems(nil, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: narrow}), "nor a nil store")
 	})
 }
 
@@ -205,7 +205,7 @@ func %s(t *testing.T) {}
 	}
 	w.Write("lib/go.mod", "module lib\n")
 
-	err := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: []string{"**/*.go"}, Check: goTestCheck("-run", "NoSuchTest")})
+	err := refuseNarrowedIn(root, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"**/*.go"}}, Check: goTestCheck("-run", "NoSuchTest")})
 	require.Error(t, err)
 	for _, tested := range []string{"pkg (TestAlpha", "nested/x (TestDeep"} {
 		assert.Contains(t, err.Error(), tested)
@@ -232,7 +232,7 @@ func TestRefuseNarrowedTestsCountsOnlyTestsGoTestBuilds(t *testing.T) {
 		"pkg/.hidden_test.go":                   "package pkg\n\nimport \"testing\"\n\nfunc TestHidden(t *testing.T) {}\n",
 	})
 
-	require.NoError(t, refuseNarrowedIn(w.Root(), types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha|Beta|Gamma")}))
+	require.NoError(t, refuseNarrowedIn(w.Root(), types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: goTestCheck("-run", "Alpha|Beta|Gamma")}))
 }
 
 // The check's own -tags decide which files it builds, so a tagged test it builds and leaves
@@ -248,7 +248,7 @@ func TestRefuseNarrowedTestsBuildsWithTheChecksTags(t *testing.T) {
 		{"-run", "Alpha|Beta|Gamma", "-tags", "integration"},
 		{"-tags=other,integration", "-run", "Alpha|Beta|Gamma"},
 	} {
-		err := refuseNarrowedIn(w.Root(), types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck(args...)})
+		err := refuseNarrowedIn(w.Root(), types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: goTestCheck(args...)})
 		require.Error(t, err, args)
 		assert.Contains(t, err.Error(), "pkg (TestTagged)", args)
 	}
@@ -264,7 +264,7 @@ func TestRefuseNarrowedTestsCountsAFileWhoseConstraintDoesNotRead(t *testing.T) 
 		"pkg/broken_test.go": "//go:build (\n\npackage pkg\n\nimport \"testing\"\n\nfunc TestUnread(t *testing.T) {}\n",
 	})
 
-	err := refuseNarrowedIn(w.Root(), types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha|Beta|Gamma")})
+	err := refuseNarrowedIn(w.Root(), types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: goTestCheck("-run", "Alpha|Beta|Gamma")})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pkg (TestUnread)")
 }
@@ -275,7 +275,7 @@ func TestRefuseNarrowedTestsGradesEveryCheckGoal(t *testing.T) {
 
 	root := testRoot(t).Root()
 	row := types.Job{
-		ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck(),
+		ID: "w", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: goTestCheck(),
 		Goals: []types.Goal{{ID: "unit", Kind: types.GoalKindCheck, Check: *goTestCheck("-run", "Alpha")}},
 	}
 
@@ -301,7 +301,7 @@ func TestRefuseNarrowedTestsCapsWhatItLists(t *testing.T) {
 	w.Write("big/b.go", "package big\n")
 	w.Write("big/b_test.go", many.String())
 
-	err := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: []string{"big/b.go"}, Check: goTestCheck("-run", "TestCase000")})
+	err := refuseNarrowedIn(root, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"big/b.go"}}, Check: goTestCheck("-run", "TestCase000")})
 	require.Error(t, err)
 	msg := err.Error()
 	assert.NotContains(t, msg, "\n", "an error is one line")
@@ -311,13 +311,13 @@ func TestRefuseNarrowedTestsCapsWhatItLists(t *testing.T) {
 	assert.NotContains(t, msg, "widen -run to")
 	assert.Less(t, len(msg), 600)
 
-	few := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha")})
+	few := refuseNarrowedIn(root, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: goTestCheck("-run", "Alpha")})
 	require.Error(t, few)
 	assert.Contains(t, few.Error(), "pkg (TestBeta, TestGamma_sub)", "a short list is named whole")
 	assert.NotContains(t, few.Error(), "more)")
 	assert.Contains(t, few.Error(), "widen -run to `Alpha|^(TestBeta|TestGamma_sub)$`", "and a short pattern is printed")
 
-	skipped := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: []string{"big/b.go"}, Check: goTestCheck("-skip", "TestCase")})
+	skipped := refuseNarrowedIn(root, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"big/b.go"}}, Check: goTestCheck("-skip", "TestCase")})
 	require.Error(t, skipped)
 	assert.NotContains(t, skipped.Error(), "\n")
 	assert.Contains(t, skipped.Error(), "and 195 more)")
@@ -332,17 +332,17 @@ func TestForkAndApplyRefuseACheckThatLeavesOutATest(t *testing.T) {
 	paths := []string{"pkg/a.go"}
 
 	s := tempStore(t, testRoot(t).Root()).InWorkspace(goCheckWorkspace("."))
-	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths, u.Check = paths, narrow }, config.Jobs{}, nil)
+	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.Paths.Write, u.Check = paths, narrow }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "TestBeta", "a fork by merge, the tool's put")
 
-	_, err = Apply(ctx, s, []types.Declaration{{ID: "w", WritePaths: paths, Check: narrow}}, config.Jobs{}, nil, nil, true)
+	_, err = Apply(ctx, s, []types.Declaration{{ID: "w", Paths: types.JobPaths{Write: paths}, Check: narrow}}, config.Jobs{}, nil, nil, true)
 	require.ErrorContains(t, err, "TestBeta", "job apply, a dry run included")
 
 	rows, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a refused fork wrote nothing")
 
-	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths, u.Check = paths, goTestCheck() }, config.Jobs{}, nil)
+	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.Paths.Write, u.Check = paths, goTestCheck() }, config.Jobs{}, nil)
 	require.NoError(t, err)
 
 	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.Check = narrow }, config.Jobs{}, nil)
@@ -353,7 +353,7 @@ func TestForkAndApplyRefuseACheckThatLeavesOutATest(t *testing.T) {
 	}, config.Jobs{}, nil)
 	require.ErrorContains(t, err, `goal "unit"`, "adding a narrowed goal to a row that exists")
 
-	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = []string{"pkg/a.go", "pkg/b.go"} }, config.Jobs{}, nil)
+	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.Paths.Write = []string{"pkg/a.go", "pkg/b.go"} }, config.Jobs{}, nil)
 	require.NoError(t, err, "an update that leaves the check alone is held to nothing new")
 }
 
@@ -362,7 +362,7 @@ func TestForkLetsARowThatAlreadyNarrowsTakeAnUnrelatedUpdate(t *testing.T) {
 
 	ctx := context.Background()
 	s := tempStore(t, testRoot(t).Root()).InWorkspace(goCheckWorkspace("."))
-	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
+	seed(t, s, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.Agent = modelRequest("opus") }, config.Jobs{}, nil)
 	require.NoError(t, err)
@@ -377,13 +377,13 @@ func TestForkGradesOnlyTheAddedWritePathsOfAnUpdate(t *testing.T) {
 	w := testRoot(t)
 	w.Write("other/o_test.go", "package other\n\nimport \"testing\"\n\nfunc TestOther(t *testing.T) {}\n")
 	s := tempStore(t, w.Root()).InWorkspace(goCheckWorkspace("."))
-	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
+	seed(t, s, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
-	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "other/o.go") }, config.Jobs{}, nil)
+	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.Paths.Write = append(u.Paths.Write, "other/o.go") }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "other (TestOther)", "the added package is graded")
 	assert.NotContains(t, err.Error(), "pkg (", "and the package the row already held is not")
 
-	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "docs/page.md") }, config.Jobs{}, nil)
+	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.Paths.Write = append(u.Paths.Write, "docs/page.md") }, config.Jobs{}, nil)
 	require.NoError(t, err, "a path that names no Go package adds nothing to grade")
 }
 
@@ -397,7 +397,7 @@ func TestNarrowedTestsAcceptAWritePackageScopedCheck(t *testing.T) {
 	store := (&Store{storeConfig: storeConfig{root: root}}).InWorkspace(goCheckWorkspace("."))
 	refused := func(writePaths []string, args ...string) []string {
 		var out []string
-		for _, p := range narrowedTestProblems(store, types.Job{ID: "w", WritePaths: writePaths, Check: goTestCheck(args...)}) {
+		for _, p := range narrowedTestProblems(store, types.Job{ID: "w", Paths: types.JobPaths{Write: writePaths}, Check: goTestCheck(args...)}) {
 			out = append(out, fmt.Sprintf("%s %s", p.Code, p.Field))
 		}
 		return out

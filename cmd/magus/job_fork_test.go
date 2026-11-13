@@ -73,7 +73,7 @@ func (s *ForkGraderSuite) rows() []types.Job {
 		{Target: "lint", Project: ".", NoDefaultCharms: true, Args: []string{"run.go"}},
 		{Target: types.TargetCI, Project: "."},
 	} {
-		rows = append(rows, types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &c})
+		rows = append(rows, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &c})
 	}
 	return rows
 }

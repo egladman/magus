@@ -12,6 +12,6 @@ stdout 'wave/sym: 0 of 1 goal\(s\) met'
 stdout '"NeverDefined" is defined nowhere the graph can see'
 
 -- job.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/sym", "agent": {"instructions": "define NeverDefined", "worker": {"type": "resumed"}}, "write_paths": ["code.go"], "goals": [{"id": "sym", "kind": "symbol", "expect": "present", "symbols": ["NeverDefined"]}]}
+{"api_version": "magus.job/v1alpha1", "id": "wave/sym", "agent": {"instructions": "define NeverDefined", "worker": {"type": "resumed"}}, "paths": {"write": ["code.go"]}, "goals": [{"id": "sym", "kind": "symbol", "expect": "present", "symbols": ["NeverDefined"]}]}
 -- code.go --
 package pkg

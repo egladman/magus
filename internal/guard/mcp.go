@@ -19,7 +19,7 @@ import (
 // rendering and a parse that disagree is a rule judging something nobody sent.
 
 // writePathsParam is the one list a bound caller may shrink.
-const writePathsParam = "write_paths"
+const writePathsParam = "paths.write"
 
 // mcpElidedParams render as a presence marker instead of their value. The
 // agent section holds a caller's prose, and the rendered line lands in the
@@ -372,28 +372,40 @@ func (r *clientReader) jobLine(op string, idNode, opts ast.Node) {
 		if !ok {
 			out = append(out, "opts="+unreadValue)
 		} else {
-			fields := make([]string, 0, len(m.Keys))
-			for i, k := range m.Keys {
-				key, ok := mapKey(k)
-				if !ok {
-					fields = append(fields, "opts="+unreadValue)
-					continue
-				}
-				if mcpElidedParams[key] {
-					fields = append(fields, fmt.Sprintf("%s=%s", key, mcpElidedValue))
-					continue
-				}
-				value, ok := literalValue(m.Values[i])
-				if !ok {
-					value = unreadValue
-				}
-				fields = append(fields, fmt.Sprintf("%s=%s", key, quoteValue(value)))
-			}
+			fields := optsFields("", m)
 			slices.Sort(fields)
 			out = append(out, fields...)
 		}
 	}
 	r.lines = append(r.lines, strings.Join(out, " "))
+}
+
+// optsFields renders each key of m as key=value. A nested map renders its
+// keys under the parent's, as paths.write, the spelling a rule reads.
+func optsFields(prefix string, m *ast.MapExpr) []string {
+	fields := make([]string, 0, len(m.Keys))
+	for i, k := range m.Keys {
+		key, ok := mapKey(k)
+		if !ok {
+			fields = append(fields, "opts="+unreadValue)
+			continue
+		}
+		key = prefix + key
+		if mcpElidedParams[key] {
+			fields = append(fields, fmt.Sprintf("%s=%s", key, mcpElidedValue))
+			continue
+		}
+		if nested, ok := m.Values[i].(*ast.MapExpr); ok {
+			fields = append(fields, optsFields(key+".", nested)...)
+			continue
+		}
+		value, ok := literalValue(m.Values[i])
+		if !ok {
+			value = unreadValue
+		}
+		fields = append(fields, fmt.Sprintf("%s=%s", key, quoteValue(value)))
+	}
+	return fields
 }
 
 func orUnread(s string) string {

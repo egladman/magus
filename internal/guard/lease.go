@@ -512,7 +512,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 			return opRewriteDenial(v, me, deps.DefaultCharms)
 		case len(v.outside) > 0:
 			return rewriteDenial(v, me, deps.DefaultCharms)
-		case v.permitted, vetsWritePaths(v.run, me.WritePaths, deps):
+		case v.permitted, vetsWritePaths(v.run, me.Paths.Write, deps):
 			continue
 		}
 		r = v.run
@@ -563,7 +563,7 @@ func readsOwnProjects(r targetRun, row types.Job) bool {
 	if r.verb != "run" || !r.noDefaultCharms || r.rewrites(nil) {
 		return false
 	}
-	paths := slices.Concat(row.WritePaths, row.ReadPaths)
+	paths := slices.Concat(row.Paths.Write, row.Paths.Read)
 	checks := rowChecks(row)
 	return !slices.ContainsFunc(r.selection(), func(p string) bool {
 		p = path.Clean(p)
@@ -624,7 +624,7 @@ func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at locat
 			return job.VCSIgnored(ctx, at.workspace)
 		}),
 		produces: sync.OnceValue(func() func(target, project string) bool {
-			return leaseProducers(ctx, workspace, row.WritePaths)
+			return leaseProducers(ctx, workspace, row.Paths.Write)
 		}),
 		composes: sync.OnceValue(func() func(target, project string) bool {
 			return checksCompose(graph, checks)
@@ -718,7 +718,7 @@ func (j rowJudge) verdict(r targetRun) runVerdict {
 		v.op, v.composers = true, r.composers(j.graph)
 		return v
 	}
-	v.outside = r.writesOutside(projects, j.row.WritePaths, own)
+	v.outside = r.writesOutside(projects, j.row.Paths.Write, own)
 	return v
 }
 
@@ -754,7 +754,7 @@ func (j rowJudge) heldBy(own []job.RegeneratedOutput, projects []*types.Project)
 			if apart, _ := job.HeldApart(j.root, other, func() ([]*types.Project, string) { return projects, "" }, pattern); apart {
 				continue
 			}
-			if writePathsTouch(other.WritePaths, pattern) || slices.Contains(theirs, o) {
+			if writePathsTouch(other.Paths.Write, pattern) || slices.Contains(theirs, o) {
 				return o.Output, other
 			}
 		}
@@ -800,8 +800,8 @@ func knockClause(root string, holder types.Job) string {
 // asked instead.
 func heldDenial(v runVerdict, me types.Job, root string) denial {
 	wait := hint.JobWait.With(v.holder.ID)
-	why := fmt.Sprintf("lease %s's write paths (%s) hold it", v.holder.ID, strings.Join(v.holder.WritePaths, ", "))
-	if !writePathsTouch(v.holder.WritePaths, strings.Fields(v.held)[0]) {
+	why := fmt.Sprintf("lease %s's write paths (%s) hold it", v.holder.ID, strings.Join(v.holder.Paths.Write, ", "))
+	if !writePathsTouch(v.holder.Paths.Write, strings.Fields(v.held)[0]) {
 		why = fmt.Sprintf("lease %s regenerates it from its own write paths too, and was declared before lease %s", v.holder.ID, me.ID)
 	}
 	next := fmt.Sprintf("run `%s`", wait)
@@ -2104,7 +2104,7 @@ func childForkRebind(f childFork, h holder, verb, ask string) rebind {
 	case slices.ContainsFunc(held.rows, func(r types.Job) bool { return r.ID == f.id }):
 		return rebind{problem: fmt.Sprintf("would %s over %s, which already exists", verb, f.id), ask: "change it",
 			why: "A worker writes no row but its own and the children it hands out."}
-	case !f.readOnly && !f.writePaths && (held.row.ReadOnly || len(held.row.WritePaths) > 0):
+	case !f.readOnly && !f.writePaths && (held.row.ReadOnly || len(held.row.Paths.Write) > 0):
 		return rebind{problem: fmt.Sprintf("would %s that can write anywhere", verb), fix: "fork it --read-only or with --write-paths inside your own.",
 			why: "A child that is not read-only and names no write paths is scoped by nothing."}
 	case (!f.readOnly || f.bounded) && h.storeLease() != h.id:
@@ -2134,8 +2134,8 @@ func cliFork(args []string, stdin string) childFork {
 		}
 		scriptOnly := row.Check != nil && row.Check.Target == "" && row.Check.Script != ""
 		return childFork{
-			id: row.ID, parent: row.Parent, readOnly: row.ReadOnly, writePaths: len(row.WritePaths) > 0,
-			bounded: len(row.WritePaths)+len(row.ReadPaths)+len(row.DenyPaths)+len(row.Goals) > 0 ||
+			id: row.ID, parent: row.Parent, readOnly: row.ReadOnly, writePaths: len(row.Paths.Write) > 0,
+			bounded: len(row.Paths.Write)+len(row.Paths.Read)+len(row.Paths.Deny)+len(row.Goals) > 0 ||
 				(row.Check != nil && !scriptOnly) || row.Validation != "" || (row.State != "" && row.State != types.StateDeclared),
 		}
 	}
@@ -2333,11 +2333,11 @@ func shrinksWritePaths(params map[string]string, row types.Job) bool {
 		}
 	}
 	proposed := strings.Split(declared, ",")
-	if !present || len(proposed) >= len(row.WritePaths) {
+	if !present || len(proposed) >= len(row.Paths.Write) {
 		return false
 	}
 	for _, decl := range proposed {
-		if !slices.Contains(row.WritePaths, strings.TrimSpace(decl)) {
+		if !slices.Contains(row.Paths.Write, strings.TrimSpace(decl)) {
 			return false
 		}
 	}
@@ -3079,7 +3079,7 @@ func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Jo
 	}
 	list := strings.Join(outside, " ")
 	return fmt.Sprintf("It commits %s, outside the lease's write paths (%s). Unstage them with `git restore --staged -- %s` and file them owed: you may commit an output a target declares when you wrote a source it reads (the target ran, so its output is yours), and your orchestrator widens the row for anything else.",
-		list, strings.Join(row.WritePaths, ", "), list)
+		list, strings.Join(row.Paths.Write, ", "), list)
 }
 
 // pathsOutsideLease is the sorted paths row may not commit: outside its write
@@ -3088,7 +3088,7 @@ func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Jo
 func pathsOutsideLease(row types.Job, paths []string, site vcsSite) ([]string, error) {
 	var outside []string
 	for _, p := range paths {
-		if _, held, _ := declarationCovering(row.WritePaths, p); !held && !types.IsMagusMaintained(p) && !slices.Contains(outside, p) {
+		if _, held, _ := declarationCovering(row.Paths.Write, p); !held && !types.IsMagusMaintained(p) && !slices.Contains(outside, p) {
 			outside = append(outside, p)
 		}
 	}
@@ -3132,7 +3132,7 @@ func pickPathsRefusal(ctx context.Context, row types.Job, inv hint.Invocation, r
 		return ""
 	}
 	return fmt.Sprintf("It picks commits writing %s, outside the lease's write paths (%s). Take only the paths you hold with `git checkout <commit> -- <path>` and commit them, or file the rest owed: you may commit an output a target declares when you wrote a source it reads, and your orchestrator widens the row for anything else.",
-		strings.Join(outside, " "), strings.Join(row.WritePaths, ", "))
+		strings.Join(outside, " "), strings.Join(row.Paths.Write, ", "))
 }
 
 // denyLeaseScriptVCS judges each shell script the line runs by its lines, since
@@ -4111,7 +4111,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			// No lease declares it, so the acting lease's own write paths decide, as for the
 			// editor tool. Only a redirect target or an existing file counts: sed's `s/a/b`
 			// is spelled like a path. A remove or move is graded below, holder-made files kept.
-			if !enrolled || len(me.WritePaths) == 0 || slices.ContainsFunc(removed, func(o placedWord) bool {
+			if !enrolled || len(me.Paths.Write) == 0 || slices.ContainsFunc(removed, func(o placedWord) bool {
 				t, ok := o.place(home)
 				return ok && t == target
 			}) {
@@ -4130,7 +4130,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			return g.Reason
 		}
 	}
-	if !enrolled || len(me.WritePaths) == 0 {
+	if !enrolled || len(me.Paths.Write) == 0 {
 		return ""
 	}
 	if unread := unreadHandedScripts(command, dialect); len(unread) > 0 {
@@ -4153,7 +4153,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		if err != nil || !info.Mode().IsRegular() {
 			return false
 		}
-		if _, denied, err := declarationCovering(me.DenyPaths, rel); err != nil || denied {
+		if _, denied, err := declarationCovering(me.Paths.Deny, rel); err != nil || denied {
 			return false
 		}
 		revision, _ := types.ParseCheckpointToken(cmp.Or(me.Checkpoint, me.ReportedBase))
@@ -4191,7 +4191,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			}
 			return denial{
 				Say: fmt.Sprintf("magus workspace: %s outside the paths lease %s was given (%s); "+leaseActorClause("widen these write paths"),
-					what, me.ID, strings.Join(me.WritePaths, ", ")),
+					what, me.ID, strings.Join(me.Paths.Write, ", ")),
 				Why: fmt.Sprintf("A remove or move writes each path it names, and a directory with everything in it, so every one of them must be inside the write paths lease %s (%s) declared and outside its deny paths. "+
 					"`%s` shows what the job holds.\n"+leaseActorWhy,
 					me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID)),
@@ -4257,8 +4257,8 @@ func reachOutside(checkout string, me types.Job, rel string) string {
 	root := filepath.Join(checkout, filepath.FromSlash(rel))
 	// Lstat: a remove of a link to a directory removes the link.
 	if info, err := os.Lstat(root); err != nil || !info.IsDir() {
-		_, denied, errDeny := declarationCovering(me.DenyPaths, rel)
-		_, mine, errMine := declarationCovering(me.WritePaths, rel)
+		_, denied, errDeny := declarationCovering(me.Paths.Deny, rel)
+		_, mine, errMine := declarationCovering(me.Paths.Write, rel)
 		if errDeny != nil || errMine != nil || mine && !denied {
 			return ""
 		}
@@ -4275,17 +4275,17 @@ func reachOutside(checkout string, me types.Job, rel string) string {
 			return filepath.SkipAll
 		}
 		r := path.Join(rel, filepath.ToSlash(under))
-		_, denied, errDeny := declarationCovering(me.DenyPaths, r)
-		_, mine, errMine := declarationCovering(me.WritePaths, r)
+		_, denied, errDeny := declarationCovering(me.Paths.Deny, r)
+		_, mine, errMine := declarationCovering(me.Paths.Write, r)
 		switch {
 		case errDeny != nil || errMine != nil:
 			return filepath.SkipAll
 		case denied:
-		case mine && d.IsDir() && !holdsDeclaredPath(me.DenyPaths, r):
+		case mine && d.IsDir() && !holdsDeclaredPath(me.Paths.Deny, r):
 			return filepath.SkipDir
 		case mine:
 			return nil
-		case d.IsDir() && holdsDeclaredPath(me.WritePaths, r):
+		case d.IsDir() && holdsDeclaredPath(me.Paths.Write, r):
 			return nil
 		}
 		outside = r
@@ -4319,7 +4319,7 @@ func holdsDeclaredPath(decls []string, dir string) bool {
 // mentions is not treated as a path at all.
 func declaredPath(live []types.Job, rel string) (declared, byCatchAll bool) {
 	for _, u := range live {
-		for _, decls := range [][]string{u.WritePaths, u.DenyPaths} {
+		for _, decls := range [][]string{u.Paths.Write, u.Paths.Deny} {
 			decl, ok, _ := declarationCovering(decls, rel)
 			if !ok {
 				continue
