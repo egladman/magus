@@ -295,12 +295,15 @@ final DENY_HEAD = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"h
 final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}`;
 
 // A block's reason sends the agent back to work and shows the person, so it carries the
-// first line and additionalContext the rest. A systemMessage shows the person a notice and
-// lets the stop through. Spliced through STOP_EVENT_SLOT: Stop and SubagentStop share it.
+// first line and additionalContext the rest. An advise lets the stop through
+// and goes to additionalContext, which only the agent reads.
+// Spliced through STOP_EVENT_SLOT: Stop and SubagentStop share it.
 final STOP_EVENT_SLOT = "__MAGUS_STOP_EVENT__";
-final STOP_REPLY = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"decision":"block","reason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"hookSpecificOutput":{"hookEventName":"__MAGUS_STOP_EVENT__","additionalContext":{{toJson .}}}{{end}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
-// Codex's Stop reply takes no hookSpecificOutput, so its block carries the whole reason.
-final STOP_REPLY_CODEX = `{{if eq .decision "deny"}}{"decision":"block","reason":{{toJson .reason}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
+final STOP_REPLY = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"decision":"block","reason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"hookSpecificOutput":{"hookEventName":"__MAGUS_STOP_EVENT__","additionalContext":{{toJson .}}}{{end}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"__MAGUS_STOP_EVENT__","additionalContext":{{toJson .context}}}}{{end}}`;
+// Codex's Stop reply takes no hookSpecificOutput, so its block carries the
+// whole reason. Its only other text field, systemMessage, shows the person,
+// so an advise prints nothing there.
+final STOP_REPLY_CODEX = `{{if eq .decision "deny"}}{"decision":"block","reason":{{toJson .reason}}}{{end}}`;
 
 final PERMISSION_NO_DECISION = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`;
 final PERMISSION_ALLOW = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`;
@@ -853,6 +856,12 @@ test "an unjudged read passes, and the person still hears of it" {
     final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
     std\assert(spec["permissionDecision"] == null, message: "{reply}");
     std\assert(reply["systemMessage"] == "v\nf", message: "{reply}");
+}
+
+test "a stop advise reaches the agent alone" {
+    std\assert(STOP_REPLY.indexOf("systemMessage") == null, message: STOP_REPLY);
+    std\assert(STOP_REPLY.indexOf("toJson .context") != null, message: STOP_REPLY);
+    std\assert(STOP_REPLY_CODEX.indexOf("systemMessage") == null and STOP_REPLY_CODEX.indexOf("advise") == null, message: STOP_REPLY_CODEX);
 }
 
 test "the lifecycle events carry the notice in their own dialect" {
