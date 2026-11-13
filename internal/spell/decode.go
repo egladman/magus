@@ -77,12 +77,7 @@ func (r Resolved) declared() (spells.Descriptor, error) {
 	if err != nil {
 		return spells.Descriptor{}, err
 	}
-	for i, runner := range c.ScriptRunners {
-		if err := validateCommand("", "", runner); err != nil {
-			return spells.Descriptor{}, fmt.Errorf("mgs_listScriptRunners[%d]: %w", i, err)
-		}
-	}
-	if err := spells.ValidateScriptRunners(c.ScriptRunners); err != nil {
+	if err := validateScriptRunners(c.ScriptRunners); err != nil {
 		return spells.Descriptor{}, err
 	}
 	if err := validateScopes(c.Scopes); err != nil {
@@ -113,6 +108,17 @@ func (r Resolved) declared() (spells.Descriptor, error) {
 		Scopes:             c.Scopes,
 		Opaque:             c.Opaque,
 	}, nil
+}
+
+// validateScriptRunners refuses an mgs_listScriptRunners command that is
+// malformed, then the set of runners as a whole.
+func validateScriptRunners(runners []spells.Command) error {
+	for i, runner := range runners {
+		if err := validateCommand("", "", runner); err != nil {
+			return fmt.Errorf("mgs_listScriptRunners[%d]: %w", i, err)
+		}
+	}
+	return spells.ValidateScriptRunners(runners)
 }
 
 // validateScopes refuses an mgs_getScopes command that names no program:
