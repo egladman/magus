@@ -350,7 +350,7 @@ export fun specView(row: magus\Job, list: magus\JobList) > result\Result::<str> 
         evidence.append({"id": id, "sep": if (i + 1 < gates.len()) "," else ""});
     }
     final deny = mut [<Deny>];
-    foreach (p in row.denyPaths) {
+    foreach (p in row.paths.deny) {
         deny.append(Deny{ path = p, reason = "denied by the spec" });
     }
     final dependencies = dependencyLines(row, list: list);
@@ -362,9 +362,9 @@ export fun specView(row: magus\Job, list: magus\JobList) > result\Result::<str> 
         "goals": goals,
         "base": if (row.checkpoint == "") "The spec names no checkpoint." else "Your worktree must sit at checkpoint `{row.checkpoint}`.",
         "readOnly": row.readOnly,
-        "writePaths": if (row.readOnly) [<str>] else row.writePaths,
+        "writePaths": if (row.readOnly) [<str>] else row.paths.write,
         "denyLines": denyLines(deny),
-        "readPaths": row.readPaths,
+        "readPaths": row.paths.read,
         "alone": dependencies.len() == 0 and overlaps.len() == 0,
         "dependencies": lineMaps(dependencies),
         "overlaps": lineMaps(overlaps),
@@ -479,9 +479,11 @@ export fun fixtureRow() > magus\Job {
             worker = magus\agent\Worker{ @"type" = magus\agent\WorkerType.resumed },
         },
         checkpoint = "7472f16fc709ab3827cd38ff281fecc0a217ca88",
-        writePaths = ["internal/guard/quote.go", "internal/guard/quote_test.go"],
-        denyPaths = ["internal/guard/guard.go", "run.go#probeOne", "run.go#buildStep"],
-        readPaths = ["internal/guard", "docs/reference/rules"],
+        paths = magus\JobPaths{
+            write = ["internal/guard/quote.go", "internal/guard/quote_test.go"],
+            read = ["internal/guard", "docs/reference/rules"],
+            deny = ["internal/guard/guard.go", "run.go#probeOne", "run.go#buildStep"],
+        },
         dependsOn = ["guard-tokenizer", "guard-catalog"],
         check = check,
         goals = [

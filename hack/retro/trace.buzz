@@ -727,7 +727,7 @@ fun facts(j: magus\Job) > JobFacts {
     }
     final checkout = if (j.worktree != null and j.worktree!.root != "") j.worktree!.root else j.checkoutRoot;
     return JobFacts{
-        id = j.id, state = j.state.value, checkout = checkout, writePaths = j.writePaths, created = j.created,
+        id = j.id, state = j.state.value, checkout = checkout, writePaths = j.paths.write, created = j.created,
         registered = j.registered, updated = j.updated, reworkRounds = j.reworkRounds, widenings = j.widenings,
         releasedPaths = released, releasedAt = at,
     };

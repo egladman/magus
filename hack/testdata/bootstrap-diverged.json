@@ -3,7 +3,7 @@
     "api_version": "magus.job/v1alpha1",
     "id": "agent-scripts",
     "checkpoint": "7472f16fc709ab3827cd38ff281fecc0a217ca88",
-    "write_paths": ["hack/dev/bootstrap-worktree.buzz"],
+    "paths": {"write": ["hack/dev/bootstrap-worktree.buzz"]},
     "state": "declared",
     "reported_base": "1111111111111111111111111111111111111111",
     "base_verdict": "diverged",

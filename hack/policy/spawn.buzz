@@ -185,7 +185,7 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
         tool = tool + "read_only = true";
     } else {
         fork = fork + " --write-paths <paths>";
-        tool = tool + "write_paths = [\"<paths>\"]";
+        tool = tool + "paths = .\{ write = [\"<paths>\"] }";
     }
     fork = fork + " --instructions \"<what done means>\"";
     tool = tool + ", agent = \{\"model\": \{\"{modelKey}\": \"{model}\"}, \"instructions\": \"<what done means>\", \"worker\": \{\"type\": \"resume\"}} })";

@@ -711,8 +711,8 @@ fun leaseAt(root: str) > result\Result::<Lease> {
         foreach (j in list.jobs) {
             // Only a live lease with something to write grades an edit: an exited job holds
             // nothing, and a read-only one has no boundary to step outside of.
-            if (j.checkoutRoot == root and (j.state == magus\JobState.declared or j.state == magus\JobState.running) and j.writePaths.len() > 0) {
-                final outside = outsidePath(j.writePaths);
+            if (j.checkoutRoot == root and (j.state == magus\JobState.declared or j.state == magus\JobState.running) and j.paths.write.len() > 0) {
+                final outside = outsidePath(j.paths.write);
                 if (outside.error -> err) {
                     return result\Result::<Lease>{ error = err };
                 }
