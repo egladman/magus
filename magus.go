@@ -569,6 +569,9 @@ func (m *Magus) shadowAcknowledged(importPath string) bool {
 }
 
 func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
+	if err := errors.Join(collectOptions(opts).Misuse...); err != nil {
+		return nil, err
+	}
 	cfg, err := loadConfig(root, opts...)
 	if err != nil {
 		return nil, err

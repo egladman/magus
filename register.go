@@ -27,14 +27,16 @@ type options struct {
 	stepRules []StepRule
 }
 
-// sdkOption sets what only this package reads. On a bare Load it panics,
-// naming the option: an Option returns no error, and that Load's reader
-// would read none of it.
+// sdkOption sets what only this package reads. On a bare Load it records
+// the misuse in Load.Misuse, which Open and Inspect return, since an Option
+// returns no error.
 func sdkOption(name string, set func(*options)) Option {
 	return func(o workspace.Options) {
 		own, ok := o.(*options)
 		if !ok {
-			panic(fmt.Sprintf("magus.%s sets what only magus.Open and magus.Inspect read, and was applied to a %T, which reads none of it", name, o))
+			l := o.Loading()
+			l.Misuse = append(l.Misuse, fmt.Errorf("magus.%s sets what only magus.Open and magus.Inspect read, and was applied to a %T, which reads none of it", name, o))
+			return
 		}
 		set(own)
 	}

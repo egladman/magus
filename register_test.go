@@ -26,23 +26,41 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// sdkOptionSuite pins that an option only Open and Inspect read fails loudly
-// on a bare workspace.Load, whose reader reads none of it.
+// sdkOptionSuite pins that an option only Open and Inspect read records its
+// misuse on a bare workspace.Load, and that Inspect returns it.
 type sdkOptionSuite struct{ suite.Suite }
 
 func TestSDKOption(t *testing.T) { suite.Run(t, new(sdkOptionSuite)) }
 
-func (s *sdkOptionSuite) TestWithStepRowsPanicsOnABareLoad() {
-	s.PanicsWithValue("magus.WithStepRows sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it",
-		func() { WithStepRows()(&workspace.Load{}) })
+func (s *sdkOptionSuite) TestWithStepRowsRecordsMisuseOnABareLoad() {
+	l := &workspace.Load{}
+	s.NotPanics(func() { WithStepRows()(l) })
+	s.Require().Len(l.Misuse, 1)
+	s.EqualError(l.Misuse[0], "magus.WithStepRows sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
 }
 
-func (s *sdkOptionSuite) TestWithStepRulePanicsOnABareLoad() {
-	s.Panics(func() { WithStepRule(refundLimit)(&workspace.Load{}) })
+func (s *sdkOptionSuite) TestWithStepRuleRecordsMisuseOnABareLoad() {
+	l := &workspace.Load{}
+	WithStepRule(refundLimit)(l)
+	s.Require().Len(l.Misuse, 1)
+	s.EqualError(l.Misuse[0], "magus.WithStepRule sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
 }
 
-func (s *sdkOptionSuite) TestWithSpawnRulePanicsOnABareLoad() {
-	s.Panics(func() { WithSpawnRule(TierCeiling)(&workspace.Load{}) })
+func (s *sdkOptionSuite) TestWithSpawnRuleRecordsMisuseOnABareLoad() {
+	l := &workspace.Load{}
+	WithSpawnRule(TierCeiling)(l)
+	s.Require().Len(l.Misuse, 1)
+	s.EqualError(l.Misuse[0], "magus.WithSpawnRule sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
+}
+
+func (s *sdkOptionSuite) TestInspectReturnsRecordedMisuse() {
+	misused := func(o workspace.Options) {
+		bare := &workspace.Load{}
+		WithSpawnRule(TierCeiling)(bare)
+		o.Loading().Misuse = append(o.Loading().Misuse, bare.Misuse...)
+	}
+	_, err := Inspect(context.Background(), s.T().TempDir(), WithSpawnRule(TierCeiling), misused)
+	s.EqualError(err, "magus.WithSpawnRule sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
 }
 
 func (s *sdkOptionSuite) TestOpensOptionsTakeIt() {

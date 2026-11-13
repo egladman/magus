@@ -70,6 +70,9 @@ type Load struct {
 	// in place of the job store.
 	JobReader      types.JobReader
 	JobReaderGiven bool
+	// Misuse is every option applied to a Load that does not read it. An Option
+	// returns no error, so the entry point that reads the Load returns these.
+	Misuse []error
 }
 
 // Option configures Open or Inspect.
