@@ -396,7 +396,9 @@ is why this host cannot receive the advice-only shape Claude Code does. The
 continuation's own `Stop` carries `stop_hook_active`, and the hook stays silent
 on it, so a reply is judged once. It needs `proofread` on `PATH` or in
 `__PROOFREAD_BIN`, prints nothing without it, and `__PROOFREAD_DECISIONS` names a
-decisions file. Codex shows the entry's `statusMessage` while it runs.
+decisions file. Without `proofread` it sends no notice either: Codex's `Stop` output has
+no field only the agent reads, so the notice Claude Code gets as `additionalContext` is
+not printed here. Codex shows the entry's `statusMessage` while it runs.
 
 ### Messages, spawns and the scout
 

@@ -555,13 +555,16 @@ rules in `proofread`, which is a choice about how your agent writes and not part
 guard, so a merge never writes it and never removes one you add. To turn it on, download
 [`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) and add it under both
 `Stop` and `UserPromptSubmit` in `.claude/settings.json` by hand. At `Stop` the script
-runs the `proofread` binary over the turn's last message and prints nothing. Context a
-`Stop` hook prints starts a turn, and you would see the agent answer advice you never saw.
-It keeps up to five findings per session in `$XDG_STATE_HOME/magus/proofread-reply/` and
-hands them to the agent as `additionalContext` with your next message. It needs no magus workspace, only `proofread` on `PATH`, in
-`__PROOFREAD_BIN`, or named with `-- --proofread PATH`; `__PROOFREAD_DECISIONS` or
-`-- --decisions FILE` sets your own decisions. It never blocks the stop and prints
-nothing when proofread is missing or the agent is already continuing.
+runs the `proofread` binary over the turn's last message and prints nothing when it finds
+nothing. Findings wait for your next message: context a `Stop` hook prints starts a turn,
+and you would see the agent answer advice you never saw. It keeps up to five findings per
+session in `$XDG_STATE_HOME/magus/proofread-reply/` and hands them to the agent as
+`additionalContext` with your next message. It needs no magus workspace, only `proofread`
+on `PATH`, in `__PROOFREAD_BIN`, or named with `-- --proofread PATH`;
+`__PROOFREAD_DECISIONS` or `-- --decisions FILE` sets your own decisions. It never blocks
+the stop. When `proofread` is missing or fails, it sends the agent one notice per session
+as `additionalContext` at `Stop`, which only the agent reads, and it prints nothing when
+the agent is already continuing.
 [Check writing in a commit hook](../../proofread.md) covers the setup.
 
 ```json
