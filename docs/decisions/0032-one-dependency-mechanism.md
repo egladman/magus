@@ -54,13 +54,13 @@ Two more channels exist outside magusfiles: a Go spell's `WithDependsOn(func(dir
 
 Read from the comments beside the keys, 2026-11-07:
 
-| project | entry                                                                      | what it stands for                                                           |
-| ------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| root    | `proto`                                                                    | "orders proto's generate first" and puts a `.proto` edit in the affected set |
-| root    | `libs/figure`                                                              | go-build embeds `figure.buzz`                                                |
-| root    | `libs/embed`                                                               | `go.mod` replaces it with the local module, so its Go builds into magus      |
-| docs    | `../proto`, `../libs/figure`, `../libs/kustomize`                          | API docs, the render and the figures read their files                        |
-| docs    | `../libs/clikit`, `diagnostics`, `embed`, `scipbuzz`, `xdg`, `gopherbuzz`  | generators compile these Go libs into the binaries they run                  |
+| project | entry                                                                     | what it stands for                                                           |
+| ------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| root    | `proto`                                                                   | "orders proto's generate first" and puts a `.proto` edit in the affected set |
+| root    | `libs/figure`                                                             | go-build embeds `figure.buzz`                                                |
+| root    | `libs/embed`                                                              | `go.mod` replaces it with the local module, so its Go builds into magus      |
+| docs    | `../proto`, `../libs/figure`, `../libs/kustomize`                         | API docs, the render and the figures read their files                        |
+| docs    | `../libs/clikit`, `diagnostics`, `embed`, `scipbuzz`, `xdg`, `gopherbuzz` | generators compile these Go libs into the binaries they run                  |
 
 None of these is "run that project first". Each is either a target the downstream
 needs (proto's `generate`) or files the downstream reads (a Go module, one `.buzz`

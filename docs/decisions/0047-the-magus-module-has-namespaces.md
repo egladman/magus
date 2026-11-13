@@ -158,12 +158,12 @@ This amends ADR 0035. Membership stays reach: no type and no namespace is listed
 
 ### 5. The mapping in magus
 
-| Go package    | Namespace     | Before                         | After                                 |
-| ------------- | ------------- | ------------------------------ | ------------------------------------- |
-| `types/agent` | `magus\agent` | `AgentStep`, `StepRequest`     | `magus\agent\Step`, `…\StepRequest`   |
-| `types/diff`  | `magus\diff`  | `DiffFile`, `DiffStep`         | `magus\diff\File`, `magus\diff\Step`  |
-| `types/trail` | `magus\trail` | `TrailMark`, `SessionOptions`  | `magus\trail\Mark`, `…\ReadOptions`   |
-| `types`       | `magus`       | `Job`, `Graph`, `GuardVerdict` | unchanged                             |
+| Go package    | Namespace     | Before                         | After                                |
+| ------------- | ------------- | ------------------------------ | ------------------------------------ |
+| `types/agent` | `magus\agent` | `AgentStep`, `StepRequest`     | `magus\agent\Step`, `…\StepRequest`  |
+| `types/diff`  | `magus\diff`  | `DiffFile`, `DiffStep`         | `magus\diff\File`, `magus\diff\Step` |
+| `types/trail` | `magus\trail` | `TrailMark`, `SessionOptions`  | `magus\trail\Mark`, `…\ReadOptions`  |
+| `types`       | `magus`       | `Job`, `Graph`, `GuardVerdict` | unchanged                            |
 
 - The config's top level sets `module: magus`. `types/image` sets `module: ""`, so
   `image\Platform` keeps its spelling beside the `image` functions.
@@ -184,24 +184,24 @@ This amends ADR 0035. Membership stays reach: no type and no namespace is listed
 - Docs, skills and the examples under `std/examples` are regenerated or swept in the
   same pull request.
 
-| Item                                                                         | State                          |
-| ---------------------------------------------------------------------------- | ------------------------------ |
-| gopherbuzz parses and binds a multi-segment declared namespace               | done                           |
-| The checker resolves `a\b\T` in a type annotation and in a declaration file  | done                           |
-| `module` takes a slash path and defaults from the Go package                 | done                           |
-| One declaration file per namespace, each opening with `namespace`            | done                           |
-| A declaration file imports the namespaces its signatures name                | done                           |
-| A segment that is also a parent member is refused                            | done                           |
-| `types/agent` mirrors under `magus\agent`; its 4 prefix `name` lines deleted | done                           |
-| `types/trail` mirrors under `magus\trail`; its 6 prefix `name` lines deleted | done                           |
-| `types/diff` mirrors under `magus\diff`; its 22 prefix `name` lines deleted  | not built (Diagnostic, Origin) |
-| `Check`, `Evidence`, `Tier` and kin move to `types/check` as `magus\check`   | done                           |
+| Item                                                                          | State                          |
+| ----------------------------------------------------------------------------- | ------------------------------ |
+| gopherbuzz parses and binds a multi-segment declared namespace                | done                           |
+| The checker resolves `a\b\T` in a type annotation and in a declaration file   | done                           |
+| `module` takes a slash path and defaults from the Go package                  | done                           |
+| One declaration file per namespace, each opening with `namespace`             | done                           |
+| A declaration file imports the namespaces its signatures name                 | done                           |
+| A segment that is also a parent member is refused                             | done                           |
+| `types/agent` mirrors under `magus\agent`; its 4 prefix `name` lines deleted  | done                           |
+| `types/trail` mirrors under `magus\trail`; its 6 prefix `name` lines deleted  | done                           |
+| `types/diff` mirrors under `magus\diff`; its 22 prefix `name` lines deleted   | not built (Diagnostic, Origin) |
+| `Check`, `Evidence`, `Tier` and kin move to `types/check` as `magus\check`    | done                           |
 | `ImpactCoverage` and `ImpactProject` move to `types/impact` as `magus\impact` | done                           |
-| `VCSCheckpoint` moves to `types/vcs` as `magus\vcs`                          | done                           |
-| `ReleaseStage` moves to `types/release` as `magus\release`                   | done                           |
-| `Diagnostic` stays in `libs/diagnostics` and in `magus`                      | done (no module line)          |
-| The rule that bundles a root type into the module returning it deleted       | not built (root types keep it) |
-| The stale comment on `std.Namespace` corrected                               | done                           |
+| `VCSCheckpoint` moves to `types/vcs` as `magus\vcs`                           | done                           |
+| `ReleaseStage` moves to `types/release` as `magus\release`                    | done                           |
+| `Diagnostic` stays in `libs/diagnostics` and in `magus`                       | done (no module line)          |
+| The rule that bundles a root type into the module returning it deleted        | not built (root types keep it) |
+| The stale comment on `std.Namespace` corrected                                | done                           |
 
 What the build found, 2026-11-12:
 

@@ -42,7 +42,6 @@ In the code: none. `magus refs` finds no symbol named for the term; the word app
 
 <!-- END GLOSSARY USAGE -->
 
-
 ## See also
 
 - [Job](job.md)

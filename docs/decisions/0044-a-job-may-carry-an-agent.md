@@ -84,11 +84,11 @@ maps them. The envelope is an unexported generic in `internal/job` until
 
 ### 4. Layout
 
-| concept | domain type                                   | record                                          | file                                 |
-| ------- | --------------------------------------------- | ----------------------------------------------- | ------------------------------------ |
-| Job     | `types.Job`, `types/job.go`                    | `jobRecord`, `internal/job/store.go`            | `jobs.jsonl`                         |
-| agent   | `agent.Spec`, `agent.Status` and the model tier types, `types/agent`; `types.Job.Agent` | `jobRecord.spec.agent`, `attemptRecord.status.agent` | none of its own |
-| Attempt | `types.Attempt`, a new file in `types/`        | `attemptRecord`, a new file in `internal/job`   | `attempts.jsonl` beside `jobs.jsonl` |
+| concept | domain type                                                                             | record                                               | file                                 |
+| ------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------ |
+| Job     | `types.Job`, `types/job.go`                                                             | `jobRecord`, `internal/job/store.go`                 | `jobs.jsonl`                         |
+| agent   | `agent.Spec`, `agent.Status` and the model tier types, `types/agent`; `types.Job.Agent` | `jobRecord.spec.agent`, `attemptRecord.status.agent` | none of its own                      |
+| Attempt | `types.Attempt`, a new file in `types/`                                                 | `attemptRecord`, a new file in `internal/job`        | `attempts.jsonl` beside `jobs.jsonl` |
 
 `attempts.jsonl` uses `file.JSONL`, as `grants.jsonl` does.
 

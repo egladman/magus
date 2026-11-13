@@ -179,28 +179,28 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 
 ### State
 
-| item                                                                                         | State    |
-| -------------------------------------------------------------------------------------------- | -------- |
-| every fork records a store-computed `Authority`; a child inherits its parent's                 | done     |
-| a leased row with no authority is refused state changes                                        | done     |
-| `Pending` and the approved sources read at the authority; cache keys carry it                 | done     |
-| an optional VCS capability lists paths changed between a revision and the working tree        | done     |
-| the row records the judging binary's path and hash; the hook runs only a recorded binary      | done     |
-| a build target declares a product path; the guard treats it as magus                          | done     |
-| the integrator relinks, re-pins and advances; nobody else does                                | done     |
-| a leased call loads policy and authority from its row's checkout                              | done     |
-| the lease resolves before policy loads, at every door                                         | done     |
-| the SDK judges with the approved sources when the working tree does not load                  | done     |
-| a request carries an explicit authority for a caller with no row                              | done     |
-| `types` row reader and `magus.WithJobReader`; the job store is the default                    | done     |
-| `ChangedBuildInputs` moves into the go spell (`mgs_getScopes`); the Buzz copies go           | done     |
-| `builds.buzz` rewritten to the product-path rule                                              | done     |
-| Go names only its own module's paths, each saying why (`internal/contract`, `internal/ward`, `load_contract.go`) | done     |
-| the worker placement script comes from the scripts index, not `stale_binary.go`              | done     |
-| the worker relink of fbacfdce1 is removed                                                     | done     |
-| a leased call's contract digest reads the tree at its row's authority                         | done     |
-| the fork's `checkoutReadsRow` reads the authority's `api.lock`                                | planned  |
-| zero-trust containment of a worker's own code                                                 | planned  |
+| item                                                                                                             | State   |
+| ---------------------------------------------------------------------------------------------------------------- | ------- |
+| every fork records a store-computed `Authority`; a child inherits its parent's                                   | done    |
+| a leased row with no authority is refused state changes                                                          | done    |
+| `Pending` and the approved sources read at the authority; cache keys carry it                                    | done    |
+| an optional VCS capability lists paths changed between a revision and the working tree                           | done    |
+| the row records the judging binary's path and hash; the hook runs only a recorded binary                         | done    |
+| a build target declares a product path; the guard treats it as magus                                             | done    |
+| the integrator relinks, re-pins and advances; nobody else does                                                   | done    |
+| a leased call loads policy and authority from its row's checkout                                                 | done    |
+| the lease resolves before policy loads, at every door                                                            | done    |
+| the SDK judges with the approved sources when the working tree does not load                                     | done    |
+| a request carries an explicit authority for a caller with no row                                                 | done    |
+| `types` row reader and `magus.WithJobReader`; the job store is the default                                       | done    |
+| `ChangedBuildInputs` moves into the go spell (`mgs_getScopes`); the Buzz copies go                               | done    |
+| `builds.buzz` rewritten to the product-path rule                                                                 | done    |
+| Go names only its own module's paths, each saying why (`internal/contract`, `internal/ward`, `load_contract.go`) | done    |
+| the worker placement script comes from the scripts index, not `stale_binary.go`                                  | done    |
+| the worker relink of fbacfdce1 is removed                                                                        | done    |
+| a leased call's contract digest reads the tree at its row's authority                                            | done    |
+| the fork's `checkoutReadsRow` reads the authority's `api.lock`                                                   | planned |
+| zero-trust containment of a worker's own code                                                                    | planned |
 
 ### Principles checked
 

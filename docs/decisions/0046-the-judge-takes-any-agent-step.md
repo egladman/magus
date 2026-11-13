@@ -223,7 +223,6 @@ type StepRequest struct { // replaces ADR 0039's ToolRequest: what a rule reads
     Command      string
     Lease        string
 }
-
 ```
 
 `agent.Verdict` and `agent.Judgment` carry what a deny suggests as `NextSteps []agent.Step`.
@@ -261,27 +260,27 @@ func WithStepRule(rule StepRule) Option
 
 ### State
 
-| item                                                                         | State     |
-| ---------------------------------------------------------------------------- | --------- |
-| `JudgeCommand`, `JudgeWrite` (`judge.go:25`, `:31`)                          | done      |
-| workspace rule seams `command`, `spawn`, `write`, `stop`                     | done      |
-| `agent.Step`, `agent.StepRow`, `agent.StepRequest`                           | done      |
-| `Magus.Judge`, `WithStepRows`                                                | done      |
-| `RecordJudgment` takes a `Step`                                              | proposed  |
-| `magus\guard.step(<kind>, <fun>)`                                            | done      |
-| `StepRule`, `WithStepRule`                                                   | done      |
-| an uncovered kind is an error when the rules load                            | done      |
-| a mistyped location is a deny (`step-input`)                                 | done      |
-| `unjudged-step` replaces `unjudged-tool`                                     | done      |
+| item                                                                                                   | State     |
+| ------------------------------------------------------------------------------------------------------ | --------- |
+| `JudgeCommand`, `JudgeWrite` (`judge.go:25`, `:31`)                                                    | done      |
+| workspace rule seams `command`, `spawn`, `write`, `stop`                                               | done      |
+| `agent.Step`, `agent.StepRow`, `agent.StepRequest`                                                     | done      |
+| `Magus.Judge`, `WithStepRows`                                                                          | done      |
+| `RecordJudgment` takes a `Step`                                                                        | proposed  |
+| `magus\guard.step(<kind>, <fun>)`                                                                      | done      |
+| `StepRule`, `WithStepRule`                                                                             | done      |
+| an uncovered kind is an error when the rules load                                                      | done      |
+| a mistyped location is a deny (`step-input`)                                                           | done      |
+| `unjudged-step` replaces `unjudged-tool`                                                               | done      |
 | the hook and `magus shell` read a `Step` record; a `tool` step is judged as the envelope it stands for | done      |
-| a host's own envelope handed to a step rule as a `Step`                      | proposed  |
-| a `spawns` row judged by the spawn rules                                     | done      |
-| `StepRow.InputSchema`; a mismatch is refused with the schema path            | done      |
-| `NextSteps []agent.Step` on the verdict: a deny suggests the step it judged  | proposed  |
-| `types.GuardJudgment.Next` (JSON `next`) becomes `NextSteps` (`next_steps`): a deliberate break | done      |
-| a typed Go struct or method per kind                                         | not built |
-| a verdict that changes the step, or a step that suspends the caller's loop   | not built |
-| judging a result after the step ran                                          | not built |
+| a host's own envelope handed to a step rule as a `Step`                                                | proposed  |
+| a `spawns` row judged by the spawn rules                                                               | done      |
+| `StepRow.InputSchema`; a mismatch is refused with the schema path                                      | done      |
+| `NextSteps []agent.Step` on the verdict: a deny suggests the step it judged                            | proposed  |
+| `types.GuardJudgment.Next` (JSON `next`) becomes `NextSteps` (`next_steps`): a deliberate break        | done      |
+| a typed Go struct or method per kind                                                                   | not built |
+| a verdict that changes the step, or a step that suspends the caller's loop                             | not built |
+| judging a result after the step ran                                                                    | not built |
 
 ### Principles checked
 
@@ -338,7 +337,6 @@ shared with a target's build step (`internal/cache.Step`, `types.ChainStep`), an
 package name says which one is meant. Call stays the word for a tool call, a kind of
 step. Reopen if a rule or a log must tell the two meanings apart by more than their
 package.
-
 
 ### A separate type for what a deny suggests
 

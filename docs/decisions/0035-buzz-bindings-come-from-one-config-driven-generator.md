@@ -569,13 +569,13 @@ structs. Generated decoders and encoders reordered by Buzz name and gained one d
 declared were never emitted, so they are no longer derived. Four dead config lines went
 with them: `daemon.Readiness`, `diff.Author`, `ProjectOrigin` and `EventType`.
 
-| Item                                                                         | State     |
-| ---------------------------------------------------------------------------- | --------- |
+| Item                                                                                                                       | State     |
+| -------------------------------------------------------------------------------------------------------------------------- | --------- |
 | Membership and direction derived by reach; `boundaryTypes`, `boundaryEnumTypes`, `inboundTypes`, `requiredMembers` deleted | done      |
-| `.buzzgen.yaml` holds settings only; a line nothing crosses as is an error   | done      |
-| `required` drops the mirror default; `agent.Worker.type` is required         | done      |
-| jobschema reads the derived set; `jobSources`, `closedSets` deleted          | done      |
-| Roots declared in `.buzzgen.yaml` instead of `boundaryRoots`                 | not built |
+| `.buzzgen.yaml` holds settings only; a line nothing crosses as is an error                                                 | done      |
+| `required` drops the mirror default; `agent.Worker.type` is required                                                       | done      |
+| jobschema reads the derived set; `jobSources`, `closedSets` deleted                                                        | done      |
+| Roots declared in `.buzzgen.yaml` instead of `boundaryRoots`                                                               | not built |
 
 Alternatives:
 
@@ -634,10 +634,10 @@ types, so the two declaration files would import each other. `types/trail` decla
 is not in ADR 0047's scope. `types/image` keeps `module: ""` as well:
 `TestTwoModulesShareAnObjectMethodName` pins its records bundling into any module.
 
-| Item                                                                           | State     |
-| ------------------------------------------------------------------------------ | --------- |
-| `module` takes a slash path and a child package derives it                     | done      |
-| One declaration file per nested namespace, opening with `namespace`            | done      |
-| A declaration file imports the nested namespaces it names                      | done      |
-| A nested segment that is also a parent member is refused                       | done      |
-| `types/diff` and `types/trail` move to `magus\diff` and `magus\trail`          | not built |
+| Item                                                                  | State     |
+| --------------------------------------------------------------------- | --------- |
+| `module` takes a slash path and a child package derives it            | done      |
+| One declaration file per nested namespace, opening with `namespace`   | done      |
+| A declaration file imports the nested namespaces it names             | done      |
+| A nested segment that is also a parent member is refused              | done      |
+| `types/diff` and `types/trail` move to `magus\diff` and `magus\trail` | not built |
