@@ -88,12 +88,12 @@ magus graph export -o json  # the whole graph
 | [libs/clikit](libs/clikit/MAGUS.md)                                         |       8 | `magus query project=libs/clikit`                     | `format`, `ci`, `test`                            |
 | [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `ci`, `test`                            |
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       8 | `magus query project=libs/diagnostics`                | `format`, `ci`, `test`                            |
-| libs/embed                                                                  |       7 | `magus query project=libs/embed`                      | `ci`, `format`, `build`                           |
+| libs/embed                                                                  |       8 | `magus query project=libs/embed`                      | `ci`, `format`, `build`                           |
 | libs/embed/train                                                            |      15 | `magus query project=libs/embed/train`                | `format`, `build`, `ci`                           |
 | libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `ci`, `lint`, `test`                              |
 | [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      12 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `buzzbench-test`               |
 | [libs/kustomize](libs/kustomize/MAGUS.md)                                   |       5 | `magus query project=libs/kustomize`                  | `lint`, `ci`, `test`                              |
-| [libs/proofread](libs/proofread/MAGUS.md)                                   |      11 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `wordclass-generate` |
+| [libs/proofread](libs/proofread/MAGUS.md)                                   |      12 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `wordclass-generate` |
 | libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `ci`, `format`                            |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `test`                            |
 | libs/ssg                                                                    |       1 | `magus query project=libs/ssg`                        | `test`                                            |
@@ -183,15 +183,16 @@ magus graph export -o json  # the whole graph
 
 ## Project: libs/embed
 
-| Target     | What it does                                                                                                |
-| ---------- | ----------------------------------------------------------------------------------------------------------- |
-| `install`  |                                                                                                             |
-| `ci`       | The anchor `magus affected ci` keys off.                                                                    |
-| `format`   |                                                                                                             |
-| `lint`     | testdata/probe.txt and gen/table.digest are embedded in the package, and the go spell claims only Go files. |
-| `build`    |                                                                                                             |
-| `test`     |                                                                                                             |
-| `security` | Fails on a vulnerable symbol this module calls.                                                             |
+| Target          | What it does                                                                                                |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| `install`       |                                                                                                             |
+| `golangci-lint` | The tree-wide conventions over this module, through .magus/custom-gcl.                                      |
+| `ci`            | The anchor `magus affected ci` keys off.                                                                    |
+| `format`        |                                                                                                             |
+| `lint`          | testdata/probe.txt and gen/table.digest are embedded in the package, and the go spell claims only Go files. |
+| `build`         |                                                                                                             |
+| `test`          |                                                                                                             |
+| `security`      | Fails on a vulnerable symbol this module calls.                                                             |
 
 ## Project: libs/embed/train
 
