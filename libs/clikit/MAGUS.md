@@ -14,5 +14,5 @@ Query: `magus query project=libs/clikit`
 | `ci`             | The anchor `magus affected ci` keys off.                               |
 | `index-generate` | Renders MAGUS.md, this project's target catalog.                       |
 | `lint`           |                                                                        |
-| `build`          |                                                                        |
+| `build`          | The module root holds no package, only the packages below it.          |
 | `test`           | Runs the suite; the root merges coverage.out into its coverage badge.  |
