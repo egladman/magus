@@ -48,7 +48,7 @@ describe('parseJobs', () => {
             state: 'running',
             agent: { model: { id: 'opus' }, worker: { type: 'resume' } },
             check: 'magus run go-test api',
-            writePaths: ['api/store.go'],
+            paths: { write: ['api/store.go'] },
             goals: [{ id: 'gone', kind: 'symbol' }],
             writeProof: 'disjoint',
             baseVerdict: 'diverged',

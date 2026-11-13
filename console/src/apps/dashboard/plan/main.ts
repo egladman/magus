@@ -972,9 +972,9 @@ export function activate(host: HTMLElement): JobsInstance {
         n.job.checkpoint,
         jobModel(n.job),
         n.job.check,
-        n.job.writePaths,
-        n.job.denyPaths,
-        n.job.readPaths,
+        n.job.paths?.write ?? [],
+        n.job.paths?.deny ?? [],
+        n.job.paths?.read ?? [],
         n.job.dependsOn,
         n.job.releases.map((r) => [r.path, r.digest]),
         String(n.job.created),
@@ -1286,9 +1286,9 @@ export function activate(host: HTMLElement): JobsInstance {
     field(dl, "Checkpoint", n.job.checkpoint);
     field(dl, "Model", jobModel(n.job));
     field(dl, "Check", n.job.check);
-    pathField(dl, "Write paths", n.job.writePaths);
-    pathField(dl, "Deny paths", n.job.denyPaths);
-    pathField(dl, "Read paths", n.job.readPaths);
+    pathField(dl, "Write paths", n.job.paths?.write ?? []);
+    pathField(dl, "Deny paths", n.job.paths?.deny ?? []);
+    pathField(dl, "Read paths", n.job.paths?.read ?? []);
     pathField(dl, "Depends on", n.job.dependsOn);
     field(dl, "Parent", n.parent ?? "");
     if (n.danglingParent) {

@@ -209,7 +209,7 @@ func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	_, err := store.Update(t.Context(), "wave3/merge", func(row *types.Job) {
 		row.State = types.StateRunning
 		row.Agent = &agent.Spec{Model: agent.Model{ID: "opus"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}
-		row.WritePaths = []string{"internal/handler"}
+		row.Paths.Write = []string{"internal/handler"}
 	})
 	require.NoError(t, err)
 
@@ -234,7 +234,7 @@ func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	require.Equal(t, jobv1.JobHolder_JOB_HOLDER_SESSION, delegated.Holder)
 	require.Equal(t, string(types.StateRunning), delegated.State)
 	require.Equal(t, "opus", delegated.GetAgent().GetModel().GetId())
-	require.Equal(t, []string{"internal/handler"}, delegated.WritePaths)
+	require.Equal(t, []string{"internal/handler"}, delegated.GetPaths().GetWrite())
 }
 
 // TestListJobs_ServesTheStoredRowVerbatim pins what a reader of a delegated row cannot work
@@ -246,7 +246,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	_, err := store.Update(t.Context(), "job-a", func(row *types.Job) {
 		row.Agent = agent.Instructed("ship the store")
 		row.Checkpoint = "60dc9151"
-		row.WritePaths = []string{"internal/job", "types/job.go"}
+		row.Paths.Write = []string{"internal/job", "types/job.go"}
 		row.State = types.StateRunning
 		row.Goals = []types.Goal{
 			{
@@ -279,7 +279,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	// The store derives a release from a claim that shrinks, so giving up types/job.go is
 	// the only way to get one onto the wire.
 	stored, err := store.Update(t.Context(), "job-a", func(row *types.Job) {
-		row.WritePaths = []string{"internal/job"}
+		row.Paths.Write = []string{"internal/job"}
 	})
 	require.NoError(t, err)
 	_, err = store.Update(t.Context(), "scout", func(row *types.Job) {
@@ -303,7 +303,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	require.NotNil(t, got, "the delegated row is missing from the listing")
 	require.Equal(t, "ship the store", got.GetAgent().GetInstructions())
 	require.Equal(t, "60dc9151", got.Checkpoint)
-	require.Equal(t, []string{"internal/job"}, got.WritePaths)
+	require.Equal(t, []string{"internal/job"}, got.GetPaths().GetWrite())
 	require.Equal(t, stored.Updated, got.Updated, "the row's own stamp, not the moment it was read")
 	require.Len(t, got.Releases, 1)
 	require.Equal(t, "types/job.go", got.Releases[0].Path)
@@ -340,12 +340,12 @@ func TestListJobs_ReportsOverlappingWritePaths(t *testing.T) {
 	dir := t.TempDir()
 	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 	for _, row := range []types.Job{
-		{ID: "job-a", WritePaths: []string{"internal/job"}, State: types.StateRunning},
-		{ID: "job-b", WritePaths: []string{"internal/job/store.go"}, State: types.StateDeclared},
-		{ID: "job-done", WritePaths: []string{"internal/job"}, State: types.StatePass},
+		{ID: "job-a", Paths: types.JobPaths{Write: []string{"internal/job"}}, State: types.StateRunning},
+		{ID: "job-b", Paths: types.JobPaths{Write: []string{"internal/job/store.go"}}, State: types.StateDeclared},
+		{ID: "job-done", Paths: types.JobPaths{Write: []string{"internal/job"}}, State: types.StatePass},
 	} {
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) {
-			cur.WritePaths, cur.State = row.WritePaths, row.State
+			cur.Paths.Write, cur.State = row.Paths.Write, row.State
 		})
 		require.NoError(t, err)
 	}
@@ -497,11 +497,11 @@ func TestListJobs_ServesTheStoresReport(t *testing.T) {
 	for _, row := range []types.Job{
 		{ID: "late", State: types.StateRunning, Deadline: 1},
 		{ID: "waiter", State: types.StateDeclared, DependsOn: []string{"never-declared"}},
-		{ID: "a", State: types.StateRunning, WritePaths: []string{"run.go#RunCI"}},
-		{ID: "b", State: types.StateRunning, WritePaths: []string{"run.go#executeStages"}},
+		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run.go#RunCI"}}},
+		{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run.go#executeStages"}}},
 	} {
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) {
-			cur.State, cur.Deadline, cur.DependsOn, cur.WritePaths = row.State, row.Deadline, row.DependsOn, row.WritePaths
+			cur.State, cur.Deadline, cur.DependsOn, cur.Paths.Write = row.State, row.Deadline, row.DependsOn, row.Paths.Write
 		})
 		require.NoError(t, err)
 	}
@@ -547,7 +547,7 @@ func (s *listJobsSuite) overlaps(oneCheckout bool, projects []*types.Project) []
 	store := jobstore.NewStore(jobstore.Location{StateBase: s.T().TempDir(), CacheDir: dir, Root: dir})
 	for id, checkout := range map[string]string{"a": a, "b": b} {
 		_, err := store.Update(s.T().Context(), id, func(cur *types.Job) {
-			cur.State, cur.WritePaths, cur.CheckoutRoot = types.StateRunning, []string{"gen/decode.go"}, checkout
+			cur.State, cur.Paths.Write, cur.CheckoutRoot = types.StateRunning, []string{"gen/decode.go"}, checkout
 		})
 		s.Require().NoError(err)
 	}

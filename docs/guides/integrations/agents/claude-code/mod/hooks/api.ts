@@ -78,7 +78,7 @@ export function parseJobs(text: string, fetchedAt: number): Result<Listing> {
       holder: holder === 'session' ? '' : holder,
       criteria: str(agent.instructions) || str(j.description),
       check: str(j.check),
-      writePaths: strs(j.writePaths),
+      writePaths: strs(record(j.paths).write),
       goals: records(j.goals).map(g => `${str(g.kind) || '?'} ${str(g.id)}`.trim()),
       proof: str(j.writeProof),
       endReason: str(j.endReason),

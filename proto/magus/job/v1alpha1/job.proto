@@ -92,13 +92,11 @@ message Job {
 
   // The facts a DELEGATED job carries, empty on a catalog job. These are what an
   // orchestrator declared, never a verdict magus reached.
-  reserved 9, 11;
-  reserved "criteria", "model";
+  reserved 9, 11, 13, 14, 15;
+  reserved "criteria", "model", "write_paths", "deny_paths", "read_paths";
   string parent = 10; // the job this one was handed out under, empty for a root
   string check = 12; // the one check this job runs, rendered as the command that runs it
-  repeated string write_paths = 13;
-  repeated string deny_paths = 14;
-  repeated string read_paths = 15;
+  JobPaths paths = 47; // what the job may write, may not write and may read
   repeated string depends_on = 16;
   bool read_only = 17;
   string checkpoint = 18;
@@ -156,6 +154,15 @@ message Job {
   string brief_format = 44;
   // agent is the job's agent section, unset for ordinary work.
   JobAgent agent = 46;
+}
+
+// JobPaths is a delegated job's declared boundary. soft are the write
+// entries that overlap nothing until the holder's diff touches them.
+message JobPaths {
+  repeated string write = 1;
+  repeated string read = 2;
+  repeated string deny = 3;
+  repeated string soft = 4;
 }
 
 // JobAgent is what the agent taking a job is asked for.

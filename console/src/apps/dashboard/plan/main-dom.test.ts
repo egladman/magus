@@ -573,9 +573,7 @@ test("selecting a job shows its criteria, checkpoint, model, check and paths", a
         agent: { instructions: "draw the jobs", model: { id: "opus" }, worker: { type: "resumed" } },
         checkpoint: "after the stage lands",
         check: "console:test",
-        writePaths: ["console/src/console/plan/"],
-        denyPaths: ["internal/"],
-        readPaths: ["docs/"],
+        paths: { write: ["console/src/console/plan/"], read: ["docs/"], deny: ["internal/"] },
       }),
     ]),
     feeds: true,
@@ -804,8 +802,8 @@ test("an overlap warns on both rows and names the other job in the detail", asyn
   serve({
     jobs: okJobs(
       [
-        sessionJob("a", { state: "running", writePaths: ["internal/job"] }),
-        sessionJob("b", { writePaths: ["internal/job/store.go"] }),
+        sessionJob("a", { state: "running", paths: { write: ["internal/job"] } }),
+        sessionJob("b", { paths: { write: ["internal/job/store.go"] } }),
         sessionJob("c", { state: "pass" }),
       ],
       [
@@ -883,7 +881,7 @@ test("a released path shows with a short digest", async () => {
     jobs: okJobs([
       sessionJob("a", {
         state: "running",
-        writePaths: ["docs"],
+        paths: { write: ["docs"] },
         releases: [
           {
             path: "internal/job/store.go",

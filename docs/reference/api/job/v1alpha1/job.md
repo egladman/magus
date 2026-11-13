@@ -73,9 +73,7 @@ Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/
 | `state`           | string                                                 | 8  | state is the row's lifecycle position: declared, running, exited, pass, fail or no\_return. A string rather than an enum because the vocabulary is the job store's and a second closed set here would be a second place to add a value to.                                                                                                                                                                                         |
 | `parent`          | string                                                 | 10 | the job this one was handed out under, empty for a root                                                                                                                                                                                                                                                                                                                                                                            |
 | `check`           | string                                                 | 12 | the one check this job runs, rendered as the command that runs it                                                                                                                                                                                                                                                                                                                                                                  |
-| `write_paths`     | repeated string                                        | 13 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `deny_paths`      | repeated string                                        | 14 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `read_paths`      | repeated string                                        | 15 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `paths`           | [JobPaths](#jobpaths)                                  | 47 | what the job may write, may not write and may read                                                                                                                                                                                                                                                                                                                                                                                 |
 | `depends_on`      | repeated string                                        | 16 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `read_only`       | bool                                                   | 17 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `checkpoint`      | string                                                 | 18 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -107,7 +105,7 @@ Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/
 | `brief_format`    | string                                                 | 44 | brief\_format is markdown or buzz; empty defers to magus.yaml's agents.brief\_format.                                                                                                                                                                                                                                                                                                                                              |
 | `agent`           | [JobAgent](#jobagent)                                  | 46 | agent is the job's agent section, unset for ordinary work.                                                                                                                                                                                                                                                                                                                                                                         |
 
-_Reserved: 9, 11, 38; `criteria`, `model`, `schema_version`._
+_Reserved: 9, 11, 13, 14, 15, 38; `criteria`, `model`, `write_paths`, `deny_paths`, `read_paths`, `schema_version`._
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -300,6 +298,21 @@ Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/
 | `reason`  | string          | 3 |             |
 
 Used by: [ListJobs (response)](job.md#listjobs).
+
+### JobPaths
+
+JobPaths is a delegated job's declared boundary. soft are the write entries that overlap nothing until the holder's diff touches them.
+
+Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
+
+| Field   | Type            | # | Description |
+| ------- | --------------- | - | ----------- |
+| `write` | repeated string | 1 |             |
+| `read`  | repeated string | 2 |             |
+| `deny`  | repeated string | 3 |             |
+| `soft`  | repeated string | 4 |             |
+
+Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
 ### JobReadOnly
 
