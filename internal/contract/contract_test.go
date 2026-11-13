@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -188,7 +189,7 @@ func (s *DigestSuite) embeddedFiles() map[string]string {
 			return err
 		}
 		body, err := fs.ReadFile(buzz, p)
-		files[spellDir+"/"+p] = string(body)
+		files[path.Join(spellDir, p)] = string(body)
 		return err
 	}))
 	return files
@@ -235,7 +236,7 @@ func (s *DigestSuite) TestTheRevisionLeavesOutWhatEmbedLeavesOut() {
 
 func (s *DigestSuite) TestARevisionCarryingNoContractNeverDiffers() {
 	vc := revisionFiles{"auth": {"README.md": "x"}}
-	_, err := TreeAt(s.T().Context(), vc, s.root, "auth")
+	_, err := treeAt(s.T().Context(), vc, s.root, "auth")
 	s.ErrorIs(err, ErrNotCarried)
 	skew, err := CheckAt(s.T().Context(), vc, s.root, "auth")
 	s.Require().NoError(err)

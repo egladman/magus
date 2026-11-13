@@ -127,10 +127,10 @@ type Revision interface {
 	types.RevisionLister
 }
 
-// TreeAt is Tree for the files the checkout at root holds at rev, read
+// treeAt is Tree for the files the checkout at root holds at rev, read
 // through vc; the working tree is never read. root is the repository's
 // root. It fails with ErrNotCarried when rev holds no api.lock.
-func TreeAt(ctx context.Context, vc Revision, root, rev string) (string, error) {
+func treeAt(ctx context.Context, vc Revision, root, rev string) (string, error) {
 	lock, err := readLockAt(ctx, vc, root, rev)
 	if err != nil {
 		return "", err
@@ -205,7 +205,7 @@ func Check(root string) (Skew, error) {
 // is judged by its authority's revision (ADR 0045), so neither the root
 // moving nor the worker's own edits read as skew.
 func CheckAt(ctx context.Context, vc Revision, root, rev string) (Skew, error) {
-	return skew(Skew{Root: root, Revision: rev}, func() (string, error) { return TreeAt(ctx, vc, root, rev) })
+	return skew(Skew{Root: root, Revision: rev}, func() (string, error) { return treeAt(ctx, vc, root, rev) })
 }
 
 // skew fills s with this binary's digest and the one tree computes.

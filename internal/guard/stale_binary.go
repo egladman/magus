@@ -90,24 +90,27 @@ func judgedContract(ctx context.Context, at location, lease, root string) (contr
 	return authorityContract(ctx, root, row.Authority)
 }
 
-// authorityTrees holds each revision's contract digest by root and
-// revision. A revision's files never change, so a later or concurrent
+// authorityTrees holds each revision's contract digest, a string, by
+// authorityKey. A revision's files never change, so a later or concurrent
 // judgment reuses it. A failed read is never kept.
 var authorityTrees sync.Map
 
+type authorityKey struct{ root, rev string }
+
 // authorityContract is the binary's contract against root at rev.
 func authorityContract(ctx context.Context, root, rev string) (contract.Skew, error) {
-	key := root + "\x00" + rev
-	if tree, ok := authorityTrees.Load(key); ok {
-		return contract.Skew{Binary: contract.Binary(), Tree: tree.(string), Root: root, Revision: rev}, nil
+	key := authorityKey{root: root, rev: rev}
+	if kept, ok := authorityTrees.Load(key); ok {
+		if tree, ok := kept.(string); ok {
+			return contract.Skew{Binary: contract.Binary(), Tree: tree, Root: root, Revision: rev}, nil
+		}
 	}
 	vc, err := openRevision(ctx, root, rev)
 	if err != nil {
 		return contract.Skew{}, err
 	}
-	defer vc.close()
 	skew, err := contract.CheckAt(ctx, vc, root, rev)
-	if err != nil {
+	if err = errors.Join(err, vc.close()); err != nil {
 		return contract.Skew{}, fmt.Errorf("the authority %.12s is unreadable: %w", rev, err)
 	}
 	authorityTrees.Store(key, skew.Tree)
@@ -130,10 +133,11 @@ func (r revisionTree) ReadFileAt(ctx context.Context, root, rev, path string) (s
 	return r.RevisionFileReader.ReadFileAt(ctx, root, rev, path)
 }
 
-func (r revisionTree) close() {
-	if r.batch != nil {
-		_ = r.batch.Close()
+func (r revisionTree) close() error {
+	if r.batch == nil {
+		return nil
 	}
+	return r.batch.Close()
 }
 
 // openRevision is root's version control read at rev. A driver that
