@@ -322,31 +322,38 @@ func (s *Session) HasModuleDecls(importPath string) bool {
 // SetModuleDecls instead would collect it at the import point, which for an import
 // partway down a chain outranks types the chain already declared.
 func (s *Session) DeclareModuleTypes(boundName, src string) {
-	// A host's declaration source is static text a person wrote, so a parse error is a
-	// bug in the host and must not read as an empty declaration: an import's callers
-	// ignore the parse error because the Exec that follows re-parses the source, and
-	// nothing re-parses this.
+	if err := s.declareHostTypes(boundName, src, true); err != nil {
+		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): %v", boundName, err))
+	}
+}
+
+// declareHostTypes collects src's types under boundName, and bare as well
+// when bare is set. Nothing re-parses a host's source, so a parse error is
+// an error, never an empty declaration.
+func (s *Session) declareHostTypes(boundName, src string, bare bool) error {
 	s.syncHostTypes()
 	prog, err := s.parse(src)
 	if err != nil {
-		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): declarations do not parse: %v", boundName, err))
+		return fmt.Errorf("declarations do not parse: %w", err)
 	}
 	if err := s.collectDeclImports(boundName, "", prog); err != nil {
-		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): %v", boundName, err))
+		return err
 	}
-	s.collectProgram(boundName, prog)
+	s.collectDecls(boundName, prog, bare)
 	if err := s.checkDeclTypeNames(boundName, boundName, prog); err != nil {
-		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): %v", boundName, err))
+		return err
 	}
-	*s.hostTypes = append(*s.hostTypes, hostTypeDecl{boundName: boundName, prog: prog})
+	*s.hostTypes = append(*s.hostTypes, hostTypeDecl{boundName: boundName, prog: prog, bare: bare})
 	s.hostTypesSeen = len(*s.hostTypes)
+	return nil
 }
 
-// hostTypeDecl is one DeclareModuleTypes call, parsed once for every session
-// that shares it.
+// hostTypeDecl is one host declaration, parsed once for every session that
+// shares it. bare is false for DeclareNamespaceTypes.
 type hostTypeDecl struct {
 	boundName string
 	prog      *ast.Program
+	bare      bool
 }
 
 // syncHostTypes collects the host declarations another session in this tree made
@@ -364,7 +371,7 @@ func (s *Session) syncHostTypes() {
 	for _, d := range unseen {
 		// DeclareModuleTypes already refused a source whose imports fail.
 		_ = s.collectDeclImports(d.boundName, "", d.prog)
-		s.collectProgram(d.boundName, d.prog)
+		s.collectDecls(d.boundName, d.prog, d.bare)
 	}
 	s.importedTypes = append(s.importedTypes, decls...)
 	s.importedModuleFuncs = prependEach(s.importedModuleFuncs, funcs)
