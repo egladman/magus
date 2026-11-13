@@ -172,13 +172,13 @@ worker to dismiss real anomalies{{end}}.
 
 Write paths bound READS too: a worker may read its projects and what they declare
 `depends_on`. When a worker must READ something it must not WRITE, put that path in the
-row's `read_paths` instead of widening `write_paths`{{if .Full}}: one list cannot say
+row's `paths.read` instead of widening `paths.write`{{if .Full}}: one list cannot say
 both, and widening the write paths to open a read is how two workers end up owning
 one file{{else}}. Widening is how two workers end up owning one file{{end}}.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker done writing a
 contested path announces the release at once, then carries on validating. It shrinks
-the job's `write_paths` with another `{{tool "client"}}` (`{{buzz "workspace.putJob"}}`) write, or messages
+the job's `paths.write` with another `{{tool "client"}}` (`{{buzz "workspace.putJob"}}`) write, or messages
 the orchestrator if the host supports it{{if .Full}}. A waiting job
 starts against the released file while the first is still running tests, which
 is most of a worker's lifetime; holding every path to exit serializes agents on
@@ -216,7 +216,7 @@ check it names. `max_attempts` on the record caps the forks; past it a fork is r
 until its record raises the cap.
 
 Advance the row on every state change. `{{cmd "ls jobs"}}` then shows which live jobs
-claim intersecting `write_paths` and how long since each row was touched. A reported
+claim intersecting `paths.write` and how long since each row was touched. A reported
 overlap is a pair you either intended or must repartition.
 
 magus ENDS a live job itself, as `no_return` with an `end_reason`, on every read of the
@@ -311,7 +311,7 @@ A record on stdin declares a `paths` goal and two `symbol` goals:
 magus job fork --stdin <<'EOF'
 {"api_version": "magus.job/v1alpha1", "id": "api-store/migrate", "parent": "api-store", "model": "<model>",
  "criteria": "accounts move to the new store; nothing names the old one",
- "write_paths": ["db/migrations/*.sql", "api/migrate.go"],
+ "paths": {"write": ["db/migrations/*.sql", "api/migrate.go"]},
  "check": {"target": "go-test", "project": "api", "args": ["-run", "TestMigrate"]},
  "goals": [
    {"id": "migration", "kind": "paths", "expect": "changed", "paths": ["db/migrations/*.sql"]},

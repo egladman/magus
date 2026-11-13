@@ -34,8 +34,8 @@ project, declared together in one stream:
 
 ```console
 $ magus job apply --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "upgrade/api", "agent": {"instructions": "api runs left-pad 1.3", "worker": {"type": "resumed"}}, "write_paths": ["api/deps.txt"], "check": {"target": "test", "project": "api"}}
-{"api_version": "magus.job/v1alpha1", "id": "upgrade/web", "agent": {"instructions": "web runs left-pad 1.3", "worker": {"type": "resumed"}}, "write_paths": ["web/deps.txt"], "check": {"target": "test", "project": "web"}}
+{"api_version": "magus.job/v1alpha1", "id": "upgrade/api", "agent": {"instructions": "api runs left-pad 1.3", "worker": {"type": "resumed"}}, "paths": {"write": ["api/deps.txt"]}, "check": {"target": "test", "project": "api"}}
+{"api_version": "magus.job/v1alpha1", "id": "upgrade/web", "agent": {"instructions": "web runs left-pad 1.3", "worker": {"type": "resumed"}}, "paths": {"write": ["web/deps.txt"]}, "check": {"target": "test", "project": "web"}}
 EOF
 created upgrade/api, declared, with 1 write path(s)
 model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
@@ -116,7 +116,7 @@ $ magus job fork fr/upgrading --instructions 'upgrading section in French' --wri
 note: judging fr/upgrading's goals; a goal naming a symbol loads the symbol graph
 note: judged fr/upgrading's goals in 0ms
 [error] 1 problem:
-  1. [MGS3032] write_paths[0]: fr/upgrading declares "docs/fr/install.md", and fr/install (running, updated 0s ago) already holds "docs/fr/install.md". Both are live and neither is the other's parent, child, or depends_on partner, so docs/fr/install.md has one owner unless the rows say otherwise. fr/install has touched none yet in it so far. fr/install has changed nothing under docs/fr/install.md
+  1. [MGS3032] paths.write[0]: fr/upgrading declares "docs/fr/install.md", and fr/install (running, updated 0s ago) already holds "docs/fr/install.md". Both are live and neither is the other's parent, child, or depends_on partner, so docs/fr/install.md has one owner unless the rows say otherwise. fr/install has touched none yet in it so far. fr/install has changed nothing under docs/fr/install.md
      fix: Claim `docs/fr/install.md#<declaration>` on both rows, add `--depends-on fr/install` to fr/upgrading, or fold fr/upgrading into fr/install; or the root narrows fr/install to what it has changed with `magus job apply fr/install --release-write-path docs/fr/install.md`, which keeps its goals. Not granted: fr/upgrading wants docs/fr/install.md whole; a fork claiming only declarations fr/install has not touched is granted them
 not checked:
   the symbol, claim, test, check and workspace checks and the write proof: not run, since this fork already contends with a live job; fork again once it does not
@@ -130,11 +130,11 @@ page by heading, which narrows Ana's job and declares Ben's in one stream:
 
 ```console
 $ magus job apply --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "fr/install", "agent": {"instructions": "install page in French", "worker": {"type": "resumed"}}, "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
-{"api_version": "magus.job/v1alpha1", "id": "fr/upgrading", "agent": {"instructions": "upgrading section in French", "worker": {"type": "resumed"}}, "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "fr/install", "agent": {"instructions": "install page in French", "worker": {"type": "resumed"}}, "paths": {"write": ["docs/fr/install.md#Installer"]}, "check": {"target": "lint", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "fr/upgrading", "agent": {"instructions": "upgrading section in French", "worker": {"type": "resumed"}}, "paths": {"write": ["docs/fr/install.md#Mettre à jour"]}, "check": {"target": "lint", "project": "."}}
 EOF
 updated fr/install, still running:
-  write_paths +docs/fr/install.md#Installer -docs/fr/install.md
+  paths.write +docs/fr/install.md#Installer -docs/fr/install.md
 created fr/upgrading, declared, with 1 write path(s)
 model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 ```
@@ -172,8 +172,8 @@ needs no target: `paths` goals read the diff and the tree.
 
 ```console
 $ magus job apply --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "release-1.3/changelog", "agent": {"instructions": "CHANGELOG.md has a 1.3 section", "worker": {"type": "resumed"}}, "write_paths": ["CHANGELOG.md"], "goals": [{"id": "changelog", "kind": "paths", "expect": "changed", "paths": ["CHANGELOG.md"]}]}
-{"api_version": "magus.job/v1alpha1", "id": "release-1.3/notes", "agent": {"instructions": "release notes exist for 1.3", "worker": {"type": "resumed"}}, "write_paths": ["notes/1.3.md"], "goals": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
+{"api_version": "magus.job/v1alpha1", "id": "release-1.3/changelog", "agent": {"instructions": "CHANGELOG.md has a 1.3 section", "worker": {"type": "resumed"}}, "paths": {"write": ["CHANGELOG.md"]}, "goals": [{"id": "changelog", "kind": "paths", "expect": "changed", "paths": ["CHANGELOG.md"]}]}
+{"api_version": "magus.job/v1alpha1", "id": "release-1.3/notes", "agent": {"instructions": "release notes exist for 1.3", "worker": {"type": "resumed"}}, "paths": {"write": ["notes/1.3.md"]}, "goals": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
 EOF
 created release-1.3/changelog, declared, with 1 write path(s)
 model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers

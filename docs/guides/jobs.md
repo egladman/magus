@@ -370,11 +370,11 @@ record is the whole spec, so it repeats what stays:
 $ magus job apply --stdin <<'EOF'
 {"api_version": "magus.job/v1alpha1", "id": "cents",
  "agent": {"instructions": "prices are integers of cents", "worker": {"type": "resumed"}},
- "write_paths": ["pricing/total.sh"],
+ "paths": {"write": ["pricing/total.sh"]},
  "check": {"target": "test", "project": "."}}
 EOF
 updated cents, still running:
-  write_paths -pricing/format.sh
+  paths.write -pricing/format.sh
 ```
 
 `magus job fork --schema` prints every field a record takes, and `--dry-run` prints
@@ -580,7 +580,7 @@ refuses the glob under MGS3043 and says the breadth was not judged, rather than
 passing it. A glob that begins with `**` is refused whatever it matches.
 
 The fix for an MGS3043 problem gives the narrowest write paths the job's symbol goals
-and criteria name, as a ready `write_paths` array, then the deviation that keeps the glob.
+and criteria name, as a ready `paths.write` array, then the deviation that keeps the glob.
 When the knowledge graph cannot answer the symbol goals, the fix says so; `magus graph
 build` and a fork again give a fuller list. MGS3042 reads `jobs.max_depth` and
 `jobs.max_live` the same way, and a zero limit is unlimited.
@@ -610,8 +610,8 @@ store, so the plan is committed beside the code:
 <!-- golden: job_people_ci.txtar shop/ci/jobs.jsonl -->
 
 ```json
-{"api_version": "magus.job/v1alpha1", "id": "release/pricing", "agent": {"instructions": "totals are computed in cents", "worker": {"type": "resumed"}}, "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
-{"api_version": "magus.job/v1alpha1", "id": "release/tax", "agent": {"instructions": "tax rounds half up", "worker": {"type": "resumed"}}, "write_paths": ["checkout/tax.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/pricing", "agent": {"instructions": "totals are computed in cents", "worker": {"type": "resumed"}}, "paths": {"write": ["pricing/total.sh"]}, "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/tax", "agent": {"instructions": "tax rounds half up", "worker": {"type": "resumed"}}, "paths": {"write": ["checkout/tax.sh"]}, "check": {"target": "test", "project": "."}}
 ```
 
 with the evidence the CI step fills in once it knows the run's ref:

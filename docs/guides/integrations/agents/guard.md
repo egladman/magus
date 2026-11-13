@@ -190,7 +190,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   the locks. An agent that edits any of it rewrites the evidence it is graded by,
   and no later verdict says so, which is why this one is not scoped to a boundary:
   what it protects is whether a boundary was checked at all. It ranks above the
-  lease rules, so a worker whose `write_paths` happen to cover the directory
+  lease rules, so a worker whose `paths.write` happen to cover the directory
   reads what the directory IS rather than a verdict about whose it is. The
   file-write rules catch an editor tool's write; the shell-command rules catch a
   redirect (`>`, `>>`, `tee`) and the coreutils that take a path as an operand
@@ -625,7 +625,7 @@ projects that depend on it: `magus affected` runs that direction, from a change
 outward to what it could break, and focus runs the other one, from where you
 stand back to what you legitimately need.
 
-It is the read half of a boundary whose write half is a job's `write_paths`,
+It is the read half of a boundary whose write half is a job's `paths.write`,
 and the two catch different failures. A write outside your write paths collides with
 another agent, and the diff eventually shows it. A read outside it collides with
 nothing and leaves no trace: it spends tokens on a tree nobody asked about, and
@@ -642,8 +642,8 @@ owns has no boundary it could be outside of.
 
 It ADVISES by default and DENIES only under a lease this checkout holds
 (`magus job exec <id>`), because a hard read boundary needs somebody to have
-declared one. The job's `read_paths` names the paths whose projects it may read; it
-falls back to `write_paths`, since a worker leased to edit a project was pointed
+declared one. The job's `paths.read` names the paths whose projects it may read; it
+falls back to `paths.write`, since a worker leased to edit a project was pointed
 at that project. Widening is that field and nothing else. There is no
 environment variable that turns the rule off, because a variable would be set
 once, in a wrapper, by the first worker it inconvenienced, and nothing afterwards
