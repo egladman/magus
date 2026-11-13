@@ -1210,22 +1210,38 @@ func (e evidenceFlag) Set(value string) error {
 	return nil
 }
 
-// bindForkSpec binds `job fork`'s flags with the command tree's binder. The
-// list flags it leaves to the command land on d, the record --stdin decodes.
-func bindForkSpec(fs *flag.FlagSet, d *types.Declaration) *flaggen.JobForkFlags {
-	f := flaggen.BindJobFork(fs)
-	fs.Var((*listFlag)(&d.Paths.Write), "write-paths", "A path this job may write, or `<file>#<declaration>` to claim one declaration of a file (a path holding a literal # is spelled `./a#b.md` or `a\\#b.md`); repeatable or comma-separated")
-	fs.Var((*listFlag)(&d.Paths.Deny), "deny-paths", "A path this job may not write, carved out of its write paths; repeatable or comma-separated")
-	fs.Var((*listFlag)(&d.Paths.Read), "read-paths", "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)")
-	fs.Var((*listFlag)(&d.DependsOn), "depends-on", "A job this one waits on; repeatable or comma-separated")
-	return f
+// listValues splits each value of the list flag name as [listFlag.Set] does.
+func listValues(command, name string, values []string) ([]string, error) {
+	var l listFlag
+	for _, v := range values {
+		if err := l.Set(v); err != nil {
+			return nil, exit.Usagef("%s: --%s %q: %s", command, name, v, err)
+		}
+	}
+	return l, nil
 }
 
-// flagDeclaration is the record for id from what bindForkSpec bound.
+// flagDeclaration is the record for id from the bound `job fork` flags.
 // An unparsable check is carried through so Validate names the rule,
 // rather than the row going silently checkless. An agent flag writes the
 // agent section, and models reads the --model word.
-func flagDeclaration(d types.Declaration, id string, f flaggen.JobForkFlags, models func(string) typesagent.Model) types.Declaration {
+func flagDeclaration(id string, f flaggen.JobForkFlags, models func(string) typesagent.Model) (types.Declaration, error) {
+	var d types.Declaration
+	for _, l := range []struct {
+		name string
+		from []string
+		to   *[]string
+	}{
+		{flaggen.FlagJobForkWritePaths, f.WritePaths, &d.Paths.Write},
+		{flaggen.FlagJobForkDenyPaths, f.DenyPaths, &d.Paths.Deny},
+		{flaggen.FlagJobForkReadPaths, f.ReadPaths, &d.Paths.Read},
+		{flaggen.FlagJobForkDependsOn, f.DependsOn, &d.DependsOn},
+	} {
+		var err error
+		if *l.to, err = listValues("magus job fork", l.name, l.from); err != nil {
+			return types.Declaration{}, err
+		}
+	}
 	d.Schema = types.Schema{Version: types.JobAPIVersion}
 	d.ID = id
 	d.Parent, d.Checkpoint, d.Checkout = f.Parent, f.Checkpoint, f.Checkout
@@ -1243,14 +1259,14 @@ func flagDeclaration(d types.Declaration, id string, f flaggen.JobForkFlags, mod
 		}
 	}
 	if strings.TrimSpace(f.Check) == "" {
-		return d
+		return d, nil
 	}
 	parsed, err := types.ParseLeaseCheck(f.Check)
 	if err != nil {
 		parsed = types.LeaseCheck{Target: f.Check}
 	}
 	d.Check = &parsed
-	return d
+	return d, nil
 }
 
 // jobFork declares one job, from flags or from a JSON record on stdin.
@@ -1266,8 +1282,8 @@ func flagDeclaration(d types.Declaration, id string, f flaggen.JobForkFlags, mod
 // live job must not erase the rest.
 func jobFork(ctx context.Context, root string, args []string) error {
 	var (
-		row, declared types.Declaration
-		spec          *flaggen.JobForkFlags
+		row  types.Declaration
+		spec *flaggen.JobForkFlags
 		// fromFlags is a fork whose record the flags declare, built once the
 		// store can read the --model word.
 		fromFlags bool
@@ -1277,7 +1293,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	)
 	pos, err := commandParse("job fork", args, func(fs *flag.FlagSet) {
 		flags = fs
-		spec = bindForkSpec(fs, &declared)
+		spec = flaggen.BindJobFork(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job fork <job> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus job fork --stdin < job.json")
@@ -1402,7 +1418,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	jobWS := jobWorkspace(ctx, root)
 	store = store.InWorkspace(jobWS).WithGrader(newForkGrader(forkHeldWorkspace(ctx, root, jobWS)).grade)
 	if fromFlags {
-		row = flagDeclaration(declared, pos[0], *spec, store.ModelRequest)
+		if row, err = flagDeclaration(pos[0], *spec, store.ModelRequest); err != nil {
+			return err
+		}
 		if err := row.Validate(); err != nil {
 			return exit.Usagef("magus job fork: %s", err)
 		}

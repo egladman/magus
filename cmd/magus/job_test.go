@@ -436,9 +436,8 @@ func TestChainToGateTerminatesOnACycle(t *testing.T) {
 func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	t.Parallel()
 
-	var bound types.Declaration
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
-	spec := bindForkSpec(flags, &bound)
+	spec := flaggen.BindJobFork(flags)
 	require.NoError(t, flags.Parse([]string{
 		"--instructions", "the store is the enforcement point",
 		"--parent", "adjacency",
@@ -467,7 +466,8 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	}`))
 	require.NoError(t, err)
 
-	fromFlags := flagDeclaration(bound, "adj/store", *spec, tierWords("design"))
+	fromFlags, err := flagDeclaration("adj/store", *spec, tierWords("design"))
+	require.NoError(t, err)
 	require.NoError(t, fromFlags.Validate())
 
 	var a, b types.Job
@@ -480,7 +480,9 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 // A brief format is one of the two, refused at fork rather than read as markdown later.
 func TestForkRefusesAnUnknownBriefFormat(t *testing.T) {
 	t.Parallel()
-	err := flagDeclaration(types.Declaration{}, "adj/store", flaggen.JobForkFlags{Instructions: "c", BriefFormat: "json"}, tierWords()).Validate()
+	d, err := flagDeclaration("adj/store", flaggen.JobForkFlags{Instructions: "c", BriefFormat: "json"}, tierWords())
+	require.NoError(t, err)
+	err = d.Validate()
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `brief_format "json"`)
 }
@@ -507,11 +509,11 @@ func TestForkAgentFlags(t *testing.T) {
 }
 
 func (s *forkAgentFlagsSuite) fork(args ...string) types.Declaration {
-	var bound types.Declaration
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
-	spec := bindForkSpec(flags, &bound)
+	spec := flaggen.BindJobFork(flags)
 	s.Require().NoError(flags.Parse(args))
-	d := flagDeclaration(bound, "adj/store", *spec, tierWords("design"))
+	d, err := flagDeclaration("adj/store", *spec, tierWords("design"))
+	s.Require().NoError(err)
 	s.Require().NoError(d.Validate())
 	return d
 }
@@ -542,6 +544,35 @@ func (s *forkAgentFlagsSuite) TestNewWorkerStartsANewWorkerForItsReason() {
 	s.Equal(&typesagent.Spec{
 		Worker: typesagent.Worker{Type: typesagent.WorkerTypeNew, Reason: "the warm one read the old limiter"},
 	}, s.fork("--read-only", "--new-worker", "the warm one read the old limiter").Agent)
+}
+
+// forkListFlagsSuite pins how the list flags of `job fork` reach the record.
+type forkListFlagsSuite struct {
+	suite.Suite
+}
+
+func TestForkListFlags(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(forkListFlagsSuite))
+}
+
+func (s *forkListFlagsSuite) declare(args ...string) (types.Declaration, error) {
+	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
+	spec := flaggen.BindJobFork(flags)
+	s.Require().NoError(flags.Parse(args))
+	return flagDeclaration("adj/store", *spec, tierWords())
+}
+
+func (s *forkListFlagsSuite) TestRepeatsAndCommasReachThePaths() {
+	d, err := s.declare("--write-paths", "a.go,b.go", "--write-paths", "c.go", "--depends-on", "adj/guard")
+	s.Require().NoError(err)
+	s.Equal([]string{"a.go", "b.go", "c.go"}, d.Paths.Write)
+	s.Equal([]string{"adj/guard"}, d.DependsOn)
+}
+
+func (s *forkListFlagsSuite) TestATrailingCommaIsRefused() {
+	_, err := s.declare("--deny-paths", "MAGUS.md,")
+	s.ErrorContains(err, "--deny-paths")
 }
 
 // A path flag takes both spellings, and refuses the empty segment a trailing comma
@@ -2455,11 +2486,11 @@ type forkDeliverySuite struct {
 func TestForkDelivery(t *testing.T) { suite.Run(t, new(forkDeliverySuite)) }
 
 func (s *forkDeliverySuite) TestTheFlagReachesTheRecord() {
-	var bound types.Declaration
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
-	spec := bindForkSpec(flags, &bound)
+	spec := flaggen.BindJobFork(flags)
 	s.Require().NoError(flags.Parse([]string{"--instructions", "c", "--delivery", types.DeliveryFold}))
-	row := flagDeclaration(bound, "adj/store", *spec, tierWords())
+	row, err := flagDeclaration("adj/store", *spec, tierWords())
+	s.Require().NoError(err)
 	s.Require().NoError(row.Validate())
 	s.Equal(types.DeliveryFold, row.Delivery)
 }
