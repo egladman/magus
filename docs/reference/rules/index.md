@@ -110,7 +110,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [symbol-search](symbol-search.md)                         | a text search of the tree for a symbol, a declaration or a diagnostic code the graph answers        |
 | [throwaway-copy](throwaway-copy.md)                       | a run inside a temp or scratchpad copy, which leaves the real tree unverified                       |
 | [token-state](token-state.md)                             | an agent reading or writing the token secrets: the operator token file or the token store           |
-| [unjudged-step](unjudged-step.md)                         | a step no row declares: a tool call whose input no rule reads, or a step of an undeclared kind      |
+| [unjudged-step](unjudged-step.md)                         | a step nothing declares: a tool call whose input no rule reads, or a step of an undeclared kind     |
 | [unknown-env](unknown-env.md)                             | a retired or misspelled MAGUS_* variable handed to a command                                        |
 | [unknown-magus-argv](unknown-magus-argv.md)               | a magus command or flag the judging binary's command tree does not have                             |
 | [unread-command](unread-command.md)                       | a program or VCS subcommand the shell computes before it runs, which no rule can read               |
