@@ -134,214 +134,6 @@ type storeConfig struct {
 	migrations []migrate.Migration
 }
 
-// jobMigrations take a jobs.jsonl from each migration to the next, in order; see
-// [Store.migrate]. A migration rewrites stored rows once, so a change to a stored member's
-// name lands here and no reader keeps the old name.
-var jobMigrations = []migrate.Migration{
-	{Name: "model, criteria and fresh_reason move under agent", Up: agentSection},
-	{Name: "worker type resume becomes resumed", Up: workerResumed},
-	{Name: triesMoved, Up: dropTries},
-	{Name: "model tiers economy, standard and principal become routine, bounded and design", Up: fourModelTiers},
-	{Name: recordsEnveloped, Up: envelopeRow, Header: envelopeHeader},
-}
-
-// recordsEnveloped names the migration [Store.migrate] rewrites
-// attempts.jsonl before, with [Store.envelopeAttempts].
-const recordsEnveloped = "rows and attempts take the batch.magus/v1alpha1 envelope; holder goes"
-
-// headerEntry reports the header line, the one that is neither a row
-// before [recordsEnveloped] nor one after.
-func headerEntry(e migrate.Entry) bool {
-	_, id := e["id"]
-	_, spec := e["spec"]
-	return !id && !spec
-}
-
-// envelopeRow rewrites a flat row as its [jobRecord]. A server's row is
-// told by its registration once holder goes. A member types.Job does not
-// declare is kept on the record as it was.
-func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
-	text, err := json.Marshal(e)
-	if err != nil {
-		return nil, err
-	}
-	var row types.Job
-	var flat struct {
-		Holder     string           `json:"holder"`
-		APIVersion types.APIVersion `json:"api_version"`
-	}
-	if err := json.Unmarshal(text, &row); err != nil {
-		return nil, fmt.Errorf("reading the row: %w", err)
-	}
-	if err := json.Unmarshal(text, &flat); err != nil {
-		return nil, fmt.Errorf("reading holder: %w", err)
-	}
-	if _, old := e["schema_version"]; old || (flat.APIVersion != "" && flat.APIVersion.Compare(types.JobAPIVersion) < 0) {
-		return nil, types.RefuseVersion(types.JobAPIVersion, flat.APIVersion, "job: row "+row.ID, staleStoreFix)
-	}
-	holder := flat
-	if holder.Holder == "server" {
-		row.RegisteredBy.EntryPoint = types.EntryPointServer
-	}
-	r := recordJob(row, nil)
-	declared := jsonNames(reflect.TypeFor[types.Job]())
-	for k, v := range e {
-		if !declared[k] && k != "holder" && k != "api_version" {
-			if r.Unknown == nil {
-				r.Unknown = map[string]json.RawMessage{}
-			}
-			r.Unknown[k] = v
-		}
-	}
-	return remarshal(r)
-}
-
-// envelopeHeader rewrites the flat header as the JobList line, its
-// requires list as the requires annotation.
-func envelopeHeader(e migrate.Entry) (migrate.Entry, error) {
-	var requires []string
-	if raw, ok := e["requires"]; ok {
-		if err := json.Unmarshal(raw, &requires); err != nil {
-			return nil, fmt.Errorf("reading requires: %w", err)
-		}
-	}
-	features := make([]apiversion.Feature, len(requires))
-	for i, r := range requires {
-		features[i] = apiversion.Feature(r)
-	}
-	delete(e, "api_version")
-	delete(e, "requires")
-	next, err := remarshal(jobsFile{TypeMeta: jobListType, Metadata: apiversion.Metadata{}.WithRequires(recordGroup, features)})
-	if err != nil {
-		return nil, err
-	}
-	for k, v := range e {
-		next[k] = v
-	}
-	return next, nil
-}
-
-// remarshal is v as an entry.
-func remarshal(v any) (migrate.Entry, error) {
-	text, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	var e migrate.Entry
-	if err := json.Unmarshal(text, &e); err != nil {
-		return nil, err
-	}
-	return e, nil
-}
-
-// jsonNames are the member names t's fields declare.
-func jsonNames(t reflect.Type) map[string]bool {
-	out := map[string]bool{}
-	for i := range t.NumField() {
-		f := t.Field(i)
-		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
-		switch {
-		case name == "-":
-		case name != "":
-			out[name] = true
-		case f.Anonymous:
-			for k := range jsonNames(f.Type) {
-				out[k] = true
-			}
-		default:
-			out[f.Name] = true
-		}
-	}
-	return out
-}
-
-// workerResumed respells a stored worker type "resume" as "resumed", the
-// value Go and the Buzz enum now share.
-func workerResumed(e migrate.Entry) (migrate.Entry, error) {
-	raw, ok := e["agent"]
-	if !ok {
-		return e, nil
-	}
-	var section map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &section); err != nil {
-		return nil, fmt.Errorf("reading the agent section: %w", err)
-	}
-	var worker map[string]json.RawMessage
-	if body, ok := section["worker"]; ok {
-		if err := json.Unmarshal(body, &worker); err != nil {
-			return nil, fmt.Errorf("reading agent.worker: %w", err)
-		}
-	}
-	var typ string
-	if body, ok := worker["type"]; ok {
-		if err := json.Unmarshal(body, &typ); err != nil {
-			return nil, fmt.Errorf("reading agent.worker.type: %w", err)
-		}
-	}
-	if typ != "resume" {
-		return e, nil
-	}
-	var err error
-	if worker["type"], err = json.Marshal(agent.WorkerTypeResumed); err == nil {
-		if section["worker"], err = json.Marshal(worker); err == nil {
-			e["agent"], err = json.Marshal(section)
-		}
-	}
-	if err != nil {
-		return nil, fmt.Errorf("writing agent.worker.type: %w", err)
-	}
-	return e, nil
-}
-
-// agentSection moves a row's flat agent members under agent. A model the
-// stored tier resolved as a tier name becomes the requested tier, and any
-// other model an id. A server's row takes no section: it ran no agent.
-func agentSection(e migrate.Entry) (migrate.Entry, error) {
-	var old struct {
-		Criteria    string `json:"criteria"`
-		Model       string `json:"model"`
-		FreshReason string `json:"fresh_reason"`
-		Holder      string `json:"holder"`
-		ModelTier   *struct {
-			Source string `json:"source"`
-			Model  string `json:"model"`
-		} `json:"model_tier"`
-	}
-	flat := map[string]json.RawMessage{}
-	for _, key := range []string{"criteria", "model", "fresh_reason", "holder", "model_tier"} {
-		if v, ok := e[key]; ok {
-			flat[key] = v
-		}
-	}
-	body, err := json.Marshal(flat)
-	if err == nil {
-		err = json.Unmarshal(body, &old)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("reading the flat agent members: %w", err)
-	}
-	delete(e, "criteria")
-	delete(e, "model")
-	delete(e, "fresh_reason")
-	if old.Criteria == "" && old.Model == "" && old.FreshReason == "" || old.Holder == "server" {
-		return e, nil
-	}
-	spec := agent.Spec{Instructions: old.Criteria, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}
-	switch {
-	case old.Model == "":
-	case old.ModelTier != nil && old.ModelTier.Source == string(agent.ModelTierSourceRow) && old.ModelTier.Model == "":
-		spec.Model.Tier = old.Model
-	default:
-		spec.Model.ID = old.Model
-	}
-	if old.FreshReason != "" {
-		spec.Worker = agent.Worker{Type: agent.WorkerTypeNew, Reason: old.FreshReason}
-	}
-	if e["agent"], err = json.Marshal(spec); err != nil {
-		return nil, fmt.Errorf("writing the agent section: %w", err)
-	}
-	return e, nil
-}
 
 // Location is where a Store lives: the repository whose rows these are, the state base
 // that places the file, and the checkout's cache directory.
@@ -547,644 +339,6 @@ var (
 	attemptType = apiversion.TypeMeta{APIVersion: RecordAPIVersion, Kind: "Attempt"}
 )
 
-// jobRecord is one row of jobs.jsonl, the persistence type of
-// [types.Job] (ADR 0030). [recordJob] and [jobRecord.job] are the one
-// conversion. Unknown, here and on spec and status, is what a newer
-// magus wrote, carried back out unchanged.
-type jobRecord struct {
-	apiversion.TypeMeta
-	Metadata apiversion.Metadata        `json:"metadata"`
-	Spec     jobSpec                    `json:"spec"`
-	Status   jobStatus                  `json:"status"`
-	Unknown  map[string]json.RawMessage `json:",unknown"`
-}
-
-// jobSpec is what a declaration writes.
-type jobSpec struct {
-	Parent       string                     `json:"parent,omitempty"`
-	Agent        *agentRecord               `json:"agent,omitempty"`
-	Checkpoint   string                     `json:"checkpoint,omitempty"`
-	WritePaths   []string                   `json:"writePaths,omitempty"`
-	DenyPaths    []string                   `json:"denyPaths,omitempty"`
-	SoftPaths    []string                   `json:"softPaths,omitempty"`
-	ReadPaths    []string                   `json:"readPaths,omitempty"`
-	DependsOn    []string                   `json:"dependsOn,omitempty"`
-	Integrates   []string                   `json:"integrates,omitempty"`
-	Breaks       []string                   `json:"breaks,omitempty"`
-	BriefFormat  string                     `json:"briefFormat,omitempty"`
-	Delivery     string                     `json:"delivery,omitempty"`
-	ParentHead   string                     `json:"parentHead,omitempty"`
-	Follows      string                     `json:"follows,omitempty"`
-	MaxAttempts  int                        `json:"maxAttempts,omitzero"`
-	MaxClaims    int                        `json:"maxClaims,omitzero"`
-	Deferred     []types.JobDeferred        `json:"deferred,omitempty"`
-	LeftUnmerged string                     `json:"leftUnmerged,omitempty"`
-	Weight       float64                    `json:"weight,omitzero"`
-	Check        *leaseCheckRecord          `json:"check,omitempty"`
-	Validation   string                     `json:"validation,omitempty"`
-	Goals        []goalRecord               `json:"goals,omitempty"`
-	ReadOnly     bool                       `json:"readOnly,omitzero"`
-	Deviations   []types.Deviation          `json:"deviations,omitempty"`
-	Unknown      map[string]json.RawMessage `json:",unknown"`
-}
-
-// jobStatus is what the store computes. Its conditions are the row's
-// lifecycle; see [lifecycleConditions].
-type jobStatus struct {
-	Conditions      []apiversion.Condition       `json:"conditions,omitempty"`
-	ModelTier       *modelTierRecord             `json:"modelTier,omitempty"`
-	ReworkRounds    int                          `json:"reworkRounds,omitzero"`
-	Widenings       int                          `json:"widenings,omitzero"`
-	Claims          []claimRecord                `json:"claims,omitempty"`
-	Landed          bool                         `json:"landed,omitzero"`
-	Paused          int64                        `json:"paused,omitzero"`
-	PausedBy        originRecord                 `json:"pausedBy,omitzero"`
-	PauseReason     string                       `json:"pauseReason,omitempty"`
-	PausedUntil     int64                        `json:"pausedUntil,omitzero"`
-	Rejection       *rejectionRecord             `json:"rejection,omitempty"`
-	Releases        []releaseRecord              `json:"releases,omitempty"`
-	Unattributed    []types.JobUnattributedWrite `json:"unattributed,omitempty"`
-	Entries         []entryRecord                `json:"entries,omitempty"`
-	ReleaseRequests []types.JobReleaseRequest    `json:"releaseRequests,omitempty"`
-	WriteProof      string                       `json:"writeProof,omitempty"`
-	Validated       int64                        `json:"validated,omitzero"`
-	ReportedBase    string                       `json:"reportedBase,omitempty"`
-	BaseVerdict     string                       `json:"baseVerdict,omitempty"`
-	RegisteredBy    originRecord                 `json:"registeredBy,omitzero"`
-	Authority       string                       `json:"authority,omitempty"`
-	Registered      int64                        `json:"registered,omitzero"`
-	HolderStopped   int64                        `json:"holderStopped,omitzero"`
-	CheckoutRoot    string                       `json:"checkoutRoot,omitempty"`
-	Worktree        *worktreeRecord              `json:"worktree,omitempty"`
-	EndReason       string                       `json:"endReason,omitempty"`
-	Created         int64                        `json:"created"`
-	Updated         int64                        `json:"updated"`
-	Deadline        int64                        `json:"deadline,omitzero"`
-	Attempt         *runAttemptRecord            `json:"attempt,omitempty"`
-	GateAttempts    []gateAttemptRecord          `json:"gateAttempts,omitempty"`
-	LastRun         *runRecord                   `json:"lastRun,omitempty"`
-	Integration     *integrationRecord           `json:"integration,omitempty"`
-	WaiterEvidence  *integrationRecord           `json:"waiterEvidence,omitempty"`
-	Unknown         map[string]json.RawMessage   `json:",unknown"`
-}
-
-// recordJob is row as the line jobs.jsonl stores. stored is the row's
-// record as read, nil for a new row: what it carries that row cannot say
-// is kept.
-func recordJob(row types.Job, stored *jobRecord) jobRecord {
-	var prev jobRecord
-	if stored != nil {
-		prev = *stored
-	}
-	features := make([]apiversion.Feature, len(row.Requires))
-	for i, f := range row.Requires {
-		features[i] = apiversion.Feature(f)
-	}
-	meta := prev.Metadata.WithRequires(recordGroup, features)
-	meta.Name, meta.Generation = row.ID, int64(row.Generation)
-	r := jobRecord{TypeMeta: jobType, Metadata: meta, Unknown: prev.Unknown}
-	r.Spec = jobSpec{
-		Parent: row.Parent, Agent: recordAgent(row.Agent), Checkpoint: row.Checkpoint,
-		WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, SoftPaths: row.SoftPaths, ReadPaths: row.ReadPaths,
-		DependsOn: row.DependsOn, Integrates: row.Integrates, Breaks: row.Breaks,
-		BriefFormat: wireBriefFormat.spell(row.BriefFormat), Delivery: row.Delivery, ParentHead: row.ParentHead,
-		Follows: row.Follows, MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims,
-		Deferred: row.Deferred, LeftUnmerged: row.LeftUnmerged, Weight: row.Weight,
-		Validation: row.Validation, ReadOnly: row.ReadOnly, Deviations: row.Deviations,
-		Unknown: prev.Spec.Unknown,
-	}
-	if row.Check != nil {
-		c := leaseCheckRecord(*row.Check)
-		r.Spec.Check = &c
-	}
-	for _, g := range row.Goals {
-		r.Spec.Goals = append(r.Spec.Goals, recordGoal(g))
-	}
-	r.Status = jobStatus{
-		Conditions:   lifecycleConditions(row, prev.Status.Conditions),
-		ModelTier:    recordModelTier(row.ModelTier),
-		ReworkRounds: row.ReworkRounds, Widenings: row.Widenings, Landed: row.Landed,
-		Paused: row.Paused, PausedBy: recordOrigin(row.PausedBy), PauseReason: row.PauseReason, PausedUntil: row.PausedUntil,
-		Rejection:    recordRejection(row.Rejection),
-		Unattributed: row.Unattributed, ReleaseRequests: row.ReleaseRequests,
-		WriteProof: wireWriteProof.spell(row.WriteProof), Validated: row.Validated,
-		ReportedBase: row.ReportedBase, BaseVerdict: wireBaseVerdict.spell(row.BaseVerdict),
-		RegisteredBy: recordOrigin(row.RegisteredBy), Authority: row.Authority, Registered: row.Registered,
-		HolderStopped: row.HolderStopped, CheckoutRoot: row.CheckoutRoot, EndReason: row.EndReason,
-		Created: row.Created, Updated: row.Updated, Deadline: row.Deadline,
-		Integration: recordIntegration(row.Integration), WaiterEvidence: recordIntegration(row.WaiterEvidence),
-		Unknown: prev.Status.Unknown,
-	}
-	for _, c := range row.Claims {
-		r.Status.Claims = append(r.Status.Claims, claimRecord{
-			Path: c.Path, Evidence: claimEvidenceRecord{Kind: wireClaimKind.spell(c.Evidence.Kind), Subject: c.Evidence.Subject},
-			Proof: c.Proof, At: c.At, By: recordOrigin(c.By),
-		})
-	}
-	for _, rel := range row.Releases {
-		r.Status.Releases = append(r.Status.Releases, releaseRecord(rel))
-	}
-	for _, e := range row.Entries {
-		r.Status.Entries = append(r.Status.Entries, entryRecord{Path: e.Path, By: recordOrigin(e.By), At: e.At, Consumed: e.Consumed})
-	}
-	if row.Worktree != nil {
-		w := worktreeRecord(*row.Worktree)
-		r.Status.Worktree = &w
-	}
-	if row.Attempt != nil {
-		a := runAttemptRecord(*row.Attempt)
-		r.Status.Attempt = &a
-	}
-	for _, g := range row.GateAttempts {
-		r.Status.GateAttempts = append(r.Status.GateAttempts, gateAttemptRecord{GateID: g.GateID, Attempt: runAttemptRecord(g.Attempt)})
-	}
-	if row.LastRun != nil {
-		run := runRecord(*row.LastRun)
-		r.Status.LastRun = &run
-	}
-	return r
-}
-
-// job is r as the domain type, refusing a record of another kind or
-// version.
-func (r jobRecord) job() (types.Job, error) {
-	if r.TypeMeta != jobType {
-		return types.Job{}, &apiversion.RefusedError{Want: jobType, Got: r.TypeMeta}
-	}
-	state, err := lifecycleState(r.Status.Conditions)
-	if err != nil {
-		return types.Job{}, fmt.Errorf("job %s: %w", r.Metadata.Name, err)
-	}
-	s, st := r.Spec, r.Status
-	row := types.Job{
-		ID: r.Metadata.Name, Generation: int(r.Metadata.Generation), State: state,
-		Parent: s.Parent, Agent: s.Agent.spec(), Checkpoint: s.Checkpoint,
-		WritePaths: s.WritePaths, DenyPaths: s.DenyPaths, SoftPaths: s.SoftPaths, ReadPaths: s.ReadPaths,
-		DependsOn: s.DependsOn, Integrates: s.Integrates, Breaks: s.Breaks,
-		BriefFormat: wireBriefFormat.read(s.BriefFormat), Delivery: s.Delivery, ParentHead: s.ParentHead,
-		Follows: s.Follows, MaxAttempts: s.MaxAttempts, MaxClaims: s.MaxClaims,
-		Deferred: s.Deferred, LeftUnmerged: s.LeftUnmerged, Weight: s.Weight,
-		Validation: s.Validation, ReadOnly: s.ReadOnly, Deviations: s.Deviations,
-		ModelTier:    st.ModelTier.tier(),
-		ReworkRounds: st.ReworkRounds, Widenings: st.Widenings, Landed: st.Landed,
-		Paused: st.Paused, PausedBy: st.PausedBy.origin(), PauseReason: st.PauseReason, PausedUntil: st.PausedUntil,
-		Rejection:    st.Rejection.rejection(),
-		Unattributed: st.Unattributed, ReleaseRequests: st.ReleaseRequests,
-		WriteProof: wireWriteProof.read(st.WriteProof), Validated: st.Validated,
-		ReportedBase: st.ReportedBase, BaseVerdict: wireBaseVerdict.read(st.BaseVerdict),
-		RegisteredBy: st.RegisteredBy.origin(), Authority: st.Authority, Registered: st.Registered,
-		HolderStopped: st.HolderStopped, CheckoutRoot: st.CheckoutRoot, EndReason: st.EndReason,
-		Created: st.Created, Updated: st.Updated, Deadline: st.Deadline,
-		Integration: st.Integration.integration(), WaiterEvidence: st.WaiterEvidence.integration(),
-	}
-	for _, f := range r.Metadata.Requires(recordGroup) {
-		row.Requires = append(row.Requires, string(f))
-	}
-	row.Unknown = unknownMembers(r.Unknown, s.Unknown, st.Unknown)
-	if s.Check != nil {
-		c := types.LeaseCheck(*s.Check)
-		row.Check = &c
-	}
-	for _, g := range s.Goals {
-		row.Goals = append(row.Goals, g.goal())
-	}
-	for _, c := range st.Claims {
-		row.Claims = append(row.Claims, types.JobClaim{
-			Path: c.Path, Evidence: types.ClaimEvidence{Kind: wireClaimKind.read(c.Evidence.Kind), Subject: c.Evidence.Subject},
-			Proof: c.Proof, At: c.At, By: c.By.origin(),
-		})
-	}
-	for _, rel := range st.Releases {
-		row.Releases = append(row.Releases, types.JobRelease(rel))
-	}
-	for _, e := range st.Entries {
-		row.Entries = append(row.Entries, types.JobEntry{Path: e.Path, By: e.By.origin(), At: e.At, Consumed: e.Consumed})
-	}
-	if st.Worktree != nil {
-		w := types.JobWorktree(*st.Worktree)
-		row.Worktree = &w
-	}
-	if st.Attempt != nil {
-		a := types.JobAttempt(*st.Attempt)
-		row.Attempt = &a
-	}
-	for _, g := range st.GateAttempts {
-		row.GateAttempts = append(row.GateAttempts, types.JobGateAttempt{GateID: g.GateID, Attempt: types.JobAttempt(g.Attempt)})
-	}
-	if st.LastRun != nil {
-		run := types.JobRun(*st.LastRun)
-		row.LastRun = &run
-	}
-	return row, nil
-}
-
-// unknownMembers names the members of top, spec and status, as
-// [types.Job.Unknown] spells them.
-func unknownMembers(top, spec, status map[string]json.RawMessage) []string {
-	if len(top)+len(spec)+len(status) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(top)+len(spec)+len(status))
-	for k := range top {
-		out = append(out, k)
-	}
-	for k := range spec {
-		out = append(out, "spec."+k)
-	}
-	for k := range status {
-		out = append(out, "status."+k)
-	}
-	slices.Sort(out)
-	return out
-}
-
-// lifecycleCondition is the condition a state is stored as, True.
-type lifecycleCondition struct {
-	state        types.JobState
-	kind, reason string
-}
-
-// lifecycle is every state's condition. Failed takes two reasons, as a
-// Kubernetes Job's Failed does.
-var lifecycle = []lifecycleCondition{
-	{types.StateDeclared, "Declared", "Declared"},
-	{types.StateRunning, "Running", "Running"},
-	{types.StateExited, "Exited", "Exited"},
-	{types.StatePass, "Complete", "Passed"},
-	{types.StateFail, "Failed", "CriteriaUnmet"},
-	{types.StateNoReturn, "Failed", "NoReturn"},
-}
-
-// lifecycleConditions are row's conditions: its state's, then every
-// condition of stored no state names, kept as stored. A state's condition
-// keeps its stored transition time; a new one transitioned at Updated.
-func lifecycleConditions(row types.Job, stored []apiversion.Condition) []apiversion.Condition {
-	var out []apiversion.Condition
-	for _, l := range lifecycle {
-		if l.state != row.State {
-			continue
-		}
-		c := apiversion.Condition{
-			Type: l.kind, Status: apiversion.ConditionTrue, ObservedGeneration: int64(row.Generation),
-			LastTransitionTime: time.Unix(row.Updated, 0).UTC(), Reason: l.reason,
-		}
-		for _, s := range stored {
-			if s.Type == c.Type && s.Reason == c.Reason && s.Status == c.Status {
-				c.LastTransitionTime = s.LastTransitionTime
-			}
-		}
-		out = append(out, c)
-	}
-	for _, s := range stored {
-		if !slices.ContainsFunc(lifecycle, func(l lifecycleCondition) bool { return l.kind == s.Type }) {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-// lifecycleState is the state conditions hold True, "" for none. Two
-// is a record no magus writes.
-func lifecycleState(conditions []apiversion.Condition) (types.JobState, error) {
-	var state types.JobState
-	for _, c := range conditions {
-		if c.Status != apiversion.ConditionTrue {
-			continue
-		}
-		for _, l := range lifecycle {
-			if l.kind != c.Type || l.reason != c.Reason {
-				continue
-			}
-			if state != "" {
-				return "", fmt.Errorf("the conditions hold both %s and %s", state, l.state)
-			}
-			state = l.state
-		}
-	}
-	return state, nil
-}
-
-// wireEnum spells an enum's lowercase Go values in CamelCase on a record.
-// A value it does not list passes through both ways unchanged.
-type wireEnum[T ~string] struct {
-	wire map[T]string
-	gov  map[string]T
-}
-
-func newWireEnum[T ~string](values ...T) wireEnum[T] {
-	e := wireEnum[T]{wire: map[T]string{}, gov: map[string]T{}}
-	for _, v := range values {
-		w := camelCase(string(v))
-		e.wire[v], e.gov[w] = w, v
-	}
-	return e
-}
-
-func (e wireEnum[T]) spell(v T) string {
-	if w, ok := e.wire[v]; ok {
-		return w
-	}
-	return string(v)
-}
-
-func (e wireEnum[T]) read(w string) T {
-	if v, ok := e.gov[w]; ok {
-		return v
-	}
-	return T(w)
-}
-
-// camelCase spells words joined by '_' or '-' as one CamelCase word.
-func camelCase(v string) string {
-	var b strings.Builder
-	for word := range strings.FieldsFuncSeq(v, func(r rune) bool { return r == '_' || r == '-' }) {
-		b.WriteString(strings.ToUpper(word[:1]) + word[1:])
-	}
-	return b.String()
-}
-
-var (
-	wireWriteProof  = newWireEnum(types.WriteProofAlone, types.WriteProofDisjoint, types.WriteProofOverlapping)
-	wireBaseVerdict = newWireEnum(types.BaseMatch, types.BaseRevisionMatch, types.BaseDiverged, types.BaseUnknown)
-	wireBriefFormat = newWireEnum(types.BriefFormatMarkdown, types.BriefFormatBuzz)
-	wireGoalKind    = newWireEnum(types.GoalKinds()...)
-	wireGoalExpect  = newWireEnum(types.GoalExpects()...)
-	wireClaimKind   = newWireEnum(types.ClaimRefs, types.ClaimTest, types.ClaimOutput, types.ClaimReleased, types.ClaimDeadHolder)
-	wireEntryPoint  = newWireEnum(types.EntryPointCLI, types.EntryPointHook, types.EntryPointMCP, types.EntryPointRPC, types.EntryPointServer)
-	wireCredential  = newWireEnum(types.KindOperator, types.KindStored, types.KindShare, types.KindExchange, types.KindStdio, types.KindSocketPeer)
-	wireWorkerType  = newWireEnum(agent.WorkerTypeResumed, agent.WorkerTypeNew)
-	wireTierSource  = newWireEnum(agent.ModelTierSourceRow, agent.ModelTierSourceMatrix, agent.ModelTierSourceUserMatrix, agent.ModelTierSourceDefault)
-	wireSkills      = newWireEnum(agent.SkillVariantShort, agent.SkillVariantFull)
-)
-
-// The records below mirror domain types under camelCase keys. A domain
-// type whose keys are all one word is stored as it is.
-
-type agentRecord struct {
-	Model        agent.Model  `json:"model,omitzero"`
-	Instructions string       `json:"instructions,omitempty"`
-	Worker       workerRecord `json:"worker"`
-}
-
-type workerRecord struct {
-	Type   string `json:"type"`
-	Reason string `json:"reason,omitempty"`
-}
-
-func recordAgent(s *agent.Spec) *agentRecord {
-	if s == nil {
-		return nil
-	}
-	return &agentRecord{Model: s.Model, Instructions: s.Instructions,
-		Worker: workerRecord{Type: wireWorkerType.spell(s.Worker.Type), Reason: s.Worker.Reason}}
-}
-
-func (r *agentRecord) spec() *agent.Spec {
-	if r == nil {
-		return nil
-	}
-	return &agent.Spec{Model: r.Model, Instructions: r.Instructions,
-		Worker: agent.Worker{Type: wireWorkerType.read(r.Worker.Type), Reason: r.Worker.Reason}}
-}
-
-type leaseCheckRecord struct {
-	Target          string   `json:"target"`
-	Script          string   `json:"script,omitempty"`
-	Project         string   `json:"project,omitempty"`
-	Args            []string `json:"args,omitempty"`
-	NoDefaultCharms bool     `json:"noDefaultCharms,omitzero"`
-	Test            bool     `json:"test,omitzero"`
-}
-
-type goalRecord struct {
-	ID          string           `json:"id"`
-	Description string           `json:"description,omitempty"`
-	DependsOn   []string         `json:"dependsOn,omitempty"`
-	Kind        string           `json:"kind"`
-	Expect      string           `json:"expect,omitempty"`
-	Check       leaseCheckRecord `json:"check,omitzero"`
-	Paths       []string         `json:"paths,omitempty"`
-	Symbols     []string         `json:"symbols,omitempty"`
-	Signature   string           `json:"signature,omitempty"`
-}
-
-func recordGoal(g types.Goal) goalRecord {
-	return goalRecord{ID: g.ID, Description: g.Description, DependsOn: g.DependsOn,
-		Kind: wireGoalKind.spell(g.Kind), Expect: wireGoalExpect.spell(g.Expect), Check: leaseCheckRecord(g.Check),
-		Paths: g.Paths, Symbols: g.Symbols, Signature: g.Signature}
-}
-
-func (r goalRecord) goal() types.Goal {
-	return types.Goal{ID: r.ID, Description: r.Description, DependsOn: r.DependsOn,
-		Kind: wireGoalKind.read(r.Kind), Expect: wireGoalExpect.read(r.Expect), Check: types.LeaseCheck(r.Check),
-		Paths: r.Paths, Symbols: r.Symbols, Signature: r.Signature}
-}
-
-type modelTierRecord struct {
-	Name   string   `json:"name"`
-	Rank   int      `json:"rank"`
-	Skills string   `json:"skills"`
-	Source string   `json:"source"`
-	Reason string   `json:"reason,omitempty"`
-	Site   string   `json:"site,omitempty"`
-	Model  string   `json:"model,omitempty"`
-	Shared []string `json:"shared,omitempty"`
-}
-
-func recordModelTier(t *agent.JobModelTier) *modelTierRecord {
-	if t == nil {
-		return nil
-	}
-	return &modelTierRecord{Name: t.Name, Rank: t.Rank, Skills: wireSkills.spell(t.Skills), Source: wireTierSource.spell(t.Source),
-		Reason: t.Reason, Site: t.Site, Model: t.Model, Shared: t.Shared}
-}
-
-func (r *modelTierRecord) tier() *agent.JobModelTier {
-	if r == nil {
-		return nil
-	}
-	return &agent.JobModelTier{Name: r.Name, Rank: r.Rank, Skills: wireSkills.read(r.Skills), Source: wireTierSource.read(r.Source),
-		Reason: r.Reason, Site: r.Site, Model: r.Model, Shared: r.Shared}
-}
-
-type originRecord struct {
-	User       string           `json:"user,omitempty"`
-	UID        string           `json:"uid,omitempty"`
-	EntryPoint string           `json:"entryPoint,omitempty"`
-	Host       string           `json:"host,omitempty"`
-	Session    string           `json:"session,omitempty"`
-	Agent      string           `json:"agent,omitempty"`
-	Credential credentialRecord `json:"credential,omitzero"`
-}
-
-type credentialRecord struct {
-	Kind  string      `json:"class,omitempty"`
-	ID    string      `json:"id,omitempty"`
-	Name  string      `json:"name,omitempty"`
-	Grant types.Grant `json:"grant,omitzero"`
-}
-
-func recordOrigin(o types.Origin) originRecord {
-	return originRecord{User: o.User, UID: o.UID, EntryPoint: wireEntryPoint.spell(o.EntryPoint), Host: o.Host,
-		Session: o.Session, Agent: o.Agent, Credential: credentialRecord{
-			Kind: wireCredential.spell(o.Credential.Kind), ID: o.Credential.ID, Name: o.Credential.Name, Grant: o.Credential.Grant,
-		}}
-}
-
-func (r originRecord) origin() types.Origin {
-	return types.Origin{User: r.User, UID: r.UID, EntryPoint: wireEntryPoint.read(r.EntryPoint), Host: r.Host,
-		Session: r.Session, Agent: r.Agent, Credential: types.Credential{
-			Kind: wireCredential.read(r.Credential.Kind), ID: r.Credential.ID, Name: r.Credential.Name, Grant: r.Credential.Grant,
-		}}
-}
-
-type claimRecord struct {
-	Path     string              `json:"path"`
-	Evidence claimEvidenceRecord `json:"evidence"`
-	Proof    string              `json:"proof"`
-	At       int64               `json:"at"`
-	By       originRecord        `json:"by"`
-}
-
-type claimEvidenceRecord struct {
-	Kind    string `json:"kind"`
-	Subject string `json:"subject,omitempty"`
-}
-
-type releaseRecord struct {
-	Path        string `json:"path"`
-	Digest      string `json:"digest"`
-	ReleasedAt  int64  `json:"releasedAt"`
-	Revoked     bool   `json:"revoked,omitzero"`
-	TakenBy     string `json:"takenBy,omitempty"`
-	DeadBecause string `json:"deadBecause,omitempty"`
-	Narrowed    bool   `json:"narrowed,omitzero"`
-}
-
-type entryRecord struct {
-	Path     string       `json:"path"`
-	By       originRecord `json:"by"`
-	At       int64        `json:"at"`
-	Consumed int64        `json:"consumed,omitzero"`
-}
-
-type verificationRecord struct {
-	ID         string   `json:"id"`
-	Verified   bool     `json:"verified"`
-	OutputRef  string   `json:"outputRef,omitempty"`
-	Scope      string   `json:"scope,omitempty"`
-	Owed       string   `json:"owed,omitempty"`
-	Violations []string `json:"violations,omitempty"`
-}
-
-func recordVerifications(in []types.VerificationStatus) []verificationRecord {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]verificationRecord, 0, len(in))
-	for _, v := range in {
-		out = append(out, verificationRecord(v))
-	}
-	return out
-}
-
-func verifications(in []verificationRecord) []types.VerificationStatus {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]types.VerificationStatus, 0, len(in))
-	for _, v := range in {
-		out = append(out, types.VerificationStatus(v))
-	}
-	return out
-}
-
-type rejectionRecord struct {
-	Unmet              []verificationRecord `json:"unmet,omitempty"`
-	Violations         []string             `json:"violations,omitempty"`
-	At                 int64                `json:"at"`
-	ObservedGeneration int                  `json:"observedGeneration,omitzero"`
-}
-
-func recordRejection(r *types.JobRejection) *rejectionRecord {
-	if r == nil {
-		return nil
-	}
-	return &rejectionRecord{Unmet: recordVerifications(r.Unmet), Violations: r.Violations, At: r.At, ObservedGeneration: r.ObservedGeneration}
-}
-
-func (r *rejectionRecord) rejection() *types.JobRejection {
-	if r == nil {
-		return nil
-	}
-	return &types.JobRejection{Unmet: verifications(r.Unmet), Violations: r.Violations, At: r.At, ObservedGeneration: r.ObservedGeneration}
-}
-
-type worktreeRecord struct {
-	Root         string `json:"root"`
-	Source       string `json:"source"`
-	Base         string `json:"base"`
-	Created      int64  `json:"created"`
-	Binary       string `json:"binary,omitempty"`
-	BinaryDigest string `json:"binaryDigest,omitempty"`
-	Removed      int64  `json:"removed,omitzero"`
-	Kept         string `json:"kept,omitempty"`
-	Made         bool   `json:"made,omitzero"`
-}
-
-type runAttemptRecord struct {
-	Found              bool     `json:"found"`
-	Ref                string   `json:"ref,omitempty"`
-	TimestampMs        int64    `json:"timestampMs,omitzero"`
-	Project            string   `json:"project,omitempty"`
-	Target             string   `json:"target,omitempty"`
-	Spell              string   `json:"spell,omitempty"`
-	Failed             bool     `json:"failed,omitzero"`
-	AttemptID          string   `json:"attemptId,omitempty"`
-	DurationMs         int64    `json:"durationMs,omitzero"`
-	Revision           string   `json:"revision,omitempty"`
-	Dirty              bool     `json:"dirty,omitzero"`
-	Lease              string   `json:"lease,omitempty"`
-	ExtraArgs          []string `json:"extraArgs,omitempty"`
-	ObservedGeneration int      `json:"observedGeneration,omitzero"`
-}
-
-type gateAttemptRecord struct {
-	GateID  string           `json:"gateId"`
-	Attempt runAttemptRecord `json:"attempt"`
-}
-
-type runRecord struct {
-	Invocation     string `json:"invocation,omitempty"`
-	Ended          int64  `json:"ended,omitzero"`
-	DurationMs     int64  `json:"durationMs,omitzero"`
-	OK             bool   `json:"ok"`
-	Error          string `json:"error,omitempty"`
-	ItemsRemoved   int64  `json:"itemsRemoved,omitzero"`
-	BytesReclaimed int64  `json:"bytesReclaimed,omitzero"`
-}
-
-type integrationRecord struct {
-	Checkout           string               `json:"checkout"`
-	At                 int64                `json:"at"`
-	Verified           bool                 `json:"verified"`
-	Gates              []verificationRecord `json:"gates,omitempty"`
-	ObservedGeneration int                  `json:"observedGeneration,omitzero"`
-}
-
-func recordIntegration(i *types.JobIntegration) *integrationRecord {
-	if i == nil {
-		return nil
-	}
-	return &integrationRecord{Checkout: i.Checkout, At: i.At, Verified: i.Verified, Gates: recordVerifications(i.Gates), ObservedGeneration: i.ObservedGeneration}
-}
-
-func (r *integrationRecord) integration() *types.JobIntegration {
-	if r == nil {
-		return nil
-	}
-	return &types.JobIntegration{Checkout: r.Checkout, At: r.At, Verified: r.Verified, Gates: verifications(r.Gates), ObservedGeneration: r.ObservedGeneration}
-}
 
 // jobsLog is the file a write read, so the write appends only the lines that changed.
 type jobsLog struct {
@@ -1497,251 +651,6 @@ func keepDerived(row *types.Job, prev types.Job) {
 	}
 }
 
-// mutate is the locked read-modify-write [Store.Update], [Store.Exec] and [Wait] share, and
-// the only place a row is written row-wise. kind says what the write is; see
-// [grading].
-//
-// apply gets what Update does not need: exists, because Update creates a row while Exec
-// and Wait refuse one nobody declared, and now, the one clock read the write is stamped from. It
-// may fail, which is what lets that refusal be decided under the lock; nothing is written
-// when it does.
-func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(cur *types.Job, exists bool, now int64) error) (types.Job, error) {
-	return s.mutateSeeing(ctx, id, kind, func(cur *types.Job, exists bool, now int64, _ []types.Job) error {
-		return apply(cur, exists, now)
-	})
-}
-
-// mutateSeeing is mutate whose apply also sees every stored row.
-// The rows are read under the same lock; apply must not change them.
-func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply func(cur *types.Job, exists bool, now int64, rows []types.Job) error) (types.Job, error) {
-	if strings.TrimSpace(id) == "" {
-		return types.Job{}, ErrNoID
-	}
-	// Read before the lock, like Exec's checkpoint: the trail may be another checkout's, and
-	// only a declaration of an ended row folds what they say.
-	var denials []types.JobDenial
-	var denialsKnown bool
-	if kind == asDeclaration {
-		denials, denialsKnown = s.endedAttemptDenials(id)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	actor := s.Actor()
-	rootHead := sync.OnceValue(func() string { return s.committedRevision(ctx) })
-	var stored types.Job
-	var ended endings
-	var folded *types.Attempt
-	err := s.update(ctx, func(f *jobsFile) error {
-		ended, folded = endings{}, nil
-		i := slices.IndexFunc(f.Jobs, func(e types.Job) bool { return e.ID == id })
-		var prev types.Job
-		if i >= 0 {
-			prev = f.Jobs[i]
-			if err := readOnly(prev); err != nil {
-				return err
-			}
-		}
-		row := prev.Clone()
-		row.ID = id
-		now := time.Now().Unix()
-		if aerr := apply(&row, i >= 0, now, f.Jobs); aerr != nil {
-			return aerr
-		}
-		row = row.Clone()
-		row.ID = id
-		// Every door into the store declares here, so a record that names no state is
-		// stored as declared: the guard reads an empty state as ended.
-		if kind == asDeclaration && row.State == "" {
-			row.State = types.StateDeclared
-		}
-		if kind == asDeclaration && i >= 0 && widensInPlace(prev, row) {
-			row.State = prev.State
-		}
-		entering := kind == asDeclaration && requestsEntry(prev, row)
-		switch {
-		case entering:
-			if aerr := authorizeEntry(actor, id, prev, row, i >= 0, f.Jobs); aerr != nil {
-				return aerr
-			}
-			e := &row.Entries[len(row.Entries)-1]
-			e.By, e.At, e.Consumed = trail.StampOrigin(ctx, types.Origin{}), now, 0
-		case kind.graded():
-			if aerr := authorizeRow(actor, id, kind, prev, row, i >= 0, f.Jobs); aerr != nil {
-				return aerr
-			}
-		}
-		// An ended row declared again is a fork of the job's next attempt.
-		refork := kind == asDeclaration && i >= 0 && prev.State.Terminal() && row.State.Live()
-		// The store's own record of what HAPPENED is not a caller's to send. On an
-		// existing row it is carried forward, so a whole-row write neither forges nor
-		// erases a registration; a row a BOUND caller creates carries none, since a child
-		// handed a registration it never made writes without ever reporting its base.
-		switch {
-		case i >= 0:
-			if kind != asExec {
-				row.ReportedBase, row.BaseVerdict, row.Registered = prev.ReportedBase, prev.BaseVerdict, prev.Registered
-				row.CheckoutRoot = prev.CheckoutRoot
-			}
-			// An ended row declared again is handed out afresh: its old holder gave it up,
-			// and a checkout left on it would refuse every new taker and, once that
-			// worktree is gone, end the row again on the next sweep.
-			if refork {
-				all, aerr := s.Attempts()
-				if aerr != nil {
-					return aerr
-				}
-				tries := types.NewJobAttempts(all)
-				if aerr := refuseAttempt(id, tries.LiveN(id), row); aerr != nil {
-					return aerr
-				}
-				fold := foldAttempt(prev, tries.Live(id), tries.Prior(id), denials, denialsKnown, now)
-				folded = &fold
-				row.ReportedBase, row.BaseVerdict, row.Registered, row.CheckoutRoot = "", "", 0, ""
-			}
-			if kind != asObservation {
-				row.Unattributed, row.ReleaseRequests = prev.Unattributed, prev.ReleaseRequests
-			}
-			if refork {
-				row.ReleaseRequests = nil
-			}
-			if kind != asObservation && !entering {
-				row.Entries = prev.Entries
-			}
-		case actor.Bound():
-			row.ReportedBase, row.BaseVerdict, row.Registered, row.Unattributed = "", "", 0, nil
-			row.CheckoutRoot = ""
-		}
-		if i < 0 {
-			row.Entries, row.ReleaseRequests = nil, nil
-		}
-		row.ReleaseRequests = heldRequests(row)
-		if kind == asDeclaration && i >= 0 {
-			keepDerived(&row, prev)
-		}
-		// Hardening is one-way: a re-declaration cannot soften a path the holder already
-		// wrote, and a soft path that is no write path claims nothing.
-		row.SoftPaths = slices.DeleteFunc(row.SoftPaths, func(p string) bool {
-			return !slices.Contains(row.WritePaths, p) ||
-				i >= 0 && slices.Contains(prev.WritePaths, p) && !slices.Contains(prev.SoftPaths, p)
-		})
-		// The store writes every reason: the sweep's, and the one a write ending a live row
-		// as no_return gets from what the row had become, and a pass its holder's result made.
-		// A row brought back to life has none.
-		row.EndReason = prev.EndReason
-		row.Landed = prev.Landed && !row.State.Live()
-		switch {
-		case row.State.Live():
-			row.EndReason = ""
-		case i >= 0 && prev.State.Live() && row.State == types.StateNoReturn:
-			all, aerr := s.Attempts()
-			if aerr != nil {
-				return aerr
-			}
-			row.EndReason = endedReason(prev, types.NewJobAttempts(all).Result(id) != nil, s.endsOwnRow(prev))
-		case i >= 0 && prev.State.Live() && row.State == types.StatePass && gradedByHolder(prev):
-			row.EndReason = returnedReason
-		}
-		row.Updated = now
-		// A wait that refuses records why and leaves the row where it was, heartbeat
-		// included: the waiter is not the holder.
-		if (kind == asObservation || kind == asAdvance || entering || (kind == asVerdict && row.State == prev.State)) && i >= 0 {
-			row.Updated = prev.Updated
-		}
-		row.Created = now
-		// The record keeps what a newer magus stored; see [jobsFile].
-		row.Unknown = prev.Unknown
-		row.ModelTier = prev.ModelTier
-		// Only RecordWorktree and EndWorktrees write the worktree record, and Exec rebinding
-		// an untaken row from an adopted checkout to another. The next attempt keeps a
-		// checkout that still stands and forgets one magus removed.
-		if kind != asExec || !rebindsAdopted(prev, row) {
-			row.Worktree = prev.Clone().Worktree
-		}
-		if refork && row.Worktree != nil {
-			row.Worktree.Kept = ""
-			if row.Worktree.Removed != 0 {
-				row.Worktree = nil
-			}
-		}
-		if s.modelTiers != nil && (i < 0 || prev.Agent.RequestedModel() != row.Agent.RequestedModel()) {
-			assigned, aerr := s.assignModelTierWithHistory(ctx, row, f.Jobs)
-			if aerr != nil {
-				return aerr
-			}
-			row.ModelTier = &assigned
-		}
-		if i < 0 || prev.Agent.RequestedModel() != row.Agent.RequestedModel() || prev.Parent != row.Parent {
-			if aerr := refuseAboveParent(s.modelTiers, s.spawnRule, row, f.Jobs); aerr != nil {
-				return aerr
-			}
-		}
-		// The counters are the store's: a whole-row write cannot set them, and only a
-		// write that adds write paths to a row its holder already took counts a widening.
-		row.Widenings = prev.Widenings
-		if kind != asClaim {
-			row.Claims = prev.Claims
-		}
-		if kind != asObservation {
-			row.ReworkRounds = prev.ReworkRounds
-		}
-		if kind != asNarrowing && i >= 0 && (prev.State == types.StateRunning || prev.State == types.StateExited) &&
-			slices.ContainsFunc(row.WritePaths, func(p string) bool { return !slices.Contains(prev.WritePaths, p) }) {
-			row.Widenings++
-		}
-		// The generation and the evidence are the store's too. Only a wait
-		// records a rejection. A fork of the next attempt starts the
-		// evidence and the counters over.
-		row.Generation = nextGeneration(prev, row, i >= 0, kind)
-		if kind != asVerdict {
-			row.Rejection = prev.Rejection
-		}
-		if refork {
-			row.Attempt, row.GateAttempts, row.Rejection = nil, nil, nil
-			row.Integration, row.WaiterEvidence = nil, nil
-			row.ReworkRounds, row.Widenings, row.Claims = 0, 0, nil
-		}
-		row.Requires = requiredFeatures(row)
-		if kind != asNarrowing {
-			row.Releases = s.releases(ctx, prev, row, now, prev.Registered != 0 && actor.Lease != id)
-		}
-		switch {
-		case kind == asAdvance:
-		case kind == asDeclaration && (i < 0 || refork):
-			row.Authority = forkAuthority(actor, f.Jobs, rootHead)
-		default:
-			row.Authority = prev.Authority
-		}
-		if i >= 0 {
-			row.Created = prev.Created
-			row.RegisteredBy = prev.RegisteredBy
-			f.Jobs[i] = row
-		} else {
-			row.RegisteredBy = trail.StampOrigin(ctx, types.Origin{})
-			f.Jobs = append(f.Jobs, row)
-		}
-		if i >= 0 && !prev.State.Terminal() && row.State.Terminal() {
-			if err := ended.hold(s, f.Jobs, row); err != nil {
-				return err
-			}
-		}
-		stored = row.Clone()
-		return nil
-	})
-	if err != nil {
-		return types.Job{}, err
-	}
-	// After the row, so a refused write folds nothing.
-	if folded != nil {
-		if err := s.appendAttempts(ctx, *folded); err != nil {
-			return stored, fmt.Errorf("%s was forked again, and its last attempt was not folded: %w", id, err)
-		}
-	}
-	if err := ended.record(ctx, time.Now().UnixMilli()); err != nil {
-		return stored, err
-	}
-	return stored, nil
-}
 
 // endedAttemptDenials are the guard's denials of the holder of job id since its last
 // attempt began, for the fold a fork of the ended row makes, and whether the trail still
@@ -2185,43 +1094,15 @@ func (s *Store) parse(wait bool) (jobsFile, jobsLog, []file.Line, error) {
 	if err := s.refuseDocument(); err != nil {
 		return jobsFile{}, jobsLog{}, nil, err
 	}
-	deadline := time.Now().Add(tailWait)
-	var read file.Lines
-	for {
-		var err error
-		if read, err = file.ReadLines(s.path); err != nil {
-			return jobsFile{}, jobsLog{}, nil, fmt.Errorf("job: %w", err)
-		}
-		if !read.Partial || !wait {
-			break
-		}
-		if time.Now().After(deadline) {
-			return jobsFile{}, jobsLog{}, nil, fmt.Errorf("job: %s ends in a line no writer finished, so the next write to the plan drops it", s.path)
-		}
-		time.Sleep(time.Millisecond)
+	read, err := s.readLines(wait)
+	if err != nil {
+		return jobsFile{}, jobsLog{}, nil, err
 	}
 	f := jobsFile{stored: map[string]jobRecord{}}
 	log := jobsLog{rows: make(map[string][]byte, len(read.Lines)), lines: len(read.Lines), partial: read.Partial}
-	var texts []file.Line
-	for _, line := range read.Lines {
-		var probe struct {
-			apiversion.TypeMeta
-			ID   json.RawMessage `json:"id"`
-			Spec json.RawMessage `json:"spec"`
-		}
-		if err := json.Unmarshal(line.Text, &probe); err != nil {
-			return jobsFile{}, jobsLog{}, nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
-		}
-		if probe.ID == nil && probe.Spec == nil {
-			header := jobsFile{}
-			if err := json.Unmarshal(line.Text, &header); err != nil {
-				return jobsFile{}, jobsLog{}, nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
-			}
-			header.stored, log.header = f.stored, line.Text
-			f = header
-			continue
-		}
-		texts = append(texts, line)
+	texts, err := s.takeHeader(read.Lines, &f, &log)
+	if err != nil {
+		return jobsFile{}, jobsLog{}, nil, err
 	}
 	if f.Migration != len(s.migrations) {
 		return f, log, texts, nil
@@ -2229,18 +1110,76 @@ func (s *Store) parse(wait bool) (jobsFile, jobsLog, []file.Line, error) {
 	if f.TypeMeta != jobListType && log.header != nil {
 		return jobsFile{}, jobsLog{}, nil, s.refuseRecord(jobListType, f.TypeMeta, 1)
 	}
+	if err := s.decodeRows(texts, &f, &log); err != nil {
+		return jobsFile{}, jobsLog{}, nil, err
+	}
+	if err := s.refuseUnmetFeatures(f); err != nil {
+		return jobsFile{}, jobsLog{}, nil, err
+	}
+	return f, log, nil, nil
+}
+
+// readLines reads the file's lines. With wait it reads again for up to
+// [tailWait] while the file ends in a line no writer finished.
+func (s *Store) readLines(wait bool) (file.Lines, error) {
+	deadline := time.Now().Add(tailWait)
+	for {
+		read, err := file.ReadLines(s.path)
+		if err != nil {
+			return file.Lines{}, fmt.Errorf("job: %w", err)
+		}
+		if !read.Partial || !wait {
+			return read, nil
+		}
+		if time.Now().After(deadline) {
+			return file.Lines{}, fmt.Errorf("job: %s ends in a line no writer finished, so the next write to the plan drops it", s.path)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// takeHeader sets the header line into f and log, and returns the lines of
+// the rows.
+func (s *Store) takeHeader(lines []file.Line, f *jobsFile, log *jobsLog) ([]file.Line, error) {
+	var texts []file.Line
+	for _, line := range lines {
+		var probe struct {
+			apiversion.TypeMeta
+			ID   json.RawMessage `json:"id"`
+			Spec json.RawMessage `json:"spec"`
+		}
+		if err := json.Unmarshal(line.Text, &probe); err != nil {
+			return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
+		}
+		if probe.ID != nil || probe.Spec != nil {
+			texts = append(texts, line)
+			continue
+		}
+		header := jobsFile{}
+		if err := json.Unmarshal(line.Text, &header); err != nil {
+			return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
+		}
+		header.stored, log.header = f.stored, line.Text
+		*f = header
+	}
+	return texts, nil
+}
+
+// decodeRows decodes the row lines into f and log, a later line of a row
+// replacing the earlier one in place.
+func (s *Store) decodeRows(texts []file.Line, f *jobsFile, log *jobsLog) error {
 	at := map[string]int{}
 	for _, line := range texts {
 		var r jobRecord
 		if err := json.Unmarshal(line.Text, &r); err != nil {
-			return jobsFile{}, jobsLog{}, nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
+			return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 		}
 		row, err := r.job()
 		if refused, ok := errors.AsType[*apiversion.RefusedError](err); ok {
-			return jobsFile{}, jobsLog{}, nil, s.refuseRecord(refused.Want, refused.Got, line.N)
+			return s.refuseRecord(refused.Want, refused.Got, line.N)
 		}
 		if err != nil {
-			return jobsFile{}, jobsLog{}, nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
+			return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 		}
 		log.rows[row.ID] = line.Text
 		f.stored[row.ID] = r
@@ -2251,19 +1190,25 @@ func (s *Store) parse(wait bool) (jobsFile, jobsLog, []file.Line, error) {
 		at[row.ID] = len(f.Jobs)
 		f.Jobs = append(f.Jobs, row)
 	}
+	return nil
+}
+
+// refuseUnmetFeatures refuses a file requiring a feature this magus lacks.
+func (s *Store) refuseUnmetFeatures(f jobsFile) error {
 	known := make([]apiversion.Feature, len(types.JobFeatures))
 	for i, k := range types.JobFeatures {
 		known[i] = apiversion.Feature(k)
 	}
-	if lacks := f.Metadata.Unmet(recordGroup, known); lacks != nil {
-		names := make([]string, len(lacks))
-		for i, l := range lacks {
-			names[i] = string(l)
-		}
-		return jobsFile{}, jobsLog{}, nil, types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s requires %s, which this magus (%s) lacks, update magus",
-			s.path, quoteAll(names), RecordAPIVersion)
+	lacks := f.Metadata.Unmet(recordGroup, known)
+	if lacks == nil {
+		return nil
 	}
-	return f, log, nil, nil
+	names := make([]string, len(lacks))
+	for i, l := range lacks {
+		names[i] = string(l)
+	}
+	return types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s requires %s, which this magus (%s) lacks, update magus",
+		s.path, quoteAll(names), RecordAPIVersion)
 }
 
 // encodeJobs renders the ledger as its lines: the header first, then one line per row.
