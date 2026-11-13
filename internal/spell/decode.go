@@ -128,7 +128,7 @@ func validateScopes(c *spells.Command) error {
 		return nil
 	}
 	if c.Bin == "" {
-		return errors.New("mgs_getScopes: bin is required; magus runs the command with the package appended")
+		return errors.New("mgs_getScopes: bin is required, since magus runs the command with the package appended")
 	}
 	if err := validateCommand("", "", *c); err != nil {
 		return fmt.Errorf("mgs_getScopes: %w", err)
