@@ -13,3 +13,6 @@
   conformance lens, `shapes` on the grouping lens and `jobs` on an unmerged report.
   A deferred item's `row` is `job`. The `namewords` analyzer takes a `banned`
   option that keeps a word out of every declared name in some packages.
+- **A stored job or attempt whose enum spelling magus does not list is refused.**
+  The read names the spelling and the record, where it once passed the value on
+  to a Buzz conversion that panicked on it.
