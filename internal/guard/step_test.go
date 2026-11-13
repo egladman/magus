@@ -68,6 +68,28 @@ func (s *stepTableSuite) TestANamedRowWinsOverItsKindsCatchAll() {
 	s.Equal([]string{"inert"}, other.Capabilities)
 }
 
+var networkRow = typesagent.StepRow{Kind: "refund", Capabilities: []string{"network"}}
+
+func (s *stepTableSuite) TestARowNothingJudgesIsRefusedWithNoKindRule() {
+	table, err := NewStepTable([]typesagent.StepRow{networkRow}, nil)
+	s.Require().NoError(err)
+	err = table.CheckJudged([]string{"egress"})
+	s.ErrorContains(err, `kind "refund"`)
+	s.ErrorContains(err, `magus\guard.step`)
+}
+
+func (s *stepTableSuite) TestAKindRuleJudgesARowNothingElseJudges() {
+	table, err := NewStepTable([]typesagent.StepRow{networkRow}, nil)
+	s.Require().NoError(err)
+	s.NoError(table.CheckJudged([]string{"refund"}))
+}
+
+func (s *stepTableSuite) TestAGoRuleJudgesEveryRow() {
+	table, err := NewStepTable([]typesagent.StepRow{networkRow}, []StepRule{passStep})
+	s.Require().NoError(err)
+	s.NoError(table.CheckJudged(nil))
+}
+
 func (s *stepTableSuite) TestAnUnknownCapabilityIsRefused() {
 	_, err := NewStepTable([]typesagent.StepRow{{Kind: "tool", Capabilities: []string{"teleports"}}}, nil)
 	s.ErrorContains(err, `unknown capability "teleports"`)
