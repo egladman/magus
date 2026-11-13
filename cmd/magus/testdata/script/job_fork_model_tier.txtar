@@ -1,7 +1,7 @@
-# A fork records the model tier its job runs at, and the step that chose it: the row when
+# A fork records the model tier its job runs at, and the step that chose it: the job when
 # it names a tier or a model, else the workspace's matrix, else the declared default. Fork
 # prints the line, describe job prints it again with the skill variant, and ls jobs shows
-# the tier when the row names no model. A dry-run apply assigns nothing and runs no matrix.
+# the tier when the job names no model. A dry-run apply assigns nothing and runs no matrix.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 exec magus init -local -vcs git
@@ -28,24 +28,24 @@ stdout '^model tier: bounded \(rank 1\), default: "the declared default" at magu
 exec magus describe job wave/wide
 stdout '^skills: short$'
 
-# A row naming a tier wins and the matrix is not asked.
+# A job naming a tier wins and the matrix is not asked.
 stdin $WORK/named.json
 exec magus job fork --stdin
-stdout '^model tier: design \(rank 2\), row: "the job names the tier design"$'
+stdout '^model tier: design \(rank 2\), job: "the job names the tier design"$'
 
-# A model that maps to no tier is kept as the row's word and takes the default's rank.
+# A model that maps to no tier is kept as the job's word and takes the default's rank.
 stdin $WORK/model.json
 exec magus job fork --stdin
-stdout '^model tier: bounded \(rank 1\), row: "the job names the model haiku, which no model tier maps to"$'
+stdout '^model tier: bounded \(rank 1\), job: "the job names the model haiku, which no model tier maps to"$'
 
-# ls jobs shows the tier where the row names no model, and the model where it does.
+# ls jobs shows the tier where the job names no model, and the model where it does.
 exec magus ls jobs
 stdout 'wave/small +- +declared +routine '
 stdout 'wave/wide +- +declared +bounded '
 stdout 'wave/named +- +declared +design '
 stdout 'wave/model +- +declared +haiku '
 
-# A dry-run apply writes nothing and assigns no tier; the real one creates the row with one.
+# A dry-run apply writes nothing and assigns no tier; the real one creates the job with one.
 stdin $WORK/applied.json
 exec magus job apply --stdin --dry-run
 stdout '^would create wave/applied with 1 write path\(s\)$'

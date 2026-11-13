@@ -96,7 +96,7 @@ export fun mgs_getSkills() > HarnessSkills {
 }
 
 export fun mgs_listTools() > HarnessTools {
-    return HarnessTools{dir = "host/tools", rows = [HarnessTool{name = "Shell", capability = ToolCapability.runs}]};
+    return HarnessTools{dir = "host/tools", tools = [HarnessTool{name = "Shell", capability = ToolCapability.runs}]};
 }
 -- shop/magusfile.buzz --
 import "magus";

@@ -25,9 +25,9 @@ func TestConformanceJSONCarriesPropose(t *testing.T) {
 	require.NoError(t, err)
 	var got map[string]any
 	require.NoError(t, json.Unmarshal(b, &got))
-	rows, _ := got["rows"].([]any)
-	require.Len(t, rows, 1)
-	assert.EqualValues(t, 938, rows[0].(map[string]any)["propose"])
+	distributions, _ := got["distributions"].([]any)
+	require.Len(t, distributions, 1)
+	assert.EqualValues(t, 938, distributions[0].(map[string]any)["propose"])
 }
 
 func TestConformanceDefinitionDoesNotPromiseLiveEnforcement(t *testing.T) {
