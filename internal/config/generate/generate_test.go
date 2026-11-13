@@ -172,7 +172,7 @@ func TestParseConfigFlagsErrors(t *testing.T) {
 func TestWriteRendersParsableGoForEveryArtifact(t *testing.T) {
 	out := t.TempDir()
 	p := Paths{
-		Fields:   Output{Path: filepath.Join(out, "fields.go"), Package: "schemagen"},
+		Fields:   Output{Path: filepath.Join(out, "fields.go"), Package: "settings"},
 		Bind:     Output{Path: filepath.Join(out, "bind.go"), Package: "flaggen"},
 		ApplyEnv: Output{Path: filepath.Join(out, "env.go"), Package: "configgen"},
 	}
@@ -186,9 +186,9 @@ func TestWriteRendersParsableGoForEveryArtifact(t *testing.T) {
 
 	fields := read(t, p.Fields.Path)
 	assert.Contains(t, fields, `GoPath:   "StateDir",`)
-	assert.Contains(t, fields, `Flag:     fieldtype.FlagNames{Long: "state-dir", Short: "s"},`)
-	assert.Contains(t, fields, "Kind:     fieldtype.KindBoolPtr,")
-	assert.Contains(t, fields, "Kind:     fieldtype.KindStringSlice,")
+	assert.Contains(t, fields, `Flag:     configuration.FlagNames{Long: "state-dir", Short: "s"},`)
+	assert.Contains(t, fields, "Kind:     command.OptionalBool,")
+	assert.Contains(t, fields, "Kind:     command.StringList,")
 
 	bind := read(t, p.Bind.Path)
 	assert.Contains(t, bind, `fs.StringVar(&cfg.StateDir, "s", cfg.StateDir, "Short for --state-dir")`)
