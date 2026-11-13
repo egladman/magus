@@ -14,6 +14,7 @@ import (
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
 	impacttypes "github.com/egladman/magus/types/impact"
+	releasetypes "github.com/egladman/magus/types/release"
 	"github.com/egladman/magus/types/trail"
 	vcstypes "github.com/egladman/magus/types/vcs"
 )
@@ -376,7 +377,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectKnowledgeRefsOutput(v.(types.KnowledgeRefsOutput), enums)
 	}},
 	{Name: "RegionChange", Zero: types.RegionChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRegionChange(v.(types.RegionChange), enums) }},
-	{Name: "ReleaseStage", Zero: types.ReleaseStage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReleaseStage(v.(types.ReleaseStage)) }},
 	{Name: "ReplyReviewRequest", Zero: types.ReplyReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectReplyReviewRequest(v.(types.ReplyReviewRequest))
 	}},
@@ -407,6 +407,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "SpellCache", Zero: types.SpellCache{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellCache(v.(types.SpellCache)) }},
 	{Name: "SpellToolchain", Zero: types.SpellToolchain{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellToolchain(v.(types.SpellToolchain)) }},
 	{Name: "SpellVersion", Zero: types.SpellVersion{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellVersion(v.(types.SpellVersion)) }},
+	{Name: "Stage", Zero: releasetypes.Stage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReleaseStage(v.(releasetypes.Stage)) }},
 	{Name: "Status", Zero: types.StatusRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRecord(v.(types.StatusRecord)) }},
 	{Name: "Step", Zero: typesagent.Step{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStep(v.(typesagent.Step)) }},
 	{Name: "StepRequest", Zero: typesagent.StepRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStepRequest(v.(typesagent.StepRequest)) }},

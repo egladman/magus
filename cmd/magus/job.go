@@ -52,6 +52,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/release"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -1836,14 +1837,14 @@ type forkReport struct {
 
 // workspaceStage is the release stage of m's newest root tag, unknown when its VCS lists
 // none.
-func workspaceStage(ctx context.Context, m *magus.Magus) types.ReleaseStage {
+func workspaceStage(ctx context.Context, m *magus.Magus) release.Stage {
 	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
 	if err != nil || res.VCS == nil {
-		return types.ReleaseStage{}
+		return release.Stage{}
 	}
 	tags, err := res.VCS.Tags(ctx, m.Root(), "")
 	if err != nil {
-		return types.ReleaseStage{}
+		return release.Stage{}
 	}
 	return types.NewestReleaseStage(tags)
 }

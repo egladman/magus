@@ -9,6 +9,7 @@
 import "magus/agent";
 import "magus/check";
 import "magus/impact";
+import "magus/release";
 import "magus/trail";
 import "magus/vcs";
 
@@ -1784,11 +1785,6 @@ export object DiffFile {
     risk: magus\check\TierEvidence? = null,
 }
 
-export object ReleaseStage {
-    tag: str = "",
-    major: int = 0,
-}
-
 export object DiffAPI {
     base: str = "",
     floor: str = "",
@@ -1797,7 +1793,7 @@ export object DiffAPI {
     removed: int = 0,
     signature: int = 0,
     body: int = 0,
-    stage: ReleaseStage = ReleaseStage{},
+    stage: magus\release\Stage = magus\release\Stage{},
 }
 
 export object DiffHunkRef {

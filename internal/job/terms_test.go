@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/types/release"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -163,7 +164,7 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 	}
 	row.Breaks = []string{"--old-flag", "ledger.Open"}
 	facts := TermsFacts{
-		Stage:              types.ReleaseStage{Tag: "v0.4.0"},
+		Stage:              release.Stage{Tag: "v0.4.0"},
 		DeletionCandidates: []types.UnreferencedEntry{{ID: "a", Label: "stale", Kind: "Function", Source: "internal/ledger/x.go:4"}},
 	}
 
@@ -196,13 +197,13 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 func TestTermsDropsEmptyInterfaceStageAndCandidates(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, NewTerms(briefRow(), TermsFacts{}).String(), NewTerms(briefRow(), TermsFacts{Stage: types.ReleaseStage{}}).String())
+	assert.Equal(t, NewTerms(briefRow(), TermsFacts{}).String(), NewTerms(briefRow(), TermsFacts{Stage: release.Stage{}}).String())
 	bare := NewTerms(briefRow(), TermsFacts{}).String()
 	for _, heading := range []string{"interface", "may break", "release stage", deletionHeading} {
 		assert.NotContains(t, bare, heading)
 	}
 
-	got := NewTerms(briefRow(), TermsFacts{Stage: types.ReleaseStage{Tag: "v1.2.0", Major: 1}}).String()
+	got := NewTerms(briefRow(), TermsFacts{Stage: release.Stage{Tag: "v1.2.0", Major: 1}}).String()
 	assert.Contains(t, got, "\nrelease stage\n  newest release v1.2.0\n")
 }
 

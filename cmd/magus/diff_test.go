@@ -33,6 +33,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/impact"
+	"github.com/egladman/magus/types/release"
 	"github.com/egladman/magus/types/vcs"
 )
 
@@ -2354,19 +2355,19 @@ func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
 func TestDiffAPILinesNameTheReleaseStage(t *testing.T) {
 	t.Parallel()
 
-	api := func(stage types.ReleaseStage) *diff.API {
+	api := func(stage release.Stage) *diff.API {
 		return &diff.API{Base: "main", Floor: diff.BumpMajor, Likely: diff.BumpMajor, Removed: 1, Stage: stage}
 	}
 	cases := map[string]struct {
-		stage types.ReleaseStage
+		stage release.Stage
 		want  []string
 	}{
 		"below 1.0 a major floor ships as a minor": {
-			stage: types.ReleaseStage{Tag: "v0.4.0", Major: 0},
+			stage: release.Stage{Tag: "v0.4.0", Major: 0},
 			want:  []string{"  newest release v0.4.0: below 1.0 a major floor ships as a minor release"},
 		},
 		"from 1.0 on the tag stands alone": {
-			stage: types.ReleaseStage{Tag: "v1.2.0", Major: 1},
+			stage: release.Stage{Tag: "v1.2.0", Major: 1},
 			want:  []string{"  newest release v1.2.0"},
 		},
 		"no tag visible says nothing about a stage": {},

@@ -56,6 +56,7 @@ import (
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/release"
 	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
 )
@@ -1357,20 +1358,20 @@ func (m *Magus) resolveReviewOrigin(ctx context.Context, driver types.VCSDriver)
 
 // releaseStage is the stage of the workspace's newest release tag, or the zero (unknown)
 // stage when there is no VCS or no tag to read.
-func (m *Magus) releaseStage(ctx context.Context) types.ReleaseStage {
+func (m *Magus) releaseStage(ctx context.Context) release.Stage {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
-		return types.ReleaseStage{}
+		return release.Stage{}
 	}
 	return releaseStage(ctx, res.VCS, m.ws.Root)
 }
 
 // releaseStage treats a driver that cannot list tags as one with none: the stage is
 // then unknown, which a reader must not mistake for pre-1.0.
-func releaseStage(ctx context.Context, driver types.VCSDriver, root string) types.ReleaseStage {
+func releaseStage(ctx context.Context, driver types.VCSDriver, root string) release.Stage {
 	tags, err := driver.Tags(ctx, root, "")
 	if err != nil {
-		return types.ReleaseStage{}
+		return release.Stage{}
 	}
 	return types.NewestReleaseStage(tags)
 }

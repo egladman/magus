@@ -14,6 +14,7 @@ import (
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
 	impacttypes "github.com/egladman/magus/types/impact"
+	releasetypes "github.com/egladman/magus/types/release"
 	"github.com/egladman/magus/types/trail"
 	vcstypes "github.com/egladman/magus/types/vcs"
 	"time"
@@ -2453,7 +2454,7 @@ func ObjectImpactProject(v impacttypes.Project) vm.Value {
 	return out
 }
 
-func ObjectReleaseStage(v types.ReleaseStage) vm.Value {
+func ObjectReleaseStage(v releasetypes.Stage) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("tag", vm.StringValue(v.Tag))
 	out.MapSet("major", vm.IntValue(int64(v.Major)))

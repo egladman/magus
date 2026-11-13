@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/types/release"
 )
 
 // Terms is what one job grants its holder: the declared job, and the workspace facts
@@ -68,7 +69,7 @@ type Terms struct {
 	Grouping *types.Grouping `json:"grouping,omitempty" yaml:"grouping,omitempty"`
 	// Stage is where the workspace's releases stand, from its newest tag. The zero stage is
 	// unknown and renders nothing.
-	Stage types.ReleaseStage `json:"stage" yaml:"stage"`
+	Stage release.Stage `json:"stage" yaml:"stage"`
 	// DeletionCandidates are the unreferenced symbols in the write paths, from
 	// [UnreferencedInPaths]: findings to finish or delete, never goals.
 	DeletionCandidates []types.UnreferencedEntry `json:"deletion_candidates,omitempty" yaml:"deletion_candidates,omitempty"`
@@ -132,7 +133,7 @@ type TermsFacts struct {
 	UnrunGates           []UnrunGate
 	Affinity             []TermsAffinity
 	Grouping             *types.Grouping
-	Stage                types.ReleaseStage
+	Stage                release.Stage
 	DeletionCandidates   []types.UnreferencedEntry
 	ReferencedOutside    []ReferencedFile
 	ReferencedOutsideGap string
@@ -381,7 +382,7 @@ func firstLine(s string) string {
 	return line
 }
 
-func stageLine(s types.ReleaseStage) string {
+func stageLine(s release.Stage) string {
 	line := "newest release " + s.Tag
 	if s.Major == 0 {
 		line += ": below 1.0 a major floor ships as a minor release"

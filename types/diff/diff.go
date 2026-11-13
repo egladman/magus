@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/impact"
+	"github.com/egladman/magus/types/release"
 	"github.com/egladman/magus/types/vcs"
 )
 
@@ -133,10 +134,10 @@ type API struct {
 	Removed   int `json:"removed"   yaml:"removed"`
 	Signature int `json:"signature" yaml:"signature"`
 	Body      int `json:"body"      yaml:"body"`
-	// Stage is where the workspace's releases stand, from its newest tag, so a reader can
-	// tell what a major floor ships as. Unknown (see [ReleaseStage.Known]) when no tag is
-	// visible.
-	Stage types.ReleaseStage `json:"stage" yaml:"stage"`
+	// Stage is where the workspace's releases stand, from its newest tag, so a
+	// reader can tell what a major floor ships as. Unknown (see
+	// [release.Stage.Known]) when no tag is visible.
+	Stage release.Stage `json:"stage" yaml:"stage"`
 }
 
 // Symbol is one changed symbol with its exposure.

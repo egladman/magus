@@ -3897,7 +3897,7 @@ github.com/egladman/magus/types.NewJobList func(jobs []Job) JobList
 github.com/egladman/magus/types.NewProjectRef func(path string, dir string) ProjectRef
 github.com/egladman/magus/types.NewSecret func(s string) Secret
 github.com/egladman/magus/types.NewStepLog func() *StepLog
-github.com/egladman/magus/types.NewestReleaseStage func(tags []VCSTag) ReleaseStage
+github.com/egladman/magus/types.NewestReleaseStage func(tags []VCSTag) github.com/egladman/magus/types/release.Stage
 github.com/egladman/magus/types.NextStep type struct
 github.com/egladman/magus/types.NextStep.Argv field []string "json:\"argv,omitempty\"  yaml:\"argv,omitempty\""
 github.com/egladman/magus/types.NextStep.ID field string "json:\"id\"              yaml:\"id\""
@@ -4356,10 +4356,6 @@ github.com/egladman/magus/types.RelationRationaleFor const RelationID = "rationa
 github.com/egladman/magus/types.RelationReferences const RelationID = "references"
 github.com/egladman/magus/types.RelationSplits const RelationID = "splits"
 github.com/egladman/magus/types.RelationUses const RelationID = "uses"
-github.com/egladman/magus/types.ReleaseStage type struct
-github.com/egladman/magus/types.ReleaseStage.Known method func() bool
-github.com/egladman/magus/types.ReleaseStage.Major field int "json:\"major\" yaml:\"major\""
-github.com/egladman/magus/types.ReleaseStage.Tag field string "json:\"tag,omitempty\" yaml:\"tag,omitempty\""
 github.com/egladman/magus/types.RemoteConfigReporter type interface
 github.com/egladman/magus/types.RemoteConfigReporter.ConfiguredRemote imethod func(dir string) (string, error)
 github.com/egladman/magus/types.RemoteReporter type interface

@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
+	"github.com/egladman/magus/types/release"
 )
 
 // goSymbol spells a scip-go moniker for a symbol in package pkg, so a test reads as the
@@ -569,7 +570,7 @@ func TestReleaseStageFromReadsTheNewestRootTag(t *testing.T) {
 	v, _ := types.ParseVersion("v0.4.0")
 	driver := tagsDriver{tags: []types.VCSTag{{Name: "v0.4.0", Version: v}}}
 
-	assert.Equal(t, types.ReleaseStage{Tag: "v0.4.0", Major: 0}, releaseStage(t.Context(), driver, "."))
+	assert.Equal(t, release.Stage{Tag: "v0.4.0", Major: 0}, releaseStage(t.Context(), driver, "."))
 }
 
 func TestReleaseStageFromIsUnknownWithoutTags(t *testing.T) {
