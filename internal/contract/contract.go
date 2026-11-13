@@ -242,19 +242,6 @@ func ReadsFormat(root string, format types.APIVersion) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return readsFormat(lock, format), nil
-}
-
-// ReadsFormatAt is ReadsFormat for a binary built from root at rev, read
-// through vc.
-func ReadsFormatAt(ctx context.Context, vc Revision, root, rev string, format types.APIVersion) (bool, error) {
-	lock, err := readLockAt(ctx, vc, root, rev)
-	if err != nil {
-		return false, err
-	}
-	return readsFormat(lock, format), nil
-}
-
-func readsFormat(lock []byte, format types.APIVersion) bool {
-	return slices.Contains(strings.Split(string(lock), "\n"), "store "+format.String())
+	lines := strings.Split(string(lock), "\n")
+	return slices.Contains(lines, "store "+format.String()), nil
 }

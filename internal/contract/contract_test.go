@@ -247,13 +247,3 @@ func (s *DigestSuite) TestAnUnreadableRevisionIsAnError() {
 	s.Require().Error(err)
 	s.NotErrorIs(err, ErrNotCarried)
 }
-
-func (s *DigestSuite) TestReadsFormatAtReadsTheRevisionsLock() {
-	vc := revisionFiles{"auth": {lockPath: "config a\nstore magus.job/v1alpha1\n"}}
-	reads, err := ReadsFormatAt(s.T().Context(), vc, s.root, "auth", types.JobAPIVersion)
-	s.Require().NoError(err)
-	s.True(reads)
-	reads, err = ReadsFormatAt(s.T().Context(), vc, s.root, "auth", types.EventAPIVersion)
-	s.Require().NoError(err)
-	s.False(reads)
-}
