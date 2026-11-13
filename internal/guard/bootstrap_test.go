@@ -247,7 +247,7 @@ func TestRankOwnBuildDeniesEverythingButTheFixedRecovery(t *testing.T) {
 type RelinkSuite struct {
 	suite.Suite
 	layers ctxLayers
-	built string
+	built  string
 }
 
 func TestRelinkSuite(t *testing.T) {
@@ -258,7 +258,7 @@ func (s *RelinkSuite) SetupTest() {
 	testkit.Isolate(s.T())
 	s.built = checkoutFixture(s.T(), ownModule, true)
 	servesPlacement(s.T(), s.built)
-	s.layers =ctxLayers{atLayer(location{cacheDir: s.T().TempDir(), workspace: s.built})}
+	s.layers = ctxLayers{atLayer(location{cacheDir: s.T().TempDir(), workspace: s.built})}
 }
 
 func (s *RelinkSuite) judge(lease, command string) types.GuardJudgment {

@@ -470,7 +470,7 @@ type JobModelTier struct {
 	Site   string          `json:"site,omitempty"   yaml:"site,omitempty"`
 	Model  string          `json:"model,omitempty"  yaml:"model,omitempty"`
 	// Shared is [ModelTierSet.SharedAliases] for the tier when it was assigned.
-	Shared []string        `json:"shared,omitempty" yaml:"shared,omitempty"`
+	Shared []string `json:"shared,omitempty" yaml:"shared,omitempty"`
 }
 
 // String renders the assignment as `fork` and `describe job` print it: the name and rank,

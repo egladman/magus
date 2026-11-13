@@ -31,8 +31,8 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/impact"
 	"github.com/egladman/magus/types/check"
+	"github.com/egladman/magus/types/impact"
 )
 
 // The viewer is the DEFAULT at a terminal, so this table is about FALLBACK rather than

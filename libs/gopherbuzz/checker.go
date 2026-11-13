@@ -327,7 +327,7 @@ func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.N
 //	a type a check rewrites must be copied out of base first (ownBaseObject).
 func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPrelude, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, declImports map[string]map[string]string, private map[string]bool, embedded bool, valueImports map[string]bool, nested *chunkNamespaces) (errs []typeError, warnings []typeError) {
 	c := &checker{
-		nested: nested,
+		nested:       nested,
 		types:        map[string]types.Type{},
 		moduleFuncs:  moduleFuncs,
 		moduleTypes:  moduleTypes,

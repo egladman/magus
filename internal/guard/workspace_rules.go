@@ -44,7 +44,7 @@ type headPolicy struct {
 	// commit. A leased call's row names it.
 	revision string
 	driver   types.VCSDriver
-	repoRoot  func(context.Context) (string, error)
+	repoRoot func(context.Context) (string, error)
 	// batch is the shared object process for this authority, when the driver
 	// can open one. One hook reads every pending policy source; a process per
 	// source was most of that wait.

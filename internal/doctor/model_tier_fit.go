@@ -10,8 +10,8 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/types/check"
 )
 
 const (

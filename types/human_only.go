@@ -12,9 +12,9 @@ type TargetPolicy struct {
 	TargetRef
 	HumanOnly bool `json:"human_only,omitempty"`
 	// Reason is the human_only reason, "" for a target that is not human_only.
-	Reason     string `json:"reason,omitempty"`
-	SkipCache  bool   `json:"skip_cache,omitempty"`
-	Relinks    string `json:"relinks,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	SkipCache bool   `json:"skip_cache,omitempty"`
+	Relinks   string `json:"relinks,omitempty"`
 	// Product is where a worker builds the Relinks binary, which no hook runs.
 	// ProductTarget is the sibling target that writes it.
 	Product       string `json:"product,omitempty"`

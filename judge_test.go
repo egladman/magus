@@ -359,7 +359,10 @@ func (s *judgeStepSuite) TestAnInputOffItsSchemaIsDeniedBeforeAnyRuleRuns() {
 	row := refundRow
 	row.InputSchema = []byte(`{"type":"object","properties":{"amount":{"type":"number"}},"required":["amount"]}`)
 	calls := 0
-	counting := func(context.Context, agent.StepRequest) (types.GuardVerdict, error) { calls++; return types.GuardVerdict{}, nil }
+	counting := func(context.Context, agent.StepRequest) (types.GuardVerdict, error) {
+		calls++
+		return types.GuardVerdict{}, nil
+	}
 
 	j, err := s.open(WithStepRows(row), WithStepRule(counting)).Judge(s.T().Context(), s.step("refund", "card", map[string]any{"amount": "ten"}))
 

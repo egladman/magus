@@ -6,8 +6,8 @@ import (
 	"strconv"
 
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/impact"
 	"github.com/egladman/magus/types/check"
+	"github.com/egladman/magus/types/impact"
 )
 
 // Review is the annotated changeset: every changed file with what the workspace already
@@ -547,7 +547,7 @@ type Thread struct {
 	Project     string `json:"project,omitempty" yaml:"project,omitempty"`
 	Role        string `json:"role,omitempty" yaml:"role,omitempty"`
 	// Reach is the file's widest reach; nil when no symbol index covered it.
-	Reach    *int                  `json:"reach,omitempty" yaml:"reach,omitempty"`
+	Reach    *int             `json:"reach,omitempty" yaml:"reach,omitempty"`
 	Coverage *impact.Coverage `json:"coverage,omitempty" yaml:"coverage,omitempty"`
 	// Symbols are the changed symbols in the thread's hunk, each with who references it, who it
 	// is public to, the callers it is reached through and its conformance findings.

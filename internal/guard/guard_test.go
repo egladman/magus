@@ -1105,7 +1105,7 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 		Rule:       string(denyRuleOutputRedirect),
 		Lease:      v.Lease, // follows the environment the test ran in
 		LeaseFrom:  v.LeaseFrom,
-		NextSteps:       []types.NextStep{want},
+		NextSteps:  []types.NextStep{want},
 	}, v, "one line plus the next and the verdict ref")
 
 	assert.Equal(t, "deny-output-redirect", servedNextPreauthorizes(hint.NewGate(cacheDir, ""), want.Run))

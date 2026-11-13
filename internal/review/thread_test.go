@@ -9,8 +9,8 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/notes"
-	"github.com/egladman/magus/types/impact"
 	"github.com/egladman/magus/types/check"
+	"github.com/egladman/magus/types/impact"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

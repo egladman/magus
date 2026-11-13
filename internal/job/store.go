@@ -134,7 +134,6 @@ type storeConfig struct {
 	migrations []migrate.Migration
 }
 
-
 // Location is where a Store lives: the repository whose rows these are, the state base
 // that places the file, and the checkout's cache directory.
 //
@@ -338,7 +337,6 @@ var (
 	jobType     = apiversion.TypeMeta{APIVersion: RecordAPIVersion, Kind: "Job"}
 	attemptType = apiversion.TypeMeta{APIVersion: RecordAPIVersion, Kind: "Attempt"}
 )
-
 
 // jobsLog is the file a write read, so the write appends only the lines that changed.
 type jobsLog struct {
@@ -650,7 +648,6 @@ func keepDerived(row *types.Job, prev types.Job) {
 		}
 	}
 }
-
 
 // endedAttemptDenials are the guard's denials of the holder of job id since its last
 // attempt began, for the fold a fork of the ended row makes, and whether the trail still

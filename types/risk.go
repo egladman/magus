@@ -24,8 +24,8 @@ type TierGateStep struct {
 // sufficient to validate it. An empty Gate pairs only with RiskTrivial.
 type TierReport struct {
 	// Base is the revision the change was measured from.
-	Base     string         `json:"base"     yaml:"base"`
-	Target   string         `json:"target"   yaml:"target"`
+	Base     string               `json:"base"     yaml:"base"`
+	Target   string               `json:"target"   yaml:"target"`
 	Tier     check.Tier           `json:"tier"     yaml:"tier"`
 	Affected []string             `json:"affected" yaml:"affected"`
 	Evidence []check.TierEvidence `json:"evidence" yaml:"evidence"`
