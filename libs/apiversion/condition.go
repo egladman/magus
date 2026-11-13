@@ -17,7 +17,7 @@ type Condition struct {
 	Type   string          `json:"type" yaml:"type" buzz:"type"`
 	Status ConditionStatus `json:"status" yaml:"status" buzz:"status"`
 	// ObservedGeneration is the Metadata.Generation behind the condition.
-	ObservedGeneration int64     `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty" buzz:"observedGeneration"`
+	ObservedGeneration int64     `json:"observedGeneration,omitzero" yaml:"observedGeneration,omitempty" buzz:"observedGeneration"`
 	LastTransitionTime time.Time `json:"lastTransitionTime" yaml:"lastTransitionTime" buzz:"lastTransitionTime"`
 	// Reason is a CamelCase machine-readable cause.
 	Reason  string `json:"reason" yaml:"reason" buzz:"reason"`

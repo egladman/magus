@@ -327,7 +327,7 @@ func TestHolderClaimsItsOwnJobWithAProof(t *testing.T) {
 // claim less when and by whom, so it compares with the row its fixture seeded.
 func claimedView(stored types.Job) types.Job {
 	v := stored.Clone()
-	v.Schema, v.Created, v.Updated, v.Generation, v.RegisteredBy = types.Schema{}, 0, 0, 0, types.Origin{}
+	v.Requires, v.Created, v.Updated, v.Generation, v.RegisteredBy = nil, 0, 0, 0, types.Origin{}
 	for i := range v.Claims {
 		v.Claims[i].At, v.Claims[i].By = 0, types.Origin{}
 	}

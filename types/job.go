@@ -58,27 +58,6 @@ func JobStates() []JobState {
 // for it themselves.
 func ValidJobState(s JobState) bool { return slices.Contains(JobStates(), s) }
 
-// JobHolder is who runs a job. One store holds both kinds, so a reader can tell the
-// server's own housekeeping from work a session was handed without asking a second door.
-type JobHolder string
-
-const (
-	// HolderServer is a job from the server's maintenance catalog: the server declares it,
-	// submits it, and runs it itself.
-	HolderServer JobHolder = "server"
-	// HolderSession is work an orchestrator declared for somebody else to hold.
-	HolderSession JobHolder = "session"
-)
-
-// OrSession reads an empty holder as HolderSession: every row written before the two kinds
-// shared a store was a session's, so absent means session rather than unknown.
-func (h JobHolder) OrSession() JobHolder {
-	if h == "" {
-		return HolderSession
-	}
-	return h
-}
-
 // LeaseCheck is the one check a lease runs, in the parts the output store records a run
 // by: the target (carrying a `spell::` filter when the row named one), the project it runs
 // in, and whatever is forwarded past `--`.
@@ -739,10 +718,12 @@ func (a JobAttempt) String() string {
 // and magus\ledger.list return one. VCSCheckpoint stays unregistered: Checkpoint is a
 // plain string here, the form an orchestrator has at spawn time.
 type Job struct {
-	// Schema is the shape this row was written in, stamped by the store on every write and
-	// never taken from a client, with every member this build does not declare. See
-	// JobAPIVersion.
-	Schema `yaml:",inline"`
+	// Requires names the features a magus must implement to write
+	// this row. Store-computed; the record keeps it as an annotation.
+	Requires []string `json:"requires,omitempty" yaml:"requires,omitempty"`
+	// Unknown names the record members this build does not declare,
+	// as spec.<key>, status.<key> or <key>. A rewrite keeps them.
+	Unknown []string `json:"unknown,omitempty" yaml:"unknown,omitempty"`
 	// ID is the lease's identity within the plan, and the key Update upserts on. The
 	// console joins its drawer rows to agent activity by this value, so an
 	// orchestrator should use the same id it puts in the worker's prompt.
@@ -869,8 +850,6 @@ type Job struct {
 	// State is the row's lifecycle position. See JobState for why no_return is
 	// its own value.
 	State JobState `json:"state,omitempty" yaml:"state,omitempty"`
-	// Holder is who runs this job. See [JobHolder]; empty reads as HolderSession.
-	Holder JobHolder `json:"holder,omitempty" yaml:"holder,omitempty"`
 	// ReadOnly marks the abbreviated row the skill describes: a lease that gathers
 	// evidence and writes nothing has no write set, so empty WritePaths and
 	// DenyPaths are correct rather than missing. Without this flag a reader
@@ -2381,12 +2360,11 @@ func NewJobList(jobs []Job) JobList {
 	}
 	var blocked []JobBlock
 	var readOnly []JobReadOnly
-	known := JobSchema.Features()
 	for _, row := range jobs {
 		if b, ok := JobBlockedOn(jobs, row); ok && row.State.Live() {
 			blocked = append(blocked, b)
 		}
-		if lacks := row.Unmet(known); lacks != nil {
+		if lacks := row.Unmet(); lacks != nil {
 			readOnly = append(readOnly, JobReadOnly{Job: row.ID, Lacks: lacks})
 		}
 	}
@@ -2697,6 +2675,29 @@ func (u Job) HardPaths() []string {
 	return slices.DeleteFunc(slices.Clone(u.WritePaths), func(p string) bool { return slices.Contains(u.SoftPaths, p) })
 }
 
+// JobFeatures are the Requires entries this build implements, sorted. A
+// row requiring another is read and listed, and only writing it is
+// refused.
+var JobFeatures = DeclarationSchema.Features()
+
+// Unmet returns the entries of Requires that [JobFeatures] does not name,
+// in row order, or nil when this build can write the row.
+func (u Job) Unmet() []string {
+	var out []string
+	for _, r := range u.Requires {
+		if !slices.Contains(JobFeatures, r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// ServerRun reports a job the server declared and runs itself, from its
+// maintenance catalog: no agent section, registered by the server.
+func (u Job) ServerRun() bool {
+	return u.Agent == nil && u.RegisteredBy.EntryPoint == EntryPointServer
+}
+
 // Instructions is the agent section's prose, empty for ordinary work.
 func (u Job) Instructions() string {
 	if u.Agent == nil {
@@ -2710,7 +2711,8 @@ func (u Job) Instructions() string {
 // preserves nil, so a row that stored null does not come back as [].
 func (u Job) Clone() Job {
 	c := u
-	c.Schema = u.clone()
+	c.Requires = slices.Clone(u.Requires)
+	c.Unknown = slices.Clone(u.Unknown)
 	c.WritePaths = slices.Clone(u.WritePaths)
 	c.DenyPaths = slices.Clone(u.DenyPaths)
 	c.SoftPaths = slices.Clone(u.SoftPaths)

@@ -87,7 +87,7 @@ func (v APIVersion) Refuse(got APIVersion) error {
 	if got == v {
 		return nil
 	}
-	return &RefusedError{Want: Header{APIVersion: v}, Got: Header{APIVersion: got}}
+	return &RefusedError{Want: TypeMeta{APIVersion: v}, Got: TypeMeta{APIVersion: got}}
 }
 
 // ErrNewer matches a RefusedError whose record is a newer version of the

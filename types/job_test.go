@@ -575,40 +575,21 @@ func TestDeclarationValidatesSignatureGoals(t *testing.T) {
 	assert.Contains(t, GoalExpects(), ExpectSignature)
 }
 
-// entries was added without moving JobSchemaVersion, so a schema-11 magus that predates it
-// reads such a row, acts on the rest, and writes entries back untouched.
-func TestAnOlderReaderKeepsEntries(t *testing.T) {
+func TestJobUnmetNamesWhatThisBuildLacks(t *testing.T) {
 	t.Parallel()
 
-	type olderJob struct {
-		Schema
-		ID    string   `json:"id"`
-		State JobState `json:"state"`
-	}
-	in := Job{
-		Schema:  Schema{Version: JobAPIVersion},
-		ID:      "worker",
-		State:   StateRunning,
-		Entries: []JobEntry{{Path: "a.go", By: Origin{User: "eli"}, At: 1, Consumed: 2}},
-	}
-	raw, err := json.Marshal(in)
-	require.NoError(t, err)
+	assert.Nil(t, Job{}.Unmet())
+	assert.Nil(t, Job{Requires: []string{"claim-declarations"}}.Unmet())
+	assert.Equal(t, []string{"jobs-v99", "x"}, Job{Requires: []string{"jobs-v99", "signature-goals", "x"}}.Unmet())
+}
 
-	var old olderJob
-	require.NoError(t, json.Unmarshal(raw, &old))
-	old.State = StatePass
-	rewritten, err := json.Marshal(old)
-	require.NoError(t, err)
+func TestServerRunNeedsNoAgentAndTheServerAsRegistrar(t *testing.T) {
+	t.Parallel()
 
-	var back Job
-	require.NoError(t, json.Unmarshal(rewritten, &back))
-	// The stamp an older reader sees is one it accepts, and it carries the entries through.
-	assert.Equal(t, Job{
-		Schema:  Schema{Version: JobAPIVersion},
-		ID:      "worker",
-		State:   StatePass,
-		Entries: in.Entries,
-	}, back)
+	server := Origin{EntryPoint: EntryPointServer}
+	assert.True(t, Job{RegisteredBy: server}.ServerRun())
+	assert.False(t, Job{RegisteredBy: server, Agent: &agent.Spec{}}.ServerRun(), "an agent section is a session's work")
+	assert.False(t, Job{RegisteredBy: Origin{EntryPoint: EntryPointCLI}}.ServerRun())
 }
 
 func TestDeclarationRefusesABlankBreaksEntry(t *testing.T) {

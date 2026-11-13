@@ -778,7 +778,7 @@ func (s *fourModelTiersSuite) migrated(line string) (types.Job, map[string]any) 
 	f, err := st.read()
 	s.Require().NoError(err)
 	s.Require().Len(f.Jobs, 1)
-	return f.Jobs[0], storedRow(s.T(), path, f.Jobs[0].ID)
+	return f.Jobs[0], storedSpec(s.T(), path, f.Jobs[0].ID)
 }
 
 func (s *fourModelTiersSuite) TestEachOldRequestedTierTakesItsNewName() {

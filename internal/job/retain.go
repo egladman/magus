@@ -23,7 +23,7 @@ const strayTempAge = time.Hour
 // over reports whether nobody will act on row again: graded or ended, or exited with its
 // result never collected. Server rows and rows this magus cannot write are never over.
 func over(row types.Job) bool {
-	if row.Holder.OrSession() == types.HolderServer || readOnly(row) != nil {
+	if row.ServerRun() || readOnly(row) != nil {
 		return false
 	}
 	return row.State.Terminal() || row.State == types.StateExited

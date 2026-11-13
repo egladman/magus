@@ -56,7 +56,7 @@ type probeLog struct {
 // rows a landing can be judged for. The checkout's diff decides, so a row
 // whose holder filed no result still qualifies.
 func landingCandidate(row types.Job) bool {
-	return (row.State == types.StateExited || row.State == types.StateRunning) && row.Holder.OrSession() != types.HolderServer && !row.ReadOnly &&
+	return (row.State == types.StateExited || row.State == types.StateRunning) && !row.ServerRun() && !row.ReadOnly &&
 		row.CheckoutRoot != "" &&
 		checkpointRevision(row.Checkpoint) != ""
 }
@@ -323,7 +323,7 @@ func Unmerged(ctx context.Context, root string, rows []types.Job, tries types.Jo
 	var report types.JobUnmergedReport
 	var work []types.Job
 	for _, row := range rows {
-		if row.Holder.OrSession() == types.HolderServer || row.LeftUnmerged != "" || !ownTree(rows, root, row) {
+		if row.ServerRun() || row.LeftUnmerged != "" || !ownTree(rows, root, row) {
 			continue
 		}
 		result := tries.Result(row.ID)

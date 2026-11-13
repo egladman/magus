@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,12 +36,39 @@ func seedFiled(t *testing.T, store *jobstore.Store, id string, result *types.Job
 	t.Helper()
 	path, err := store.Path()
 	require.NoError(t, err)
-	line, err := json.Marshal(struct {
-		APIVersion types.APIVersion `json:"api_version"`
-		types.Attempt
-	}{types.JobAPIVersion, types.Attempt{Job: id, N: 1, Status: types.AttemptStatus{Result: result}}})
+	raw, err := json.Marshal(result)
+	require.NoError(t, err)
+	var filed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &filed))
+	line, err := json.Marshal(map[string]any{
+		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
+		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
+	})
 	require.NoError(t, err)
 	require.NoError(t, file.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
+}
+
+// fixtureCamelKeys is v with every object key camelCased, as the
+// attempts.jsonl record spells them.
+func fixtureCamelKeys(v any) any {
+	switch v := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, x := range v {
+			parts := strings.Split(k, "_")
+			for i := 1; i < len(parts); i++ {
+				parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+			}
+			out[strings.Join(parts, "")] = fixtureCamelKeys(x)
+		}
+		return out
+	case []any:
+		for i := range v {
+			v[i] = fixtureCamelKeys(v[i])
+		}
+		return v
+	}
+	return v
 }
 
 // trailWorkspace is a workspace whose trail lives at dir, whose cache reports a fixed size,
@@ -394,7 +422,6 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 		Validation:           types.JobResultValidation{Command: "magus run go-test api", OutputRef: "out1"},
 		VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}},
 	}
-	row.Version = "magus.job/v1alpha11"
 	row.Requires = []string{"claims"}
 	row.Breaks = []string{"--old-flag", "api.Open"}
 	row.ModelTier = &agent.JobModelTier{
@@ -419,7 +446,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.Equal(t, "diverged", got.BaseVerdict)
 	require.Equal(t, "/w/agent-1", got.CheckoutRoot)
 	require.Equal(t, int64(1700000100), got.Registered)
-	require.Equal(t, "magus.job/v1alpha11", got.ApiVersion)
+	require.Equal(t, "batch.magus/v1alpha1", got.ApiVersion)
 	require.Equal(t, []string{"claims"}, got.Requires)
 
 	wantBy := &jobv1.JobOrigin{

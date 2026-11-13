@@ -27,7 +27,7 @@ func strictUnmarshal(data []byte, v any) error {
 }
 
 func (s *ObjectSuite) TestSpecHeaderNamesSpecType() {
-	s.Equal(Header{APIVersion: "example.widget/v1alpha1", Kind: "Widget"}, SpecHeader[widgetSpec]())
+	s.Equal(TypeMeta{APIVersion: "example.widget/v1alpha1", Kind: "Widget"}, SpecHeader[widgetSpec]())
 }
 
 func (s *ObjectSuite) TestNewStampsHeader() {
@@ -55,7 +55,7 @@ func (s *ObjectSuite) TestReadRoundTrips() {
 func (s *ObjectSuite) TestReadHeaderIgnoresBody() {
 	header, err := ReadHeader([]byte(`{"apiVersion":"example.widget/v1","kind":"Other","spec":{"x":1}}`), json.Unmarshal)
 	s.Require().NoError(err)
-	s.Equal(Header{APIVersion: "example.widget/v1", Kind: "Other"}, header)
+	s.Equal(TypeMeta{APIVersion: "example.widget/v1", Kind: "Other"}, header)
 }
 
 func (s *ObjectSuite) TestReadHeaderWrapsDecodeError() {
@@ -110,6 +110,32 @@ func (s *ObjectSuite) TestRequiresIgnoresOtherGroups() {
 func (s *ObjectSuite) TestUnmetListsUnknownFeaturesInOrder() {
 	m := Metadata{Annotations: map[string]string{"example.widget/requires": "a,b,c"}}
 	s.Equal([]Feature{"b", "c"}, m.Unmet("example.widget", []Feature{"a"}))
+}
+
+func (s *ObjectSuite) TestWithRequiresWritesAnnotation() {
+	m := Metadata{Annotations: map[string]string{"other": "x"}}.WithRequires("example.widget", []Feature{"a", "b"})
+	s.Equal(map[string]string{"other": "x", "example.widget/requires": "a,b"}, m.Annotations)
+}
+
+func (s *ObjectSuite) TestWithRequiresEmptyDropsAnnotation() {
+	m := Metadata{Annotations: map[string]string{"example.widget/requires": "a"}}.WithRequires("example.widget", nil)
+	s.Nil(m.Annotations)
+}
+
+func (s *ObjectSuite) TestWithRequiresLeavesReceiverMap() {
+	before := map[string]string{"example.widget/requires": "a"}
+	Metadata{Annotations: before}.WithRequires("example.widget", []Feature{"b"})
+	s.Equal(map[string]string{"example.widget/requires": "a"}, before)
+}
+
+func (s *ObjectSuite) TestEmbeddedTypeMetaStaysTopLevel() {
+	type record struct {
+		TypeMeta
+		Status string `json:"status"`
+	}
+	data, err := json.Marshal(record{TypeMeta: TypeMeta{APIVersion: "example.widget/v1alpha1", Kind: "Widget"}, Status: "ok"})
+	s.Require().NoError(err)
+	s.JSONEq(`{"apiVersion":"example.widget/v1alpha1","kind":"Widget","status":"ok"}`, string(data))
 }
 
 func (s *ObjectSuite) TestUnmetNilWhenAllKnown() {

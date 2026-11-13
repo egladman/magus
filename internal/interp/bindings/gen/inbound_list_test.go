@@ -193,7 +193,6 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.GuardDecision]():        {"", "allow", "advise", "deny"},
 	reflect.TypeFor[types.HookPoint]():            {"", "shell", "edit", "stop", "subagent-stop", "spawn", "session-start", "compact", "mcp", "attach"},
 	reflect.TypeFor[types.JobBaseVerdict]():       {"", "match", "revision-match", "diverged", "unknown"},
-	reflect.TypeFor[types.JobHolder]():            {"", "server", "session"},
 	reflect.TypeFor[types.JobState]():             {"", "declared", "running", "exited", "pass", "fail", "no_return"},
 	reflect.TypeFor[types.JobWriteProof]():        {"", "alone", "disjoint", "overlapping"},
 	reflect.TypeFor[types.McpTransport]():         {"", "stdio", "http"},

@@ -2509,8 +2509,6 @@ github.com/egladman/magus/types.HistoryReporter.embeds AncestryReporter
 github.com/egladman/magus/types.HistoryReporter.embeds BranchChangeReporter
 github.com/egladman/magus/types.HistoryReporter.embeds ChurnReporter
 github.com/egladman/magus/types.HistoryReporter.embeds RevTimeReporter
-github.com/egladman/magus/types.HolderServer const JobHolder = "server"
-github.com/egladman/magus/types.HolderSession const JobHolder = "session"
 github.com/egladman/magus/types.Holds type struct
 github.com/egladman/magus/types.Holds.Holds field []Precedent "json:\"holds\""
 github.com/egladman/magus/types.Holds.Indexes field []SymbolIndexStatus "json:\"indexes\""
@@ -2693,7 +2691,6 @@ github.com/egladman/magus/types.Job.GateAttempts field []JobGateAttempt "json:\"
 github.com/egladman/magus/types.Job.Generation field int "json:\"generation,omitempty\" yaml:\"generation,omitempty\""
 github.com/egladman/magus/types.Job.Goals field []Goal "json:\"goals,omitempty\" yaml:\"goals,omitempty\""
 github.com/egladman/magus/types.Job.HardPaths method func() []string
-github.com/egladman/magus/types.Job.Holder field JobHolder "json:\"holder,omitempty\" yaml:\"holder,omitempty\""
 github.com/egladman/magus/types.Job.HolderStopped field int64 "json:\"holder_stopped,omitempty\" yaml:\"holder_stopped,omitempty\""
 github.com/egladman/magus/types.Job.HoldsNoBuildSeat method func() bool
 github.com/egladman/magus/types.Job.ID field string "json:\"id\" yaml:\"id\""
@@ -2723,13 +2720,15 @@ github.com/egladman/magus/types.Job.Rejection field *JobRejection "json:\"reject
 github.com/egladman/magus/types.Job.ReleaseRequests field []JobReleaseRequest "json:\"release_requests,omitempty\" yaml:\"release_requests,omitempty\" buzz:\"-\""
 github.com/egladman/magus/types.Job.Releases field []JobRelease "json:\"releases,omitempty\" yaml:\"releases,omitempty\""
 github.com/egladman/magus/types.Job.ReportedBase field string "json:\"reported_base,omitempty\" yaml:\"reported_base,omitempty\""
+github.com/egladman/magus/types.Job.Requires field []string "json:\"requires,omitempty\" yaml:\"requires,omitempty\""
 github.com/egladman/magus/types.Job.ReworkRounds field int "json:\"rework_rounds,omitempty\" yaml:\"rework_rounds,omitempty\""
-github.com/egladman/magus/types.Job.Schema embedded Schema "yaml:\",inline\""
+github.com/egladman/magus/types.Job.ServerRun method func() bool
 github.com/egladman/magus/types.Job.SoftPaths field []string "json:\"soft_paths,omitempty\" yaml:\"soft_paths,omitempty\""
 github.com/egladman/magus/types.Job.StaleAt method func(observed int) bool
 github.com/egladman/magus/types.Job.State field JobState "json:\"state,omitempty\" yaml:\"state,omitempty\""
 github.com/egladman/magus/types.Job.Unattributed field []JobUnattributedWrite "json:\"unattributed,omitempty\" yaml:\"unattributed,omitempty\""
-github.com/egladman/magus/types.Job.Unmet method func(known []string) []string
+github.com/egladman/magus/types.Job.Unknown field []string "json:\"unknown,omitempty\" yaml:\"unknown,omitempty\""
+github.com/egladman/magus/types.Job.Unmet method func() []string
 github.com/egladman/magus/types.Job.Updated field int64 "json:\"updated\" yaml:\"updated\""
 github.com/egladman/magus/types.Job.Validated field int64 "json:\"validated,omitempty\" yaml:\"validated,omitempty\""
 github.com/egladman/magus/types.Job.Validation field string "json:\"validation,omitempty\" yaml:\"validation,omitempty\""
@@ -2804,6 +2803,7 @@ github.com/egladman/magus/types.JobEntry.At field int64 "json:\"at\" yaml:\"at\"
 github.com/egladman/magus/types.JobEntry.By field Origin "json:\"by\" yaml:\"by\""
 github.com/egladman/magus/types.JobEntry.Consumed field int64 "json:\"consumed,omitempty\" yaml:\"consumed,omitempty\""
 github.com/egladman/magus/types.JobEntry.Path field string "json:\"path\" yaml:\"path\""
+github.com/egladman/magus/types.JobFeatures var []string
 github.com/egladman/magus/types.JobForkFacts type struct
 github.com/egladman/magus/types.JobForkFacts.BranchesUnknown field string "json:\"branches_unknown,omitempty\"  yaml:\"branches_unknown,omitempty\""
 github.com/egladman/magus/types.JobForkFacts.CommitsSinceTest field int "json:\"commits_since_test\"           yaml:\"commits_since_test\""
@@ -2827,8 +2827,6 @@ github.com/egladman/magus/types.JobGrant.Lowers method func(row Job, attempt int
 github.com/egladman/magus/types.JobGrant.Revoked field bool "json:\"revoked,omitzero\" yaml:\"revoked,omitempty\""
 github.com/egladman/magus/types.JobGrant.Rule field string "json:\"rule\" yaml:\"rule\""
 github.com/egladman/magus/types.JobGrant.Until field int64 "json:\"until,omitzero\" yaml:\"until,omitempty\""
-github.com/egladman/magus/types.JobHolder type string
-github.com/egladman/magus/types.JobHolder.OrSession method func() JobHolder
 github.com/egladman/magus/types.JobIDRule func(id string) string
 github.com/egladman/magus/types.JobIdleSince func(rows []Job, row Job) (since int64, waiting bool)
 github.com/egladman/magus/types.JobIntegration type struct
@@ -2991,7 +2989,6 @@ github.com/egladman/magus/types.JobRun.Error field string "json:\"error,omitempt
 github.com/egladman/magus/types.JobRun.Invocation field string "json:\"invocation,omitempty\" yaml:\"invocation,omitempty\""
 github.com/egladman/magus/types.JobRun.ItemsRemoved field int64 "json:\"items_removed,omitempty\"   yaml:\"items_removed,omitempty\""
 github.com/egladman/magus/types.JobRun.OK field bool "json:\"ok\"              yaml:\"ok\""
-github.com/egladman/magus/types.JobSchema var FormatLedger
 github.com/egladman/magus/types.JobStaleAt func(rows []Job, row Job, now int64, after time.Duration) bool
 github.com/egladman/magus/types.JobState type string
 github.com/egladman/magus/types.JobState.Editing method func() bool

@@ -72,6 +72,31 @@ func (s *migrateSuite) TestUpSeveralVersionsInOrder() {
 	s.Equal("{\"migration\":3}\n{\"id\":\"a\",\"pass\":1}\n", s.contents(st), "only the migrations past 1 ran, in order")
 }
 
+func (s *migrateSuite) TestAHeaderRewriteRunsBeforeTheVersionIsSet() {
+	m := renameMember("plan", "book")
+	m.Header = func(e Entry) (Entry, error) {
+		e["book"], e["migration"] = e["plan"], json.RawMessage("99")
+		delete(e, "plan")
+		return e, nil
+	}
+	st := s.store("{\"plan\":\"p\"}\n{\"id\":\"a\",\"plan\":1}\n", m)
+
+	_, err := st.Apply()
+	s.Require().NoError(err)
+	s.Equal("{\"book\":\"p\",\"migration\":1}\n{\"book\":1,\"id\":\"a\"}\n", s.contents(st))
+}
+
+func (s *migrateSuite) TestAFailingHeaderRewriteLeavesTheFile() {
+	body := "{\"plan\":\"p\"}\n{\"id\":\"a\"}\n"
+	m := renameMember("plan", "book")
+	m.Header = func(Entry) (Entry, error) { return nil, errors.New("no") }
+	st := s.store(body, m)
+
+	_, err := st.Apply()
+	s.ErrorContains(err, "migration 1 (plan to book): header: no")
+	s.Equal(body, s.contents(st))
+}
+
 func (s *migrateSuite) TestAddsAHeaderToAFileWithoutOne() {
 	st := s.store("{\"id\":\"a\",\"attempt\":1}\n", renameMember("attempt", "run"))
 

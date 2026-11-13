@@ -63,7 +63,11 @@ func (d descendant) String() string {
 	if at := heldCheckout(row); at != "" {
 		where = "held in " + at
 	}
-	s := fmt.Sprintf("%s (%s, %s holder, %s)", row.ID, row.State, row.Holder.OrSession(), where)
+	holder := "session"
+	if row.ServerRun() {
+		holder = "server"
+	}
+	s := fmt.Sprintf("%s (%s, %s holder, %s)", row.ID, row.State, holder, where)
 	var work []string
 	if n := len(d.uncommitted); n > 0 {
 		work = append(work, fmt.Sprintf("%d uncommitted path(s) in its write paths, first %s", n, d.uncommitted[0]))

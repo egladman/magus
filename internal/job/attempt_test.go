@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -167,12 +168,54 @@ func (s *attemptStoreSuite) TestADroppedRowTakesItsTriesWithIt() {
 func (s *attemptStoreSuite) TestALineAnotherVersionWroteIsRefused() {
 	path := filepath.Join(filepath.Dir(s.storePath()), attemptsFileName)
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
-	s.Require().NoError(os.WriteFile(path, []byte(`{"api_version":"magus.job/v1alpha99","job":"a","n":1,"status":{}}`+"\n"), 0o600))
+	s.Require().NoError(os.WriteFile(path, []byte(`{"apiVersion":"batch.magus/v1alpha99","kind":"Attempt","spec":{"job":"a","n":1},"status":{}}`+"\n"), 0o600))
 
 	_, err := s.store.Attempts()
 
 	s.Require().Error(err)
-	s.Contains(err.Error(), "attempt 1 of a is magus.job/v1alpha99")
+	s.Contains(err.Error(), "attempt 1 of a is batch.magus/v1alpha99 Attempt")
+}
+
+func (s *attemptStoreSuite) TestATryIsStoredAsAnAttemptRecord() {
+	seed(s.T(), s.store, running("a"))
+	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", &types.JobResult{Job: "a", ChangedPaths: []string{"a.go"}}, 30))
+
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(s.storePath()), attemptsFileName))
+	s.Require().NoError(err)
+	var line map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(strings.TrimSpace(string(raw))), &line))
+	s.Equal(map[string]any{
+		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
+		"spec": map[string]any{"job": "a", "n": float64(1)},
+		"status": map[string]any{"ended": float64(30), "end": "Exit", "result": map[string]any{
+			"job": "a", "changedPaths": []any{"a.go"}, "unresolvedRisks": nil,
+		}},
+	}, line, "camelCase keys, CamelCase enum values")
+}
+
+// An attempts.jsonl an older magus wrote takes the envelope once, and a
+// line already in it is kept.
+func (s *attemptStoreSuite) TestEnvelopingAttemptsRewritesTheOlderLines() {
+	path := filepath.Join(filepath.Dir(s.storePath()), attemptsFileName)
+	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+	current, err := json.Marshal(recordAttempt(types.Attempt{Job: "b", N: 1, Status: types.AttemptStatus{Started: 3}}))
+	s.Require().NoError(err)
+	s.Require().NoError(os.WriteFile(path, []byte(`{"api_version":"magus.job/v1alpha1","job":"a","n":2,"status":{"state":"no_return","ended":5,"end":"job"},"dropped":true}`+"\n"+
+		string(current)+"\n"), 0o600))
+
+	s.Require().NoError(s.store.envelopeAttempts())
+	s.Require().NoError(s.store.envelopeAttempts())
+
+	log, err := s.store.attemptsLog()
+	s.Require().NoError(err)
+	recs, err := log.Load()
+	s.Require().NoError(err)
+	s.Require().Len(recs, 1, "the dropped try reads as gone")
+	s.Equal(types.Attempt{Job: "b", N: 1, Status: types.AttemptStatus{Started: 3}}, recs[0].attempt())
+	raw, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	s.Contains(string(raw), `"jobState":"NoReturn"`)
+	s.Contains(string(raw), `"dropped":true`)
 }
 
 func (s *attemptStoreSuite) TestAnArchiveKeepsTheTriesOfTheRowsItHolds() {

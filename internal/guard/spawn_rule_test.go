@@ -1003,11 +1003,9 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 	// The fork's authority predates the spawner's later commit.
 	assert.NotEqual(t, head, got.Authority)
 	assert.Equal(t, types.Job{
-		Schema:       got.Schema,
 		ID:           row.ID,
 		WritePaths:   row.WritePaths,
 		State:        types.StateRunning,
-		Holder:       got.Holder,
 		ReportedBase: head,
 		BaseVerdict:  got.BaseVerdict,
 		RegisteredBy: got.RegisteredBy,

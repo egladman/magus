@@ -58,7 +58,7 @@ func TestExitPassesAReadOnlyRowNothingElseGrades(t *testing.T) {
 
 	notes, err := Exit(t.Context(), s, "notes", &types.JobResult{}, none)
 	require.NoError(t, err)
-	notes.Schema, notes.Generation, notes.RegisteredBy = types.Schema{}, 0, types.Origin{}
+	notes.Generation, notes.RegisteredBy = 0, types.Origin{}
 	notes.Created, notes.Updated, notes.GateAttempts = 0, 0, nil
 	assert.Equal(t, types.Job{ID: "notes", ReadOnly: true, State: types.StatePass, Registered: 1, EndReason: returnedReason}, notes,
 		"the store's own stamps aside, a read-only row passes and changes nothing else")
@@ -742,7 +742,7 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 				{ID: "recent", State: types.StateDeclared, Updated: fresh},
 				{ID: "taken", State: types.StateDeclared, Registered: old, Updated: old},
 				{ID: "running", State: types.StateRunning, Updated: old},
-				{ID: "maintenance", Holder: types.HolderServer, State: types.StateDeclared, Updated: old},
+				{ID: "maintenance", RegisteredBy: types.Origin{EntryPoint: types.EntryPointServer}, State: types.StateDeclared, Updated: old},
 			},
 			ended: map[string]string{"untaken": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
@@ -822,7 +822,6 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 				row := got[want.ID]
 				reason, ended := tt.ended[want.ID]
 				wantRow := want
-				wantRow.Schema = row.Schema // the envelope is the store's, stamped on read
 				if !ended {
 					assert.Equal(t, wantRow, row, "%s stays as it was", want.ID)
 					continue
@@ -1170,7 +1169,7 @@ func pruneRows(now int64) []types.Job {
 		{ID: "done", State: types.StateExited, Updated: fresh},
 		{ID: "done/c", Parent: "done", State: types.StateDeclared, Updated: fresh},
 		{ID: "fresh", State: types.StateDeclared, Updated: fresh},
-		{ID: "maint", Holder: types.HolderServer, State: types.StateExited, Updated: old},
+		{ID: "maint", RegisteredBy: types.Origin{EntryPoint: types.EntryPointServer}, State: types.StateExited, Updated: old},
 		{ID: "graded", State: types.StatePass, Updated: old},
 	}
 }

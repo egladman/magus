@@ -2803,18 +2803,18 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
 		switch key {
-		case "apiVersion":
-			sVersion, err := decodeString(item, path+".apiVersion")
-			if err != nil {
-				return out, err
-			}
-			out.Schema.Version = types.APIVersion(sVersion)
 		case "requires":
 			strsRequires, err := decodeStringList(item, path+".requires")
 			if err != nil {
 				return out, err
 			}
-			out.Schema.Requires = strsRequires
+			out.Requires = strsRequires
+		case "unknown":
+			strsUnknown, err := decodeStringList(item, path+".unknown")
+			if err != nil {
+				return out, err
+			}
+			out.Unknown = strsUnknown
 		case "id":
 			sID, err := decodeString(item, path+".id")
 			if err != nil {
@@ -3071,12 +3071,6 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.State = types.JobState(sState)
-		case "holder":
-			sHolder, err := decodeEnum(item, path+".holder", "JobHolder", enumJobHolderValues)
-			if err != nil {
-				return out, err
-			}
-			out.Holder = types.JobHolder(sHolder)
 		case "readOnly":
 			bReadOnly, err := decodeBool(item, path+".readOnly")
 			if err != nil {
@@ -9270,7 +9264,6 @@ var enumGoalKindValues = []string{"", "check", "paths", "symbol"}
 var enumGuardDecisionValues = []string{"", "allow", "advise", "deny"}
 var enumHookPointValues = []string{"", "shell", "edit", "stop", "subagent-stop", "spawn", "session-start", "compact", "mcp", "attach"}
 var enumJobBaseVerdictValues = []string{"", "match", "revision-match", "diverged", "unknown"}
-var enumJobHolderValues = []string{"", "server", "session"}
 var enumJobStateValues = []string{"", "declared", "running", "exited", "pass", "fail", "no_return"}
 var enumJobWriteProofValues = []string{"", "alone", "disjoint", "overlapping"}
 var enumMcpTransportValues = []string{"", "stdio", "http"}

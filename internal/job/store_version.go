@@ -3,7 +3,7 @@ package job
 import (
 	"fmt"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/types"
 )
 
@@ -11,23 +11,13 @@ import (
 // wrote. A newer magus's lines are kept whole.
 const staleStoreFix = "move jobs.jsonl aside, or delete it, and fork the jobs again"
 
-// decodeLine decodes one store line into into, whose envelope is schema,
-// and refuses a line older than JobAPIVersion, naming staleStoreFix.
-func (s *Store) decodeLine(text []byte, line int, into any, schema *types.Schema) error {
-	if err := json.Unmarshal(text, into); err != nil {
-		return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line, err)
+// refuseRecord refuses the record at line of the store, got where this
+// magus reads only want. Another version names staleStoreFix or a newer
+// magus. Another kind is a line no magus writes.
+func (s *Store) refuseRecord(want, got apiversion.TypeMeta, line int) error {
+	what := fmt.Sprintf("job: %s:%d", s.path, line)
+	if got.APIVersion != want.APIVersion {
+		return types.RefuseVersion(types.APIVersion(want.APIVersion), types.APIVersion(got.APIVersion), what, staleStoreFix)
 	}
-	if _, old := schema.Unknown["schema_version"]; old || (schema.Version != "" && schema.Version.Compare(types.JobAPIVersion) < 0) {
-		return types.RefuseVersion(types.JobAPIVersion, schema.Version, fmt.Sprintf("job: %s:%d", s.path, line), staleStoreFix)
-	}
-	return nil
-}
-
-// newestVersion is the stamp a rewrite carries: this build's, or the
-// stored one when a newer magus wrote it, so no rewrite lowers a stamp.
-func newestVersion(stored types.APIVersion) types.APIVersion {
-	if stored.Compare(types.JobAPIVersion) > 0 {
-		return stored
-	}
-	return types.JobAPIVersion
+	return types.DiagnosticErrorf(types.StoreLineUndecodable, "%s: %v", what, &apiversion.RefusedError{Want: want, Got: got})
 }

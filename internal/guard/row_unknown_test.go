@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,21 +20,37 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// plantUnknownMember appends id's stored row again carrying a member no build declares,
-// as a newer magus would write it; the store's own writers carry the stored bag instead.
+// plantUnknownMember appends id's stored record again with a spec
+// member no build declares, as a newer magus would write it.
 func plantUnknownMember(t *testing.T, ctx context.Context, id, member string) {
 	t.Helper()
 	at := ctx.Value(locationKey{}).(location)
 	store := job.NewStore(job.Location{CacheDir: at.cacheDir, StateBase: fixture.StateBase(t), Root: at.workspace})
 	rows, err := store.List()
 	require.NoError(t, err)
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
-	require.GreaterOrEqual(t, i, 0, "%s is seeded", id)
-	row := rows[i]
-	row.Unknown = map[string]json.RawMessage{member: json.RawMessage(`["**"]`)}
-	line, err := json.Marshal(row)
-	require.NoError(t, err)
+	require.True(t, slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }), "%s is seeded", id)
 	path, err := store.Path()
+	require.NoError(t, err)
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var record map[string]json.RawMessage
+	for text := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
+		var line struct {
+			Metadata struct {
+				Name string `json:"name"`
+			} `json:"metadata"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(text), &line))
+		if line.Metadata.Name == id {
+			require.NoError(t, json.Unmarshal([]byte(text), &record))
+		}
+	}
+	var spec map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(record["spec"], &spec))
+	spec[member] = json.RawMessage(`["**"]`)
+	record["spec"], err = json.Marshal(spec)
+	require.NoError(t, err)
+	line, err := json.Marshal(record)
 	require.NoError(t, err)
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
@@ -231,7 +248,7 @@ func TestSpawnBoundToAReadableRowIsNotDeniedForSkew(t *testing.T) {
 }
 
 func withUnknown(row types.Job, member string) types.Job {
-	row.Unknown = map[string]json.RawMessage{member: json.RawMessage(`true`)}
+	row.Unknown = []string{"spec." + member}
 	return row
 }
 

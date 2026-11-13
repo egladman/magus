@@ -95,7 +95,6 @@ func TestListEndsExitedJobsWhoseWorkLanded(t *testing.T) {
 	got := states(t, s)
 	assert.Equal(t, []string{"landed", "busy", "pending"}, probed, "only exited rows in a checkout are probed")
 	landed := exited("landed")
-	landed.Schema = got["landed"].Schema // the envelope is the store's, stamped on read
 	landed.State, landed.EndReason, landed.Updated, landed.Landed = types.StateNoReturn, "its work landed on origin/main at base1", 100_000, true
 	assert.Equal(t, landed, got["landed"])
 	assert.False(t, got["busy/child"].Landed, "another ending is no landing")
@@ -338,7 +337,6 @@ func workerMergedIntoIntegration(t *testing.T, state types.JobState, dirty bool)
 		return
 	}
 	ended := exited("job-a", wa, "a.go")
-	ended.Schema = got["job-a"].Schema // the envelope is the store's, stamped on read
 	ended.State, ended.Updated = types.StateNoReturn, got["job-a"].Updated
 	ended.Landed = true
 	ended.EndReason = fmt.Sprintf("its work landed in integration job integration at %s: the 1 changed path(s) at %s in %s read the same there",

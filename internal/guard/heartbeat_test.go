@@ -110,7 +110,7 @@ func TestSilentLeases(t *testing.T) {
 		{ID: "recent", State: types.StateRunning},
 		{ID: "exited", State: types.StateNoReturn},
 		{ID: "unstamped", State: types.StateRunning},
-		{ID: "server", State: types.StateRunning, Holder: types.HolderServer},
+		{ID: "server", State: types.StateRunning, RegisteredBy: types.Origin{EntryPoint: types.EntryPointServer}},
 	}
 
 	got, err := SilentLeases(root, t.TempDir(), rows, now, SilentLeaseAfter)

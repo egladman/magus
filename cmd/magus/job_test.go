@@ -145,9 +145,9 @@ func TestPrintJobTreeNamesWhoHoldsEachJob(t *testing.T) {
 	t.Parallel()
 
 	rows := []types.Job{
-		{ID: "taken", State: types.StateRunning, Holder: types.HolderSession, CheckoutRoot: "/src/ana"},
+		{ID: "taken", State: types.StateRunning, CheckoutRoot: "/src/ana"},
 		{ID: "waiting", State: types.StateDeclared},
-		{ID: "sweep", State: types.StateRunning, Holder: types.HolderServer},
+		{ID: "sweep", State: types.StateRunning, RegisteredBy: types.Origin{EntryPoint: types.EntryPointServer}},
 	}
 	var out strings.Builder
 	printJobTree(&out, types.NewJobList(rows))
@@ -606,12 +606,39 @@ func seedFiled(t *testing.T, store *job.Store, id string, result *types.JobResul
 	t.Helper()
 	path, err := store.Path()
 	require.NoError(t, err)
-	line, err := json.Marshal(struct {
-		APIVersion types.APIVersion `json:"api_version"`
-		types.Attempt
-	}{types.JobAPIVersion, types.Attempt{Job: id, N: 1, Status: types.AttemptStatus{Result: result}}})
+	raw, err := json.Marshal(result)
+	require.NoError(t, err)
+	var filed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &filed))
+	line, err := json.Marshal(map[string]any{
+		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
+		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
+	})
 	require.NoError(t, err)
 	require.NoError(t, file.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
+}
+
+// fixtureCamelKeys is v with every object key camelCased, as the
+// attempts.jsonl record spells them.
+func fixtureCamelKeys(v any) any {
+	switch v := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, x := range v {
+			parts := strings.Split(k, "_")
+			for i := 1; i < len(parts); i++ {
+				parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+			}
+			out[strings.Join(parts, "")] = fixtureCamelKeys(x)
+		}
+		return out
+	case []any:
+		for i := range v {
+			v[i] = fixtureCamelKeys(v[i])
+		}
+		return v
+	}
+	return v
 }
 
 // A deny path naming a declaration of a file no diff driver reads is refused at fork

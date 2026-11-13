@@ -932,8 +932,8 @@ func jobModelCell(row types.Job) string {
 // same OS account, and a CLI exec sees no other identity.
 func jobHolderCell(row types.Job) string {
 	switch {
-	case row.Holder.OrSession() == types.HolderServer:
-		return string(types.HolderServer)
+	case row.ServerRun():
+		return string(types.EntryPointServer)
 	case row.CheckoutRoot != "":
 		return filepath.Base(row.CheckoutRoot)
 	}

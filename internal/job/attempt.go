@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
+	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/types"
 )
 
@@ -19,30 +20,155 @@ const attemptsFileName = "attempts.jsonl"
 
 // attemptRecord is one line of attempts.jsonl, the persistence type of
 // [types.Attempt] (ADR 0030). The last line per job and number is the
-// attempt; a Dropped line ends it with its job's row.
+// attempt; a dropped line ends it with its job's row.
 type attemptRecord struct {
-	APIVersion types.APIVersion    `json:"api_version"`
-	Job        string              `json:"job"`
-	N          int                 `json:"n"`
-	Status     attemptStatusRecord `json:"status"`
-	Dropped    bool                `json:"dropped,omitzero"`
+	apiversion.TypeMeta
+	Spec   attemptSpec         `json:"spec"`
+	Status attemptStatusRecord `json:"status"`
 }
 
-// attemptStatusRecord is the stored status. Its own type, so the record
-// can leave the domain shape without the domain type moving.
-type attemptStatusRecord types.AttemptStatus
+// attemptSpec names the try: an attempt has no name of its own.
+type attemptSpec struct {
+	Job string `json:"job"`
+	N   int    `json:"n"`
+}
 
-func (r attemptRecord) key() string { return fmt.Sprintf("%s\x00%d", r.Job, r.N) }
+// attemptStatusRecord is [types.AttemptStatus] under camelCase keys.
+// JobState is what the job ended as, never the try's lifecycle.
+type attemptStatusRecord struct {
+	Started            int64                `json:"started,omitzero"`
+	Ended              int64                `json:"ended,omitzero"`
+	End                string               `json:"end,omitempty"`
+	Result             *resultRecord        `json:"result,omitempty"`
+	JobState           string               `json:"jobState,omitempty"`
+	ObservedGeneration int                  `json:"observedGeneration,omitzero"`
+	EndReason          string               `json:"endReason,omitempty"`
+	ModelTier          string               `json:"modelTier,omitempty"`
+	Checkpoint         string               `json:"checkpoint,omitempty"`
+	ReportedBase       string               `json:"reportedBase,omitempty"`
+	ReworkRounds       int                  `json:"reworkRounds,omitzero"`
+	Widenings          int                  `json:"widenings,omitzero"`
+	Unmet              []verificationRecord `json:"unmet,omitempty"`
+	Violations         []string             `json:"violations,omitempty"`
+	FailingRefs        []string             `json:"failingRefs,omitempty"`
+	Denials            []denialRecord       `json:"denials,omitempty"`
+	DenialsKnown       bool                 `json:"denialsKnown,omitzero"`
+	Retry              retryRecord          `json:"retry,omitzero"`
+	Dropped            bool                 `json:"dropped,omitzero"`
+}
+
+type resultRecord struct {
+	Job                  string                 `json:"job,omitempty"`
+	ChangedPaths         []string               `json:"changedPaths"`
+	Validation           resultValidationRecord `json:"validation,omitzero"`
+	VerificationEvidence []evidenceRecord       `json:"verificationEvidence,omitempty"`
+	Descendants          []string               `json:"descendants,omitempty"`
+	UnresolvedRisks      []string               `json:"unresolvedRisks"`
+	FollowUps            []string               `json:"followUps,omitempty"`
+	ObservedGeneration   int                    `json:"observedGeneration,omitzero"`
+}
+
+type resultValidationRecord struct {
+	Command   string `json:"command"`
+	OutputRef string `json:"outputRef"`
+	Owed      string `json:"owed,omitempty"`
+	Unrun     string `json:"unrun,omitempty"`
+}
+
+type evidenceRecord struct {
+	GateID    string `json:"gateId"`
+	OutputRef string `json:"outputRef"`
+	Owed      string `json:"owed,omitempty"`
+	Unrun     string `json:"unrun,omitempty"`
+}
+
+type denialRecord struct {
+	Rule       string `json:"rule"`
+	Reason     string `json:"reason,omitempty"`
+	Action     string `json:"action,omitempty"`
+	VerdictRef string `json:"verdictRef,omitempty"`
+	Ts         int64  `json:"ts"`
+}
+
+type retryRecord struct {
+	Retryable bool                 `json:"retryable"`
+	Change    string               `json:"change,omitempty"`
+	Reason    string               `json:"reason,omitempty"`
+	Code      types.DiagnosticCode `json:"code,omitempty"`
+}
+
+var (
+	wireAttemptEnd  = newWireEnum(types.AttemptEndExit, types.AttemptEndHandback, types.AttemptEndStop, types.AttemptEndDeadline, types.AttemptEndJob)
+	wireJobState    = newWireEnum(types.JobStates()...)
+	wireRetryChange = newWireEnum(types.RetryAfterConfig, types.RetryAfterWidening, types.RetryAfterPerson, types.RetryAfterUpgrade)
+)
+
+func (r attemptRecord) key() string { return fmt.Sprintf("%s\x00%d", r.Spec.Job, r.Spec.N) }
 
 // recordAttempt is a as the line attempts.jsonl stores.
 func recordAttempt(a types.Attempt) attemptRecord {
-	a = a.Clone()
-	return attemptRecord{APIVersion: types.JobAPIVersion, Job: a.Job, N: a.N, Status: attemptStatusRecord(a.Status)}
+	s := a.Status
+	st := attemptStatusRecord{
+		Started: s.Started, Ended: s.Ended, End: wireAttemptEnd.spell(s.End), Result: recordResult(s.Result),
+		JobState: wireJobState.spell(s.State), ObservedGeneration: s.ObservedGeneration, EndReason: s.EndReason,
+		ModelTier: s.ModelTier, Checkpoint: s.Checkpoint, ReportedBase: s.ReportedBase,
+		ReworkRounds: s.ReworkRounds, Widenings: s.Widenings, Unmet: recordVerifications(s.Unmet),
+		Violations: slices.Clone(s.Violations), FailingRefs: slices.Clone(s.FailingRefs), DenialsKnown: s.DenialsKnown,
+		Retry: retryRecord{Retryable: s.Retry.Retryable, Change: wireRetryChange.spell(s.Retry.Change), Reason: s.Retry.Reason, Code: s.Retry.Code},
+	}
+	for _, d := range s.Denials {
+		st.Denials = append(st.Denials, denialRecord(d))
+	}
+	return attemptRecord{TypeMeta: attemptType, Spec: attemptSpec{Job: a.Job, N: a.N}, Status: st}
 }
 
 // attempt is r as the domain type.
 func (r attemptRecord) attempt() types.Attempt {
-	return types.Attempt{Job: r.Job, N: r.N, Status: types.AttemptStatus(r.Status)}.Clone()
+	st := r.Status
+	s := types.AttemptStatus{
+		Started: st.Started, Ended: st.Ended, End: wireAttemptEnd.read(st.End), Result: st.Result.result(),
+		State: wireJobState.read(st.JobState), ObservedGeneration: st.ObservedGeneration, EndReason: st.EndReason,
+		ModelTier: st.ModelTier, Checkpoint: st.Checkpoint, ReportedBase: st.ReportedBase,
+		ReworkRounds: st.ReworkRounds, Widenings: st.Widenings, Unmet: verifications(st.Unmet),
+		Violations: st.Violations, FailingRefs: st.FailingRefs, DenialsKnown: st.DenialsKnown,
+		Retry: types.RetryVerdict{Retryable: st.Retry.Retryable, Change: wireRetryChange.read(st.Retry.Change), Reason: st.Retry.Reason, Code: st.Retry.Code},
+	}
+	for _, d := range st.Denials {
+		s.Denials = append(s.Denials, types.JobDenial(d))
+	}
+	return types.Attempt{Job: r.Spec.Job, N: r.Spec.N, Status: s}.Clone()
+}
+
+func recordResult(r *types.JobResult) *resultRecord {
+	if r == nil {
+		return nil
+	}
+	out := &resultRecord{
+		Job: r.Job, ChangedPaths: slices.Clone(r.ChangedPaths), Validation: resultValidationRecord(r.Validation),
+		Descendants: slices.Clone(r.Descendants), UnresolvedRisks: slices.Clone(r.UnresolvedRisks),
+		FollowUps: slices.Clone(r.FollowUps), ObservedGeneration: r.ObservedGeneration,
+	}
+	for _, e := range r.VerificationEvidence {
+		out.VerificationEvidence = append(out.VerificationEvidence, evidenceRecord(e))
+	}
+	return out
+}
+
+// result is r as the result a holder filed. Its version was the input's,
+// checked when it was filed, and the record's own stands for it here.
+func (r *resultRecord) result() *types.JobResult {
+	if r == nil {
+		return nil
+	}
+	out := &types.JobResult{
+		Job: r.Job, ChangedPaths: r.ChangedPaths, Validation: types.JobResultValidation(r.Validation),
+		Descendants: r.Descendants, UnresolvedRisks: r.UnresolvedRisks, FollowUps: r.FollowUps,
+		ObservedGeneration: r.ObservedGeneration,
+	}
+	for _, e := range r.VerificationEvidence {
+		out.VerificationEvidence = append(out.VerificationEvidence, types.VerificationEvidence(e))
+	}
+	return out
 }
 
 func (s *Store) attemptsLog() (file.JSONL[attemptRecord], error) {
@@ -53,18 +179,59 @@ func (s *Store) attemptsLog() (file.JSONL[attemptRecord], error) {
 		Path: filepath.Join(filepath.Dir(s.path), attemptsFileName),
 		Perm: 0o600,
 		Key:  attemptRecord.key,
-		Live: func(r attemptRecord) bool { return !r.Dropped },
+		Live: func(r attemptRecord) bool { return !r.Status.Dropped },
 	}, nil
 }
 
 // refuseAttemptVersion refuses a line another version of magus wrote,
 // which this one cannot tell the meaning of.
 func refuseAttemptVersion(r attemptRecord) error {
-	if r.APIVersion == types.JobAPIVersion {
+	if r.TypeMeta == attemptType {
 		return nil
 	}
-	return types.DiagnosticErrorf(types.StoreRecordsNewer, "%s: attempt %d of %s is %s, and this magus reads %s: update magus, or %s",
-		attemptsFileName, r.N, r.Job, r.APIVersion, types.JobAPIVersion, staleStoreFix)
+	return types.DiagnosticErrorf(types.StoreRecordsNewer, "%s: attempt %d of %s is %s %s, and this magus reads %s %s: update magus, or %s",
+		attemptsFileName, r.Spec.N, r.Spec.Job, r.APIVersion, r.Kind, attemptType.APIVersion, attemptType.Kind, staleStoreFix)
+}
+
+// envelopeAttempts rewrites each line of attempts.jsonl an older magus
+// wrote as an [attemptRecord]. A line already one is kept, so a run cut
+// short runs again to the same file.
+func (s *Store) envelopeAttempts() error {
+	log, err := s.attemptsLog()
+	if err != nil {
+		return err
+	}
+	return file.WithLock(context.Background(), log.Path+".lock", file.LockWait, func() error {
+		read, err := file.ReadLines(log.Path)
+		if err != nil || len(read.Lines) == 0 {
+			return err
+		}
+		lines := make([][]byte, 0, len(read.Lines))
+		for _, line := range read.Lines {
+			var old struct {
+				APIVersion types.APIVersion    `json:"api_version"`
+				Job        string              `json:"job"`
+				N          int                 `json:"n"`
+				Status     types.AttemptStatus `json:"status"`
+				Dropped    bool                `json:"dropped"`
+			}
+			if err := json.Unmarshal(line.Text, &old); err != nil {
+				return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", log.Path, line.N, err)
+			}
+			if old.APIVersion == "" {
+				lines = append(lines, line.Text)
+				continue
+			}
+			r := recordAttempt(types.Attempt{Job: old.Job, N: old.N, Status: old.Status})
+			r.Status.Dropped = old.Dropped
+			text, err := json.Marshal(r)
+			if err != nil {
+				return err
+			}
+			lines = append(lines, text)
+		}
+		return file.RewriteLines(log.Path, lines, log.Perm)
+	})
 }
 
 // Attempts is every try the store holds, in the order their last lines
@@ -229,8 +396,8 @@ func (s *Store) dropAttempts(ctx context.Context, gone map[string]bool) error {
 	return log.Update(ctx, func(recs []attemptRecord) []attemptRecord {
 		var out []attemptRecord
 		for _, r := range recs {
-			if gone[r.Job] {
-				r.Dropped = true
+			if gone[r.Spec.Job] {
+				r.Status.Dropped = true
 				out = append(out, r)
 			}
 		}

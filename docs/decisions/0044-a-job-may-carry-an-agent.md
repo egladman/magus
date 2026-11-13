@@ -114,8 +114,9 @@ maps them. The envelope is an unexported generic in `internal/job` until
 | `types.Attempt`, `attempts.jsonl` with `attemptRecord`; `Prior` and the job result move there         | done     |
 | a spawn naming a row starts its try; handback, `SubagentStop` and exit end it; the deadline bounds it | done     |
 | the transcript spawn scan and `StopRequest.Tasks` deleted; the stop rule reads started tries          | done     |
-| CRD envelope in `batch.magus/v1alpha1` on both files; conditions replace `state`; `Holder` deleted    | proposed |
-| envelope on `libs/apiversion` `TypeMeta`                                                              | proposed |
+| CRD envelope in `batch.magus/v1alpha1` on both files; conditions replace `state`; `Holder` deleted    | done     |
+| envelope on `libs/apiversion` `TypeMeta`                                                              | done     |
+| `types.Schema` deleted: `Declaration`, `JobResult` and `StoredOutput` on `apiversion.Object`          | proposed |
 
 ### Deliberate break
 
@@ -130,6 +131,20 @@ Step 3 moves a row's `result`, `prior` and `attempts` to `attempts.jsonl` in sto
 migration 3, and the names are reserved on the row. `magus job` JSON output and the Buzz
 `job.list` value carry the tries as `attempts` beside the rows. `StopRequest.Tasks` and
 `TasksUnknown` are gone: a stop rule reads the tries that started and have not ended.
+
+Step 4 rewrites both files in store migration 5. A `jobs.jsonl` row becomes a `Job`
+record: `metadata.name` is the id, `metadata.generation` the generation, and the
+`batch.magus/requires` annotation the row's requires. The declared members move under
+`spec` and the computed ones under `status`, all camelCase. `state` becomes one True
+condition: `Declared`, `Running`, `Exited`, `Complete`, or `Failed` with reason
+`CriteriaUnmet` or `NoReturn`. The header becomes a `JobList` line. An `attempts.jsonl`
+line becomes an `Attempt` record with `spec.job` and `spec.n`. Enum values are
+CamelCase on both files and lowercase in Go. `holder` goes from the row and from
+`types.Job`. A server's run is a job with no agent section that the server registered
+(`status.registeredBy.entryPoint: Server`), and the migration stamps that on every row that held
+`holder: server`. `types.Job` loses `api_version`; its `requires` is read from the
+annotation, and `unknown` names the record members this build does not declare.
+`libs/apiversion` renames `Header` to `TypeMeta`.
 
 ### Principles checked
 

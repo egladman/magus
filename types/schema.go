@@ -82,26 +82,8 @@ func (l FormatLedger) Features() []string {
 	return out
 }
 
-// JobSchema is the ledger of a stored job row.
-var JobSchema = FormatLedger{
-	Name:    "job",
-	Type:    reflect.TypeFor[Job](),
-	Version: JobAPIVersion,
-	// The four boundary renames and completion_gates, names only the JSON document an
-	// older magus kept the plan in carried, and waivers, the name deviations had first.
-	// result, prior and attempts moved to attempts.jsonl (ADR 0044).
-	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "result", "prior", "attempts"},
-	Added:    map[string]APIVersion{"agent": JobAPIVersion, "authority": JobAPIVersion},
-	Requires: map[string]APIVersion{
-		"dead-job-end":       JobAPIVersion,
-		"claim-declarations": JobAPIVersion,
-		"signature-goals":    JobAPIVersion,
-		"job-generations":    JobAPIVersion,
-	},
-}
-
-// DeclarationSchema is the ledger of the job a caller declares on stdin. It shares the
-// row's version and features.
+// DeclarationSchema is the ledger of the job a caller declares on stdin.
+// Its features are the ones a stored row requires; see [JobFeatures].
 var DeclarationSchema = FormatLedger{
 	Name:    "declaration",
 	Type:    reflect.TypeFor[Declaration](),
@@ -110,7 +92,12 @@ var DeclarationSchema = FormatLedger{
 	// refused as an unknown member.
 	Reserved: []string{"completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "tier"},
 	Added:    map[string]APIVersion{"agent": JobAPIVersion},
-	Requires: JobSchema.Requires,
+	Requires: map[string]APIVersion{
+		"dead-job-end":       JobAPIVersion,
+		"claim-declarations": JobAPIVersion,
+		"signature-goals":    JobAPIVersion,
+		"job-generations":    JobAPIVersion,
+	},
 }
 
 // JobResultSchema is the ledger of the result a holder files.
@@ -130,5 +117,6 @@ var StoredOutputSchema = FormatLedger{
 	Reserved: []string{"schema_version"},
 }
 
-// FormatLedgers are every ledger the conventions test holds to the contract.
-var FormatLedgers = []FormatLedger{JobSchema, DeclarationSchema, JobResultSchema, StoredOutputSchema}
+// FormatLedgers are every ledger the conventions test holds to the
+// contract. A stored job row is internal/job's record, not a ledger.
+var FormatLedgers = []FormatLedger{DeclarationSchema, JobResultSchema, StoredOutputSchema}

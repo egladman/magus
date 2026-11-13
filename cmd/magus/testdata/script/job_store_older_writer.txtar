@@ -23,7 +23,7 @@ stdout 'scout/first'
 stdout 'scout/second'
 
 # The store now requires a feature this build lacks.
-exec sh -c 'f=$(find "$XDG_STATE_HOME" -name jobs.jsonl) && sed "1s/}\$/,\"requires\":[\"jobs-v99\"]}/" "$f" > "$f.new" && mv "$f.new" "$f"'
+exec sh -c 'f=$(find "$XDG_STATE_HOME" -name jobs.jsonl) && sed "1s/}\$/,\"metadata\":{\"annotations\":{\"batch.magus\/requires\":\"jobs-v99\"}}}/" "$f" > "$f.new" && mv "$f.new" "$f"'
 
 ! exec magus job fork scout/third --read-only --instructions 'read the tests'
 stderr '\[MGS3051\]'

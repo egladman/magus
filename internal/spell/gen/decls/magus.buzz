@@ -113,12 +113,6 @@ export enum<str> JobState {
     noReturn = "no_return",
 }
 
-export enum<str> JobHolder {
-    none = "",
-    server = "server",
-    session = "session",
-}
-
 export enum<str> JobWriteProof {
     none = "",
     alone = "alone",
@@ -844,8 +838,8 @@ export object JobIntegration {
 }
 
 export object Job {
-    apiVersion: str = "",
     requires: [str] = [],
+    unknown: [str] = [],
     id: str = "",
     parent: str = "",
     agent: AgentSpec? = null,
@@ -881,7 +875,6 @@ export object Job {
     validation: str = "",
     goals: [Goal] = [],
     state: JobState = JobState.none,
-    holder: JobHolder = JobHolder.none,
     readOnly: bool = false,
     releases: [JobRelease] = [],
     unattributed: [JobUnattributedWrite] = [],

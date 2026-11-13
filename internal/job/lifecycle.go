@@ -1101,7 +1101,7 @@ func (w *sweeper) dead(rows []types.Job) ([]ending, error) {
 		x := indexRows(rows)
 		var round []ending
 		for _, row := range rows {
-			if !row.State.Live() || row.Holder.OrSession() == types.HolderServer || readOnly(row) != nil {
+			if !row.State.Live() || row.ServerRun() || readOnly(row) != nil {
 				continue
 			}
 			reason, err := w.reason(x, rows, row)
@@ -1427,7 +1427,7 @@ func (w *sweeper) prunable(rows []types.Job, window time.Duration, all bool) ([]
 		x := indexRows(rows)
 		var round []Ending
 		for _, row := range rows {
-			if !row.State.Live() || row.Holder.OrSession() == types.HolderServer || readOnly(row) != nil || kept[row.ID] {
+			if !row.State.Live() || row.ServerRun() || readOnly(row) != nil || kept[row.ID] {
 				continue
 			}
 			reason, err := w.reason(x, rows, row)

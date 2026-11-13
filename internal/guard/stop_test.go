@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/file"
@@ -33,14 +34,52 @@ func storeTries(t *testing.T, at location, tries ...types.Attempt) {
 	require.NoError(t, err)
 	lines := make([][]byte, 0, len(tries))
 	for _, a := range tries {
-		line, err := json.Marshal(struct {
-			APIVersion types.APIVersion `json:"api_version"`
-			types.Attempt
-		}{types.JobAPIVersion, a})
-		require.NoError(t, err)
-		lines = append(lines, line)
+		lines = append(lines, fixtureAttemptLine(t, a))
 	}
 	require.NoError(t, file.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), lines, 0o600))
+}
+
+// fixtureAttemptLine is a as an attempts.jsonl record, its keys
+// camelCased. A copy, as storeTries is; enum values pass through as Go
+// spells them, which the store reads unchanged.
+func fixtureAttemptLine(t *testing.T, a types.Attempt) []byte {
+	t.Helper()
+	raw, err := json.Marshal(a.Status)
+	require.NoError(t, err)
+	var status map[string]any
+	require.NoError(t, json.Unmarshal(raw, &status))
+	if state, ok := status["state"]; ok {
+		delete(status, "state")
+		status["job_state"] = state
+	}
+	line, err := json.Marshal(map[string]any{
+		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
+		"spec": map[string]any{"job": a.Job, "n": a.N}, "status": fixtureCamelKeys(status),
+	})
+	require.NoError(t, err)
+	return line
+}
+
+// fixtureCamelKeys is v with every object key camelCased.
+func fixtureCamelKeys(v any) any {
+	switch v := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, x := range v {
+			parts := strings.Split(k, "_")
+			for i := 1; i < len(parts); i++ {
+				parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+			}
+			out[strings.Join(parts, "")] = fixtureCamelKeys(x)
+		}
+		return out
+	case []any:
+		for i := range v {
+			v[i] = fixtureCamelKeys(v[i])
+		}
+		return v
+	}
+	return v
 }
 
 type StopUnfiledSuite struct {

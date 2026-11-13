@@ -299,19 +299,19 @@ func TestLedgerViolations(t *testing.T) {
 func TestSchemaUnknownRoundTrips(t *testing.T) {
 	t.Parallel()
 
-	in := `{"api_version":"magus.job/v1alpha99","requires":["x"],"id":"a","future_field":{"x":1}}`
-	var row Job
-	require.NoError(t, json.Unmarshal([]byte(in), &row))
+	in := `{"api_version":"magus.job-result/v1alpha99","requires":["x"],"job":"a","future_field":{"x":1}}`
+	var result JobResult
+	require.NoError(t, json.Unmarshal([]byte(in), &result))
 	// The bag's raw values are the decoder's own; its keys are checked below.
-	assert.Equal(t, Job{Schema: Schema{Version: "magus.job/v1alpha99", Requires: []string{"x"}, Unknown: row.Unknown}, ID: "a"}, row)
-	assert.Equal(t, []string{"future_field"}, slices.Collect(maps.Keys(row.Unknown)))
+	assert.Equal(t, JobResult{Schema: Schema{Version: "magus.job-result/v1alpha99", Requires: []string{"x"}, Unknown: result.Unknown}, Job: "a"}, result)
+	assert.Equal(t, []string{"future_field"}, slices.Collect(maps.Keys(result.Unknown)))
 
-	out, err := json.Marshal(row.Clone())
+	out, err := json.Marshal(result)
 	require.NoError(t, err)
 	var back map[string]any
 	require.NoError(t, json.Unmarshal(out, &back))
 	assert.Equal(t, map[string]any{"x": float64(1)}, back["future_field"])
-	assert.Equal(t, "magus.job/v1alpha99", back["api_version"])
+	assert.Equal(t, "magus.job-result/v1alpha99", back["api_version"])
 }
 
 func TestSchemaUnmet(t *testing.T) {
@@ -320,5 +320,5 @@ func TestSchemaUnmet(t *testing.T) {
 	assert.Nil(t, Schema{}.Unmet(nil))
 	assert.Nil(t, Schema{Requires: []string{"a"}}.Unmet([]string{"a", "b"}))
 	assert.Equal(t, []string{"c", "d"}, Schema{Requires: []string{"c", "a", "d"}}.Unmet([]string{"a"}))
-	assert.Equal(t, []string{"claim-declarations", "dead-job-end", "job-generations", "signature-goals"}, JobSchema.Features())
+	assert.Equal(t, []string{"claim-declarations", "dead-job-end", "job-generations", "signature-goals"}, JobFeatures)
 }

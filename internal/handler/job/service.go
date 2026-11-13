@@ -265,8 +265,9 @@ func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv
 	if s.store == nil {
 		return
 	}
+	// The server holds its catalog's rows whoever asked for the run.
+	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
 	if _, err := s.store.Update(ctx, j.Name, func(row *types.Job) {
-		row.Holder = types.HolderServer
 		row.State = types.StateRunning
 		if row.LastRun == nil {
 			row.LastRun = &types.JobRun{}
@@ -346,7 +347,7 @@ func delegatedJob(row types.Job, result *types.JobResult) *jobv1.Job {
 		Attempt:        wireAttempt(row.Attempt),
 		Integration:    wireIntegration(row.Integration),
 		WaiterEvidence: wireIntegration(row.WaiterEvidence),
-		ApiVersion:     string(row.Version),
+		ApiVersion:     string(jobstore.RecordAPIVersion),
 		Requires:       row.Requires,
 		ModelTier:      wireModelTier(row.ModelTier),
 		BriefFormat:    string(row.BriefFormat),
@@ -354,7 +355,7 @@ func delegatedJob(row types.Job, result *types.JobResult) *jobv1.Job {
 		Widenings:      int32(row.Widenings),
 		Agent:          wireAgent(row.Agent),
 	}
-	if row.Holder.OrSession() == types.HolderServer {
+	if row.ServerRun() {
 		j.Holder = jobv1.JobHolder_JOB_HOLDER_SERVER
 	}
 	for _, r := range row.Releases {
