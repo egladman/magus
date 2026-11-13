@@ -198,6 +198,8 @@ worker runs. That sandbox is a later decision, and section 1 holds until then.
 | Go names only its own module's paths, each saying why (`internal/contract`, `internal/ward`, `load_contract.go`) | done     |
 | the worker placement script comes from the scripts index, not `stale_binary.go`              | done     |
 | the worker relink of fbacfdce1 is removed                                                     | done     |
+| a leased call's contract digest reads the tree at its row's authority                         | done     |
+| the fork's `checkoutReadsRow` reads the authority's `api.lock`                                | planned  |
 | zero-trust containment of a worker's own code                                                 | planned  |
 
 ### Principles checked
