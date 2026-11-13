@@ -268,7 +268,7 @@ func WithStepRule(rule StepRule) Option
 | `agent.Step`, `agent.StepRow`, `agent.StepRequest`                           | done      |
 | `Magus.Judge`, `WithStepRows`                                                | done      |
 | `RecordJudgment` takes a `Step`                                              | proposed  |
-| `magus\guard.step(<kind>, <fun>)`                                            | proposed  |
+| `magus\guard.step(<kind>, <fun>)`                                            | done      |
 | `StepRule`, `WithStepRule`                                                   | done      |
 | an uncovered kind is an error when the rules load                            | done      |
 | a mistyped location is a deny (`step-input`)                                 | done      |
@@ -499,3 +499,35 @@ Still proposed, and why:
   (`shapeDeny`, `servedNext`, `hint.FilterServable`, the `next_steps` the glues print) to
   carry a step of kind `tool` with the command as its input. Nothing in this change
   needed it.
+
+### 2026-11-12: `magus\guard.step` is built
+
+What was built:
+
+- `magus\guard.step(<kind>, <fun>)` registers one rule per kind in the root magusfile.
+  The kind takes the rule-name grammar. `step` joins the reserved names, since an
+  unnamed verdict reports as `workspace:step`. A named one reports as
+  `workspace:<rule>`, as the other seams do.
+- The rules sit on a `steprule.Set` (`internal/guard/steprule`), not on
+  `workspace.WorkspaceRegistry`, so `internal/workspace` still does not import
+  `types/agent`. A load puts the set on its context as it puts the model tiers: `Magus`
+  holds its own, and each guard load holds one beside its registry. The registry
+  still releases the session a rule runs on.
+- `StepRequest` and `Step` (`AgentStep` in Buzz) are generated mirrors (ADR 0035).
+- `JudgeStep` asks the rule for the step's kind after the Go rules, on the working
+  tree and the approved copy (ADR 0045), and keeps the stricter answer. A rule that
+  fails judges nothing and says so beside the verdict, as the stop seam does. A step
+  that changes state is denied when the rule runs out of time.
+- A row with no built-in capability and no Go rule is checked when the magusfile
+  loads, not when the rows are read. It opens when the root magusfile registers a
+  rule for its kind. At judgment a step only that rule judges is denied under
+  `unjudged-step` when no side answers.
+- The policy snapshot records the kinds each side registers, and the trail's marker
+  records them too. A removed kind counts as a pending loosening. `ForeignJudgeDeps`
+  drops both sides of the rule.
+- `WithStepRows`, `WithStepRule` and `WithSpawnRule` panic on a bare `workspace.Load`
+  rather than set nothing.
+
+Still proposed: a host's own envelope is handed to no step rule. A `tool` step no row
+covers is still judged as its envelope, so `magus\guard.step("tool", ...)` judges only
+the tool steps a row declares.
