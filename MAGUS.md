@@ -73,7 +73,7 @@ magus graph export -o json  # the whole graph
 | function   |    4000+ | `magus query kind=function`   | `apiBase`, `main`, `judgeText`                                                                                                                                    |
 | import     |     200+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                                                                              |
 | rationale  |      10+ | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                                                            |
-| package    |     100+ | `magus query kind=package`    | `gopkg.in/yaml.v3`, `github.com/davecgh/go-spew`, `github.com/pmezard/go-difflib`                                                                                 |
+| package    |     100+ | `magus query kind=package`    | `github.com/davecgh/go-spew`, `github.com/pmezard/go-difflib`, `github.com/stretchr/testify`                                                                      |
 | link       |     100+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://cursor.com/docs/agent/hooks`                                                                  |
 | marker     |        4 | `magus query kind=marker`     | `magus:diagram server-share`, `magus:diagram server-http`, `magus:skills`                                                                                         |
 | figure     |      50+ | `magus query kind=figure`     | `One library draws every figure, here and in the console`, `One pipeline, and the modules each host registers`, `A target exists because a magusfile exported it` |
@@ -85,7 +85,7 @@ magus graph export -o json  # the whole graph
 | [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `catalog-docs-generate`, `site-generate`, `lint`  |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |      10 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                   |
 | [libs/apiversion](libs/apiversion/MAGUS.md)                                 |       8 | `magus query project=libs/apiversion`                 | `format`, `ci`, `build`                           |
-| [libs/cmdline](libs/cmdline/MAGUS.md)                                       |       8 | `magus query project=libs/cmdline`                    | `format`, `ci`, `test`                            |
+| [libs/clikit](libs/clikit/MAGUS.md)                                         |       8 | `magus query project=libs/clikit`                     | `format`, `ci`, `test`                            |
 | [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `ci`, `test`                            |
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       8 | `magus query project=libs/diagnostics`                | `format`, `ci`, `test`                            |
 | libs/embed                                                                  |       7 | `magus query project=libs/embed`                      | `ci`, `format`, `build`                           |
