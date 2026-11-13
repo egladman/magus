@@ -990,7 +990,7 @@ func (s *scopesSuite) TestAnUndeclaredScopesIsNil() {
 
 func (s *scopesSuite) TestRefusesACommandNamingNoProgram() {
 	_, err := describe(Contract{Name: "golang", Scopes: &spells.Command{Args: []string{"list"}}})
-	s.EqualError(err, `spell "golang": mgs_getScopes: bin is required; magus runs the command with the package appended`)
+	s.EqualError(err, `spell "golang": mgs_getScopes: bin is required, since magus runs the command with the package appended`)
 }
 
 // lexLanguage declares a whole syntax, which each case below breaks one way.
