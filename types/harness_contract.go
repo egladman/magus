@@ -135,10 +135,10 @@ type Price struct {
 	Output       float64 `json:"output,omitzero"`
 }
 
-// ModelRow is one model a host runs: its exact id, the model-tier case it runs ("" for
+// HarnessModel is one model a host runs: its exact id, the model-tier case it runs ("" for
 // none), the short alias the host takes for it in a spawn ("" for none), its context window
 // in tokens, its price, and its long-context step, whose zero Above means none.
-type ModelRow struct {
+type HarnessModel struct {
 	ID     string    `json:"id"`
 	Tier   string    `json:"tier,omitzero"`
 	Alias  string    `json:"alias,omitzero"`
@@ -159,19 +159,19 @@ type HarnessTool struct {
 // `magus agent harness install` writes the rows to, beside a host file magus shell finds
 // them by. A tool no row names is one the guard cannot judge.
 type HarnessTools struct {
-	Dir  string        `json:"dir"`
-	Rows []HarnessTool `json:"rows"`
+	Dir   string        `json:"dir"`
+	Tools []HarnessTool `json:"tools"`
 }
 
 // The files a tool rows directory holds beside one file per capability: the layout
 // version, the harness's model rows, the workspace's model-tier declaration, the harness
 // id the directory belongs to, and that harness's Limits.
 const (
-	ToolRowsVersionFile = "version"
-	ToolModelRowsFile   = "models"
-	ToolTiersFile       = "tiers"
-	ToolHostFile        = "host"
-	ToolLimitsFile      = "limits"
+	ToolVersionFile = "version"
+	ToolModelsFile  = "models"
+	ToolTiersFile   = "tiers"
+	ToolHostFile    = "host"
+	ToolLimitsFile  = "limits"
 )
 
 // Holds reports whether rel, a slash-separated workspace-relative path, is a file install
@@ -182,13 +182,13 @@ func (t HarnessTools) Holds(rel string) bool {
 	if path.Clean(dir) != path.Clean(t.Dir) {
 		return false
 	}
-	return name == ToolModelRowsFile || name == ToolTiersFile || name == ToolRowsVersionFile ||
+	return name == ToolModelsFile || name == ToolTiersFile || name == ToolVersionFile ||
 		name == ToolHostFile || name == ToolLimitsFile || slices.Contains(toolCapabilities, ToolCapability(name))
 }
 
 // Capability is the capability the table gives tool, "" for a tool no row names.
 func (t HarnessTools) Capability(tool string) ToolCapability {
-	for _, r := range t.Rows {
+	for _, r := range t.Tools {
 		if r.Name == tool {
 			return r.Capability
 		}

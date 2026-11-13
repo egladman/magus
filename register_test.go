@@ -34,7 +34,7 @@ func TestSDKOption(t *testing.T) { suite.Run(t, new(sdkOptionSuite)) }
 
 func (s *sdkOptionSuite) TestWithStepRowsRecordsMisuseOnABareLoad() {
 	l := &workspace.Load{}
-	s.NotPanics(func() { WithStepRows()(l) })
+	s.NotPanics(func() { WithStepSpecs()(l) })
 	s.Require().Len(l.Misuse, 1)
 	s.EqualError(l.Misuse[0], "magus.WithStepRows sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
 }
@@ -64,8 +64,8 @@ func (s *sdkOptionSuite) TestInspectReturnsRecordedMisuse() {
 }
 
 func (s *sdkOptionSuite) TestOpensOptionsTakeIt() {
-	o := collectOptions([]Option{WithStepRows(refundRow), WithSpawnRule(TierCeiling)})
-	s.Equal([]agent.StepRow{refundRow}, o.stepRows)
+	o := collectOptions([]Option{WithStepSpecs(refundRow), WithSpawnRule(TierCeiling)})
+	s.Equal([]agent.StepSpec{refundRow}, o.stepSpecs)
 	s.NotNil(o.spawnRule)
 }
 

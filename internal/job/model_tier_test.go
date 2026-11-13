@@ -68,7 +68,7 @@ func (s *requestedModelSuite) TestATierAndTheIDItMapsToAgree() {
 	got, err := s.resolve(agent.Model{ID: "opus", Tier: "design"})
 	s.Require().NoError(err)
 	s.Equal(agent.JobModelTier{
-		Name: "design", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
+		Name: "design", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceJob,
 		Reason: "the job names the tier design", Model: "opus",
 	}, got, "the tier decides, and the id is the model the host spawns")
 }
@@ -207,7 +207,7 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 			name:        "a row naming a tier wins and the matrix never runs",
 			row:         types.Job{ID: "a", Agent: tierRequest("design")},
 			matrix:      countingMatrix{answer: routineAnswer()},
-			want:        agent.JobModelTier{Name: "design", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow, Reason: "the job names the tier design"},
+			want:        agent.JobModelTier{Name: "design", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceJob, Reason: "the job names the tier design"},
 			matrixCalls: 0,
 		},
 		{
@@ -215,7 +215,7 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 			row:    types.Job{ID: "a", Agent: modelRequest("gpt")},
 			matrix: countingMatrix{answer: routineAnswer()},
 			want: agent.JobModelTier{
-				Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
+				Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceJob,
 				Reason: "the job names the model gpt, which no model tier maps to", Model: "gpt",
 			},
 			matrixCalls: 0,
@@ -225,7 +225,7 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 			row:    types.Job{ID: "a", Agent: modelRequest("opus")},
 			matrix: countingMatrix{answer: routineAnswer()},
 			want: agent.JobModelTier{
-				Name: "design", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
+				Name: "design", Rank: 2, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceJob,
 				Reason: "the job names the model opus, which harness claude-code maps to the tier design", Model: "opus",
 			},
 			matrixCalls: 0,
@@ -235,7 +235,7 @@ func TestAssignModelTierPrecedence(t *testing.T) {
 			row:    types.Job{ID: "a", Agent: modelRequest("sonnet")},
 			matrix: countingMatrix{},
 			want: agent.JobModelTier{
-				Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceRow,
+				Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceJob,
 				Reason: "the job names the model sonnet, which harness claude-code maps to the tier bounded", Model: "sonnet",
 			},
 			matrixCalls: 0,
@@ -512,7 +512,7 @@ func TestStoreReassignsOnlyWhenTheModelChanges(t *testing.T) {
 	changed := seed(t, s, row)
 	assert.Equal(t, 1, matrix.calls, "a row that names a tier never reaches the matrix")
 	wantChanged := *changed.ModelTier
-	wantChanged.Name, wantChanged.Source = "design", agent.ModelTierSourceRow
+	wantChanged.Name, wantChanged.Source = "design", agent.ModelTierSourceJob
 	assert.Equal(t, wantChanged, *changed.ModelTier)
 }
 
@@ -524,13 +524,13 @@ func TestStoreKeepsTheStoredTierAgainstAWholeRowWrite(t *testing.T) {
 	row.Agent.Model = agent.Model{}
 	first := seed(t, s, row)
 
-	row.ModelTier = &agent.JobModelTier{Name: "design", Rank: 2, Source: agent.ModelTierSourceRow, Reason: "forged"}
+	row.ModelTier = &agent.JobModelTier{Name: "design", Rank: 2, Source: agent.ModelTierSourceJob, Reason: "forged"}
 	again := seed(t, s, row)
 	assert.Equal(t, first.ModelTier, again.ModelTier, "a caller's tier is replaced by the stored one")
 
 	forged := lease("b")
 	forged.Agent.Model = agent.Model{}
-	forged.ModelTier = &agent.JobModelTier{Name: "design", Rank: 2, Source: agent.ModelTierSourceRow, Reason: "forged"}
+	forged.ModelTier = &agent.JobModelTier{Name: "design", Rank: 2, Source: agent.ModelTierSourceJob, Reason: "forged"}
 	created := seed(t, s, forged)
 	assert.Equal(t, "bounded", created.ModelTier.Name, "a created row is assigned, whatever it sent")
 }

@@ -128,7 +128,7 @@ func modelTierFitDetail(rec types.ModelTierRecord, set *agent.ModelTierSet, outc
 		fixes = append(fixes, fmt.Sprintf("%d were routed here by %s (most often %q): route %s jobs to another tier there",
 			n, matrix, commonest(reasons), rec.Kind))
 	}
-	if n := chose[agent.ModelTierSourceRow]; n > 0 {
+	if n := chose[agent.ModelTierSourceJob]; n > 0 {
 		fixes = append(fixes, fmt.Sprintf("%d named the tier or model themselves: fork them with another --model", n))
 	}
 	if len(fixes) == 0 {

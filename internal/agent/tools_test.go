@@ -30,7 +30,7 @@ func shellRow() []types.HarnessTool {
 // The directory is one file per capability that has a row, a tool name a line in sorted
 // order, and the version, which marks the directory installed.
 func TestHarnessToolsFilesAreOneFilePerCapability(t *testing.T) {
-	tools := types.HarnessTools{Dir: "host/magus/tools", Rows: []types.HarnessTool{
+	tools := types.HarnessTools{Dir: "host/magus/tools", Tools: []types.HarnessTool{
 		{Name: "Shell", Capability: types.ToolRuns},
 		{Name: "Read", Capability: types.ToolReads},
 		{Name: "Glob", Capability: types.ToolReads},
@@ -47,7 +47,7 @@ func TestHarnessToolsFilesAreOneFilePerCapability(t *testing.T) {
 // Holds names every file install writes, including a capability file this table has no row
 // for, and nothing else, in this directory or beside it.
 func TestHarnessToolsHoldsEveryFileInstallWrites(t *testing.T) {
-	tools := types.HarnessTools{Dir: "host/magus/tools", Rows: shellRow()}
+	tools := types.HarnessTools{Dir: "host/magus/tools", Tools: shellRow()}
 	for _, f := range ToolFiles(types.HarnessTools{Dir: tools.Dir}, &ModelFacts{}) {
 		assert.True(t, tools.Holds(f.Path), f.Path)
 	}
@@ -68,7 +68,7 @@ func TestHarnessToolsHoldsEveryFileInstallWrites(t *testing.T) {
 
 func TestReadToolRowsReadsBackWhatFilesWrote(t *testing.T) {
 	root := t.TempDir()
-	writeToolFiles(t, root, ToolFiles(types.HarnessTools{Dir: "tools", Rows: []types.HarnessTool{
+	writeToolFiles(t, root, ToolFiles(types.HarnessTools{Dir: "tools", Tools: []types.HarnessTool{
 		{Name: "Shell", Capability: types.ToolRuns},
 		{Name: "Browse", Capability: types.ToolNetwork},
 	}}, nil))
@@ -88,9 +88,9 @@ func TestStaleToolRowsSuite(t *testing.T) {
 
 func (s *StaleToolRowsSuite) TestRefusesVersionOneRows() {
 	root := s.T().TempDir()
-	files := ToolFiles(types.HarnessTools{Dir: "tools", Rows: shellRow()}, nil)
+	files := ToolFiles(types.HarnessTools{Dir: "tools", Tools: shellRow()}, nil)
 	for i, f := range files {
-		if path.Base(f.Path) == types.ToolRowsVersionFile {
+		if path.Base(f.Path) == types.ToolVersionFile {
 			files[i].Content = "1\n"
 		}
 	}
@@ -120,7 +120,7 @@ func testModelFacts(t testing.TB) *ModelFacts {
 func TestToolRowsModelsReadBackWhatFilesWrote(t *testing.T) {
 	root := t.TempDir()
 	want := testModelFacts(t)
-	writeToolFiles(t, root, ToolFiles(types.HarnessTools{Dir: "tools", Rows: shellRow()}, want))
+	writeToolFiles(t, root, ToolFiles(types.HarnessTools{Dir: "tools", Tools: shellRow()}, want))
 
 	got, err := readToolRows(root, "tools").Models()
 	require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestToolRowsModelsWithoutTiersReadAsNone(t *testing.T) {
 // Every way to have no model facts says why and names the install that rewrites them.
 func TestToolRowsModelsSayWhyThereAreNone(t *testing.T) {
 	root := t.TempDir()
-	writeToolFiles(t, root, ToolFiles(types.HarnessTools{Dir: "bare", Rows: shellRow()}, nil))
+	writeToolFiles(t, root, ToolFiles(types.HarnessTools{Dir: "bare", Tools: shellRow()}, nil))
 	broken := ToolFiles(types.HarnessTools{Dir: "broken"}, testModelFacts(t))
 	for i, f := range broken {
 		if path.Base(f.Path) == types.ToolTiersFile {
@@ -173,7 +173,7 @@ func TestToolRowsModelsSayWhyThereAreNone(t *testing.T) {
 // to ask each harness spell for its rows and the magusfile for its tiers.
 func BenchmarkToolRowsModels(b *testing.B) {
 	root := b.TempDir()
-	for _, f := range ToolFiles(types.HarnessTools{Dir: "tools", Rows: shellRow()}, testModelFacts(b)) {
+	for _, f := range ToolFiles(types.HarnessTools{Dir: "tools", Tools: shellRow()}, testModelFacts(b)) {
 		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(f.Path)), 0o755); err != nil {
 			b.Fatal(err)
 		}
@@ -193,7 +193,7 @@ func BenchmarkToolRowsModels(b *testing.B) {
 // Every way to have no table names the install that writes one, and knows no tool.
 func TestReadToolRowsSaysWhyThereAreNone(t *testing.T) {
 	root := t.TempDir()
-	stale := ToolFiles(types.HarnessTools{Dir: "stale", Rows: shellRow()}, nil)
+	stale := ToolFiles(types.HarnessTools{Dir: "stale", Tools: shellRow()}, nil)
 	stale[len(stale)-1].Content = "0\n"
 	writeToolFiles(t, root, stale)
 
@@ -219,14 +219,14 @@ func TestValidateHarnessToolsRefusesWhatTheGuardCannotRead(t *testing.T) {
 		err   string
 	}{
 		"absolute dir":       {types.HarnessTools{Dir: "/abs"}, "dir must be a workspace-relative path"},
-		"unknown capability": {types.HarnessTools{Dir: "d", Rows: []types.HarnessTool{row("X", "flies")}}, `row 1 (X): capability "flies" is none of runs, reads, writes, spawns, network, inert`},
-		"no capability":      {types.HarnessTools{Dir: "d", Rows: []types.HarnessTool{row("X", "")}}, `row 1 (X): capability "" is none of runs, reads, writes, spawns, network, inert`},
-		"two rows":           {types.HarnessTools{Dir: "d", Rows: []types.HarnessTool{row("X", types.ToolRuns), row("X", types.ToolInert)}}, "row 2: X is declared twice"},
-		"a name with a line": {types.HarnessTools{Dir: "d", Rows: []types.HarnessTool{row("X\nY", types.ToolRuns)}}, "row 1: name must be one non-empty line"},
+		"unknown capability": {types.HarnessTools{Dir: "d", Tools: []types.HarnessTool{row("X", "flies")}}, `row 1 (X): capability "flies" is none of runs, reads, writes, spawns, network, inert`},
+		"no capability":      {types.HarnessTools{Dir: "d", Tools: []types.HarnessTool{row("X", "")}}, `row 1 (X): capability "" is none of runs, reads, writes, spawns, network, inert`},
+		"two rows":           {types.HarnessTools{Dir: "d", Tools: []types.HarnessTool{row("X", types.ToolRuns), row("X", types.ToolInert)}}, "row 2: X is declared twice"},
+		"a name with a line": {types.HarnessTools{Dir: "d", Tools: []types.HarnessTool{row("X\nY", types.ToolRuns)}}, "row 1: name must be one non-empty line"},
 	} {
 		assert.EqualError(t, validateHarnessTools(tc.tools), tc.err, name)
 	}
-	assert.NoError(t, validateHarnessTools(types.HarnessTools{Dir: "d", Rows: shellRow()}))
+	assert.NoError(t, validateHarnessTools(types.HarnessTools{Dir: "d", Tools: shellRow()}))
 }
 
 // The hook names only its host: the rows are the directory whose host file names it, and
@@ -235,7 +235,7 @@ func TestFindToolRowsByHost(t *testing.T) {
 	root := t.TempDir()
 	limits := types.Limits{ForegroundDefaultMs: 120000, ResumesOnBackgroundFrom: "2.1.299", ObservesSkillLoads: true}
 	for _, host := range []string{"claude-code", "codex"} {
-		tools := types.HarnessTools{Dir: filepath.Join("."+host, "magus", "tools"), Rows: shellRow()}
+		tools := types.HarnessTools{Dir: filepath.Join("."+host, "magus", "tools"), Tools: shellRow()}
 		writeToolFiles(t, root, append(ToolFiles(tools, nil), hostFiles(tools.Dir, host, limits)...))
 	}
 

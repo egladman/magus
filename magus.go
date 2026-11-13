@@ -215,7 +215,7 @@ type Magus struct {
 	// modelTiers is what the root magusfile's magus\modelTiers declared.
 	modelTiers agent.ModelTierState
 	// stepRules is what the root magusfile's magus\guard.step registered.
-	// Load checks the step rows against its kinds.
+	// Load checks the step specs against its kinds.
 	stepRules steps.Group
 }
 
@@ -424,7 +424,7 @@ func (m *Magus) load(ctx context.Context) error {
 	}
 	m.magusfileExports = customTargets
 	if err := m.steps.CheckJudged(m.stepRules.Kinds()); err != nil {
-		return fmt.Errorf("magus: WithStepRows: %w", err)
+		return fmt.Errorf("magus: WithStepSpecs: %w", err)
 	}
 	// Workspace providers run HERE, where both facts they need hold.
 	// The magusfiles ran, so magus\workspaceProvider named its spells.
@@ -626,9 +626,9 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	for i, r := range vo.stepRules {
 		rules[i] = guard.StepRule(r)
 	}
-	steps, err := guard.NewStepTable(vo.stepRows, rules)
+	steps, err := guard.NewStepTable(vo.stepSpecs, rules)
 	if err != nil {
-		return nil, fmt.Errorf("magus: WithStepRows: %w", err)
+		return nil, fmt.Errorf("magus: WithStepSpecs: %w", err)
 	}
 	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.spawnRule, cacheBackend: vo.CacheBackend,
 		environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine, jobReader: vo.JobReader, steps: steps}

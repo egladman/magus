@@ -98,7 +98,7 @@ func TestServiceHistoryMetricsCacheHit(t *testing.T) {
 	)
 	want := board
 	want.Volatility = &types.Volatility{}
-	want.ModelTiers = &types.ModelTiers{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}
+	want.ModelTiers = &types.ModelTiers{Definition: types.ModelTiersDefinition, Models: []types.ModelTierRecord{}}
 	for range 3 {
 		got, err := svc.HistoryMetrics(context.Background())
 		require.NoError(t, err)

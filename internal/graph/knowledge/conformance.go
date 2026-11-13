@@ -46,7 +46,7 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.Conformance {
 	out := types.Conformance{Excluded: conformanceExcluded(g, o)}
 	for _, key := range slices.SortedFunc(maps.Keys(samples), compareConformanceKeys) {
 		items := samples[key]
-		row := types.ConformanceRow{Key: key, N: len(items)}
+		row := types.ConformanceDistribution{Key: key, N: len(items)}
 		measures := make([]int, len(items))
 		for i, it := range items {
 			measures[i] = it.Measure
@@ -61,7 +61,7 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.Conformance {
 		value, enforced := o.Effective(key)
 		row.Value = value
 		if !enforced {
-			out.Rows = append(out.Rows, row)
+			out.Distributions = append(out.Distributions, row)
 			continue
 		}
 		if key == cloneKey {
@@ -82,9 +82,9 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.Conformance {
 		if limited && key.Metric != types.ConformanceFileSplit && row.N >= o.MinSample && float64(row.Live) < float64(row.Value)*(1-o.Step) {
 			row.Propose = row.Live
 		}
-		out.Rows = append(out.Rows, row)
+		out.Distributions = append(out.Distributions, row)
 	}
-	out.Answer = types.ClassifyAnswer(len(out.Rows) > 0, "", nil)
+	out.Answer = types.ClassifyAnswer(len(out.Distributions) > 0, "", nil)
 	return out
 }
 

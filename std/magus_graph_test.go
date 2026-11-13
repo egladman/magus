@@ -482,9 +482,9 @@ func TestConformanceReportsRowsBesideIndexFreshness(t *testing.T) {
 	assert.Equal(t, wantReport, report)
 	assert.True(t, ws.readAfter, "freshness is read after the freshen")
 	lines := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}
-	i := slices.IndexFunc(report.Rows, func(r types.ConformanceRow) bool { return r.Key == lines })
-	require.GreaterOrEqual(t, i, 0, "rows: %v", report.Rows)
-	row := report.Rows[i]
+	i := slices.IndexFunc(report.Distributions, func(r types.ConformanceDistribution) bool { return r.Key == lines })
+	require.GreaterOrEqual(t, i, 0, "rows: %v", report.Distributions)
+	row := report.Distributions[i]
 	wantRow := row
 	wantRow.N = 2 // a declared output is never counted
 	wantRow.Value = 100

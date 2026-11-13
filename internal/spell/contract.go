@@ -92,7 +92,7 @@ type harnessContract struct {
 	Limits types.Limits `mgs:"mgs_getLimits"`
 	// The models the host runs, with prices in USD per million tokens. A person's
 	// agents.models overrides these row by row.
-	Models []types.ModelRow `mgs:"mgs_listModels"`
+	Models []types.HarnessModel `mgs:"mgs_listModels"`
 	// Plain host settings kept in place, such as a plugin to enable. A value someone set
 	// differently is left alone and named, never overwritten.
 	Settings []types.Setting `mgs:"mgs_listSettings"`

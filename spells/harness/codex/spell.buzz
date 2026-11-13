@@ -206,7 +206,7 @@ export fun mgs_listTools() > HarnessTools {
     foreach (name in ["wait_agent", "close_agent", "update_plan", "view_image", "web_search"]) {
         rows.append(HarnessTool{name = name, capability = ToolCapability.inert});
     }
-    return HarnessTools{dir = TOOLS_DIR, rows = rows};
+    return HarnessTools{dir = TOOLS_DIR, tools = rows};
 }
 
 // Codex MCP lives in ~/.codex/config.toml (user-global). Magus does not write it; describe

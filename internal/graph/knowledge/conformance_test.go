@@ -120,22 +120,22 @@ func lensFixtureOptions() types.ConformanceOptions {
 	return o
 }
 
-func findConformanceRow(t *testing.T, out types.Conformance, m types.ConformanceMetric, p types.ConformancePopulation, scope string) types.ConformanceRow {
+func findConformanceRow(t *testing.T, out types.Conformance, m types.ConformanceMetric, p types.ConformancePopulation, scope string) types.ConformanceDistribution {
 	t.Helper()
-	for _, r := range out.Rows {
+	for _, r := range out.Distributions {
 		if r.Key == (types.ConformanceKey{Metric: m, Population: p, Scope: scope}) {
 			return r
 		}
 	}
 	require.Failf(t, "no row", "%s %s %q", m, p, scope)
-	return types.ConformanceRow{}
+	return types.ConformanceDistribution{}
 }
 
 func TestConformanceMeasuresEveryMetricAndPopulation(t *testing.T) {
 	out := lensFixture().Conformance(lensFixtureOptions())
 
 	var keys []string
-	for _, r := range out.Rows {
+	for _, r := range out.Distributions {
 		keys = append(keys, fmt.Sprintf("%s %s %s", r.Key.Metric, r.Key.Population, r.Key.Scope))
 	}
 	assert.Equal(t, []string{
@@ -154,7 +154,7 @@ func TestConformanceMeasuresEveryMetricAndPopulation(t *testing.T) {
 
 	// The anchor 30 is enforced, not the live p95 40.
 	lines := findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
-	assert.Equal(t, types.ConformanceRow{
+	assert.Equal(t, types.ConformanceDistribution{
 		Key: lines.Key, N: 5, P50: 10, P90: 40, P95: 40, P99: 40, Live: 40, Value: 30,
 		Violations: []types.ConformanceItem{{ID: "internal/a/a.go", Source: "internal/a/a.go:1", Measure: 40}},
 	}, lines)
@@ -416,7 +416,7 @@ func (s *ProposalSuite) SetupSuite() {
 }
 
 // row is the file-lines source row under anchor with minSample.
-func (s *ProposalSuite) row(anchor, minSample int) types.ConformanceRow {
+func (s *ProposalSuite) row(anchor, minSample int) types.ConformanceDistribution {
 	key := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}
 	o := types.ConformanceOptions{
 		Limits:    map[types.ConformanceKey]types.ConformanceLimit{key: {Percentile: 95, Anchor: anchor}},
@@ -462,7 +462,7 @@ func TestConformanceWithoutSymbolsIsUnknown(t *testing.T) {
 	g.AddNode(types.KnowledgeNode{ID: fileID("a.go"), Kind: types.KindFile, Source: "a.go"})
 	out := g.Conformance(lensFixtureOptions())
 	assert.Equal(t, types.VerdictUnknown, out.Answer.Verdict)
-	assert.Empty(t, out.Rows)
+	assert.Empty(t, out.Distributions)
 }
 
 // nearestRank's float form agrees with the integer form precedent.go's importedPackages inlines.
@@ -578,7 +578,7 @@ func TestConformanceMainLogic(t *testing.T) {
 	out := assembleLens(boundarySymbols()).Conformance(boundaryOptions())
 	row := findConformanceRow(t, out, types.ConformanceMainLogic, types.ConformancePopMain, "")
 	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
-	assert.Equal(t, types.ConformanceRow{
+	assert.Equal(t, types.ConformanceDistribution{
 		Key: row.Key, N: 7, Value: 119,
 		Violations: []types.ConformanceItem{
 			{ID: "cmd/tool/main.go#compute", Source: "cmd/tool/main.go:10", Measure: 150, Home: "internal/lib"},
@@ -590,7 +590,7 @@ func TestConformanceStorePathExport(t *testing.T) {
 	out := assembleLens(boundarySymbols()).Conformance(boundaryOptions())
 	row := findConformanceRow(t, out, types.ConformanceStorePathExport, types.ConformancePopSource, "")
 	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
-	assert.Equal(t, types.ConformanceRow{
+	assert.Equal(t, types.ConformanceDistribution{
 		Key: row.Key, N: 2,
 		Violations: []types.ConformanceItem{
 			{ID: "internal/store/store.go#LogPath", Source: "internal/store/store.go:3", Measure: 2, Home: "internal/store"},
@@ -613,7 +613,7 @@ func TestConformanceFileSplit(t *testing.T) {
 
 	row := findConformanceRow(t, g.Conformance(options(1500)), types.ConformanceFileSplit, types.ConformancePopSource, "")
 	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
-	assert.Equal(t, types.ConformanceRow{
+	assert.Equal(t, types.ConformanceDistribution{
 		Key: row.Key, N: 2, Value: 1500,
 		Violations: []types.ConformanceItem{
 			{ID: "internal/r/r_tasks.go", Source: "internal/r/r_tasks.go:1", Measure: 1100, Home: "internal/r/r.go", Unshared: true},
@@ -663,7 +663,7 @@ func TestConformanceFileSplitNamesOneConcept(t *testing.T) {
 	row := findConformanceRow(t, g.Conformance(o), types.ConformanceFileSplit, types.ConformancePopSource, "")
 	// The distribution is the population's, which other tests pin; this one judges names.
 	row.N, row.P50, row.P90, row.P95, row.P99, row.Live, row.Value, row.Propose = 0, 0, 0, 0, 0, 0, 0, 0
-	assert.Equal(t, types.ConformanceRow{Key: key, Violations: []types.ConformanceItem{
+	assert.Equal(t, types.ConformanceDistribution{Key: key, Violations: []types.ConformanceItem{
 		{ID: "internal/a/job_claim_callers.go", Source: "internal/a/job_claim_callers.go:1", Measure: 3000,
 			Home: "internal/a/job.go", Rename: "internal/a/job_claim.go"},
 		{ID: "internal/b/job_claim_callers.go", Source: "internal/b/job_claim_callers.go:1", Measure: 300,

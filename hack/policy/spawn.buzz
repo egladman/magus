@@ -66,11 +66,11 @@ fun lineage(title: str) > Lineage? {
 // would share the spawning checkout, then a brief that tells its worker to build magus. rows is null when the store could not be read, which
 // unreadable says why: the row rule then advises and never denies. A continue starts
 // nothing, so it passes both.
-export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
+export fun decideSpawn(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVerdict {
     if (spawn.kind != magus\SpawnKind.spawn) {
         return magus\guard.allow();
     }
-    final row = decideJobRow(spawn, rows: rows, unreadable: unreadable);
+    final row = decideNamedJob(spawn, rows: rows, unreadable: unreadable);
     if (row.decision == magus\GuardDecision.deny) {
         return row;
     }
@@ -87,10 +87,10 @@ export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) >
     return row;
 }
 
-// decideJobRow is spawn-without-job-row: the title must name a live row the spawner may hand
+// decideNamedJob is spawn-without-job-row: the title must name a live row the spawner may hand
 // out, or the guard cannot bind the child to its lease. The job is the row `<job>`, else
 // `<parent>/<job>`, the same resolution the guard binds with.
-fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
+fun decideNamedJob(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVerdict {
     if (rows == null) {
         return magus\guard.advise("The job store could not be read ({unreadable}), so whether this spawn "
             + "names a live job row went unchecked and it passes. Its child will not be bound to a lease. "
@@ -102,7 +102,7 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
             + "The description is `{spawn.title}`, and <job> is a live row in this workspace's job store. "
             + remedy(spawn, line: null));
     }
-    var found: helpers\JobRow? = null;
+    var found: helpers\JobSummary? = null;
     foreach (id in [line!.job, "{line!.parent}/{line!.job}"]) {
         foreach (r in rows!) {
             if (found == null and r.id == id) {
@@ -137,7 +137,7 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
 }
 
 // descends reports whether job is ancestor or has ancestor in its parent chain.
-fun descends(rows: [helpers\JobRow], job: str, ancestor: str) > bool {
+fun descends(rows: [helpers\JobSummary], job: str, ancestor: str) > bool {
     final parents = mut {<str: str>};
     foreach (r in rows) {
         parents[r.id] = r.parent;
@@ -204,18 +204,18 @@ fun request(title: str, isolated: bool) > Spawn {
 }
 
 final store = [
-    helpers\JobRow{ id = "guard-command", state = magus\JobState.running },
-    helpers\JobRow{ id = "naming-advisory", state = magus\JobState.declared },
-    helpers\JobRow{ id = "changelog-fragments", state = magus\JobState.exited },
-    helpers\JobRow{ id = "v050-prep", state = magus\JobState.running },
-    helpers\JobRow{ id = "v050-prep/scout-callers", state = magus\JobState.declared, parent = "v050-prep" },
-    helpers\JobRow{ id = "drop-improve", state = magus\JobState.pass, parent = "v050-prep" },
-    helpers\JobRow{ id = "footprint", state = magus\JobState.noReturn },
-    helpers\JobRow{ id = "elsewhere", state = magus\JobState.running },
+    helpers\JobSummary{ id = "guard-command", state = magus\JobState.running },
+    helpers\JobSummary{ id = "naming-advisory", state = magus\JobState.declared },
+    helpers\JobSummary{ id = "changelog-fragments", state = magus\JobState.exited },
+    helpers\JobSummary{ id = "v050-prep", state = magus\JobState.running },
+    helpers\JobSummary{ id = "v050-prep/scout-callers", state = magus\JobState.declared, parent = "v050-prep" },
+    helpers\JobSummary{ id = "drop-improve", state = magus\JobState.pass, parent = "v050-prep" },
+    helpers\JobSummary{ id = "footprint", state = magus\JobState.noReturn },
+    helpers\JobSummary{ id = "elsewhere", state = magus\JobState.running },
 ];
 
 // judged is decideSpawn with every denial held to the verdict shape.
-fun judged(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
+fun judged(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVerdict {
     return verdict\checked(decideSpawn(spawn, rows: rows, unreadable: unreadable), label: spawn.title);
 }
 
@@ -286,9 +286,9 @@ test "a code-changing spawn without its own checkout is denied" {
 
 test "an integrate spawn is refused for a row bound to another checkout, naming where to spawn it" {
     final rows = [
-        helpers\JobRow{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
-        helpers\JobRow{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
-        helpers\JobRow{ id = "unbound", state = magus\JobState.declared },
+        helpers\JobSummary{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
+        helpers\JobSummary{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
+        helpers\JobSummary{ id = "unbound", state = magus\JobState.declared },
     ];
     final at = fun (title: str) > Spawn {
         return Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = false, checkout = "/w/main" };
@@ -309,7 +309,7 @@ test "a thinking role, an isolated worker and a continue pass" {
 }
 
 test "a spawn differing only in agent type gets the same verdict" {
-    final rows = [helpers\JobRow{ id = "guard-command", state = magus\JobState.running }];
+    final rows = [helpers\JobSummary{ id = "guard-command", state = magus\JobState.running }];
     foreach (title in ["orchestrator/review guard-command", "orchestrator/feat guard-command", "orchestrator/review nothing-here"]) {
         foreach (isolated in [true, false]) {
             final plain = judged(Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = isolated }, rows: rows, unreadable: "");

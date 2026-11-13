@@ -158,7 +158,7 @@ type ModelTierDeclaration struct {
 	Enum, Site string
 	// Cases are the enum's case names, cheapest first.
 	Cases []string
-	// Default is the rank a job gets when neither its row nor a matrix names one.
+	// Default is the rank a job gets when neither its job nor a matrix names one.
 	Default int
 	Bounds  []ModelTierBounds
 	Skills  []SkillVariant
@@ -313,7 +313,7 @@ func (s *ModelTierSet) Parse(name string) (ModelTier, error) {
 }
 
 // renamedModelTiers maps each old shipped tier name to its new one.
-// compat(until: the next release): a row written before the rename
+// compat(until: the next release): a job written before the rename
 // still names economy, standard or principal.
 var renamedModelTiers = map[string]string{"economy": "routine", "standard": "bounded", "principal": "design"}
 
@@ -448,8 +448,8 @@ const (
 type ModelTierSource string
 
 const (
-	// ModelTierSourceRow is a tier or model the job row named.
-	ModelTierSourceRow ModelTierSource = "row"
+	// ModelTierSourceJob is a tier or model the job named.
+	ModelTierSourceJob ModelTierSource = "job"
 	// ModelTierSourceMatrix is the workspace's registered matrix function's answer.
 	ModelTierSourceMatrix ModelTierSource = "matrix"
 	// ModelTierSourceUserMatrix is the person's own matrix module's answer.
@@ -458,9 +458,10 @@ const (
 	ModelTierSourceDefault ModelTierSource = "default"
 )
 
-// JobModelTier is the tier recorded on a job row when it was assigned: the case name and
-// rank, the skill variant its worker loads, which declaration chose it and why, the
-// file:line of that declaration, and the model alias the host spawns.
+// JobModelTier is the tier recorded on a job when it was assigned.
+// It holds the case name and rank, the skill variant its worker loads,
+// which declaration chose it and why, and that declaration's file:line.
+// Model is the alias the host spawns.
 type JobModelTier struct {
 	Name   string          `json:"name"             yaml:"name"`
 	Rank   int             `json:"rank"             yaml:"rank"`

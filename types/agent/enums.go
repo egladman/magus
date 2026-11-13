@@ -14,7 +14,7 @@ func (v SkillVariant) String() string   { return enum.String(v) }
 func (v SkillVariant) Full() bool  { return v == SkillVariantFull }
 func (v SkillVariant) Short() bool { return v == SkillVariantShort }
 
-var modelTierSources = enum.Set[ModelTierSource]{ModelTierSourceRow, ModelTierSourceMatrix, ModelTierSourceUserMatrix, ModelTierSourceDefault}
+var modelTierSources = enum.Set[ModelTierSource]{ModelTierSourceJob, ModelTierSourceMatrix, ModelTierSourceUserMatrix, ModelTierSourceDefault}
 
 func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }
 func (v ModelTierSource) Valid() bool      { return modelTierSources.Valid(v) }

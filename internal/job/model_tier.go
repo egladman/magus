@@ -210,7 +210,7 @@ func resolveModelTier(ctx context.Context, set *agent.ModelTierSet, models []typ
 			Name:   tier.Name(),
 			Rank:   tier.Rank(),
 			Skills: set.Skills(tier),
-			Source: agent.ModelTierSourceRow,
+			Source: agent.ModelTierSourceJob,
 			Reason: fmt.Sprintf("the job names the tier %s", tier.Name()),
 			Model:  requested.ID,
 		}, nil
@@ -219,7 +219,7 @@ func resolveModelTier(ctx context.Context, set *agent.ModelTierSet, models []typ
 			Name:   tier.Name(),
 			Rank:   tier.Rank(),
 			Skills: set.Skills(tier),
-			Source: agent.ModelTierSourceRow,
+			Source: agent.ModelTierSourceJob,
 			Reason: fmt.Sprintf("the job names the model %s, which %s maps to the tier %s", requested.ID, mapper(host), tier.Name()),
 			Model:  requested.ID,
 		}, nil
@@ -229,7 +229,7 @@ func resolveModelTier(ctx context.Context, set *agent.ModelTierSet, models []typ
 			Name:   def.Name(),
 			Rank:   def.Rank(),
 			Skills: set.Skills(def),
-			Source: agent.ModelTierSourceRow,
+			Source: agent.ModelTierSourceJob,
 			Reason: fmt.Sprintf("the job names the model %s, which no model tier maps to", requested.ID),
 			Model:  requested.ID,
 		}, nil

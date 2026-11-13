@@ -40,7 +40,7 @@ func (_m *mockLifecycleSource) EXPECT() *mockLifecycleSource_Expecter {
 }
 
 // Lifecycles provides a mock function for the type mockLifecycleSource
-func (_mock *mockLifecycleSource) Lifecycles(ctx context.Context, installed ...types.ToolRow) (types.LifecycleStatus, []spells.Lifecycle, error) {
+func (_mock *mockLifecycleSource) Lifecycles(ctx context.Context, installed ...types.ToolStatus) (types.LifecycleStatus, []spells.Lifecycle, error) {
 	var tmpRet mock.Arguments
 	if len(installed) > 0 {
 		tmpRet = _mock.Called(ctx, installed)
@@ -56,22 +56,22 @@ func (_mock *mockLifecycleSource) Lifecycles(ctx context.Context, installed ...t
 	var r0 types.LifecycleStatus
 	var r1 []spells.Lifecycle
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, ...types.ToolRow) (types.LifecycleStatus, []spells.Lifecycle, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, ...types.ToolStatus) (types.LifecycleStatus, []spells.Lifecycle, error)); ok {
 		return returnFunc(ctx, installed...)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, ...types.ToolRow) types.LifecycleStatus); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, ...types.ToolStatus) types.LifecycleStatus); ok {
 		r0 = returnFunc(ctx, installed...)
 	} else {
 		r0 = ret.Get(0).(types.LifecycleStatus)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, ...types.ToolRow) []spells.Lifecycle); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, ...types.ToolStatus) []spells.Lifecycle); ok {
 		r1 = returnFunc(ctx, installed...)
 	} else {
 		if ret.Get(1) != nil {
 			r1 = ret.Get(1).([]spells.Lifecycle)
 		}
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, ...types.ToolRow) error); ok {
+	if returnFunc, ok := ret.Get(2).(func(context.Context, ...types.ToolStatus) error); ok {
 		r2 = returnFunc(ctx, installed...)
 	} else {
 		r2 = ret.Error(2)
@@ -92,16 +92,16 @@ func (_e *mockLifecycleSource_Expecter) Lifecycles(ctx interface{}, installed ..
 		append([]interface{}{ctx}, installed...)...)}
 }
 
-func (_c *mockLifecycleSource_Lifecycles_Call) Run(run func(ctx context.Context, installed ...types.ToolRow)) *mockLifecycleSource_Lifecycles_Call {
+func (_c *mockLifecycleSource_Lifecycles_Call) Run(run func(ctx context.Context, installed ...types.ToolStatus)) *mockLifecycleSource_Lifecycles_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 []types.ToolRow
-		var variadicArgs []types.ToolRow
+		var arg1 []types.ToolStatus
+		var variadicArgs []types.ToolStatus
 		if len(args) > 1 {
-			variadicArgs = args[1].([]types.ToolRow)
+			variadicArgs = args[1].([]types.ToolStatus)
 		}
 		arg1 = variadicArgs
 		run(
@@ -117,7 +117,7 @@ func (_c *mockLifecycleSource_Lifecycles_Call) Return(lifecycleStatus types.Life
 	return _c
 }
 
-func (_c *mockLifecycleSource_Lifecycles_Call) RunAndReturn(run func(ctx context.Context, installed ...types.ToolRow) (types.LifecycleStatus, []spells.Lifecycle, error)) *mockLifecycleSource_Lifecycles_Call {
+func (_c *mockLifecycleSource_Lifecycles_Call) RunAndReturn(run func(ctx context.Context, installed ...types.ToolStatus) (types.LifecycleStatus, []spells.Lifecycle, error)) *mockLifecycleSource_Lifecycles_Call {
 	_c.Call.Return(run)
 	return _c
 }

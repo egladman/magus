@@ -54,9 +54,9 @@ func passStep(context.Context, typesagent.StepRequest) (types.GuardVerdict, erro
 }
 
 func (s *stepTableSuite) TestANamedRowWinsOverItsKindsCatchAll() {
-	all := typesagent.StepRow{Kind: "tool", Capabilities: []string{"inert"}}
-	named := typesagent.StepRow{Kind: "tool", Name: "refund", Capabilities: []string{"network"}}
-	table, err := NewStepTable([]typesagent.StepRow{all, named}, []StepRule{passStep})
+	all := typesagent.StepSpec{Kind: "tool", Capabilities: []string{"inert"}}
+	named := typesagent.StepSpec{Kind: "tool", Name: "refund", Capabilities: []string{"network"}}
+	table, err := NewStepTable([]typesagent.StepSpec{all, named}, []StepRule{passStep})
 	s.Require().NoError(err)
 
 	refund, ok := table.covering("tool", "refund")
@@ -68,10 +68,10 @@ func (s *stepTableSuite) TestANamedRowWinsOverItsKindsCatchAll() {
 	s.Equal([]string{"inert"}, other.Capabilities)
 }
 
-var networkRow = typesagent.StepRow{Kind: "refund", Capabilities: []string{"network"}}
+var networkRow = typesagent.StepSpec{Kind: "refund", Capabilities: []string{"network"}}
 
 func (s *stepTableSuite) TestARowNothingJudgesIsRefusedWithNoKindRule() {
-	table, err := NewStepTable([]typesagent.StepRow{networkRow}, nil)
+	table, err := NewStepTable([]typesagent.StepSpec{networkRow}, nil)
 	s.Require().NoError(err)
 	err = table.CheckJudged([]string{"egress"})
 	s.ErrorContains(err, `kind "refund"`)
@@ -79,44 +79,44 @@ func (s *stepTableSuite) TestARowNothingJudgesIsRefusedWithNoKindRule() {
 }
 
 func (s *stepTableSuite) TestAKindRuleJudgesARowNothingElseJudges() {
-	table, err := NewStepTable([]typesagent.StepRow{networkRow}, nil)
+	table, err := NewStepTable([]typesagent.StepSpec{networkRow}, nil)
 	s.Require().NoError(err)
 	s.NoError(table.CheckJudged([]string{"refund"}))
 }
 
 func (s *stepTableSuite) TestAGoRuleJudgesEveryRow() {
-	table, err := NewStepTable([]typesagent.StepRow{networkRow}, []StepRule{passStep})
+	table, err := NewStepTable([]typesagent.StepSpec{networkRow}, []StepRule{passStep})
 	s.Require().NoError(err)
 	s.NoError(table.CheckJudged(nil))
 }
 
 func (s *stepTableSuite) TestAnUnknownCapabilityIsRefused() {
-	_, err := NewStepTable([]typesagent.StepRow{{Kind: "tool", Capabilities: []string{"teleports"}}}, nil)
+	_, err := NewStepTable([]typesagent.StepSpec{{Kind: "tool", Capabilities: []string{"teleports"}}}, nil)
 	s.ErrorContains(err, `unknown capability "teleports"`)
 }
 
 func (s *stepTableSuite) TestAnInertRowWithAnotherCapabilityIsRefused() {
-	_, err := NewStepTable([]typesagent.StepRow{{Kind: "tool", Capabilities: []string{"inert", "network"}}}, []StepRule{passStep})
+	_, err := NewStepTable([]typesagent.StepSpec{{Kind: "tool", Capabilities: []string{"inert", "network"}}}, []StepRule{passStep})
 	s.ErrorContains(err, "inert says nothing judges the row")
 }
 
 func (s *stepTableSuite) TestASpawnsRowNeedsNoRule() {
-	_, err := NewStepTable([]typesagent.StepRow{{Kind: "delegate", Capabilities: []string{"spawns"}, SpawnDescriptionField: "/title"}}, nil)
+	_, err := NewStepTable([]typesagent.StepSpec{{Kind: "delegate", Capabilities: []string{"spawns"}, SpawnDescriptionField: "/title"}}, nil)
 	s.NoError(err)
 }
 
 func (s *stepTableSuite) TestASpawnsRowThatAlsoRunsIsRefused() {
-	_, err := NewStepTable([]typesagent.StepRow{{Kind: "delegate", Capabilities: []string{"spawns", "runs"}, Command: "/command"}}, nil)
+	_, err := NewStepTable([]typesagent.StepSpec{{Kind: "delegate", Capabilities: []string{"spawns", "runs"}, Command: "/command"}}, nil)
 	s.ErrorContains(err, "does not share a row with runs")
 }
 
 func (s *stepTableSuite) TestADescriptionFieldWithoutSpawnsIsRefused() {
-	_, err := NewStepTable([]typesagent.StepRow{{Kind: "plan", Capabilities: []string{"inert"}, SpawnDescriptionField: "/title"}}, nil)
+	_, err := NewStepTable([]typesagent.StepSpec{{Kind: "plan", Capabilities: []string{"inert"}, SpawnDescriptionField: "/title"}}, nil)
 	s.ErrorContains(err, "spawn_description_field goes with spawns")
 }
 
 func (s *stepTableSuite) TestADescriptionFieldThatDoesNotParseIsRefused() {
-	_, err := NewStepTable([]typesagent.StepRow{{Kind: "delegate", Capabilities: []string{"spawns"}, SpawnDescriptionField: "title"}}, nil)
+	_, err := NewStepTable([]typesagent.StepSpec{{Kind: "delegate", Capabilities: []string{"spawns"}, SpawnDescriptionField: "title"}}, nil)
 	s.ErrorContains(err, "spawn_description_field")
 }
 
@@ -160,7 +160,7 @@ func (s *stepRecordSuite) TestAToolStepNoRowCoversIsLeftToTheEnvelope() {
 }
 
 func (s *stepRecordSuite) TestAToolStepARowCoversIsJudgedAsAStep() {
-	table, err := NewStepTable([]typesagent.StepRow{{Kind: hostToolKind, Capabilities: []string{"inert"}}}, nil)
+	table, err := NewStepTable([]typesagent.StepSpec{{Kind: hostToolKind, Capabilities: []string{"inert"}}}, nil)
 	s.Require().NoError(err)
 
 	step, ok := declaredStep(s.T().Context(), s.record(s.toolStep("Bash", nil)), table)
@@ -204,7 +204,7 @@ func (s *stepRecordSuite) TestAStepJudgeCannotReadIsDenied() {
 }
 
 func (s *stepTableSuite) TestARunsRowWithoutACommandIsRefused() {
-	_, err := NewStepTable([]typesagent.StepRow{{Kind: "shell", Capabilities: []string{"runs"}}}, nil)
+	_, err := NewStepTable([]typesagent.StepSpec{{Kind: "shell", Capabilities: []string{"runs"}}}, nil)
 	s.ErrorContains(err, "runs and command go together")
 }
 

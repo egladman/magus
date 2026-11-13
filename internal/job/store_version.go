@@ -222,7 +222,7 @@ func agentSection(e migrate.Entry) (migrate.Entry, error) {
 	spec := agent.Spec{Instructions: old.Criteria, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}
 	switch {
 	case old.Model == "":
-	case old.ModelTier != nil && old.ModelTier.Source == string(agent.ModelTierSourceRow) && old.ModelTier.Model == "":
+	case old.ModelTier != nil && old.ModelTier.Source == string(agent.ModelTierSourceJob) && old.ModelTier.Model == "":
 		spec.Model.Tier = old.Model
 	default:
 		spec.Model.ID = old.Model

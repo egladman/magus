@@ -93,7 +93,7 @@ export fun mgs_listTools() > HarnessTools {
     foreach (name in ["write", "edit", "apply_patch"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.writes}); }
     rows.append(HarnessTool{name = "task", capability = ToolCapability.spawns});
     foreach (name in ["todowrite", "webfetch", "websearch", "question", "skill"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.inert}); }
-    return HarnessTools{dir = ".opencode/magus/tools", rows = rows};
+    return HarnessTools{dir = ".opencode/magus/tools", tools = rows};
 }
 
 // opencode_env_hint is what the printed config says about MAGUS_LOG_SILENT. opencode.json

@@ -1161,7 +1161,7 @@ type Declaration struct {
 // dismissed, is set.
 type JobDeferred struct {
 	Item   string `json:"item"             yaml:"item"`
-	Row    string `json:"row,omitempty"    yaml:"row,omitempty" schema:"leaseid"`
+	Job    string `json:"job,omitempty"    yaml:"job,omitempty" schema:"leaseid"`
 	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
 }
 
@@ -1182,7 +1182,7 @@ type JobUnmerged struct {
 // risks: listed for reading, and no work the branch lacks.
 type JobUnmergedReport struct {
 	Branch  string        `json:"branch,omitempty"  yaml:"branch,omitempty"`
-	Rows    []JobUnmerged `json:"rows,omitempty"    yaml:"rows,omitempty"`
+	Jobs    []JobUnmerged `json:"jobs,omitempty"    yaml:"jobs,omitempty"`
 	Risks   []JobUnmerged `json:"risks,omitempty"   yaml:"risks,omitempty"`
 	Unknown string        `json:"unknown,omitempty" yaml:"unknown,omitempty"`
 }
@@ -1210,10 +1210,10 @@ func (r JobUnmergedReport) Lines() []string {
 	if r.Unknown != "" {
 		out = append(out, "not merged: unknown, "+r.Unknown)
 	}
-	if len(r.Rows) > 0 {
-		out = append(out, fmt.Sprintf("not merged onto %s: %d", cmp.Or(r.Branch, "the branch"), len(r.Rows)))
+	if len(r.Jobs) > 0 {
+		out = append(out, fmt.Sprintf("not merged onto %s: %d", cmp.Or(r.Branch, "the branch"), len(r.Jobs)))
 	}
-	for _, u := range r.Rows {
+	for _, u := range r.Jobs {
 		switch {
 		case u.Item != "":
 			out = append(out, fmt.Sprintf("  %s: %q: %s; %s", u.Job, u.Item, u.Why, u.Remedy))
@@ -1529,14 +1529,14 @@ func (r Declaration) settlementProblems() JobProblems {
 	}
 	for i, d := range r.Deferred {
 		at := fmt.Sprintf("deferred[%d]", i)
-		row, reason := strings.TrimSpace(d.Row), strings.TrimSpace(d.Reason)
+		row, reason := strings.TrimSpace(d.Job), strings.TrimSpace(d.Reason)
 		switch {
 		case strings.TrimSpace(d.Item) == "":
 			invalid(at+".item", at+" names no item", "copy the item's text from the row's result")
 		case (row == "") == (reason == ""):
 			invalid(at, at+" answers with neither or both of row and reason", "name the declared row that carries it, or the reason it is dismissed")
 		case row != "" && !ValidJobID(row):
-			invalid(at+".row", fmt.Sprintf("%s row %q is not a lease id", at, d.Row), "name the declared row that carries it")
+			invalid(at+".row", fmt.Sprintf("%s row %q is not a lease id", at, d.Job), "name the declared row that carries it")
 		}
 	}
 	return ps

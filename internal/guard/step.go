@@ -34,12 +34,12 @@ type StepRule func(ctx context.Context, req typesagent.StepRequest) (types.Guard
 // StepTable is the step rows and rules a program declared, each row
 // checked once by NewStepTable.
 type StepTable struct {
-	rows  []stepRow
+	rows  []stepSpec
 	rules []StepRule
 }
 
-type stepRow struct {
-	typesagent.StepRow
+type stepSpec struct {
+	typesagent.StepSpec
 	paths       []jsonPointer
 	command     jsonPointer
 	description jsonPointer
@@ -49,7 +49,7 @@ type stepRow struct {
 // NewStepTable checks rows against rules. A malformed row is an error. A
 // row nothing would judge is left to CheckJudged, once the workspace's own
 // rules are known.
-func NewStepTable(rows []typesagent.StepRow, rules []StepRule) (StepTable, error) {
+func NewStepTable(rows []typesagent.StepSpec, rules []StepRule) (StepTable, error) {
 	for _, r := range rules {
 		if r == nil {
 			return StepTable{}, errors.New("a step rule is nil")
@@ -59,7 +59,7 @@ func NewStepTable(rows []typesagent.StepRow, rules []StepRule) (StepTable, error
 	seen := map[[2]string]bool{}
 	var errs []error
 	for i, row := range rows {
-		r, err := newStepRow(row)
+		r, err := newStepSpec(row)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("step row %d (kind %q): %w", i, row.Kind, err))
 			continue
@@ -78,46 +78,46 @@ func NewStepTable(rows []typesagent.StepRow, rules []StepRule) (StepTable, error
 	return t, nil
 }
 
-func newStepRow(row typesagent.StepRow) (stepRow, error) {
+func newStepSpec(row typesagent.StepSpec) (stepSpec, error) {
 	if row.Kind == "" {
-		return stepRow{}, errors.New("no kind")
+		return stepSpec{}, errors.New("no kind")
 	}
 	if err := types.ValidateGuardRuleName(row.Kind); err != nil {
-		return stepRow{}, fmt.Errorf("kind: %w", err)
+		return stepSpec{}, fmt.Errorf("kind: %w", err)
 	}
-	r := stepRow{StepRow: row}
+	r := stepSpec{StepSpec: row}
 	if err := checkCapabilities(row); err != nil {
-		return stepRow{}, err
+		return stepSpec{}, err
 	}
 	for _, p := range row.Paths {
 		ptr, err := parseJSONPointer(p)
 		if err != nil {
-			return stepRow{}, fmt.Errorf("paths: %w", err)
+			return stepSpec{}, fmt.Errorf("paths: %w", err)
 		}
 		r.paths = append(r.paths, ptr)
 	}
 	if row.Command != "" {
 		ptr, err := parseJSONPointer(row.Command)
 		if err != nil {
-			return stepRow{}, fmt.Errorf("command: %w", err)
+			return stepSpec{}, fmt.Errorf("command: %w", err)
 		}
 		r.command = ptr
 	}
 	if row.SpawnDescriptionField != "" {
 		ptr, err := parseJSONPointer(row.SpawnDescriptionField)
 		if err != nil {
-			return stepRow{}, fmt.Errorf("spawn_description_field: %w", err)
+			return stepSpec{}, fmt.Errorf("spawn_description_field: %w", err)
 		}
 		r.description = ptr
 	}
 	if len(row.InputSchema) > 0 {
 		var s jsonschema.Schema
 		if err := json.Unmarshal(row.InputSchema, &s); err != nil {
-			return stepRow{}, fmt.Errorf("input_schema does not parse: %w", err)
+			return stepSpec{}, fmt.Errorf("input_schema does not parse: %w", err)
 		}
 		resolved, err := s.Resolve(nil)
 		if err != nil {
-			return stepRow{}, fmt.Errorf("input_schema does not resolve: %w", err)
+			return stepSpec{}, fmt.Errorf("input_schema does not resolve: %w", err)
 		}
 		r.schema = resolved
 	}
@@ -140,13 +140,13 @@ func (t StepTable) CheckJudged(kinds []string) error {
 }
 
 // unjudged reports a row only a workspace's magus\guard.step rule judges.
-func (t StepTable) unjudged(r stepRow) bool {
+func (t StepTable) unjudged(r stepSpec) bool {
 	return len(t.rules) == 0 && !r.has(types.ToolInert) && !r.builtinJudged()
 }
 
 // changes reports a row whose step may change state: anything but inert
 // or a read.
-func (r stepRow) changes() bool {
+func (r stepSpec) changes() bool {
 	return len(r.Capabilities) == 0 || slices.ContainsFunc(r.Capabilities, func(c string) bool {
 		return c != string(types.ToolInert) && c != string(types.ToolReads)
 	})
@@ -154,7 +154,7 @@ func (r stepRow) changes() bool {
 
 // checkCapabilities refuses a row whose capabilities and pointers disagree,
 // since a built-in rule would then have nothing to read.
-func checkCapabilities(row typesagent.StepRow) error {
+func checkCapabilities(row typesagent.StepSpec) error {
 	known := types.ToolCapabilities()
 	for _, c := range row.Capabilities {
 		if !slices.Contains(known, types.ToolCapability(c)) {
@@ -177,22 +177,22 @@ func checkCapabilities(row typesagent.StepRow) error {
 	return nil
 }
 
-func (r stepRow) has(c types.ToolCapability) bool { return slices.Contains(r.Capabilities, string(c)) }
+func (r stepSpec) has(c types.ToolCapability) bool { return slices.Contains(r.Capabilities, string(c)) }
 
-func (r stepRow) builtinJudged() bool {
+func (r stepSpec) builtinJudged() bool {
 	return r.has(types.ToolRuns) || r.has(types.ToolReads) || r.has(types.ToolWrites) || r.has(types.ToolSpawns)
 }
 
 // readsDir reports a row whose built-in rules judge relative to the
 // step's Dir.
-func (r stepRow) readsDir() bool {
+func (r stepSpec) readsDir() bool {
 	return len(r.paths) > 0 || r.command != nil || r.has(types.ToolSpawns)
 }
 
 // covering is the row for kind and name, a named row winning over the
 // kind's catch-all.
-func (t StepTable) covering(kind, name string) (stepRow, bool) {
-	var all *stepRow
+func (t StepTable) covering(kind, name string) (stepSpec, bool) {
+	var all *stepSpec
 	for i, r := range t.rows {
 		if r.Kind != kind {
 			continue
@@ -205,7 +205,7 @@ func (t StepTable) covering(kind, name string) (stepRow, bool) {
 		}
 	}
 	if all == nil {
-		return stepRow{}, false
+		return stepSpec{}, false
 	}
 	return *all, true
 }
@@ -278,7 +278,7 @@ const workspaceStepRule = workspaceShellPrefix + "step"
 // step's kind on both sides, strengthen only. A rule that fails judges
 // nothing and says so. A row only that rule judges is denied when no side
 // answers.
-func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, stepReq typesagent.StepRequest, row stepRow, judged types.GuardJudgment) types.GuardJudgment {
+func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, stepReq typesagent.StepRequest, row stepSpec, judged types.GuardJudgment) types.GuardJudgment {
 	step := stepReq.Step
 	unjudged := deps.Steps.unjudged(row)
 	if judged.Decision == decisionDeny {
@@ -350,7 +350,7 @@ type stepInput struct {
 // spawnEnvelope is the hook envelope a spawns step is judged as, so the
 // spawn rules read it as they read a host's spawn. The refusal says
 // which field holds the wrong type.
-func (r stepRow) spawnEnvelope(step typesagent.Step, input map[string]any) (string, string) {
+func (r stepSpec) spawnEnvelope(step typesagent.Step, input map[string]any) (string, string) {
 	if _, ok := envelopeSpawn(input); !ok {
 		return "", "holds no spawn prompt: a prompt, or a message beside an agent field"
 	}
@@ -373,7 +373,7 @@ func (r stepRow) spawnEnvelope(step typesagent.Step, input map[string]any) (stri
 
 // read follows the row's pointers into input, or says which field holds
 // the wrong type: the agent can correct that, so it is a deny.
-func (r stepRow) read(input map[string]any) (stepInput, string) {
+func (r stepSpec) read(input map[string]any) (stepInput, string) {
 	var got stepInput
 	if r.command != nil {
 		s, ok := r.command.get(input).(string)
@@ -406,7 +406,7 @@ func (r stepRow) read(input map[string]any) (stepInput, string) {
 // judgeStepBuiltins runs Judge over the spawn, the command and each path.
 // Each is the request the hook judges for a spawn, a shell line, a read
 // or a write.
-func judgeStepBuiltins(ctx context.Context, deps Dependencies, req Request, step typesagent.Step, row stepRow, read stepInput, judged types.GuardJudgment) types.GuardJudgment {
+func judgeStepBuiltins(ctx context.Context, deps Dependencies, req Request, step typesagent.Step, row stepSpec, read stepInput, judged types.GuardJudgment) types.GuardJudgment {
 	base := req
 	base.Dir, base.Session, base.Agent = step.Dir, cmp.Or(step.Session, req.Session), cmp.Or(step.Agent, req.Agent)
 	base.IsPath = false

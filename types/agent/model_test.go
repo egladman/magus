@@ -326,7 +326,7 @@ func (s *modelTierSuite) TestEveryProblemIsReported() {
 
 func (s *modelTierSuite) TestTheVocabulariesCloseTheirSets() {
 	s.Equal([]string{"short", "full"}, SkillVariant("").Values())
-	s.Equal([]string{"row", "matrix", "user-matrix", "default"}, ModelTierSource("").Values())
+	s.Equal([]string{"job", "matrix", "user-matrix", "default"}, ModelTierSource("").Values())
 	s.False(SkillVariant("medium").Valid())
 	s.True(SkillVariantFull.Full())
 	s.False(SkillVariantFull.Short())
@@ -361,12 +361,12 @@ func (s *modelTierSuite) TestTheForkLineNamesAReasonAlone() {
 }
 
 func (s *modelTierSuite) TestTheForkLineNamesTheSourceAlone() {
-	s.Equal("design (rank 2), row", JobModelTier{Name: "design", Rank: 2, Source: ModelTierSourceRow}.String())
+	s.Equal("design (rank 2), job", JobModelTier{Name: "design", Rank: 2, Source: ModelTierSourceJob}.String())
 }
 
 func (s *modelTierSuite) TestTheForkLineSaysWhichTiersShareAnID() {
-	tier := JobModelTier{Name: "frontier", Rank: 3, Source: ModelTierSourceRow, Shared: []string{"codex runs design and frontier on one id, gpt-6-astra"}}
-	s.Equal("frontier (rank 3), row; codex runs design and frontier on one id, gpt-6-astra", tier.String())
+	tier := JobModelTier{Name: "frontier", Rank: 3, Source: ModelTierSourceJob, Shared: []string{"codex runs design and frontier on one id, gpt-6-astra"}}
+	s.Equal("frontier (rank 3), job; codex runs design and frontier on one id, gpt-6-astra", tier.String())
 }
 
 type modelTierStateSuite struct {

@@ -15,7 +15,7 @@ import (
 func TestConformanceJSONCarriesPropose(t *testing.T) {
 	out := Conformance{
 		Definition: ConformanceDefinition,
-		Rows: []ConformanceRow{{
+		Distributions: []ConformanceDistribution{{
 			Key:   ConformanceKey{Metric: ConformanceFileLines, Population: ConformancePopSource},
 			Value: 2200, Propose: 938,
 		}},

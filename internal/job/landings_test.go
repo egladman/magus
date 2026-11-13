@@ -384,12 +384,12 @@ func (s *unmergedSuite) TestAFiledRowWithCommitsOffTheBranchIsNamedWithItsHeadAn
 	got := s.unmerged(types.Job{ID: "w", State: types.StateExited})
 
 	s.Equal(s.main, got.Branch)
-	s.Require().Len(got.Rows, 1)
-	s.Equal("w", got.Rows[0].Job)
-	s.True(strings.HasPrefix(head, got.Rows[0].Head), got.Rows[0].Head)
-	s.Contains(got.Rows[0].Why, "not on "+s.main)
-	s.Contains(got.Rows[0].Remedy, fmt.Sprintf("merge %s into %s", got.Rows[0].Head, s.main))
-	s.Contains(got.Rows[0].Remedy, "left_unmerged")
+	s.Require().Len(got.Jobs, 1)
+	s.Equal("w", got.Jobs[0].Job)
+	s.True(strings.HasPrefix(head, got.Jobs[0].Head), got.Jobs[0].Head)
+	s.Contains(got.Jobs[0].Why, "not on "+s.main)
+	s.Contains(got.Jobs[0].Remedy, fmt.Sprintf("merge %s into %s", got.Jobs[0].Head, s.main))
+	s.Contains(got.Jobs[0].Remedy, "left_unmerged")
 }
 
 func (s *unmergedSuite) TestAnAncestorOfTheBranchIsMerged() {
@@ -399,7 +399,7 @@ func (s *unmergedSuite) TestAnAncestorOfTheBranchIsMerged() {
 	s.filed("w", &types.JobResult{ChangedPaths: []string{"w.txt"}})
 	got := s.unmerged(types.Job{ID: "w", State: types.StatePass})
 
-	s.Empty(got.Rows)
+	s.Empty(got.Jobs)
 	s.Empty(got.Unknown)
 }
 
@@ -407,7 +407,7 @@ func (s *unmergedSuite) TestASquashedBranchIsMergedByContent() {
 	s.branch("w")
 	s.repo.Commit("squash", map[string]string{"w.txt": "w\n"})
 
-	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows)
+	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Jobs)
 }
 
 func (s *unmergedSuite) TestAReplayedBranchIsMergedAfterTheBranchWentOnToChangeItsFile() {
@@ -418,7 +418,7 @@ func (s *unmergedSuite) TestAReplayedBranchIsMergedAfterTheBranchWentOnToChangeI
 	s.repo.Git("cherry-pick", "w")
 	s.repo.Commit("edit bottom", map[string]string{"shared.txt": "one\n2\n3\n4\n5\n6\n7\n8\nnine\n"})
 
-	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows)
+	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Jobs)
 }
 
 func (s *unmergedSuite) TestAReadRunsNoMergeDriverAndLeavesNoTempFile() {
@@ -435,7 +435,7 @@ func (s *unmergedSuite) TestAReadRunsNoMergeDriverAndLeavesNoTempFile() {
 
 	got := s.unmerged(types.Job{ID: "w", State: types.StatePass})
 
-	s.Require().Len(got.Rows, 1)
+	s.Require().Len(got.Jobs, 1)
 	s.NoFileExists(called)
 	leftovers, err := filepath.Glob(filepath.Join(s.repo.Root(), ".merge_file_*"))
 	s.Require().NoError(err)
@@ -449,7 +449,7 @@ func (s *unmergedSuite) TestAReplayedCommitIsMergedAfterTheBranchRewroteItsLine(
 	s.repo.Git("cherry-pick", "w")
 	s.repo.Commit("rewrite the line", map[string]string{"line.txt": "second\n"})
 
-	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows)
+	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Jobs)
 }
 
 func (s *unmergedSuite) TestACommitThatOnlySharesItsSubjectWithAnotherAuthorIsNotReplayed() {
@@ -458,7 +458,7 @@ func (s *unmergedSuite) TestACommitThatOnlySharesItsSubjectWithAnotherAuthorIsNo
 	s.repo.Git("switch", "-q", s.main)
 	s.repo.Git("-c", "user.email=other@example.com", "commit", "-q", "--allow-empty", "-m", "write the line")
 
-	s.Len(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows, 1)
+	s.Len(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Jobs, 1)
 }
 
 func (s *unmergedSuite) TestAReadPastItsDeadlineNamesWhatItLeftAndTheNextCarriesOn() {
@@ -473,8 +473,8 @@ func (s *unmergedSuite) TestAReadPastItsDeadlineNamesWhatItLeftAndTheNextCarries
 	if got.Unknown == "" {
 		s.Fail("a read that answered nothing must say so", "%+v", got)
 	}
-	s.Empty(got.Rows, "nothing is claimed of a row it did not read")
-	s.Len(s.unmerged(row).Rows, 1)
+	s.Empty(got.Jobs, "nothing is claimed of a row it did not read")
+	s.Len(s.unmerged(row).Jobs, 1)
 }
 
 func (s *unmergedSuite) TestAnAnswerForARowTheStoreLostIsDropped() {
@@ -574,19 +574,19 @@ func (s *unmergedSuite) TestAStoredMergeIsReadInsteadOfAskingAgain() {
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
 	s.Require().NoError(file.AppendLines(path, [][]byte{line}, 0o644))
 
-	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows)
+	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Jobs)
 }
 
 func (s *unmergedSuite) TestAStoredMergeOfAnOlderHeadStandsForNothing() {
 	head := s.repo.Git("rev-parse", s.branch("w"))
-	s.Empty(s.unmerged(types.Job{ID: "other", State: types.StatePass}).Rows)
+	s.Empty(s.unmerged(types.Job{ID: "other", State: types.StatePass}).Jobs)
 	line, err := json.Marshal(unmergedFact{ID: "w", Branch: s.main, Head: head + "0", Tip: s.repo.Git("rev-parse", "HEAD"), Merged: true})
 	s.Require().NoError(err)
 	path := unmergedFactsPath(s.repo.Root())
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
 	s.Require().NoError(file.AppendLines(path, [][]byte{line}, 0o644))
 
-	s.Len(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Rows, 1)
+	s.Len(s.unmerged(types.Job{ID: "w", State: types.StatePass}).Jobs, 1)
 }
 
 func (s *unmergedSuite) TestARowEndedWithWorkOnItsBranchAndNoStatedReasonCounts() {
@@ -594,8 +594,8 @@ func (s *unmergedSuite) TestARowEndedWithWorkOnItsBranchAndNoStatedReasonCounts(
 
 	got := s.unmerged(types.Job{ID: "w", State: types.StateNoReturn, EndReason: "abandoned by its holder, which filed no result"})
 
-	s.Require().Len(got.Rows, 1)
-	s.Equal("w", got.Rows[0].Job)
+	s.Require().Len(got.Jobs, 1)
+	s.Equal("w", got.Jobs[0].Job)
 }
 
 func (s *unmergedSuite) TestAStatedReasonLeavesTheRowOut() {
@@ -603,7 +603,7 @@ func (s *unmergedSuite) TestAStatedReasonLeavesTheRowOut() {
 
 	got := s.unmerged(types.Job{ID: "w", State: types.StateNoReturn, LeftUnmerged: "the approach was dropped"})
 
-	s.Empty(got.Rows)
+	s.Empty(got.Jobs)
 }
 
 func (s *unmergedSuite) TestARowALandingProbeEndedIsLeftOut() {
@@ -611,7 +611,7 @@ func (s *unmergedSuite) TestARowALandingProbeEndedIsLeftOut() {
 
 	got := s.unmerged(types.Job{ID: "w", State: types.StateNoReturn, Landed: true})
 
-	s.Empty(got.Rows)
+	s.Empty(got.Jobs)
 }
 
 func (s *unmergedSuite) TestAnEndReasonThatOnlyReadsLikeALandingIsStillChecked() {
@@ -619,13 +619,13 @@ func (s *unmergedSuite) TestAnEndReasonThatOnlyReadsLikeALandingIsStillChecked()
 
 	got := s.unmerged(types.Job{ID: "w", State: types.StateNoReturn, EndReason: "its work landed on main at abc"})
 
-	s.Len(got.Rows, 1)
+	s.Len(got.Jobs, 1)
 }
 
 func (s *unmergedSuite) TestARunningRowIsStillWorking() {
 	s.branch("w")
 
-	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StateRunning}).Rows)
+	s.Empty(s.unmerged(types.Job{ID: "w", State: types.StateRunning}).Jobs)
 }
 
 func (s *unmergedSuite) TestAFiledCheckoutHoldingUncommittedChangesCounts() {
@@ -637,22 +637,22 @@ func (s *unmergedSuite) TestAFiledCheckoutHoldingUncommittedChangesCounts() {
 
 	got := s.unmerged(row)
 
-	s.Require().Len(got.Rows, 1)
-	s.NotEmpty(got.Rows[0].Head)
-	s.Contains(got.Rows[0].Why, "1 uncommitted path(s), first w.txt")
+	s.Require().Len(got.Jobs, 1)
+	s.NotEmpty(got.Jobs[0].Head)
+	s.Contains(got.Jobs[0].Why, "1 uncommitted path(s), first w.txt")
 }
 
 func (s *unmergedSuite) TestAFiledRowWithNoCheckoutOrBranchIsNeverReadAsMerged() {
 	s.filed("gone", &types.JobResult{ChangedPaths: []string{"a.go"}})
 	got := s.unmerged(types.Job{ID: "gone", State: types.StatePass})
 
-	s.Require().Len(got.Rows, 1)
-	s.Empty(got.Rows[0].Head)
-	s.Contains(got.Rows[0].Why, "cannot be read")
+	s.Require().Len(got.Jobs, 1)
+	s.Empty(got.Jobs[0].Head)
+	s.Contains(got.Jobs[0].Why, "cannot be read")
 }
 
 func (s *unmergedSuite) TestAnEndedRowThatFiledNoPathAndLeftNoBranchHasNothingToLose() {
-	s.Empty(s.unmerged(types.Job{ID: "gone", State: types.StateNoReturn}).Rows)
+	s.Empty(s.unmerged(types.Job{ID: "gone", State: types.StateNoReturn}).Jobs)
 }
 
 func (s *unmergedSuite) TestAGoneHeadAPassedIntegrationNamesIsMerged() {
@@ -662,7 +662,7 @@ func (s *unmergedSuite) TestAGoneHeadAPassedIntegrationNamesIsMerged() {
 		types.Job{ID: "merge", State: types.StatePass, Integrates: []string{"gone"}, ReadOnly: true},
 	)
 
-	s.Empty(got.Rows)
+	s.Empty(got.Jobs)
 }
 
 func (s *unmergedSuite) TestADetachedCheckoutIsUnknownNeverMerged() {
@@ -672,7 +672,7 @@ func (s *unmergedSuite) TestADetachedCheckoutIsUnknownNeverMerged() {
 	got := s.unmerged(types.Job{ID: "w", State: types.StatePass})
 
 	s.Contains(got.Unknown, "no branch checked out")
-	s.Empty(got.Rows)
+	s.Empty(got.Jobs)
 }
 
 func (s *unmergedSuite) TestAFollowUpStandsUntilAnswered() {
@@ -681,8 +681,8 @@ func (s *unmergedSuite) TestAFollowUpStandsUntilAnswered() {
 
 	got := s.unmerged(row)
 
-	s.Require().Len(got.Rows, 1)
-	s.Equal("a follow-up", got.Rows[0].Item)
+	s.Require().Len(got.Jobs, 1)
+	s.Equal("a follow-up", got.Jobs[0].Item)
 	s.Empty(got.Risks)
 }
 
@@ -692,7 +692,7 @@ func (s *unmergedSuite) TestARowWithOnlyUnresolvedRisksHasNothingUnmerged() {
 
 	got := s.unmerged(row)
 
-	s.Empty(got.Rows)
+	s.Empty(got.Jobs)
 	s.Require().Len(got.Risks, 1)
 	s.Equal("a risk", got.Risks[0].Item)
 }
@@ -707,28 +707,28 @@ func (s *unmergedSuite) TestAnAnsweredRiskLeavesTheList() {
 
 func (s *unmergedSuite) TestAReasonOrADeclaredRowAnswersAnItem() {
 	row := types.Job{ID: "r", State: types.StatePass, ReadOnly: true,
-		Deferred: []types.JobDeferred{{Item: "a risk", Reason: "accepted"}, {Item: "a follow-up", Row: "next"}}}
+		Deferred: []types.JobDeferred{{Item: "a risk", Reason: "accepted"}, {Item: "a follow-up", Job: "next"}}}
 	s.filed("r", &types.JobResult{UnresolvedRisks: []string{"a risk"}, FollowUps: []string{"a follow-up"}})
 
 	got := s.unmerged(row, types.Job{ID: "next", State: types.StateDeclared})
 
-	s.Empty(got.Rows)
+	s.Empty(got.Jobs)
 	s.Empty(got.Risks)
 }
 
 func (s *unmergedSuite) TestAnAnswerNamingAMissingRowLeavesTheItemStanding() {
 	row := types.Job{ID: "r", State: types.StatePass, ReadOnly: true,
-		Deferred: []types.JobDeferred{{Item: "a follow-up", Row: "gone"}}}
+		Deferred: []types.JobDeferred{{Item: "a follow-up", Job: "gone"}}}
 	s.filed("r", &types.JobResult{FollowUps: []string{"a follow-up"}})
 
-	s.Len(s.unmerged(row).Rows, 1)
+	s.Len(s.unmerged(row).Jobs, 1)
 }
 
 func (s *unmergedSuite) TestAnotherCheckoutsTreeIsNotThisOnes() {
 	s.branch("w")
 	peer := types.Job{ID: "w", State: types.StatePass, Worktree: &types.JobWorktree{Source: s.T().TempDir()}}
 
-	s.Empty(s.unmerged(peer).Rows)
+	s.Empty(s.unmerged(peer).Jobs)
 }
 
 func (s *unmergedSuite) settle(rec types.Declaration) ([]types.Job, error) {
@@ -771,7 +771,7 @@ func (s *unmergedSuite) TestSettleRefusesARowNothingDeclares() {
 	seed(s.T(), s.store, types.Job{ID: "r", State: types.StatePass})
 	fileTry(s.T(), s.store, "r", &types.JobResult{FollowUps: []string{"later"}})
 
-	_, err := s.settle(types.Declaration{ID: "r", Deferred: []types.JobDeferred{{Item: "later", Row: "gone"}}})
+	_, err := s.settle(types.Declaration{ID: "r", Deferred: []types.JobDeferred{{Item: "later", Job: "gone"}}})
 
 	s.Require().ErrorContains(err, "which nothing declares")
 }
@@ -788,7 +788,7 @@ func (s *unmergedSuite) TestSettleRefusesBothARowAndAReason() {
 	seed(s.T(), s.store, types.Job{ID: "r", State: types.StatePass})
 	fileTry(s.T(), s.store, "r", &types.JobResult{FollowUps: []string{"later"}})
 
-	_, err := s.settle(types.Declaration{ID: "r", Deferred: []types.JobDeferred{{Item: "later", Row: "r", Reason: "x"}}})
+	_, err := s.settle(types.Declaration{ID: "r", Deferred: []types.JobDeferred{{Item: "later", Job: "r", Reason: "x"}}})
 
 	s.Require().ErrorContains(err, "neither or both")
 }

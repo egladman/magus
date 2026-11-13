@@ -62,7 +62,7 @@ const (
 // testToolFiles is testToolRows installed under testToolsDir with the host file that names
 // the directory, as the harness install writes them.
 func testToolFiles() []types.AgentFile {
-	return append(agent.ToolFiles(types.HarnessTools{Dir: testToolsDir, Rows: testToolRows}, nil),
+	return append(agent.ToolFiles(types.HarnessTools{Dir: testToolsDir, Tools: testToolRows}, nil),
 		types.AgentFile{Path: testToolsDir + "/" + types.ToolHostFile, Content: testToolHost + "\n"})
 }
 

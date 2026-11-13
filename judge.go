@@ -32,10 +32,10 @@ func (m *Magus) JudgeCommand(ctx context.Context, session, dir, command string) 
 
 type authorityKey struct{}
 
-// ContextWithAuthority has a judgment under ctx with no job row read the
+// ContextWithAuthority has a judgment under ctx with no job read the
 // approved rules at revision (ADR 0045). CI passes its target branch's,
 // so a pull request cannot approve its own loosening. A leased call reads
-// its row's authority instead.
+// its job's authority instead.
 func ContextWithAuthority(ctx context.Context, revision string) context.Context {
 	return context.WithValue(ctx, authorityKey{}, revision)
 }
@@ -46,8 +46,8 @@ func (m *Magus) JudgeWrite(ctx context.Context, session, dir, path string) (type
 	return m.judge(ctx, guard.Request{Input: path, IsPath: true, Dir: dir, Session: session})
 }
 
-// Judge judges step against the rows WithStepRows declared. The built-in
-// rules judge the command and paths its row points at, then each StepRule
+// Judge judges step against the specs WithStepSpecs declared. The built-in
+// rules judge the command and paths its spec points at, then each StepRule
 // judges it, then the workspace's magus\guard.step rule for its kind, beside
 // its approved copy. The strictest decision wins. Judge never changes, holds
 // or takes the step. An undeclared kind is a deny. The error is a step

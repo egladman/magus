@@ -308,9 +308,9 @@ func stepDenied(rule, reason string) types.GuardJudgment {
 	return types.GuardJudgment{APIVersion: hostagent.GuardAPIVersion, Decision: string(types.GuardDeny), Reason: reason, Rule: rule}
 }
 
-var shellRow = agent.StepRow{Kind: "shell", Capabilities: []string{string(types.ToolRuns)}, Command: "/command"}
+var shellRow = agent.StepSpec{Kind: "shell", Capabilities: []string{string(types.ToolRuns)}, Command: "/command"}
 
-var refundRow = agent.StepRow{Kind: "refund", Capabilities: []string{string(types.ToolNetwork)}}
+var refundRow = agent.StepSpec{Kind: "refund", Capabilities: []string{string(types.ToolNetwork)}}
 
 // refundLimit denies a refund over 100, a rule for a kind magus never ships.
 func refundLimit(_ context.Context, req agent.StepRequest) (types.GuardVerdict, error) {
@@ -330,7 +330,7 @@ func (s *judgeStepSuite) TestAnUndeclaredKindIsDenied() {
 }
 
 func (s *judgeStepSuite) TestARunsRowJudgesItsCommand() {
-	j, err := s.open(WithStepRows(shellRow)).Judge(s.T().Context(), s.step("shell", "bash", map[string]any{"command": "ls"}))
+	j, err := s.open(WithStepSpecs(shellRow)).Judge(s.T().Context(), s.step("shell", "bash", map[string]any{"command": "ls"}))
 
 	s.Require().NoError(err)
 	s.Equal(string(types.GuardDeny), j.Decision)
@@ -338,9 +338,9 @@ func (s *judgeStepSuite) TestARunsRowJudgesItsCommand() {
 }
 
 func (s *judgeStepSuite) TestAWritesRowJudgesEachPath() {
-	row := agent.StepRow{Kind: "memory", Capabilities: []string{string(types.ToolWrites)}, Paths: []string{"/files"}}
+	row := agent.StepSpec{Kind: "memory", Capabilities: []string{string(types.ToolWrites)}, Paths: []string{"/files"}}
 
-	j, err := s.open(WithStepRows(row)).Judge(s.T().Context(), s.step("memory", "notes", map[string]any{"files": []any{"notes.txt"}}))
+	j, err := s.open(WithStepSpecs(row)).Judge(s.T().Context(), s.step("memory", "notes", map[string]any{"files": []any{"notes.txt"}}))
 
 	s.Require().NoError(err)
 	s.Equal(string(types.GuardDeny), j.Decision)
@@ -348,7 +348,7 @@ func (s *judgeStepSuite) TestAWritesRowJudgesEachPath() {
 }
 
 func (s *judgeStepSuite) TestAMistypedLocationIsDeniedNamingTheField() {
-	j, err := s.open(WithStepRows(shellRow)).Judge(s.T().Context(), s.step("shell", "bash", map[string]any{"command": 4.0}))
+	j, err := s.open(WithStepSpecs(shellRow)).Judge(s.T().Context(), s.step("shell", "bash", map[string]any{"command": 4.0}))
 
 	s.Require().NoError(err)
 	s.Equal(stepDenied("step-input", j.Reason), j)
@@ -364,7 +364,7 @@ func (s *judgeStepSuite) TestAnInputOffItsSchemaIsDeniedBeforeAnyRuleRuns() {
 		return types.GuardVerdict{}, nil
 	}
 
-	j, err := s.open(WithStepRows(row), WithStepRule(counting)).Judge(s.T().Context(), s.step("refund", "card", map[string]any{"amount": "ten"}))
+	j, err := s.open(WithStepSpecs(row), WithStepRule(counting)).Judge(s.T().Context(), s.step("refund", "card", map[string]any{"amount": "ten"}))
 
 	s.Require().NoError(err)
 	s.Equal(stepDenied("step-input", j.Reason), j)
@@ -373,7 +373,7 @@ func (s *judgeStepSuite) TestAnInputOffItsSchemaIsDeniedBeforeAnyRuleRuns() {
 }
 
 func (s *judgeStepSuite) TestAGoRuleJudgesAKindMagusNeverShips() {
-	m := s.open(WithStepRows(refundRow), WithStepRule(refundLimit))
+	m := s.open(WithStepSpecs(refundRow), WithStepRule(refundLimit))
 
 	j, err := m.Judge(s.T().Context(), s.step("refund", "card", map[string]any{"amount": 250.0}))
 
@@ -382,7 +382,7 @@ func (s *judgeStepSuite) TestAGoRuleJudgesAKindMagusNeverShips() {
 }
 
 func (s *judgeStepSuite) TestAGoRulesPassLeavesTheStepPassing() {
-	m := s.open(WithStepRows(refundRow), WithStepRule(refundLimit))
+	m := s.open(WithStepSpecs(refundRow), WithStepRule(refundLimit))
 
 	j, err := m.Judge(s.T().Context(), s.step("refund", "card", map[string]any{"amount": 20.0}))
 
@@ -395,15 +395,15 @@ func (s *judgeStepSuite) TestAGoRuleErrorIsAJudgmentNotMade() {
 		return types.GuardVerdict{}, errors.New("ledger unreachable")
 	}
 
-	_, err := s.open(WithStepRows(refundRow), WithStepRule(failing)).Judge(s.T().Context(), s.step("refund", "card", nil))
+	_, err := s.open(WithStepSpecs(refundRow), WithStepRule(failing)).Judge(s.T().Context(), s.step("refund", "card", nil))
 
 	s.ErrorContains(err, "ledger unreachable")
 }
 
 func (s *judgeStepSuite) TestAnInertRowPasses() {
-	row := agent.StepRow{Kind: "plan", Capabilities: []string{string(types.ToolInert)}}
+	row := agent.StepSpec{Kind: "plan", Capabilities: []string{string(types.ToolInert)}}
 
-	j, err := s.open(WithStepRows(row)).Judge(s.T().Context(), s.step("plan", "todo", map[string]any{"items": []any{"ls"}}))
+	j, err := s.open(WithStepSpecs(row)).Judge(s.T().Context(), s.step("plan", "todo", map[string]any{"items": []any{"ls"}}))
 
 	s.Require().NoError(err)
 	s.Equal("pass", j.Decision)
@@ -422,19 +422,19 @@ func (s *judgeStepSuite) TestAnEmptyDirIsAnErrorWhenTheRowReadsACommand() {
 	step := s.step("shell", "bash", map[string]any{"command": "ls"})
 	step.Dir = ""
 
-	_, err := s.open(WithStepRows(shellRow)).Judge(s.T().Context(), step)
+	_, err := s.open(WithStepSpecs(shellRow)).Judge(s.T().Context(), step)
 
 	s.ErrorContains(err, "dir is empty")
 }
 
 func (s *judgeStepSuite) TestARowNothingJudgesFailsTheOpen() {
-	_, err := Open(s.T().Context(), s.root, WithStepRows(refundRow), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(refundRow), WithSpawnRule(TierCeiling))
 
 	s.ErrorContains(err, "magus.WithStepRule")
 }
 
 func (s *judgeStepSuite) TestARepeatedRowFailsTheOpen() {
-	_, err := Open(s.T().Context(), s.root, WithStepRows(shellRow, shellRow), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(shellRow, shellRow), WithSpawnRule(TierCeiling))
 
 	s.ErrorContains(err, `repeats kind "shell"`)
 }
@@ -443,7 +443,7 @@ func (s *judgeStepSuite) TestAPointerThatDoesNotParseFailsTheOpen() {
 	row := shellRow
 	row.Command = "command"
 
-	_, err := Open(s.T().Context(), s.root, WithStepRows(row), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(TierCeiling))
 
 	s.ErrorContains(err, "not a JSON Pointer")
 }
@@ -452,7 +452,7 @@ func (s *judgeStepSuite) TestASchemaThatDoesNotParseFailsTheOpen() {
 	row := shellRow
 	row.InputSchema = []byte(`{"type":`)
 
-	_, err := Open(s.T().Context(), s.root, WithStepRows(row), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(TierCeiling))
 
 	s.ErrorContains(err, "input_schema")
 }
@@ -461,12 +461,12 @@ func (s *judgeStepSuite) TestAKindNamedForASeamFailsTheOpen() {
 	row := shellRow
 	row.Kind = "command"
 
-	_, err := Open(s.T().Context(), s.root, WithStepRows(row), WithSpawnRule(TierCeiling))
+	_, err := Open(s.T().Context(), s.root, WithStepSpecs(row), WithSpawnRule(TierCeiling))
 
 	s.ErrorContains(err, "reserved")
 }
 
-var delegateRow = agent.StepRow{Kind: "delegate", Capabilities: []string{string(types.ToolSpawns)}, SpawnDescriptionField: "/title"}
+var delegateRow = agent.StepSpec{Kind: "delegate", Capabilities: []string{string(types.ToolSpawns)}, SpawnDescriptionField: "/title"}
 
 // A spawns row's step reaches the workspace's magus\guard.spawn rule, as a
 // host's spawn does.
@@ -478,7 +478,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     return magus\guard.deny("No spawns here: {req.description}.");
 });
 `)
-	m, err := Open(s.T().Context(), w.Root(), WithStepRows(delegateRow), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), w.Root(), WithStepSpecs(delegateRow), WithSpawnRule(TierCeiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	step := agent.Step{APIVersion: agent.StepAPIVersion, Kind: "delegate", Name: "researcher", Session: "s1", Dir: w.Root(),
@@ -492,7 +492,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 }
 
 func (s *judgeStepSuite) TestASpawnsStepWithNoPromptIsDeniedNamingIt() {
-	j, err := s.open(WithStepRows(delegateRow)).Judge(s.T().Context(), s.step("delegate", "researcher", map[string]any{"title": "t"}))
+	j, err := s.open(WithStepSpecs(delegateRow)).Judge(s.T().Context(), s.step("delegate", "researcher", map[string]any{"title": "t"}))
 
 	s.Require().NoError(err)
 	s.Equal(stepDenied("step-input", j.Reason), j)
@@ -513,7 +513,7 @@ func (s *buzzStepRuleSuite) SetupTest() { testkit.Isolate(s.T()) }
 func (s *buzzStepRuleSuite) open(src string, opts ...Option) (*Magus, error) {
 	w := testkit.NewWorkspace(s.T())
 	w.Magusfile(src)
-	m, err := Open(s.T().Context(), w.Root(), append(opts, WithStepRows(refundRow), WithSpawnRule(TierCeiling))...)
+	m, err := Open(s.T().Context(), w.Root(), append(opts, WithStepSpecs(refundRow), WithSpawnRule(TierCeiling))...)
 	if m != nil {
 		s.T().Cleanup(func() { _ = m.Close() })
 	}
@@ -576,7 +576,7 @@ magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => 
 
 func (s *buzzStepRuleSuite) TestAnUncommittedLooseningWaitsOnApproval() {
 	repo := testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": refundRule})
-	m, err := Open(s.T().Context(), repo.Root(), WithStepRows(refundRow), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), repo.Root(), WithStepSpecs(refundRow), WithSpawnRule(TierCeiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	loosened := "import \"magus\";\nimport \"magus/agent\";\n\nmagus\\guard.step(\"refund\", fun (req: magus\\agent\\StepRequest) > GuardVerdict => magus\\guard.allow());\n"
@@ -629,7 +629,7 @@ func (s *stepRemedySuite) TestADenyServesItsRemedyCommand() {
 	testkit.Isolate(s.T())
 	w := testkit.NewWorkspace(s.T())
 	w.Magusfile(`import "magus";` + "\n")
-	m, err := Open(s.T().Context(), w.Root(), WithStepRows(shellRow), WithSpawnRule(TierCeiling))
+	m, err := Open(s.T().Context(), w.Root(), WithStepSpecs(shellRow), WithSpawnRule(TierCeiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 	step := agent.Step{APIVersion: agent.StepAPIVersion, Kind: "shell", Name: "bash", Session: "s1", Dir: w.Root(),

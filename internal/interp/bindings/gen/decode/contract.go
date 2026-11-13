@@ -64,7 +64,7 @@ var HarnessFuncs = []ContractFunc{
 	{Name: "mgs_getMcp", Field: "MCP", Returns: "McpServer", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncMCP(v) }},
 	{Name: "mgs_listTools", Field: "Tools", Returns: "HarnessTools", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncTools(v) }},
 	{Name: "mgs_getLimits", Field: "Limits", Returns: "Limits", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncLimits(v) }},
-	{Name: "mgs_listModels", Field: "Models", Returns: "[ModelRow]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncModels(v) }},
+	{Name: "mgs_listModels", Field: "Models", Returns: "[Model]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncModels(v) }},
 	{Name: "mgs_listSettings", Field: "Settings", Returns: "[Setting]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncSettings(v) }},
 	{Name: "mgs_renderAgents", Field: "RenderAgents", Returns: "[AgentFile]", Params: "agents: [ShippedAgent]", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncRenderAgents(v) }},
 	{Name: "mgs_renderPrompts", Field: "RenderPrompts", Returns: "[Prompt]", Params: "humanOnly: {str: str}", Required: true, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncRenderPrompts(v) }},
@@ -462,16 +462,16 @@ func decodeHarnessFuncLimits(v vm.Value) (types.Limits, error) {
 	return out, nil
 }
 
-func decodeHarnessFuncModels(v vm.Value) ([]types.ModelRow, error) {
-	var out []types.ModelRow
-	listModels, err := decodeList(v, "mgs_listModels", "[ModelRow]")
+func decodeHarnessFuncModels(v vm.Value) ([]types.HarnessModel, error) {
+	var out []types.HarnessModel
+	listModels, err := decodeList(v, "mgs_listModels", "[Model]")
 	if err != nil {
 		return out, err
 	}
 	if len(listModels) > 0 {
-		itemsModels := make([]types.ModelRow, len(listModels))
+		itemsModels := make([]types.HarnessModel, len(listModels))
 		for indexModels, itemModels := range listModels {
-			xModelsItem, err := decodeModelRow(itemModels, fmt.Sprintf("%s[%d]", "mgs_listModels", indexModels))
+			xModelsItem, err := decodeModel(itemModels, fmt.Sprintf("%s[%d]", "mgs_listModels", indexModels))
 			if err != nil {
 				return out, err
 			}

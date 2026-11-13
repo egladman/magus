@@ -235,14 +235,14 @@ func compareConformanceKeys(a, b ConformanceKey) int {
 // Packages is set only on a base measure, in directory order. It tells
 // an import of moved declarations from a new one.
 type Conformance struct {
-	Definition string                  `json:"definition"           yaml:"definition"`
-	Rows       []ConformanceRow        `json:"rows"                 yaml:"rows"`
-	Excluded   int                     `json:"excluded"             yaml:"excluded"`
-	Answer     KnowledgeAnswer         `json:"answer"               yaml:"answer"`
-	Base       string                  `json:"base,omitempty"       yaml:"base,omitempty"`
-	Ceilings   []ConformanceCeiling    `json:"ceilings,omitempty"   yaml:"ceilings,omitempty"`
-	Unmeasured []ConformanceUnmeasured `json:"unmeasured,omitempty" yaml:"unmeasured,omitempty"`
-	Packages   []ConformancePackage    `json:"packages,omitempty"   yaml:"packages,omitempty"`
+	Definition    string                    `json:"definition"           yaml:"definition"`
+	Distributions []ConformanceDistribution `json:"distributions"        yaml:"distributions"`
+	Excluded      int                       `json:"excluded"             yaml:"excluded"`
+	Answer        KnowledgeAnswer           `json:"answer"               yaml:"answer"`
+	Base          string                    `json:"base,omitempty"       yaml:"base,omitempty"`
+	Ceilings      []ConformanceCeiling      `json:"ceilings,omitempty"   yaml:"ceilings,omitempty"`
+	Unmeasured    []ConformanceUnmeasured   `json:"unmeasured,omitempty" yaml:"unmeasured,omitempty"`
+	Packages      []ConformancePackage      `json:"packages,omitempty"   yaml:"packages,omitempty"`
 }
 
 // ConformanceUnmeasured is a touched file the base was not measured for: its language and why.
@@ -253,10 +253,10 @@ type ConformanceUnmeasured struct {
 	Reason   string `json:"reason"   yaml:"reason"`
 }
 
-// ConformanceRow is one key's distribution and verdict. Live is the configured percentile
+// ConformanceDistribution is one key's distribution and verdict. Live is the configured percentile
 // measured today; Value is the anchor Effective enforces. Propose is zero, or a tighter anchor
 // to configure: it is never looser than Value. Violations are the items past Value.
-type ConformanceRow struct {
+type ConformanceDistribution struct {
 	Key        ConformanceKey    `json:"key"        yaml:"key"`
 	N          int               `json:"n"          yaml:"n"`
 	P50        int               `json:"p50"        yaml:"p50"`
@@ -320,7 +320,7 @@ func ConformanceCeilings(base, head Conformance, touched []string, checks []Conf
 		packages[p.Dir] = p
 	}
 	var out []ConformanceCeiling
-	for _, row := range head.Rows {
+	for _, row := range head.Distributions {
 		if !slices.Contains(checks, row.Key.Metric) {
 			continue
 		}
@@ -376,7 +376,7 @@ type violationIdentity struct {
 
 func placeViolations(out Conformance, checks []ConformanceMetric) []*placedViolation {
 	var all []*placedViolation
-	for _, row := range out.Rows {
+	for _, row := range out.Distributions {
 		if !slices.Contains(checks, row.Key.Metric) {
 			continue
 		}

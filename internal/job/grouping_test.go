@@ -26,7 +26,7 @@ func worked(job string, ended, durationMs, setup, contextTokens int64, projects 
 
 func shapeRow(t *testing.T, out types.Grouping, shape types.GroupingShape) types.GroupingRecord {
 	t.Helper()
-	for _, r := range out.Rows {
+	for _, r := range out.Shapes {
 		if r.Shape == shape {
 			return r
 		}
@@ -102,8 +102,8 @@ func TestGroupingRecordsIsUnknownBelowTheSampleOrWithoutTrails(t *testing.T) {
 		}, got, name)
 	}
 	empty := GroupingRecords(nil, nil)
-	require.Len(t, empty.Rows, 3, "every shape answers, unknown when nothing was recorded")
-	for _, r := range empty.Rows {
+	require.Len(t, empty.Shapes, 3, "every shape answers, unknown when nothing was recorded")
+	for _, r := range empty.Shapes {
 		assert.Equal(t, types.GroupingUnknown, r.Verdict)
 	}
 }

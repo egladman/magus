@@ -47,7 +47,7 @@ var boundaryRoots = []boundaryRoot{
 	{Type: reflect.TypeFor[types.HookBinding](), Inbound: true},
 	{Type: reflect.TypeFor[types.ManagedEntries](), Inbound: true},
 	{Type: reflect.TypeFor[types.McpServer](), Inbound: true},
-	{Type: reflect.TypeFor[types.ModelRow](), Inbound: true},
+	{Type: reflect.TypeFor[types.HarnessModel](), Inbound: true},
 	{Type: reflect.TypeFor[types.HarnessTools](), Inbound: true},
 	{Type: reflect.TypeFor[types.AgentFile](), Inbound: true},
 	{Type: reflect.TypeFor[types.Prompt](), Inbound: true},

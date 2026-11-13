@@ -41,7 +41,7 @@ func (s *Service) HistoryMetrics(ctx context.Context) (Board, error) {
 
 func (s *Service) modelTiers(ctx context.Context) (types.ModelTiers, error) {
 	if s.magus == nil {
-		return types.ModelTiers{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}, nil
+		return types.ModelTiers{Definition: types.ModelTiersDefinition, Models: []types.ModelTierRecord{}}, nil
 	}
 	return s.magus.ModelTierLens(ctx)
 }

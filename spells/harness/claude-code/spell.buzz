@@ -281,7 +281,7 @@ fun claude_desktop_tools() > [HarnessTool] {
 }
 
 export fun mgs_listTools() > HarnessTools {
-    return HarnessTools{dir = claude_tools_dir(), rows = claude_tools()};
+    return HarnessTools{dir = claude_tools_dir(), tools = claude_tools()};
 }
 
 // Common hook input fields no other host sends
@@ -626,7 +626,7 @@ test "mgs_listTools names each tool once" {
     final tools = mgs_listTools();
     assert\equal(tools.dir, ".claude/magus/tools", "beside the settings");
     final seen = mut {<str: bool>};
-    foreach (row in tools.rows) {
+    foreach (row in tools.tools) {
         assert\isTrue(seen[row.name] == null, "{row.name} has one row");
         seen[row.name] = true;
     }
@@ -640,7 +640,7 @@ test "mgs_listTools names each tool once" {
 
 test "the desktop app's tools carry what each can do, and auto-merge has no row" {
     final capability = mut {<str: str>};
-    foreach (row in mgs_listTools().rows) { capability[row.name] = row.capability.value; }
+    foreach (row in mgs_listTools().tools) { capability[row.name] = row.capability.value; }
     foreach (name, want in {
         "mcp__ccd_session__start_session": "spawns",
         "mcp__ccd_session__hand_off_to_session": "spawns",

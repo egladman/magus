@@ -344,7 +344,7 @@ func TestMagusToolsIsServedInProcess(t *testing.T) {
 		Workspace: "/ws",
 		Count:     1,
 		Lifecycle: types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleLive},
-		Tools:     []types.ToolRow{{Project: ".", Bin: "go", Lifecycle: "go", Cycle: "1.26", Support: "supported"}},
+		Tools:     []types.ToolStatus{{Project: ".", Bin: "go", Lifecycle: "go", Cycle: "1.26", Support: "supported"}},
 	}
 	got, err := MagusDescribeTool(types.WithWorkspace(t.Context(), &cannedToolReporter{report: want}))
 	require.NoError(t, err)
@@ -515,8 +515,8 @@ func TestJobUnmergedAnswersFromThePinnedRows(t *testing.T) {
 	got, err := MagusUnmergedJob(ctx, t.TempDir())
 
 	require.NoError(t, err)
-	require.Len(t, got.Rows, 1)
-	assert.Equal(t, "later", got.Rows[0].Item)
+	require.Len(t, got.Jobs, 1)
+	assert.Equal(t, "later", got.Jobs[0].Item)
 }
 
 func TestJobUnmergedRaisesAPinnedReadError(t *testing.T) {

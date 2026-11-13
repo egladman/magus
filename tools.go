@@ -25,7 +25,7 @@ func (m *Magus) Tools(ctx context.Context, projects ...string) (types.ToolReport
 		err error
 	}
 	memo := map[string]reading{}
-	var rows []types.ToolRow
+	var rows []types.ToolStatus
 	for _, p := range m.ws.All() {
 		if len(projects) > 0 && !slices.Contains(projects, p.Path) {
 			continue
@@ -72,8 +72,8 @@ func (m *Magus) Tools(ctx context.Context, projects ...string) (types.ToolReport
 // sortToolRows orders by project, bin, then spell. Spell is the third key, not decoration:
 // two spells in one project can declare the same bin, and without it their order is
 // whatever pdqsort happened to do.
-func sortToolRows(rows []types.ToolRow) {
-	slices.SortFunc(rows, func(a, b types.ToolRow) int {
+func sortToolRows(rows []types.ToolStatus) {
+	slices.SortFunc(rows, func(a, b types.ToolStatus) int {
 		return cmp.Or(cmp.Compare(a.Project, b.Project), cmp.Compare(a.Bin, b.Bin), cmp.Compare(a.Spell, b.Spell))
 	})
 }
@@ -81,9 +81,9 @@ func sortToolRows(rows []types.ToolRow) {
 // buildToolRow turns one probe outcome into a row. Pure (no context, no exec) because
 // welding this state machine inside the fork loop is what let four distinct outcomes
 // collapse into one blank "not found".
-func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.VersionBounds, raw string, probeErr error) types.ToolRow {
+func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.VersionBounds, raw string, probeErr error) types.ToolStatus {
 	window := t.Supported.Intersect(projBounds)
-	row := types.ToolRow{
+	row := types.ToolStatus{
 		Project: project, Bin: bin, Spell: spell,
 		SpellBounds:     t.Supported.Window(),
 		WorkspaceBounds: projBounds.Window(),
@@ -122,7 +122,7 @@ func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.V
 // whose spell names no product, or a workspace that wires no provider, keeps the columns
 // empty; everything else the answer cannot place reads unknown, and the report's
 // lifecycle state says why.
-func joinLifecycle(row *types.ToolRow, state string, lifecycles []spells.Lifecycle, now time.Time) {
+func joinLifecycle(row *types.ToolStatus, state string, lifecycles []spells.Lifecycle, now time.Time) {
 	if row.Lifecycle == "" || state == types.LifecycleUnwired {
 		return
 	}

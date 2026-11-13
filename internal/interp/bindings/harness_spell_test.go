@@ -492,7 +492,7 @@ func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {
 }
 
 func TestValidateModelRowsReadsPricesAndTiers(t *testing.T) {
-	got, tiers, err := validateModelRows([]types.ModelRow{{
+	got, tiers, err := validateModelRows([]types.HarnessModel{{
 		ID: "m-1", Tier: "bounded", Alias: "mid", Window: 200000,
 		Price: types.Price{Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3, CacheRead: 0.1, Output: 7},
 		Step:  types.PriceStep{Above: 100000, Multiplier: 2},
@@ -503,25 +503,25 @@ func TestValidateModelRowsReadsPricesAndTiers(t *testing.T) {
 		CacheRead: 0.1, Output: 7, LongContext: &types.PriceStep{Above: 100000, Multiplier: 2}}}, got)
 	assert.Equal(t, map[string][]string{"bounded": {"m-1"}}, tiers)
 
-	_, tiers, err = validateModelRows([]types.ModelRow{{ID: "m-1"}})
+	_, tiers, err = validateModelRows([]types.HarnessModel{{ID: "m-1"}})
 	require.NoError(t, err)
 	assert.Nil(t, tiers, "no row names a tier")
 }
 
 func TestValidateModelRowsRefusesWhatNamesNoOneModel(t *testing.T) {
 	tests := map[string]struct {
-		rows []types.ModelRow
+		rows []types.HarnessModel
 		want string
 	}{
-		"step without multiplier": {[]types.ModelRow{{ID: "m-1", Step: types.PriceStep{Above: 100000}}},
+		"step without multiplier": {[]types.HarnessModel{{ID: "m-1", Step: types.PriceStep{Above: 100000}}},
 			"row 1 (m-1) sets one of the price step's above and multiplier without the other"},
-		"multiplier without step": {[]types.ModelRow{{ID: "m-1", Step: types.PriceStep{Multiplier: 2}}},
+		"multiplier without step": {[]types.HarnessModel{{ID: "m-1", Step: types.PriceStep{Multiplier: 2}}},
 			"row 1 (m-1) sets one of the price step's above and multiplier without the other"},
-		"alias without a tier": {[]types.ModelRow{{ID: "m-1", Alias: "mid"}},
+		"alias without a tier": {[]types.HarnessModel{{ID: "m-1", Alias: "mid"}},
 			"row 1 (m-1) sets alias mid without a tier, so the alias names no tier"},
-		"one alias on two rows": {[]types.ModelRow{{ID: "m-1", Tier: "bounded", Alias: "mid"}, {ID: "m-2", Tier: "routine", Alias: "mid"}},
+		"one alias on two rows": {[]types.HarnessModel{{ID: "m-1", Tier: "bounded", Alias: "mid"}, {ID: "m-2", Tier: "routine", Alias: "mid"}},
 			"rows m-1 and m-2 both declare alias mid"},
-		"a row without an id": {[]types.ModelRow{{Window: 1000}}, "row 1 has no id"},
+		"a row without an id": {[]types.HarnessModel{{Window: 1000}}, "row 1 has no id"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -537,7 +537,7 @@ func TestClaudeCodeRowsNameAModelForEveryShippedTier(t *testing.T) {
 	d := loadShippedHarness(t, "claude-code")
 	drv, ok := project.DefaultSpellRegistry().Lookup("claude-code")
 	require.True(t, ok)
-	rows, _, err := callHarness[[]types.ModelRow](context.Background(), drv, "mgs_listModels")
+	rows, _, err := callHarness[[]types.HarnessModel](context.Background(), drv, "mgs_listModels")
 	require.NoError(t, err)
 	_, tierRows, err := validateModelRows(rows)
 	require.NoError(t, err)
@@ -889,7 +889,7 @@ func entryFailsClosed(d agent.HarnessDescriptor, event string) bool {
 }
 
 func TestValidateModelRowsKeepsEveryRowOfATier(t *testing.T) {
-	_, tiers, err := validateModelRows([]types.ModelRow{
+	_, tiers, err := validateModelRows([]types.HarnessModel{
 		{ID: "m-1", Tier: "design", Alias: "big"}, {ID: "m-2", Tier: "design", Alias: "bigger"}, {ID: "m-3", Tier: "routine"},
 	})
 

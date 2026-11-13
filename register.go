@@ -23,7 +23,7 @@ type Option = workspace.Option
 type options struct {
 	workspace.Load
 	spawnRule SpawnRule
-	stepRows  []agent.StepRow
+	stepSpecs []agent.StepSpec
 	stepRules []StepRule
 }
 

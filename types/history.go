@@ -350,7 +350,7 @@ func (t TrendEntry) Label() string { return ProjectDisplayName(t.Path, t.Name, "
 // current declaration; a dropped tier keeps rank -1.
 type ModelTiers struct {
 	Definition string            `json:"definition" yaml:"definition"`
-	Rows       []ModelTierRecord `json:"rows"       yaml:"rows"`
+	Models     []ModelTierRecord `json:"models"     yaml:"models"`
 }
 
 // HistoryMetrics is the optional capability a workspace implements to answer history

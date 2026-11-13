@@ -26,7 +26,7 @@ func (m *Magus) LifecycleProvider() string {
 // It reaches the network: the provider fetches on every call. The status says whether the
 // answer is live, replayed (offline or unreached), or absent (unwired). The error is
 // non-nil only for a malformed answer, which names the spell, key and field.
-func (m *Magus) Lifecycles(ctx context.Context, installed ...types.ToolRow) (types.LifecycleStatus, []spells.Lifecycle, error) {
+func (m *Magus) Lifecycles(ctx context.Context, installed ...types.ToolStatus) (types.LifecycleStatus, []spells.Lifecycle, error) {
 	var seen []workspace.InstalledTool
 	for _, r := range installed {
 		if r.Lifecycle != "" && r.InstalledVersion != "" {

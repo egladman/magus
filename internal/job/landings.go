@@ -328,7 +328,7 @@ func Unmerged(ctx context.Context, root string, rows []types.Job, tries types.Jo
 		}
 		result := tries.Result(row.ID)
 		if result != nil {
-			report.Rows = append(report.Rows, unanswered(rows, row, result.FollowUps, "its result defers this and no row carries it")...)
+			report.Jobs = append(report.Jobs, unanswered(rows, row, result.FollowUps, "its result defers this and no row carries it")...)
 			report.Risks = append(report.Risks, unanswered(rows, row, result.UnresolvedRisks, "its result names this risk and no row carries it")...)
 		}
 		if !row.ReadOnly && !row.State.Editing() && (result != nil || row.State.Terminal()) && !row.Landed {
@@ -361,7 +361,7 @@ func Unmerged(ctx context.Context, root string, rows []types.Job, tries types.Jo
 	read := unmergedRead{driver: driver, root: root, branch: branch, tip: meta.ID, now: time.Now().Unix(), tries: tries}
 	read.run(ctx, rows, work)
 	for _, row := range work {
-		report.Rows = append(report.Rows, read.facts(rows, row)...)
+		report.Jobs = append(report.Jobs, read.facts(rows, row)...)
 	}
 	report.Unknown = read.unknown()
 	return report
@@ -373,7 +373,7 @@ func unanswered(rows []types.Job, row types.Job, items []string, why string) []t
 	var out []types.JobUnmerged
 	for _, item := range items {
 		i := slices.IndexFunc(row.Deferred, func(d types.JobDeferred) bool { return d.Item == item })
-		if i >= 0 && (row.Deferred[i].Reason != "" || slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == row.Deferred[i].Row })) {
+		if i >= 0 && (row.Deferred[i].Reason != "" || slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == row.Deferred[i].Job })) {
 			continue
 		}
 		out = append(out, types.JobUnmerged{
@@ -857,8 +857,8 @@ func settleErrors(rows []types.Job, result *types.JobResult, rec types.Declarati
 		if !slices.Contains(items, d.Item) {
 			errs = append(errs, fmt.Errorf("%s's result defers no item %q", rec.ID, d.Item))
 		}
-		if d.Row != "" && !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == d.Row }) {
-			errs = append(errs, fmt.Errorf("%s answers %q with row %s, which nothing declares", rec.ID, d.Item, d.Row))
+		if d.Job != "" && !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == d.Job }) {
+			errs = append(errs, fmt.Errorf("%s answers %q with row %s, which nothing declares", rec.ID, d.Item, d.Job))
 		}
 	}
 	return errs

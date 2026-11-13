@@ -625,7 +625,7 @@ func TestSessionBriefNamesEveryExitedJobNobodyCollected(t *testing.T) {
 
 func TestSessionBriefListsWhatIsNotMerged(t *testing.T) {
 	t.Parallel()
-	brief := sessionBrief{Unmerged: types.JobUnmergedReport{Branch: "feat/x", Rows: []types.JobUnmerged{
+	brief := sessionBrief{Unmerged: types.JobUnmergedReport{Branch: "feat/x", Jobs: []types.JobUnmerged{
 		{Job: "w", Head: "abc123", Why: "2 commit(s) are not on feat/x", Remedy: "merge abc123"},
 	}}}
 
@@ -649,7 +649,7 @@ func TestSessionBriefCapsALongUnmergedReport(t *testing.T) {
 		rows = append(rows, types.JobUnmerged{Job: fmt.Sprintf("w%d", i), Why: "off", Remedy: "merge"})
 	}
 
-	text := sessionBrief{Unmerged: types.JobUnmergedReport{Rows: rows}}.Text()
+	text := sessionBrief{Unmerged: types.JobUnmergedReport{Jobs: rows}}.Text()
 
 	assert.Contains(t, text, "and 4 more")
 	assert.NotContains(t, text, "w12")

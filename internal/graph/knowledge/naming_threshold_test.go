@@ -162,16 +162,16 @@ func (s *ThresholdSuite) TestReportsATouchedItemNewlyPast() {
 
 func (s *ThresholdSuite) TestPastLeavesAMetricWithItsOwnCheckToThatCheck() {
 	const item = thresholdFile + "#Frobnicate"
-	row := func(m types.ConformanceMetric) types.ConformanceRow {
-		return types.ConformanceRow{
+	row := func(m types.ConformanceMetric) types.ConformanceDistribution {
+		return types.ConformanceDistribution{
 			Key:        types.ConformanceKey{Metric: m, Population: types.ConformancePopSource},
 			Value:      1,
 			Violations: []types.ConformanceItem{{ID: item, Measure: 9}},
 		}
 	}
-	out := types.Conformance{Rows: []types.ConformanceRow{row(types.ConformanceFuncLines)}}
+	out := types.Conformance{Distributions: []types.ConformanceDistribution{row(types.ConformanceFuncLines)}}
 	for m := range ownCheck {
-		out.Rows = append(out.Rows, row(m))
+		out.Distributions = append(out.Distributions, row(m))
 	}
 	hits := thresholdPast(out, map[string]*namingDecl{item: {id: "frob", label: "Frobnicate"}})
 	s.Require().Len(hits, 1)

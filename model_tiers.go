@@ -33,9 +33,9 @@ func (m *Magus) ModelTierMatrix() types.ModelTierMatrix {
 	return m.wsReg.ModelTierMatrix()
 }
 
-// ModelRows is the lazy reader of the model rows this workspace's wired harnesses
+// Models is the lazy reader of the model rows this workspace's wired harnesses
 // publish. The first call loads each harness spell.
-func (m *Magus) ModelRows(ctx context.Context) func() []types.ModelPricing {
+func (m *Magus) Models(ctx context.Context) func() []types.ModelPricing {
 	return sync.OnceValue(func() []types.ModelPricing {
 		wired, err := workspace.WiredHarnesses(m)
 		if err != nil {

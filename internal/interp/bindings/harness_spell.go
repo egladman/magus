@@ -97,7 +97,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 	}
 	// The model rows come first: the agents magus ships run on the one a row names for the
 	// cheapest tier.
-	rows, _, err := callHarness[[]types.ModelRow](ctx, drv, "mgs_listModels")
+	rows, _, err := callHarness[[]types.HarnessModel](ctx, drv, "mgs_listModels")
 	if err != nil {
 		return fail(err)
 	}
@@ -248,7 +248,7 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 		if !ok {
 			continue
 		}
-		rows, _, err := callHarness[[]types.ModelRow](ctx, drv, "mgs_listModels")
+		rows, _, err := callHarness[[]types.HarnessModel](ctx, drv, "mgs_listModels")
 		if err != nil {
 			return nil, fmt.Errorf("harness spell %q: %w", id, err)
 		}
@@ -349,7 +349,7 @@ func pickTierModels(tierRows map[string][]string, mapped func(tier string) (stri
 // validateModelRows reads model rows into prices and each tier's row ids.
 // A half-set price step, or an alias without a tier or on two rows, names
 // no one model, so each is an error. Several rows may share a tier.
-func validateModelRows(rows []types.ModelRow) ([]types.ModelPricing, map[string][]string, error) {
+func validateModelRows(rows []types.HarnessModel) ([]types.ModelPricing, map[string][]string, error) {
 	out := make([]types.ModelPricing, len(rows))
 	aliases := map[string]string{}
 	var tiers map[string][]string

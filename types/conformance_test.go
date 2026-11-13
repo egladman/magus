@@ -268,16 +268,16 @@ func (s *ConformanceSuite) TestCeilingsChargeAnImportThatReachesNoDigest() {
 
 // ceilingOutput is a lens answer with one row for k holding a violation per id.
 func ceilingOutput(k ConformanceKey, ids ...string) Conformance {
-	row := ConformanceRow{Key: k}
+	row := ConformanceDistribution{Key: k}
 	for _, id := range ids {
 		row.Violations = append(row.Violations, ConformanceItem{ID: id})
 	}
-	return Conformance{Rows: []ConformanceRow{row}}
+	return Conformance{Distributions: []ConformanceDistribution{row}}
 }
 
 // identityOutput is a lens answer with one row for k holding items.
 func identityOutput(k ConformanceKey, items ...ConformanceItem) Conformance {
-	return Conformance{Rows: []ConformanceRow{{Key: k, Violations: items}}}
+	return Conformance{Distributions: []ConformanceDistribution{{Key: k, Violations: items}}}
 }
 
 // splitBase is a base where internal/w imports lib, and types too when
@@ -304,5 +304,5 @@ func splitHead(digests ...string) Conformance {
 		{Dir: "types", Digests: []string{"d2"}},
 		{Dir: "types/agent", Digests: digests},
 	}}
-	return Conformance{Rows: []ConformanceRow{{Key: importedPackagesSource, Value: 2, Violations: []ConformanceItem{item}}}}
+	return Conformance{Distributions: []ConformanceDistribution{{Key: importedPackagesSource, Value: 2, Violations: []ConformanceItem{item}}}}
 }

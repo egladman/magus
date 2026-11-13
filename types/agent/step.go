@@ -7,9 +7,9 @@ import "time"
 const StepAPIVersion = "magus.step/v1alpha1"
 
 // Step is one thing an agent is about to do, as data. Kind is a name its
-// program declared with a StepRow, and Input holds the step's own
+// program declared with a StepSpec, and Input holds the step's own
 // arguments. The judge reads them as sent and never restates the step.
-// Dir is required when the row reads paths or a command. The judge does
+// Dir is required when the spec reads paths or a command. The judge does
 // not read ID or At yet.
 type Step struct {
 	APIVersion string         `json:"api_version"`
@@ -23,24 +23,24 @@ type Step struct {
 	At         time.Time      `json:"at,omitzero"`
 }
 
-// StepRow declares one kind of step before any is judged. An empty Name
+// StepSpec declares one kind of step before any is judged. An empty Name
 // covers every name of the kind. Capabilities are types.ToolCapability
 // values. Paths and Command are JSON Pointers (RFC 6901) into a step's
 // Input, read by the built-in rules only. A step whose Input does not
 // match InputSchema is refused before any rule runs.
-type StepRow struct {
+type StepSpec struct {
 	Kind         string   `json:"kind"`
 	Name         string   `json:"name,omitempty"`
 	Capabilities []string `json:"capabilities"`
 	Paths        []string `json:"paths,omitempty"`
 	Command      string   `json:"command,omitempty"`
-	// SpawnDescriptionField is where a spawns row's description sits.
+	// SpawnDescriptionField is where a spawn spec's description sits.
 	SpawnDescriptionField string `json:"spawn_description_field,omitempty"`
 	InputSchema           []byte `json:"input_schema,omitempty"`
 }
 
-// StepRequest is what a step rule reads: the step, its row's capabilities,
-// and the paths and command read from its input. Lease is the row the step
+// StepRequest is what a step rule reads: the step, its spec's capabilities,
+// and the paths and command read from its input. Lease is the job the step
 // acts under, empty when it names none.
 type StepRequest struct {
 	Step         Step

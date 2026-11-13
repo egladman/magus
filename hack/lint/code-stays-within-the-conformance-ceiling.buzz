@@ -130,7 +130,7 @@ export fun fixFor(metric: str, value: int, item: Item) > str {
 // advice is a line per violation of a metric the policy does not check.
 fun advice(report: magus\ConformanceReport) > [str] {
     final lines = mut [<str>];
-    final rows = report.rows;
+    final rows = report.distributions;
     foreach (row in rows) {
         final key = row.key;
         if (ceiling\POLICY.holds(key.metric.value)) {
@@ -170,7 +170,7 @@ fun unmeasured(report: magus\ConformanceReport) > [str] {
 // rowValues is each row's anchor under its label, for naming it beside a ceiling.
 fun rowValues(report: magus\ConformanceReport) > {str: int} {
     final values = mut {<str: int>};
-    final rows = report.rows;
+    final rows = report.distributions;
     foreach (row in rows) {
         values[keyLabel(row.key)] = row.value;
     }
@@ -211,16 +211,16 @@ fun fresh() > magus\SymbolIndexStatus {
     return magus\SymbolIndexStatus{ freshness = magus\SymbolIndexFreshness.upToDate, language = "go", project = magus\ProjectRef{ path = "." }, op = "go-index" };
 }
 
-fun row(metric: magus\ConformanceMetric, value: int, violations: [magus\ConformanceItem]) > magus\ConformanceRow {
-    return magus\ConformanceRow{ key = magus\ConformanceKey{ metric = metric, population = magus\ConformancePopulation.source }, value = value, violations = violations };
+fun row(metric: magus\ConformanceMetric, value: int, violations: [magus\ConformanceItem]) > magus\ConformanceDistribution {
+    return magus\ConformanceDistribution{ key = magus\ConformanceKey{ metric = metric, population = magus\ConformancePopulation.source }, value = value, violations = violations };
 }
 
 fun violation(id: str, source: str, measure: int) > magus\ConformanceItem {
     return magus\ConformanceItem{ id = id, source = source, measure = measure };
 }
 
-fun report(rows: [magus\ConformanceRow], ceilings: [magus\ConformanceCeiling]) > magus\ConformanceReport {
-    return magus\ConformanceReport{ indexes = [fresh()], answer = magus\KnowledgeAnswer{ verdict = magus\KnowledgeVerdict.found }, base = "0123456789abcdef", rows = rows, ceilings = ceilings };
+fun report(rows: [magus\ConformanceDistribution], ceilings: [magus\ConformanceCeiling]) > magus\ConformanceReport {
+    return magus\ConformanceReport{ indexes = [fresh()], answer = magus\KnowledgeAnswer{ verdict = magus\KnowledgeVerdict.found }, base = "0123456789abcdef", distributions = rows, ceilings = ceilings };
 }
 
 test "a crossed ceiling fails at each violation in the file, naming both counts" {

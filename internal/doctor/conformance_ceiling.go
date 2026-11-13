@@ -55,7 +55,7 @@ func conformanceUnmeasured(why string) check.Check {
 func (r *runner) conformanceProposals(out types.Conformance) check.Check {
 	checks := r.opts.cfg.Knowledge.Conformance.Checks
 	var details []string
-	for _, row := range out.Rows {
+	for _, row := range out.Distributions {
 		if row.Propose > 0 {
 			details = append(details, conformanceProposal(row, checks[row.Key.Metric][row.Key.Population].Percentile))
 		}
@@ -78,7 +78,7 @@ func (r *runner) conformanceProposals(out types.Conformance) check.Check {
 }
 
 // conformanceProposal names the magus.yaml key a row's proposal lowers.
-func conformanceProposal(row types.ConformanceRow, percentile float64) string {
+func conformanceProposal(row types.ConformanceDistribution, percentile float64) string {
 	field := fmt.Sprintf("knowledge.conformance.checks.%s.%s.anchor", row.Key.Metric, row.Key.Population)
 	if row.Key.Scope != "" {
 		field = fmt.Sprintf("knowledge.conformance.checks.%s.%s.scopes.%s", row.Key.Metric, row.Key.Population, row.Key.Scope)

@@ -287,9 +287,9 @@ fun binariesDenial(req: CommandRequest, programs: [helpers\Program]) > str {
 fun mandateVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerdict {
     final issued = mandate\loadMandate(req.workspace);
     final now = mandate\now();
-    var jobs = [<mandate\Row>];
+    var jobs = [<mandate\JobFacts>];
     if (mandate\inForce(issued, now: now)) {
-        jobs = mandate\rows(magus\workspace().jobs() catch JobList{});
+        jobs = mandate\jobFacts(magus\workspace().jobs() catch JobList{});
     }
     final store = jobs;
     final assess = fun (id: str) > mandate\Assessed {
@@ -325,7 +325,7 @@ export fun judgeStop(req: StopRequest) > GuardVerdict !> any {
         mandate\fileAttention(req.workspace, rows: rows, now: now);
     };
     return mandate\decideStop(mandate\StopFacts{ role = req.role.value, stopHookActive = req.stopHookActive, running = mandate\runningTries(list.attempts) },
-        q: mandate\Queue{ jobs = mandate\rows(list), blocked = blocked, unmerged = unmerged }, m: mandate\loadMandate(req.workspace), now: now, count: count, file: file);
+        q: mandate\Queue{ jobs = mandate\jobFacts(list), blocked = blocked, unmerged = unmerged }, m: mandate\loadMandate(req.workspace), now: now, count: count, file: file);
 }
 
 fun parsePrograms(req: CommandRequest) > [helpers\Program] {
@@ -482,10 +482,10 @@ fun bodyFiles(programs: [helpers\Program], dir: str) > {str: str} {
 // magus\workspace().jobs() answers from the rows the guard pinned for the call.
 // It throws when the store could not be read.
 export fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
-    var rows: [helpers\JobRow]? = null;
+    var rows: [helpers\JobSummary]? = null;
     var unreadable = "";
     try {
-        rows = jobRows(magus\workspace().jobs().jobs);
+        rows = jobSummaries(magus\workspace().jobs().jobs);
     } catch (e) {
         unreadable = errorText(e);
     }
@@ -500,16 +500,16 @@ fun spawnFacts(req: SpawnRequest) > spawn\Spawn {
     return spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease, prompt = req.prompt, checkout = req.checkout };
 }
 
-fun jobRows(jobs: [Job]) > [helpers\JobRow] {
-    final read = mut [<helpers\JobRow>];
+fun jobSummaries(jobs: [Job]) > [helpers\JobSummary] {
+    final read = mut [<helpers\JobSummary>];
     foreach (row in jobs) {
-        read.append(helpers\JobRow{ id = row.id, parent = row.parent, state = row.state, checkoutRoot = row.checkoutRoot });
+        read.append(helpers\JobSummary{ id = row.id, parent = row.parent, state = row.state, checkoutRoot = row.checkoutRoot });
     }
     return read;
 }
 
 test "an integrate spawn for a row bound to another checkout is refused end to end and a matching checkout passes" {
-    final rows = jobRows([
+    final rows = jobSummaries([
         Job{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
         Job{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
     ]);

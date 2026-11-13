@@ -66,8 +66,8 @@ func (s *conformanceCeilingSuite) TestALensErrorIsAFailureNamingTheCause() {
 func (s *conformanceCeilingSuite) TestAProposalNamesTheAnchorToLower() {
 	key := types.ConformanceKey{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}
 	got := s.check(conformanceWorkspace{out: types.Conformance{
-		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
-		Rows:   []types.ConformanceRow{{Key: key, Value: 92, Propose: 70}},
+		Answer:        types.KnowledgeAnswer{Verdict: types.VerdictFound},
+		Distributions: []types.ConformanceDistribution{{Key: key, Value: 92, Propose: 70}},
 	}})
 	s.Equal(check.Check{
 		Name: "conformance-ceiling", Status: check.Advice, Evidence: check.EvidenceMeasured,
@@ -79,8 +79,8 @@ func (s *conformanceCeilingSuite) TestAProposalNamesTheAnchorToLower() {
 func (s *conformanceCeilingSuite) TestNothingToTightenPasses() {
 	key := types.ConformanceKey{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}
 	got := s.check(conformanceWorkspace{out: types.Conformance{
-		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
-		Rows:   []types.ConformanceRow{{Key: key, Value: 92}},
+		Answer:        types.KnowledgeAnswer{Verdict: types.VerdictFound},
+		Distributions: []types.ConformanceDistribution{{Key: key, Value: 92}},
 	}})
 	s.Equal(check.Check{
 		Name: "conformance-ceiling", Status: check.OK, Evidence: check.EvidenceMeasured,

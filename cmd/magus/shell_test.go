@@ -2247,7 +2247,7 @@ func installHostRows(t *testing.T, host string, limits types.Limits, rows ...typ
 	dir := filepath.Join("."+host, "magus", "tools")
 	raw, err := json.Marshal(limits)
 	require.NoError(t, err)
-	files := append(agent.ToolFiles(types.HarnessTools{Dir: dir, Rows: rows}, nil),
+	files := append(agent.ToolFiles(types.HarnessTools{Dir: dir, Tools: rows}, nil),
 		types.AgentFile{Path: filepath.Join(dir, types.ToolHostFile), Content: host + "\n"},
 		types.AgentFile{Path: filepath.Join(dir, types.ToolLimitsFile), Content: string(raw) + "\n"})
 	for _, f := range files {

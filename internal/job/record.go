@@ -404,7 +404,7 @@ var (
 	wireEntryPoint  = newWireEnum(types.EntryPointCLI, types.EntryPointHook, types.EntryPointMCP, types.EntryPointRPC, types.EntryPointServer)
 	wireCredential  = newWireEnum(types.KindOperator, types.KindStored, types.KindShare, types.KindExchange, types.KindStdio, types.KindSocketPeer)
 	wireWorkerType  = newWireEnum(agent.WorkerTypeResumed, agent.WorkerTypeNew)
-	wireTierSource  = newWireEnum(agent.ModelTierSourceRow, agent.ModelTierSourceMatrix, agent.ModelTierSourceUserMatrix, agent.ModelTierSourceDefault)
+	wireTierSource  = newWireEnum(agent.ModelTierSourceJob, agent.ModelTierSourceMatrix, agent.ModelTierSourceUserMatrix, agent.ModelTierSourceDefault)
 	wireSkills      = newWireEnum(agent.SkillVariantShort, agent.SkillVariantFull)
 )
 

@@ -36,7 +36,7 @@ func validateHarnessTools(t types.HarnessTools) error {
 		return errors.New("dir must be a workspace-relative path")
 	}
 	seen := map[string]bool{}
-	for i, r := range t.Rows {
+	for i, r := range t.Tools {
 		switch {
 		case r.Name == "" || strings.ContainsAny(r.Name, "\n\r"):
 			return fmt.Errorf("row %d: name must be one non-empty line", i+1)
@@ -56,7 +56,7 @@ func validateHarnessTools(t types.HarnessTools) error {
 // workspace; nil writes neither. The version file tells an installed directory from none.
 func ToolFiles(t types.HarnessTools, models *ModelFacts) []types.AgentFile {
 	byCapability := map[types.ToolCapability][]string{}
-	for _, r := range t.Rows {
+	for _, r := range t.Tools {
 		byCapability[r.Capability] = append(byCapability[r.Capability], r.Name)
 	}
 	capabilities := types.ToolCapabilities()
@@ -75,10 +75,10 @@ func ToolFiles(t types.HarnessTools, models *ModelFacts) []types.AgentFile {
 	}
 	if models != nil {
 		files = append(files,
-			types.AgentFile{Path: path.Join(t.Dir, types.ToolModelRowsFile), Content: encodeModelRows(models.Rows)},
+			types.AgentFile{Path: path.Join(t.Dir, types.ToolModelsFile), Content: encodeModelRows(models.Rows)},
 			types.AgentFile{Path: path.Join(t.Dir, types.ToolTiersFile), Content: encodeTiers(models.Tiers)})
 	}
-	return append(files, types.AgentFile{Path: path.Join(t.Dir, types.ToolRowsVersionFile), Content: string(ToolRowsVersion) + "\n"})
+	return append(files, types.AgentFile{Path: path.Join(t.Dir, types.ToolVersionFile), Content: string(ToolRowsVersion) + "\n"})
 }
 
 // hostFiles are the files that tell a hook which host a tool rows directory in dir belongs
@@ -168,7 +168,7 @@ func readToolRows(root, dir string) ToolRows {
 		abs = filepath.Join(root, dir)
 	}
 	reinstall := "write it with `magus agent harness install`"
-	version, err := os.ReadFile(filepath.Join(abs, types.ToolRowsVersionFile))
+	version, err := os.ReadFile(filepath.Join(abs, types.ToolVersionFile))
 	if err != nil {
 		rows.Err = fmt.Errorf("no tool rows at %s, %s: %w", dir, reinstall, err)
 		return rows
@@ -215,7 +215,7 @@ func (r ToolRows) Models() (ModelFacts, error) {
 		return ModelFacts{}, errors.New("no tool rows were read")
 	}
 	reinstall := "rewrite it with `magus agent harness install`"
-	body, err := os.ReadFile(filepath.Join(r.abs, types.ToolModelRowsFile))
+	body, err := os.ReadFile(filepath.Join(r.abs, types.ToolModelsFile))
 	if err != nil {
 		return ModelFacts{}, fmt.Errorf("no model rows at %s, %s: %w", r.Dir, reinstall, err)
 	}
