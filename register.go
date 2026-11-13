@@ -7,7 +7,7 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/broker"
-	"github.com/egladman/magus/internal/guard/steprule"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -210,7 +210,7 @@ func WorkspaceRegistryFromContext(ctx context.Context) *WorkspaceRegistry {
 // registry, and the model tiers and step rules m holds.
 func (m *Magus) installWorkspaceRegistry(ctx context.Context) context.Context {
 	ctx = agent.WithModelTierState(workspace.ContextWithRegistry(ctx, m.wsReg), &m.modelTiers)
-	return steprule.WithSet(ctx, &m.stepRules)
+	return steps.WithGroup(ctx, &m.stepRules)
 }
 
 // ProjectOption mutates a Project at registration time. A non-nil error aborts Open.

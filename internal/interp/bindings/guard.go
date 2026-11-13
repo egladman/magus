@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/guard/builtin"
-	"github.com/egladman/magus/internal/guard/steprule"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
@@ -312,7 +312,7 @@ func registerEventRules(ctx context.Context, sess *buzz.Session, obs buzz.Direct
 }
 
 // registerStepRule binds magus\guard.step(kind, fun) onto guardMap. Each kind
-// has one rule, kept on the load's steprule.Set rather than its registry.
+// has one rule, kept on the load's steps.Group rather than its registry.
 // Refusals are MGS1045, as registerFunctionRule's are.
 func registerStepRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value) {
 	const name = `magus\guard.step`
@@ -336,9 +336,9 @@ func registerStepRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectOb
 				`%s: kind %q is already registered in this magusfile, and a workspace has one rule per kind; fold the second one into the first`, name, kind)
 		}
 		registered[kind] = true
-		set, reg := steprule.FromContext(ctx), workspace.WorkspaceRegistryFromContext(ctx)
-		if set != nil && reg != nil && sess != nil {
-			set.Set(kind, steprule.Rule(buzzRule(sess, args[1], "step", func(req agent.StepRequest, _ ffi.EnumCases) vm.Value {
+		group, reg := steps.GroupFromContext(ctx), workspace.WorkspaceRegistryFromContext(ctx)
+		if group != nil && reg != nil && sess != nil {
+			group.Set(kind, steps.Rule(buzzRule(sess, args[1], "step", func(req agent.StepRequest, _ ffi.EnumCases) vm.Value {
 				return bindgen.ObjectStepRequest(req)
 			})))
 			// The registry releases the session the rule runs on.

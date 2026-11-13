@@ -508,9 +508,9 @@ What was built:
   The kind takes the rule-name grammar. `step` joins the reserved names, since an
   unnamed verdict reports as `workspace:step`. A named one reports as
   `workspace:<rule>`, as the other seams do.
-- The rules sit on a `steprule.Set` (`internal/guard/steprule`), not on
+- The rules sit on a `steps.Group` (`internal/guard/steps`), not on
   `workspace.WorkspaceRegistry`, so `internal/workspace` still does not import
-  `types/agent`. A load puts the set on its context as it puts the model tiers: `Magus`
+  `types/agent`. A load puts the group on its context as it puts the model tiers: `Magus`
   holds its own, and each guard load holds one beside its registry. The registry
   still releases the session a rule runs on.
 - `StepRequest` and `Step` (`AgentStep` in Buzz) are generated mirrors (ADR 0035).

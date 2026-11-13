@@ -19,7 +19,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
-	"github.com/egladman/magus/internal/guard/steprule"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
@@ -182,8 +182,8 @@ func TestPathMagusDropsTheStepRules(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	root := ownCheckout(t, ctx, true)
 	deps := Dependencies{
-		StepRule: func(string) steprule.Rule { return nil },
-		ApprovedStepRule: func(context.Context, string) (steprule.Rule, error) {
+		StepRule: func(string) steps.Rule { return nil },
+		ApprovedStepRule: func(context.Context, string) (steps.Rule, error) {
 			return nil, errStaleLoad
 		},
 	}

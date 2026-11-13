@@ -13,7 +13,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/guard/steprule"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
@@ -284,7 +284,7 @@ func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, ste
 	if judged.Decision == decisionDeny {
 		return judged
 	}
-	var worktree steprule.Rule
+	var worktree steps.Rule
 	if deps.StepRule != nil {
 		worktree = deps.StepRule(step.Kind)
 	}
@@ -297,7 +297,7 @@ func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, ste
 	at := hookLocationAt(deps, step.Dir)
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: cmp.Or(step.Session, req.Session), Agent: cmp.Or(step.Agent, req.Agent), Window: req.Window}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
-	bind := func(rule steprule.Rule) ruleCall {
+	bind := func(rule steps.Rule) ruleCall {
 		if rule == nil {
 			return nil
 		}

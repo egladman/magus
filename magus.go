@@ -34,7 +34,7 @@ import (
 	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
-	"github.com/egladman/magus/internal/guard/steprule"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/log/attr"
@@ -214,7 +214,7 @@ type Magus struct {
 	modelTiers agent.ModelTierState
 	// stepRules is what the root magusfile's magus\guard.step registered.
 	// Load checks the step rows against its kinds.
-	stepRules steprule.Set
+	stepRules steps.Group
 }
 
 // env reads key from the environment WithEnv gave, "" for a key unset there or with no

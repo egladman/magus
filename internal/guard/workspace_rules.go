@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
-	"github.com/egladman/magus/internal/guard/steprule"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -608,20 +608,20 @@ func LoadApprovedWriteRule(ctx context.Context, root string) (workspace.WriteRul
 // seams, and the step rules internal/workspace cannot hold.
 type ruleLoad struct {
 	*workspace.WorkspaceRegistry
-	steps *steprule.Set
+	steps *steps.Group
 }
 
 func newRuleLoad() *ruleLoad {
-	return &ruleLoad{WorkspaceRegistry: workspace.NewWorkspaceRegistry(), steps: &steprule.Set{}}
+	return &ruleLoad{WorkspaceRegistry: workspace.NewWorkspaceRegistry(), steps: &steps.Group{}}
 }
 
-// within is ctx with the load's registry and step set to register into.
+// within is ctx with the load's registry and step group to register into.
 func (l *ruleLoad) within(ctx context.Context) context.Context {
-	return steprule.WithSet(workspace.ContextWithRegistry(ctx, l.WorkspaceRegistry), l.steps)
+	return steps.WithGroup(workspace.ContextWithRegistry(ctx, l.WorkspaceRegistry), l.steps)
 }
 
 // StepRule is the rule for kind, nil when l is nil or registers none.
-func (l *ruleLoad) StepRule(kind string) steprule.Rule {
+func (l *ruleLoad) StepRule(kind string) steps.Rule {
 	if l == nil {
 		return nil
 	}
@@ -908,7 +908,7 @@ type WorkspaceRules struct {
 	opts     types.VCSOptions
 	registry *workspace.WorkspaceRegistry
 	// steps is nil for rules built with no load.
-	steps   *steprule.Set
+	steps   *steps.Group
 	sources []interp.SourceFile
 	// cacheDir is where the approval authority records what it found pending, nil for
 	// nowhere. NewDependencies sets it from its Wiring.
@@ -998,7 +998,7 @@ func (r *WorkspaceRules) WriteRule() workspace.WriteRule { return r.registry.Wri
 func (r *WorkspaceRules) StopRule() workspace.StopRule { return r.registry.StopRule() }
 
 // StepRule returns the magus\guard.step rule for kind, or nil.
-func (r *WorkspaceRules) StepRule(kind string) steprule.Rule { return r.steps.Rule(kind) }
+func (r *WorkspaceRules) StepRule(kind string) steps.Rule { return r.steps.Rule(kind) }
 
 // StepKinds returns the kinds magus\guard.step registers, sorted.
 func (r *WorkspaceRules) StepKinds() []string { return r.steps.Kinds() }
@@ -1229,7 +1229,7 @@ func (r *WorkspaceRules) ApprovedStopRule(ctx context.Context) (workspace.StopRu
 }
 
 // ApprovedStepRule is ApprovedSpawnRule for the magus\guard.step rule of kind.
-func (r *WorkspaceRules) ApprovedStepRule(ctx context.Context, kind string) (steprule.Rule, error) {
+func (r *WorkspaceRules) ApprovedStepRule(ctx context.Context, kind string) (steps.Rule, error) {
 	reg, err := r.approvedIfChanged(ctx)
 	if err != nil {
 		return nil, err
@@ -1391,7 +1391,7 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 		}
 		return reg.StopRule(), nil
 	}
-	deps.ApprovedStepRule = func(ctx context.Context, kind string) (steprule.Rule, error) {
+	deps.ApprovedStepRule = func(ctx context.Context, kind string) (steps.Rule, error) {
 		reg, err := registry(ctx)
 		if err != nil {
 			return nil, err

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/guard/builtin"
-	"github.com/egladman/magus/internal/guard/steprule"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
@@ -736,21 +736,21 @@ func (s *StopRuleBindingSuite) testContext() context.Context {
 type StepRuleBindingSuite struct {
 	suite.Suite
 	reg   *workspace.WorkspaceRegistry
-	steps *steprule.Set
+	steps *steps.Group
 	sess  *buzz.Session
 }
 
 func TestStepRuleBindingSuite(t *testing.T) { suite.Run(t, new(StepRuleBindingSuite)) }
 
 func (s *StepRuleBindingSuite) SetupTest() {
-	s.reg, s.steps = workspace.NewWorkspaceRegistry(), &steprule.Set{}
+	s.reg, s.steps = workspace.NewWorkspaceRegistry(), &steps.Group{}
 	s.T().Cleanup(func() { _ = s.reg.Close() })
 	s.sess = buzz.NewSession(s.testContext(), buzz.WithEmbedded())
 	registerAllBuzz(s.testContext(), s.sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
 }
 
 func (s *StepRuleBindingSuite) testContext() context.Context {
-	return steprule.WithSet(workspace.ContextWithRegistry(s.T().Context(), s.reg), s.steps)
+	return steps.WithGroup(workspace.ContextWithRegistry(s.T().Context(), s.reg), s.steps)
 }
 
 func (s *StepRuleBindingSuite) TestTheRuleSeesTheStepAfterTheLoadCloses() {

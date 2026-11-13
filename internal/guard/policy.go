@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
-	"github.com/egladman/magus/internal/guard/steprule"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/json"
@@ -307,11 +307,11 @@ type seamRules struct {
 	Steps []string `json:"steps,omitempty"`
 }
 
-func registered(reg *workspace.WorkspaceRegistry, steps *steprule.Set) seamRules {
+func registered(reg *workspace.WorkspaceRegistry, group *steps.Group) seamRules {
 	if reg == nil {
 		return seamRules{}
 	}
-	return seamRules{Spawn: reg.SpawnRule() != nil, Command: reg.CommandRule() != nil, Write: reg.WriteRule() != nil, Stop: reg.StopRule() != nil, Steps: steps.Kinds()}
+	return seamRules{Spawn: reg.SpawnRule() != nil, Command: reg.CommandRule() != nil, Write: reg.WriteRule() != nil, Stop: reg.StopRule() != nil, Steps: group.Kinds()}
 }
 
 // seams is registered for l, the zero value for a nil l.
@@ -610,11 +610,11 @@ func (s snapshotSite) lazyWorktreeRules(deps *Dependencies, has seamRules) {
 		})
 	}
 	if len(has.Steps) > 0 {
-		deps.StepRule = func(kind string) steprule.Rule {
+		deps.StepRule = func(kind string) steps.Rule {
 			if !slices.Contains(has.Steps, kind) {
 				return nil
 			}
-			return steprule.Rule(lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, typesagent.StepRequest, hint.Gate) (types.GuardVerdict, error) {
+			return steps.Rule(lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, typesagent.StepRequest, hint.Gate) (types.GuardVerdict, error) {
 				return r.StepRule(kind)
 			}))
 		}
@@ -644,8 +644,8 @@ func (s snapshotSite) lazyApprovedRules(deps *Dependencies, body snapshotBody) {
 	deps.ApprovedStopRule = func(ctx context.Context) (workspace.StopRule, error) {
 		return approvedSeam(ctx, body.Approved.Stop, registry, (*ruleLoad).StopRule)
 	}
-	deps.ApprovedStepRule = func(ctx context.Context, kind string) (steprule.Rule, error) {
-		return approvedSeam(ctx, slices.Contains(body.Approved.Steps, kind), registry, func(l *ruleLoad) steprule.Rule { return l.StepRule(kind) })
+	deps.ApprovedStepRule = func(ctx context.Context, kind string) (steps.Rule, error) {
+		return approvedSeam(ctx, slices.Contains(body.Approved.Steps, kind), registry, func(l *ruleLoad) steps.Rule { return l.StepRule(kind) })
 	}
 }
 
