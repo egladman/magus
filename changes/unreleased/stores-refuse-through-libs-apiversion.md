@@ -5,5 +5,5 @@
   the tool rows refuse a record an older magus stamped with an integer, naming it as
   carrying no `apiVersion`. Move the old store aside or write the record again with this
   magus.
-- A `magus.lock` from a newer magus is refused for its version instead of for its first
-  unknown field.
+- **A `magus.lock` from a newer magus is refused for its version.** It used to be
+  refused for its first unknown field.
