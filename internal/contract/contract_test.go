@@ -1,10 +1,13 @@
 package contract
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -148,4 +151,109 @@ func (s *DigestSuite) TestTheEmbeddedLockNamesTheJobStore() {
 func (s *DigestSuite) writeLock() string {
 	s.write(lockPath, commands.Lock())
 	return s.root
+}
+
+// revisionFiles is version control holding each revision's files by path.
+type revisionFiles map[string]map[string]string
+
+func (r revisionFiles) ReadFileAt(_ context.Context, _, rev, p string) (string, error) {
+	body, ok := r[rev][p]
+	if !ok {
+		return "", fmt.Errorf("%s is absent at %s", p, rev)
+	}
+	return body, nil
+}
+
+func (r revisionFiles) ListFilesAt(_ context.Context, _, rev, dir string) ([]string, error) {
+	files, ok := r[rev]
+	if !ok {
+		return nil, fmt.Errorf("unknown revision %s", rev)
+	}
+	var out []string
+	for p := range files {
+		if strings.HasPrefix(p, dir+"/") {
+			out = append(out, p)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// embeddedFiles is the contract this test binary embeds, by path.
+func (s *DigestSuite) embeddedFiles() map[string]string {
+	files := map[string]string{lockPath: string(commands.Lock())}
+	buzz := spell.GeneratedBuzz()
+	s.Require().NoError(fs.WalkDir(buzz, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		body, err := fs.ReadFile(buzz, p)
+		files[spellDir+"/"+p] = string(body)
+		return err
+	}))
+	return files
+}
+
+func (s *DigestSuite) TestARevisionCarryingTheBinarysFilesAgrees() {
+	vc := revisionFiles{"auth": s.embeddedFiles()}
+	skew, err := CheckAt(s.T().Context(), vc, s.root, "auth")
+	s.Require().NoError(err)
+	s.False(skew.Differs())
+	s.Equal("auth", skew.Revision)
+}
+
+func (s *DigestSuite) TestTheRevisionIsReadAndNotTheWorkingTree() {
+	s.carry()
+	s.write(filepath.Join(spellDir, "gen/decls/fs.buzz"), []byte("export extern fun newer() > void;\n"))
+	moved, err := Check(s.root)
+	s.Require().NoError(err)
+	s.Require().True(moved.Differs(), "the working tree carries another contract")
+
+	skew, err := CheckAt(s.T().Context(), revisionFiles{"auth": s.embeddedFiles()}, s.root, "auth")
+	s.Require().NoError(err)
+	s.False(skew.Differs())
+}
+
+func (s *DigestSuite) TestAChangedDeclarationAtTheRevisionDiffers() {
+	files := s.embeddedFiles()
+	files[spellDir+"/gen/decls/fs.buzz"] = "export extern fun newer() > void;\n"
+	skew, err := CheckAt(s.T().Context(), revisionFiles{"auth": files}, s.root, "auth")
+	s.Require().NoError(err)
+	s.True(skew.Differs())
+	s.Contains(skew.Diagnostic().Error(), s.root+" at auth")
+}
+
+func (s *DigestSuite) TestTheRevisionLeavesOutWhatEmbedLeavesOut() {
+	files := s.embeddedFiles()
+	files[spellDir+"/gen/decls/.hidden.buzz"] = "x"
+	files[spellDir+"/gen/decls/notes.txt"] = "x"
+	files[spellDir+"/other/outside.buzz"] = "x"
+	skew, err := CheckAt(s.T().Context(), revisionFiles{"auth": files}, s.root, "auth")
+	s.Require().NoError(err)
+	s.False(skew.Differs())
+}
+
+func (s *DigestSuite) TestARevisionCarryingNoContractNeverDiffers() {
+	vc := revisionFiles{"auth": {"README.md": "x"}}
+	_, err := TreeAt(s.T().Context(), vc, s.root, "auth")
+	s.ErrorIs(err, ErrNotCarried)
+	skew, err := CheckAt(s.T().Context(), vc, s.root, "auth")
+	s.Require().NoError(err)
+	s.False(skew.Differs())
+}
+
+func (s *DigestSuite) TestAnUnreadableRevisionIsAnError() {
+	_, err := CheckAt(s.T().Context(), revisionFiles{}, s.root, "gone")
+	s.Require().Error(err)
+	s.NotErrorIs(err, ErrNotCarried)
+}
+
+func (s *DigestSuite) TestReadsFormatAtReadsTheRevisionsLock() {
+	vc := revisionFiles{"auth": {lockPath: "config a\nstore magus.job/v1alpha1\n"}}
+	reads, err := ReadsFormatAt(s.T().Context(), vc, s.root, "auth", types.JobAPIVersion)
+	s.Require().NoError(err)
+	s.True(reads)
+	reads, err = ReadsFormatAt(s.T().Context(), vc, s.root, "auth", types.EventAPIVersion)
+	s.Require().NoError(err)
+	s.False(reads)
 }
