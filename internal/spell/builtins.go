@@ -321,19 +321,12 @@ func DeclareMagusTypes(sess *buzz.Session, implements func(member string) bool) 
 	if err != nil {
 		return err
 	}
-	var imports strings.Builder
+	// A default such as magus\vcs\Checkpoint{} compiles at the literal, which
+	// fills its fields only from a type declared under its namespace.
 	for _, ns := range namespaces {
-		fmt.Fprintf(&imports, "import %q;\n", strings.ReplaceAll(ns.name, `\`, "/"))
-	}
-	// The nested imports bind magus as a bare namespace, which a sub-session
-	// takes for the module. Importing the module last puts it under them.
-	if _, ok := sess.NativeModule("magus"); ok {
-		imports.WriteString("import \"magus\";\n")
-	}
-	// A default such as magus\vcs\Checkpoint{} fills its fields from the type
-	// its import declared, qualified only so no program's own type is shadowed.
-	if err := sess.Exec(context.Background(), imports.String()); err != nil {
-		return fmt.Errorf("magus namespaces cannot be imported: %w", err)
+		if err := sess.DeclareNamespaceTypes(ns.name, ns.src); err != nil {
+			return err
+		}
 	}
 	sess.DeclareModuleTypes("magus", decls)
 	return bindMagusRecords(sess, decls)
