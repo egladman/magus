@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ward"
 )
@@ -152,15 +151,15 @@ func rankContractPick(v ShellVerdict, reason string) ShellVerdict {
 }
 
 // denyContractSkew refuses a state-changing line while the binary's
-// contract differs from a tree it still loads. A failed load is the
-// stale-binary rule's, whose denial names the failure.
+// contract differs from a tree it still loads, as judgedContract reads it.
+// A failed load is the stale-binary rule's, whose denial names the failure.
 // Reads, VCS recovery and the relink still run.
-func denyContractSkew(deps Dependencies, at location, line string, d Dialect) string {
+func denyContractSkew(ctx context.Context, deps Dependencies, at location, line string, d Dialect) string {
 	root := at.workspace
 	if root == "" || deps.LoadFailure != nil {
 		return ""
 	}
-	skew, err := contract.Check(root)
+	skew, err := judgedContract(ctx, at, deps.lease, root)
 	if err == nil && !skew.Differs() {
 		return ""
 	}
@@ -176,7 +175,7 @@ func denyContractSkew(deps Dependencies, at location, line string, d Dialect) st
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: %s (%s) embeds contract %.12s, and %s carries %.12s; relink ./magus, alone on its line: `%s`.",
-			deps.Binary, cmp.Or(deps.BinaryVersion, "an unknown version"), skew.Binary, root, skew.Tree, ward.RelinkAt(root)),
+			deps.Binary, cmp.Or(deps.BinaryVersion, "an unknown version"), skew.Binary, skew.TreeName(), skew.Tree, ward.RelinkAt(root)),
 		Why: withPolicyNote(relinkWhy, runPolicyNote(line, at)),
 	}.full()
 }

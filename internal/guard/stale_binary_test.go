@@ -170,7 +170,7 @@ func TestPathMagusInAFromSourceCheckoutJudgesNothing(t *testing.T) {
 
 	deps := ForeignJudgeDeps(unloadedDependencies(errStaleLoad), root, "/usr/local/bin/magus")
 	require.ErrorIs(t, deps.LoadFailure, errNotCheckoutBinary)
-	assert.Equal(t, unloadNoBinary, unloadCause(deps.LoadFailure, root))
+	assert.Equal(t, unloadNoBinary, unloadCause(ctx, deps.LoadFailure, location{workspace: root}, ""))
 
 	v := judgeUnloaded(ctx, deps, "touch notes.txt")
 	assert.Equal(t, decisionDeny, v.Decision, v.Reason)
@@ -522,30 +522,35 @@ func (s *UnloadCauseSuite) withBinary() string {
 	return w.Root()
 }
 
+// cause is unloadCause for an unleased call in root.
+func (s *UnloadCauseSuite) cause(failure error, root string) unloadKind {
+	return unloadCause(s.T().Context(), failure, location{workspace: root}, "")
+}
+
 func (s *UnloadCauseSuite) TestAnotherContractIsStaleWhateverTheErrorSays() {
 	root := s.withBinary()
 	carryContract(s.T(), root, "config another.key\n")
-	s.Equal(unloadStale, unloadCause(errors.New("magusfile.buzz:3:1: expected expression"), root))
+	s.Equal(unloadStale, s.cause(errors.New("magusfile.buzz:3:1: expected expression"), root))
 }
 
 func (s *UnloadCauseSuite) TestTheSameContractIsTheTreesOwnFailure() {
 	root := s.withBinary()
 	carryOwnContract(s.T(), root)
-	s.Equal(unloadNone, unloadCause(s.stale, root))
-	s.Equal(unloadNone, unloadCause(errMissingMember, root), "the wording is never read")
+	s.Equal(unloadNone, s.cause(s.stale, root))
+	s.Equal(unloadNone, s.cause(errMissingMember, root), "the wording is never read")
 }
 
 func (s *UnloadCauseSuite) TestATreeCarryingNoContractIsTheTreesOwnFailure() {
-	s.Equal(unloadNone, unloadCause(s.stale, s.withBinary()))
+	s.Equal(unloadNone, s.cause(s.stale, s.withBinary()))
 }
 
 func (s *UnloadCauseSuite) TestAnyFailureWithNoBinaryHasNone() {
-	s.Equal(unloadNoBinary, unloadCause(errors.New("typo"), testkit.NewWorkspace(s.T()).Root()))
+	s.Equal(unloadNoBinary, s.cause(errors.New("typo"), testkit.NewWorkspace(s.T()).Root()))
 }
 
 func (s *UnloadCauseSuite) TestNoFailureOrNoRootIsNone() {
-	s.Equal(unloadNone, unloadCause(nil, testkit.NewWorkspace(s.T()).Root()))
-	s.Equal(unloadNone, unloadCause(s.stale, ""))
+	s.Equal(unloadNone, s.cause(nil, testkit.NewWorkspace(s.T()).Root()))
+	s.Equal(unloadNone, s.cause(s.stale, ""))
 }
 
 func (s *UnloadCauseSuite) TestAForeignJudgeOfTheSameContractJudges() {

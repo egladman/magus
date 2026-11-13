@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	cmdtree "github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/spell"
@@ -136,7 +137,7 @@ func carryOwnContract(t *testing.T, root string) {
 		}
 		return os.WriteFile(dst, body, 0o644)
 	}))
-	require.False(t, contractDiffers(root))
+	require.False(t, differs(contract.Check(root)))
 }
 
 // In a checkout of magus itself the fix is the rebuild, and the relink for a binary that
@@ -345,10 +346,10 @@ func TestJudgingBinaryNoteForAWorkerNamesThePlacement(t *testing.T) {
 	judge := Dependencies{Binary: filepath.Join(root, "magus")}
 
 	assert.Equal(t, fmt.Sprintf("Judged by %s, this checkout's ./magus. It was built from another contract than the tree carries. Fix: ask the main session to place a ./magus that loads this workspace.", filepath.Join(root, "magus")),
-		judgingBinaryNote(judge, at, stale, "lease-a"))
+		judgingBinaryNote(ctx, judge, at, stale, "lease-a"))
 	assert.Equal(t, fmt.Sprintf("Judged by %s, this checkout's ./magus. It was built from another contract than the tree carries. Fix: relink ./magus, alone on its line: `%s`.", filepath.Join(root, "magus"), ward.RelinkAt(root)),
-		judgingBinaryNote(judge, at, stale, ""))
-	assert.Empty(t, judgingBinaryNote(Dependencies{}, at, stale, ""))
+		judgingBinaryNote(ctx, judge, at, stale, ""))
+	assert.Empty(t, judgingBinaryNote(ctx, Dependencies{}, at, stale, ""))
 }
 
 // A record that registered no command rule still denies a push: nothing loaded.

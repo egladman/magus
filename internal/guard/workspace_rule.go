@@ -229,13 +229,13 @@ func (a rulesAnswer) approvedAnswered() bool {
 // too (denyUnloadableCommit). call is built only then, so the pass
 // path pays nothing for it.
 // Reports whether it denied; each deny names the failures itself.
-func (a *rulesAnswer) denyShort(call func() judgedCall, at location) bool {
+func (a *rulesAnswer) denyShort(ctx context.Context, call func() judgedCall, at location) bool {
 	call = sync.OnceValue(call)
 	switch {
 	case a.lapse != nil:
 		return denyLapse(a, call())
 	case a.unloaded:
-		if denyUnloaded(a, call(), at) {
+		if denyUnloaded(ctx, a, call(), at) {
 			return true
 		}
 	case len(a.raised) > 0:
@@ -353,14 +353,14 @@ type judgedCall struct {
 // Otherwise every call that changes state is denied, whether or not a rule is
 // on record. A gated verb gets unloadedDenial and the rest brokenPolicyDenial.
 // An edit of a policy source passes, as that is the fix.
-func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
+func denyUnloaded(ctx context.Context, asked *rulesAnswer, call judgedCall, at location) bool {
 	if !asked.unloaded || asked.answer.Decision == types.GuardDeny {
 		return false
 	}
 	own := ownSourceRoot(at.workspace)
 	recorded := recordedRule(at.cacheDir, call.seam)
 	unknown := !policyRecorded(at.cacheDir)
-	cause := unloadCause(asked.loadFailure, at.workspace)
+	cause := unloadCause(ctx, asked.loadFailure, at, call.lease)
 	guarded := call.changes
 	holds := guarded && cause != unloadNone
 	broken := guarded && cause == unloadNone && !call.guardSource
@@ -587,7 +587,7 @@ type judgingBinary struct {
 // judgingBinaryNote names the magus that judged the call and how it relates to the
 // checkout's own ./magus, with the fix when the load failure is the binary being older than
 // the tree. "" when the judge's path is unknown, which a caller outside the CLI leaves unset.
-func judgingBinaryNote(deps Dependencies, at location, loadFailure error, lease string) string {
+func judgingBinaryNote(ctx context.Context, deps Dependencies, at location, loadFailure error, lease string) string {
 	if deps.Binary == "" {
 		return ""
 	}
@@ -599,7 +599,7 @@ func judgingBinaryNote(deps Dependencies, at location, loadFailure error, lease 
 			b, errB := os.Stat(filepath.Join(j.root, "magus"))
 			j.same = errA == nil && errB == nil && os.SameFile(a, b)
 		}
-		if unloadCause(loadFailure, j.root) == unloadStale {
+		if unloadCause(ctx, loadFailure, at, lease) == unloadStale {
 			j.stale = true
 			j.fix = binaryRemedy(ownSourceRoot(j.root), j.root, lease, false).say
 		}

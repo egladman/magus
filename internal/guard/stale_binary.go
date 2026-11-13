@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // unloadKind is why the binary judging a call cannot read the tree's guard policy.
@@ -45,26 +47,115 @@ const (
 	denyRulePolicyUnloaded denyRuleName = "policy-unloaded"
 )
 
-// unloadCause says why the working tree's policy did not load. The
-// contracts say it, never the failure's wording. With no ./magus the
-// judge is a PATH binary nobody pinned to this tree.
-func unloadCause(loadFailure error, root string) unloadKind {
+// unloadCause says why the working tree of at's workspace did not load
+// its policy for a call under lease. The contracts say it, never the
+// failure's wording. With no ./magus the judge is a PATH binary nobody
+// pinned to this tree.
+func unloadCause(ctx context.Context, loadFailure error, at location, lease string) unloadKind {
+	root := at.workspace
 	switch {
 	case loadFailure == nil || root == "":
 		return unloadNone
 	case errors.Is(loadFailure, errNotCheckoutBinary), !hasMagusBinary(root):
 		return unloadNoBinary
-	case contractDiffers(root):
+	case contractDiffers(ctx, at, lease, root):
 		return unloadStale
 	}
 	return unloadNone
 }
 
-// contractDiffers reports a checkout of magus at root whose contract
-// differs from the judging binary's. One that cannot be read differs.
-func contractDiffers(root string) bool {
-	skew, err := contract.Check(root)
+// contractDiffers reports a checkout of magus at root whose contract, as
+// judgedContract reads it, differs from the judging binary's. One that
+// cannot be read differs.
+func contractDiffers(ctx context.Context, at location, lease, root string) bool {
+	return differs(judgedContract(ctx, at, lease, root))
+}
+
+func differs(skew contract.Skew, err error) bool {
 	return err != nil || skew.Differs()
+}
+
+// judgedContract is the binary's contract against the tree a call under
+// lease is judged by. A leased call reads its row's Authority (ADR 0045),
+// so the root moving is never skew. Any other reads the working tree.
+func judgedContract(ctx context.Context, at location, lease, root string) (contract.Skew, error) {
+	if !ownSourceRoot(root) {
+		return contract.Check(root)
+	}
+	// lease-authority refuses a row with no authority.
+	row, ok := leaseRow(ctx, at, lease)
+	if !ok || row.Authority == "" {
+		return contract.Check(root)
+	}
+	return authorityContract(ctx, root, row.Authority)
+}
+
+// authorityTrees holds each revision's contract digest by root and
+// revision. A revision's files never change, so a later or concurrent
+// judgment reuses it. A failed read is never kept.
+var authorityTrees sync.Map
+
+// authorityContract is the binary's contract against root at rev.
+func authorityContract(ctx context.Context, root, rev string) (contract.Skew, error) {
+	key := root + "\x00" + rev
+	if tree, ok := authorityTrees.Load(key); ok {
+		return contract.Skew{Binary: contract.Binary(), Tree: tree.(string), Root: root, Revision: rev}, nil
+	}
+	vc, err := openRevision(ctx, root, rev)
+	if err != nil {
+		return contract.Skew{}, err
+	}
+	defer vc.close()
+	skew, err := contract.CheckAt(ctx, vc, root, rev)
+	if err != nil {
+		return contract.Skew{}, fmt.Errorf("the authority %.12s is unreadable: %w", rev, err)
+	}
+	authorityTrees.Store(key, skew.Tree)
+	return skew, nil
+}
+
+// revisionTree reads one revision of a checkout. Where the driver offers
+// an object batch, every read at that revision shares one process.
+type revisionTree struct {
+	types.RevisionFileReader
+	types.RevisionLister
+	rev   string
+	batch vcs.ObjectBatch
+}
+
+func (r revisionTree) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {
+	if r.batch != nil && rev == r.rev {
+		return r.batch.Read(path)
+	}
+	return r.RevisionFileReader.ReadFileAt(ctx, root, rev, path)
+}
+
+func (r revisionTree) close() {
+	if r.batch != nil {
+		_ = r.batch.Close()
+	}
+}
+
+// openRevision is root's version control read at rev. A driver that
+// cannot list a revision's files leaves the authority unreadable.
+func openRevision(ctx context.Context, root, rev string) (revisionTree, error) {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil {
+		return revisionTree{}, fmt.Errorf("the authority %.12s is unreadable: %w", rev, err)
+	}
+	if res.VCS == nil {
+		return revisionTree{}, fmt.Errorf("the authority %.12s is unreadable: %s is under no version control", rev, root)
+	}
+	lister, ok := res.VCS.(types.RevisionLister)
+	if !ok {
+		return revisionTree{}, fmt.Errorf("the authority %.12s is unreadable: %s cannot list a revision's files", rev, res.VCS.Name())
+	}
+	tree := revisionTree{RevisionFileReader: res.VCS, RevisionLister: lister, rev: rev}
+	if opener, ok := res.VCS.(vcs.ObjectBatchOpener); ok {
+		// Without a batch each file is read on its own: slower, same answer.
+		tree.batch, _ = opener.OpenObjectBatch(ctx, root, rev)
+	}
+	return tree, nil
 }
 
 // errNotCheckoutBinary is the load failure of a judge that is not ./magus.
@@ -72,7 +163,8 @@ var errNotCheckoutBinary = errors.New("the judging magus is neither this checkou
 
 // foreignJudge reports a binary that is not root's ./magus, in a checkout
 // of magus, built from another contract than root carries. One whose
-// contract matches judges as root's own would.
+// contract matches judges as root's own would. No lease has resolved yet,
+// so the working tree is what root carries.
 func foreignJudge(root, binary string) bool {
 	if root == "" || binary == "" || ownBootstrapLine(root) == "" {
 		return false
@@ -82,7 +174,7 @@ func foreignJudge(root, binary string) bool {
 	if errJudge == nil && errOwn == nil && os.SameFile(judge, own) {
 		return false
 	}
-	return contractDiffers(root)
+	return differs(contract.Check(root))
 }
 
 // ForeignJudgeDeps drops every rule from deps when binary is not root's own
@@ -801,10 +893,11 @@ func soleCall(command string, d Dialect) (*syntax.CallExpr, bool) {
 
 // replacesStaleMagus reports the line that gets at's workspace a current
 // ./magus, alone on its line: a relinking target run, or the bootstrap.
-// It holds while ./magus is absent or built from another contract.
+// It holds while ./magus is absent or built from another contract than
+// the working tree's, which is what the relink builds from.
 func replacesStaleMagus(command string, at location) bool {
 	root := at.workspace
-	if root == "" || (hasMagusBinary(root) && !contractDiffers(root)) {
+	if root == "" || (hasMagusBinary(root) && !differs(contract.Check(root))) {
 		return false
 	}
 	call, ok := soleCall(command, DialectBash)

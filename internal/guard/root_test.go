@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
@@ -482,7 +483,7 @@ func TestRootRebuildsAStaleBinary(t *testing.T) {
 	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run go-build .", at), "a tree that carries no contract")
 
 	writeSource(t, at.workspace, "internal/commands/testdata/api.lock")
-	assert.True(t, contractDiffers(at.workspace))
+	assert.True(t, differs(contract.Check(at.workspace)))
 	assert.Empty(t, rootWorkClass("./magus run go-build .", at), "a binary built from another contract")
 	assert.Empty(t, rootWorkClass(ward.BootstrapCommand, at))
 	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run go-build . && git add -A", at), "only alone on its line")

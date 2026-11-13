@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,7 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/types"
 )
 
 type ContractSkewSuite struct {
@@ -40,7 +43,7 @@ func (s *ContractSkewSuite) carryContract() {
 
 func (s *ContractSkewSuite) deny(line string) string {
 	at := location{workspace: s.root, dir: s.root, cacheDir: s.T().TempDir()}
-	return denyContractSkew(s.deps, at, line, DialectBash)
+	return denyContractSkew(s.T().Context(), s.deps, at, line, DialectBash)
 }
 
 func (s *ContractSkewSuite) TestADifferingContractRefusesAChangeAndNamesTheRelink() {
@@ -65,6 +68,93 @@ func (s *ContractSkewSuite) TestATreeCarryingNoContractNeverDiffers() {
 func (s *ContractSkewSuite) TestAnUnreadableContractRefusesAChange() {
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.root, "internal/commands/testdata/api.lock"), 0o755))
 	s.Contains(s.deny("touch notes.txt"), "cannot read the contract")
+}
+
+// authorityRows is a job store holding the given rows.
+type authorityRows []types.Job
+
+func (r authorityRows) List() ([]types.Job, error) { return r, nil }
+
+// AuthorityContractSuite reproduces the incident of 2026-11-12. The root
+// relinked while a worker was live, and the worker's binary, built from its
+// authority, was refused as stale against the root's working tree.
+type AuthorityContractSuite struct {
+	suite.Suite
+	root, authority string
+	deps            Dependencies
+}
+
+func TestAuthorityContractSuite(t *testing.T) {
+	suite.Run(t, new(AuthorityContractSuite))
+}
+
+// SetupTest commits this binary's contract in a checkout of magus as the
+// authority, then moves the working tree to another contract.
+func (s *AuthorityContractSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	s.git("init", "-q", "-b", "main")
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), fmt.Appendf(nil, "module %s\n\ngo 1.26\n", ownModule), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus"), []byte("#!/bin/sh\n"), 0o755))
+	carryOwnContract(s.T(), s.root)
+	s.authority = s.commit("authority")
+	carryContract(s.T(), s.root, "config another.key\n")
+	s.deps = Dependencies{Binary: filepath.Join(s.root, "magus"), BinaryVersion: "v0-test"}
+}
+
+func (s *AuthorityContractSuite) git(args ...string) string {
+	out, err := exec.Command("git", append([]string{"-C", s.root, "-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false"}, args...)...).CombinedOutput()
+	s.Require().NoError(err, string(out))
+	return strings.TrimSpace(string(out))
+}
+
+func (s *AuthorityContractSuite) commit(msg string) string {
+	s.git("add", "-A")
+	s.git("commit", "-q", "-m", msg)
+	return s.git("rev-parse", "HEAD")
+}
+
+// at is the call's location, whose store holds the worker's row recording
+// authority.
+func (s *AuthorityContractSuite) at(authority string) location {
+	return location{workspace: s.root, dir: s.root, cacheDir: s.T().TempDir(),
+		rows: authorityRows{{ID: "worker", Authority: authority}}}
+}
+
+func (s *AuthorityContractSuite) deny(lease, authority string) string {
+	s.deps.lease = lease
+	return denyContractSkew(s.T().Context(), s.deps, s.at(authority), "touch notes.txt", DialectBash)
+}
+
+func (s *AuthorityContractSuite) TestTheWorkingTreeCarriesAnotherContract() {
+	s.True(differs(contract.Check(s.root)))
+}
+
+func (s *AuthorityContractSuite) TestALeasedCallMatchingItsAuthorityIsJudged() {
+	s.Empty(s.deny("worker", s.authority))
+}
+
+func (s *AuthorityContractSuite) TestAnUnleasedCallReadsTheWorkingTree() {
+	s.Contains(s.deny("", s.authority), "relink ./magus")
+}
+
+func (s *AuthorityContractSuite) TestARowWithNoAuthorityReadsTheWorkingTree() {
+	s.Contains(s.deny("worker", ""), "relink ./magus")
+}
+
+func (s *AuthorityContractSuite) TestAnAuthorityCarryingAnotherContractIsRefused() {
+	moved := s.commit("another contract")
+	carryOwnContract(s.T(), s.root)
+	s.Contains(s.deny("worker", moved), fmt.Sprintf("%s at %.12s carries", s.root, moved))
+}
+
+func (s *AuthorityContractSuite) TestAnUnreadableAuthorityIsRefused() {
+	s.Contains(s.deny("worker", "0123456789abcdef0123456789abcdef01234567"), "cannot read the contract")
+}
+
+func (s *AuthorityContractSuite) TestALeasedLoadFailureMatchingItsAuthorityIsNotStale() {
+	ctx, failure := s.T().Context(), errors.New("magusfile.buzz:3:1: expected expression")
+	s.Equal(unloadNone, unloadCause(ctx, failure, s.at(s.authority), "worker"))
+	s.Equal(unloadStale, unloadCause(ctx, failure, s.at(s.authority), ""))
 }
 
 func TestLoadContractNamesTheTriggerPaths(t *testing.T) {

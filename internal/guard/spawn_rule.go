@@ -178,12 +178,12 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		if env.IsSpawn {
 			call.verb, call.changes = call.what, true
 		}
-		denied := asked.denyShort(func() judgedCall { return call }, at)
+		denied := asked.denyShort(ctx, func() judgedCall { return call }, at)
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
 		if !denied {
 			note := ruleFailureNote(ruleFailureReport{
 				gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamSpawn, failures: failures, answered: asked.answered, toldInFull: asked.lapse != nil,
-				judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, actingLease) },
+				judging: func() string { return judgingBinaryNote(ctx, deps, at, asked.loadFailure, actingLease) },
 				lead:    loadFailureLead(deps.LoadFailure, at.workspace),
 			})
 			verdict = applyRuleFailureNote(verdict, note, advisorySpawnRuleFailed)
