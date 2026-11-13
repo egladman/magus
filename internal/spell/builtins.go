@@ -321,10 +321,14 @@ func DeclareMagusTypes(sess *buzz.Session, implements func(member string) bool) 
 	if err != nil {
 		return err
 	}
-	// A default such as magus\vcs\Checkpoint{} compiles at the literal,
-	// which fills fields only from a type declared under its namespace.
+	var imports strings.Builder
 	for _, ns := range namespaces {
-		sess.DeclareModuleTypes(ns.name, ns.src)
+		fmt.Fprintf(&imports, "import %q;\n", strings.ReplaceAll(ns.name, `\`, "/"))
+	}
+	// A default such as magus\vcs\Checkpoint{} fills its fields from the type
+	// its import declared, qualified only so no program's own type is shadowed.
+	if err := sess.Exec(context.Background(), imports.String()); err != nil {
+		return fmt.Errorf("magus namespaces cannot be imported: %w", err)
 	}
 	sess.DeclareModuleTypes("magus", decls)
 	return bindMagusRecords(sess, decls)
