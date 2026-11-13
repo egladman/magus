@@ -1030,6 +1030,17 @@ type RevisionFileReader interface {
 	ReadFileAt(ctx context.Context, root, rev, path string) (string, error)
 }
 
+// RevisionLister lists the files a revision holds under one directory,
+// without materializing a tree. With ReadFileAt it reads a subtree at a
+// revision, as the contract digest of an authority does (ADR 0045).
+//
+// It is optional: VCSDriver does not embed it, and a caller asserts it.
+type RevisionLister interface {
+	// ListFilesAt is the sorted root-relative paths of each file rev holds
+	// under dir, rev spelled as for ReadFileAt. An absent dir lists nothing.
+	ListFilesAt(ctx context.Context, root, rev, dir string) ([]string, error)
+}
+
 // RevisionExporter is the capability to materialize a revision's tracked files into a
 // directory (a "checkout to a throwaway tree" without touching the working copy). It
 // powers `magus graph diff --rev`, which builds a base knowledge graph from the exported

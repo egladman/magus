@@ -142,6 +142,39 @@ func (v hgVCS) ChangedSince(ctx context.Context, dir, rev string, paths []string
 	return statusSince(ctx, v, "hg", dir, rev, paths)
 }
 
+// ListFilesAt implements types.RevisionLister via `hg files`.
+func (v hgVCS) ListFilesAt(ctx context.Context, root, rev, dir string) ([]string, error) {
+	return filesAt(ctx, "hg", root, rev, dir)
+}
+
+// filesAt is ListFilesAt for the Mercurial family. It runs from root, so
+// the cwd-relative paths files prints are root-relative. files exits 1 when
+// nothing matches, which is an empty listing.
+func filesAt(ctx context.Context, bin, root, rev, dir string) ([]string, error) {
+	if rev == "" {
+		rev = "."
+	}
+	if err := checkRef(rev); err != nil {
+		return nil, err
+	}
+	cmd := vcsExec(ctx, bin, "files", "-r", rev, "--", "path:"+dir)
+	cmd.Dir = root
+	out, err := cmd.Output()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && len(out) == 0 {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s files -r %s: %w", bin, rev, err)
+	}
+	files := splitLines(out)
+	for i, f := range files {
+		files[i] = filepath.ToSlash(f)
+	}
+	slices.Sort(files)
+	return files, nil
+}
+
 // statusSince is ChangedSince for the two backends that speak Mercurial's
 // status. A pattern makes both print cwd-relative paths, and sl refuses
 // --root-relative beside one, so it runs from the root as jj's does.

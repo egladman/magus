@@ -2486,3 +2486,56 @@ func TestChangedSinceRejectsAFlagLikeRevision(t *testing.T) {
 	_, err := (gitVCS{}).ChangedSince(t.Context(), repo.Root(), "--output=x", nil)
 	assert.Error(t, err)
 }
+
+// listFilesAt is b's ListFilesAt, failing the test for a driver without it.
+func listFilesAt(t *testing.T, b parityBackend, dir, rev, sub string) []string {
+	t.Helper()
+	lister, ok := b.drv.(types.RevisionLister)
+	require.Truef(t, ok, "%s cannot list the files a revision holds", b.name)
+	got, err := lister.ListFilesAt(t.Context(), dir, rev, sub)
+	require.NoError(t, err)
+	return got
+}
+
+// An authority's contract is its subtree at that revision, so a file only
+// the working tree holds stays out of the listing.
+func TestParityListFilesAtReadsTheRevisionsSubtree(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"top.txt": "t\n", "sub/a.txt": "a\n", "sub/deep/b.txt": "b\n"})
+		rev := committedRevision(t, b, dir)
+		writeRepositoryFile(t, dir, "sub/a.txt", "later\n")
+		commitAll(t, b, dir, "later")
+		writeRepositoryFile(t, dir, "sub/edit.txt", "edit\n")
+
+		assert.Equal(t, []string{"sub/a.txt", "sub/deep/b.txt"}, listFilesAt(t, b, dir, rev, "sub"), b.name)
+	})
+}
+
+func TestParityListFilesAtOfAnAbsentDirectoryListsNothing(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"top.txt": "t\n"})
+		rev := committedRevision(t, b, dir)
+
+		assert.Empty(t, listFilesAt(t, b, dir, rev, "absent"), b.name)
+	})
+}
+
+func TestParityListFilesAtOfAnUnknownRevisionIsAnError(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"top.txt": "t\n"})
+		lister, ok := b.drv.(types.RevisionLister)
+		require.Truef(t, ok, "%s cannot list the files a revision holds", b.name)
+
+		_, err := lister.ListFilesAt(t.Context(), dir, "no-such-revision", "top")
+		assert.Error(t, err, b.name)
+	})
+}
+
+func TestListFilesAtRejectsAFlagLikeRevision(t *testing.T) {
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "one\n"})
+	_, err := (gitVCS{}).ListFilesAt(t.Context(), repo.Root(), "--output=x", "")
+	assert.Error(t, err)
+}

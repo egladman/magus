@@ -2976,6 +2976,29 @@ func (gitVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, e
 // ErrObjectMissing is an object batch's answer that the revision has no such path.
 var ErrObjectMissing = errors.New("vcs: object missing")
 
+// ListFilesAt implements types.RevisionLister via `git ls-tree`. --full-tree
+// reads dir from the top, as ReadFileAt's rev:path does, wherever root sits.
+func (gitVCS) ListFilesAt(ctx context.Context, root, rev, dir string) ([]string, error) {
+	if rev == "" {
+		rev = "HEAD"
+	}
+	if err := checkRev(rev); err != nil {
+		return nil, err
+	}
+	out, err := gitOutput(ctx, root, gitOpts{KeepLeadingSpace: true}, "ls-tree", "-r", "-z", "--name-only", "--full-tree", rev, "--", dir)
+	if err != nil {
+		return nil, fmt.Errorf("git ls-tree %s: %w", rev, err)
+	}
+	var files []string
+	for _, name := range strings.Split(out, "\x00") {
+		if name != "" {
+			files = append(files, name)
+		}
+	}
+	slices.Sort(files)
+	return files, nil
+}
+
 // ObjectBatch is one process serving many revision reads. Close finishes it.
 type ObjectBatch interface {
 	Read(rel string) (string, error)
