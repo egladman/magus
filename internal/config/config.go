@@ -1169,7 +1169,7 @@ func defaultText(defaults reflect.Value, goPath string) (string, error) {
 	for _, name := range strings.Split(goPath, ".") {
 		v = v.FieldByName(name)
 		if !v.IsValid() {
-			return "", fmt.Errorf("schema field %s is not in Config; regenerate internal/config/gen/settings", goPath)
+			return "", fmt.Errorf("schema field %s is not in Config, regenerate internal/config/gen/settings", goPath)
 		}
 	}
 	if v.IsZero() {

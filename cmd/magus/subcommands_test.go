@@ -466,17 +466,20 @@ func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []command.
 // section shows it in context); flag.FlagSet panics on a duplicate Var call,
 // so this is the one safe way to layer several nodes' declared flags onto one
 // FlagSet without assuming which level actually owns a given name.
-func bindUnlessRegistered(fs *flag.FlagSet, node command.Command) {
+func bindUnlessRegistered(fs *flag.FlagSet, node command.Command) error {
 	if len(node.Flags) == 0 {
-		return
+		return nil
 	}
 	tmp := flag.NewFlagSet("tmp", flag.ContinueOnError)
-	node.BindFlags(tmp)
+	if err := node.BindFlags(tmp); err != nil {
+		return err
+	}
 	tmp.VisitAll(func(f *flag.Flag) {
 		if fs.Lookup(f.Name) == nil {
 			fs.Var(f.Value, f.Name, f.Usage)
 		}
 	})
+	return nil
 }
 
 // TestRegistryExamplesParse dry-parses every EXAMPLES entry in the CLI
@@ -537,7 +540,9 @@ func TestRegistryExamplesParse(t *testing.T) {
 						continue
 					}
 					for _, node := range cmdPath {
-						bindUnlessRegistered(fs, node)
+						if err := bindUnlessRegistered(fs, node); err != nil {
+							t.Fatalf("bind %s: %v", node.Name, err)
+						}
 					}
 					parseArgs := gc.Args
 					if cmdPath[0].Name == "query" {

@@ -210,7 +210,7 @@ func TestManpageFlagsMatchTheCLI(t *testing.T) {
 	for _, cmd := range commands.Root.Children {
 		for _, probe := range flagProbes(cmd) {
 			t.Run(strings.ReplaceAll(probe.name, " ", "_"), func(t *testing.T) {
-				documented := documentedFlagNames(probe.name, probe.buildFlags, globals)
+				documented := documentedFlagNames(t, probe.name, probe.buildFlags, globals)
 				for _, argv := range probe.argvs {
 					runCLIQuietly(t, append(argv, "-h")...)
 				}
@@ -276,7 +276,7 @@ func TestJobForkRegistryFlagsAreTheFlagsItBinds(t *testing.T) {
 type flagProbe struct {
 	name       string
 	argvs      [][]string
-	buildFlags func(*flag.FlagSet)
+	buildFlags func(*flag.FlagSet) error
 }
 
 // modeArgv lists the invocations needed to bind a command's whole documented flag set.
@@ -461,9 +461,10 @@ func TestGraphExportHasNoStaticAlias(t *testing.T) {
 }
 
 // documentedFlagNames lists the non-global flag names a BuildFlags closure declares.
-func documentedFlagNames(cmdPath string, build func(*flag.FlagSet), globals map[string]bool) []string {
+func documentedFlagNames(t *testing.T, cmdPath string, build func(*flag.FlagSet) error, globals map[string]bool) []string {
+	t.Helper()
 	fs := flag.NewFlagSet("doc", flag.ContinueOnError)
-	build(fs)
+	require.NoError(t, build(fs))
 	var out []string
 	fs.VisitAll(func(f *flag.Flag) {
 		if !globals[f.Name] && !modeSelectors[cmdPath][strings.TrimPrefix(f.Name, command.NegationPrefix)] {
