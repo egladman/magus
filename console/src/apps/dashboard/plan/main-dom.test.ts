@@ -288,7 +288,10 @@ test("a served but empty listing is a different sentence from a refusal", async 
 test("the jobs draw one node and one list row each", async () => {
   serve({
     jobs: okJobs([
-      sessionJob("root", { state: "running", agent: { instructions: "ship it", worker: { type: "resumed" } } }),
+      sessionJob("root", {
+        state: "running",
+        agent: { instructions: "ship it", worker: { type: "resumed" } },
+      }),
       sessionJob("b1", { parent: "root", state: "pass" }),
       sessionJob("b2", {
         parent: "root",
@@ -570,7 +573,11 @@ test("selecting a job shows its criteria, checkpoint, model, check and paths", a
   serve({
     jobs: okJobs([
       sessionJob("root", {
-        agent: { instructions: "draw the jobs", model: { id: "opus" }, worker: { type: "resumed" } },
+        agent: {
+          instructions: "draw the jobs",
+          model: { id: "opus" },
+          worker: { type: "resumed" },
+        },
         checkpoint: "after the stage lands",
         check: "console:test",
         paths: { write: ["console/src/console/plan/"], read: ["docs/"], deny: ["internal/"] },
@@ -607,7 +614,10 @@ test("a row shows its kind and its goals - criteria and parent - not only the de
       sessionJob("root", { agent: { instructions: "draw the jobs", worker: { type: "resumed" } } }),
       sessionJob("child", {
         parent: "root",
-        agent: { instructions: "make the card say what it is for, same as the row does", worker: { type: "resumed" } },
+        agent: {
+          instructions: "make the card say what it is for, same as the row does",
+          worker: { type: "resumed" },
+        },
       }),
     ]),
   });
@@ -631,7 +641,10 @@ test("the card carries the job's kind and a truncated criteria", async () => {
   serve({
     jobs: okJobs([
       sessionJob("root", {
-        agent: { instructions: "a criteria sentence long enough that the card has to cut it off somewhere", worker: { type: "resumed" } },
+        agent: {
+          instructions: "a criteria sentence long enough that the card has to cut it off somewhere",
+          worker: { type: "resumed" },
+        },
       }),
     ]),
   });
@@ -1414,7 +1427,10 @@ test("a changed model repaints the row that carries it", async () => {
     jobs: () => {
       reads++;
       return okJobs([
-        sessionJob("root", { state: "running", agent: { model: { id: reads > 1 ? "sonnet" : "opus" }, worker: { type: "resumed" } } }),
+        sessionJob("root", {
+          state: "running",
+          agent: { model: { id: reads > 1 ? "sonnet" : "opus" }, worker: { type: "resumed" } },
+        }),
       ])();
     },
   });

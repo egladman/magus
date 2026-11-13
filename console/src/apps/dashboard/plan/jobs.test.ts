@@ -137,7 +137,10 @@ test("a parent cycle flattens instead of hanging, and every job still appears", 
 });
 
 test("a duplicate id keeps the first entry", () => {
-  const model = buildJobTree([job("a", { agent: { instructions: "first", worker: { type: "resumed" } } }), job("a", { agent: { instructions: "second", worker: { type: "resumed" } } })]);
+  const model = buildJobTree([
+    job("a", { agent: { instructions: "first", worker: { type: "resumed" } } }),
+    job("a", { agent: { instructions: "second", worker: { type: "resumed" } } }),
+  ]);
   assert.equal(model.nodes.length, 1);
   assert.equal(model.byId.get("a")?.job.agent?.instructions, "first");
 });
