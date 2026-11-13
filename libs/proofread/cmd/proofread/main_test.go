@@ -916,7 +916,6 @@ func TestAnAbsentUserKindsFileDeclaresNothing(t *testing.T) {
 	}
 }
 
-
 func TestJSONNamesTheSpecificsAFindingHolds(t *testing.T) {
 	text := "fix(cache): read the key once\n\n" +
 		"The loader reads the cache, the graph and the log. We moved the docs, rewrote the parser for Sydney " +

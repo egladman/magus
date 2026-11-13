@@ -339,7 +339,6 @@ func TestTriadKeepsItsDefaultWhenTheVoiceHasNoRange(t *testing.T) {
 	}
 }
 
-
 func TestBuildVoiceKeepsARangeOfEachFeatureItsWindowsMeasure(t *testing.T) {
 	r, ok := authorVoice(t).Kinds[KindReviewReply].Ranges["opener_class_entropy"]
 

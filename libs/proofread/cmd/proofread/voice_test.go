@@ -401,7 +401,6 @@ func TestRunJudgesWithAVoiceFile(t *testing.T) {
 	}
 }
 
-
 // pairedFiles writes 25 owner replies and a rewrite of each that joins its
 // clauses with a semicolon, plus one rewrite whose original is missing.
 func pairedFiles(t *testing.T) (owner, other string) {

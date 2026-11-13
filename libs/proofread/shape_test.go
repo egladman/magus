@@ -236,7 +236,6 @@ func TestMeasureShapeCountsACodeSpanAsOneWordOfNoPunctuation(t *testing.T) {
 	}
 }
 
-
 const evenList = `Steps taken:
 
 - Updated the parser to read the new header format.
