@@ -243,21 +243,21 @@ func TestUnjudgedToolAdvisesOnceAndDeniesWhereTheWorkspaceSaysSo(t *testing.T) {
 		return Judge(ctx, deps, Request{Input: toolEnvelope(t, session, root, tool, map[string]any{"ref": "e1"}), Host: "claude-code", Dir: root, Tools: tools})
 	}
 
-	lowered := withSetting(string(denyRuleUnjudgedTool), builtin.Advise)
+	lowered := withSetting(string(denyRuleUnjudgedStep), builtin.Advise)
 	first := call(lowered, "unjudged-advise", "mcp__browser__click")
 	firstShape, firstText := spoken(first)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleUnjudgedTool)}, firstShape, "set to advise, it advises")
+	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleUnjudgedStep)}, firstShape, "set to advise, it advises")
 	assert.Contains(t, firstText, "mcp__browser__click")
 	assert.Equal(t, decisionPass, call(lowered, "unjudged-advise", "mcp__browser__click").Decision, "said once a session")
 
 	denied := call(Dependencies{}, "unjudged-deny", "mcp__browser__click")
 	deniedShape, deniedText := spoken(denied)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleUnjudgedTool)}, deniedShape)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleUnjudgedStep)}, deniedShape)
 	assert.Contains(t, deniedText, "mcp__browser__click")
 
-	assert.Equal(t, decisionPass, call(withSetting(string(denyRuleUnjudgedTool), builtin.Deny), "unjudged-deny", "TodoWrite").Decision,
+	assert.Equal(t, decisionPass, call(withSetting(string(denyRuleUnjudgedStep), builtin.Deny), "unjudged-deny", "TodoWrite").Decision,
 		"an inert tool is never named")
-	assert.Equal(t, decisionPass, call(withSetting(string(denyRuleUnjudgedTool), builtin.Off), "unjudged-off", "mcp__browser__click").Decision)
+	assert.Equal(t, decisionPass, call(withSetting(string(denyRuleUnjudgedStep), builtin.Off), "unjudged-off", "mcp__browser__click").Decision)
 }
 
 // The read-only fast path: a call to an inert tool is answered before the rules load, which

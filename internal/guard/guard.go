@@ -805,6 +805,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 	unjudged := ""
 	// unplaced is the advice a first call gets when no waiting spawn names its caller.
 	unplaced := ""
+	if step, ok := declaredStep(ctx, input, deps.Steps); ok {
+		return judgeStepRecord(ctx, deps, req, step)
+	}
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
@@ -860,7 +863,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			// list, a search) has nothing any rule can read. Falling through judged the raw
 			// JSON as a shell line, so a denied command merely NAMED inside a todo blocked
 			// the tool call that wrote the todo. A call to a tool the host's tool rows do not
-			// list goes on to unjudged-tool instead.
+			// list goes on to unjudged-step instead.
 			if env.AgentTranscript != "" {
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
@@ -1074,7 +1077,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// contribution. Running the write rules here would only ever manufacture a false
 		// advisory about editing a file the agent opened read-only.
 	case unjudged != "":
-		refuseWith(denyRuleUnjudgedTool, denyUnjudgedTool(unjudged, req.Tools))
+		refuseWith(denyRuleUnjudgedStep, denyUnjudgedTool(unjudged, req.Tools))
 		pending.speak(markers, &verdict, whys)
 	case env.Enters:
 		if d := denyEnterCheckout(env.Tool, env.Value, env.EntersNew, ownedCheckouts(ctx, deps, location)); d.refused() {
@@ -2018,12 +2021,20 @@ const (
 //
 // tools are the host's tool rows, which say what a tool does where the input's shape
 // cannot: a file path is a read or a write, and an inert tool has nothing to judge.
+//
+// A Step record of kind tool reads as the envelope it stands for. A
+// record of any other kind is no envelope: Judge hands it to JudgeStep.
 func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	if !strings.HasPrefix(raw, "{") {
 		return hookRequest{}, false
 	}
 	var env hookEnvelope
-	if err := json.Unmarshal([]byte(raw), &env); err != nil {
+	if step, ok := stepRecord(raw); ok {
+		if !hostToolStep(step) {
+			return hookRequest{}, false
+		}
+		env = stepEnvelope(step)
+	} else if err := json.Unmarshal([]byte(raw), &env); err != nil {
 		return hookRequest{}, false
 	}
 	req := hookRequest{Cwd: env.Cwd, Who: hookAttribution{

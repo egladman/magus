@@ -189,7 +189,7 @@ export fun mgs_getLimits() > Limits {
 final DISCOVERY_TOOLS = [<str>];
 
 // Every Cursor tool the guard should know whose input's shape does not say what it does; a
-// tool missing here is one the guard cannot judge (unjudged-tool).
+// tool missing here is one the guard cannot judge (unjudged-step).
 export fun mgs_listTools() > HarnessTools {
     return HarnessTools{dir = TOOLS_DIR, rows = [
         HarnessTool{name = "Shell", capability = ToolCapability.runs},

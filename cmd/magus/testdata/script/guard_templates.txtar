@@ -234,7 +234,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 ! stdout .
 
 # case: mcp/advise
-# Another server's tool carries nothing magus can read, so unjudged-tool names it rather
+# Another server's tool carries nothing magus can read, so unjudged-step names it rather
 # than letting it run unseen. It denies by default; this fixture workspace sets it to
 # advise, which says it once a session, and its cache dir holds it to once.
 cd read-ws
@@ -1761,7 +1761,7 @@ magus\project({
     "sources": ["*.go"],
     "no_language": "fixture workspace: only the read rule's view of a long Go file matters here",
 });
-magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}, "unjudged-tool": "advise"});
+magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}, "unjudged-step": "advise"});
 -- .testscript/magus/tools/version --
 magus.tool-rows/v1alpha1
 -- .testscript/magus/tools/runs --

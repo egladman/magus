@@ -8,4 +8,4 @@
   [ADR 0046](https://eli.gladman.cc/magus/decisions/0046-the-judge-takes-any-agent-step/).
 - **The `step-input` rule** denies a judged step whose input fails its row's JSON
   Schema, or holds the wrong type where the row points. An undeclared kind is denied
-  under `unjudged-tool`, and a malformed row, or one nothing judges, fails `Open`.
+  under `unjudged-step`, and a malformed row, or one nothing judges, fails `Open`.

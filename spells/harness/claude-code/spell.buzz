@@ -48,7 +48,7 @@ final HOOK_TIMEOUT_S = 10;
 final RESUMES_ON_BACKGROUND_FROM = "2.1.299";
 
 // Every tool, so magus judges every call by its tool and the shape of its input, and a tool
-// no rule can read is named rather than run unseen (the unjudged-tool rule). Skill loads
+// no rule can read is named rather than run unseen (the unjudged-step rule). Skill loads
 // ride it too, which is what lets mgs_getLimits say this host's loads are observed.
 final EVERY_TOOL = "*";
 
@@ -201,7 +201,7 @@ export fun mgs_listEntries() > [ManagedEntries] {
 fun claude_tools_dir() > str { return ".claude/magus/tools"; }
 
 // Every tool this host offers that the guard should know, by Claude Code's own name and
-// what it can do. A tool missing here is one the guard cannot judge (unjudged-tool), so a
+// what it can do. A tool missing here is one the guard cannot judge (unjudged-step), so a
 // new tool stays refused where that rule denies until a row is added.
 fun claude_tools() > [HarnessTool] {
     final rows = mut [<HarnessTool>];
@@ -242,7 +242,7 @@ fun ccd_rows(family: str, tools: [str], capability: ToolCapability) > [HarnessTo
 }
 
 // The desktop app's own controls, mcp__ccd_<family>__<tool>. mcp__ccd_pr__set_auto_merge
-// has no row on purpose: a person enables auto-merge, so unjudged-tool refuses it.
+// has no row on purpose: a person enables auto-merge, so unjudged-step refuses it.
 fun claude_desktop_tools() > [HarnessTool] {
     final groups = [
         ccd_rows("session", tools: ["start_session", "hand_off_to_session", "move_to_cloud"], capability: ToolCapability.spawns),
@@ -662,7 +662,7 @@ test "the desktop app's tools carry what each can do, and auto-merge has no row"
     }) {
         assert\equal(capability[name] ?? "(no row)", want, name);
     }
-    assert\isTrue(capability["mcp__ccd_pr__set_auto_merge"] == null, "a person enables auto-merge, so unjudged-tool refuses the call");
+    assert\isTrue(capability["mcp__ccd_pr__set_auto_merge"] == null, "a person enables auto-merge, so unjudged-step refuses the call");
 }
 
 test "mgs_getMcp registers a per-checkout stdio server" {

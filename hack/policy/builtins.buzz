@@ -80,7 +80,7 @@ export final BUILTINS: {str: any} = {
 //     definition lookups. 2026-09-30: of the 1,211 distinct search lines the guard
 //     recorded that week, the old rule refused one, because a stale index's fail-open
 //     advice let every symbol search through.
-//   unjudged-tool: 2026-10-14, every harness now hooks every tool, and this tree wants a
+//   unjudged-step: 2026-10-14, every harness now hooks every tool, and this tree wants a
 //     call no rule could read stopped rather than noted. A tool that touches nothing
 //     belongs in the guard's known-tool table, not past this rule.
 //   unknown-env: 2026-09-24, the day MAGUS_NO_WAIT was removed, agents prefixed 462

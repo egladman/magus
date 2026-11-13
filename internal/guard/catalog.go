@@ -120,7 +120,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocHeredocWrite},
 	{doc: ruleDocHooksOff},
 	{doc: ruleDocSpawnPlainCommands},
-	{doc: ruleDocUnjudgedTool},
+	{doc: ruleDocUnjudgedStep},
 	{doc: ruleDocStepInput},
 	{doc: ruleDocMonitorDuplicate},
 	{doc: ruleDocMonitorPile},
@@ -932,13 +932,14 @@ var ruleDocSpawnPlainCommands = types.RuleDoc{
 		"A prompt need not say how to write commands: the host's refusal teaches that. A spawn into a shared checkout passes.",
 }
 
-var ruleDocUnjudgedTool = types.RuleDoc{
-	Name:    string(denyRuleUnjudgedTool),
-	Catches: "a tool call whose input carries nothing any rule reads, from a tool the guard does not know",
+var ruleDocUnjudgedStep = types.RuleDoc{
+	Name:    string(denyRuleUnjudgedStep),
+	Catches: "a step no row declares: a tool call whose input no rule reads, or a step of an undeclared kind",
 	Why: "Every harness wires every tool to the guard, which judges a call by the shape of its input: a command line, a file path read or written, a search, a spawn's prompt, a skill load. " +
 		"A tool whose input has none of those shapes, and which the host's tool rows do not list, could do whatever a rule exists to stop with no rule seeing it; a tool the rows list as touching nothing (a todo list, a plan, a web lookup) passes. " +
 		"The harness spell declares the rows (mgs_listTools) and `magus agent harness install` writes them, one file per capability with one tool name per line; with no rows to read, no tool is known and the refusal names that install. " +
-		"It denies by default: a call no rule can read is a call no rule judged, and the remedy is a tool row. A workspace that accepts unjudged tools sets it to advise. A finished call is never named.",
+		"It denies by default: a call no rule can read is a call no rule judged, and the remedy is a tool row. A workspace that accepts unjudged tools sets it to advise. A finished call is never named. " +
+		"A program judging its agent's steps through magus.Judge declares each kind with magus.WithStepRows, and a step no row covers is refused under this rule too.",
 }
 
 var ruleDocStepInput = types.RuleDoc{

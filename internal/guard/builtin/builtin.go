@@ -298,7 +298,7 @@ var defaults = map[string]decision{
 	"stop-unfiled":              Deny,
 	"symbol-search":             Deny,
 	"throwaway-copy":            Deny,
-	"unjudged-tool":             Deny,
+	"unjudged-step":             Deny,
 	"unknown-env":               Deny,
 	"unknown-magus-argv":        Deny,
 	"unread-command":            Deny,

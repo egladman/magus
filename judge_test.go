@@ -324,7 +324,7 @@ func (s *judgeStepSuite) TestAnUndeclaredKindIsDenied() {
 	j, err := s.open().Judge(s.T().Context(), s.step("refund", "card", nil))
 
 	s.Require().NoError(err)
-	s.Equal(stepDenied("unjudged-tool", j.Reason), j)
+	s.Equal(stepDenied("unjudged-step", j.Reason), j)
 	s.Contains(j.Reason, `kind "refund"`)
 	s.Contains(j.Reason, "magus.WithStepRows")
 }
@@ -461,6 +461,39 @@ func (s *judgeStepSuite) TestAKindNamedForASeamFailsTheOpen() {
 	_, err := Open(s.T().Context(), s.root, WithStepRows(row), WithSpawnRule(TierCeiling))
 
 	s.ErrorContains(err, "reserved")
+}
+
+var delegateRow = agent.StepRow{Kind: "delegate", Capabilities: []string{string(types.ToolSpawns)}, SpawnDescriptionField: "/title"}
+
+// A spawns row's step reaches the workspace's magus\guard.spawn rule, as a
+// host's spawn does.
+func (s *judgeStepSuite) TestASpawnsRowIsJudgedByTheSpawnRules() {
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile(`import "magus";
+
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
+    return magus\guard.deny("No spawns here: {req.description}.");
+});
+`)
+	m, err := Open(s.T().Context(), w.Root(), WithStepRows(delegateRow), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	step := agent.Step{APIVersion: agent.StepAPIVersion, Kind: "delegate", Name: "researcher", Session: "s1", Dir: w.Root(),
+		Input: map[string]any{"prompt": "Summarize the open tickets.", "title": "ticket summary"}}
+
+	j, err := m.Judge(s.T().Context(), step)
+
+	s.Require().NoError(err)
+	s.Equal(string(types.GuardDeny), j.Decision)
+	s.Contains(j.Reason, "No spawns here: ticket summary.")
+}
+
+func (s *judgeStepSuite) TestASpawnsStepWithNoPromptIsDeniedNamingIt() {
+	j, err := s.open(WithStepRows(delegateRow)).Judge(s.T().Context(), s.step("delegate", "researcher", map[string]any{"title": "t"}))
+
+	s.Require().NoError(err)
+	s.Equal(stepDenied("step-input", j.Reason), j)
+	s.Contains(j.Reason, "spawn prompt")
 }
 
 // stepRemedySuite pins that a step's built-in deny serves the remedy the

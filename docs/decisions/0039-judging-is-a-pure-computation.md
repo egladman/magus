@@ -527,7 +527,7 @@ The implementing change owes these, all outside this record's one file:
 
 ## Amendments
 
-### 2026-11-12: the tool door becomes ADR 0046's Judge
+### 2026-11-12: the tool door becomes ADR 0046's `Judge`
 
 [ADR 0046](0046-the-judge-takes-any-agent-step.md) renames the tool door to take any
 agent step. `JudgeTool` becomes `Judge`, `ToolCall` becomes `Step`, `ToolRow` becomes
@@ -536,3 +536,25 @@ agent step. `JudgeTool` becomes `Judge`, `ToolCall` becomes `Step`, `ToolRow` be
 embedder may register a rule in Go and in Buzz, so `ToolRule` and `WithToolRule` become
 `StepRule` and `WithStepRule`, which answers the open question above as "both". The
 text above is kept as written.
+
+### 2026-11-12: `types` imports `types/agent`, not the reverse
+
+"Where the names live" says `types/agent` imports `types` and `types` never imports it.
+The tree says the opposite. `types` imports `types/agent` (`types/job.go`,
+`types/harness_contract.go`). `types/agent` imports nothing in magus but
+`internal/json` and `types/enum`, and the compiler refuses the cycle an import of `types`
+would make. So `types/agent` is the leaf, and it cannot name `types.NextStep`,
+`types.LeaseSource`, `types.GuardProfile` or `types.ModelTier`.
+
+What follows for the moves above:
+
+- A type moves into `types/agent` only with every `types` name it reads, or it waits.
+  `Judgment` and `Verdict` cannot embed `types.GuardJudgment` or `types.GuardVerdict`
+  from the leaf. `Magus.Judge` returns `types.GuardJudgment`, and a `StepRule` returns
+  `types.GuardVerdict`, until those move.
+- `AgentFacts`, `RuleDoc` and `HarnessTools` need not move to keep `types` free of an
+  import cycle, since `types` may already import the leaf.
+- `Capability` moves with its values. Until then a `StepRow` holds
+  `types.ToolCapability` values as strings.
+
+The text above is kept as written.

@@ -326,7 +326,7 @@ lets the call run, or to `off`, with
 | [`stage-all`](../../../reference/rules/stage-all.md)                                 | a whole-tree `git add`                                                    |
 | [`symbol-search`](../../../reference/rules/symbol-search.md)                         | a text search for a symbol the graph answers                              |
 | [`throwaway-copy`](../../../reference/rules/throwaway-copy.md)                       | a run inside a temp or scratchpad copy                                    |
-| [`unjudged-tool`](../../../reference/rules/unjudged-tool.md)                         | a tool call whose input no rule reads, from a tool the guard lacks        |
+| [`unjudged-step`](../../../reference/rules/unjudged-step.md)                         | a tool call whose input no rule reads, from a tool the guard lacks        |
 | [`unknown-env`](../../../reference/rules/unknown-env.md)                             | a retired or misspelled `MAGUS_*` variable                                |
 
 The notices, such as `split-run` and `leased-path`, are in
@@ -910,7 +910,7 @@ that never ran) no tool is known, and the refusal says so and names the install;
 
 A call whose input has none of those shapes, from a tool the rows do not list, is
 one no rule could judge. The
-[`unjudged-tool`](../../../reference/rules/unjudged-tool.md) rule names it: it advises
+[`unjudged-step`](../../../reference/rules/unjudged-step.md) rule names it: it advises
 once per session by default, since the guard cannot know such a tool is harmful, and
 a workspace that wants every call judged sets it to `deny` with
 [`magus\guard.builtins`](#setting-a-built-in-rule). Another MCP server's tool is the

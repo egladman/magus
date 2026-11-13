@@ -122,7 +122,7 @@ cannot; `magus agent harness install` writes them to `.claude/magus/tools`, one 
 capability with one tool name per line, beside a host file naming claude-code, where magus
 finds them by the entry's `--agent-name`. A tool the rows list as touching nothing (a todo list, a plan, a web lookup)
 passes before any rule loads; a tool whose input has none of those shapes and that no row
-lists is named by the unjudged-tool rule rather than run unseen. See
+lists is named by the unjudged-step rule rather than run unseen. See
 [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard).
 
 The catch-all replaced the per-tool entries, among them the `Edit|Write|NotebookEdit`
@@ -317,7 +317,7 @@ Claude Code's `PreToolUse` also fires for a tool served over MCP, named
 `mcp__<server>__<tool>`, and the catch-all entry receives it like any other call. A
 call to one of magus's own tools (`mcp__magus__*`) is judged as the CLI verb it
 stands for, so a rule that holds on one channel holds on the other. A call to
-another server's tool carries a params object magus cannot read, so the unjudged-tool
+another server's tool carries a params object magus cannot read, so the unjudged-step
 rule names it: it advises by default, and a workspace that wants every call judged
 sets it to deny.
 

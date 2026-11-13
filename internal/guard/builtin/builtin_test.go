@@ -55,7 +55,7 @@ func TestDefaults(t *testing.T) {
 		"background-left":      Deny,
 		"background-silent":    Deny,
 		"background-unbounded": Deny,
-		"unjudged-tool":        Deny,
+		"unjudged-step":        Deny,
 		"unread-command":       Deny,
 		"guard-unfinished":     Advise,
 

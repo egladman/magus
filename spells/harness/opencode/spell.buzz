@@ -86,7 +86,7 @@ final DISCOVERY_TOOLS = ["skill"];
 // Every OpenCode tool the guard should know, written by `magus agent harness install` to
 // a directory beside a host file naming opencode, where `magus shell --agent-name opencode`
 // finds them. A tool missing here is one
-// the guard cannot judge (unjudged-tool).
+// the guard cannot judge (unjudged-step).
 export fun mgs_listTools() > HarnessTools {
     final rows = mut [HarnessTool{name = "bash", capability = ToolCapability.runs}];
     foreach (name in ["read", "glob", "grep", "lsp"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.reads}); }

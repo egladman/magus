@@ -303,7 +303,7 @@ sources:
 //
 // preToolUse matches every tool. A call none of the above restates, carrying no file path,
 // goes to `magus shell` whole, as the envelope it reads: magus passes a tool its known-tool
-// table calls inert, and names one no rule can read (unjudged-tool).
+// table calls inert, and names one no rule can read (unjudged-step).
 //
 // beforeSubmitPrompt hands the person's message to `magus shell --message`, which records
 // the topics it raises and judges nothing; the reply only says to go on.

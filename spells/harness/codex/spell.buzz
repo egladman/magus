@@ -29,7 +29,7 @@ final HOOK_DIR = ".";
 final SPAWN_MATCHER = "spawn_agent|collaborationspawn_agent|Agent";
 
 // Every tool Codex raises PreToolUse for, so magus judges each by its tool and the shape
-// of its input, and names one no rule can read (the unjudged-tool rule).
+// of its input, and names one no rule can read (the unjudged-step rule).
 final EVERY_TOOL = "*";
 
 // Where `magus agent harness install` writes this host's tool rows, beside its hooks.
@@ -197,7 +197,7 @@ final DISCOVERY_TOOLS = ["tool_search", "search_tool_bm25"];
 
 // Every Codex tool the guard should know whose input's shape does not say what it does. A
 // shell call carries its command and is judged by it; a tool missing here is one the guard
-// cannot judge (unjudged-tool).
+// cannot judge (unjudged-step).
 export fun mgs_listTools() > HarnessTools {
     final rows = mut [HarnessTool{name = "apply_patch", capability = ToolCapability.writes}];
     foreach (name in ["spawn_agent", "collaborationspawn_agent", "send_input", "resume_agent"]) {

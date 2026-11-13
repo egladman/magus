@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
 )
@@ -76,9 +78,107 @@ func (s *stepTableSuite) TestAnInertRowWithAnotherCapabilityIsRefused() {
 	s.ErrorContains(err, "inert says nothing judges the row")
 }
 
-func (s *stepTableSuite) TestASpawnsRowIsRefusedUntilJudgeJudgesSpawns() {
-	_, err := NewStepTable([]typesagent.StepRow{{Kind: "delegate", Capabilities: []string{"spawns"}}}, nil)
-	s.ErrorContains(err, "spawns is not judged through Judge yet")
+func (s *stepTableSuite) TestASpawnsRowNeedsNoRule() {
+	_, err := NewStepTable([]typesagent.StepRow{{Kind: "delegate", Capabilities: []string{"spawns"}, SpawnDescriptionField: "/title"}}, nil)
+	s.NoError(err)
+}
+
+func (s *stepTableSuite) TestASpawnsRowThatAlsoRunsIsRefused() {
+	_, err := NewStepTable([]typesagent.StepRow{{Kind: "delegate", Capabilities: []string{"spawns", "runs"}, Command: "/command"}}, nil)
+	s.ErrorContains(err, "does not share a row with runs")
+}
+
+func (s *stepTableSuite) TestADescriptionFieldWithoutSpawnsIsRefused() {
+	_, err := NewStepTable([]typesagent.StepRow{{Kind: "plan", Capabilities: []string{"inert"}, SpawnDescriptionField: "/title"}}, nil)
+	s.ErrorContains(err, "spawn_description_field goes with spawns")
+}
+
+func (s *stepTableSuite) TestADescriptionFieldThatDoesNotParseIsRefused() {
+	_, err := NewStepTable([]typesagent.StepRow{{Kind: "delegate", Capabilities: []string{"spawns"}, SpawnDescriptionField: "title"}}, nil)
+	s.ErrorContains(err, "spawn_description_field")
+}
+
+// stepRecordSuite pins how a hook or `magus shell` reads a Step record.
+type stepRecordSuite struct {
+	suite.Suite
+}
+
+func TestStepRecord(t *testing.T) { suite.Run(t, new(stepRecordSuite)) }
+
+func (s *stepRecordSuite) record(step typesagent.Step) string {
+	raw, err := json.Marshal(step)
+	s.Require().NoError(err)
+	return string(raw)
+}
+
+func (s *stepRecordSuite) toolStep(name string, input map[string]any) typesagent.Step {
+	return typesagent.Step{APIVersion: typesagent.StepAPIVersion, Kind: hostToolKind, Name: name, Input: input, Session: "s1", Dir: "/r"}
+}
+
+func (s *stepRecordSuite) TestAToolStepReadsAsItsEnvelope() {
+	req, ok := decodeHookEnvelope(s.record(s.toolStep("Bash", map[string]any{"command": "ls"})), agent.ToolRows{})
+
+	s.Require().True(ok)
+	s.Equal(hookRequest{Value: "ls", Cwd: "/r", Who: hookAttribution{Session: "s1"}}, req)
+}
+
+func (s *stepRecordSuite) TestAnotherKindIsNoEnvelope() {
+	step := s.toolStep("card", nil)
+	step.Kind = "refund"
+
+	_, ok := decodeHookEnvelope(s.record(step), agent.ToolRows{})
+
+	s.False(ok)
+}
+
+func (s *stepRecordSuite) TestAToolStepNoRowCoversIsLeftToTheEnvelope() {
+	_, ok := declaredStep(s.T().Context(), s.record(s.toolStep("Bash", nil)), StepTable{})
+
+	s.False(ok)
+}
+
+func (s *stepRecordSuite) TestAToolStepARowCoversIsJudgedAsAStep() {
+	table, err := NewStepTable([]typesagent.StepRow{{Kind: hostToolKind, Capabilities: []string{"inert"}}}, nil)
+	s.Require().NoError(err)
+
+	step, ok := declaredStep(s.T().Context(), s.record(s.toolStep("Bash", nil)), table)
+
+	s.Require().True(ok)
+	s.Equal("Bash", step.Name)
+}
+
+func (s *stepRecordSuite) TestANamelessToolStepIsJudgedAsAStep() {
+	_, ok := declaredStep(s.T().Context(), s.record(s.toolStep("", nil)), StepTable{})
+
+	s.True(ok, "a tool step naming no tool has no envelope to stand for")
+}
+
+func (s *stepRecordSuite) TestAHostEnvelopeIsNoStepRecord() {
+	_, ok := stepRecord(`{"tool_name":"Bash","tool_input":{"command":"echo magus.step/v1alpha1"}}`)
+
+	s.False(ok)
+}
+
+func (s *stepRecordSuite) TestAnUndeclaredKindSentToJudgeIsDenied() {
+	ctx, _ := spawnFixture(s.T())
+	step := s.toolStep("card", nil)
+	step.Kind = "refund"
+
+	j := Judge(ctx, Dependencies{}, Request{Input: s.record(step)})
+
+	s.Equal(types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: j.Reason, Rule: string(denyRuleUnjudgedStep)}, j)
+	s.Contains(j.Reason, `kind "refund"`)
+}
+
+func (s *stepRecordSuite) TestAStepJudgeCannotReadIsDenied() {
+	ctx, _ := spawnFixture(s.T())
+	step := s.toolStep("Bash", nil)
+	step.APIVersion = "magus.step/v9"
+
+	j := Judge(ctx, Dependencies{}, Request{Input: s.record(step)})
+
+	s.Equal(types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: j.Reason, Rule: string(denyRuleStepInput)}, j)
+	s.Contains(j.Reason, "api_version")
 }
 
 func (s *stepTableSuite) TestARunsRowWithoutACommandIsRefused() {

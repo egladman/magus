@@ -272,8 +272,10 @@ func WithStepRule(rule StepRule) Option
 | `StepRule`, `WithStepRule`                                                   | done      |
 | an uncovered kind is an error when the rules load                            | done      |
 | a mistyped location is a deny (`step-input`)                                 | done      |
-| `unjudged-step` replaces `unjudged-tool`                                     | proposed  |
-| the hook envelope and `magus shell` decode into a `Step`                     | proposed  |
+| `unjudged-step` replaces `unjudged-tool`                                     | done      |
+| the hook and `magus shell` read a `Step` record; a `tool` step is judged as the envelope it stands for | done      |
+| a host's own envelope handed to a step rule as a `Step`                      | proposed  |
+| a `spawns` row judged by the spawn rules                                     | done      |
 | `StepRow.InputSchema`; a mismatch is refused with the schema path            | done      |
 | `NextSteps []agent.Step` on the verdict: a deny suggests the step it judged  | proposed  |
 | `types.GuardJudgment.Next` (JSON `next`) becomes `NextSteps` (`next_steps`): a deliberate break | done      |
@@ -437,8 +439,8 @@ needs to hold the step itself. Reopen only if that refusal is reopened.
 `types/agent` is the leaf, not the package above `types` that ADR 0039 assumed. What
 was built follows from that:
 
-- `types/agent` may import nothing in magus but `internal/json` and `types/enum`
-  (depguard's `types-pure-domain`). So `Step.APIVersion` is a string,
+- `types/agent` imports nothing in magus but `internal/json` and `types/enum`, and an
+  import of `types` would be a cycle. So `Step.APIVersion` is a string,
   `magus.step/v1alpha1`, and `StepRow.Capabilities` holds `types.ToolCapability`
   values as strings. The named type moves into `types/agent` with ADR 0039's capability
   move.
@@ -461,3 +463,39 @@ The rows left proposed, and why:
 - `NextSteps []agent.Step` can sit on `types.GuardJudgment`, since `types` imports the
   leaf. The guard's remedy rules read `types.NextStep` throughout, and moving them is
   its own change.
+
+### 2026-11-12: the hook, the CLI and spawns reach `JudgeStep`
+
+What was built:
+
+- The rule is `unjudged-step` on every door. It never shipped as `unjudged-tool` in a
+  release, so the rename breaks only a pre-release `magus\guard.builtins` that names the
+  old key. That load now fails with MGS1045.
+- `guard.Judge` reads a `Step` record wherever it reads a host's envelope, so the hook
+  and `magus shell` take the record as JSON. The kind a host's tool call is, is `tool`,
+  which answers the last open question. The host's tool rows declare that kind. So a
+  `tool` step no `StepRow` covers is judged as the envelope it stands for: the name is
+  `tool_name`, the input is `tool_input`, and `Dir` is `cwd`. Every other record goes to
+  `guard.JudgeStep`. A record it cannot judge, such as one with another `api_version`,
+  is denied under `step-input` and never cleared, since a hook fails open on an error.
+- A `spawns` row no longer fails the open. Its step is judged as a host's spawn, by the
+  same built-in spawn rules and `magus\guard.spawn`. Its input needs a prompt.
+  `SpawnDescriptionField` is a JSON Pointer to the description, and it is refused on a
+  row that does not spawn. A spawns row shares no row with `runs`, `reads` or `writes`.
+  As on the hook path, judging a spawn records it.
+
+Still proposed, and why:
+
+- `magus\guard.step` needs a step rule kept on `workspace.WorkspaceRegistry`, beside the
+  four seams. The live lease `workspace-imports-fit-their-ceiling` holds that file to take
+  `types/agent` out of `internal/workspace`'s imports, and a `StepRequest` rule there
+  adds it back. The seam also needs a `StepRequest` mirror from buzzgen, the policy
+  snapshot's record of which seams are registered, the approved-copy load, and
+  `ForeignJudgeDeps` dropping the rule. Until it lands, a kind other than `tool` sent to
+  `magus shell` has no rows and is denied under `unjudged-step`.
+- A host's own envelope is not handed to a rule as a `Step` until a rule on the hook path
+  reads one. That is `magus\guard.step`.
+- `NextSteps []agent.Step` on `types.GuardJudgment` needs every remedy the guard serves
+  (`shapeDeny`, `servedNext`, `hint.FilterServable`, the `next_steps` the glues print) to
+  carry a step of kind `tool` with the command as its input. Nothing in this change
+  needed it.

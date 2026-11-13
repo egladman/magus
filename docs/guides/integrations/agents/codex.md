@@ -503,7 +503,7 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do; s
 - **Every tool reaches the guard.** One `PreToolUse` entry matches `*`, and the glue
   sends the whole event, so magus judges a command, a patch, an MCP call and a spawn by
   the shape of its input. A call to another MCP server's tool carries nothing magus can
-  read, and the unjudged-tool rule names it (see
+  read, and the unjudged-step rule names it (see
   [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard)).
 - Hooks are not available on Windows, and `[features] hooks = false` turns the
   every hook off. A repo-local `.codex/hooks.json` is also inert until you

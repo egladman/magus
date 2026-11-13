@@ -1325,7 +1325,7 @@ var recoverableRules = []string{
 	"exit-status-echo", "filter-without-input", "grep-reader", "interpreter-rewrite", "interpreter-script", "magus-timeout",
 	"monitor-duplicate", "monitor-pile", "output-pipe", "output-redirect", "raw-tool", "read-navigation",
 	"read-paging", "search-translation", "sed-in-place", "sibling-checkout",
-	"spawn-before-skill", "spawn-waiter", "stage-all", "symbol-search", "throwaway-copy", "unjudged-tool",
+	"spawn-before-skill", "spawn-waiter", "stage-all", "symbol-search", "throwaway-copy", "unjudged-step",
 	"unknown-env",
 }
 

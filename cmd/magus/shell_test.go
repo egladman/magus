@@ -812,6 +812,42 @@ func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
 	assert.Equal(t, "pass\n", out.String())
 }
 
+// shellStep runs `magus shell` over step's record from a host whose rows
+// call TodoWrite inert. It returns the verdict's name and the exit error.
+func shellStep(t *testing.T, step typesagent.Step) (string, error) {
+	t.Helper()
+	t.Cleanup(snapshotGlobals())
+	t.Setenv(trail.EnvBaggage, "")
+	global = globalFlags{}
+	t.Chdir(t.TempDir())
+	installHostRows(t, "claude-code", types.Limits{}, types.HarnessTool{Name: "TodoWrite", Capability: types.ToolInert})
+	raw, err := json.Marshal(step)
+	require.NoError(t, err)
+	var out bytes.Buffer
+	ctx := guard.WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
+	err = shellStdin(ctx, bytes.NewReader(raw), &out, []string{"-o", "name", "--agent-name", "claude-code"})
+	return out.String(), err
+}
+
+func TestShellJudgesAToolStepAsTheEnvelopeItStandsFor(t *testing.T) {
+	step := typesagent.Step{APIVersion: typesagent.StepAPIVersion, Kind: "tool", Name: "TodoWrite", Session: "s1",
+		Input: map[string]any{"todos": []any{map[string]any{"content": "never use sed -i here"}}}}
+
+	verdict, err := shellStep(t, step)
+
+	require.NoError(t, err)
+	assert.Equal(t, "pass\n", verdict, "an inert tool's step passes as its envelope does")
+}
+
+func TestShellDeniesAStepOfAKindNoRowDeclares(t *testing.T) {
+	step := typesagent.Step{APIVersion: typesagent.StepAPIVersion, Kind: "refund", Name: "card", Session: "s1"}
+
+	verdict, err := shellStep(t, step)
+
+	require.Error(t, err, "a deny exits 2")
+	assert.Equal(t, "deny\n", verdict)
+}
+
 // TestEnforceVerdictBlocksOnlyDeny pins the half that makes the guard real. Every rule was
 // reachable and correct while the process exited 0, so a host read success and ran the
 // command anyway: the guard looked installed and enforced nothing.
