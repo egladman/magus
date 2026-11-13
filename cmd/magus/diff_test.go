@@ -31,6 +31,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/impact"
 	"github.com/egladman/magus/types/check"
 )
 
@@ -223,7 +224,7 @@ func TestDiffCountsLineIsWhatTheReaderIsLeftWith(t *testing.T) {
 			{Path: "gen/out.json", Role: diff.RoleOutput},
 		},
 		SeedProjects:     []string{"root"},
-		AffectedProjects: []types.ImpactProject{{Path: "root"}, {Path: "docs"}},
+		AffectedProjects: []impact.Project{{Path: "root"}, {Path: "docs"}},
 	}
 	assert.Equal(t, "2 files to read, 1 generated folded; 1 projects edited, 2 projects rebuild",
 		diffCountsLine(rev, false))
@@ -476,7 +477,7 @@ func TestPrintDiffTextWithoutImpactIsUnchanged(t *testing.T) {
 			{Path: "gen/out.json", Role: diff.RoleOutput},
 		},
 		SeedProjects:     []string{"root"},
-		AffectedProjects: []types.ImpactProject{{Path: "root"}, {Path: "docs"}},
+		AffectedProjects: []impact.Project{{Path: "root"}, {Path: "docs"}},
 	}
 	identity := func(p string) string { return p }
 
@@ -524,7 +525,7 @@ func TestPrintDiffTextAppendsImpactAboveTheConsoleLink(t *testing.T) {
 // total is a fabrication wearing a duration, and quoting it would teach a reader to trust every
 // later one.
 func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
-	affected := []types.ImpactProject{{Path: "root", Seed: true, Files: []string{"a.go"}}, {Path: "docs"}}
+	affected := []impact.Project{{Path: "root", Seed: true, Files: []string{"a.go"}}, {Path: "docs"}}
 
 	t.Run("no history at all", func(t *testing.T) {
 		assert.Nil(t, estimateImpactCost(&forecast.History{}, affected))
@@ -573,7 +574,7 @@ func TestImpactOwnersJoinOnlyTheReach(t *testing.T) {
 		{Path: "unrelated", Primary: "carol", PrimaryShare: 51, Authors: 9},
 		{Path: "docs", Authors: 0},
 	}}
-	affected := []types.ImpactProject{{Path: "root"}, {Path: "docs"}, {Path: "never-committed"}}
+	affected := []impact.Project{{Path: "root"}, {Path: "docs"}, {Path: "never-committed"}}
 
 	got := listImpactOwners(own, affected)
 	assert.Equal(t, []impactOwner{{Project: "root", Primary: "alice", PrimaryShare: 72, Authors: 4}}, got)
@@ -587,7 +588,7 @@ func TestImpactReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
 
 	r := computeImpactReach(diff.Diff{
 		SeedProjects:     []string{"root"},
-		AffectedProjects: []types.ImpactProject{{Path: "root", Seed: true, Files: []string{"a.go", "b.go"}}, {Path: "docs"}},
+		AffectedProjects: []impact.Project{{Path: "root", Seed: true, Files: []string{"a.go", "b.go"}}, {Path: "docs"}},
 	})
 	assert.Equal(t, &impactReach{
 		Seeds:    1,
@@ -1916,7 +1917,7 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	t.Run("coverage rounds and no history is stated plainly", func(t *testing.T) {
 		facts := diffFileFacts(diff.File{
 			Path:      "a.go",
-			Coverage:  &types.ImpactCoverage{Ratio: 0.675, Covered: 27, Total: 40},
+			Coverage:  &impact.Coverage{Ratio: 0.675, Covered: 27, Total: 40},
 			NoHistory: true,
 		})
 		assert.Contains(t, facts, "68% covered")
@@ -1924,7 +1925,7 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	})
 
 	t.Run("zero total coverage is not zero percent", func(t *testing.T) {
-		facts := diffFileFacts(diff.File{Path: "a.go", Coverage: &types.ImpactCoverage{}})
+		facts := diffFileFacts(diff.File{Path: "a.go", Coverage: &impact.Coverage{}})
 		assert.Empty(t, facts)
 	})
 }
@@ -2105,7 +2106,7 @@ func TestPrintDiffTextOrdersTheEvidence(t *testing.T) {
 			{Path: "MAGUS.md", Role: diff.RoleOutput},
 		},
 		SeedProjects:     []string{"core"},
-		AffectedProjects: []types.ImpactProject{{}, {}},
+		AffectedProjects: []impact.Project{{}, {}},
 		Notes:            []string{"no coverage profile was loaded"},
 	}
 

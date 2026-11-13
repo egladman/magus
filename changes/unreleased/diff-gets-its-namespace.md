@@ -11,3 +11,8 @@
   `magus\check\Tier` and `magus\check\TierEvidence`. A script that names one adds
   `import "magus/check";`. `DoctorReport`, `TierReport` and `TierOptions` stay in
   `types` and `magus`.
+- **Breaking: `ImpactCoverage` and `ImpactProject` moved to `types/impact` and the
+  `magus\impact` namespace.** In Go they are `impact.Coverage` and `impact.Project`. In
+  Buzz they are `magus\impact\Coverage` and `magus\impact\Project`, after
+  `import "magus/impact";`. `ImpactResult`, `ImpactSymbol` and `ImpactFileCoverage`
+  stay in `types` and `magus`.

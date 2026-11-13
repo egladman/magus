@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
+	impacttypes "github.com/egladman/magus/types/impact"
 	"github.com/egladman/magus/types/trail"
 )
 
@@ -90,6 +91,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectConformanceUnmeasured(v.(types.ConformanceUnmeasured))
 	}},
 	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow), enums) }},
+	{Name: "Coverage", Zero: impacttypes.Coverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactCoverage(v.(impacttypes.Coverage)) }},
 	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential), enums) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
 	{Name: "DecisionSyntax", Zero: spells.DecisionSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDecisionSyntax(v.(spells.DecisionSyntax)) }},
@@ -189,11 +191,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Holds", Zero: types.Holds{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHolds(v.(types.Holds), enums) }},
 	{Name: "Hotspots", Zero: types.Hotspots{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHotspots(v.(types.Hotspots)) }},
 	{Name: "Impact", Zero: types.ImpactResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactResult(v.(types.ImpactResult)) }},
-	{Name: "ImpactCoverage", Zero: types.ImpactCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactCoverage(v.(types.ImpactCoverage)) }},
 	{Name: "ImpactFileCoverage", Zero: types.ImpactFileCoverage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectImpactFileCoverage(v.(types.ImpactFileCoverage))
 	}},
-	{Name: "ImpactProject", Zero: types.ImpactProject{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactProject(v.(types.ImpactProject)) }},
 	{Name: "ImpactSymbol", Zero: types.ImpactSymbol{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactSymbol(v.(types.ImpactSymbol)) }},
 	{Name: "ImportGraph", Zero: types.ImportGraph{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImportGraph(v.(types.ImportGraph)) }},
 	{Name: "InflightChange", Zero: types.InflightChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -315,6 +315,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Precedent", Zero: types.Precedent{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedent(v.(types.Precedent), enums) }},
 	{Name: "PrecedentKey", Zero: types.PrecedentKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedentKey(v.(types.PrecedentKey)) }},
 	{Name: "PrecedentScope", Zero: types.PrecedentScope{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedentScope(v.(types.PrecedentScope)) }},
+	{Name: "Project", Zero: impacttypes.Project{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactProject(v.(impacttypes.Project)) }},
 	{Name: "ProjectEntry", Zero: types.ProjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectEntry(v.(types.ProjectEntry)) }},
 	{Name: "ProjectGraph", Zero: types.ProjectGraph{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectGraph(v.(types.ProjectGraph)) }},
 	{Name: "ProjectQuery", Zero: types.ProjectQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectProjectQuery(v.(types.ProjectQuery)) }},

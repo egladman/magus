@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
+	impacttypes "github.com/egladman/magus/types/impact"
 	"github.com/egladman/magus/types/trail"
 	"time"
 )
@@ -2261,7 +2262,7 @@ func ObjectTierReport(v types.TierReport, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImpactCoverage(v types.ImpactCoverage) vm.Value {
+func ObjectImpactCoverage(v impacttypes.Coverage) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("ratio", vm.FloatValue(float64(v.Ratio)))
 	out.MapSet("covered", vm.IntValue(int64(v.Covered)))
@@ -2424,7 +2425,7 @@ func ObjectDiffFile(v difftypes.File, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImpactProject(v types.ImpactProject) vm.Value {
+func ObjectImpactProject(v impacttypes.Project) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("seed", vm.BoolValue(v.Seed))

@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/impact"
 	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -172,7 +173,7 @@ func TestPrintImpactTextQualifiesUndeclaredSeeds(t *testing.T) {
 			ChangedFileCount: 2,
 			ChangedFiles:     []string{".golangci.yml", "main.go"},
 			SeedProjects:     []string{"."},
-			AffectedProjects: []types.ImpactProject{{
+			AffectedProjects: []impact.Project{{
 				Path:            ".",
 				Seed:            true,
 				Files:           []string{".golangci.yml", "main.go"},
@@ -215,7 +216,7 @@ func TestPrintImpactTextStaysPlainWhenEverythingIsDeclared(t *testing.T) {
 			ChangedFileCount: 1,
 			ChangedFiles:     []string{"main.go"},
 			SeedProjects:     []string{"."},
-			AffectedProjects: []types.ImpactProject{{Path: ".", Seed: true, Files: []string{"main.go"}}},
+			AffectedProjects: []impact.Project{{Path: ".", Seed: true, Files: []string{"main.go"}}},
 		}))
 	})
 	assert.Contains(t, out, ". (seeded by 1 changed file)")

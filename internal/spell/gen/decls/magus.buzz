@@ -8,6 +8,7 @@
 
 import "magus/agent";
 import "magus/check";
+import "magus/impact";
 import "magus/trail";
 
 export enum<str> DiagnosticOrigin {
@@ -1715,12 +1716,6 @@ export object DiffOptions {
     minShare: double = 0.0,
 }
 
-export object ImpactCoverage {
-    ratio: double = 0.0,
-    covered: int = 0,
-    total: int = 0,
-}
-
 export object DiffPublicPath {
     id: str = "",
     qualified: str = "",
@@ -1784,7 +1779,7 @@ export object DiffFile {
     project: str = "",
     role: str = "",
     hint: str = "",
-    coverage: ImpactCoverage? = null,
+    coverage: magus\impact\Coverage? = null,
     symbols: [DiffSymbol] = [],
     hunks: [DiffHunk] = [],
     layout: [magus\check\Check] = [],
@@ -1796,15 +1791,6 @@ export object DiffFile {
     reach: int? = null,
     threads: [DiffThreadRef] = [],
     risk: magus\check\TierEvidence? = null,
-}
-
-export object ImpactProject {
-    path: str = "",
-    seed: bool = false,
-    files: [str] = [],
-    undeclaredFiles: [str] = [],
-    spells: [str] = [],
-    targets: [str] = [],
 }
 
 export object ReleaseStage {
@@ -1898,7 +1884,7 @@ export object Diff {
     base: str = "",
     files: [DiffFile] = [],
     seedProjects: [str] = [],
-    affectedProjects: [ImpactProject] = [],
+    affectedProjects: [magus\impact\Project] = [],
     notes: [str] = [],
     api: DiffAPI? = null,
     order: DiffOrder? = null,
@@ -1914,12 +1900,12 @@ export object ImpactSymbol {
     label: str = "",
     refCount: int = 0,
     fileCount: int = 0,
-    coverage: ImpactCoverage = ImpactCoverage{},
+    coverage: magus\impact\Coverage = magus\impact\Coverage{},
 }
 
 export object ImpactFileCoverage {
     file: str = "",
-    coverage: ImpactCoverage = ImpactCoverage{},
+    coverage: magus\impact\Coverage = magus\impact\Coverage{},
 }
 
 export object Impact {
@@ -1927,7 +1913,7 @@ export object Impact {
     changedFileCount: int = 0,
     changedFiles: [str] = [],
     seedProjects: [str] = [],
-    affectedProjects: [ImpactProject] = [],
+    affectedProjects: [magus\impact\Project] = [],
     changedSymbols: [ImpactSymbol] = [],
     changedFileCoverage: [ImpactFileCoverage] = [],
     notes: [str] = [],

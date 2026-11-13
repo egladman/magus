@@ -46,6 +46,7 @@ import (
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/impact"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -2090,7 +2091,7 @@ func computeImpactReach(rev difftypes.Diff) *impactReach {
 // Projects the lens has nothing to say about are DROPPED rather than listed with an empty
 // author: a project with no commits in the window has no owner to name, and a blank name
 // beside a path reads as a lookup that failed.
-func listImpactOwners(own types.Ownership, affected []types.ImpactProject) []impactOwner {
+func listImpactOwners(own types.Ownership, affected []impact.Project) []impactOwner {
 	byPath := make(map[string]types.OwnershipEntry, len(own.Projects))
 	for _, e := range own.Projects {
 		byPath[e.Path] = e
@@ -2119,7 +2120,7 @@ func listImpactOwners(own types.Ownership, affected []types.ImpactProject) []imp
 // constant, so a total is always computable and a total computed from those is a fabrication
 // wearing a duration. Only projects with enough samples for forecast's own project tier are
 // counted, and a reach whose projects all fall short reports no history at all.
-func estimateImpactCost(h *forecast.History, affected []types.ImpactProject) *impactCost {
+func estimateImpactCost(h *forecast.History, affected []impact.Project) *impactCost {
 	c := &impactCost{}
 	for _, p := range affected {
 		target, stats, ok := impactCostTarget(h, p)
@@ -2147,7 +2148,7 @@ func estimateImpactCost(h *forecast.History, affected []types.ImpactProject) *im
 
 // impactCostTarget picks the target a project's rebuild is estimated by, and reports false
 // when the history has no measurement of this project worth quoting.
-func impactCostTarget(h *forecast.History, p types.ImpactProject) (string, forecast.Stats, bool) {
+func impactCostTarget(h *forecast.History, p impact.Project) (string, forecast.Stats, bool) {
 	targets, ok := h.Projects[p.Path]
 	if !ok {
 		return "", forecast.Stats{}, false

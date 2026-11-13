@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/impact"
 	"github.com/egladman/magus/types/check"
 )
 
@@ -364,7 +365,7 @@ type File struct {
 	Hint string `json:"hint,omitempty" yaml:"hint,omitempty"`
 	// Coverage is the file's observed coverage, nil when none was measured. Nil is DISTINCT
 	// from zero: "no coverage run has happened" must not render as "this code is untested".
-	Coverage *types.ImpactCoverage `json:"coverage,omitempty" yaml:"coverage,omitempty"`
+	Coverage *impact.Coverage `json:"coverage,omitempty" yaml:"coverage,omitempty"`
 	// Symbols are the symbols this file defines whose lines the patch changed, each carrying
 	// how widely it is referenced. A package or namespace symbol is never one. Empty when no
 	// symbol index covers the file.
@@ -476,7 +477,7 @@ type Diff struct {
 	SeedProjects []string `json:"seed_projects,omitempty" yaml:"seed_projects,omitempty"`
 	// AffectedProjects is the full reverse closure. The gap between its length and
 	// SeedProjects' is the whole "why is docs in my build" question, so both ship.
-	AffectedProjects []types.ImpactProject `json:"affected_projects,omitempty" yaml:"affected_projects,omitempty"`
+	AffectedProjects []impact.Project `json:"affected_projects,omitempty" yaml:"affected_projects,omitempty"`
 	// Notes are magus-authored caveats about what could NOT be computed (no symbol index, no
 	// coverage run). They are surfaced rather than swallowed: a reader who sees no reach
 	// numbers must be able to tell "nothing depends on this" from "nothing was measured".
@@ -547,7 +548,7 @@ type Thread struct {
 	Role        string `json:"role,omitempty" yaml:"role,omitempty"`
 	// Reach is the file's widest reach; nil when no symbol index covered it.
 	Reach    *int                  `json:"reach,omitempty" yaml:"reach,omitempty"`
-	Coverage *types.ImpactCoverage `json:"coverage,omitempty" yaml:"coverage,omitempty"`
+	Coverage *impact.Coverage `json:"coverage,omitempty" yaml:"coverage,omitempty"`
 	// Symbols are the changed symbols in the thread's hunk, each with who references it, who it
 	// is public to, the callers it is reached through and its conformance findings.
 	Symbols []Symbol `json:"symbols,omitempty" yaml:"symbols,omitempty"`

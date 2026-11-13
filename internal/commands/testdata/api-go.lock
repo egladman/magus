@@ -2539,22 +2539,11 @@ github.com/egladman/magus/types.IgnorePattern.Pattern field string "json:\"patte
 github.com/egladman/magus/types.IgnorePattern.Type field PatternType "json:\"type\" yaml:\"type\" validate:\"required,oneof=glob regex literal\""
 github.com/egladman/magus/types.IgnoredFileReporter type interface
 github.com/egladman/magus/types.IgnoredFileReporter.IgnoredFiles imethod func(ctx context.Context, dir string, paths []string) ([]string, error)
-github.com/egladman/magus/types.ImpactCoverage type struct
-github.com/egladman/magus/types.ImpactCoverage.Covered field int "json:\"covered_stmts\" yaml:\"covered_stmts\""
-github.com/egladman/magus/types.ImpactCoverage.Ratio field float64 "json:\"ratio\"         yaml:\"ratio\""
-github.com/egladman/magus/types.ImpactCoverage.Total field int "json:\"total_stmts\"   yaml:\"total_stmts\""
 github.com/egladman/magus/types.ImpactFileCoverage type struct
-github.com/egladman/magus/types.ImpactFileCoverage.Coverage field ImpactCoverage "json:\"coverage\" yaml:\"coverage\""
+github.com/egladman/magus/types.ImpactFileCoverage.Coverage field github.com/egladman/magus/types/impact.Coverage "json:\"coverage\" yaml:\"coverage\""
 github.com/egladman/magus/types.ImpactFileCoverage.File field string "json:\"file\"     yaml:\"file\""
-github.com/egladman/magus/types.ImpactProject type struct
-github.com/egladman/magus/types.ImpactProject.Files field []string "json:\"files,omitempty\" yaml:\"files,omitempty\""
-github.com/egladman/magus/types.ImpactProject.Path field string "json:\"path\" yaml:\"path\""
-github.com/egladman/magus/types.ImpactProject.Seed field bool "json:\"seed\" yaml:\"seed\""
-github.com/egladman/magus/types.ImpactProject.Spells field []string "json:\"spells,omitempty\" yaml:\"spells,omitempty\""
-github.com/egladman/magus/types.ImpactProject.Targets field []string "json:\"targets,omitempty\" yaml:\"targets,omitempty\""
-github.com/egladman/magus/types.ImpactProject.UndeclaredFiles field []string "json:\"undeclared_files,omitempty\" yaml:\"undeclared_files,omitempty\""
 github.com/egladman/magus/types.ImpactResult type struct
-github.com/egladman/magus/types.ImpactResult.AffectedProjects field []ImpactProject "json:\"affected_projects,omitempty\" yaml:\"affected_projects,omitempty\""
+github.com/egladman/magus/types.ImpactResult.AffectedProjects field []github.com/egladman/magus/types/impact.Project "json:\"affected_projects,omitempty\" yaml:\"affected_projects,omitempty\""
 github.com/egladman/magus/types.ImpactResult.Base field string "json:\"base\" yaml:\"base\""
 github.com/egladman/magus/types.ImpactResult.ChangedFileCount field int "json:\"changed_file_count\"      yaml:\"changed_file_count\""
 github.com/egladman/magus/types.ImpactResult.ChangedFileCoverage field []ImpactFileCoverage "json:\"changed_file_coverage,omitempty\" yaml:\"changed_file_coverage,omitempty\""
@@ -2563,7 +2552,7 @@ github.com/egladman/magus/types.ImpactResult.ChangedSymbols field []ImpactSymbol
 github.com/egladman/magus/types.ImpactResult.Notes field []string "json:\"notes,omitempty\" yaml:\"notes,omitempty\""
 github.com/egladman/magus/types.ImpactResult.SeedProjects field []string "json:\"seed_projects,omitempty\" yaml:\"seed_projects,omitempty\""
 github.com/egladman/magus/types.ImpactSymbol type struct
-github.com/egladman/magus/types.ImpactSymbol.Coverage field ImpactCoverage "json:\"coverage\"   yaml:\"coverage\""
+github.com/egladman/magus/types.ImpactSymbol.Coverage field github.com/egladman/magus/types/impact.Coverage "json:\"coverage\"   yaml:\"coverage\""
 github.com/egladman/magus/types.ImpactSymbol.File field string "json:\"file\"       yaml:\"file\""
 github.com/egladman/magus/types.ImpactSymbol.FileCount field int "json:\"file_count\" yaml:\"file_count\""
 github.com/egladman/magus/types.ImpactSymbol.Label field string "json:\"label,omitempty\" yaml:\"label,omitempty\""

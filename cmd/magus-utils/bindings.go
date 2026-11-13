@@ -836,6 +836,7 @@ var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/types", alias: "types"},
 	{path: "github.com/egladman/magus/types/agent", alias: "typesagent"},
 	{path: "github.com/egladman/magus/types/check", alias: "check", prefix: "Check"},
+	{path: "github.com/egladman/magus/types/impact", alias: "impacttypes", prefix: "Impact"},
 	{path: "github.com/egladman/magus/types/image", alias: "imagetypes", prefix: "Image"},
 	{path: "github.com/egladman/magus/types/daemon", alias: "daemon", prefix: "Status"},
 	{path: "github.com/egladman/magus/types/trail", alias: "trail", prefix: "Trail"},
