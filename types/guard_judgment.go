@@ -25,13 +25,14 @@ type GuardJudgment struct {
 	Lease string `json:"lease,omitempty"`
 	// LeaseFrom is which source answered Lease; see LeaseSource.
 	LeaseFrom LeaseSource `json:"lease_from,omitempty"`
-	// Next is a deny's remedy, served only when it passes the guard for the acting
-	// lease, and pre-authorized for the calls after it. Reason renders it too.
-	Next []NextStep `json:"next,omitempty"`
+	// NextSteps is a deny's remedy, served only when it passes
+	// the guard for the acting lease, and pre-authorized for the
+	// calls after it. Reason renders it too.
+	NextSteps []NextStep `json:"next_steps,omitempty"`
 }
 
-// GuardDeniedError is a call refused because the guard denied it. Judgment is the whole
-// deny, so a caller can show its Rule and act on its Next instead of parsing the message.
+// GuardDeniedError is a call refused because the guard denied it.
+// Judgment is the whole deny, so a caller reads its Rule and NextSteps.
 type GuardDeniedError struct {
 	Judgment GuardJudgment
 }

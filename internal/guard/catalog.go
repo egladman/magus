@@ -121,6 +121,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocHooksOff},
 	{doc: ruleDocSpawnPlainCommands},
 	{doc: ruleDocUnjudgedTool},
+	{doc: ruleDocStepInput},
 	{doc: ruleDocMonitorDuplicate},
 	{doc: ruleDocMonitorPile},
 	{doc: ruleDocSpawnWaiter},
@@ -938,6 +939,14 @@ var ruleDocUnjudgedTool = types.RuleDoc{
 		"A tool whose input has none of those shapes, and which the host's tool rows do not list, could do whatever a rule exists to stop with no rule seeing it; a tool the rows list as touching nothing (a todo list, a plan, a web lookup) passes. " +
 		"The harness spell declares the rows (mgs_listTools) and `magus agent harness install` writes them, one file per capability with one tool name per line; with no rows to read, no tool is known and the refusal names that install. " +
 		"It denies by default: a call no rule can read is a call no rule judged, and the remedy is a tool row. A workspace that accepts unjudged tools sets it to advise. A finished call is never named.",
+}
+
+var ruleDocStepInput = types.RuleDoc{
+	Name:    string(denyRuleStepInput),
+	Catches: "a judged step whose input fails its row's schema, or holds the wrong type where the row points",
+	Why: "A program that judges its agent's steps through magus.Judge declares each kind once, with JSON Pointers to the command and paths the built-in rules read and an optional JSON Schema for the input. " +
+		"A rule that reads a malformed input reads a guess, so the step is refused before any rule runs, and the reason names the schema path or the pointer. " +
+		"The agent can correct its input, so it is a deny rather than an error.",
 }
 
 var ruleDocMonitorDuplicate = types.RuleDoc{

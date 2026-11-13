@@ -129,6 +129,7 @@ github.com/egladman/magus.Magus.IdentifyRef method(ptr) func(ctx context.Context
 github.com/egladman/magus.Magus.ImportCache method(ptr) func(ctx context.Context, r io.Reader) error
 github.com/egladman/magus.Magus.InvocationByID method(ptr) func(inv string) (Invocation, error)
 github.com/egladman/magus.Magus.InvocationEventsByID method(ptr) func(inv string) (Invocation, []Event, error)
+github.com/egladman/magus.Magus.Judge method(ptr) func(ctx context.Context, step github.com/egladman/magus/types/agent.Step) (github.com/egladman/magus/types.GuardJudgment, error)
 github.com/egladman/magus.Magus.JudgeCommand method(ptr) func(ctx context.Context, session string, dir string, command string) (github.com/egladman/magus/types.GuardJudgment, error)
 github.com/egladman/magus.Magus.JudgeWrite method(ptr) func(ctx context.Context, session string, dir string, path string) (github.com/egladman/magus/types.GuardJudgment, error)
 github.com/egladman/magus.Magus.KnowledgeGraphHealthy method(ptr) func() (watching bool, valid bool)
@@ -248,6 +249,7 @@ github.com/egladman/magus.SpellCache.Refused field []string
 github.com/egladman/magus.SpellCache.Skipped field int
 github.com/egladman/magus.SpellCache.Spell field string
 github.com/egladman/magus.SpellCache.Transferred field int64
+github.com/egladman/magus.StepRule type func(ctx context.Context, req github.com/egladman/magus/types/agent.StepRequest) (github.com/egladman/magus/types.GuardVerdict, error)
 github.com/egladman/magus.SymbolOccurrenceRead type = github.com/egladman/magus/internal/graph/workspacegraph.SymbolOccurrenceRead
 github.com/egladman/magus.SymbolOccurrenceRead.Files field []github.com/egladman/magus/types.SymbolOccurrenceFile
 github.com/egladman/magus.SymbolOccurrenceRead.Names field []string
@@ -296,6 +298,8 @@ github.com/egladman/magus.WithSpell func(name string, opts ...BindingOption) Pro
 github.com/egladman/magus.WithSpellFilter func(name string) RunOption
 github.com/egladman/magus.WithStderr func(w io.Writer) Option
 github.com/egladman/magus.WithStep func() RunOption
+github.com/egladman/magus.WithStepRows func(rows ...github.com/egladman/magus/types/agent.StepRow) Option
+github.com/egladman/magus.WithStepRule func(rule StepRule) Option
 github.com/egladman/magus.WithTarget func(name string, opts ...TargetOption) ProjectOption
 github.com/egladman/magus.WithTargetResults func(fn func(github.com/egladman/magus/types.TargetResult)) RunOption
 github.com/egladman/magus.WithUpstream func() ComposeOption
@@ -2363,7 +2367,7 @@ github.com/egladman/magus/types.GuardJudgment.Context field string "json:\"conte
 github.com/egladman/magus/types.GuardJudgment.Decision field string "json:\"decision\""
 github.com/egladman/magus/types.GuardJudgment.Lease field string "json:\"lease,omitempty\""
 github.com/egladman/magus/types.GuardJudgment.LeaseFrom field LeaseSource "json:\"lease_from,omitempty\""
-github.com/egladman/magus/types.GuardJudgment.Next field []NextStep "json:\"next,omitempty\""
+github.com/egladman/magus/types.GuardJudgment.NextSteps field []NextStep "json:\"next_steps,omitempty\""
 github.com/egladman/magus/types.GuardJudgment.Reason field string "json:\"reason,omitempty\""
 github.com/egladman/magus/types.GuardJudgment.Rule field string "json:\"rule,omitempty\""
 github.com/egladman/magus/types.GuardProfile type string

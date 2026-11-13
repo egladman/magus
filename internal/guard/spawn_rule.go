@@ -196,7 +196,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// Worded as the command and write seams word theirs: the verdict, at most one next and
 	// the ref holding the rest. A rule the catalog does not list keeps its whole reason.
 	if verdict.Decision == decisionDeny && verdict.Rule != "" {
-		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), verdict.Rule, verdict.Reason, why, "", verdict.Next, false)
+		verdict.Reason, verdictRef, verdict.NextSteps = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), verdict.Rule, verdict.Reason, why, "", verdict.NextSteps, false)
 	}
 	appendHookSpawn(ctx, deps, env, who, spawnVerdictRecord{
 		verdictRef:   verdictRef,
@@ -250,7 +250,7 @@ func startNamedAttempt(ctx context.Context, at location, facts hint.Gate, env ho
 	return ""
 }
 
-// handbackTool is the tool a Claude Code subagent files its report
+// handbackTool is the tool a host's subagent files its report
 // through, which ends its try as the glue's HANDBACK_TOOLS reads it.
 const handbackTool = "SubagentHandback"
 
@@ -259,7 +259,7 @@ const handbackTool = "SubagentHandback"
 // store cannot attribute ends nothing, and the deadline bounds the try.
 func endHandedBack(ctx context.Context, at location, who hookAttribution, now time.Time) {
 	if b := boundJob(who, at); b.Job != "" && !b.Gone {
-		_ = job.NewStore(at.jobs()).EndAttempt(ctx, b.Job, types.AttemptEndHandback, now)
+		_ = job.NewStore(at.jobs()).EndAttempt(ctx, b.Job, types.AttemptEndHandback, now) // best effort: the deadline bounds the try
 	}
 }
 

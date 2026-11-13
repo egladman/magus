@@ -46,6 +46,22 @@ func (m *Magus) JudgeWrite(ctx context.Context, session, dir, path string) (type
 	return m.judge(ctx, guard.Request{Input: path, IsPath: true, Dir: dir, Session: session})
 }
 
+// Judge judges step against the rows WithStepRows declared. The built-in
+// rules judge the command and paths its row points at, then each StepRule
+// judges it, and the strictest decision wins. Judge never changes, holds
+// or takes the step. An undeclared kind is a deny. The error is a step
+// that cannot be judged, or a failed StepRule.
+func (m *Magus) Judge(ctx context.Context, step agent.Step) (types.GuardJudgment, error) {
+	req := guard.Request{Dir: step.Dir, Session: step.Session, Agent: step.Agent, Lease: types.JobLeaseFromContext(ctx)}
+	req.Authority, _ = ctx.Value(authorityKey{}).(string)
+	authority := guard.ResolveAuthority(ctx, guard.Dependencies{CacheDir: m.guardCacheDir, JobReader: m.jobReader}, req)
+	deps, err := m.guardDependenciesAt(ctx, authority)
+	if err != nil {
+		return types.GuardJudgment{}, err
+	}
+	return guard.JudgeStep(ctx, deps, req, step)
+}
+
 func (m *Magus) judge(ctx context.Context, req guard.Request) (types.GuardJudgment, error) {
 	req.Lease = types.JobLeaseFromContext(ctx)
 	req.Authority, _ = ctx.Value(authorityKey{}).(string)
@@ -102,6 +118,7 @@ func (m *Magus) guardDependenciesAt(ctx context.Context, authority guard.CallAut
 	deps.ModelTiers = func() *agent.ModelTierSet { return m.ModelTiers(ctx) }
 	deps.TierRule = m.spawnRule
 	deps.JobReader = m.jobReader
+	deps.Steps = m.steps
 	return deps, nil
 }
 

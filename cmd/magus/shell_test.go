@@ -1928,7 +1928,7 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 		Rule:       v.Rule, // the rule's catalogued name is pinned by the guard's own tests
 		Lease:      v.Lease,
 		LeaseFrom:  v.LeaseFrom,
-		Next:       v.Next,
+		NextSteps:       v.NextSteps,
 	}, v)
 }
 
@@ -1957,7 +1957,7 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 		Rule:       "workspace:command",
 		Lease:      v.Lease,
 		LeaseFrom:  v.LeaseFrom,
-		Next:       v.Next,
+		NextSteps:       v.NextSteps,
 	}, v)
 }
 

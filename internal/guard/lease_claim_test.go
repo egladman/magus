@@ -79,9 +79,9 @@ func TestServedClaimLinePassesTheGuardForTheWorker(t *testing.T) {
 		"session_id": "5d1c", "hook_event_name": "PreToolUse", "tool_name": "Write", "cwd": root,
 		"tool_input": map[string]any{"file_path": filepath.Join(root, "internal/commands/registry.go"), "content": "package x\n"},
 	})})
-	require.Len(t, write.Next, 1, "the refusal serves the apply line to the worker: %+v", write)
-	assert.Equal(t, line, write.Next[0].Run)
-	write.Next = nil
+	require.Len(t, write.NextSteps, 1, "the refusal serves the apply line to the worker: %+v", write)
+	assert.Equal(t, line, write.NextSteps[0].Run)
+	write.NextSteps = nil
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleLeaseClaim)), unworded(write))
 }
 

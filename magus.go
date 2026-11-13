@@ -33,6 +33,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/log/attr"
@@ -206,6 +207,8 @@ type Magus struct {
 	cacheBackend types.CacheBackend
 	// jobReader is WithJobReader's; nil reads the job store.
 	jobReader types.JobReader
+	// steps is WithStepRows' and WithStepRule's, checked at Open.
+	steps guard.StepTable
 }
 
 // env reads key from the environment WithEnv gave, "" for a key unset there or with no
@@ -608,8 +611,16 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if vo.JobReaderGiven && vo.JobReader == nil {
 		return nil, errors.New("magus: WithJobReader was given a nil reader, so pass a reader, or leave the option out to read the job store")
 	}
+	rules := make([]guard.StepRule, len(vo.StepRules))
+	for i, r := range vo.StepRules {
+		rules[i] = guard.StepRule(r)
+	}
+	steps, err := guard.NewStepTable(vo.StepRows, rules)
+	if err != nil {
+		return nil, fmt.Errorf("magus: WithStepRows: %w", err)
+	}
 	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.SpawnRule, cacheBackend: vo.CacheBackend,
-		environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine, jobReader: vo.JobReader}
+		environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine, jobReader: vo.JobReader, steps: steps}
 	if vo.Stderr != nil {
 		m.stderr = vo.Stderr
 	}

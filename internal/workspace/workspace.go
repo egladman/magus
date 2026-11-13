@@ -16,6 +16,7 @@
 package workspace
 
 import (
+	"context"
 	"io"
 
 	"github.com/egladman/magus/broker"
@@ -74,6 +75,9 @@ type Load struct {
 	// in place of the job store.
 	JobReader      types.JobReader
 	JobReaderGiven bool
+	// StepRows and StepRules are what Magus.Judge judges a step by.
+	StepRows  []agent.StepRow
+	StepRules []func(context.Context, agent.StepRequest) (types.GuardVerdict, error)
 }
 
 // Option configures Open or Inspect.

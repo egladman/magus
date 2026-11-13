@@ -10,6 +10,7 @@
 {"name":"Command","reason":"value type a Run or query result returns to the caller"}
 {"name":"ComposeGraph","reason":"entry point a Go program calls to load or inspect a workspace without the CLI"}
 {"name":"ComposeOption","reason":"option type taken by Open, Run, Plan or a declaration"}
+{"name":"ContextWithAuthority","reason":"the revision a judgment with no job row reads the approved rules at (ADR 0045)"}
 {"name":"Drift","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"DurationPredictor","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"DurationPredictor.PredictDuration","reason":"duration prediction contract the planner calls"}
@@ -97,6 +98,7 @@
 {"name":"Magus.ImportCache","reason":"cache, sandbox and lock state the CLI reports or manages"}
 {"name":"Magus.InvocationByID","reason":"run entry point or invocation record the CLI drives"}
 {"name":"Magus.InvocationEventsByID","reason":"run entry point or invocation record the CLI drives"}
+{"name":"Magus.Judge","reason":"guard verdict on any step an embedder's agent takes (ADR 0046)"}
 {"name":"Magus.JudgeCommand","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
 {"name":"Magus.JudgeWrite","reason":"guard verdicts and generated-file resolution for hooks and merge drivers"}
 {"name":"Magus.KnowledgeGraphHealthy","reason":"graph, plan and statistics query behind a CLI verb"}
@@ -196,6 +198,7 @@
 {"name":"SinkOption","reason":"option type taken by Open, Run, Plan or a declaration"}
 {"name":"SpawnRule","reason":"helper or hook the CLI, std or a test double needs from the root package"}
 {"name":"SpellCache","reason":"value type a Run or query result returns to the caller"}
+{"name":"StepRule","reason":"an embedder's own rule over the steps Judge judges (ADR 0046)"}
 {"name":"SymbolOccurrenceRead","reason":"value type a Run or query result returns to the caller"}
 {"name":"SymbolRefresh","reason":"value type a Run or query result returns to the caller"}
 {"name":"SymbolRefreshBudget","reason":"constant a caller compares against or pins"}
@@ -220,6 +223,7 @@
 {"name":"WithGate","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithGraphHistory","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithGraphInput","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithJobReader","reason":"functional option that brings an embedder's own rows to the lease rules (ADR 0045)"}
 {"name":"WithMetricsCollection","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithObserver","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithOutputs","reason":"functional option that configures a Run, a Target or a Project declaration"}
@@ -235,6 +239,8 @@
 {"name":"WithSpellFilter","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithStderr","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithStep","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithStepRows","reason":"functional option that declares the step kinds Judge judges (ADR 0046)"}
+{"name":"WithStepRule","reason":"functional option that adds an embedder's rule to Judge (ADR 0046)"}
 {"name":"WithTarget","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithTargetResults","reason":"functional option that configures a Run; the SDK examples read each finished target through it"}
 {"name":"WithUpstream","reason":"functional option that configures a Run, a Target or a Project declaration"}

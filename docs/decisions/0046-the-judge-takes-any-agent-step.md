@@ -11,7 +11,7 @@ date: 2026-11-12
 
 ## Context
 
-Eli said on 2026-11-12 that the judgment mechanism will be used for far more than shell
+Eli said on 2026-11-12 that the judgment mechanism serves far more than shell
 commands and file writes. An embedder in an agent framework, or any Go agent loop, must
 be able to ask it about any step its agent takes. This record is written before any
 code because it changes the root package's exported API. The evidence was read from this
@@ -117,7 +117,7 @@ decided and, where a command remedies it, the next step.
 
 ### 3. A kind is declared once, and an undeclared kind is refused
 
-The embedder declares each kind of step it will ask about, once, when it opens the
+The embedder declares each kind of step it asks about, once, when it opens the
 judge. A declaration is a row of data: the kind, the name (empty covers every name of
 that kind), the capabilities, and where in the input a built-in rule finds a path, a
 command or a spawn's description.
@@ -265,16 +265,18 @@ func WithStepRule(rule StepRule) Option
 | ---------------------------------------------------------------------------- | --------- |
 | `JudgeCommand`, `JudgeWrite` (`judge.go:25`, `:31`)                          | done      |
 | workspace rule seams `command`, `spawn`, `write`, `stop`                     | done      |
-| `agent.Step`, `agent.StepRow`, `agent.StepRequest`                           | proposed  |
-| `Magus.Judge`, `WithStepRows`; `RecordJudgment` takes a `Step`               | proposed  |
+| `agent.Step`, `agent.StepRow`, `agent.StepRequest`                           | done      |
+| `Magus.Judge`, `WithStepRows`                                                | done      |
+| `RecordJudgment` takes a `Step`                                              | proposed  |
 | `magus\guard.step(<kind>, <fun>)`                                            | proposed  |
-| `StepRule`, `WithStepRule`, beside the Buzz seam                             | proposed  |
-| an uncovered kind is an error when the rules load                            | proposed  |
-| `unjudged-step` replaces `unjudged-tool`; a mistyped location is a deny      | proposed  |
+| `StepRule`, `WithStepRule`                                                   | done      |
+| an uncovered kind is an error when the rules load                            | done      |
+| a mistyped location is a deny (`step-input`)                                 | done      |
+| `unjudged-step` replaces `unjudged-tool`                                     | proposed  |
 | the hook envelope and `magus shell` decode into a `Step`                     | proposed  |
-| `StepRow.InputSchema`; a mismatch is refused with the schema path            | proposed  |
-| `NextSteps []agent.Step` on the verdict: a deny suggests the step it judged   | proposed  |
-| `types.GuardJudgment.Next` (`types/guard_judgment.go:30`, JSON `next`) becomes `NextSteps` (`next_steps`): a deliberate break | proposed  |
+| `StepRow.InputSchema`; a mismatch is refused with the schema path            | done      |
+| `NextSteps []agent.Step` on the verdict: a deny suggests the step it judged  | proposed  |
+| `types.GuardJudgment.Next` (JSON `next`) becomes `NextSteps` (`next_steps`): a deliberate break | done      |
 | a typed Go struct or method per kind                                         | not built |
 | a verdict that changes the step, or a step that suspends the caller's loop   | not built |
 | judging a result after the step ran                                          | not built |
@@ -318,14 +320,14 @@ func WithStepRule(rule StepRule) Option
 
 ## Alternatives
 
-### Judge an Action, not a Step
+### Judge an action, not a step
 
 The first draft named the judged unit an Action. It lost because the word says nothing
 about where the unit sits: a job, an attempt and the thing done inside it are all
 actions. A Step is the lowest level, one thing the agent does during an attempt, and it
 need not be a tool call. Reopen if a unit arrives that no embedder can call a step.
 
-### Judge a Call
+### Judge a call
 
 The second draft named the unit a Call, because Mastra's own word for the intercepted
 unit is a tool call. It lost on Eli's call of 2026-11-12: step reads as what an agent
@@ -428,3 +430,34 @@ needs to hold the step itself. Reopen only if that refusal is reopened.
 - Is the hook path's kind named `tool`, or does each host tool keep only its name?
 
 ## Amendments
+
+### 2026-11-12: the Go door is built; the package points the other way
+
+`types` imports `types/agent` (`types/job.go`, `types/harness_contract.go`), so
+`types/agent` is the leaf, not the package above `types` that ADR 0039 assumed. What
+was built follows from that:
+
+- `types/agent` may import nothing in magus but `internal/json` and `types/enum`
+  (depguard's `types-pure-domain`). So `Step.APIVersion` is a string,
+  `magus.step/v1alpha1`, and `StepRow.Capabilities` holds `types.ToolCapability`
+  values as strings. The named type moves into `types/agent` with ADR 0039's capability
+  move.
+- `Judge` returns `types.GuardJudgment` and a `StepRule` returns `types.GuardVerdict`.
+  `agent.Judgment` and `agent.Verdict` cannot embed them from the leaf, so they wait on
+  ADR 0039's moves.
+- A spawns row fails the open: a spawn is still judged only on the hook path.
+- A Go rule's verdict reports under `step:<rule>`, or `step:<kind>` when it names none.
+
+The rows left proposed, and why:
+
+- `RecordJudgment` waits on ADR 0039 part 2. Until then `Judge` records on the trail
+  as `JudgeCommand` does.
+- `magus\guard.step` needs a registry seam, a generated `StepRequest` mirror (ADR 0035)
+  and the approved-copy load, which is its own change.
+- `unjudged-step` renames a rule the shipped harness spells, `hack/policy` and the
+  guides name. `Judge` denies an undeclared kind under `unjudged-tool` until then.
+- The hook envelope and `magus shell` keep their shape-first decode until the rename
+  and the Buzz seam land.
+- `NextSteps []agent.Step` can sit on `types.GuardJudgment`, since `types` imports the
+  leaf. The guard's remedy rules read `types.NextStep` throughout, and moving them is
+  its own change.

@@ -634,7 +634,7 @@ func (s *LeasedNestedSpawnSuite) check(v types.GuardJudgment, decision, rule, re
 	}
 	want := types.GuardJudgment{APIVersion: v.APIVersion, Decision: decision, Rule: rule,
 		LeaseFrom: v.LeaseFrom}
-	v.Reason, v.Next = "", nil
+	v.Reason, v.NextSteps = "", nil
 	s.Equal(want, v)
 }
 

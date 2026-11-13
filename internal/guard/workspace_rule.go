@@ -488,7 +488,7 @@ func applyWorkspaceAnswer(verdict types.GuardJudgment, decided string, asked rul
 	}
 	switch {
 	case answer.Decision == types.GuardDeny:
-		return types.GuardJudgment{APIVersion: verdict.APIVersion, Decision: decisionDeny, Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, Next: asked.next}, asked.by
+		return types.GuardJudgment{APIVersion: verdict.APIVersion, Decision: decisionDeny, Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, NextSteps: asked.next}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionPass:
 		return types.GuardJudgment{APIVersion: verdict.APIVersion, Decision: decisionAdvise, Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionAdvise:

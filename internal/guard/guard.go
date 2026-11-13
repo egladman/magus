@@ -197,6 +197,9 @@ type Dependencies struct {
 	// JobReader is what the lease rules read job rows through, nil for the
 	// job store of the checkout judged. An SDK caller passes its own.
 	JobReader types.JobReader
+	// Steps is the step rows and Go step rules JudgeStep reads.
+	// Zero denies every step as undeclared.
+	Steps StepTable
 
 	// scope is where the judged call runs. Judge fills it from the location it resolved,
 	// so Evaluate can tell a path outside the workspace without reading anything itself.
@@ -1030,7 +1033,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		if v, refused := pending.hold(deps, ShellVerdict{Deny: d.Say, Why: d.Why, Rule: denyRule{Name: rule}}); refused {
 			verdict.Decision, verdict.Reason, verdict.Context = decisionDeny, v.Deny, ""
 			verdict.Rule = string(rule)
-			verdict.Next = d.Next
+			verdict.NextSteps = d.Next
 			whys[v.Deny] = v.Why
 		}
 	}
@@ -1662,11 +1665,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			if len(next) > 0 {
 				verdict.Reason, why = remedy.Lead, remedy.Why
 			}
-		case len(verdict.Next) > 0:
+		case len(verdict.NextSteps) > 0:
 			// The workspace seam's own deny, which words its reason without the command.
-			next = servableRemedy(ctx, deps, req, who, callDir, location.workspace, standing, actingLease, verdict.Next)
+			next = servableRemedy(ctx, deps, req, who, callDir, location.workspace, standing, actingLease, verdict.NextSteps)
 		}
-		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
+		verdict.Reason, verdictRef, verdict.NextSteps = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
 	}
 	if verdict.Decision == decisionPass && unplaced != "" && !req.Observe {
 		verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, unplaced, string(advisorySpawnUnplaced)

@@ -191,7 +191,7 @@ func TestLoadFailureDenyNamesThePlacementForALeasedWorker(t *testing.T) {
 	want := verdictWithRule(decisionDeny, string(denyRuleStaleBinary))
 	next, ok := placementNext(root, denyRuleStaleBinary, "lease-a")
 	require.True(t, ok)
-	want.Next = []types.NextStep{next}
+	want.NextSteps = []types.NextStep{next}
 	assert.Equal(t, want, unworded(v))
 	assert.Contains(t, v.Reason, "ask the main session to place a ./magus that loads this workspace")
 	assert.NotContains(t, v.Reason, ward.RelinkAt(root))
@@ -430,7 +430,7 @@ func (s *JudgedShortSuite) TestALoadFailureWithNoRecordPassesAReadWithTheNote() 
 func (s *JudgedShortSuite) TestALoadFailureWithNoRecordDeniesAStateChange() {
 	ctx, _ := spawnFixture(s.T())
 	v := Judge(ctx, unloadedDeps(), Request{Input: "touch NOTES.md", Host: "claude-code", Session: "s1"})
-	s.Equal(verdictOf(decisionDeny, string(denyRuleStaleBinary)), judgedAs(v))
+	s.Equal(ruledAs(decisionDeny, string(denyRuleStaleBinary)), judgedAs(v))
 }
 
 // A spawn is gated; a continuation of a child already running is not.

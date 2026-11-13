@@ -1717,7 +1717,7 @@ func (s *ExitedHolderBindingSuite) TestEditIntoTheJobCheckoutAfterOwnExitIsDenie
 
 // withoutVolatile drops the fields of v that vary between runs.
 func withoutVolatile(v types.GuardJudgment) types.GuardJudgment {
-	v.APIVersion, v.Reason, v.Context, v.LeaseFrom, v.Next = "", "", "", "", nil
+	v.APIVersion, v.Reason, v.Context, v.LeaseFrom, v.NextSteps = "", "", "", "", nil
 	return v
 }
 

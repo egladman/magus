@@ -555,12 +555,12 @@ func (s *remedyContractSuite) contract(rule denyRuleName, cases ...remedyCase) {
 				v := Judge(ctx, deps, call)
 				if role.call.Host == "" {
 					require.Equal(t, string(rule), v.Rule, "%q:\n%s", call.Input, v.Reason)
-					require.NotEmpty(t, v.Next, "unbound, %q serves its remedy", call.Input)
+					require.NotEmpty(t, v.NextSteps, "unbound, %q serves its remedy", call.Input)
 					if want != "" {
-						assert.Equal(t, want, v.Next[0].Run)
+						assert.Equal(t, want, v.NextSteps[0].Run)
 					}
 				}
-				for _, n := range v.Next {
+				for _, n := range v.NextSteps {
 					assert.Equal(t, hint.DenyRemedyPrefix+string(rule), n.ID)
 					assertRunsOnTheTree(t, n.Run)
 					gradeServed(t, ctx, deps, call, role.name, n.ID, n.Run)
@@ -672,9 +672,9 @@ func (s *remedyContractSuite) TestLeaseClaim() {
 	})
 	v := Judge(ctx, deps, write)
 	require.Equal(t, string(denyRuleLeaseClaim), v.Rule, v.Reason)
-	require.Len(t, v.Next, 1)
-	assertRunsOnTheTree(t, v.Next[0].Run)
-	gradeServed(t, ctx, deps, worker, "lease holder", v.Next[0].ID, v.Next[0].Run)
+	require.Len(t, v.NextSteps, 1)
+	assertRunsOnTheTree(t, v.NextSteps[0].Run)
+	gradeServed(t, ctx, deps, worker, "lease holder", v.NextSteps[0].ID, v.NextSteps[0].Run)
 }
 
 func (s *remedyContractSuite) TestMagusTimeout() {

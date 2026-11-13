@@ -86,7 +86,7 @@ func (s *StopUnfiledSuite) subagent() map[string]any {
 
 func (s *StopUnfiledSuite) TestAnUnfiledLeasedChildIsRefusedNamingTheExit() {
 	v := s.stop(s.row(), "SubagentStop", s.subagent())
-	s.Equal(verdictOf(decisionDeny, string(denyRuleStopUnfiled)), judgedAs(v))
+	s.Equal(ruledAs(decisionDeny, string(denyRuleStopUnfiled)), judgedAs(v))
 	s.Contains(v.Reason, "`magus job exit spec/worker --stdin`")
 	s.Contains(v.Reason, "magus job exit --schema")
 }
@@ -103,7 +103,7 @@ func (s *StopUnfiledSuite) TestTheSecondStopPassesAndSaysSo() {
 	fields := s.subagent()
 	fields["stop_hook_active"] = true
 	v := s.stop(s.row(), "SubagentStop", fields)
-	s.Equal(verdictOf(decisionAdvise, string(denyRuleStopUnfiled)), judgedAs(v))
+	s.Equal(ruledAs(decisionAdvise, string(denyRuleStopUnfiled)), judgedAs(v))
 	s.Contains(v.Context, "`magus job wait spec/worker`")
 }
 

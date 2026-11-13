@@ -286,7 +286,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 				Decision:   "deny",
 				Reason: fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared.\nNext: %s",
 					refusal.err.Error(), refusal.next.Run),
-				Next: []types.NextStep{refusal.next},
+				NextSteps: []types.NextStep{refusal.next},
 			}
 			if err := writeGuardVerdict(out, opts, verdict); err != nil {
 				return err

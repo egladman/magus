@@ -66,9 +66,9 @@ func shortDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyRu
 // verdict and the ref, and is the verdict's only served next.
 func servedDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyRuleName, say string, next types.NextStep) string {
 	t.Helper()
-	require.Len(t, v.Next, 1, v.Reason)
-	assert.Equal(t, next, v.Next[0])
-	v.Next = nil
+	require.Len(t, v.NextSteps, 1, v.Reason)
+	assert.Equal(t, next, v.NextSteps[0])
+	v.NextSteps = nil
 	assert.Equal(t, verdictWithRule(decisionDeny, string(rule)), unworded(v))
 	shown, cited, ok := strings.Cut(v.Reason, "\ndetails: ")
 	require.True(t, ok, v.Reason)
@@ -373,7 +373,7 @@ func TestBootstrapNamesTheMissingPlacementScriptToAWorker(t *testing.T) {
 	worker := Judge(ctx, strict(testDependencies()), Request{Input: line, Host: "claude-code", Session: "s1", Lease: "lease-a"})
 	assert.Equal(t, decisionDeny, worker.Decision)
 	assert.Contains(t, worker.Reason, "no script serves "+placementSituation)
-	assert.Empty(t, worker.Next)
+	assert.Empty(t, worker.NextSteps)
 }
 
 // Over a ./magus of another contract the bootstrap is refused for anyone,
@@ -789,7 +789,7 @@ func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
 	want := verdictWithRule(decisionDeny, string(denyRuleStaleBinary))
 	next, ok := placementNext(root, denyRuleStaleBinary, "lease-a")
 	require.True(t, ok)
-	want.Next = []types.NextStep{next}
+	want.NextSteps = []types.NextStep{next}
 	assert.Equal(t, want, unworded(worker))
 	assert.Contains(t, worker.Reason, "ask the main session to place a ./magus")
 	assert.NotContains(t, worker.Reason, ward.RelinkAt(root))

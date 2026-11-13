@@ -53,8 +53,8 @@ func verdictWithRule(decision, rule string) types.GuardJudgment {
 	return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decision, Rule: rule}
 }
 
-// verdictOf is the decision and rule alone, the shape judgedAs keeps.
-func verdictOf(decision, rule string) types.GuardJudgment {
+// ruledAs is the decision and rule alone, the shape judgedAs keeps.
+func ruledAs(decision, rule string) types.GuardJudgment {
 	return types.GuardJudgment{Decision: decision, Rule: rule}
 }
 
@@ -1105,7 +1105,7 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 		Rule:       string(denyRuleOutputRedirect),
 		Lease:      v.Lease, // follows the environment the test ran in
 		LeaseFrom:  v.LeaseFrom,
-		Next:       []types.NextStep{want},
+		NextSteps:       []types.NextStep{want},
 	}, v, "one line plus the next and the verdict ref")
 
 	assert.Equal(t, "deny-output-redirect", servedNextPreauthorizes(hint.NewGate(cacheDir, ""), want.Run))
@@ -1134,8 +1134,8 @@ func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 	assert.NotContains(t, leased.Reason, "next:")
 
 	unbound := Judge(ctx, deps, Request{Input: piped})
-	require.Len(t, unbound.Next, 1)
-	assert.Equal(t, "magus affected ci -s", unbound.Next[0].Run)
+	require.Len(t, unbound.NextSteps, 1)
+	assert.Equal(t, "magus affected ci -s", unbound.NextSteps[0].Run)
 }
 
 // TestEveryJudgedDecisionNamesItsRule reads Judge itself: a statement setting a verdict to

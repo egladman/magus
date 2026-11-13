@@ -473,6 +473,7 @@ guard-rule stage-all
 guard-rule stage-classify
 guard-rule stale-binary
 guard-rule stall
+guard-rule step-input
 guard-rule stop-unfiled
 guard-rule symbol-search
 guard-rule throwaway-copy

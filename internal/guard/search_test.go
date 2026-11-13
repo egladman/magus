@@ -253,7 +253,7 @@ func TestJudgeResolvesSearchPathsFromTheCallCwd(t *testing.T) {
 	v := Judge(ctx, deps, Request{Input: envelope})
 
 	shape := verdictWithRule("deny", string(denyRuleSearchTranslation))
-	shape.Next = v.Next // the served remedy is the search rule's own, tested there
+	shape.NextSteps = v.NextSteps // the served remedy is the search rule's own, tested there
 	assert.Equal(t, shape, unworded(v))
 	assert.Contains(t, v.Reason, "explain file:internal/api/handler.go")
 }
