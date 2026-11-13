@@ -3,11 +3,13 @@
 - **Breaking: a job's write, read, deny and soft paths nest under `paths`.** A
   `magus job fork --stdin` or `magus job apply` record names
   `"paths": {"write": [...], "read": [...], "deny": [...]}` in place of `write_paths`,
-  `read_paths` and `deny_paths`, and a record naming a flat key is refused as an unknown
-  member. `magus ls jobs -o json` and `magus describe job -o json` print `paths.write`,
-  `paths.read`, `paths.deny` and `paths.soft`, and a problem names its field the same
-  way (`paths.write[2]`). The flags keep their names: `--write-paths`, `--read-paths`,
-  `--deny-paths`, `--add-write-path` and `--release-write-path`.
+  `read_paths` and `deny_paths`. A record naming a flat key is refused as an unknown
+  member.
+- **Breaking: job JSON prints `paths.write`, `paths.read`, `paths.deny` and
+  `paths.soft`.** So do `magus ls jobs -o json` and `magus describe job -o json`, and a
+  problem names its field the same way (`paths.write[2]`). The flags keep their names:
+  `--write-paths`, `--read-paths`, `--deny-paths`, `--add-write-path` and
+  `--release-write-path`.
 - **Breaking: the stored `batch.magus/v1alpha1` row nests them as `spec.paths`.** Store
   migration 7 moves `spec.writePaths`, `spec.readPaths`, `spec.denyPaths` and
   `spec.softPaths` under `spec.paths`. An older magus cannot read a store this one
