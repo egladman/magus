@@ -51,7 +51,7 @@ func render() (string, error) {
 	})
 
 	fmt.Fprintf(&b, "# Configuration\n\n")
-	fmt.Fprintf(&b, "magus resolves configuration from these layers, highest precedence first: a CLI flag, a `MAGUS_*` environment variable, a `magus.yaml` in the working directory below the workspace root, the `magus.yaml` at the workspace root, then the user config at `$XDG_CONFIG_HOME/magus/magus.yaml`. This page is the inventory of config keys a flag or an environment variable can set, each with its `magus.yaml` path, environment variable, CLI flag, and value type. Keys that only a file sets, such as `knowledge.workspaces` in the user config, are documented where they are used.\n\n")
+	fmt.Fprintf(&b, "magus resolves configuration from these layers, highest precedence first: a CLI flag, a `MAGUS_*` environment variable, a `magus.yaml` in the working directory below the workspace root, the `magus.yaml` at the workspace root, then the user config at `$XDG_CONFIG_HOME/magus/magus.yaml`. This page is the inventory of config keys, each with its `magus.yaml` path, the environment variable and CLI flag that also set it, and its value type. A key a file alone sets says file only; `<name>` in a key stands for the name of a list entry.\n\n")
 
 	// Group fields by their top-level yaml section (the segment before the first
 	// "."), so the reference reads section by section.
@@ -75,7 +75,7 @@ func render() (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("label setting %s: %w", f.YamlPath, err)
 			}
-			rows = append(rows, []string{md.Code(f.YamlPath), md.Code(f.EnvVar), flagCell(f.Flag), label})
+			rows = append(rows, []string{md.Code(f.YamlPath), envCell(f.EnvVar), flagCell(f), label})
 		}
 		b.WriteString(md.Table([]string{"Config key", "Environment variable", "Flag", "Type"}, nil, rows))
 	}
@@ -93,13 +93,26 @@ func topSection(yamlPath string) string {
 	return "general"
 }
 
+// fileOnly marks a cell for a key only a config file sets.
+const fileOnly = "_(file only)_"
+
+func envCell(name string) string {
+	if name == "" {
+		return fileOnly
+	}
+	return md.Code(name)
+}
+
 // flagCell renders the CLI flag for a table cell: the long form (plus short when
 // present), or an italic "(env only)" for fields with no flag.
-func flagCell(f configuration.FlagNames) string {
-	if f.Long == "" {
+func flagCell(s configuration.Setting) string {
+	f := s.Flag
+	switch {
+	case s.EnvVar == "":
+		return fileOnly
+	case f.Long == "":
 		return "_(env only)_"
-	}
-	if f.Short != "" {
+	case f.Short != "":
 		return fmt.Sprintf("`-%s`, `--%s`", f.Short, f.Long)
 	}
 	return fmt.Sprintf("`--%s`", f.Long)
@@ -108,7 +121,7 @@ func flagCell(f configuration.FlagNames) string {
 // kindLabel maps a setting's command.Kind to a reader-facing type name.
 func kindLabel(k command.Kind) (string, error) {
 	switch k {
-	case command.String:
+	case command.String, command.Text:
 		return "string", nil
 	case command.Int:
 		return "int", nil
@@ -122,6 +135,8 @@ func kindLabel(k command.Kind) (string, error) {
 		return "duration", nil
 	case command.StringList:
 		return "list _(comma-separated, env only)_", nil
+	case command.StringMap:
+		return "map", nil
 	}
 	return "", fmt.Errorf("setting kind %q has no label", k)
 }

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -1150,53 +1149,13 @@ type Report struct {
 // reported as unknown by doctor and can draw a did-you-mean refusal.
 // TestEveryReadMagusEnvVarIsRegistered fails when shipped code reads a name it lacks.
 func EnvVars() ([]command.Env, error) {
-	defaults := reflect.ValueOf(Defaults())
 	out := make([]command.Env, 0, len(settings.Settings)+len(envOnly))
 	for _, f := range settings.Settings {
-		text, err := defaultText(defaults, f.GoPath)
-		if err != nil {
-			return nil, err
+		if f.EnvVar != "" {
+			out = append(out, command.Env{Name: f.EnvVar, Key: f.YamlPath, Default: f.Default, Doc: f.Doc})
 		}
-		out = append(out, command.Env{Name: f.EnvVar, Key: f.YamlPath, Default: text, Doc: f.Doc})
 	}
 	return append(out, envOnly...), nil
-}
-
-// defaultText renders the field at goPath in defaults, or "" for a zero value.
-// A path Config lacks means the generated schema is stale.
-func defaultText(defaults reflect.Value, goPath string) (string, error) {
-	v := defaults
-	for _, name := range strings.Split(goPath, ".") {
-		v = v.FieldByName(name)
-		if !v.IsValid() {
-			return "", fmt.Errorf("schema field %s is not in Config, regenerate internal/config/gen/settings", goPath)
-		}
-	}
-	if v.IsZero() {
-		return "", nil
-	}
-	if d, ok := v.Interface().(time.Duration); ok {
-		// 6h0m0s reads as 6h: drop each trailing zero unit.
-		s := d.String()
-		if trimmed, ok := strings.CutSuffix(s, "m0s"); ok {
-			s = trimmed + "m"
-		}
-		if trimmed, ok := strings.CutSuffix(s, "h0m"); ok {
-			s = trimmed + "h"
-		}
-		return s, nil
-	}
-	if v.Kind() == reflect.Pointer {
-		v = v.Elem()
-	}
-	if v.Kind() == reflect.Slice {
-		parts := make([]string, v.Len())
-		for i := range parts {
-			parts[i] = fmt.Sprint(v.Index(i).Interface())
-		}
-		return strings.Join(parts, ","), nil
-	}
-	return fmt.Sprint(v.Interface()), nil
 }
 
 // envOnly are the variables no config field carries, so the schema cannot list them:

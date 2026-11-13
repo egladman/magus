@@ -7,7 +7,7 @@ export fun bindingsGenerateFigure() > figure\Figure !> any {
     final utils = magus\graph().dir("cmd/magus-utils");
     final emit = magus\graph().dir("internal/generate/emit");
     final godecl = magus\graph().dir("internal/generate/godecl");
-    final cfgen = magus\graph().dir("internal/config/generate");
+    final cfgen = magus\graph().dir("libs/clikit/generate");
     final buzzgen = magus\graph().dir("libs/gopherbuzz/buzzgen");
     final gen = magus\graph().dir("internal/interp/bindings/gen");
     final bindings = magus\graph().dir("internal/interp/bindings");

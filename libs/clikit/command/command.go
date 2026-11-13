@@ -77,6 +77,14 @@ const (
 	// empty and declares no Default.
 	StringList Kind = "string-list"
 
+	// Text is a setting whose type reads its own value as an
+	// encoding.TextUnmarshaler. No command Flag declares it.
+	Text Kind = "text"
+
+	// StringMap is a string-to-string map only a config file sets. No
+	// command Flag declares it.
+	StringMap Kind = "string-map"
+
 	// Custom is a flag declared here and bound by hand: a repeatable flag.Value, or
 	// a mode selector read from argv before any FlagSet exists. The generator emits
 	// only its name constant, since a second binding would panic as redefined.

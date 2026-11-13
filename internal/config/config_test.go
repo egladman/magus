@@ -35,18 +35,17 @@ func TestDefaults_ARunWaitsHalfAnHourForTheBudget(t *testing.T) {
 	assert.Equal(t, 30*time.Minute, Defaults().BudgetWait)
 }
 
-func TestDefaultTextNamesASchemaFieldConfigLacks(t *testing.T) {
-	t.Parallel()
-	_, err := defaultText(reflect.ValueOf(Defaults()), "Cache.NoSuchField")
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "schema field Cache.NoSuchField is not in Config")
-}
-
-func TestEnvVarsListsEverySchemaField(t *testing.T) {
+func TestEnvVarsListsEverySchemaVariable(t *testing.T) {
 	t.Parallel()
 	docs, err := EnvVars()
 	require.NoError(t, err)
-	assert.Len(t, docs, len(settings.Settings)+len(envOnly))
+	variables := 0
+	for _, f := range settings.Settings {
+		if f.EnvVar != "" {
+			variables++
+		}
+	}
+	assert.Len(t, docs, variables+len(envOnly))
 }
 
 func TestJobsClaimBounds(t *testing.T) {
@@ -409,13 +408,29 @@ func (s *SettingsSuite) TestTableIsNotEmpty() {
 
 func (s *SettingsSuite) TestEveryEnvVarStartsWithMAGUS() {
 	for _, f := range settings.Settings {
-		s.Truef(strings.HasPrefix(f.EnvVar, "MAGUS_"), "%s: EnvVar %q", f.GoPath, f.EnvVar)
+		if f.EnvVar != "" {
+			s.Truef(strings.HasPrefix(f.EnvVar, "MAGUS_"), "%s: EnvVar %q", f.GoPath, f.EnvVar)
+		}
 	}
+}
+
+func (s *SettingsSuite) TestAFileOnlyKeyHasNoEnvVar() {
+	for _, f := range settings.Settings {
+		if f.YamlPath == "required_version" {
+			s.Empty(f.EnvVar)
+			s.Empty(f.Flag.Long)
+			return
+		}
+	}
+	s.Fail("no required_version setting: the generator lost cli:\"-\" keys")
 }
 
 func (s *SettingsSuite) TestNoEnvVarRepeats() {
 	seen := make(map[string]string, len(settings.Settings))
 	for _, f := range settings.Settings {
+		if f.EnvVar == "" {
+			continue
+		}
 		prev, ok := seen[f.EnvVar]
 		s.Falsef(ok, "%s names both %s and %s", f.EnvVar, prev, f.GoPath)
 		seen[f.EnvVar] = f.GoPath

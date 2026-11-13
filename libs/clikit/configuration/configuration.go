@@ -14,16 +14,21 @@ type FlagNames struct {
 	Short string // e.g. "c"; empty when no short was declared
 }
 
-// Setting is one scalar config field exposed as a CLI flag and an
-// environment variable.
+// Setting is one value a program reads from its config file, an environment
+// variable or a flag. Each source it lacks is empty.
 type Setting struct {
-	GoPath   string    // "Cache.Dir"
-	YamlPath string    // "cache.dir"
-	EnvVar   string    // "MAGUS_CACHE_DIR"
-	Flag     FlagNames // long + optional short; Long empty means env-only
+	GoPath   string    // "Cache.Dir"; empty when no struct field holds it
+	YamlPath string    // "cache.dir"; empty when no config key sets it
+	EnvVar   string    // "MAGUS_CACHE_DIR"; empty when no variable sets it
+	Flag     FlagNames // long + optional short; Long empty means no flag
 	Kind     command.Kind
 	Usage    string // one-line description for flag.Usage
 	Doc      string // the field's first doc paragraph
+	Default  string // the value unset reads as; empty when zero
+
+	// Floor lets the variable raise a Text value and never lower it, by
+	// the type's WeakerThan: a value a parent hands its children.
+	Floor bool
 }
 
 // String returns a single-line summary suitable for log output and %v

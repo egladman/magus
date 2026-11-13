@@ -50,7 +50,9 @@ var inheritedEnv = map[string]bool{"MAGUS_DAEMON_SOCKET": true}
 var registeredEnv = sync.OnceValue(func() map[string]bool {
 	out := make(map[string]bool, len(settings.Settings)+len(envOnly))
 	for _, f := range settings.Settings {
-		out[f.EnvVar] = true
+		if f.EnvVar != "" {
+			out[f.EnvVar] = true
+		}
 	}
 	for _, d := range envOnly {
 		out[d.Name] = true
