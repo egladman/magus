@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -69,7 +70,7 @@ func TestPathsNestedSuite(t *testing.T) { suite.Run(t, new(pathsNestedSuite)) }
 // spec is the spec pathsNested makes of a stored entry's spec.
 func (s *pathsNestedSuite) spec(spec string) map[string]json.RawMessage {
 	var e migrate.Entry
-	s.Require().NoError(json.Unmarshal([]byte(`{"metadata":{"name":"a"},"spec":`+spec+`}`), &e))
+	s.Require().NoError(json.Unmarshal(fmt.Appendf(nil, `{"metadata":{"name":"a"},"spec":%s}`, spec), &e))
 	got, err := pathsNested(e)
 	s.Require().NoError(err)
 	var out map[string]json.RawMessage

@@ -372,7 +372,7 @@ func (r *clientReader) jobLine(op string, idNode, opts ast.Node) {
 		if !ok {
 			out = append(out, "opts="+unreadValue)
 		} else {
-			fields := optsFields("", m)
+			fields := renderedFields("", m)
 			slices.Sort(fields)
 			out = append(out, fields...)
 		}
@@ -380,9 +380,9 @@ func (r *clientReader) jobLine(op string, idNode, opts ast.Node) {
 	r.lines = append(r.lines, strings.Join(out, " "))
 }
 
-// optsFields renders each key of m as key=value. A nested map renders its
+// renderedFields renders each key of m as key=value. A nested map renders its
 // keys under the parent's, as paths.write, the spelling a rule reads.
-func optsFields(prefix string, m *ast.MapExpr) []string {
+func renderedFields(prefix string, m *ast.MapExpr) []string {
 	fields := make([]string, 0, len(m.Keys))
 	for i, k := range m.Keys {
 		key, ok := mapKey(k)
@@ -396,7 +396,7 @@ func optsFields(prefix string, m *ast.MapExpr) []string {
 			continue
 		}
 		if nested, ok := m.Values[i].(*ast.MapExpr); ok {
-			fields = append(fields, optsFields(key+".", nested)...)
+			fields = append(fields, renderedFields(key+".", nested)...)
 			continue
 		}
 		value, ok := literalValue(m.Values[i])

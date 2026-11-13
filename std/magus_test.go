@@ -563,7 +563,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 
 	got, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"state": "pass"}))
 	require.NoError(t, err)
-	assert.Equal(t, types.StatePass, got.State) //nolint:fieldwise // a stored job row carries store-stamped schema, origin, checkout root and timestamps this test does not construct
+	assert.Equal(t, types.StatePass, got.State)
 	assert.Equal(t, "the declared goal", got.Instructions(), "the state advance must not erase the row")
 	assert.Equal(t, []string{"internal/job"}, got.Paths.Write)
 	require.NotNil(t, got.Check, "the state advance must not erase the check")
