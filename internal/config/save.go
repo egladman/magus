@@ -288,4 +288,3 @@ func Init(j stamp.Judge, path string, force bool) (bool, error) {
 	}
 	return true, nil
 }
-
