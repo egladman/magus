@@ -340,9 +340,10 @@ func ParseLeaseCheck(s string) (LeaseCheck, error) {
 // ParseLeaseRunLine reads a rendered `[magus] run <target> <project> [-- args]` back into a
 // record.
 //
-// compat(until: no client still sends a rendered validation line; observe:
-// no archived record carries `validation` without `check`): jobs declared
-// this line before the check record existed.
+// compat(until: no client still sends a rendered validation line): jobs
+// declared it before the check record existed. Observe it by grepping the
+// ledger archives under the per-repository state dir for a record with
+// `validation` and no `check`.
 func ParseLeaseRunLine(s string) (LeaseCheck, error) {
 	words := strings.Fields(s)
 	if len(words) > 0 && words[0] != "run" && words[0] != "buzz" {
@@ -1004,7 +1005,9 @@ type JobDenial struct {
 // It is a DECLARATION and not a merge: an omitted field is cleared rather than
 // kept. magus\workspace().putJob does the opposite (see job.PutMerge).
 //
-// JSON only: decoded from stdin and never emitted, so no yaml tags.
+// JSON only: decoded from stdin and never emitted, so no yaml tags. The strict
+// decoder would refuse an old client's job as an unknown member, so the legacy
+// spellings of the path fields are read.
 type Declaration struct {
 	// Schema is the job shape this record is written in. The version is
 	// required, and one newer than this magus is rejected by name. See
@@ -1054,9 +1057,9 @@ type Declaration struct {
 	// checkout's revision when it names none.
 	// The job owns it: see [JobWorktree]. Empty works wherever the job is taken.
 	Checkout string `json:"checkout,omitempty" schema:"abspath"`
-	// LegacyWritePaths is write_paths' pre-rename spelling, never emitted.
-	// compat(until: no archive or trail holds owned_paths, focus or
-	// forbidden_paths): they are still read. Naming both spellings is refused.
+	// compat(until: no client or stored ledger still sends owned_paths, focus
+	// or forbidden_paths): see Declaration. Observe it by grepping the
+	// leases-*.json archives and the trail for the old keys.
 	LegacyWritePaths []string `json:"owned_paths,omitempty"`
 	// LegacyDenyPaths is the pre-rename spelling of deny_paths. compat: see LegacyWritePaths.
 	LegacyDenyPaths []string `json:"forbidden_paths,omitempty"`
@@ -1074,8 +1077,9 @@ type Declaration struct {
 	ReadOnly bool `json:"read_only,omitempty"`
 	// Validation is the check as a rendered `magus run` line.
 	//
-	// compat(until: no archived record carries `validation` without `check`):
-	// it is parsed into Check. Sending both is refused rather than merged.
+	// compat(until: no client still sends a rendered validation line): it is
+	// parsed into Check. Observe it by grepping the ledger archives for a
+	// record with `validation` and no `check`.
 	Validation string `json:"validation,omitempty"`
 	// Goals are what done means, graded by `magus job wait`. See [Job.Goals].
 	Goals []Goal `json:"goals,omitempty"`
