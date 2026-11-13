@@ -82,6 +82,75 @@ type ModelTierSet struct {
 	hosts      map[string][]string
 }
 
+// ModelTierState is the model-tier declaration a workspace holds: the root
+// magusfile's, none when it turned tiers off, or else the shipped default.
+// The zero value holds no declaration and no default. Safe for concurrent use.
+type ModelTierState struct {
+	mu  sync.Mutex
+	set *ModelTierSet
+	// declared tells a magusfile's nil (tiers off) apart from no
+	// declaration, which leaves the tiers to build.
+	declared bool
+	build    func() (*ModelTierSet, error)
+}
+
+// Declare records a magusfile's declaration, replacing one an earlier
+// evaluation of the same magusfile recorded. nil records that it turned
+// model tiers off, so the default does not apply.
+func (s *ModelTierState) Declare(set *ModelTierSet) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.set, s.declared = set, true
+}
+
+// SetDefault records how to build the declaration a workspace gets when its
+// magusfile declares none. Nothing builds it until [ModelTierState.Tiers].
+func (s *ModelTierState) SetDefault(build func() (*ModelTierSet, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.build = build
+}
+
+// Tiers returns the declaration, nil when tiers are off or nothing set a
+// default. A default that builds is kept. One that fails returns its error,
+// and the next call builds again.
+func (s *ModelTierState) Tiers() (*ModelTierSet, error) {
+	s.mu.Lock()
+	if s.declared || s.build == nil {
+		defer s.mu.Unlock()
+		return s.set, nil
+	}
+	build := s.build
+	s.mu.Unlock()
+
+	// Outside the lock: the build loads a Buzz module, which must not wait
+	// on this state. Racing callers build the same set; the first kept wins.
+	set, err := build()
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.declared {
+		s.set, s.declared = set, true
+	}
+	return s.set, nil
+}
+
+type modelTierStateKey struct{}
+
+// WithModelTierState returns ctx carrying s, the state a magusfile's
+// magus\modelTiers declares into.
+func WithModelTierState(ctx context.Context, s *ModelTierState) context.Context {
+	return context.WithValue(ctx, modelTierStateKey{}, s)
+}
+
+// ModelTierStateFromContext returns the state on ctx, or nil.
+func ModelTierStateFromContext(ctx context.Context) *ModelTierState {
+	s, _ := ctx.Value(modelTierStateKey{}).(*ModelTierState)
+	return s
+}
+
 // ModelTierDeclaration is the raw declaration a magusfile's Buzz enum and its mapping
 // functions produce. Bounds, Skills and each Hosts list carry one entry per case, by rank.
 type ModelTierDeclaration struct {

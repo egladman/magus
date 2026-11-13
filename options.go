@@ -13,7 +13,7 @@ import (
 // as rows. The lease a call puts on its context (types.WithJobLease) names the
 // row r answers for. Open fails on a nil r.
 func WithJobReader(r types.JobReader) Option {
-	return func(o *workspace.Load) { o.JobReader, o.JobReaderGiven = r, true }
+	return func(o workspace.Options) { l := o.Loading(); l.JobReader, l.JobReaderGiven = r, true }
 }
 
 // WithStepRows declares each kind of step Judge is asked about; a step no
@@ -21,7 +21,7 @@ func WithJobReader(r types.JobReader) Option {
 // is not inert when neither a built-in rule nor a StepRule judges it.
 // Repeated options add rows.
 func WithStepRows(rows ...agent.StepRow) Option {
-	return func(o *workspace.Load) { o.StepRows = append(o.StepRows, rows...) }
+	return sdkOption(func(o *options) { o.stepRows = append(o.stepRows, rows...) })
 }
 
 // StepRule judges a step Judge was asked about, after the built-in rules.
@@ -33,5 +33,5 @@ type StepRule func(ctx context.Context, req agent.StepRequest) (types.GuardVerdi
 // WithStepRule adds rule to the ones Judge runs, in the order given. Open
 // fails on a nil rule.
 func WithStepRule(rule StepRule) Option {
-	return func(o *workspace.Load) { o.StepRules = append(o.StepRules, rule) }
+	return sdkOption(func(o *options) { o.stepRules = append(o.stepRules, rule) })
 }

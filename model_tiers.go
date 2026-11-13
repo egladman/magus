@@ -2,9 +2,11 @@ package magus
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
@@ -12,11 +14,14 @@ import (
 
 // ModelTiers returns what the root magusfile declared with magus\modelTiers.
 // Else it returns the shipped declaration, and nil when it turned them off.
+// It is nil too when the shipped one does not build, logged as an error.
 func (m *Magus) ModelTiers(ctx context.Context) *typesagent.ModelTierSet {
-	if m.wsReg == nil {
+	set, err := m.modelTiers.Tiers()
+	if err != nil {
+		slog.With(attr.Component("magus")).ErrorContext(ctx, "the default model tier declaration does not load", attr.Error(err))
 		return nil
 	}
-	return m.wsReg.ModelTiers(ctx)
+	return set
 }
 
 // ModelTierMatrix returns the magus\modelTier function the root magusfile

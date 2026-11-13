@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
@@ -366,4 +367,91 @@ func (s *modelTierSuite) TestTheForkLineNamesTheSourceAlone() {
 func (s *modelTierSuite) TestTheForkLineSaysWhichTiersShareAnID() {
 	tier := JobModelTier{Name: "frontier", Rank: 3, Source: ModelTierSourceRow, Shared: []string{"codex runs design and frontier on one id, gpt-6-astra"}}
 	s.Equal("frontier (rank 3), row; codex runs design and frontier on one id, gpt-6-astra", tier.String())
+}
+
+type modelTierStateSuite struct {
+	suite.Suite
+}
+
+func TestModelTierState(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(modelTierStateSuite))
+}
+
+func (s *modelTierStateSuite) named(enum string) *ModelTierSet {
+	decl := fourTiers()
+	decl.Enum = enum
+	set, err := NewModelTierSet(decl)
+	s.Require().NoError(err)
+	return set
+}
+
+func (s *modelTierStateSuite) TestNoDeclarationAndNoDefaultIsNil() {
+	var state ModelTierState
+	set, err := state.Tiers()
+	s.Require().NoError(err)
+	s.Nil(set)
+}
+
+func (s *modelTierStateSuite) TestTheDefaultBuildsOnceOnTheFirstAsk() {
+	var state ModelTierState
+	builds := 0
+	shipped := s.named("Shipped")
+	state.SetDefault(func() (*ModelTierSet, error) { builds++; return shipped, nil })
+	s.Zero(builds, "setting the default builds nothing")
+	for range 2 {
+		set, err := state.Tiers()
+		s.Require().NoError(err)
+		s.Same(shipped, set)
+	}
+	s.Equal(1, builds)
+}
+
+func (s *modelTierStateSuite) TestADeclarationReplacesTheDefaultAndARerunReplacesIt() {
+	var state ModelTierState
+	state.SetDefault(func() (*ModelTierSet, error) { return s.named("Shipped"), nil })
+	first, second := s.named("First"), s.named("Second")
+	state.Declare(first)
+	set, err := state.Tiers()
+	s.Require().NoError(err)
+	s.Same(first, set)
+	state.Declare(second)
+	set, err = state.Tiers()
+	s.Require().NoError(err)
+	s.Same(second, set)
+}
+
+func (s *modelTierStateSuite) TestADeclarationOfNilTurnsTiersOff() {
+	var state ModelTierState
+	state.SetDefault(func() (*ModelTierSet, error) {
+		return nil, errors.New("the default must not build when tiers are off")
+	})
+	state.Declare(nil)
+	set, err := state.Tiers()
+	s.Require().NoError(err)
+	s.Nil(set)
+}
+
+func (s *modelTierStateSuite) TestADefaultThatFailsReturnsItsErrorAndBuildsAgain() {
+	var state ModelTierState
+	builds := 0
+	shipped := s.named("Shipped")
+	state.SetDefault(func() (*ModelTierSet, error) {
+		builds++
+		if builds == 1 {
+			return nil, errors.New("broken")
+		}
+		return shipped, nil
+	})
+	_, err := state.Tiers()
+	s.Require().ErrorContains(err, "broken")
+	set, err := state.Tiers()
+	s.Require().NoError(err)
+	s.Same(shipped, set)
+}
+
+func (s *modelTierStateSuite) TestTheContextCarriesTheState() {
+	state := &ModelTierState{}
+	s.Same(state, ModelTierStateFromContext(WithModelTierState(s.T().Context(), state)))
+	s.Nil(ModelTierStateFromContext(s.T().Context()))
 }

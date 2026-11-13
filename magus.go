@@ -209,6 +209,8 @@ type Magus struct {
 	jobReader types.JobReader
 	// steps is WithStepRows' and WithStepRule's, checked at Open.
 	steps guard.StepTable
+	// modelTiers is what the root magusfile's magus\modelTiers declared.
+	modelTiers agent.ModelTierState
 }
 
 // env reads key from the environment WithEnv gave, "" for a key unset there or with no
@@ -567,10 +569,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// Before project discovery, and long before any magusfile is evaluated. The
 	// magusfile is the thing that explodes when the binary is too old, so a floor
 	// checked after it has already failed reports nothing anyone can act on.
-	var vo workspace.Load
-	for _, fn := range opts {
-		fn(&vo)
-	}
+	vo := collectOptions(opts)
 	if d := ward.CheckRequiredVersion(cfg.RequiredVersion, vo.Version); d != nil {
 		return nil, d
 	}
@@ -602,7 +601,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if ws.Workspaces, err = reconcileWorkspaces(ctx, root, cfg.Knowledge.Workspaces, ws.VCSOptions, stderr); err != nil {
 		return nil, err
 	}
-	if vo.SpawnRule == nil {
+	if vo.spawnRule == nil {
 		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(magus.TierCeiling), the reference rule, or a rule of your own")
 	}
 	if vo.CacheBackendGiven && vo.CacheBackend == nil {
@@ -611,15 +610,15 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if vo.JobReaderGiven && vo.JobReader == nil {
 		return nil, errors.New("magus: WithJobReader was given a nil reader, so pass a reader, or leave the option out to read the job store")
 	}
-	rules := make([]guard.StepRule, len(vo.StepRules))
-	for i, r := range vo.StepRules {
+	rules := make([]guard.StepRule, len(vo.stepRules))
+	for i, r := range vo.stepRules {
 		rules[i] = guard.StepRule(r)
 	}
-	steps, err := guard.NewStepTable(vo.StepRows, rules)
+	steps, err := guard.NewStepTable(vo.stepRows, rules)
 	if err != nil {
 		return nil, fmt.Errorf("magus: WithStepRows: %w", err)
 	}
-	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.SpawnRule, cacheBackend: vo.CacheBackend,
+	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.spawnRule, cacheBackend: vo.CacheBackend,
 		environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine, jobReader: vo.JobReader, steps: steps}
 	if vo.Stderr != nil {
 		m.stderr = vo.Stderr
@@ -627,19 +626,15 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if isJSONLLog(cfg.Log) {
 		m.records = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(m.stderr), cfg.Log.SlogLevel()))
 	}
-	var o workspace.Load
-	for _, fn := range opts {
-		fn(&o)
+	if vo.Limiter != nil {
+		m.limOnce.Do(func() { m.lim = vo.Limiter })
 	}
-	if o.Limiter != nil {
-		m.limOnce.Do(func() { m.lim = o.Limiter })
-	}
-	m.broker, m.brokerGiven, m.brokerPolicy = o.Broker, o.BrokerGiven, o.BrokerPolicy
-	m.metricsCollect = o.MetricsCollect
-	m.injectedTel = o.Provider
-	m.skipProviders = o.SkipWorkspaceProviders
-	if o.Registry != nil {
-		m.wsReg = o.Registry
+	m.broker, m.brokerGiven, m.brokerPolicy = vo.Broker, vo.BrokerGiven, vo.BrokerPolicy
+	m.metricsCollect = vo.MetricsCollect
+	m.injectedTel = vo.Provider
+	m.skipProviders = vo.SkipWorkspaceProviders
+	if vo.Registry != nil {
+		m.wsReg = vo.Registry
 	} else {
 		m.wsReg = workspace.NewWorkspaceRegistry()
 	}
@@ -652,10 +647,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 }
 
 func loadConfig(root string, opts ...Option) (config.Config, error) {
-	var o workspace.Load
-	for _, fn := range opts {
-		fn(&o)
-	}
+	o := collectOptions(opts)
 	if o.Preloaded != nil {
 		return *o.Preloaded, nil
 	}
@@ -694,7 +686,7 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 // load names all of them instead of one per fix.
 func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, error) {
 	customTargets := make(map[string][]string)
-	ctx = installWorkspaceRegistry(ctx, m.wsReg)
+	ctx = m.installWorkspaceRegistry(ctx)
 	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
 	// so a top-level read here must be the SAME read the run sees.
 	ctx = m.ContextWithSecrets(ctx)

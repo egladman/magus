@@ -46,10 +46,12 @@ declareDefault(modeltiers\ModelTier, modeltiers\defaultTier, modeltiers\bounds, 
 // the shipped magus/modeltiers declaration, built when a fork first asks for it.
 // Nothing declared here selects a model at run time.
 func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, magus vm.Value) {
-	if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
+	// A load that holds no tiers, as the guard's, still checks a declaration.
+	tiers := agent.ModelTierStateFromContext(ctx)
+	if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil && tiers != nil {
 		// The context outlives the load that built it: a fork asks long after.
 		defaultCtx := context.WithoutCancel(ctx)
-		reg.SetDefaultModelTiers(func() (*agent.ModelTierSet, error) { return defaultModelTierSet(defaultCtx, reg.Harnesses()) })
+		tiers.SetDefault(func() (*agent.ModelTierSet, error) { return defaultModelTierSet(defaultCtx, reg.Harnesses()) })
 	}
 	// Per session, not per registry, as registerFunctionRule counts.
 	registered := false
@@ -69,6 +71,7 @@ func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.Direct
 			}
 			return vm.Null
 		}
+		var set *agent.ModelTierSet
 		if arg(0).IsNull() {
 			for i := 1; i < 5; i++ {
 				if !arg(i).IsNull() {
@@ -76,24 +79,32 @@ func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.Direct
 						"null turns model tiers off and takes no other argument, got %s as argument %d", arg(i).Kind(), i+1)
 				}
 			}
-			reg.SetModelTiers(nil)
-			return vm.Null, nil
-		}
-		decl, err := declareModelTiers(callCtx, sess, arg(0), arg(1), arg(2), arg(3), arg(4))
-		if err != nil {
+		} else if set, err = declaredModelTierSet(ctx, callCtx, sess, reg, arg); err != nil {
 			return vm.Null, err
 		}
-		decl.Site = modelTierSite(ctx)
-		if err := checkWiredHarnesses(decl, reg.Harnesses()); err != nil {
-			return vm.Null, err
+		if tiers != nil {
+			tiers.Declare(set)
 		}
-		set, err := agent.NewModelTierSet(decl)
-		if err != nil {
-			return vm.Null, modelTierUnusable(modelTiersMember, "%v", err)
-		}
-		reg.SetModelTiers(set)
 		return vm.Null, nil
 	}))
+}
+
+// declaredModelTierSet checks the magus\modelTiers arguments in callCtx against
+// the harnesses reg wired.
+func declaredModelTierSet(ctx, callCtx context.Context, sess *buzz.Session, reg *workspace.WorkspaceRegistry, arg func(int) vm.Value) (*agent.ModelTierSet, error) {
+	decl, err := declareModelTiers(callCtx, sess, arg(0), arg(1), arg(2), arg(3), arg(4))
+	if err != nil {
+		return nil, err
+	}
+	decl.Site = modelTierSite(ctx)
+	if err := checkWiredHarnesses(decl, reg.Harnesses()); err != nil {
+		return nil, err
+	}
+	set, err := agent.NewModelTierSet(decl)
+	if err != nil {
+		return nil, modelTierUnusable(modelTiersMember, "%v", err)
+	}
+	return set, nil
 }
 
 // registerModelTierMatrix binds magus\modelTier onto magus:
@@ -118,7 +129,7 @@ func registerModelTierMatrix(ctx context.Context, sess *buzz.Session, obs buzz.D
 				"already registered in this magusfile, and a workspace has one matrix; fold the second one into the first")
 		}
 		registered = true
-		reg.SetModelTierMatrix(buzzModelTierMatrix(sess, reg, args[0], modelTierSite(ctx)))
+		reg.SetModelTierMatrix(buzzModelTierMatrix(sess, agent.ModelTierStateFromContext(ctx), args[0], modelTierSite(ctx)))
 		// The fork calls it after this load has closed.
 		reg.Keep(sess.Keep())
 		return vm.Null, nil
@@ -393,9 +404,15 @@ func defaultModelTierSet(ctx context.Context, wired []string) (*agent.ModelTierS
 
 // buzzModelTierMatrix checks the answer against the declaration in force when it is
 // called, since the modelTiers and modelTier calls may come in either order.
-func buzzModelTierMatrix(sess *buzz.Session, reg *workspace.WorkspaceRegistry, matrix vm.Value, site string) types.ModelTierMatrix {
+func buzzModelTierMatrix(sess *buzz.Session, tiers *agent.ModelTierState, matrix vm.Value, site string) types.ModelTierMatrix {
 	return func(ctx context.Context, req types.ModelTierRequest) (*agent.JobModelTier, error) {
-		set := reg.ModelTiers(ctx)
+		if tiers == nil {
+			return nil, fmt.Errorf("%s: the load that registered the matrix holds no model tiers", modelTierMember)
+		}
+		set, err := tiers.Tiers()
+		if err != nil {
+			return nil, fmt.Errorf("%s: the default model tier declaration does not load: %w", modelTierMember, err)
+		}
 		if set == nil {
 			return nil, fmt.Errorf("%s: the workspace has no model tiers to choose among: magus\\modelTiers(null) turned them off", modelTierMember)
 		}
