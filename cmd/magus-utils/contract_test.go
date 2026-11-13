@@ -29,7 +29,7 @@ func TestReadHarnessContract(t *testing.T) {
 		"mgs_getMcp":               "() > McpServer",
 		"mgs_listTools":            "() > HarnessTools",
 		"mgs_getLimits":            "() > Limits",
-		"mgs_listModels":           "() > [ModelRow]",
+		"mgs_listModels":           "() > [HarnessModel]",
 		"mgs_listSettings":         "() > [Setting]",
 		"mgs_renderAgents":         "(agents: [ShippedAgent]) > [AgentFile]",
 		"mgs_renderPrompts":        "(humanOnly: {str: str}) > [Prompt]",
