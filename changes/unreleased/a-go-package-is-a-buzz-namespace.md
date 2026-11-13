@@ -7,6 +7,12 @@
   `ModelTierSource` are `magus\agent\StepRequest` and so on. A script that names one adds
   `import "magus/agent";`, and `import "magus";` does not bring it. A guard step rule
   annotates `fun (req: magus\agent\StepRequest)`.
+- **Breaking: the `types/trail` mirrors moved to the `magus\trail` namespace.**
+  `magus\TrailMark`, `TrailObservation`, `TrailSpawn`, `TrailSection` and `TrailVerdict`
+  are `magus\trail\Mark`, `magus\trail\Observation`, `magus\trail\Spawn`,
+  `magus\trail\Section` and `magus\trail\Verdict`. `Trail` is `magus\trail\Trail`, and
+  `magus\SessionOptions` is `magus\trail\ReadOptions`. `magus\session()` and its
+  `Session` handle stay in `magus`. A script that names one adds `import "magus/trail";`.
 - **Breaking: gopherbuzz binds a declaration module that declares a nested namespace
   under that namespace only.** `import "shop/order";` for a module declaring
   `namespace shop\order;` binds `shop\order`, not `order`, and a file names its types only

@@ -452,7 +452,7 @@ var magusObjects = []Object{
 					"observations, spawns}. An empty session is the one with the newest observation in the window. " +
 					"Reads the trail of every checkout of this repository that changed inside the window, because a " +
 					"session's hooks record into the checkout they ran from. An unreadable time raises.",
-				Returns: []Ret{{Object: "Trail"}},
+				Returns: []Ret{{Object: `magus\trail\Trail`}},
 				Raises:  true,
 				Impl:    MagusSessionTrail,
 			},
@@ -461,7 +461,7 @@ var magusObjects = []Object{
 				Doc: "Every verdict a person recorded on a trail row in this repository, oldest first; a later mark " +
 					"on an id supersedes an earlier one. Kept per repository identity, so every checkout and every " +
 					"session reads the same marks. Raises on a store line that does not decode.",
-				Returns: []Ret{{Object: "[TrailMark]"}},
+				Returns: []Ret{{Object: `[magus\trail\Mark]`}},
 				Raises:  true,
 				Impl:    MagusSessionMarks,
 			},
@@ -472,8 +472,8 @@ var magusObjects = []Object{
 					"next-not-taken, verdict one of should-deny, should-advise, wrong-deny, fine; key names the rule " +
 					"or shape the row groups by. Appends to the per-repository store and rewrites nothing. Raises on " +
 					"a malformed mark or an unwritable store.",
-				Args:    []Arg{{Name: "mark", Object: "TrailMark"}},
-				Returns: []Ret{{Object: "TrailMark"}},
+				Args:    []Arg{{Name: "mark", Object: `magus\trail\Mark`}},
+				Returns: []Ret{{Object: `magus\trail\Mark`}},
 				Raises:  true,
 				Impl:    MagusSessionMark,
 			},

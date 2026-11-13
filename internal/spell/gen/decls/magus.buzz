@@ -7,6 +7,7 @@
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
 import "magus/agent";
+import "magus/trail";
 
 export enum<str> DiagnosticOrigin {
     unknown = "",
@@ -336,22 +337,6 @@ export enum<str> RegionSide {
     none = "",
     old = "old",
     new = "new",
-}
-
-export enum<str> TrailSection {
-    none = "",
-    refused = "refused",
-    advised = "advised",
-    unguarded = "unguarded",
-    nextNotTaken = "next-not-taken",
-}
-
-export enum<str> TrailVerdict {
-    none = "",
-    shouldDeny = "should-deny",
-    shouldAdvise = "should-advise",
-    wrongDeny = "wrong-deny",
-    fine = "fine",
 }
 
 export enum<str> GuardDecision {
@@ -885,26 +870,20 @@ export object RaiseOptions {
     url: str = "",
 }
 
-export object SessionOptions {
-    session: str = "",
-    since: str = "",
-    @"until": str = "",
-}
-
 export object Session {
     session: str = "",
     since: str = "",
     @"until": str = "",
 
-    fun trail() > Trail !> any {
+    fun trail() > magus\trail\Trail !> any {
         return magus__Session__trail(this);
     }
 
-    fun marks() > [TrailMark] !> any {
+    fun marks() > [magus\trail\Mark] !> any {
         return magus__Session__marks(this);
     }
 
-    fun mark(mark: TrailMark) > TrailMark !> any {
+    fun mark(mark: magus\trail\Mark) > magus\trail\Mark !> any {
         return magus__Session__mark(this, mark: mark);
     }
 }
@@ -2194,51 +2173,6 @@ export object JobRegistration {
     advice: str = "",
 }
 
-export object TrailObservation {
-    at: int = 0,
-    agent: str = "",
-    lease: str = "",
-    tool: str = "",
-    command: str = "",
-    path: str = "",
-    decision: str = "",
-    rule: str = "",
-    nexts: [str] = [],
-    preauthorizedBy: str = "",
-    shape: str = "",
-    shapes: [str] = [],
-}
-
-export object TrailSpawn {
-    at: int = 0,
-    agent: str = "",
-    child: str = "",
-    lease: str = "",
-    model: str = "",
-}
-
-export object Trail {
-    session: str = "",
-    host: str = "",
-    start: int = 0,
-    end: int = 0,
-    checkouts: [str] = [],
-    observations: [TrailObservation] = [],
-    spawns: [TrailSpawn] = [],
-}
-
-export object TrailMark {
-    id: str = "",
-    section: TrailSection = TrailSection.none,
-    key: str = "",
-    rule: str = "",
-    verdict: TrailVerdict = TrailVerdict.none,
-    note: str = "",
-    session: str = "",
-    at: int = 0,
-    examples: [str] = [],
-}
-
 export object GuardVerdict {
     decision: GuardDecision = GuardDecision.none,
     reason: str = "",
@@ -2883,9 +2817,9 @@ extern fun magus__History__trend(recv: History) > Trend !> any;
 extern fun magus__Job__exit(recv: Job, result: {str: any} = {<str: any>}) > Job !> any;
 extern fun magus__Job__wait(recv: Job, result: {str: any} = {<str: any>}) > JobStatus !> any;
 extern fun magus__Job__register(recv: Job) > JobRegistration !> any;
-extern fun magus__Session__trail(recv: Session) > Trail !> any;
-extern fun magus__Session__marks(recv: Session) > [TrailMark] !> any;
-extern fun magus__Session__mark(recv: Session, mark: TrailMark) > TrailMark !> any;
+extern fun magus__Session__trail(recv: Session) > magus\trail\Trail !> any;
+extern fun magus__Session__marks(recv: Session) > [magus\trail\Mark] !> any;
+extern fun magus__Session__mark(recv: Session, mark: magus\trail\Mark) > magus\trail\Mark !> any;
 
 export extern fun canonicalName(name: str) > str;
 export extern fun change(base: str = "", opts: ChangeOptions? = null) > Change !> any;
@@ -2905,7 +2839,7 @@ export extern fun project(config: any, opts: any = null) > void;
 export extern fun pry() > void;
 export extern fun raise(code: DiagnosticCode, message: str, opts: RaiseOptions? = null) > void !> any;
 export extern fun run(args: [str], opts: CommandOptions? = null) > ExecResult !> any;
-export extern fun session(opts: SessionOptions? = null) > Session !> any;
+export extern fun session(opts: magus\trail\ReadOptions? = null) > Session !> any;
 export extern fun where(dir: str) > str !> any;
 export extern fun workspace(dir: str = "") > Workspace !> any;
 export extern fun workspaceProvider(spell: {str: any}) > void;

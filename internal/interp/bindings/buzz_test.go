@@ -941,8 +941,8 @@ export fun trailNumber() > void !> any {
 export fun putMistakes() > void !> any { magus\workspace().putJob("w", opts: {"passsed": true, "state": "passed"}); }
 `))
 	for name, want := range map[string][]string{
-		"trailTypo":   {`sessionOptions: SessionOptions has no member "sinse"`},
-		"trailNumber": {`sessionOptions.session: want str, got int`},
+		"trailTypo":   {`readOptions: ReadOptions has no member "sinse"`},
+		"trailNumber": {`readOptions.session: want str, got int`},
 		"putMistakes": {"no field of a job row is named passsed", "state must be one of"},
 	} {
 		fn, ok := sess.Exports()[name]

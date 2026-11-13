@@ -35,16 +35,6 @@ packages:
       Unread: {config: {name: DiffUnread}}
       Why: {config: {name: DiffWhy}}
       WhyRelation: {config: {name: DiffWhyRelation}}
-  github.com/egladman/magus/types/trail:
-    # Trail is a magus handle: its methods call the magus module's externs.
-    config: {module: ""}
-    types:
-      Mark: {config: {name: TrailMark}}
-      Observation: {config: {name: TrailObservation}}
-      ReadOptions: {config: {name: SessionOptions}}
-      Section: {config: {name: TrailSection}}
-      Spawn: {config: {name: TrailSpawn}}
-      Verdict: {config: {name: TrailVerdict}}
   github.com/egladman/magus/libs/diagnostics:
     types:
       Code:

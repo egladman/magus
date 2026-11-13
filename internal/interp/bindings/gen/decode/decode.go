@@ -7308,45 +7308,6 @@ func decodeSession(v vm.Value, path string) (types.Session, error) {
 	return out, nil
 }
 
-// DecodeTrailReadOptions decodes a Buzz SessionOptions, an object instance or a map, into a trail.ReadOptions.
-func DecodeTrailReadOptions(v vm.Value) (trail.ReadOptions, error) {
-	return decodeTrailReadOptions(v, "sessionOptions")
-}
-
-func decodeTrailReadOptions(v vm.Value, path string) (trail.ReadOptions, error) {
-	var out trail.ReadOptions
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "SessionOptions", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "session":
-			sSession, err := decodeString(item, path+".session")
-			if err != nil {
-				return out, err
-			}
-			out.Session = sSession
-		case "since":
-			sSince, err := decodeString(item, path+".since")
-			if err != nil {
-				return out, err
-			}
-			out.Since = sSince
-		case "until":
-			sUntil, err := decodeString(item, path+".until")
-			if err != nil {
-				return out, err
-			}
-			out.Until = sUntil
-		default:
-			return out, unknownMember(path, "SessionOptions", key)
-		}
-	}
-	return out, nil
-}
-
 // DecodeSetting decodes a Buzz Setting, an object instance or a map, into a types.Setting.
 func DecodeSetting(v vm.Value) (types.Setting, error) {
 	return decodeSetting(v, "setting")
@@ -8753,6 +8714,45 @@ func decodeWorker(v vm.Value, path string) (typesagent.Worker, error) {
 	}
 	if !hasType {
 		return out, missingMember(path, "Worker", "type")
+	}
+	return out, nil
+}
+
+// DecodeTrailReadOptions decodes a Buzz ReadOptions, an object instance or a map, into a trail.ReadOptions.
+func DecodeTrailReadOptions(v vm.Value) (trail.ReadOptions, error) {
+	return decodeTrailReadOptions(v, "readOptions")
+}
+
+func decodeTrailReadOptions(v vm.Value, path string) (trail.ReadOptions, error) {
+	var out trail.ReadOptions
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "ReadOptions", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "session":
+			sSession, err := decodeString(item, path+".session")
+			if err != nil {
+				return out, err
+			}
+			out.Session = sSession
+		case "since":
+			sSince, err := decodeString(item, path+".since")
+			if err != nil {
+				return out, err
+			}
+			out.Since = sSince
+		case "until":
+			sUntil, err := decodeString(item, path+".until")
+			if err != nil {
+				return out, err
+			}
+			out.Until = sUntil
+		default:
+			return out, unknownMember(path, "ReadOptions", key)
+		}
 	}
 	return out, nil
 }

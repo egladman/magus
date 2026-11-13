@@ -146,7 +146,6 @@ var inboundTypes = []inboundType{
 	{Name: "Secret", Zero: spells.Secret{}, Encode: func(v any) vm.Value { return ObjectSecret(v.(spells.Secret)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSecret(v) }},
 	{Name: "Service", Zero: spells.Service{}, Encode: func(v any) vm.Value { return ObjectService(v.(spells.Service), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeService(v) }},
 	{Name: "Session", Zero: types.Session{}, Encode: func(v any) vm.Value { return ObjectSession(v.(types.Session), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSession(v) }},
-	{Name: "SessionOptions", Zero: trail.ReadOptions{}, Encode: func(v any) vm.Value { return ObjectTrailReadOptions(v.(trail.ReadOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTrailReadOptions(v) }},
 	{Name: "Setting", Zero: types.Setting{}, Encode: func(v any) vm.Value { return ObjectSetting(v.(types.Setting)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSetting(v) }},
 	{Name: "SkillsOptions", Zero: types.SkillsOptions{}, Encode: func(v any) vm.Value { return ObjectSkillsOptions(v.(types.SkillsOptions), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSkillsOptions(v) }},
 	{Name: "Spec", Zero: imagetypes.Spec{}, Encode: func(v any) vm.Value { return ObjectImageSpec(v.(imagetypes.Spec), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageSpec(v) }},
@@ -173,6 +172,7 @@ var inboundTypes = []inboundType{
 	{Name: "magus\\agent\\Model", Zero: typesagent.Model{}, Encode: func(v any) vm.Value { return ObjectModel(v.(typesagent.Model)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeModel(v) }},
 	{Name: "magus\\agent\\Spec", Zero: typesagent.Spec{}, Encode: func(v any) vm.Value { return ObjectSpec(v.(typesagent.Spec), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSpec(v) }},
 	{Name: "magus\\agent\\Worker", Zero: typesagent.Worker{}, Encode: func(v any) vm.Value { return ObjectWorker(v.(typesagent.Worker), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeWorker(v) }},
+	{Name: "magus\\trail\\ReadOptions", Zero: trail.ReadOptions{}, Encode: func(v any) vm.Value { return ObjectTrailReadOptions(v.(trail.ReadOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTrailReadOptions(v) }},
 	{Name: "vcs\\CommandOptions", Zero: types.VCSCommandOptions{}, Encode: func(v any) vm.Value { return ObjectVCSCommandOptions(v.(types.VCSCommandOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeVCSCommandOptions(v) }},
 }
 
