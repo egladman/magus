@@ -86,7 +86,7 @@ type mockLifecycleSource_Lifecycles_Call struct {
 
 // Lifecycles is a helper method to define mock.On call
 //   - ctx context.Context
-//   - installed ...types.ToolRow
+//   - installed ...types.ToolStatus
 func (_e *mockLifecycleSource_Expecter) Lifecycles(ctx interface{}, installed ...interface{}) *mockLifecycleSource_Lifecycles_Call {
 	return &mockLifecycleSource_Lifecycles_Call{Call: _e.mock.On("Lifecycles",
 		append([]interface{}{ctx}, installed...)...)}
