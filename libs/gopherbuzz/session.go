@@ -304,6 +304,12 @@ func (s *Session) SetModuleDecls(importPath, src string) {
 	s.moduleDecls[importPath] = src
 }
 
+// HasModuleDecls reports whether SetModuleDecls registered importPath.
+func (s *Session) HasModuleDecls(importPath string) bool {
+	_, ok := s.moduleDecls[importPath]
+	return ok
+}
+
 // DeclareModuleTypes parses src and registers its exported object/enum types under
 // boundName's namespace immediately, without waiting for a matching `import`
 // statement to trigger it (contrast SetModuleDecls, whose src is only collected
@@ -1586,8 +1592,11 @@ func (s *Session) loadFileImports(ctx context.Context, prog *ast.Program) (map[a
 			continue
 		}
 		start := time.Now()
-		name, binds := importNamespace(imp)
-		_, wasBound := s.env.Get(name)
+		names := s.importBindings(imp)
+		wasBound := make([]bool, len(names))
+		for i, name := range names {
+			_, wasBound[i] = s.env.Get(name)
+		}
 		outcome, err := s.resolveImport(ctx, imp)
 		outcomes[imp.Pos] = outcome
 		if obs := s.compileObserver; obs != nil {
@@ -1596,8 +1605,8 @@ func (s *Session) loadFileImports(ctx context.Context, prog *ast.Program) (map[a
 		if err != nil {
 			return outcomes, err
 		}
-		if binds {
-			s.noteNamespaceImport(name, wasBound)
+		for i, name := range names {
+			s.noteNamespaceImport(name, wasBound[i])
 		}
 	}
 	return outcomes, nil
@@ -1614,6 +1623,26 @@ func importNamespace(imp *ast.ImportStmt) (string, bool) {
 	}
 	parts := strings.Split(strings.TrimPrefix(imp.Path, "buzz:"), "/")
 	return parts[len(parts)-1], true
+}
+
+// importBindings are the global names imp binds a namespace under. A nested
+// declaration namespace binds its first segment, and the first segment of
+// the part the importer's namespace does not share.
+func (s *Session) importBindings(imp *ast.ImportStmt) []string {
+	nested := s.nestedDeclNamespace(strings.TrimPrefix(imp.Path, "buzz:"), imp)
+	if nested == "" {
+		if name, binds := importNamespace(imp); binds {
+			return []string{name}
+		}
+		return nil
+	}
+	head, _, _ := strings.Cut(nested, `\`)
+	names := []string{head}
+	if rel := s.relativeNamespace(nested); rel != "" {
+		relHead, _, _ := strings.Cut(rel, `\`)
+		names = append(names, relHead)
+	}
+	return names
 }
 
 // noteNamespaceImport records that an import bound name. A name the host bound
@@ -2601,19 +2630,29 @@ func (s *Session) adoptNamespacePrefix(name string, mod vmpackage.Value) {
 	}
 }
 
-// nestedImportsOf is the set of nested namespaces prog's own imports bind. An
-// entry chunk also names those an earlier entry chunk imported.
-func (s *Session) nestedImportsOf(prog *ast.Program) map[string]bool {
-	out := map[string]bool{}
+// nestedImportsOf is the nested namespaces prog's own imports bind. An entry
+// chunk also names those an earlier entry chunk imported.
+func (s *Session) nestedImportsOf(prog *ast.Program) *chunkNamespaces {
+	out := &chunkNamespaces{bound: map[string]bool{}, relatives: map[string]string{}}
 	if !s.collectImportPrivate {
-		maps.Copy(out, s.entryNested)
+		maps.Copy(out.bound, s.entryNested)
 	}
 	for _, stmt := range prog.Stmts {
-		if imp, ok := stmt.(*ast.ImportStmt); ok {
-			if ns := s.nestedDeclNamespace(strings.TrimPrefix(imp.Path, "buzz:"), imp); ns != "" {
-				out[ns] = true
-			}
+		imp, ok := stmt.(*ast.ImportStmt)
+		if !ok {
+			continue
 		}
+		ns := s.nestedDeclNamespace(strings.TrimPrefix(imp.Path, "buzz:"), imp)
+		if ns == "" {
+			continue
+		}
+		out.bound[ns] = true
+		rel := s.relativeNamespace(ns)
+		if strings.Contains(rel, `\`) {
+			out.bound[rel] = true
+			rel = ""
+		}
+		out.relatives[imp.Path] = rel
 	}
 	return out
 }

@@ -165,10 +165,46 @@ func (c *checker) unboundQualifier(qual string) bool {
 	}
 	head, _, nested := strings.Cut(qual, `\`)
 	if nested && c.namespaceType(qual) != nil {
-		return c.nestedImports != nil && !c.nestedImports[qual]
+		return c.nested != nil && !c.nested.bound[qual]
 	}
 	_, ok := c.lookup(head)
 	return !ok
+}
+
+// chunkNamespaces are the nested namespaces one chunk's imports bind.
+type chunkNamespaces struct {
+	// bound holds each nested namespace the chunk may name, a\b.
+	bound map[string]bool
+	// relatives maps each nested import path of the chunk to the single
+	// segment it also binds inside a namespace sharing its prefix, or "".
+	relatives map[string]string
+}
+
+// relative is the single-segment spelling the nested import at path binds,
+// and whether path is a nested import of the chunk at all.
+func (n *chunkNamespaces) relative(path string) (string, bool) {
+	if n == nil {
+		return "", false
+	}
+	rel, ok := n.relatives[path]
+	return rel, ok
+}
+
+// nestedPath spells the namespaced member chain `a\b` as the namespace a\b,
+// or "" when v is no chain of two or more segments.
+func nestedPath(v *ast.MemberExpr) string {
+	if !v.Namespaced {
+		return ""
+	}
+	switch o := v.Object.(type) {
+	case *ast.IdentExpr:
+		return o.Name + `\` + v.Name
+	case *ast.MemberExpr:
+		if outer := nestedPath(o); outer != "" {
+			return outer + `\` + v.Name
+		}
+	}
+	return ""
 }
 
 // namespaceMemberType resolves `qual\name` through the namespace bound to qual,

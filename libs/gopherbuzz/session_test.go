@@ -3268,6 +3268,40 @@ fun sku() > int { return till\last().sku; }`)
 	s.Contains(err.Error(), "str")
 }
 
+func (s *nestedNamespaceSuite) TestAnEnumCaseReadsThroughANestedNamespace() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/size", "namespace shop\\size;\nexport enum<str> Size { small = \"s\", large = \"l\" }\n")
+	sess.SetModuleDecls("shop", "namespace shop;\nexport fun open() > str { return \"open\"; }\n")
+	sess.SetModuleDecls("menu", `namespace menu;
+import "shop/size";
+export fun pick() > shop\size\Size { return shop\size\Size.large; }
+`)
+	v, err := sess.Eval(context.Background(), `import "shop";
+import "shop/size";
+import "menu";
+fun value(size: shop\size\Size) > str { return size.value; }
+return value(menu\pick()) + value(shop\size\Size.small) + shop\open();`)
+	s.Require().NoError(err)
+	s.Equal("lsopen", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestAnAliasedModulesImportLeavesTheEntrysImportWhole() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	sess.SetModuleDecls("till", `namespace till;
+import "shop/order";
+export fun last() > shop\order\Step { return shop\order\Step{ sku = "t" }; }
+`)
+	v, err := sess.Eval(context.Background(), `import "till" as till;
+import "shop/order";
+fun sku(step: shop\order\Step) > str { return step.sku; }
+return sku(till\last()) + sku(shop\order\Step{ sku = "e" });`)
+	s.Require().NoError(err)
+	s.Equal("te", v.String())
+}
+
 func (s *nestedNamespaceSuite) TestANestedNamespaceLeavesAModuleOfItsLastSegment() {
 	sess := NewSession(context.Background(), WithEmbedded())
 	s.T().Cleanup(func() { _ = sess.Close() })
