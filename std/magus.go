@@ -1534,10 +1534,10 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	}
 	// std cannot import internal/agent, which loads the harness spells, so the workspace
 	// supplies the reader.
-	if rows, ok := ws.(interface {
-		ModelRows(ctx context.Context) func() []types.ModelPricing
+	if models, ok := ws.(interface {
+		Models(ctx context.Context) func() []types.ModelPricing
 	}); ok {
-		loc.ModelRows = rows.ModelRows(ctx)
+		loc.ModelRows = models.Models(ctx)
 	}
 	if owned, ok := ws.(interface {
 		AffectedFromPaths(ctx context.Context, paths []string) (*types.AffectedResult, error)
