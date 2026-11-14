@@ -874,6 +874,12 @@ const ModelTierAboveParent DiagnosticCode = "MGS3055"
 // ModelTiersIncomparable is a spawn or fork whose tier and its parent's come
 // from two model-tier declarations. The spawn rule cannot order them.
 const ModelTiersIncomparable DiagnosticCode = "MGS3056"
+
+// UncommittedRepair is a ci run under rw that changed files in the working
+// tree: it repaired a declared writer, or a verify pass regenerated an
+// output. The verdict belongs to the committed bytes, so the run fails until
+// the person commits the change and runs ci again.
+const UncommittedRepair DiagnosticCode = "MGS3057"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -1228,6 +1234,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ShardCrossesProjects,
 	ModelTierAboveParent,
 	ModelTiersIncomparable,
+	UncommittedRepair,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,

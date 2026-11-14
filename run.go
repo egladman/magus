@@ -2,8 +2,10 @@ package magus
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"maps"
@@ -43,6 +45,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -341,6 +344,11 @@ func CharmsForCI(charms []string) []string {
 // not a hardcoded preflight...test chain. The magusfile composes the pipeline
 // order via magus.needs.
 //
+// Every pass verifies under [CharmsForCI]. Under rw, a failing declared
+// writer runs under rw, then the targets verify again. A run that changed
+// the tree fails with MGS3057. A dry run or a tree with no VCS repairs
+// nothing. Under rw, [WithTargetResults] hears the last pass only.
+//
 // It is judged as Run is, each target as `magus run <target> <project>`: `magus run ci`
 // is the verb that reaches it.
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
@@ -356,6 +364,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 	// Both write-granting charms come off: rw so check-only targets stay check-only,
 	// and update so a ci run verifies the pinned upstream state rather than refreshing
 	// it against whatever the registry or the feed serves today.
+	carried := o.Charms
 	o.Charms = CharmsForCI(o.Charms)
 
 	// ci is the one target that must not silently no-op when undefined. Ordinary
@@ -384,7 +393,246 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 					"so this run would do nothing", types.TargetCI, "magus affected ci", "magus affected --plan")
 		}
 	}
-	return m.redactError(m.runResolved(ctx, targets, o))
+	if !carriesReadWrite(carried) {
+		return m.redactError(m.runResolved(ctx, targets, o))
+	}
+	return m.redactError(m.verifyAndRepair(ctx, targets, o, carried))
+}
+
+func carriesReadWrite(charms []string) bool {
+	return slices.ContainsFunc(charms, func(c string) bool {
+		return types.NormalizeCharm(c) == types.CharmReadWrite
+	})
+}
+
+// verifyAndRepair is RunCI's loop for a run whose charms carry rw. Each
+// target is repaired at most once and each step retried at most once, so it
+// ends.
+func (m *Magus) verifyAndRepair(ctx context.Context, targets []types.Target, o run, carried []string) error {
+	tree, why, err := m.repairCheckout(ctx, o)
+	if err != nil {
+		return err
+	}
+	if why != "" {
+		o.out(m).EmitNotice(ctx, slog.LevelInfo, "", fmt.Sprintf("rw is carried, but %s, so this ci run verifies only", why))
+		return m.runResolved(ctx, targets, o)
+	}
+	before, err := tree.snapshot(ctx)
+	if err != nil {
+		return err
+	}
+	loop := repairLoop{repaired: map[types.TargetRef]bool{}, retried: map[types.TargetRef]bool{}}
+	last, runErr := m.repairPasses(ctx, targets, o, carried, &loop)
+	if o.results != nil {
+		for _, r := range last {
+			o.results(r)
+		}
+	}
+	if ctx.Err() != nil {
+		return runErr
+	}
+	after, err := tree.snapshot(ctx)
+	if err != nil {
+		return errors.Join(runErr, err)
+	}
+	changed := diff.DiffContent(before, after)
+	if len(changed) == 0 {
+		return runErr
+	}
+	return errors.Join(runErr, uncommittedRepair(changed, loop.order))
+}
+
+// repairPasses verifies, repairs what loop decides, and verifies again until
+// a pass passes or nothing is left to try. It returns the last pass's results.
+func (m *Magus) repairPasses(ctx context.Context, targets []types.Target, o run, carried []string, loop *repairLoop) ([]types.TargetResult, error) {
+	for {
+		var pass []types.TargetResult
+		o.results = func(r types.TargetResult) { pass = append(pass, r) }
+		runErr := m.runResolved(ctx, targets, o)
+		if runErr == nil || ctx.Err() != nil {
+			return pass, runErr
+		}
+		repairs, retry, stop := loop.decide(m, pass)
+		if stop != nil {
+			runErr = stop
+		}
+		if err := m.repair(ctx, o, carried, repairs); err != nil {
+			return pass, errors.Join(stop, err)
+		}
+		if stop != nil || (len(repairs) == 0 && !retry) {
+			return pass, runErr
+		}
+	}
+}
+
+// repairLoop is what one RunCI has already done to its failures.
+type repairLoop struct {
+	repaired map[types.TargetRef]bool
+	retried  map[types.TargetRef]bool
+	order    []types.TargetRef
+}
+
+// decide reads one verify pass's failures. repairs are the declared writers
+// to run under rw, and retry is a stale output the pass already rewrote.
+// stop joins the failures no repair can clear, the run's answer when set.
+func (l *repairLoop) decide(m *Magus, pass []types.TargetResult) (repairs []types.TargetRef, retry bool, stop error) {
+	var terminal []error
+	// A member step and the composer waiting on it report the same failure.
+	decided := map[types.TargetRef]bool{}
+	for _, r := range pass {
+		if r.Status != types.TargetFailed || r.Err == nil {
+			continue
+		}
+		step := types.TargetRef{Project: r.Project, Target: r.Target}
+		if drift := (*types.OutputDriftError)(nil); errors.As(r.Err, &drift) {
+			if l.retried[step] {
+				terminal = append(terminal, r.Err)
+				continue
+			}
+			l.retried[step], retry = true, true
+			continue
+		}
+		failed := cache.FailedNeeds(r.Err)
+		if len(failed) == 0 {
+			failed = []types.TargetRef{step}
+		}
+		for _, ref := range failed {
+			ref.Target = types.Normalize(ref.Target)
+			if decided[ref] {
+				continue
+			}
+			decided[ref] = true
+			switch {
+			case !m.declaresWriter(ref):
+				terminal = append(terminal, r.Err)
+			case l.repaired[ref]:
+				terminal = append(terminal, fmt.Errorf("%s: it failed again after its write arm ran: %w", ref.Ref(), r.Err))
+			default:
+				repairs = append(repairs, ref)
+			}
+		}
+	}
+	for _, ref := range repairs {
+		l.repaired[ref] = true
+		l.order = append(l.order, ref)
+	}
+	return repairs, retry, errors.Join(terminal...)
+}
+
+// declaresWriter reports a target ci may repair. It declares its own write
+// and reads rw, so rw is the remedy its failure names.
+func (m *Magus) declaresWriter(ref types.TargetRef) bool {
+	p := m.Get(ref.Project)
+	return p != nil && declaresOwnWrite(p, ref.Target) && m.readsCharm(p, ref.Target, types.CharmReadWrite)
+}
+
+// declaresOwnWrite reports target's own in-place updates or outputs in p.
+// Unlike declaresOutput it walks no chain: a composer of a writer is not one.
+func declaresOwnWrite(p *types.Project, target string) bool {
+	return len(p.TargetUpdates[target]) > 0 || len(p.TargetOutputs[target]) > 0
+}
+
+// repair runs each target under the carried charms less update, as
+// `magus run <target>:rw` would. A member it composes sees rw too. The cache
+// is skipped: a replay of an in-place update writes nothing.
+func (m *Magus) repair(ctx context.Context, o run, carried []string, refs []types.TargetRef) error {
+	o.Charms = slices.DeleteFunc(slices.Clone(carried), func(c string) bool {
+		return types.NormalizeCharm(c) == types.CharmUpdate
+	})
+	o.Cache, o.results = false, nil
+	for _, ref := range refs {
+		o.out(m).EmitNotice(ctx, slog.LevelInfo, "",
+			fmt.Sprintf("repairing %s under rw: it declares the write and failed its check", ref.Ref()))
+		if err := m.runResolved(ctx, []types.Target{{Path: ref.Project, Name: ref.Target}}, o); err != nil {
+			return fmt.Errorf("repairing %s under rw: %w", ref.Ref(), err)
+		}
+	}
+	return nil
+}
+
+// uncommittedRepair is the error a run that changed the tree ends with.
+func uncommittedRepair(changed []string, repaired []types.TargetRef) error {
+	slices.Sort(changed)
+	names := "nothing; a verify pass wrote them"
+	if len(repaired) > 0 {
+		refs := make([]string, len(repaired))
+		for i, r := range repaired {
+			refs[i] = r.Ref()
+		}
+		names = strings.Join(refs, ", ")
+	}
+	return types.DiagnosticErrorf(types.UncommittedRepair,
+		"ci changed %s: %s (repaired: %s). Commit them and run ci again; an uncommitted repair gets no verdict",
+		plural.Count(len(changed), "version-controlled file", "version-controlled files"), strings.Join(changed, ", "), names)
+}
+
+// repairTree is the checkout a repairing ci run compares before and after.
+type repairTree struct {
+	vcs  types.VCSDriver
+	root string // the checkout's top level
+	dir  string // the workspace root
+}
+
+// repairCheckout resolves the checkout a repair is told apart in. why says
+// why no repair can be made, "" when one can.
+func (m *Magus) repairCheckout(ctx context.Context, o run) (repairTree, string, error) {
+	if o.DryRun {
+		return repairTree{}, "a dry run executes nothing", nil
+	}
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil {
+		return repairTree{}, "", fmt.Errorf("resolving the VCS a ci repair is told apart in: %w", err)
+	}
+	if res.VCS == nil || res.Source == types.VCSSourceDefault {
+		return repairTree{}, "no version control claims " + m.ws.Root, nil
+	}
+	root, err := res.VCS.Root(ctx, m.ws.Root)
+	if err != nil {
+		return repairTree{}, "", fmt.Errorf("reading the checkout root from %s for a ci repair: %w", res.VCS.Name(), err)
+	}
+	return repairTree{vcs: res.VCS, root: root, dir: m.ws.Root}, "", nil
+}
+
+// snapshot hashes the tree's changed paths by content. A dirty path may hold
+// glob characters, so each is read literally, never through a glob. A missing
+// path or a directory hashes as zero: an untracked directory's files are not
+// seen.
+func (t repairTree) snapshot(ctx context.Context) (diff.ContentSnap, error) {
+	paths, err := t.vcs.DirtyFiles(ctx, t.dir, nil)
+	if err != nil {
+		return nil, fmt.Errorf("listing the changed files for a ci repair: %w", err)
+	}
+	snap := make(diff.ContentSnap, len(paths))
+	for _, p := range paths {
+		sum, err := hashTreeFile(filepath.Join(t.root, filepath.FromSlash(p)))
+		if err != nil {
+			return nil, fmt.Errorf("reading %s for a ci repair: %w", p, err)
+		}
+		snap[p] = sum
+	}
+	return snap, nil
+}
+
+func hashTreeFile(path string) ([32]byte, error) {
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return [32]byte{}, nil
+	}
+	if err != nil {
+		return [32]byte{}, err
+	}
+	defer func() { _ = f.Close() }() // opened read-only: a close error loses no bytes
+	info, err := f.Stat()
+	if err != nil || info.IsDir() {
+		return [32]byte{}, err
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return [32]byte{}, err
+	}
+	var sum [32]byte
+	copy(sum[:], h.Sum(nil))
+	return sum, nil
 }
 
 // allProvided reports whether every project in the scope came from a workspace
@@ -1027,7 +1275,7 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 				}
 				return invoke(workerCtx)
 			}, r.cacheOpts...)
-			return cache.WrapNeedFailure(err, cache.NeedMember{Target: name, Ref: res.Ref})
+			return cache.WrapNeedFailure(err, cache.NeedMember{Project: p.Path, Target: name, Ref: res.Ref})
 		})
 	}
 }
@@ -1042,9 +1290,10 @@ func (r *composedRunner) inlineClaimer(p *types.Project) targetInterceptorFunc {
 		// A member this run already reached, as a step or inline, is waited on.
 		// The wait holds nothing: the composer lent its claim and slots.
 		return runOnce(ctx, r.runs, types.TargetRef{Project: p.Path, Target: name}, func() error {
-			return r.m.cache.RunInline(ctx, member, func(ctx context.Context) error {
+			err := r.m.cache.RunInline(ctx, member, func(ctx context.Context) error {
 				return recordInline(underComposer(ctx, member), p, name, invoke)
 			}, r.cacheOpts...)
+			return cache.WrapNeedFailure(err, cache.NeedMember{Project: p.Path, Target: name})
 		})
 	}
 }

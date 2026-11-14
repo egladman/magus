@@ -3278,3 +3278,350 @@ func (s *productStepSuite) TestTheDeclarationReachesTheTargetPolicy() {
 	want := types.Target{Relinks: "./tool", Product: "bin/tool", ProductTarget: "link-product"}
 	s.Equal(want, s.m.Get(".").TargetPolicies["link"])
 }
+
+// ciRepairMagusfile names its targets so that no name matters. tidy edits
+// a.txt in place and regen writes gen.txt. check reads rw with no write,
+// broken never reads rw, stubborn's write never passes, fragile's fails.
+const ciRepairMagusfile = `import "magus";
+import "fs";
+
+export fun tidy(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["a.txt"], editsExistingSource: true);
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile("a.txt", "tidy\n");
+        return;
+    }
+    if (fs\readFile("a.txt") != "tidy\n") {
+        throw "a.txt is not tidy";
+    }
+}
+export fun regen(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["gen.txt"]);
+    fs\writeFile("gen.txt", fs\readFile("input.txt"));
+}
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile("b.txt", "rewritten\n");
+        return;
+    }
+    throw "check failed";
+}
+export fun broken(ctx: magus\Context, args: [str]) > void !> any {
+    throw "broken failed";
+}
+export fun stubborn(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["a.txt"], editsExistingSource: true);
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile("a.txt", "stubborn\n");
+        return;
+    }
+    throw "stubborn failed";
+}
+export fun fragile(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["a.txt"], editsExistingSource: true);
+    if (ctx.hasCharm("rw")) {
+        throw "the write arm failed";
+    }
+    throw "fragile failed";
+}
+`
+
+const ciNeedsTidy = `export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(tidy); }
+`
+
+func TestCIRepairSuite(t *testing.T) { suite.Run(t, new(ciRepairSuite)) }
+
+// ciRepairSuite pins a local ci under rw. It repairs a failing declared
+// writer, verifies again, and fails until the repair is committed.
+type ciRepairSuite struct{ suite.Suite }
+
+// open commits a workspace whose ci is the given source, a.txt untidy.
+func (s *ciRepairSuite) open(ci string, files map[string]string) (*Magus, *testkit.Repo) {
+	tree := map[string]string{
+		".gitignore":     ".magus/\n",
+		"a.txt":          "messy\n",
+		"input.txt":      "generated\n",
+		"gen.txt":        "generated\n",
+		"magusfile.buzz": ciRepairMagusfile + ci,
+	}
+	for k, v := range files {
+		tree[k] = v
+	}
+	repo := testkit.NewRepository(s.T(), tree)
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err, "Open")
+	s.T().Cleanup(func() { _ = m.Close() })
+	return m, repo
+}
+
+func (s *ciRepairSuite) ci(m *Magus, opts ...RunOption) error {
+	return m.RunCI(context.Background(), []types.Target{{Path: ".", Name: "ci"}}, opts...)
+}
+
+func (s *ciRepairSuite) read(repo *testkit.Repo, rel string) string {
+	b, err := os.ReadFile(repo.Path(rel))
+	s.Require().NoError(err)
+	return string(b)
+}
+
+func (s *ciRepairSuite) TestCleanTreeVerifiesOnceAndRepairsNothing() {
+	m, repo := s.open(ciNeedsTidy, map[string]string{"a.txt": "tidy\n"})
+
+	s.Require().NoError(s.ci(m, WithWrite()))
+	s.Empty(repo.Git("status", "--porcelain"))
+}
+
+func (s *ciRepairSuite) TestFailingDeclaredWriterIsRunUnderReadWrite() {
+	m, repo := s.open(ciNeedsTidy, nil)
+
+	_ = s.ci(m, WithWrite())
+	s.Equal("tidy\n", s.read(repo, "a.txt"))
+}
+
+func (s *ciRepairSuite) TestRepairIsFollowedByAnotherVerifyPass() {
+	m, _ := s.open(ciNeedsTidy, nil)
+
+	err := s.ci(m, WithWrite())
+	s.Require().Error(err)
+	s.NotContains(err.Error(), "a.txt is not tidy", "the second pass verified the repaired bytes")
+}
+
+func (s *ciRepairSuite) TestRepairedRunFailsAndNamesTheTargetAndFiles() {
+	m, _ := s.open(ciNeedsTidy, nil)
+
+	err := s.ci(m, WithWrite())
+	s.Require().True(errors.Is(err, types.UncommittedRepair), "got %v", err)
+	s.Contains(err.Error(), "ci changed 1 version-controlled file: a.txt (repaired: .:tidy)")
+	s.Contains(err.Error(), "Commit them and run ci again")
+}
+
+func (s *ciRepairSuite) TestReaderOfReadWriteWithoutAWriteIsNotRepaired() {
+	m, repo := s.open(`export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(check); }
+`, nil)
+
+	err := s.ci(m, WithWrite())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "check failed")
+	s.False(errors.Is(err, types.UncommittedRepair))
+	s.NoFileExists(repo.Path("b.txt"), "check declares no write, so ci never runs it under rw")
+}
+
+func (s *ciRepairSuite) TestFailingTargetThatDoesNotReadReadWriteIsNotRepaired() {
+	m, repo := s.open(`export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(broken); }
+`, nil)
+
+	err := s.ci(m, WithWrite())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "broken failed")
+	s.Empty(repo.Git("status", "--porcelain"))
+}
+
+func (s *ciRepairSuite) TestWriterThatFailsAgainAfterItsRepairReturnsItsError() {
+	m, repo := s.open(`export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(stubborn); }
+`, nil)
+
+	err := s.ci(m, WithWrite())
+	s.Require().Error(err)
+	s.Contains(err.Error(), ".:stubborn: it failed again after its write arm ran")
+	s.Contains(err.Error(), "stubborn failed")
+	s.Equal("stubborn\n", s.read(repo, "a.txt"))
+}
+
+func (s *ciRepairSuite) TestStaleOutputIsRetriedOnceWithoutReadWrite() {
+	m, repo := s.open(`export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(regen); }
+`, map[string]string{"gen.txt": "stale\n"})
+
+	err := s.ci(m, WithWrite())
+	s.Require().True(errors.Is(err, types.UncommittedRepair), "got %v", err)
+	s.Contains(err.Error(), "gen.txt (repaired: nothing; a verify pass wrote them)")
+	s.NotContains(err.Error(), "left declared output stale", "the retry passed on the regenerated bytes")
+	s.Equal("generated\n", s.read(repo, "gen.txt"))
+}
+
+func (s *ciRepairSuite) TestFailingInlineDeclaredWriterIsRepaired() {
+	m, repo := s.open(`export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint); }
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(tidy); }
+`, nil)
+
+	err := s.ci(m, WithWrite())
+	s.Require().True(errors.Is(err, types.UncommittedRepair), "got %v", err)
+	s.Contains(err.Error(), "(repaired: .:tidy)", "the innermost failing member is the one repaired")
+	s.Equal("tidy\n", s.read(repo, "a.txt"))
+}
+
+func (s *ciRepairSuite) TestFailingCrossProjectDeclaredWriterIsRepaired() {
+	m, repo := s.open(`import "project/lib";
+magus\project({"depends_on": ["lib"]});
+export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lib.tidy); }
+`, map[string]string{
+		"a.txt":              "tidy\n",
+		"lib/magusfile.buzz": ciRepairMagusfile,
+		"lib/a.txt":          "messy\n",
+		"lib/input.txt":      "generated\n",
+		"lib/gen.txt":        "generated\n",
+	})
+
+	err := s.ci(m, WithWrite())
+	s.Require().True(errors.Is(err, types.UncommittedRepair), "got %v", err)
+	s.Contains(err.Error(), "lib/a.txt (repaired: lib:tidy)")
+	s.Equal("tidy\n", s.read(repo, "lib/a.txt"))
+}
+
+func (s *ciRepairSuite) TestInlineMemberWithoutAWriteIsNotRepaired() {
+	m, repo := s.open(`export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint); }
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(check); }
+`, nil)
+
+	err := s.ci(m, WithWrite())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "check failed")
+	s.NoFileExists(repo.Path("b.txt"))
+}
+
+func (s *ciRepairSuite) TestSeveralFailuresInOnePassAreEachDecided() {
+	m, repo := s.open(`export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(tidy, broken); }
+`, nil)
+
+	err := s.ci(m, WithWrite())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "broken failed", "a failure no repair clears is the answer")
+	s.True(errors.Is(err, types.UncommittedRepair), "the writer beside it was repaired: %v", err)
+	s.Equal("tidy\n", s.read(repo, "a.txt"))
+}
+
+func (s *ciRepairSuite) TestRepairRunThatFailsReturnsItsError() {
+	m, _ := s.open(`export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(fragile); }
+`, nil)
+
+	err := s.ci(m, WithWrite())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "repairing .:fragile under rw")
+	s.Contains(err.Error(), "the write arm failed")
+}
+
+func (s *ciRepairSuite) TestFileRegeneratedBesideAnotherFailureIsNamed() {
+	m, _ := s.open(`export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(regen, broken); }
+`, map[string]string{"gen.txt": "stale\n"})
+
+	err := s.ci(m, WithWrite())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "broken failed")
+	s.True(errors.Is(err, types.UncommittedRepair), "got %v", err)
+	s.Contains(err.Error(), "gen.txt")
+}
+
+func (s *ciRepairSuite) TestFailureAfterARepairNamesTheChangedFiles() {
+	m, _ := s.open(`export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(stubborn); }
+`, nil)
+
+	err := s.ci(m, WithWrite())
+	s.Require().True(errors.Is(err, types.UncommittedRepair), "got %v", err)
+	s.Contains(err.Error(), "a.txt (repaired: .:stubborn)")
+}
+
+func (s *ciRepairSuite) TestClearedFailuresAreNotReported() {
+	m, _ := s.open(ciNeedsTidy, nil)
+
+	var failed []string
+	_ = s.ci(m, WithWrite(), WithTargetResults(func(r types.TargetResult) {
+		if r.Status == types.TargetFailed {
+			failed = append(failed, fmt.Sprintf("%s:%s", r.Project, r.Target))
+		}
+	}))
+	s.Empty(failed, "the last verify pass passed, so the callback hears no failure")
+}
+
+func (s *ciRepairSuite) TestRunWithoutReadWriteRepairsNothing() {
+	m, repo := s.open(ciNeedsTidy, nil)
+
+	err := s.ci(m)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "a.txt is not tidy")
+	s.Equal("messy\n", s.read(repo, "a.txt"))
+}
+
+func (s *ciRepairSuite) TestDryRunRepairsNothing() {
+	m, repo := s.open(ciNeedsTidy, nil)
+
+	_ = s.ci(m, WithWrite(), WithDryRun())
+	s.Equal("messy\n", s.read(repo, "a.txt"))
+}
+
+func (s *ciRepairSuite) TestRunWithoutVersionControlRepairsNothingAndSaysSo() {
+	s.T().Setenv("MAGUS_VCS_ENABLED", "")
+	s.T().Setenv("MAGUS_VCS_NAME", "")
+	w := testkit.NewWorkspace(s.T())
+	w.Write("a.txt", "messy\n")
+	w.Magusfile(ciRepairMagusfile + ciNeedsTidy)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err, "Open")
+	s.T().Cleanup(func() { _ = m.Close() })
+	var stream, notices bytes.Buffer
+	sink, err := NewSink(output.JSONL, &stream, &notices)
+	s.Require().NoError(err)
+
+	err = s.ci(m, WithWrite(), WithSink(sink))
+	s.Require().NoError(sink.Close())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "a.txt is not tidy")
+	s.Contains(notices.String(), "rw is carried, but no version control claims")
+	s.Contains(notices.String(), "so this ci run verifies only")
+	b, readErr := os.ReadFile(w.Path("a.txt"))
+	s.Require().NoError(readErr)
+	s.Equal("messy\n", string(b))
+}
+
+func (s *ciRepairSuite) TestUpdateNeverReachesARepair() {
+	m, repo := s.open(`export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(pinned); }
+export fun pinned(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["a.txt"], editsExistingSource: true);
+    if (ctx.hasCharm("update")) {
+        fs\writeFile("a.txt", "refreshed\n");
+        return;
+    }
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile("a.txt", "tidy\n");
+        return;
+    }
+    if (fs\readFile("a.txt") != "tidy\n") {
+        throw "a.txt is not tidy";
+    }
+}
+`, nil)
+
+	_ = s.ci(m, WithCharms(types.CharmReadWrite, types.CharmUpdate))
+	s.Equal("tidy\n", s.read(repo, "a.txt"))
+}
+
+func (s *ciRepairSuite) TestRunAfterTheCommitRepairsNothing() {
+	m, repo := s.open(ciNeedsTidy, nil)
+	s.Require().Error(s.ci(m, WithWrite()))
+	repo.Commit("tidy", nil)
+
+	s.Require().NoError(s.ci(m, WithWrite()))
+	s.Empty(repo.Git("status", "--porcelain"))
+}
+
+func (s *ciRepairSuite) TestInPlaceUpdateDeclaresAWrite() {
+	p := &types.Project{TargetUpdates: map[string][]types.UpdateRef{"tidy": {{Glob: "*.go"}}}}
+	s.True(declaresOwnWrite(p, "tidy"))
+}
+
+func (s *ciRepairSuite) TestOutputDeclaresAWrite() {
+	p := &types.Project{TargetOutputs: map[string][]types.OutputRef{"regen": {{Glob: "gen/**"}}}}
+	s.True(declaresOwnWrite(p, "regen"))
+}
+
+func (s *ciRepairSuite) TestTargetWithoutWritesFilesDeclaresNoWrite() {
+	s.False(declaresOwnWrite(&types.Project{Outputs: types.MustParseGlobs("gen/**")}, "check"),
+		"a project-wide output is no target's own declaration")
+}
+
+func (s *ciRepairSuite) TestWriteDeclaredByAMemberIsNotTheTargetsOwn() {
+	p := &types.Project{
+		TargetChains:  map[string][]types.ChainStep{"format": {{Target: "regen"}}},
+		TargetOutputs: map[string][]types.OutputRef{"regen": {{Glob: "gen/**"}}},
+	}
+	s.False(declaresOwnWrite(p, "format"))
+	s.True(declaresOutput(p, "format"), "the chain-walking neighbour still sees it")
+}
