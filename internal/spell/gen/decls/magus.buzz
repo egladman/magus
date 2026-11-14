@@ -2779,7 +2779,7 @@ export extern fun session(opts: magus\trail\ReadOptions? = null) > Session !> an
 export extern fun where(dir: str) > str !> any;
 export extern fun workspace(dir: str = "") > Workspace !> any;
 export extern fun workspaceProvider(spell: {str: any}) > void;
-// Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this module hard to read.
+// Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this module hard to read. Inside a target every level is written to the target's captured output, in log.format, so `magus query output <ref>` holds the whole log whatever -q or -v said. The console shows a line only at or above the run's log level, passing target or failing.
 export object log {
     static extern fun debug(msg: str = "", fields: {str: str} = {<str: str>}) > void;
     static extern fun error(msg: str = "", fields: {str: str} = {<str: str>}) > void;

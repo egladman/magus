@@ -356,7 +356,7 @@ var Magus = Module{
 	Namespaces: []Namespace{
 		{
 			Name: "log",
-			Doc:  "Emitting a message without changing control flow: the four levels, plus hint. magus\\fatal and magus\\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this module hard to read.",
+			Doc:  "Emitting a message without changing control flow: the four levels, plus hint. magus\\fatal and magus\\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this module hard to read. Inside a target every level is written to the target's captured output, in log.format, so `magus query output <ref>` holds the whole log whatever -q or -v said. The console shows a line only at or above the run's log level, passing target or failing.",
 			Methods: []Method{
 				{
 					Name:   "debug",

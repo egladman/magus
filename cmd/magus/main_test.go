@@ -1327,7 +1327,7 @@ func notices(t *testing.T, fn func()) string {
 	t.Helper()
 	var buf bytes.Buffer
 	prev := slog.Default()
-	slog.SetDefault(slog.New(cache.NewPrettyHandler(&buf, slog.LevelDebug)))
+	slog.SetDefault(slog.New(cache.NewLogHandler(&buf, "pretty", &slog.HandlerOptions{Level: slog.LevelDebug})))
 	defer slog.SetDefault(prev)
 	fn()
 	return buf.String()

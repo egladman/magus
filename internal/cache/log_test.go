@@ -658,7 +658,7 @@ func TestPrettyHandlerCloseIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	h := NewPrettyHandler(&buf, slog.LevelInfo)
+	h := prettyHandler(&buf, slog.LevelInfo)
 	require.NotPanics(t, func() {
 		h.Close()
 		h.Close()
@@ -672,7 +672,7 @@ func TestPrettyHandlerNonTTYSkipsStickyRegion(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer
-	h := NewPrettyHandler(&buf, slog.LevelInfo)
+	h := prettyHandler(&buf, slog.LevelInfo)
 	assert.False(t, h.lease.Enabled(), "a non-TTY writer must be granted no rows")
 
 	require.NoError(t, h.Handle(context.Background(), buildRecord(
@@ -810,7 +810,7 @@ func TestPrettyHandlerRedactsSecrets(t *testing.T) {
 	require.NoError(t, err)
 
 	var sink bytes.Buffer
-	h := NewPrettyHandler(&sink, slog.LevelDebug)
+	h := prettyHandler(&sink, slog.LevelDebug)
 	slog.New(h).DebugContext(ctx, "run.exec",
 		"cmd", "sh", "args", []string{"-c", "echo tok=ghp_never_echo_me"}, "dir", ".")
 
@@ -822,7 +822,7 @@ func TestPrettyHandlerRedactsSecrets(t *testing.T) {
 // common path: a run that reads no secret renders byte-for-byte as before.
 func TestPrettyHandlerIsUnchangedWithoutSecrets(t *testing.T) {
 	var sink bytes.Buffer
-	h := NewPrettyHandler(&sink, slog.LevelDebug)
+	h := prettyHandler(&sink, slog.LevelDebug)
 	slog.New(h).DebugContext(context.Background(), "run.exec",
 		"cmd", "go", "args", []string{"build", "./..."}, "dir", ".")
 
@@ -843,7 +843,7 @@ func TestPrettyHandlerIsUnchangedWithoutSecrets(t *testing.T) {
 // A log handler must not use record delivery as a cancellation channel.
 func TestPrettyHandlerPrintsAfterCancellation(t *testing.T) {
 	var sink bytes.Buffer
-	lg := slog.New(NewPrettyHandler(&sink, slog.LevelInfo))
+	lg := slog.New(prettyHandler(&sink, slog.LevelInfo))
 
 	ctx, cancel := context.WithCancel(t.Context())
 	lg.InfoContext(ctx, "cache.warn", slog.String("msg", "before"))
@@ -1305,7 +1305,7 @@ func TestNoEscapeSequencesEverReachAPipe(t *testing.T) {
 	t.Parallel()
 
 	var buf bytes.Buffer // no Fd(), so never a terminal
-	h := NewPrettyHandler(&buf, slog.LevelInfo)
+	h := prettyHandler(&buf, slog.LevelInfo)
 	ctx := context.Background()
 
 	h.BeginRun()
@@ -1433,7 +1433,7 @@ func TestClickCoordinatesMatchWhereTheBandActuallyDrew(t *testing.T) {
 func TestRecordBoolSurvivesAWrongType(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	h := NewPrettyHandler(&buf, slog.LevelInfo)
+	h := prettyHandler(&buf, slog.LevelInfo)
 	assert.NotPanics(t, func() {
 		_ = h.Handle(context.Background(), buildRecord("cache.remote.posture",
 			slog.String("backend", "gha"), slog.String("active", "not a bool")))

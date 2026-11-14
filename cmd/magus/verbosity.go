@@ -236,26 +236,17 @@ func applyDisplay() {
 // displayLogHandler builds the stderr handler for the -o and log.format in
 // force, and records a pretty handler as displayHandler.
 func displayLogHandler(opts *slog.HandlerOptions) slog.Handler {
-	lvl := opts.Level.Level()
-	var h slog.Handler
 	// -o jsonl reads global.output directly rather than globalCfg.Log.Format (which
 	// finalizeConfig also points at "jsonl", for the CACHE logger -- see its
 	// comment): general diagnostics go through the process-wide default logger
 	// installed here, not the cache logger those convert, and must not print free
 	// text on stderr while a caller parses this run as JSONL. They land as run.notice
 	// records on the stderr encoder a -o jsonl sink writes its notices through.
-	switch {
-	case global.output == string(outputJSONL):
-		h = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(os.Stderr), lvl))
-	case globalCfg.Log.Format == "json":
-		h = secret.NewRedactingHandler(slog.NewJSONHandler(os.Stderr, opts))
-	case globalCfg.Log.Format == "text":
-		h = secret.NewRedactingHandler(slog.NewTextHandler(os.Stderr, opts))
-	default: // pretty, plain
-		// Render general diagnostics through the same compact handler as cache
-		// events so they share one style and stop interleaving as raw
-		// "time=... level=..." lines with the pretty output.
-		ph := cache.NewPrettyHandler(os.Stderr, lvl)
+	if global.output == string(outputJSONL) {
+		return secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(os.Stderr), opts.Level.Level()))
+	}
+	h := cache.NewLogHandler(os.Stderr, globalCfg.Log.Format, opts)
+	if ph, ok := h.(*cache.PrettyHandler); ok {
 		if name := globalCfg.Log.Loader; name != "" {
 			l, err := progress.Lookup(name)
 			if err == nil {
@@ -268,7 +259,6 @@ func displayLogHandler(opts *slog.HandlerOptions) slog.Handler {
 		displayMu.Lock()
 		displayHandler = ph
 		displayMu.Unlock()
-		h = ph
 	}
 	return h
 }
