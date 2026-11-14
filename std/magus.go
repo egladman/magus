@@ -94,6 +94,18 @@ var Magus = Module{
 			Impl:    MagusCommand,
 		},
 		{
+			Name: "cmdAll",
+			Doc:  "magus\\cmd for a batch: run `magus <sub> <argv>` once per argv in args, all with the same opts, as many at once as the run's concurrency budget seats. Each child holds one slot of that budget while it runs, the one proc\\with_slots reserves from, after the calling target hands its own back, so a batch never runs the machine past its budget. With no budget on the context, as in a bare `magus buzz` script, the children run one at a time and a line says so. Children start in input order, and the results come back in input order. Each child's output is buffered and written to the console in input order once it ends, so the log reads as if they ran one after another. Every child runs to its end whatever its siblings do; then a non-zero exit raises, naming every failed command, unless opts.AllowFailure is set, which returns every result instead. opts is magus\\cmd's, applied to each child. run and affected are refused: this run's pool adopts a nested run, which would then queue for the slots its siblings hold. Use magus\\run, which takes several targets, for those.",
+			Args: []Arg{
+				{Name: "sub"},
+				{Name: "args"},
+				{Name: "opts", Optional: true, Object: "CommandOptions"},
+			},
+			Returns: []Ret{{Object: "[ExecResult]"}},
+			Raises:  true,
+			Impl:    MagusCommandAll,
+		},
+		{
 			Name: "where",
 			Doc:  "Return the project path containing dir, or null when dir is inside no project. Served in-process from the workspace on the context - no subprocess.",
 			Args: []Arg{
@@ -1264,6 +1276,43 @@ func MagusCommand(ctx context.Context, sub string, args []string, opts types.Mag
 	return runMagusSub(ctx, sub, args, opts)
 }
 
+// MagusCommandAll implements magus\cmdAll: magus\cmd once per argv, each child
+// holding one limiter slot, results in input order. Every child runs to its
+// end before a failure raises. run and affected are refused: this run's pool
+// adopts them, and an adopted child queues for the slots its siblings hold.
+func MagusCommandAll(ctx context.Context, sub string, args [][]string, opts types.MagusCommandOptions) ([]types.ExecResult, error) {
+	if sub == "run" || sub == "affected" {
+		return nil, fmt.Errorf(`magus\cmdAll: %s is refused: this run's pool adopts a nested magus %s, which then queues for the slots its siblings hold; call magus\cmd for each`, sub, sub)
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf(`magus\cmdAll: executable: %w`, err)
+	}
+	env := recursiveMagusEnv(ctx)
+	fulls := make([][]string, len(args))
+	for i, argv := range args {
+		warnIfTypedSubcommand(ctx, sub, argv)
+		fulls[i] = nestedArgv(append([]string{sub}, argv...), opts)
+	}
+	results := make([]types.ExecResult, len(args))
+	label := func(i int) string { return "magus " + strings.Join(fulls[i], " ") }
+	errs := eachSeated(ctx, len(args), label, func(ctx context.Context, i int) error {
+		res, err := spawn.Exec(nestedMagusContext(ctx), self, fulls[i], nestedExecOptions(ctx, opts, env))
+		results[i], err = nestedResult("cmdAll", fulls[i], res, err, opts)
+		return err
+	})
+	var failed []error
+	for _, err := range errs {
+		if err != nil {
+			failed = append(failed, err)
+		}
+	}
+	if len(failed) > 0 {
+		return nil, fmt.Errorf("magus.cmdAll: %d of %d commands failed:\n%w", len(failed), len(args), errors.Join(failed...))
+	}
+	return results, nil
+}
+
 // warnIfTypedSubcommand warns when sub (and, for describe, its noun) names a
 // command with a dedicated typed method, nudging authors off the escape hatch.
 // A describe noun with no method draws nothing: magus.cmd is the way to reach it.
@@ -1957,12 +2006,7 @@ func runMagus(ctx context.Context, label string, args []string, opts types.Magus
 		return types.ExecResult{}, fmt.Errorf("magus.%s: executable: %w", label, err)
 	}
 
-	// Global flags (e.g. --root) precede the subcommand and its args.
-	var full []string
-	if opts.Root != "" {
-		full = append(full, "--root", opts.Root)
-	}
-	full = append(full, args...)
+	full := nestedArgv(args, opts)
 
 	// childEnv withholds server sockets from subprocesses, while a recursive Magus
 	// call must retain both that trusted transport and its captured lease.
@@ -1980,6 +2024,16 @@ func runMagus(ctx context.Context, label string, args []string, opts types.Magus
 		return types.ExecResult{}, fmt.Errorf("magus.%s: %w", label, err)
 	}
 	return rec, cmdErr
+}
+
+// nestedArgv is a nested magus's argv: global flags (--root) precede the
+// subcommand and its args.
+func nestedArgv(args []string, opts types.MagusCommandOptions) []string {
+	var full []string
+	if opts.Root != "" {
+		full = append(full, "--root", opts.Root)
+	}
+	return append(full, args...)
 }
 
 // nestedResult turns a nested magus's exit into what the calling method returns.

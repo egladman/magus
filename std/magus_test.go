@@ -1048,3 +1048,16 @@ func (s *stdSuite) TestNestedMagusCarriesTheTargetLayerItsCallerDoesNot() {
 	s.Require().NoError(sandbox.PolicyFromContext(nested).CheckRead(nested, granted), "the nested magus")
 	s.Error(sandbox.PolicyFromContext(ctx).CheckRead(ctx, granted), "the script's own exec")
 }
+
+type MagusCommandAllSuite struct{ suite.Suite }
+
+func TestMagusCommandAllSuite(t *testing.T) { suite.Run(t, new(MagusCommandAllSuite)) }
+
+func (s *MagusCommandAllSuite) TestAnAdoptedSubcommandIsRefused() {
+	_, err := MagusCommandAll(s.T().Context(), "run", [][]string{{"build", "."}}, types.MagusCommandOptions{})
+	s.ErrorContains(err, `magus\cmdAll: run is refused`)
+}
+
+func (s *MagusCommandAllSuite) TestRootPrecedesTheSubcommand() {
+	s.Equal([]string{"--root", "w", "buzz", "-t"}, nestedArgv([]string{"buzz", "-t"}, types.MagusCommandOptions{Root: "w"}))
+}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"os"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/libs/termkit"
@@ -655,4 +657,110 @@ func ProcWithSlots(ctx context.Context, n int, cb func(ctx context.Context) erro
 		ctx = seated
 	}
 	return cb(ctx)
+}
+
+// eachSeated runs run(ctx, i) for each i below n, one limiter slot each.
+// The caller's slots are handed back meanwhile. Output is replayed in index
+// order. Every started call finishes; errs[i] is call i's error.
+func eachSeated(ctx context.Context, n int, label func(i int) string, run func(ctx context.Context, i int) error) []error {
+	errs := make([]error, n)
+	lim := cache.LimiterFromContext(ctx)
+	if lim == nil {
+		// A bare `magus buzz` script: nothing budgets the machine.
+		if n > 1 {
+			slog.InfoContext(ctx, "no concurrency limiter on the context, so the commands run one at a time", "commands", n)
+		}
+		for i := range n {
+			errs[i] = run(ctx, i)
+		}
+		return errs
+	}
+	_ = proc.RunChildSync(ctx, lim, func() error {
+		seatAll(ctx, lim, n, label, run, errs)
+		return nil
+	})
+	return errs
+}
+
+// seatAll admits each call in index order and replays each one's output in
+// that order once it ends. A refused slot starts nothing further.
+func seatAll(ctx context.Context, lim *cache.Limiter, n int, label func(i int) string, run func(ctx context.Context, i int) error, errs []error) {
+	outputs := make([]*orderedOutput, n)
+	done := make([]chan struct{}, n)
+	for i := range n {
+		outputs[i] = &orderedOutput{beat: cache.ProgressFromContext(ctx).Beat}
+		done[i] = make(chan struct{})
+	}
+	flushed := make(chan struct{})
+	go func() {
+		defer close(flushed)
+		stdout, stderr := spawn.OutputWriters(ctx)
+		for i := range n {
+			<-done[i]
+			outputs[i].replay(stdout, stderr)
+		}
+	}()
+	var wg sync.WaitGroup
+	for i := range n {
+		seat, release, err := lim.Admit(ctx, label(i))
+		if err != nil {
+			for j := i; j < n; j++ {
+				errs[j] = fmt.Errorf("%s: not started: %w", label(j), err)
+				close(done[j])
+			}
+			break
+		}
+		seat = spawn.WithOutputWriters(seat, outputs[i].writer(false), outputs[i].writer(true))
+		wg.Go(func() {
+			defer close(done[i])
+			defer release()
+			errs[i] = run(seat, i)
+		})
+	}
+	wg.Wait()
+	<-flushed
+}
+
+// orderedOutput keeps one call's writes to both streams in write order.
+// Each write beats the step's progress: the run's taps see nothing until
+// the replay.
+type orderedOutput struct {
+	mu     sync.Mutex
+	chunks []outputChunk
+	beat   func()
+}
+
+type outputChunk struct {
+	stderr bool
+	data   []byte
+}
+
+func (o *orderedOutput) writer(stderr bool) io.Writer {
+	return outputStream{o: o, stderr: stderr}
+}
+
+func (o *orderedOutput) replay(stdout, stderr io.Writer) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for _, c := range o.chunks {
+		w := stdout
+		if c.stderr {
+			w = stderr
+		}
+		_, _ = w.Write(c.data)
+	}
+	o.chunks = nil
+}
+
+type outputStream struct {
+	o      *orderedOutput
+	stderr bool
+}
+
+func (s outputStream) Write(p []byte) (int, error) {
+	s.o.mu.Lock()
+	s.o.chunks = append(s.o.chunks, outputChunk{stderr: s.stderr, data: slices.Clone(p)})
+	s.o.mu.Unlock()
+	s.o.beat()
+	return len(p), nil
 }
