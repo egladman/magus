@@ -445,7 +445,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1. Config file key: **dry_run**.
 
 **MAGUS_DEFAULT_CHARMS**
-: Execution charms applied to every \`magus run\` / \`magus x\` by default, e.g. ["rw"] to make targets write locally without typing :rw. Per-run :charms stack on top. The ci anchor still strips "rw" (RunCI), so a local \`magus run ci\` stays read-only; --no-default-charms ignores these for one run. \`magus affected\` does not apply them, so CI stays read-only unless explicit. Config file key: **default_charms**.
+: Execution charms applied to every \`magus run\` / \`magus x\` by default, e.g. ["rw"] to make targets write locally without typing :rw. Per-run :charms stack on top. \`magus affected\` applies them too. Under "rw", a ci run repairs a failing declared writer. --no-default-charms ignores these for one run. Config file key: **default_charms**.
 
 **MAGUS_SANDBOX**
 : Off (the default), best-effort (landlock confines each child where the host has it, magus's own binding checks where it does not), or required (refuse to run, MGS2012, unless the kernel can confine every child: landlock ABI 3). Config file key: **sandbox.mode**.

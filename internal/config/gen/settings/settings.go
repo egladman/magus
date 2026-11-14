@@ -1034,7 +1034,7 @@ var Settings = []configuration.Setting{
 		EnvVar:   "MAGUS_DEFAULT_CHARMS",
 		Kind:     command.StringList,
 		Usage:    "MAGUS_DEFAULT_CHARMS: DefaultCharms are execution charms applied to every 'magus run' / 'magus x' by default, e.g.",
-		Doc:      "Execution charms applied to every `magus run` / `magus x` by default, e.g. [\"rw\"] to make targets write locally without typing :rw. Per-run :charms stack on top. The ci anchor still strips \"rw\" (RunCI), so a local `magus run ci` stays read-only; --no-default-charms ignores these for one run. `magus affected` does not apply them, so CI stays read-only unless explicit",
+		Doc:      "Execution charms applied to every `magus run` / `magus x` by default, e.g. [\"rw\"] to make targets write locally without typing :rw. Per-run :charms stack on top. `magus affected` applies them too. Under \"rw\", a ci run repairs a failing declared writer. --no-default-charms ignores these for one run",
 	},
 	{
 		GoPath:   "Sandbox.Mode",

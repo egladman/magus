@@ -92,7 +92,7 @@ func doctorCommand(ctx context.Context, root string, rc runConfig, args []string
 		dopts = append(dopts, doctor.WithExplanations(exp))
 	}
 	// The budget the broker starts with (brokerServe); a ci run strips every write charm,
-	// and `magus affected ci` adds none.
+	// and its verify passes claim without one.
 	ctx = doctor.WithGateClaims(ctx, func(ctx context.Context, targets []types.Target) ([]types.MachineClaim, error) {
 		m, err := loadMagus(ctx, root)
 		if err != nil {

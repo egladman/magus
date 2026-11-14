@@ -113,9 +113,9 @@ type Config struct {
 
 	// DefaultCharms are execution charms applied to every `magus run` / `magus x` by
 	// default, e.g. ["rw"] to make targets write locally without typing :rw. Per-run
-	// :charms stack on top. The ci anchor still strips "rw" (RunCI), so a local
-	// `magus run ci` stays read-only; --no-default-charms ignores these for one run.
-	// `magus affected` does not apply them, so CI stays read-only unless explicit.
+	// :charms stack on top. `magus affected` applies them too.
+	// Under "rw", a ci run repairs a failing declared writer.
+	// --no-default-charms ignores these for one run.
 	DefaultCharms []string `json:"default_charms" yaml:"default_charms"`
 
 	// Sandbox confines spells and the processes magus starts to the workspace and an
