@@ -699,6 +699,7 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, error) {
 	customTargets := make(map[string][]string)
 	ctx = m.installWorkspaceRegistry(ctx)
+	ctx = interp.WithBytecodeWarnings(ctx)
 	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
 	// so a top-level read here must be the SAME read the run sees.
 	ctx = m.ContextWithSecrets(ctx)

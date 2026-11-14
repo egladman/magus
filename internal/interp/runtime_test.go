@@ -371,11 +371,12 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 
 // storedChunks lists every file under dir, which holds nothing but the stores, less
 // the magusfile facts kept beside the chunks.
+// A store's own dot files are not chunks.
 func storedChunks(t *testing.T, dir string) map[string]bool {
 	t.Helper()
 	out := map[string]bool{}
 	require.NoError(t, filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err == nil && d.Type().IsRegular() && !strings.HasPrefix(d.Name(), "facts-") {
+		if err == nil && d.Type().IsRegular() && !strings.HasPrefix(d.Name(), "facts-") && !strings.HasPrefix(d.Name(), ".") {
 			out[path] = true
 		}
 		return err
@@ -507,7 +508,7 @@ func TestGuardBytecodeStorePrunesStaleStamps(t *testing.T) {
 	long := time.Now().Add(-2 * staleStampAge)
 	require.NoError(t, os.Chtimes(old, long, long))
 
-	store, err := worktreeBytecodeStore(t.TempDir())
+	store, err := workingCopyBytecodeStore(t.TempDir())
 	require.NoError(t, err)
 	require.NotNil(t, store)
 	assert.NoDirExists(t, old)
@@ -531,7 +532,7 @@ func TestGuardBytecodeStoreIsOffWithoutABuildID(t *testing.T) {
 	compilerStamp = func() string { return "" }
 	t.Cleanup(func() { compilerStamp = old })
 
-	store, err := worktreeBytecodeStore(t.TempDir())
+	store, err := workingCopyBytecodeStore(t.TempDir())
 	require.ErrorContains(t, err, "no build id")
 	assert.Nil(t, store)
 	assert.NoDirExists(t, filepath.Join(cache, "magus", "buzz-bytecode"))
@@ -989,17 +990,16 @@ func (s *BytecodeCacheSuite) TestEditedEarlierFileCompilesTheLaterOne() {
 
 func (s *BytecodeCacheSuite) TestNoBuildIDCompilesEveryLoadAndSaysSo() {
 	logs := s.captureLog()
-	noStoreReported.Clear()
-	s.T().Cleanup(noStoreReported.Clear)
 	old := compilerStamp
 	compilerStamp = func() string { return "" }
 	s.T().Cleanup(func() { compilerStamp = old })
+	command := WithBytecodeWarnings(s.T().Context())
 
-	_, first := s.load(s.T().Context(), s.source(), true)
-	_, second := s.load(s.T().Context(), s.source(), true)
+	_, first := s.load(command, s.source(), true)
+	_, second := s.load(command, s.source(), true)
 	s.Equal([]bool{true, true}, []bool{first, second})
 	s.Empty(storedChunks(s.T(), s.cache))
-	s.Equal(1, strings.Count(logs.String(), "no sealed bytecode store"), "said once per process: %s", logs)
+	s.Equal(1, warnings(logs, "no sealed bytecode store"), "said once per command: %s", logs)
 	s.Contains(logs.String(), "no build id")
 }
 
@@ -1025,4 +1025,127 @@ func (s *BytecodeCacheSuite) TestUnusableChunkIsCompiledOverAndSaysSo() {
 	marker, compiled := s.load(s.T().Context(), s.source(), true)
 	s.Equal([]any{"one", true}, []any{marker, compiled})
 	s.Contains(logs.String(), "stored chunk is unusable")
+}
+
+// storeDir is where the suite's workspace keeps its chunks.
+func (s *BytecodeCacheSuite) storeDir() string {
+	sum := sha256.Sum256([]byte(s.w.Root()))
+	return filepath.Join(s.cache, "magus", "buzz-bytecode", compilerStamp(), hex.EncodeToString(sum[:]))
+}
+
+// warnings counts the warning lines in logs that carry text.
+func warnings(logs *bytes.Buffer, text string) int {
+	n := 0
+	for line := range strings.Lines(logs.String()) {
+		if strings.Contains(line, "level=WARN") && strings.Contains(line, text) {
+			n++
+		}
+	}
+	return n
+}
+
+// b was compiled after a ran helper, so a changed helper compiles b again
+// though neither b nor its own imports changed.
+func (s *BytecodeCacheSuite) TestChangedImportOfAnEarlierFileCompilesTheLaterOne() {
+	first := s.w.Write("magusfiles/a.buzz", "import \"helper\";\nexport final base = helper\\value();\n")
+	second := s.w.Write("magusfiles/b.buzz", "export final marker = base;\n")
+	src := &Source{Dir: s.w.Root(), Files: []string{first, second}, Engine: "buzz"}
+	s.load(s.T().Context(), src, true)
+	before := storedChunks(s.T(), s.cache)
+	s.w.Write("helper.buzz", "export fun value() > str { return \"two\"; }\n")
+
+	marker, _ := s.load(s.T().Context(), src, true)
+	s.Equal("two", marker)
+	s.Len(storedChunks(s.T(), s.cache), len(before)+2, "helper and b stored under new keys, a over its own")
+}
+
+func (s *BytecodeCacheSuite) TestChunkThatCannotBeKeptSaysSo() {
+	stamp := filepath.Dir(s.storeDir())
+	s.Require().NoError(os.MkdirAll(stamp, 0o700))
+	s.Require().NoError(os.Chmod(stamp, 0o500))
+	s.T().Cleanup(func() { _ = os.Chmod(stamp, 0o700) })
+	logs := s.captureLog()
+
+	marker, compiled := s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one", true}, []any{marker, compiled})
+	s.Equal(1, warnings(logs, "could not keep the compiled chunk"), "%s", logs)
+}
+
+func (s *BytecodeCacheSuite) TestCacheThatIsNotADirectorySaysSo() {
+	stamps := filepath.Join(s.cache, "magus", "buzz-bytecode")
+	s.Require().NoError(os.MkdirAll(filepath.Dir(stamps), 0o700))
+	s.Require().NoError(os.WriteFile(stamps, nil, 0o600))
+	logs := s.captureLog()
+
+	_, compiled := s.load(s.T().Context(), s.source(), true)
+	s.True(compiled)
+	s.Equal(1, warnings(logs, "no sealed bytecode store"), "%s", logs)
+}
+
+// A daemon serves many commands, and each one that compiles every load is told.
+func (s *BytecodeCacheSuite) TestEveryCommandWithoutAStoreSaysSo() {
+	logs := s.captureLog()
+	old := compilerStamp
+	compilerStamp = func() string { return "" }
+	s.T().Cleanup(func() { compilerStamp = old })
+
+	s.load(s.T().Context(), s.source(), true)
+	s.load(s.T().Context(), s.source(), true)
+	s.Equal(2, warnings(logs, "no sealed bytecode store"), "%s", logs)
+}
+
+// A sealed chunk this build stored verifies, so one that does not decode is a
+// fault in the store's format, not an edited import.
+func (s *BytecodeCacheSuite) TestSealedChunkThatDoesNotDecodeSaysSo() {
+	s.load(s.T().Context(), s.source(), true)
+	store, err := sealedBytecodeStoreUnder("buzz-bytecode", s.w.Root())
+	s.Require().NoError(err)
+	for path := range storedChunks(s.T(), s.storeDir()) {
+		key := filepath.Base(path)
+		blob, err := store.Load(key)
+		s.Require().NoError(err)
+		s.Require().NoError(store.Store(key, blob[:len(blob)/2]))
+	}
+	logs := s.captureLog()
+
+	marker, compiled := s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one", true}, []any{marker, compiled})
+	s.Positive(warnings(logs, "does not decode"), "%s", logs)
+	s.NotContains(logs.String(), "stale against its imports")
+}
+
+func (s *BytecodeCacheSuite) TestPartialWriteACrashLeftIsRemoved() {
+	s.Require().NoError(os.MkdirAll(s.storeDir(), 0o700))
+	partial := filepath.Join(s.storeDir(), ".partial-123")
+	s.Require().NoError(os.WriteFile(partial, []byte("half"), 0o600))
+	long := time.Now().Add(-2 * staleStampAge)
+	s.Require().NoError(os.Chtimes(partial, long, long))
+
+	s.load(s.T().Context(), s.source(), true)
+	s.NoFileExists(partial)
+}
+
+func (s *BytecodeCacheSuite) TestChunkUnwrittenForAWeekIsRemoved() {
+	s.Require().NoError(os.MkdirAll(s.storeDir(), 0o700))
+	unused := filepath.Join(s.storeDir(), strings.Repeat("0", 64))
+	s.Require().NoError(os.WriteFile(unused, []byte("an edited magusfile's chunk"), 0o600))
+	long := time.Now().Add(-8 * 24 * time.Hour)
+	s.Require().NoError(os.Chtimes(unused, long, long))
+
+	s.load(s.T().Context(), s.source(), true)
+	s.NoFileExists(unused)
+}
+
+func (s *BytecodeCacheSuite) TestSweepKeepsChunksInUse() {
+	s.load(s.T().Context(), s.source(), true)
+	stored := storedChunks(s.T(), s.cache)
+	s.Require().NotEmpty(stored)
+	long := time.Now().Add(-2 * staleStampAge)
+	for path := range stored {
+		s.Require().NoError(os.Chtimes(path, long, long))
+	}
+
+	marker, compiled := s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one", false}, []any{marker, compiled})
+	s.Equal(stored, storedChunks(s.T(), s.cache))
 }
