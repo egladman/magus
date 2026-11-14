@@ -2,11 +2,15 @@ package magus
 
 import (
 	"context"
+	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -99,4 +103,73 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 			assert.Equal(t, tc.gate, rep.Commands())
 		})
 	}
+}
+
+func TestSizedRepairSuite(t *testing.T) { suite.Run(t, new(sizedRepairSuite)) }
+
+// sizedRepairSuite pins a sized gate under rw: it verifies and repairs as
+// RunCI does, over the steps it sized.
+type sizedRepairSuite struct{ suite.Suite }
+
+func (s *sizedRepairSuite) open() (*Magus, *testkit.Repo) {
+	repo := testkit.NewRepository(s.T(), map[string]string{
+		".gitignore":     ".magus/\n",
+		"a.txt":          "messy\n",
+		"input.txt":      "generated\n",
+		"gen.txt":        "generated\n",
+		"magusfile.buzz": ciRepairMagusfile,
+	})
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err, "Open")
+	s.T().Cleanup(func() { _ = m.Close() })
+	return m, repo
+}
+
+func (s *sizedRepairSuite) read(repo *testkit.Repo, rel string) string {
+	b, err := os.ReadFile(repo.Path(rel))
+	s.Require().NoError(err)
+	return string(b)
+}
+
+// gate runs a gate sized to steps. A step that names an op runs on its own.
+func (s *sizedRepairSuite) gate(m *Magus, steps []types.TierGateStep, opts ...RunOption) error {
+	return m.RunGate(context.Background(), types.TierReport{Tier: check.RiskScoped, Gate: steps}, opts...)
+}
+
+func (s *sizedRepairSuite) TestSizedRunVerifiesWithReadWriteWithheld() {
+	m, repo := s.open()
+
+	err := s.gate(m, []types.TierGateStep{{Target: "check", Projects: []string{"."}}}, WithWrite())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "check failed")
+	s.NoFileExists(repo.Path("b.txt"), "check ran without rw, and declares no write to repair")
+}
+
+func (s *sizedRepairSuite) TestSizedRunRepairsAFailingDeclaredWriter() {
+	m, repo := s.open()
+
+	err := s.gate(m, []types.TierGateStep{{Target: "tidy", Projects: []string{"."}}}, WithWrite())
+	s.Require().True(errors.Is(err, types.UncommittedRepair), "got %v", err)
+	s.Contains(err.Error(), "through .:tidy: a.txt")
+	s.Equal("tidy\n", s.read(repo, "a.txt"))
+}
+
+func (s *sizedRepairSuite) TestSizedRunGathersFailuresAcrossItsRuns() {
+	m, repo := s.open()
+
+	err := s.gate(m, []types.TierGateStep{
+		{Target: "regen", Projects: []string{"."}},
+		{Target: "tidy", Projects: []string{"."}, Op: "tidy-op"},
+	}, WithWrite())
+	s.Require().True(errors.Is(err, types.UncommittedRepair), "the second run's failure was read: %v", err)
+	s.Equal("tidy\n", s.read(repo, "a.txt"))
+}
+
+func (s *sizedRepairSuite) TestSizedRunWithoutReadWriteRepairsNothing() {
+	m, repo := s.open()
+
+	err := s.gate(m, []types.TierGateStep{{Target: "tidy", Projects: []string{"."}}})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "a.txt is not tidy")
+	s.Equal("messy\n", s.read(repo, "a.txt"))
 }

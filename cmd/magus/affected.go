@@ -268,8 +268,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
 	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, !af.DefaultCharms)
-	// Same as `magus run`: RunCI gets the carried set and verifies without the
-	// write charms, which the header names. A sized gate gets the stripped set.
+	// Same as `magus run`: RunCI and a sized gate get the carried set and
+	// verify without the write charms, which the header names.
 	carried := charms
 	if target == "ci" {
 		charms = magus.CharmsForCI(charms)
@@ -369,10 +369,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	invCtx, readReturns := types.WithReturnCapture(invCtx)
 	switch {
 	case sized != nil:
-		if slices.ContainsFunc(carried, func(c string) bool { return types.NormalizeCharm(c) == types.CharmReadWrite }) {
-			slog.InfoContext(ctx, "this sized ci run verifies only", attr.Notice(""), attr.Component("magus"))
-		}
-		err = m.RunGate(invCtx, *sized, withCharms(runOpts, charms)...)
+		err = m.RunGate(invCtx, *sized, withCharms(runOpts, carried)...)
 	case target == "ci":
 		err = m.RunCI(invCtx, targets, withCharms(runOpts, carried)...)
 	default:
