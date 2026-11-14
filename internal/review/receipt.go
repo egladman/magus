@@ -43,7 +43,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/vcs"
 )
 
 // digestLen keeps 16 hex characters, 64 bits: collision-free for a per-workspace store and
@@ -82,18 +82,10 @@ type Receipt struct {
 	At     time.Time `json:"at"`
 	// Source names where the content came from, zero for the working tree.
 	//
-	// types.VCSCheckpoint rather than the revision expression the reader typed, and the
-	// difference is not cosmetic: "feat/audience" is a MOVABLE name, so a receipt holding it
-	// would still read as covering that branch after somebody pushed to it. Checkpoint.Revision
-	// is documented as the full resolved id meant to be fed back to a VCS, which is the only
-	// spelling that still means the same thing tomorrow. Checkpoint.VCS records whose revision
-	// syntax it is written in, since the backends do not share one.
-	//
-	// PROVENANCE ONLY. Covers never reads it, because the digest is already the identity: the
-	// package's whole assertion is "at this content, somebody said read", and content is content
-	// whether it arrived from a checkout or a branch. What Source buys is a later reader being
-	// able to tell "I read this on Alice's branch" from "I read this in my tree".
-	Source types.VCSCheckpoint `json:"source,omitzero"`
+	// A resolved id, not the branch name typed: a movable name goes stale.
+	// Provenance only. Covers never reads it, since the digest is the
+	// identity.
+	Source vcs.Checkpoint `json:"source,omitzero"`
 	// Reason is why one keystroke covered this file, set only by a bulk `--ack` and empty
 	// for a receipt earned by stepping the file in the viewer.
 	//
@@ -215,8 +207,8 @@ func ReadStates(cacheDir string, paths []string, digestOf func(path string) stri
 // A zero checkpoint means no receipt for these paths names a revision: nobody has reviewed them, or
 // the reviewing was done against a working tree, which has no revision to name. Both are "there is
 // no earlier pass to subtract", never "nothing changed".
-func (s Store) ReviewedAt(paths []string) (types.VCSCheckpoint, int) {
-	var at types.VCSCheckpoint
+func (s Store) ReviewedAt(paths []string) (vcs.Checkpoint, int) {
+	var at vcs.Checkpoint
 	var oldest time.Time
 	covered := 0
 	for _, p := range paths {

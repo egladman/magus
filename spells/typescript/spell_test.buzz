@@ -44,7 +44,7 @@ test "a package wires the tools it declares and reports every script" {
         source("src/main.ts"),
     ]) catch [<DiscoveredProject>];
     std\assert(claims.len() == 1, message: "one package.json is one claim");
-    final root = claimAt(claims, path: ".") catch DiscoveredProject{};
+    final root = claimAt(claims, path: ".") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(root.role.value == "project", message: "a package forms a project");
     std\assert(root.name == "web", message: "the package name labels the project");
     std\assert(opsOf(root, target: "lint") == "eslint", message: "eslint lints");
@@ -57,7 +57,7 @@ test "a package wires the tools it declares and reports every script" {
 
 test "biome lints and formats" {
     final claims = discover([marker("package.json", content: `\{"devDependencies": \{"@biomejs/biome": "1"}}`)]) catch [<DiscoveredProject>];
-    final root = claimAt(claims, path: ".") catch DiscoveredProject{};
+    final root = claimAt(claims, path: ".") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(opsOf(root, target: "lint") == "biome-check", message: "biome-check lints");
     std\assert(opsOf(root, target: "format") == "biome-format", message: "biome-format formats");
 }
@@ -70,9 +70,9 @@ test "a pnpm workspace links members through workspace: ranges" {
         marker("packages/b/package.json", content: `\{"name": "@x/b"}`),
     ]) catch [<DiscoveredProject>];
     std\assert(claims.len() == 3, message: "the root and both members are projects");
-    final a = claimAt(claims, path: "packages/a") catch DiscoveredProject{};
+    final a = claimAt(claims, path: "packages/a") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(a.dependsOn.join(",") == "packages/b", message: "workspace:* is an edge to the member's directory");
-    final b = claimAt(claims, path: "packages/b") catch DiscoveredProject{};
+    final b = claimAt(claims, path: "packages/b") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(b.dependsOn.len() == 0, message: "b depends on nothing");
 }
 
@@ -82,7 +82,7 @@ test "pnpm does not link a plain range, and says so" {
         marker("packages/a/package.json", content: `\{"name": "a", "dependencies": \{"b": "^1.0.0"}}`),
         marker("packages/b/package.json", content: `\{"name": "b"}`),
     ]) catch [<DiscoveredProject>];
-    final a = claimAt(claims, path: "packages/a") catch DiscoveredProject{};
+    final a = claimAt(claims, path: "packages/a") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(a.dependsOn.len() == 0, message: "no edge without workspace:");
     std\assert(hasGap(a, file: "packages/a/package.json", about: "link-workspace-packages"), message: "the missing edge is reported");
 }
@@ -92,7 +92,7 @@ test "a workspace: range naming no member is reported" {
         marker("pnpm-workspace.yaml", content: "packages: [\"packages/*\"]\n"),
         marker("packages/a/package.json", content: `\{"name": "a", "dependencies": \{"gone": "workspace:^"}}`),
     ]) catch [<DiscoveredProject>];
-    final a = claimAt(claims, path: "packages/a") catch DiscoveredProject{};
+    final a = claimAt(claims, path: "packages/a") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(hasGap(a, file: "packages/a/package.json", about: "dependencies.gone: workspace:^ names no package"), message: "an unresolved workspace: range is a gap");
 }
 
@@ -103,7 +103,7 @@ test "npm workspaces link a plain range by name" {
         marker("apps/ui/package.json", content: `\{"name": "ui"}`),
         marker("apps/legacy/package.json", content: `\{"name": "ui"}`),
     ]) catch [<DiscoveredProject>];
-    final web = claimAt(claims, path: "apps/web") catch DiscoveredProject{};
+    final web = claimAt(claims, path: "apps/web") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(web.dependsOn.join(",") == "apps/ui", message: "the member named ui, not the excluded one");
 }
 
@@ -112,7 +112,7 @@ test "a file: range is an edge to the package at that path" {
         marker("app/package.json", content: `\{"dependencies": \{"lib": "file:../lib", "tarball": "file:../vendor/x.tgz"}}`),
         marker("lib/package.json", content: `\{"name": "lib"}`),
     ]) catch [<DiscoveredProject>];
-    final app = claimAt(claims, path: "app") catch DiscoveredProject{};
+    final app = claimAt(claims, path: "app") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(app.dependsOn.join(",") == "lib", message: "file:../lib resolves to lib");
     std\assert(hasGap(app, file: "app/package.json", about: "dependencies.tarball:"), message: "a file: range to no package is reported");
 }
@@ -123,7 +123,7 @@ test "node test files without vitest run under node-test" {
         source("lib/parse.test.mjs"),
         source("lib/parse.mjs"),
     ]) catch [<DiscoveredProject>];
-    final root = claimAt(claims, path: ".") catch DiscoveredProject{};
+    final root = claimAt(claims, path: ".") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(opsOf(root, target: "test") == "node-test", message: "node --test finds parse.test.mjs");
 }
 
@@ -133,22 +133,22 @@ test "a nested package's test files are its own" {
         marker("sub/package.json", content: `\{}`),
         source("sub/a.test.js"),
     ]) catch [<DiscoveredProject>];
-    final root = claimAt(claims, path: ".") catch DiscoveredProject{};
-    final sub = claimAt(claims, path: "sub") catch DiscoveredProject{};
+    final root = claimAt(claims, path: ".") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
+    final sub = claimAt(claims, path: "sub") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(root.targets["test"] == null, message: "the root owns no test file");
     std\assert(opsOf(sub, target: "test") == "node-test", message: "sub owns a.test.js");
 }
 
 test "TypeScript test files without vitest are reported" {
     final claims = discover([marker("package.json", content: `\{}`), source("src/a.test.ts")]) catch [<DiscoveredProject>];
-    final root = claimAt(claims, path: ".") catch DiscoveredProject{};
+    final root = claimAt(claims, path: ".") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(root.targets["test"] == null, message: "nothing runs a.test.ts");
     std\assert(hasGap(root, file: "src/a.test.ts", about: "no vitest dependency"), message: "the test file is reported");
 }
 
 test "a test runner with no op is reported and blocks node-test" {
     final claims = discover([marker("package.json", content: `\{"devDependencies": \{"jest": "29"}}`), source("a.test.js")]) catch [<DiscoveredProject>];
-    final root = claimAt(claims, path: ".") catch DiscoveredProject{};
+    final root = claimAt(claims, path: ".") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(root.targets["test"] == null, message: "jest's tests are not node's");
     std\assert(hasGap(root, file: "package.json", about: "jest: no op"), message: "jest is reported");
 }
@@ -159,7 +159,7 @@ test "build config the spell cannot run is reported" {
         source("tsconfig.build.json"),
         source("vite.config.ts"),
     ]) catch [<DiscoveredProject>];
-    final root = claimAt(claims, path: ".") catch DiscoveredProject{};
+    final root = claimAt(claims, path: ".") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(root.targets["build"] == null, message: "no tsconfig.json, no tsc-build");
     std\assert(hasGap(root, file: "tsconfig.build.json", about: "reads tsconfig.json"), message: "the stray tsconfig is reported");
     std\assert(hasGap(root, file: "vite.config.ts", about: "bundler config"), message: "the bundler config is reported");
@@ -167,14 +167,14 @@ test "build config the spell cannot run is reported" {
 
 test "a package with nothing to wire says so" {
     final claims = discover([marker("package.json", content: `\{"scripts": \{"start": "node ."}}`)]) catch [<DiscoveredProject>];
-    final root = claimAt(claims, path: ".") catch DiscoveredProject{};
+    final root = claimAt(claims, path: ".") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(root.targets.len() == 0, message: "no target");
     std\assert(hasGap(root, file: "package.json", about: "no target was wired"), message: "the empty project is reported");
 }
 
 test "a package.json that is not JSON is still a project, with a gap" {
     final claims = discover([marker("package.json", content: "\{not json")]) catch [<DiscoveredProject>];
-    final root = claimAt(claims, path: ".") catch DiscoveredProject{};
+    final root = claimAt(claims, path: ".") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(hasGap(root, file: "package.json", about: "not a JSON object"), message: "the parse failure is reported");
 }
 
@@ -183,7 +183,7 @@ test "a workspace glob that matches nothing is reported on the workspace root" {
         marker("package.json", content: `\{}`),
         marker("pnpm-workspace.yaml", content: "packages: [\"tools/*\"]\n"),
     ]) catch [<DiscoveredProject>];
-    final root = claimAt(claims, path: ".") catch DiscoveredProject{};
+    final root = claimAt(claims, path: ".") catch DiscoveredProject{ path = "", role = DiscoveryRole.none };
     std\assert(hasGap(root, file: "pnpm-workspace.yaml", about: "tools/* matches no package.json"), message: "the dead glob is reported");
 }
 

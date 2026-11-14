@@ -77,12 +77,10 @@ func (r Resolved) declared() (spells.Descriptor, error) {
 	if err != nil {
 		return spells.Descriptor{}, err
 	}
-	for i, runner := range c.ScriptRunners {
-		if err := validateCommand("", "", runner); err != nil {
-			return spells.Descriptor{}, fmt.Errorf("mgs_listScriptRunners[%d]: %w", i, err)
-		}
+	if err := validateScriptRunners(c.ScriptRunners); err != nil {
+		return spells.Descriptor{}, err
 	}
-	if err := spells.ValidateScriptRunners(c.ScriptRunners); err != nil {
+	if err := validateScopes(c.Scopes); err != nil {
 		return spells.Descriptor{}, err
 	}
 	var indexer *spells.SymbolIndexer
@@ -107,8 +105,35 @@ func (r Resolved) declared() (spells.Descriptor, error) {
 		SymbolIndexer:      indexer,
 		Coverage:           c.Coverage,
 		Sandbox:            c.Sandbox,
+		Scopes:             c.Scopes,
 		Opaque:             c.Opaque,
 	}, nil
+}
+
+// validateScriptRunners refuses an mgs_listScriptRunners command that is
+// malformed, then the set of runners as a whole.
+func validateScriptRunners(runners []spells.Command) error {
+	for i, runner := range runners {
+		if err := validateCommand("", "", runner); err != nil {
+			return fmt.Errorf("mgs_listScriptRunners[%d]: %w", i, err)
+		}
+	}
+	return spells.ValidateScriptRunners(runners)
+}
+
+// validateScopes refuses an mgs_getScopes command that names no program:
+// magus runs it directly, so an empty one is no command at all.
+func validateScopes(c *spells.Command) error {
+	if c == nil {
+		return nil
+	}
+	if c.Bin == "" {
+		return errors.New("mgs_getScopes: bin is required, since magus runs the command with the package appended")
+	}
+	if err := validateCommand("", "", *c); err != nil {
+		return fmt.Errorf("mgs_getScopes: %w", err)
+	}
+	return nil
 }
 
 // addSymbolIndexOp registers m's declared indexer as an op under its reserved name.

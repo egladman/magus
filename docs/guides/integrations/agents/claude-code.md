@@ -122,7 +122,7 @@ cannot; `magus agent harness install` writes them to `.claude/magus/tools`, one 
 capability with one tool name per line, beside a host file naming claude-code, where magus
 finds them by the entry's `--agent-name`. A tool the rows list as touching nothing (a todo list, a plan, a web lookup)
 passes before any rule loads; a tool whose input has none of those shapes and that no row
-lists is named by the unjudged-tool rule rather than run unseen. See
+lists is named by the unjudged-step rule rather than run unseen. See
 [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard).
 
 The catch-all replaced the per-tool entries, among them the `Edit|Write|NotebookEdit`
@@ -317,7 +317,7 @@ Claude Code's `PreToolUse` also fires for a tool served over MCP, named
 `mcp__<server>__<tool>`, and the catch-all entry receives it like any other call. A
 call to one of magus's own tools (`mcp__magus__*`) is judged as the CLI verb it
 stands for, so a rule that holds on one channel holds on the other. A call to
-another server's tool carries a params object magus cannot read, so the unjudged-tool
+another server's tool carries a params object magus cannot read, so the unjudged-step
 rule names it: it advises by default, and a workspace that wants every call judged
 sets it to deny.
 
@@ -410,6 +410,10 @@ carries that response field; a release that drops it leaves every parent empty
 rather than guessed. The same record keeps the model the spawn
 named, and, when the spawn's `description` reads `<parent>/<role> <job>` for a
 live job, the job its later calls are graded under, in its own worktree too.
+
+A guard verdict at `Stop` or `SubagentStop` reaches the agent alone. A deny blocks
+the stop with its reason, and advice rides `hookSpecificOutput.additionalContext`,
+which the host hands the model and does not show you.
 
 The `SubagentStop` entry also measures the subagent. Its payload names the finished
 subagent's `agent_id` and `agent_transcript_path`; magus reads the last usage
@@ -551,13 +555,16 @@ rules in `proofread`, which is a choice about how your agent writes and not part
 guard, so a merge never writes it and never removes one you add. To turn it on, download
 [`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) and add it under both
 `Stop` and `UserPromptSubmit` in `.claude/settings.json` by hand. At `Stop` the script
-runs the `proofread` binary over the turn's last message and prints nothing. Context a
-`Stop` hook prints starts a turn, and you would see the agent answer advice you never saw.
-It keeps up to five findings per session in `$XDG_STATE_HOME/magus/proofread-reply/` and
-hands them to the agent as `additionalContext` with your next message. It needs no magus workspace, only `proofread` on `PATH`, in
-`__PROOFREAD_BIN`, or named with `-- --proofread PATH`; `__PROOFREAD_DECISIONS` or
-`-- --decisions FILE` sets your own decisions. It never blocks the stop and prints
-nothing when proofread is missing or the agent is already continuing.
+runs the `proofread` binary over the turn's last message and prints nothing when it finds
+nothing. Findings wait for your next message: context a `Stop` hook prints starts a turn,
+and you would see the agent answer advice you never saw. It keeps up to five findings per
+session in `$XDG_STATE_HOME/magus/proofread-reply/` and hands them to the agent as
+`additionalContext` with your next message. It needs no magus workspace, only `proofread`
+on `PATH`, in `__PROOFREAD_BIN`, or named with `-- --proofread PATH`;
+`__PROOFREAD_DECISIONS` or `-- --decisions FILE` sets your own decisions. It never blocks
+the stop. When `proofread` is missing or fails, it sends the agent one notice per session
+as `additionalContext` at `Stop`, which only the agent reads, and it prints nothing when
+the agent is already continuing.
 [Check writing in a commit hook](../../proofread.md) covers the setup.
 
 ```json

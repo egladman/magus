@@ -21,8 +21,8 @@ final HELP = "cost: a temporary worktree and one merge per branch; --apply also 
 
 final PRIMARY = "check";
 
-// JobRow is what the merge reads of a job row.
-export object JobRow {
+// MergeJob is what the merge reads of a job row.
+export object MergeJob {
     id: str,
     dependsOn: [str],
     checkoutRoot: str = "",
@@ -159,7 +159,7 @@ fun stripType(branch: str) > str {
     return branch.sub(slash! + 1);
 }
 
-fun rowNamed(rows: [JobRow], id: str) > JobRow? {
+fun rowNamed(rows: [MergeJob], id: str) > MergeJob? {
     foreach (r in rows) {
         if (r.id == id) { return r; }
     }
@@ -168,7 +168,7 @@ fun rowNamed(rows: [JobRow], id: str) > JobRow? {
 
 // candidatesFromJobs is one candidate per job id, on the branch branchOf names for it. An
 // id no row holds, and a job with no branch, is an error naming it.
-export fun candidatesFromJobs(ids: [str], rows: [JobRow], branchOf: fun (row: JobRow) > result\Result::<str>) > result\Result::<[Candidate]> {
+export fun candidatesFromJobs(ids: [str], rows: [MergeJob], branchOf: fun (row: MergeJob) > result\Result::<str>) > result\Result::<[Candidate]> {
     final acc = mut [<Candidate>];
     foreach (id in ids) {
         final row = rowNamed(rows, id: id);
@@ -183,21 +183,21 @@ export fun candidatesFromJobs(ids: [str], rows: [JobRow], branchOf: fun (row: Jo
 
 // jobForBranch is the row whose id is the branch, or the branch without its type prefix,
 // or whose checkout has the branch checked out; null when none does.
-export fun jobForBranch(branch: str, rows: [JobRow], checkedOut: fun (row: JobRow) > result\Result::<str>) > result\Result::<JobRow?> {
+export fun jobForBranch(branch: str, rows: [MergeJob], checkedOut: fun (row: MergeJob) > result\Result::<str>) > result\Result::<MergeJob?> {
     foreach (id in [branch, stripType(branch)]) {
         final row = rowNamed(rows, id: id);
-        if (row != null) { return result\ok::<JobRow?>(row); }
+        if (row != null) { return result\ok::<MergeJob?>(row); }
     }
     foreach (r in rows) {
         if (r.checkoutRoot == "") { continue; }
         final held = checkedOut(r);
-        if (held.error -> err) { return result\Result::<JobRow?>{ error = err }; }
-        if (held.value! == branch) { return result\ok::<JobRow?>(r); }
+        if (held.error -> err) { return result\Result::<MergeJob?>{ error = err }; }
+        if (held.value! == branch) { return result\ok::<MergeJob?>(r); }
     }
-    return result\ok::<JobRow?>(null);
+    return result\ok::<MergeJob?>(null);
 }
 
-export fun candidatesFromBranches(branches: [str], rows: [JobRow], checkedOut: fun (row: JobRow) > result\Result::<str>) > result\Result::<[Candidate]> {
+export fun candidatesFromBranches(branches: [str], rows: [MergeJob], checkedOut: fun (row: MergeJob) > result\Result::<str>) > result\Result::<[Candidate]> {
     final acc = mut [<Candidate>];
     foreach (b in branches) {
         final found = jobForBranch(b, rows: rows, checkedOut: checkedOut);
@@ -287,9 +287,9 @@ export fun parseCheck(cmd: str) > result\Result::<stack\CheckGoal> {
     return result\ok::<stack\CheckGoal>(stack\CheckGoal{ id = PRIMARY, target = words[2], project = project, args = args });
 }
 
-fun storeRows() > result\Result::<[JobRow]> {
+fun storeRows() > result\Result::<[MergeJob]> {
     try {
-        final acc = mut [<JobRow>];
+        final acc = mut [<MergeJob>];
         foreach (j in magus\workspace().jobs().jobs) {
             final goals = mut [<stack\CheckGoal>];
             foreach (g in j.goals) {
@@ -297,15 +297,15 @@ fun storeRows() > result\Result::<[JobRow]> {
                     goals.append(stack\CheckGoal{ id = g.id, target = g.check.target, project = g.check.project, args = g.check.args });
                 }
             }
-            acc.append(JobRow{ id = j.id, dependsOn = j.dependsOn, checkoutRoot = j.checkoutRoot, check = checkCommand(j.check), goals = goals });
+            acc.append(MergeJob{ id = j.id, dependsOn = j.dependsOn, checkoutRoot = j.checkoutRoot, check = checkCommand(j.check), goals = goals });
         }
-        return result\ok::<[JobRow]>(acc);
+        return result\ok::<[MergeJob]>(acc);
     } catch (err: any) {
-        return result\caught::<[JobRow]>(err, doing: "merge-job-branches: list the jobs");
+        return result\caught::<[MergeJob]>(err, doing: "merge-job-branches: list the jobs");
     }
 }
 
-fun checkedOutIn(row: JobRow) > result\Result::<str> {
+fun checkedOutIn(row: MergeJob) > result\Result::<str> {
     try {
         if (row.checkoutRoot == "" or !fs\isDir(row.checkoutRoot)) { return result\ok::<str>(""); }
         final res = vcs\cmd(["branch", "--show-current"], opts: vcs\CommandOptions{ quiet = true, dir = row.checkoutRoot, allowFailure = true });
@@ -316,7 +316,7 @@ fun checkedOutIn(row: JobRow) > result\Result::<str> {
     }
 }
 
-fun branchOfJob(root: str, row: JobRow) > result\Result::<str> {
+fun branchOfJob(root: str, row: MergeJob) > result\Result::<str> {
     final here = checkedOutIn(row);
     if (here.error -> err) { return result\Result::<str>{ error = err }; }
     if (here.value! != "") { return here; }
@@ -863,7 +863,7 @@ fun planned(root: str, values: {str: str}) > result\Result::<stack\BranchStack> 
     final rows = storeRun.value!;
     var candRun = result\ok::<[Candidate]>([<Candidate>]);
     if (values["--jobs"] != null) {
-        candRun = candidatesFromJobs(splitList(values["--jobs"]), rows: rows, branchOf: fun (row: JobRow) > result\Result::<str> => branchOfJob(root, row: row));
+        candRun = candidatesFromJobs(splitList(values["--jobs"]), rows: rows, branchOf: fun (row: MergeJob) > result\Result::<str> => branchOfJob(root, row: row));
     } else {
         candRun = candidatesFromBranches(splitList(values["--branches"]), rows: rows, checkedOut: checkedOutIn);
     }
@@ -1055,10 +1055,10 @@ export fun main(args: [str]) > void !> any {
     if (!passed) { throw "merge-job-branches: a merged job's checks did not pass, so the merge is not done"; }
 }
 
-fun fixtureRows() > result\Result::<[JobRow]> {
+fun fixtureRows() > result\Result::<[MergeJob]> {
     try {
         final doc = serialize\jsonDecode(fs\readFile("hack/testdata/merge-job-branches-jobs.json"));
-        final rows = mut [<JobRow>];
+        final rows = mut [<MergeJob>];
         foreach (j in doc.q("jobs").listValue()) {
             final deps = mut [<str>];
             foreach (d in j.q("depends_on").listValue()) { deps.append(d.stringValue()); }
@@ -1067,16 +1067,16 @@ fun fixtureRows() > result\Result::<[JobRow]> {
                 goals.append(stack\CheckGoal{ id = g.q("id").stringValue(), target = g.q("target").stringValue(),
                     project = g.q("project").stringValue() });
             }
-            rows.append(JobRow{ id = j.q("id").stringValue(), dependsOn = deps, checkoutRoot = j.q("checkout_root").string() ?? "",
+            rows.append(MergeJob{ id = j.q("id").stringValue(), dependsOn = deps, checkoutRoot = j.q("checkout_root").string() ?? "",
                 check = j.q("check").stringValue(), goals = goals });
         }
-        return result\ok::<[JobRow]>(rows);
+        return result\ok::<[MergeJob]>(rows);
     } catch (err: any) {
-        return result\caught::<[JobRow]>(err, doing: "read the job fixture");
+        return result\caught::<[MergeJob]>(err, doing: "read the job fixture");
     }
 }
 
-fun featBranch(row: JobRow) > result\Result::<str> { return result\ok::<str>("feat/{row.id}"); }
+fun featBranch(row: MergeJob) > result\Result::<str> { return result\ok::<str>("feat/{row.id}"); }
 
 fun joinBranches(s: stack\BranchStack) > str {
     final names = mut [<str>];
@@ -1121,7 +1121,7 @@ test "a cycle, an unknown job and a branch named twice are errors naming them" {
 
 test "a branch finds its job by id, by id without a type prefix, or by the checkout holding it" {
     final rows = fixtureRows().value!;
-    fun held(row: JobRow) > result\Result::<str> {
+    fun held(row: MergeJob) > result\Result::<str> {
         if (row.checkoutRoot == "/checkouts/held") { return result\ok::<str>("topic"); }
         return result\ok::<str>("");
     }

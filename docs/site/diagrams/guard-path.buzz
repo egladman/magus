@@ -20,7 +20,7 @@ export fun guardPathFigure() > figure\Figure !> any {
                 + "event to magus shell. The built-in rules judge it first, reading the job store "
                 + "for the lease the call acts as and the session record for what the session "
                 + "already did; the workspace's magus\\guard.command rule sees only what they let "
-                + "through and can only add to the verdict. Each judgement lands in the trail. A "
+                + "through and can only add to the verdict. Each judgment goes to the trail. A "
                 + "deny carries its reason and a next: breadcrumb naming the command to run "
                 + "instead, and the hook renders it into the host's reply.")
         .actor(hook)
@@ -29,7 +29,7 @@ export fun guardPathFigure() > figure\Figure !> any {
         .box(catalog, label: "Rule catalog", sub: "ids and grades")
         .box(jobs, label: "Job store", sub: "leases, write paths", look: figure\Look.store)
         .box(sessions, label: "Session record", sub: "what this session did", look: figure\Look.store)
-        .box(trail, label: "Trail", sub: "every judgement kept", look: figure\Look.store)
+        .box(trail, label: "Trail", sub: "every judgment kept", look: figure\Look.store)
         .actor(policy)
         .actor(verdict)
         .edgesFromGraph()

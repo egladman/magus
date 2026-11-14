@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // TestCLICommandHeadsAreRealSubcommands guards against the drift that shipped a
@@ -57,9 +57,9 @@ func TestCLICommandPathsResolve(t *testing.T) {
 
 // resolveCommandPath reports whether tokens name a routable subcommand chain.
 func resolveCommandPath(tokens []string) error {
-	children := commands.Root.Children
+	children := commands.Root.Spec.Children
 	for i, tok := range tokens {
-		idx := slices.IndexFunc(children, func(c cmdline.Command) bool { return c.Name == tok })
+		idx := slices.IndexFunc(children, func(c command.Command) bool { return c.Name == tok })
 		if idx < 0 {
 			parent := "magus " + strings.Join(tokens[:i], " ")
 			return fmt.Errorf("%q is not a subcommand of %q - fix the hint, or add the entry to internal/commands/registry.go",
@@ -114,14 +114,14 @@ func TestCLIDescribeNounsAreAccepted(t *testing.T) {
 	}
 }
 
-func childNames(t *testing.T, command string) []string {
+func childNames(t *testing.T, parent string) []string {
 	t.Helper()
-	idx := slices.IndexFunc(commands.Root.Children, func(c cmdline.Command) bool { return c.Name == command })
+	idx := slices.IndexFunc(commands.Root.Spec.Children, func(c command.Command) bool { return c.Name == parent })
 	if idx < 0 {
-		t.Fatalf("no commands.Root.Children entry for %q", command)
+		t.Fatalf("no commands.Root.Spec.Children entry for %q", parent)
 	}
-	names := make([]string, 0, len(commands.Root.Children[idx].Children))
-	for _, child := range commands.Root.Children[idx].Children {
+	names := make([]string, 0, len(commands.Root.Spec.Children[idx].Children))
+	for _, child := range commands.Root.Spec.Children[idx].Children {
 		names = append(names, child.Name)
 	}
 	return names
@@ -249,13 +249,13 @@ func dispatcherCases(t *testing.T, file, funcName string) []string {
 	return cases
 }
 
-// registryChildren walks commands.Root.Children down a dotted command path (e.g. "config",
+// registryChildren walks commands.Root.Spec.Children down a dotted command path (e.g. "config",
 // "mcp", "connector") and returns the names of that command's declared
 // Children.
 func registryChildren(t *testing.T, path ...string) []string {
 	t.Helper()
-	cmds := commands.Root.Children
-	var cur cmdline.Command
+	cmds := commands.Root.Spec.Children
+	var cur command.Command
 	found := false
 	for i, name := range path {
 		found = false
@@ -290,7 +290,7 @@ func registryChildren(t *testing.T, path ...string) []string {
 func TestDispatcherChildrenAreDeclared(t *testing.T) {
 	tests := []struct {
 		command string   // registry path, for the failure message
-		path    []string // dotted command path into commands.Root.Children
+		path    []string // dotted command path into commands.Root.Spec.Children
 		file    string
 		fn      string
 		exempt  []string
@@ -385,9 +385,9 @@ func TestServerDispatcherChildrenAreDeclared(t *testing.T) {
 }
 
 // walkRegistryCommands visits every node in the recursive registry tree
-// (internal/commands.Root.Children plus every Children entry, at any depth), calling visit
+// (internal/commands.Root.Spec.Children plus every Children entry, at any depth), calling visit
 // with the dotted path of command words leading to it.
-func walkRegistryCommands(cmds []cmdline.Command, prefix []string, visit func(path []string, c cmdline.Command)) {
+func walkRegistryCommands(cmds []command.Command, prefix []string, visit func(path []string, c command.Command)) {
 	for _, c := range cmds {
 		path := append(append([]string{}, prefix...), c.Name)
 		visit(path, c)
@@ -422,8 +422,8 @@ func walkRegistryCommands(cmds []cmdline.Command, prefix []string, visit func(pa
 // gives the real CLI. A token that is neither a known global flag nor a
 // matching child name stops the walk; per-command flags are never expected
 // to precede their own subcommand in these examples.
-func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []cmdline.Command, matched bool) {
-	cmds := commands.Root.Children
+func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []command.Command, matched bool) {
+	cmds := commands.Root.Spec.Children
 	for i := 0; i < len(args); {
 		tok := args[i]
 		if strings.HasPrefix(tok, "-") {
@@ -466,17 +466,20 @@ func resolveRegistryPath(globalFS *flag.FlagSet, args []string) (path []cmdline.
 // section shows it in context); flag.FlagSet panics on a duplicate Var call,
 // so this is the one safe way to layer several nodes' declared flags onto one
 // FlagSet without assuming which level actually owns a given name.
-func bindUnlessRegistered(fs *flag.FlagSet, node cmdline.Command) {
+func bindUnlessRegistered(fs *flag.FlagSet, node command.Command) error {
 	if len(node.Flags) == 0 {
-		return
+		return nil
 	}
 	tmp := flag.NewFlagSet("tmp", flag.ContinueOnError)
-	node.BindFlags(tmp)
+	if err := node.BindFlags(tmp); err != nil {
+		return err
+	}
 	tmp.VisitAll(func(f *flag.Flag) {
 		if fs.Lookup(f.Name) == nil {
 			fs.Var(f.Value, f.Name, f.Usage)
 		}
 	})
+	return nil
 }
 
 // TestRegistryExamplesParse dry-parses every EXAMPLES entry in the CLI
@@ -509,7 +512,7 @@ func TestRegistryExamplesParse(t *testing.T) {
 	// example like `--tee build.jsonl` leaks global.tee into every later test in
 	// the package, and the next config-view test faithfully tees into the cwd.
 	t.Cleanup(snapshotGlobals())
-	walkRegistryCommands(commands.Root.Children, nil, func(path []string, c cmdline.Command) {
+	walkRegistryCommands(commands.Root.Spec.Children, nil, func(path []string, c command.Command) {
 		for _, ex := range c.Examples {
 			t.Run(fmt.Sprintf("%s/%s", strings.Join(path, "_"), ex.Comment), func(t *testing.T) {
 				if knownBrokenExamples[ex.Command] {
@@ -537,7 +540,9 @@ func TestRegistryExamplesParse(t *testing.T) {
 						continue
 					}
 					for _, node := range cmdPath {
-						bindUnlessRegistered(fs, node)
+						if err := bindUnlessRegistered(fs, node); err != nil {
+							t.Fatalf("bind %s: %v", node.Name, err)
+						}
 					}
 					parseArgs := gc.Args
 					if cmdPath[0].Name == "query" {

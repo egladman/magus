@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -555,12 +555,12 @@ func (s *remedyContractSuite) contract(rule denyRuleName, cases ...remedyCase) {
 				v := Judge(ctx, deps, call)
 				if role.call.Host == "" {
 					require.Equal(t, string(rule), v.Rule, "%q:\n%s", call.Input, v.Reason)
-					require.NotEmpty(t, v.Next, "unbound, %q serves its remedy", call.Input)
+					require.NotEmpty(t, v.NextSteps, "unbound, %q serves its remedy", call.Input)
 					if want != "" {
-						assert.Equal(t, want, v.Next[0].Run)
+						assert.Equal(t, want, v.NextSteps[0].Run)
 					}
 				}
-				for _, n := range v.Next {
+				for _, n := range v.NextSteps {
 					assert.Equal(t, hint.DenyRemedyPrefix+string(rule), n.ID)
 					assertRunsOnTheTree(t, n.Run)
 					gradeServed(t, ctx, deps, call, role.name, n.ID, n.Run)
@@ -589,7 +589,7 @@ func assertRunsOnTheTree(t *testing.T, run string) {
 // past a leaf or a command taking operands. Only the root's flags take a
 // value before the subcommand.
 func treeMiss(args []string) string {
-	node := commands.Root
+	node := commands.Root.Spec.Command
 	for i := 0; i < len(args); i++ {
 		word := args[i]
 		if word == "--" {
@@ -597,7 +597,7 @@ func treeMiss(args []string) string {
 		}
 		if strings.HasPrefix(word, "-") {
 			flag := strings.TrimLeft(word, "-")
-			if node.Name == commands.Root.Name && !strings.Contains(word, "=") && takesValue(node, flag) {
+			if node.Name == commands.Root.Spec.Name && !strings.Contains(word, "=") && takesValue(node, flag) {
 				i++
 			}
 			continue
@@ -617,19 +617,19 @@ func treeMiss(args []string) string {
 	return ""
 }
 
-func childNamed(node cmdline.Command, name string) (cmdline.Command, bool) {
+func childNamed(node command.Command, name string) (command.Command, bool) {
 	for _, c := range node.Children {
 		if c.Name == name {
 			return c, true
 		}
 	}
-	return cmdline.Command{}, false
+	return command.Command{}, false
 }
 
-func takesValue(node cmdline.Command, name string) bool {
+func takesValue(node command.Command, name string) bool {
 	for _, f := range node.Flags {
 		if f.Name == name {
-			return f.Kind != cmdline.Bool
+			return f.Kind != command.Bool
 		}
 	}
 	return false
@@ -672,9 +672,9 @@ func (s *remedyContractSuite) TestLeaseClaim() {
 	})
 	v := Judge(ctx, deps, write)
 	require.Equal(t, string(denyRuleLeaseClaim), v.Rule, v.Reason)
-	require.Len(t, v.Next, 1)
-	assertRunsOnTheTree(t, v.Next[0].Run)
-	gradeServed(t, ctx, deps, worker, "lease holder", v.Next[0].ID, v.Next[0].Run)
+	require.Len(t, v.NextSteps, 1)
+	assertRunsOnTheTree(t, v.NextSteps[0].Run)
+	gradeServed(t, ctx, deps, worker, "lease holder", v.NextSteps[0].ID, v.NextSteps[0].Run)
 }
 
 func (s *remedyContractSuite) TestMagusTimeout() {
@@ -764,8 +764,9 @@ func (s *remedyContractSuite) TestWorktreeRemove() {
 		func(t *testing.T, at location) (Request, string) {
 			r := newWorktreeRepository(t)
 			wt, row := r.workerWorktree(types.StateExited)
-			row.ID, row.Result = "remedy-wait", &types.JobResult{}
+			row.ID = "remedy-wait"
 			seedRemedyJob(t, at, row)
+			storeTries(t, at, filedTry(row.ID))
 			return Request{Input: "git worktree remove " + wt, Dir: r.main}, hint.JobWait.With("remedy-wait")
 		},
 	)

@@ -24,8 +24,8 @@ type PrecedentOptions struct {
 	// Generated holds the workspace-relative paths that are generated output. Generated and
 	// test code is never counted.
 	Generated map[string]bool
-	// Conformance supplies the dep-fanout ceilings and the gates that make a row established,
-	// taken as given. A layer with no configured or committed dep-fanout value gets no fan-out
+	// Conformance supplies the imported-packages ceilings and the gates that make a row established,
+	// taken as given. A layer with no configured or committed imported-packages value gets no fan-out
 	// row.
 	Conformance types.ConformanceOptions
 }
@@ -37,7 +37,7 @@ func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated, Conformance: o.Conformance})
 	m := precedentMiner{g: g, x: x, conformance: o.Conformance, fileNS: g.fileNamespaces()}
 	pk := m.packages()
-	rows := slices.Concat(m.depDirection(pk), m.depFanout(pk), m.errorSentinelName(), m.testPackageName(pk),
+	rows := slices.Concat(m.depDirection(pk), m.importedPackages(pk), m.errorSentinelName(), m.testPackageName(pk),
 		m.paramNameByType(), m.paramOrder(), m.contextFirst(), m.errorLast())
 	for i := range rows {
 		r := &rows[i]
@@ -46,7 +46,7 @@ func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 		}
 		// A fan-out ceiling is configured, not mined from the cohort, so how many packages sit
 		// under it says how tight it is and gates nothing; only the cohort does.
-		r.Established = r.Cohort >= x.gates.MinCohort && (r.Family == types.PrecedentDepFanout || r.Share >= x.gates.MinShare)
+		r.Established = r.Cohort >= x.gates.MinCohort && (r.Family == types.PrecedentImportedPackages || r.Share >= x.gates.MinShare)
 	}
 	slices.SortFunc(rows, func(a, b types.Precedent) int {
 		return cmp.Or(
@@ -176,15 +176,11 @@ func compareDirEdges(a, b dirEdge) int {
 	return cmp.Or(cmp.Compare(a.from, b.from), cmp.Compare(a.to, b.to))
 }
 
-// depFanout is, per layer, the distribution of how many distinct packages in it each
-// importing package imports. The cohort is the packages that import the layer at all: a
-// package that never does says nothing about how many is usual.
-//
-// The ceiling is the dep-fanout value Effective enforces for the layer, the committed value
-// else the anchor, and never the cohort's own percentile: a ceiling that follows the code
-// rises as the code grows. The lens counts every workspace import of a package in the layer;
-// this counts only the imports into it, which the value therefore bounds from above.
-func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
+// importedPackages counts, per layer, how many of its packages each
+// importer imports. The cohort is the packages that import the layer.
+// The ceiling is the value Effective enforces, never the cohort's own
+// percentile, which would rise as the code grows.
+func (m precedentMiner) importedPackages(pk precedentPackages) []types.Precedent {
 	// Keyed by directory, not namespace: a language that makes each file a module has many
 	// namespaces per directory, and counting each would add one import per importing file.
 	imports := map[string]map[string]map[string]bool{}
@@ -211,12 +207,12 @@ func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
 		dirs := slices.SortedFunc(maps.Keys(byDir), func(a, b string) int {
 			return cmp.Or(cmp.Compare(len(byDir[b]), len(byDir[a])), cmp.Compare(a, b))
 		})
-		bound, enforced := m.conformance.Effective(types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: layer})
+		bound, enforced := m.conformance.Effective(types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: layer})
 		if !enforced {
 			continue
 		}
 		row := types.Precedent{
-			Family: types.PrecedentDepFanout,
+			Family: types.PrecedentImportedPackages,
 			Scope:  types.PrecedentScope{Layers: []string{layer}},
 			Key:    types.PrecedentKey{MaxImports: bound},
 			Cohort: len(dirs),

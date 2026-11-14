@@ -62,33 +62,46 @@ type Load struct {
 	// VCSDriver, when VCSDriverGiven, is the VCS to drive in place of a built-in one.
 	VCSDriver      types.VCSDriver
 	VCSDriverGiven bool
-	// SpawnRule decides whether a job may spawn one at a given model tier. Required: a
-	// workspace has no default rule.
-	SpawnRule func(parent, child types.ModelTier) error
 	// CacheBackend, when CacheBackendGiven, is the store behind the remote cache tier in
 	// place of one a magusfile wires.
 	CacheBackend      types.CacheBackend
 	CacheBackendGiven bool
+	// JobReader, when JobReaderGiven, is the rows the guard's lease rules read
+	// in place of the job store.
+	JobReader      types.JobReader
+	JobReaderGiven bool
+	// Misuse is every option applied to a Load that does not read it. An Option
+	// returns no error, so the entry point that reads the Load returns these.
+	Misuse []error
 }
 
 // Option configures Open or Inspect.
-type Option func(*Load)
+type Option func(Options)
+
+// Options is what an Option sets: a *Load, or a type that embeds a Load
+// beside settings only its own options set.
+type Options interface {
+	Loading() *Load
+}
+
+// Loading returns l, the Load an Option sets.
+func (l *Load) Loading() *Load { return l }
 
 // WithLoadedConfig injects an already-parsed config instead of reading magus.yaml.
 func WithLoadedConfig(cfg config.Config) Option {
-	return func(o *Load) { o.Preloaded = &cfg }
+	return func(o Options) { o.Loading().Preloaded = &cfg }
 }
 
 // WithLimiter injects a pre-built concurrency limiter (e.g. shared across server workspaces).
 func WithLimiter(lim *cache.Limiter) Option {
-	return func(o *Load) { o.Limiter = lim }
+	return func(o Options) { o.Loading().Limiter = lim }
 }
 
 // WithMetricsCollection builds an always-on in-process metrics collector for this workspace so
 // its OTel instruments record even when telemetry export is off, and the server can serve OTLP
 // snapshots to the /dashboard. The CLI leaves it unset to keep one-shot runs a true no-op.
 func WithMetricsCollection() Option {
-	return func(o *Load) { o.MetricsCollect = true }
+	return func(o Options) { o.Loading().MetricsCollect = true }
 }
 
 // WithTelemetryProvider injects an already-constructed observability provider so several
@@ -104,14 +117,14 @@ func WithMetricsCollection() Option {
 // observability.WithProvider (a different package, same short name) stores a Provider on a
 // context rather than an Option. This is the one that meant something else entirely.
 func WithTelemetryProvider(p observability.Provider) Option {
-	return func(o *Load) { o.Provider = p }
+	return func(o Options) { o.Loading().Provider = p }
 }
 
 // WithVersion supplies the running build's version so Open and Inspect can check
 // it against the workspace's required_version floor. cmd/magus passes its
 // linker-stamped version; a caller that omits it gets no floor check.
 func WithVersion(v string) Option {
-	return func(o *Load) { o.Version = v }
+	return func(o Options) { o.Loading().Version = v }
 }
 
 // WithoutWorkspaceProviders opens the workspace without running its wired workspace
@@ -126,7 +139,7 @@ func WithVersion(v string) Option {
 //
 // Unrelated to WithTelemetryProvider above, which injects an observability provider.
 func WithoutWorkspaceProviders() Option {
-	return func(o *Load) { o.SkipWorkspaceProviders = true }
+	return func(o Options) { o.Loading().SkipWorkspaceProviders = true }
 }
 
 // ProjectOption mutates a Project at registration time; a non-nil error aborts Open.

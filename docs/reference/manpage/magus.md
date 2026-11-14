@@ -465,15 +465,6 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_VCS_\<NAME\>_BASE_REF**
 : Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs
 
-**MAGUS_PROC_SOCKET**
-: Env-only, no magus.yaml equivalent: the proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it
-
-**MAGUS_PROC_TOKEN**
-: Env-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus
-
-**MAGUS_PROC_TREE**
-: Env-only, no magus.yaml equivalent: the ids of every bounded process tree a process descends from, inherited by every child so a command's leftovers are found; set by magus, never by hand
-
 **MAGUS_SHARD**
 : CI matrix shard ID (e.g. "0"); equivalent to magus run --shard; set by .github/actions/magus
 
@@ -482,9 +473,6 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_UPDATE_URL**
 : Env-only, no magus.yaml equivalent: override the release index URL for \`magus self update\`; set to a self-hosted copy of index.json to use a private update channel (default: https://eli.gladman.cc/magus/public/release/index.json)
-
-**MAGUS_STAMPED_LEASE**
-: Set by a shared server on a script it forks for a remote caller, and by an authenticated MCP caller for a child magus: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant; never set it by hand
 
 **MAGUS_NO_BOOTSTRAP_EXEC**
 : Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
@@ -507,38 +495,52 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_MCP_TOKEN**
 : Env-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable
 
-**MAGUS_MCP_BUZZ_PURE**
-: Set internally by the buzz MCP tool for its forked transform worker; never set it by hand
-
-**MAGUS_MCP_CLIENT**
-: Set internally by the client MCP tool for its forked worker; never set it by hand
-
-**MAGUS_MCP_CLIENT_HOST**
-: Set internally by the client MCP tool: the calling client's name, stamped onto the worker's activity trail; never set it by hand
-
-**MAGUS_MCP_CLIENT_LEASE**
-: Set internally by the client MCP tool: the calling client's job lease, or empty when the transport stamped none; never set it by hand
-
 **MAGUS_S3_BUCKET**
 : Env-only: the bucket the aws/s3-cache spell stores remote-cache artifacts in
 
 **MAGUS_S3_ENDPOINT**
 : Env-only: the S3-compatible endpoint the aws/s3-cache spell talks to (default: https://s3.\<region\>.amazonaws.com)
 
+### Set by magus for the processes it spawns, never by hand
+
+**MAGUS_PROC_SOCKET**
+: The proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it
+
+**MAGUS_PROC_TOKEN**
+: The secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus
+
+**MAGUS_PROC_TREE**
+: The ids of every bounded process tree a process descends from, inherited by every child so a command's leftovers are found
+
+**MAGUS_STAMPED_LEASE**
+: Set by a shared server on a script it forks for a remote caller, and by an authenticated MCP caller for a child magus: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant
+
+**MAGUS_MCP_BUZZ_PURE**
+: Set by the buzz MCP tool for its forked transform worker
+
+**MAGUS_MCP_CLIENT**
+: Set by the client MCP tool for its forked worker
+
+**MAGUS_MCP_CLIENT_HOST**
+: Set by the client MCP tool: the calling client's name, stamped onto the worker's activity trail
+
+**MAGUS_MCP_CLIENT_LEASE**
+: Set by the client MCP tool: the calling client's job lease, or empty when the transport stamped none
+
 **MAGUS_LEVEL**
-: Set by magus for the processes it spawns: the magus recursion depth, like make's MAKELEVEL; never set it by hand
+: The magus recursion depth, like make's MAKELEVEL
 
 **MAGUS_INVOCATION_ANCESTORS**
-: Set by magus for the processes it spawns: the comma-separated invocations a nested magus runs underneath; never set it by hand
+: The comma-separated invocations a nested magus runs underneath
 
 **MAGUS_BOOTSTRAP_EXEC_DONE**
-: Set by magus when it replaces itself with a workspace-local ./magus, so the replacement never hops again; never set it by hand
+: Set when magus replaces itself with a workspace-local ./magus, so the replacement never hops again
 
 **MAGUS_SYMBOL_INDEX**
-: Set by magus for a spell's symbol indexer op: the path the indexer writes its SCIP index to; never set it by hand
+: Set for a spell's symbol indexer op: the path the indexer writes its SCIP index to
 
 **MAGUS_WORKSPACE_ROOT**
-: Set by magus for a spell's symbol indexer op: the workspace root the index's paths are relative to; never set it by hand
+: Set for a spell's symbol indexer op: the workspace root the index's paths are relative to
 
 **MAGUS_INTERNAL_ADVICE_MODE**
 : Set by \`magus diff\` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice
@@ -547,7 +549,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Set by \`magus diff\` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting
 
 **MAGUS_DETACHED_REFRESH**
-: Set by magus on the detached symbol refresh a graph read starts, so that process exits rather than queues behind another refresh; never set it by hand
+: Set on the detached symbol refresh a graph read starts, so that process exits rather than queues behind another refresh
 
 ## Files
 

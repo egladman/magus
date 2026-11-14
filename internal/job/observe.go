@@ -309,7 +309,12 @@ func (s *Store) Report(ctx context.Context, now int64, staleAfter time.Duration)
 	if err != nil {
 		return types.JobList{}, err
 	}
+	tries, err := s.Attempts()
+	if err != nil {
+		return types.JobList{}, err
+	}
 	list := types.NewJobList(HardenWritten(ctx, s, rows)).Flag(now, staleAfter)
+	list.Attempts = BoundAttempts(list.Jobs, tries, now)
 	list.Overlaps = ContendedOverlaps(list.Jobs, list.Overlaps, s.workspaceProjects)
 	// A footprint reads each holder's diff, a VCS call per changed path, and a stale row's
 	// holder is the one least likely to still be writing: on a store of abandoned rows,

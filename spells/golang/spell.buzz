@@ -359,6 +359,28 @@ export fun mgs_getCoverage() > Coverage {
     return Coverage{format = CoverageFormat.goProfile, profile = ".magus/coverage.out"};
 }
 
+// scopesFormat prints, per linked package outside the standard library, the
+// globs its build reads. *.go covers a source deleted since the listing.
+// Embed patterns cover a deleted embedded file; EmbedFiles cover an all: one.
+final scopesFormat = `{{if and (not .Standard) .Dir}}`
+    + `{{.Dir}}/*.go` + "\n" + `!{{.Dir}}/*_test.go` + "\n"
+    + `{{range .CFiles}}{{$.Dir}}/{{.}}` + "\n" + `{{end}}`
+    + `{{range .HFiles}}{{$.Dir}}/{{.}}` + "\n" + `{{end}}`
+    + `{{range .SFiles}}{{$.Dir}}/{{.}}` + "\n" + `{{end}}`
+    + `{{range .SysoFiles}}{{$.Dir}}/{{.}}` + "\n" + `{{end}}`
+    + `{{range .EmbedFiles}}{{$.Dir}}/{{.}}` + "\n" + `{{end}}`
+    + `{{range .EmbedPatterns}}{{$.Dir}}/{{.}}` + "\n" + `{{$.Dir}}/{{.}}/**` + "\n" + `{{end}}`
+    + `{{with .Module}}{{.Dir}}/go.mod` + "\n" + `{{.Dir}}/go.sum` + "\n"
+    + `{{.Dir}}/go.work` + "\n" + `{{.Dir}}/go.work.sum` + "\n" + `{{end}}`
+    + `{{end}}`;
+
+// go list loads packages without compiling any. -e still lists a package
+// that fails to load, such as one needing a GOEXPERIMENT the caller lacks:
+// its directory holds the same files either way.
+export fun mgs_getScopes() > Command {
+    return Command{bin = "go", args = ["list", "-e", "-deps", "-f", scopesFormat]};
+}
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {
         "go-build": goBuild,

@@ -106,7 +106,7 @@ func TestDecideAutoClaimTakesTheWiderEdges(t *testing.T) {
 		"a test of a file the job claimed": {
 			path: "internal/free/free_test.go", fanIn: leafFanIn,
 			edit: func(row *types.Job, _ *[]types.Job, _ *[]*types.Project) {
-				row.WritePaths = append(row.WritePaths, "internal/free/free.go")
+				row.Paths.Write = append(row.Paths.Write, "internal/free/free.go")
 				row.Claims = []types.JobClaim{{Path: "internal/free/free.go"}}
 			},
 			want: widerClaim("internal/free/free_test.go", "test:internal/free/free.go", "internal/free/free_test.go tests internal/free/free.go: it names Free"),
@@ -155,7 +155,7 @@ func TestDecideAutoClaimStopsTheWiderEdges(t *testing.T) {
 		"a path another live job holds": {
 			path: test, fanIn: leafFanIn,
 			edit: func(_ *types.Job, rows *[]types.Job, _ *[]*types.Project) {
-				*rows = append(*rows, types.Job{ID: "leaser", State: types.StateRunning, WritePaths: []string{test}})
+				*rows = append(*rows, types.Job{ID: "leaser", State: types.StateRunning, Paths: types.JobPaths{Write: []string{test}}})
 			},
 			want: stopped("["+string(types.WritePathFileShared)+"] internal/lease/held_test.go is held by live job leaser, and a proof never takes a path another job holds", false),
 		},
@@ -215,7 +215,7 @@ func TestDecideAutoClaimStopsWhatTheStoreWouldRefuse(t *testing.T) {
 		"a path another live job holds": {
 			path: autoCaller, fanIn: leafFanIn, want: held,
 			edit: func(_ *types.Job, rows *[]types.Job, _ *[]*types.Project) {
-				*rows = append(*rows, types.Job{ID: "renderer", State: types.StateRunning, WritePaths: []string{autoCaller}})
+				*rows = append(*rows, types.Job{ID: "renderer", State: types.StateRunning, Paths: types.JobPaths{Write: []string{autoCaller}}})
 			},
 		},
 		"a job at its cap": {

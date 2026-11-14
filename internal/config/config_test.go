@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +15,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
 
+	"github.com/egladman/magus/internal/config/gen/settings"
 	"github.com/egladman/magus/internal/stamp"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -30,6 +33,26 @@ func TestDefaults_VolatilityEnabled(t *testing.T) {
 func TestDefaults_ARunWaitsHalfAnHourForTheBudget(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, 30*time.Minute, Defaults().BudgetWait)
+}
+
+func TestConfigurationStartsWithTheGeneratedTable(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, settings.Settings, Spec.Settings[:len(settings.Settings)])
+}
+
+func TestAVariableNoKeyCarriesIsInTheConfiguration(t *testing.T) {
+	t.Parallel()
+	s, ok := Spec.Variable("MAGUS_OFFLINE")
+	require.True(t, ok)
+	assert.Empty(t, s.YamlPath)
+	assert.False(t, s.Internal)
+}
+
+func TestAVariableMagusSetsForItsChildrenIsInternal(t *testing.T) {
+	t.Parallel()
+	s, ok := Spec.Variable("MAGUS_LEVEL")
+	require.True(t, ok)
+	assert.True(t, s.Internal)
 }
 
 func TestJobsClaimBounds(t *testing.T) {
@@ -167,7 +190,7 @@ func TestConformanceDefaults(t *testing.T) {
 	assert.Equal(t, 32, c.Checks[types.ConformanceTypeMethods][types.ConformancePopTest].Anchor)
 	assert.Equal(t, 82, c.Checks[types.ConformanceFileSymbols][types.ConformancePopSource].Anchor)
 	assert.Equal(t, ConformanceLimitConfig{Percentile: 50, Anchor: 80}, c.Checks[types.ConformanceCloneTokens][types.ConformancePopSource])
-	assert.Equal(t, ConformanceLimitConfig{Percentile: 95, Anchor: 62}, c.Checks[types.ConformanceDepFanout][types.ConformancePopSource],
+	assert.Equal(t, ConformanceLimitConfig{Percentile: 95, Anchor: 62}, c.Checks[types.ConformanceImportedPackages][types.ConformancePopSource],
 		"a scope names one workspace's directory, so it ships in none")
 	assert.Equal(t, map[types.ConformancePopulation]ConformanceLimitConfig{
 		types.ConformancePopSource: {Percentile: 99, Anchor: 7},
@@ -207,14 +230,14 @@ func TestConformanceOptions(t *testing.T) {
 		Exclude:   []string{"vendor/**"},
 		Gates:     conformanceGatesConfig{MinCohort: 3, MinShare: 0.7, Bar: 0.4, MaxFindings: 9},
 		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
-			types.ConformanceFileLines:  {types.ConformancePopTest: {Percentile: 99, Anchor: 1900}},
-			types.ConformanceDepFanout:  {types.ConformancePopSource: {Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}},
-			types.ConformanceAliasShare: {types.ConformancePopSource: {Percentile: 95, Anchor: 100, MinSubject: 5}},
+			types.ConformanceFileLines:        {types.ConformancePopTest: {Percentile: 99, Anchor: 1900}},
+			types.ConformanceImportedPackages: {types.ConformancePopSource: {Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}},
+			types.ConformanceAliasShare:       {types.ConformancePopSource: {Percentile: 95, Anchor: 100, MinSubject: 5}},
 		},
 	}
 	fileLines := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopTest}
-	fanout := types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource}
-	scoped := types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "cmd/magus"}
+	fanout := types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource}
+	scoped := types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: "cmd/magus"}
 	alias := types.ConformanceKey{Metric: types.ConformanceAliasShare, Population: types.ConformancePopSource}
 	want := types.ConformanceOptions{
 		Limits: map[types.ConformanceKey]types.ConformanceLimit{
@@ -239,11 +262,11 @@ func TestConformanceOptions(t *testing.T) {
 // every other package answers to stays tight.
 func TestConformanceScopedLimitKeepsTheAnchorTight(t *testing.T) {
 	t.Parallel()
-	scoped := types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "cmd/magus"}
-	other := types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "internal/server"}
+	scoped := types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: "cmd/magus"}
+	other := types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: "internal/server"}
 
 	c := Defaults().Knowledge.Conformance
-	c.Checks[types.ConformanceDepFanout][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}
+	c.Checks[types.ConformanceImportedPackages][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}
 	o := c.Options()
 	require.NoError(t, o.Validate())
 
@@ -263,7 +286,7 @@ func TestConformanceLoadsFromYAML(t *testing.T) {
   conformance:
     min_sample: 10
     checks:
-      dep-fanout:
+      imported-packages:
         source:
           percentile: 90
           anchor: 20
@@ -278,11 +301,11 @@ func TestConformanceLoadsFromYAML(t *testing.T) {
 		Step:      0.05,
 		Gates:     conformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
-			types.ConformanceDepFanout: {types.ConformancePopSource: {Percentile: 90, Anchor: 20, Scopes: map[string]int{"cmd/tool": 31}}},
+			types.ConformanceImportedPackages: {types.ConformancePopSource: {Percentile: 90, Anchor: 20, Scopes: map[string]int{"cmd/tool": 31}}},
 		},
 	}, c, "keys left out keep their defaults and written checks replace the defaults")
 
-	scoped := types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "cmd/tool"}
+	scoped := types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: "cmd/tool"}
 	assert.Equal(t, types.ConformanceLimit{Percentile: 90, Anchor: 31}, c.Options().Limits[scoped])
 }
 
@@ -379,4 +402,68 @@ func (s *SymbolIndexersSuite) TestValidateRefusesADuplicate() {
 	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs, Console: Defaults().Console,
 		Spells: SpellsConfig{SymbolIndexers: []string{"typescript", "typescript"}}}
 	s.ErrorContains(Validate(cfg), "spells.symbol_indexers")
+}
+
+// SettingsSuite pins the generated settings table against config.go.
+type SettingsSuite struct{ suite.Suite }
+
+func TestSettingsSuite(t *testing.T) { suite.Run(t, new(SettingsSuite)) }
+
+func (s *SettingsSuite) TestTableIsNotEmpty() {
+	s.NotEmpty(settings.Settings)
+}
+
+func (s *SettingsSuite) TestEveryEnvVarStartsWithMAGUS() {
+	for _, f := range settings.Settings {
+		if f.EnvVar != "" {
+			s.Truef(strings.HasPrefix(f.EnvVar, "MAGUS_"), "%s: EnvVar %q", f.GoPath, f.EnvVar)
+		}
+	}
+}
+
+func (s *SettingsSuite) TestAFileOnlyKeyHasNoEnvVar() {
+	for _, f := range settings.Settings {
+		if f.YamlPath == "required_version" {
+			s.Empty(f.EnvVar)
+			s.Empty(f.Flag.Long)
+			return
+		}
+	}
+	s.Fail("no required_version setting: the generator lost cli:\"-\" keys")
+}
+
+func (s *SettingsSuite) TestNoEnvVarRepeats() {
+	seen := make(map[string]string, len(settings.Settings))
+	for _, f := range settings.Settings {
+		if f.EnvVar == "" {
+			continue
+		}
+		prev, ok := seen[f.EnvVar]
+		s.Falsef(ok, "%s names both %s and %s", f.EnvVar, prev, f.GoPath)
+		seen[f.EnvVar] = f.GoPath
+	}
+}
+
+func (s *SettingsSuite) TestNoGoPathRepeats() {
+	seen := make(map[string]bool, len(settings.Settings))
+	for _, f := range settings.Settings {
+		s.Falsef(seen[f.GoPath], "%s repeats", f.GoPath)
+		seen[f.GoPath] = true
+	}
+}
+
+func (s *SettingsSuite) TestOptionalBoolHasNoFlag() {
+	for _, f := range settings.Settings {
+		if f.Kind == command.OptionalBool {
+			s.Emptyf(f.Flag.Long, "%s is an optional bool", f.GoPath)
+		}
+	}
+}
+
+func (s *SettingsSuite) TestADurationSettingIsFound() {
+	found := false
+	for _, f := range settings.Settings {
+		found = found || f.Kind == command.Duration
+	}
+	s.True(found, "no duration setting: the generator lost time.Duration")
 }

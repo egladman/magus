@@ -606,7 +606,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
     modelTiers: {
       rows: [
         {
-          label: "economy / check",
+          label: "routine / check",
           rank: 0,
           jobs: 24,
           pass: 21,
@@ -621,7 +621,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
           medianTokens: 38_000,
         },
         {
-          label: "economy / symbol",
+          label: "routine / symbol",
           rank: 0,
           jobs: 14,
           pass: 6,
@@ -794,7 +794,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       broker: {
         pid: 48101,
         version: "0.0.0",
-        apiVersion: "magus.broker/v1alpha1",
+        protocol: "magus.broker/v1alpha1",
         socket: "/run/user/501/magus/broker.sock",
         executable: "/usr/local/bin/magus",
         startTime: timestampFromMs(now - 3_600_000),

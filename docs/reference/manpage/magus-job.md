@@ -100,23 +100,26 @@ them and magus describe job prints one job's terms.
 **--checkpoint** *magus vcs checkpoint -o name*
 : The working state this job is handed, as magus vcs checkpoint -o name prints it
 
-**--criteria** *string*
-: What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares
-
 **--delivery** *string*
 : How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)
 
-**--deny-paths** *string*
+**--deny-paths** *value*
 : A path this job may not write, carved out of its write paths; repeatable or comma-separated
 
-**--depends-on** *string*
+**--depends-on** *value*
 : A job this one waits on; repeatable or comma-separated
 
 **--[no-]fix** (default: off)
 : Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain
 
+**--instructions** *string*
+: What this job is for and what done means, as prose for its agent; the machine-checkable half is --check, and the goals a --stdin record declares
+
 **--model** *string*
 : The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier
+
+**--new-worker** *string*
+: Start a new worker for this job instead of resuming the warm one of the job it follows, for this reason
 
 **--parent** *string*
 : The job this one is forked from
@@ -124,7 +127,7 @@ them and magus describe job prints one job's terms.
 **--[no-]read-only** (default: off)
 : A job that gathers evidence and writes nothing
 
-**--read-paths** *string*
+**--read-paths** *value*
 : A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)
 
 **--[no-]schema** (default: off)
@@ -260,6 +263,12 @@ them and magus describe job prints one job's terms.
 
 **resume**
 : Lift the pause on jobs
+
+**pin**
+: Record the hash of the ./magus that judges a job's checkout
+
+**advance**
+: Move jobs' authority to this checkout's HEAD
 
 **grant**
 : Lower one guard rule to advice for one job, typed by a person

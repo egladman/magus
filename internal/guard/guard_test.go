@@ -38,6 +38,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,6 +51,11 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 // substring.
 func verdictWithRule(decision, rule string) types.GuardJudgment {
 	return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decision, Rule: rule}
+}
+
+// ruledAs is the decision and rule alone, the shape judgedAs keeps.
+func ruledAs(decision, rule string) types.GuardJudgment {
+	return types.GuardJudgment{Decision: decision, Rule: rule}
 }
 
 // unworded is v without the fields a rule test leaves to other assertions: the reason and
@@ -192,11 +198,11 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 // rather than both running ungraded.
 func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 	one := types.Job{
-		ID: "wave/one", Criteria: "the store", WritePaths: []string{"internal/job/**"},
+		ID: "wave/one", Agent: typesagent.Instructed("the store"), Paths: types.JobPaths{Write: []string{"internal/job/**"}},
 		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
 	}
 	two := types.Job{
-		ID: "wave/two", Criteria: "the guard", WritePaths: []string{"internal/guard/**"},
+		ID: "wave/two", Agent: typesagent.Instructed("the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}},
 		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
 	}
 	ctx, _ := fleetFixture(t, one, two)
@@ -345,10 +351,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "pr-watch", name: "one read of a pull request's state", input: bash("gh pr view 300 --json state,autoMergeRequest"), decision: decisionPass},
 		{rule: "worker-runs-gate", name: "a review worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/review footprint", decision: decisionDeny, reason: "integrate"},
 		{rule: "worker-runs-gate", name: "the checkout's integrator runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint",
-			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, WritePaths: []string{"docs/**"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
+			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/**"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
 		{rule: "worker-runs-gate", name: "an integrate title with no lease taken here", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint", decision: decisionDeny, reason: "integrate"},
 		{rule: "worker-builds-magus", name: "the checkout's integrator builds magus", input: bash("./magus run go-build ."), worker: "root/integrate footprint",
-			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, WritePaths: []string{"docs/**"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
+			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/**"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
 		{rule: "detached-push-unqualified", name: "a detached push to a new branch", input: bash("git push origin HEAD:guard-pr-polling"),
 			checkout: &types.CheckoutState{RemoteBranches: []string{"origin/main"}}, decision: decisionDeny, reason: "HEAD:refs/heads/guard-pr-polling"},
 		{rule: "push-authority", name: "a subagent opens a pull request", input: bash(`gh pr create --title "fix: pin the key" --body "Pins it."`),
@@ -978,7 +984,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 		{
 			name: "an unregistered worker's first write",
 			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
-				ctx, root := fleetFixture(t, types.Job{ID: "worker", State: types.StateRunning, WritePaths: []string{"app/**"}})
+				ctx, root := fleetFixture(t, types.Job{ID: "worker", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"app/**"}}})
 				bindCaller(t, ctx, hookAttribution{}, "worker")
 				// An edit of a file already there, so no new-directory or new-file rule speaks.
 				require.NoError(t, os.MkdirAll(filepath.Join(root, "app"), 0o755))
@@ -1000,7 +1006,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				before := treeState(t, dirs...)
 				preview := Judge(ctx, deps, checked)
 				assert.Equal(t, before, treeState(t, dirs...), "round %d: the dry run wrote", round)
-				leftover, err := filepath.Glob(filepath.Join(os.TempDir(), "magus-guard-dry-run-*"))
+				leftover, err := filepath.Glob(filepath.Join(dryRunCopies(), "*"))
 				require.NoError(t, err)
 				assert.Empty(t, leftover, "round %d: the dry run left its copy behind", round)
 
@@ -1047,11 +1053,13 @@ func TestSessionCopyRemovesTheCopyOfAnExitedProcess(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 	const exited = 1 << 30
-	orphan := filepath.Join(tmp, fmt.Sprintf("%s%d-1", dryRunCopyPrefix, exited))
+	parent := dryRunCopies()
+	require.Equal(t, filepath.Clean(tmp), filepath.Dir(parent), "copies go under the temporary directory")
+	orphan := filepath.Join(parent, fmt.Sprintf("%d-1", exited))
 	require.False(t, hint.NewGate(orphan, "s1").MarkFired("told"), "a late write recreates the copy")
 	require.DirExists(t, orphan)
-	live := filepath.Join(tmp, fmt.Sprintf("%s%d-1", dryRunCopyPrefix, os.Getpid()))
-	unnamed := filepath.Join(tmp, dryRunCopyPrefix+"2837461923")
+	live := filepath.Join(parent, fmt.Sprintf("%d-1", os.Getpid()))
+	unnamed := filepath.Join(parent, "2837461923")
 	for _, dir := range []string{live, unnamed} {
 		require.NoError(t, os.Mkdir(dir, 0o755))
 	}
@@ -1099,7 +1107,7 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 		Rule:       string(denyRuleOutputRedirect),
 		Lease:      v.Lease, // follows the environment the test ran in
 		LeaseFrom:  v.LeaseFrom,
-		Next:       []types.NextStep{want},
+		NextSteps:  []types.NextStep{want},
 	}, v, "one line plus the next and the verdict ref")
 
 	assert.Equal(t, "deny-output-redirect", servedNextPreauthorizes(hint.NewGate(cacheDir, ""), want.Run))
@@ -1128,8 +1136,8 @@ func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 	assert.NotContains(t, leased.Reason, "next:")
 
 	unbound := Judge(ctx, deps, Request{Input: piped})
-	require.Len(t, unbound.Next, 1)
-	assert.Equal(t, "magus affected ci -s", unbound.Next[0].Run)
+	require.Len(t, unbound.NextSteps, 1)
+	assert.Equal(t, "magus affected ci -s", unbound.NextSteps[0].Run)
 }
 
 // TestEveryJudgedDecisionNamesItsRule reads Judge itself: a statement setting a verdict to
@@ -1271,7 +1279,7 @@ func BenchmarkWithJobStoreRows(b *testing.B) {
 	for i := range 300 {
 		row := types.Job{
 			ID: fmt.Sprintf("root-%d/job-%d", i%20, i), Parent: fmt.Sprintf("root-%d", i%20),
-			State: states[i%len(states)], WritePaths: []string{"internal/guard/guard.go"},
+			State: states[i%len(states)], Paths: types.JobPaths{Write: []string{"internal/guard/guard.go"}},
 		}
 		_, err := store.Update(b.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(b, err)
@@ -1306,7 +1314,7 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 		return ids
 	}
 
-	put(types.Job{ID: "a", State: types.StateDeclared, WritePaths: []string{"x.go"}, Model: "sonnet"})
+	put(types.Job{ID: "a", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"x.go"}}, Agent: &typesagent.Spec{Model: typesagent.Model{ID: "sonnet"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}})
 	assert.Equal(t, []string{"a"}, rowsOf())
 	put(types.Job{ID: "b", State: types.StateDeclared})
 	assert.Equal(t, []string{"a", "b"}, rowsOf())
@@ -1319,7 +1327,7 @@ var recoverableRules = []string{
 	"exit-status-echo", "filter-without-input", "grep-reader", "interpreter-rewrite", "interpreter-script", "magus-timeout",
 	"monitor-duplicate", "monitor-pile", "output-pipe", "output-redirect", "raw-tool", "read-navigation",
 	"read-paging", "search-translation", "sed-in-place", "sibling-checkout",
-	"spawn-before-skill", "spawn-waiter", "stage-all", "symbol-search", "throwaway-copy", "unjudged-tool",
+	"spawn-before-skill", "spawn-waiter", "stage-all", "symbol-search", "throwaway-copy", "unjudged-step",
 	"unknown-env",
 }
 
@@ -1907,13 +1915,13 @@ func TestEffectiveBuiltinsWithoutAnApprovalAuthority(t *testing.T) {
 // A builtins declaration is policy: the digest moves with it, and declaring one alone is
 // enough for there to be one.
 func TestPolicyDigestCoversBuiltins(t *testing.T) {
-	none := buildPolicy(nil, false, false, false, false, nil, nil)
+	none := buildPolicy(nil, false, false, false, false, nil, nil, nil)
 	assert.Empty(t, none.Digest)
 
-	off := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil)
-	deny := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}}, nil)
-	lines := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}}, nil)
-	moreLines := buildPolicy(nil, false, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}}, nil)
+	off := buildPolicy(nil, false, false, false, false, nil, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil)
+	deny := buildPolicy(nil, false, false, false, false, nil, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}}, nil)
+	lines := buildPolicy(nil, false, false, false, false, nil, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}}, nil)
+	moreLines := buildPolicy(nil, false, false, false, false, nil, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}}, nil)
 	assert.NotEmpty(t, off.Digest)
 	assert.Equal(t, 1, off.Builtins)
 	assert.NotEqual(t, off.Digest, deny.Digest)
@@ -1921,8 +1929,23 @@ func TestPolicyDigestCoversBuiltins(t *testing.T) {
 
 	shell := []workspace.ShellRule{{Name: "x", Decision: "deny", Program: "curl", Reason: "r"}}
 	assert.NotEqual(t,
-		buildPolicy(shell, false, false, false, false, nil, nil).Digest,
-		buildPolicy(shell, false, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil).Digest)
+		buildPolicy(shell, false, false, false, false, nil, nil, nil).Digest,
+		buildPolicy(shell, false, false, false, false, nil, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil).Digest)
+}
+
+// A step rule is code: registering one is a policy, and its kind names it.
+func TestPolicyDigestCoversStepRules(t *testing.T) {
+	refund := buildPolicy(nil, false, false, false, false, []string{"refund"}, nil, nil)
+	egress := buildPolicy(nil, false, false, false, false, []string{"egress"}, nil, nil)
+	assert.NotEmpty(t, refund.Digest)
+	assert.Equal(t, []string{"refund"}, refund.StepRules)
+	assert.NotEqual(t, refund.Digest, egress.Digest)
+}
+
+func TestARemovedStepRuleWaitsOnApproval(t *testing.T) {
+	prev := policyMarker{Digest: "a", StepRules: []string{"refund"}}
+	assert.Equal(t, PolicyLoosenPending, classifyPolicy(prev, true, PolicyState{Digest: "b"}, true))
+	assert.Equal(t, PolicyTightened, classifyPolicy(policyMarker{Digest: "a"}, true, PolicyState{Digest: "b", StepRules: []string{"refund"}}, true))
 }
 
 func TestPendingSetCoversFilesUnderAnUntrackedDirectory(t *testing.T) {
@@ -2164,4 +2187,156 @@ func (s *WorkspaceMemoSuite) TestAFailedOpenIsTriedAgainNextJudgment() {
 	_, err = s.judgment(memo).inspect(s.T().Context(), "/w")
 	s.Require().NoError(err)
 	s.Equal(2, s.opens)
+}
+
+// authoritySuite pins ADR 0045's policy wait. What changed since the
+// authority's revision, committed or not, is pending until it holds it.
+type authoritySuite struct {
+	suite.Suite
+	root   string
+	file   string
+	before string
+	h      headPolicy
+	git    func(...string)
+}
+
+func TestAuthority(t *testing.T) { suite.Run(t, new(authoritySuite)) }
+
+func (s *authoritySuite) SetupTest() {
+	s.T().Setenv("MAGUS_CACHE_DIR", "")
+	s.root, s.h, s.git = gitPolicy(s.T(), map[string]string{"policy.buzz": "strict\n"})
+	s.file = filepath.Join(s.root, "policy.buzz")
+	before, err := s.h.driver.FindCommit(s.T().Context(), s.root, "")
+	s.Require().NoError(err)
+	s.before = before.ID
+	s.Require().NoError(os.WriteFile(s.file, []byte("loosened\n"), 0o644))
+	s.git("commit", "-q", "-am", "loosen")
+}
+
+// at is the authority over the same checkout read at rev.
+func (s *authoritySuite) at(rev string) headPolicy {
+	h := s.h
+	h.revision, h.batch = rev, &objectBatchState{}
+	return h
+}
+
+func (s *authoritySuite) TestACommittedLooseningIsPendingSinceTheAuthority() {
+	got, err := s.at(s.before).Pending(s.T().Context(), []string{s.file})
+
+	s.Require().NoError(err)
+	s.Require().Len(got, 1)
+	s.Equal(canonicalPath(s.file), canonicalPath(got[0]))
+}
+
+func (s *authoritySuite) TestTheCheckedOutCommitApprovesItsOwnCommit() {
+	got, err := s.h.Pending(s.T().Context(), []string{s.file})
+
+	s.Require().NoError(err)
+	s.Empty(got)
+}
+
+func (s *authoritySuite) TestTheApprovedSourceIsReadAtTheAuthority() {
+	h := s.at(s.before)
+	defer func() { _ = h.Close() }()
+
+	got, err := h.ReadFile(s.T().Context(), s.file)
+
+	s.Require().NoError(err)
+	s.Equal("strict\n", string(got))
+}
+
+func (s *authoritySuite) TestAnUnbatchedReadIsAtTheAuthorityToo() {
+	h := s.at(s.before)
+	h.driver = unbatchedDriver{VCSDriver: h.driver, reads: &[]string{}}
+
+	got, err := h.ReadFile(s.T().Context(), s.file)
+
+	s.Require().NoError(err)
+	s.Equal("strict\n", string(got))
+}
+
+func (s *authoritySuite) TestADriverThatCannotDiffARevisionLeavesTheAuthorityUnreadable() {
+	h := s.at(s.before)
+	h.driver = unbatchedDriver{VCSDriver: h.driver, reads: &[]string{}}
+
+	_, err := h.Pending(s.T().Context(), []string{s.file})
+
+	s.ErrorContains(err, fmt.Sprintf("the authority %s is unreadable", s.before))
+}
+
+func (s *authoritySuite) TestThePendingRecordIsKeyedByTheAuthority() {
+	s.NotEqual(s.at(s.before).pendingKey("id", "files"), s.h.pendingKey("id", "files"))
+}
+
+// One authority's record does not answer for another over the same scope.
+func (s *authoritySuite) TestAnotherAuthorityDoesNotReuseTheRecord() {
+	scope := []string{s.file}
+	_, err := s.h.Pending(s.T().Context(), scope)
+	s.Require().NoError(err)
+
+	got, err := s.at(s.before).Pending(s.T().Context(), scope)
+
+	s.Require().NoError(err)
+	s.Len(got, 1)
+}
+
+// resolveAuthoritySuite pins ResolveAuthority. A leased call takes its row's
+// checkout and authority, and a call with no row the request's own.
+type resolveAuthoritySuite struct {
+	suite.Suite
+	ws       string
+	checkout string
+}
+
+func TestResolveAuthority(t *testing.T) { suite.Run(t, new(resolveAuthoritySuite)) }
+
+type rowsReader []types.Job
+
+func (r rowsReader) List() ([]types.Job, error) { return r, nil }
+
+func (s *resolveAuthoritySuite) SetupTest() {
+	s.ws = s.T().TempDir()
+	s.checkout = s.T().TempDir()
+}
+
+func (s *resolveAuthoritySuite) resolve(req Request, rows ...types.Job) CallAuthority {
+	ctx := WithLocation(s.T().Context(), filepath.Join(s.ws, ".magus"), s.ws, s.ws)
+	return ResolveAuthority(ctx, Dependencies{JobReader: rowsReader(rows)}, req)
+}
+
+func (s *resolveAuthoritySuite) TestALeasedCallTakesItsRowsCheckoutAndAuthority() {
+	row := types.Job{ID: "task", State: types.StateRunning, Authority: "abc123", CheckoutRoot: s.checkout}
+
+	got := s.resolve(Request{Input: "ls", Lease: "task", Authority: "ignored"}, row)
+
+	s.Equal(CallAuthority{Lease: "task", Checkout: s.checkout, Revision: "abc123"}, got)
+}
+
+func (s *resolveAuthoritySuite) TestAForkedWorktreeOutranksTheExecCheckout() {
+	row := types.Job{ID: "task", State: types.StateRunning, Authority: "abc123", CheckoutRoot: s.T().TempDir(),
+		Worktree: &types.JobWorktree{Root: s.checkout}}
+
+	s.Equal(s.checkout, s.resolve(Request{Input: "ls", Lease: "task"}, row).Checkout)
+}
+
+func (s *resolveAuthoritySuite) TestACheckoutGoneFromDiskLoadsTheCallersOwn() {
+	row := types.Job{ID: "task", State: types.StateRunning, Authority: "abc123", CheckoutRoot: filepath.Join(s.checkout, "gone")}
+
+	s.Empty(s.resolve(Request{Input: "ls", Lease: "task"}, row).Checkout)
+}
+
+func (s *resolveAuthoritySuite) TestACallWithNoRowTakesTheRequestsAuthority() {
+	s.Equal(CallAuthority{Revision: "target"}, s.resolve(Request{Input: "ls", Authority: "target"}))
+}
+
+func (s *resolveAuthoritySuite) TestALeaseNoRowCarriesKeepsTheRequestsAuthority() {
+	got := s.resolve(Request{Input: "ls", Lease: "nobody", Authority: "target"})
+
+	s.Equal(CallAuthority{Lease: "nobody", Revision: "target"}, got)
+}
+
+func (s *resolveAuthoritySuite) TestAPendingRowHasNoAuthorityYet() {
+	got := s.resolve(Request{Input: "ls", PendingRow: &types.Job{ID: "fork"}, Authority: "target"})
+
+	s.Equal(CallAuthority{Lease: "fork", Revision: "target"}, got)
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -379,6 +380,32 @@ func (s *PolicySnapshotSuite) TestAHitJudgesWithoutALoad() {
 	s.Equal(types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed"}, s.command(deps))
 	s.command(deps)
 	s.Equal(1, s.loads, "the function rule loads once, on its first call")
+}
+
+func (s *PolicySnapshotSuite) TestAHitKeepsTheStepRulesKinds() {
+	s.repo.Commit("step", map[string]string{"magusfile.buzz": `import "magus";
+import "magus/agent";
+
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.deny("No {req.step.name} refunds."));
+`})
+	s.warm(s.repo)
+
+	deps, rules := NewDependencies(s.T().Context(), s.wiring(s.repo))
+	s.Nil(rules, "a hit loads no rules up front")
+	s.Equal([]string{"refund"}, deps.Policy().StepRules)
+	s.Require().NotNil(deps.StepRule)
+	s.Nil(deps.StepRule("egress"), "a kind the snapshot does not name has no rule")
+	rule := deps.StepRule("refund")
+	s.Require().NotNil(rule)
+	s.Zero(s.loads)
+
+	got, err := rule(s.T().Context(), typesagent.StepRequest{Step: typesagent.Step{Kind: "refund", Name: "card"}}, hint.NewGate(s.T().TempDir(), "s"))
+	s.Require().NoError(err)
+	s.Equal(types.GuardVerdict{Decision: types.GuardDeny, Reason: "No card refunds."}, got)
+	s.Equal(1, s.loads, "the step rule loads on its first call")
+	approved, err := deps.ApprovedStepRule(s.T().Context(), "refund")
+	s.Require().NoError(err)
+	s.Nil(approved, "a clean tree's approved rule is the working tree's")
 }
 
 func (s *PolicySnapshotSuite) TestAnEditedPolicySourceMisses() {

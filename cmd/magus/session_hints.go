@@ -19,7 +19,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 )
 
 // hintFloor is the uptake a breadcrumb has to clear to be worth its context. Measured

@@ -159,11 +159,11 @@ func TestFocusVerdictWideningIsWhatTheLeaseDeclares(t *testing.T) {
 // to edit app that also declares libs/ui readable reads both, and the dependencies of each.
 func TestLeaseFocusReadPathsWidenTheWritePaths(t *testing.T) {
 	ws := newFocusFixture()
-	focus, ok := leaseFocus(ws, types.Job{WritePaths: []string{"app/**"}, ReadPaths: []string{"libs/ui"}})
+	focus, ok := leaseFocus(ws, types.Job{Paths: types.JobPaths{Write: []string{"app/**"}, Read: []string{"libs/ui"}}})
 	require.True(t, ok)
 	assert.ElementsMatch(t, []string{"app", "libs/core", "libs/ui"}, focus.Projects)
 
-	writesOnly, ok := leaseFocus(ws, types.Job{WritePaths: []string{"app/**"}})
+	writesOnly, ok := leaseFocus(ws, types.Job{Paths: types.JobPaths{Write: []string{"app/**"}}})
 	require.True(t, ok)
 	assert.ElementsMatch(t, []string{"app", "libs/core"}, writesOnly.Projects, "no read paths: the write paths are the boundary")
 

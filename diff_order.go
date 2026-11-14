@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // hunkPlace is where a touched symbol's changed lines fall within its file's patch.
@@ -96,7 +97,7 @@ func (m *Magus) attachRisk(ctx context.Context, out *diff.Diff, base, patch stri
 		out.Notes = append(out.Notes, fmt.Sprintf("risk tiers skipped: %v", err))
 		return
 	}
-	byPath := make(map[string]types.TierEvidence, len(report.Evidence))
+	byPath := make(map[string]check.TierEvidence, len(report.Evidence))
 	for _, e := range report.Evidence {
 		if e.Path != "" {
 			byPath[e.Path] = e
@@ -190,9 +191,9 @@ func orderFiles(files []diff.File, moved map[string]bool) []changeset.OrderFile 
 	return out
 }
 
-func riskTier(f diff.File) types.Tier {
+func riskTier(f diff.File) check.Tier {
 	if f.Risk == nil {
-		return types.RiskFull
+		return check.RiskFull
 	}
 	return f.Risk.Tier
 }

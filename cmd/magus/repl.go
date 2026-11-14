@@ -116,7 +116,7 @@ func workspaceTargetNames(ctx context.Context, cwd string) func() []string {
 // generated binders in cmd/magus/gen and the shell completions come from, so
 // this can't drift from what the subcommand actually accepts.
 func cliFlagCandidates(verb string) []string {
-	for _, c := range commands.Root.Children {
+	for _, c := range commands.Root.Spec.Children {
 		if c.Name != verb {
 			continue
 		}

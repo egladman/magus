@@ -102,13 +102,18 @@ func stopRequest(ctx context.Context, deps Dependencies, env stopEnvelope, who h
 // stopFailureNote names each side of the stop rule that judged nothing, "" when every side
 // answered.
 func stopFailureNote(asked rulesAnswer) string {
+	return seamFailureNote(seamStop, "this stop stands on the built-in check alone", asked)
+}
+
+// seamFailureNote names each side of seam's rule that judged nothing and
+// what the call stands on instead, "" when every side answered.
+func seamFailureNote(seam functionSeam, stands string, asked rulesAnswer) string {
 	if len(asked.failures) == 0 {
 		return ""
 	}
 	lines := make([]string, len(asked.failures))
 	for i, f := range asked.failures {
-		lines[i] = fmt.Sprintf("%s: %s", sideName(seamStop, f.Side), f.Error)
+		lines[i] = fmt.Sprintf("%s: %s", sideName(seam, f.Side), f.Error)
 	}
-	return fmt.Sprintf("magus workspace: %s judged nothing, so this stop stands on the built-in check alone.\n%s",
-		seamStop.member(), strings.Join(lines, "\n"))
+	return fmt.Sprintf("magus workspace: %s judged nothing, so %s.\n%s", seam.member(), stands, strings.Join(lines, "\n"))
 }

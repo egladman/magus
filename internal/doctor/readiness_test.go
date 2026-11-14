@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,9 +24,9 @@ func TestCheckReadinessProbes(t *testing.T) {
 
 	t.Run("no gates", func(t *testing.T) {
 		got := (&runner{}).checkReadinessProbes(t.Context(), []*types.Project{{}})
-		assert.Equal(t, types.Check{
+		assert.Equal(t, check.Check{
 			Name:    "tool-readiness",
-			Status:  types.CheckOK,
+			Status:  check.OK,
 			Message: "no spell gates an op on a tool being reachable",
 		}, got)
 	})
@@ -35,10 +36,10 @@ func TestCheckReadinessProbes(t *testing.T) {
 	// is OK: an advice nobody can clear is one every docker workspace carries forever.
 	t.Run("lists the gate without running it", func(t *testing.T) {
 		got := (&runner{}).checkReadinessProbes(t.Context(), gated)
-		assert.Equal(t, types.Check{
+		assert.Equal(t, check.Check{
 			Name:     "tool-readiness",
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceDeclared,
+			Status:   check.OK,
+			Evidence: check.EvidenceDeclared,
 			Message:  "1 tool(s) gated on a readiness probe",
 			Details:  []string{"compose: docker gated on `magus-doctor-no-such-bin info`"},
 		}, got)
@@ -56,10 +57,10 @@ func TestCheckReadinessProbes(t *testing.T) {
 		got := (&runner{opts: options{probe: true}}).checkReadinessProbes(t.Context(), gated)
 		require.Len(t, got.Details, 1)
 		// The failed probe's own wording is pinned by substring below.
-		assert.Equal(t, types.Check{
+		assert.Equal(t, check.Check{
 			Name:     "tool-readiness",
-			Status:   types.CheckFail,
-			Evidence: types.EvidenceMeasured,
+			Status:   check.Fail,
+			Evidence: check.EvidenceMeasured,
 			Message:  "1 of 1 gated tool(s) not ready",
 			Details:  got.Details,
 		}, got)
@@ -82,10 +83,10 @@ func TestCheckReadinessProbes(t *testing.T) {
 			},
 		}}
 		got := (&runner{opts: options{probe: true}}).checkReadinessProbes(t.Context(), up)
-		assert.Equal(t, types.Check{
+		assert.Equal(t, check.Check{
 			Name:     "tool-readiness",
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceMeasured,
+			Status:   check.OK,
+			Evidence: check.EvidenceMeasured,
 			Message:  "1 gated tool(s), all ready",
 			Details:  []string{fmt.Sprintf("compose: docker ready (`%s`)", bin)},
 		}, got)

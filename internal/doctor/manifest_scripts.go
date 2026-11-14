@@ -13,22 +13,23 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // checkManifestScripts is MGS1049: a target that runs a script a manifest defines.
 // The spells declare which argv shapes do (mgs_listScriptRunners); the dry host
 // traces each target body's proc\exec calls. A call behind a helper is seen, a branch
 // the probe does not take is not.
-func (r *runner) checkManifestScripts(ctx context.Context, projects []*types.Project) types.Check {
+func (r *runner) checkManifestScripts(ctx context.Context, projects []*types.Project) check.Check {
 	return checkManifestScripts(ctx, r.root, projects, project.DefaultSpellRegistry().All())
 }
 
-func checkManifestScripts(ctx context.Context, root string, projects []*types.Project, all []*spells.Spell) types.Check {
+func checkManifestScripts(ctx context.Context, root string, projects []*types.Project, all []*spells.Spell) check.Check {
 	const name = "manifest-scripts"
 	declaring := slices.DeleteFunc(slices.Clone(all), func(s *spells.Spell) bool { return len(s.ScriptRunners()) == 0 })
 	if len(declaring) == 0 {
-		return types.Check{
-			Name: name, Status: types.CheckOK, Evidence: types.EvidenceDeclared,
+		return check.Check{
+			Name: name, Status: check.OK, Evidence: check.EvidenceDeclared,
 			Message: "no registered spell declares a script runner",
 		}
 	}
@@ -68,23 +69,23 @@ func checkManifestScripts(ctx context.Context, root string, projects []*types.Pr
 
 	switch {
 	case len(findings) > 0:
-		return types.Check{
+		return check.Check{
 			Name:   name,
-			Status: types.CheckFail,
+			Status: check.Fail,
 			Message: fmt.Sprintf("%d call(s) run a script a manifest defines, so its steps, inputs and outputs are "+
 				"invisible to the cache key; declare those steps in the magusfile (see %s)",
 				len(findings), types.CodeURL(types.ManifestScriptDelegation)),
 			Details: append(findings, untraced...),
 		}
 	case len(untraced) > 0:
-		return types.Check{
-			Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown,
+		return check.Check{
+			Name: name, Status: check.OK, Evidence: check.EvidenceUnknown,
 			Message: fmt.Sprintf("could not trace %d of %d magusfile(s)", len(untraced), len(untraced)+traced),
 			Details: untraced,
 		}
 	}
-	return types.Check{
-		Name: name, Status: types.CheckOK,
+	return check.Check{
+		Name: name, Status: check.OK,
 		Message: fmt.Sprintf("no target in %d magusfile(s) runs a manifest-defined script", traced),
 	}
 }

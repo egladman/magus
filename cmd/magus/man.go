@@ -9,8 +9,8 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/libs/cmdline/exit"
-	"github.com/egladman/magus/libs/cmdline/generate"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/clikit/generate"
 	"github.com/egladman/magus/libs/xdg"
 )
 
@@ -39,9 +39,10 @@ func manCommand(args []string) error {
 		}
 		dir = def
 	}
-	root := commands.Root
-	root.Env = config.EnvVars()
-	pages := generate.Roff(root, "", version)
+	pages, err := generate.Roff(commands.Root.Spec.Command, config.Spec, "", version)
+	if err != nil {
+		return fmt.Errorf("magus self man: %w", err)
+	}
 	names := make([]string, 0, len(pages))
 	for _, page := range pages {
 		names = append(names, page.Name)

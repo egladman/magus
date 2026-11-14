@@ -33,6 +33,7 @@ const time = (v: unknown): number => (typeof v === 'string' ? Date.parse(v) || 0
 const str = (v: unknown): string => (v === undefined || v === null ? '' : String(v))
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : [])
 const records = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter(isRecord) : [])
+const record = (v: unknown): Record<string, unknown> => (isRecord(v) ? v : {})
 const enumWord = (v: unknown, prefix: string): string =>
   typeof v === 'string' ? v.replace(prefix, '').toLowerCase() : ''
 
@@ -64,6 +65,8 @@ export function parseJobs(text: string, fetchedAt: number): Result<Listing> {
   if (doc.error) return doc
   const rows: JobRow[] = []
   for (const j of records(doc.value.jobs)) {
+    const agent = record(j.agent)
+    const model = record(agent.model)
     const state = jobState(j.state)
     if (state.error) return state
     const holder = enumWord(j.holder, 'JOB_HOLDER_')
@@ -71,11 +74,11 @@ export function parseJobs(text: string, fetchedAt: number): Result<Listing> {
       id: str(j.id),
       parent: str(j.parent),
       state: state.value,
-      model: str(j.model),
+      model: str(model.tier) || str(model.id),
       holder: holder === 'session' ? '' : holder,
-      criteria: str(j.criteria) || str(j.description),
+      criteria: str(agent.instructions) || str(j.description),
       check: str(j.check),
-      writePaths: strs(j.writePaths),
+      writePaths: strs(record(j.paths).write),
       goals: records(j.goals).map(g => `${str(g.kind) || '?'} ${str(g.id)}`.trim()),
       proof: str(j.writeProof),
       endReason: str(j.endReason),

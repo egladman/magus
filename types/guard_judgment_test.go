@@ -22,7 +22,7 @@ func TestGuardJudgmentWireShape(t *testing.T) {
 		Rule:       "some-rule",
 		Lease:      "job-a",
 		LeaseFrom:  LeaseSourceFlag,
-		Next: []NextStep{{
+		NextSteps: []NextStep{{
 			ID:    "deny-remedy-some-rule",
 			Run:   "magus run test .",
 			Argv:  []string{"magus", "run", "test", "."},
@@ -33,7 +33,7 @@ func TestGuardJudgmentWireShape(t *testing.T) {
 	got, err := json.Marshal(full)
 	require.NoError(t, err)
 	assert.Equal(t, `{"api_version":"magus.guard/v1alpha3","decision":"deny","reason":"no","context":"fyi","rule":"some-rule",`+
-		`"lease":"job-a","lease_from":"flag","next":[{"id":"deny-remedy-some-rule","run":"magus run test .",`+
+		`"lease":"job-a","lease_from":"flag","next_steps":[{"id":"deny-remedy-some-rule","run":"magus run test .",`+
 		`"argv":["magus","run","test","."],"why":"because","reads":true}]}`, string(got))
 
 	pass, err := json.Marshal(GuardJudgment{APIVersion: "magus.guard/v1alpha3", Decision: "pass"})

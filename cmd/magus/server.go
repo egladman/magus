@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types/diff"
 	"log/slog"

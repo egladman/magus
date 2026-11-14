@@ -11,9 +11,9 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'shop'
 
-exec magus job fork plan --read-only --criteria 'plan the pricing work'
-exec magus job fork plan/a --parent plan --read-only --criteria 'read the pricing code'
-exec magus job fork plan/b --parent plan --read-only --criteria 'read the tax code'
+exec magus job fork plan --read-only --instructions 'plan the pricing work'
+exec magus job fork plan/a --parent plan --read-only --instructions 'read the pricing code'
+exec magus job fork plan/b --parent plan --read-only --instructions 'read the tax code'
 
 ! exec magus job exit plan
 stderr 'ending plan would end 2 live job\(s\) below it: plan/a \(declared, session holder, never taken\); plan/b \(declared, session holder, never taken\)'

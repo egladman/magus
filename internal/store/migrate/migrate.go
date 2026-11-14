@@ -23,6 +23,9 @@ type Migration struct {
 	// Up rewrites one entry. It reads nothing but the entry, so a migration applied to
 	// the same file twice writes the same bytes.
 	Up func(Entry) (Entry, error)
+	// Header rewrites the header the same way, nil to leave it as it is. The
+	// version member is set after it, so it never decides the version.
+	Header func(Entry) (Entry, error)
 }
 
 // Store is what a JSON Lines store declares to be migrated.
@@ -114,6 +117,9 @@ func (s Store) Apply() (result, error) {
 		return res, nil
 	}
 	for v := res.From; v < res.To; v++ {
+		if header, err = s.upHeader(v, header); err != nil {
+			return res, err
+		}
 		if err := s.up(v, entries); err != nil {
 			return res, err
 		}
@@ -158,6 +164,22 @@ func (s Store) up(v int, entries []Entry) error {
 		entries[i] = next
 	}
 	return nil
+}
+
+// upHeader applies migration v's header rewrite, which takes v to v+1.
+func (s Store) upHeader(v int, header Entry) (Entry, error) {
+	m := s.Migrations[v]
+	if m.Header == nil {
+		return header, nil
+	}
+	next, err := m.Header(header)
+	if err == nil && next == nil {
+		err = errors.New("returned no header")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s: %s: migration %d (%s): header: %w", s.Name, s.Path, v+1, m.Name, err)
+	}
+	return next, nil
 }
 
 // rewrite replaces the file with entries, one line each.

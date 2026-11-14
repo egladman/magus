@@ -35,10 +35,10 @@ exec magus describe job wave/shape
 stdout '^  --old-flag$'
 
 -- blank.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/shape", "criteria": "reshape it", "write_paths": ["code.go"], "check": {"target": "test", "project": "."}, "breaks": ["--old-flag", ""]}
+{"api_version": "magus.job/v1alpha1", "id": "wave/shape", "agent": {"instructions": "reshape it", "worker": {"type": "resumed"}}, "paths": {"write": ["code.go"]}, "check": {"target": "test", "project": "."}, "breaks": ["--old-flag", ""]}
 -- breaks.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/shape", "criteria": "reshape it", "write_paths": ["code.go"], "check": {"target": "test", "project": "."}, "breaks": ["--old-flag", "api.Open"]}
+{"api_version": "magus.job/v1alpha1", "id": "wave/shape", "agent": {"instructions": "reshape it", "worker": {"type": "resumed"}}, "paths": {"write": ["code.go"]}, "check": {"target": "test", "project": "."}, "breaks": ["--old-flag", "api.Open"]}
 -- clear.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/shape", "criteria": "reshape it", "write_paths": ["code.go"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "wave/shape", "agent": {"instructions": "reshape it", "worker": {"type": "resumed"}}, "paths": {"write": ["code.go"]}, "check": {"target": "test", "project": "."}}
 -- code.go --
 package pkg

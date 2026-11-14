@@ -14,6 +14,7 @@ import "fs";
 import "os";
 import "encoding/json";
 import "magus";
+import "magus/check";
 import "vcs";
 import "./hack/magusfile/branch-stack" as branchstack;
 import "./hack/policy/helpers" as helpers;
@@ -50,9 +51,9 @@ export object Mandate {
     budget: int = branchstack\reviewBudget,
 }
 
-// Row is what the rules read of one job store row.
+// JobFacts is what the rules read of one job store row.
 // It is copied out of magus\workspace().jobs() so a test can build one.
-export object Row {
+export object JobFacts {
     id: str,
     state: magus\JobState,
     parent: str = "",
@@ -78,7 +79,7 @@ export object Assessed {
 // assess is id's proven tier: measure's report on the change in the job's own checkout since
 // the checkpoint it was handed. A row measure cannot reach, or a measure that raises, is full,
 // and its evidence says which, so an unmeasured job never reads as a measured tier.
-export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > TierReport !> any, count: fun (row: Row) > {str: int} !> any) > Assessed {
+export fun assess(id: str, jobs: [JobFacts], measure: fun (row: JobFacts) > TierReport !> any, count: fun (row: JobFacts) > {str: int} !> any) > Assessed {
     final row = byId(jobs, id: id);
     if (row == null) {
         return Assessed{ tier = "full", evidence = ["{id}: full (no job row by that id, so nothing was measured)"] };
@@ -108,7 +109,7 @@ export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > TierReport !> 
     var reviewable = 0;
     foreach (e in report.evidence) {
         final n = changed[e.path] ?? 0;
-        if (e.path != "" and (e.tier == magus\Tier.scoped or e.tier == magus\Tier.full)) {
+        if (e.path != "" and (e.tier == magus\check\Tier.scoped or e.tier == magus\check\Tier.full)) {
             reviewable = reviewable + n;
             lines.append("{evidenceLine(e)}, {n} lines");
         } else {
@@ -120,7 +121,7 @@ export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > TierReport !> 
 
 // counted is assess's count outside a test: each path's changed lines in the
 // job's checkout since its checkpoint, added plus deleted.
-export fun counted(row: Row) > {str: int} !> any {
+export fun counted(row: JobFacts) > {str: int} !> any {
     final lines = mut {<str: int>};
     foreach (s in vcs\diffStat(row.checkpoint, dir: row.checkoutRoot)) {
         lines[s.path] = s.added + s.deleted;
@@ -129,12 +130,12 @@ export fun counted(row: Row) > {str: int} !> any {
 }
 
 // measured is assess's measure outside a test: the ci gate's tier for the job's change.
-export fun measured(row: Row) > TierReport !> any {
+export fun measured(row: JobFacts) > TierReport !> any {
     return magus\change(row.checkpoint).tier("ci", opts: TierOptions{ checkout = row.checkoutRoot });
 }
 
 // evidenceLine renders e as `magus affected ci` prints it: `<path>: <tier> (<class>: <why>)`.
-fun evidenceLine(e: TierEvidence) > str {
+fun evidenceLine(e: magus\check\TierEvidence) > str {
     var subject = e.path;
     if (subject == "") {
         subject = "{e.project} {e.target}".trim();
@@ -149,15 +150,23 @@ fun evidenceLine(e: TierEvidence) > str {
     return "{subject}: {e.tier.value} ({why})";
 }
 
-// rows copies a job store's rows.
-export fun rows(jobs: [Job]) > [Row] {
-    final found = mut [<Row>];
-    foreach (j in jobs) {
+// rows copies a job store's rows, each with the risks its live try's
+// result names.
+export fun jobFacts(list: JobList) > [JobFacts] {
+    final found = mut [<JobFacts>];
+    foreach (j in list.jobs) {
         var risks = [<str>];
-        if (j.result != null) {
-            risks = j.result!.unresolvedRisks;
+        var live = 0;
+        foreach (a in list.attempts) {
+            if (a.job == j.id and a.n > live and a.status.state == magus\JobState.none) {
+                live = a.n;
+                risks = [<str>];
+                if (a.status.result != null) {
+                    risks = a.status.result!.unresolvedRisks;
+                }
+            }
         }
-        found.append(Row{ id = j.id, state = j.state, parent = j.parent, paused = j.paused != 0, dependsOn = j.dependsOn,
+        found.append(JobFacts{ id = j.id, state = j.state, parent = j.parent, paused = j.paused != 0, dependsOn = j.dependsOn,
             created = j.created, checkpoint = j.checkpoint, checkoutRoot = j.checkoutRoot, unresolvedRisks = risks, holderStopped = j.holderStopped });
     }
     return found;
@@ -286,7 +295,7 @@ export fun rank(tier: str) > int {
 
 // decideBudget holds a settled job whose scoped or full lines pass the
 // mandate's budget, naming the split a person may run. It never splits.
-fun decideBudget(id: str, m: Mandate, row: Row, got: Assessed) > GuardVerdict {
+fun decideBudget(id: str, m: Mandate, row: JobFacts, got: Assessed) > GuardVerdict {
     if (got.lines >= 0 and got.lines <= m.budget) {
         return magus\guard.allow();
     }
@@ -299,11 +308,11 @@ fun decideBudget(id: str, m: Mandate, row: Row, got: Assessed) > GuardVerdict {
 // settled reports whether a job is done with no call left for the person: `job wait`
 // recorded it pass and its exit record names no unresolved risk. A worker's own report can
 // only unsettle a job.
-export fun settled(row: Row) > bool {
+export fun settled(row: JobFacts) > bool {
     return row.state == magus\JobState.pass and row.unresolvedRisks.len() == 0;
 }
 
-fun byId(jobs: [Row], id: str) > Row? {
+fun byId(jobs: [JobFacts], id: str) > JobFacts? {
     foreach (r in jobs) {
         if (r.id == id) {
             return r;
@@ -314,7 +323,7 @@ fun byId(jobs: [Row], id: str) > Row? {
 
 // mandated reports whether id is a row m names, or a child forked from one, which by the job
 // rules narrows its parent.
-export fun mandated(id: str, m: Mandate, jobs: [Row]) > bool {
+export fun mandated(id: str, m: Mandate, jobs: [JobFacts]) > bool {
     var at = id;
     var hops = 0;
     while (at != "" and hops <= jobs.len()) {
@@ -373,7 +382,7 @@ export object Fork {
 // readFork is the fork p declares; body is the heredoc the line feeds it, "" for none.
 export fun readFork(p: helpers\Program, body: str) > Fork {
     if (!helpers\hasFlag(p.args, long: "--stdin")) {
-        final ops = helpers\stripFlags(p.args, valueFlags: ["--parent", "--write-paths", "--deny-paths", "--read-paths", "--depends-on", "--criteria",
+        final ops = helpers\stripFlags(p.args, valueFlags: ["--parent", "--write-paths", "--deny-paths", "--read-paths", "--depends-on", "--instructions", "--new-worker",
             "--check", "--checkout", "--checkpoint", "--model", "--timeout", "--brief-format"]);
         final named = helpers\magusOperands(ops);
         final id = if (named.len() > 2) named[2] else "";
@@ -426,7 +435,7 @@ fun deny(reason: str) > GuardVerdict {
 // decideCommand judges one shell line against the mandate. Issuing or revoking one is the
 // person's act, so it is denied whether or not one is in force; every other denial holds
 // only while one is.
-export fun decideCommand(programs: [helpers\Program], line: str, m: Mandate?, jobs: [Row], now: int, assess: fun (id: str) > Assessed) > GuardVerdict {
+export fun decideCommand(programs: [helpers\Program], line: str, m: Mandate?, jobs: [JobFacts], now: int, assess: fun (id: str) > Assessed) > GuardVerdict {
     foreach (p in programs) {
         final action = mandateAction(p);
         if (action == "issue" or action == "revoke") {
@@ -461,7 +470,7 @@ export fun decideCommand(programs: [helpers\Program], line: str, m: Mandate?, jo
     return magus\guard.allow();
 }
 
-fun decideProgram(p: helpers\Program, body: str, m: Mandate, jobs: [Row], assess: fun (id: str) > Assessed) > GuardVerdict {
+fun decideProgram(p: helpers\Program, body: str, m: Mandate, jobs: [JobFacts], assess: fun (id: str) > Assessed) > GuardVerdict {
     final verb = jobVerb(p);
     if (verb.len() > 0) {
         return decideJob(p, verb: verb, body: body, m: m, jobs: jobs, assess: assess);
@@ -495,14 +504,14 @@ fun decideProgram(p: helpers\Program, body: str, m: Mandate, jobs: [Row], assess
     return magus\guard.allow();
 }
 
-fun madeUnder(jobs: [Row], id: str, m: Mandate) > bool {
+fun madeUnder(jobs: [JobFacts], id: str, m: Mandate) > bool {
     if (byId(jobs, id: id) -> row) {
         return row.created >= m.at;
     }
     return false;
 }
 
-fun checkoutMadeUnder(jobs: [Row], dir: str, m: Mandate) > bool {
+fun checkoutMadeUnder(jobs: [JobFacts], dir: str, m: Mandate) > bool {
     foreach (r in jobs) {
         if (r.checkoutRoot != "" and (r.checkoutRoot == dir or r.checkoutRoot.endsWith("/" + dir)) and r.created >= m.at) {
             return true;
@@ -511,7 +520,7 @@ fun checkoutMadeUnder(jobs: [Row], dir: str, m: Mandate) > bool {
     return false;
 }
 
-fun decideJob(p: helpers\Program, verb: [str], body: str, m: Mandate, jobs: [Row], assess: fun (id: str) > Assessed) > GuardVerdict {
+fun decideJob(p: helpers\Program, verb: [str], body: str, m: Mandate, jobs: [JobFacts], assess: fun (id: str) > Assessed) > GuardVerdict {
     final what = verb[0];
     if (what == "grant") {
         return deny("a grant is typed by the person, never by the root or a worker\nADR 0019 section 5: the report names the grant left.");
@@ -553,7 +562,7 @@ fun decideJob(p: helpers\Program, verb: [str], body: str, m: Mandate, jobs: [Row
 // decideHold holds an unsettled job for review when its proven tier is above the mandate's
 // tolerance: the integration fork naming it is denied, the row stays for the person, and the
 // root goes on with the next row.
-export fun decideHold(id: str, m: Mandate, jobs: [Row], assess: fun (id: str) > Assessed) > GuardVerdict {
+export fun decideHold(id: str, m: Mandate, jobs: [JobFacts], assess: fun (id: str) > Assessed) > GuardVerdict {
     if (byId(jobs, id: id) -> row) {
         if (settled(row)) {
             return decideBudget(id, m: m, row: row, got: assess(id));
@@ -603,11 +612,43 @@ export fun decideWrite(path: str, workspace: str, m: Mandate?, now: int) > Guard
 export object StopFacts {
     role: str,
     stopHookActive: bool,
+    // running are the tries the guard saw start whose end nobody has
+    // observed, read under each job's deadline.
+    running: [Try] = [],
+}
+
+// Try is one try of a job: started at a unix second, end unobserved.
+export object Try {
+    job: str,
+    n: int,
+    started: int,
+}
+
+// runningTries are the tries in attempts the guard saw start and
+// nobody saw end.
+export fun runningTries(attempts: [magus\Attempt]) > [Try] {
+    final found = mut [<Try>];
+    foreach (a in attempts) {
+        if (a.status.started != 0 and a.status.ended == 0) {
+            found.append(Try{ job = a.job, n = a.n, started = a.status.started });
+        }
+    }
+    return found;
+}
+
+// runningLine names each try still counted as running.
+fun runningLine(running: [Try], now: int) > str {
+    final named = mut [<str>];
+    foreach (t in running) {
+        named.append("{t.job} attempt {t.n}, started {(now - t.started) / 60}m ago");
+    }
+    return "this stop stands: {named.join("; ")}: started, end unobserved. "
+        + "A handback, `magus job exit` or the job's deadline ends each.";
 }
 
 // Queue is the job store as the Stop rule reads it.
 export object Queue {
-    jobs: [Row],
+    jobs: [JobFacts],
     // blocked are the rows the store reports waiting on another.
     blocked: [str] = [],
     // unmerged is magus\workspace().unmerged() on the root's branch.
@@ -624,9 +665,9 @@ fun unmergedLines(report: JobUnmergedReport) > [str] {
     if (report.unknown != "") {
         lines.append("unknown: {report.unknown}. Nothing is taken as merged until that read answers.");
     }
-    foreach (i, u in report.rows) {
+    foreach (i, u in report.jobs) {
         if (i == unmergedShown) {
-            lines.append("and {report.rows.len() - unmergedShown} more; `./magus ls jobs` lists every one.");
+            lines.append("and {report.jobs.len() - unmergedShown} more; `./magus ls jobs` lists every one.");
             break;
         }
         var subject = u.job;
@@ -641,13 +682,13 @@ fun unmergedLines(report: JobUnmergedReport) > [str] {
     return lines;
 }
 
-// unmergedRows names what a refusal is over, for its count and attention.
-fun unmergedRows(report: JobUnmergedReport) > [str] {
+// unmergedJobs names what a refusal is over, for its count and attention.
+fun unmergedJobs(report: JobUnmergedReport) > [str] {
     final names = mut [<str>];
     if (report.unknown != "") {
         names.append("unknown");
     }
-    foreach (u in report.rows) {
+    foreach (u in report.jobs) {
         if (names.indexOf(u.job) == null) {
             names.append(u.job);
         }
@@ -703,16 +744,29 @@ fun idleStopReason(ready: [str], unmerged: [str], stopped: [str]) > str {
     return reason;
 }
 
+// mandateEnded is true once the mandate in force has run past its end.
+fun mandateEnded(m: Mandate?, now: int) > bool {
+    if (m -> mandate) {
+        return mandate.action == "issue" and now >= mandate.ends;
+    }
+    return false;
+}
+
 // decideStop refuses the root's stop while rows it could fork wait and no worker runs to wake
 // it. With no mandate in force it refuses once per stop, so a person present can end a turn.
 // Under a mandate a refusal naming the same rows loopLimit stops running lets the turn end and
 // calls file with the rows, for the person. Past the mandate's end the turn ends.
 // What magus\workspace().unmerged() reports refuses as a waiting row does.
+// A try started and not seen to end is worked, whatever its row's state,
+// and the stop stands saying so.
 // A running row whose holder stopped wakes nobody.
 // With nothing else waiting it refuses once.
 export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: fun (key: str) > int, file: fun (rows: [str]) > void) > GuardVerdict {
     if (facts.role != "root") {
         return magus\guard.allow();
+    }
+    if (facts.running.len() > 0) {
+        return magus\guard.advise(runningLine(facts.running, now: now), opts: {"rule": "idle-stop"});
     }
     final stopped = mut [<str>];
     foreach (r in q.jobs) {
@@ -725,10 +779,8 @@ export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: 
             }
         }
     }
-    if (m -> mandate) {
-        if (mandate.action == "issue" and now >= mandate.ends) {
-            return magus\guard.allow();
-        }
+    if (mandateEnded(m, now: now)) {
+        return magus\guard.allow();
     }
     final ready = forkable(q, m: m, now: now);
     final unmerged = unmergedLines(q.unmerged);
@@ -736,12 +788,13 @@ export fun decideStop(facts: StopFacts, q: Queue, m: Mandate?, now: int, count: 
         if (stopped.len() == 0 or facts.stopHookActive) {
             return magus\guard.allow();
         }
-        return magus\guard.deny("this stop is refused: a stopped worker's row has no result\n{stoppedLine(stopped)}", opts: {"rule": "idle-stop"});
+        final reason = "this stop is refused: a stopped worker's row has no result\n{stoppedLine(stopped)}";
+        return magus\guard.deny(reason, opts: {"rule": "idle-stop"});
     }
     final reason = idleStopReason(ready, unmerged: unmerged, stopped: stopped);
     var names = ready;
     if (unmerged.len() > 0) {
-        names = ready + unmergedRows(q.unmerged);
+        names = ready + unmergedJobs(q.unmerged);
     }
     if (!inForce(m, now: now)) {
         if (facts.stopHookActive) {
@@ -770,11 +823,11 @@ export fun fileAttention(workspace: str, rows: [str], now: int) > void {
 
 final issued = Mandate{ action = "issue", at = 1000, endClock = "07:30", ends = 5000, tolerance = "mechanical", rows = ["naming-lint", "go-indexer"] };
 final store = [
-    Row{ id = "naming-lint", state = magus\JobState.declared, created = 500 },
-    Row{ id = "go-indexer", state = magus\JobState.pass, created = 500 },
-    Row{ id = "naming-lint/docs", state = magus\JobState.declared, parent = "naming-lint", created = 1500 },
-    Row{ id = "landing", state = magus\JobState.declared, created = 500 },
-    Row{ id = "late", state = magus\JobState.pass, created = 2000, unresolvedRisks = ["picked a name"] },
+    JobFacts{ id = "naming-lint", state = magus\JobState.declared, created = 500 },
+    JobFacts{ id = "go-indexer", state = magus\JobState.pass, created = 500 },
+    JobFacts{ id = "naming-lint/docs", state = magus\JobState.declared, parent = "naming-lint", created = 1500 },
+    JobFacts{ id = "landing", state = magus\JobState.declared, created = 500 },
+    JobFacts{ id = "late", state = magus\JobState.pass, created = 2000, unresolvedRisks = ["picked a name"] },
 ];
 final fullTier = fun (id: str) > Assessed => Assessed{ tier = "full", evidence = ["x.go: full (unproven)"], lines = 120 };
 final mechanicalTier = fun (id: str) > Assessed => Assessed{ tier = "mechanical", lines = 0 };
@@ -867,13 +920,13 @@ test "a mandate line without a budget reads as the review budget, and one with i
 }
 
 test "a job's tier is measured in its checkout from its checkpoint, and anything unmeasured is full" {
-    final measured = [Row{ id = "late", state = magus\JobState.pass, checkpoint = "abc", checkoutRoot = "/w/late" }, Row{ id = "bare", state = magus\JobState.pass }];
+    final measured = [JobFacts{ id = "late", state = magus\JobState.pass, checkpoint = "abc", checkoutRoot = "/w/late" }, JobFacts{ id = "bare", state = magus\JobState.pass }];
     final asked = mut [<str>];
-    final mechanical = fun (row: Row) > TierReport !> any {
+    final mechanical = fun (row: JobFacts) > TierReport !> any {
         asked.append("{row.checkoutRoot}@{row.checkpoint}");
-        return TierReport{ tier = magus\Tier.mechanical, evidence = [TierEvidence{ path = "x.go", tier = magus\Tier.mechanical, class = "comment", why = "comments only" }] };
+        return TierReport{ tier = magus\check\Tier.mechanical, evidence = [magus\check\TierEvidence{ path = "x.go", tier = magus\check\Tier.mechanical, class = "comment", why = "comments only" }] };
     };
-    final none = fun (row: Row) > {str: int} !> any {
+    final none = fun (row: JobFacts) > {str: int} !> any {
         return {"x.go": 7};
     };
     final got = assess("late", jobs: measured, measure: mechanical, count: none);
@@ -882,7 +935,7 @@ test "a job's tier is measured in its checkout from its checkpoint, and anything
     std\assert(got.lines == 0, message: "a mechanical path's lines are not reviewable");
     std\assert(assess("bare", jobs: measured, measure: mechanical, count: none).tier == "full", message: "no checkout recorded");
     std\assert(assess("gone", jobs: measured, measure: mechanical, count: none).tier == "full", message: "no row");
-    final raises = fun (row: Row) > TierReport !> any {
+    final raises = fun (row: JobFacts) > TierReport !> any {
         throw "no workspace";
     };
     final raised = assess("late", jobs: measured, measure: raises, count: none);
@@ -924,11 +977,11 @@ test "a running row lets the root stop, and so do rows paused, blocked or waitin
     final none = fun (key: str) > int => 1;
     final skip = fun (rows: [str]) > void {};
     final root = StopFacts{ role = "root", stopHookActive = false };
-    final running = Queue{ jobs = [Row{ id = "naming-lint", state = magus\JobState.declared }, Row{ id = "go-indexer", state = magus\JobState.running }] };
+    final running = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared }, JobFacts{ id = "go-indexer", state = magus\JobState.running }] };
     std\assert(decideStop(root, q: running, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a worker will wake it");
-    final held = Queue{ jobs = [Row{ id = "naming-lint", state = magus\JobState.declared, paused = true }, Row{ id = "go-indexer", state = magus\JobState.declared, dependsOn = ["gone"] }] };
+    final held = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared, paused = true }, JobFacts{ id = "go-indexer", state = magus\JobState.declared, dependsOn = ["gone"] }] };
     std\assert(decideStop(root, q: held, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "paused and waiting");
-    final blocked = Queue{ jobs = [Row{ id = "naming-lint", state = magus\JobState.declared }], blocked = ["naming-lint"] };
+    final blocked = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared }], blocked = ["naming-lint"] };
     std\assert(decideStop(root, q: blocked, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "blocked");
 }
 
@@ -937,7 +990,7 @@ test "a stopped holder's row refuses the root's stop once and never reads as a r
     final skip = fun (rows: [str]) > void {};
     final root = StopFacts{ role = "root", stopHookActive = false };
     final again = StopFacts{ role = "root", stopHookActive = true };
-    final alone = Queue{ jobs = [Row{ id = "go-indexer", state = magus\JobState.running, holderStopped = 1500 }] };
+    final alone = Queue{ jobs = [JobFacts{ id = "go-indexer", state = magus\JobState.running, holderStopped = 1500 }] };
     final refused = decideStop(root, q: alone, m: null, now: 2000, count: none, file: skip);
     std\assert(refused.decision == magus\GuardDecision.deny, message: "refused");
     std\assert(refused.reason.indexOf("go-indexer") != null, message: "names the row");
@@ -947,24 +1000,48 @@ test "a stopped holder's row refuses the root's stop once and never reads as a r
     std\assert(decideStop(again, q: alone, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "the second stop stands");
     std\assert(decideStop(again, q: alone, m: issued, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "once under a mandate too");
 
-    final beside = Queue{ jobs = [alone.jobs[0], Row{ id = "naming-lint", state = magus\JobState.running }] };
+    final beside = Queue{ jobs = [alone.jobs[0], JobFacts{ id = "naming-lint", state = magus\JobState.running }] };
     std\assert(decideStop(root, q: beside, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a running worker still wakes the root");
-    final paused = Queue{ jobs = [Row{ id = "go-indexer", state = magus\JobState.running, holderStopped = 1500, paused = true }] };
+    final paused = Queue{ jobs = [JobFacts{ id = "go-indexer", state = magus\JobState.running, holderStopped = 1500, paused = true }] };
     std\assert(decideStop(root, q: paused, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.allow, message: "a person paused it");
 }
 
 test "a stopped holder's row does not let the root idle with work queued" {
     final none = fun (key: str) > int => 1;
     final skip = fun (rows: [str]) > void {};
-    final queued = Queue{ jobs = [Row{ id = "go-indexer", state = magus\JobState.running, holderStopped = 1500 }, Row{ id = "naming-lint", state = magus\JobState.declared }] };
+    final queued = Queue{ jobs = [JobFacts{ id = "go-indexer", state = magus\JobState.running, holderStopped = 1500 }, JobFacts{ id = "naming-lint", state = magus\JobState.declared }] };
     final refused = decideStop(StopFacts{ role = "root", stopHookActive = true }, q: queued, m: issued, now: 2000, count: none, file: skip);
     std\assert(refused.decision == magus\GuardDecision.deny, message: "every stop under a mandate");
     std\assert(refused.reason.indexOf("naming-lint") != null, message: "names the waiting row");
     std\assert(refused.reason.indexOf("stopped with no result: go-indexer") != null, message: "names the stopped row");
 }
 
-final offBranch = JobUnmergedReport{ branch = "feat/x", rows = [JobUnmerged{ job = "go-indexer", head = "abc123", why = "2 commit(s) are not on feat/x", remedy = "merge abc123" }] };
-final doneStore = [Row{ id = "go-indexer", state = magus\JobState.pass }];
+test "a try started and not seen to end lets the root stop and says so, whatever its row reads" {
+    final none = fun (key: str) > int => 1;
+    final skip = fun (rows: [str]) > void {};
+    final spawned = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.declared }] };
+    final live = StopFacts{ role = "root", stopHookActive = false, running = [Try{ job = "naming-lint", n = 1, started = 1880 }] };
+    final stands = decideStop(live, q: spawned, m: issued, now: 2000, count: none, file: skip);
+    std\assert(stands.decision == magus\GuardDecision.advise, message: "spawned, not yet past job exec");
+    std\assert(stands.reason.indexOf("naming-lint attempt 1, started 2m ago: started, end unobserved") != null, message: stands.reason);
+    final waiting = Queue{ jobs = [JobFacts{ id = "naming-lint", state = magus\JobState.running, holderStopped = 1500 }] };
+    std\assert(decideStop(live, q: waiting, m: null, now: 2000, count: none, file: skip).decision == magus\GuardDecision.advise, message: "waiting on its own background run");
+    final ended = decideStop(StopFacts{ role = "root", stopHookActive = false }, q: waiting, m: null, now: 2000, count: none, file: skip);
+    std\assert(ended.decision == magus\GuardDecision.deny and ended.reason.indexOf("stopped with no result: naming-lint") != null, message: "stopped once its end was observed");
+}
+
+test "a try runs from its start until an end is observed" {
+    final tries = [
+        Attempt{ job = "a", n = 1, status = AttemptStatus{ started = 10 } },
+        Attempt{ job = "b", n = 2, status = AttemptStatus{ started = 10, ended = 20, end = magus\AttemptEnd.handback } },
+        Attempt{ job = "c", n = 1 },
+    ];
+    final running = runningTries(tries);
+    std\assert(running.len() == 1 and running[0].job == "a" and running[0].n == 1, message: "only the started try with no end");
+}
+
+final offBranch = JobUnmergedReport{ branch = "feat/x", jobs = [JobUnmerged{ job = "go-indexer", head = "abc123", why = "2 commit(s) are not on feat/x", remedy = "merge abc123" }] };
+final doneStore = [JobFacts{ id = "go-indexer", state = magus\JobState.pass }];
 
 test "finished work off the branch refuses the root's stop, naming the row, its head and the remedy" {
     final none = fun (key: str) > int => 1;
@@ -984,7 +1061,7 @@ test "a deferred item refuses the stop and an unknown read is never taken as mer
     final none = fun (key: str) > int => 1;
     final skip = fun (rows: [str]) > void {};
     final root = StopFacts{ role = "root", stopHookActive = false };
-    final item = JobUnmergedReport{ rows = [JobUnmerged{ job = "go-indexer", item = "picked a name", why = "no row carries it", remedy = "declare a row" }] };
+    final item = JobUnmergedReport{ jobs = [JobUnmerged{ job = "go-indexer", item = "picked a name", why = "no row carries it", remedy = "declare a row" }] };
     final deferred = decideStop(root, q: Queue{ jobs = doneStore, unmerged = item }, m: null, now: 2000, count: none, file: skip);
     std\assert(deferred.decision == magus\GuardDecision.deny and deferred.reason.indexOf("picked a name") != null, message: "names the item");
     final unknown = decideStop(root, q: Queue{ jobs = doneStore, unmerged = JobUnmergedReport{ unknown = "no branch" } }, m: null, now: 2000, count: none, file: skip);
@@ -1005,7 +1082,7 @@ test "a long report names the first facts and points at the whole list" {
     for (var i = 0; i < unmergedShown + 2; i = i + 1) {
         many.append(JobUnmerged{ job = "r{i}", why = "off", remedy = "merge" });
     }
-    final lines = unmergedLines(JobUnmergedReport{ rows = many });
+    final lines = unmergedLines(JobUnmergedReport{ jobs = many });
     std\assert(lines.len() == unmergedShown + 1, message: "the first ones and a count");
     std\assert(lines[unmergedShown].startsWith("and 2 more"), message: "says how many are left");
 }

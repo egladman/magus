@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	typesvcs "github.com/egladman/magus/types/vcs"
 )
 
 // Checkpoint resolves what is true in dir right now: the head revision, the branch
@@ -32,15 +33,15 @@ import (
 // One Metadata call covers revision, branch and dirtiness, so a clean tree spawns no
 // second round of processes. The patch is read only when the tree is dirty, which is
 // also the only case where a digest would say anything.
-func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preserve bool) (types.VCSCheckpoint, error) {
+func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preserve bool) (typesvcs.Checkpoint, error) {
 	if res.VCS == nil {
-		return types.VCSCheckpoint{}, errors.New("vcs checkpoint: no VCS resolved for this workspace, there is no revision to record")
+		return typesvcs.Checkpoint{}, errors.New("vcs checkpoint: no VCS resolved for this workspace, there is no revision to record")
 	}
 	meta, err := res.VCS.Metadata(ctx, dir)
 	if err != nil {
-		return types.VCSCheckpoint{}, fmt.Errorf("vcs checkpoint: %w", err)
+		return typesvcs.Checkpoint{}, fmt.Errorf("vcs checkpoint: %w", err)
 	}
-	cp := types.VCSCheckpoint{
+	cp := typesvcs.Checkpoint{
 		Revision: meta.ID,
 		Branch:   meta.Ref,
 		Dirty:    meta.IsDirty,
@@ -51,7 +52,7 @@ func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preser
 	}
 	patch, err := res.VCS.DirtyDiff(ctx, dir, nil)
 	if err != nil {
-		return types.VCSCheckpoint{}, fmt.Errorf("vcs checkpoint: %w", err)
+		return typesvcs.Checkpoint{}, fmt.Errorf("vcs checkpoint: %w", err)
 	}
 	cp.PatchDigest = patchDigest(patch)
 	cp.UntrackedDigest = untrackedDigest(ctx, dir, res)
@@ -153,7 +154,7 @@ func capturesLedger() (file.JSONL[Capture], error) {
 // capture already holds exactly this work; captured is false then and
 // cp.Preserved is the earlier handle. A clean tree captures nothing. Each
 // capture is recorded in the ledger, and a failure to record is an error.
-func PreserveChanged(ctx context.Context, dir string, res types.VCSResolution) (cp types.VCSCheckpoint, captured bool, err error) {
+func PreserveChanged(ctx context.Context, dir string, res types.VCSResolution) (cp typesvcs.Checkpoint, captured bool, err error) {
 	cp, err = Checkpoint(ctx, dir, res, false)
 	if err != nil || !cp.Dirty {
 		return cp, false, err

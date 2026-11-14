@@ -414,7 +414,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]spells.Charm{
 				"update": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
-			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "-trimpath"}, TrailingArgs: []string{"./..."}, EnvKeys: goldenGoPlatformEnv}},
+			"go-vet": {Command: spells.Command{Bin: "go", Args: []string{"vet", "-trimpath"}, TrailingArgs: []string{"./..."}, EnvKeys: goldenGoPlatformEnv,
+				PathScope:      []string{"./{dir}"},
+				PathScopeFiles: []string{"**/*.go", "!**/testdata/**", "!**/vendor/**", "!**/_*/**", "!**/.*/**", "!**/_*", "!**/.*"}}},
 			"govulncheck": {Command: spells.Command{Bin: "govulncheck", DefaultArgs: []string{"./..."}, Capture: true, External: spells.ExternalReads}},
 			// Synthesized from mgs_getSymbolIndexer, not authored in mgs_listTargets, which
 			// is why it carries a kind no spell can write.
@@ -792,6 +794,9 @@ func TestBuiltinsMatchGolden(t *testing.T) {
 		// Sandbox is out of BuiltinsHash too, and the grants are pinned by behavior in
 		// TestGoSpellDeclaresTheToolchainsGrants rather than copied here.
 		g.Sandbox = nil
+		// Scopes is out of BuiltinsHash as well; spells/golang/spell_test.buzz
+		// pins the go spell's.
+		g.Scopes = nil
 		if len(g.Ops) > 0 {
 			ops := make(map[string]spells.Op, len(g.Ops))
 			for opName, op := range g.Ops {

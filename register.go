@@ -7,18 +7,52 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // Option configures Open or Inspect.
 type Option = workspace.Option
 
+// options is what Open and Inspect are given: the Load the loader reads,
+// beside what only this package reads.
+type options struct {
+	workspace.Load
+	spawnRule SpawnRule
+	stepSpecs []agent.StepSpec
+	stepRules []StepRule
+}
+
+// sdkOption sets what only this package reads. On a bare Load it records
+// the misuse in Load.Misuse, which Open and Inspect return, since an Option
+// returns no error.
+func sdkOption(name string, set func(*options)) Option {
+	return func(o workspace.Options) {
+		own, ok := o.(*options)
+		if !ok {
+			l := o.Loading()
+			l.Misuse = append(l.Misuse, fmt.Errorf("magus.%s sets what only magus.Open and magus.Inspect read, and was applied to a %T, which reads none of it", name, o))
+			return
+		}
+		set(own)
+	}
+}
+
+func collectOptions(opts []Option) *options {
+	o := &options{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o
+}
+
 // WithConfigFile causes the constructor to load magus.yaml from path instead of <root>/magus.yaml.
 func WithConfigFile(path string) Option {
-	return func(o *workspace.Load) { o.ConfigPath = path }
+	return func(o workspace.Options) { o.Loading().ConfigPath = path }
 }
 
 // WithMetricsCollection builds an always-on in-process metrics collector for this workspace
@@ -35,13 +69,13 @@ func WithMetricsCollection() Option {
 // this process's environment either way.
 func WithEnv(env []string) Option {
 	env = slices.Clone(env)
-	return func(o *workspace.Load) { o.Env = env }
+	return func(o workspace.Options) { o.Loading().Env = env }
 }
 
 // WithStderr sends the workspace's notices (lock decisions, a run's text report when no
 // sink is given) and, under -o jsonl, its records to w. Without it they are discarded.
 func WithStderr(w io.Writer) Option {
-	return func(o *workspace.Load) { o.Stderr = w }
+	return func(o workspace.Options) { o.Loading().Stderr = w }
 }
 
 // WithCommandLine is the command line the workspace records as this process's: in the
@@ -49,14 +83,14 @@ func WithStderr(w io.Writer) Option {
 // the records hold an empty command line.
 func WithCommandLine(args []string) Option {
 	args = slices.Clone(args)
-	return func(o *workspace.Load) { o.CommandLine = args }
+	return func(o workspace.Options) { o.Loading().CommandLine = args }
 }
 
 // WithVCSDriver drives d as the workspace's VCS, in place of the built-in one its markers
 // or magus.yaml would pick: a VCS magus does not ship, or a test double. Open fails on a
 // nil d, and when magus.yaml's vcs.name names a different VCS than d does.
 func WithVCSDriver(d types.VCSDriver) Option {
-	return func(o *workspace.Load) { o.VCSDriver, o.VCSDriverGiven = d, true }
+	return func(o workspace.Options) { l := o.Loading(); l.VCSDriver, l.VCSDriverGiven = d, true }
 }
 
 // WithCacheBackend stores the remote cache tier in b, in place of a backend a magusfile
@@ -64,13 +98,13 @@ func WithVCSDriver(d types.VCSDriver) Option {
 // on a nil b, and when the magusfile also wires a backend, naming both. b is held to the
 // same trust set as a wired backend (cache.remote.trusted_keys in magus.yaml).
 func WithCacheBackend(b types.CacheBackend) Option {
-	return func(o *workspace.Load) { o.CacheBackend, o.CacheBackendGiven = b, true }
+	return func(o workspace.Options) { l := o.Loading(); l.CacheBackend, l.CacheBackendGiven = b, true }
 }
 
 // SpawnRule decides whether a job at model tier parent may spawn one at tier child: nil
 // allows it, and an error refuses it, saying why. A tier is the zero value when none was
 // assigned. TierCeiling is the reference rule.
-type SpawnRule func(parent, child types.ModelTier) error
+type SpawnRule func(parent, child agent.ModelTier) error
 
 // TierCeiling is the reference SpawnRule: a child's tier is at most its parent's, by the
 // order the workspace's model-tier declaration gives its cases (cheapest first). An
@@ -78,16 +112,16 @@ type SpawnRule func(parent, child types.ModelTier) error
 // A refusal is a *types.DiagnosticError: types.ModelTierAboveParent for a
 // child ranked above its parent, and types.ModelTiersIncomparable for tiers
 // from two declarations.
-func TierCeiling(parent, child types.ModelTier) error {
+func TierCeiling(parent, child agent.ModelTier) error {
 	if parent.IsZero() || child.IsZero() {
 		return nil
 	}
 	above, err := child.Above(parent)
 	if err != nil {
-		return types.DiagnosticErrorf(types.ModelTiersIncomparable, "magus: spawn rule: %v", err)
+		return types.WrapDiagnostic(types.ModelTiersIncomparable, err, "the parent's and the child's model tiers do not compare: %v", err)
 	}
 	if above {
-		return types.DiagnosticErrorf(types.ModelTierAboveParent, "magus: a job at model tier %q may not spawn one at %q: a child's tier is at most its parent's",
+		return types.DiagnosticErrorf(types.ModelTierAboveParent, "a job at model tier %q may not spawn one at %q: a child's tier is at most its parent's",
 			parent.Name(), child.Name())
 	}
 	return nil
@@ -97,7 +131,7 @@ func TierCeiling(parent, child types.ModelTier) error {
 // there is no default rule, so Open and Inspect fail without one or on a nil one, naming
 // TierCeiling, the reference rule the CLI passes.
 func WithSpawnRule(rule SpawnRule) Option {
-	return func(o *workspace.Load) { o.SpawnRule = rule }
+	return sdkOption("WithSpawnRule", func(o *options) { o.spawnRule = rule })
 }
 
 // WithVersion supplies the running build's version so Open and Inspect can check it
@@ -117,13 +151,13 @@ func WithVersion(v string) Option {
 // setting unless [WithBrokerPolicy] overrides it. Open fails when the resolved policy is
 // off, since b would never be used, and when b is nil.
 func WithBroker(b *broker.Client) Option {
-	return func(o *workspace.Load) { o.Broker, o.BrokerGiven = b, true }
+	return func(o workspace.Options) { l := o.Loading(); l.Broker, l.BrokerGiven = b, true }
 }
 
 // WithBrokerPolicy overrides the workspace's `broker` setting (magus.yaml, MAGUS_BROKER)
 // for this Open. An invalid policy fails Open, and so does off beside [WithBroker].
 func WithBrokerPolicy(p types.BrokerPolicy) Option {
-	return func(o *workspace.Load) { o.BrokerPolicy = p }
+	return func(o workspace.Options) { o.Loading().BrokerPolicy = p }
 }
 
 // WithoutWorkspaceProviders opens the workspace without its provider spells.
@@ -157,7 +191,7 @@ func (reg *WorkspaceRegistry) AddProvider(spellName string) { reg.r.AddProvider(
 
 // WithWorkspaceRegistry injects a pre-built WorkspaceRegistry, replacing the default one.
 func WithWorkspaceRegistry(reg *WorkspaceRegistry) Option {
-	return func(o *workspace.Load) { o.Registry = reg.r }
+	return func(o workspace.Options) { o.Loading().Registry = reg.r }
 }
 
 // WithWorkspaceRegistryContext installs reg in ctx so interpreters can retrieve it.
@@ -174,8 +208,11 @@ func WorkspaceRegistryFromContext(ctx context.Context) *WorkspaceRegistry {
 	return &WorkspaceRegistry{r: r}
 }
 
-func installWorkspaceRegistry(ctx context.Context, reg *workspace.WorkspaceRegistry) context.Context {
-	return workspace.ContextWithRegistry(ctx, reg)
+// installWorkspaceRegistry puts what a magusfile declares into on ctx: the
+// registry, and the model tiers and step rules m holds.
+func (m *Magus) installWorkspaceRegistry(ctx context.Context) context.Context {
+	ctx = agent.WithModelTierState(workspace.ContextWithRegistry(ctx, m.wsReg), &m.modelTiers)
+	return steps.WithGroup(ctx, &m.stepRules)
 }
 
 // ProjectOption mutates a Project at registration time. A non-nil error aborts Open.

@@ -9,8 +9,8 @@ export object QueueChanges {
     schema: str = "",
     base: str = "",
     remoteURL: str = "",
-    changes: [QueueChange] = [],
-    merged: [QueueMergedChange] = [],
-    unqueued: [QueueUnqueuedChange] = [],
+    changes: [QueueChange],
+    merged: [QueueMergedChange],
+    unqueued: [QueueUnqueuedChange],
     closed: [QueueClosedChange] = [],
 }

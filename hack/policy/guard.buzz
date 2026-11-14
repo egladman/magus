@@ -35,8 +35,7 @@
 //     `go build` or `go install` of cmd/magus, or `magus run go-build` / `build` of the root
 //     project), the bootstrap included. The checkout's integrator builds ./magus once per base
 //     commit and hack/dev/bootstrap-worktree.buzz places it; the integrator and a person build,
-//     and so does a worker running go-build in a checkout its job owns when the job's write
-//     paths cover a build input of ./cmd/magus.
+//     and no worker does: no job row pins its build.
 //   brief-builds-magus (deny, spawn): a spawn brief that tells its worker to compile magus. A
 //     line that names the command only to forbid it ("never ...") is not graded, and an
 //     integrate spawn's brief is not either.
@@ -279,7 +278,7 @@ fun binariesDenial(req: CommandRequest, programs: [helpers\Program]) > str {
         if (tree != null and tree!.removed == 0) { leaseRoot = tree!.root; }
     }
     final integrator = req.role == magus\AgentRole.integrator;
-    return binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts, leaseRoot = leaseRoot, writePaths = leaseWrites(req) }, disk: binaries\onDisk(),
+    return binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts, leaseRoot = leaseRoot }, disk: binaries\onDisk(),
         worker: !integrator and (req.role == magus\AgentRole.worker or req.parent != "" or req.agent != ""));
 }
 
@@ -288,9 +287,9 @@ fun binariesDenial(req: CommandRequest, programs: [helpers\Program]) > str {
 fun mandateVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerdict {
     final issued = mandate\loadMandate(req.workspace);
     final now = mandate\now();
-    var jobs = [<mandate\Row>];
+    var jobs = [<mandate\JobFacts>];
     if (mandate\inForce(issued, now: now)) {
-        jobs = mandate\rows((magus\workspace().jobs() catch JobList{}).jobs);
+        jobs = mandate\jobFacts(magus\workspace().jobs() catch JobList{});
     }
     final store = jobs;
     final assess = fun (id: str) > mandate\Assessed {
@@ -325,15 +324,8 @@ export fun judgeStop(req: StopRequest) > GuardVerdict !> any {
     final file = fun (rows: [str]) > void {
         mandate\fileAttention(req.workspace, rows: rows, now: now);
     };
-    return mandate\decideStop(mandate\StopFacts{ role = req.role.value,stopHookActive = req.stopHookActive },
-        q: mandate\Queue{ jobs = mandate\rows(list.jobs), blocked = blocked, unmerged = unmerged }, m: mandate\loadMandate(req.workspace), now: now, count: count, file: file);
-}
-
-fun leaseWrites(req: CommandRequest) > [str] {
-    if (req.lease == null) {
-        return [<str>];
-    }
-    return req.lease!.writePaths;
+    return mandate\decideStop(mandate\StopFacts{ role = req.role.value, stopHookActive = req.stopHookActive, running = mandate\runningTries(list.attempts) },
+        q: mandate\Queue{ jobs = mandate\jobFacts(list), blocked = blocked, unmerged = unmerged }, m: mandate\loadMandate(req.workspace), now: now, count: count, file: file);
 }
 
 fun parsePrograms(req: CommandRequest) > [helpers\Program] {
@@ -490,59 +482,34 @@ fun bodyFiles(programs: [helpers\Program], dir: str) > {str: str} {
 // magus\workspace().jobs() answers from the rows the guard pinned for the call.
 // It throws when the store could not be read.
 export fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
-    var jobs = [<Job>];
-    var rows: [helpers\JobRow]? = null;
+    var rows: [helpers\JobSummary]? = null;
     var unreadable = "";
     try {
-        jobs = magus\workspace().jobs().jobs;
-        rows = jobRows(jobs);
+        rows = jobSummaries(magus\workspace().jobs().jobs);
     } catch (e) {
         unreadable = errorText(e);
     }
-    final facts = spawnFacts(req, ownBuild: ownsBuild(req.description, jobs: jobs, disk: binaries\onDisk()));
-    return spawn\decideSpawn(facts, rows: rows, unreadable: unreadable);
+    return spawn\decideSpawn(spawnFacts(req), rows: rows, unreadable: unreadable);
 }
 
-fun spawnFacts(req: SpawnRequest, ownBuild: bool = false) > spawn\Spawn {
+fun spawnFacts(req: SpawnRequest) > spawn\Spawn {
     var lease = "";
     if (req.lease != null) {
         lease = req.lease!.id;
     }
-    return spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease, prompt = req.prompt, checkout = req.checkout, ownBuild = ownBuild };
+    return spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease, prompt = req.prompt, checkout = req.checkout };
 }
 
-// ownsBuild: the job a `<parent>/<role> <job>` title names owns a standing checkout and its
-// write paths cover a build input of ./cmd/magus there, so its worker builds ./magus.
-fun ownsBuild(title: str, jobs: [Job], disk: binaries\Disk) > bool {
-    if (helpers\titleRole(title) == "") {
-        return false;
-    }
-    final id = title.split(" ")[1];
+fun jobSummaries(jobs: [Job]) > [helpers\JobSummary] {
+    final read = mut [<helpers\JobSummary>];
     foreach (row in jobs) {
-        if (row.id != id or row.worktree == null or row.worktree!.removed != 0 or row.worktree!.root == "") {
-            continue;
-        }
-        final root = row.worktree!.root;
-        final binaryScopes = disk.binaryScopes;
-        final scopes = binaryScopes(root);
-        if (scopes == null) {
-            return false;
-        }
-        return builds\ownsBuild(builds\OwnBuild{ root = root, owned = [root], inputs = builds\buildInputsAmong(row.writePaths, scopes: scopes!) });
-    }
-    return false;
-}
-
-fun jobRows(jobs: [Job]) > [helpers\JobRow] {
-    final read = mut [<helpers\JobRow>];
-    foreach (row in jobs) {
-        read.append(helpers\JobRow{ id = row.id, parent = row.parent, state = row.state, checkoutRoot = row.checkoutRoot });
+        read.append(helpers\JobSummary{ id = row.id, parent = row.parent, state = row.state, checkoutRoot = row.checkoutRoot });
     }
     return read;
 }
 
 test "an integrate spawn for a row bound to another checkout is refused end to end and a matching checkout passes" {
-    final rows = jobRows([
+    final rows = jobSummaries([
         Job{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
         Job{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
     ]);
@@ -748,23 +715,4 @@ test "the main session's cat of a task capture outside the workspace is denied n
     std\assert(allowed.decision == magus\GuardDecision.allow, message: "a workspace with no ./magus: " + allowed.decision + " " + allowed.reason);
     fs\removeAll(ws);
     fs\removeAll(host);
-}
-
-test "a spawned job builds its own binary only from a standing checkout whose build inputs its write paths cover" {
-    final disk = binaries\Disk{
-        isCheckout = fun (dir: str) > bool { return true; },
-        hasBinary = fun (dir: str) > bool { return true; },
-        sameFile = fun (a: str, b: str) > bool { return a == b; },
-        binaryScopes = fun (root: str) > [str]? { return ["./", "internal/job/"]; },
-    };
-    final jobs = [
-        Job{ id = "own", writePaths = ["internal/job/worktree.go"], worktree = JobWorktree{ root = "/w/own" } },
-        Job{ id = "docs", writePaths = ["docs/a.md"], worktree = JobWorktree{ root = "/w/docs" } },
-        Job{ id = "shared", writePaths = ["internal/job/worktree.go"] },
-        Job{ id = "ended", writePaths = ["internal/job/worktree.go"], worktree = JobWorktree{ root = "/w/ended", removed = 1 } },
-    ];
-    std\assert(ownsBuild("orchestrator/feat own", jobs: jobs, disk: disk), message: "its own checkout and a build input");
-    foreach (title in ["orchestrator/feat docs", "orchestrator/feat shared", "orchestrator/feat ended", "orchestrator/feat missing", "build it"]) {
-        std\assert(!ownsBuild(title, jobs: jobs, disk: disk), message: title);
-    }
 }

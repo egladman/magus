@@ -20,10 +20,54 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
+
+// sdkOptionSuite pins that an option only Open and Inspect read records its
+// misuse on a bare workspace.Load, and that Inspect returns it.
+type sdkOptionSuite struct{ suite.Suite }
+
+func TestSDKOption(t *testing.T) { suite.Run(t, new(sdkOptionSuite)) }
+
+func (s *sdkOptionSuite) TestWithStepSpecsRecordsMisuseOnABareLoad() {
+	l := &workspace.Load{}
+	s.NotPanics(func() { WithStepSpecs()(l) })
+	s.Require().Len(l.Misuse, 1)
+	s.EqualError(l.Misuse[0], "magus.WithStepSpecs sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
+}
+
+func (s *sdkOptionSuite) TestWithStepRuleRecordsMisuseOnABareLoad() {
+	l := &workspace.Load{}
+	WithStepRule(refundLimit)(l)
+	s.Require().Len(l.Misuse, 1)
+	s.EqualError(l.Misuse[0], "magus.WithStepRule sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
+}
+
+func (s *sdkOptionSuite) TestWithSpawnRuleRecordsMisuseOnABareLoad() {
+	l := &workspace.Load{}
+	WithSpawnRule(TierCeiling)(l)
+	s.Require().Len(l.Misuse, 1)
+	s.EqualError(l.Misuse[0], "magus.WithSpawnRule sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
+}
+
+func (s *sdkOptionSuite) TestInspectReturnsRecordedMisuse() {
+	misused := func(o workspace.Options) {
+		bare := &workspace.Load{}
+		WithSpawnRule(TierCeiling)(bare)
+		o.Loading().Misuse = append(o.Loading().Misuse, bare.Misuse...)
+	}
+	_, err := Inspect(context.Background(), s.T().TempDir(), WithSpawnRule(TierCeiling), misused)
+	s.EqualError(err, "magus.WithSpawnRule sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
+}
+
+func (s *sdkOptionSuite) TestOpensOptionsTakeIt() {
+	o := collectOptions([]Option{WithStepSpecs(refundSpec), WithSpawnRule(TierCeiling)})
+	s.Equal([]agent.StepSpec{refundSpec}, o.stepSpecs)
+	s.NotNil(o.spawnRule)
+}
 
 // makeWorkspaceRoot lays down project manifest stubs and returns the
 // temp directory path. Does not call Open — lets the caller register
@@ -569,14 +613,14 @@ func TestRefuseHumanOnlyInGate(t *testing.T) {
 }
 
 // modelTiers declares low and high, cheapest first, as a magusfile's enum would.
-func modelTiers(t *testing.T) (low, high types.ModelTier) {
+func modelTiers(t *testing.T) (low, high agent.ModelTier) {
 	t.Helper()
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
 		Enum:   "Tier",
 		Site:   "magusfile.buzz:1",
 		Cases:  []string{"low", "high"},
-		Bounds: make([]types.ModelTierBounds, 2),
-		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Bounds: make([]agent.ModelTierBounds, 2),
+		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	low, err = set.Parse("low")
@@ -611,10 +655,10 @@ func (s *SpawnRuleSuite) TestTiersFromTwoDeclarationsAreModelTiersIncomparable()
 
 func (s *SpawnRuleSuite) TestAForkAboveItsParentIsRefusedWithTheRulesCode() {
 	t := s.T()
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
 		Enum: "Tier", Site: "magusfile.buzz:1", Cases: []string{"low", "high"}, Default: 0,
-		Bounds: make([]types.ModelTierBounds, 2),
-		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Bounds: make([]agent.ModelTierBounds, 2),
+		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort},
 	})
 	s.Require().NoError(err)
 	store := job.NewStore(job.Location{
@@ -623,8 +667,8 @@ func (s *SpawnRuleSuite) TestAForkAboveItsParentIsRefusedWithTheRulesCode() {
 	})
 	put := func(id, parent, model string) error {
 		row := types.Job{
-			ID: id, Parent: parent, Model: model, Criteria: "goal for " + id, Checkpoint: "abc123",
-			WritePaths: []string{"internal/" + id}, Validation: "magus run test", State: types.StateDeclared,
+			ID: id, Parent: parent, Agent: &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: model}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, Checkpoint: "abc123",
+			Paths: types.JobPaths{Write: []string{"internal/" + id}}, Validation: "magus run test", State: types.StateDeclared,
 		}
 		_, err := store.Update(t.Context(), id, func(cur *types.Job) { *cur = row })
 		return err
@@ -646,8 +690,8 @@ func TestTierCeilingHoldsAChildAtMostItsParentsTier(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"low"`)
 	assert.Contains(t, err.Error(), `"high"`)
-	assert.NoError(t, TierCeiling(types.ModelTier{}, high), "an unassigned parent bounds nothing")
-	assert.NoError(t, TierCeiling(low, types.ModelTier{}), "an unassigned child is bounded by nothing")
+	assert.NoError(t, TierCeiling(agent.ModelTier{}, high), "an unassigned parent bounds nothing")
+	assert.NoError(t, TierCeiling(low, agent.ModelTier{}), "an unassigned child is bounded by nothing")
 
 	otherLow, _ := modelTiers(t)
 	assert.Error(t, TierCeiling(otherLow, low), "two declarations cannot be ordered against each other")

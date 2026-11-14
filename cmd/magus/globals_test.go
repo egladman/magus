@@ -13,8 +13,8 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
-	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -207,10 +207,10 @@ func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
 func TestManpageFlagsMatchTheCLI(t *testing.T) {
 	globals := globalFlagNames()
 
-	for _, cmd := range commands.Root.Children {
+	for _, cmd := range commands.Root.Spec.Children {
 		for _, probe := range flagProbes(cmd) {
 			t.Run(strings.ReplaceAll(probe.name, " ", "_"), func(t *testing.T) {
-				documented := documentedFlagNames(probe.name, probe.buildFlags, globals)
+				documented := documentedFlagNames(t, probe.name, probe.buildFlags, globals)
 				for _, argv := range probe.argvs {
 					runCLIQuietly(t, append(argv, "-h")...)
 				}
@@ -244,8 +244,8 @@ func TestManpageFlagsMatchTheCLI(t *testing.T) {
 // flag takes no value; a flag the command binds differently leaves the guard reading a
 // value as an operand, or an operand as a value.
 func TestJobForkRegistryFlagsAreTheFlagsItBinds(t *testing.T) {
-	var fork cmdline.Command
-	for _, group := range commands.Root.Children {
+	var fork command.Command
+	for _, group := range commands.Root.Spec.Children {
 		for _, child := range group.Children {
 			if group.Name == "job" && child.Name == "fork" {
 				fork = child
@@ -266,7 +266,7 @@ func TestJobForkRegistryFlagsAreTheFlagsItBinds(t *testing.T) {
 		if !assert.True(t, ok, "--%s is in the registry and not bound", declared.Name) {
 			continue
 		}
-		want := recordedFlag{Name: declared.Name, Usage: declared.Doc, Bool: declared.Kind == cmdline.Bool}
+		want := recordedFlag{Name: declared.Name, Usage: command.DurationUsage(declared), Bool: declared.Kind == command.Bool}
 		assert.Equal(t, want, got, "--%s: its doc, and whether it takes a value", declared.Name)
 	}
 }
@@ -276,7 +276,7 @@ func TestJobForkRegistryFlagsAreTheFlagsItBinds(t *testing.T) {
 type flagProbe struct {
 	name       string
 	argvs      [][]string
-	buildFlags func(*flag.FlagSet)
+	buildFlags func(*flag.FlagSet) error
 }
 
 // modeArgv lists the invocations needed to bind a command's whole documented flag set.
@@ -338,9 +338,9 @@ func recordedFlagsUnder(name string) ([]recordedFlag, bool) {
 
 // flaggedChildren names the subcommands of name that declare their own flags.
 func flaggedChildren(name string) map[string]bool {
-	cmds := commands.Root.Children
+	cmds := commands.Root.Spec.Children
 	for _, word := range strings.Fields(name) {
-		i := slices.IndexFunc(cmds, func(c cmdline.Command) bool { return c.Name == word })
+		i := slices.IndexFunc(cmds, func(c command.Command) bool { return c.Name == word })
 		if i < 0 {
 			return nil
 		}
@@ -358,7 +358,7 @@ func flaggedChildren(name string) map[string]bool {
 // flagProbes expands one man-page command into the invocations that actually bind flags.
 // A command with subcommands binds nothing itself (`magus server -h` prints its own
 // usage and parses nothing), so its children are what get probed.
-func flagProbes(cmd cmdline.Command) []flagProbe {
+func flagProbes(cmd command.Command) []flagProbe {
 	if len(cmd.Children) == 0 {
 		if len(cmd.Flags) == 0 {
 			return nil
@@ -461,12 +461,13 @@ func TestGraphExportHasNoStaticAlias(t *testing.T) {
 }
 
 // documentedFlagNames lists the non-global flag names a BuildFlags closure declares.
-func documentedFlagNames(command string, build func(*flag.FlagSet), globals map[string]bool) []string {
+func documentedFlagNames(t *testing.T, cmdPath string, build func(*flag.FlagSet) error, globals map[string]bool) []string {
+	t.Helper()
 	fs := flag.NewFlagSet("doc", flag.ContinueOnError)
-	build(fs)
+	require.NoError(t, build(fs))
 	var out []string
 	fs.VisitAll(func(f *flag.Flag) {
-		if !globals[f.Name] && !modeSelectors[command][strings.TrimPrefix(f.Name, cmdline.NegationPrefix)] {
+		if !globals[f.Name] && !modeSelectors[cmdPath][strings.TrimPrefix(f.Name, command.NegationPrefix)] {
 			out = append(out, f.Name)
 		}
 	})

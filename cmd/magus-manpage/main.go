@@ -27,7 +27,7 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/libs/cmdline/generate"
+	"github.com/egladman/magus/libs/clikit/generate"
 )
 
 func main() {
@@ -41,23 +41,28 @@ func main() {
 	ver := flag.String("version", "", "version for the .TH source field, e.g. v0.2.0; empty (the default) stays version-neutral for committed pages (roff mode)")
 	flag.Parse()
 
-	root := commands.Root
-	root.Env = config.EnvVars()
+	root := commands.Root.Spec.Command
 	var pages []generate.Page
 	var ext string
+	var err error
 	switch *format {
 	case "roff":
 		if *out == "" {
 			*out = "manpage"
 		}
-		pages, ext = generate.Roff(root, *date, *ver), ".1"
+		pages, err = generate.Roff(root, config.Spec, *date, *ver)
+		ext = ".1"
 	case "md":
 		if *out == "" {
 			*out = "docs/reference/manpage"
 		}
-		pages, ext = generate.Markdown(root, "internal/commands/registry.go"), ".md"
+		pages, err = generate.Markdown(root, config.Spec, "internal/commands/registry.go")
+		ext = ".md"
 	default:
 		fatalf("unknown -format %q; want roff or md", *format)
+	}
+	if err != nil {
+		fatalf("render the %s pages: %v", *format, err)
 	}
 
 	if err := os.MkdirAll(*out, 0o755); err != nil {

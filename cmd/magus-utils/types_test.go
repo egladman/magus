@@ -91,7 +91,7 @@ func TestRunTypes(t *testing.T) {
 		err := runTypes([]string{"-type", "NotDeclared", "-out", filepath.Join(t.TempDir(), "x.buzz")})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unknown boundary type")
-		assert.Contains(t, err.Error(), "boundaryTypes")
+		assert.Contains(t, err.Error(), "boundaryRoots")
 	})
 }
 

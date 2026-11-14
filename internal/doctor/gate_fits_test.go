@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // The machine entry 94 was refused on: 18.0 GiB across 10 slots.
@@ -33,7 +34,7 @@ func TestGateFitsFailsOnAMemberOverTheWholeBudget(t *testing.T) {
 		Sizing: types.MemorySizing{Samples: 8, Fallback: "test: no memory curve for this shape (2 of 3 runs); claimed the 18.9 GiB peak"},
 	}
 	got := gradeGateFits([]types.MachineClaim{member}, entry94BudgetMB, entry94Slots)
-	assert.Equal(t, types.CheckFail, got.Status)
+	assert.Equal(t, check.Fail, got.Status)
 	assert.Contains(t, got.Message, "1 step(s) of the ci gate claim more than this machine's whole build budget of 18.0 GiB across 10 slots")
 	assert.Contains(t, got.Message, "magus affected ci")
 	require.Len(t, got.Details, 1)
@@ -50,13 +51,13 @@ func TestGateFitsPassesWhenEachStepClaimsItsOwn(t *testing.T) {
 		{Project: ".", Target: "security", MemoryMB: 3615, Slots: 2, Profile: recordedCurve(3615), Sizing: types.MemorySizing{Samples: 8}},
 	}
 	got := gradeGateFits(claims, entry94BudgetMB, entry94Slots)
-	assert.Equal(t, types.CheckOK, got.Status, "16.9 GiB summed is over budget, but no single step is")
+	assert.Equal(t, check.OK, got.Status, "16.9 GiB summed is over budget, but no single step is")
 }
 
 func TestGateFitsFailsOnASlotClaimWiderThanTheMachine(t *testing.T) {
 	t.Parallel()
 	got := gradeGateFits([]types.MachineClaim{{Project: ".", Target: "test", MemoryMB: 1000, Slots: 12}}, entry94BudgetMB, entry94Slots)
-	assert.Equal(t, types.CheckFail, got.Status)
+	assert.Equal(t, check.Fail, got.Status)
 	assert.Contains(t, got.Details[0], "test claims 1000 MiB (declared) and 12 slot(s)")
 }
 
@@ -77,13 +78,13 @@ func TestGateFitsAsksTheSizerForEachProjectsCi(t *testing.T) {
 	r := &runner{}
 
 	got := r.checkGateFits(WithGateClaims(t.Context(), sizer, entry94BudgetMB, entry94Slots), []*types.Project{p, {Path: "libs/x"}})
-	assert.Equal(t, types.CheckFail, got.Status)
+	assert.Equal(t, check.Fail, got.Status)
 	assert.Equal(t, []types.Target{{Path: ".", Name: "ci"}}, asked,
 		"the sizer walks ci's members itself; libs/x composes no ci")
 
 	skipped := (&runner{}).checkGateFits(t.Context(), []*types.Project{p})
-	assert.Equal(t, types.Check{
-		Name: gateFitsCheck, Status: types.CheckOK, Evidence: types.EvidenceUnknown,
+	assert.Equal(t, check.Check{
+		Name: gateFitsCheck, Status: check.OK, Evidence: check.EvidenceUnknown,
 		Message: "no admission sizer supplied; skipped",
 	}, skipped, "no sizer is not a pass")
 }

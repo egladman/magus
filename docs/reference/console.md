@@ -38,6 +38,19 @@ of it runs an arbitrary command or writes into your working tree:
 
 Every one of them is gated behind the same loopback bind and bearer token.
 
+## Where the pages come from
+
+A released magus binary carries no pages. The console is a separate static site, rendered
+from `docs/` at deploy time and hosted at [eli.gladman.cc/magus](https://eli.gladman.cc/magus/),
+or self-hosted from any file server. The daemon serves `/console/` only from the build
+`MAGUS_CONSOLE_DIR` names, and answers `404` there until the variable names one. With
+`console.enabled: false` the daemon runs without the console and serves no browser API at
+all ([Kill switch](#kill-switch)).
+
+The [live demo](https://eli.gladman.cc/magus/console/) needs no install and no daemon: it
+fills the dashboard with synthesized activity, streams a build into the log viewer, and
+moves between every app in demo mode.
+
 ## What the console serves
 
 Every route under the console's `/api/v1/` prefix, enumerated:

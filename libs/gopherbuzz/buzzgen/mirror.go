@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -40,6 +41,11 @@ type Namer func(reflect.Type) string
 // type carries itself.
 type EnumType func(reflect.Type) (name, zero string, ok bool)
 
+// Required names the Buzz fields of a struct that every value sets.
+// Its mirror declares them with no default, so a literal that leaves
+// one out fails the check. Which fields those are is the host's contract.
+type Required func(reflect.Type) []string
+
 // Options configure a rendering pass.
 type Options struct {
 	// Namer resolves struct-valued fields to their declared Buzz object names. A nil
@@ -50,10 +56,20 @@ type Options struct {
 	// mirrors every string-kinded field as bare `str`, which is correct for a host
 	// with no enum registry.
 	EnumType EnumType
+	// Required names the fields declared with no default. A nil
+	// Required gives every field its zero value.
+	Required Required
 	// TimeAsString mirrors time.Time as an RFC3339 `str` rather than descending into
 	// its fields. Every known host encodes a timestamp that way, so it defaults on;
 	// set it false only if yours genuinely hands Buzz a structured time.
 	TimeAsString bool
+}
+
+func (o Options) required(t reflect.Type) []string {
+	if o.Required == nil || t.Kind() != reflect.Struct {
+		return nil
+	}
+	return o.Required(t)
 }
 
 func (o Options) name(t reflect.Type) string {
@@ -68,7 +84,8 @@ func (o Options) name(t reflect.Type) string {
 func DefaultOptions() Options { return Options{TimeAsString: true} }
 
 // ObjectDecl renders rt as `export object <name> { … }`. Each exported field becomes a
-// Buzz field with its mapped type and zero-value default.
+// Buzz field with its mapped type and zero-value default. A field
+// opts.Required names has no default; one rt does not declare is an error.
 //
 // It emits the declaration alone, with no generated-file banner, so a caller bundling
 // many mirrors into one module source carries one header instead of repeating it per
@@ -83,8 +100,14 @@ func ObjectDecl(name string, rt reflect.Type, opts Options) ([]byte, error) {
 		name += "::<" + strings.Join(params, ", ") + ">"
 	}
 	fmt.Fprintf(&b, "export object %s {\n", name)
-	if err := renderFields(&b, rt, opts); err != nil {
+	declared := map[string]bool{}
+	if err := renderFields(&b, rt, opts, declared); err != nil {
 		return nil, err
+	}
+	for _, field := range opts.required(rt) {
+		if !declared[field] {
+			return nil, fmt.Errorf("%s requires field %s, which it does not declare", rt, field)
+		}
 	}
 	fmt.Fprintln(&b, "}")
 	return b.Bytes(), nil
@@ -136,14 +159,15 @@ func TypeParams(rt reflect.Type) []string {
 // Inlining is not a style preference: encoding/json promotes an anonymous field's keys
 // to the outer object, so nesting here would make the Buzz mirror and the JSON encoding
 // of the same value disagree about their shape.
-func renderFields(b *bytes.Buffer, rt reflect.Type, opts Options) error {
+func renderFields(b *bytes.Buffer, rt reflect.Type, opts Options, declared map[string]bool) error {
+	required := opts.required(rt)
 	for i := 0; i < rt.NumField(); i++ {
 		f := rt.Field(i)
 		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
 			continue
 		}
 		if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("buzz") == "" {
-			if err := renderFields(b, f.Type, opts); err != nil {
+			if err := renderFields(b, f.Type, opts, declared); err != nil {
 				return err
 			}
 			continue
@@ -152,7 +176,18 @@ func renderFields(b *bytes.Buffer, rt reflect.Type, opts Options) error {
 		if err != nil {
 			return fmt.Errorf("field %s: %w", f.Name, err)
 		}
-		fmt.Fprintf(b, "    %s: %s = %s,\n", FieldName(f), bt, def)
+		name, member := FieldName(f), memberName(f)
+		declared[member] = true
+		if slices.Contains(required, member) {
+			fmt.Fprintf(b, "    %s: %s,\n", name, bt)
+			continue
+		}
+		// A struct with a required field has no zero literal to default to.
+		if f.Type.Kind() == reflect.Struct && len(opts.required(f.Type)) > 0 {
+			return fmt.Errorf("field %s: %s requires %s, so %s{} is no default: require %s too",
+				f.Name, bt, strings.Join(opts.required(f.Type), ", "), bt, member)
+		}
+		fmt.Fprintf(b, "    %s: %s = %s,\n", name, bt, def)
 	}
 	return nil
 }
@@ -217,10 +252,14 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 		if opts.TimeAsString && t == reflect.TypeOf(time.Time{}) {
 			return "str", `""`, nil
 		}
-		// A field holding a generic instance would need `Result::<int>` spelled from
-		// the type arguments, which reflect does not expose by name.
+		// reflect names an instance only as Object[pkg/path.Arg], so the Buzz
+		// spelling is rebuilt from that string.
 		if strings.Contains(t.Name(), "[") {
-			return "", "", fmt.Errorf("generic instance %s cannot be a field type", t)
+			name, err := genericInstanceName(t.Name())
+			if err != nil {
+				return "", "", fmt.Errorf("generic instance %s: %w", t, err)
+			}
+			return name, name + "{}", nil
 		}
 		// A struct field maps to the Buzz object the host declares for it, which is NOT
 		// always the Go type's own name. Resolving through the Namer is what keeps a
@@ -262,14 +301,20 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 // really does tokenize. A field named `out` hits the first; a field named `in` hits only
 // the second, and missing it emits a file that does not parse.
 func FieldName(f reflect.StructField) string {
-	name := f.Tag.Get("buzz")
-	if name == "" {
-		name = LowerFirstWord(f.Name)
-	}
+	name := memberName(f)
 	if buzz.IsReservedIdent(name) || token.IsKeyword(name) {
 		return fmt.Sprintf(`@"%s"`, name)
 	}
 	return name
+}
+
+// memberName is the name a Buzz value carries the field under, before
+// FieldName escapes a reserved word for the declaration.
+func memberName(f reflect.StructField) string {
+	if name := f.Tag.Get("buzz"); name != "" {
+		return name
+	}
+	return LowerFirstWord(f.Name)
 }
 
 // LowerFirstWord lowercases a Go field name's first WORD rather than its first rune, so an
@@ -303,4 +348,73 @@ func LowerFirstWord(name string) string {
 		// the one capital that stays.
 		return strings.ToLower(string(r[:n-1])) + string(r[n-1:])
 	}
+}
+
+var builtinTypeNames = map[string]string{
+	"string": "str", "bool": "bool", "float32": "double", "float64": "double",
+	"int": "int", "int8": "int", "int16": "int", "int32": "int", "int64": "int",
+	"uint": "int", "uint8": "int", "uint16": "int", "uint32": "int", "uint64": "int",
+	"any": "any?",
+}
+
+// genericInstanceName spells reflect's Object[example.com/types.JobSpec] as
+// Object::<JobSpec>. Arguments keep their Go names, because a Namer needs
+// types and reflect gives only this string. A map argument is refused.
+func genericInstanceName(reflected string) (string, error) {
+	open := strings.Index(reflected, "[")
+	if open <= 0 || !strings.HasSuffix(reflected, "]") {
+		return "", fmt.Errorf("cannot read type arguments from %q", reflected)
+	}
+	var args []string
+	for _, arg := range splitTypeArguments(reflected[open+1 : len(reflected)-1]) {
+		buzzArg, err := typeArgumentName(arg)
+		if err != nil {
+			return "", err
+		}
+		args = append(args, buzzArg)
+	}
+	return reflected[:open] + "::<" + strings.Join(args, ", ") + ">", nil
+}
+
+func splitTypeArguments(list string) []string {
+	var parts []string
+	depth, start := 0, 0
+	for i, r := range list {
+		switch r {
+		case '[':
+			depth++
+		case ']':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, list[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(parts, list[start:])
+}
+
+func typeArgumentName(arg string) (string, error) {
+	arg = strings.TrimSpace(arg)
+	switch {
+	case strings.HasPrefix(arg, "[]"):
+		elem, err := typeArgumentName(arg[2:])
+		return "[" + elem + "]", err
+	case strings.HasPrefix(arg, "*"):
+		elem, err := typeArgumentName(arg[1:])
+		if err != nil || strings.HasSuffix(elem, "?") {
+			return elem, err
+		}
+		return elem + "?", nil
+	case strings.HasPrefix(arg, "map["):
+		return "", fmt.Errorf("type argument %q is a map", arg)
+	}
+	if open := strings.Index(arg, "["); open > 0 {
+		return genericInstanceName(arg[strings.LastIndex(arg[:open], ".")+1:])
+	}
+	if name, ok := builtinTypeNames[arg]; ok {
+		return name, nil
+	}
+	return arg[strings.LastIndex(arg, ".")+1:], nil
 }

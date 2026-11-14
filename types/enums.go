@@ -49,12 +49,6 @@ func (v PlatformStyle) Values() []string { return platformStyles.Strings() }
 func (v PlatformStyle) Valid() bool      { return platformStyles.Valid(v) }
 func (v PlatformStyle) String() string   { return enum.String(v) }
 
-var checkStatuses = enum.Set[CheckStatus]{"ok", "fail", "advice"}
-
-func (v CheckStatus) Values() []string { return checkStatuses.Strings() }
-func (v CheckStatus) Valid() bool      { return checkStatuses.Valid(v) }
-func (v CheckStatus) String() string   { return enum.String(v) }
-
 var eventOutcomes = enum.Set[EventOutcome]{"waiting", "permission", "failed", "finished", "diagnostic", "update", "other"}
 
 func (v EventOutcome) Values() []string { return eventOutcomes.Strings() }
@@ -92,7 +86,7 @@ func (v ConflictKind) Valid() bool      { return conflictKinds.Valid(v) }
 func (v ConflictKind) String() string   { return enum.String(v) }
 
 var precedentFamilies = enum.Set[PrecedentFamily]{
-	PrecedentDepDirection, PrecedentDepFanout, PrecedentErrSentinelName, PrecedentTestPackageName,
+	PrecedentDepDirection, PrecedentImportedPackages, PrecedentErrSentinelName, PrecedentTestPackageName,
 	PrecedentParamNameByType, PrecedentParamOrder, PrecedentCtxFirst, PrecedentErrorLast,
 }
 
@@ -123,18 +117,6 @@ var sandboxModes = enum.Set[SandboxMode]{SandboxModeOff, SandboxModeBestEffort, 
 
 func (v SandboxMode) Values() []string { return sandboxModes.Strings() }
 func (v SandboxMode) Valid() bool      { return sandboxModes.Valid(v) }
-
-var skillVariants = enum.Set[SkillVariant]{SkillVariantShort, SkillVariantFull}
-
-func (v SkillVariant) Values() []string { return skillVariants.Strings() }
-func (v SkillVariant) Valid() bool      { return skillVariants.Valid(v) }
-func (v SkillVariant) String() string   { return enum.String(v) }
-
-// Full and Short let a skill body branch with {{if .Full}}: text/template cannot name a
-// package constant, so the predicate hangs off the value being rendered. Short brackets
-// text only the shorter reader sees, so it suits wording, never a step.
-func (v SkillVariant) Full() bool  { return v == SkillVariantFull }
-func (v SkillVariant) Short() bool { return v == SkillVariantShort }
 
 var skillForms = enum.Set[SkillForm]{SkillFormBoth, SkillFormShort, SkillFormFull}
 
@@ -205,12 +187,6 @@ func (v BriefRefKind) Values() []string { return briefRefKinds.Strings() }
 func (v BriefRefKind) Valid() bool      { return briefRefKinds.Valid(v) }
 func (v BriefRefKind) String() string   { return enum.String(v) }
 
-var modelTierSources = enum.Set[ModelTierSource]{ModelTierSourceRow, ModelTierSourceMatrix, ModelTierSourceUserMatrix, ModelTierSourceDefault}
-
-func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }
-func (v ModelTierSource) Valid() bool      { return modelTierSources.Valid(v) }
-func (v ModelTierSource) String() string   { return enum.String(v) }
-
 var claimKinds = enum.Set[ClaimKind]{ClaimRefs, ClaimTest, ClaimOutput, ClaimReleased, ClaimDeadHolder}
 
 func (v ClaimKind) Values() []string { return claimKinds.Strings() }
@@ -218,7 +194,7 @@ func (v ClaimKind) Valid() bool      { return claimKinds.Valid(v) }
 func (v ClaimKind) String() string   { return enum.String(v) }
 
 var conformanceMetrics = enum.Set[ConformanceMetric]{
-	ConformanceFileLines, ConformanceFuncLines, ConformanceTypeMethods, ConformanceFileSymbols, ConformanceDepFanout,
+	ConformanceFileLines, ConformanceFuncLines, ConformanceTypeMethods, ConformanceFileSymbols, ConformanceImportedPackages,
 	ConformanceCloneTokens, ConformanceExportScope, ConformanceCallSequence, ConformanceSharedBody, ConformanceSharedReach,
 	ConformanceCallerSpread, ConformanceModeKnobs, ConformanceAliasShare, ConformanceNameClash,
 	ConformanceMainLogic, ConformanceStorePathExport, ConformanceFileSplit,

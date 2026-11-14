@@ -22,7 +22,7 @@ func runTSTypes(args []string) error {
 	if len(outs) == 0 {
 		return fmt.Errorf("usage: magus-utils tstypes -out <path.ts> [-out <path.ts>...]")
 	}
-	src, err := renderTSTypes(boundaryTypes)
+	src, err := renderTSTypes(boundaryTypes())
 	if err != nil {
 		return err
 	}

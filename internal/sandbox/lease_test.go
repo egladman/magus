@@ -106,7 +106,7 @@ func (s *UnreadableJobStoreSuite) TestNoLeaseNeverReadsTheStore() {
 func TestNarrowToLeaseGrantsOnlyTheWritePaths(t *testing.T) {
 	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
-		WritePaths: []string{"pkg/a/**"},
+		Paths: types.JobPaths{Write: []string{"pkg/a/**"}},
 	})
 	p := narrowed(t, root, cacheDir, "fleet/w1")
 	ctx := t.Context()
@@ -131,7 +131,7 @@ func TestNarrowToLeaseGrantsOnlyTheWritePaths(t *testing.T) {
 func TestNarrowToLeaseRefusesAForbiddenPathInsideAnOwnedOne(t *testing.T) {
 	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
-		WritePaths: []string{"pkg/**"}, DenyPaths: []string{"pkg/a/gen"},
+		Paths: types.JobPaths{Write: []string{"pkg/**"}, Deny: []string{"pkg/a/gen"}},
 	})
 	p := narrowed(t, root, cacheDir, "fleet/w1")
 	ctx := t.Context()
@@ -143,12 +143,37 @@ func TestNarrowToLeaseRefusesAForbiddenPathInsideAnOwnedOne(t *testing.T) {
 		"pkg/a cannot be granted without granting the forbidden pkg/a/gen with it")
 }
 
+func TestNarrowToLeaseGrantsTheDeclaredProductPath(t *testing.T) {
+	root, cacheDir := leaseWorkspace(t, types.Job{
+		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
+		Paths: types.JobPaths{Write: []string{"pkg/a/**"}},
+	})
+	base := fromConfig(t, root, cacheDir, config.SandboxConfig{})
+	p, err := NarrowToLease(t.Context(), base, job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root}, "fleet/w1", types.LeaseSourceMarker, "pkg/b/product")
+	require.NoError(t, err)
+
+	require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(root, "pkg", "b", "product")))
+	require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(root, "pkg", "a", "x.txt")))
+	assert.Error(t, p.CheckWrite(t.Context(), filepath.Join(root, "x.txt")))
+}
+
+func TestNarrowToLeaseGrantsNoProductPathToAReadOnlyRow(t *testing.T) {
+	root, cacheDir := leaseWorkspace(t, types.Job{
+		ID: "fleet/r1", Parent: "fleet/root", State: types.StateRunning, ReadOnly: true,
+	})
+	base := fromConfig(t, root, cacheDir, config.SandboxConfig{})
+	p, err := NarrowToLease(t.Context(), base, job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root}, "fleet/r1", types.LeaseSourceMarker, "pkg/b/product")
+	require.NoError(t, err)
+
+	assert.Error(t, p.CheckWrite(t.Context(), filepath.Join(root, "pkg", "b", "product")))
+}
+
 // TestNarrowToLeaseGrantsNothingForAGlobThatMatchesNothing keeps a typo from reading as a
 // grant: an owned path is a claim about files that exist.
 func TestNarrowToLeaseGrantsNothingForAGlobThatMatchesNothing(t *testing.T) {
 	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
-		WritePaths: []string{"pkg/nowhere/**"},
+		Paths: types.JobPaths{Write: []string{"pkg/nowhere/**"}},
 	})
 	p := narrowed(t, root, cacheDir, "fleet/w1")
 
@@ -163,7 +188,7 @@ func TestNarrowToLeaseGrantsNothingForAGlobThatMatchesNothing(t *testing.T) {
 func TestNarrowToLeaseGrantsTheDirectoryOfALiteralPathToCreate(t *testing.T) {
 	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
-		WritePaths: []string{"pkg/a/new.go", "pkg/nowhere/**"},
+		Paths: types.JobPaths{Write: []string{"pkg/a/new.go", "pkg/nowhere/**"}},
 	})
 	p := narrowed(t, root, cacheDir, "fleet/w1")
 	ctx := t.Context()
@@ -183,7 +208,7 @@ func TestNarrowToLeaseNeverGrantsOutsideTheCheckout(t *testing.T) {
 	outside := filesystem.ResolveRulePath(t.TempDir())
 	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
-		WritePaths: []string{fmt.Sprintf("../%s/x.txt", filepath.Base(outside)), "link/x.txt", "nowhere/deeper/new.go", "."},
+		Paths: types.JobPaths{Write: []string{fmt.Sprintf("../%s/x.txt", filepath.Base(outside)), "link/x.txt", "nowhere/deeper/new.go", "."}},
 	})
 	require.NoError(t, os.Symlink(outside, filepath.Join(root, "link")))
 	p := narrowed(t, root, cacheDir, "fleet/w1")
@@ -225,12 +250,12 @@ func TestNarrowToLeaseLeavesEveryUnnarrowableCaseAlone(t *testing.T) {
 		row   types.Job
 		acted string
 	}{
-		{"root lease", types.Job{ID: "fleet/root", State: types.StateRunning, WritePaths: []string{"pkg/a/**"}}, "fleet/root"},
+		{"root lease", types.Job{ID: "fleet/root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"pkg/a/**"}}}, "fleet/root"},
 		{"no row", types.Job{}, "fleet/w1"},
-		{"no lease claimed", types.Job{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning, WritePaths: []string{"pkg/a/**"}}, ""},
+		{"no lease claimed", types.Job{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"pkg/a/**"}}}, ""},
 		{"empty write paths", types.Job{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning}, "fleet/w1"},
-		{"terminal row", types.Job{ID: "fleet/w1", Parent: "fleet/root", State: types.StatePass, WritePaths: []string{"pkg/a/**"}}, "fleet/w1"},
-		{"no state", types.Job{ID: "fleet/w1", Parent: "fleet/root", WritePaths: []string{"pkg/a/**"}}, "fleet/w1"},
+		{"terminal row", types.Job{ID: "fleet/w1", Parent: "fleet/root", State: types.StatePass, Paths: types.JobPaths{Write: []string{"pkg/a/**"}}}, "fleet/w1"},
+		{"no state", types.Job{ID: "fleet/w1", Parent: "fleet/root", Paths: types.JobPaths{Write: []string{"pkg/a/**"}}}, "fleet/w1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, cacheDir := leaseWorkspace(t, tc.row)

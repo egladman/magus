@@ -131,7 +131,7 @@ func braceJoin(urls []string) string {
 
 // supportCell qualifies an unknown with the reason the provider gave none, so an
 // unreachable host reads "unknown (unreached)" rather than a bare unknown.
-func supportCell(t types.ToolRow, state string) string {
+func supportCell(t types.ToolStatus, state string) string {
 	if t.Support == string(spells.SupportUnknown) && (state == types.LifecycleOffline || state == types.LifecycleUnreached) {
 		return fmt.Sprintf("%s (%s)", t.Support, state)
 	}
@@ -139,7 +139,7 @@ func supportCell(t types.ToolRow, state string) string {
 }
 
 // installedCell says what was read, and when nothing was, which kind of nothing.
-func installedCell(t types.ToolRow) string {
+func installedCell(t types.ToolStatus) string {
 	switch {
 	case t.InstalledVersion != "":
 		return t.InstalledVersion
@@ -152,7 +152,7 @@ func installedCell(t types.ToolRow) string {
 
 // verdictCell spaces the verdict the way the console words the enum (too_old reads "too
 // old"); the JSON value keeps its underscore so a shell comparison needs no quoting.
-func verdictCell(t types.ToolRow) string {
+func verdictCell(t types.ToolStatus) string {
 	v := strings.ReplaceAll(t.Verdict, "_", " ")
 	if t.DiagnosticCode != "" {
 		v += fmt.Sprintf(" (%s)", t.DiagnosticCode)
@@ -160,7 +160,7 @@ func verdictCell(t types.ToolRow) string {
 	return v
 }
 
-func windowCell(t types.ToolRow) string {
+func windowCell(t types.ToolStatus) string {
 	if t.Effective == "" {
 		return "unconstrained"
 	}
@@ -170,7 +170,7 @@ func windowCell(t types.ToolRow) string {
 // declaredByCell answers the question the intersection discarded: whose bound is this.
 // Without it the two declarations are visible only to someone piping JSON, which is not
 // the reader looking at a failing row.
-func declaredByCell(t types.ToolRow) string {
+func declaredByCell(t types.ToolStatus) string {
 	switch {
 	case t.SpellBounds != "" && t.WorkspaceBounds != "":
 		return "spell+ws"

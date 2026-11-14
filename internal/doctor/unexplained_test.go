@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,9 +79,9 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{}
 
 		got := r.checkUnexplainedHotspots(t.Context(), nil)
-		assert.Equal(t, types.Check{
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceUnknown,
+		assert.Equal(t, check.Check{
+			Status:   check.OK,
+			Evidence: check.EvidenceUnknown,
 			Details:  []string{"start one where a reason is worth keeping: " + hint.NotesEdit.With("<name>")},
 		}, withoutWording(got))
 	})
@@ -89,7 +90,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r := &runner{ws: hotWorkspace{files: hot("a.go")}}
 
 		got := r.checkUnexplainedHotspots(t.Context(), nil)
-		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
+		assert.Equal(t, check.EvidenceUnknown, got.Evidence)
 	})
 
 	t.Run("no history lens is unknown", func(t *testing.T) {
@@ -97,7 +98,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{Notes: 2}
 
 		got := r.checkUnexplainedHotspots(t.Context(), nil)
-		assert.Equal(t, types.Check{Status: types.CheckOK, Evidence: types.EvidenceUnknown}, withoutWording(got))
+		assert.Equal(t, check.Check{Status: check.OK, Evidence: check.EvidenceUnknown}, withoutWording(got))
 		assert.Contains(t, got.Message, "no history lens")
 	})
 
@@ -106,7 +107,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{Notes: 2}
 
 		got := r.checkUnexplainedHotspots(t.Context(), nil)
-		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
+		assert.Equal(t, check.EvidenceUnknown, got.Evidence)
 	})
 
 	t.Run("notes that reach the hot files pass", func(t *testing.T) {
@@ -114,7 +115,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{Notes: 3, Files: []string{"internal/cache/key.go"}}
 
 		got := r.checkUnexplainedHotspots(t.Context(), nil)
-		assert.Equal(t, types.Check{Status: types.CheckOK, Evidence: types.EvidenceInferred}, withoutWording(got))
+		assert.Equal(t, check.Check{Status: check.OK, Evidence: check.EvidenceInferred}, withoutWording(got))
 		assert.Contains(t, got.Message, "1 of the 2")
 	})
 
@@ -123,7 +124,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{Notes: 3, Files: []string{"elsewhere.go"}}
 
 		got := r.checkUnexplainedHotspots(t.Context(), nil)
-		assert.Equal(t, types.CheckAdvice, got.Status)
+		assert.Equal(t, check.Advice, got.Status)
 		require.Len(t, got.Details, 3) // two bare files, then the remedy
 		assert.Contains(t, got.Details[0], "a.go")
 		assert.Contains(t, got.Details[1], "b.go")
@@ -137,7 +138,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{Notes: 1, Files: []string{"/w/pkg/a.go"}}
 
 		got := r.checkUnexplainedHotspots(t.Context(), nil)
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "1 of the 1")
 	})
 

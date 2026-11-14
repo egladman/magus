@@ -1542,6 +1542,7 @@ func assertMirrorConstructs(t *testing.T, object string) {
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
 	buzzstd.Register(s)
+	require.NoError(t, spell.SetNamespaceDecls(s))
 	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
 	require.NoError(t, s.Exec(ctx, fmt.Sprintf(`import "%s"; final __r = %s{};`, testBoundaryTypesPath, object)),
 		"%s{} must construct: the mirror is missing from the bundle, ordered after a type it references, or emitted with a field name that does not parse", object)
@@ -1591,6 +1592,7 @@ func assertMirrorReadsField(t *testing.T, object, field string) {
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
 	buzzstd.Register(s)
+	require.NoError(t, spell.SetNamespaceDecls(s))
 	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
 	err := s.Exec(ctx, fmt.Sprintf(`import "%s"; final __r = %s{}.%s;`, testBoundaryTypesPath, object, field))
 	require.NoError(t, err, "%s has no field %q, but %s's BuzzObject emits that key: the mirror and the boundary map disagree", object, field, object)

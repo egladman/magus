@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -66,7 +67,7 @@ func acceptRow() types.Job {
 	check := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
 	return types.Job{
 		ID:         "harness/ledger-accept",
-		WritePaths: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"},
+		Paths:      types.JobPaths{Write: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"}},
 		Check:      &check,
 		Validation: check.String(),
 		State:      types.StateRunning,
@@ -103,9 +104,9 @@ func claimed(rep types.JobResult) Observed {
 
 func goalRow() types.Job {
 	return types.Job{
-		ID:         "harness/gated",
-		WritePaths: []string{"internal/job"},
-		State:      types.StateRunning,
+		ID:    "harness/gated",
+		Paths: types.JobPaths{Write: []string{"internal/job"}},
+		State: types.StateRunning,
 		Goals: []types.Goal{
 			{ID: "unit", Description: "job package tests pass", Check: types.LeaseCheck{Target: "go::go-test", Project: "."}},
 			{ID: "docs", Description: "docs checks pass", Check: types.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"unit"}},
@@ -215,7 +216,7 @@ func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
 	}
 	rep := passingResult()
 	rep.Validation.OutputRef = ""
-	green := GreenGate{Commit: "c1", Projects: []string{".", "docs"}, Tier: types.RiskTrivial}
+	green := GreenGate{Commit: "c1", Projects: []string{".", "docs"}, Tier: check.RiskTrivial}
 
 	seen := claimed(rep)
 	seen.GreenGate = green
@@ -228,8 +229,8 @@ func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
 		gate GreenGate
 	}{
 		"no green gate":               {ciRow("ci", "."), GreenGate{}},
-		"a mechanical delta":          {ciRow("ci", "."), GreenGate{Commit: "c1", Projects: []string{"."}, Tier: types.RiskMechanical}},
-		"a scoped delta":              {ciRow("ci", "."), GreenGate{Commit: "c1", Projects: []string{"."}, Tier: types.RiskScoped}},
+		"a mechanical delta":          {ciRow("ci", "."), GreenGate{Commit: "c1", Projects: []string{"."}, Tier: check.RiskMechanical}},
+		"a scoped delta":              {ciRow("ci", "."), GreenGate{Commit: "c1", Projects: []string{"."}, Tier: check.RiskScoped}},
 		"a project the gate skipped":  {ciRow("ci", "site"), green},
 		"a check that is not ci":      {ciRow("go::go-test", "."), green},
 		"a spell-qualified ci target": {ciRow("go::ci", "."), green},
@@ -746,10 +747,10 @@ func TestVerifyReadsARootDeclarationAsTheWholeTree(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.WritePaths = []string{"."}
+	row.Paths.Write = []string{"."}
 	assert.True(t, verifyClaim(row, passingResult(), passingRun, nil).Verified)
 
-	row.WritePaths = []string{""}
+	row.Paths.Write = []string{""}
 	assert.False(t, verifyClaim(row, passingResult(), passingRun, nil).Verified, "a blank declaration claims nothing")
 }
 
@@ -759,7 +760,7 @@ func TestVerifyRejectsADeniedPath(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.DenyPaths = []string{"internal/ledger/store.go"}
+	row.Paths.Deny = []string{"internal/ledger/store.go"}
 	rep := passingResult()
 	rep.ChangedPaths = []string{"internal/ledger/store.go"}
 
@@ -814,7 +815,7 @@ func TestVerifyRefusesWritesFromAReadOnlyLease(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.ReadOnly, row.WritePaths = true, nil
+	row.ReadOnly, row.Paths.Write = true, nil
 
 	v := verifyClaim(row, passingResult(), passingRun, nil)
 	assert.False(t, v.Verified)
@@ -862,7 +863,7 @@ func keys(m map[string]json.RawMessage) []string {
 func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "unit", Created: 1, WritePaths: []string{"run.go#executeStages"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	row := types.Job{ID: "unit", Created: 1, Paths: types.JobPaths{Write: []string{"run.go#executeStages"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
 	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"run.go"}}
 	placed := func(decl string) types.RegionChange {
 		return types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
@@ -885,7 +886,7 @@ func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
 	assert.Contains(t, blind.Violations, "job unit claims declarations and its footprint is not known (git does not report changed regions (RegionReporter)), so no claim could be checked")
 
 	whole := row
-	whole.WritePaths = []string{"run.go"}
+	whole.Paths.Write = []string{"run.go"}
 	assert.NotContains(t, VerifyGates(whole, rep, types.JobAttempt{}, nil, []types.Job{whole}, unread).Violations,
 		"job unit claims declarations and its footprint is not known (git does not report changed regions (RegionReporter)), so no claim could be checked",
 		"a job claiming no declaration is not graded on its footprint")
@@ -896,7 +897,7 @@ func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
 func TestVerifyGatesGradesTheFootprintAgainstDeclarationDenies(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "unit", Created: 1, WritePaths: []string{"run.go"}, DenyPaths: []string{"run.go#executeStages"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	row := types.Job{ID: "unit", Created: 1, Paths: types.JobPaths{Write: []string{"run.go"}, Deny: []string{"run.go#executeStages"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
 	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"run.go"}}
 	placed := func(decl string) types.RegionChange {
 		return types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
@@ -921,7 +922,7 @@ func TestVerifyGatesGradesTheFootprintAgainstDeclarationDenies(t *testing.T) {
 		denied(verify(Observed{Changed: []string{"run.go"}, ChangedKnown: true, RegionsReason: "no regions"})))
 
 	whole := row
-	whole.DenyPaths = []string{"run.go"}
+	whole.Paths.Deny = []string{"run.go"}
 	assert.Equal(t, []string{`changed path "run.go" is one the job is denied (run.go)`},
 		denied(VerifyGates(whole, rep, types.JobAttempt{}, nil, []types.Job{whole}, seen(placed("func RunCI() {"))).Violations))
 }
@@ -992,7 +993,7 @@ func TestUnclaimedFootprint(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, unclaimedFootprint(types.Job{WritePaths: tc.writePaths, Releases: tc.releases}, tc.regions))
+			assert.Equal(t, tc.want, unclaimedFootprint(types.Job{Paths: types.JobPaths{Write: tc.writePaths}, Releases: tc.releases}, tc.regions))
 		})
 	}
 }
@@ -1002,7 +1003,7 @@ func integrationRow(t *testing.T, state types.JobState) *Store {
 	t.Helper()
 	s := tempStore(t, t.TempDir())
 	_, err := s.Update(t.Context(), "w", func(u *types.Job) {
-		types.Declaration{ID: "w", WritePaths: []string{"a.go"}, Check: forkCheck(), Goals: []types.Goal{
+		types.Declaration{ID: "w", Paths: types.JobPaths{Write: []string{"a.go"}}, Check: forkCheck(), Goals: []types.Goal{
 			{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "docs"}},
 		}}.Apply(u)
 		u.State = state
@@ -1113,7 +1114,7 @@ func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) 
 
 	s := tempStore(t, t.TempDir())
 	_, err := s.Update(t.Context(), "w", func(u *types.Job) {
-		types.Declaration{ID: "w", WritePaths: []string{"a.go"}, Goals: []types.Goal{
+		types.Declaration{ID: "w", Paths: types.JobPaths{Write: []string{"a.go"}}, Goals: []types.Goal{
 			{ID: "moved", Kind: types.GoalKindSymbol, Symbols: []string{"Api"}},
 			{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Api"}, Signature: "func Api()"},
 			{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}},
@@ -1142,7 +1143,7 @@ func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) 
 func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}, WritePaths: []string{"a.go", "b.go"}, State: types.StateRunning}
+	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}, Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}, State: types.StateRunning}
 	rep := types.JobResult{
 		Schema:               types.Schema{Version: types.JobResultAPIVersion},
 		Job:                  "integrate",
@@ -1237,23 +1238,28 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 	worker := types.Job{ID: "a", Check: &scoped, Goals: []types.Goal{
 		{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
 		{ID: "buzz", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "buzz-test", Project: "docs"}},
-	}, Result: &types.JobResult{
+	}}
+	owed := &types.JobResult{
 		Validation:           types.JobResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: types.OwedNoSeat},
 		VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat}, {GateID: "buzz", Owed: types.OwedNoSeat}},
-	}}
-	paid := types.Job{ID: "b", Check: &types.LeaseCheck{Target: "buzz-test", Project: "console"},
-		Result: &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out1"}}}
+	}
+	paid := types.Job{ID: "b", Check: &types.LeaseCheck{Target: "buzz-test", Project: "console"}}
 	elsewhere := worker
 	elsewhere.ID = "c"
+	tries := types.NewJobAttempts([]types.Attempt{
+		filedTry("a", owed),
+		filedTry("b", &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out1"}}),
+		filedTry("c", owed),
+	})
 	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}}
 	held := integratorGoals(row)
 
-	got := owedGoals(row, []types.Job{worker, paid, elsewhere}, held)
+	got := owedGoals(row, []types.Job{worker, paid, elsewhere}, tries, held)
 	want := []types.Goal{
 		{ID: "buzz-test-docs", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "buzz-test", Project: "docs"}},
 	}
 	assert.Equal(t, want, got, "the scoped go-test and lint ride the full runs; a check paid for and a branch not merged add nothing")
-	assert.Empty(t, owedGoals(types.Job{ID: "w"}, []types.Job{worker}, nil), "a job that integrates nothing owes nothing")
+	assert.Empty(t, owedGoals(types.Job{ID: "w"}, []types.Job{worker}, tries, nil), "a job that integrates nothing owes nothing")
 }
 
 // narrowedRunSuite pins a file-scoped goal grading what the row changed.

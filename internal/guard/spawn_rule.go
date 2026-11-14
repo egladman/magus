@@ -178,12 +178,12 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		if env.IsSpawn {
 			call.verb, call.changes = call.what, true
 		}
-		denied := asked.denyShort(func() judgedCall { return call }, at)
+		denied := asked.denyShort(ctx, func() judgedCall { return call }, at)
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
 		if !denied {
 			note := ruleFailureNote(ruleFailureReport{
 				gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamSpawn, failures: failures, answered: asked.answered, toldInFull: asked.lapse != nil,
-				judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, actingLease) },
+				judging: func() string { return judgingBinaryNote(ctx, deps, at, asked.loadFailure, actingLease) },
 				lead:    loadFailureLead(deps.LoadFailure, at.workspace),
 			})
 			verdict = applyRuleFailureNote(verdict, note, advisorySpawnRuleFailed)
@@ -196,7 +196,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// Worded as the command and write seams word theirs: the verdict, at most one next and
 	// the ref holding the rest. A rule the catalog does not list keeps its whole reason.
 	if verdict.Decision == decisionDeny && verdict.Rule != "" {
-		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), verdict.Rule, verdict.Reason, why, "", verdict.Next, false)
+		verdict.Reason, verdictRef, verdict.NextSteps = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), verdict.Rule, verdict.Reason, why, "", verdict.NextSteps, false)
 	}
 	appendHookSpawn(ctx, deps, env, who, spawnVerdictRecord{
 		verdictRef:   verdictRef,
@@ -220,8 +220,47 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		if env.IsSpawn {
 			recordPendingSpawn(facts, env, actingLease, time.Now())
 		}
+		if note := startNamedAttempt(ctx, at, facts, env, titled, time.Now()); note != "" {
+			verdict.Context = strings.Join(slices.DeleteFunc([]string{verdict.Context, note}, func(s string) bool { return s == "" }), "\n\n")
+			if verdict.Decision == decisionPass {
+				verdict.Decision = decisionAdvise
+			}
+		}
 	}
 	return verdict
+}
+
+// startNamedAttempt records a try of the row a spawn's title or a
+// continuation's worker names starting at now. It returns what kept it
+// from being recorded, "" when it was or no row is named.
+func startNamedAttempt(ctx context.Context, at location, facts hint.Gate, env hookRequest, titled spawnTitle, now time.Time) string {
+	if isDryRun(ctx) {
+		return ""
+	}
+	row, ok := continuedRow(ctx, at, facts, env)
+	if env.IsSpawn {
+		row, ok = titled()
+	}
+	if !ok {
+		return ""
+	}
+	if _, err := job.NewStore(at.jobs()).StartAttempt(ctx, row.ID, now); err != nil {
+		return fmt.Sprintf("magus workspace: this worker's try of job %s was not recorded, so the stop rule cannot count it: %s", row.ID, err)
+	}
+	return ""
+}
+
+// handbackTool is the tool a host's subagent files its report
+// through, which ends its try as the glue's HANDBACK_TOOLS reads it.
+const handbackTool = "SubagentHandback"
+
+// endHandedBack records that the caller's bound job's try ended by
+// handback at now. Best effort, like every hook record: a call the
+// store cannot attribute ends nothing, and the deadline bounds the try.
+func endHandedBack(ctx context.Context, at location, who hookAttribution, now time.Time) {
+	if b := boundJob(who, at); b.Job != "" && !b.Gone {
+		_ = job.NewStore(at.jobs()).EndAttempt(ctx, b.Job, types.AttemptEndHandback, now) // best effort: the deadline bounds the try
+	}
 }
 
 // spawnBuiltIns is the compiled half of a spawn's verdict, which reads session state and

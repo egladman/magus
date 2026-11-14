@@ -746,12 +746,12 @@ const PipeUpstreamFailed DiagnosticCode = "MGS3030"
 // because a claim nothing can check reads as a boundary and is none.
 const WritePathClaimUngradable DiagnosticCode = "MGS3031"
 
-// WritePathFileShared is a job fork whose write path and another live row's, in any
-// checkout, name the same single literal file that has a diff driver, with neither row
-// ordered against the other by parent, child, or depends_on. Refused rather than
-// recorded: the file has one owner unless a claim, a dependency, or a fold says
-// otherwise, and none of the three costs the fork anything a whole-file lease does not
-// already pay.
+// WritePathFileShared is a job fork whose write path and another live job's
+// name the same single literal file, in any checkout, that has a diff driver.
+// Neither job is ordered against the other by parent, child, or depends_on.
+// Refused rather than recorded: the file has one owner unless a claim, a
+// dependency, or a fold says otherwise, and none of the three costs the fork
+// anything a whole-file lease does not already pay.
 const WritePathFileShared DiagnosticCode = "MGS3032"
 
 // MCPBuzzFailed is a rejected or failed buzz tool transform. The message
@@ -823,10 +823,11 @@ const GateNotRun DiagnosticCode = "MGS3045"
 // working in: a half-saved load file stops `magus run` for every job there.
 const CheckoutConfigHeld DiagnosticCode = "MGS3046"
 
-// StoreRecordsNewer is a magus record a newer magus wrote with a requirement or schema
-// version this build lacks: a job row, a stored output, or the run history. The record is
-// kept on disk unchanged. A job row stays listed and graded but is not written; a stored
-// output is not read; a run sizes its claims from declarations and records no history.
+// StoreRecordsNewer is a magus record a newer magus wrote with a requirement or
+// schema version this build lacks: a job record, a stored output, or the run
+// history. The record is kept on disk unchanged. A job record stays listed and
+// graded but is not written. A stored output is not read. A run sizes its
+// claims from declarations and records no history.
 const StoreRecordsNewer DiagnosticCode = "MGS3047"
 
 // PeerFromAnotherBuild is a magus process that answered from another build: a broker
@@ -867,7 +868,7 @@ const ShardCrossesProjects DiagnosticCode = "MGS3054"
 
 // ModelTierAboveParent is a spawn or fork at a model tier ranked above its
 // parent's, which the workspace's spawn rule refuses. A person forks the
-// higher-tier work as a row of its own.
+// higher-tier work as a job of its own.
 const ModelTierAboveParent DiagnosticCode = "MGS3055"
 
 // ModelTiersIncomparable is a spawn or fork whose tier and its parent's come

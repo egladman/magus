@@ -58,8 +58,8 @@ func runBoundaryObjects(args []string) error {
 	// Every type the registry declares as crossing at run time. This is what covers a
 	// type no declared method returns: magus\job and magus\describe are bound by
 	// hand, so their returns are reachable from the registry and nowhere else.
-	for _, entry := range boundaryTypes {
-		if !entry.RuntimeObject {
+	for _, entry := range boundaryTypes() {
+		if !entry.Outbound {
 			continue
 		}
 		if err := e.emitStruct(entry.Type); err != nil {
@@ -68,11 +68,7 @@ func runBoundaryObjects(args []string) error {
 	}
 	// Every inbound type too, so its decoder has an encoder to round-trip against and a
 	// value magus decoded can be handed back to Buzz unchanged.
-	inbound, err := inboundBoundaryTypes()
-	if err != nil {
-		return err
-	}
-	for _, entry := range inbound {
+	for _, entry := range inboundTypes() {
 		if err := e.emitStruct(entry.Type); err != nil {
 			return fmt.Errorf("inbound type %s: %w", entry.Name, err)
 		}

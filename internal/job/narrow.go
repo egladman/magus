@@ -85,7 +85,7 @@ func releasedReach(row types.Job, entry, other string) bool {
 
 // heldByPattern reports whether a write path of row with glob metacharacters covers file.
 func heldByPattern(row types.Job, file string) bool {
-	return slices.ContainsFunc(row.WritePaths, func(entry string) bool {
+	return slices.ContainsFunc(row.Paths.Write, func(entry string) bool {
 		p, decl := types.SplitClaim(entry)
 		return decl == "" && strings.ContainsAny(p, globMeta) && coversPath(p, file)
 	})
@@ -94,7 +94,7 @@ func heldByPattern(row types.Job, file string) bool {
 // claimsOnFile are the declarations row's write paths claim in file.
 func claimsOnFile(row types.Job, file string) []string {
 	var out []string
-	for _, entry := range row.WritePaths {
+	for _, entry := range row.Paths.Write {
 		if p, decl := types.SplitClaim(entry); decl != "" && path.Clean(p) == file {
 			out = append(out, decl)
 		}
@@ -162,7 +162,7 @@ func NarrowHold(ctx context.Context, store *Store, id, file string, touched []st
 		if len(added) == 0 && Narrowed(*cur, file) {
 			return errNarrowedAlready
 		}
-		cur.WritePaths = append(cur.WritePaths, added...)
+		cur.Paths.Write = append(cur.Paths.Write, added...)
 		recordNarrowing(cur, file, takenBy, now, store.digest(ctx, file))
 		return nil
 	})
@@ -178,7 +178,7 @@ func NarrowHold(ctx context.Context, store *Store, id, file string, touched []st
 
 // wholeFileHeld reports whether a write path of row covers file whole.
 func wholeFileHeld(row types.Job, file string) bool {
-	return slices.ContainsFunc(row.WritePaths, func(entry string) bool {
+	return slices.ContainsFunc(row.Paths.Write, func(entry string) bool {
 		p, decl := types.SplitClaim(entry)
 		return decl == "" && coversPath(p, file)
 	})

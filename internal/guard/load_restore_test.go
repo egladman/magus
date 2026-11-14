@@ -108,11 +108,11 @@ func TestMissingImportAllowsRestoringTheNamedFile(t *testing.T) {
 		"git restore ../outside/hack/policy/guard.buzz",
 	} {
 		v := judgeUnloaded(ctx, deps, line)
-		shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleOwnSay)
+		shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleOwnSay(root))
 	}
 
 	other := Judge(ctx, deps, Request{Input: filepath.Join(root, "main.go"), IsPath: true, Host: "claude-code", Session: "s2"})
-	shortDeny(t, cacheDir, other, denyRuleStaleBinary, staleOwnSay)
+	shortDeny(t, cacheDir, other, denyRuleStaleBinary, staleOwnSay(root))
 }
 
 // A load error in a file lets git put back that file, and only by git.
@@ -148,7 +148,7 @@ func TestRestoreIsDeniedWhenTheLoadErrorNamesNoFile(t *testing.T) {
 	declareGuardRule(t, root)
 	deps := unloadedDependencies(errMissingMember)
 
-	shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, "git restore hack/policy/guard.buzz"), denyRuleStaleBinary, staleOwnSay)
+	shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, "git restore hack/policy/guard.buzz"), denyRuleStaleBinary, staleOwnSay(root))
 }
 
 // The bootstrap the deny prints runs for a ./magus that cannot resolve an import, not only

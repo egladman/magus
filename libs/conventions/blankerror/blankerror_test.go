@@ -11,15 +11,15 @@ import (
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
-type BlankErrorSuite struct {
+type AnalyzerSuite struct {
 	suite.Suite
 }
 
 func TestBlankError(t *testing.T) {
-	suite.Run(t, new(BlankErrorSuite))
+	suite.Run(t, new(AnalyzerSuite))
 }
 
-func (s *BlankErrorSuite) TestNewRequiresABase() {
+func (s *AnalyzerSuite) TestNewRequiresABase() {
 	_, err := New(Options{})
 	s.Require().Error(err)
 }
@@ -52,7 +52,7 @@ func fixes() {
 
 // TestOnlyTouchedFunctionsAreCharged commits baseSource, then analyzes
 // testdata/src/a/a.go as the working copy of that repository.
-func (s *BlankErrorSuite) TestOnlyTouchedFunctionsAreCharged() {
+func (s *AnalyzerSuite) TestOnlyTouchedFunctionsAreCharged() {
 	if _, err := exec.LookPath("git"); err != nil {
 		s.T().Skip("needs git")
 	}

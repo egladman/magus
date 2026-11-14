@@ -686,7 +686,7 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 // op after the first read of it. The trailing marker is the assertion: it is only
 // traced if the body survived the whole chain.
 func TestRun_insightLensesAreShaped(t *testing.T) {
-	for _, lens := range []string{"history().hotspots().nodes", "history().affinity().pairs", "history().ownership().projects", "history().trend().projects", "workspace().volatility().targets", "workspace().tierOutcomes().rows"} {
+	for _, lens := range []string{"history().hotspots().nodes", "history().affinity().pairs", "history().ownership().projects", "history().trend().projects", "workspace().volatility().targets", "workspace().tierOutcomes().models"} {
 		t.Run(lens, func(t *testing.T) {
 			src := fmt.Sprintf(`
 import "magus";

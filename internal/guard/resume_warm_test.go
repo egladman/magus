@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 const (
@@ -30,8 +31,8 @@ func (f reworkFixture) putRow(t *testing.T, row types.Job) {
 func warmFixture(t *testing.T, follow func(*types.Job)) reworkFixture {
 	t.Helper()
 	f := newReworkFixture(t)
-	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateExited, WritePaths: []string{"internal/cache/machine.go"}})
-	next := types.Job{ID: "regress-fix", State: types.StateDeclared, WritePaths: []string{"internal/cache/order.go"}}
+	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateExited, Paths: types.JobPaths{Write: []string{"internal/cache/machine.go"}}})
+	next := types.Job{ID: "regress-fix", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/cache/order.go"}}}
 	follow(&next)
 	f.putRow(t, next)
 	writeSpawnedAgent(f.facts, warmAgent, spawnedAgent{ID: warmAgent, Description: warmEndedTitle, Name: "brisk-heron"})
@@ -48,7 +49,7 @@ func (f reworkFixture) spawn(t *testing.T) types.GuardJudgment {
 
 func TestSpawnWarmWorkerCountsAStoppedHolderAsWarm(t *testing.T) {
 	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
-	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateRunning, HolderStopped: time.Now().Unix(), WritePaths: []string{"internal/cache/machine.go"}})
+	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateRunning, HolderStopped: time.Now().Unix(), Paths: types.JobPaths{Write: []string{"internal/cache/machine.go"}}})
 
 	v := f.spawn(t)
 	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
@@ -67,7 +68,7 @@ func TestSpawnWarmWorkerAsksNoExitOfAnEndedRow(t *testing.T) {
 
 func TestSpawnWarmWorkerLeavesARunningHolderAlone(t *testing.T) {
 	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
-	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateRunning, WritePaths: []string{"internal/cache/machine.go"}})
+	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/cache/machine.go"}}})
 
 	v := f.spawn(t)
 	assert.NotEqual(t, string(denyRuleSpawnWarmWorker), v.Rule, v.Reason)
@@ -80,7 +81,7 @@ func TestSpawnWarmWorkerRefusesAFreshSpawnWhileTheWriterIsWarm(t *testing.T) {
 		link   string
 	}{
 		{"a job naming its predecessor", func(j *types.Job) { j.Follows = "gate-fits" }, "follows gate-fits"},
-		{"a job sharing a write path", func(j *types.Job) { j.WritePaths = append(j.WritePaths, "internal/cache/*.go") }, "shares internal/cache/*.go with gate-fits"},
+		{"a job sharing a write path", func(j *types.Job) { j.Paths.Write = append(j.Paths.Write, "internal/cache/*.go") }, "shares internal/cache/*.go with gate-fits"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -109,7 +110,7 @@ func TestSpawnWarmWorkerReadsTheWorkspaceTTL(t *testing.T) {
 func TestSpawnWarmWorkerPassesAFreshReason(t *testing.T) {
 	v := warmFixture(t, func(j *types.Job) {
 		j.Follows = "gate-fits"
-		j.FreshReason = "gate-fits read the old limiter; this job replaces it"
+		j.Agent = &typesagent.Spec{Worker: typesagent.Worker{Type: typesagent.WorkerTypeNew, Reason: "gate-fits read the old limiter; this job replaces it"}}
 	}).spawn(t)
 
 	assert.NotEqual(t, string(denyRuleSpawnWarmWorker), v.Rule, v.Reason)
@@ -136,7 +137,7 @@ func TestSpawnWarmWorkerRemedyPassesTheGuard(t *testing.T) {
 func TestFindWarmWorker(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	ttl := 5 * time.Minute
-	ended := types.Job{ID: "gate-fits", State: types.StatePass, WritePaths: []string{"a.go"}, Updated: now.Add(-2 * time.Minute).Unix()}
+	ended := types.Job{ID: "gate-fits", State: types.StatePass, Paths: types.JobPaths{Write: []string{"a.go"}}, Updated: now.Add(-2 * time.Minute).Unix()}
 	next := types.Job{ID: "regress-fix", State: types.StateDeclared, Follows: "gate-fits"}
 	haiku := []types.ModelPricing{{ID: "claude-haiku-9", Alias: "haiku", LongContext: &types.PriceStep{Above: 100_000, Multiplier: 2}}}
 	tokens := func(n int64) *int64 { return &n }
@@ -172,7 +173,7 @@ func TestFindWarmWorker(t *testing.T) {
 
 func TestFindWarmWorkerSkipsAWorkerOfAnotherRole(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
-	ended := types.Job{ID: "gate-fits", State: types.StatePass, WritePaths: []string{"a.go"}, Updated: now.Add(-time.Minute).Unix()}
+	ended := types.Job{ID: "gate-fits", State: types.StatePass, Paths: types.JobPaths{Write: []string{"a.go"}}, Updated: now.Add(-time.Minute).Unix()}
 	next := types.Job{ID: "regress-fix", State: types.StateDeclared, Follows: "gate-fits"}
 	f := newReworkFixture(t)
 	writeSpawnedAgent(f.facts, warmAgent, spawnedAgent{ID: warmAgent, Description: warmEndedTitle})
@@ -188,7 +189,7 @@ func TestFindWarmWorkerSkipsAWorkerOfAnotherRole(t *testing.T) {
 func TestFindWarmWorkerServesOnlyAWorkerInTheJobsCheckout(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	root := t.TempDir()
-	ended := types.Job{ID: "gate-fits", State: types.StatePass, WritePaths: []string{"a.go"}, CheckoutRoot: root, Updated: now.Add(-time.Minute).Unix()}
+	ended := types.Job{ID: "gate-fits", State: types.StatePass, Paths: types.JobPaths{Write: []string{"a.go"}}, CheckoutRoot: root, Updated: now.Add(-time.Minute).Unix()}
 	f := newReworkFixture(t)
 	writeSpawnedAgent(f.facts, warmAgent, spawnedAgent{ID: warmAgent, Description: warmEndedTitle})
 	warmFor := func(next types.Job) bool {

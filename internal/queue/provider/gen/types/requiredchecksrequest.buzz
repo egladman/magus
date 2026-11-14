@@ -6,17 +6,17 @@
 // `go generate`, never this file.
 
 export object QueueRequiredChecksRequest {
-    id: str = "",
-    repo: str = "",
-    head: str = "",
+    id: str,
+    repo: str,
+    head: str,
     ref: str = "",
     branch: str = "",
-    base: str = "",
+    base: str,
     title: str = "",
     author: str = "",
-    method: str = "",
+    method: str,
     parent: str = "",
-    fork: bool = false,
+    fork: bool,
     affected: [str] = [],
     unboundedBy: str = "",
     stackBase: str = "",

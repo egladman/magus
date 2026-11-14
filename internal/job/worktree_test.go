@@ -11,8 +11,10 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -186,7 +188,7 @@ func (s *JJFollowCheckpointSuite) SetupTest() {
 	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w1", dir, base, "")
 	s.Require().NoError(err)
 	s.Require().True(made)
-	seed(s.T(), s.store, types.Job{ID: "w1", State: types.StateDeclared, WritePaths: []string{"a.txt"}})
+	seed(s.T(), s.store, types.Job{ID: "w1", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.txt"}}})
 	s.row, err = s.store.RecordWorktree(s.T().Context(), "w1", wt)
 	s.Require().NoError(err)
 }
@@ -234,14 +236,14 @@ func TestInstallProjectsNamesOwnersWithAnInstallTarget(t *testing.T) {
 		{Path: "docs", MagusfileTargets: []string{"install"}},
 		{Path: "libs/xdg"},
 	}
-	row := types.Job{WritePaths: []string{"docs/a.md", "docs/b.md", "libs/xdg/x.go", "main.go"}}
+	row := types.Job{Paths: types.JobPaths{Write: []string{"docs/a.md", "docs/b.md", "libs/xdg/x.go", "main.go"}}}
 	assert.Equal(t, "docs", InstallProjects(t.TempDir(), row, projects))
 }
 
 func TestInstallProjectsSaysNoneForAGoOnlyJob(t *testing.T) {
 	t.Parallel()
 	projects := []*types.Project{{Path: "."}, {Path: "docs", MagusfileTargets: []string{"install"}}}
-	assert.Equal(t, "none", InstallProjects(t.TempDir(), types.Job{WritePaths: []string{"main.go"}}, projects))
+	assert.Equal(t, "none", InstallProjects(t.TempDir(), types.Job{Paths: types.JobPaths{Write: []string{"main.go"}}}, projects))
 }
 
 func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
@@ -249,9 +251,9 @@ func TestAGoalAddedDuringAForkIsSaidOnce(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	var notes strings.Builder
 	s.notices = &notes
-	merge := func(u *types.Job) { u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck() }
+	merge := func(u *types.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
 
-	_, err := ValidateFork(t.Context(), s.Quiet(), "w", merge, config.Jobs{}, nil)
+	_, err := validateDryFork(t.Context(), s.Quiet(), "w", merge)
 	require.NoError(t, err)
 	_, _ = ForkMerge(t.Context(), s, "w", merge, config.Jobs{}, nil)
 	assert.Equal(t, 1, strings.Count(notes.String(), `added the goal "lint"`), notes.String())
@@ -275,18 +277,18 @@ func TestPlaceBuiltBinaryFindsNoneWhenExeCannotAnswer(t *testing.T) {
 func TestSoftPathsRaiseNoWorkspaceProblem(t *testing.T) {
 	t.Parallel()
 	store, _ := validateWorkspace(t)
-	cold := types.Job{ID: "w", WritePaths: []string{"docs/site/page.buzz"}, ReadOnly: false, Check: &types.LeaseCheck{Target: "site-generate", Project: "docs"}}
+	cold := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"docs/site/page.buzz"}}, ReadOnly: false, Check: &types.LeaseCheck{Target: "site-generate", Project: "docs"}}
 	warm := cold.Clone()
-	warm.WritePaths = append(warm.WritePaths, "cli/registry_test.go")
-	warm.SoftPaths = []string{"cli/registry_test.go"}
+	warm.Paths.Write = append(warm.Paths.Write, "cli/registry_test.go")
+	warm.Paths.Soft = []string{"cli/registry_test.go"}
 
-	coldList, _ := workspaceProblems(t.Context(), store, cold, cold, false, nil)
-	warmList, _ := workspaceProblems(t.Context(), store, warm, warm, false, nil)
+	coldList, _ := workspaceProblems(t.Context(), store, nil, cold, cold, false, nil)
+	warmList, _ := workspaceProblems(t.Context(), store, nil, warm, warm, false, nil)
 	assert.Equal(t, codes(coldList), codes(warmList))
 	assert.NotContains(t, codes(warmList), types.GateNotRun)
 
-	warm.SoftPaths = nil
-	declared, _ := workspaceProblems(t.Context(), store, warm, warm, false, nil)
+	warm.Paths.Soft = nil
+	declared, _ := workspaceProblems(t.Context(), store, nil, warm, warm, false, nil)
 	assert.Contains(t, codes(declared), types.GateNotRun, "the same path, declared, raises its gate")
 }
 
@@ -305,7 +307,7 @@ func forkInto(t *testing.T, s *Store, id, binary string) types.Job {
 	wt, made, err := s.ForkWorktree(t.Context(), id, filepath.Join(t.TempDir(), id), "", binary)
 	require.NoError(t, err)
 	require.True(t, made)
-	seed(t, s, types.Job{ID: id, State: types.StateDeclared, WritePaths: []string{"a.txt"}})
+	seed(t, s, types.Job{ID: id, State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.txt"}}})
 	row, err := s.RecordWorktree(t.Context(), id, wt)
 	require.NoError(t, err)
 	return row
@@ -367,7 +369,7 @@ func TestForkWorktreeAdoptsALinkedCheckoutThatAlreadyStands(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, primary)
 
-	seed(t, s, types.Job{ID: "finish", State: types.StateDeclared, WritePaths: []string{"a.txt"}})
+	seed(t, s, types.Job{ID: "finish", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.txt"}}})
 	_, err = s.RecordWorktree(ctx, "finish", wt)
 	require.NoError(t, err)
 	owned, err := s.OwnedCheckout(dir)
@@ -480,11 +482,42 @@ func TestBuiltAtJudgesABinaryByItsOwnVersion(t *testing.T) {
 	dirty, _ := forkersBinary(t, types.MagusBuild{Version: "v0.5.0-dirty", Commit: at})
 	other, _ := forkersBinary(t, types.MagusBuild{Version: "v0.5.0", Commit: "fedcba9876543210fedcba9876543210fedcba98"})
 
-	assert.True(t, BuiltAt(ctx, clean, at))
-	assert.False(t, BuiltAt(ctx, dirty, at), "uncommitted changes")
-	assert.False(t, BuiltAt(ctx, other, at), "another commit")
-	assert.False(t, BuiltAt(ctx, filepath.Join(t.TempDir(), "absent"), at), "no binary")
-	assert.False(t, BuiltAt(ctx, "", at), "no path")
+	assert.True(t, builtAt(ctx, clean, at))
+	assert.False(t, builtAt(ctx, dirty, at), "uncommitted changes")
+	assert.False(t, builtAt(ctx, other, at), "another commit")
+	assert.False(t, builtAt(ctx, filepath.Join(t.TempDir(), "absent"), at), "no binary")
+	assert.False(t, builtAt(ctx, "", at), "no path")
+}
+
+// BinaryContractSuite pins the digest a binary reports of the contract it
+// was built with, which a fork compares against the checkout's tree.
+type BinaryContractSuite struct {
+	suite.Suite
+}
+
+func TestBinaryContractSuite(t *testing.T) {
+	suite.Run(t, new(BinaryContractSuite))
+}
+
+func (s *BinaryContractSuite) script(body string) string {
+	bin := filepath.Join(s.T().TempDir(), "magus")
+	s.Require().NoError(os.WriteFile(bin, fmt.Appendf(nil, "#!/bin/sh\n%s\n", body), 0o755))
+	return bin
+}
+
+func (s *BinaryContractSuite) TestItReadsTheEmbeddedDigest() {
+	bin := s.script(`echo '{"version":"v0.5.0","embedded":{"contract_sha256":"abc"}}'`)
+	s.Equal("abc", BinaryContract(s.T().Context(), bin))
+}
+
+func (s *BinaryContractSuite) TestABinaryFromBeforeTheDigestSaysNone() {
+	bin := s.script(`echo '{"version":"v0.4.0"}'`)
+	s.Empty(BinaryContract(s.T().Context(), bin))
+}
+
+func (s *BinaryContractSuite) TestABinaryThatCannotAnswerSaysNone() {
+	s.Empty(BinaryContract(s.T().Context(), s.script("exit 1")))
+	s.Empty(BinaryContract(s.T().Context(), ""))
 }
 
 func TestAdoptedCheckoutWithAStaleBinaryIsNotBuiltAtItsBase(t *testing.T) {
@@ -501,7 +534,7 @@ func TestAdoptedCheckoutWithAStaleBinaryIsNotBuiltAtItsBase(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, madeNow)
 	assert.NotEmpty(t, wt.Binary, "the adopted checkout holds a ./magus")
-	assert.False(t, BuiltAt(ctx, wt.Binary, wt.Base), "which the fork must replace")
+	assert.False(t, builtAt(ctx, wt.Binary, wt.Base), "which the fork must replace")
 }
 
 // A checkout holding the bootstrap script builds its own ./magus, so the forker's is never
@@ -571,7 +604,7 @@ func TestExecBindsAnUntakenAdoptedJobToAFreshCheckoutAtItsCheckpoint(t *testing.
 	}
 	landing := linked("landing", checkpoint)
 	for _, id := range []string{"w1", "w2"} {
-		seed(t, s, types.Job{ID: id, State: types.StateDeclared, Checkpoint: checkpoint, WritePaths: []string{"a.txt"}})
+		seed(t, s, types.Job{ID: id, State: types.StateDeclared, Checkpoint: checkpoint, Paths: types.JobPaths{Write: []string{"a.txt"}}})
 		wt, made, err := s.ForkWorktree(ctx, id, landing, "", "")
 		require.NoError(t, err)
 		require.False(t, made)
@@ -705,86 +738,211 @@ func TestDeleteEndsTheCheckoutTheRowOwns(t *testing.T) {
 	assert.Equal(t, "dirty", rows[0].ID)
 }
 
-func TestBuildInputsAreTheChangedPathsALinkedPackageReaches(t *testing.T) {
-	t.Parallel()
-	root := filepath.FromSlash("/w/a")
-	listed := fmt.Sprintf("%s|VERSION|banner.txt\n%s\n%s\n\n%s\n%s\n",
-		root,
-		filepath.Join(root, "cmd", "magus"),
-		filepath.Join(root, "internal", "job"),
-		filepath.FromSlash("/usr/local/go/src/fmt"),
-		filepath.FromSlash("/home/u/go/pkg/mod/x@v1/y"))
-	scopes := packageScopes(listed, root)
-	assert.Equal(t, []string{"./", "VERSION", "banner.txt", "cmd/magus/", "internal/job/"}, scopes)
-
-	for _, tc := range []struct {
-		path  string
-		input bool
-	}{
-		{"internal/job/worktree.go", true},
-		{"cmd/magus/main.go", true},
-		{"main.go", true},
-		{"go.mod", true},
-		{"go.sum", true},
-		{"go.work", true},
-		{"VERSION", true},
-		{"internal/job/gen/job.schema.json", true},
-		{"internal/job/worktree_test.go", false},
-		{"internal/other/x.go", false},
-		{"libs/embed/train/go.mod", false},
-		{"docs/index.md", false},
-		{"MAGUS.md", false},
-		{"console/src/app.ts", false},
-		{"changes/unreleased/x.md", false},
-	} {
-		assert.Equal(t, tc.input, len(buildInputs([]string{tc.path}, scopes)) == 1, tc.path)
-	}
+// BuildInputsSuite judges changed paths against a fake spell's scopes, in a
+// checkout whose ./magus links lib, beside an unlinked package and docs.
+type BuildInputsSuite struct {
+	suite.Suite
+	repo  *testkit.Repo
+	built string
 }
 
-// goModuleRepository is a git checkout holding a Go module whose ./cmd/magus links lib, beside a
-// package nothing links and a docs file.
-func goModuleRepository(t *testing.T) *testkit.Repo {
+func TestBuildInputsSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(BuildInputsSuite))
+}
+
+func (s *BuildInputsSuite) SetupTest() {
+	s.repo = linkingRepository(s.T())
+	s.built = s.repo.Head()
+}
+
+func linkingRepository(t *testing.T) *testkit.Repo {
 	t.Helper()
 	return testkit.NewRepository(t, map[string]string{
-		"go.mod":            "module example.com/m\n\ngo 1.26\n",
-		"cmd/magus/main.go": "package main\n\nimport \"example.com/m/lib\"\n\nfunc main() { lib.Run() }\n",
-		"lib/lib.go":        "package lib\n\nfunc Run() {}\n",
+		"go.mod":            "module example.com/m\n",
+		"cmd/magus/main.go": "package main\n",
+		"lib/lib.go":        "package lib\n",
 		"lib/lib_test.go":   "package lib\n",
 		"unlinked/u.go":     "package unlinked\n",
 		"docs/a.md":         "a\n",
 	})
 }
 
-// A fork with no checkout of its own lands in the forking checkout, whose ./magus judges
-// the job: built before the checkpoint's Go build inputs, it names the bootstrap.
-func TestLandingBootstrapNamesTheBuildAStaleMagusNeeds(t *testing.T) {
-	t.Parallel()
-	repo := goModuleRepository(t)
-	s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
-	built := repo.Head()
-	docs := repo.Commit("docs", map[string]string{"docs/a.md": "b\n"})
-	linked := repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nfunc Run() { _ = 1 }\n"})
-	local := filepath.Join(repo.Root(), "magus")
-	require.NoError(t, os.WriteFile(local, []byte("build 1\n"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "magus.yaml"), []byte(hookConfig), 0o644))
-	ctx := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built})
+// libScopes prints scopes the way the go spell does. One is absolute, one
+// excludes, and one lies outside the root.
+const libScopes = `printf '%s\n' "$PWD/cmd/magus/*.go" 'lib/*.go' '!lib/*_test.go' go.mod /elsewhere/x/*.go`
 
-	for name, tc := range map[string]struct {
-		exe, checkpoint, want string
-	}{
-		"a checkpoint past a linked package": {exe: local, checkpoint: linked, want: CheckoutBootstrap(testHook, repo.Root())},
-		"a checkpoint past a docs edit":      {exe: local, checkpoint: docs},
-		"the commit it was built at":         {exe: local, checkpoint: built},
-		"a magus on PATH":                    {exe: filepath.Join(t.TempDir(), "magus"), checkpoint: linked},
-	} {
-		got, err := s.LandingBootstrap(ctx, tc.exe, tc.checkpoint)
-		require.NoError(t, err, name)
-		assert.Equal(t, tc.want, got, name)
+// relinking is a root project whose go-build relinks ./magus, bound to one
+// spell per script, each its mgs_getScopes. The package is the script's $1.
+func relinking(scripts ...string) []*types.Project {
+	p := &types.Project{Path: ".", TargetPolicies: map[string]types.Target{"go-build": {Relinks: "./magus"}}}
+	for i, script := range scripts {
+		cmd := &spells.Command{Bin: "sh", Args: []string{"-c", script, "scopes"}}
+		p.ResolvedSpells = append(p.ResolvedSpells, spells.NewSpell(fmt.Sprintf("fake%d", i), spells.WithScopes(cmd)))
 	}
+	return []*types.Project{p}
+}
 
-	unknown := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "dev", Commit: "unknown"})
-	_, err := s.LandingBootstrap(unknown, local, linked)
-	require.ErrorContains(t, err, "records no commit it was built from")
+func (s *BuildInputsSuite) changed(projects []*types.Project, files map[string]string) ([]string, error) {
+	later := s.repo.Commit("later", files)
+	return s.since(projects, later)
+}
+
+func (s *BuildInputsSuite) since(projects []*types.Project, to string) ([]string, error) {
+	drv, why := resolveDriver(s.T().Context(), s.repo.Root())
+	s.Require().NotNil(drv, why)
+	return ChangedBuildInputs(s.T().Context(), drv, s.repo.Root(), projects, s.built, to)
+}
+
+func (s *BuildInputsSuite) TestALinkedSourceIsAnInput() {
+	inputs, err := s.changed(relinking(libScopes), map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
+	s.Require().NoError(err)
+	s.Equal([]string{"lib/lib.go"}, inputs)
+}
+
+func (s *BuildInputsSuite) TestAnAbsoluteScopeUnderTheRootMatches() {
+	inputs, err := s.changed(relinking(libScopes), map[string]string{"cmd/magus/main.go": "package main\n\nvar _ = 1\n"})
+	s.Require().NoError(err)
+	s.Equal([]string{"cmd/magus/main.go"}, inputs)
+}
+
+func (s *BuildInputsSuite) TestAnExcludedTestIsNotAnInput() {
+	inputs, err := s.changed(relinking(libScopes), map[string]string{"lib/lib_test.go": "package lib\n\nvar _ = 1\n"})
+	s.Require().NoError(err)
+	s.Empty(inputs)
+}
+
+func (s *BuildInputsSuite) TestAnUnlinkedPackageAndDocsAreNotInputs() {
+	inputs, err := s.changed(relinking(libScopes), map[string]string{"unlinked/u.go": "package unlinked\n\nvar _ = 1\n", "docs/a.md": "b\n"})
+	s.Require().NoError(err)
+	s.Empty(inputs)
+}
+
+func (s *BuildInputsSuite) TestADeletedLinkedSourceIsAnInput() {
+	s.repo.Git("rm", "-q", "lib/lib.go")
+	s.repo.Git("commit", "-q", "-m", "drop lib.go")
+	inputs, err := s.since(relinking(libScopes), s.repo.Head())
+	s.Require().NoError(err)
+	s.Equal([]string{"lib/lib.go"}, inputs)
+}
+
+func (s *BuildInputsSuite) TestEverySpellsScopesCount() {
+	inputs, err := s.changed(relinking(`printf 'lib/*.go\n'`, `printf 'docs/*.md\n'`), map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n", "docs/a.md": "b\n"})
+	s.Require().NoError(err)
+	s.Equal([]string{"docs/a.md", "lib/lib.go"}, inputs)
+}
+
+func (s *BuildInputsSuite) TestEqualCommitsRunNothing() {
+	inputs, err := s.since(nil, s.built)
+	s.Require().NoError(err)
+	s.Empty(inputs)
+}
+
+func (s *BuildInputsSuite) TestTheCommandRunsWithThePackageAppended() {
+	scopes, err := relinkScopes(s.T().Context(), relinking(`printf '%s\n' "$1"`), s.repo.Root())
+	s.Require().NoError(err)
+	s.Equal([]string{"cmd/magus"}, scopes)
+}
+
+func (s *BuildInputsSuite) TestAGlobOutsideTheRootDropsOut() {
+	scopes, err := relinkScopes(s.T().Context(), relinking(libScopes), s.repo.Root())
+	s.Require().NoError(err)
+	s.Equal([]string{"!lib/*_test.go", "cmd/magus/*.go", "go.mod", "lib/*.go"}, scopes)
+}
+
+func (s *BuildInputsSuite) TestNoRelinkingTargetLeavesTheInputsUnknown() {
+	_, err := relinkScopes(s.T().Context(), []*types.Project{{Path: "."}}, s.repo.Root())
+	s.ErrorContains(err, fmt.Sprintf("no target in %s relinks ./magus, so the build inputs of ./magus are unknown", s.repo.Root()))
+}
+
+func (s *BuildInputsSuite) TestNoSpellDeclaringScopesLeavesTheInputsUnknown() {
+	projects := relinking()
+	projects[0].ResolvedSpells = []*spells.Spell{spells.NewSpell("plain")}
+	_, err := relinkScopes(s.T().Context(), projects, s.repo.Root())
+	s.ErrorContains(err, "no spell bound to project ., which relinks ./magus, declares mgs_getScopes")
+}
+
+func (s *BuildInputsSuite) TestAFailingCommandSaysWhatItPrinted() {
+	_, err := s.changed(relinking(`echo broken >&2; exit 3`), map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
+	s.ErrorContains(err, `the fake0 spell's mgs_getScopes, `)
+	s.ErrorContains(err, `, says "broken"`)
+}
+
+func (s *BuildInputsSuite) TestAMalformedGlobIsAnError() {
+	_, err := relinkScopes(s.T().Context(), relinking(`printf 'lib/[x\n'`), s.repo.Root())
+	s.ErrorContains(err, `the fake0 spell's mgs_getScopes printed "lib/[x", which is not a glob`)
+}
+
+// LandingBootstrapSuite: a fork with no checkout of its own lands in the
+// forking checkout. A ./magus built before the checkpoint's build inputs
+// names the bootstrap.
+type LandingBootstrapSuite struct {
+	suite.Suite
+	repo  *testkit.Repo
+	built string
+	store *Store
+	local string
+}
+
+func TestLandingBootstrapSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(LandingBootstrapSuite))
+}
+
+func (s *LandingBootstrapSuite) SetupTest() {
+	s.repo = linkingRepository(s.T())
+	s.built = s.repo.Head()
+	root := s.repo.Root()
+	s.store = NewStore(Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: root}).
+		InWorkspace(Workspace{Projects: relinking(libScopes)})
+	s.local = filepath.Join(root, "magus")
+	s.Require().NoError(os.WriteFile(s.local, []byte("build 1\n"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(hookConfig), 0o644))
+}
+
+// builtAtBase is a context whose magus was built at the suite's first commit.
+func (s *LandingBootstrapSuite) builtAtBase() context.Context {
+	return types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: s.built})
+}
+
+func (s *LandingBootstrapSuite) TestACheckpointPastALinkedPackageNamesTheBootstrap() {
+	linked := s.repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
+	got, err := s.store.LandingBootstrap(s.builtAtBase(), s.local, linked)
+	s.Require().NoError(err)
+	s.Equal(CheckoutBootstrap(testHook, s.repo.Root()), got)
+}
+
+func (s *LandingBootstrapSuite) TestACheckpointPastADocsEditNamesNothing() {
+	docs := s.repo.Commit("docs", map[string]string{"docs/a.md": "b\n"})
+	got, err := s.store.LandingBootstrap(s.builtAtBase(), s.local, docs)
+	s.Require().NoError(err)
+	s.Empty(got)
+}
+
+func (s *LandingBootstrapSuite) TestTheCommitItWasBuiltAtNamesNothing() {
+	got, err := s.store.LandingBootstrap(s.builtAtBase(), s.local, s.built)
+	s.Require().NoError(err)
+	s.Empty(got)
+}
+
+func (s *LandingBootstrapSuite) TestAMagusOnPathNamesNothing() {
+	linked := s.repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
+	got, err := s.store.LandingBootstrap(s.builtAtBase(), filepath.Join(s.T().TempDir(), "magus"), linked)
+	s.Require().NoError(err)
+	s.Empty(got)
+}
+
+func (s *LandingBootstrapSuite) TestABuildWithNoCommitIsAnError() {
+	unknown := types.WithMagusBuild(s.T().Context(), types.MagusBuild{Version: "dev", Commit: "unknown"})
+	_, err := s.store.LandingBootstrap(unknown, s.local, s.built)
+	s.ErrorContains(err, "records no commit it was built from")
+}
+
+func (s *LandingBootstrapSuite) TestAStoreWithNoWorkspaceSaysTheInputsAreUnknown() {
+	bare := NewStore(Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: s.repo.Root()})
+	linked := s.repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nvar _ = 1\n"})
+	_, err := bare.LandingBootstrap(s.builtAtBase(), s.local, linked)
+	s.ErrorContains(err, "the build inputs of ./magus are unknown, since this door opened the job store without a workspace")
 }
 
 // testHook is the checkout.bootstrap hookConfig declares.
@@ -1001,23 +1159,6 @@ func (s *ReviewCheckoutSuite) TestInstallTargetsListsOnlyProjectsDeclaringInstal
 	s.Equal([]string{".", "web"}, InstallTargets(projects))
 }
 
-func TestChangedBuildInputsFailsWhereThePackagesCannotBeListed(t *testing.T) {
-	t.Parallel()
-	repo := execRepository(t)
-	built := repo.Head()
-	later := repo.Commit("later", map[string]string{"b.txt": "b\n"})
-	s := NewStore(Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: repo.Root()})
-	drv, why := resolveDriver(t.Context(), repo.Root())
-	require.NotNil(t, drv, why)
-
-	_, err := ChangedBuildInputs(t.Context(), drv, s.root, built, later)
-	require.ErrorContains(t, err, "go list -deps ./cmd/magus")
-
-	inputs, err := ChangedBuildInputs(t.Context(), drv, s.root, later, later)
-	require.NoError(t, err, "equal commits list nothing")
-	assert.Empty(t, inputs)
-}
-
 type ForkAgainSuite struct {
 	suite.Suite
 	store *Store
@@ -1093,4 +1234,104 @@ func (s *ForkAgainSuite) TestDiscardKeepsABranchThatMovedPastTheBase() {
 	s.repo.Git("-C", wt.Root, "commit", "-q", "--allow-empty", "-m", "the job's own work")
 	s.Require().NoError(s.store.DiscardWorktree(s.T().Context(), wt))
 	s.NotEmpty(s.branches())
+}
+
+// BinaryPinSuite pins what PinBinary records and what PinRefusal accepts.
+type BinaryPinSuite struct {
+	suite.Suite
+	store *Store
+	loc   Location
+	row   types.Job
+	bin   string
+}
+
+func TestBinaryPinSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(BinaryPinSuite))
+}
+
+func (s *BinaryPinSuite) SetupTest() {
+	s.store, s.loc, _ = worktreeStore(s.T())
+	s.row = forkInto(s.T(), s.store, "w1", "")
+	s.bin = filepath.Join(s.row.Worktree.Root, binaryName)
+	s.write("one")
+}
+
+func (s *BinaryPinSuite) write(body string) {
+	s.Require().NoError(os.WriteFile(s.bin, []byte(body), 0o755))
+}
+
+func (s *BinaryPinSuite) refusal(bin string) string {
+	why, err := s.store.PinRefusal(bin)
+	s.Require().NoError(err)
+	return why
+}
+
+func (s *BinaryPinSuite) TestPinRecordsTheBinaryAndItsHash() {
+	pinned, err := s.store.PinBinary(s.T().Context(), "w1")
+	s.Require().NoError(err)
+	want, err := BinaryDigest(s.bin)
+	s.Require().NoError(err)
+	s.Require().Len(pinned, 1)
+	s.Equal(s.bin, pinned[0].Worktree.Binary)
+	s.Equal(want, pinned[0].Worktree.BinaryDigest)
+	s.Empty(s.refusal(s.bin))
+}
+
+func (s *BinaryPinSuite) TestABinaryRecordedWithNoHashIsRefused() {
+	wt := *s.row.Worktree
+	wt.Binary = s.bin
+	_, err := s.store.RecordWorktree(s.T().Context(), "w1", wt)
+	s.Require().NoError(err)
+	s.Contains(s.refusal(s.bin), "its bytes do not hash to what job w1 pins")
+}
+
+func (s *BinaryPinSuite) TestABinaryRewrittenAfterItsPinIsRefused() {
+	_, err := s.store.PinBinary(s.T().Context(), "w1")
+	s.Require().NoError(err)
+	s.Empty(s.refusal(s.bin))
+	s.write("two, longer")
+	s.Contains(s.refusal(s.bin), "its bytes do not hash to what job w1 pins")
+}
+
+func (s *BinaryPinSuite) TestABinaryNoRowRecordsIsRefused() {
+	s.Equal("no live job row records it as its checkout's binary", s.refusal(filepath.Join(s.T().TempDir(), binaryName)))
+}
+
+func (s *BinaryPinSuite) TestTheCacheAnswersWhileTheFileKeepsItsIdentity() {
+	_, err := s.store.PinBinary(s.T().Context(), "w1")
+	s.Require().NoError(err)
+	s.Empty(s.refusal(s.bin))
+	info, err := os.Stat(s.bin)
+	s.Require().NoError(err)
+	// ADR 0045 section 1 accepts this forgery.
+	s.write("owt")
+	s.Require().NoError(os.Chtimes(s.bin, info.ModTime(), info.ModTime()))
+	s.Empty(s.refusal(s.bin))
+}
+
+func (s *BinaryPinSuite) TestABoundWorkerPinsNothing() {
+	worker := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: s.loc.Root, Actor: &Actor{Lease: "w1"}})
+	_, err := worker.PinBinary(s.T().Context(), "w1")
+	var refused *RefusedError
+	s.Require().ErrorAs(err, &refused)
+	s.Contains(refused.Rule, "a worker that pinned its own build would pick its judge")
+}
+
+func (s *BinaryPinSuite) TestTheCacheCompactsToOneEntryPerPath() {
+	cache := digestCache(filepath.Join(s.T().TempDir(), digestCacheName))
+	for i := range 2 + file.CompactSlack {
+		s.Require().NoError(cache.Update(s.T().Context(), func([]binaryDigest) []binaryDigest {
+			return []binaryDigest{{Path: "/a", Size: int64(i), Digest: "sha256:old"}}
+		}))
+	}
+	s.Require().NoError(cache.Update(s.T().Context(), func([]binaryDigest) []binaryDigest {
+		return []binaryDigest{{Path: "/a", Digest: "sha256:new"}}
+	}))
+	got, err := cache.Load()
+	s.Require().NoError(err)
+	s.Equal([]binaryDigest{{Path: "/a", Digest: "sha256:new"}}, got)
+	read, err := file.ReadLines(cache.Path)
+	s.Require().NoError(err)
+	s.Len(read.Lines, 1)
 }

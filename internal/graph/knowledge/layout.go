@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // The layout lens reports how a directory a change creates sits against the directories beside
@@ -80,10 +81,10 @@ func (d dirShape) digit() bool { return strings.IndexFunc(d.base(), unicode.IsDi
 // source of exactly one language the lens knows; its siblings are the directories of that
 // language under the same parent that the change did not create.
 //
-// Each finding is a [types.Check] with Status advice and Evidence measured: counts of files the
+// Each finding is a measured [check.Check] at advice: counts of files the
 // graph holds, never a rule. At most Gates.MaxFindings are returned across the change,
 // ordered by directory and check so two runs over one graph agree byte for byte.
-func (g *Graph) Layout(c LayoutChange) map[string][]types.Check {
+func (g *Graph) Layout(c LayoutChange) map[string][]check.Check {
 	if len(c.Added) == 0 {
 		return nil
 	}
@@ -184,8 +185,8 @@ func (g *Graph) Layout(c LayoutChange) map[string][]types.Check {
 				continue
 			}
 			lang := layoutLanguages[subj.language].label
-			check := types.Check{
-				Name: chk.name, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
+			check := check.Check{
+				Name: chk.name, Status: check.Advice, Evidence: check.EvidenceMeasured,
 				Message: fmt.Sprintf("`%s`: %s, %s and %s; %d of %d %s directories beside it %s, as %s do",
 					dir, count(subj.files, lang+" file"), count(subj.tests, "test file"),
 					count(importers, "importing directory"), len(kept), len(siblings), lang, chk.norm,
@@ -204,7 +205,7 @@ func (g *Graph) Layout(c LayoutChange) map[string][]types.Check {
 	if len(found) == 0 {
 		return nil
 	}
-	out := map[string][]types.Check{}
+	out := map[string][]check.Check{}
 	for _, f := range found[:min(len(found), gates.MaxFindings)] {
 		out[f.dir] = append(out[f.dir], f.check)
 	}
@@ -213,7 +214,7 @@ func (g *Graph) Layout(c LayoutChange) map[string][]types.Check {
 
 type layoutFinding struct {
 	dir   string
-	check types.Check
+	check check.Check
 }
 
 // layoutCheck is one shape a directory can break. breaks is read over the subject and over each

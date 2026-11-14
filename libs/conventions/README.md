@@ -110,6 +110,15 @@ named `XFromContext`, not `XFrom`. A short form is a clipped word (`Ctx` for con
 An initialism Go spells in caps, and a word the standard library spells the same
 way, is not one.
 
+`banned` keeps a word out of every declared name in some packages, so a word
+reserved for one layer cannot leak into the types above it. Each entry lists
+`packages` (an import path, or one ending in `/...` for the packages below it
+too), `words` matched like the other lists, and `why`, printed with each report
+to say what to name the thing instead. It judges each top-level name, struct
+field and interface method, exported or not, and no parameter or local. The root
+config bans `Row` and `Rows` in the root package and under `types/`: row names
+the persistence layer only (ADR 0030).
+
 ## Not here
 
 Rules whose subject is not one package's Go source stayed tests: a vocabulary or

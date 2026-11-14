@@ -893,7 +893,7 @@ func TestJobExitWithoutResultThroughBuzzScript(t *testing.T) {
 import "magus";
 
 export fun abandon() > str !> any {
-    magus\workspace().putJob("optional-exit", opts: {"criteria": "exercise omitted result", "read_only": true});
+    magus\workspace().putJob("optional-exit", opts: {"agent": {"instructions": "exercise omitted result", "worker": {"type": "resumed"}}, "read_only": true});
     final row = magus\job("optional-exit").exit();
     return row.state.value;
 }
@@ -941,8 +941,8 @@ export fun trailNumber() > void !> any {
 export fun putMistakes() > void !> any { magus\workspace().putJob("w", opts: {"passsed": true, "state": "passed"}); }
 `))
 	for name, want := range map[string][]string{
-		"trailTypo":   {`sessionOptions: SessionOptions has no member "sinse"`},
-		"trailNumber": {`sessionOptions.session: want str, got int`},
+		"trailTypo":   {`readOptions: ReadOptions has no member "sinse"`},
+		"trailNumber": {`readOptions.session: want str, got int`},
 		"putMistakes": {"no field of a job row is named passsed", "state must be one of"},
 	} {
 		fn, ok := sess.Exports()[name]
@@ -972,7 +972,7 @@ func TestJobPutResolvesItsCheckpointThroughBuzzScript(t *testing.T) {
 import "magus";
 
 export fun put(id: str, checkpoint: str) > str !> any {
-    final row = magus\workspace().putJob(id, opts: {"criteria": "hold a checkpoint", "checkpoint": checkpoint, "read_only": true});
+    final row = magus\workspace().putJob(id, opts: {"agent": {"instructions": "hold a checkpoint", "worker": {"type": "resumed"}}, "checkpoint": checkpoint, "read_only": true});
     return row.checkpoint;
 }
 `))

@@ -54,10 +54,12 @@ func claimTree(t *testing.T) (string, types.Job, Observed, []*types.Project) {
 		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
 	}
 	row := types.Job{
-		ID:         "cli-ls-files",
-		State:      types.StateRunning,
-		WritePaths: []string{"internal/hint/cli_command.go", "internal/hint/printer.go", "cmd/magus/vcs.go", "internal/commands/registry.go", "internal/lease/held.go"},
-		DenyPaths:  []string{"internal/guard/shell_test.go"},
+		ID:    "cli-ls-files",
+		State: types.StateRunning,
+		Paths: types.JobPaths{
+			Write: []string{"internal/hint/cli_command.go", "internal/hint/printer.go", "cmd/magus/vcs.go", "internal/commands/registry.go", "internal/lease/held.go"},
+			Deny:  []string{"internal/guard/shell_test.go"},
+		},
 		Registered: 100,
 	}
 	region := func(file string, side types.RegionSide, lines [2]int, decl string) types.RegionChange {
@@ -306,7 +308,7 @@ func TestHolderClaimsItsOwnJobWithAProof(t *testing.T) {
 	require.NoError(t, err)
 
 	want := row.Clone()
-	want.WritePaths = append(want.WritePaths, "internal/guard/shell.go", "cmd/magus/testdata/script/guard_git.txtar", "cmd/magus/gen/flags.go")
+	want.Paths.Write = append(want.Paths.Write, "internal/guard/shell.go", "cmd/magus/testdata/script/guard_git.txtar", "cmd/magus/gen/flags.go")
 	want.Widenings = 1
 	want.Claims = []types.JobClaim{
 		{Path: "internal/guard/shell.go", Evidence: types.ClaimEvidence{Kind: types.ClaimRefs, Subject: "hint.VCSAdd"},
@@ -327,7 +329,7 @@ func TestHolderClaimsItsOwnJobWithAProof(t *testing.T) {
 // claim less when and by whom, so it compares with the row its fixture seeded.
 func claimedView(stored types.Job) types.Job {
 	v := stored.Clone()
-	v.Schema, v.Created, v.Updated, v.Generation, v.Attempts, v.RegisteredBy = types.Schema{}, 0, 0, 0, 0, types.Origin{}
+	v.Requires, v.Created, v.Updated, v.Generation, v.RegisteredBy = nil, 0, 0, 0, types.Origin{}
 	for i := range v.Claims {
 		v.Claims[i].At, v.Claims[i].By = 0, types.Origin{}
 	}
@@ -341,14 +343,14 @@ func TestHolderClaimsAPathItsExitReleased(t *testing.T) {
 	loc, row, facts := claimStore(t)
 	held := boundStore(loc, row.ID)
 	_, err := held.Update(t.Context(), row.ID, func(u *types.Job) {
-		u.WritePaths = []string{"cmd/magus/vcs.go", "internal/hint/cli_command.go"}
+		u.Paths.Write = []string{"cmd/magus/vcs.go", "internal/hint/cli_command.go"}
 		u.State = types.StateExited
 	})
 	require.NoError(t, err)
 
 	stored, err := held.Claim(t.Context(), row.ID, []types.JobClaimRequest{{Path: "internal/commands/registry.go", Because: "released"}}, facts, config.Defaults().Jobs, false)
 	require.NoError(t, err)
-	assert.Contains(t, stored.WritePaths, "internal/commands/registry.go")
+	assert.Contains(t, stored.Paths.Write, "internal/commands/registry.go")
 	assert.Equal(t, types.StateExited, stored.State)
 	assert.Contains(t, stored.Claims[0].Proof, "released it at")
 }
@@ -356,7 +358,7 @@ func TestHolderClaimsAPathItsExitReleased(t *testing.T) {
 func TestClaimRefusals(t *testing.T) {
 	t.Parallel()
 
-	owner := types.Job{ID: "other", State: types.StateRunning, WritePaths: []string{"internal/guard/shell.go"}}
+	owner := types.Job{ID: "other", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/shell.go"}}}
 	for name, tc := range map[string]struct {
 		actor   string
 		cap     int
@@ -408,7 +410,7 @@ func TestClaimRefusals(t *testing.T) {
 
 			after, err := NewStore(loc).List()
 			require.NoError(t, err)
-			assert.Equal(t, row.WritePaths, after[0].WritePaths, "a refused claim writes nothing")
+			assert.Equal(t, row.Paths.Write, after[0].Paths.Write, "a refused claim writes nothing")
 			assert.Empty(t, after[0].Claims)
 		})
 	}
@@ -482,7 +484,7 @@ func TestForkAdvisesASmallClaimCap(t *testing.T) {
 // facts holding its holder dead as the store wrote the row.
 func deadHolderStore(t *testing.T) (Location, types.Job, types.Job, claimFacts) {
 	t.Helper()
-	loc, row, facts := claimStore(t, types.Job{ID: "gone", State: types.StateRunning, Registered: 50, WritePaths: []string{"internal/free/free.go"}})
+	loc, row, facts := claimStore(t, types.Job{ID: "gone", State: types.StateRunning, Registered: 50, Paths: types.JobPaths{Write: []string{"internal/free/free.go"}}})
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
 	gone := rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })]
@@ -515,7 +517,7 @@ func TestClaimFromADeadHolderIsRecordedOnBothRows(t *testing.T) {
 	require.NoError(t, err)
 
 	want := row.Clone()
-	want.WritePaths = append(want.WritePaths, "internal/free/free.go")
+	want.Paths.Write = append(want.Paths.Write, "internal/free/free.go")
 	want.Widenings = 1
 	want.Claims = []types.JobClaim{{
 		Path: "internal/free/free.go", Evidence: types.ClaimEvidence{Kind: types.ClaimDeadHolder, Subject: "gone"},
@@ -526,7 +528,7 @@ func TestClaimFromADeadHolderIsRecordedOnBothRows(t *testing.T) {
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
 	after := rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })]
-	assert.Empty(t, after.WritePaths, "the dead holder no longer holds the path")
+	assert.Empty(t, after.Paths.Write, "the dead holder no longer holds the path")
 	assert.Equal(t, gone.Updated, after.Updated, "the dead holder's heartbeat is its own writes'")
 	require.Len(t, after.Releases, 1)
 	release := after.Releases[0]
@@ -548,5 +550,5 @@ func TestClaimFromADeadHolderRefusesARowWrittenSince(t *testing.T) {
 
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
-	assert.Equal(t, []string{"internal/free/free.go"}, rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })].WritePaths, "nothing was written")
+	assert.Equal(t, []string{"internal/free/free.go"}, rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })].Paths.Write, "nothing was written")
 }

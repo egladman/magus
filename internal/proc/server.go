@@ -27,7 +27,7 @@ import (
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/proc/sockdir"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
 )
 

@@ -209,7 +209,7 @@ type streamHead struct {
 // diagnosed.
 func (e Event) MarshalJSON() ([]byte, error) {
 	if e.Body == nil {
-		return nil, fmt.Errorf("types: Event has no body")
+		return nil, fmt.Errorf("marshal event: no body")
 	}
 	head, err := json.Marshal(streamHead{
 		Schema:    Schema,
@@ -223,10 +223,10 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	}
 	body, err := json.Marshal(e.Body)
 	if err != nil {
-		return nil, fmt.Errorf("types: Event body %T: %w", e.Body, err)
+		return nil, fmt.Errorf("marshal event body %T: %w", e.Body, err)
 	}
 	if len(body) < 2 || body[0] != '{' || body[len(body)-1] != '}' {
-		return nil, fmt.Errorf("types: Event body %T marshals to %q (want a JSON object)", e.Body, body)
+		return nil, fmt.Errorf("marshal event body %T to %q: want a JSON object", e.Body, body)
 	}
 	var buf bytes.Buffer
 	buf.Grow(len(head) + len(body))
@@ -266,7 +266,7 @@ func (e *Event) UnmarshalJSON(line []byte) error {
 func DecodeStreamEvent(line []byte) (Event, error) {
 	var head streamHead
 	if err := json.Unmarshal(line, &head); err != nil {
-		return Event{}, fmt.Errorf("types: decode stream event: %w", err)
+		return Event{}, fmt.Errorf("decode stream event: %w", err)
 	}
 	var body Body
 	switch head.Type {
@@ -289,7 +289,7 @@ func DecodeStreamEvent(line []byte) (Event, error) {
 		}
 		body = b
 	default:
-		return Event{}, fmt.Errorf("types: decode stream event: unknown type %q", head.Type)
+		return Event{}, fmt.Errorf("decode stream event: unknown type %q", head.Type)
 	}
 	return Event{Ts: head.Ts, Workspace: head.Workspace, Inv: head.Inv, Body: body}, nil
 }
@@ -345,5 +345,5 @@ func ParseStreamEventType(s string) (EventType, error) {
 			return t, nil
 		}
 	}
-	return "", fmt.Errorf("types: unknown event type %q", s)
+	return "", fmt.Errorf("parse stream event type: unknown event type %q", s)
 }

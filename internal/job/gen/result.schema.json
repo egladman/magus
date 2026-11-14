@@ -89,7 +89,7 @@
       "items": {
         "type": "string"
       },
-      "description": "FollowUps is work the holder explicitly leaves for later. Each item stands until the row's Deferred answers it."
+      "description": "FollowUps is work the holder explicitly leaves for later. Each item stands until the job's Deferred answers it."
     },
     "observed_generation": {
       "type": "integer",

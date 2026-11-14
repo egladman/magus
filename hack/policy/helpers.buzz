@@ -214,10 +214,10 @@ export fun vcsRequest(calls: [[str]]) > [Program] {
     return programs;
 }
 
-// JobRow is what the spawn rule reads of one job store row.
+// JobSummary is what the spawn rule reads of one job store row.
 // It is copied out of magus\workspace().jobs().
 // A Buzz test cannot build the host's Job.
-export object JobRow {
+export object JobSummary {
     id: str,
     parent: str = "",
     state: magus\JobState,
@@ -235,15 +235,15 @@ fun jobState(s: str) > magus\JobState {
     return magus\JobState.none;
 }
 
-// jobRows is a job store, each row spelled as [id, state] or [id, state, parent].
-export fun jobRows(specs: [[str]]) > [JobRow] {
-    final rows = mut [<JobRow>];
+// jobSummaries is a job store, each row spelled as [id, state] or [id, state, parent].
+export fun jobSummaries(specs: [[str]]) > [JobSummary] {
+    final rows = mut [<JobSummary>];
     foreach (spec in specs) {
         var parent = "";
         if (spec.len() > 2) {
             parent = spec[2];
         }
-        rows.append(JobRow{ id = spec[0], state = jobState(spec[1]), parent = parent });
+        rows.append(JobSummary{ id = spec[0], state = jobState(spec[1]), parent = parent });
     }
     return rows;
 }

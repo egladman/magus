@@ -11,10 +11,10 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
-func (r *runner) checkCheckpointWiring(ctx context.Context) types.Check {
+func (r *runner) checkCheckpointWiring(ctx context.Context) check.Check {
 	wired, err := workspace.WiredHarnesses(r.ws)
 	if err != nil {
 		return unknownWiring("checkpoint-wiring", err)
@@ -32,7 +32,7 @@ func (r *runner) checkCheckpointWiring(ctx context.Context) types.Check {
 //
 // Advice rather than a failure. Not every workspace wants this wired, and a doctor that
 // fails over an optional hook teaches people to stop reading it.
-func checkCheckpointWiring(ctx context.Context, root string, wired ...string) types.Check {
+func checkCheckpointWiring(ctx context.Context, root string, wired ...string) check.Check {
 	const name = "checkpoint-wiring"
 
 	var hosts, recording []string
@@ -49,25 +49,25 @@ func checkCheckpointWiring(ctx context.Context, root string, wired ...string) ty
 
 	switch {
 	case len(hosts) == 0:
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceUnknown,
+			Status:   check.OK,
+			Evidence: check.EvidenceUnknown,
 			Message:  "no agent-host hook config in this checkout, so there is nothing to record from; skipped",
 		}
 	case len(recording) == 0:
-		return types.Check{
+		return check.Check{
 			Name:    name,
-			Status:  types.CheckAdvice,
+			Status:  check.Advice,
 			Message: fmt.Sprintf("%d host hook config(s) wired, none recording a checkpoint; nothing says where work stood when a session stopped", len(hosts)),
 			Details: append(append([]string{}, hosts...),
 				"wire a stop hook to "+checkpointTemplate+": docs/guides/integrations/agents.md",
 				"or record one by hand: "+hint.SessionCheckpoint.With(`--note "..."`)),
 		}
 	default:
-		return types.Check{
+		return check.Check{
 			Name:    name,
-			Status:  types.CheckOK,
+			Status:  check.OK,
 			Message: fmt.Sprintf("%d of %d host hook config(s) record a checkpoint", len(recording), len(hosts)),
 			Details: recording,
 		}

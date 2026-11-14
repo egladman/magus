@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -193,7 +194,7 @@ func (s *HolderStoppedSuite) SetupTest() {
 	s.root = repo.Root()
 	s.loc = tempLocation(s.T(), s.root)
 	s.store = NewStore(s.loc)
-	seed(s.T(), s.store, types.Job{ID: "w", Checkpoint: repo.Head(), State: types.StateDeclared, WritePaths: []string{"a.go"}})
+	seed(s.T(), s.store, types.Job{ID: "w", Checkpoint: repo.Head(), State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.go"}}})
 	_, err := s.store.Exec(s.T().Context(), "w")
 	s.Require().NoError(err)
 	s.worker = Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
@@ -325,7 +326,7 @@ func (s *HolderStoppedSuite) TestALaterJobTakesAStaleStampedHoldersPath() {
 	s.Require().NoError(err)
 	rows, err = NewStore(loc).List()
 	s.Require().NoError(err)
-	s.Empty(rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })].WritePaths)
+	s.Empty(rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "gone" })].Paths.Write)
 }
 
 func (s *HolderStoppedSuite) TestAHolderBackBeforeTheTakeKeepsItsPath() {
@@ -349,7 +350,7 @@ func (s *HolderStoppedSuite) TestAHolderBackBeforeTheTakeKeepsItsPath() {
 
 func (s *HolderStoppedSuite) TestALaterForkOverlapsAStampedHolderUntilItEnds() {
 	s.Require().NoError(s.store.StampHolderStopped(s.T().Context(), s.worker))
-	later := types.Job{ID: "later", State: types.StateDeclared, WritePaths: []string{"a.go"}}
+	later := types.Job{ID: "later", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.go"}}}
 
 	s.Equal(types.WriteProofOverlapping, s.store.WriteProof([]types.Job{s.row("w"), later}, later), "recorded, never refused")
 
@@ -415,7 +416,7 @@ func TestWaitReclaimsTheWritePathsForRework(t *testing.T) {
 	assert.Equal(t, types.StateRunning, state(t, loc))
 	assert.Contains(t, strings.Join(status.Notes, "\n"), "holds its write paths again")
 
-	taker := types.Job{ID: "taker", Criteria: "c", WritePaths: []string{"cmd/magus/ledger.go"}, State: types.StateRunning}
+	taker := types.Job{ID: "taker", Agent: agent.Instructed("c"), Paths: types.JobPaths{Write: []string{"cmd/magus/ledger.go"}}, State: types.StateRunning}
 	loc = exited(t, taker)
 	status, err = Wait(t.Context(), NewStore(loc), result.Job, &empty, resolve, nil, nil)
 	require.NoError(t, err)

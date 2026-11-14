@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	impacttypes "github.com/egladman/magus/types/impact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -80,7 +81,7 @@ func TestCompute(t *testing.T) {
 				// Changed is sorted and includes files outside any project.
 				ChangedFiles: []string{"api/main.go", "api/util.go", "docs/README.md"},
 				SeedProjects: []string{"api"},
-				AffectedProjects: []types.ImpactProject{
+				AffectedProjects: []impacttypes.Project{
 					{
 						Path:    "api",
 						Seed:    true,
@@ -117,7 +118,7 @@ func TestCompute(t *testing.T) {
 				ChangedFileCount: 2,
 				ChangedFiles:     []string{".golangci.yml", "main.go"},
 				SeedProjects:     []string{"."},
-				AffectedProjects: []types.ImpactProject{{
+				AffectedProjects: []impacttypes.Project{{
 					Path:            ".",
 					Seed:            true,
 					Files:           []string{".golangci.yml", "main.go"},
@@ -155,7 +156,7 @@ func TestComputeFromPaths(t *testing.T) {
 		ChangedFileCount: 1,
 		ChangedFiles:     []string{"api/main.go"},
 		SeedProjects:     []string{"api"},
-		AffectedProjects: []types.ImpactProject{{Path: "api", Seed: true, Files: []string{"api/main.go"}}},
+		AffectedProjects: []impacttypes.Project{{Path: "api", Seed: true, Files: []string{"api/main.go"}}},
 	}, got)
 }
 
@@ -208,11 +209,11 @@ func TestEnrich(t *testing.T) {
 				Base:         "origin/main",
 				ChangedFiles: []string{"a.go", "b.go"},
 				ChangedSymbols: []types.ImpactSymbol{
-					{File: "a.go", Symbol: "symbol:a.Bar", Label: "Bar", RefCount: 10, FileCount: 4, Coverage: types.ImpactCoverage{Ratio: 1, Covered: 4, Total: 4}},
+					{File: "a.go", Symbol: "symbol:a.Bar", Label: "Bar", RefCount: 10, FileCount: 4, Coverage: impacttypes.Coverage{Ratio: 1, Covered: 4, Total: 4}},
 					{File: "a.go", Symbol: "symbol:a.Foo", Label: "Foo", RefCount: 3, FileCount: 2},
 				},
 				ChangedFileCoverage: []types.ImpactFileCoverage{
-					{File: "a.go", Coverage: types.ImpactCoverage{Ratio: 0.5, Covered: 5, Total: 10}},
+					{File: "a.go", Coverage: impacttypes.Coverage{Ratio: 0.5, Covered: 5, Total: 10}},
 				},
 			},
 		},

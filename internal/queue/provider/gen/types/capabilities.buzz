@@ -6,10 +6,10 @@
 // `go generate`, never this file.
 
 export object QueueCapabilities {
-    stackMerge: str = "",
-    linearStacks: bool = false,
-    methods: [str] = [],
-    requiredApprovals: int = 0,
+    stackMerge: str,
+    linearStacks: bool,
+    methods: [str],
+    requiredApprovals: int,
     queueLabel: str = "",
     committer: Person = Person{},
     setup: QueueSetup? = null,

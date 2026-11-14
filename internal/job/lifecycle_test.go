@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -27,20 +28,20 @@ import (
 func TestEndedReasonSaysWhichEnd(t *testing.T) {
 	t.Parallel()
 	check := &types.LeaseCheck{Target: "test", Project: "."}
-	filed := &types.JobResult{}
 	for _, tt := range []struct {
 		name     string
 		row      types.Job
+		filed    bool
 		byHolder bool
 		want     string
 	}{
-		{"a read-only scout that filed nothing", types.Job{ID: "s", ReadOnly: true, Registered: 1}, true, "ended ungraded"},
-		{"a result nobody verified", types.Job{ID: "w", Check: check, Registered: 1, Result: filed}, false, "ended unverified"},
-		{"a row nobody took", types.Job{ID: "w", Check: check}, false, "before any holder ran"},
-		{"its holder giving it up", types.Job{ID: "w", Check: check, Registered: 1}, true, "abandoned by its holder"},
-		{"the root ending an isolated worker's row", types.Job{ID: "w", Check: check, Registered: 1}, false, "ended by someone other than its holder"},
+		{"a read-only scout that filed nothing", types.Job{ID: "s", ReadOnly: true, Registered: 1}, false, true, "ended ungraded"},
+		{"a result nobody verified", types.Job{ID: "w", Check: check, Registered: 1}, true, false, "ended unverified"},
+		{"a row nobody took", types.Job{ID: "w", Check: check}, false, false, "before any holder ran"},
+		{"its holder giving it up", types.Job{ID: "w", Check: check, Registered: 1}, false, true, "abandoned by its holder"},
+		{"the root ending an isolated worker's row", types.Job{ID: "w", Check: check, Registered: 1}, false, false, "ended by someone other than its holder"},
 	} {
-		assert.Contains(t, endedReason(tt.row, tt.byHolder), tt.want, tt.name)
+		assert.Contains(t, endedReason(tt.row, tt.filed, tt.byHolder), tt.want, tt.name)
 	}
 }
 
@@ -57,8 +58,8 @@ func TestExitPassesAReadOnlyRowNothingElseGrades(t *testing.T) {
 
 	notes, err := Exit(t.Context(), s, "notes", &types.JobResult{}, none)
 	require.NoError(t, err)
-	notes.Schema, notes.Generation, notes.Attempts, notes.RegisteredBy = types.Schema{}, 0, 0, types.Origin{}
-	notes.Created, notes.Updated, notes.Result, notes.GateAttempts = 0, 0, nil, nil
+	notes.Generation, notes.RegisteredBy = 0, types.Origin{}
+	notes.Created, notes.Updated, notes.GateAttempts = 0, 0, nil
 	assert.Equal(t, types.Job{ID: "notes", ReadOnly: true, State: types.StatePass, Registered: 1, EndReason: returnedReason}, notes,
 		"the store's own stamps aside, a read-only row passes and changes nothing else")
 
@@ -92,11 +93,12 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	exited, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolver)
 	require.NoError(t, err)
 	assert.Equal(t, types.StateExited, exited.State)
-	require.NotNil(t, exited.Result)
+	filed := liveTry(t, NewStore(loc), result.Job).Status.Result
+	require.NotNil(t, filed)
 	require.NotNil(t, exited.Attempt)
 	attempt.ObservedGeneration = 1
 	assert.Equal(t, attempt, *exited.Attempt, "the run is stamped with the generation it was filed at")
-	assert.Equal(t, 1, exited.Result.ObservedGeneration)
+	assert.Equal(t, 1, filed.ObservedGeneration)
 
 	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, observeClaim(result), nil)
 	require.NoError(t, err)
@@ -122,8 +124,8 @@ func TestWaitIgnoresASoftPathNobodyWrote(t *testing.T) {
 	t.Parallel()
 
 	row := coveredRow()
-	row.WritePaths = append(row.WritePaths, "docs/unwritten_test.go")
-	row.SoftPaths = []string{"docs/unwritten_test.go"}
+	row.Paths.Write = append(row.Paths.Write, "docs/unwritten_test.go")
+	row.Paths.Soft = []string{"docs/unwritten_test.go"}
 	loc := declared(t, row)
 	result := passingResult()
 	attempt := passingRun
@@ -172,7 +174,7 @@ func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
 // nothing and the spec keeps its generation.
 func coveredRow() types.Job {
 	row := acceptRow()
-	row.WritePaths = []string{"internal/ledger", "cmd/magus/ledger.go"}
+	row.Paths.Write = []string{"internal/ledger", "cmd/magus/ledger.go"}
 	return row
 }
 
@@ -405,7 +407,7 @@ func (s *rowKeepsItsPathsSuite) TestExitKeepsAPathTheResultDoesNotName() {
 
 	exited := s.exit(loc, row.ID, result)
 
-	s.Equal(row.WritePaths, exited.WritePaths)
+	s.Equal(row.Paths.Write, exited.Paths.Write)
 	s.Empty(exited.Releases)
 
 	status, err := Wait(s.T().Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result), nil)
@@ -418,11 +420,11 @@ func (s *rowKeepsItsPathsSuite) TestAbandonmentKeepsEveryPath() {
 	loc := declared(s.T(), kept)
 	stored, err := Exit(s.T().Context(), boundStore(loc, kept.ID), kept.ID, nil, nil)
 	s.Require().NoError(err)
-	s.Equal(kept.WritePaths, stored.WritePaths)
+	s.Equal(kept.Paths.Write, stored.Paths.Write)
 }
 
 func (s *rowKeepsItsPathsSuite) TestRejectionGivesUpOnlyAnUntouchedPathAnotherJobTook() {
-	taker := types.Job{ID: "taker", Criteria: "c", WritePaths: []string{"docs/reference/*.md"}, State: types.StateRunning}
+	taker := types.Job{ID: "taker", Agent: agent.Instructed("c"), Paths: types.JobPaths{Write: []string{"docs/reference/*.md"}}, State: types.StateRunning}
 	row := acceptRow()
 	loc := declared(s.T(), row, taker)
 	result := passingResult()
@@ -440,7 +442,7 @@ func (s *rowKeepsItsPathsSuite) TestRejectionGivesUpOnlyAnUntouchedPathAnotherJo
 	s.Require().NoError(err)
 	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.ID })
 	s.Equal(types.StateRunning, rows[i].State)
-	s.Equal([]string{"internal/ledger", "cmd/magus/ledger.go"}, rows[i].WritePaths)
+	s.Equal([]string{"internal/ledger", "cmd/magus/ledger.go"}, rows[i].Paths.Write)
 }
 
 func TestWaitKeepsARejectedJobOpen(t *testing.T) {
@@ -511,7 +513,7 @@ func TestWaitNeverPassesOnEvidenceOfAnEarlierSpec(t *testing.T) {
 	resolver := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
 	_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolver)
 	require.NoError(t, err)
-	respecced, err := NewStore(loc).Update(t.Context(), result.Job, func(u *types.Job) { u.Criteria = "also cover the console" })
+	respecced, err := NewStore(loc).Update(t.Context(), result.Job, func(u *types.Job) { u.Agent = agent.Instructed("also cover the console") })
 	require.NoError(t, err)
 	require.Equal(t, 2, respecced.Generation)
 
@@ -740,7 +742,7 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 				{ID: "recent", State: types.StateDeclared, Updated: fresh},
 				{ID: "taken", State: types.StateDeclared, Registered: old, Updated: old},
 				{ID: "running", State: types.StateRunning, Updated: old},
-				{ID: "maintenance", Holder: types.HolderServer, State: types.StateDeclared, Updated: old},
+				{ID: "maintenance", RegisteredBy: types.Origin{EntryPoint: types.EntryPointServer}, State: types.StateDeclared, Updated: old},
 			},
 			ended: map[string]string{"untaken": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
@@ -820,7 +822,6 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 				row := got[want.ID]
 				reason, ended := tt.ended[want.ID]
 				wantRow := want
-				wantRow.Schema = row.Schema // the envelope is the store's, stamped on read
 				if !ended {
 					assert.Equal(t, wantRow, row, "%s stays as it was", want.ID)
 					continue
@@ -875,13 +876,13 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, abs, taken.CheckoutRoot)
 
-	seed(t, s, types.Job{ID: "w", State: types.StateDeclared, Checkpoint: "abc", Criteria: "rewritten"})
+	seed(t, s, types.Job{ID: "w", State: types.StateDeclared, Checkpoint: "abc", Agent: agent.Instructed("rewritten")})
 	require.NoError(t, os.RemoveAll(checkout))
 
 	rows := states(t, s)
 	assert.Equal(t, stamped(types.Job{
 		ID:           "w",
-		Criteria:     "rewritten",
+		Agent:        agent.Instructed("rewritten"),
 		Checkpoint:   "abc",
 		State:        types.StateNoReturn,
 		ReportedBase: taken.ReportedBase,
@@ -898,7 +899,7 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 func TestUnattributedWritesLeaveUpdatedAlone(t *testing.T) {
 	root := t.TempDir()
 	s := tempStore(t, root)
-	plant(t, s, types.Job{ID: "w", State: types.StateRunning, WritePaths: []string{"a.go"}, Created: 50, Updated: 50})
+	plant(t, s, types.Job{ID: "w", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.go"}}, Created: 50, Updated: 50})
 
 	require.NoError(t, s.RecordUnattributedWrite(t.Context(), "w", "a.go"))
 
@@ -1116,7 +1117,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 			t.Parallel()
 
 			row := types.Job{
-				ID: "goal", Criteria: "the goal holds", WritePaths: []string{"."}, State: types.StateRunning, Created: 1,
+				ID: "goal", Agent: agent.Instructed("the goal holds"), Paths: types.JobPaths{Write: []string{"."}}, State: types.StateRunning, Created: 1,
 				Checkpoint: cmp.Or(tc.checkpoint, checkpoint), CheckoutRoot: cmp.Or(tc.checkout, worker),
 				Goals: []types.Goal{tc.goal.Resolve()},
 			}
@@ -1168,7 +1169,7 @@ func pruneRows(now int64) []types.Job {
 		{ID: "done", State: types.StateExited, Updated: fresh},
 		{ID: "done/c", Parent: "done", State: types.StateDeclared, Updated: fresh},
 		{ID: "fresh", State: types.StateDeclared, Updated: fresh},
-		{ID: "maint", Holder: types.HolderServer, State: types.StateExited, Updated: old},
+		{ID: "maint", RegisteredBy: types.Origin{EntryPoint: types.EntryPointServer}, State: types.StateExited, Updated: old},
 		{ID: "graded", State: types.StatePass, Updated: old},
 	}
 }
@@ -1380,6 +1381,12 @@ func (j waiterEvidenceJob) stored(t *testing.T) types.Job {
 	return rows[i]
 }
 
+// filed is the result the job's live try holds.
+func (j waiterEvidenceJob) filed(t *testing.T) *types.JobResult {
+	t.Helper()
+	return liveTry(t, NewStore(j.loc), j.row.ID).Status.Result
+}
+
 // requireUnmoved asserts the wait recorded nothing: the job stays exited, with no waiter
 // evidence beside it.
 func (j waiterEvidenceJob) requireUnmoved(t *testing.T) {
@@ -1418,8 +1425,9 @@ func TestWaitTakesWaiterEvidenceForAGoalTheHolderFailed(t *testing.T) {
 	assert.Equal(t, types.StatePass, row.State)
 	require.NotNil(t, row.Attempt)
 	assert.True(t, row.Attempt.Failed, "the holder's own attempt stays beside the waiter's")
-	require.NotNil(t, row.Result)
-	assert.Equal(t, "a1b2c3d4", row.Result.Validation.OutputRef)
+	filed := j.filed(t)
+	require.NotNil(t, filed)
+	assert.Equal(t, "a1b2c3d4", filed.Validation.OutputRef)
 	require.NotNil(t, row.WaiterEvidence)
 	assert.Equal(t, j.waiter, row.WaiterEvidence.Checkout)
 	assert.NotZero(t, row.WaiterEvidence.At)
@@ -1447,7 +1455,7 @@ func TestWaitTakesWaiterEvidenceForOneNamedGoalOnly(t *testing.T) {
 	row := j.stored(t)
 	require.NotNil(t, row.WaiterEvidence)
 	assert.Equal(t, []types.VerificationStatus{{ID: "unit", Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates, "docs passed on the holder's evidence and took none")
-	assert.Equal(t, "unit-ref", row.Result.VerificationEvidence[0].OutputRef)
+	assert.Equal(t, "unit-ref", j.filed(t).VerificationEvidence[0].OutputRef)
 	assert.True(t, row.GateAttempts[0].Attempt.Failed)
 }
 

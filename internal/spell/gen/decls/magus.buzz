@@ -6,25 +6,17 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+import "magus/agent";
+import "magus/check";
+import "magus/impact";
+import "magus/release";
+import "magus/trail";
+import "magus/vcs";
+
 export enum<str> DiagnosticOrigin {
     unknown = "",
     builtin = "builtin",
     workspace = "workspace",
-}
-
-export enum<str> CheckStatus {
-    none = "",
-    ok = "ok",
-    fail = "fail",
-    advice = "advice",
-}
-
-export enum<str> Evidence {
-    none = "",
-    measured = "measured",
-    declared = "declared",
-    inferred = "inferred",
-    unknown = "unknown",
 }
 
 export enum<str> SymbolIndexFreshness {
@@ -33,18 +25,6 @@ export enum<str> SymbolIndexFreshness {
     outOfDate = "out-of-date",
     notIndexed = "not-indexed",
     unvouched = "unvouched",
-}
-
-export enum<str> SkillVariant {
-    short = "short",
-    full = "full",
-}
-
-export enum<str> ModelTierSource {
-    row = "row",
-    matrix = "matrix",
-    userMatrix = "user-matrix",
-    default = "default",
 }
 
 export enum<str> ClaimKind {
@@ -75,24 +55,6 @@ export enum<str> EntryPoint {
     server = "server",
 }
 
-export enum<str> RetryChange {
-    none = "",
-    config = "config",
-    widening = "widening",
-    person = "person",
-    upgrade = "upgrade",
-}
-
-export enum<str> JobState {
-    none = "",
-    declared = "declared",
-    running = "running",
-    exited = "exited",
-    pass = "pass",
-    fail = "fail",
-    noReturn = "no_return",
-}
-
 export enum<str> GoalKind {
     none = "",
     check = "check",
@@ -116,10 +78,14 @@ export enum<str> BriefFormat {
     buzz = "buzz",
 }
 
-export enum<str> JobHolder {
+export enum<str> JobState {
     none = "",
-    server = "server",
-    session = "session",
+    declared = "declared",
+    running = "running",
+    exited = "exited",
+    pass = "pass",
+    fail = "fail",
+    noReturn = "no_return",
 }
 
 export enum<str> JobWriteProof {
@@ -135,6 +101,23 @@ export enum<str> JobBaseVerdict {
     revisionMatch = "revision-match",
     diverged = "diverged",
     unknown = "unknown",
+}
+
+export enum<str> RetryChange {
+    none = "",
+    config = "config",
+    widening = "widening",
+    person = "person",
+    upgrade = "upgrade",
+}
+
+export enum<str> AttemptEnd {
+    none = "",
+    exit = "exit",
+    handback = "handback",
+    stop = "stop",
+    deadline = "deadline",
+    job = "job",
 }
 
 export enum<str> InflightAttention {
@@ -236,7 +219,7 @@ export enum<str> KnowledgeResolution {
 export enum<str> PrecedentFamily {
     none = "",
     depDirection = "dep-direction",
-    depFanout = "dep-fanout",
+    importedPackages = "imported-packages",
     errSentinelName = "err-sentinel-name",
     testPackageName = "test-package-name",
     paramNameByType = "param-name-by-type",
@@ -260,14 +243,6 @@ export enum<str> DuplicationShape {
     sharedCore = "shared-core",
     siblingHelper = "sibling-helper",
     leave = "leave",
-}
-
-export enum<str> Tier {
-    none = "",
-    trivial = "trivial",
-    mechanical = "mechanical",
-    scoped = "scoped",
-    full = "full",
 }
 
 export enum<str> DiffWhyRelation {
@@ -309,7 +284,7 @@ export enum<str> ConformanceMetric {
     funcLines = "func-lines",
     typeMethods = "type-methods",
     fileSymbols = "file-symbols",
-    depFanout = "dep-fanout",
+    importedPackages = "imported-packages",
     cloneTokens = "clone-tokens",
     exportScope = "export-scope",
     callSequence = "call-sequence",
@@ -343,22 +318,6 @@ export enum<str> RegionSide {
     none = "",
     old = "old",
     new = "new",
-}
-
-export enum<str> TrailSection {
-    none = "",
-    refused = "refused",
-    advised = "advised",
-    unguarded = "unguarded",
-    nextNotTaken = "next-not-taken",
-}
-
-export enum<str> TrailVerdict {
-    none = "",
-    shouldDeny = "should-deny",
-    shouldAdvise = "should-advise",
-    wrongDeny = "wrong-deny",
-    fine = "fine",
 }
 
 export enum<str> GuardDecision {
@@ -435,21 +394,11 @@ export object ChangeOptions {
     patch: str = "",
 }
 
-export object VCSCheckpoint {
-    revision: str = "",
-    branch: str = "",
-    dirty: bool = false,
-    patchDigest: str = "",
-    untrackedDigest: str = "",
-    vcs: str = "",
-    preserved: str = "",
-}
-
 export object Change {
     base: str = "",
     rev: str = "",
     patch: str = "",
-    at: VCSCheckpoint = VCSCheckpoint{},
+    at: magus\vcs\Checkpoint = magus\vcs\Checkpoint{},
     files: {str: str} = {},
 
     fun tier(target: str, opts: TierOptions? = null) > TierReport !> any {
@@ -507,15 +456,6 @@ export object DiagnosticCode {
     origin: DiagnosticOrigin = DiagnosticOrigin.unknown,
 }
 
-export object Check {
-    name: str = "",
-    status: CheckStatus = CheckStatus.none,
-    message: str = "",
-    details: [str] = [],
-    evidence: Evidence = Evidence.none,
-    fix: [str] = [],
-}
-
 export object DoctorSummary {
     ok: int = 0,
     fail: int = 0,
@@ -525,7 +465,7 @@ export object DoctorSummary {
 
 export object DoctorReport {
     workspace: str = "",
-    checks: [Check] = [],
+    checks: [magus\check\Check] = [],
     summary: DoctorSummary = DoctorSummary{},
 }
 
@@ -642,14 +582,11 @@ export object History {
     }
 }
 
-export object JobModelTier {
-    name: str = "",
-    rank: int = 0,
-    skills: SkillVariant = SkillVariant.short,
-    source: ModelTierSource = ModelTierSource.row,
-    reason: str = "",
-    site: str = "",
-    model: str = "",
+export object JobPaths {
+    write: [str] = [],
+    read: [str] = [],
+    deny: [str] = [],
+    soft: [str] = [],
 }
 
 export object ClaimEvidence {
@@ -690,7 +627,7 @@ export object JobClaim {
 
 export object JobDeferred {
     item: str = "",
-    row: str = "",
+    job: str = "",
     reason: str = "",
 }
 
@@ -701,41 +638,6 @@ export object VerificationStatus {
     scope: str = "",
     owed: str = "",
     violations: [str] = [],
-}
-
-export object JobDenial {
-    rule: str = "",
-    reason: str = "",
-    action: str = "",
-    verdictRef: str = "",
-    ts: int = 0,
-}
-
-export object RetryVerdict {
-    retryable: bool = false,
-    change: RetryChange = RetryChange.none,
-    reason: str = "",
-    code: str = "",
-}
-
-export object PriorAttempt {
-    n: int = 0,
-    state: JobState = JobState.none,
-    observedGeneration: int = 0,
-    endReason: str = "",
-    modelTier: str = "",
-    checkpoint: str = "",
-    reportedBase: str = "",
-    ended: int = 0,
-    reworkRounds: int = 0,
-    widenings: int = 0,
-    unmet: [VerificationStatus] = [],
-    violations: [str] = [],
-    unresolvedRisks: [str] = [],
-    failingRefs: [str] = [],
-    denials: [JobDenial] = [],
-    denialsKnown: bool = false,
-    retry: RetryVerdict = RetryVerdict{},
 }
 
 export object JobRejection {
@@ -801,36 +703,10 @@ export object JobWorktree {
     base: str = "",
     created: int = 0,
     binary: str = "",
+    binaryDigest: str = "",
     removed: int = 0,
     kept: str = "",
     made: bool = false,
-}
-
-export object JobResultValidation {
-    command: str = "",
-    outputRef: str = "",
-    owed: str = "",
-    unrun: str = "",
-}
-
-export object VerificationEvidence {
-    gateID: str = "",
-    outputRef: str = "",
-    owed: str = "",
-    unrun: str = "",
-}
-
-export object JobResult {
-    apiVersion: str = "",
-    requires: [str] = [],
-    job: str = "",
-    changedPaths: [str] = [],
-    validation: JobResultValidation = JobResultValidation{},
-    verificationEvidence: [VerificationEvidence] = [],
-    descendants: [str] = [],
-    unresolvedRisks: [str] = [],
-    followUps: [str] = [],
-    observedGeneration: int = 0,
 }
 
 export object JobAttempt {
@@ -874,26 +750,21 @@ export object JobIntegration {
 }
 
 export object Job {
-    apiVersion: str = "",
     requires: [str] = [],
+    unknown: [str] = [],
     id: str = "",
     parent: str = "",
-    criteria: str = "",
+    agent: magus\agent\Spec? = null,
     checkpoint: str = "",
-    writePaths: [str] = [],
-    denyPaths: [str] = [],
-    softPaths: [str] = [],
-    readPaths: [str] = [],
+    paths: JobPaths = JobPaths{},
     dependsOn: [str] = [],
     integrates: [str] = [],
     breaks: [str] = [],
-    model: str = "",
-    modelTier: JobModelTier? = null,
+    modelTier: magus\agent\JobModelTier? = null,
     briefFormat: BriefFormat = BriefFormat.none,
     delivery: str = "",
     parentHead: str = "",
     follows: str = "",
-    freshReason: str = "",
     reworkRounds: int = 0,
     widenings: int = 0,
     claims: [JobClaim] = [],
@@ -908,14 +779,11 @@ export object Job {
     pausedBy: Origin = Origin{},
     pauseReason: str = "",
     pausedUntil: int = 0,
-    attempts: int = 0,
-    prior: [PriorAttempt] = [],
     rejection: JobRejection? = null,
     check: LeaseCheck? = null,
     validation: str = "",
     goals: [Goal] = [],
     state: JobState = JobState.none,
-    holder: JobHolder = JobHolder.none,
     readOnly: bool = false,
     releases: [JobRelease] = [],
     unattributed: [JobUnattributedWrite] = [],
@@ -926,6 +794,7 @@ export object Job {
     reportedBase: str = "",
     baseVerdict: JobBaseVerdict = JobBaseVerdict.none,
     registeredBy: Origin = Origin{},
+    authority: str = "",
     registered: int = 0,
     holderStopped: int = 0,
     checkoutRoot: str = "",
@@ -934,7 +803,6 @@ export object Job {
     created: int = 0,
     updated: int = 0,
     deadline: int = 0,
-    result: JobResult? = null,
     attempt: JobAttempt? = null,
     gateAttempts: [JobGateAttempt] = [],
     lastRun: JobRun? = null,
@@ -968,26 +836,20 @@ export object RaiseOptions {
     url: str = "",
 }
 
-export object SessionOptions {
-    session: str = "",
-    since: str = "",
-    @"until": str = "",
-}
-
 export object Session {
     session: str = "",
     since: str = "",
     @"until": str = "",
 
-    fun trail() > Trail !> any {
+    fun trail() > magus\trail\Trail !> any {
         return magus__Session__trail(this);
     }
 
-    fun marks() > [TrailMark] !> any {
+    fun marks() > [magus\trail\Mark] !> any {
         return magus__Session__marks(this);
     }
 
-    fun mark(mark: TrailMark) > TrailMark !> any {
+    fun mark(mark: magus\trail\Mark) > magus\trail\Mark !> any {
         return magus__Session__mark(this, mark: mark);
     }
 }
@@ -1055,6 +917,75 @@ export object Workspace {
     fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any {
         return magus__Workspace__diagnoseDrift(this, outputs: outputs, inputs: inputs);
     }
+}
+
+export object JobResultValidation {
+    command: str = "",
+    outputRef: str = "",
+    owed: str = "",
+    unrun: str = "",
+}
+
+export object VerificationEvidence {
+    gateID: str = "",
+    outputRef: str = "",
+    owed: str = "",
+    unrun: str = "",
+}
+
+export object JobResult {
+    apiVersion: str = "",
+    requires: [str] = [],
+    job: str = "",
+    changedPaths: [str] = [],
+    validation: JobResultValidation = JobResultValidation{},
+    verificationEvidence: [VerificationEvidence] = [],
+    descendants: [str] = [],
+    unresolvedRisks: [str] = [],
+    followUps: [str] = [],
+    observedGeneration: int = 0,
+}
+
+export object JobDenial {
+    rule: str = "",
+    reason: str = "",
+    action: str = "",
+    verdictRef: str = "",
+    ts: int = 0,
+}
+
+export object RetryVerdict {
+    retryable: bool = false,
+    change: RetryChange = RetryChange.none,
+    reason: str = "",
+    code: str = "",
+}
+
+export object AttemptStatus {
+    started: int = 0,
+    ended: int = 0,
+    end: AttemptEnd = AttemptEnd.none,
+    result: JobResult? = null,
+    state: JobState = JobState.none,
+    observedGeneration: int = 0,
+    endReason: str = "",
+    modelTier: str = "",
+    checkpoint: str = "",
+    reportedBase: str = "",
+    reworkRounds: int = 0,
+    widenings: int = 0,
+    unmet: [VerificationStatus] = [],
+    violations: [str] = [],
+    failingRefs: [str] = [],
+    denials: [JobDenial] = [],
+    denialsKnown: bool = false,
+    retry: RetryVerdict = RetryVerdict{},
+}
+
+export object Attempt {
+    job: str = "",
+    n: int = 0,
+    status: AttemptStatus = AttemptStatus{},
 }
 
 export object JobOverlapFootprint {
@@ -1133,13 +1064,14 @@ export object JobUnmerged {
 
 export object JobUnmergedReport {
     branch: str = "",
-    rows: [JobUnmerged] = [],
+    jobs: [JobUnmerged] = [],
     risks: [JobUnmerged] = [],
     unknown: str = "",
 }
 
 export object JobList {
     jobs: [Job] = [],
+    attempts: [Attempt] = [],
     overlaps: [JobOverlap] = [],
     overdue: [str] = [],
     orphans: [str] = [],
@@ -1185,7 +1117,7 @@ export object ModelTierRecord {
 
 export object ModelTiers {
     definition: str = "",
-    rows: [ModelTierRecord] = [],
+    models: [ModelTierRecord] = [],
 }
 
 export object GroupingRecord {
@@ -1209,7 +1141,7 @@ export object Grouping {
     definition: str = "",
     minSample: int = 0,
     unclassified: int = 0,
-    rows: [GroupingRecord] = [],
+    shapes: [GroupingRecord] = [],
 }
 
 export object VolatilityTarget {
@@ -1749,16 +1681,6 @@ export object TierOptions {
     checkout: str = "",
 }
 
-export object TierEvidence {
-    path: str = "",
-    project: str = "",
-    target: str = "",
-    class: str = "",
-    tier: Tier = Tier.none,
-    why: str = "",
-    packages: [str] = [],
-}
-
 export object TierGateStep {
     target: str = "",
     projects: [str] = [],
@@ -1770,9 +1692,9 @@ export object TierGateStep {
 export object TierReport {
     base: str = "",
     target: str = "",
-    tier: Tier = Tier.none,
+    tier: magus\check\Tier = magus\check\Tier.none,
     affected: [str] = [],
-    evidence: [TierEvidence] = [],
+    evidence: [magus\check\TierEvidence] = [],
     gate: [TierGateStep] = [],
 }
 
@@ -1788,12 +1710,6 @@ export object DiffOptions {
     patch: str = "",
     minCohort: int = 0,
     minShare: double = 0.0,
-}
-
-export object ImpactCoverage {
-    ratio: double = 0.0,
-    covered: int = 0,
-    total: int = 0,
 }
 
 export object DiffPublicPath {
@@ -1815,7 +1731,7 @@ export object DiffSymbol {
     qualified: str = "",
     signature: str = "",
     baseSignature: str = "",
-    checks: [Check] = [],
+    checks: [magus\check\Check] = [],
     publicThrough: [DiffPublicPath] = [],
 }
 
@@ -1859,10 +1775,10 @@ export object DiffFile {
     project: str = "",
     role: str = "",
     hint: str = "",
-    coverage: ImpactCoverage? = null,
+    coverage: magus\impact\Coverage? = null,
     symbols: [DiffSymbol] = [],
     hunks: [DiffHunk] = [],
-    layout: [Check] = [],
+    layout: [magus\check\Check] = [],
     visibility: str = "",
     touches: [DiffTouch] = [],
     readState: str = "",
@@ -1870,21 +1786,7 @@ export object DiffFile {
     noHistory: bool = false,
     reach: int? = null,
     threads: [DiffThreadRef] = [],
-    risk: TierEvidence? = null,
-}
-
-export object ImpactProject {
-    path: str = "",
-    seed: bool = false,
-    files: [str] = [],
-    undeclaredFiles: [str] = [],
-    spells: [str] = [],
-    targets: [str] = [],
-}
-
-export object ReleaseStage {
-    tag: str = "",
-    major: int = 0,
+    risk: magus\check\TierEvidence? = null,
 }
 
 export object DiffAPI {
@@ -1895,7 +1797,7 @@ export object DiffAPI {
     removed: int = 0,
     signature: int = 0,
     body: int = 0,
-    stage: ReleaseStage = ReleaseStage{},
+    stage: magus\release\Stage = magus\release\Stage{},
 }
 
 export object DiffHunkRef {
@@ -1946,7 +1848,7 @@ export object DiffOrder {
 }
 
 export object DiffReviewed {
-    at: VCSCheckpoint = VCSCheckpoint{},
+    at: magus\vcs\Checkpoint = magus\vcs\Checkpoint{},
     files: int = 0,
 }
 
@@ -1973,7 +1875,7 @@ export object Diff {
     base: str = "",
     files: [DiffFile] = [],
     seedProjects: [str] = [],
-    affectedProjects: [ImpactProject] = [],
+    affectedProjects: [magus\impact\Project] = [],
     notes: [str] = [],
     api: DiffAPI? = null,
     order: DiffOrder? = null,
@@ -1989,12 +1891,12 @@ export object ImpactSymbol {
     label: str = "",
     refCount: int = 0,
     fileCount: int = 0,
-    coverage: ImpactCoverage = ImpactCoverage{},
+    coverage: magus\impact\Coverage = magus\impact\Coverage{},
 }
 
 export object ImpactFileCoverage {
     file: str = "",
-    coverage: ImpactCoverage = ImpactCoverage{},
+    coverage: magus\impact\Coverage = magus\impact\Coverage{},
 }
 
 export object Impact {
@@ -2002,7 +1904,7 @@ export object Impact {
     changedFileCount: int = 0,
     changedFiles: [str] = [],
     seedProjects: [str] = [],
-    affectedProjects: [ImpactProject] = [],
+    affectedProjects: [magus\impact\Project] = [],
     changedSymbols: [ImpactSymbol] = [],
     changedFileCoverage: [ImpactFileCoverage] = [],
     notes: [str] = [],
@@ -2023,6 +1925,11 @@ export object ConformanceKey {
     scope: str = "",
 }
 
+export object ConformanceImport {
+    dir: str = "",
+    digests: [str] = [],
+}
+
 export object ConformanceItem {
     id: str = "",
     source: str = "",
@@ -2030,9 +1937,11 @@ export object ConformanceItem {
     home: str = "",
     unshared: bool = false,
     rename: str = "",
+    digest: str = "",
+    imports: [ConformanceImport] = [],
 }
 
-export object ConformanceRow {
+export object ConformanceDistribution {
     key: ConformanceKey = ConformanceKey{},
     n: int = 0,
     p50: int = 0,
@@ -2059,14 +1968,21 @@ export object ConformanceUnmeasured {
     reason: str = "",
 }
 
+export object ConformancePackage {
+    dir: str = "",
+    imports: [str] = [],
+    digests: [str] = [],
+}
+
 export object ConformanceReport {
     definition: str = "",
-    rows: [ConformanceRow] = [],
+    distributions: [ConformanceDistribution] = [],
     excluded: int = 0,
     answer: KnowledgeAnswer = KnowledgeAnswer{},
     base: str = "",
     ceilings: [ConformanceCeiling] = [],
     unmeasured: [ConformanceUnmeasured] = [],
+    packages: [ConformancePackage] = [],
     indexes: [SymbolIndexStatus] = [],
 }
 
@@ -2193,51 +2109,6 @@ export object JobRegistration {
     advice: str = "",
 }
 
-export object TrailObservation {
-    at: int = 0,
-    agent: str = "",
-    lease: str = "",
-    tool: str = "",
-    command: str = "",
-    path: str = "",
-    decision: str = "",
-    rule: str = "",
-    nexts: [str] = [],
-    preauthorizedBy: str = "",
-    shape: str = "",
-    shapes: [str] = [],
-}
-
-export object TrailSpawn {
-    at: int = 0,
-    agent: str = "",
-    child: str = "",
-    lease: str = "",
-    model: str = "",
-}
-
-export object Trail {
-    session: str = "",
-    host: str = "",
-    start: int = 0,
-    end: int = 0,
-    checkouts: [str] = [],
-    observations: [TrailObservation] = [],
-    spawns: [TrailSpawn] = [],
-}
-
-export object TrailMark {
-    id: str = "",
-    section: TrailSection = TrailSection.none,
-    key: str = "",
-    rule: str = "",
-    verdict: TrailVerdict = TrailVerdict.none,
-    note: str = "",
-    session: str = "",
-    at: int = 0,
-    examples: [str] = [],
-}
-
 export object GuardVerdict {
     decision: GuardDecision = GuardDecision.none,
     reason: str = "",
@@ -2281,7 +2152,7 @@ export object SpawnRequest {
     parent: str = "",
     role: AgentRole = AgentRole.none,
     lease: Job? = null,
-    modelTier: JobModelTier? = null,
+    modelTier: magus\agent\JobModelTier? = null,
     thread: AgentThread = AgentThread.none,
     threadFrom: ThreadSource = ThreadSource.none,
     orchestration: Orchestration = Orchestration.none,
@@ -2771,7 +2642,7 @@ export object LifecycleStatus {
     detail: str = "",
 }
 
-export object ToolRow {
+export object ToolStatus {
     project: str = "",
     bin: str = "",
     spell: str = "",
@@ -2792,7 +2663,7 @@ export object ToolReport {
     workspace: str = "",
     count: int = 0,
     lifecycle: LifecycleStatus = LifecycleStatus{},
-    tools: [ToolRow] = [],
+    tools: [ToolStatus] = [],
 }
 
 export object ListedWorkspace {
@@ -2820,7 +2691,7 @@ export object ServiceLease {
 export object ModelTierRequest {
     id: str = "",
     parent: str = "",
-    criteria: str = "",
+    instructions: str = "",
     readOnly: bool = false,
     check: LeaseCheck? = null,
     goals: [Goal] = [],
@@ -2832,13 +2703,8 @@ export object ModelTierRequest {
     writeFiles: int = 0,
     parentRank: int? = null,
     declaredRank: int? = null,
-    declaredModel: str = "",
+    model: magus\agent\Model = magus\agent\Model{},
     history: [ModelTierRecord] = [],
-}
-
-export object ModelTierBounds {
-    maxLive: int = 0,
-    maxContext: int = 0,
 }
 
 extern fun magus__Workspace__jobs(recv: Workspace) > JobList !> any;
@@ -2887,9 +2753,9 @@ extern fun magus__History__trend(recv: History) > Trend !> any;
 extern fun magus__Job__exit(recv: Job, result: {str: any} = {<str: any>}) > Job !> any;
 extern fun magus__Job__wait(recv: Job, result: {str: any} = {<str: any>}) > JobStatus !> any;
 extern fun magus__Job__register(recv: Job) > JobRegistration !> any;
-extern fun magus__Session__trail(recv: Session) > Trail !> any;
-extern fun magus__Session__marks(recv: Session) > [TrailMark] !> any;
-extern fun magus__Session__mark(recv: Session, mark: TrailMark) > TrailMark !> any;
+extern fun magus__Session__trail(recv: Session) > magus\trail\Trail !> any;
+extern fun magus__Session__marks(recv: Session) > [magus\trail\Mark] !> any;
+extern fun magus__Session__mark(recv: Session, mark: magus\trail\Mark) > magus\trail\Mark !> any;
 
 export extern fun canonicalName(name: str) > str;
 export extern fun change(base: str = "", opts: ChangeOptions? = null) > Change !> any;
@@ -2909,7 +2775,7 @@ export extern fun project(config: any, opts: any = null) > void;
 export extern fun pry() > void;
 export extern fun raise(code: DiagnosticCode, message: str, opts: RaiseOptions? = null) > void !> any;
 export extern fun run(args: [str], opts: CommandOptions? = null) > ExecResult !> any;
-export extern fun session(opts: SessionOptions? = null) > Session !> any;
+export extern fun session(opts: magus\trail\ReadOptions? = null) > Session !> any;
 export extern fun where(dir: str) > str !> any;
 export extern fun workspace(dir: str = "") > Workspace !> any;
 export extern fun workspaceProvider(spell: {str: any}) > void;
@@ -2947,6 +2813,7 @@ export object guard {
     static extern fun shapes(command: str) > [str];
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: fun (req: SpawnRequest) > GuardVerdict !> any) > void;
+    static extern fun step(kind: str, rule: fun (req: magus\agent\StepRequest) > GuardVerdict !> any) > void;
     static extern fun stop(rule: fun (req: StopRequest) > GuardVerdict !> any) > void;
     static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;
 }

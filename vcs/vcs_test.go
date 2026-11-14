@@ -2409,3 +2409,133 @@ func TestParityRemoteURLByName(t *testing.T) {
 		}
 	})
 }
+
+// committedRevision is the full id of dir's last commit. jj's working copy is
+// a commit of its own, so its last commit is @'s parent.
+func committedRevision(t *testing.T, b parityBackend, dir string) string {
+	t.Helper()
+	if b.name == "jj" {
+		return strings.TrimSpace(vcsTestOutput(t, dir, "jj", "log", "-r", "@-", "--no-graph", "-T", "commit_id"))
+	}
+	c, err := b.drv.FindCommit(t.Context(), dir, "")
+	require.NoError(t, err)
+	return c.ID
+}
+
+// changedSince is b's ChangedSince, failing the test for a driver without it.
+func changedSince(t *testing.T, b parityBackend, dir, rev string, paths []string) []string {
+	t.Helper()
+	differ, ok := b.drv.(RevisionDiffer)
+	require.Truef(t, ok, "%s cannot list the paths changed since a revision", b.name)
+	got, err := differ.ChangedSince(t.Context(), dir, rev, paths)
+	require.NoError(t, err)
+	return got
+}
+
+// A commit since the revision is a change: the guard reads a worker's
+// committed loosening as pending until its authority holds it.
+func TestParityChangedSinceNamesACommittedChange(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n", "b.txt": "same\n"})
+		rev := committedRevision(t, b, dir)
+		writeRepositoryFile(t, dir, "a.txt", "two\n")
+		commitAll(t, b, dir, "loosen")
+
+		assert.Equal(t, []string{"a.txt"}, changedSince(t, b, dir, rev, nil), b.name)
+	})
+}
+
+func TestParityChangedSinceNamesAnEditAndAnUntrackedFile(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n", "b.txt": "same\n"})
+		rev := committedRevision(t, b, dir)
+		writeRepositoryFile(t, dir, "a.txt", "two\n")
+		writeRepositoryFile(t, dir, "new.txt", "new\n")
+
+		assert.ElementsMatch(t, []string{"a.txt", "new.txt"}, changedSince(t, b, dir, rev, nil), b.name)
+	})
+}
+
+func TestParityChangedSinceKeepsToItsPaths(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n", "b.txt": "one\n"})
+		rev := committedRevision(t, b, dir)
+		writeRepositoryFile(t, dir, "a.txt", "two\n")
+		writeRepositoryFile(t, dir, "b.txt", "two\n")
+
+		assert.Equal(t, []string{"a.txt"}, changedSince(t, b, dir, rev, []string{"a.txt"}), b.name)
+	})
+}
+
+func TestParityChangedSinceIsRepositoryRelative(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"root.txt": "r\n", "sub/a.txt": "s\n"})
+		rev := committedRevision(t, b, dir)
+		writeRepositoryFile(t, dir, "sub/a.txt", "changed\n")
+
+		assert.Equal(t, []string{"sub/a.txt"}, changedSince(t, b, filepath.Join(dir, "sub"), rev, []string{"a.txt"}), b.name)
+	})
+}
+
+func TestChangedSinceRejectsAFlagLikeRevision(t *testing.T) {
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "one\n"})
+	_, err := (gitVCS{}).ChangedSince(t.Context(), repo.Root(), "--output=x", nil)
+	assert.Error(t, err)
+}
+
+// listFilesAt is b's ListFilesAt, failing the test for a driver without it.
+func listFilesAt(t *testing.T, b parityBackend, dir, rev, sub string) []string {
+	t.Helper()
+	lister, ok := b.drv.(types.RevisionLister)
+	require.Truef(t, ok, "%s cannot list the files a revision holds", b.name)
+	got, err := lister.ListFilesAt(t.Context(), dir, rev, sub)
+	require.NoError(t, err)
+	return got
+}
+
+// An authority's contract is its subtree at that revision, so a file only
+// the working tree holds stays out of the listing.
+func TestParityListFilesAtReadsTheRevisionsSubtree(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"top.txt": "t\n", "sub/a.txt": "a\n", "sub/deep/b.txt": "b\n"})
+		rev := committedRevision(t, b, dir)
+		writeRepositoryFile(t, dir, "sub/a.txt", "later\n")
+		commitAll(t, b, dir, "later")
+		writeRepositoryFile(t, dir, "sub/edit.txt", "edit\n")
+
+		assert.Equal(t, []string{"sub/a.txt", "sub/deep/b.txt"}, listFilesAt(t, b, dir, rev, "sub"), b.name)
+	})
+}
+
+func TestParityListFilesAtOfAnAbsentDirectoryListsNothing(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"top.txt": "t\n"})
+		rev := committedRevision(t, b, dir)
+
+		assert.Empty(t, listFilesAt(t, b, dir, rev, "absent"), b.name)
+	})
+}
+
+func TestParityListFilesAtOfAnUnknownRevisionIsAnError(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"top.txt": "t\n"})
+		lister, ok := b.drv.(types.RevisionLister)
+		require.Truef(t, ok, "%s cannot list the files a revision holds", b.name)
+
+		_, err := lister.ListFilesAt(t.Context(), dir, "no-such-revision", "top")
+		assert.Error(t, err, b.name)
+	})
+}
+
+func TestListFilesAtRejectsAFlagLikeRevision(t *testing.T) {
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "one\n"})
+	_, err := (gitVCS{}).ListFilesAt(t.Context(), repo.Root(), "--output=x", "")
+	assert.Error(t, err)
+}

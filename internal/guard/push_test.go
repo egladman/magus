@@ -874,7 +874,7 @@ func (s *NarrowPushSuite) TestAPushJudgmentReadsTheStoreOnceAndGitOnceForEveryGa
 }
 
 // A git process per changed file spent a 733-file branch's whole deadline.
-func (s *NarrowPushSuite) TestAPushOfManyChangedFilesIsWeighedBeforeTheDeadline() {
+func (s *NarrowPushSuite) TestAPushOfManyChangedFilesIsWeighedInAFewGitProcesses() {
 	s.gateAtFirstCommit()
 	files := map[string]string{}
 	for i := range 400 {
@@ -882,13 +882,16 @@ func (s *NarrowPushSuite) TestAPushOfManyChangedFilesIsWeighedBeforeTheDeadline(
 	}
 	head := s.repo.Commit("many", files)
 	s.passed(strings.Repeat("e", 64), "go-test", head)
+	older := s.repo.Commit("older", map[string]string{"f000.go": "package a\n"})
+	s.passed(strings.Repeat("f", 64), "lint", older)
+	head = s.repo.Commit("again", map[string]string{"f000.go": files["f000.go"]})
+	s.passed(strings.Repeat("g", 64), "go-test", head)
 	s.deps.Revision = func(context.Context, string, string) string { return head[:12] }
-	deadline, cancel := context.WithTimeout(s.T().Context(), time.Second)
-	defer cancel()
-	ctx := withPhaseLog(deadline, trail.Phase{})
+	ctx := withPhaseLog(s.T().Context(), trail.Phase{})
+	calls := s.gitCalls()
 
 	ev := pushCoverage(ctx, s.deps, s.at, "git push", DialectBash, s.repo.Root())
-	s.Require().NoError(deadline.Err(), "the judgment ran into its deadline")
+	s.Less(len(calls()), 20, "git processes for 400 files at two revisions")
 	s.Equal(gateNarrow, ev.cover)
 	s.Contains(ev.admitted(), "each of the 400 files")
 	var phases []string
@@ -1163,7 +1166,7 @@ func TestADeadlineCutReadCoversNothing(t *testing.T) {
 		Return("", context.Canceled)
 	ev := runEvidence{
 		driver: driver, root: "/repo", commit: "c1",
-		files: map[string]fileAt{}, revisions: map[string]bool{},
+		files: map[revisionFile]fileAt{}, revisions: map[string]bool{},
 	}
 
 	run := cache.OutputDescriptor{Revision: "r1"}

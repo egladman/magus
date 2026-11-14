@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // The cost rules judge the main thread of a session: the context every one of its calls
@@ -478,9 +479,9 @@ func gradeSpawnModel(deps Dependencies, verdict types.GuardJudgment, env hookReq
 // declaration as it stands.
 type forkedTier struct {
 	job    string
-	record types.JobModelTier
-	tier   types.ModelTier
-	set    *types.ModelTierSet
+	record agent.JobModelTier
+	tier   agent.ModelTier
+	set    *agent.ModelTierSet
 	// rows are the mgs_listModels rows: their aliases name the short model a host's spawn
 	// tool takes where the declaration maps only full ids.
 	rows []types.ModelPricing
@@ -499,7 +500,7 @@ func boundModelTier(deps Dependencies, row types.Job) (forkedTier, bool) {
 // tierIn is the tier row was forked at in set. It is false when the row records none, set
 // is nil, or set no longer has a case of that name at that rank: a row forked before its
 // enum changed is graded by nothing rather than by a guess.
-func tierIn(set *types.ModelTierSet, row types.Job) (forkedTier, bool) {
+func tierIn(set *agent.ModelTierSet, row types.Job) (forkedTier, bool) {
 	if set == nil || row.ModelTier == nil {
 		return forkedTier{}, false
 	}
@@ -510,8 +511,8 @@ func tierIn(set *types.ModelTierSet, row types.Job) (forkedTier, bool) {
 	return forkedTier{job: row.ID, record: *row.ModelTier, tier: t, set: set}, true
 }
 
-// line is the assignment as a verdict names it, with the alias host spawns for it:
-// `economy (rank 0) -> haiku, matrix: "two files" at hack/tiers.buzz:12`.
+// line is the assignment as a verdict names it, with the alias host spawns.
+// One reads `routine (rank 0) -> haiku, matrix: "two files" at a.buzz:12`.
 func (f forkedTier) line(alias string) string {
 	out := fmt.Sprintf("%s (rank %d) -> %s, %s", f.record.Name, f.record.Rank, alias, f.record.Source)
 	if f.record.Reason != "" {
@@ -586,19 +587,20 @@ func (f forkedTier) rankedAbove(host, model string) string {
 // recoversOwnCheckout reports a line that runs root's checkout.bootstrap with
 // --here --recover and nothing else. Only that entry is root work; ordinary
 // builds remain delegated. A workspace declaring no hook has no such line.
-func readsCitedResult(rows []types.Job, line string, at location) bool {
+func readsCitedResult(tries types.JobAttempts, line string, at location) bool {
 	paths := focusReadPaths(line, cmp.Or(at.dir, at.workspace), userHome())
 	if len(paths) == 0 {
 		return false
 	}
 	var cited []string
-	for _, row := range rows {
-		if row.Result == nil {
+	for job := range tries {
+		result := tries.Result(job)
+		if result == nil {
 			continue
 		}
-		cited = append(cited, row.Result.ChangedPaths...)
-		cited = append(cited, row.Result.UnresolvedRisks...)
-		cited = append(cited, row.Result.FollowUps...)
+		cited = append(cited, result.ChangedPaths...)
+		cited = append(cited, result.UnresolvedRisks...)
+		cited = append(cited, result.FollowUps...)
 	}
 	return len(cited) > 0 && !slices.ContainsFunc(paths, func(p string) bool { return !citesPath(cited, p) })
 }

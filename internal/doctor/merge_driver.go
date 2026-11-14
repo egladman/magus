@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -33,22 +34,22 @@ import (
 //
 // The diff drivers are installed with the merge driver, so a registration missing any of
 // them fails here too, and the remedy is the init verb that installs them.
-func (r *runner) checkMergeDriverLoads(ctx context.Context) types.Check {
+func (r *runner) checkMergeDriverLoads(ctx context.Context) check.Check {
 	const name = "merge-driver-loads-workspace"
 
 	registered := r.registeredMergeDriver(ctx)
 	if registered == "" {
-		return types.Check{Name: name, Status: types.CheckOK,
+		return check.Check{Name: name, Status: check.OK,
 			Message: "no merge driver registered, so generated conflicts fall back to a hand merge"}
 	}
 	exe := driverExecutable(registered)
 	if exe == "" {
-		return types.Check{Name: name, Status: types.CheckFail,
+		return check.Check{Name: name, Status: check.Fail,
 			Message: "the registered merge driver names no executable: " + registered}
 	}
 	missing, err := vcs.MissingDiffDrivers(ctx, r.ws.Root())
 	if err != nil {
-		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
+		return check.Check{Name: name, Status: check.Fail, Message: err.Error()}
 	}
 
 	// The workspace this doctor is inspecting, so the answer is about the tree in front of
@@ -56,9 +57,9 @@ func (r *runner) checkMergeDriverLoads(ctx context.Context) types.Check {
 	probe := exec.Command(exe, "ls")
 	probe.Dir = r.ws.Root()
 	if out, err := probe.CombinedOutput(); err != nil {
-		return types.Check{
+		return check.Check{
 			Name:   name,
-			Status: types.CheckFail,
+			Status: check.Fail,
 			Message: "the registered merge driver cannot load this workspace, so every conflict in a " +
 				"generated file falls back to markers with nothing naming the cause",
 			Details: []string{
@@ -69,15 +70,15 @@ func (r *runner) checkMergeDriverLoads(ctx context.Context) types.Check {
 		}
 	}
 	if len(missing) > 0 {
-		return types.Check{
+		return check.Check{
 			Name:   name,
-			Status: types.CheckFail,
+			Status: check.Fail,
 			Message: "the merge driver is registered without the diff drivers installed beside it, so " +
 				"hunk headers name no declaration and a footprint cannot say what a change touched",
 			Details: append(missing, r.installRemedy(ctx)),
 		}
 	}
-	return types.Check{Name: name, Status: types.CheckOK,
+	return check.Check{Name: name, Status: check.OK,
 		Message: "the registered merge driver loads this workspace"}
 }
 
@@ -127,14 +128,14 @@ func driverExecutable(registered string) string {
 // settled yet. Each names generated files still holding one side of a merge, so a
 // commit made now carries stale output. The record outlives a settle hook that failed
 // or was bypassed with --no-verify, and this is where that becomes visible.
-func (r *runner) checkOwedRegeneration(ctx context.Context) types.Check {
+func (r *runner) checkOwedRegeneration(ctx context.Context) check.Check {
 	const name = "owed-regeneration"
 	owed, err := vcs.OwedRegenerations(ctx, r.ws.Root())
 	if err != nil {
-		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
+		return check.Check{Name: name, Status: check.Fail, Message: err.Error()}
 	}
 	if len(owed) == 0 {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no merge left a regeneration owed"}
+		return check.Check{Name: name, Status: check.OK, Message: "no merge left a regeneration owed"}
 	}
 	path, _ := vcs.OwedRegenerationPath(ctx, r.ws.Root())
 	details := make([]string, 0, len(owed)+2)
@@ -148,9 +149,9 @@ func (r *runner) checkOwedRegeneration(ctx context.Context) types.Check {
 	details = append(details,
 		fmt.Sprintf("settle them with `%s`, which runs them, stages the result and clears the record", hint.VCSResolve.String()),
 		"record: "+path)
-	return types.Check{
+	return check.Check{
 		Name:    name,
-		Status:  types.CheckFail,
+		Status:  check.Fail,
 		Message: fmt.Sprintf("%d regeneration(s) a merge kept one side for have not run, so those generated files are stale", len(owed)),
 		Details: details,
 	}

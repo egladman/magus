@@ -1,5 +1,6 @@
 import "magus";
 import "../../hack/magusfile/advisories" as advisories;
+import "../../hack/magusfile/run-golangci" as golangci;
 
 import "magus/spell/go";
 
@@ -24,6 +25,11 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(["testdata/*", "gen/table.digest"]);
     go["go-vet"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
+}
+// The tree-wide conventions over this module, through .magus/custom-gcl.
+export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
+    golangci\readLibFiles(ctx);
+    golangci\lintLib("libs/embed", ctx.hasCharm("rw"));
 }
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(["testdata/*", "gen/table.digest"]);

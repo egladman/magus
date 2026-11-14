@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -74,9 +75,9 @@ func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
-	require.Equal(t, types.Check{
+	require.Equal(t, check.Check{
 		Name:    "bound-lease",
-		Status:  types.CheckOK,
+		Status:  check.OK,
 		Message: "no lease bound; the guard advises only",
 	}, got)
 }
@@ -88,9 +89,9 @@ func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
-	require.Equal(t, types.Check{
+	require.Equal(t, check.Check{
 		Name:    "bound-lease",
-		Status:  types.CheckFail,
+		Status:  check.Fail,
 		Message: `this checkout's marker binds lease "adj/marker" while the environment claims "adj/from-env"`,
 		Details: []string{
 			"the guard wrote the marker when a caller whose host names no session ran `magus job exec` here, so magus grades every write under adj/marker and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
@@ -130,7 +131,7 @@ func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
-	require.Equal(t, types.Check{Status: types.CheckFail, Evidence: types.EvidenceUnknown}, withoutWording(got))
+	require.Equal(t, check.Check{Status: check.Fail, Evidence: check.EvidenceUnknown}, withoutWording(got))
 	require.Contains(t, got.Message, "could not read the job store")
 }
 
@@ -140,13 +141,13 @@ func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
-	require.Equal(t, types.Check{
+	require.Equal(t, check.Check{
 		Name:    "bound-lease",
-		Status:  types.CheckFail,
+		Status:  check.Fail,
 		Message: `lease "adj/no-such-lease" is bound here, and no row declares it`,
 		Details: []string{
 			"the guard grades every write here as an unattributed edit: advisory, never denied",
-			"declare the row under this id: " + hint.JobFork.With("adj/no-such-lease", "--criteria", "<criteria>"),
+			"declare the row under this id: " + hint.JobFork.With("adj/no-such-lease", "--instructions", "<instructions>"),
 		},
 	}, got)
 }
@@ -158,9 +159,9 @@ func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
-	require.Equal(t, types.Check{
+	require.Equal(t, check.Check{
 		Name:    "bound-lease",
-		Status:  types.CheckFail,
+		Status:  check.Fail,
 		Message: `lease "adj/done" is bound here and not live (pass), so its lease-scoped rules are inert`,
 		Details: []string{"every write here grades as an unattributed edit until this checkout binds a live lease"},
 	}, got)
@@ -178,9 +179,9 @@ func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
-	require.Equal(t, types.Check{
+	require.Equal(t, check.Check{
 		Name:    "bound-lease",
-		Status:  types.CheckFail,
+		Status:  check.Fail,
 		Message: `lease "adj/stateless" is bound here and not live (no state), so its lease-scoped rules are inert`,
 		Details: []string{"every write here grades as an unattributed edit until this checkout binds a live lease"},
 	}, got)
@@ -193,9 +194,9 @@ func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
 
-	require.Equal(t, types.Check{
+	require.Equal(t, check.Check{
 		Name:    "bound-lease",
-		Status:  types.CheckFail,
+		Status:  check.Fail,
 		Message: `lease "adj/live" is bound here and live, but has no registered base, so the guard denies every write until one is recorded`,
 		Details: []string{fmt.Sprintf("record one: %s, then exec it on this lease", hint.VCSCheckpoint.With("-o", "name"))},
 	}, got)
@@ -206,9 +207,9 @@ func TestBoundLeaseAdvisesWhenNothingInvokesTheGuard(t *testing.T) {
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, w.Root()))
 
-	require.Equal(t, types.Check{
+	require.Equal(t, check.Check{
 		Name:    "bound-lease",
-		Status:  types.CheckAdvice,
+		Status:  check.Advice,
 		Message: `lease "adj/unwired" is bound here, live and registered, but no host hook config in this checkout invokes the guard`,
 		Details: []string{"the guard-wiring check names what is missing; MCP calls are not checked here"},
 	}, got)
@@ -220,9 +221,9 @@ func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, w.Root()), "test-host")
 
-	require.Equal(t, types.Check{
+	require.Equal(t, check.Check{
 		Name:    "bound-lease",
-		Status:  types.CheckOK,
+		Status:  check.OK,
 		Message: `lease "adj/enforcing" is bound here, live, registered, and a host hook is wired to judge it`,
 	}, got)
 }
@@ -251,7 +252,7 @@ func TestCheckJobTreeEndsOrphansAndFlagsStaleJobs(t *testing.T) {
 
 	now := time.Now().Unix()
 	got := checkJobTree(place(t, "", root), config.Jobs{}, now)
-	assert.Equal(t, types.CheckOK, got.Status, "the read ended the orphan, so nothing is left to report: %s", got.Message)
+	assert.Equal(t, check.OK, got.Status, "the read ended the orphan, so nothing is left to report: %s", got.Message)
 	rows, err := store.List()
 	require.NoError(t, err)
 	orphan := rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "root/orphan" })]
@@ -259,7 +260,7 @@ func TestCheckJobTreeEndsOrphansAndFlagsStaleJobs(t *testing.T) {
 	assert.NotEmpty(t, orphan.EndReason)
 
 	stale := checkJobTree(place(t, "", root), config.Jobs{StaleAfter: time.Minute}, now+3600)
-	require.Equal(t, types.CheckAdvice, stale.Status)
+	require.Equal(t, check.Advice, stale.Status)
 	assert.Contains(t, strings.Join(stale.Details, "\n"), hint.JobExit.With("live"))
 	assert.Contains(t, stale.Message, "jobs.stale_after")
 }
@@ -269,18 +270,18 @@ func TestCheckJobTreePassesAHealthyPlan(t *testing.T) {
 	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
 
 	got := checkJobTree(place(t, "", root), config.Jobs{StaleAfter: time.Hour}, time.Now().Unix())
-	assert.Equal(t, types.CheckOK, got.Status, got.Message)
+	assert.Equal(t, check.OK, got.Status, got.Message)
 }
 
 func TestCheckJobTreeNamesJobsBlockedOnAnEndedDependency(t *testing.T) {
 	_, root, store := newWorkspaceLedger(t)
 	seed(t, store, types.Job{ID: "dep", State: types.StateFail})
-	seed(t, store, types.Job{ID: "waiter", State: types.StateDeclared, DependsOn: []string{"dep"}, WritePaths: []string{"internal/job"}})
+	seed(t, store, types.Job{ID: "waiter", State: types.StateDeclared, DependsOn: []string{"dep"}, Paths: types.JobPaths{Write: []string{"internal/job"}}})
 	seed(t, store, types.Job{ID: "queued", State: types.StateDeclared, DependsOn: []string{"live"}})
 	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
 
 	got := checkJobTree(place(t, "", root), config.Jobs{}, time.Now().Unix())
-	require.Equal(t, types.CheckAdvice, got.Status, got.Message)
+	require.Equal(t, check.Advice, got.Status, got.Message)
 	assert.Contains(t, got.Message, "waiter is blocked on dep which is fail")
 	assert.NotContains(t, got.Message, "queued", "a dependency still running is a plan in order, not a finding")
 }

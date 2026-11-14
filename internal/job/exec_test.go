@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -318,7 +319,7 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	handed := repo.Head()
 	repo.Commit("elsewhere", map[string]string{"b.txt": "b\n"})
 	s := tempStore(t, repo.Root())
-	seed(t, s, types.Job{ID: "u1", Checkpoint: handed, Criteria: "declared goal"})
+	seed(t, s, types.Job{ID: "u1", Checkpoint: handed, Agent: agent.Instructed("declared goal")})
 
 	diverged, err := s.Exec(ctx, "u1")
 	require.NoError(t, err)
@@ -329,7 +330,7 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	require.NoError(t, err)
 	want := stamped(types.Job{
 		ID:           "u1",
-		Criteria:     "declared goal",
+		Agent:        agent.Instructed("declared goal"),
 		Checkpoint:   handed,
 		State:        types.StateRunning,
 		ReportedBase: handed,

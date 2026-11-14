@@ -8,23 +8,23 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/generate"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/generate"
 )
 
 // registryFlags is every flag name the tree declares as its own spelling: an alias
 // and a one-character short are second ways to type a flag, not concepts.
 func registryFlags() []string {
 	seen := map[string]bool{}
-	collect := func(flags []cmdline.Flag) {
+	collect := func(flags []command.Flag) {
 		for _, f := range flags {
 			if f.AliasOf == "" && len(f.Name) > 1 {
 				seen[f.Name] = true
 			}
 		}
 	}
-	collect(Root.Flags)
-	cmdline.Walk(Root, func(_ string, c cmdline.Command) { collect(c.Flags) })
+	collect(Root.Spec.Flags)
+	command.Walk(Root.Spec.Command, func(_ string, c command.Command) { collect(c.Flags) })
 	names := make([]string, 0, len(seen))
 	for n := range seen {
 		names = append(names, n)
@@ -34,7 +34,7 @@ func registryFlags() []string {
 }
 
 func TestRegistryFlagsPassTheGeneratorRefusals(t *testing.T) {
-	if err := cmdline.Check(Root); err != nil {
+	if err := command.Check(Root.Spec.Command); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -101,7 +101,7 @@ func TestEveryColumnSpellsTheFlag(t *testing.T) {
 	}
 }
 
-// flagUnitSuffixes are quantity units that belong on the VALUE of a cmdline.Duration
+// flagUnitSuffixes are quantity units that belong on the VALUE of a command.Duration
 // flag (5m, 420ms), never as a suffix of the flag's name. An Int counted in that
 // unit (--tool-ms 420) is the anti-pattern this refuses.
 var flagUnitSuffixes = []string{
@@ -115,7 +115,7 @@ func TestNoFlagNameEncodesAUnit(t *testing.T) {
 	for _, name := range registryFlags() {
 		for _, unit := range flagUnitSuffixes {
 			if strings.HasSuffix(name, unit) {
-				t.Errorf("flag --%s encodes unit %q in its name: use cmdline.Duration and a unit-free name (e.g. --timeout 5m), not an Int counted in that unit", name, unit)
+				t.Errorf("flag --%s encodes unit %q in its name: use command.Duration and a unit-free name (e.g. --timeout 5m), not an Int counted in that unit", name, unit)
 			}
 		}
 	}
@@ -127,9 +127,9 @@ func TestEffect(t *testing.T) { suite.Run(t, new(effectSuite)) }
 
 // A new leaf cannot reach a reader of the tree unclassified.
 func (s *effectSuite) TestEveryLeafDeclaresAnEffect() {
-	cmdline.Walk(Root, func(path string, c cmdline.Command) {
+	command.Walk(Root.Spec.Command, func(path string, c command.Command) {
 		if len(c.Children) == 0 {
-			s.NotEmpty(c.Effect, "magus %s declares no Effect: set one of %v", path, cmdline.Effects)
+			s.NotEmpty(c.Effect, "magus %s declares no Effect: set one of %v", path, command.Effects)
 		}
 	})
 }

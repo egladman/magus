@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
 	"io"
@@ -32,6 +33,8 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/log/attr"
@@ -53,6 +56,8 @@ import (
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/release"
+	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -107,9 +112,7 @@ type Magus struct {
 	ws    *types.Workspace
 	cfg   config.Config
 	cache *cache.Cache
-	// version is the running build, as the caller reported it via WithVersion. Kept so
-	// a workspace-load failure can say what this binary IS: the one thing an
-	// out-of-date binary can state about itself. See explainStale.
+	// version is the running build, as the caller reported it via WithVersion.
 	version string
 	// records receives a -o jsonl invocation's stderr records: the cache's log and any
 	// output that runs outside a target's capture. Nil for every other format.
@@ -205,6 +208,15 @@ type Magus struct {
 	// cacheBackend is WithCacheBackend's; nil without one, when the magusfile may wire
 	// one instead.
 	cacheBackend types.CacheBackend
+	// jobReader is WithJobReader's; nil reads the job store.
+	jobReader types.JobReader
+	// steps is WithStepRows' and WithStepRule's, checked at Open.
+	steps guard.StepTable
+	// modelTiers is what the root magusfile's magus\modelTiers declared.
+	modelTiers agent.ModelTierState
+	// stepRules is what the root magusfile's magus\guard.step registered.
+	// Load checks the step specs against its kinds.
+	stepRules steps.Group
 }
 
 // env reads key from the environment WithEnv gave, "" for a key unset there or with no
@@ -286,7 +298,7 @@ func (w internals) SpellImports() *remotespell.Imports { return w.spellImports }
 
 // CheckSpawn holds a job at tier parent spawning one at tier child to the workspace's
 // spawn rule.
-func (w internals) CheckSpawn(parent, child types.ModelTier) error {
+func (w internals) CheckSpawn(parent, child agent.ModelTier) error {
 	return w.spawnRule(parent, child)
 }
 
@@ -315,17 +327,9 @@ func Inspect(ctx context.Context, root string, opts ...Option) (types.WorkspaceR
 		return nil, err
 	}
 	if err := m.load(ctx); err != nil {
-		return nil, m.explainStale(err)
+		return nil, explainStale(err, m.Root())
 	}
 	return m, nil
-}
-
-// explainStale annotates a workspace-load failure that looks like an out-of-date
-// binary. load() is the right place: it is where magusfiles and local spells are
-// EVALUATED, and therefore where a name this build does not provide actually surfaces.
-// Discover, above, only walks the tree; it cannot fail this way.
-func (m *Magus) explainStale(err error) error {
-	return withOwnBuildEscape(ward.ExplainStaleBinary(err, m.version, m.cfg.RequiredVersion), m.Root())
 }
 
 // WorkspaceLoadFailure describes err, a failed Open of root, as the server reports a FAILED
@@ -419,6 +423,9 @@ func (m *Magus) load(ctx context.Context) error {
 		return errors.Join(err, m.spellShadows())
 	}
 	m.magusfileExports = customTargets
+	if err := m.steps.CheckJudged(m.stepRules.Kinds()); err != nil {
+		return fmt.Errorf("magus: WithStepSpecs: %w", err)
+	}
 	// Workspace providers run HERE, where both facts they need hold.
 	// The magusfiles ran, so magus\workspaceProvider named its spells.
 	// The registry waits, so magus\project still layers on top.
@@ -564,6 +571,9 @@ func (m *Magus) shadowAcknowledged(importPath string) bool {
 }
 
 func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
+	if err := errors.Join(collectOptions(opts).Misuse...); err != nil {
+		return nil, err
+	}
 	cfg, err := loadConfig(root, opts...)
 	if err != nil {
 		return nil, err
@@ -571,10 +581,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// Before project discovery, and long before any magusfile is evaluated. The
 	// magusfile is the thing that explodes when the binary is too old, so a floor
 	// checked after it has already failed reports nothing anyone can act on.
-	var vo workspace.Load
-	for _, fn := range opts {
-		fn(&vo)
-	}
+	vo := collectOptions(opts)
 	if d := ward.CheckRequiredVersion(cfg.RequiredVersion, vo.Version); d != nil {
 		return nil, d
 	}
@@ -606,33 +613,40 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if ws.Workspaces, err = reconcileWorkspaces(ctx, root, cfg.Knowledge.Workspaces, ws.VCSOptions, stderr); err != nil {
 		return nil, err
 	}
-	if vo.SpawnRule == nil {
+	if vo.spawnRule == nil {
 		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(magus.TierCeiling), the reference rule, or a rule of your own")
 	}
 	if vo.CacheBackendGiven && vo.CacheBackend == nil {
 		return nil, errors.New("magus: WithCacheBackend was given a nil backend, so pass a backend, or leave the option out to use the one the magusfile wires")
 	}
-	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.SpawnRule, cacheBackend: vo.CacheBackend,
-		environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine}
+	if vo.JobReaderGiven && vo.JobReader == nil {
+		return nil, errors.New("magus: WithJobReader was given a nil reader, so pass a reader, or leave the option out to read the job store")
+	}
+	rules := make([]guard.StepRule, len(vo.stepRules))
+	for i, r := range vo.stepRules {
+		rules[i] = guard.StepRule(r)
+	}
+	steps, err := guard.NewStepTable(vo.stepSpecs, rules)
+	if err != nil {
+		return nil, fmt.Errorf("magus: WithStepSpecs: %w", err)
+	}
+	m := &Magus{ws: ws, cfg: cfg, version: vo.Version, spawnRule: vo.spawnRule, cacheBackend: vo.CacheBackend,
+		environ: vo.Env, getenv: envGetter(vo.Env), stderr: io.Discard, commandLine: vo.CommandLine, jobReader: vo.JobReader, steps: steps}
 	if vo.Stderr != nil {
 		m.stderr = vo.Stderr
 	}
 	if isJSONLLog(cfg.Log) {
 		m.records = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(m.stderr), cfg.Log.SlogLevel()))
 	}
-	var o workspace.Load
-	for _, fn := range opts {
-		fn(&o)
+	if vo.Limiter != nil {
+		m.limOnce.Do(func() { m.lim = vo.Limiter })
 	}
-	if o.Limiter != nil {
-		m.limOnce.Do(func() { m.lim = o.Limiter })
-	}
-	m.broker, m.brokerGiven, m.brokerPolicy = o.Broker, o.BrokerGiven, o.BrokerPolicy
-	m.metricsCollect = o.MetricsCollect
-	m.injectedTel = o.Provider
-	m.skipProviders = o.SkipWorkspaceProviders
-	if o.Registry != nil {
-		m.wsReg = o.Registry
+	m.broker, m.brokerGiven, m.brokerPolicy = vo.Broker, vo.BrokerGiven, vo.BrokerPolicy
+	m.metricsCollect = vo.MetricsCollect
+	m.injectedTel = vo.Provider
+	m.skipProviders = vo.SkipWorkspaceProviders
+	if vo.Registry != nil {
+		m.wsReg = vo.Registry
 	} else {
 		m.wsReg = workspace.NewWorkspaceRegistry()
 	}
@@ -645,10 +659,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 }
 
 func loadConfig(root string, opts ...Option) (config.Config, error) {
-	var o workspace.Load
-	for _, fn := range opts {
-		fn(&o)
-	}
+	o := collectOptions(opts)
 	if o.Preloaded != nil {
 		return *o.Preloaded, nil
 	}
@@ -687,7 +698,7 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 // load names all of them instead of one per fix.
 func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, error) {
 	customTargets := make(map[string][]string)
-	ctx = installWorkspaceRegistry(ctx, m.wsReg)
+	ctx = m.installWorkspaceRegistry(ctx)
 	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
 	// so a top-level read here must be the SAME read the run sees.
 	ctx = m.ContextWithSecrets(ctx)
@@ -902,7 +913,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// autobind, and any magus.cache.remote() backend wiring all happen here, so a
 	// magusfile-chosen remote backend can be attached at cache construction.
 	if err := m.load(ctx); err != nil {
-		return nil, m.explainStale(err)
+		return nil, explainStale(err, m.Root())
 	}
 
 	cacheDir := resolveCacheDir(m.ws.Root, m.cfg)
@@ -1283,19 +1294,19 @@ func (m *Magus) Regions(ctx context.Context, base string, files []types.FileChan
 // caller recording what it read records something that still means the same thing after somebody
 // pushes to that branch. Dirty and PatchDigest stay zero, because a committed revision is not a
 // working tree and reporting it as clean-or-dirty would be answering a question nobody asked.
-func (m *Magus) RevisionCheckpoint(ctx context.Context, rev string) (types.VCSCheckpoint, error) {
+func (m *Magus) RevisionCheckpoint(ctx context.Context, rev string) (typesvcs.Checkpoint, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
-		return types.VCSCheckpoint{}, fmt.Errorf("%w: %w",
+		return typesvcs.Checkpoint{}, fmt.Errorf("%w: %w",
 			types.DiagnosticErrorf(types.VCSCapabilityMissing,
 				"this workspace has version control disabled, so %q names no revision", rev),
 			types.ErrVCSUnsupported)
 	}
 	commit, err := res.VCS.FindCommit(ctx, m.ws.Root, rev)
 	if err != nil {
-		return types.VCSCheckpoint{}, fmt.Errorf("resolving %q: %w", rev, err)
+		return typesvcs.Checkpoint{}, fmt.Errorf("resolving %q: %w", rev, err)
 	}
-	return types.VCSCheckpoint{Revision: commit.ID, Branch: rev, VCS: res.Name}, nil
+	return typesvcs.Checkpoint{Revision: commit.ID, Branch: rev, VCS: res.Name}, nil
 }
 
 // FileAt returns a repo-relative path's content at a revision.
@@ -1347,20 +1358,20 @@ func (m *Magus) resolveReviewOrigin(ctx context.Context, driver types.VCSDriver)
 
 // releaseStage is the stage of the workspace's newest release tag, or the zero (unknown)
 // stage when there is no VCS or no tag to read.
-func (m *Magus) releaseStage(ctx context.Context) types.ReleaseStage {
+func (m *Magus) releaseStage(ctx context.Context) release.Stage {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
-		return types.ReleaseStage{}
+		return release.Stage{}
 	}
 	return releaseStage(ctx, res.VCS, m.ws.Root)
 }
 
 // releaseStage treats a driver that cannot list tags as one with none: the stage is
 // then unknown, which a reader must not mistake for pre-1.0.
-func releaseStage(ctx context.Context, driver types.VCSDriver, root string) types.ReleaseStage {
+func releaseStage(ctx context.Context, driver types.VCSDriver, root string) release.Stage {
 	tags, err := driver.Tags(ctx, root, "")
 	if err != nil {
-		return types.ReleaseStage{}
+		return release.Stage{}
 	}
 	return types.NewestReleaseStage(tags)
 }
@@ -1410,10 +1421,10 @@ func (m *Magus) untrackedPatch(ctx context.Context, driver types.VCSDriver, path
 			continue
 		}
 		content := strings.TrimSuffix(string(body), "\n")
-		rows := strings.Split(content, "\n")
-		fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n", p, p, p, len(rows))
-		for _, r := range rows {
-			fmt.Fprintf(&b, "+%s\n", r)
+		added := strings.Split(content, "\n")
+		fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n", p, p, p, len(added))
+		for _, line := range added {
+			fmt.Fprintf(&b, "+%s\n", line)
 		}
 	}
 	return b.String(), nil

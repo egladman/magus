@@ -252,17 +252,17 @@ func contractFieldType(expr ast.Expr, imports map[string]string) (reflect.Type, 
 			return nil, fmt.Errorf("unsupported type expression")
 		}
 		pkgPath := imports[pkg.Name]
-		for _, entry := range boundaryTypes {
+		for _, entry := range boundaryTypes() {
 			if entry.Type.PkgPath() == pkgPath && entry.Type.Name() == x.Sel.Name {
 				return entry.Type, nil
 			}
 		}
 		for _, en := range boundaryEnumList() {
-			if en.Type.PkgPath() == pkgPath && en.Type.Name() == x.Sel.Name {
+			if en.Type != nil && en.Type.PkgPath() == pkgPath && en.Type.Name() == x.Sel.Name {
 				return en.Type, nil
 			}
 		}
-		return nil, fmt.Errorf("%s.%s is not a registered boundary type (cmd/magus-utils/boundary_types.go)", pkg.Name, x.Sel.Name)
+		return nil, fmt.Errorf("%s.%s does not cross into Buzz: add it to boundaryRoots (cmd/magus-utils/boundary_types.go)", pkg.Name, x.Sel.Name)
 	}
 	return nil, fmt.Errorf("unsupported type expression %T", expr)
 }
@@ -289,11 +289,7 @@ func contractReturn(rt reflect.Type, handler bool) (string, error) {
 }
 
 func renderContractTable(funcs, harness []contractFunc) ([]byte, error) {
-	entries, err := inboundBoundaryTypes()
-	if err != nil {
-		return nil, err
-	}
-	e := newDecodeEmitter(entries)
+	e := newDecodeEmitter(inboundTypes())
 	decoders, err := renderContractDecoders(e, funcs, harness)
 	if err != nil {
 		return nil, err

@@ -85,15 +85,15 @@ She declares a job per half, from her main checkout:
 <!-- golden: job_people_solo.txtar fork.out -->
 
 ```console
-$ magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
+$ magus job fork refactor/pricing --instructions 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 referenced outside the write paths: files that use what the write paths define
   unknown, no symbol index answered; `magus graph build` builds one
 ```
 
 ```sh
-magus job fork refactor/tax --criteria 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .'
+magus job fork refactor/tax --instructions 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .'
 git worktree add ../shop-pricing
 git worktree add ../shop-tax
 ```
@@ -105,9 +105,9 @@ board:
 
 ```console
 $ magus ls jobs
-JOB               HOLDER  STATE     MODEL     PATHS  PROOF     CHECK
-refactor/pricing  -       declared  standard  1      alone     magus run test .
-refactor/tax      -       declared  standard  1      disjoint  magus run test .
+JOB               HOLDER  STATE     MODEL    PATHS  PROOF     CHECK
+refactor/pricing  -       declared  bounded  1      alone     magus run test .
+refactor/tax      -       declared  bounded  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -138,10 +138,10 @@ it anyway: a divergence is a fact for the record, not a refusal. The terms:
 ```console
 $ magus describe job refactor/pricing
 job: refactor/pricing
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 skills: short
 
-criteria
+instructions
 totals are computed in cents
 
 write paths
@@ -265,9 +265,9 @@ with `--all`:
 
 ```console
 $ magus ls jobs --all
-JOB               HOLDER        STATE      MODEL     PATHS  PROOF     CHECK
-refactor/pricing  shop-pricing  pass       standard  1      alone     magus run test .
-refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
+JOB               HOLDER        STATE      MODEL    PATHS  PROOF     CHECK
+refactor/pricing  shop-pricing  pass       bounded  1      alone     magus run test .
+refactor/tax      shop-tax      no_return  bounded  1      disjoint  magus run test .
 
 not merged onto main: 1
   refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"magus.job/v1alpha1","id":"refactor/pricing","left_unmerged":"<why>"}
@@ -280,7 +280,7 @@ Ana made both worktrees by hand, and removing them is hers to remember. `--check
 hands both ends to magus:
 
 ```sh
-magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .' --checkout ../shop-pricing
+magus job fork refactor/pricing --instructions 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .' --checkout ../shop-pricing
 ```
 
 The fork makes the checkout at the job's checkpoint, or at the revision her checkout
@@ -302,7 +302,7 @@ Ana and Ben share a workstation, each in a worktree of the shop: `../ana` and
 `../ben`. Ana takes a job on `total.sh` and `format.sh`, both in the pricing directory:
 
 ```sh
-magus job fork cents --criteria 'prices are integers of cents' --write-paths pricing/total.sh,pricing/format.sh --check 'test .'
+magus job fork cents --instructions 'prices are integers of cents' --write-paths pricing/total.sh,pricing/format.sh --check 'test .'
 magus job exec cents
 ```
 
@@ -311,9 +311,9 @@ Ben's change needs `format.sh` too, and he declares it anyway:
 <!-- golden: job_people_team.txtar fork.out -->
 
 ```console
-$ magus job fork currency --criteria 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
+$ magus job fork currency --instructions 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
 forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 referenced outside the write paths: files that use what the write paths define
   unknown, no symbol index answered; `magus graph build` builds one
 ```
@@ -347,9 +347,9 @@ Ben takes his job, and the board shows the shared ground:
 
 ```console
 $ magus ls jobs
-JOB       HOLDER  STATE    MODEL     PATHS  PROOF  CHECK
-cents     ana     running  standard  2      alone  magus run test .
-currency  ben     running  standard  2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL    PATHS  PROOF  CHECK
+cents     ana     running  bounded  2      alone  magus run test .
+currency  ben     running  bounded  2      alone  magus run test .
 
 overlaps
   cents and currency claim common ground
@@ -369,12 +369,12 @@ record is the whole spec, so it repeats what stays:
 ```console
 $ magus job apply --stdin <<'EOF'
 {"api_version": "magus.job/v1alpha1", "id": "cents",
- "criteria": "prices are integers of cents",
- "write_paths": ["pricing/total.sh"],
+ "agent": {"instructions": "prices are integers of cents", "worker": {"type": "resumed"}},
+ "paths": {"write": ["pricing/total.sh"]},
  "check": {"target": "test", "project": "."}}
 EOF
 updated cents, still running:
-  write_paths -pricing/format.sh
+  paths.write -pricing/format.sh
 ```
 
 `magus job fork --schema` prints every field a record takes, and `--dry-run` prints
@@ -386,9 +386,9 @@ the file Ana left. The overlap is gone:
 
 ```console
 $ magus ls jobs
-JOB       HOLDER  STATE    MODEL     PATHS  PROOF  CHECK
-cents     ana     running  standard  1      alone  magus run test .
-currency  ben     running  standard  2      alone  magus run test .
+JOB       HOLDER  STATE    MODEL    PATHS  PROOF  CHECK
+cents     ana     running  bounded  1      alone  magus run test .
+currency  ben     running  bounded  2      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -400,10 +400,10 @@ and Ben's terms now list only `total.sh` as Ana's:
 ```console
 $ magus describe job currency
 job: currency
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 skills: short
 
-criteria
+instructions
 prices carry a currency code
 
 write paths
@@ -580,7 +580,7 @@ refuses the glob under MGS3043 and says the breadth was not judged, rather than
 passing it. A glob that begins with `**` is refused whatever it matches.
 
 The fix for an MGS3043 problem gives the narrowest write paths the job's symbol goals
-and criteria name, as a ready `write_paths` array, then the deviation that keeps the glob.
+and criteria name, as a ready `paths.write` array, then the deviation that keeps the glob.
 When the knowledge graph cannot answer the symbol goals, the fix says so; `magus graph
 build` and a fork again give a fuller list. MGS3042 reads `jobs.max_depth` and
 `jobs.max_live` the same way, and a zero limit is unlimited.
@@ -610,8 +610,8 @@ store, so the plan is committed beside the code:
 <!-- golden: job_people_ci.txtar shop/ci/jobs.jsonl -->
 
 ```json
-{"api_version": "magus.job/v1alpha1", "id": "release/pricing", "criteria": "totals are computed in cents", "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
-{"api_version": "magus.job/v1alpha1", "id": "release/tax", "criteria": "tax rounds half up", "write_paths": ["checkout/tax.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/pricing", "agent": {"instructions": "totals are computed in cents", "worker": {"type": "resumed"}}, "paths": {"write": ["pricing/total.sh"]}, "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/tax", "agent": {"instructions": "tax rounds half up", "worker": {"type": "resumed"}}, "paths": {"write": ["checkout/tax.sh"]}, "check": {"target": "test", "project": "."}}
 ```
 
 with the evidence the CI step fills in once it knows the run's ref:
@@ -641,9 +641,9 @@ done
 ```console
 $ magus job apply -f ci/jobs.jsonl
 created release/pricing, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 created release/tax, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 ```
 
 <!-- golden: job_people_ci.txtar pass.out -->
@@ -662,9 +662,9 @@ not move:
 
 ```console
 $ magus ls jobs
-JOB              HOLDER  STATE     MODEL     PATHS  PROOF     CHECK
-release/pricing  -       declared  standard  1      alone     magus run test .
-release/tax      -       declared  standard  1      disjoint  magus run test .
+JOB              HOLDER  STATE     MODEL    PATHS  PROOF     CHECK
+release/pricing  -       declared  bounded  1      alone     magus run test .
+release/tax      -       declared  bounded  1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```

@@ -9,8 +9,16 @@
 [!exec:git] skip 'the workspace is a git checkout'
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec git init -q -b main
 exec magus init -local -vcs git
 cp $WORK/magusfile.buzz magusfile.buzz
+# A fork records the root's committed revision as the worker's authority.
+exec git add -A
+exec git commit -q -m init
 exec magus job fork wave/guard --check 'test .' --write-paths src/pkg/code.go
 env BAGGAGE=magus.lease=wave/guard
 

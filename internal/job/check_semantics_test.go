@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -45,7 +44,7 @@ func (s *testSelectionSuite) TestNonGoTargetNamedTestDoesNotReadGoSelectors() {
 	s.Empty(dialect)
 	root := testRoot(s.T()).Root()
 	store := tempStore(s.T(), root).InWorkspace(ws)
-	s.Empty(narrowedTestProblems(store, types.Job{ID: "node", WritePaths: []string{"pkg/a.go"}, Check: &types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha"}}}))
+	s.Empty(narrowedTestProblems(store, types.Job{ID: "node", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: &types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha"}}}))
 }
 func (s *testSelectionSuite) TestRenamedWrapperInheritsDeclaredDialect() {
 	ws := goCheckWorkspace(".")
@@ -55,7 +54,7 @@ func (s *testSelectionSuite) TestRenamedWrapperInheritsDeclaredDialect() {
 	p.TargetSpellOps = map[string][]types.TargetSpellUse{"check-cases": {{Spell: "go", Ops: []string{"go-test"}}}}
 	root := testRoot(s.T()).Root()
 	store := tempStore(s.T(), root).InWorkspace(ws)
-	problems := narrowedTestProblems(store, types.Job{ID: "renamed", WritePaths: []string{"pkg/a.go"}, Check: &types.LeaseCheck{Target: "check-cases", Project: ".", Args: []string{"-run", "Alpha"}}})
+	problems := narrowedTestProblems(store, types.Job{ID: "renamed", Paths: types.JobPaths{Write: []string{"pkg/a.go"}}, Check: &types.LeaseCheck{Target: "check-cases", Project: ".", Args: []string{"-run", "Alpha"}}})
 	s.Require().Len(problems, 1)
 	s.Contains(problems[0].Message, "TestBeta")
 }
@@ -109,9 +108,9 @@ func (s *testSelectionSuite) TestForwardingTargetWithNeedsReadsDeclaredDialect()
 	s.Equal("go", dialect)
 	root := testRoot(s.T()).Root()
 	store := tempStore(s.T(), root).InWorkspace(ws)
-	s.Empty(narrowedTestProblems(store, types.Job{ID: "scoped", WritePaths: []string{"pkg/a.go"},
+	s.Empty(narrowedTestProblems(store, types.Job{ID: "scoped", Paths: types.JobPaths{Write: []string{"pkg/a.go"}},
 		Check: &types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}}}), "scoped to the written package")
-	s.Len(narrowedTestProblems(store, types.Job{ID: "unscoped", WritePaths: []string{"pkg/a.go"},
+	s.Len(narrowedTestProblems(store, types.Job{ID: "unscoped", Paths: types.JobPaths{Write: []string{"pkg/a.go"}},
 		Check: &types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"-run", "Alpha"}}}), 1, "-run alone still leaves tests out")
 }
 func (s *testSelectionSuite) TestNeedsCompositionDoesNotInheritSelector() {
@@ -128,7 +127,7 @@ func (s *testSelectionSuite) TestMissingWorkspaceKeepsEvidenceStrict() {
 	check := types.LeaseCheck{Target: "test", Project: "."}
 	attempt := types.JobAttempt{Project: ".", Target: "test", ExtraArgs: []string{"-run", "Alpha"}}
 	s.False(ranCheck(check, attempt, nil, store.testSelection()))
-	s.Empty(narrowedTestProblems(store, types.Job{Check: &check, WritePaths: []string{"pkg/a.go"}}))
+	s.Empty(narrowedTestProblems(store, types.Job{Check: &check, Paths: types.JobPaths{Write: []string{"pkg/a.go"}}}))
 }
 func (s *testSelectionSuite) TestUnavailableWorkspaceKeepsEvidenceStrict() {
 	store := tempStore(s.T(), s.T().TempDir()).InWorkspace(Workspace{Unavailable: "load failed"})
@@ -142,10 +141,10 @@ func (s *testSelectionSuite) TestUnknownProjectDoesNotBorrowAnotherProjectDialec
 }
 func (s *testSelectionSuite) TestStoreValidationReportsUnavailableSelection() {
 	store := tempStore(s.T(), testRoot(s.T()).Root())
-	validation, err := ValidateFork(context.Background(), store, "unknown", func(row *types.Job) {
-		row.WritePaths = []string{"pkg/a.go"}
+	validation, err := validateDryFork(context.Background(), store, "unknown", func(row *types.Job) {
+		row.Paths.Write = []string{"pkg/a.go"}
 		row.Check = &types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha"}}
-	}, config.Jobs{}, nil)
+	})
 	s.Require().NoError(err)
 	s.Contains(validation.Unchecked, "the check's project, target and test-selection semantics: this door opened the job store without a workspace")
 }

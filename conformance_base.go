@@ -32,9 +32,11 @@ const noBaseIndex = "no in-process index; ceiling not applied"
 const projectNewAtHead = "its project is new at head, so the base holds no measure; ceiling not applied"
 
 // baseMeasureVersion keys the kept measures; bump it when measureTree measures differently.
+// Bump it too when the kept entry's JSON shape changes: an old entry decodes
+// empty and reads as a base of zero.
 // It replaces the magus build in the key: a gate measures under one
 // binary and lint reads under the checkout's own.
-const baseMeasureVersion = "5"
+const baseMeasureVersion = "7"
 
 // ConformanceCeilings is head, the lens over the working tree, with c.Base's ceilings: each file
 // changed since c.Base whose count of violations of a metric in c.Checks rose past its count
@@ -179,6 +181,18 @@ func readConformanceEntry(entry string) (types.Conformance, bool, error) {
 	var out types.Conformance
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return types.Conformance{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
+	}
+	var keys struct {
+		Rows          json.RawMessage `json:"rows"`
+		Distributions json.RawMessage `json:"distributions"`
+	}
+	if err := json.Unmarshal(raw, &keys); err != nil {
+		return types.Conformance{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
+	}
+	drifted := len(out.Distributions) == 0 && out.Answer.Verdict == types.VerdictFound
+	if drifted || (len(keys.Rows) == 0 && len(keys.Distributions) == 0) {
+		return types.Conformance{}, false, fmt.Errorf("conformance: %s holds no distributions, since it was kept in another shape, "+
+			"so measure the base again with `magus run conformance-base .`", entry)
 	}
 	return out, true, nil
 }
@@ -386,6 +400,7 @@ func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan
 	}
 	out := g.Conformance(opts)
 	out.Definition = types.ConformanceDefinition
+	out.Packages = g.ConformancePackages(opts)
 	if out.Answer.Verdict == types.VerdictUnknown {
 		return types.Conformance{}, errors.New("the in-process indexers read no symbols, so no ceiling can be judged against it")
 	}

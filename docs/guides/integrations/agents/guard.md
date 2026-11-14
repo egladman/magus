@@ -190,7 +190,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   the locks. An agent that edits any of it rewrites the evidence it is graded by,
   and no later verdict says so, which is why this one is not scoped to a boundary:
   what it protects is whether a boundary was checked at all. It ranks above the
-  lease rules, so a worker whose `write_paths` happen to cover the directory
+  lease rules, so a worker whose `paths.write` happen to cover the directory
   reads what the directory IS rather than a verdict about whose it is. The
   file-write rules catch an editor tool's write; the shell-command rules catch a
   redirect (`>`, `>>`, `tee`) and the coreutils that take a path as an operand
@@ -326,7 +326,7 @@ lets the call run, or to `off`, with
 | [`stage-all`](../../../reference/rules/stage-all.md)                                 | a whole-tree `git add`                                                    |
 | [`symbol-search`](../../../reference/rules/symbol-search.md)                         | a text search for a symbol the graph answers                              |
 | [`throwaway-copy`](../../../reference/rules/throwaway-copy.md)                       | a run inside a temp or scratchpad copy                                    |
-| [`unjudged-tool`](../../../reference/rules/unjudged-tool.md)                         | a tool call whose input no rule reads, from a tool the guard lacks        |
+| [`unjudged-step`](../../../reference/rules/unjudged-step.md)                         | a tool call whose input no rule reads, from a tool the guard lacks        |
 | [`unknown-env`](../../../reference/rules/unknown-env.md)                             | a retired or misspelled `MAGUS_*` variable                                |
 
 The notices, such as `split-run` and `leased-path`, are in
@@ -625,7 +625,7 @@ projects that depend on it: `magus affected` runs that direction, from a change
 outward to what it could break, and focus runs the other one, from where you
 stand back to what you legitimately need.
 
-It is the read half of a boundary whose write half is a job's `write_paths`,
+It is the read half of a boundary whose write half is a job's `paths.write`,
 and the two catch different failures. A write outside your write paths collides with
 another agent, and the diff eventually shows it. A read outside it collides with
 nothing and leaves no trace: it spends tokens on a tree nobody asked about, and
@@ -642,8 +642,8 @@ owns has no boundary it could be outside of.
 
 It ADVISES by default and DENIES only under a lease this checkout holds
 (`magus job exec <id>`), because a hard read boundary needs somebody to have
-declared one. The job's `read_paths` names the paths whose projects it may read; it
-falls back to `write_paths`, since a worker leased to edit a project was pointed
+declared one. The job's `paths.read` names the paths whose projects it may read; it
+falls back to `paths.write`, since a worker leased to edit a project was pointed
 at that project. Widening is that field and nothing else. There is no
 environment variable that turns the rule off, because a variable would be set
 once, in a wrapper, by the first worker it inconvenienced, and nothing afterwards
@@ -910,7 +910,7 @@ that never ran) no tool is known, and the refusal says so and names the install;
 
 A call whose input has none of those shapes, from a tool the rows do not list, is
 one no rule could judge. The
-[`unjudged-tool`](../../../reference/rules/unjudged-tool.md) rule names it: it advises
+[`unjudged-step`](../../../reference/rules/unjudged-step.md) rule names it: it advises
 once per session by default, since the guard cannot know such a tool is harmful, and
 a workspace that wants every call judged sets it to `deny` with
 [`magus\guard.builtins`](#setting-a-built-in-rule). Another MCP server's tool is the

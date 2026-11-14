@@ -13,7 +13,7 @@ import (
 // caller fixes the record in one round.
 type JobProblem struct {
 	Code DiagnosticCode `json:"code"`
-	// Field is a JSON path into the record (`write_paths[2]`, `check.project`,
+	// Field is a JSON path into the record (`paths.write[2]`, `check.project`,
 	// `goals[1].symbols[0]`), empty when the problem is the record as a whole.
 	Field string `json:"field,omitempty"`
 	// Subject is what a [Deviation] names to permit this problem: the write path, the
@@ -40,10 +40,10 @@ type JobEdit struct {
 func (e JobEdit) Apply(d *Declaration) bool {
 	switch {
 	case e.AddWritePath != "":
-		if slices.Contains(d.WritePaths, e.AddWritePath) {
+		if slices.Contains(d.Paths.Write, e.AddWritePath) {
 			return false
 		}
-		d.WritePaths = append(d.WritePaths, e.AddWritePath)
+		d.Paths.Write = append(d.Paths.Write, e.AddWritePath)
 	case e.AddGoal != nil:
 		if slices.ContainsFunc(d.Goals, func(g Goal) bool { return g.ID == e.AddGoal.ID }) {
 			return false
@@ -64,7 +64,7 @@ func (e JobEdit) Apply(d *Declaration) bool {
 func (e JobEdit) String() string {
 	switch {
 	case e.AddWritePath != "":
-		return fmt.Sprintf("added %q to write_paths", e.AddWritePath)
+		return fmt.Sprintf("added %q to paths.write", e.AddWritePath)
 	case e.AddGoal != nil:
 		return fmt.Sprintf("added the goal %q (%s)", e.AddGoal.ID, e.AddGoal.Check)
 	case e.AddDeviation != nil:

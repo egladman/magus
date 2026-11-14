@@ -177,12 +177,24 @@ linters:
           list-mode: lax
           files:
             - "${base-path}/types/*.go"
+            - "${base-path}/types/agent/*.go"
+            - "${base-path}/types/check/*.go"
+            - "${base-path}/types/impact/*.go"
+            - "${base-path}/types/vcs/*.go"
+            - "${base-path}/types/release/*.go"
             - "!$test"
           allow:
             - github.com/egladman/magus/spells$
             - github.com/egladman/magus/libs/diagnostics$
+            # The version header every record leads with; a leaf library itself.
+            - github.com/egladman/magus/libs/apiversion$
             - github.com/egladman/magus/internal/json$
             - github.com/egladman/magus/types/enum$
+            - github.com/egladman/magus/types/agent$
+            - github.com/egladman/magus/types/check$
+            - github.com/egladman/magus/types/impact$
+            - github.com/egladman/magus/types/vcs$
+            - github.com/egladman/magus/types/release$
           deny:
             - pkg: os$
               desc: types is the near-leaf domain package and may not reach the world
@@ -197,7 +209,7 @@ linters:
             - pkg: os/user$
               desc: types is the near-leaf domain package and may not reach the world
             - pkg: github.com/egladman/magus/
-              desc: types may depend on spells, libs/diagnostics, internal/json and types/enum, nothing else in magus
+              desc: types may depend on spells, libs/diagnostics, internal/json and its own domain packages, nothing else in magus
 
         # libs/conventions, libs/proofread and libs/testpairing are magus-repo policy, never shipped.
         root-imports-no-repo-policy:
@@ -240,7 +252,7 @@ linters:
           # never builds dot directories or testdata, so they need no entry.
           # proofread is skipped too: its attribution rule names the tools whose
           # credit it refuses, which is this repository's policy, not magus naming a host.
-          skip-dirs: [gen, docs, schema, proofread]
+          skip-dirs: [gen, docs, proofread]
           hosts: [claude, opencode, codex, aider, windsurf]
           # Cursor is a terminal position and a pagination token far more often
           # than the host, so only the shapes that mean the host are matched: the
@@ -391,7 +403,6 @@ linters:
           allow:
             - {file: "cmd/magus-*/*.go", reason: build-time codegen with no log display}
             - {file: cmd/langservice-manifest/*.go, reason: build-time codegen with no log display}
-            - {file: internal/config/generate/*.go, reason: build-time codegen with no log display}
             - {file: "benchmarks/*/main.go", reason: a standalone benchmark tool with no log display}
             - {file: "benchmarks/agent/cmd/*/main.go", reason: a standalone benchmark tool with no log display}
             - {file: libs/testkit/environ.go, reason: a test binary's TestMain reports before any display exists}
@@ -523,6 +534,7 @@ linters:
             - vmstat    # the Darwin tool
             - jobserver # GNU make's name for the token protocol internal/proc/spawn implements
             - changelog # Keep a Changelog's own word for the file proofread's changelog kind judges
+            - worktree  # git's own term
 
       nameoutput:
         type: module
@@ -574,6 +586,12 @@ linters:
               Impl,
               Repo,
             ]
+          # ADR 0030: row is a persistence word. The SDK and the domain types name
+          # the thing a row stores.
+          banned:
+            - packages: [github.com/egladman/magus, github.com/egladman/magus/types/...]
+              words: [Row, Rows]
+              why: row names only the persistence layer, so say job, spec or record
 
       testisolation:
         type: module

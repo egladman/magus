@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // checkToolchainLifecycle reports a tool whose installed release cycle is past its end of
@@ -21,7 +22,7 @@ import (
 //
 // Advice at most. End of life is information about the world outside the tree, and a
 // release cycle ending is not a defect in it (docs/scope.md).
-func (r *runner) checkToolchainLifecycle(ctx context.Context, projects []*types.Project) types.Check {
+func (r *runner) checkToolchainLifecycle(ctx context.Context, projects []*types.Project) check.Check {
 	const name = "toolchain-lifecycle"
 	// A *magus.Magus answers both. The cache dir is the workspace's resolved one, which
 	// r.root (the --root override, often empty) cannot rebuild.
@@ -35,28 +36,28 @@ func (r *runner) checkToolchainLifecycle(ctx context.Context, projects []*types.
 		wired = p.LifecycleProvider()
 	}
 	if wired == "" {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no lifecycle provider wired (magus\\lifecycle.provider)"}
+		return check.Check{Name: name, Status: check.OK, Message: "no lifecycle provider wired (magus\\lifecycle.provider)"}
 	}
 	keys := workspace.LifecycleKeys(projects)
 	if len(keys) == 0 {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no spell names a lifecycle product"}
+		return check.Check{Name: name, Status: check.OK, Message: "no spell names a lifecycle product"}
 	}
 	answer, stored := workspace.CachedLifecycles(ctx, p.CacheDir(), r.ws.Root(), wired, keys)
 	if !stored {
-		return types.Check{
-			Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown,
+		return check.Check{
+			Name: name, Status: check.OK, Evidence: check.EvidenceUnknown,
 			Message: fmt.Sprintf("no stored answer from %s for this workspace's spells; `magus describe tools` asks it", wired),
 			Fix:     []string{"describe", "tools"},
 		}
 	}
 	details := lifecycleFindings(projects, answer, time.Now())
 	msg := fmt.Sprintf("no installed cycle or window floor is past its end of life (%s, fetched %s)", wired, answer.Status.FetchedAt)
-	status := types.CheckOK
+	status := check.OK
 	if len(details) > 0 {
-		status = types.CheckAdvice
+		status = check.Advice
 		msg = fmt.Sprintf("%d past end of life, per %s as fetched %s", len(details), wired, answer.Status.FetchedAt)
 	}
-	return types.Check{Name: name, Status: status, Message: msg, Details: details}
+	return check.Check{Name: name, Status: status, Message: msg, Details: details}
 }
 
 // lifecycleFindings lists every installed version and every window floor whose cycle is

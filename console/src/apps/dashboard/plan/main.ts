@@ -88,6 +88,8 @@ import {
   isStale,
   isTerminal,
   jobClient,
+  jobInstructions,
+  jobModel,
   joinRuns,
   lastRunLine,
   layoutNodes,
@@ -334,8 +336,8 @@ function jobsDrawn(model: JobTree, nowMs: number): Drawn {
       if (size) meta.push(size);
       const last = lastRunLine(n.job, nowMs);
       if (last) meta.push(last);
-    } else if (n.job.model) {
-      meta.push(n.job.model);
+    } else if (jobModel(n.job)) {
+      meta.push(jobModel(n.job));
     }
     nodes.push({
       id: n.id,
@@ -355,7 +357,7 @@ function jobsDrawn(model: JobTree, nowMs: number): Drawn {
       terminal: isTerminal(n.state),
       runName: server ? n.job.name : "",
       kind: HOLDER_LABEL[n.holder],
-      criteria: n.job.criteria,
+      criteria: jobInstructions(n.job),
       parentLabel: n.parent ?? n.danglingParent,
     });
   }
@@ -965,14 +967,14 @@ export function activate(host: HTMLElement): JobsInstance {
         n.parent,
         n.danglingParent,
         n.holder,
-        n.job.criteria,
+        jobInstructions(n.job),
         n.job.description,
         n.job.checkpoint,
-        n.job.model,
+        jobModel(n.job),
         n.job.check,
-        n.job.writePaths,
-        n.job.denyPaths,
-        n.job.readPaths,
+        n.job.paths?.write ?? [],
+        n.job.paths?.deny ?? [],
+        n.job.paths?.read ?? [],
         n.job.dependsOn,
         n.job.releases.map((r) => [r.path, r.digest]),
         String(n.job.created),
@@ -1280,13 +1282,13 @@ export function activate(host: HTMLElement): JobsInstance {
     field(dl, "What it does", n.job.description);
     field(dl, "Size", sizeLine(n.job));
     field(dl, "Last run", lastRunLine(n.job, Date.now()));
-    field(dl, "Criteria", n.job.criteria);
+    field(dl, "Instructions", jobInstructions(n.job));
     field(dl, "Checkpoint", n.job.checkpoint);
-    field(dl, "Model", n.job.model);
+    field(dl, "Model", jobModel(n.job));
     field(dl, "Check", n.job.check);
-    pathField(dl, "Write paths", n.job.writePaths);
-    pathField(dl, "Deny paths", n.job.denyPaths);
-    pathField(dl, "Read paths", n.job.readPaths);
+    pathField(dl, "Write paths", n.job.paths?.write ?? []);
+    pathField(dl, "Deny paths", n.job.paths?.deny ?? []);
+    pathField(dl, "Read paths", n.job.paths?.read ?? []);
     pathField(dl, "Depends on", n.job.dependsOn);
     field(dl, "Parent", n.parent ?? "");
     if (n.danglingParent) {

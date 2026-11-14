@@ -32,7 +32,7 @@ func TestCollectMirrorsVisitsNamespaceObjects(t *testing.T) {
 		Name:       "probe",
 		Namespaces: []std.Namespace{{Name: "guard", Objects: []string{"NoSuchObject"}}},
 	})
-	assert.ErrorContains(t, err, `object "NoSuchObject" is not declared in boundaryTypes`)
+	assert.ErrorContains(t, err, `object "NoSuchObject" does not cross into Buzz`)
 }
 
 // Every bundle declares each type it names, so executing it alone cannot stop on one
@@ -42,10 +42,30 @@ func TestEveryModuleDeclBundleDeclaresTheTypesItNames(t *testing.T) {
 	for _, mod := range hostmodules.All() {
 		src, err := renderModuleDecls(mod)
 		require.NoError(t, err, mod.Name)
-		prog, err := buzz.Parse(src)
+		prog, err := buzz.Parse(namespaceImports(mod.Name, src) + src)
 		require.NoError(t, err, mod.Name)
 		assert.Empty(t, undeclaredTypeNames(prog), mod.Name)
 	}
+	for _, module := range nestedModules() {
+		src, err := namespaceDeclSource(module)
+		require.NoError(t, err, module)
+		prog, err := buzz.Parse(src)
+		require.NoError(t, err, module)
+		assert.Empty(t, undeclaredTypeNames(prog), module)
+	}
+}
+
+// newNamespaceSession is a session holding every nested namespace's
+// declarations, as one magus registers.
+func newNamespaceSession(t *testing.T) *buzz.Session {
+	t.Helper()
+	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	for _, module := range nestedModules() {
+		src, err := namespaceDeclSource(module)
+		require.NoError(t, err, module)
+		sess.SetModuleDecls(module, src)
+	}
+	return sess
 }
 
 func TestUndeclaredTypeNames(t *testing.T) {
@@ -69,8 +89,8 @@ func TestModuleRecordDeclsRunAlone(t *testing.T) {
 	for _, mod := range hostmodules.All() {
 		src, err := renderRecordDecls(mod)
 		require.NoError(t, err, mod.Name)
-		sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
-		require.NoError(t, sess.Exec(t.Context(), src), mod.Name)
+		sess := newNamespaceSession(t)
+		require.NoError(t, sess.Exec(t.Context(), namespaceImports(mod.Name, src)+src), mod.Name)
 		_ = sess.Close()
 	}
 
@@ -83,13 +103,14 @@ func TestModuleRecordDeclsRunAlone(t *testing.T) {
 	require.Equal(t, "magus", magus.Name)
 	src, err := renderRecordDecls(magus)
 	require.NoError(t, err)
-	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	src = namespaceImports(magus.Name, src) + src
+	sess := newNamespaceSession(t)
 	t.Cleanup(func() { _ = sess.Close() })
 	require.NoError(t, sess.Exec(t.Context(), src))
 	sess.DeclareModuleTypes("magus", src)
 	require.NoError(t, sess.Exec(t.Context(), `
 export fun build() > str {
-    final none = Check{}.status == CheckStatus.none;
+    final none = DiagnosticCode{}.origin == DiagnosticOrigin.unknown;
     return "{DirsOptions{ language = "go", depth = 2 }.language} {none}";
 }
 `))
@@ -126,7 +147,7 @@ func TestExternDeclTypesACallback(t *testing.T) {
 
 // One adapter per callback type, named for its parameter and result types.
 func TestImplCallbacksNamesOneAdapterPerType(t *testing.T) {
-	cbs, err := implCallbacks(hostmodules.All())
+	cbs, err := implementationCallbacks(hostmodules.All())
 	require.NoError(t, err)
 	names := make([]string, len(cbs))
 	for i, cb := range cbs {

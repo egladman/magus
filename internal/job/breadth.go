@@ -44,7 +44,7 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 	if err != nil {
 		return types.JobProblems{{
 			Code:    types.WritePathTooBroad,
-			Field:   "write_paths",
+			Field:   "paths.write",
 			Message: fmt.Sprintf("write path breadth was not judged: the claim bounds jobs.max_claim_files and jobs.max_claim_projects are unreadable: %v", err),
 			Fix:     "fix the jobs section of magus.yaml, then fork again",
 		}}
@@ -53,12 +53,12 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 	projectOf := projectLocator(root, ws)
 	var problems types.JobProblems
 	var fix func(string) string
-	for i, wp := range row.WritePaths {
+	for i, wp := range row.Paths.Write {
 		file, decl := types.SplitClaim(wp)
 		if decl != "" || !types.IsGlobMeta(file) {
 			continue
 		}
-		files := writtenFiles(root, types.Job{WritePaths: []string{wp}, DenyPaths: row.DenyPaths})
+		files := writtenFiles(root, types.Job{Paths: types.JobPaths{Write: []string{wp}, Deny: row.Paths.Deny}})
 		if ws.Ignored != nil {
 			ignored := ws.Ignored(files)
 			files = slices.DeleteFunc(files, func(f string) bool { return slices.Contains(ignored, f) })
@@ -87,7 +87,7 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 		}
 		problems = append(problems, types.JobProblem{
 			Code:    types.WritePathTooBroad,
-			Field:   fmt.Sprintf("write_paths[%d]", i),
+			Field:   fmt.Sprintf("paths.write[%d]", i),
 			Subject: wp,
 			Message: fmt.Sprintf("write path %q matches %s in %s: %s",
 				wp, plural.Count(len(files), "file", "files"), plural.Count(len(projects), "project", "projects"), strings.Join(over, ", ")),
@@ -97,8 +97,9 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 	return problems
 }
 
-// broadClaimFix measures the narrowest cover once and returns the fix text for one broad
-// write path: the cover as a ready write_paths array, then the deviation that keeps the path.
+// broadClaimFix measures the narrowest cover once and returns the fix text for
+// one broad write path. The fix names the cover as a ready paths.write array,
+// then the deviation that keeps the path.
 func broadClaimFix(ctx context.Context, root string, row types.Job, read SymbolReader) func(string) string {
 	graphless := read == nil
 	answering := read
@@ -117,7 +118,7 @@ func broadClaimFix(ctx context.Context, root string, row types.Job, read SymbolR
 		var b strings.Builder
 		if len(cover) > 0 {
 			listed, _ := json.Marshal(cover)
-			fmt.Fprintf(&b, "replace %q with the files the goals and criteria name: \"write_paths\": %s", wp, listed)
+			fmt.Fprintf(&b, "replace %q with the files the goals and criteria name: \"paths\": {\"write\": %s}", wp, listed)
 		} else {
 			fmt.Fprintf(&b, "replace %q with the files this job edits, each by name: the criteria and goals name no file the graph resolves", wp)
 		}
@@ -158,7 +159,7 @@ func narrowestCover(ctx context.Context, root string, row types.Job, read Symbol
 			}
 		}
 	}
-	for _, token := range strings.Fields(row.Criteria) {
+	for _, token := range strings.Fields(row.Instructions()) {
 		if p, ok := criteriaPath(root, token); ok {
 			add(p)
 		}

@@ -33,10 +33,11 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline/exit"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // shellStdin runs `magus shell` with its input on stdin, which is the shape a host's
@@ -96,8 +97,8 @@ func fleetFixture(t *testing.T, leases ...types.Job) (ctx context.Context, root,
 func narrowLease() types.Job {
 	return types.Job{
 		ID:         "harness/lease-scoped-deny",
-		Criteria:   "lease-scoped denies in the guard",
-		WritePaths: []string{"cmd/magus/**"},
+		Agent:      typesagent.Instructed("lease-scoped denies in the guard"),
+		Paths:      types.JobPaths{Write: []string{"cmd/magus/**"}},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
 		State:      types.StateRunning,
 		Registered: 1,
@@ -811,6 +812,42 @@ func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
 	assert.Equal(t, "pass\n", out.String())
 }
 
+// shellStep runs `magus shell` over step's record from a host whose rows
+// call TodoWrite inert. It returns the verdict's name and the exit error.
+func shellStep(t *testing.T, step typesagent.Step) (string, error) {
+	t.Helper()
+	t.Cleanup(snapshotGlobals())
+	t.Setenv(trail.EnvBaggage, "")
+	global = globalFlags{}
+	t.Chdir(t.TempDir())
+	installHostRows(t, "claude-code", types.Limits{}, types.HarnessTool{Name: "TodoWrite", Capability: types.ToolInert})
+	raw, err := json.Marshal(step)
+	require.NoError(t, err)
+	var out bytes.Buffer
+	ctx := guard.WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
+	err = shellStdin(ctx, bytes.NewReader(raw), &out, []string{"-o", "name", "--agent-name", "claude-code"})
+	return out.String(), err
+}
+
+func TestShellJudgesAToolStepAsTheEnvelopeItStandsFor(t *testing.T) {
+	step := typesagent.Step{APIVersion: typesagent.StepAPIVersion, Kind: "tool", Name: "TodoWrite", Session: "s1",
+		Input: map[string]any{"todos": []any{map[string]any{"content": "never use sed -i here"}}}}
+
+	verdict, err := shellStep(t, step)
+
+	require.NoError(t, err)
+	assert.Equal(t, "pass\n", verdict, "an inert tool's step passes as its envelope does")
+}
+
+func TestShellDeniesAStepOfAKindNoRowDeclares(t *testing.T) {
+	step := typesagent.Step{APIVersion: typesagent.StepAPIVersion, Kind: "refund", Name: "card", Session: "s1"}
+
+	verdict, err := shellStep(t, step)
+
+	require.Error(t, err, "a deny exits 2")
+	assert.Equal(t, "deny\n", verdict)
+}
+
 // TestEnforceVerdictBlocksOnlyDeny pins the half that makes the guard real. Every rule was
 // reachable and correct while the process exited 0, so a host read success and ran the
 // command anyway: the guard looked installed and enforced nothing.
@@ -1066,7 +1103,7 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	lease := narrowLease()
-	lease.WritePaths = []string{"**"}
+	lease.Paths.Write = []string{"**"}
 	// Unregistered, so the write-path rule has a denial of its own to be outranked BY. A
 	// boundary that covers the path and says nothing leaves the rank unobserved.
 	lease.Registered = 0
@@ -1170,7 +1207,7 @@ func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	wide := narrowLease()
-	wide.WritePaths = []string{"cmd/magus/**", "internal/hint/**"}
+	wide.Paths.Write = []string{"cmd/magus/**", "internal/hint/**"}
 	ctx, _, _ := fleetFixture(t, wide)
 
 	client := func(script string) string {
@@ -1181,16 +1218,16 @@ func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 		toolInput string
 		want      string
 	}{
-		"fork on another row":   {client(`magus\workspace().putJob("harness/other", opts: {"write_paths": ["**"]});`), "deny\n"},
-		"fork widening its own": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"**\"]});", own)), "deny\n"},
+		"fork on another row":   {client(`magus\workspace().putJob("harness/other", opts: {"paths": {"write": ["**"]}});`), "deny\n"},
+		"fork widening its own": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"**\"]}});", own)), "deny\n"},
 		"clearing the board":    {client(`magus\workspace().clearJobs();`), "deny\n"},
 		"exec elsewhere":        {client(`magus\job("harness/other").register();`), "deny\n"},
 		"exec its own":          {client(fmt.Sprintf("magus\\job(%s).register();", own)), "pass\n"},
 		"listing the plan":      {client(`magus\workspace().jobs();`), "pass\n"},
-		"giving paths back":     {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"]});", own)), "pass\n"},
+		"giving paths back":     {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"cmd/magus/**\"]}});", own)), "pass\n"},
 		// A shrink beside a forged checkpoint or rewritten criteria is not a plain shrink.
-		"forging its own base":   {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"checkpoint\": \"deadbeef\"});", own)), "deny\n"},
-		"rewriting its criteria": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"write_paths\": [\"cmd/magus/**\"], \"criteria\": \"something else\"});", own)), "deny\n"},
+		"forging its own base":   {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"cmd/magus/**\"]}, \"checkpoint\": \"deadbeef\"});", own)), "deny\n"},
+		"rewriting its criteria": {client(fmt.Sprintf("magus\\workspace().putJob(%s, opts: {\"paths\": {\"write\": [\"cmd/magus/**\"]}, \"criteria\": \"something else\"});", own)), "deny\n"},
 	} {
 		envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"mcp-%s\",\"tool_name\":\"mcp__magus__client\",\"tool_input\":%s}", name, tc.toolInput)
 		var out bytes.Buffer
@@ -1411,7 +1448,7 @@ func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	lease := narrowLease()
-	lease.WritePaths = []string{".claude/**", "cmd/magus/**"}
+	lease.Paths.Write = []string{".claude/**", "cmd/magus/**"}
 	ctx, _, _ := fleetFixture(t, lease)
 
 	var denied bytes.Buffer
@@ -1636,8 +1673,8 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	testkit.Isolate(t)
-	root, cacheDir := t.TempDir(), t.TempDir()
-	row := types.Job{ID: "worker", WritePaths: []string{"a.go"}, Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1}
+	root, cacheDir := testkit.NewRepository(t, nil).Root(), t.TempDir()
+	row := types.Job{ID: "worker", Paths: types.JobPaths{Write: []string{"a.go"}}, Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1}
 	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 	ctx := guard.WithLocation(t.Context(), cacheDir, root, "")
@@ -1818,24 +1855,24 @@ func judgeSpawnAt(t *testing.T, root string) types.GuardJudgment {
 // tieredWorkspace is a loaded workspace that declares set as its model tiers.
 type tieredWorkspace struct {
 	types.WorkspaceRepository
-	set *types.ModelTierSet
+	set *typesagent.ModelTierSet
 }
 
-func (w tieredWorkspace) ModelTiers(context.Context) *types.ModelTierSet { return w.set }
+func (w tieredWorkspace) ModelTiers(context.Context) *typesagent.ModelTierSet { return w.set }
 
 // The guard's model tiers open the workspace on the first ask and never again, so a spawn
 // that never asks, one bound to no tiered row, pays nothing for the load.
 func TestWorkspaceModelTiersOpenTheWorkspaceOnceAndOnlyWhenAsked(t *testing.T) {
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
 		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "principal"},
-		Bounds: []types.ModelTierBounds{{}, {}}, Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Bounds: []typesagent.ModelTierBounds{{}, {}}, Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	cases := []struct {
 		name string
 		ws   types.WorkspaceRepository
 		err  error
-		want *types.ModelTierSet
+		want *typesagent.ModelTierSet
 	}{
 		{"a tiered workspace", tieredWorkspace{set: set}, nil, set},
 		{"a workspace with no tier reader", struct{ types.WorkspaceRepository }{}, nil, nil},
@@ -1927,7 +1964,7 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 		Rule:       v.Rule, // the rule's catalogued name is pinned by the guard's own tests
 		Lease:      v.Lease,
 		LeaseFrom:  v.LeaseFrom,
-		Next:       v.Next,
+		NextSteps:  v.NextSteps,
 	}, v)
 }
 
@@ -1956,7 +1993,7 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 		Rule:       "workspace:command",
 		Lease:      v.Lease,
 		LeaseFrom:  v.LeaseFrom,
-		Next:       v.Next,
+		NextSteps:  v.NextSteps,
 	}, v)
 }
 
@@ -2210,7 +2247,7 @@ func installHostRows(t *testing.T, host string, limits types.Limits, rows ...typ
 	dir := filepath.Join("."+host, "magus", "tools")
 	raw, err := json.Marshal(limits)
 	require.NoError(t, err)
-	files := append(agent.ToolFiles(types.HarnessTools{Dir: dir, Rows: rows}, nil),
+	files := append(agent.ToolFiles(types.HarnessTools{Dir: dir, Tools: rows}, nil),
 		types.AgentFile{Path: filepath.Join(dir, types.ToolHostFile), Content: host + "\n"},
 		types.AgentFile{Path: filepath.Join(dir, types.ToolLimitsFile), Content: string(raw) + "\n"})
 	for _, f := range files {
@@ -2286,6 +2323,17 @@ func (s *DelegateToCheckoutSuite) write(dir string) string {
 	return fmt.Sprintf(`{"cwd":%q,"tool_input":{"file_path":%q}}`, s.session, filepath.Join(dir, "x.go"))
 }
 
+// pin is [pinCheckoutBinary] in the session's job store.
+func (s *DelegateToCheckoutSuite) pin(own string) string {
+	pinCheckoutBinary(s.T(), s.session, own)
+	return own
+}
+
+// placePinned is placeStub into the checkout, pinned.
+func (s *DelegateToCheckoutSuite) placePinned(stamp, say string, code int) string {
+	return s.pin(placeStub(s.T(), s.repo.Root(), stamp, say, code))
+}
+
 func (s *DelegateToCheckoutSuite) delegate(input string) (handled bool, declined, out string, err error) {
 	return s.delegateWithin(context.Background(), input)
 }
@@ -2303,6 +2351,7 @@ func (s *DelegateToCheckoutSuite) delegateToSleeper(say string) (own string, han
 	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\nprintf '%%s' '%s'\ntouch '%s'\nexec sleep 30\n", s.repo.Head(), say, started)
 	own = filepath.Join(s.repo.Root(), "magus")
 	s.Require().NoError(os.WriteFile(own, []byte(script), 0o755))
+	s.pin(own)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -2337,6 +2386,7 @@ func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheParentsDeadline() {
 	own := filepath.Join(s.repo.Root(), "magus")
 	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\ncat >/dev/null\nprintf '%%s' \"$%s\"\n", s.repo.Head(), guard.HookDeadlineEnv)
 	s.Require().NoError(os.WriteFile(own, []byte(script), 0o755))
+	s.pin(own)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	want, _ := ctx.Deadline()
@@ -2347,7 +2397,7 @@ func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheParentsDeadline() {
 }
 
 func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesTheWrite() {
-	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	handled, declined, out, err := s.delegate(s.write(s.repo.Root()))
 	s.True(handled)
 	s.Empty(declined)
@@ -2356,7 +2406,7 @@ func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesTheWrite() {
 }
 
 func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesALineThatCdsIntoTheCheckout() {
-	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	handled, declined, out, err := s.delegate(s.line())
 	s.True(handled)
 	s.Empty(declined)
@@ -2368,7 +2418,7 @@ func (s *DelegateToCheckoutSuite) TestABuildAfterHeadJudges() {
 	base := s.repo.Head()
 	ahead := s.repo.Commit("ahead", nil)
 	s.repo.Git("checkout", "-q", base)
-	placeStub(s.T(), s.repo.Root(), ahead, `{"decision":"deny"}`, 2)
+	s.placePinned(ahead, `{"decision":"deny"}`, 2)
 	handled, declined, _, _ := s.delegate(s.line())
 	s.True(handled)
 	s.Empty(declined)
@@ -2377,7 +2427,7 @@ func (s *DelegateToCheckoutSuite) TestABuildAfterHeadJudges() {
 func (s *DelegateToCheckoutSuite) TestABuildBehindHeadJudges() {
 	behind := s.repo.Head()
 	s.repo.Commit("moved on", nil)
-	placeStub(s.T(), s.repo.Root(), behind, `{"decision":"deny"}`, 2)
+	s.placePinned(behind, `{"decision":"deny"}`, 2)
 	handled, declined, out, err := s.delegate(s.line())
 	s.True(handled)
 	s.Empty(declined)
@@ -2386,14 +2436,14 @@ func (s *DelegateToCheckoutSuite) TestABuildBehindHeadJudges() {
 }
 
 func (s *DelegateToCheckoutSuite) TestAnUnstampedBuildJudges() {
-	placeStub(s.T(), s.repo.Root(), unknownVersion, `{"decision":"deny"}`, 2)
+	s.placePinned(unknownVersion, `{"decision":"deny"}`, 2)
 	handled, declined, _, _ := s.delegate(s.line())
 	s.True(handled)
 	s.Empty(declined)
 }
 
 func (s *DelegateToCheckoutSuite) TestACallAlreadyHandedOnIsJudgedHere() {
-	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	s.T().Setenv(delegatedEnv, "/other/magus")
 	ctx, cancel, err := takeDelegation(context.Background())
 	defer cancel()
@@ -2442,7 +2492,7 @@ func (s *DelegateToCheckoutSuite) TestADelegateHandedAPastDeadlineDeniesAndSaysT
 }
 
 func (s *DelegateToCheckoutSuite) TestALineThatStaysInTheSessionIsJudgedHere() {
-	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	input := fmt.Sprintf(`{"cwd":%q,"tool_name":"Bash","tool_input":{"command":"./magus run lint ."}}`, s.T().TempDir())
 	handled, declined, _, _ := s.delegate(input)
 	s.False(handled)
@@ -2457,7 +2507,7 @@ func (s *DelegateToCheckoutSuite) TestASessionDirectoryMovedIntoAnotherRepositor
 	s.Require().NoError(err)
 	s.False(handled)
 	s.Empty(out)
-	s.Contains(declined, "is not a checkout of the session's repository")
+	s.Contains(declined, "no live job row records it")
 }
 
 func (s *DelegateToCheckoutSuite) TestAReadIntoAnotherRepositoryIsJudgedHere() {
@@ -2467,7 +2517,7 @@ func (s *DelegateToCheckoutSuite) TestAReadIntoAnotherRepositoryIsJudgedHere() {
 	s.Require().NoError(err)
 	s.False(handled)
 	s.Empty(out)
-	s.Contains(declined, "is not a checkout of the session's repository")
+	s.Contains(declined, "no live job row records it")
 }
 
 func (s *DelegateToCheckoutSuite) TestALineThatCdsIntoAPlantedWorkspaceIsJudgedHere() {
@@ -2479,7 +2529,7 @@ func (s *DelegateToCheckoutSuite) TestALineThatCdsIntoAPlantedWorkspaceIsJudgedH
 	s.Require().NoError(err)
 	s.False(handled)
 	s.Empty(out)
-	s.Contains(declined, "is not a checkout of the session's repository")
+	s.Contains(declined, "no live job row records it")
 }
 
 func (s *DelegateToCheckoutSuite) TestABinaryInNoCheckoutHandsNothingOn() {
@@ -2490,6 +2540,38 @@ func (s *DelegateToCheckoutSuite) TestABinaryInNoCheckoutHandsNothingOn() {
 	s.False(handled)
 	s.Empty(out)
 	s.Contains(declined, "is no checkout's own ./magus")
+}
+
+func (s *DelegateToCheckoutSuite) TestACheckoutBinaryNoRowPinsIsJudgedHere() {
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"pass"}`, 0)
+	handled, declined, out, err := s.delegate(s.line())
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Empty(out)
+	s.Contains(declined, "no live job row records it as its checkout's binary")
+}
+
+func (s *DelegateToCheckoutSuite) TestABinaryRewrittenSinceItsPinIsJudgedHere() {
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
+	// A worker's relink lands a different binary at the pinned path.
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"pass"}`, 0)
+	handled, declined, out, err := s.delegate(s.line())
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Empty(out)
+	s.Contains(declined, "its bytes do not hash to what job pinned pins")
+}
+
+func (s *DelegateToCheckoutSuite) TestAPinOnAnEndedRowHandsNothingOn() {
+	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
+	_, cacheDir := seedJobStore(s.T(), s.session)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: s.session})
+	_, err := store.Update(s.T().Context(), "pinned", func(cur *types.Job) { cur.State = types.StatePass })
+	s.Require().NoError(err)
+	handled, declined, _, err := s.delegate(s.line())
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Contains(declined, "no live job row records it")
 }
 
 func (s *DelegateToCheckoutSuite) TestCallDirIsTheCheckoutALineCdsInto() {
@@ -2756,8 +2838,16 @@ func (s *unjudgedHookSuite) TestTheHookBootstrapIsWardsCommand() {
 	s.Contains(string(body), fmt.Sprintf("final BOOTSTRAP = %q;", ward.BootstrapCommand))
 }
 
+// The hook carries a copy of the relink, which it passes with no judge.
+func (s *unjudgedHookSuite) TestTheHookRelinkIsWardsCommand() {
+	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "lib", "hook.buzz"))
+	s.Require().NoError(err)
+	s.Contains(string(body), fmt.Sprintf("final RELINK = %q;", ward.RelinkAt("")))
+}
+
 // staleConfigSuite pins the guard over a magus.yaml key this build predates
 // (MGS1040): it judges the call as a stale binary's rather than exiting.
+// The checkout carries another contract than the test binary's.
 type staleConfigSuite struct {
 	suite.Suite
 	root string
@@ -2772,6 +2862,7 @@ func (s *staleConfigSuite) SetupTest() {
 	ws.Write("go.mod", "module github.com/egladman/magus\n\ngo 1.25\n")
 	ws.Write("magusfile.buzz", "import \"magus\";\nmagus\\guard.command(judge);\n")
 	ws.Write("magus.yaml", "checkout:\n  bootstrap: hack/dev/bootstrap-checkout.buzz\n")
+	ws.Write("internal/commands/testdata/api.lock", "config another.key\n")
 	ws.WriteExecutable("magus", "#!/bin/sh\n")
 	s.root = ws.Root()
 	s.T().Chdir(s.root)
@@ -2794,7 +2885,7 @@ func (s *staleConfigSuite) judge(command string) types.GuardJudgment {
 
 func (s *staleConfigSuite) TestAStateChangeIsRefusedAsAStaleBinary() {
 	v := s.judge("touch notes.txt")
-	s.Contains(v.Reason, "predates this workspace's magus.yaml")
+	s.Contains(v.Reason, "built from another contract than this tree carries")
 	s.Equal(types.GuardJudgment{Decision: "deny", Rule: "stale-binary"}, types.GuardJudgment{Decision: v.Decision, Rule: v.Rule})
 }
 
@@ -2817,7 +2908,7 @@ func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
 	s.Require().NoError(err)
 	var v types.GuardJudgment
 	s.Require().NoError(json.Unmarshal(body, &v), string(body))
-	s.Contains(v.Reason, "predates this workspace's magus.yaml")
+	s.Contains(v.Reason, "built from another contract than this tree carries")
 	s.Equal(types.GuardJudgment{Decision: "deny", Rule: "stale-binary"}, types.GuardJudgment{Decision: v.Decision, Rule: v.Rule})
 	s.Equal(2, code, "the guard's deny exit, never startup's 1")
 }
@@ -2828,7 +2919,8 @@ func (s *staleConfigSuite) TestTheBootstrapItServesRuns() {
 }
 
 // CheckoutJudgeDepsSuite judges from a hook whose working directory is a magus
-// source checkout, by a binary that is not that checkout's ./magus.
+// source checkout, by a binary that is not that checkout's ./magus and was
+// built from another contract.
 type CheckoutJudgeDepsSuite struct {
 	suite.Suite
 	root, binary string
@@ -2842,6 +2934,9 @@ func (s *CheckoutJudgeDepsSuite) SetupTest() {
 	s.root = s.T().TempDir()
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), []byte("module github.com/egladman/magus\n\ngo 1.25\n"), 0o644))
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus"), []byte("#!/bin/sh\n"), 0o755))
+	lock := filepath.Join(s.root, "internal", "commands", "testdata", "api.lock")
+	s.Require().NoError(os.MkdirAll(filepath.Dir(lock), 0o755))
+	s.Require().NoError(os.WriteFile(lock, []byte("config another.key\n"), 0o644))
 	s.binary = filepath.Join(s.T().TempDir(), "magus")
 	s.Require().NoError(os.WriteFile(s.binary, []byte("#!/bin/sh\n"), 0o755))
 }

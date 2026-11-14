@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -53,17 +54,31 @@ func judgeStopUnfiled(ctx context.Context, deps Dependencies, raw string, who ho
 	return v, true
 }
 
-// unfiledRow is the live row lease names when it carries no result.
+// unfiledRow is the live row lease names when its live attempt filed no result.
 func unfiledRow(ctx context.Context, at location, lease string) (types.Job, bool) {
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
 		return types.Job{}, false
 	}
+	tries, err := leaseAttempts(ctx, at)
+	if err != nil {
+		return types.Job{}, false
+	}
 	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == lease })
-	if i < 0 || rows[i].Result != nil || !rows[i].State.Live() {
+	if i < 0 || tries.Result(lease) != nil || !rows[i].State.Live() {
 		return types.Job{}, false
 	}
 	return rows[i], true
+}
+
+// leaseAttempts are the pinned job store's tries, read when nothing
+// pinned one, as [leaseRows] reads the rows.
+func leaseAttempts(ctx context.Context, at location) (types.JobAttempts, error) {
+	if pinned, ok := job.SnapshotFromContext(ctx); ok {
+		return types.NewJobAttempts(pinned.Attempts), pinned.Err
+	}
+	all, err := job.NewStore(at.jobs()).Attempts()
+	return types.NewJobAttempts(all), err
 }
 
 // unfiledStopReason names the two commands that file the result, first line
@@ -73,7 +88,7 @@ func unfiledStopReason(row types.Job) string {
 	if row.ReadOnly {
 		changed = `nothing: a read-only row files "changed_paths": []`
 	}
-	return fmt.Sprintf("magus workspace: job %s has no filed result, so this stop is refused once [%s]\n"+
-		"File it: `magus job exit %s --stdin`, its changed_paths naming %s; `magus job exit --schema` prints the shape.",
+	return fmt.Sprintf("magus workspace: job %s filed no result, stop refused once [%s]\n"+
+		"Run `magus job exit %s --stdin` naming %s; shape: magus job exit --schema",
 		row.ID, denyRuleStopUnfiled, row.ID, changed)
 }

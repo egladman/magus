@@ -54,13 +54,13 @@ Two more channels exist outside magusfiles: a Go spell's `WithDependsOn(func(dir
 
 Read from the comments beside the keys, 2026-11-07:
 
-| project | entry                                                                      | what it stands for                                                           |
-| ------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| root    | `proto`                                                                    | "orders proto's generate first" and puts a `.proto` edit in the affected set |
-| root    | `libs/figure`                                                              | go-build embeds `figure.buzz`                                                |
-| root    | `libs/embed`                                                               | `go.mod` replaces it with the local module, so its Go builds into magus      |
-| docs    | `../proto`, `../libs/figure`, `../libs/kustomize`                          | API docs, the render and the figures read their files                        |
-| docs    | `../libs/cmdline`, `diagnostics`, `embed`, `scipbuzz`, `xdg`, `gopherbuzz` | generators compile these Go libs into the binaries they run                  |
+| project | entry                                                                     | what it stands for                                                           |
+| ------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| root    | `proto`                                                                   | "orders proto's generate first" and puts a `.proto` edit in the affected set |
+| root    | `libs/figure`                                                             | go-build embeds `figure.buzz`                                                |
+| root    | `libs/embed`                                                              | `go.mod` replaces it with the local module, so its Go builds into magus      |
+| docs    | `../proto`, `../libs/figure`, `../libs/kustomize`                         | API docs, the render and the figures read their files                        |
+| docs    | `../libs/clikit`, `diagnostics`, `embed`, `scipbuzz`, `xdg`, `gopherbuzz` | generators compile these Go libs into the binaries they run                  |
 
 None of these is "run that project first". Each is either a target the downstream
 needs (proto's `generate`) or files the downstream reads (a Go module, one `.buzz`
@@ -273,6 +273,14 @@ code the pending design names, for either reference.
 | spell contract `needs`/`provides` renamed `sources`/`outputs`                                                                                                                    | proposed |
 | [dependencies.md](../concepts/dependencies.md) rewritten around two verbs; `magus\needs` in the docs becomes `ctx.needs`                                                         | proposed |
 | ADR 0027 gains an amendment pointing here                                                                                                                                        | proposed |
+| a `ctx.needs` edge carries the needed target's key: a step's key folds in the own inputs of every target its chain reaches; a `skip_cache` member's artifact keys as before      | done     |
+
+The needs-key row was measured over the 200 commits before it on `main`. Of the 158
+cacheable targets the `ci` targets reach, 60 gained key inputs. The target runs a
+commit's changed files miss rose from 12,207 to 13,802 of 31,600 (39% to 44%). The
+count matches each changed path against each target's source globs, so it leaves out the
+walk's pruning of nested projects. The agents guide's `test` rose from 64 misses to 196,
+since it now keys on what `go_build` reads.
 
 ### Principles checked
 

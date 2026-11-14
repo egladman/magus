@@ -46,6 +46,10 @@ type Contract struct {
 	Coverage *spells.Coverage `mgs:"mgs_getCoverage"`
 	// What the spell's tools need from the host beyond the sandbox's own grants.
 	Sandbox *spells.Sandbox `mgs:"mgs_getSandbox"`
+	// The command that prints the globs a build of the package magus
+	// appends reads. A leading ! excludes. Without it a relinked binary's
+	// build inputs are unknown.
+	Scopes *spells.Command `mgs:"mgs_getScopes"`
 	// Whether the spell delegates to a foreign process that manages its own dependency
 	// graph, so magus treats the project as a black box.
 	Opaque bool `mgs:"mgs_isOpaque"`
@@ -88,7 +92,7 @@ type harnessContract struct {
 	Limits types.Limits `mgs:"mgs_getLimits"`
 	// The models the host runs, with prices in USD per million tokens. A person's
 	// agents.models overrides these row by row.
-	Models []types.ModelRow `mgs:"mgs_listModels"`
+	Models []types.HarnessModel `mgs:"mgs_listModels"`
 	// Plain host settings kept in place, such as a plugin to enable. A value someone set
 	// differently is left alone and named, never overwritten.
 	Settings []types.Setting `mgs:"mgs_listSettings"`

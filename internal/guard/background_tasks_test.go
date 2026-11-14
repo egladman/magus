@@ -207,6 +207,20 @@ func TestLiveBackgroundTasksLeavesAPartialLineOutOfTheCheckpoint(t *testing.T) {
 	assert.Equal(t, "bc0m5o2bg", got[0].ID)
 }
 
+// A root transcript's background subagent spawn, shaped like Claude
+// Code's of 2026-11-04: the call and the result that launches it.
+const (
+	spawnCall     = `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01QCmx","name":"Agent","input":{"description":"root/worker naming-lint","prompt":"JOB ID: naming-lint","subagent_type":"general-purpose","model":"sonnet"}}]},"uuid":"s1","timestamp":"2026-11-04T10:00:00.000Z"}`
+	spawnLaunched = `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01QCmx","type":"tool_result","content":[{"type":"text","text":"Async agent launched successfully. (This tool result is internal metadata.)\nagentId: a4dce34d9c86d3e46 (internal ID - do not mention to user.)\nThe agent is working in the background. You will be notified automatically when it completes."}]}]},"uuid":"s2","timestamp":"2026-11-04T10:00:01.000Z"}`
+)
+
+// A subagent is a job store try, never a shell task the transcript names.
+func TestASpawnIsNoShellTask(t *testing.T) {
+	tasks, err := liveBackgroundTasks(writeTranscript(t, spawnCall, spawnLaunched), "", bgTime(t, "2026-11-04T11:00:00Z"))
+	require.NoError(t, err)
+	assert.Empty(t, tasks)
+}
+
 // rootStop is Claude Code's Stop for the root session: no agent, and the session's own
 // transcript.
 func rootStop(t *testing.T, transcript string) string {
@@ -728,6 +742,48 @@ func TestReadBackgroundTranscriptKeepsTheVersionAcrossACheckpoint(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, "2.1.299", read.hostVersion)
 	assert.Len(t, read.tasks, 1)
+}
+
+func waitingStore(t *testing.T) (*job.Store, job.Caller) {
+	root := t.TempDir()
+	commitCheckout(t, root)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), Root: root, CacheDir: t.TempDir(), Actor: &job.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	require.NoError(t, err)
+	_, err = store.Exec(t.Context(), "w")
+	require.NoError(t, err)
+	worker := job.Caller{Host: "claude-code", Session: "8f2c6a1e", Agent: "a05d44b006f8f68af"}
+	require.NoError(t, store.Bind(worker, "w"))
+	_, err = store.StartAttempt(t.Context(), "w", time.Now())
+	require.NoError(t, err)
+	return store, worker
+}
+
+// A stop that leaves a task running ends nothing, on any host version.
+func TestASubagentStopWithALiveTaskLeavesItsTryRunning(t *testing.T) {
+	store, worker := waitingStore(t)
+	transcript := writeTranscript(t, bgSearchCall, bgSearchResult)
+
+	_, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), "", types.GuardJudgment{})
+	require.NoError(t, err)
+
+	tries, err := store.Attempts()
+	require.NoError(t, err)
+	require.Len(t, tries, 1)
+	assert.Zero(t, tries[0].Status.Ended)
+}
+
+func TestASubagentStopWithNoLiveTaskEndsItsTry(t *testing.T) {
+	store, worker := waitingStore(t)
+	transcript := writeTranscript(t, `{"type":"user"}`)
+
+	_, err := endStoppedSession(t.Context(), store, worker, subagentStop(t, worker.Agent, transcript), "", types.GuardJudgment{})
+	require.NoError(t, err)
+
+	tries, err := store.Attempts()
+	require.NoError(t, err)
+	require.Len(t, tries, 1)
+	assert.Equal(t, types.AttemptEndStop, tries[0].Status.End)
 }
 
 // A stop its host resumes leaves the row as it was, since a wake is

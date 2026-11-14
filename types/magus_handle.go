@@ -1,5 +1,7 @@
 package types
 
+import "github.com/egladman/magus/types/vcs"
+
 // MagusWorkspace is magus\workspace(): the workspace a script reads.
 // Dir is the checkout whose branch its job facts are about, Root unless
 // the call named another checkout of the same repository.
@@ -17,8 +19,8 @@ type Change struct {
 	// Rev is a committed range, base...head, read instead of the tree.
 	Rev string `json:"rev"`
 	// Patch is a unified diff read instead of the tree.
-	Patch string        `json:"patch"`
-	At    VCSCheckpoint `json:"at"`
+	Patch string         `json:"patch"`
+	At    vcs.Checkpoint `json:"at"`
 	// Files digests each path dirty at construction, "" when deleted.
 	// A refusal names the paths whose digest moved.
 	Files map[string]string `json:"files"`

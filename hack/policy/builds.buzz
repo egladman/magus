@@ -1,8 +1,9 @@
 // The one-binary-per-base rules: brief-builds-magus (spawn) and worker-builds-magus
 // (command). The checkout's integrator builds ./magus once per base commit, in the landing
-// checkout, and hack/dev/bootstrap-worktree.buzz copies it into each worker checkout. The one
-// other build is a worker's go-build in a checkout its job owns, when the job's write paths
-// cover a build input of ./cmd/magus: no placed binary can judge that tree.
+// checkout, and hack/dev/bootstrap-worktree.buzz copies it into each worker checkout. A
+// worker builds no ./magus, in a checkout its job owns either: the root's hook runs only a
+// binary a live job row pins, and only the fork, the placement and the integrator pin one.
+// A worker builds magus only at go-build's product path, which no hook runs.
 namespace agentpolicy\builds;
 
 import "std";
@@ -28,8 +29,10 @@ final separators = ["&&", "||", "|", ";"];
 
 // buildOf is what a program does to compile magus, "" for anything else: `go run`, `go build`
 // or `go install` of the package cmd/magus, or a run of the root project's go-build or build
-// target. An unrelated `go run` and every other magus verb pass.
+// target. An unrelated `go run` and every other magus verb pass, and so does a
+// build of the product path.
 export fun buildOf(p: helpers\Program) > str {
+    if (buildsProduct(p)) { return ""; }
     if (p.name == "go") {
         final call = helpers\goCall(p.args);
         if (call.args.len() == 0 or goVerbs.indexOf(call.args[0]) == null) { return ""; }
@@ -49,6 +52,32 @@ export fun buildOf(p: helpers\Program) > str {
         return "magus run {ops[1]} " + (if (ops.len() > 2) ops[2] else ".");
     }
     return "";
+}
+
+// go-build's product in magusfile.buzz, copied: a command request carries no
+// target policy.
+final productPath = "bin/magus";
+final productTarget = "go-build-product";
+
+// buildsProduct reports a program that compiles at the product path and nowhere
+// else: `go build -o bin/magus ./cmd/magus`, or a run of the product target.
+export fun buildsProduct(p: helpers\Program) > bool {
+    if (p.name == "go") {
+        final call = helpers\goCall(p.args);
+        if (call.args.len() == 0 or call.args[0] != "build") { return false; }
+        final output = helpers\flagValue(call.args.sub(1), long: "-o", short: "");
+        if (output == null) { return false; }
+        final clean = path\clean(output!);
+        return clean == productPath or clean.endsWith("/" + productPath);
+    }
+    if (p.name == "magus") {
+        final ops = helpers\magusOperands(p.args);
+        if (ops.len() < 2 or ops[0] != "run") { return false; }
+        final named = ops[1].split("::");
+        if (named[named.len() - 1] != productTarget) { return false; }
+        return ops.len() == 2 or path\clean(ops[2]) == ".";
+    }
+    return false;
 }
 
 fun isMagusPackage(arg: str) > bool {
@@ -80,152 +109,28 @@ export fun workerPlacement(built: str, lease: str) > str {
         + "placed in this checkout; if it cannot load this tree, ask the main session to place a newer one, "
         + "which it builds and places in one step with "
         + "`<main checkout>/magus buzz {stale\placementScript} -- --job <id> --build-from <main checkout>`. "
-        + "A worker runs `./magus run go-build .` itself only in a checkout its job owns, and only when the "
-        + "job's write paths cover a build input of ./cmd/magus. A row that moved the checkout it owns, "
-        + "by a fast-forward or a merge, finishes with `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here`.";
-}
-
-// OwnBuild is what a worker's build of magus is judged against: root is the checkout it
-// builds in, owned the checkouts the worker's job owns, and inputs the job's write paths that
-// are build inputs of ./cmd/magus in root.
-export object OwnBuild {
-    root: str = "",
-    owned: [str] = [<str>],
-    inputs: [str] = [<str>],
-    // unlisted says why inputs is unknown, "" when it was read.
-    unlisted: str = "",
-}
-
-// ownsBuild: the worker builds in a checkout its job owns, and its write paths change what
-// that checkout's binary compiles from.
-export fun ownsBuild(own: OwnBuild) > bool {
-    return own.root != "" and own.owned.indexOf(path\clean(own.root)) != null and own.inputs.len() > 0;
-}
-
-// runsGoBuild: p runs the root project's go-build target, directly or through the bootstrap
-// (`go run ./cmd/magus run go-build ...`). A `go build` of cmd/magus or the build target
-// writes a binary go-build's stamp and placement never see.
-export fun runsGoBuild(p: helpers\Program) > bool {
-    var args = [<str>];
-    if (p.name == "magus") {
-        args = helpers\magusOperands(p.args);
-    } else if (p.name == "go") {
-        final call = helpers\goCall(p.args);
-        if (call.args.len() == 0 or call.args[0] != "run") { return false; }
-        var after = -1;
-        foreach (i, arg in call.args) {
-            if (after < 0 and isMagusPackage(arg)) { after = i + 1; }
-        }
-        if (after < 0) { return false; }
-        args = call.args.sub(after);
-    }
-    if (args.len() < 2 or args[0] != "run") { return false; }
-    final named = args[1].split("::");
-    if (named[named.len() - 1] != "go-build") { return false; }
-    foreach (arg in args.sub(2)) {
-        if (!arg.startsWith("-")) { return path\clean(arg) == "."; }
-    }
-    return true;
+        + "A worker builds no ./magus in a checkout its job owns either, nor after a fast-forward or a merge moved it: "
+        + "the root's hook runs only a ./magus a live job row pins, and only the fork, the placement and the integrator pin one. "
+        + "To try this unit's own edits, build them at {productPath}, which no hook runs: `magus run {productTarget} .`.";
 }
 
 // workerBuildDenial is worker-builds-magus: the denial for a program that compiles magus run
-// by a caller holding the worker lease, "" when it does not, the caller holds none, the caller
-// integrates the checkout, or it is a go-build own allows. A person holds no lease and builds
-// freely; the root's build is orchestrator-groundwork's to refuse.
-export fun workerBuildDenial(p: helpers\Program, lease: str, integrator: bool = false, own: OwnBuild = OwnBuild{}) > str {
+// by a caller holding the worker lease, "" when it does not, the caller holds none, or the
+// caller integrates the checkout. A person holds no lease and builds freely; the root's build
+// is orchestrator-groundwork's to refuse.
+export fun workerBuildDenial(p: helpers\Program, lease: str, integrator: bool = false) > str {
     if (lease == "" or integrator) { return ""; }
     final built = buildOf(p);
     if (built == "") { return ""; }
-    if (ownsBuild(own) and runsGoBuild(p)) { return ""; }
-    final denial = workerPlacement(built, lease: lease);
-    if (own.unlisted != "") { return denial + " " + own.unlisted; }
-    return denial;
-}
-
-// buildInputsAmong are the write paths that cover a build input under scopes, the way
-// internal/job's ChangedBuildInputs reads a changed path: a non-test Go file in a scope
-// directory, a root module file, another file inside a scope directory or embedded at the
-// root. A claim (`file#decl`) is its file; a glob covers an input when its directory part
-// holds or lies inside a scope directory. A copy: the guard runs no Go.
-export fun buildInputsAmong(writePaths: [str], scopes: [str]) > [str] {
-    final found = mut [<str>];
-    foreach (declared in writePaths) {
-        final file = declared.split("#")[0];
-        if (globbed(file)) {
-            final dir = globDir(file);
-            foreach (s in scopes) {
-                if (s != rootScope and s.endsWith("/") and (dir == "" or s.startsWith(dir) or dir.startsWith(s))) {
-                    found.append(declared);
-                    break;
-                }
-            }
-        } else if (isBuildInput(file, scopes: scopes)) {
-            found.append(declared);
-        }
-    }
-    return found;
-}
-
-final rootScope = "./";
-
-// inputScopes turns the build inputs stale\goInputs lists into what isBuildInput matches a
-// path against: "dir/" for the directory of each Go source, which also admits a file not
-// written yet, rootScope for the root package, and every other input as itself.
-export fun inputScopes(inputs: [str]) > [str] {
-    final scopes = mut [<str>];
-    final seen = mut {<str: bool>};
-    foreach (input in inputs) {
-        var scope = input;
-        if (input.endsWith(".go")) {
-            final dir = fs\dirname(input);
-            scope = if (dir == ".") rootScope else dir + "/";
-        }
-        if (!(seen[scope] ?? false)) {
-            seen[scope] = true;
-            scopes.append(scope);
-        }
-    }
-    return scopes;
-}
-
-fun isBuildInput(p: str, scopes: [str]) > bool {
-    final name = fs\basename(p);
-    final dir = fs\dirname(p);
-    if (dir == ".") {
-        if (stale\moduleFiles.indexOf(name) != null) { return true; }
-    }
-    if (name.endsWith(".go")) {
-        if (name.endsWith("_test.go")) { return false; }
-        return scopes.indexOf(if (dir == ".") rootScope else dir + "/") != null;
-    }
-    foreach (s in scopes) {
-        if (s == p or (s != rootScope and s.endsWith("/") and p.startsWith(s))) { return true; }
-    }
-    return false;
-}
-
-fun globbed(p: str) > bool {
-    return p.indexOf("*") != null or p.indexOf("?") != null or p.indexOf("[") != null or p.indexOf("\{") != null;
-}
-
-// globDir is the directories of p before its first wildcard segment, with a trailing slash,
-// "" when the first segment is one.
-fun globDir(p: str) > str {
-    final kept = mut [<str>];
-    foreach (segment in p.split("/")) {
-        if (globbed(segment)) { break; }
-        kept.append(segment + "/");
-    }
-    return kept.join("");
+    return workerPlacement(built, lease: lease);
 }
 
 // briefDenial is brief-builds-magus: the denial for a spawn brief that tells its worker to
-// compile magus, quoting the line, "" when none does or ownBuild says the spawned job builds
-// its own (see OwnBuild). spawn.buzz skips it for an integrate spawn, whose holder builds. A
-// line that names the command only to forbid it ("never `go build ./cmd/magus`") is not
-// graded, nor is a fenced block that a negating line introduces.
-export fun briefDenial(brief: str, ownBuild: bool = false) > str {
-    if (ownBuild) { return ""; }
+// compile magus, quoting the line, "" when none does. spawn.buzz skips it for
+// an integrate spawn, whose holder builds. A line that names the command only
+// to forbid it ("never `go build ./cmd/magus`") is not graded, nor is a fenced
+// block that a negating line introduces.
+export fun briefDenial(brief: str) > str {
     var introduced = "";
     var recent = "";
     var fenced = false;
@@ -247,7 +152,8 @@ export fun briefDenial(brief: str, ownBuild: bool = false) > str {
                     + "landing checkout, and {stale\placementScript} copies it into each worker checkout. A worker that compiles "
                     + "it adds two Go builds per worker, and a fan-out runs a dozen at once. The worker uses the "
                     + "./magus already placed, and asks the main session for a newer one if it cannot load the "
-                    + "tree. A line that names the command to forbid it (\"never ...\") is not graded.";
+                    + "tree, and builds its own edits at {productPath}, which no hook runs, with `magus run {productTarget} .`. "
+                    + "A line that names the command to forbid it (\"never ...\") is not graded.";
             }
         }
     }
@@ -412,64 +318,37 @@ test "a brief that only names the build to forbid it, or builds something else, 
     }
 }
 
-test "go-build is the one build a worker may own, run directly or through the bootstrap" {
+test "a worker's build at the product path passes, and every other build of magus is denied" {
     foreach (argv in [
+        ["go", "build", "-o", "bin/magus", "./cmd/magus"],
+        ["go", "build", "-trimpath", "-o=./bin/magus", "./cmd/magus"],
+        ["go", "-C", "/w/a", "build", "-o", "/w/a/bin/magus", "./cmd/magus"],
+        ["magus", "run", "go-build-product", "."],
+        ["./magus", "run", "go-build-product"],
+    ]) {
+        std\assert(buildsProduct(program(argv)), message: argv.join(" "));
+        std\assert(workerBuildDenial(program(argv), lease: "ui-logs") == "", message: argv.join(" "));
+    }
+    foreach (argv in [
+        ["go", "build", "-o", "magus", "./cmd/magus"],
+        ["go", "build", "-o", "bin/magus-dev", "./cmd/magus"],
+        ["go", "run", "./cmd/magus", "-o", "bin/magus"],
         ["magus", "run", "go-build", "."],
-        ["./magus", "--root", "/w/b", "run", "go::go-build"],
-        ["magus", "run", "go-build", "--no-cache", "."],
-        ["go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."],
-        ["go", "-C", "/w/b", "run", "./cmd/magus", "run", "go-build", "."],
+        ["magus", "run", "go-build-product", "docs"],
     ]) {
-        std\assert(runsGoBuild(program(argv)), message: argv.join(" "));
+        std\assert(!buildsProduct(program(argv)), message: argv.join(" "));
     }
-    foreach (argv in [
-        ["magus", "run", "build", "."],
-        ["magus", "run", "go-build", "console"],
-        ["go", "build", "./cmd/magus"],
-        ["go", "install", "./cmd/magus"],
-        ["go", "run", "./cmd/magus", "version"],
-        ["go", "run", "./cmd/magus-utils", "run", "go-build", "."],
-    ]) {
-        std\assert(!runsGoBuild(program(argv)), message: argv.join(" "));
-    }
+    std\assert(workerBuildDenial(program(["go", "build", "-o", "magus", "./cmd/magus"]), lease: "ui-logs") != "", message: "the judge");
 }
 
-test "the build inputs among write paths follow the go list scopes" {
-    final listed = "/w/a|main.go|VERSION\n/w/a/cmd/magus|main.go\n/w/a/internal/job|claim.go\n\n/usr/local/go/src/fmt\n";
-    final scopes = inputScopes(stale\goInputs(listed, root: "/w/a"));
-    std\assert(scopes.join(",") == "./,VERSION,cmd/magus/,internal/job/", message: scopes.join(","));
-    final found = buildInputsAmong([
-        "internal/job/worktree.go",
-        "internal/job/worktree_test.go",
-        "internal/job/gen/job.schema.json",
-        "internal/job/claim.go#ungradableClaimProblems",
-        "go.sum",
-        "VERSION",
-        "main.go",
-        "internal/*/isolation.go",
-        "docs/*.md",
-        "libs/embed/train/go.mod",
-        "MAGUS.md",
-    ], scopes: scopes);
-    std\assert(found.join(",") == "internal/job/worktree.go,internal/job/gen/job.schema.json,internal/job/claim.go#ungradableClaimProblems,go.sum,VERSION,main.go,internal/*/isolation.go",
-        message: found.join(","));
+test "the denial names the product build" {
+    final denial = workerPlacement("go build ./cmd/magus", lease: "ui-logs");
+    std\assert(denial.indexOf("build them at bin/magus, which no hook runs: `magus run go-build-product .`") != null, message: denial);
 }
 
-test "a worker's own go-build passes only with an owned checkout and a build input" {
-    final build = program(["magus", "run", "go-build", "."]);
-    final own = OwnBuild{ root = "/w/b", owned = ["/w/b"], inputs = ["internal/job/worktree.go"] };
-    std\assert(workerBuildDenial(build, lease: "iso", own: own) == "", message: "its own build");
-    std\assert(workerBuildDenial(build, lease: "iso", own: OwnBuild{ root = "/w/b", owned = ["/w/c"], inputs = own.inputs }) != "", message: "not owned");
-    std\assert(workerBuildDenial(build, lease: "iso", own: OwnBuild{ root = "/w/b", owned = ["/w/b"] }) != "", message: "no build input");
-    std\assert(workerBuildDenial(build, lease: "iso", own: OwnBuild{ owned = ["/w/b"], inputs = own.inputs }) != "", message: "no root");
-    std\assert(workerBuildDenial(program(["go", "build", "./cmd/magus"]), lease: "iso", own: own) != "", message: "not go-build");
-    final unlisted = workerBuildDenial(build, lease: "iso", own: OwnBuild{ root = "/w/b", owned = ["/w/b"], unlisted = "go list failed." });
-    verdict\assertVerdict(unlisted, label: "unlisted");
-    std\assert(unlisted.endsWith(" go list failed."), message: unlisted);
+test "a brief may teach the product build" {
+    std\assert(briefDenial("Try your flag: `./magus run go-build-product .`, then `bin/magus x`.") == "", message: "the target");
+    std\assert(briefDenial("Build `go build -o bin/magus ./cmd/magus` to try it.") == "", message: "the raw build");
+    std\assert(briefDenial("Build `go build -o magus ./cmd/magus` first.") != "", message: "the judge");
 }
 
-test "a brief for a job that builds its own binary may name the build" {
-    final brief = "Build it with ./magus run go-build . before you start.";
-    std\assert(briefDenial(brief) != "", message: "any other spawn");
-    std\assert(briefDenial(brief, ownBuild: true) == "", message: "the job owns its build");
-}

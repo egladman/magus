@@ -58,42 +58,42 @@ export enum<str> MediaType {
 }
 
 export object Platform {
-    os: OS = OS.none,
-    architecture: Architecture = Architecture.none,
+    os: OS,
+    architecture: Architecture,
     variant: Variant = Variant.none,
     osVersion: str = "",
     osFeatures: [str] = [],
 }
 
 export object File {
-    source: str = "",
-    path: str = "",
-    mode: int = 0,
+    source: str,
+    path: str,
+    mode: int,
     uid: int = 0,
     gid: int = 0,
 }
 
 export object Tree {
-    source: str = "",
-    path: str = "",
+    source: str,
+    path: str,
     include: [str] = [],
     exclude: [str] = [],
-    modePolicy: ModePolicy = ModePolicy.none,
-    symlinks: SymlinkPolicy = SymlinkPolicy.none,
+    modePolicy: ModePolicy,
+    symlinks: SymlinkPolicy,
     uid: int = 0,
     gid: int = 0,
 }
 
 export object Symlink {
-    path: str = "",
-    target: str = "",
+    path: str,
+    target: str,
     uid: int = 0,
     gid: int = 0,
 }
 
 export object Directory {
-    path: str = "",
-    mode: int = 0,
+    path: str,
+    mode: int,
     uid: int = 0,
     gid: int = 0,
 }
@@ -114,7 +114,7 @@ export object Config {
 export object Spec {
     base: str = "",
     scratch: bool = false,
-    platform: Platform = Platform{},
+    platform: Platform,
     files: [File] = [],
     trees: [Tree] = [],
     symlinks: [Symlink] = [],
@@ -175,8 +175,8 @@ export object Layout {
 }
 
 export object Document {
-    path: str = "",
-    descriptor: Descriptor = Descriptor{},
+    path: str,
+    descriptor: Descriptor,
 }
 
 export object Secret {
@@ -201,8 +201,8 @@ export object Dependency {
 }
 
 export object Provenance {
-    builderID: str = "",
-    sourceRevision: str = "",
+    builderID: str,
+    sourceRevision: str,
     dependencies: [Dependency] = [],
 }
 

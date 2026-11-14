@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // checkReadinessProbes reports which tools this workspace's spells gate on, and what
@@ -19,7 +20,7 @@ import (
 // daemon being up, the very coupling readiness exists to make legible. The runner
 // enforces; this only says what WOULD be enforced, so someone hitting MGS3004 can see
 // where the gate came from without reading a spell.
-func (r *runner) checkReadinessProbes(ctx context.Context, projects []*types.Project) types.Check {
+func (r *runner) checkReadinessProbes(ctx context.Context, projects []*types.Project) check.Check {
 	type gate struct {
 		spell, tool, cmd string
 		probe            spells.Command
@@ -50,9 +51,9 @@ func (r *runner) checkReadinessProbes(ctx context.Context, projects []*types.Pro
 		}
 	}
 	if len(gates) == 0 {
-		return types.Check{
+		return check.Check{
 			Name:    "tool-readiness",
-			Status:  types.CheckOK,
+			Status:  check.OK,
 			Message: "no spell gates an op on a tool being reachable",
 		}
 	}
@@ -69,7 +70,7 @@ func (r *runner) checkReadinessProbes(ctx context.Context, projects []*types.Pro
 	// spells reach docker or podman permanently yellow, including one where --probe had
 	// just confirmed every tool was up, and a level that cannot be cleared is one people
 	// learn to skip past, taking the real ones with it. Only a failed probe lowers this.
-	status := types.CheckOK
+	status := check.OK
 	var down int
 	for _, g := range gates {
 		if !r.opts.probe {
@@ -81,7 +82,7 @@ func (r *runner) checkReadinessProbes(ctx context.Context, projects []*types.Pro
 		// environment is ready, and the honest answer is no.
 		if err := exec.CommandContext(ctx, g.probe.Bin, g.probe.Args...).Run(); err != nil {
 			down++
-			status = types.CheckFail
+			status = check.Fail
 			details = append(details, fmt.Sprintf("%s: %s NOT ready: `%s` failed", g.spell, g.tool, g.cmd))
 			continue
 		}
@@ -91,14 +92,14 @@ func (r *runner) checkReadinessProbes(ctx context.Context, projects []*types.Pro
 	// every gate and is reporting what it saw. That is a different claim, and the
 	// registry's default cannot know which one this run made.
 	msg := fmt.Sprintf("%d tool(s) gated on a readiness probe", len(gates))
-	evidence := types.EvidenceDeclared
+	evidence := check.EvidenceDeclared
 	switch {
 	case r.opts.probe && down > 0:
 		msg = fmt.Sprintf("%d of %d gated tool(s) not ready", down, len(gates))
-		evidence = types.EvidenceMeasured
+		evidence = check.EvidenceMeasured
 	case r.opts.probe:
 		msg = fmt.Sprintf("%d gated tool(s), all ready", len(gates))
-		evidence = types.EvidenceMeasured
+		evidence = check.EvidenceMeasured
 	}
-	return types.Check{Name: "tool-readiness", Status: status, Evidence: evidence, Message: msg, Details: details}
+	return check.Check{Name: "tool-readiness", Status: status, Evidence: evidence, Message: msg, Details: details}
 }

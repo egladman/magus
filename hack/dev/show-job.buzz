@@ -1,0 +1,566 @@
+namespace jobview;
+
+import "flags";
+import "magus";
+import "magus/agent";
+import "result";
+import "std";
+import "template";
+
+import "assert";
+import "encoding/json";
+import "fs";
+
+final SUMMARY = "render a job's spec or its filed result as Markdown, never stored";
+final SERVES = ["replaces:cat jobs.jsonl"];
+final EFFECT = "read";
+
+final USAGE = "usage: magus buzz hack/dev/show-job.buzz -- --job <id> [--result]";
+final HELP = "cost: two job-store reads\n{USAGE}\n\n"
+    + "Prints a view of job <id>: its spec for the worker by default, or with --result the JobResult its holder filed.\n"
+    + "Both are rendered from the typed records (magus\\Job and magus\\JobResult) through the template module, at read\n"
+    + "time: nothing is stored and nothing reads the Markdown back. Read-only; the same records render the same view.";
+
+// RESULT_SCHEMA is the job result schema the spec's skeleton is written to.
+// `./magus job exit --schema` prints the shape a binary accepts.
+final RESULT_SCHEMA = "magus.job-result/v1alpha1";
+final WORD = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/:=,+@%-";
+
+// The templates switch Mustache's delimiters to <% %>, so a Buzz string
+// needs no escaped braces. <%& x %> is an unescaped value.
+final SPEC = [
+    "\{\{=<% %>=\}\}# Job <%& id %>",
+    "",
+    "The spec: `./magus describe job <%& id %>`. It is the record; this view is rendered from it and never stored.",
+    "",
+    "## Criteria",
+    "",
+    "<%& criteria %>",
+    "<%#hasGoals%>",
+    "",
+    "<%/hasGoals%>",
+    "<%#goals%>",
+    "- goal `<%& id %>`: <%& description %>",
+    "<%/goals%>",
+    "",
+    "## Setup",
+    "",
+    "<%& base %> From your worktree, with no `cd` prefix, run:",
+    "",
+    "    magus buzz hack/dev/bootstrap-worktree.buzz -- --job <%& id %>",
+    "",
+    "It places the orchestrator's `./magus` (it never builds one), builds the graph, takes the lease and refuses unless the row names this worktree and its base. "
+        + "If it refuses, stop and report the blocking reason and evidence ref; do not paste the full verdict or take the lease by hand somewhere else.",
+    "",
+    "The guard grades your writes under the lease only once it has bound your session: at a spawn titled for this job, "
+        + "or when it sees you run `./magus job exec <%& id %>` yourself. Not spawned under it? Run that once after the script.",
+    "",
+    "## Write paths",
+    "",
+    "<%#readOnly%>",
+    "- none: this job is read-only, so write nothing in the tree",
+    "<%/readOnly%>",
+    "<%#writePaths%>",
+    "- `<%& . %>`",
+    "<%/writePaths%>",
+    "",
+    "## Deny paths",
+    "",
+    "Never write these, whatever your write paths say; a lease that owns one is worked by its own holder.",
+    "",
+    "<%#denyLines%>",
+    "<%& . %>",
+    "<%/denyLines%>",
+    "- derived by the workspace (generated files, other leases, shared build inputs): `./magus describe job <%& id %>` lists them",
+    "",
+    "## Read paths",
+    "",
+    "<%#readPaths%>",
+    "- `<%& . %>`",
+    "<%/readPaths%>",
+    "<%^readPaths%>",
+    "- none declared: read what the criteria need, through the graph first",
+    "<%/readPaths%>",
+    "",
+    "## Other jobs",
+    "",
+    "<%#alone%>",
+    "- none depends on or overlaps this one",
+    "<%/alone%>",
+    "<%#dependencies%>",
+    "<%& line %>",
+    "<%/dependencies%>",
+    "<%#overlaps%>",
+    "<%& line %>",
+    "<%/overlaps%>",
+    "",
+    "## Check",
+    "",
+    "<%#check%>",
+    "Your one check, run exactly like this:",
+    "",
+    "    <%& check %>",
+    "<%/check%>",
+    "<%^check%>",
+    "The spec names no check: the goals above grade the work.",
+    "<%/check%>",
+    "",
+    "Run nothing else that validates: no `magus affected ci`, no other target, no raw tool. The root runs everything else, serially.",
+    "If the build budget refuses your check, set validation.owed to `no seat` and leave output_ref empty; mark any verification_evidence the same way. Do not wait or retry; the root runs the owed check.",
+    "",
+    "## Finish",
+    "",
+    "Write `<%& id %>-result.json` in your scratchpad directory, outside your write paths; the job id in the name keeps it apart "
+        + "from other workers sharing that directory. Fill in the output ref your passing check printed; `./magus job exit --schema` prints the schema:",
+    "",
+    "```json",
+    "\{",
+    "  \"api_version\": \"<%& resultSchema %>\",",
+    "  \"job\": \"<%& id %>\",",
+    "  \"changed_paths\": <%& changed %>,",
+    "  \"validation\": \{\"command\": \"<%& checkJSON %>\", \"output_ref\": \"<the ref the check printed>\"\},",
+    "  \"verification_evidence\": [",
+    "<%#evidence%>",
+    "    \{\"gate_id\": \"<%& id %>\", \"output_ref\": \"<the ref its passing run printed>\"\}<%& sep %>",
+    "<%/evidence%>",
+    "  ],",
+    "  \"unresolved_risks\": [\"<what you could not settle, or nothing>\"]",
+    "\}",
+    "```",
+    "",
+    "Then, as your last step:",
+    "",
+    "    ./magus job exit <%& id %> --stdin < <scratchpad>/<%& id %>-result.json",
+    "",
+    "After filing the result, reply with the job id, outcome, validation ref and unresolved risks. Keep the JSON result, claims, deviations and guard transcript in their records; do not paste them into the reply.",
+].join("\n");
+
+final RESULT = [
+    "\{\{=<% %>=\}\}# Result of job <%& id %>",
+    "",
+    "The record: `./magus describe job <%& id %>`, under `result`. This view is rendered from it and never stored.",
+    "",
+    "State <%& state %>; filed at generation <%& observed %> of a spec now at generation <%& generation %>.",
+    "",
+    "## Changed paths",
+    "",
+    "<%#changedPaths%>",
+    "- `<%& . %>`",
+    "<%/changedPaths%>",
+    "<%^changedPaths%>",
+    "- none",
+    "<%/changedPaths%>",
+    "",
+    "## Validation",
+    "",
+    "<%& validation %>",
+    "<%#hasEvidence%>",
+    "",
+    "## Verification evidence",
+    "",
+    "<%/hasEvidence%>",
+    "<%#evidence%>",
+    "<%& . %>",
+    "<%/evidence%>",
+    "",
+    "## Unresolved risks",
+    "",
+    "<%#risks%>",
+    "- <%& . %>",
+    "<%/risks%>",
+    "<%^risks%>",
+    "- none",
+    "<%/risks%>",
+    "<%#hasFollowUps%>",
+    "",
+    "## Follow-ups",
+    "",
+    "<%/hasFollowUps%>",
+    "<%#followUps%>",
+    "- <%& . %>",
+    "<%/followUps%>",
+].join("\n");
+
+export object Deny {
+    path: str,
+    reason: str,
+}
+
+fun quoted(word: str) > str {
+    foreach (i in 0..word.len()) {
+        if (WORD.indexOf(word.sub(i, len: 1)) == null) {
+            return "'" + word.replace("'", with: "'\\''") + "'";
+        }
+    }
+    return if (word == "") "''" else word;
+}
+
+// checkCommand renders a check's target, project and tool args as the command
+// a worker types. With no target it falls back to the validation line.
+export fun checkCommand(target: str, project: str, args: [str], validation: str) > str {
+    if (target == "") {
+        if (validation.startsWith("magus ")) {
+            return "./{validation}";
+        }
+        return validation;
+    }
+    final words = mut ["./magus", "run", target, if (project == "") "." else project, "--budget-wait", "0"];
+    if (args.len() > 0) {
+        words.append("--");
+        foreach (a in args) {
+            words.append(quoted(a));
+        }
+    }
+    return words.join(" ");
+}
+
+fun leaseCheckCommand(check: magus\LeaseCheck?, validation: str) > str {
+    if (check -> c) {
+        return checkCommand(c.target, project: c.project, args: c.args, validation: validation);
+    }
+    return checkCommand("", project: "", args: [<str>], validation: validation);
+}
+
+// denyLines groups deny paths by reason, in first-seen order. A
+// file#declaration claim is spelled out as the declarations it covers, so a
+// worker does not read one claimed function as the whole file.
+export fun denyLines(deny: [Deny]) > [str] {
+    final reasons = mut [<str>];
+    final byReason = mut {<str: mut [str]>};
+    final decls = mut {<str: mut {str: mut [str]}>};
+    final files = mut {<str: mut [str]>};
+    foreach (d in deny) {
+        if (byReason[d.reason] == null) {
+            reasons.append(d.reason);
+            byReason[d.reason] = mut [<str>];
+            decls[d.reason] = mut {<str: mut [str]>};
+            files[d.reason] = mut [<str>];
+        }
+        final hash = d.path.indexOf("#");
+        if (hash == null) {
+            byReason[d.reason]!.append("`{d.path}`");
+            continue;
+        }
+        final file = d.path.sub(0, len: hash!);
+        final decl = d.path.sub(hash! + 1);
+        if (decls[d.reason]![file] == null) {
+            decls[d.reason]![file] = mut [<str>];
+            files[d.reason]!.append(file);
+        }
+        decls[d.reason]![file]!.append(decl);
+    }
+    final lines = mut [<str>];
+    foreach (r in reasons) {
+        final parts = mut [<str>];
+        foreach (p in byReason[r]!) {
+            parts.append(p);
+        }
+        foreach (f in files[r]!) {
+            final names = decls[r]![f]!;
+            final noun = if (names.len() == 1) "declaration" else "declarations";
+            parts.append("`{f}` (only the {noun} `{names.join("`, `")}`; the rest of the file is not claimed)");
+        }
+        lines.append("- {r}: {parts.join(", ")}");
+    }
+    return lines;
+}
+
+// dependencyLines says what each job row depends on asks of the worker.
+fun dependencyLines(row: magus\Job, list: magus\JobList) > [str] {
+    final states = mut {<str: str>};
+    foreach (j in list.jobs) {
+        states[j.id] = j.state.value;
+    }
+    final lines = mut [<str>];
+    foreach (d in row.dependsOn) {
+        final state = states[d] ?? "missing";
+        if (state == "pass") {
+            lines.append("- depends on `{d}`, which passed: build on its result (`./magus describe job {d}`)");
+        } else {
+            lines.append("- depends on `{d}`, which is {state}: `./magus job wait {d}` before touching what it changes");
+        }
+    }
+    return lines;
+}
+
+// overlapLines is each overlap naming row, seen from row, by the other job.
+fun overlapLines(row: magus\Job, list: magus\JobList) > [str] {
+    final found = mut [<[str]>];
+    foreach (o in list.overlaps) {
+        var other = "";
+        var mine = [<str>];
+        var theirs = [<str>];
+        if (o.jobA == row.id) {
+            other = o.jobB;
+            mine = o.pathsA;
+            theirs = o.pathsB;
+        } else if (o.jobB == row.id) {
+            other = o.jobA;
+            mine = o.pathsB;
+            theirs = o.pathsA;
+        } else {
+            continue;
+        }
+        var now = "nobody measured what either wrote";
+        if (o.footprint -> f) {
+            if (f.verdict == "shared") {
+                now = "both have already written {f.shared.join(", ")}";
+            } else if (f.verdict != "") {
+                now = "neither has written into the overlap yet";
+            }
+        }
+        found.append([other, "- overlaps live job `{other}`: your `{mine.join("`, `")}` against its `{theirs.join("`, `")}`; {now}. "
+            + "Write only your own paths there; if the criteria need one of its, stop and name the conflict in unresolved_risks rather than work around it"]);
+    }
+    final ordered = found.sort(fun (a: [str], b: [str]) > bool => a[0] < b[0]);
+    final lines = mut [<str>];
+    foreach (o in ordered) {
+        lines.append(o[1]);
+    }
+    return lines;
+}
+
+fun lineMaps(lines: [str]) > [{str: any}] {
+    final maps = mut [<{str: any}>];
+    foreach (l in lines) {
+        maps.append({"line": l});
+    }
+    return maps;
+}
+
+// specView renders row's spec for its worker. list gives the states of what
+// it depends on and the live jobs it overlaps.
+export fun specView(row: magus\Job, list: magus\JobList) > result\Result::<str> {
+    final check = leaseCheckCommand(row.check, validation: row.validation);
+    final goals = mut [<{str: any}>];
+    final gates = mut [<str>];
+    foreach (g in row.goals) {
+        if (g.id != "check" and g.description != "") {
+            goals.append({"id": g.id, "description": g.description});
+        }
+        if (leaseCheckCommand(g.check, validation: "") != "") {
+            gates.append(g.id);
+        }
+    }
+    if (gates.len() == 0 and check != "") {
+        gates.append("check");
+    }
+    final evidence = mut [<{str: any}>];
+    foreach (i, id in gates) {
+        evidence.append({"id": id, "sep": if (i + 1 < gates.len()) "," else ""});
+    }
+    final deny = mut [<Deny>];
+    foreach (p in row.paths.deny) {
+        deny.append(Deny{ path = p, reason = "denied by the spec" });
+    }
+    final dependencies = dependencyLines(row, list: list);
+    final overlaps = overlapLines(row, list: list);
+    final data: {str: any} = {
+        "id": row.id,
+        "criteria": row.agent?.instructions ?? "",
+        "hasGoals": goals.len() > 0,
+        "goals": goals,
+        "base": if (row.checkpoint == "") "The spec names no checkpoint." else "Your worktree must sit at checkpoint `{row.checkpoint}`.",
+        "readOnly": row.readOnly,
+        "writePaths": if (row.readOnly) [<str>] else row.paths.write,
+        "denyLines": denyLines(deny),
+        "readPaths": row.paths.read,
+        "alone": dependencies.len() == 0 and overlaps.len() == 0,
+        "dependencies": lineMaps(dependencies),
+        "overlaps": lineMaps(overlaps),
+        "check": check,
+        "checkJSON": check.replace("\"", with: "\\\""),
+        "resultSchema": "{RESULT_SCHEMA}",
+        "changed": if (row.readOnly) "[]" else "[\"<every path you changed>\"]",
+        "evidence": evidence,
+    };
+    try {
+        return result\ok::<str>(template\render(SPEC, data: data).trim() + "\n");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "show-job: render the spec of job {row.id}");
+    }
+}
+
+// refLine is one ref a result cites, or what is owed or unrun instead.
+fun refLine(label: str, ref: str, owed: str, unrun: str) > str {
+    if (ref != "") {
+        return "{label}: `{ref}`";
+    }
+    if (owed != "") {
+        return "{label}: owed, {owed}";
+    }
+    if (unrun != "") {
+        return "{label}: not run, {unrun}";
+    }
+    return "{label}: no ref filed";
+}
+
+// resultView renders filed, the JobResult row's live try filed. None is an
+// error: `magus job wait` says when there is one.
+export fun resultView(row: magus\Job, filed: magus\JobResult?) > result\Result::<str> {
+    if (filed == null) {
+        return result\fail::<str>("show-job: job {row.id} has no filed result yet; `./magus job wait {row.id}` waits for one");
+    }
+    final r = filed!;
+    var validation = "- no check was filed";
+    if (r.validation.command != "") {
+        validation = refLine("- `{r.validation.command}`", ref: r.validation.outputRef, owed: r.validation.owed, unrun: r.validation.unrun);
+    }
+    final evidence = mut [<str>];
+    foreach (e in r.verificationEvidence) {
+        evidence.append(refLine("- gate `{e.gateID}`", ref: e.outputRef, owed: e.owed, unrun: e.unrun));
+    }
+    final data: {str: any} = {
+        "id": row.id,
+        "state": row.state.value,
+        "observed": "{r.observedGeneration}",
+        "generation": "{row.generation}",
+        "changedPaths": r.changedPaths,
+        "validation": validation,
+        "hasEvidence": evidence.len() > 0,
+        "evidence": evidence,
+        "risks": r.unresolvedRisks,
+        "hasFollowUps": r.followUps.len() > 0,
+        "followUps": r.followUps,
+    };
+    try {
+        return result\ok::<str>(template\render(RESULT, data: data).trim() + "\n");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "show-job: render the result of job {row.id}");
+    }
+}
+
+// liveResult is what job id's newest try no fork superseded filed,
+// null when it filed nothing.
+fun liveResult(list: magus\JobList, id: str) > magus\JobResult? {
+    var n = 0;
+    var filed: magus\JobResult? = null;
+    foreach (a in list.attempts) {
+        if (a.job == id and a.n > n and a.status.state == magus\JobState.none) {
+            n = a.n;
+            filed = a.status.result;
+        }
+    }
+    return filed;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help", "--result"], valued: ["--job"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "show-job: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final id = parsed.values["--job"] ?? "";
+    if (id == "") {
+        throw "show-job: --job is required\n{USAGE}";
+    }
+    final row = magus\job(id);
+    final list = magus\workspace().jobs();
+    var view = resultView(row, filed: liveResult(list, id: id));
+    if (parsed.values["--result"] == null) {
+        view = specView(row, list: list);
+    }
+    if (view.error != null) {
+        throw view.error!.message;
+    }
+    std\print(view.value!.trim());
+}
+
+// fixtureRow is the spec the golden view is rendered from.
+export fun fixtureRow() > magus\Job {
+    final check = magus\LeaseCheck{ target = "go::go-test", project = ".", args = ["-run", "Quote|Shell"] };
+    return magus\Job{
+        id = "guard-shell-quoting",
+        agent = magus\agent\Spec{
+            instructions = "magus shell judges a quoted pipe as one word; a regression test pins it",
+            worker = magus\agent\Worker{ @"type" = magus\agent\WorkerType.resumed },
+        },
+        checkpoint = "7472f16fc709ab3827cd38ff281fecc0a217ca88",
+        paths = magus\JobPaths{
+            write = ["internal/guard/quote.go", "internal/guard/quote_test.go"],
+            read = ["internal/guard", "docs/reference/rules"],
+            deny = ["internal/guard/guard.go", "run.go#probeOne", "run.go#buildStep"],
+        },
+        dependsOn = ["guard-tokenizer", "guard-catalog"],
+        check = check,
+        goals = [
+            magus\Goal{ id = "check", kind = magus\GoalKind.check, expect = magus\GoalExpect.passed, check = check },
+            magus\Goal{ id = "docs-untouched", description = "docs/ stays as it is", kind = magus\GoalKind.paths,
+                expect = magus\GoalExpect.absent, paths = ["docs/**"] },
+        ],
+        state = magus\JobState.declared,
+    };
+}
+
+// fixtureList is the job list beside fixtureRow. One dependency passed and
+// one runs; two live jobs overlap it, one of them measured.
+export fun fixtureList() > magus\JobList {
+    return magus\JobList{
+        jobs = [
+            magus\Job{ id = "guard-tokenizer", state = magus\JobState.pass },
+            magus\Job{ id = "guard-catalog", state = magus\JobState.running },
+        ],
+        overlaps = [
+            magus\JobOverlap{ jobA = "guard-shell-quoting", jobB = "guard-wide", pathsA = ["internal/guard/quote.go"], pathsB = ["internal/guard/**"],
+                footprint = magus\JobOverlapFootprint{ verdict = "disjoint" } },
+            magus\JobOverlap{ jobA = "guard-docs", jobB = "guard-shell-quoting", pathsA = ["internal/guard/*_test.go"], pathsB = ["internal/guard/quote_test.go"] },
+        ],
+    };
+}
+
+test "the fixture spec renders the golden view" {
+    final want: [str] = json\parse(fs\readFile("hack/testdata/show-job-golden.json"));
+    final got = specView(fixtureRow(), list: fixtureList()).value!.trim().split("\n");
+    assert\equal(got, want: want, message: "spec view");
+}
+
+test "a check renders with its project and quoted tool args; a bare validation gets ./" {
+    assert\equal(checkCommand("go::go-test", project: ".", args: ["-run", "Guard|Shell"], validation: ""),
+        want: "./magus run go::go-test . --budget-wait 0 -- -run 'Guard|Shell'", message: "args");
+    assert\equal(checkCommand("", project: "", args: [<str>], validation: "magus run conventions ."),
+        want: "./magus run conventions .", message: "validation");
+}
+
+test "declaration claims are spelled out per file, grouped by reason" {
+    assert\equal(denyLines([
+        Deny{ path = "run.go#probeOne", reason = "owned by live lease a" },
+        Deny{ path = "symbol.go", reason = "owned by live lease a" },
+        Deny{ path = "run.go#buildStep", reason = "owned by live lease a" },
+        Deny{ path = "go.mod", reason = "shared build input" },
+    ]), want: [
+        "- owned by live lease a: `symbol.go`, `run.go` (only the declarations `probeOne`, `buildStep`; the rest of the file is not claimed)",
+        "- shared build input: `go.mod`",
+    ], message: "deny");
+}
+
+test "a filed result renders its refs and what is owed" {
+    final row = fixtureRow();
+    final filed = magus\Job{ id = row.id, state = magus\JobState.pass, generation = 2 };
+    final result = magus\JobResult{
+        job = row.id,
+        changedPaths = ["internal/guard/quote.go"],
+        validation = magus\JobResultValidation{ command = "magus run go::go-test .", outputRef = "out1a2b3c" },
+        verificationEvidence = [magus\VerificationEvidence{ gateID = "lint", owed = "no seat" }],
+        unresolvedRisks = [<str>],
+        observedGeneration = 2,
+    };
+    final list = magus\JobList{ attempts = [
+        magus\Attempt{ job = row.id, n = 1, status = magus\AttemptStatus{ state = magus\JobState.fail } },
+        magus\Attempt{ job = row.id, n = 2, status = magus\AttemptStatus{ result = result } },
+    ] };
+    final got = resultView(filed, filed: liveResult(list, id: row.id)).value!;
+    assert\equal(got.indexOf("- `magus run go::go-test .`: `out1a2b3c`") != null, want: true, message: "validation ref");
+    assert\equal(got.indexOf("- gate `lint`: owed, no seat") != null, want: true, message: "owed gate");
+    assert\equal(got.indexOf("## Unresolved risks\n\n- none") != null, want: true, message: "no risks");
+}
+
+test "a spec with no filed result has no result view" {
+    assert\equal(resultView(fixtureRow(), filed: null).error != null, want: true, message: "unfiled");
+}
+
+test "the same records render the same bytes" {
+    assert\equal(specView(fixtureRow(), list: fixtureList()).value!, want: specView(fixtureRow(), list: fixtureList()).value!, message: "deterministic");
+}

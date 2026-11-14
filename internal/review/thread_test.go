@@ -9,7 +9,8 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/notes"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
+	"github.com/egladman/magus/types/impact"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +36,7 @@ func threadFile() diff.File {
 		Path:     "internal/cache/cache.go",
 		Project:  "cache",
 		Role:     diff.RoleSource,
-		Coverage: &types.ImpactCoverage{Ratio: 0.5, Covered: 20, Total: 40},
+		Coverage: &impact.Coverage{Ratio: 0.5, Covered: 20, Total: 40},
 		Reach:    &reach,
 		Symbols: []diff.Symbol{
 			putSymbol(),
@@ -53,7 +54,7 @@ func putSymbol() diff.Symbol {
 		ID: "m internal/cache/Store#Put().", Label: "Put", Qualified: "Store.Put",
 		Signature: "func (s *Store) Put(k string) error", Change: diff.ChangeBody,
 		RefCount: 31, FileCount: 14, PublicTo: []string{"daemon", "docs"},
-		Checks: []types.Check{{Name: diff.CheckParamOrder, Status: types.CheckAdvice, Message: "Put takes (key, value) in the reverse of the usual order"}},
+		Checks: []check.Check{{Name: diff.CheckParamOrder, Status: check.Advice, Message: "Put takes (key, value) in the reverse of the usual order"}},
 		PublicThrough: []diff.PublicPath{
 			{ID: "m internal/daemon/Run().", Qualified: "Run", Via: []string{"Store.Flush"}, Boundary: diff.BoundaryProject},
 		},
@@ -71,7 +72,7 @@ func threadFixture(t *testing.T) ThreadInput {
 			Base:             "working",
 			Files:            []diff.File{threadFile(), {Path: "docs/cache.md"}},
 			SeedProjects:     []string{"cache"},
-			AffectedProjects: []types.ImpactProject{{Path: "cache", Seed: true}, {Path: "daemon"}, {Path: "docs"}},
+			AffectedProjects: []impact.Project{{Path: "cache", Seed: true}, {Path: "daemon"}, {Path: "docs"}},
 		},
 		Hunks: hunks,
 		Comments: []diff.ReviewComment{
@@ -120,7 +121,7 @@ func TestReadThreadReadsTheWholeThreadWithWhatTheChangeReaches(t *testing.T) {
 		Project:     "cache",
 		Role:        diff.RoleSource,
 		Reach:       &reach,
-		Coverage:    &types.ImpactCoverage{Ratio: 0.5, Covered: 20, Total: 40},
+		Coverage:    &impact.Coverage{Ratio: 0.5, Covered: 20, Total: 40},
 		Symbols:     []diff.Symbol{putSymbol()},
 		Notes: []string{
 			"note cache-pairs anchors file:internal/cache/cache.go",
@@ -247,7 +248,7 @@ func TestReadThreadFallsBackToTheHostsHunkWhenTheCommentIsOutdated(t *testing.T)
 		Project:     "cache",
 		Role:        diff.RoleSource,
 		Reach:       &reach,
-		Coverage:    &types.ImpactCoverage{Ratio: 0.5, Covered: 20, Total: 40},
+		Coverage:    &impact.Coverage{Ratio: 0.5, Covered: 20, Total: 40},
 		SymbolsNote: "The comment's hunk is not in this changeset, so its symbols cannot be placed. The file's changed symbols are: `Store.Put`, `Store.Get`.",
 		Notes: []string{
 			"note cache-pairs anchors file:internal/cache/cache.go",

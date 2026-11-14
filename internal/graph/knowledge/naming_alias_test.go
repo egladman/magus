@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // aliasUser is a function the change touches in an importer file of aliasFixture.
@@ -47,10 +48,10 @@ func TestAliasCheckReportsAnAliasedImport(t *testing.T) {
 			n := len(c.Details)
 			require.Greater(t, n, len(tc.past))
 			c.Details = c.Details[n-len(tc.past)-1:]
-			assert.Equal(t, types.Check{
+			assert.Equal(t, check.Check{
 				Name:     diff.CheckImportAlias,
-				Status:   types.CheckAdvice,
-				Evidence: types.EvidenceInferred,
+				Status:   check.Advice,
+				Evidence: check.EvidenceInferred,
 				Message:  tc.message,
 				Details:  append(tc.past, "rename the package"),
 			}, c)
@@ -73,7 +74,7 @@ func TestAliasCheckReportsANewPackageTakingAName(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Subjects: []string{symID(fresh)}, Introduced: introduced(fresh), Conformance: aliasOptions()})
 
-	assert.Equal(t, map[string][]types.Check{symID(fresh): {advice(diff.CheckImportAlias,
+	assert.Equal(t, map[string][]check.Check{symID(fresh): {advice(diff.CheckImportAlias,
 		"internal/newq takes the package name types, which internal/queue/types (13 importers), types (20 importers) already declares: "+
 			"consider another name before anything imports both",
 	)}}, got)

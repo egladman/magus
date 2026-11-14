@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // layoutFile is one file a fixture places, defining one symbol and referencing others by name.
@@ -80,17 +81,17 @@ func TestLayoutFlagsANewOneFileUntestedDigitNamedPackage(t *testing.T) {
 
 	got := g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(merge, caller)})
 	evidence := "1 Go file, 0 test files and 1 importing directory"
-	assert.Equal(t, map[string][]types.Check{"internal/pkgb3": {
+	assert.Equal(t, map[string][]check.Check{"internal/pkgb3": {
 		{
-			Name: diff.CheckPackageFiles, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
+			Name: diff.CheckPackageFiles, Status: check.Advice, Evidence: check.EvidenceMeasured,
 			Message: fmt.Sprintf("`internal/pkgb3`: %s; 6 of 6 Go directories beside it hold more than one, as `internal/pkgb` and `internal/pkgc` do", evidence),
 		},
 		{
-			Name: diff.CheckPackageTests, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
+			Name: diff.CheckPackageTests, Status: check.Advice, Evidence: check.EvidenceMeasured,
 			Message: fmt.Sprintf("`internal/pkgb3`: %s; 6 of 6 Go directories beside it hold a test file, as `internal/pkgb` and `internal/pkgc` do", evidence),
 		},
 		{
-			Name: diff.CheckPackageName, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
+			Name: diff.CheckPackageName, Status: check.Advice, Evidence: check.EvidenceMeasured,
 			Message: fmt.Sprintf("`internal/pkgb3`: %s; 6 of 6 Go directories beside it carry no digit in their names, as `internal/pkgb` and `internal/pkgc` do", evidence),
 		},
 	}}, got)
@@ -142,10 +143,10 @@ func TestLayoutNamesTheOutliers(t *testing.T) {
 	got := g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(added, layoutFile{path: "internal/zed/x_test.go"})})
 	require.Len(t, got["internal/zed"], 1)
 	// The message is pinned by substring below.
-	want := types.Check{
+	want := check.Check{
 		Name:     diff.CheckPackageFiles,
-		Status:   types.CheckAdvice,
-		Evidence: types.EvidenceMeasured,
+		Status:   check.Advice,
+		Evidence: check.EvidenceMeasured,
 		Message:  got["internal/zed"][0].Message,
 		Details:  []string{"not: internal/lone"},
 	}

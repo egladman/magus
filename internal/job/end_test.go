@@ -185,7 +185,7 @@ func TestAbandonWaitsOnAPersonWhenARestatedDescendantHoldsWork(t *testing.T) {
 	loc := tempLocation(t, repo.Root())
 	s := NewStore(loc)
 	seed(t, s, types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true})
-	seed(t, s, types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, WritePaths: []string{"a.txt"}, CheckoutRoot: repo.Root()})
+	seed(t, s, types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.txt"}}, CheckoutRoot: repo.Root()})
 	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "a.txt"), []byte("half done\n"), 0o644))
 
 	for range 2 {
@@ -219,7 +219,7 @@ func TestAbandonNeedsNoPersonForADescendantHoldingNoWork(t *testing.T) {
 	repo := execRepository(t)
 	s := NewStore(tempLocation(t, repo.Root()))
 	seed(t, s, types.Job{ID: "plan", State: types.StateRunning, ReadOnly: true})
-	seed(t, s, types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, WritePaths: []string{"a.txt"}, CheckoutRoot: repo.Root()})
+	seed(t, s, types.Job{ID: "plan/w", Parent: "plan", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.txt"}}, CheckoutRoot: repo.Root()})
 	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "other.txt"), []byte("not its paths\n"), 0o644))
 
 	ended, _, refused := Abandon(t.Context(), s, []string{"plan", "plan/w"})
@@ -391,7 +391,7 @@ func TestJobPruneWaitsOnAPersonForARestatedDescendantHoldingWork(t *testing.T) {
 	old := now - int64((3 * time.Hour).Seconds())
 	plant(t, s,
 		types.Job{ID: "done", State: types.StateExited, Registered: old, Updated: old},
-		types.Job{ID: "done/w", Parent: "done", State: types.StateRunning, WritePaths: []string{"a.txt"}, CheckoutRoot: repo.Root(), Updated: now - 60},
+		types.Job{ID: "done/w", Parent: "done", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.txt"}}, CheckoutRoot: repo.Root(), Updated: now - 60},
 	)
 	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "a.txt"), []byte("half done\n"), 0o644))
 
@@ -425,8 +425,12 @@ func TestExitWithoutAResultRecordsNoReturn(t *testing.T) {
 	stored, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.StateNoReturn, stored.State)
-	assert.Nil(t, stored.Result)
 	assert.Nil(t, stored.Attempt)
+	tries, err := NewStore(loc).Attempts()
+	require.NoError(t, err)
+	live := types.NewJobAttempts(tries).Live(row.ID)
+	assert.Nil(t, live.Status.Result)
+	assert.Equal(t, types.AttemptEndExit, live.Status.End, "the exit ends the try")
 }
 
 type exitCommittedSuite struct {

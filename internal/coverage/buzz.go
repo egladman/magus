@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 )
 

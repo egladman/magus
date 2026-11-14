@@ -16,7 +16,7 @@ import "./hack/dev/bootstrap-checkout" as checkout;
 import "assert";
 
 final SUMMARY = "place ./magus and a lease in a job's worktree";
-final SERVES = ["rule:stale-binary"];
+final SERVES = ["rule:stale-binary -- --job \{lease} --from \{checkout}"];
 
 final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout> | --build-from <checkout>] | --check --from <checkout>)";
 final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this script compiles magus only under --build-from\n{USAGE}\n\n"
@@ -29,8 +29,8 @@ final HELP = "cost: a binary copy, a graph build and a lease, in seconds; this s
     + "the graph, and never the harness wiring: hack/dev/bootstrap-harnesses.buzz is the person's run for that.\n\n"
     + "The orchestrator builds one ./magus per base commit, in the root, and every worker checkout receives a copy. A copy is\n"
     + "placed only when it is provably the binary this worktree would build: go-build stamps it with a digest of its Go\n"
-    + "build inputs (each file `go list -deps ./cmd/magus` compiles or embeds, and the root go.mod, go.sum or go.work), and\n"
-    + "that digest must be this worktree's. Docs, console, tests, a package nothing links and a separate module such as\n"
+    + "build inputs (each file the go spell's mgs_getScopes names for ./cmd/magus: what it compiles or embeds, and its\n"
+    + "modules' go.mod, go.sum or go.work), and that digest must be this worktree's. Docs, console, tests, a package nothing links and a separate module such as\n"
     + "libs/embed/train do not count, so a base commit later than the binary's usually qualifies, and so does a binary built\n"
     + "from uncommitted changes. Otherwise the script refuses and names what to build in the root.\n"
     + "--build-from <checkout> is --from after building: it runs `<checkout>/magus --root <checkout> run go-build .` first, then\n"
@@ -314,6 +314,11 @@ export fun bootstrap(root: str, job: str, source: str) > result\Result::<Row> {
         std\print(checkout\seedLine([origin, main], dir: root));
     } catch (err: any) {
         return result\caught::<Row>(err, doing: "bootstrap-worktree: place ./magus in {root}");
+    }
+    // The root's hook runs only a ./magus a live row pins.
+    final pinned = magusAt(v.bin, root: origin, args: ["job", "pin", job]);
+    if (pinned.error -> e) {
+        io\stderr.write("bootstrap-worktree: placed ./magus, and no row pins it, so the root's hook judges with its own binary: {e.message}\n");
     }
     return claimThenIndex(
         fun (args: [str]) > result\Result::<str> => magusAt(local, root: root, args: args),

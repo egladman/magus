@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 const execMessage = "`Exec` (157 lines) is shared by 6 packages 3 import hops apart (cmd/termcast, internal/a, internal/b, ...), " +
@@ -22,7 +23,7 @@ func TestCouplingCheckReportsTheExecShape(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Subjects: []string{execID()}, Conformance: couplingOptions()})
 
-	assert.Equal(t, map[string][]types.Check{execID(): {advice(diff.CheckSharedLoop, execMessage,
+	assert.Equal(t, map[string][]check.Check{execID(): {advice(diff.CheckSharedLoop, execMessage,
 		"callers: cmd/termcast, internal/a, internal/b, internal/c, internal/queue, std",
 		"shared-body source: 30, the configured anchor",
 		"caller-spread source: 2, the configured anchor",
@@ -100,7 +101,7 @@ func TestCouplingCheckReportsABranchForOneCaller(t *testing.T) {
 	t.Run("re-signed", func(t *testing.T) {
 		got := g.ConformanceChecks(ConformanceChange{Subjects: []string{id}, Conformance: couplingOptions()})
 
-		assert.Equal(t, map[string][]types.Check{id: {advice(diff.CheckSharedLoop,
+		assert.Equal(t, map[string][]check.Check{id: {advice(diff.CheckSharedLoop,
 			"`loadWorkspaceGraph` now branches on `global`, and 2 files call it (cmd/magus/graph.go, cmd/magus/query.go): "+
 				"a branch only one caller takes is a second function under one name. Keep the shared part small and give the branch "+
 				"its own function, unless every caller needs the fix it carries",

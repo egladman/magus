@@ -10,15 +10,16 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // historyUnreadableCheck is the advice a history-backed check gives when it could not
 // read the run history. Only a history a newer magus wrote names a fix; any other
 // failure has none to name.
-func historyUnreadableCheck(name string, err error) types.Check {
-	c := types.Check{
+func historyUnreadableCheck(name string, err error) check.Check {
+	c := check.Check{
 		Name:    name,
-		Status:  types.CheckAdvice,
+		Status:  check.Advice,
 		Message: "run history is unreadable, so declarations could not be checked against what magus measured",
 		Details: []string{err.Error()},
 	}
@@ -58,7 +59,7 @@ const (
 //
 // Advice, never a failure: the magusfile figure stays a human's to write, and a
 // deliberate ceiling above the measured peak is a legitimate thing to declare.
-func (r *runner) checkMemoryDeclarations(ctx context.Context, projects []*types.Project) types.Check {
+func (r *runner) checkMemoryDeclarations(ctx context.Context, projects []*types.Project) check.Check {
 	const name = "memory-declarations"
 
 	var h forecast.History
@@ -69,8 +70,8 @@ func (r *runner) checkMemoryDeclarations(ctx context.Context, projects []*types.
 	// fresh clone rather than an error. Saying so beats "everything agrees", which
 	// claims a comparison that never happened.
 	if len(h.Projects) == 0 {
-		return types.Check{
-			Name: name, Status: types.CheckOK,
+		return check.Check{
+			Name: name, Status: check.OK,
 			Message: "no targets have run yet, so there is nothing to compare declarations against",
 		}
 	}
@@ -88,16 +89,16 @@ func (r *runner) checkMemoryDeclarations(ctx context.Context, projects []*types.
 	}
 
 	if len(details) == 0 {
-		return types.Check{
-			Name: name, Status: types.CheckOK,
+		return check.Check{
+			Name: name, Status: check.OK,
 			Message: "every measured target agrees with what it declares",
 		}
 	}
 	slices.Sort(details)
 	details = slices.Compact(details)
-	return types.Check{
+	return check.Check{
 		Name:   name,
-		Status: types.CheckAdvice,
+		Status: check.Advice,
 		Message: fmt.Sprintf(
 			"%d target(s) declare memory that disagrees with what magus measured; admission is only as good as the declarations it arbitrates (see %s)",
 			len(details), types.CodeURL(types.MemoryDeclarationDrift)),

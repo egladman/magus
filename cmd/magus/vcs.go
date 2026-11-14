@@ -26,8 +26,9 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
+	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -403,7 +404,7 @@ func settleByClaims(ctx context.Context, m *magus.Magus, drv types.VCSDriver, ou
 func jobsWriting(rows []types.Job, p string) (writers []types.Job, claimed bool) {
 	for _, row := range rows {
 		writes := false
-		for _, e := range row.WritePaths {
+		for _, e := range row.Paths.Write {
 			if types.PathsIntersect(e, p) {
 				writes = true
 				claimed = claimed || types.HasClaim(e)
@@ -476,7 +477,7 @@ func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job)
 			if row.State != types.StatePass {
 				return nil, "", unsettledf("job %s is %s, not recorded pass by `magus job wait`", row.ID, cmp.Or(row.State, types.StateDeclared))
 			}
-			for _, e := range row.WritePaths {
+			for _, e := range row.Paths.Write {
 				if !types.PathsIntersect(e, p) {
 					continue
 				}
@@ -875,7 +876,7 @@ func vcsCheckpointCommand(ctx context.Context, root string, args []string) error
 
 // emitCheckpoint renders the checkpoint: the structured formats get the record, -o name
 // the one citable token, and the terminal the one-line reading of the same value.
-func emitCheckpoint(cp types.VCSCheckpoint) error {
+func emitCheckpoint(cp typesvcs.Checkpoint) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -900,7 +901,7 @@ func emitCheckpoint(cp types.VCSCheckpoint) error {
 // default rendering. Without it the two spellings of the command produced identical
 // output while one of them left an object in the user's repository, and the only way back
 // to that object was a format flag nobody was told to pass.
-func checkpointLine(cp types.VCSCheckpoint) string {
+func checkpointLine(cp typesvcs.Checkpoint) string {
 	branch := cp.Branch
 	if branch == "" {
 		branch = "-"

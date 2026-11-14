@@ -14,7 +14,7 @@ A root session ending its turn with an open `magus session advise` advisory it h
 
 ## Why
 
-An advisory is a person's directive to every session in the repository, and a stop is the one moment every host hands text back to the model. So a root session's stop that nothing else refuses is held once per advisory, with the advisory's text as the reason, and the session keeps working with it in front of it. Where the host renders a prompt's context (Claude Code, Codex) the next prompt shows it first and the stop does not repeat it. A subagent's stop shows nothing, so a child cannot spend its root's one showing. Nothing closes an advisory but `magus session retract <id>`, which is a person's to run. The rule is fixed: a workspace setting would let a checkout silence the person.
+An advisory is a person's directive to every session in the repository, and a stop is the one moment every host hands text back to the model. So a root session's stop that nothing else refuses is held once per advisory, with the advisory's text as the reason, and the session keeps working with it in front of it. Where the host renders a prompt's context, the next prompt shows it first and the stop does not repeat it. A subagent's stop shows nothing, so a child cannot spend its root's one showing. Nothing closes an advisory but `magus session retract <id>`, which is a person's to run. The rule is fixed: a workspace setting would let a checkout silence the person.
 
 ## Default and override
 

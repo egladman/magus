@@ -8,6 +8,14 @@ export fun goPackages(glob: str) > [magus\Dir] !> any {
     return magus\graph().dirs(glob, opts: magus\DirsOptions{ language = "go" });
 }
 
+// dataTypes is the types packages a figure of the project model leaves out:
+// closed string sets and data the figures do not trace.
+export fun dataTypes() > [magus\Dir] !> any {
+    final names = ["enum", "daemon", "diff", "events", "image", "trail",
+                   "agent", "check", "impact", "release", "vcs"];
+    return names.map(fun (i: int, name: str) > magus\Dir !> any => magus\graph().dir("types/" + name));
+}
+
 // cmdTools is every command under cmd/ except the magus binary itself: docs generators,
 // codegen and the browser playground, each built by its own target.
 export fun cmdTools() > [magus\Dir] !> any {

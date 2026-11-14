@@ -100,9 +100,17 @@ func (s *BootstrapExecRefusalSuite) SetupTest() {
 	s.self = filepath.Join(s.repo.Root(), "magus")
 }
 
-func (s *BootstrapExecRefusalSuite) TestALinkedCheckoutTakesOver() {
-	linked := s.repo.AddWorktree("job").Root()
-	s.Empty(bootstrapExecRefusal(filepath.Join(linked, "magus"), s.self))
+func (s *BootstrapExecRefusalSuite) TestAPinnedLinkedCheckoutTakesOver() {
+	target := filepath.Join(s.repo.AddWorktree("job").Root(), "magus")
+	s.Require().NoError(os.WriteFile(target, []byte("#!/bin/sh\n"), 0o755))
+	pinCheckoutBinary(s.T(), s.repo.Root(), target)
+	s.Empty(bootstrapExecRefusal(target, s.self))
+}
+
+func (s *BootstrapExecRefusalSuite) TestAnUnpinnedLinkedCheckoutIsRefused() {
+	target := filepath.Join(s.repo.AddWorktree("job").Root(), "magus")
+	s.Require().NoError(os.WriteFile(target, []byte("#!/bin/sh\n"), 0o755))
+	s.Contains(bootstrapExecRefusal(target, s.self), "no live job row records it")
 }
 
 func (s *BootstrapExecRefusalSuite) TestAPlantedWorkspaceInTheCheckoutIsRefused() {
@@ -110,12 +118,12 @@ func (s *BootstrapExecRefusalSuite) TestAPlantedWorkspaceInTheCheckoutIsRefused(
 	s.Require().NoError(os.MkdirAll(planted, 0o755))
 	s.Require().NoError(os.WriteFile(filepath.Join(planted, "magus.yaml"), []byte("{}\n"), 0o644))
 	target := writeBootstrapFixtureWorkspace(s.T(), planted)
-	s.Contains(bootstrapExecRefusal(target, s.self), "is not a checkout of the session's repository")
+	s.Contains(bootstrapExecRefusal(target, s.self), "no live job row records it")
 }
 
 func (s *BootstrapExecRefusalSuite) TestAnotherRepositoryIsRefused() {
 	clone := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
-	s.Contains(bootstrapExecRefusal(filepath.Join(clone.Root(), "magus"), s.self), "is not a checkout of the session's repository")
+	s.Contains(bootstrapExecRefusal(filepath.Join(clone.Root(), "magus"), s.self), "no live job row records it")
 }
 
 func (s *BootstrapExecRefusalSuite) TestAnInstalledBinaryDefersAnywhere() {

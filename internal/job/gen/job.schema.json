@@ -3,7 +3,7 @@
   "$id": "https://magus.invalid/job/job.schema.json",
   "$comment": "Generated from Declaration by `magus-utils jobschema`. DO NOT EDIT; run `magus run job-generate .`.",
   "title": "magus job",
-  "description": "Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing the store computes. A caller cannot say when its row was created or what it released, and the way to make that true is for the input type not to carry those fields rather than for the store to strip them afterwards.",
+  "description": "Declaration is the typed INPUT for one lease: the fields a caller DECLARES, and nothing the store computes.",
   "type": "object",
   "additionalProperties": false,
   "required": ["api_version", "id"],
@@ -32,45 +32,89 @@
       "maxLength": 128,
       "description": "Parent is the lease this one was spawned under, empty for a lease the root declared."
     },
-    "criteria": {
-      "type": "string",
-      "description": "Criteria is what this lease is for and what done means, as one block of prose. The machine-checkable half is Goals."
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["worker"],
+      "properties": {
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "tier": {
+              "type": "string"
+            }
+          },
+          "description": "Model is the requested model. Zero leaves the choice to the workspace's matrix or default."
+        },
+        "instructions": {
+          "type": "string",
+          "description": "Instructions say what the job is for and what done means, as prose a reader grades. The machine-checkable half is the job's goals."
+        },
+        "worker": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["resumed", "new"]
+            },
+            "reason": {
+              "type": "string",
+              "description": "Reason says why a new worker starts instead of the warm one."
+            }
+          },
+          "description": "Worker says which worker takes the job. Its type is always written."
+        }
+      },
+      "description": "Agent is the agent section; nil is ordinary work. See [Job.Agent]."
     },
     "checkpoint": {
       "type": "string",
       "description": "Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o name` prints it."
     },
-    "write_paths": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "write": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
+          },
+          "description": "Write entries of the form `<file>#<declaration>` claim one declaration of the file (see SplitClaim)."
+        },
+        "read": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
+          }
+        },
+        "deny": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
+          }
+        },
+        "soft": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
+          },
+          "description": "Soft are the Write entries that overlap nothing until the diff touches them. The store then drops them from Soft."
+        }
       },
-      "description": "WritePaths is what this lease may write, empty on a read-only row by design. An entry `<file>#<declaration>` claims one declaration of the file (see SplitClaim)."
-    },
-    "deny_paths": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
-      },
-      "description": "DenyPaths are the paths inside those this lease may not write."
-    },
-    "soft_paths": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
-      },
-      "description": "SoftPaths are the entries of WritePaths that are soft claims (see [Job.SoftPaths])."
-    },
-    "read_paths": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^(?:(?:[^/#.*~](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.[^/#.](?:\\\\#|[^/#])*|\\.\\.(?:\\\\#|[^/#])+)|(?:[^/#.~](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+)(?:/(?:[^/#.](?:\\\\#|[^/#])*|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))*/(?:[^/#.*](?:\\\\#|[^/#])*|\\*(?:[^*/#](?:\\\\#|[^/#])*)?|\\*\\*(?:\\\\#|[^/#])+|\\.(?:[^/#.](?:\\\\#|[^/#])*)?|\\.\\.(?:\\\\#|[^/#])+))(?:#[^#]+)?$"
-      },
-      "description": "ReadPaths is what it may READ, widened to those projects' dependencies by the guard. Empty means write_paths stands in."
+      "description": "Paths are what this lease may write and read. See [JobPaths]."
     },
     "depends_on": {
       "type": "array",
@@ -95,10 +139,6 @@
       },
       "description": "Breaks are the flags, JSON keys, exported symbols or stored formats the root approved this job breaking; empty means it breaks nothing on its own authority. See [Job.Breaks]."
     },
-    "model": {
-      "type": "string",
-      "description": "Model is the model or effort tier the work was matched to, a free string because hosts name their models differently."
-    },
     "weight": {
       "type": "number",
       "description": "Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an explicit 0 is out of range. See [Job.Weight]."
@@ -119,10 +159,7 @@
       "type": "string",
       "pattern": "^[./0-9a-z-]+$",
       "maxLength": 128,
-      "description": "Follows and FreshReason name the job this one continues and why its worker is not resumed for it. See [Job.Follows]."
-    },
-    "fresh_reason": {
-      "type": "string"
+      "description": "Follows names the job this one continues. See [Job.Follows]."
     },
     "checkout": {
       "type": "string",
@@ -134,25 +171,21 @@
       "items": {
         "type": "string"
       },
-      "description": "LegacyWritePaths is the pre-rename spelling of write_paths, accepted on input and never emitted."
+      "description": "compat(until: no client or stored ledger still sends owned_paths, focus or forbidden_paths): see Declaration. Observe it by grepping the leases-*.json archives and the trail for the old keys."
     },
     "forbidden_paths": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "LegacyDenyPaths is the pre-rename spelling of deny_paths. compat: see LegacyWritePaths."
+      "description": "LegacyDenyPaths is the pre-rename spelling of paths.deny. compat: see LegacyWritePaths."
     },
     "focus": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "LegacyReadPaths is the pre-rename spelling of read_paths. compat: see LegacyWritePaths."
-    },
-    "tier": {
-      "type": "string",
-      "description": "LegacyModel is the pre-rename spelling of model. compat: see LegacyWritePaths."
+      "description": "LegacyReadPaths is the pre-rename spelling of paths.read. compat: see LegacyWritePaths."
     },
     "check": {
       "type": "object",
@@ -169,7 +202,7 @@
         },
         "project": {
           "type": "string",
-          "description": "Project is the project the target runs in, \".\" when the row names none."
+          "description": "Project is the project the target runs in, \".\" when the job names none."
         },
         "args": {
           "type": "array",
@@ -216,7 +249,7 @@
     "state": {
       "type": "string",
       "enum": ["", "declared", "running", "exited", "pass", "fail", "no_return"],
-      "description": "State is the row's lifecycle position, empty for a row that has not said where it stands. no_return is a lease that never reported, which is not a failure."
+      "description": "State is the job's lifecycle position, empty for a job that has not said where it stands. no_return is a lease that never reported, which is not a failure."
     },
     "read_only": {
       "type": "boolean",
@@ -274,7 +307,7 @@
               },
               "project": {
                 "type": "string",
-                "description": "Project is the project the target runs in, \".\" when the row names none."
+                "description": "Project is the project the target runs in, \".\" when the job names none."
               },
               "args": {
                 "type": "array",
@@ -343,7 +376,7 @@
     "timeout": {
       "type": "string",
       "pattern": "^(?:(?:(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:ns|us|µs|μs|ms|s|m|h))*(?:[0-9]*[1-9][0-9]*(?:\\.[0-9]*)?|[0-9]*\\.[0-9]*[1-9][0-9]*)(?:ns|us|µs|μs|ms|s|m|h)(?:(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:ns|us|µs|μs|ms|s|m|h))*)?$",
-      "description": "Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when it writes the row, so a declaration carries a length and never an instant. Empty is no bound; there is no default here (a workspace may set jobs.default_timeout)."
+      "description": "Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when it writes the job, so a declaration carries a length and never an instant. Empty is no bound; there is no default here (a workspace may set jobs.default_timeout)."
     },
     "max_attempts": {
       "type": "integer",
@@ -412,7 +445,7 @@
           "item": {
             "type": "string"
           },
-          "row": {
+          "job": {
             "type": "string",
             "pattern": "^[./0-9a-z-]+$",
             "maxLength": 128
@@ -422,7 +455,7 @@
           }
         }
       },
-      "description": "Deferred and LeftUnmerged turn the record into a settlement of the row ID names, ended or not. It declares nothing else."
+      "description": "Deferred and LeftUnmerged turn the record into a settlement of the job ID names, ended or not. It declares nothing else."
     },
     "left_unmerged": {
       "type": "string"

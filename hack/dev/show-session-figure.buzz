@@ -4,7 +4,9 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
+import "magus/agent";
 import "magus/figure";
+import "magus/trail";
 import "result";
 import "std";
 import "../../.github/actions/advice/figure-link" as figurelink;
@@ -56,7 +58,7 @@ fun shortSession(id: str) > str {
 //
 // The spawn edge into a job comes from its declared parent, else from whichever job the
 // spawning agent was working under when the trail recorded the spawn, else from the session.
-export fun tree(t: Trail, jobs: [magus\Job], all: bool, start: int) > JobTree {
+export fun tree(t: magus\trail\Trail, jobs: [magus\Job], all: bool, start: int) > JobTree {
     final root = "session {shortSession(t.session)}";
     final byID = mut {<str: magus\Job>};
     final children = mut {<str: mut [str]>};
@@ -123,7 +125,7 @@ export fun tree(t: Trail, jobs: [magus\Job], all: bool, start: int) > JobTree {
     final depends = mut [<[str]>];
     foreach (id in order) {
         final j = byID[id]!;
-        nodes.append(JobBox{ id = id, state = j.state.value, model = j.model, paths = j.writePaths.len(), check = j.check?.target ?? "" });
+        nodes.append(JobBox{ id = id, state = j.state.value, model = modelWord(j), paths = j.paths.write.len(), check = j.check?.target ?? "" });
         var parent = j.parent;
         if (parent == "" or keep[parent] != true) {
             parent = spawnedBy[id] ?? "";
@@ -245,7 +247,7 @@ export fun main(args: [str]) > void !> any {
     if (themeName != "light" and themeName != "dark") {
         throw "show-session-figure: --theme is light or dark, not {themeName}\n{USAGE}";
     }
-    final t = magus\session(magus\SessionOptions{ session = parsed.values["--session"] ?? "", since = parsed.values["--since"] ?? "", @"until" = parsed.values["--until"] ?? "" }).trail();
+    final t = magus\session(magus\trail\ReadOptions{ session = parsed.values["--session"] ?? "", since = parsed.values["--since"] ?? "", @"until" = parsed.values["--until"] ?? "" }).trail();
     if (t.session == "") {
         throw "show-session-figure: no agent session recorded anything in this repository's trails inside the window; widen it with --since";
     }
@@ -280,6 +282,14 @@ export fun rendered(tr: JobTree, format: str, theme: figure\Theme, console: str)
         + (if (url.value! != "") "explore: {url.value!}" else "explore: the tree is too large for a link; -o svg prints the figure"));
 }
 
+// modelWord is the model a job requests: its tier, else its host model id.
+fun modelWord(j: magus\Job) > str {
+    if (j.agent -> a) {
+        return if (a.model.tier != "") a.model.tier else a.model.id;
+    }
+    return "";
+}
+
 // fixture builds the tree of hack/testdata/session-figure-jobs.json.
 // It reads the feedback trail fixture beside it.
 // They are what magus\workspace().jobs() and magus\session().trail() return.
@@ -291,25 +301,26 @@ fun fixture() > result\Result::<JobTree> {
             final deps = mut [<str>];
             foreach (d in j["dependsOn"] ?? []) { deps.append(d); }
             final paths = mut [<str>];
-            foreach (p in j["writePaths"] ?? []) { paths.append(p); }
+            final declared: {str: any} = j["paths"] ?? {<str: any>};
+            foreach (p in declared["write"] ?? []) { paths.append(p); }
             final target = j["check"] ?? "";
             jobs.append(magus\Job{
-                id = j["id"], parent = j["parent"] ?? "", dependsOn = deps, model = j["model"] ?? "", state = magus\JobState(j["state"] ?? ""),
-                writePaths = paths, created = std\toInt(j["created"] ?? 0),
+                id = j["id"], parent = j["parent"] ?? "", dependsOn = deps, agent = magus\agent\Spec{ model = magus\agent\Model{ id = j["model"] ?? "" }, worker = magus\agent\Worker{ @"type" = magus\agent\WorkerType.resumed } }, state = magus\JobState(j["state"] ?? ""),
+                paths = magus\JobPaths{ write = paths }, created = std\toInt(j["created"] ?? 0),
                 check = if (target != "") magus\LeaseCheck{ target = target, project = "." } else null,
             });
         }
         final trailText = fs\readFile("hack/testdata/feedback-trail.json");
         final t = json\parse(trailText);
-        final obs = mut [<TrailObservation>];
+        final obs = mut [<magus\trail\Observation>];
         foreach (o in t["observations"]) {
-            obs.append(TrailObservation{ at = std\toInt(o["at"]), agent = o["agent"] ?? "", lease = o["lease"] ?? "" });
+            obs.append(magus\trail\Observation{ at = std\toInt(o["at"]), agent = o["agent"] ?? "", lease = o["lease"] ?? "" });
         }
-        final spawns = mut [<TrailSpawn>];
+        final spawns = mut [<magus\trail\Spawn>];
         foreach (s in t["spawns"]) {
-            spawns.append(TrailSpawn{ at = std\toInt(s["at"]), agent = s["agent"] ?? "", child = s["child"] ?? "", lease = s["lease"] ?? "" });
+            spawns.append(magus\trail\Spawn{ at = std\toInt(s["at"]), agent = s["agent"] ?? "", child = s["child"] ?? "", lease = s["lease"] ?? "" });
         }
-        return result\ok::<JobTree>(tree(Trail{ session = t["session"], observations = obs, spawns = spawns }, jobs: jobs, all: false, start: 0));
+        return result\ok::<JobTree>(tree(magus\trail\Trail{ session = t["session"], observations = obs, spawns = spawns }, jobs: jobs, all: false, start: 0));
     } catch (err: any) {
         return result\caught::<JobTree>(err, doing: "show-session-figure: read the fixture");
     }

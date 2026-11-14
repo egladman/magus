@@ -32,11 +32,13 @@ func inertCall(req Request) bool {
 	return ok && env.Inert
 }
 
-// denyRuleUnjudgedTool is a tool call no rule could read.
-const denyRuleUnjudgedTool denyRuleName = "unjudged-tool"
+// denyRuleUnjudgedStep is a step no row declares: a host tool
+// call no rule could read, or a step of an undeclared kind.
+const denyRuleUnjudgedStep denyRuleName = "unjudged-step"
 
-// denyUnjudgedTool is unjudged-tool's refusal of a call to tool. With no tool rows to read,
-// the refusal says so and names the install that writes them.
+// denyUnjudgedTool is unjudged-step's refusal of a call to a host
+// tool. With no tool rows to read, it names the install that
+// writes them.
 func denyUnjudgedTool(tool string, tools agent.ToolRows) denial {
 	if tools.Err != nil {
 		return denial{
@@ -50,7 +52,7 @@ func denyUnjudgedTool(tool string, tools agent.ToolRows) denial {
 		Say: fmt.Sprintf("magus workspace: no rule could judge this %s call, and no tool row names it: use a tool the guard judges, or ask a person to add a %s row to mgs_listTools.", tool, tool),
 		Why: "Every tool call reaches the guard, and the guard judges a call by the shape of its input: a command, file path, search, prompt or skill. A tool whose input has none of the shapes it reads " +
 			"could do anything a rule exists to stop, and nothing would say so. A shell command or a file read or write is judged; a row for the tool in the harness spell's mgs_listTools says what it does. " +
-			"Setting unjudged-tool to advise or off in magus\\guard.builtins, which allows it unjudged, is the person's call.",
+			"Setting unjudged-step to advise or off in magus\\guard.builtins, which allows it unjudged, is the person's call.",
 	}
 }
 

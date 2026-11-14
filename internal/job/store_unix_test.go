@@ -38,9 +38,9 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 
 	s := tempStore(t, root)
 	seed(t, s, types.Job{
-		ID:         "u1",
-		WritePaths: []string{"escape.go", "pipe", "big.bin"},
-		State:      types.StateRunning,
+		ID:    "u1",
+		Paths: types.JobPaths{Write: []string{"escape.go", "pipe", "big.bin"}},
+		State: types.StateRunning,
 	})
 
 	// Released off the test goroutine with a deadline, because the failure this is
@@ -52,7 +52,7 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		u, uerr := s.Update(ctx, "u1", func(u *types.Job) { u.WritePaths = nil })
+		u, uerr := s.Update(ctx, "u1", func(u *types.Job) { u.Paths.Write = nil })
 		done <- result{lease: u, err: uerr}
 	}()
 
@@ -86,8 +86,8 @@ func TestStoreDigestFollowsALinkThatStaysInside(t *testing.T) {
 	require.NoError(t, os.Symlink(filepath.Join(root, "real.go"), filepath.Join(root, "link.go")))
 
 	s := tempStore(t, root)
-	seed(t, s, types.Job{ID: "u1", WritePaths: []string{"link.go"}})
-	stored, err := s.Update(ctx, "u1", func(u *types.Job) { u.WritePaths = nil })
+	seed(t, s, types.Job{ID: "u1", Paths: types.JobPaths{Write: []string{"link.go"}}})
+	stored, err := s.Update(ctx, "u1", func(u *types.Job) { u.Paths.Write = nil })
 	require.NoError(t, err)
 	require.Len(t, stored.Releases, 1)
 	assert.Equal(t, "sha256:"+fileHash(t, filepath.Join(root, "real.go")), stored.Releases[0].Digest)
@@ -101,7 +101,7 @@ func TestDeleteRemovesOneRowAndRefusesATerminalOneWithoutForce(t *testing.T) {
 	store := NewStore(loc)
 
 	for _, id := range []string{"keep", "drop"} {
-		_, err := store.Update(t.Context(), id, func(row *types.Job) { row.WritePaths = []string{"internal/job"} })
+		_, err := store.Update(t.Context(), id, func(row *types.Job) { row.Paths.Write = []string{"internal/job"} })
 		require.NoError(t, err)
 	}
 
@@ -134,7 +134,7 @@ func TestDeleteRemovesOneRowAndRefusesATerminalOneWithoutForce(t *testing.T) {
 func TestDeleteRefusesABoundHolder(t *testing.T) {
 	loc := tempLocation(t, t.TempDir())
 	store := NewStore(loc)
-	_, err := store.Update(t.Context(), "held", func(row *types.Job) { row.WritePaths = []string{"internal/job"} })
+	_, err := store.Update(t.Context(), "held", func(row *types.Job) { row.Paths.Write = []string{"internal/job"} })
 	require.NoError(t, err)
 
 	bound := NewStore(Location{CacheDir: loc.CacheDir, Root: loc.Root, StateBase: loc.StateBase, Actor: &Actor{Lease: "held"}})

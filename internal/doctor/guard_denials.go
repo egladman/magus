@@ -5,7 +5,7 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // recurringGuardDenialLimit bounds the activity window this reads. Doctor runs often and
@@ -21,14 +21,14 @@ const recurringGuardDenialLimit = 500
 // defect. What is reportable is that it KEEPS happening, because that is the part no single
 // session can see. This states the evidence only; choosing a destination is a human's job,
 // and the magus-workspace-rules skill carries the method for choosing it.
-func (r *runner) checkRecurringGuardDenials() types.Check {
+func (r *runner) checkRecurringGuardDenials() check.Check {
 	const name = "recurring-guard-denials"
 	feedback, err := trail.RecentGuardFeedback(r.cacheDir(), "", recurringGuardDenialLimit)
 	if err != nil {
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceUnknown,
+			Status:   check.OK,
+			Evidence: check.EvidenceUnknown,
 			Message:  "no readable activity trail, so nothing can be said about recurring denials",
 		}
 	}
@@ -39,7 +39,7 @@ func (r *runner) checkRecurringGuardDenials() types.Check {
 		}
 	}
 	if len(recurring) == 0 {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no guard denial has recurred across sessions"}
+		return check.Check{Name: name, Status: check.OK, Message: "no guard denial has recurred across sessions"}
 	}
 	details := make([]string, 0, len(recurring))
 	for _, c := range recurring {
@@ -47,10 +47,10 @@ func (r *runner) checkRecurringGuardDenials() types.Check {
 			c.Rule, c.Tool, c.Denied, c.Sessions, c.FollowedSessions, c.Sessions))
 	}
 	slices.Sort(details)
-	return types.Check{
+	return check.Check{
 		Name:     name,
-		Status:   types.CheckAdvice,
-		Evidence: types.EvidenceInferred,
+		Status:   check.Advice,
+		Evidence: check.EvidenceInferred,
 		Message: fmt.Sprintf("%d guard rule(s) denied the same shape more than once; the friction is real whether the rule is right or the reader is",
 			len(recurring)),
 		Details: details,

@@ -5,7 +5,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,9 +20,9 @@ func TestCheckTerminalUnderTest(t *testing.T) {
 	c := (&runner{}).checkTerminal()
 	// What it saw is the environment's (TERM, locale), so the details are carried over and
 	// pinned by substring below.
-	want := types.Check{
+	want := check.Check{
 		Name:    "terminal-capabilities",
-		Status:  types.CheckOK, // a pipe is not a fault
+		Status:  check.OK, // a pipe is not a fault
 		Message: "not an interactive terminal; magus renders plain output",
 		Details: c.Details,
 	}
@@ -38,7 +38,7 @@ func TestCheckTerminalUnderTest(t *testing.T) {
 func TestCheckTerminalNeverFails(t *testing.T) {
 	for _, term := range []string{"", "dumb", "xterm-256color", "screen-256color"} {
 		t.Setenv("TERM", term)
-		assert.NotEqual(t, types.CheckFail, (&runner{}).checkTerminal().Status, "TERM=%q", term)
+		assert.NotEqual(t, check.Fail, (&runner{}).checkTerminal().Status, "TERM=%q", term)
 	}
 }
 
@@ -48,7 +48,7 @@ func TestCheckTerminalReportsNoColorWithoutBlaming(t *testing.T) {
 	// it is never a fault.
 	t.Setenv("NO_COLOR", "1")
 	c := (&runner{}).checkTerminal()
-	assert.NotEqual(t, types.CheckFail, c.Status)
+	assert.NotEqual(t, check.Fail, c.Status)
 }
 
 // TestCheckTerminalReportsTheLogFormatFirst pins the ordering that matters.
@@ -62,7 +62,7 @@ func TestCheckTerminalReportsTheLogFormatFirst(t *testing.T) {
 	for _, format := range []string{"json", "text"} {
 		r := &runner{opts: options{cfg: config.Config{Log: config.Log{Format: format}}}}
 		c := r.checkTerminal()
-		assert.Equal(t, types.CheckOK, c.Status, "a structured format is a choice, not a fault")
+		assert.Equal(t, check.OK, c.Status, "a structured format is a choice, not a fault")
 		assert.Contains(t, c.Message, format)
 		assert.Contains(t, c.Message, "draws no interactive view")
 		require.NotEmpty(t, c.Details)

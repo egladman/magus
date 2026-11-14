@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -53,7 +54,7 @@ func TestValidJobID(t *testing.T) {
 }
 
 func owner(id string, state JobState, paths ...string) Job {
-	return Job{ID: id, State: state, WritePaths: paths}
+	return Job{ID: id, State: state, Paths: JobPaths{Write: paths}}
 }
 
 func TestJobOverlaps(t *testing.T) {
@@ -311,9 +312,11 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	t.Parallel()
 
 	orig := Job{
-		ID:           "a",
-		WritePaths:   append(make([]string, 0, 4), "types/"),
-		DenyPaths:    append(make([]string, 0, 4), "gen/"),
+		ID: "a",
+		Paths: JobPaths{
+			Write: append(make([]string, 0, 4), "types/"),
+			Deny:  append(make([]string, 0, 4), "gen/"),
+		},
 		DependsOn:    append(make([]string, 0, 4), "b"),
 		Breaks:       append(make([]string, 0, 4), "--old-flag"),
 		Goals:        append(make([]Goal, 0, 4), Goal{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}),
@@ -323,8 +326,8 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	}
 
 	first, second := orig.Clone(), orig.Clone()
-	first.WritePaths = append(first.WritePaths, "first/")
-	first.DenyPaths = append(first.DenyPaths, "first/")
+	first.Paths.Write = append(first.Paths.Write, "first/")
+	first.Paths.Deny = append(first.Paths.Deny, "first/")
 	first.DependsOn = append(first.DependsOn, "first")
 	first.Breaks = append(first.Breaks, "first")
 	first.Goals[0].DependsOn = append(first.Goals[0].DependsOn, "first")
@@ -332,8 +335,8 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	first.Releases = append(first.Releases, JobRelease{Path: "first/z.go"})
 	first.Unattributed = append(first.Unattributed, JobUnattributedWrite{Path: "first/z.go"})
 
-	second.WritePaths = append(second.WritePaths, "second/")
-	second.DenyPaths = append(second.DenyPaths, "second/")
+	second.Paths.Write = append(second.Paths.Write, "second/")
+	second.Paths.Deny = append(second.Paths.Deny, "second/")
 	second.DependsOn = append(second.DependsOn, "second")
 	second.Breaks = append(second.Breaks, "second")
 	second.Goals[0].DependsOn = append(second.Goals[0].DependsOn, "second")
@@ -343,9 +346,11 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 
 	// Clone resolves each gate's kind and expectation, so the clone's gate carries both.
 	assert.Equal(t, Job{
-		ID:           "a",
-		WritePaths:   []string{"types/", "first/"},
-		DenyPaths:    []string{"gen/", "first/"},
+		ID: "a",
+		Paths: JobPaths{
+			Write: []string{"types/", "first/"},
+			Deny:  []string{"gen/", "first/"},
+		},
 		DependsOn:    []string{"b", "first"},
 		Breaks:       []string{"--old-flag", "first"},
 		Goals:        []Goal{{ID: "unit", Kind: GoalKindCheck, Expect: ExpectPassed, Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check", "first"}}},
@@ -357,9 +362,11 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	// The original is the store's row and nobody appended through it, so it must still
 	// hold exactly what it held.
 	assert.Equal(t, Job{
-		ID:           "a",
-		WritePaths:   []string{"types/"},
-		DenyPaths:    []string{"gen/"},
+		ID: "a",
+		Paths: JobPaths{
+			Write: []string{"types/"},
+			Deny:  []string{"gen/"},
+		},
 		DependsOn:    []string{"b"},
 		Breaks:       []string{"--old-flag"},
 		Goals:        []Goal{{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}},
@@ -395,54 +402,29 @@ func TestJobCloneCopiesAttemptArgs(t *testing.T) {
 	assert.Equal(t, []string{"-run", "TestOne"}, orig.GateAttempts[0].Attempt.ExtraArgs)
 }
 
-// The previous attempts and the rejection are the next holder's evidence, so a clone handed
-// out of the store must not alias the slices one level down. Asserted across two clones for
-// the reason TestJobCloneCopiesEverySliceField gives.
-func TestJobCloneCopiesPriorAttemptsAndRejection(t *testing.T) {
+// The rejection is the next holder's evidence, so a clone handed out of
+// the store must not alias the slices one level down. Asserted across
+// two clones for the reason TestJobCloneCopiesEverySliceField gives.
+func TestJobCloneCopiesTheRejection(t *testing.T) {
 	t.Parallel()
 
 	refs := func() []string { return append(make([]string, 0, 4), "out1") }
 	unmet := func() []VerificationStatus {
 		return append(make([]VerificationStatus, 0, 4), VerificationStatus{ID: "unit", Violations: refs()})
 	}
-	prior := func() PriorAttempt {
-		return PriorAttempt{
-			N:               1,
-			Unmet:           unmet(),
-			Violations:      refs(),
-			UnresolvedRisks: refs(),
-			FailingRefs:     refs(),
-			Denials:         append(make([]JobDenial, 0, 4), JobDenial{Rule: "lease-write"}),
-		}
-	}
-	orig := Job{
-		ID:        "a",
-		Prior:     append(make([]PriorAttempt, 0, 4), prior()),
-		Rejection: &JobRejection{Unmet: unmet(), Violations: refs()},
-	}
+	orig := Job{ID: "a", Rejection: &JobRejection{Unmet: unmet(), Violations: refs()}}
 
 	first, second := orig.Clone(), orig.Clone()
 	for i, c := range []Job{first, second} {
 		tag := fmt.Sprint(i)
-		p := &c.Prior[0]
-		p.Unmet[0].Violations = append(p.Unmet[0].Violations, tag)
-		p.Violations = append(p.Violations, tag)
-		p.UnresolvedRisks = append(p.UnresolvedRisks, tag)
-		p.FailingRefs = append(p.FailingRefs, tag)
-		p.Denials = append(p.Denials, JobDenial{Rule: tag})
 		c.Rejection.Unmet[0].Violations = append(c.Rejection.Unmet[0].Violations, tag)
 		c.Rejection.Violations = append(c.Rejection.Violations, tag)
 	}
-	first.Prior[0].FailingRefs[0] = "first"
 	first.Rejection.At = 9
 
-	assert.Equal(t, []string{"first", "0"}, first.Prior[0].FailingRefs)
-	wantPrior := second.Prior[0]
-	wantPrior.FailingRefs = []string{"out1", "1"}
-	wantPrior.Denials = []JobDenial{{Rule: "lease-write"}, {Rule: "1"}}
-	assert.Equal(t, wantPrior, second.Prior[0])
 	assert.Equal(t, []string{"out1", "1"}, second.Rejection.Unmet[0].Violations)
-	assert.Equal(t, Job{ID: "a", Prior: []PriorAttempt{prior()}, Rejection: &JobRejection{Unmet: unmet(), Violations: refs()}}, orig)
+	assert.Equal(t, []string{"out1", "1"}, second.Rejection.Violations)
+	assert.Equal(t, Job{ID: "a", Rejection: &JobRejection{Unmet: unmet(), Violations: refs()}}, orig)
 }
 
 // A cap on attempts is declared like the rest of the spec, so applying a record that omits
@@ -482,21 +464,19 @@ func TestDeclarationRefusesAWeightOutOfRange(t *testing.T) {
 	assert.Equal(t, int64(42), row.Paused, "apply keeps a pause")
 }
 
-// The generation and the attempt record are the store's, so a declaration never writes
-// them: Apply leaves them where they were.
-func TestDeclarationApplyLeavesStoreComputedAttemptsAlone(t *testing.T) {
+// The generation and the rejection are the store's, so a declaration
+// never writes them: Apply leaves them where they were.
+func TestDeclarationApplyLeavesStoreComputedFieldsAlone(t *testing.T) {
 	t.Parallel()
 
 	row := Job{
 		ID:         "worker",
 		Generation: 2,
-		Attempts:   2,
-		Prior:      []PriorAttempt{{N: 1, State: StateFail}},
 		Rejection:  &JobRejection{At: 1, ObservedGeneration: 2},
 	}
 	want := row
-	want.Criteria = "again"
-	Declaration{ID: "worker", Criteria: "again"}.Apply(&row)
+	want.Agent = agent.Instructed("again")
+	Declaration{ID: "worker", Agent: agent.Instructed("again")}.Apply(&row)
 	assert.Equal(t, want, row)
 }
 
@@ -554,16 +534,16 @@ func TestDeclarationRefusesAPathOutsideTheWorkspace(t *testing.T) {
 		decl Declaration
 		want string
 	}{
-		{Declaration{ID: "j", WritePaths: []string{"~/.claude/plans/**"}}, `write_paths[0] "~/.claude/plans/**" begins with ~`},
-		{Declaration{ID: "j", WritePaths: []string{"api/**", "/abs/**"}}, `write_paths[1] "/abs/**" is absolute`},
-		{Declaration{ID: "j", DenyPaths: []string{"../wt/**"}}, `deny_paths[0] "../wt/**" climbs out of the workspace`},
-		{Declaration{ID: "j", ReadPaths: []string{"docs/../../x"}}, `read_paths[0] "docs/../../x" climbs out`},
+		{Declaration{ID: "j", Paths: JobPaths{Write: []string{"~/.claude/plans/**"}}}, `paths.write[0] "~/.claude/plans/**" begins with ~`},
+		{Declaration{ID: "j", Paths: JobPaths{Write: []string{"api/**", "/abs/**"}}}, `paths.write[1] "/abs/**" is absolute`},
+		{Declaration{ID: "j", Paths: JobPaths{Deny: []string{"../wt/**"}}}, `paths.deny[0] "../wt/**" climbs out of the workspace`},
+		{Declaration{ID: "j", Paths: JobPaths{Read: []string{"docs/../../x"}}}, `paths.read[0] "docs/../../x" climbs out`},
 	} {
 		err := tt.decl.Validate()
 		require.Error(t, err, tt.want)
 		assert.Contains(t, err.Error(), tt.want)
 	}
-	assert.NoError(t, Declaration{ID: "j", ReadOnly: true, ReadPaths: []string{"docs/../api/**"}}.Validate(),
+	assert.NoError(t, Declaration{ID: "j", ReadOnly: true, Paths: JobPaths{Read: []string{"docs/../api/**"}}}.Validate(),
 		"a path that cleans to one inside the workspace stands")
 }
 
@@ -601,40 +581,21 @@ func TestDeclarationValidatesSignatureGoals(t *testing.T) {
 	assert.Contains(t, GoalExpects(), ExpectSignature)
 }
 
-// entries was added without moving JobSchemaVersion, so a schema-11 magus that predates it
-// reads such a row, acts on the rest, and writes entries back untouched.
-func TestAnOlderReaderKeepsEntries(t *testing.T) {
+func TestJobUnmetNamesWhatThisBuildLacks(t *testing.T) {
 	t.Parallel()
 
-	type olderJob struct {
-		Schema
-		ID    string   `json:"id"`
-		State JobState `json:"state"`
-	}
-	in := Job{
-		Schema:  Schema{Version: JobAPIVersion},
-		ID:      "worker",
-		State:   StateRunning,
-		Entries: []JobEntry{{Path: "a.go", By: Origin{User: "eli"}, At: 1, Consumed: 2}},
-	}
-	raw, err := json.Marshal(in)
-	require.NoError(t, err)
+	assert.Nil(t, Job{}.Unmet())
+	assert.Nil(t, Job{Requires: []string{"claim-declarations"}}.Unmet())
+	assert.Equal(t, []string{"jobs-v99", "x"}, Job{Requires: []string{"jobs-v99", "signature-goals", "x"}}.Unmet())
+}
 
-	var old olderJob
-	require.NoError(t, json.Unmarshal(raw, &old))
-	old.State = StatePass
-	rewritten, err := json.Marshal(old)
-	require.NoError(t, err)
+func TestServerRunNeedsNoAgentAndTheServerAsRegistrar(t *testing.T) {
+	t.Parallel()
 
-	var back Job
-	require.NoError(t, json.Unmarshal(rewritten, &back))
-	// The stamp an older reader sees is one it accepts, and it carries the entries through.
-	assert.Equal(t, Job{
-		Schema:  Schema{Version: JobAPIVersion},
-		ID:      "worker",
-		State:   StatePass,
-		Entries: in.Entries,
-	}, back)
+	server := Origin{EntryPoint: EntryPointServer}
+	assert.True(t, Job{RegisteredBy: server}.ServerRun())
+	assert.False(t, Job{RegisteredBy: server, Agent: &agent.Spec{}}.ServerRun(), "an agent section is a session's work")
+	assert.False(t, Job{RegisteredBy: Origin{EntryPoint: EntryPointCLI}}.ServerRun())
 }
 
 func TestDeclarationRefusesABlankBreaksEntry(t *testing.T) {
@@ -691,7 +652,7 @@ func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
 
 	schema := Schema{Version: JobAPIVersion}
 	require.NoError(t, Declaration{Schema: schema, ID: "worker", Enter: "a.go"}.Validate())
-	err := Declaration{Schema: schema, ID: "worker", Enter: "a.go", WritePaths: []string{"**"}}.Validate()
+	err := Declaration{Schema: schema, ID: "worker", Enter: "a.go", Paths: JobPaths{Write: []string{"**"}}}.Validate()
 	assert.ErrorContains(t, err, "carries only api_version, id and enter")
 }
 
@@ -861,7 +822,7 @@ func TestJobIdleSinceStartsAtAnExitedDependency(t *testing.T) {
 }
 
 func dependent(id string, state JobState, dependsOn string, paths ...string) Job {
-	return Job{ID: id, State: state, WritePaths: paths, DependsOn: []string{dependsOn}}
+	return Job{ID: id, State: state, Paths: JobPaths{Write: paths}, DependsOn: []string{dependsOn}}
 }
 
 func TestJobOverlapsOmitsADependentThatIsNotReady(t *testing.T) {
@@ -895,7 +856,7 @@ func TestJobOverlapsReportsADependentOnceEveryDependencyPasses(t *testing.T) {
 
 	rows := []Job{
 		owner("dep", StateRunning, "types"),
-		{ID: "waiter", State: StateDeclared, WritePaths: []string{"internal/job"}, DependsOn: []string{"dep", "dep2"}},
+		{ID: "waiter", State: StateDeclared, Paths: JobPaths{Write: []string{"internal/job"}}, DependsOn: []string{"dep", "dep2"}},
 		owner("dep2", StatePass),
 		owner("other", StateRunning, "internal/job"),
 	}
@@ -1031,7 +992,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		Timeout:     "soon",
 		MaxAttempts: -1,
 		Checkout:    "rel/dir",
-		WritePaths:  []string{"a.go", "../b.go"},
+		Paths:       JobPaths{Write: []string{"a.go", "../b.go"}},
 		Breaks:      []string{" "},
 		Check:       &LeaseCheck{Target: "test", Project: "."},
 		Validation:  "magus run test .",
@@ -1061,7 +1022,7 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		"MGS3037 timeout",
 		"MGS3037 max_attempts",
 		"MGS3037 checkout",
-		"MGS3037 write_paths[1]",
+		"MGS3037 paths.write[1]",
 		"MGS3037 validation",
 		"MGS3037 breaks[0]",
 		"MGS3037 deviations[0].code",
@@ -1080,7 +1041,7 @@ func TestDeclarationProblemsOfAValidRecordIsEmpty(t *testing.T) {
 	t.Parallel()
 	d := Declaration{
 		ID:         "wave/a",
-		WritePaths: []string{"types/job.go"},
+		Paths:      JobPaths{Write: []string{"types/job.go"}},
 		Check:      &LeaseCheck{Target: "go-test", Project: "."},
 		Deviations: []Deviation{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}},
 		Goals:      []Goal{{ID: "names", Kind: GoalKindSymbol, Symbols: []string{"X"}, DependsOn: []string{PrimaryGoalID}}},
@@ -1212,7 +1173,7 @@ func TestAClaimRecordDeclaresNothingElse(t *testing.T) {
 	rec := Declaration{Schema: Schema{Version: JobAPIVersion}, ID: "cli-ls-files", Claim: []JobClaimRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}}
 	assert.Empty(t, rec.Problems())
 
-	rec.Criteria = "more"
+	rec.Agent = agent.Instructed("more")
 	rec.Claim = append(rec.Claim, JobClaimRequest{Path: "../x.go", Because: "released"}, JobClaimRequest{Path: "internal/**", Because: "maybe"})
 	var fields []string
 	for _, p := range rec.Problems() {
@@ -1308,6 +1269,6 @@ func TestHoldsNoBuildSeat(t *testing.T) {
 	check := Goal{Kind: GoalKindCheck, Check: LeaseCheck{Target: "test", Project: "."}}
 	assert.True(t, Job{ReadOnly: true}.HoldsNoBuildSeat())
 	assert.False(t, Job{ReadOnly: true, Goals: []Goal{check}}.HoldsNoBuildSeat(), "a check runs a target")
-	assert.False(t, Job{ReadOnly: true, WritePaths: []string{"a/**"}}.HoldsNoBuildSeat())
+	assert.False(t, Job{ReadOnly: true, Paths: JobPaths{Write: []string{"a/**"}}}.HoldsNoBuildSeat())
 	assert.False(t, Job{}.HoldsNoBuildSeat(), "a writer is not read-only")
 }

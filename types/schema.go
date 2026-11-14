@@ -46,14 +46,14 @@ func (s Schema) clone() Schema {
 	return s
 }
 
-// SchemaLedger is the evolution record of one versioned type, read by the conventions
+// FormatLedger is the evolution record of one versioned type, read by the conventions
 // test in schema_test.go against the frozen field sets in testdata/schema.
 //
 // The contract it enforces: adding a field never moves Version; a removed or renamed
 // json name goes into Reserved and is never declared again; a field keeps its type for
 // life. Version moves only for a change an older reader would act on WRONGLY, and that
 // version names the feature in Requires.
-type SchemaLedger struct {
+type FormatLedger struct {
 	// Name keys the golden files: testdata/schema/<Name>.<version>.json,
 	// as job.v1alpha1.json.
 	Name string
@@ -71,7 +71,7 @@ type SchemaLedger struct {
 }
 
 // Features are the Requires entries a reader at l.Version implements, sorted.
-func (l SchemaLedger) Features() []string {
+func (l FormatLedger) Features() []string {
 	var out []string
 	for f, v := range l.Requires {
 		if v.Compare(l.Version) <= 0 {
@@ -82,14 +82,17 @@ func (l SchemaLedger) Features() []string {
 	return out
 }
 
-// JobSchema is the ledger of a stored job row.
-var JobSchema = SchemaLedger{
-	Name:    "job",
-	Type:    reflect.TypeFor[Job](),
+// DeclarationSchema is the ledger of the job a caller declares on stdin.
+// Its features are the ones a stored row requires; see [JobFeatures].
+var DeclarationSchema = FormatLedger{
+	Name:    "declaration",
+	Type:    reflect.TypeFor[Declaration](),
 	Version: JobAPIVersion,
-	// The four boundary renames and completion_gates, names only the JSON document an
-	// older magus kept the plan in carried, and waivers, the name deviations had first.
-	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers", "schema_version"},
+	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
+	// refused as an unknown member.
+	Reserved: []string{"completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "tier",
+		"write_paths", "deny_paths", "read_paths", "soft_paths"},
+	Added: map[string]APIVersion{"agent": JobAPIVersion, "paths": JobAPIVersion},
 	Requires: map[string]APIVersion{
 		"dead-job-end":       JobAPIVersion,
 		"claim-declarations": JobAPIVersion,
@@ -98,20 +101,8 @@ var JobSchema = SchemaLedger{
 	},
 }
 
-// DeclarationSchema is the ledger of the job a caller declares on stdin. It shares the
-// row's version and features.
-var DeclarationSchema = SchemaLedger{
-	Name:    "declaration",
-	Type:    reflect.TypeFor[Declaration](),
-	Version: JobAPIVersion,
-	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
-	// refused as an unknown member.
-	Reserved: []string{"completion_gates", "waivers", "schema_version"},
-	Requires: JobSchema.Requires,
-}
-
 // JobResultSchema is the ledger of the result a holder files.
-var JobResultSchema = SchemaLedger{
+var JobResultSchema = FormatLedger{
 	Name:     "job-result",
 	Type:     reflect.TypeFor[JobResult](),
 	Version:  JobResultAPIVersion,
@@ -120,12 +111,13 @@ var JobResultSchema = SchemaLedger{
 
 // StoredOutputSchema is the ledger of the record `magus query output <ref> -o jsonl`
 // writes and `magus query output --stdin` reads.
-var StoredOutputSchema = SchemaLedger{
+var StoredOutputSchema = FormatLedger{
 	Name:     "output-record",
 	Type:     reflect.TypeFor[StoredOutput](),
 	Version:  StoredOutputAPIVersion,
 	Reserved: []string{"schema_version"},
 }
 
-// SchemaLedgers are every ledger the conventions test holds to the contract.
-var SchemaLedgers = []SchemaLedger{JobSchema, DeclarationSchema, JobResultSchema, StoredOutputSchema}
+// FormatLedgers are every ledger the conventions test holds to the
+// contract. A stored job row is internal/job's record, not a ledger.
+var FormatLedgers = []FormatLedger{DeclarationSchema, JobResultSchema, StoredOutputSchema}

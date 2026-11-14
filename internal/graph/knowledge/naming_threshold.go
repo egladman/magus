@@ -102,7 +102,7 @@ var ownCheck = map[types.ConformanceMetric]string{
 // clone-tokens value.
 func thresholdPast(out types.Conformance, byItem map[string]*namingDecl) []thresholdHit {
 	var hits []thresholdHit
-	for _, row := range out.Rows {
+	for _, row := range out.Distributions {
 		if _, owned := ownCheck[row.Key.Metric]; owned {
 			continue
 		}
@@ -121,7 +121,7 @@ func thresholdPast(out types.Conformance, byItem map[string]*namingDecl) []thres
 // group's under each member.
 func thresholdMeasures(out types.Conformance) map[types.ConformanceKey]map[string]int {
 	measures := map[types.ConformanceKey]map[string]int{}
-	for _, row := range out.Rows {
+	for _, row := range out.Distributions {
 		for _, v := range row.Violations {
 			for _, id := range thresholdMembers(row.Key, v) {
 				if measures[row.Key] == nil {

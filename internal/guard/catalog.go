@@ -106,6 +106,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocLeaseRowUnknown},
 	{doc: ruleDocEditUngraded},
 	{doc: ruleDocLeaseUndeclared},
+	{doc: ruleDocLeaseAuthority},
 	{doc: ruleDocLeaseVcs},
 	{doc: ruleDocLeaseWrite},
 	{doc: ruleDocLeaseClaim},
@@ -119,7 +120,8 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocHeredocWrite},
 	{doc: ruleDocHooksOff},
 	{doc: ruleDocSpawnPlainCommands},
-	{doc: ruleDocUnjudgedTool},
+	{doc: ruleDocUnjudgedStep},
+	{doc: ruleDocStepInput},
 	{doc: ruleDocMonitorDuplicate},
 	{doc: ruleDocMonitorPile},
 	{doc: ruleDocSpawnWaiter},
@@ -186,7 +188,7 @@ var ruleDocStopUnfiled = types.RuleDoc{
 	Why: "A parent reads what its child did through `magus job wait`, which waits on the row's filed JobResult; a child that stops without one leaves nothing to wait on, and a rule nobody is required to follow is one nobody follows (ADR 0043). " +
 		"At a subagent's stop, when the caller holds a lease whose live row has no result, the stop is refused once, naming `magus job exit <job> --stdin` and `magus job exit --schema`. A read-only row files one too, with an empty changed_paths, so a scout is held to the same rule. " +
 		"The second stop passes with a note, since the host marks it as one a stop rule already held: nothing re-prompts the child, and `magus job wait` shows the row never passed. " +
-		"On Claude Code and Codex the refusal blocks the stop, so the child files the record itself. A host that reports no child stop never reaches it. Set to advise, the stop stands and the note says what was not filed.",
+		"Where the host's stop hook can block, the refusal blocks the stop, so the child files the record itself. A host that reports no child stop never reaches it. Set to advise, the stop stands and the note says what was not filed.",
 }
 
 var ruleDocBackgroundLeft = types.RuleDoc{
@@ -533,7 +535,7 @@ var ruleDocRawTool = types.RuleDoc{
 		"One command is exempt, in a checkout of magus itself: `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`, alone on its line with no wrapper and no other prefix, in a checkout root that has no `magus` binary yet, is advised rather than refused, because a fresh checkout has no other way to get its first binary. " +
 		"It runs the real go-build target (its generate steps and stamped link) instead of a bare link, so the first binary is the one every later build would make. `--no-cache` because that target's key cannot express the embedded-spell ordering and once replayed a binary missing tools; Go's content-addressed build cache stays on, `-trimpath` matches the target's own build so packages compile once, and `GOEXPERIMENT=jsonv2` because magus refuses to compile without it and a fresh checkout cannot count on mise to set it. " +
 		"Every other raw go command in that root, a bare `go build -o magus ./cmd/magus` included, is refused and served the bootstrap. Once the binary exists the deny applies again and names `./magus run go-build .`. " +
-		"None of this is a leased worker's: there is one binary per base, the checkout's integrator builds it and a copy is placed in each worker checkout, so a worker is refused every build of it and served the one command that copies the main checkout's binary into its own, `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`. " +
+		"None of this is a leased worker's: there is one binary per base, the checkout's integrator builds it and a copy is placed in each worker checkout, so a worker is refused every build of it and served the one command that copies the main checkout's binary into its own: the script the workspace declares as serving rule:stale-binary, run with `--job <id> --from <main checkout>`. " +
 		"A checkout that cannot load its own sources (MGS1021) has a second exemption, because no target can run there and the bootstrap fails to compile against generated files that lag their sources: " +
 		"alone on its line, with no environment prefix but `GOEXPERIMENT`, the relink MGS1021 prints (`go build [-trimpath] -o magus ./cmd/magus`) and the generators the `*_generate` targets run (`go generate <package>` inside the checkout) are advised rather than refused, with a binary or without. " +
 		"The guard learns this by loading the workspace, and only for one of those lines; the binary judging is the checkout's own `./magus` when there is one. Once the workspace loads, they are refused again. " +
@@ -553,7 +555,7 @@ var ruleDocPersonAdvisory = types.RuleDoc{
 	Catches: "a root session ending its turn with an open `magus session advise` advisory it has not been shown",
 	Why: "An advisory is a person's directive to every session in the repository, and a stop is the one moment every host hands text back to the model. " +
 		"So a root session's stop that nothing else refuses is held once per advisory, with the advisory's text as the reason, and the session keeps working with it in front of it. " +
-		"Where the host renders a prompt's context (Claude Code, Codex) the next prompt shows it first and the stop does not repeat it. A subagent's stop shows nothing, so a child cannot spend its root's one showing. " +
+		"Where the host renders a prompt's context, the next prompt shows it first and the stop does not repeat it. A subagent's stop shows nothing, so a child cannot spend its root's one showing. " +
 		"Nothing closes an advisory but `magus session retract <id>`, which is a person's to run. The rule is fixed: a workspace setting would let a checkout silence the person.",
 }
 
@@ -587,7 +589,7 @@ var ruleDocStaleBinary = types.RuleDoc{
 	Why: "A magus older than the tree, or one answering for a checkout with no ./magus, cannot load the magusfile, so none of the workspace's rules run and a fresh worktree has no record of them to fall back on. The magusfile visibly registering a guard rule is enough to refuse. " +
 		"Edits, spawns, pushes, writing MCP tools and every command that changes state wait until a magus loads the tree. A line passes only when it proves read-only (every program reads, no redirect writes a file, nothing is computed by a substitution), is the fix (`./magus run go-build .`, the relink, the bootstrap over a ./magus that cannot load the tree, each alone on its line), or is a read-only scout recording its work (`magus job exec`, `magus job exit`, `magus buzz --record`). " +
 		"A call that puts back a file the load error names as an unresolved import (`git mv` onto it, `git restore` or `git checkout --` of it, or a write to it) also runs, with an advisory that says so; the bootstrap runs for that failure too. " +
-		"A leased worker is never told to rebuild the main checkout's binary: there is one binary per base and the main session places it with `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`. A placement can be older than a tree the worker's own commits moved, so the one route that always works for a worker's own row is the hook magus.yaml declares as checkout.bootstrap, `./magus buzz <checkout.bootstrap> -- --checkout <its checkout>`, alone on its line with at most an `export BAGGAGE=...;` in front. A workspace with no checkout.bootstrap declared has no such route, and a placement is the way in. A load failure no newer binary fixes, such as a typo in a checkout with its own ./magus, is policy-unloaded's instead. " +
+		"A leased worker is never told to rebuild the main checkout's binary: there is one binary per base and the main session places it with the script the workspace declares as serving rule:stale-binary, run with `--job <id> --from <main checkout>`. A placement can be older than a tree the worker's own commits moved, so the one route that always works for a worker's own row is the hook magus.yaml declares as checkout.bootstrap, `./magus buzz <checkout.bootstrap> -- --checkout <its checkout>`, alone on its line with at most an `export BAGGAGE=...;` in front. A workspace with no checkout.bootstrap declared has no such route, and a placement is the way in. A load failure no newer binary fixes, such as a typo in a checkout with its own ./magus, is policy-unloaded's instead. " +
 		"The load contract is what a binary built before a change needs to load the tree after it: the host declarations, the API locks, the generated boundary bindings, and the Buzz checker and compiler. " +
 		"In a checkout of magus whose ./magus was built at a commit before a load-contract change HEAD carries, every call that changes state is refused until it is rebuilt; reads, VCS recovery and the rebuild run. A build descending from HEAD lacks nothing HEAD carries and is not refused, and only the changes on HEAD's own side of a diverged build count. The refusal names the process that judged the call. A ./magus built from uncommitted changes may already carry the change, and the stale-sources notice speaks for it instead. " +
 		"A `git cherry-pick` or `git merge` that brings a load-contract change straight into a checkout of magus whose tree still loads is refused too: it lands in a checkout of its own first (`magus job fork <integration> --checkout <dir>`), where the whole change is applied, ./cmd/magus compiled and the guard policy loaded before this branch moves to it, because a prefix of a series can leave a tree no binary builds from. " +
@@ -753,6 +755,14 @@ var ruleDocLeaseUndeclared = types.RuleDoc{
 	Catches: "a call graded under a lease id the job store has no row for, or a binding it tombstoned",
 }
 
+var ruleDocLeaseAuthority = types.RuleDoc{
+	Name:    string(denyRuleLeaseAuthority),
+	Catches: "a state-changing call under a live lease whose row records no authority",
+	Why: "The store records an authority on every fork (ADR 0045): the root checkout's committed revision for a fork by the root, the parent's authority for a worker's child. " +
+		"A row without one was forked by an older magus or where the root's version control named no revision, so nothing says which revision may judge the worker, and judging from the worker's own tree would let it approve its own loosening. " +
+		"Reading the tree, printing a schema or a usage line, and the job verbs still run, as lease-undeclared passes them. The orchestrator ends the job and forks it again.",
+}
+
 var ruleDocLeaseVcs = types.RuleDoc{
 	Name:    string(denyRuleLeaseVCS),
 	Catches: "a worker lease mutating version control, or committing outside its own branch and checkout",
@@ -825,7 +835,7 @@ var ruleDocWorkerCheckOnly = types.RuleDoc{
 		"A `magus run` whose target names the rw charm, the check included, is held to the write paths as well: it passes only when every glob that target declares writing (ctx.writesFiles, with or without editsExistingSource), and every file each target its ctx.needs chain reaches in the same project declares modifying, lies inside them. A needed step's outputs and another project's steps build what the run consumes, and are not counted. A target whose chain declares no write passes, since nothing says what it touches, so a formatter declares the files it rewrites. The refusal names the globs and the same run with neither the charm nor the default charms. A run the workspace's default_charms give rw is judged the same way, unless it passes --no-default-charms. " +
 		"A spell op run on its own under the rw charm (`markdown::dprint:rw`, or a target no magusfile it selects exports) is refused even when the check composes it: an op declares no writes, so it would always pass and what it rewrites shows only after the write, as MGS3001. The refusal names the magusfile target that calls the op, whose declarations are judged, or the run without the charm when none does. An op whose spell declares no rw charm runs unpatched under default_charms [rw] and passes. " +
 		"A run regenerating an output another declared or running lease holds is refused, so the two never overwrite each other's copy; a lease that filed its result holds no output. The refusal names `magus job wait` for a holder below the caller, and otherwise the root of the holder's job tree, for which it files one attention row. " +
-		"`magus affected` is never the check, since it takes its projects from the diff. Rebuilding magus's own binary (`go-build .`, the target whose relinks policy names it) is refused too: there is one binary per base, the integrator builds it and a copy is placed in the worker's checkout. The one exception is that run, with no charm and over the root alone, in a checkout the caller's job owns while a workspace command rule is loaded: this rule stands down and that rule answers. A rule that raises answers nothing, so such a build passes with the failure noted. An unbound caller, the checkout's integrator and a row declaring no check are untouched. " +
+		"`magus affected` is never the check, since it takes its projects from the diff. Rebuilding magus's own binary (`go-build .`, the target whose relinks policy names it) is refused too: there is one binary per base, the integrator builds it and a copy is placed in the worker's checkout. That holds in a checkout the caller's job owns too: the root's hook runs only a ./magus a live job row pins, so a worker's build would judge nothing. An unbound caller, the checkout's integrator and a row declaring no check are untouched. " +
 		"The same rule grades a spawn prompt naming a live row (by `magus.lease=`, `job exec` or its JOB ID line): a prompt telling that worker to run another target is refused under spawn-command, quoting the line, before any worker exists. " +
 		"A run it lets through is still refused unless it carries `--budget-wait 0`, since a claim otherwise queues for the budget's 30m default and a worker never waits: the refusal names the check with the flag. " +
 		"A continuation to a worker already bound to a live row is not graded against the row: that worker's own runs are.",
@@ -922,13 +932,22 @@ var ruleDocSpawnPlainCommands = types.RuleDoc{
 		"A prompt need not say how to write commands: the host's refusal teaches that. A spawn into a shared checkout passes.",
 }
 
-var ruleDocUnjudgedTool = types.RuleDoc{
-	Name:    string(denyRuleUnjudgedTool),
-	Catches: "a tool call whose input carries nothing any rule reads, from a tool the guard does not know",
+var ruleDocUnjudgedStep = types.RuleDoc{
+	Name:    string(denyRuleUnjudgedStep),
+	Catches: "a step nothing declares: a tool call whose input no rule reads, or a step of an undeclared kind",
 	Why: "Every harness wires every tool to the guard, which judges a call by the shape of its input: a command line, a file path read or written, a search, a spawn's prompt, a skill load. " +
 		"A tool whose input has none of those shapes, and which the host's tool rows do not list, could do whatever a rule exists to stop with no rule seeing it; a tool the rows list as touching nothing (a todo list, a plan, a web lookup) passes. " +
 		"The harness spell declares the rows (mgs_listTools) and `magus agent harness install` writes them, one file per capability with one tool name per line; with no rows to read, no tool is known and the refusal names that install. " +
-		"It denies by default: a call no rule can read is a call no rule judged, and the remedy is a tool row. A workspace that accepts unjudged tools sets it to advise. A finished call is never named.",
+		"It denies by default: a call no rule can read is a call no rule judged, and the remedy is a tool row. A workspace that accepts unjudged tools sets it to advise. A finished call is never named. " +
+		"A program judging its agent's steps through magus.Judge declares each kind with magus.WithStepSpecs, and a step no spec covers is refused under this rule too.",
+}
+
+var ruleDocStepInput = types.RuleDoc{
+	Name:    string(denyRuleStepInput),
+	Catches: "a judged step whose input fails its row's schema, or holds the wrong type where the row points",
+	Why: "A program that judges its agent's steps through magus.Judge declares each kind once, with JSON Pointers to the command and paths the built-in rules read and an optional JSON Schema for the input. " +
+		"A rule that reads a malformed input reads a guess, so the step is refused before any rule runs, and the reason names the schema path or the pointer. " +
+		"The agent can correct its input, so it is a deny rather than an error.",
 }
 
 var ruleDocMonitorDuplicate = types.RuleDoc{
@@ -1052,7 +1071,7 @@ var ruleDocSpawnWarmWorker = types.RuleDoc{
 	Why: "Within the prompt-cache TTL a resumed worker re-reads its context at the cache-read price and has already paid its orientation, so it costs no more than a fresh agent, which pays the prefix and the orientation again. " +
 		"Context size is not cost: a large context read from cache is cheaper than a small one written fresh. " +
 		"A spawn whose job names an ended job in `follows`, or shares its write paths, is refused while that job's worker is warm, naming the agent to continue and the TTL left. " +
-		"It passes once the TTL has passed, when the warm worker's context is near its model's long-context price step, or when the job record carries a `fresh_reason`. " +
+		"It passes once the TTL has passed, when the warm worker's context is near its model's long-context price step, or when the job record names a new worker in agent.worker. " +
 		"It sees only the workers this session spawned, and measures warmth from the worker's last call, or from its job's last write when magus never saw one.",
 }
 
@@ -1349,7 +1368,7 @@ var ruleDocStall = types.RuleDoc{
 	Name:    string(denyRuleStall),
 	Catches: "a leased worker refused by something only the root can clear",
 	Why: "A worker blocked on its lease's boundary or on a magus that cannot load the tree waits and reports again, and the root hears late. " +
-		"When lease-write, lease-vcs, lease-harness, lease-rebind, lease-undeclared or stale-binary refuses a leased worker, the refusal's verdict line ends with the job's exit, the block named as an unresolved risk, and one attention row per lease and rule states the facts: the job, the rule, the model it ran on and how often it was refused. It names no remedy, and never refuses anything itself. " +
+		"When lease-write, lease-vcs, lease-harness, lease-rebind, lease-undeclared, lease-authority or stale-binary refuses a leased worker, the refusal's verdict line ends with the job's exit, the block named as an unresolved risk, and one attention row per lease and rule states the facts: the job, the rule, the model it ran on and how often it was refused. It names no remedy, and never refuses anything itself. " +
 		"A refusal repeating the last one, and a run of refused calls (a calls parameter sets its length), are recorded per lease and said to no one.",
 }
 

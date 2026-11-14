@@ -14,7 +14,7 @@ func TestSnapshotFromContext(t *testing.T) {
 
 	readError := errors.New("jobs.jsonl line 1: unexpected end of JSON input")
 	row := func() types.Job {
-		return types.Job{ID: "orchestrator/guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+		return types.Job{ID: "orchestrator/guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
 	}
 	cases := []struct {
 		name   string
@@ -47,7 +47,7 @@ func TestSnapshotFromContext(t *testing.T) {
 func TestSnapshotReadSharesAndCloneIsolates(t *testing.T) {
 	t.Parallel()
 
-	pinned := Snapshot{Rows: []types.Job{{ID: "orchestrator/guard-facts", WritePaths: []string{"internal/guard/**"}}}}
+	pinned := Snapshot{Rows: []types.Job{{ID: "orchestrator/guard-facts", Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}}}
 	ctx := WithSnapshot(t.Context(), pinned)
 
 	read, ok := SnapshotFromContext(ctx)
@@ -55,6 +55,6 @@ func TestSnapshotReadSharesAndCloneIsolates(t *testing.T) {
 	assert.Same(t, &pinned.Rows[0], &read.Rows[0], "a read hands out the pinned rows, not a copy")
 
 	clone := read.Clone()
-	clone.Rows[0].WritePaths[0] = "edited"
-	assert.Equal(t, "internal/guard/**", pinned.Rows[0].WritePaths[0], "a clone's edit does not reach the pinned rows")
+	clone.Rows[0].Paths.Write[0] = "edited"
+	assert.Equal(t, "internal/guard/**", pinned.Rows[0].Paths.Write[0], "a clone's edit does not reach the pinned rows")
 }

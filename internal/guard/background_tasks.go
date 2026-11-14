@@ -337,10 +337,30 @@ func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw,
 	case sessionEnded(raw):
 		_, ended, err := store.EndSession(ctx, c)
 		return ended, err
-	case subagentStopped(raw) && !resumedStop(raw, resumesFrom, time.Now()):
-		return false, store.StampHolderStopped(ctx, c)
+	case subagentStopped(raw):
+		now := time.Now()
+		resumed := resumedStop(raw, resumesFrom, now)
+		var errs []error
+		if !resumed {
+			errs = append(errs, store.StampHolderStopped(ctx, c))
+		}
+		if !resumed && !waitingStop(raw, now) {
+			errs = append(errs, store.EndCallerAttempt(ctx, c, types.AttemptEndStop, now))
+		}
+		return false, errors.Join(errs...)
 	}
 	return false, nil
+}
+
+// waitingStop reports a subagent stop that leaves a background task running.
+// Its try stays started until a handback, an exit or the deadline.
+func waitingStop(raw string, now time.Time) bool {
+	env, ok := decodeStop(raw)
+	if !ok || env.AgentID == "" || env.AgentTranscriptPath == "" {
+		return false
+	}
+	read, err := readBackgroundTranscript(env.AgentTranscriptPath, "", now)
+	return err == nil && len(read.tasks) > 0
 }
 
 // resumedStop reports a subagent stop that leaves a background task running on a host that
@@ -483,8 +503,8 @@ func lastHeard(t backgroundTask) time.Time {
 	return last
 }
 
-// backgroundTask is one shell command a host runs in the background for an agent: a
-// backgrounded call, or a watcher's command.
+// backgroundTask is one task a host runs in the background for
+// an agent: a backgrounded shell call or a watcher's command.
 type backgroundTask struct {
 	// ID is the host's task id, "" when the transcript never named one.
 	ID      string    `json:"id,omitzero"`
@@ -798,7 +818,8 @@ func (r *taskReader) prune() {
 
 // taskReader folds transcript lines into the tasks still running.
 type taskReader struct {
-	// commands is every shell call by its call id, for a result that moves it to the background.
+	// commands is every shell call and spawn by its call id,
+	// for a result that moves it to the background.
 	commands map[string]backgroundTask
 	// live is every backgrounded call by its call id, in order.
 	live  map[string]*backgroundTask
@@ -911,18 +932,19 @@ func (r *taskReader) callResult(b transcriptBlock) {
 	if b.IsError {
 		return
 	}
+	task, known := r.commands[b.ToolUseID]
+	if t, ok := r.live[b.ToolUseID]; ok {
+		task, known = *t, true
+	}
+	if !known {
+		return
+	}
 	text := blockText(b.Content)
 	m := backgroundIDPattern.FindStringSubmatch(text)
 	if m == nil {
 		return
 	}
-	if _, ok := r.live[b.ToolUseID]; !ok {
-		task, known := r.commands[b.ToolUseID]
-		if !known {
-			return
-		}
-		r.start(b.ToolUseID, task)
-	}
+	r.start(b.ToolUseID, task)
 	r.live[b.ToolUseID].ID = m[1]
 	if out := backgroundOutputPattern.FindStringSubmatch(text); out != nil {
 		r.live[b.ToolUseID].Output = out[1]

@@ -30,6 +30,7 @@ var unclearable = map[string]bool{
 	string(denyRuleLeaseHarness):    true,
 	string(denyRuleLeaseRebind):     true,
 	string(denyRuleLeaseUndeclared): true,
+	string(denyRuleLeaseAuthority):  true,
 	string(denyRuleStaleBinary):     true,
 }
 
@@ -168,8 +169,8 @@ func workerModel(ctx context.Context, at location, who hookAttribution, lease st
 	}
 	if rows, err := leaseRows(ctx, at); err == nil {
 		for _, row := range rows {
-			if row.ID == lease && row.Model != "" {
-				return row.Model
+			if m := row.Agent.RequestedModel(); row.ID == lease && !m.IsZero() {
+				return m.String()
 			}
 		}
 	}

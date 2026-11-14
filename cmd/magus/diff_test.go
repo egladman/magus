@@ -27,10 +27,14 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/cmdline/exit"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
+	"github.com/egladman/magus/types/impact"
+	"github.com/egladman/magus/types/release"
+	"github.com/egladman/magus/types/vcs"
 )
 
 // The viewer is the DEFAULT at a terminal, so this table is about FALLBACK rather than
@@ -222,7 +226,7 @@ func TestDiffCountsLineIsWhatTheReaderIsLeftWith(t *testing.T) {
 			{Path: "gen/out.json", Role: diff.RoleOutput},
 		},
 		SeedProjects:     []string{"root"},
-		AffectedProjects: []types.ImpactProject{{Path: "root"}, {Path: "docs"}},
+		AffectedProjects: []impact.Project{{Path: "root"}, {Path: "docs"}},
 	}
 	assert.Equal(t, "2 files to read, 1 generated folded; 1 projects edited, 2 projects rebuild",
 		diffCountsLine(rev, false))
@@ -475,7 +479,7 @@ func TestPrintDiffTextWithoutImpactIsUnchanged(t *testing.T) {
 			{Path: "gen/out.json", Role: diff.RoleOutput},
 		},
 		SeedProjects:     []string{"root"},
-		AffectedProjects: []types.ImpactProject{{Path: "root"}, {Path: "docs"}},
+		AffectedProjects: []impact.Project{{Path: "root"}, {Path: "docs"}},
 	}
 	identity := func(p string) string { return p }
 
@@ -523,7 +527,7 @@ func TestPrintDiffTextAppendsImpactAboveTheConsoleLink(t *testing.T) {
 // total is a fabrication wearing a duration, and quoting it would teach a reader to trust every
 // later one.
 func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
-	affected := []types.ImpactProject{{Path: "root", Seed: true, Files: []string{"a.go"}}, {Path: "docs"}}
+	affected := []impact.Project{{Path: "root", Seed: true, Files: []string{"a.go"}}, {Path: "docs"}}
 
 	t.Run("no history at all", func(t *testing.T) {
 		assert.Nil(t, estimateImpactCost(&forecast.History{}, affected))
@@ -572,7 +576,7 @@ func TestImpactOwnersJoinOnlyTheReach(t *testing.T) {
 		{Path: "unrelated", Primary: "carol", PrimaryShare: 51, Authors: 9},
 		{Path: "docs", Authors: 0},
 	}}
-	affected := []types.ImpactProject{{Path: "root"}, {Path: "docs"}, {Path: "never-committed"}}
+	affected := []impact.Project{{Path: "root"}, {Path: "docs"}, {Path: "never-committed"}}
 
 	got := listImpactOwners(own, affected)
 	assert.Equal(t, []impactOwner{{Project: "root", Primary: "alice", PrimaryShare: 72, Authors: 4}}, got)
@@ -586,7 +590,7 @@ func TestImpactReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
 
 	r := computeImpactReach(diff.Diff{
 		SeedProjects:     []string{"root"},
-		AffectedProjects: []types.ImpactProject{{Path: "root", Seed: true, Files: []string{"a.go", "b.go"}}, {Path: "docs"}},
+		AffectedProjects: []impact.Project{{Path: "root", Seed: true, Files: []string{"a.go", "b.go"}}, {Path: "docs"}},
 	})
 	assert.Equal(t, &impactReach{
 		Seeds:    1,
@@ -1862,8 +1866,8 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	t.Run("conformance shows each check's message", func(t *testing.T) {
 		facts := diffFileFacts(diff.File{
 			Path: "a.go",
-			Symbols: []diff.Symbol{{Label: "EntryPointFrom", Checks: []types.Check{{
-				Name: diff.CheckNamingAffix, Status: types.CheckAdvice, Evidence: types.EvidenceInferred,
+			Symbols: []diff.Symbol{{Label: "EntryPointFrom", Checks: []check.Check{{
+				Name: diff.CheckNamingAffix, Status: check.Advice, Evidence: check.EvidenceInferred,
 				Message: "`EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext`",
 				Details: []string{"named <X>FromContext: BaseFromContext"},
 			}}}},
@@ -1915,7 +1919,7 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	t.Run("coverage rounds and no history is stated plainly", func(t *testing.T) {
 		facts := diffFileFacts(diff.File{
 			Path:      "a.go",
-			Coverage:  &types.ImpactCoverage{Ratio: 0.675, Covered: 27, Total: 40},
+			Coverage:  &impact.Coverage{Ratio: 0.675, Covered: 27, Total: 40},
 			NoHistory: true,
 		})
 		assert.Contains(t, facts, "68% covered")
@@ -1923,7 +1927,7 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	})
 
 	t.Run("zero total coverage is not zero percent", func(t *testing.T) {
-		facts := diffFileFacts(diff.File{Path: "a.go", Coverage: &types.ImpactCoverage{}})
+		facts := diffFileFacts(diff.File{Path: "a.go", Coverage: &impact.Coverage{}})
 		assert.Empty(t, facts)
 	})
 }
@@ -2104,7 +2108,7 @@ func TestPrintDiffTextOrdersTheEvidence(t *testing.T) {
 			{Path: "MAGUS.md", Role: diff.RoleOutput},
 		},
 		SeedProjects:     []string{"core"},
-		AffectedProjects: []types.ImpactProject{{}, {}},
+		AffectedProjects: []impact.Project{{}, {}},
 		Notes:            []string{"no coverage profile was loaded"},
 	}
 
@@ -2231,7 +2235,7 @@ func TestReviewedContentDigestsTheRevisionNotTheCheckout(t *testing.T) {
 
 	atRevision := reviewedContent{
 		root: root,
-		at:   types.VCSCheckpoint{Revision: "cafe1234", Branch: "feat/audience", VCS: "git"},
+		at:   vcs.Checkpoint{Revision: "cafe1234", Branch: "feat/audience", VCS: "git"},
 		read: func(rev, path string) (string, error) {
 			assert.Equal(t, "cafe1234", rev, "the resolved id is what gets read, never the branch name")
 			assert.Equal(t, "a.go", path)
@@ -2252,7 +2256,7 @@ func TestReviewedContentDigestsTheRevisionNotTheCheckout(t *testing.T) {
 func TestReviewedContentYieldsNothingForAFileAbsentAtTheRevision(t *testing.T) {
 	c := reviewedContent{
 		root: t.TempDir(),
-		at:   types.VCSCheckpoint{Revision: "cafe1234"},
+		at:   vcs.Checkpoint{Revision: "cafe1234"},
 		read: func(string, string) (string, error) { return "", fmt.Errorf("path does not exist at that revision") },
 	}
 
@@ -2267,7 +2271,7 @@ func TestReviewedContentYieldsNothingForAFileAbsentAtTheRevision(t *testing.T) {
 // that re-derived it would be the second lookup this join exists to prevent.
 func TestHintSinceLastReview(t *testing.T) {
 	rangeSrc := diffInput{kind: inputRevRange, base: "main", head: "topic", label: "the range main...topic"}
-	reviewed := func(at types.VCSCheckpoint, files int) diff.Diff {
+	reviewed := func(at vcs.Checkpoint, files int) diff.Diff {
 		rev := diff.Diff{Files: []diff.File{{Path: "a.go"}, {Path: "b.go"}}}
 		rev.AttachReviewed(at, files)
 		return rev
@@ -2275,7 +2279,7 @@ func TestHintSinceLastReview(t *testing.T) {
 
 	t.Run("an earlier pass names the revision and the command", func(t *testing.T) {
 		got := notices(t, func() {
-			hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{Revision: "0123456789abcdef0123", VCS: "git"}, 1), rangeSrc)
+			hintSinceLastReview(t.Context(), reviewed(vcs.Checkpoint{Revision: "0123456789abcdef0123", VCS: "git"}, 1), rangeSrc)
 		})
 		assert.Contains(t, got, "you last reviewed 1 of these 2 files")
 		assert.Contains(t, got, "0123456789ab", "the prose abbreviates")
@@ -2283,20 +2287,20 @@ func TestHintSinceLastReview(t *testing.T) {
 	})
 
 	t.Run("nothing to subtract prints nothing", func(t *testing.T) {
-		out := notices(t, func() { hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{}, 0), rangeSrc) })
+		out := notices(t, func() { hintSinceLastReview(t.Context(), reviewed(vcs.Checkpoint{}, 0), rangeSrc) })
 		assert.Empty(t, out, "a first pass has no earlier one")
 	})
 
 	t.Run("already looking at the reviewed revision prints nothing", func(t *testing.T) {
 		out := notices(t, func() {
-			hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{Revision: "main", VCS: "git"}, 1), rangeSrc)
+			hintSinceLastReview(t.Context(), reviewed(vcs.Checkpoint{Revision: "main", VCS: "git"}, 1), rangeSrc)
 		})
 		assert.Empty(t, out, "the reader is already seeing exactly the delta")
 	})
 
 	t.Run("a working-tree review has no earlier revision to name", func(t *testing.T) {
 		out := notices(t, func() {
-			hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{Revision: "0123456789abcdef0123"}, 1),
+			hintSinceLastReview(t.Context(), reviewed(vcs.Checkpoint{Revision: "0123456789abcdef0123"}, 1),
 				diffInput{kind: inputWorkingTree, label: "the working tree"})
 		})
 		assert.Empty(t, out)
@@ -2351,19 +2355,19 @@ func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
 func TestDiffAPILinesNameTheReleaseStage(t *testing.T) {
 	t.Parallel()
 
-	api := func(stage types.ReleaseStage) *diff.API {
+	api := func(stage release.Stage) *diff.API {
 		return &diff.API{Base: "main", Floor: diff.BumpMajor, Likely: diff.BumpMajor, Removed: 1, Stage: stage}
 	}
 	cases := map[string]struct {
-		stage types.ReleaseStage
+		stage release.Stage
 		want  []string
 	}{
 		"below 1.0 a major floor ships as a minor": {
-			stage: types.ReleaseStage{Tag: "v0.4.0", Major: 0},
+			stage: release.Stage{Tag: "v0.4.0", Major: 0},
 			want:  []string{"  newest release v0.4.0: below 1.0 a major floor ships as a minor release"},
 		},
 		"from 1.0 on the tag stands alone": {
-			stage: types.ReleaseStage{Tag: "v1.2.0", Major: 1},
+			stage: release.Stage{Tag: "v1.2.0", Major: 1},
 			want:  []string{"  newest release v1.2.0"},
 		},
 		"no tag visible says nothing about a stage": {},

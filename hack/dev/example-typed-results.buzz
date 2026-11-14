@@ -75,8 +75,8 @@ export fun jobLines() > result\Result::<[str]> {
         final declared = mut [<str>];
         foreach (j in list.jobs) {
             byState[j.state.value] = (byState[j.state.value] ?? 0) + 1;
-            if (j.state == magus\JobState.declared and j.writePaths.len() > 0) {
-                declared.append("  {j.id}: {j.writePaths.len()} write paths");
+            if (j.state == magus\JobState.declared and j.paths.write.len() > 0) {
+                declared.append("  {j.id}: {j.paths.write.len()} write paths");
             }
         }
         final lines = mut ["{list.jobs.len()} jobs"];

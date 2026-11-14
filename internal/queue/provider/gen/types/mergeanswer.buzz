@@ -6,7 +6,7 @@
 // `go generate`, never this file.
 
 export object QueueMergeAnswer {
-    merged: bool = false,
+    merged: bool,
     byProvider: bool = false,
     reason: str = "",
 }

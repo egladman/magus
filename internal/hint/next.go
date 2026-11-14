@@ -257,10 +257,10 @@ func LeaseRole(rows []types.Job, id string) (Role, []string) {
 		if row.ID != id {
 			continue
 		}
-		if row.ReadOnly || len(row.WritePaths) == 0 {
+		if row.ReadOnly || len(row.Paths.Write) == 0 {
 			return RoleReviewer, nil
 		}
-		return RoleWorker, row.WritePaths
+		return RoleWorker, row.Paths.Write
 	}
 	return RoleWorker, nil
 }

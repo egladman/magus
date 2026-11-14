@@ -18,9 +18,9 @@ type isolationCase struct {
 }
 
 var (
-	isolationWriter = types.Job{ID: "w", WritePaths: []string{"docs/a.md"}}
+	isolationWriter = types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"docs/a.md"}}}
 	isolationReader = types.Job{ID: "r", ReadOnly: true}
-	isolationPeer   = types.Job{ID: "peer", State: types.StateRunning, WritePaths: []string{"docs/b.md"}}
+	isolationPeer   = types.Job{ID: "peer", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/b.md"}}}
 )
 
 func assertIsolation(t *testing.T, cases map[string]isolationCase) {
@@ -85,9 +85,9 @@ func TestChooseIsolationHardSignalsIgnoreTheDials(t *testing.T) {
 func TestChooseIsolationSoftSignalsMoveAWriter(t *testing.T) {
 	t.Parallel()
 	writer, reader := isolationWriter, isolationReader
-	wide := types.Job{ID: "w", WritePaths: make([]string, largeWriteSet+1)}
-	for i := range wide.WritePaths {
-		wide.WritePaths[i] = fmt.Sprintf("docs/%d.md", i)
+	wide := types.Job{ID: "w", Paths: types.JobPaths{Write: make([]string, largeWriteSet+1)}}
+	for i := range wide.Paths.Write {
+		wide.Paths.Write[i] = fmt.Sprintf("docs/%d.md", i)
 	}
 	assertIsolation(t, map[string]isolationCase{
 		"a read-only job shares the checkout":            {job: isolationJob{Row: reader}, level: isolationShared, reason: "read-only"},
@@ -102,7 +102,7 @@ func TestChooseIsolationSoftSignalsMoveAWriter(t *testing.T) {
 			job: isolationJob{Row: wide}, risk: 0.7, level: isolationOwnCheckout, reason: "28 write paths, past the 27",
 		},
 		"a write set at the p90 stays lowered": {
-			job: isolationJob{Row: types.Job{ID: "w", WritePaths: wide.WritePaths[:largeWriteSet]}}, risk: 0.7, level: isolationShared,
+			job: isolationJob{Row: types.Job{ID: "w", Paths: types.JobPaths{Write: wide.Paths.Write[:largeWriteSet]}}}, risk: 0.7, level: isolationShared,
 		},
 		"an unmerged dependency raises a lowered writer": {
 			job: isolationJob{Row: writer, UnmergedDependency: "base-job"}, weight: 0.2, level: isolationOwnCheckout,

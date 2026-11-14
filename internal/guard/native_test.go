@@ -57,7 +57,7 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 
 	grep := Judge(ctx, deps, Request{Input: envelope("Grep", map[string]any{"pattern": "HandleRequest", "path": "internal", "output_mode": "content"})})
 	grepShape := verdictWithRule("deny", string(denyRuleSymbolSearch))
-	grepShape.Next = grep.Next // the served remedy is the search rule's own, tested there
+	grepShape.NextSteps = grep.NextSteps // the served remedy is the search rule's own, tested there
 	assert.Equal(t, grepShape, unworded(grep))
 	assert.Contains(t, grep.Reason, "refs HandleRequest --occurrences")
 
@@ -70,7 +70,7 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 
 	glob := Judge(ctx, deps, Request{Input: envelope("Glob", map[string]any{"pattern": "**/handler.go", "path": "internal/api"})})
 	globShape := verdictWithRule("deny", string(denyRuleSearchTranslation))
-	globShape.Next = glob.Next
+	globShape.NextSteps = glob.NextSteps
 	assert.Equal(t, globShape, unworded(glob))
 	assert.Contains(t, glob.Reason, "answers this search exactly")
 	assert.Contains(t, storedVerdict(t, ctx.Value(locationKey{}).(location).cacheDir, glob.Reason), "file:internal/api/gen/handler.go",

@@ -1,11 +1,12 @@
 package types
 
 import (
-	"cmp"
+	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
+
+	"github.com/egladman/magus/libs/apiversion"
 )
 
 // APIVersion names a versioned format Kubernetes-style, as
@@ -46,7 +47,7 @@ func (v APIVersion) String() string { return string(v) }
 
 // Group is `magus.job` in `magus.job/v1alpha1`. It is "" when v is
 // malformed.
-func (v APIVersion) Group() string { return v.parts().group }
+func (v APIVersion) Group() string { return apiversion.APIVersion(v).Group() }
 
 // Version is `v1alpha1` in `magus.job/v1alpha1`. It is "" when v is
 // malformed.
@@ -59,67 +60,38 @@ func (v APIVersion) Version() string {
 }
 
 // Stability is alpha, beta or stable. It is "" when v is malformed.
-func (v APIVersion) Stability() Stability { return v.parts().stability }
+func (v APIVersion) Stability() Stability {
+	return Stability(apiversion.APIVersion(v).Stability())
+}
 
 // Compare orders by group, then by version within the group. A
 // malformed version sorts first.
 func (v APIVersion) Compare(w APIVersion) int {
-	x, y := v.parts(), w.parts()
-	return cmp.Or(
-		cmp.Compare(x.group, y.group),
-		cmp.Compare(x.major, y.major),
-		cmp.Compare(stabilityRank(x.stability), stabilityRank(y.stability)),
-		cmp.Compare(x.minor, y.minor),
-	)
+	return apiversion.APIVersion(v).Compare(apiversion.APIVersion(w))
 }
 
-// Refuse is a reader's error for a record that carries got where the
-// reader reads only v. It is nil when got is v. what names the record;
-// fix is what the person does next, such as deleting the store. A newer
-// version of the same group asks for a newer magus instead.
-func (v APIVersion) Refuse(what string, got APIVersion, fix string) error {
+// RefuseVersion wraps apiversion's refusal of got where the reader reads
+// only want. It is nil when got is want. what names the record; fix is
+// what the person does next, such as deleting the store. A newer version
+// of the same group asks for a newer magus instead.
+func RefuseVersion(want, got APIVersion, what, fix string) error {
+	err := apiversion.APIVersion(want).Refuse(apiversion.APIVersion(got))
 	switch {
-	case got == v:
+	case err == nil:
 		return nil
-	case got == "":
-		return fmt.Errorf("%s carries no api_version, so an older magus wrote it, "+
-			"and this magus reads only %s: %s", what, v, fix)
-	case got.Group() == v.Group() && got.Compare(v) > 0:
-		return fmt.Errorf("%s is %s, newer than the %s this magus reads: upgrade magus", what, got, v)
+	case errors.Is(err, apiversion.ErrNewer):
+		return fmt.Errorf("%s: %w", what, refusal{err: err, fix: "upgrade magus"})
 	default:
-		return fmt.Errorf("%s is %s and this magus reads only %s: %s", what, got, v, fix)
+		return fmt.Errorf("%s: %w", what, refusal{err: err, fix: fix})
 	}
 }
 
-type apiVersionParts struct {
-	group        string
-	major, minor int
-	stability    Stability
+// refusal is apiversion's refusal followed by what the person does next.
+type refusal struct {
+	err error
+	fix string
 }
 
-func (v APIVersion) parts() apiVersionParts {
-	m := apiVersionRe.FindStringSubmatch(string(v))
-	if m == nil {
-		return apiVersionParts{}
-	}
-	p := apiVersionParts{group: m[1], stability: StabilityStable}
-	p.major, _ = strconv.Atoi(m[2]) // apiVersionRe matched digits
-	if m[3] != "" {
-		p.stability = Stability(m[3])
-		p.minor, _ = strconv.Atoi(m[4]) // apiVersionRe matched digits
-	}
-	return p
-}
+func (r refusal) Error() string { return fmt.Sprintf("%s: %s", r.err, r.fix) }
 
-func stabilityRank(s Stability) int {
-	switch s {
-	case StabilityAlpha:
-		return 1
-	case StabilityBeta:
-		return 2
-	case StabilityStable:
-		return 3
-	default:
-		return 0
-	}
-}
+func (r refusal) Unwrap() error { return r.err }

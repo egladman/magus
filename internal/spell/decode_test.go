@@ -971,6 +971,28 @@ func (s *coverageSuite) TestRefusesAnUncleanProfile() {
 	s.ErrorContains(err, `profile ".magus//coverage.out" must be a clean slash path`)
 }
 
+type scopesSuite struct{ suite.Suite }
+
+func TestDecodeScopes(t *testing.T) { suite.Run(t, new(scopesSuite)) }
+
+func (s *scopesSuite) TestCarriesTheCommand() {
+	cmd := &spells.Command{Bin: "go", Args: []string{"list", "-deps"}}
+	m, err := describe(Contract{Name: "golang", Scopes: cmd})
+	s.Require().NoError(err)
+	s.Equal(cmd, m.Scopes)
+}
+
+func (s *scopesSuite) TestAnUndeclaredScopesIsNil() {
+	m, err := describe(Contract{Name: "golang"})
+	s.Require().NoError(err)
+	s.Nil(m.Scopes)
+}
+
+func (s *scopesSuite) TestRefusesACommandNamingNoProgram() {
+	_, err := describe(Contract{Name: "golang", Scopes: &spells.Command{Args: []string{"list"}}})
+	s.EqualError(err, `spell "golang": mgs_getScopes: bin is required, since magus runs the command with the package appended`)
+}
+
 // lexLanguage declares a whole syntax, which each case below breaks one way.
 func lexLanguage(edit func(*spells.Syntax)) Contract {
 	syn := spells.Syntax{

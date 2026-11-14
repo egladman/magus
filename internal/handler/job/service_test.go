@@ -3,6 +3,8 @@ package job
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,16 +15,61 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/egladman/magus/internal/file"
 	jobstore "github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
+
+// seedFiled appends job id's first try, having filed result, to the
+// attempts file beside store's rows. The job package files a result only
+// through an exit; internal/guard keeps the same copy.
+func seedFiled(t *testing.T, store *jobstore.Store, id string, result *types.JobResult) {
+	t.Helper()
+	path, err := store.Path()
+	require.NoError(t, err)
+	raw, err := json.Marshal(result)
+	require.NoError(t, err)
+	var filed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &filed))
+	line, err := json.Marshal(map[string]any{
+		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
+		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
+	})
+	require.NoError(t, err)
+	require.NoError(t, file.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
+}
+
+// fixtureCamelKeys is v with every object key camelCased, as the
+// attempts.jsonl record spells them.
+func fixtureCamelKeys(v any) any {
+	switch v := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, x := range v {
+			parts := strings.Split(k, "_")
+			for i := 1; i < len(parts); i++ {
+				parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+			}
+			out[strings.Join(parts, "")] = fixtureCamelKeys(x)
+		}
+		return out
+	case []any:
+		for i := range v {
+			v[i] = fixtureCamelKeys(v[i])
+		}
+		return v
+	}
+	return v
+}
 
 // trailWorkspace is a workspace whose trail lives at dir, whose cache reports a fixed size,
 // and which declares projects.
@@ -122,7 +169,7 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 
 	j, ok := jobstore.Lookup("rotate-activities")
 	require.True(t, ok)
-	got := s.job(j, running, types.Job{})
+	got := s.job(j, running, types.Job{}, nil)
 
 	require.Equal(t, "jobs/rotate-activities", got.Name)
 	require.True(t, got.Running)
@@ -161,8 +208,8 @@ func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 	_, err := store.Update(t.Context(), "wave3/merge", func(row *types.Job) {
 		row.State = types.StateRunning
-		row.Model = "opus"
-		row.WritePaths = []string{"internal/handler"}
+		row.Agent = &agent.Spec{Model: agent.Model{ID: "opus"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}
+		row.Paths.Write = []string{"internal/handler"}
 	})
 	require.NoError(t, err)
 
@@ -186,8 +233,8 @@ func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	require.NotNil(t, delegated, "the delegated job is missing from the listing")
 	require.Equal(t, jobv1.JobHolder_JOB_HOLDER_SESSION, delegated.Holder)
 	require.Equal(t, string(types.StateRunning), delegated.State)
-	require.Equal(t, "opus", delegated.Model)
-	require.Equal(t, []string{"internal/handler"}, delegated.WritePaths)
+	require.Equal(t, "opus", delegated.GetAgent().GetModel().GetId())
+	require.Equal(t, []string{"internal/handler"}, delegated.GetPaths().GetWrite())
 }
 
 // TestListJobs_ServesTheStoredRowVerbatim pins what a reader of a delegated row cannot work
@@ -197,9 +244,9 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	dir := t.TempDir()
 	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 	_, err := store.Update(t.Context(), "job-a", func(row *types.Job) {
-		row.Criteria = "ship the store"
+		row.Agent = agent.Instructed("ship the store")
 		row.Checkpoint = "60dc9151"
-		row.WritePaths = []string{"internal/job", "types/job.go"}
+		row.Paths.Write = []string{"internal/job", "types/job.go"}
 		row.State = types.StateRunning
 		row.Goals = []types.Goal{
 			{
@@ -222,17 +269,17 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 				Signature: "func (Store).Update(ctx context.Context, id string) error",
 			},
 		}
-		row.Result = &types.JobResult{
-			ChangedPaths:    []string{"internal/job/store.go"},
-			UnresolvedRisks: []string{"schema churn"},
-			Descendants:     []string{"job-b"},
-		}
 	})
 	require.NoError(t, err)
+	seedFiled(t, store, "job-a", &types.JobResult{
+		ChangedPaths:    []string{"internal/job/store.go"},
+		UnresolvedRisks: []string{"schema churn"},
+		Descendants:     []string{"job-b"},
+	})
 	// The store derives a release from a claim that shrinks, so giving up types/job.go is
 	// the only way to get one onto the wire.
 	stored, err := store.Update(t.Context(), "job-a", func(row *types.Job) {
-		row.WritePaths = []string{"internal/job"}
+		row.Paths.Write = []string{"internal/job"}
 	})
 	require.NoError(t, err)
 	_, err = store.Update(t.Context(), "scout", func(row *types.Job) {
@@ -254,9 +301,9 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 
 	got := byID["job-a"]
 	require.NotNil(t, got, "the delegated row is missing from the listing")
-	require.Equal(t, "ship the store", got.Criteria)
+	require.Equal(t, "ship the store", got.GetAgent().GetInstructions())
 	require.Equal(t, "60dc9151", got.Checkpoint)
-	require.Equal(t, []string{"internal/job"}, got.WritePaths)
+	require.Equal(t, []string{"internal/job"}, got.GetPaths().GetWrite())
 	require.Equal(t, stored.Updated, got.Updated, "the row's own stamp, not the moment it was read")
 	require.Len(t, got.Releases, 1)
 	require.Equal(t, "types/job.go", got.Releases[0].Path)
@@ -293,12 +340,12 @@ func TestListJobs_ReportsOverlappingWritePaths(t *testing.T) {
 	dir := t.TempDir()
 	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 	for _, row := range []types.Job{
-		{ID: "job-a", WritePaths: []string{"internal/job"}, State: types.StateRunning},
-		{ID: "job-b", WritePaths: []string{"internal/job/store.go"}, State: types.StateDeclared},
-		{ID: "job-done", WritePaths: []string{"internal/job"}, State: types.StatePass},
+		{ID: "job-a", Paths: types.JobPaths{Write: []string{"internal/job"}}, State: types.StateRunning},
+		{ID: "job-b", Paths: types.JobPaths{Write: []string{"internal/job/store.go"}}, State: types.StateDeclared},
+		{ID: "job-done", Paths: types.JobPaths{Write: []string{"internal/job"}}, State: types.StatePass},
 	} {
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) {
-			cur.WritePaths, cur.State = row.WritePaths, row.State
+			cur.Paths.Write, cur.State = row.Paths.Write, row.State
 		})
 		require.NoError(t, err)
 	}
@@ -370,21 +417,20 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 			Checkout: "/waiter", At: 12, Verified: true,
 			Gates: []types.VerificationStatus{{ID: "lint", Verified: true, OutputRef: "out4"}},
 		},
-		Result: &types.JobResult{
-			Validation:           types.JobResultValidation{Command: "magus run go-test api", OutputRef: "out1"},
-			VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}},
-		},
 	}
-	row.Version = "magus.job/v1alpha11"
+	result := &types.JobResult{
+		Validation:           types.JobResultValidation{Command: "magus run go-test api", OutputRef: "out1"},
+		VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}},
+	}
 	row.Requires = []string{"claims"}
 	row.Breaks = []string{"--old-flag", "api.Open"}
-	row.ModelTier = &types.JobModelTier{
-		Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Source: types.ModelTierSourceMatrix,
+	row.ModelTier = &agent.JobModelTier{
+		Name: "economy", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix,
 		Reason: "small checked job", Site: "magusfile.buzz:20", Model: "haiku",
 	}
 	row.ReworkRounds, row.Widenings = 2, 1
 
-	got := delegatedJob(row)
+	got := delegatedJob(row, result)
 
 	require.True(t, proto.Equal(&jobv1.JobModelTier{
 		Name: "economy", Rank: 0, Skills: "full", Source: "matrix",
@@ -400,7 +446,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.Equal(t, "diverged", got.BaseVerdict)
 	require.Equal(t, "/w/agent-1", got.CheckoutRoot)
 	require.Equal(t, int64(1700000100), got.Registered)
-	require.Equal(t, "magus.job/v1alpha11", got.ApiVersion)
+	require.Equal(t, "batch.magus/v1alpha1", got.ApiVersion)
 	require.Equal(t, []string{"claims"}, got.Requires)
 
 	wantBy := &jobv1.JobOrigin{
@@ -434,7 +480,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.Equal(t, "out1", got.Result.ValidationOutputRef)
 	require.True(t, proto.Equal(&jobv1.JobVerificationEvidence{GateId: "lint", OutputRef: "out2"}, got.Result.VerificationEvidence[0]))
 
-	bare := delegatedJob(types.Job{ID: "old", State: types.StatePass})
+	bare := delegatedJob(types.Job{ID: "old", State: types.StatePass}, nil)
 	require.Nil(t, bare.RegisteredBy, "a row from before origins were recorded has no origin to report")
 	require.Nil(t, bare.Attempt)
 	require.Nil(t, bare.Integration)
@@ -451,11 +497,11 @@ func TestListJobs_ServesTheStoresReport(t *testing.T) {
 	for _, row := range []types.Job{
 		{ID: "late", State: types.StateRunning, Deadline: 1},
 		{ID: "waiter", State: types.StateDeclared, DependsOn: []string{"never-declared"}},
-		{ID: "a", State: types.StateRunning, WritePaths: []string{"run.go#RunCI"}},
-		{ID: "b", State: types.StateRunning, WritePaths: []string{"run.go#executeStages"}},
+		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run.go#RunCI"}}},
+		{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run.go#executeStages"}}},
 	} {
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) {
-			cur.State, cur.Deadline, cur.DependsOn, cur.WritePaths = row.State, row.Deadline, row.DependsOn, row.WritePaths
+			cur.State, cur.Deadline, cur.DependsOn, cur.Paths.Write = row.State, row.Deadline, row.DependsOn, row.Paths.Write
 		})
 		require.NoError(t, err)
 	}
@@ -501,7 +547,7 @@ func (s *listJobsSuite) overlaps(oneCheckout bool, projects []*types.Project) []
 	store := jobstore.NewStore(jobstore.Location{StateBase: s.T().TempDir(), CacheDir: dir, Root: dir})
 	for id, checkout := range map[string]string{"a": a, "b": b} {
 		_, err := store.Update(s.T().Context(), id, func(cur *types.Job) {
-			cur.State, cur.WritePaths, cur.CheckoutRoot = types.StateRunning, []string{"gen/decode.go"}, checkout
+			cur.State, cur.Paths.Write, cur.CheckoutRoot = types.StateRunning, []string{"gen/decode.go"}, checkout
 		})
 		s.Require().NoError(err)
 	}

@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // GateDecision is what the gate does about a redundancy finding.
@@ -207,7 +208,7 @@ func (p InheritProbe) Evaluate(ctx context.Context) (InheritFinding, bool) {
 		return InheritFinding{}, false
 	}
 	rep, err := p.Assess(ctx, commit)
-	if err != nil || rep.Tier != types.RiskTrivial {
+	if err != nil || rep.Tier != check.RiskTrivial {
 		return InheritFinding{}, false
 	}
 	return InheritFinding{Run: run, Commit: commit, Report: rep}, true

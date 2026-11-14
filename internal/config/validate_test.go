@@ -436,19 +436,19 @@ func TestValidate_Conformance(t *testing.T) {
 			edit: func(c *ConformanceConfig) {
 				c.Checks[types.ConformanceFileLines][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 2200, Scopes: map[string]int{"cmd": 3000}}
 			},
-			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.source.scopes.cmd", Tag: "conformance_scope_metric", Param: "dep-fanout", Value: "cmd"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.file-lines.source.scopes.cmd", Tag: "conformance_scope_metric", Param: "imported-packages", Value: "cmd"},
 		},
 		"scope outside the workspace": {
 			edit: func(c *ConformanceConfig) {
-				c.Checks[types.ConformanceDepFanout][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"../x": 89}}
+				c.Checks[types.ConformanceImportedPackages][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"../x": 89}}
 			},
-			want: FieldFailure{Field: "knowledge.conformance.checks.dep-fanout.source.scopes.../x", Tag: "conformance_scope_path", Value: "../x"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.imported-packages.source.scopes.../x", Tag: "conformance_scope_path", Value: "../x"},
 		},
 		"scope with a zero anchor": {
 			edit: func(c *ConformanceConfig) {
-				c.Checks[types.ConformanceDepFanout][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 0}}
+				c.Checks[types.ConformanceImportedPackages][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 0}}
 			},
-			want: FieldFailure{Field: "knowledge.conformance.checks.dep-fanout.source.scopes.cmd/magus", Tag: "gte", Param: "1", Value: "0"},
+			want: FieldFailure{Field: "knowledge.conformance.checks.imported-packages.source.scopes.cmd/magus", Tag: "gte", Param: "1", Value: "0"},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

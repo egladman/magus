@@ -4,119 +4,27 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"reflect"
 	"slices"
-	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/stamp"
+	"github.com/egladman/magus/libs/clikit/configuration"
 )
 
-// nameSegment is the literal placeholder used in dotted keys for a
-// slice-of-struct entry's identifier.
-// Users substitute the actual name when calling `magus config set`.
-const nameSegment = "<name>"
+// nameSegment stands for a list entry's name in a key; `magus config set`
+// takes the entry's actual name there.
+const nameSegment = configuration.NameSegment
 
-// durationType identifies time.Duration fields so they parse as "6h"/"30m".
-var durationType = reflect.TypeOf(time.Duration(0))
-
-type fieldSchema struct {
-	dotted      string // e.g. "cache.dir" or "ci.max_shards"
-	typeName    string // "string", "int", "bool", "[]string"
-	sliceParent string // when set, dotted is a slice-of-struct leaf rooted here
-}
-
-// schemaFields is lazily constructed via sync.OnceValue; only config-set callers pay the reflect cost.
-var schemaFields = sync.OnceValue(func() []fieldSchema {
-	return collectSchema(reflect.TypeOf(Config{}), nil, "")
-})
-
-func collectSchema(t reflect.Type, prefix []string, sliceParent string) []fieldSchema {
-	var result []fieldSchema
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		tag := f.Tag.Get("yaml")
-		if tag == "" || tag == "-" {
-			continue
-		}
-		name := strings.Split(tag, ",")[0]
-		path := append(append([]string{}, prefix...), name)
-		switch f.Type.Kind() {
-		case reflect.Struct:
-			result = append(result, collectSchema(f.Type, path, sliceParent)...)
-		case reflect.String:
-			result = append(result, fieldSchema{dotted: strings.Join(path, "."), typeName: "string", sliceParent: sliceParent})
-		case reflect.Int:
-			result = append(result, fieldSchema{dotted: strings.Join(path, "."), typeName: "int", sliceParent: sliceParent})
-		case reflect.Bool:
-			result = append(result, fieldSchema{dotted: strings.Join(path, "."), typeName: "bool", sliceParent: sliceParent})
-		case reflect.Float64:
-			result = append(result, fieldSchema{dotted: strings.Join(path, "."), typeName: "float64", sliceParent: sliceParent})
-		case reflect.Int64:
-			tn := "int64"
-			if f.Type == durationType {
-				tn = "duration"
-			}
-			result = append(result, fieldSchema{dotted: strings.Join(path, "."), typeName: tn, sliceParent: sliceParent})
-		case reflect.Pointer:
-			// Tri-state pointer scalars (nil = inherit default). Only *bool occurs today.
-			if f.Type.Elem().Kind() == reflect.Bool {
-				result = append(result, fieldSchema{dotted: strings.Join(path, "."), typeName: "*bool", sliceParent: sliceParent})
-			}
-		case reflect.Map:
-			if f.Type.Key().Kind() == reflect.String && f.Type.Elem().Kind() == reflect.String {
-				result = append(result, fieldSchema{dotted: strings.Join(path, "."), typeName: "map[string]string", sliceParent: sliceParent})
-			}
-		case reflect.Slice:
-			elem := f.Type.Elem()
-			switch elem.Kind() {
-			case reflect.String:
-				result = append(result, fieldSchema{dotted: strings.Join(path, "."), typeName: "[]string", sliceParent: sliceParent})
-			case reflect.Struct:
-				// Only emit templated keys when the element has a
-				// `name` field; that's the lookup key the
-				// name-addressed setSliceEntry uses. Slices keyed
-				// by other fields (like watch.ignore, where each
-				// entry is just {type, pattern}) are excluded from
-				// `magus config set` and must be hand-edited.
-				if !hasNameField(elem) {
-					continue
-				}
-				slicePath := strings.Join(path, ".")
-				childPrefix := append(append([]string{}, path...), nameSegment)
-				result = append(result, collectSchema(elem, childPrefix, slicePath)...)
-			}
-		}
-	}
-	return result
-}
-
-// hasNameField reports whether t is a struct with a yaml-tagged
-// "name" field. Used to gate slice-of-struct schema templating: only
-// slices whose elements are name-addressable can be set via the
-// dotted CLI syntax. Other slices must be hand-edited.
-func hasNameField(t reflect.Type) bool {
-	for i := 0; i < t.NumField(); i++ {
-		tag := t.Field(i).Tag.Get("yaml")
-		name := strings.Split(tag, ",")[0]
-		if name == "name" {
-			return true
-		}
-	}
-	return false
-}
-
-// KnownKeys returns all recognized dotted config keys in sorted order.
+// KnownKeys returns every config key Spec lists, sorted.
 func KnownKeys() []string {
-	fields := schemaFields()
-	keys := make([]string, len(fields))
-	for i, s := range fields {
-		keys[i] = s.dotted
+	var keys []string
+	for _, s := range Spec.Settings {
+		if s.YamlPath != "" {
+			keys = append(keys, s.YamlPath)
+		}
 	}
 	slices.Sort(keys)
 	return keys
@@ -133,7 +41,7 @@ func KnownKeys() []string {
 // with a *stamp.DowngradeError: an older magus validates against an older schema and
 // would drop or reject what the newer one wrote.
 func Save(j stamp.Judge, path, key, value string) error {
-	fs, entryName, ok := matchSchema(key)
+	setting, entryName, ok := matchKey(key)
 	if !ok {
 		if err := retiredKeyError(key); err != nil {
 			return err
@@ -141,7 +49,7 @@ func Save(j stamp.Judge, path, key, value string) error {
 		return fmt.Errorf("unknown config key %q (run `magus config view -o name` for valid keys)", key)
 	}
 
-	typedVal, err := parseValue(fs.typeName, value)
+	typedVal, err := setting.Parse(value)
 	if err != nil {
 		return fmt.Errorf("key %s: %w", key, err)
 	}
@@ -160,8 +68,8 @@ func Save(j stamp.Judge, path, key, value string) error {
 		}
 	}
 
-	if fs.sliceParent != "" {
-		if err := setSliceEntry(m, fs.sliceParent, entryName, fs.dotted, typedVal); err != nil {
+	if parent, ok := sliceParent(setting.YamlPath); ok {
+		if err := setSliceEntry(m, parent, entryName, setting.YamlPath, typedVal); err != nil {
 			return fmt.Errorf("key %s: %w", key, err)
 		}
 	} else {
@@ -229,21 +137,31 @@ func validateAfterMerge(data []byte) error {
 	return Validate(cfg)
 }
 
-// matchSchema finds the fieldSchema for key. Returns the matched
-// schema, the dynamic entry name (when key targets a slice-of-struct
-// leaf), and true. For scalar keys, entryName is empty.
-func matchSchema(key string) (fieldSchema, string, bool) {
-	for _, s := range schemaFields() {
-		if s.sliceParent == "" && s.dotted == key {
-			return s, "", true
+// matchKey finds the setting key names, and the list entry's name when key
+// addresses a field of one.
+func matchKey(key string) (configuration.Setting, string, bool) {
+	for _, s := range Spec.Settings {
+		if s.YamlPath == "" {
+			continue
 		}
-		if s.sliceParent != "" {
-			if name, ok := matchSliceKey(key, s.dotted); ok {
-				return s, name, true
+		if _, templated := sliceParent(s.YamlPath); !templated {
+			if s.YamlPath == key {
+				return s, "", true
 			}
+			continue
+		}
+		if name, ok := matchSliceKey(key, s.YamlPath); ok {
+			return s, name, true
 		}
 	}
-	return fieldSchema{}, "", false
+	return configuration.Setting{}, "", false
+}
+
+// sliceParent returns the list a templated key's entry lives in:
+// "sandbox.allow" for "sandbox.allow.<name>.mode".
+func sliceParent(yamlPath string) (string, bool) {
+	parent, _, ok := strings.Cut(yamlPath, "."+nameSegment+".")
+	return parent, ok
 }
 
 // matchSliceKey checks whether userKey conforms to the template path
@@ -369,71 +287,4 @@ func Init(j stamp.Judge, path string, force bool) (bool, error) {
 		return false, fmt.Errorf("write config: %w", err)
 	}
 	return true, nil
-}
-
-// parseBool parses a permissive boolean (true/1/yes, false/0/no).
-func parseBool(value string) (bool, error) {
-	switch strings.ToLower(value) {
-	case "true", "1", "yes":
-		return true, nil
-	case "false", "0", "no":
-		return false, nil
-	}
-	return false, fmt.Errorf("invalid boolean %q (use true/false/1/0)", value)
-}
-
-// parseValue converts the string value into the Go type for the named schema type.
-func parseValue(typeName, value string) (interface{}, error) {
-	switch typeName {
-	case "string":
-		return value, nil
-	case "int":
-		n, err := strconv.Atoi(value)
-		if err != nil {
-			return nil, fmt.Errorf("invalid integer %q", value)
-		}
-		return n, nil
-	case "int64":
-		n, err := strconv.ParseInt(value, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid integer %q", value)
-		}
-		return n, nil
-	case "float64":
-		f, err := strconv.ParseFloat(value, 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid number %q", value)
-		}
-		return f, nil
-	case "duration":
-		d, err := time.ParseDuration(value)
-		if err != nil {
-			return nil, fmt.Errorf("invalid duration %q (e.g. \"6h\", \"30m\")", value)
-		}
-		// yaml.v3 round-trips time.Duration via its String() form ("6h0s").
-		return d, nil
-	case "bool":
-		return parseBool(value)
-	case "*bool":
-		b, err := parseBool(value)
-		if err != nil {
-			return nil, err
-		}
-		return &b, nil
-	case "[]string":
-		var parts []string
-		for _, p := range strings.Split(value, ",") {
-			if p = strings.TrimSpace(p); p != "" {
-				parts = append(parts, p)
-			}
-		}
-		return parts, nil
-	case "map[string]string":
-		m := map[string]string{}
-		if err := yaml.Unmarshal([]byte(value), &m); err != nil {
-			return nil, fmt.Errorf("invalid map %q (YAML object, e.g. \"{X: Y}\"): %w", value, err)
-		}
-		return m, nil
-	}
-	return nil, fmt.Errorf("unsupported type %q", typeName)
 }

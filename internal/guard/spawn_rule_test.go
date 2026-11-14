@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -46,11 +47,12 @@ func (p *spawnRuleProbe) rule() workspace.SpawnRule {
 }
 
 // spawnFixture pins the trail, markers and job store to temporary dirs, so a spawn test
-// writes nothing a developer's checkout reads.
+// writes nothing a developer's checkout reads. The root is a repository, so a
+// row forked there records an authority.
 func spawnFixture(t *testing.T) (ctx context.Context, cacheDir string) {
 	t.Helper()
 	testkit.Isolate(t)
-	root := testkit.NewWorkspace(t).Root()
+	root := testkit.NewRepository(t, nil).Root()
 	cacheDir = t.TempDir()
 	return WithLocation(t.Context(), cacheDir, root, root), cacheDir
 }
@@ -303,7 +305,7 @@ func TestApprovedResolveFailureIsReported(t *testing.T) {
 
 // A built-in advice and a workspace advice both reach the reader, and the trail names both.
 func TestDecidedByNamesBothAdvisingSides(t *testing.T) {
-	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	row := types.Job{ID: "wave/worker", Agent: agent.Instructed("the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	execHere(t, ctx, row.ID)
@@ -318,7 +320,7 @@ func TestDecidedByNamesBothAdvisingSides(t *testing.T) {
 
 // Role is computed from the job store, never declared by the caller.
 func TestSpawnRuleRoleIsComputed(t *testing.T) {
-	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	row := types.Job{ID: "wave/worker", Agent: agent.Instructed("the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 
 	probe := &spawnRuleProbe{}
@@ -333,7 +335,7 @@ func TestSpawnRuleRoleIsComputed(t *testing.T) {
 	assert.Equal(t, types.AgentRoleWorker, probe.asked[1].Role)
 	require.NotNil(t, probe.asked[1].Lease)
 	assert.Equal(t, row.ID, probe.asked[1].Lease.ID)
-	assert.Equal(t, row.WritePaths, probe.asked[1].Lease.WritePaths, "the worker sees its whole lease row")
+	assert.Equal(t, row.Paths.Write, probe.asked[1].Lease.Paths.Write, "the worker sees its whole lease row")
 }
 
 // A continue reports how long the addressed agent has been idle since magus last saw it,
@@ -427,7 +429,7 @@ func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
 
 // A workspace advise joins a built-in one rather than being dropped behind it.
 func TestWorkspaceAdviseJoinsABuiltInAdvise(t *testing.T) {
-	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	row := types.Job{ID: "wave/worker", Agent: agent.Instructed("the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 	execHere(t, ctx, row.ID)
 
@@ -522,7 +524,7 @@ func TestSpawnRuleSeesTheRowsModelTier(t *testing.T) {
 	judgeSpawn(ctx, t, deps, "haiku")
 	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	require.Len(t, probe.asked, 2)
-	assert.Equal(t, &types.JobModelTier{Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Source: types.ModelTierSourceMatrix,
+	assert.Equal(t, &agent.JobModelTier{Name: "economy", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix,
 		Reason: "two files", Site: "hack/tiers.buzz:12"}, probe.asked[0].ModelTier)
 	assert.Nil(t, probe.asked[1].ModelTier)
 }
@@ -826,7 +828,7 @@ func TestSubagentStopRecordsOnlyReportedUsage(t *testing.T) {
 // The rule reads the same job rows the guard graded the call against, through the
 // snapshot magus\workspace().jobs answers from.
 func TestSpawnRuleSeesTheGuardsJobRows(t *testing.T) {
-	row := types.Job{ID: "guard-facts", Criteria: "the seam", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	row := types.Job{ID: "guard-facts", Agent: agent.Instructed("the seam"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 	var seen []job.Snapshot
 	rule := func(ctx context.Context, _ types.SpawnRequest, _ hint.Gate) (types.GuardVerdict, error) {
@@ -840,7 +842,7 @@ func TestSpawnRuleSeesTheGuardsJobRows(t *testing.T) {
 	require.NoError(t, seen[0].Err)
 	require.Len(t, seen[0].Rows, 1)
 	assert.Equal(t, row.ID, seen[0].Rows[0].ID)
-	assert.Equal(t, row.WritePaths, seen[0].Rows[0].WritePaths)
+	assert.Equal(t, row.Paths.Write, seen[0].Rows[0].Paths.Write)
 }
 
 // A spawn titled `<parent>/<role> <job>` naming a live job attributes the child to it:
@@ -856,10 +858,10 @@ func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 		Registered   bool
 	}
 	const title = "orchestrator/integrator guard-facts"
-	running := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
-	reported := types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}, ReportedBase: "77aa01c", Registered: 1}
-	finished := types.Job{ID: "guard-facts", State: types.StatePass, WritePaths: []string{"internal/guard/**"}}
-	nested := types.Job{ID: "orchestrator/facts", Parent: "orchestrator", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	running := types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
+	reported := types.Job{ID: "guard-facts", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, ReportedBase: "77aa01c", Registered: 1}
+	finished := types.Job{ID: "guard-facts", State: types.StatePass, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
+	nested := types.Job{ID: "orchestrator/facts", Parent: "orchestrator", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
 	// Positional: the spawn title, its isolation, an explicit --lease, the stored row, and
 	// what the child's write then meets.
 	cases := []struct {
@@ -919,7 +921,7 @@ func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
 // The attribution is the agent's own: its parent, calling with no agent id, is not
 // graded under the job it handed out.
 func TestAttributionDoesNotReachTheParent(t *testing.T) {
-	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Registered: 1, ReportedBase: "77aa01c"}
+	row := types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, Registered: 1, ReportedBase: "77aa01c"}
 	ctx, _ := fleetFixture(t, row)
 	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator guard-facts", "", "", "", "a1b2c3"), Host: "claude-code"})
 	v := Judge(ctx, Dependencies{}, Request{Input: `{"session_id":"8f2c6a1e","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}`, Host: "claude-code"})
@@ -931,7 +933,7 @@ func TestAttributionDoesNotReachTheParent(t *testing.T) {
 // calls are still graded under the job, with its base recorded from its own checkout and
 // the lease on every trail event.
 func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
-	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	row := types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
 	spawnerCtx, spawnerRoot := fleetFixture(t, row)
 	spawnerHead := commitCheckout(t, spawnerRoot)
 	// A linked worktree of the spawner's repository, which is what shares the job store.
@@ -980,7 +982,7 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 // sweep later stats: a registration in the spawner's checkout would outlive the worker's
 // worktree and keep the job live forever.
 func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
-	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Validated: 1}
+	row := types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, Validated: 1}
 	_, spawnerRoot := fleetFixture(t, row)
 	head := commitCheckout(t, spawnerRoot)
 	workerRoot := linkedWorktree(t, spawnerRoot)
@@ -998,19 +1000,19 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 	// The store stamps the schema, the times, who registered and the holder; they are copied
 	// across so the rest of the row is compared whole.
 	got := rows[0]
+	// The fork's authority predates the spawner's later commit.
+	assert.NotEqual(t, head, got.Authority)
 	assert.Equal(t, types.Job{
-		Schema:       got.Schema,
 		ID:           row.ID,
-		WritePaths:   row.WritePaths,
+		Paths:        types.JobPaths{Write: row.Paths.Write},
 		State:        types.StateRunning,
-		Holder:       got.Holder,
 		ReportedBase: head,
 		BaseVerdict:  got.BaseVerdict,
 		RegisteredBy: got.RegisteredBy,
+		Authority:    got.Authority,
 		Registered:   got.Registered,
 		CheckoutRoot: abs,
 		Generation:   1,
-		Attempts:     1,
 		Validated:    row.Validated,
 		Created:      got.Created,
 		Updated:      got.Updated,
@@ -1040,7 +1042,7 @@ func TestRegisterAgentBaseFollowsADivergedCheckout(t *testing.T) {
 		{"no revision to read", created, "", created, types.BaseDiverged},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+			row := types.Job{ID: "lease-life", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
 			ctx, root := fleetFixture(t, row)
 			at := hookLocation(ctx, Dependencies{})
 			revs := map[string]string{}
@@ -1077,7 +1079,7 @@ func TestRegisterAgentBaseFollowsADivergedCheckout(t *testing.T) {
 // A diverged worker that exits after a commit keeps its exit. Exec would reopen
 // the row, and the worker's next call after `job exit` would read it running.
 func TestRegisterAgentBaseLeavesAnExitedRowExited(t *testing.T) {
-	row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	row := types.Job{ID: "lease-life", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
 	ctx, root := fleetFixture(t, row)
 	at := hookLocation(ctx, Dependencies{})
 	checkpoint, created, committed := commitCheckout(t, root), commitCheckout(t, root), commitCheckout(t, root)
@@ -1104,7 +1106,7 @@ func TestRegisterAgentBaseLeavesAnExitedRowExited(t *testing.T) {
 // A registration the job store refuses (another checkout holds the job) is not tried again
 // until the row changes: each try reads the checkout's base, a VCS process, for nothing.
 func TestRegisterAgentBaseStopsAfterARefusal(t *testing.T) {
-	row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, CheckoutRoot: t.TempDir()}
+	row := types.Job{ID: "lease-life", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, CheckoutRoot: t.TempDir()}
 	ctx, root := fleetFixture(t, row)
 	commitCheckout(t, root)
 	at := hookLocation(ctx, Dependencies{})
@@ -1125,7 +1127,7 @@ func TestRegisterAgentBaseStopsAfterARefusal(t *testing.T) {
 // holds too: only the store's holder refusal is remembered, never the row's look.
 func TestRegisterAgentBaseRetriesAPassingFailure(t *testing.T) {
 	t.Run("a declared row", func(t *testing.T) {
-		row := types.Job{ID: "lease-life", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}}
+		row := types.Job{ID: "lease-life", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
 		ctx, root := fleetFixture(t, row)
 		commitCheckout(t, root)
 		at := hookLocation(ctx, Dependencies{})
@@ -1136,7 +1138,7 @@ func TestRegisterAgentBaseRetriesAPassingFailure(t *testing.T) {
 		assert.True(t, registerAgentBase(ctx, Dependencies{}, at, row.ID), "the lapsed try is not remembered as a refusal")
 	})
 	t.Run("a row another checkout holds", func(t *testing.T) {
-		row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, CheckoutRoot: t.TempDir()}
+		row := types.Job{ID: "lease-life", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, CheckoutRoot: t.TempDir()}
 		ctx, root := fleetFixture(t, row)
 		commitCheckout(t, root)
 		at := hookLocation(ctx, Dependencies{})
@@ -1198,7 +1200,7 @@ func TestRevisionIsReadOncePerJudgment(t *testing.T) {
 // subagent id arrives as --agent beside the extracted command. It must attribute exactly as
 // the envelope's agent_id does, or every subagent shell call is graded as its parent's.
 func TestAgentFlagAttributesAnExtractedCommandToTheSubagentsJob(t *testing.T) {
-	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Registered: 1, ReportedBase: "77aa01c"}
+	row := types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, Registered: 1, ReportedBase: "77aa01c"}
 	ctx, _ := fleetFixture(t, row)
 	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator guard-facts", "", "", "", "a1b2c3"), Host: "claude-code"})
 
@@ -1215,7 +1217,7 @@ func TestAgentFlagAttributesAnExtractedCommandToTheSubagentsJob(t *testing.T) {
 // it. An unleased spawner, the orchestrator or a person, may name any live job.
 func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
 	running := func(id, parent string) types.Job {
-		return types.Job{ID: id, Parent: parent, State: types.StateRunning, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}, Registered: 1, ReportedBase: "77aa01c"}
+		return types.Job{ID: id, Parent: parent, State: types.StateRunning, Paths: types.JobPaths{Write: []string{fmt.Sprintf("internal/%s/**", id)}}, Registered: 1, ReportedBase: "77aa01c"}
 	}
 	ctx, root := fleetFixture(t, running("worker-job", ""), running("victim-job", ""), running("sub-job", "worker-job"), running("grandchild-job", "sub-job"))
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
@@ -1252,7 +1254,7 @@ func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
 // when neither does. The trail records which source answered.
 func TestARecordOutranksTheBaggageClaim(t *testing.T) {
 	running := func(id string) types.Job {
-		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}, Registered: 1, ReportedBase: "77aa01c"}
+		return types.Job{ID: id, State: types.StateRunning, Paths: types.JobPaths{Write: []string{fmt.Sprintf("internal/%s/**", id)}}, Registered: 1, ReportedBase: "77aa01c"}
 	}
 	ctx, _ := fleetFixture(t, running("agent-job"), running("bound-job"), running("claimed-job"))
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
@@ -1326,9 +1328,9 @@ func gradedAs(v types.GuardJudgment) graded {
 // CLI wrote a checkout-wide marker, the orchestrator's session fell back to it, and its
 // next `job fork` and `git merge` were refused as the worker's.
 func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
-	research := types.Job{ID: "linux-platform-design", Parent: "harness-audit", Criteria: "research only", ReadOnly: true, State: types.StateDeclared, Checkpoint: "23558048b"}
+	research := types.Job{ID: "linux-platform-design", Parent: "harness-audit", Agent: agent.Instructed("research only"), ReadOnly: true, State: types.StateDeclared, Checkpoint: "23558048b"}
 	ctx, root := fleetFixture(t,
-		types.Job{ID: "harness-audit", Criteria: "the audit", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}},
+		types.Job{ID: "harness-audit", Agent: agent.Instructed("the audit"), State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}},
 		research)
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	const session = "8f2c6a1e"
@@ -1347,12 +1349,12 @@ func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
 	assert.Equal(t, graded{Lease: research.ID, From: types.LeaseSourceAgent}, gradedAs(child), "the child is graded under the job it took")
 
 	got := map[string]graded{}
-	for _, command := range []string{"./magus job fork harness-audit/next --criteria 'the next step'", "git merge linux-platform-design"} {
+	for _, command := range []string{"./magus job fork harness-audit/next --instructions 'the next step'", "git merge linux-platform-design"} {
 		got[command] = gradedAs(Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "", command), Host: "claude-code"}))
 	}
 	assert.Equal(t, map[string]graded{
-		"./magus job fork harness-audit/next --criteria 'the next step'": {},
-		"git merge linux-platform-design":                                {},
+		"./magus job fork harness-audit/next --instructions 'the next step'": {},
+		"git merge linux-platform-design":                                    {},
 	}, got, "the parent sharing the child's session and checkout acts under nothing")
 
 	lease, from := job.ActingLease(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir}, "")
@@ -1363,7 +1365,7 @@ func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
 // nobody sharing its session or checkout.
 func TestExecBindsTheCallersIdentity(t *testing.T) {
 	running := func(id string) types.Job {
-		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}, Registered: 1, ReportedBase: "77aa01c"}
+		return types.Job{ID: id, State: types.StateRunning, Paths: types.JobPaths{Write: []string{fmt.Sprintf("internal/%s/**", id)}}, Registered: 1, ReportedBase: "77aa01c"}
 	}
 	ctx, root := fleetFixture(t, running("session-job"), running("agent-job"), running("tool-job"))
 	commitCheckout(t, root)
@@ -1404,8 +1406,8 @@ func TestExecBindsTheCallersIdentity(t *testing.T) {
 func TestExecAfterAnEndedJobRebinds(t *testing.T) {
 	for _, state := range []types.JobState{types.StateExited, types.StatePass, types.StateFail, types.StateNoReturn} {
 		t.Run(string(state), func(t *testing.T) {
-			held := types.Job{ID: "held-job", State: state, WritePaths: []string{"internal/held/**"}, Registered: 1}
-			next := types.Job{ID: "next-job", State: types.StateDeclared, WritePaths: []string{"internal/next/**"}}
+			held := types.Job{ID: "held-job", State: state, Paths: types.JobPaths{Write: []string{"internal/held/**"}}, Registered: 1}
+			next := types.Job{ID: "next-job", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/next/**"}}}
 			ctx, _ := fleetFixture(t, held, next)
 			who := hookAttribution{Host: "claude-code", Session: "s1", Agent: "a1"}
 			bindCaller(t, ctx, who, held.ID)
@@ -1426,8 +1428,8 @@ func TestExecAfterAnEndedJobRebinds(t *testing.T) {
 func TestExecUnderARunningJobIsRefused(t *testing.T) {
 	for _, state := range []types.JobState{types.StateDeclared, types.StateRunning} {
 		t.Run(string(state), func(t *testing.T) {
-			held := types.Job{ID: "held-job", State: state, WritePaths: []string{"internal/held/**"}, Registered: 1}
-			other := types.Job{ID: "other-job", State: types.StateDeclared, WritePaths: []string{"internal/other/**"}}
+			held := types.Job{ID: "held-job", State: state, Paths: types.JobPaths{Write: []string{"internal/held/**"}}, Registered: 1}
+			other := types.Job{ID: "other-job", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/other/**"}}}
 			ctx, _ := fleetFixture(t, held, other)
 			who := hookAttribution{Host: "claude-code", Session: "s1", Agent: "a1"}
 			bindCaller(t, ctx, who, held.ID)
@@ -1446,7 +1448,7 @@ func TestExecUnderARunningJobIsRefused(t *testing.T) {
 // A worker its spawn already attributed is bound; its exec records the base and binds
 // nothing new, here or in the checkout.
 func TestAttributedWorkersExecIsIdempotent(t *testing.T) {
-	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Registered: 1, ReportedBase: "77aa01c"}
+	row := types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, Registered: 1, ReportedBase: "77aa01c"}
 	ctx, _ := fleetFixture(t, row)
 	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator guard-facts", "", "", "", "a1b2c3"), Host: "claude-code"})
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
@@ -1648,7 +1650,7 @@ func TestTranscriptUsageCodexTokenCount(t *testing.T) {
 func TestAnExitedBindingYieldsToABaggageClaim(t *testing.T) {
 	who := hookAttribution{Host: "claude-code", Session: "s1", Agent: "a1"}
 	row := func(id string, state types.JobState) types.Job {
-		return types.Job{ID: id, State: state, WritePaths: []string{fmt.Sprintf("internal/%s/**", id)}, Registered: 1, ReportedBase: "77aa01c"}
+		return types.Job{ID: id, State: state, Paths: types.JobPaths{Write: []string{fmt.Sprintf("internal/%s/**", id)}}, Registered: 1, ReportedBase: "77aa01c"}
 	}
 	for _, tc := range []struct {
 		name  string
@@ -1750,8 +1752,8 @@ func TestSpawnIntoAFullBudgetSkipsAdviceForAWorkerThatRunsNoTarget(t *testing.T)
 		{"read-only with a check", types.Job{ReadOnly: true, Check: check}, true},
 		{"read-only with a check goal", types.Job{ReadOnly: true, Goals: []types.Goal{{Kind: types.GoalKindCheck, Check: *check}}}, true},
 		{"read-only with a paths goal only", types.Job{ReadOnly: true, Goals: []types.Goal{{Kind: types.GoalKindPaths, Paths: []string{"a/**"}}}}, false},
-		{"write paths", types.Job{WritePaths: []string{"a/**"}}, true},
-		{"read-only with write paths", types.Job{ReadOnly: true, WritePaths: []string{"a/**"}}, true},
+		{"write paths", types.Job{Paths: types.JobPaths{Write: []string{"a/**"}}}, true},
+		{"read-only with write paths", types.Job{ReadOnly: true, Paths: types.JobPaths{Write: []string{"a/**"}}}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			standBudget(t, full)
@@ -1794,7 +1796,7 @@ func (s *SpawnUnisolatedSuite) spawn(row types.Job, isolated bool, own func(root
 }
 
 func (s *SpawnUnisolatedSuite) writer() types.Job {
-	return types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"a/**"}}
+	return types.Job{ID: "guard-facts", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a/**"}}}
 }
 
 func (s *SpawnUnisolatedSuite) TestIsolatedWritingRowWithNoCheckoutIsDenied() {
@@ -1811,7 +1813,7 @@ func (s *SpawnUnisolatedSuite) TestRowWhoseCheckoutIsTheSpawnersIsDenied() {
 func (s *SpawnUnisolatedSuite) TestReadOnlyRowPasses() {
 	row := s.writer()
 	row.ReadOnly = true
-	row.WritePaths = nil
+	row.Paths.Write = nil
 	v := s.spawn(row, true, nil)
 	assert.NotEqual(s.T(), string(denyRuleSpawnUnisolatedRow), v.Rule)
 }

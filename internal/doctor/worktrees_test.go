@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,14 +29,14 @@ func mkWorktree(t *testing.T, root, name string, live bool) {
 func TestCheckStaleWorktrees(t *testing.T) {
 	t.Run("no worktrees dir is fine", func(t *testing.T) {
 		c := checkStaleWorktrees(t.TempDir())
-		assert.Equal(t, types.CheckOK, c.Status)
+		assert.Equal(t, check.OK, c.Status)
 	})
 
 	t.Run("live worktrees pass", func(t *testing.T) {
 		root := t.TempDir()
 		mkWorktree(t, root, "feature-a", true)
 		mkWorktree(t, root, "feature-b", true)
-		assert.Equal(t, types.CheckOK, checkStaleWorktrees(root).Status)
+		assert.Equal(t, check.OK, checkStaleWorktrees(root).Status)
 	})
 
 	// The case that actually happened: `git worktree prune` clears git's registry but
@@ -46,7 +47,7 @@ func TestCheckStaleWorktrees(t *testing.T) {
 		mkWorktree(t, root, "graph-explorer-viz-8008f6", false)
 
 		c := checkStaleWorktrees(root)
-		require.Equal(t, types.CheckFail, c.Status)
+		require.Equal(t, check.Fail, c.Status)
 		assert.Contains(t, c.Message, "MGS1002", "the message must name what it breaks, not just that it is stale")
 		assert.Contains(t, c.Details, filepath.Join(".claude/worktrees", "graph-explorer-viz-8008f6"))
 		assert.NotContains(t, c.Details, filepath.Join(".claude/worktrees", "live-one"))
@@ -57,7 +58,7 @@ func TestCheckStaleWorktrees(t *testing.T) {
 		root := t.TempDir()
 		require.NoError(t, os.MkdirAll(filepath.Join(root, ".claude", "worktrees"), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(root, ".claude", "worktrees", "README"), []byte("x"), 0o600))
-		assert.Equal(t, types.CheckOK, checkStaleWorktrees(root).Status)
+		assert.Equal(t, check.OK, checkStaleWorktrees(root).Status)
 	})
 }
 
@@ -74,14 +75,14 @@ func TestDiskFullFloorMatchesTheCriticalDefault(t *testing.T) {
 
 func TestDiskTrendWithNoSamplesIsAdviceSinceNothingWouldNotice(t *testing.T) {
 	got := diskTrend(nil, config.Defaults().Disk)
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Equal(t, check.Advice, got.Status)
 	assert.Contains(t, got.Message, "nothing would notice a filling disk")
 	assert.Contains(t, got.Message, "disk.min_free_mb 51200 (the default)")
 }
 
 func TestDiskTrendIsAdviceBelowTheFloor(t *testing.T) {
 	got := diskTrend([]types.DiskSample{sampleAt(2, 40, "sample")}, config.Defaults().Disk)
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Equal(t, check.Advice, got.Status)
 	assert.Contains(t, got.Message, "40960 MB free of 512000 MB on /w")
 }
 
@@ -89,7 +90,7 @@ func TestDiskTrendIsAdviceWhenFreeSpaceFallsFast(t *testing.T) {
 	cfg := config.Defaults().Disk
 	cfg.GrowthMBPerHour = 1024
 	got := diskTrend([]types.DiskSample{sampleAt(48, 400, "sample"), sampleAt(4, 300, "sample"), sampleAt(0, 290, "sample")}, cfg)
-	assert.Equal(t, types.CheckAdvice, got.Status, "10 GiB in 4h is past 1 GiB an hour; the 48h-old sample is outside the day")
+	assert.Equal(t, check.Advice, got.Status, "10 GiB in 4h is past 1 GiB an hour; the 48h-old sample is outside the day")
 	assert.Contains(t, got.Message, "changed -2560 MB an hour over 4.0h")
 	assert.Contains(t, got.Message, "disk.growth_mb_per_hour 1024")
 	assert.NotContains(t, got.Message, "1024 (the default)", "a set threshold is not called the default")
@@ -99,7 +100,7 @@ func TestDiskTrendNamesTheLastReclaimChunks(t *testing.T) {
 	done := sampleAt(1, 300, "reclaimed")
 	done.Detail = "removed 2 worktrees"
 	got := diskTrend([]types.DiskSample{sampleAt(2, 300, "sample"), done}, config.Defaults().Disk)
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "removed 2 worktrees")
 }

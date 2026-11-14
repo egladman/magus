@@ -75,9 +75,9 @@ func TestGrantEndsWithTheJob(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, live, "a grant ends at the job's terminal state")
 
-	reforked := row
-	reforked.Attempts = row.Attempts + 1
-	_, live, err = s.LiveGrant(reforked, "hooks-off", now)
+	superseded := types.Attempt{Job: "a", N: 1, Status: types.AttemptStatus{State: types.StateFail}}
+	require.NoError(t, s.appendAttempts(t.Context(), superseded))
+	_, live, err = s.LiveGrant(row, "hooks-off", now)
 	require.NoError(t, err)
 	assert.False(t, live, "the next attempt is not the one the person approved")
 

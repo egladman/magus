@@ -3,6 +3,7 @@ namespace markfeedback;
 import "flags";
 import "fs";
 import "magus";
+import "magus/trail";
 import "result";
 import "std";
 import "strings";
@@ -20,14 +21,14 @@ final VERDICTS = ["should-deny", "should-advise", "wrong-deny", "fine"];
 // plan resolves each label (C3) or id (fb...) against the report's rows and builds the
 // marks to store. A label names a position in this report only; the mark carries the
 // row's id, so it outlives the position.
-export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > result\Result::<[TrailMark]> {
+export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > result\Result::<[magus\trail\Mark]> {
     if (VERDICTS.indexOf(verdict) == null) {
-        return result\fail::<[TrailMark]>("mark-feedback: --verdict is one of {VERDICTS.join(", ")}, not `{verdict}`\n{USAGE}");
+        return result\fail::<[magus\trail\Mark]>("mark-feedback: --verdict is one of {VERDICTS.join(", ")}, not `{verdict}`\n{USAGE}");
     }
     if (refs.len() == 0) {
-        return result\fail::<[TrailMark]>("mark-feedback: name at least one row by its label (C3) or id\n{USAGE}");
+        return result\fail::<[magus\trail\Mark]>("mark-feedback: name at least one row by its label (C3) or id\n{USAGE}");
     }
-    final marks = mut [<TrailMark>];
+    final marks = mut [<magus\trail\Mark>];
     foreach (ref in refs) {
         var found: show\Row? = null;
         foreach (row in r.rows + r.once) {
@@ -40,18 +41,18 @@ export fun plan(r: show\Report, refs: [str], verdict: str, note: str) > result\R
             foreach (row in r.rows) {
                 labels.append(row.label);
             }
-            return result\fail::<[TrailMark]>("mark-feedback: {ref} is not a row of session {r.session} in this window; its rows are {labels.join(" ")}");
+            return result\fail::<[magus\trail\Mark]>("mark-feedback: {ref} is not a row of session {r.session} in this window; its rows are {labels.join(" ")}");
         }
         final row = found!;
-        marks.append(TrailMark{
-            id = row.id, section = magus\TrailSection(row.section), key = row.key, rule = row.rule, verdict = magus\TrailVerdict(verdict), note = note,
+        marks.append(magus\trail\Mark{
+            id = row.id, section = magus\trail\Section(row.section), key = row.key, rule = row.rule, verdict = magus\trail\Verdict(verdict), note = note,
             session = r.session, at = 0, examples = row.examples,
         });
     }
-    return result\ok::<[TrailMark]>(marks);
+    return result\ok::<[magus\trail\Mark]>(marks);
 }
 
-fun planLine(m: TrailMark, r: show\Report) > str {
+fun planLine(m: magus\trail\Mark, r: show\Report) > str {
     var label = "";
     foreach (row in r.rows) {
         if (row.id == m.id) {
@@ -104,7 +105,7 @@ fun fixture() > result\Result::<show\Report> {
         if (trail.error != null) {
             return result\Result::<show\Report>{ error = trail.error };
         }
-        return result\ok::<show\Report>(show\fold(trail.value!, marks: [<TrailMark>]));
+        return result\ok::<show\Report>(show\fold(trail.value!, marks: [<magus\trail\Mark>]));
     } catch (err: any) {
         return result\caught::<show\Report>(err, doing: "mark-feedback: read the fixture");
     }

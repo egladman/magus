@@ -457,15 +457,6 @@ Env\-only, no magus.yaml equivalent: how tool versions key the cache: project (p
 \fBMAGUS_VCS_<NAME>_BASE_REF\fR
 Per\-VCS base\-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs
 .TP
-\fBMAGUS_PROC_SOCKET\fR
-Env\-only, no magus.yaml equivalent: the proc\-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it
-.TP
-\fBMAGUS_PROC_TOKEN\fR
-Env\-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus
-.TP
-\fBMAGUS_PROC_TREE\fR
-Env\-only, no magus.yaml equivalent: the ids of every bounded process tree a process descends from, inherited by every child so a command's leftovers are found; set by magus, never by hand
-.TP
 \fBMAGUS_SHARD\fR
 CI matrix shard ID (e.g. "0"); equivalent to magus run \-\-shard; set by .github/actions/magus
 .TP
@@ -474,9 +465,6 @@ Total shard count for this matrix run; equivalent to magus run \-\-n\-shards; se
 .TP
 \fBMAGUS_UPDATE_URL\fR
 Env\-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self\-hosted copy of index.json to use a private update channel (default: https://eli.gladman.cc/magus/public/release/index.json)
-.TP
-\fBMAGUS_STAMPED_LEASE\fR
-Set by a shared server on a script it forks for a remote caller, and by an authenticated MCP caller for a child magus: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant; never set it by hand
 .TP
 \fBMAGUS_NO_BOOTSTRAP_EXEC\fR
 Env\-only, no magus.yaml equivalent: when 1, true or yes, disable the pre\-workspace\-load check that replaces this process with a workspace\-local ./magus found by walking up from the working directory (or \-\-root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
@@ -499,38 +487,53 @@ Env\-only, no magus.yaml equivalent: write Go profiles for one invocation, as ki
 \fBMAGUS_MCP_TOKEN\fR
 Env\-only: the secret reference shipped harness spells name for the MCP bearer token; the environment secret provider reads it from this variable
 .TP
-\fBMAGUS_MCP_BUZZ_PURE\fR
-Set internally by the buzz MCP tool for its forked transform worker; never set it by hand
-.TP
-\fBMAGUS_MCP_CLIENT\fR
-Set internally by the client MCP tool for its forked worker; never set it by hand
-.TP
-\fBMAGUS_MCP_CLIENT_HOST\fR
-Set internally by the client MCP tool: the calling client's name, stamped onto the worker's activity trail; never set it by hand
-.TP
-\fBMAGUS_MCP_CLIENT_LEASE\fR
-Set internally by the client MCP tool: the calling client's job lease, or empty when the transport stamped none; never set it by hand
-.TP
 \fBMAGUS_S3_BUCKET\fR
 Env\-only: the bucket the aws/s3\-cache spell stores remote\-cache artifacts in
 .TP
 \fBMAGUS_S3_ENDPOINT\fR
 Env\-only: the S3\-compatible endpoint the aws/s3\-cache spell talks to (default: https://s3.<region>.amazonaws.com)
+.RE
+.SS Set by magus for the processes it spawns, never by hand
+.RS
+.TP
+\fBMAGUS_PROC_SOCKET\fR
+The proc\-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it
+.TP
+\fBMAGUS_PROC_TOKEN\fR
+The secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus
+.TP
+\fBMAGUS_PROC_TREE\fR
+The ids of every bounded process tree a process descends from, inherited by every child so a command's leftovers are found
+.TP
+\fBMAGUS_STAMPED_LEASE\fR
+Set by a shared server on a script it forks for a remote caller, and by an authenticated MCP caller for a child magus: the BAGGAGE lease was stamped by the transport rather than claimed by the spawner. It only downgrades: a missing lease reads as unstamped instead of unbound, never as a grant
+.TP
+\fBMAGUS_MCP_BUZZ_PURE\fR
+Set by the buzz MCP tool for its forked transform worker
+.TP
+\fBMAGUS_MCP_CLIENT\fR
+Set by the client MCP tool for its forked worker
+.TP
+\fBMAGUS_MCP_CLIENT_HOST\fR
+Set by the client MCP tool: the calling client's name, stamped onto the worker's activity trail
+.TP
+\fBMAGUS_MCP_CLIENT_LEASE\fR
+Set by the client MCP tool: the calling client's job lease, or empty when the transport stamped none
 .TP
 \fBMAGUS_LEVEL\fR
-Set by magus for the processes it spawns: the magus recursion depth, like make's MAKELEVEL; never set it by hand
+The magus recursion depth, like make's MAKELEVEL
 .TP
 \fBMAGUS_INVOCATION_ANCESTORS\fR
-Set by magus for the processes it spawns: the comma\-separated invocations a nested magus runs underneath; never set it by hand
+The comma\-separated invocations a nested magus runs underneath
 .TP
 \fBMAGUS_BOOTSTRAP_EXEC_DONE\fR
-Set by magus when it replaces itself with a workspace\-local ./magus, so the replacement never hops again; never set it by hand
+Set when magus replaces itself with a workspace\-local ./magus, so the replacement never hops again
 .TP
 \fBMAGUS_SYMBOL_INDEX\fR
-Set by magus for a spell's symbol indexer op: the path the indexer writes its SCIP index to; never set it by hand
+Set for a spell's symbol indexer op: the path the indexer writes its SCIP index to
 .TP
 \fBMAGUS_WORKSPACE_ROOT\fR
-Set by magus for a spell's symbol indexer op: the workspace root the index's paths are relative to; never set it by hand
+Set for a spell's symbol indexer op: the workspace root the index's paths are relative to
 .TP
 \fBMAGUS_INTERNAL_ADVICE_MODE\fR
 Set by `magus diff` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice
@@ -539,7 +542,7 @@ Set by `magus diff` for the advice script it runs; the two halves of one feature
 Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting
 .TP
 \fBMAGUS_DETACHED_REFRESH\fR
-Set by magus on the detached symbol refresh a graph read starts, so that process exits rather than queues behind another refresh; never set it by hand
+Set on the detached symbol refresh a graph read starts, so that process exits rather than queues behind another refresh
 .RE
 .SH FILES
 .TP

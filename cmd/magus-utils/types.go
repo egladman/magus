@@ -59,7 +59,7 @@ func runTypes(args []string) error {
 	// gap it actually is.
 	entry, ok := boundaryTypeNamed(*typeName)
 	if !ok {
-		return fmt.Errorf("unknown boundary type %q: declare it in boundaryTypes first", *typeName)
+		return fmt.Errorf("unknown boundary type %q: no host signature or boundaryRoots entry reaches it", *typeName)
 	}
 
 	out, err := renderBuzzMirror(entry.Name, entry.Type)
@@ -90,7 +90,7 @@ func renderListedMirrors(goFile string) error {
 		g.Go(func() error {
 			entry, found := boundaryTypeNamed(typeName)
 			if !found {
-				return fmt.Errorf("%s: unknown boundary type %q: declare it in boundaryTypes first", goFile, typeName)
+				return fmt.Errorf("%s: unknown boundary type %q: no host signature or boundaryRoots entry reaches it", goFile, typeName)
 			}
 			src, err := renderBuzzMirror(entry.Name, entry.Type)
 			if err != nil {
@@ -122,16 +122,22 @@ func typesDirective(line string) (typeName, out string, ok bool) {
 // field's object name through the boundary registry, and mirror a timestamp as a string.
 // The Namer keeps a RENAMED mirror referenceable: types.ProjectsOutput
 // declares as Projects, and its Go name would name an undeclared object.
-func mirrorOptions() buzzgen.Options {
+func mirrorOptions() buzzgen.Options { return mirrorOptionsIn("") }
+
+// mirrorOptionsIn is mirrorOptions for a declaration in the module at path,
+// which names a nested namespace's type bare only inside that namespace.
+func mirrorOptionsIn(module string) buzzgen.Options {
 	opts := buzzgen.DefaultOptions()
-	opts.Namer = buzzName
+	opts.Namer = func(t reflect.Type) string { return buzzNameIn(module, t) }
 	opts.EnumType = func(t reflect.Type) (name, zero string, ok bool) {
 		e, ok := buzzEnum(t)
 		if !ok {
 			return "", "", false
 		}
-		return e.Name, fmt.Sprintf("%s.%s", e.Name, e.Cases[0].Name), true
+		name = e.nameIn(module)
+		return name, fmt.Sprintf("%s.%s", name, e.Cases[0].Name), true
 	}
+	opts.Required = requiredFields
 	return opts
 }
 
@@ -179,10 +185,16 @@ func renderBuzzMirror(name string, rt reflect.Type) ([]byte, error) {
 // from the header so a module bundle (moduledecls) can carry many mirrors under one
 // header instead of repeating the banner per type.
 func renderBuzzMirrorDecl(name string, rt reflect.Type) ([]byte, error) {
+	return renderBuzzMirrorDeclIn("", name, rt)
+}
+
+// renderBuzzMirrorDeclIn is renderBuzzMirrorDecl for a declaration in the
+// module at path.
+func renderBuzzMirrorDeclIn(module, name string, rt reflect.Type) ([]byte, error) {
 	if err := checkNamedStrings(rt); err != nil {
 		return nil, fmt.Errorf("mirror %s: %w", name, err)
 	}
-	return buzzgen.ObjectDecl(name, rt, mirrorOptions())
+	return buzzgen.ObjectDecl(name, rt, mirrorOptionsIn(module))
 }
 
 // enumsUsedBy returns the enums rt's exported fields reference, directly or as a list,

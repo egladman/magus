@@ -48,7 +48,7 @@ final HOOK_TIMEOUT_S = 10;
 final RESUMES_ON_BACKGROUND_FROM = "2.1.299";
 
 // Every tool, so magus judges every call by its tool and the shape of its input, and a tool
-// no rule can read is named rather than run unseen (the unjudged-tool rule). Skill loads
+// no rule can read is named rather than run unseen (the unjudged-step rule). Skill loads
 // ride it too, which is what lets mgs_getLimits say this host's loads are observed.
 final EVERY_TOOL = "*";
 
@@ -201,7 +201,7 @@ export fun mgs_listEntries() > [ManagedEntries] {
 fun claude_tools_dir() > str { return ".claude/magus/tools"; }
 
 // Every tool this host offers that the guard should know, by Claude Code's own name and
-// what it can do. A tool missing here is one the guard cannot judge (unjudged-tool), so a
+// what it can do. A tool missing here is one the guard cannot judge (unjudged-step), so a
 // new tool stays refused where that rule denies until a row is added.
 fun claude_tools() > [HarnessTool] {
     final rows = mut [<HarnessTool>];
@@ -215,6 +215,8 @@ fun claude_tools() > [HarnessTool] {
     foreach (name in ["Write", "Edit", "MultiEdit", "NotebookEdit"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.writes}); }
     foreach (name in ["Agent", "Task", "SendMessage", "ScheduleWakeup"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.spawns}); }
     rows.append(HarnessTool{name = "ReadNotifications", capability = ToolCapability.reads});
+    // Inert, as the desktop app's own send_message row is.
+    rows.append(HarnessTool{name = "mcp__claude-code-remote__send_message", capability = ToolCapability.inert});
     foreach (name in [
         "BashOutput", "KillShell", "TaskOutput", "TaskStop", "TodoWrite", "WebFetch", "WebSearch",
         "ExitPlanMode", "EnterPlanMode", "AskUserQuestion", "Skill", "ToolSearch",
@@ -240,7 +242,7 @@ fun ccd_rows(family: str, tools: [str], capability: ToolCapability) > [HarnessTo
 }
 
 // The desktop app's own controls, mcp__ccd_<family>__<tool>. mcp__ccd_pr__set_auto_merge
-// has no row on purpose: a person enables auto-merge, so unjudged-tool refuses it.
+// has no row on purpose: a person enables auto-merge, so unjudged-step refuses it.
 fun claude_desktop_tools() > [HarnessTool] {
     final groups = [
         ccd_rows("session", tools: ["start_session", "hand_off_to_session", "move_to_cloud"], capability: ToolCapability.spawns),
@@ -279,7 +281,7 @@ fun claude_desktop_tools() > [HarnessTool] {
 }
 
 export fun mgs_listTools() > HarnessTools {
-    return HarnessTools{dir = claude_tools_dir(), rows = claude_tools()};
+    return HarnessTools{dir = claude_tools_dir(), tools = claude_tools()};
 }
 
 // Common hook input fields no other host sends
@@ -307,25 +309,25 @@ export fun mgs_getLimits() > Limits {
 //
 // tier is the case of the shipped model tiers (magus/modeltiers) this exact id runs, "" for
 // none: a workspace that declares no tiers of its own maps each case to the row naming it,
-// and the agents magus ships run on the economy row. alias is the short name the host takes
+// and the agents magus ships run on the routine row. alias is the short name the host takes
 // for the model in a spawn, matched exactly, "" for none.
-fun claude_model(id: str, tier: str, alias: str, window: int, price: Price) > ModelRow {
-    return ModelRow{id = id, tier = tier, alias = alias, window = window, price = price};
+fun claude_model(id: str, tier: str, alias: str, window: int, price: Price) > HarnessModel {
+    return HarnessModel{id = id, tier = tier, alias = alias, window = window, price = price};
 }
 
-fun claude_models() > [ModelRow] {
+fun claude_models() > [HarnessModel] {
     return [
         claude_model("claude-fable-5-1", tier: "", alias: "", window: 1000000,
             price: Price{input = 10.0, cacheWrite5m = 12.5, cacheWrite1h = 20.0, cacheRead = 0.25, output = 50.0}),
-        claude_model("claude-opus-5-5", tier: "principal", alias: "opus", window: 1000000,
+        claude_model("claude-opus-5-5", tier: "design", alias: "opus", window: 1000000,
             price: Price{input = 4.0, cacheWrite5m = 5.0, cacheWrite1h = 8.0, cacheRead = 0.2, output = 20.0}),
-        claude_model("claude-fable-5-2", tier: "principal", alias: "fable", window: 1000000,
+        claude_model("claude-fable-5-2", tier: "frontier", alias: "fable", window: 1000000,
             price: Price{input = 10.0, cacheWrite5m = 12.5, cacheWrite1h = 20.0, cacheRead = 0.25, output = 50.0}),
-        claude_model("claude-sonnet-5-5", tier: "standard", alias: "sonnet", window: 1000000,
+        claude_model("claude-sonnet-5-5", tier: "bounded", alias: "sonnet", window: 1000000,
             price: Price{input = 2.0, cacheWrite5m = 2.5, cacheWrite1h = 4.0, cacheRead = 0.1, output = 10.0}),
         // The one current model priced by prompt length: every category is 5x above 100000
         // prompt tokens, cache reads and writes included.
-        ModelRow{id = "claude-haiku-5-5", tier = "economy", alias = "haiku", window = 1000000,
+        HarnessModel{id = "claude-haiku-5-5", tier = "routine", alias = "haiku", window = 1000000,
             price = Price{input = 0.1, cacheWrite5m = 0.125, cacheWrite1h = 0.2, cacheRead = 0.01, output = 0.5},
             step = PriceStep{above = 100000, multiplier = 5.0}},
         claude_model("claude-haiku-4-5", tier: "", alias: "", window: 200000,
@@ -333,7 +335,7 @@ fun claude_models() > [ModelRow] {
     ];
 }
 
-export fun mgs_listModels() > [ModelRow] {
+export fun mgs_listModels() > [HarnessModel] {
     return claude_models();
 }
 
@@ -478,7 +480,7 @@ test "mgs_listModels ships the six Claude rows, and only haiku-5-5 steps its pri
     assert\equal(steps.join(","), "claude-haiku-5-5", "the one model priced by prompt length");
 }
 
-test "each shipped tier runs on its rows, by exact id, each under its own alias" {
+test "each shipped tier runs on one row, by exact id, under its own alias" {
     final tiers = mut {<str: str>};
     final aliases = mut {<str: str>};
     foreach (row in claude_models()) {
@@ -491,11 +493,12 @@ test "each shipped tier runs on its rows, by exact id, each under its own alias"
         assert\isTrue(aliases[row.alias] == null, "alias {row.alias} names one row");
         aliases[row.alias] = row.id;
     }
-    assert\equal(tiers["economy"] ?? "", "claude-haiku-5-5", "the shipped agents' tier");
-    assert\equal(tiers["standard"] ?? "", "claude-sonnet-5-5", "the default tier");
-    assert\equal(tiers["principal"] ?? "", "claude-opus-5-5,claude-fable-5-2", "the top tier's two rows");
-    assert\equal(aliases["opus"] ?? "", "claude-opus-5-5", "the top tier's default alias");
-    assert\equal(aliases["fable"] ?? "", "claude-fable-5-2", "the second top-tier row's alias");
+    assert\equal(tiers["routine"] ?? "", "claude-haiku-5-5", "the shipped agents' tier");
+    assert\equal(tiers["bounded"] ?? "", "claude-sonnet-5-5", "the default tier");
+    assert\equal(tiers["design"] ?? "", "claude-opus-5-5", "the design tier runs Opus");
+    assert\equal(tiers["frontier"] ?? "", "claude-fable-5-2", "the frontier tier runs Fable");
+    assert\equal(aliases["opus"] ?? "", "claude-opus-5-5", "the design tier's alias");
+    assert\equal(aliases["fable"] ?? "", "claude-fable-5-2", "the frontier tier's alias");
     assert\equal(aliases.len(), 4, "only the tiered rows carry an alias");
 }
 
@@ -623,7 +626,7 @@ test "mgs_listTools names each tool once" {
     final tools = mgs_listTools();
     assert\equal(tools.dir, ".claude/magus/tools", "beside the settings");
     final seen = mut {<str: bool>};
-    foreach (row in tools.rows) {
+    foreach (row in tools.tools) {
         assert\isTrue(seen[row.name] == null, "{row.name} has one row");
         seen[row.name] = true;
     }
@@ -637,7 +640,7 @@ test "mgs_listTools names each tool once" {
 
 test "the desktop app's tools carry what each can do, and auto-merge has no row" {
     final capability = mut {<str: str>};
-    foreach (row in mgs_listTools().rows) { capability[row.name] = row.capability.value; }
+    foreach (row in mgs_listTools().tools) { capability[row.name] = row.capability.value; }
     foreach (name, want in {
         "mcp__ccd_session__start_session": "spawns",
         "mcp__ccd_session__hand_off_to_session": "spawns",
@@ -659,7 +662,7 @@ test "the desktop app's tools carry what each can do, and auto-merge has no row"
     }) {
         assert\equal(capability[name] ?? "(no row)", want, name);
     }
-    assert\isTrue(capability["mcp__ccd_pr__set_auto_merge"] == null, "a person enables auto-merge, so unjudged-tool refuses the call");
+    assert\isTrue(capability["mcp__ccd_pr__set_auto_merge"] == null, "a person enables auto-merge, so unjudged-step refuses the call");
 }
 
 test "mgs_getMcp registers a per-checkout stdio server" {

@@ -74,7 +74,7 @@ either part replaced by `_`, so a server configured under `mcp.magus` exposes
 OpenCode loads: the entry whose local command names `magus` and `mcp`, or a key called
 `magus` that is not a local command. Under any other setup its calls are not
 recognized as magus's: they go to magus whole under their own name, like every other
-tool the plugin does not judge by name, and the unjudged-tool rule names them (see
+tool the plugin does not judge by name, and the unjudged-step rule names them (see
 [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard)).
 
 ## Quiet output

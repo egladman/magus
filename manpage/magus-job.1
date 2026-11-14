@@ -90,23 +90,26 @@ Make a new checkout of this repository for the job at this directory, outside th
 \fB\-\-checkpoint\fR \fImagus vcs checkpoint -o name\fR
 The working state this job is handed, as magus vcs checkpoint \-o name prints it
 .TP
-\fB\-\-criteria\fR \fIstring\fR
-What this job is for and what done means, as prose; the machine\-checkable half is \-\-check, and the goals a \-\-stdin record declares
-.TP
 \fB\-\-delivery\fR \fIstring\fR
 How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)
 .TP
-\fB\-\-deny\-paths\fR \fIstring\fR
+\fB\-\-deny\-paths\fR \fIvalue\fR
 A path this job may not write, carved out of its write paths; repeatable or comma\-separated
 .TP
-\fB\-\-depends\-on\fR \fIstring\fR
+\fB\-\-depends\-on\fR \fIvalue\fR
 A job this one waits on; repeatable or comma\-separated
 .TP
 \fB\-\-[no\-]fix\fR (default: off)
 Make every edit a problem's fix names without judgment (add a write path, a goal or the integrator's deviation), validating again until none is left, and list only the problems that remain
 .TP
+\fB\-\-instructions\fR \fIstring\fR
+What this job is for and what done means, as prose for its agent; the machine\-checkable half is \-\-check, and the goals a \-\-stdin record declares
+.TP
 \fB\-\-model\fR \fIstring\fR
 The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier
+.TP
+\fB\-\-new\-worker\fR \fIstring\fR
+Start a new worker for this job instead of resuming the warm one of the job it follows, for this reason
 .TP
 \fB\-\-parent\fR \fIstring\fR
 The job this one is forked from
@@ -114,7 +117,7 @@ The job this one is forked from
 \fB\-\-[no\-]read\-only\fR (default: off)
 A job that gathers evidence and writes nothing
 .TP
-\fB\-\-read\-paths\fR \fIstring\fR
+\fB\-\-read\-paths\fR \fIvalue\fR
 A path whose projects this job may read; repeatable or comma\-separated (additive: the written paths are readable already)
 .TP
 \fB\-\-[no\-]schema\fR (default: off)
@@ -260,6 +263,12 @@ Hold jobs' holders off the machine budget until resumed
 .TP
 \fBresume\fR
 Lift the pause on jobs
+.TP
+\fBpin\fR
+Record the hash of the ./magus that judges a job's checkout
+.TP
+\fBadvance\fR
+Move jobs' authority to this checkout's HEAD
 .TP
 \fBgrant\fR
 Lower one guard rule to advice for one job, typed by a person

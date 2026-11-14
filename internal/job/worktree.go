@@ -3,8 +3,11 @@ package job
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -15,11 +18,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -108,7 +113,7 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		return types.JobWorktree{}, false, fmt.Errorf("job: %s's checkout at %s: %w", id, dir, err)
 	}
 	wt = types.JobWorktree{Root: dir, Source: source, Base: base.ID, Created: time.Now().Unix(), Made: true}
-	if binary != "" && !BuildsItsOwnMagus(dir) && !BuiltAt(ctx, binary, base.ID) {
+	if binary != "" && !BuildsItsOwnMagus(dir) && !builtAt(ctx, binary, base.ID) {
 		slog.InfoContext(ctx, fmt.Sprintf("not placing %s in %s: it is not a clean build at %.12s", binary, dir, base.ID), attr.Notice("note"))
 	} else if binary != "" && !BuildsItsOwnMagus(dir) {
 		placed, err := placeBinary(binary, dir)
@@ -281,7 +286,7 @@ func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (st
 		}
 	}
 	for _, bin := range candidates {
-		if !BuiltAt(ctx, bin, base) {
+		if !builtAt(ctx, bin, base) {
 			continue
 		}
 		if _, err := placeBinary(bin, dir); err != nil {
@@ -292,24 +297,41 @@ func (s *Store) PlaceBuiltBinary(ctx context.Context, exe, base, dir string) (st
 	return "", nil
 }
 
-// BuiltAt reports whether the magus at bin says it was built at base, clean.
-// A binary that cannot answer is not one to reuse.
-func BuiltAt(ctx context.Context, bin, base string) bool {
+// builtVersion is what `magus version -o json` says about a build.
+type builtVersion struct {
+	Version  string `json:"version"`
+	Commit   string `json:"commit"`
+	Embedded struct {
+		Contract string `json:"contract_sha256"`
+	} `json:"embedded"`
+}
+
+// askVersion is what the magus at bin says about its build. ok is false
+// when it cannot answer.
+func askVersion(ctx context.Context, bin string) (builtVersion, bool) {
+	var v builtVersion
 	if bin == "" {
-		return false
+		return v, false
 	}
-	out, err := exec.CommandContext(ctx, bin, "version", "-o", "json").Output()
+	out, err := exec.CommandContext(ctx, bin, "version", "--client", "-o", "json").Output()
 	if err != nil {
-		return false
+		return v, false
 	}
-	var v struct {
-		Version string `json:"version"`
-		Commit  string `json:"commit"`
-	}
-	if err := json.Unmarshal(out, &v); err != nil {
-		return false
-	}
-	return v.Commit == base && !strings.HasSuffix(v.Version, "-dirty")
+	return v, json.Unmarshal(out, &v) == nil
+}
+
+// builtAt reports whether the magus at bin says it was built at base, clean.
+// A binary that cannot answer is not one to reuse.
+func builtAt(ctx context.Context, bin, base string) bool {
+	v, ok := askVersion(ctx, bin)
+	return ok && v.Commit == base && !strings.HasSuffix(v.Version, "-dirty")
+}
+
+// BinaryContract is the contract digest the magus at bin was built with,
+// "" when it cannot say. A binary built before the digest existed says "".
+func BinaryContract(ctx context.Context, bin string) string {
+	v, _ := askVersion(ctx, bin)
+	return v.Embedded.Contract
 }
 
 // InstallProjects is the comma-joined projects with an install target that own
@@ -445,20 +467,15 @@ func (s *Store) LinkedCheckout(ctx context.Context, dir string) (bool, error) {
 	return slices.ContainsFunc(registered, func(c types.RegisteredCheckout) bool { return !c.Primary && samePath(c.Root, dir) }), nil
 }
 
-// moduleFiles decide the module graph a Go build resolves, at the root.
-var moduleFiles = []string{"go.mod", "go.sum", "go.work", "go.work.sum"}
+// mainPackage is the package the relink builds into ./magus. It names
+// magus's own main package: no workspace declares where a binary links from.
+const mainPackage = "./cmd/magus"
 
-// rootScope marks the root package among the scopes. It is not a prefix: "" or "./" as one
-// would take in every file at the root.
-const rootScope = "./"
-
-// ChangedBuildInputs are the paths differing between commits from and to, in the checkout
-// at root, that can change the binary ./cmd/magus compiles to: a non-test Go file in a
-// package `go list -deps` names, a root module file, or another file in such a package's
-// directory, where go:embed reads. Each side's changes since the two diverged count. It fails
-// when either commit or the package list cannot be read, so unknown inputs never match;
-// equal commits run no process. hack/dev/bootstrap-worktree.buzz holds the same rule.
-func ChangedBuildInputs(ctx context.Context, drv types.VCSDriver, root, from, to string) ([]string, error) {
+// ChangedBuildInputs are the paths differing between commits from and to,
+// in the checkout at root, that relinkScopes matches. Each side's changes
+// since the two diverged count. It fails when either commit or the scopes
+// cannot be read, so unknown inputs never match. Equal commits run nothing.
+func ChangedBuildInputs(ctx context.Context, drv types.VCSDriver, root string, projects []*types.Project, from, to string) ([]string, error) {
 	if from == to {
 		return nil, nil
 	}
@@ -472,57 +489,106 @@ func ChangedBuildInputs(ctx context.Context, drv types.VCSDriver, root, from, to
 	}
 	slices.Sort(changed)
 	changed = slices.Compact(changed)
-	scopes, err := binaryScopes(ctx, root)
+	scopes, err := relinkScopes(ctx, projects, root)
 	if err != nil {
 		return nil, err
 	}
 	return buildInputs(changed, scopes), nil
 }
 
-// binaryScopes asks the Go toolchain which packages under root ./cmd/magus links, as
-// [packageScopes] reads them. go list loads packages without compiling any; magus refuses
-// to load without jsonv2.
-func binaryScopes(ctx context.Context, root string) ([]string, error) {
-	cmd := exec.CommandContext(ctx, "go", "list", "-deps", "-f",
-		`{{if not .Standard}}{{.Dir}}{{range .EmbedFiles}}|{{.}}{{end}}{{end}}`, "./cmd/magus")
-	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GOEXPERIMENT=jsonv2")
+// relinkScopes are the root-relative globs, "!" excluding, that the spells
+// of the project relinking ./magus print for [mainPackage]. A missing target
+// or export, or a failed command, leaves the build inputs unknown.
+func relinkScopes(ctx context.Context, projects []*types.Project, root string) ([]string, error) {
+	p := relinkingProject(projects)
+	if p == nil {
+		return nil, fmt.Errorf("job: no target in %s relinks ./%s, so the build inputs of ./%s are unknown", root, binaryName, binaryName)
+	}
+	dir := filepath.Join(root, filepath.FromSlash(p.Path))
+	var scopes []string
+	declared := false
+	for _, sp := range p.ResolvedSpells {
+		c := sp.Scopes()
+		if c == nil {
+			continue
+		}
+		declared = true
+		listed, err := runScopes(ctx, sp.Name(), *c, dir)
+		if err != nil {
+			return nil, err
+		}
+		found, err := parseScopes(sp.Name(), listed, root, dir)
+		if err != nil {
+			return nil, err
+		}
+		scopes = append(scopes, found...)
+	}
+	if !declared {
+		return nil, fmt.Errorf("job: no spell bound to project %s, which relinks ./%s, declares mgs_getScopes, so the build inputs of ./%s are unknown",
+			p.Path, binaryName, binaryName)
+	}
+	slices.Sort(scopes)
+	return slices.Compact(scopes), nil
+}
+
+// relinkingProject is the project with a target relinking ./magus, or nil.
+func relinkingProject(projects []*types.Project) *types.Project {
+	for _, p := range projects {
+		for _, pol := range p.TargetPolicies {
+			if pol.Relinks != "" && path.Clean(pol.Relinks) == binaryName {
+				return p
+			}
+		}
+	}
+	return nil
+}
+
+func runScopes(ctx context.Context, spell string, c spells.Command, dir string) (string, error) {
+	argv := append(slices.Clone(c.Args), mainPackage)
+	cmd := exec.CommandContext(ctx, c.Bin, argv...)
+	cmd.Dir = dir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("job: `go list -deps ./cmd/magus` in %s says %q: %w", root, strings.TrimSpace(stderr.String()), err)
+		return "", fmt.Errorf("job: the %s spell's mgs_getScopes, `%s %s` in %s, says %q: %w",
+			spell, c.Bin, strings.Join(argv, " "), dir, strings.TrimSpace(stderr.String()), err)
 	}
-	return packageScopes(string(out), root), nil
+	return string(out), nil
 }
 
-// packageScopes are where a file can reach the binary, root-relative: "dir/" for a package
-// below root, rootScope for the root package, a bare path for a file the root package embeds.
-// listed is one package per line, its absolute directory then each go:embed file after "|";
-// a directory outside root (stdlib, module cache) drops out.
-func packageScopes(listed, root string) []string {
+// parseScopes reads listed, one glob per line, absolute or relative to dir,
+// as globs relative to root. A glob outside root drops out: a lockfile
+// pins what lies there.
+func parseScopes(spell, listed, root, dir string) ([]string, error) {
 	base := filepath.Clean(root)
 	var scopes []string
 	for line := range strings.Lines(listed) {
-		fields := strings.Split(strings.TrimSpace(line), "|")
-		if fields[0] == "" {
+		glob := strings.TrimSpace(line)
+		if glob == "" {
 			continue
 		}
-		dir := filepath.Clean(fields[0])
-		if dir == base {
-			scopes = append(scopes, rootScope)
-			scopes = append(scopes, fields[1:]...)
+		pattern, excluded := strings.CutPrefix(glob, "!")
+		if !filepath.IsAbs(pattern) {
+			pattern = filepath.Join(dir, pattern)
+		}
+		rel, ok := strings.CutPrefix(filepath.Clean(pattern), base+string(filepath.Separator))
+		if !ok {
 			continue
 		}
-		if rel, ok := strings.CutPrefix(dir, base+string(filepath.Separator)); ok {
-			scopes = append(scopes, filepath.ToSlash(rel)+"/")
+		rel = filepath.ToSlash(rel)
+		if !doublestar.ValidatePattern(rel) {
+			return nil, fmt.Errorf("job: the %s spell's mgs_getScopes printed %q, which is not a glob", spell, glob)
 		}
+		if excluded {
+			rel = "!" + rel
+		}
+		scopes = append(scopes, rel)
 	}
-	return scopes
+	return scopes, nil
 }
 
-// buildInputs are the paths in changed that scopes reach. A linked package deleted since
-// the listing is not missed: whatever imported it changed too.
+// buildInputs are the paths in changed that scopes reach.
 func buildInputs(changed, scopes []string) []string {
 	var inputs []string
 	for _, p := range changed {
@@ -533,22 +599,19 @@ func buildInputs(changed, scopes []string) []string {
 	return inputs
 }
 
+// isBuildInput reports whether a glob of scopes matches p and no "!" one does.
 func isBuildInput(p string, scopes []string) bool {
-	dir, name := path.Split(p)
-	if dir == "" {
-		dir = rootScope
+	included := false
+	for _, s := range scopes {
+		if pattern, excluded := strings.CutPrefix(s, "!"); excluded {
+			if doublestar.MatchUnvalidated(pattern, p) {
+				return false
+			}
+			continue
+		}
+		included = included || doublestar.MatchUnvalidated(s, p)
 	}
-	switch {
-	case dir == rootScope && slices.Contains(moduleFiles, name):
-		return true
-	case strings.HasSuffix(name, "_test.go"):
-		return false
-	case strings.HasSuffix(name, ".go"):
-		return slices.Contains(scopes, dir)
-	}
-	return slices.ContainsFunc(scopes, func(s string) bool {
-		return s == p || (s != rootScope && strings.HasSuffix(s, "/") && strings.HasPrefix(p, s))
-	})
+	return included
 }
 
 // NoCheckoutHook says that a workspace declares no checkout.bootstrap hook.
@@ -625,7 +688,11 @@ func (s *Store) LandingBootstrap(ctx context.Context, exe, checkpoint string) (s
 	if err != nil {
 		return "", fmt.Errorf("job: the checkpoint %s is a commit %s cannot find: %w", revision, drv.Name(), err)
 	}
-	inputs, err := ChangedBuildInputs(ctx, drv, root, built.ID, base.ID)
+	ws, missing := s.loadedWorkspace()
+	if missing != "" {
+		return "", fmt.Errorf("job: the build inputs of ./%s are unknown, since %s", binaryName, missing)
+	}
+	inputs, err := ChangedBuildInputs(ctx, drv, root, ws.Projects, built.ID, base.ID)
 	if err != nil || len(inputs) == 0 {
 		return "", err
 	}
@@ -787,6 +854,138 @@ func placeBinary(bin, dir string) (string, error) {
 	}
 	dst := filepath.Join(dir, binaryName)
 	return dst, file.WriteFileAtomic(dst, body, 0o755)
+}
+
+// BinaryDigest is the content hash of the file at bin, "sha256:<hex>".
+func BinaryDigest(bin string) (string, error) {
+	f, err := os.Open(bin)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("job: hash %s: %w", bin, err)
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// digestCacheName is the file beside the job store that keeps each judging
+// binary's hash, so every checkout of the repository shares one.
+const digestCacheName = "binary-digests.jsonl"
+
+// binaryDigest is one hash of the file at Path. It holds while the file keeps
+// the identity, size and modification time it was hashed under. A writer can
+// forge all three, which ADR 0045 section 1 accepts.
+type binaryDigest struct {
+	Path   string `json:"path"`
+	Ino    uint64 `json:"ino,omitempty"`
+	Size   int64  `json:"size"`
+	ModNs  int64  `json:"mod_ns"`
+	Digest string `json:"digest"`
+}
+
+func (d binaryDigest) describes(fi os.FileInfo) bool {
+	ino, _, _ := file.Identity(fi)
+	return d.Size == fi.Size() && d.ModNs == fi.ModTime().UnixNano() && d.Ino == ino
+}
+
+// cachedDigest is [BinaryDigest] read through the cache beside the store.
+// The cache is never the authority. One that does not read is rehashed.
+func (s *Store) cachedDigest(bin string) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
+	// Stat before the hash: a write in between changes what the next stat sees.
+	fi, err := os.Stat(bin)
+	if err != nil {
+		return "", err
+	}
+	cache := digestCache(filepath.Join(filepath.Dir(s.path), digestCacheName))
+	entries, _ := cache.Load() // an unreadable cache is rehashed
+	key := resolved(bin)
+	for _, e := range entries {
+		if e.Path == key && e.describes(fi) {
+			return e.Digest, nil
+		}
+	}
+	digest, err := BinaryDigest(bin)
+	if err != nil {
+		return "", err
+	}
+	ino, _, _ := file.Identity(fi)
+	entry := binaryDigest{Path: key, Ino: ino, Size: fi.Size(), ModNs: fi.ModTime().UnixNano(), Digest: digest}
+	_ = cache.Update(context.Background(), func([]binaryDigest) []binaryDigest { return []binaryDigest{entry} }) // a miss rehashes
+	return digest, nil
+}
+
+// digestCache is the JSON Lines store at path, keyed by binary path.
+func digestCache(path string) file.JSONL[binaryDigest] {
+	return file.JSONL[binaryDigest]{Path: path, Key: func(d binaryDigest) string { return d.Path }}
+}
+
+// PinRefusal says why the root's hook may not hand a call to bin, "" when it
+// may. It may when a live row's standing checkout records bin as its Binary
+// and bin still hashes to that row's BinaryDigest.
+func (s *Store) PinRefusal(bin string) (string, error) {
+	rows, err := s.List()
+	if err != nil {
+		return "", err
+	}
+	pinning := slices.DeleteFunc(rows, func(r types.Job) bool {
+		return !r.State.Live() || !r.Worktree.Standing() || !samePath(r.Worktree.Binary, bin)
+	})
+	if len(pinning) == 0 {
+		return "no live job row records it as its checkout's binary", nil
+	}
+	digest, err := s.cachedDigest(bin)
+	if err != nil {
+		return "", err
+	}
+	if slices.ContainsFunc(pinning, func(r types.Job) bool { return r.Worktree.BinaryDigest == digest }) {
+		return "", nil
+	}
+	return fmt.Sprintf("its bytes do not hash to what job %s pins, so neither its fork, its placement nor its integrator wrote it last", pinning[0].ID), nil
+}
+
+// PinBinary records the hash ./magus in job id's checkout has now on every
+// live row standing at that checkout, and returns those rows. The root pins
+// any row, and the integrator its own after it relinks there. Any other bound
+// caller gets a [*RefusedError]: a worker that pinned its own build would pick
+// its judge.
+func (s *Store) PinBinary(ctx context.Context, id string) ([]types.Job, error) {
+	rows, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	if i < 0 {
+		return nil, fmt.Errorf("%w: %q", ErrUnknownJob, id)
+	}
+	if actor := s.Actor(); actor.Bound() && (actor.Lease != id || len(rows[i].Integrates) == 0) {
+		return nil, refuse(actor, id, "only the root and a row's own integrator pin the binary that judges it, and a worker that pinned its own build would pick its judge")
+	}
+	wt := rows[i].Worktree
+	if !wt.Standing() {
+		return nil, fmt.Errorf("job: %s owns no standing checkout, so it has no binary to pin", id)
+	}
+	bin := filepath.Join(wt.Root, binaryName)
+	digest, err := BinaryDigest(bin)
+	if err != nil {
+		return nil, fmt.Errorf("hashing %s's binary to pin it: %w", id, err)
+	}
+	var pinned []types.Job
+	for _, r := range rows {
+		if !r.State.Live() || !r.Worktree.Standing() || !samePath(r.Worktree.Root, wt.Root) {
+			continue
+		}
+		row, err := s.writeWorktree(ctx, r.ID, func(w *types.JobWorktree) { w.Binary, w.BinaryDigest = bin, digest })
+		if err != nil {
+			return pinned, err
+		}
+		pinned = append(pinned, row)
+	}
+	return pinned, nil
 }
 
 // RecordWorktree records wt as the checkout job id owns.

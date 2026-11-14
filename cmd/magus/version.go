@@ -10,6 +10,7 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/buildinfo"
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/types"
@@ -88,9 +89,13 @@ type versionEmbedded struct {
 	// FigureSHA256 is the hex SHA-256 of the magus/figure source; diagrams-generate in
 	// docs keys on it, since the figures render from this copy and not the checkout's.
 	FigureSHA256 string `json:"figure_sha256" yaml:"figure_sha256"`
+	// ContractSHA256 is the digest of the contract it was built with, which
+	// a checkout of magus it judges must carry. See internal/contract.
+	ContractSHA256 string `json:"contract_sha256" yaml:"contract_sha256"`
 }
 
-// newVersionOutput is this binary's stamp, without the server half.
+// newVersionOutput is this binary's stamp, without the server half and without
+// the contract digest, which can fail to hash: runVersion adds it.
 func newVersionOutput() versionOutput {
 	b := selfBuild()
 	return versionOutput{
@@ -135,6 +140,9 @@ func runVersion(ctx context.Context, args []string) error {
 		return err
 	}
 	out := newVersionOutput()
+	if out.Embedded.ContractSHA256, err = contract.Binary(); err != nil {
+		return err
+	}
 	// -o name prints the bare version and nothing else, so the round-trip would be paid
 	// for a field nothing renders, and that form is what a CI step compares against a
 	// pin, which is exactly where a server that is slow to answer must not be felt.

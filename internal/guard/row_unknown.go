@@ -4,8 +4,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/job"
@@ -48,7 +46,7 @@ func unknownRowSpawnDenial(deps Dependencies, row types.Job) denial {
 	if len(row.Unknown) == 0 {
 		return denial{}
 	}
-	members := slices.Sorted(maps.Keys(row.Unknown))
+	members := row.Unknown
 	return denial{
 		Say: fmt.Sprintf("magus workspace: %s (%s) cannot read %s on job %s's row; rebuild ./magus with `%s`, restart the daemon, and spawn again.",
 			cmp.Or(deps.Binary, "this magus"), cmp.Or(deps.BinaryVersion, "an unknown version"), strings.Join(members, ", "), row.ID, ward.BootstrapCommand),
@@ -63,7 +61,7 @@ func unknownRowDenial(deps Dependencies, row types.Job) denial {
 	if len(row.Unknown) == 0 {
 		return denial{}
 	}
-	members := slices.Sorted(maps.Keys(row.Unknown))
+	members := row.Unknown
 	binary := cmp.Or(deps.Binary, "this magus")
 	version := cmp.Or(deps.BinaryVersion, "an unknown version")
 	checkout := job.WorkingCheckout(row.CheckoutRoot, row)

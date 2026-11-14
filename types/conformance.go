@@ -23,8 +23,8 @@ const (
 	ConformanceTypeMethods ConformanceMetric = "type-methods"
 	// ConformanceFileSymbols is how many top-level declarations a file holds.
 	ConformanceFileSymbols ConformanceMetric = "file-symbols"
-	// ConformanceDepFanout is how many workspace packages a package imports.
-	ConformanceDepFanout ConformanceMetric = "dep-fanout"
+	// ConformanceImportedPackages counts a package's workspace imports.
+	ConformanceImportedPackages ConformanceMetric = "imported-packages"
 	// ConformanceCloneTokens is the token count of a body another body shares its shape with.
 	ConformanceCloneTokens ConformanceMetric = "clone-tokens"
 	// ConformanceExportScope counts exported symbols nothing outside their package uses.
@@ -87,7 +87,7 @@ const (
 	ConformancePopTest ConformancePopulation = "test"
 )
 
-// ConformanceKey names one threshold. Scope is a layer or package directory for dep-fanout,
+// ConformanceKey names one threshold. Scope is a layer or package directory for imported-packages,
 // and empty otherwise.
 type ConformanceKey struct {
 	Metric     ConformanceMetric     `json:"metric"          yaml:"metric"`
@@ -231,14 +231,18 @@ func compareConformanceKeys(a, b ConformanceKey) int {
 // revision: Base is the commit it resolved to, and Ceilings are the touched files whose count of
 // a checked metric's violations rose past their count there. Unmeasured are the touched files
 // only an external indexer reads, which hold no ceiling, each with why.
+//
+// Packages is set only on a base measure, in directory order. It tells
+// an import of moved declarations from a new one.
 type Conformance struct {
-	Definition string                  `json:"definition"           yaml:"definition"`
-	Rows       []ConformanceRow        `json:"rows"                 yaml:"rows"`
-	Excluded   int                     `json:"excluded"             yaml:"excluded"`
-	Answer     KnowledgeAnswer         `json:"answer"               yaml:"answer"`
-	Base       string                  `json:"base,omitempty"       yaml:"base,omitempty"`
-	Ceilings   []ConformanceCeiling    `json:"ceilings,omitempty"   yaml:"ceilings,omitempty"`
-	Unmeasured []ConformanceUnmeasured `json:"unmeasured,omitempty" yaml:"unmeasured,omitempty"`
+	Definition    string                    `json:"definition"           yaml:"definition"`
+	Distributions []ConformanceDistribution `json:"distributions"        yaml:"distributions"`
+	Excluded      int                       `json:"excluded"             yaml:"excluded"`
+	Answer        KnowledgeAnswer           `json:"answer"               yaml:"answer"`
+	Base          string                    `json:"base,omitempty"       yaml:"base,omitempty"`
+	Ceilings      []ConformanceCeiling      `json:"ceilings,omitempty"   yaml:"ceilings,omitempty"`
+	Unmeasured    []ConformanceUnmeasured   `json:"unmeasured,omitempty" yaml:"unmeasured,omitempty"`
+	Packages      []ConformancePackage      `json:"packages,omitempty"   yaml:"packages,omitempty"`
 }
 
 // ConformanceUnmeasured is a touched file the base was not measured for: its language and why.
@@ -249,10 +253,10 @@ type ConformanceUnmeasured struct {
 	Reason   string `json:"reason"   yaml:"reason"`
 }
 
-// ConformanceRow is one key's distribution and verdict. Live is the configured percentile
+// ConformanceDistribution is one key's distribution and verdict. Live is the configured percentile
 // measured today; Value is the anchor Effective enforces. Propose is zero, or a tighter anchor
 // to configure: it is never looser than Value. Violations are the items past Value.
-type ConformanceRow struct {
+type ConformanceDistribution struct {
 	Key        ConformanceKey    `json:"key"        yaml:"key"`
 	N          int               `json:"n"          yaml:"n"`
 	P50        int               `json:"p50"        yaml:"p50"`
@@ -291,6 +295,7 @@ func (c Ceiling) Validate() error {
 
 // ConformanceCeiling is one touched file whose violations of Key rose past its count at the
 // base: Base and Head are the two counts, and Violations the head's items in the file.
+// Neither counts a violation that only moved.
 type ConformanceCeiling struct {
 	Key        ConformanceKey    `json:"key"        yaml:"key"`
 	File       string            `json:"file"       yaml:"file"`
@@ -302,16 +307,32 @@ type ConformanceCeiling struct {
 // ConformanceCeilings is each file among touched whose count of violations of a key whose
 // metric is in checks is higher in head than in base, sorted by key, then file. A drop or a
 // file that holds as many as before passes. An item counts in every file it names: a clone
-// group in each member's file, and a dep-fanout package in every file directly inside it.
+// group in each member's file, and a imported-packages package in every file directly inside it.
+//
+// A violation follows its declaration, not its path. A head violation
+// whose digest equals a base violation's of the same metric only moved,
+// so neither side counts it. Nor does an imported-packages item count an
+// import movedImports finds in base.Packages.
 func ConformanceCeilings(base, head Conformance, touched []string, checks []ConformanceMetric) []ConformanceCeiling {
-	before := conformanceRowsByKey(base)
+	before, after := unmatchedViolations(base, head, checks)
+	packages := make(map[string]ConformancePackage, len(base.Packages))
+	for _, p := range base.Packages {
+		packages[p.Dir] = p
+	}
 	var out []ConformanceCeiling
-	for _, row := range head.Rows {
+	for _, row := range head.Distributions {
 		if !slices.Contains(checks, row.Key.Metric) {
 			continue
 		}
+		items := after[row.Key]
+		if row.Key.Metric == ConformanceImportedPackages {
+			items = slices.DeleteFunc(slices.Clone(items), func(it ConformanceItem) bool {
+				moved := movedImports(it, packages)
+				return moved > 0 && !row.Key.Metric.Past(it.Measure-moved, row.Value)
+			})
+		}
 		for _, file := range touched {
-			now := conformanceItemsIn(row.Violations, row.Key.Metric, file)
+			now := conformanceItemsIn(items, row.Key.Metric, file)
 			was := len(conformanceItemsIn(before[row.Key], row.Key.Metric, file))
 			if len(now) > was {
 				out = append(out, ConformanceCeiling{Key: row.Key, File: file, Base: was, Head: len(now), Violations: now})
@@ -324,12 +345,99 @@ func ConformanceCeilings(base, head Conformance, touched []string, checks []Conf
 	return out
 }
 
-func conformanceRowsByKey(out Conformance) map[ConformanceKey][]ConformanceItem {
-	byKey := make(map[ConformanceKey][]ConformanceItem, len(out.Rows))
-	for _, row := range out.Rows {
-		byKey[row.Key] = row.Violations
+// unmatchedViolations is each key's violations of a checked metric, in
+// base and in head, less the pairs of one metric with equal digests. An
+// empty digest pairs with nothing. Equal IDs pair first, so a new copy
+// is what counts.
+func unmatchedViolations(base, head Conformance, checks []ConformanceMetric) (before, after map[ConformanceKey][]ConformanceItem) {
+	was, now := placeViolations(base, checks), placeViolations(head, checks)
+	byIdentity := map[violationIdentity][]*placedViolation{}
+	for _, b := range was {
+		if b.item.Digest != "" {
+			id := violationIdentity{b.key.Metric, b.item.Digest}
+			byIdentity[id] = append(byIdentity[id], b)
+		}
 	}
-	return byKey
+	pairViolations(now, byIdentity, func(b, h *placedViolation) bool { return b.item.ID == h.item.ID })
+	pairViolations(now, byIdentity, func(*placedViolation, *placedViolation) bool { return true })
+	return unpairedViolations(was), unpairedViolations(now)
+}
+
+type placedViolation struct {
+	key    ConformanceKey
+	item   ConformanceItem
+	paired bool
+}
+
+type violationIdentity struct {
+	metric ConformanceMetric
+	digest string
+}
+
+func placeViolations(out Conformance, checks []ConformanceMetric) []*placedViolation {
+	var all []*placedViolation
+	for _, row := range out.Distributions {
+		if !slices.Contains(checks, row.Key.Metric) {
+			continue
+		}
+		for _, it := range row.Violations {
+			all = append(all, &placedViolation{key: row.Key, item: it})
+		}
+	}
+	return all
+}
+
+// pairViolations pairs each unpaired head violation with the first
+// unpaired base one of its identity that match accepts.
+func pairViolations(head []*placedViolation, base map[violationIdentity][]*placedViolation, match func(b, h *placedViolation) bool) {
+	for _, h := range head {
+		if h.paired || h.item.Digest == "" {
+			continue
+		}
+		for _, b := range base[violationIdentity{h.key.Metric, h.item.Digest}] {
+			if !b.paired && match(b, h) {
+				b.paired, h.paired = true, true
+				break
+			}
+		}
+	}
+}
+
+func unpairedViolations(all []*placedViolation) map[ConformanceKey][]ConformanceItem {
+	out := map[ConformanceKey][]ConformanceItem{}
+	for _, p := range all {
+		if !p.paired {
+			out[p.key] = append(out[p.key], p.item)
+		}
+	}
+	return out
+}
+
+// movedImports counts the imports of it, an imported-packages item, that
+// only follow moved declarations. Such an import is new since base. Each
+// declaration it reaches had its digest at base in a package the importer
+// already imported.
+func movedImports(it ConformanceItem, base map[string]ConformancePackage) int {
+	importer, ok := base[it.ID]
+	if !ok {
+		return 0
+	}
+	held := map[string]bool{}
+	for _, dir := range importer.Imports {
+		for _, d := range base[dir].Digests {
+			held[d] = true
+		}
+	}
+	n := 0
+	for _, imp := range it.Imports {
+		if len(imp.Digests) == 0 || slices.Contains(importer.Imports, imp.Dir) {
+			continue
+		}
+		if !slices.ContainsFunc(imp.Digests, func(d string) bool { return !held[d] }) {
+			n++
+		}
+	}
+	return n
 }
 
 // conformanceItemsIn is the items of metric m that name file.
@@ -337,7 +445,7 @@ func conformanceItemsIn(items []ConformanceItem, m ConformanceMetric, file strin
 	var out []ConformanceItem
 	for _, it := range items {
 		if slices.ContainsFunc(strings.Split(it.ID, ", "), func(member string) bool {
-			if m == ConformanceDepFanout {
+			if m == ConformanceImportedPackages {
 				return member == path.Dir(file)
 			}
 			name, _, _ := strings.Cut(member, "#")
@@ -388,11 +496,36 @@ type AliasClash struct {
 // that references nothing its root defines and defines nothing its root references. Rename
 // is the file a file-split sibling should be when its suffix after the root names more than
 // one concept: R_X_Y.go with no R_X.go is past its row whatever it measures, and names R_X.go.
+//
+// Digest is a symbol's KnowledgeSymbol.BodyDigest, so the item keeps its
+// identity when its file moves. A clone group's is its members' digests,
+// sorted and joined by commas. A file or package item has none. Imports
+// are an imported-packages item's imports, in directory order.
 type ConformanceItem struct {
-	ID       string `json:"id"                 yaml:"id"`
-	Source   string `json:"source"             yaml:"source"`
-	Measure  int    `json:"measure"            yaml:"measure"`
-	Home     string `json:"home,omitempty"     yaml:"home,omitempty"`
-	Unshared bool   `json:"unshared,omitempty" yaml:"unshared,omitempty"`
-	Rename   string `json:"rename,omitempty"   yaml:"rename,omitempty"`
+	ID       string              `json:"id"                 yaml:"id"`
+	Source   string              `json:"source"             yaml:"source"`
+	Measure  int                 `json:"measure"            yaml:"measure"`
+	Home     string              `json:"home,omitempty"     yaml:"home,omitempty"`
+	Unshared bool                `json:"unshared,omitempty" yaml:"unshared,omitempty"`
+	Rename   string              `json:"rename,omitempty"   yaml:"rename,omitempty"`
+	Digest   string              `json:"digest,omitempty"   yaml:"digest,omitempty"`
+	Imports  []ConformanceImport `json:"imports,omitempty"  yaml:"imports,omitempty"`
+}
+
+// ConformanceImport is one package directory an imported-packages item
+// imports. Digests are the sorted body digests of the top-level
+// declarations its files reference there. Digests is empty when one of
+// those has no digest, since the import is then unknown.
+type ConformanceImport struct {
+	Dir     string   `json:"dir"               yaml:"dir"`
+	Digests []string `json:"digests,omitempty" yaml:"digests,omitempty"`
+}
+
+// ConformancePackage is one package directory as a base measure keeps it.
+// Imports are the other workspace package directories it imports. Digests
+// are the sorted body digests of its top-level non-test declarations.
+type ConformancePackage struct {
+	Dir     string   `json:"dir"               yaml:"dir"`
+	Imports []string `json:"imports,omitempty" yaml:"imports,omitempty"`
+	Digests []string `json:"digests,omitempty" yaml:"digests,omitempty"`
 }

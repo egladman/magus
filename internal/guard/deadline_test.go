@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 func TestWithHookDeadlineKeepsAnEarlierOne(t *testing.T) {
@@ -594,8 +595,8 @@ func TestJudgeOpensAWorkspaceOnceForALargePick(t *testing.T) {
 
 	wt, sibling := r.add("lease-job"), r.add("sibling")
 	worker := narrowLease()
-	worker.Parent, worker.CheckoutRoot, worker.WritePaths = "orchestrator", wt, []string{"pkg/**"}
-	holder := types.Job{ID: "sibling", Criteria: "hold the package", WritePaths: []string{"pkg/**"}, State: types.StateRunning, Registered: 1, CheckoutRoot: sibling}
+	worker.Parent, worker.CheckoutRoot, worker.Paths.Write = "orchestrator", wt, []string{"pkg/**"}
+	holder := types.Job{ID: "sibling", Agent: typesagent.Instructed("hold the package"), Paths: types.JobPaths{Write: []string{"pkg/**"}}, State: types.StateRunning, Registered: 1, CheckoutRoot: sibling}
 	ctx, _ := fleetFixture(t, worker, holder)
 
 	opens := map[string]int{}
@@ -821,7 +822,7 @@ func (s *JudgeBudgetSuite) TestStallBetweenPhasesNamesTheSpan() {
 }
 
 func (s *JudgeBudgetSuite) TestLapsedRowKeepsABoundLease() {
-	row := types.Job{ID: "bound-job", Criteria: "hold a lease", State: types.StateRunning, WritePaths: []string{"internal/held/**"}}
+	row := types.Job{ID: "bound-job", Agent: typesagent.Instructed("hold a lease"), State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/held/**"}}}
 	ctx, _ := fleetFixture(s.T(), row)
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 	bindCaller(s.T(), ctx, who, row.ID)

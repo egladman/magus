@@ -599,9 +599,8 @@ func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobEr
 		return // an adopted run rather than one of the server's own, so there is no row
 	}
 	catalog := job.All()[i]
+	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
 	if _, err := serverJobStore.Update(ctx, catalog.Name, func(row *types.Job) {
-		row.Holder = types.HolderServer
-		row.Criteria = catalog.Desc
 		row.State = types.StatePass
 		if jobErr != nil {
 			row.State = types.StateFail

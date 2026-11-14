@@ -37,7 +37,11 @@ func (s *Store) Grant(ctx context.Context, id, rule string, until int64) (types.
 		if row.State.Terminal() {
 			return fmt.Errorf("job: %s already ended %s, so there is nothing left to grant", id, row.State)
 		}
-		g.Until, g.Attempt = until, row.Attempts
+		tries, err := s.Attempts()
+		if err != nil {
+			return err
+		}
+		g.Until, g.Attempt = until, types.NewJobAttempts(tries).LiveN(id)
 		return nil
 	})
 }
@@ -91,8 +95,13 @@ func (s *Store) LiveGrant(row types.Job, rule string, now int64) (types.JobGrant
 	if err != nil {
 		return types.JobGrant{}, false, err
 	}
+	tries, err := s.Attempts()
+	if err != nil {
+		return types.JobGrant{}, false, err
+	}
+	attempt := types.NewJobAttempts(tries).LiveN(row.ID)
 	for _, g := range grants {
-		if g.Rule == rule && g.Lowers(row, now) {
+		if g.Rule == rule && g.Lowers(row, attempt, now) {
 			return g, true, nil
 		}
 	}

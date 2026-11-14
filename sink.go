@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"

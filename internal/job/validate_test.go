@@ -43,7 +43,7 @@ func (s *integratedDirectorySuite) SetupTest() {
 }
 
 func (s *integratedDirectorySuite) row(write ...string) types.Job {
-	return types.Job{ID: "integrate", WritePaths: write}
+	return types.Job{ID: "integrate", Paths: types.JobPaths{Write: write}}
 }
 
 func (s *integratedDirectorySuite) TestDirectoryABranchReplacesWithASymlinkPasses() {
@@ -56,7 +56,7 @@ func (s *integratedDirectorySuite) TestDirectoryTheBranchKeepsIsRefused() {
 	ps := mergedDirectoryProblems(s.T().Context(), s.store, s.row("skills/a", "shared/a"), []string{"replaces-dir"})
 
 	s.Equal([]types.DiagnosticCode{types.WritePathIsDirectory}, codes(ps))
-	s.Equal("write_paths[1]", ps[0].Field, "the index of the entry as the record wrote it")
+	s.Equal("paths.write[1]", ps[0].Field, "the index of the entry as the record wrote it")
 }
 
 func (s *integratedDirectorySuite) TestWithoutIntegratesTheDirectoryIsRefused() {
@@ -106,7 +106,7 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 
 	s, _ := validateWorkspace(t)
 	v := validateMerge(t.Context(), s, nil, "w", func(u *types.Job) {
-		u.WritePaths = []string{"cli", "cli/registry.go"}
+		u.Paths.Write = []string{"cli", "cli/registry.go"}
 		u.Check = &types.LeaseCheck{Target: "nosuch", Project: "."}
 		u.Goals = []types.Goal{{ID: "elsewhere", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "test", Project: "nowhere"}}}
 	}, config.Jobs{}, nil)
@@ -115,7 +115,7 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 	for _, want := range []types.DiagnosticCode{types.WritePathIsDirectory, types.JobCheckUnrunnable, types.OutputOutsideWritePaths, types.GateNotRun} {
 		assert.Contains(t, got, want, "every problem at once")
 	}
-	assert.Equal(t, "write_paths[0]", problemAt(t, v.Problems, types.WritePathIsDirectory).Field)
+	assert.Equal(t, "paths.write[0]", problemAt(t, v.Problems, types.WritePathIsDirectory).Field)
 
 	var target, project types.JobProblem
 	for _, p := range v.Problems {
@@ -147,7 +147,7 @@ func TestValidateMergePermitsOnlyWhatTheRecordNames(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	declare := func(deviations ...types.Deviation) func(*types.Job) {
 		return func(u *types.Job) {
-			u.WritePaths, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
+			u.Paths.Write, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
 	v := validateMerge(t.Context(), s, nil, "w", declare(), config.Jobs{}, nil)
@@ -168,7 +168,7 @@ func TestValidateMergePermitsOnlyWhatTheRecordNames(t *testing.T) {
 	assert.Equal(t, deviations, stored.Deviations)
 
 	wrong := validateMerge(t.Context(), s, nil, "w2", func(u *types.Job) {
-		u.WritePaths, u.Check = []string{"cli"}, forkCheck()
+		u.Paths.Write, u.Check = []string{"cli"}, forkCheck()
 		u.Deviations = []types.Deviation{{Code: types.WritePathIsDirectory, Subject: "cli", Reason: "it is mine"}, {Code: types.GateNotRun, Subject: "lint ."}}
 	}, config.Jobs{}, nil)
 	fields := map[string]types.DiagnosticCode{}
@@ -177,14 +177,14 @@ func TestValidateMergePermitsOnlyWhatTheRecordNames(t *testing.T) {
 	}
 	assert.Equal(t, types.JobRecordInvalid, fields["deviations[0].code"], "a deviation on a code that is not permissible is itself a problem")
 	assert.Equal(t, types.JobRecordInvalid, fields["deviations[1].reason"], "and so is one with no reason")
-	assert.Equal(t, types.WritePathIsDirectory, fields["write_paths[0]"], "and it permits nothing")
+	assert.Equal(t, types.WritePathIsDirectory, fields["paths.write[0]"], "and it permits nothing")
 }
 
 func TestValidateMergeNamesWhatItCouldNotCheck(t *testing.T) {
 	t.Parallel()
 
 	root, _ := regeneratedWorkspace(t)
-	merge := func(u *types.Job) { u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck() }
+	merge := func(u *types.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
 
 	v := validateMerge(t.Context(), NewStore(tempLocation(t, root)), nil, "w", merge, config.Jobs{}, nil)
 	assert.Empty(t, v.Problems)
@@ -202,13 +202,13 @@ func TestValidateMergeNamesWhatItCouldNotCheck(t *testing.T) {
 	assert.Empty(t, v.Unchecked, "a read-only row with no check skips nothing it would have needed")
 }
 
-func TestValidateForkWritesNothing(t *testing.T) {
+func TestValidateDryForkWritesNothing(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	v, err := ValidateFork(t.Context(), s, "w", func(u *types.Job) {
-		u.WritePaths, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz"
-	}, config.Jobs{}, nil)
+	v, err := validateDryFork(t.Context(), s, "w", func(u *types.Job) {
+		u.Paths.Write, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz"
+	})
 	require.NoError(t, err)
 	got := codes(v.Problems)
 	assert.Contains(t, got, types.JobCheckpointUnplaceable, "the checkpoint is judged in the same pass")
@@ -220,25 +220,104 @@ func TestValidateForkWritesNothing(t *testing.T) {
 	assert.Empty(t, rows, "a dry run writes nothing")
 
 	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) {
-		u.WritePaths, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz"
+		u.Paths.Write, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz"
 	}, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.JobCheckpointUnplaceable)
 	require.ErrorIs(t, err, types.WritePathIsDirectory, "a fork reports both, not the first")
+}
+
+// forkPlanSuite pins that a fork validates once: its dry run lists what it
+// refuses, and it writes the plan it judged.
+type forkPlanSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestForkPlan(t *testing.T) { suite.Run(t, new(forkPlanSuite)) }
+
+func (s *forkPlanSuite) SetupTest() { s.store, _ = validateWorkspace(s.T()) }
+
+func (s *forkPlanSuite) plan(merge func(*types.Job), dry bool) ForkPlan {
+	plan, err := PlanFork(s.T().Context(), s.store, "w", merge, config.Jobs{}, nil, dry)
+	s.Require().NoError(err)
+	return plan
+}
+
+func (s *forkPlanSuite) TestDryRunListsWhatTheForkRefuses() {
+	merge := func(u *types.Job) { u.Paths.Write, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz" }
+
+	dry := s.plan(merge, true)
+	real := s.plan(merge, false)
+	_, err := WriteFork(s.T().Context(), s.store, real, nil, config.Jobs{})
+
+	s.Require().NotEmpty(dry.Validation.Problems)
+	s.Equal(dry.Validation.Problems, real.Validation.Problems)
+	for _, p := range dry.Validation.Problems {
+		s.ErrorIs(err, p.Code)
+	}
+	rows, lerr := s.store.List()
+	s.Require().NoError(lerr)
+	s.Empty(rows)
+}
+
+func (s *forkPlanSuite) TestForkWritesThePlanItValidated() {
+	merge := func(u *types.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
+	permit := func(u *types.Job) {
+		merge(u)
+		u.Deviations = []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+	}
+	plan := s.plan(permit, false)
+	s.Require().Empty(plan.Validation.Problems)
+
+	stored, err := WriteFork(s.T().Context(), s.store, plan, func(u *types.Job) { u.Checkpoint = "amended" }, config.Jobs{})
+
+	s.Require().NoError(err)
+	want := plan.Validation.Job
+	want.Checkpoint = "amended"
+	s.Equal(RetryDeclaration(want), RetryDeclaration(stored), "the plan's settled merge, lint goal included, then the amend")
+}
+
+func (s *forkPlanSuite) TestForkRefusesWhenALiveRowAppeared() {
+	plan := s.plan(func(u *types.Job) {
+		u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck()
+		u.Deviations = []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+	}, false)
+	s.Require().Empty(plan.Validation.Problems)
+	seed(s.T(), s.store, types.Job{ID: "other", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"cli/registry.go"}}, Check: forkCheck()})
+
+	_, err := WriteFork(s.T().Context(), s.store, plan, nil, config.Jobs{})
+
+	s.Require().Error(err)
+	s.Contains(err.Error(), "other changed after w was validated")
+}
+
+func (s *forkPlanSuite) TestForkWritesWhenALiveRowOnlyNarrowed() {
+	seed(s.T(), s.store, types.Job{ID: "other", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/**"}}, Check: forkCheck()})
+	plan := s.plan(func(u *types.Job) {
+		u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck()
+		u.Deviations = []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+	}, false)
+	s.Require().Empty(plan.Validation.Problems)
+	seed(s.T(), s.store, types.Job{ID: "other", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/rules/guard.md"}}, Check: forkCheck()})
+
+	_, err := WriteFork(s.T().Context(), s.store, plan, nil, config.Jobs{})
+
+	s.NoError(err, "a narrowed hold only lifts a constraint")
 }
 
 func TestValidateMergeJudgesAnUpdateByWhatItAdds(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	seed(t, s, types.Job{ID: "w", State: types.StateRunning, WritePaths: []string{"cli/**", "docs/**"}, Check: forkCheck()})
+	seed(t, s, types.Job{ID: "w", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"cli/**", "docs/**"}}, Check: forkCheck()})
 	rows, err := s.List()
 	require.NoError(t, err)
 
-	narrowed := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.WritePaths = []string{"cli/registry.go"} }, config.Jobs{}, nil)
+	narrowed := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.Paths.Write = []string{"cli/registry.go"} }, config.Jobs{}, nil)
 	assert.Empty(t, narrowed.Problems, "narrowing a glob to a file it covers adds nothing")
 
-	widened := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.WritePaths = []string{"cli/**", "docs/**", "cmd"} }, config.Jobs{}, nil)
-	assert.Equal(t, "write_paths[2]", problemAt(t, widened.Problems, types.WritePathIsDirectory).Field,
+	widened := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.Paths.Write = []string{"cli/**", "docs/**", "cmd"} }, config.Jobs{}, nil)
+	assert.Equal(t, "paths.write[2]", problemAt(t, widened.Problems, types.WritePathIsDirectory).Field,
 		"a problem found on what the update adds names the field in the whole row")
 	assert.NotContains(t, codes(widened.Problems), types.JobRecordInvalid, "a shape the row already had is not the update's")
 }
@@ -248,8 +327,8 @@ func TestApplyCollectsEveryRecordsProblems(t *testing.T) {
 
 	s, _ := validateWorkspace(t)
 	_, err := Apply(t.Context(), s, []types.Declaration{
-		{ID: "a", WritePaths: []string{"cli"}, Check: forkCheck()},
-		{ID: "b", WritePaths: []string{"cli/registry.go"}, State: types.StateRunning, Check: forkCheck()},
+		{ID: "a", Paths: types.JobPaths{Write: []string{"cli"}}, Check: forkCheck()},
+		{ID: "b", Paths: types.JobPaths{Write: []string{"cli/registry.go"}}, State: types.StateRunning, Check: forkCheck()},
 	}, config.Jobs{}, nil, nil, false)
 	require.ErrorIs(t, err, types.WritePathIsDirectory)
 	require.ErrorIs(t, err, types.JobRecordInvalid)
@@ -267,7 +346,7 @@ func TestValidateMergePermitsEveryRegeneratedOutputByGlob(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	declare := func(deviations ...types.Deviation) func(*types.Job) {
 		return func(u *types.Job) {
-			u.WritePaths, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
+			u.Paths.Write, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
 	bare := validateMerge(t.Context(), s, nil, "w", declare(), config.Jobs{}, nil)
@@ -292,7 +371,7 @@ func TestIntegratorDeviationsAcceptEveryOutputButADeniedOne(t *testing.T) {
 	t.Parallel()
 
 	root, projects := regeneratedWorkspace(t)
-	row := types.Job{WritePaths: []string{"cli/registry.go"}, DenyPaths: []string{"cli/testdata/api.lock"}}
+	row := types.Job{Paths: types.JobPaths{Write: []string{"cli/registry.go"}, Deny: []string{"cli/testdata/api.lock"}}}
 
 	got := IntegratorDeviations(root, row, projects, ignoresCoverage)
 
@@ -314,7 +393,7 @@ func TestExtendFootprintAddsSiblingTests(t *testing.T) {
 	t.Parallel()
 
 	root, projects := regeneratedWorkspace(t)
-	row := types.Job{WritePaths: []string{"cli/registry.go"}, DenyPaths: []string{"cli/testdata/api.lock"}}
+	row := types.Job{Paths: types.JobPaths{Write: []string{"cli/registry.go"}, Deny: []string{"cli/testdata/api.lock"}}}
 	referrers := func(file, _ string) map[string]int {
 		if file != "cli/registry.go" {
 			return nil
@@ -327,7 +406,7 @@ func TestExtendFootprintAddsSiblingTests(t *testing.T) {
 	assert.Equal(t, []string{"cli/registry_test.go"}, paths, "a test beside a written file is reached; outputs and other directories are not")
 	assert.Len(t, notes, len(paths), "each added path says why")
 
-	none, _ := ExtendFootprint(root, types.Job{ReadOnly: true, WritePaths: row.WritePaths}, projects, referrers)
+	none, _ := ExtendFootprint(root, types.Job{ReadOnly: true, Paths: types.JobPaths{Write: row.Paths.Write}}, projects, referrers)
 	assert.Empty(t, none)
 }
 
@@ -337,7 +416,7 @@ func TestValidateMergePermitsLintOnlyByItsExactSubject(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	declare := func(deviations ...types.Deviation) func(*types.Job) {
 		return func(u *types.Job) {
-			u.WritePaths, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
+			u.Paths.Write, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
 	glob := types.Deviation{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"}
@@ -356,7 +435,7 @@ func TestResolveMergeAddsALintGoalAndSaysSo(t *testing.T) {
 
 	s, _ := validateWorkspace(t)
 	declare := func(paths ...string) func(*types.Job) {
-		return func(u *types.Job) { u.WritePaths, u.Check = paths, forkCheck() }
+		return func(u *types.Job) { u.Paths.Write, u.Check = paths, forkCheck() }
 	}
 	resolve := func(merge func(*types.Job)) (types.Job, string) {
 		var notes bytes.Buffer
@@ -397,7 +476,7 @@ func TestResolveMergeAddsALintGoalForAnyLanguageLintReads(t *testing.T) {
 	top.TargetChains = map[string][]types.ChainStep{"ci": {{Target: "lint"}, {Target: "test"}}}
 	s := NewStore(tempLocation(t, root)).InWorkspace(Workspace{Projects: projects})
 
-	merged, err := resolveMerge(t.Context(), s, nil, "w", func(u *types.Job) { u.WritePaths, u.Check = []string{"web/app.ts"}, forkCheck() }, nil)
+	merged, err := resolveMerge(t.Context(), s, nil, "w", func(u *types.Job) { u.Paths.Write, u.Check = []string{"web/app.ts"}, forkCheck() }, nil)
 	require.NoError(t, err)
 	var row types.Job
 	merged(&row)
@@ -460,7 +539,7 @@ func TestDirectoryWritePathStandsDownForAnAllOutputDirectory(t *testing.T) {
 	}}
 	store := NewStore(tempLocation(t, root)).InWorkspace(Workspace{Projects: projects})
 	problems := func(paths ...string) types.JobProblems {
-		return directoryWritePathProblems(store, types.Job{WritePaths: paths})
+		return directoryWritePathProblems(store, types.Job{Paths: types.JobPaths{Write: paths}})
 	}
 
 	assert.Empty(t, problems("docs/gen"), "every file under it is a declared output")
@@ -477,9 +556,9 @@ func TestDirectoryWritePathStandsDownForAnAllOutputDirectory(t *testing.T) {
 	assert.Len(t, problems("."), 1)
 
 	bare := NewStore(tempLocation(t, root))
-	assert.Len(t, directoryWritePathProblems(bare, types.Job{WritePaths: []string{"docs/gen"}}), 1, "with no workspace nothing is known to be generated")
+	assert.Len(t, directoryWritePathProblems(bare, types.Job{Paths: types.JobPaths{Write: []string{"docs/gen"}}}), 1, "with no workspace nothing is known to be generated")
 
-	row := types.Job{WritePaths: []string{"docs/gen"}}
+	row := types.Job{Paths: types.JobPaths{Write: []string{"docs/gen"}}}
 	assert.True(t, outputInside(row, types.Glob{Pattern: "docs/gen/*.md"}), "the directory claim holds an output glob under it (MGS3044)")
 	assert.False(t, outputInside(row, types.Glob{Pattern: "docs/mixed/*.md"}))
 }
@@ -503,25 +582,25 @@ func (s *FootprintMayExtendSuite) SetupTest() {
 }
 
 func (s *FootprintMayExtendSuite) TestSourceBesideATestMayExtend() {
-	s.True(FootprintMayExtend(s.root, types.Job{WritePaths: []string{"run/run.go"}}))
+	s.True(FootprintMayExtend(s.root, types.Job{Paths: types.JobPaths{Write: []string{"run/run.go"}}}))
 }
 
 func (s *FootprintMayExtendSuite) TestADirectoryWritePathMayExtend() {
-	s.True(FootprintMayExtend(s.root, types.Job{WritePaths: []string{"run"}}))
+	s.True(FootprintMayExtend(s.root, types.Job{Paths: types.JobPaths{Write: []string{"run"}}}))
 }
 
 func (s *FootprintMayExtendSuite) TestADirectoryWithNoTestCannotExtend() {
-	s.False(FootprintMayExtend(s.root, types.Job{WritePaths: []string{"docs/guide.md"}}))
+	s.False(FootprintMayExtend(s.root, types.Job{Paths: types.JobPaths{Write: []string{"docs/guide.md"}}}))
 }
 
 func (s *FootprintMayExtendSuite) TestANewFileInANewDirectoryCannotExtend() {
-	s.False(FootprintMayExtend(s.root, types.Job{WritePaths: []string{"fresh/new.go"}}))
+	s.False(FootprintMayExtend(s.root, types.Job{Paths: types.JobPaths{Write: []string{"fresh/new.go"}}}))
 }
 
 func (s *FootprintMayExtendSuite) TestWritingOnlyTestsCannotExtend() {
-	s.False(FootprintMayExtend(s.root, types.Job{WritePaths: []string{"run/run_test.go"}}))
+	s.False(FootprintMayExtend(s.root, types.Job{Paths: types.JobPaths{Write: []string{"run/run_test.go"}}}))
 }
 
 func (s *FootprintMayExtendSuite) TestAReadOnlyRowCannotExtend() {
-	s.False(FootprintMayExtend(s.root, types.Job{ReadOnly: true, WritePaths: []string{"run/run.go"}}))
+	s.False(FootprintMayExtend(s.root, types.Job{ReadOnly: true, Paths: types.JobPaths{Write: []string{"run/run.go"}}}))
 }

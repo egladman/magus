@@ -213,7 +213,7 @@ func enclosingDeclaration(file string, line int, regions []types.RegionChange) (
 		}
 	}
 	if decl == "" || decl == types.Preamble {
-		return "", fmt.Errorf("no declaration holds the occurrence at %s:%d, so claim %s in write_paths instead", file, line, file)
+		return "", fmt.Errorf("no declaration holds the occurrence at %s:%d, so claim %s in paths.write instead", file, line, file)
 	}
 	for _, word := range declarationWords(decl) {
 		if word == "" {
@@ -223,7 +223,7 @@ func enclosingDeclaration(file string, line int, regions []types.RegionChange) (
 			return word, nil
 		}
 	}
-	return "", fmt.Errorf("the declaration holding %s:%d is not named alone by any claim of %s, so claim %s in write_paths instead", file, line, file, file)
+	return "", fmt.Errorf("the declaration holding %s:%d is not named alone by any claim of %s, so claim %s in paths.write instead", file, line, file, file)
 }
 
 var methodLine = regexp.MustCompile(`^func\s*\([^)]*?([A-Za-z_][A-Za-z0-9_]*)(?:\[[^\]]*\])?\)\s*([A-Za-z_][A-Za-z0-9_]*)`)

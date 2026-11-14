@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -54,7 +55,7 @@ type gateRedundancy struct {
 	// names its own selection.
 	undeclared []string
 	// tier is what size narrowed the gate to; empty runs the full gate.
-	tier types.Tier
+	tier check.Tier
 	// scope is what this gate's verdict covers; see gateScope.
 	scope sessions.GateScope
 }
@@ -227,7 +228,7 @@ func (g *gateRedundancy) finding(ctx context.Context, disabled bool) (gateFindin
 		}
 	}
 	rep, err := g.m.AssessChange(ctx, g.target, magus.AssessOptions{Base: rec.Commit})
-	if err != nil || rep.Tier != types.RiskTrivial {
+	if err != nil || rep.Tier != check.RiskTrivial {
 		return gateFinding{}, false
 	}
 	return gateFinding{rec: rec, delta: rep.Lines()}, true
@@ -245,7 +246,7 @@ func (g *gateRedundancy) size(ctx context.Context, base string, forced bool) *ty
 		slog.DebugContext(ctx, "change not assessed; running the full gate", attr.Error(err))
 		return nil
 	}
-	if rep.Tier == types.RiskFull {
+	if rep.Tier == check.RiskFull {
 		return nil
 	}
 	g.tier = rep.Tier

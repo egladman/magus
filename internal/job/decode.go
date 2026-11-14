@@ -338,7 +338,7 @@ func (e *missingVersion) Error() string {
 // Non-strict on purpose: this pass must survive the very fields a newer sender added,
 // or a version skew would be reported as an unknown member, which is the misdirect the
 // version exists to prevent.
-func checkVersion(raw []byte, what string, ledger types.SchemaLedger) error {
+func checkVersion(raw []byte, what string, ledger types.FormatLedger) error {
 	var envelope types.Schema
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return fmt.Errorf("job: the %s is not JSON: %w", what, err)
@@ -347,7 +347,7 @@ func checkVersion(raw []byte, what string, ledger types.SchemaLedger) error {
 	if envelope.Version == "" {
 		return &missingVersion{what: what, supported: supported}
 	}
-	if err := supported.Refuse("job: the "+what, envelope.Version, "send api_version "+string(supported)); err != nil {
+	if err := types.RefuseVersion(supported, envelope.Version, "job: the "+what, "send api_version "+string(supported)); err != nil {
 		return err
 	}
 	if lacks := envelope.Unmet(ledger.Features()); lacks != nil {

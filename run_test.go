@@ -33,7 +33,7 @@ import (
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -3079,12 +3079,11 @@ func (s *targetResultsSuite) TestAPassingTargetReportsOKWithItsRef() {
 	got, err := s.run()
 	s.Require().NoError(err)
 	s.Require().Len(got, 1)
-	s.Equal(".", got[0].Project)
-	s.Equal("build", got[0].Target)
-	s.Equal(types.TargetOK, got[0].Status)
-	s.False(got[0].CacheHit)
-	s.NotEmpty(got[0].Ref)
-	s.NoError(got[0].Err)
+	r := got[0]
+	s.NotEmpty(r.Ref)
+	s.NotEmpty(r.Hash)
+	r.Ref, r.Hash, r.Duration = "", "", 0
+	s.Equal(types.TargetResult{Project: ".", Target: "build", Status: types.TargetOK}, r)
 }
 
 func (s *targetResultsSuite) TestAReplayReportsACacheHit() {
@@ -3107,4 +3106,175 @@ func (s *targetResultsSuite) TestAFailureKeepsItsErrorAndRemedy() {
 	s.Equal(types.TargetFailed, got[0].Status)
 	s.ErrorIs(got[0].Err, refused)
 	s.NotEmpty(got[0].Next)
+}
+
+// neededKeySuite pins ADR 0032 section 7: a target's key carries the key of
+// every target it needs through ctx.needs. The fixture is the agents guide's
+// test: it reads only *.ts and needs a generator and a skip_cache binary build.
+type neededKeySuite struct {
+	suite.Suite
+	w *testkit.Workspace
+	m *Magus
+}
+
+func TestNeededKeySuite(t *testing.T) { suite.Run(t, new(neededKeySuite)) }
+
+func (s *neededKeySuite) SetupTest() {
+	s.w = testkit.NewWorkspace(s.T())
+	s.w.WriteTree(map[string]string{
+		"magusfile.buzz": `import "magus";
+magus\project({
+    "sources": ["**/*.go", "**/*.buzz"],
+    "targets": {
+        "go-build": {"skip_cache": "relinks the binary"},
+        "index-generate": {"skip_cache": "is a drift gate"},
+    },
+});
+export fun go_build(ctx: magus\Context, args: [str]) > void {}
+export fun runtime_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(["runtime/*.go"]);
+    ctx.writesFiles(["gen/runtime.txt"]);
+}
+export fun index_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(["MAGUS.md"]);
+}
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(index_generate);
+}
+export fun narrow_lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(index_generate);
+    ctx.readsFiles(["runtime/*.go"]);
+}
+`,
+		"agents/magusfile.buzz": `import "magus";
+import "project/.." as workspace;
+magus\project({"sources": ["*.ts", "lib/*.buzz"]});
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(workspace\runtime_generate, workspace\go_build);
+    ctx.readsFiles(["*.ts"]);
+}
+`,
+		"agents/plugin.test.ts": "test\n",
+		"agents/lib/hook.buzz":  "// hook\n",
+		"runtime/runtime.go":    "package runtime\n",
+		"cmd/main.go":           "package main\n",
+		"MAGUS.md":              "index\n",
+		"notes.txt":             "notes\n",
+	})
+	m, err := Open(context.Background(), s.w.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err, "Open")
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *neededKeySuite) key(project, target string) string {
+	k, _, err := s.m.ComputeTargetKey(context.Background(), project, target, nil)
+	s.Require().NoError(err, "%s:%s", project, target)
+	return k
+}
+
+// moves reports whether writing body to rel moves project:target's key.
+func (s *neededKeySuite) moves(project, target, rel, body string) bool {
+	before := s.key(project, target)
+	s.w.Write(rel, body)
+	return before != s.key(project, target)
+}
+
+func (s *neededKeySuite) TestANeededTargetsInputChangeMisses() {
+	s.True(s.moves("agents", "test", "runtime/runtime.go", "package runtime // edited\n"),
+		"runtime-generate reads runtime/*.go, and test needs it")
+}
+
+func (s *neededKeySuite) TestAnUnrelatedChangeHits() {
+	s.False(s.moves("agents", "test", "notes.txt", "notes, edited\n"),
+		"no target test reaches reads notes.txt")
+}
+
+// The edit that replayed out106d79247eec: lib/hook.buzz reaches the binary
+// go_build places, and the test runs that binary.
+func (s *neededKeySuite) TestTheAgentsTestMissesWhenTheHookItRunsChanges() {
+	s.True(s.moves("agents", "test", "agents/lib/hook.buzz", "// hook, edited\n"),
+		"go-build keys on **/*.buzz, and test needs it")
+}
+
+func (s *neededKeySuite) TestTheAgentsTestMissesOnAGoChange() {
+	s.True(s.moves("agents", "test", "cmd/main.go", "package main // edited\n"),
+		"go-build keys on **/*.go, and test needs it")
+}
+
+func (s *neededKeySuite) TestANeededTargetsInputsJoinTheSources() {
+	p := s.m.Get("agents")
+	s.Require().NotNil(p)
+	step := s.m.buildStep(p, "test")
+	s.Subset(step.Sources, types.MustParseGlobs("**/*.go", "runtime/*.go"),
+		"the needed targets' globs enter the composer's sources")
+	s.False(step.NoCache, "every needed project resolves")
+}
+
+func (s *neededKeySuite) TestAComposedSkipCacheArtifactStillKeysTheComposer() {
+	p := s.m.Get(".")
+	s.Require().NotNil(p)
+	step := s.m.buildStep(p, "lint")
+	s.Contains(step.Sources, types.Glob{Pattern: "MAGUS.md"})
+	s.Equal([]types.TargetRef{{Project: ".", Target: "index-generate"}}, step.BeforeKey,
+		"the gate still runs before the key that reads its artifact")
+}
+
+func (s *neededKeySuite) TestADeclaredFootprintStillNarrowsASkipCacheArtifact() {
+	p := s.m.Get(".")
+	s.Require().NotNil(p)
+	step := s.m.buildStep(p, "narrow-lint")
+	s.NotContains(step.Sources, types.Glob{Pattern: "MAGUS.md"},
+		"narrow-lint never opens MAGUS.md")
+	s.Empty(step.BeforeKey, "a gate whose artifact is not read is not run first")
+}
+
+func (s *neededKeySuite) TestASkipCacheTargetsOwnStepStillNeverReplays() {
+	p := s.m.Get(".")
+	s.Require().NotNil(p)
+	step := s.m.buildStep(p, "index-generate")
+	s.True(step.NoCache)
+	s.NotContains(step.Sources, types.Glob{Pattern: "MAGUS.md"},
+		"its own output says nothing about its own run")
+}
+
+// productStepSuite pins that a run's undeclared-write check (MGS4011) skips
+// the product path a relinking target declares, as it skips the relinked one.
+type productStepSuite struct {
+	suite.Suite
+	m *Magus
+}
+
+func TestProductStepSuite(t *testing.T) {
+	suite.Run(t, new(productStepSuite))
+}
+
+func (s *productStepSuite) SetupTest() {
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile(`import "magus";
+magus\project({"targets": {
+    "link": {"relinks": "./tool", "product": {"path": "bin/tool", "target": "link-product"}},
+}});
+export fun link(ctx: magus\Context, args: [str]) > void {}
+export fun link_product(ctx: magus\Context, args: [str]) > void {}
+`)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *productStepSuite) TestTheProductTargetMayWriteTheProductPath() {
+	step := s.m.buildStep(s.m.Get("."), "link-product")
+	s.Contains(step.WritePaths, filepath.Join(step.WorkspaceRoot, "bin", "tool"))
+}
+
+func (s *productStepSuite) TestTheRelinkingTargetStillMayWriteItsBinary() {
+	step := s.m.buildStep(s.m.Get("."), "link")
+	s.Contains(step.WritePaths, filepath.Join(step.WorkspaceRoot, "tool"))
+}
+
+func (s *productStepSuite) TestTheDeclarationReachesTheTargetPolicy() {
+	want := types.Target{Relinks: "./tool", Product: "bin/tool", ProductTarget: "link-product"}
+	s.Equal(want, s.m.Get(".").TargetPolicies["link"])
 }

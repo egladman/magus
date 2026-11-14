@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/json"
@@ -26,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // The lineage actions a guard_policy trail event records.
@@ -73,6 +75,8 @@ type PolicyState struct {
 	CommandRule bool
 	WriteRule   bool
 	StopRule    bool
+	// StepRules are the kinds magus\guard.step registers, sorted.
+	StepRules []string
 	// Files are the files the load read, the root magusfile and every source it imports, as
 	// the load named them. Cheap, unlike Sources: they are what the load already logged.
 	Files []string
@@ -88,7 +92,9 @@ type policyMarker struct {
 	CommandRule bool   `json:"command_rule,omitzero"`
 	WriteRule   bool   `json:"write_rule,omitzero"`
 	StopRule    bool   `json:"stop_rule,omitzero"`
-	Pending     bool   `json:"pending"`
+	// StepRules are the kinds a step rule was registered for.
+	StepRules []string `json:"step_rules,omitempty"`
+	Pending   bool     `json:"pending"`
 	// Files is PolicyState.Files, kept so a call whose own load ran out of time still knows
 	// which files the guard loads.
 	Files []string `json:"files,omitempty"`
@@ -147,7 +153,8 @@ func RecordPolicy(ctx context.Context, cacheDir, workspace string, now PolicySta
 	}
 	pending := slices.ContainsFunc(sources, func(s PolicySource) bool { return s.Worktree != s.Approved })
 	action := classifyPolicy(prev, seen, now, pending)
-	next := policyMarker{Digest: now.Digest, ShellRules: now.ShellRules, SpawnRule: now.SpawnRule, CommandRule: now.CommandRule, WriteRule: now.WriteRule, StopRule: now.StopRule, Pending: pending, Files: now.Files}
+	next := policyMarker{Digest: now.Digest, ShellRules: now.ShellRules, SpawnRule: now.SpawnRule, CommandRule: now.CommandRule, WriteRule: now.WriteRule, StopRule: now.StopRule,
+		StepRules: now.StepRules, Pending: pending, Files: now.Files}
 	if action != "" {
 		body, _ := json.Marshal(policyEvent{APIVersion: policyAPIVersion, Action: action, Digest: now.Digest, Previous: prev.Digest, Sources: sources})
 		ref, size := trail.WriteBlob(ctx, cacheDir, "policy", body)
@@ -181,7 +188,8 @@ func classifyPolicy(prev policyMarker, seen bool, now PolicyState, pending bool)
 		return PolicyRemoved
 	case !pending:
 		return PolicyCommitted
-	case prev.SpawnRule && !now.SpawnRule, prev.CommandRule && !now.CommandRule, prev.WriteRule && !now.WriteRule, prev.StopRule && !now.StopRule:
+	case prev.SpawnRule && !now.SpawnRule, prev.CommandRule && !now.CommandRule, prev.WriteRule && !now.WriteRule, prev.StopRule && !now.StopRule,
+		slices.ContainsFunc(prev.StepRules, func(kind string) bool { return !slices.Contains(now.StepRules, kind) }):
 		return PolicyLoosenPending
 	case now.ShellRules < prev.ShellRules:
 		// Shell rules have no approved twin, so a dropped one is in effect at once.
@@ -295,13 +303,23 @@ type seamRules struct {
 	Command bool `json:"command,omitzero"`
 	Write   bool `json:"write,omitzero"`
 	Stop    bool `json:"stop,omitzero"`
+	// Steps are the kinds a step rule is registered for, sorted.
+	Steps []string `json:"steps,omitempty"`
 }
 
-func registered(reg *workspace.WorkspaceRegistry) seamRules {
+func registered(reg *workspace.WorkspaceRegistry, group *steps.Group) seamRules {
 	if reg == nil {
 		return seamRules{}
 	}
-	return seamRules{Spawn: reg.SpawnRule() != nil, Command: reg.CommandRule() != nil, Write: reg.WriteRule() != nil, Stop: reg.StopRule() != nil}
+	return seamRules{Spawn: reg.SpawnRule() != nil, Command: reg.CommandRule() != nil, Write: reg.WriteRule() != nil, Stop: reg.StopRule() != nil, Steps: group.Kinds()}
+}
+
+// seams is registered for l, the zero value for a nil l.
+func (l *ruleLoad) seams() seamRules {
+	if l == nil {
+		return seamRules{}
+	}
+	return registered(l.WorkspaceRegistry, l.steps)
 }
 
 type snapshotSource struct {
@@ -391,7 +409,7 @@ func openSnapshot(ctx context.Context, w Wiring) (snapshotSite, error) {
 	if err != nil {
 		return snapshotSite{}, err
 	}
-	authority, ok, err := approvalAuthority(ctx, w.Root, w.vcsOptions(), w.CacheDir)
+	authority, ok, err := approvalAuthority(ctx, w.Root, w.Authority, w.vcsOptions(), w.CacheDir)
 	switch {
 	case err != nil:
 		return snapshotSite{}, err
@@ -402,8 +420,8 @@ func openSnapshot(ctx context.Context, w Wiring) (snapshotSite, error) {
 }
 
 // key names the state a load of sources would see. It covers the build, the
-// checked-out commit, the agents settings and every byte in the load's
-// scope. ok is false when the checkout id cannot be read.
+// authority, the checked-out commit, the agents settings and every byte in
+// the load's scope. ok is false when the checkout id cannot be read.
 func (s snapshotSite) key(sources []string) (string, bool) {
 	files := make([]interp.SourceFile, len(sources))
 	for i, p := range sources {
@@ -420,7 +438,7 @@ func (s snapshotSite) key(sources []string) (string, bool) {
 	}
 	commit, _ := buildinfo.Commit()
 	h := sha256.New()
-	for _, part := range []string{s.w.Root, s.store.Stamp, commit, fmt.Sprintf("%+v", s.w.vcsOptions()), id, scope} {
+	for _, part := range []string{s.w.Root, s.store.Stamp, commit, fmt.Sprintf("%+v", s.w.vcsOptions()), s.authority.revision, id, scope} {
 		frame(h, framePath, []byte(part))
 	}
 	frame(h, frameFile, settings)
@@ -495,8 +513,8 @@ func newSnapshotBody(ctx context.Context, rules *WorkspaceRules) (snapshotBody, 
 	body := snapshotBody{
 		Digest:   policy.Digest,
 		Builtins: builtins,
-		Worktree: registered(rules.registry),
-		Approved: registered(approved),
+		Worktree: registered(rules.registry, rules.steps),
+		Approved: approved.seams(),
 	}
 	if approved != nil {
 		body.ApprovedPending = rules.approvedPending
@@ -543,10 +561,11 @@ func (s snapshotSite) dependencies(deps Dependencies, snap policySnapshot) Depen
 	deps.Builtins = body.Builtins
 	s.lazyWorktreeRules(&deps, body.Worktree)
 	s.lazyApprovedRules(&deps, body)
-	lineage := &WorkspaceRules{root: w.Root, opts: w.vcsOptions(), cacheDir: w.CacheDir}
+	lineage := &WorkspaceRules{root: w.Root, opts: w.vcsOptions(), cacheDir: w.CacheDir, revision: w.Authority}
 	policy := WorkspacePolicy{
 		Digest: body.Digest, ShellRules: len(body.ShellRules),
 		SpawnRule: body.Worktree.Spawn, CommandRule: body.Worktree.Command, WriteRule: body.Worktree.Write, StopRule: body.Worktree.Stop,
+		StepRules: body.Worktree.Steps,
 	}
 	for _, src := range body.Sources {
 		policy.Sources = append(policy.Sources, interp.SourceFile{Path: src.Path, ContentID: src.ContentID})
@@ -565,7 +584,7 @@ func (s snapshotSite) lazyWorktreeRules(deps *Dependencies, has seamRules) {
 			defer w.trace(ctx, "guard.load_rules")()
 			rules, err := loadPolicyRules(ctx, w.Root, w.vcsOptions())
 			if rules != nil {
-				rules.cacheDir = w.CacheDir
+				rules.cacheDir, rules.revision = w.CacheDir, w.Authority
 			}
 			return rules, err
 		})
@@ -590,30 +609,43 @@ func (s snapshotSite) lazyWorktreeRules(deps *Dependencies, has seamRules) {
 			return r.StopRule()
 		})
 	}
+	if len(has.Steps) > 0 {
+		deps.StepRule = func(kind string) steps.Rule {
+			if !slices.Contains(has.Steps, kind) {
+				return nil
+			}
+			return steps.Rule(lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, typesagent.StepRequest, hint.Gate) (types.GuardVerdict, error) {
+				return r.StepRule(kind)
+			}))
+		}
+	}
 }
 
 // lazyApprovedRules sets the approved side's rules, resolved on the first call
 // of any from the snapshot's pending answer.
 func (s snapshotSite) lazyApprovedRules(deps *Dependencies, body snapshotBody) {
 	w := s.w
-	var approved onceAnswer[*workspace.WorkspaceRegistry]
-	registry := func(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
-		return approved.get(ctx, func(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
+	var approved onceAnswer[*ruleLoad]
+	registry := func(ctx context.Context) (*ruleLoad, error) {
+		return approved.get(ctx, func(ctx context.Context) (*ruleLoad, error) {
 			defer w.trace(ctx, "guard.approved_resolve")()
 			return approvedRegistry(ctx, w.Root, s.authority, body.ApprovedPending)
 		})
 	}
 	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
-		return approvedSeam(ctx, body.Approved.Spawn, registry, (*workspace.WorkspaceRegistry).SpawnRule)
+		return approvedSeam(ctx, body.Approved.Spawn, registry, (*ruleLoad).SpawnRule)
 	}
 	deps.ApprovedCommandRule = func(ctx context.Context) (workspace.CommandRule, error) {
-		return approvedSeam(ctx, body.Approved.Command, registry, (*workspace.WorkspaceRegistry).CommandRule)
+		return approvedSeam(ctx, body.Approved.Command, registry, (*ruleLoad).CommandRule)
 	}
 	deps.ApprovedWriteRule = func(ctx context.Context) (workspace.WriteRule, error) {
-		return approvedSeam(ctx, body.Approved.Write, registry, (*workspace.WorkspaceRegistry).WriteRule)
+		return approvedSeam(ctx, body.Approved.Write, registry, (*ruleLoad).WriteRule)
 	}
 	deps.ApprovedStopRule = func(ctx context.Context) (workspace.StopRule, error) {
-		return approvedSeam(ctx, body.Approved.Stop, registry, (*workspace.WorkspaceRegistry).StopRule)
+		return approvedSeam(ctx, body.Approved.Stop, registry, (*ruleLoad).StopRule)
+	}
+	deps.ApprovedStepRule = func(ctx context.Context, kind string) (steps.Rule, error) {
+		return approvedSeam(ctx, slices.Contains(body.Approved.Steps, kind), registry, func(l *ruleLoad) steps.Rule { return l.StepRule(kind) })
 	}
 }
 
@@ -634,7 +666,7 @@ func lazyRule[Req any](load func(context.Context) (*WorkspaceRules, error), pick
 	}
 }
 
-func approvedSeam[R any](ctx context.Context, has bool, registry func(context.Context) (*workspace.WorkspaceRegistry, error), pick func(*workspace.WorkspaceRegistry) R) (R, error) {
+func approvedSeam[R any](ctx context.Context, has bool, registry func(context.Context) (*ruleLoad, error), pick func(*ruleLoad) R) (R, error) {
 	var none R
 	if !has {
 		return none, nil
@@ -787,6 +819,6 @@ func WritePolicySnapshot(ctx context.Context, w Wiring) error {
 	if err != nil {
 		return err
 	}
-	rules.cacheDir = w.CacheDir
+	rules.cacheDir, rules.revision = w.CacheDir, w.Authority
 	return site.write(ctx, rules)
 }

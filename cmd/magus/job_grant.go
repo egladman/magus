@@ -12,9 +12,9 @@ import (
 
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/exit"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -27,14 +27,14 @@ const pushUnverifiedRule = "push-unverified"
 // waiving the push gate for one commit.
 func jobGrant(ctx context.Context, root string, args []string) error {
 	spec := jobCommandSpec()
-	child := spec.Children[slices.IndexFunc(spec.Children, func(c cmdline.Command) bool { return c.Name == "grant" })]
+	child := spec.Children[slices.IndexFunc(spec.Children, func(c command.Command) bool { return c.Name == "grant" })]
 	var lasting time.Duration
 	var revoke bool
 	var commit, reason string
 	rest, err := commandParse("job grant", args, func(fs *flag.FlagSet) {
 		fs.DurationVar(&lasting, "for", 0, "")
 		fs.BoolVar(&revoke, "revoke", false, "")
-		cmdline.NegatedBoolVar(fs, &revoke, "revoke")
+		command.NegatedBoolVar(fs, &revoke, "revoke")
 		fs.StringVar(&commit, "commit", "", "")
 		fs.StringVar(&reason, "reason", "", "")
 		fs.Usage = func() {

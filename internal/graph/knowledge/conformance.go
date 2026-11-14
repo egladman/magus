@@ -41,11 +41,12 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.Conformance {
 	samples[couplingKey(types.ConformanceModeKnobs)] = knobbed
 	maps.Copy(samples, aliasSamples(g, o))
 	groups := cloneGroups(g, o)
+	digests := newConformanceIndex(g, o).digests()
 
 	out := types.Conformance{Excluded: conformanceExcluded(g, o)}
 	for _, key := range slices.SortedFunc(maps.Keys(samples), compareConformanceKeys) {
 		items := samples[key]
-		row := types.ConformanceRow{Key: key, N: len(items)}
+		row := types.ConformanceDistribution{Key: key, N: len(items)}
 		measures := make([]int, len(items))
 		for i, it := range items {
 			measures[i] = it.Measure
@@ -60,16 +61,17 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.Conformance {
 		value, enforced := o.Effective(key)
 		row.Value = value
 		if !enforced {
-			out.Rows = append(out.Rows, row)
+			out.Distributions = append(out.Distributions, row)
 			continue
 		}
 		if key == cloneKey {
 			for _, grp := range groups {
-				row.Violations = append(row.Violations, cloneItem(grp))
+				row.Violations = append(row.Violations, cloneItem(grp, digests))
 			}
 		} else {
 			for _, it := range items {
 				if itemPast(key.Metric, it, row.Value) {
+					it.Digest = digests[it.ID]
 					row.Violations = append(row.Violations, it)
 				}
 			}
@@ -80,9 +82,9 @@ func (g *Graph) Conformance(o types.ConformanceOptions) types.Conformance {
 		if limited && key.Metric != types.ConformanceFileSplit && row.N >= o.MinSample && float64(row.Live) < float64(row.Value)*(1-o.Step) {
 			row.Propose = row.Live
 		}
-		out.Rows = append(out.Rows, row)
+		out.Distributions = append(out.Distributions, row)
 	}
-	out.Answer = types.ClassifyAnswer(len(out.Rows) > 0, "", nil)
+	out.Answer = types.ClassifyAnswer(len(out.Distributions) > 0, "", nil)
 	return out
 }
 
@@ -116,7 +118,7 @@ func compareConformanceKeys(a, b types.ConformanceKey) int {
 
 // conformanceSamples measures every item of every metric, keyed by metric, population and
 // scope, each list in ID order. Generated and excluded files belong to no population. A
-// dep-fanout package is keyed by its own directory when a value is configured for that
+// imported-packages package is keyed by its own directory when a value is configured for that
 // directory, else by its layer. clone-tokens samples every callable with a shape, test
 // code in its own row; its violations are cloneGroups, not these samples. call-sequence
 // samples are callSeqSamples'.
@@ -132,7 +134,7 @@ func conformanceSamples(g *Graph, o types.ConformanceOptions) map[types.Conforma
 	x.mainLogicSamples(add)
 	x.storePathSamples(add)
 	x.fileSplitSamples(add)
-	x.depSamples(add)
+	x.importedPackageSamples(add)
 	for _, e := range x.exports() {
 		add(types.ConformanceExportScope, e.pop, "", e.item)
 	}
@@ -455,14 +457,47 @@ func (x *conformanceIndex) symbolSamples(add conformanceAdd) {
 	}
 }
 
-// depSamples measures how many other workspace package directories each package imports,
-// read from the imports the index recorded. What a generated file imports is its
-// generator's choice and is not counted, but importing a generated package is.
-func (x *conformanceIndex) depSamples(add conformanceAdd) {
-	deps := x.g.packageDepsExcept(func(file string) bool {
-		_, ok := x.population(file)
-		return !ok
-	})
+// digests is each measured symbol's body digest by item ID, for a symbol
+// whose lines were read.
+func (x *conformanceIndex) digests() map[string]string {
+	out := map[string]string{}
+	for _, s := range x.symbols() {
+		if d := s.node.Attrs[AttrBodyDigest]; d != "" {
+			out[s.itemID] = d
+		}
+	}
+	return out
+}
+
+// importedPackageSamples measures how many other workspace package
+// directories each package imports, read from the imports the index
+// recorded. What a generated file imports is its generator's choice and
+// is not counted, but importing a generated package is.
+func (x *conformanceIndex) importedPackageSamples(add conformanceAdd) {
+	imports, pops := x.packageImports()
+	reached := x.reachedDigests()
+	for dir, tos := range imports {
+		pop := pops[dir]
+		scope := dir
+		if !x.pinned(types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: pop, Scope: dir}) {
+			scope = x.layer(dir)
+		}
+		item := types.ConformanceItem{ID: dir, Source: dir, Measure: len(tos)}
+		for _, to := range slices.Sorted(maps.Keys(tos)) {
+			imp := types.ConformanceImport{Dir: to}
+			if r := reached[packageEdge{dir, to}]; !r.unknown && len(r.digests) > 0 {
+				imp.Digests = slices.Sorted(maps.Keys(r.digests))
+			}
+			item.Imports = append(item.Imports, imp)
+		}
+		add(types.ConformanceImportedPackages, pop, scope, item)
+	}
+}
+
+// packageImports is each measured package directory's imports of other
+// workspace package directories, and its population.
+func (x *conformanceIndex) packageImports() (map[string]map[string]bool, map[string]types.ConformancePopulation) {
+	deps := x.g.packageDepsExcept(x.unmeasured)
 	dirs, targets := x.packageDirs(true), x.packageDirs(false)
 	imports := map[string]map[string]bool{}
 	pops := map[string]types.ConformancePopulation{}
@@ -479,14 +514,124 @@ func (x *conformanceIndex) depSamples(add conformanceAdd) {
 			}
 		}
 	}
-	for dir, tos := range imports {
-		pop := pops[dir]
-		scope := dir
-		if !x.pinned(types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: pop, Scope: dir}) {
-			scope = x.layer(dir)
+	return imports, pops
+}
+
+func (x *conformanceIndex) unmeasured(file string) bool {
+	_, ok := x.population(file)
+	return !ok
+}
+
+// packageEdge is an importing package directory and an imported one.
+type packageEdge struct{ from, to string }
+
+// packageReached is what an import's files reference: the digests of the
+// top-level declarations, and whether one of them had none.
+type packageReached struct {
+	digests map[string]bool
+	unknown bool
+}
+
+// reachedDigests is what each import reaches from the importer's measured
+// non-test files.
+func (x *conformanceIndex) reachedDigests() map[packageEdge]packageReached {
+	dirs, targets := x.packageDirs(true), x.packageDirs(false)
+	tops := x.topLevel()
+	out := map[packageEdge]packageReached{}
+	for id, f := range x.g.nodes {
+		if f.Kind != types.KindFile || types.IsTestPath(f.Source) || x.unmeasured(f.Source) {
+			continue
 		}
-		add(types.ConformanceDepFanout, pop, scope, types.ConformanceItem{ID: dir, Source: dir, Measure: len(tos)})
+		for _, ns := range x.fileNS[id] {
+			from, ok := dirs[ns]
+			if !ok {
+				continue
+			}
+			for _, e := range x.g.out[id] {
+				local := x.local[e.Target]
+				if e.Relation != types.RelationReferences || len(local) == 0 {
+					continue
+				}
+				owner := x.g.nodes[e.Target].Attrs[attrNamespace]
+				to, ok := targets[owner]
+				if !ok || to == from {
+					continue
+				}
+				k := packageEdge{from, to}
+				r := out[k]
+				if r.digests == nil {
+					r.digests = map[string]bool{}
+				}
+				if d := x.g.nodes[tops[topLevelKey{owner, local[0]}]].Attrs[AttrBodyDigest]; d != "" {
+					r.digests[d] = true
+				} else {
+					r.unknown = true
+				}
+				out[k] = r
+			}
+		}
 	}
+	return out
+}
+
+// topLevelKey is a top-level declaration: its namespace and its descriptor.
+type topLevelKey struct {
+	namespace string
+	decl      descriptor
+}
+
+// topLevel is each top-level declaration's symbol ID, so a reference to a
+// member reaches the declaration that owns it.
+func (x *conformanceIndex) topLevel() map[topLevelKey]string {
+	out := map[topLevelKey]string{}
+	for id, local := range x.local {
+		if len(local) == 1 {
+			out[topLevelKey{x.g.nodes[id].Attrs[attrNamespace], local[0]}] = id
+		}
+	}
+	return out
+}
+
+// ConformancePackages is every measured package directory with the
+// package directories it imports and its top-level declarations' digests,
+// in directory order. A base measure keeps it for imported-packages.
+func (g *Graph) ConformancePackages(o types.ConformanceOptions) []types.ConformancePackage {
+	if !g.HasSymbols() {
+		return nil
+	}
+	x := newConformanceIndex(g, o)
+	imports, _ := x.packageImports()
+	targets := x.packageDirs(false)
+	digests := map[string]map[string]bool{}
+	for id, local := range x.local {
+		n := x.g.nodes[id]
+		file, _, placed := splitPathLine(n.Source)
+		dir, ok := targets[n.Attrs[attrNamespace]]
+		d := n.Attrs[AttrBodyDigest]
+		if !placed || !ok || len(local) != 1 || d == "" || types.IsTestPath(file) {
+			continue
+		}
+		if digests[dir] == nil {
+			digests[dir] = map[string]bool{}
+		}
+		digests[dir][d] = true
+	}
+	dirs := slices.Sorted(maps.Keys(imports))
+	for dir := range digests {
+		if _, ok := imports[dir]; !ok {
+			dirs = append(dirs, dir)
+		}
+	}
+	slices.Sort(dirs)
+	out := make([]types.ConformancePackage, 0, len(dirs))
+	for _, dir := range dirs {
+		out = append(out, types.ConformancePackage{
+			Dir:     dir,
+			Imports: slices.Sorted(maps.Keys(imports[dir])),
+			Digests: slices.Sorted(maps.Keys(digests[dir])),
+		})
+	}
+	return out
 }
 
 // packageDirs places each namespace in the lowest directory holding a non-test file that
@@ -672,13 +817,20 @@ func moduleRoot(ns string) bool {
 	return ok && len(p) == 1 && p[0].Suffix == '/' && p[0].Name == parts[1]
 }
 
-// cloneItem is a clone group as one violation, named by its members.
-func cloneItem(grp []types.ConformanceItem) types.ConformanceItem {
+// cloneItem is a clone group as one violation, named by its members. It
+// has a digest only when every member has one.
+func cloneItem(grp []types.ConformanceItem, digests map[string]string) types.ConformanceItem {
 	ids := make([]string, len(grp))
+	members := make([]string, len(grp))
 	for i, m := range grp {
-		ids[i] = m.ID
+		ids[i], members[i] = m.ID, digests[m.ID]
 	}
-	return types.ConformanceItem{ID: strings.Join(ids, ", "), Source: grp[0].Source, Measure: grp[0].Measure}
+	it := types.ConformanceItem{ID: strings.Join(ids, ", "), Source: grp[0].Source, Measure: grp[0].Measure}
+	if !slices.Contains(members, "") {
+		slices.Sort(members)
+		it.Digest = strings.Join(members, ",")
+	}
+	return it
 }
 
 // packageReach counts, per package directory other than own, the distinct nodes at the far

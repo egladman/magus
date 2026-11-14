@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27508
-skill_short_bytes: 21751
+skill_full_bytes: 27567
+skill_short_bytes: 21816
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `a4a965132754` |
+| `skill-content` | `5177692f4698` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -223,7 +223,7 @@ that names one.
 - Inheriting it BY OMISSION is the failure. A host defaulting to "same as the parent"
   makes every unnamed spawn the most expensive one, and records no choice.
 
-When the tier is unclear, start at economy. A job that fails its criteria there is
+When the tier is unclear, start at routine. A job that fails its criteria there is
 re-forked one tier up, not retried at the same one.
 
 Tiers are the workspace's. `--model` takes a tier
@@ -231,24 +231,25 @@ or a model. magus never picks a model live: re-fork to change a tier.
 
 | Shipped tier | Assign |
 |---|---|
-| principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
-| standard | isolated implementation with a clear contract and a bounded set of projects, and tracing behavior through code |
-| economy | mechanical edits, fixtures, docs, inventory, and lookups the graph answers (exists, depends-on, is-generated) |
+| frontier | work moved up after it failed its criteria at design |
+| design | architecture, ambiguous ownership, public APIs, migrations, security, integration |
+| bounded | isolated implementation with a clear contract and a bounded set of projects, and tracing behavior through code |
+| routine | mechanical edits, fixtures, docs, inventory, and lookups the graph answers (exists, depends-on, is-generated) |
 
 If the host cannot select models or reasoning effort, keep its default. Tool access
 is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at economy:
+To prove something, brute-force it at routine:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
   Give each a script check, so `magus job wait` can pass it.
 - Spawn the `magus-scout` agent for each where your harness installed it.
 - Each reports its command and output ref.
-- The principal tier only reconciles the claims where workers disagree.
+- The design tier only reconciles the claims where workers disagree.
 
-Keep economy jobs short-lived. The brief points at evidence (paths, output refs, the
+Keep routine jobs short-lived. The brief points at evidence (paths, output refs, the
 row) and carries no transcript.
 Where the brief names that size, the worker reports and stops before passing it.
 
@@ -338,7 +339,7 @@ binds its child to nothing.
 
    ```sh
    magus job fork api-store --model <tier or model> \
-     --criteria "accounts move to the new store; nothing names the old one" \
+     --instructions "accounts move to the new store; nothing names the old one" \
      --write-paths 'api/store.go,api/store_test.go,db/migrations/*.sql' \
      --check "go-test api -- -run TestStore" \
      --checkpoint <checkpoint>
@@ -484,7 +485,7 @@ You do not need to be asked to split work. "Split this across agents" is one way
 several disjoint write sets you can name is another.
 
 What costs is unbounded fan-out, not fan-out: a hand-on without a shrinking scope,
-a job with no criteria, a principal model on mechanical edits. Say what a round
+a job with no criteria, a design model on mechanical edits. Say what a round
 costs when the user is deciding, and prefer the smallest fan-out that covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; looking
@@ -692,8 +693,8 @@ that names one.
 - Inheriting it BY OMISSION is the failure. A host defaulting to "same as the parent"
   makes every unnamed spawn the most expensive one, and records no choice.
 
-When the tier is unclear, start at economy. A job that fails its criteria there is
-re-forked one tier up, not retried at the same one. Economy is a starting
+When the tier is unclear, start at routine. A job that fails its criteria there is
+re-forked one tier up, not retried at the same one. Routine is a starting
 point, not a ceiling: same-strength offload is legitimate.
 
 Tiers are the workspace's: a magusfile enum (`magus\modelTiers`) maps each to every
@@ -702,25 +703,26 @@ or a model. magus never picks a model live: re-fork to change a tier.
 
 | Shipped tier | Assign |
 |---|---|
-| principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
-| standard | isolated implementation with a clear contract and a bounded set of projects, and tracing behavior through code |
-| economy | mechanical edits, fixtures, docs, inventory, and lookups the graph answers (exists, depends-on, is-generated) |
+| frontier | work moved up after it failed its criteria at design |
+| design | architecture, ambiguous ownership, public APIs, migrations, security, integration |
+| bounded | isolated implementation with a clear contract and a bounded set of projects, and tracing behavior through code |
+| routine | mechanical edits, fixtures, docs, inventory, and lookups the graph answers (exists, depends-on, is-generated) |
 
 If the host cannot select models or reasoning effort, keep its default. Tool access
 is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at economy. Many economy workers finish about as
-fast as one principal worker, for far fewer tokens:
+To prove something, brute-force it at routine. Many routine workers finish about as
+fast as one design worker, for far fewer tokens:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
   Give each a script check, so `magus job wait` can pass it.
 - Spawn the `magus-scout` agent for each where your harness installed it.
 - Each reports its command and output ref, so evidence settles the claim and not a worker's reading.
-- The principal tier only reconciles the claims where workers disagree.
+- The design tier only reconciles the claims where workers disagree.
 
-Keep economy jobs short-lived. The brief points at evidence (paths, output refs, the
+Keep routine jobs short-lived. The brief points at evidence (paths, output refs, the
 row) and carries no transcript. Some providers raise a tier's price past a prompt size.
 Where the brief names that size, the worker reports and stops before passing it.
 
@@ -814,7 +816,7 @@ an editor magus cannot attribute.
 
    ```sh
    magus job fork api-store --model <tier or model> \
-     --criteria "accounts move to the new store; nothing names the old one" \
+     --instructions "accounts move to the new store; nothing names the old one" \
      --write-paths 'api/store.go,api/store_test.go,db/migrations/*.sql' \
      --check "go-test api -- -run TestStore" \
      --checkpoint <checkpoint>

@@ -3,67 +3,67 @@ package main
 import (
 	"errors"
 	"fmt"
+	gotypes "go/types"
 	"os"
 	"path/filepath"
 	"reflect"
-	"sync"
+	"slices"
+	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 )
 
-// boundaryEnumList is every enum .buzzgen.yaml lists, with cases buzzgen
-// derives from the Go constants. It loads once, on first use, because
-// most subcommands never read it.
-var boundaryEnumList = sync.OnceValue(func() []boundaryEnum {
-	enums, err := loadBoundaryEnums()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "magus-utils:", err)
-		os.Exit(1)
-	}
-	return enums
-})
-
-func loadBoundaryEnums() ([]boundaryEnum, error) {
-	root, err := buzzgenRoot()
-	if err != nil {
-		return nil, err
-	}
-	cfg, err := buzzgen.ReadConfig(filepath.Join(root, ".buzzgen.yaml"))
-	if err != nil {
-		return nil, err
-	}
-	prog, err := buzzgen.Load(root, cfg)
-	if err != nil {
-		return nil, err
-	}
-	byKey := map[string]reflect.Type{}
-	for _, rt := range boundaryEnumTypes {
-		byKey[fmt.Sprintf("%s.%s", rt.PkgPath(), rt.Name())] = rt
-	}
+// deriveEnums derives each reached named string that is not open, and each
+// enum a module setting declares, reading the cases from Go constants.
+// open is filled with the strings that cross as str.
+func deriveEnums(r *buzzgen.Reach, prog *buzzgen.Program, open map[reflect.Type]string) ([]boundaryEnum, error) {
 	var enums []boundaryEnum
 	var errs []error
-	for _, ref := range cfg.Types() {
-		key := fmt.Sprintf("%s.%s", ref.Package, ref.Name)
-		rt, ok := byKey[key]
-		if !ok {
+	derived := map[string]bool{}
+	for _, t := range r.Named() {
+		ref := prog.Config.Ref(t.PkgPath(), t.Name())
+		if reason := ref.OpenReason(); reason != "" {
+			open[t] = reason
 			continue
 		}
-		delete(byKey, key)
+		e, err := prog.Enum(ref)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s, reached from %s: %w", t, r.From(t), err))
+			continue
+		}
+		derived[goKey(ref)] = true
+		enums = append(enums, newBoundaryEnum(e, t, ref))
+	}
+	for _, ref := range prog.Config.Types() {
+		own := prog.Config.Packages[ref.Package].Types[ref.Name].Config.Module
+		if own == nil || derived[goKey(ref)] || ref.OpenReason() != "" {
+			continue
+		}
+		named, err := prog.Named(ref)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if basic, ok := named.Underlying().(*gotypes.Basic); !ok || basic.Kind() != gotypes.String {
+			continue
+		}
 		e, err := prog.Enum(ref)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		enums = append(enums, newBoundaryEnum(e, rt, ref))
+		enums = append(enums, newBoundaryEnum(e, nil, ref))
 	}
-	for key := range byKey {
-		errs = append(errs, fmt.Errorf("%s is in boundaryEnumTypes but not in .buzzgen.yaml", key))
-	}
+	slices.SortFunc(enums, func(a, b boundaryEnum) int { return strings.Compare(a.goKey, b.goKey) })
 	return enums, errors.Join(errs...)
 }
 
+func goKey(ref buzzgen.TypeRef) string {
+	return fmt.Sprintf("%s.%s", ref.Package, ref.Name)
+}
+
 func newBoundaryEnum(e buzzgen.Enum, rt reflect.Type, ref buzzgen.TypeRef) boundaryEnum {
-	out := boundaryEnum{Name: e.Name, Type: rt}
+	out := boundaryEnum{Name: e.Name, Type: rt, goKey: goKey(ref)}
 	if ref.Settings.Module != nil {
 		out.Module = *ref.Settings.Module
 	}

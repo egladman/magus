@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // checkIgnoredOptions fails when a project declares a magus.project key this binary does
@@ -24,7 +25,7 @@ import (
 // thing CI and a new contributor both run.
 //
 // A failure, not advice: the workspace asked for something this magus cannot do.
-func (r *runner) checkIgnoredOptions(projects []*types.Project) types.Check {
+func (r *runner) checkIgnoredOptions(projects []*types.Project) check.Check {
 	const name = "magusfile-options-understood"
 
 	var details []string
@@ -35,14 +36,14 @@ func (r *runner) checkIgnoredOptions(projects []*types.Project) types.Check {
 		}
 	}
 	if len(details) == 0 {
-		return types.Check{Name: name, Status: types.CheckOK,
+		return check.Check{Name: name, Status: check.OK,
 			Message: "every magus.project key in this workspace is one this magus understands"}
 	}
 	slices.Sort(details)
 	details = slices.Compact(details)
-	return types.Check{
+	return check.Check{
 		Name:   name,
-		Status: types.CheckFail,
+		Status: check.Fail,
 		Message: fmt.Sprintf("%d magusfile option(s) were dropped because this magus does not recognize them, "+
 			"so the policy each declares is not in force; %s", len(details), hint.IgnoredKeyAdvice()),
 		Details: details,

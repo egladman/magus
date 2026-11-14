@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +41,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	orphan := filepath.Join(root, dest, "magus-retired")
 	require.NoError(t, os.MkdirAll(orphan, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
-		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort), 0o644))
+		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.SkillVariantShort), 0o644))
 
 	log.Reset()
 	out := captureStdout(t, func() {
@@ -53,7 +54,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	// A dry run names the same deletion and performs none of it.
 	require.NoError(t, os.MkdirAll(orphan, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
-		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort), 0o644))
+		agentSkills.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.SkillVariantShort), 0o644))
 	out = captureStdout(t, func() {
 		_, _, err := installHarnessSkillPath(context.Background(), root, dest, types.SkillFormFull, true, true)
 		require.NoError(t, err)

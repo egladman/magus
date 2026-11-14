@@ -727,7 +727,7 @@ fun facts(j: magus\Job) > JobFacts {
     }
     final checkout = if (j.worktree != null and j.worktree!.root != "") j.worktree!.root else j.checkoutRoot;
     return JobFacts{
-        id = j.id, state = j.state.value, checkout = checkout, writePaths = j.writePaths, created = j.created,
+        id = j.id, state = j.state.value, checkout = checkout, writePaths = j.paths.write, created = j.created,
         registered = j.registered, updated = j.updated, reworkRounds = j.reworkRounds, widenings = j.widenings,
         releasedPaths = released, releasedAt = at,
     };
@@ -781,7 +781,7 @@ fun parseArgs(args: [str]) > Args !> any {
         lookback = std\toInt(time\parseDuration(parsed.values["--since"] ?? "24h")), checkouts = if (trails.len() > 0) trails else [vcs\root()] };
 }
 
-fun jobRows() > [JobFacts] !> any {
+fun readJobs() > [JobFacts] !> any {
     final rows = mut [<JobFacts>];
     foreach (j in magus\workspace().jobs().jobs) {
         rows.append(facts(j));
@@ -822,7 +822,7 @@ export fun main(args: [str]) > void !> any {
         std\print(HELP);
         return;
     }
-    final rows = jobRows();
+    final rows = readJobs();
     final commit: CommitFacts? = if (a.kind == "commit") commitFacts(a.value) else null;
     final at = eventTime(a, rows: rows, commit: commit);
     final records = readTrails(a.checkouts, start: at - a.lookback, end: at);

@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
@@ -25,6 +26,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 func TestSettingFigure(t *testing.T) {
@@ -468,8 +470,8 @@ func TestGroundworkNamesJobExecWhenSpawningIsBroken(t *testing.T) {
 	assert.Contains(t, f.say, "spawning is broken: harness claude-code maps no model; take a row with `./magus job exec <row>`")
 }
 
-// While ./magus is older than its sources or absent, rebuilding it is the root's own work;
-// once it is current, the build is integration again.
+// While ./magus is absent or built from another contract, rebuilding it
+// is the root's own work. Once they agree, the build is integration again.
 func TestRootRebuildsAStaleBinary(t *testing.T) {
 	t.Parallel()
 	at, _ := orchestratorFixture(t)
@@ -478,12 +480,11 @@ func TestRootRebuildsAStaleBinary(t *testing.T) {
 	assert.Empty(t, rootWorkClass(ward.BootstrapCommand, at), "no binary yet")
 
 	require.NoError(t, os.WriteFile(filepath.Join(at.workspace, "magus"), []byte("binary"), 0o755))
-	ageBinary(t, at.workspace)
-	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run go-build .", at), "a current binary")
+	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run go-build .", at), "a tree that carries no contract")
 
-	writeSource(t, at.workspace, "internal/guard/x.go")
-	assert.True(t, staleOwnBinary(at.workspace))
-	assert.Empty(t, rootWorkClass("./magus run go-build .", at), "a stale binary that still loads")
+	writeSource(t, at.workspace, "internal/commands/testdata/api.lock")
+	assert.True(t, differs(contract.Check(at.workspace)))
+	assert.Empty(t, rootWorkClass("./magus run go-build .", at), "a binary built from another contract")
 	assert.Empty(t, rootWorkClass(ward.BootstrapCommand, at))
 	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run go-build . && git add -A", at), "only alone on its line")
 	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run generate .", at), "only the build")
@@ -519,10 +520,10 @@ func TestMainThreadCommandsAreJudgedByTheCostRules(t *testing.T) {
 // A spawn naming no model is refused at strict. A row forked with no model tier has no tier
 // to compare a named model against, and the declaration is never opened for it.
 func TestMainThreadSpawnsAreJudgedByTheSpawnRules(t *testing.T) {
-	ctx, _ := fleetFixture(t, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared, Model: "haiku"})
+	ctx, _ := fleetFixture(t, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared, Agent: &typesagent.Spec{Model: typesagent.Model{ID: "haiku"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}})
 	deps := strictDeps(t)
 	asked := 0
-	deps.ModelTiers = func() *types.ModelTierSet {
+	deps.ModelTiers = func() *typesagent.ModelTierSet {
 		asked++
 		return testModelTiers(t, "claude-code")
 	}
@@ -562,7 +563,7 @@ func TestSpawnNamesModelComparesModelTierRanks(t *testing.T) {
 	set := testModelTiers(t, "claude-code")
 	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
 	deps := strictDeps(t)
-	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	deps.ModelTiers = func() *typesagent.ModelTierSet { return set }
 	at := hookLocation(ctx, deps)
 	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
 
@@ -583,16 +584,16 @@ func TestSpawnNamesModelComparesModelTierRanks(t *testing.T) {
 // The shipped declaration maps full ids, and a host's spawn tool may take only the short
 // name a mgs_listModels row declares as its alias. That alias resolves the spawn's tier.
 func TestSpawnNamesModelResolvesAHarnessRowsAlias(t *testing.T) {
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
 		Enum: "ModelTier", Site: "hack/tiers.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
-		Bounds: []types.ModelTierBounds{{}, {}, {}},
-		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
+		Bounds: []typesagent.ModelTierBounds{{}, {}, {}},
+		Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort, typesagent.SkillVariantShort},
 		Hosts:  map[string][]string{"claude-code": {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"}},
 	})
 	require.NoError(t, err)
 	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
 	deps := strictDeps(t)
-	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	deps.ModelTiers = func() *typesagent.ModelTierSet { return set }
 	deps.ModelRows = func() []types.ModelPricing {
 		return []types.ModelPricing{
 			{ID: "claude-haiku-5-5", Tier: "economy", Alias: "haiku"},
@@ -621,7 +622,7 @@ func (s *LeasedNestedSpawnSuite) judge(model string, off bool) types.GuardJudgme
 	set := testModelTiers(t, "claude-code")
 	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
 	deps := strictDeps(t)
-	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	deps.ModelTiers = func() *typesagent.ModelTierSet { return set }
 	if off {
 		deps.Builtins[string(denyRuleSpawnNamesModel)] = builtin.Setting{Decision: builtin.Off}
 	}
@@ -634,7 +635,7 @@ func (s *LeasedNestedSpawnSuite) check(v types.GuardJudgment, decision, rule, re
 	}
 	want := types.GuardJudgment{APIVersion: v.APIVersion, Decision: decision, Rule: rule,
 		LeaseFrom: v.LeaseFrom}
-	v.Reason, v.Next = "", nil
+	v.Reason, v.NextSteps = "", nil
 	s.Equal(want, v)
 }
 
@@ -669,11 +670,11 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 	descriptor, _, err := agent.LoadHarness(t.Context(), root, "claude-code")
 	require.NoError(t, err)
 	require.NotNil(t, descriptor.Tools)
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
-		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
-		Bounds: []types.ModelTierBounds{{}, {}, {}},
-		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
-		Hosts:  map[string][]string{"claude-code": {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"}},
+	set, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
+		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"routine", "bounded", "design", "frontier"}, Default: 1,
+		Bounds: []typesagent.ModelTierBounds{{}, {}, {}, {}},
+		Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort, typesagent.SkillVariantShort, typesagent.SkillVariantShort},
+		Hosts:  map[string][]string{"claude-code": {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-2"}},
 	})
 	require.NoError(t, err)
 	tools := *descriptor.Tools
@@ -690,16 +691,16 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 		model, tier, parent string
 		allow               bool
 	}{
-		{"opus", "principal", "claude-opus-5-5", true},
-		{"sonnet", "standard", "claude-sonnet-5-5", true},
-		{"haiku", "economy", "claude-haiku-5-5", true},
-		{"fable", "principal", "claude-opus-5-5", true},
-		{"Opus", "principal", "claude-opus-5-5", false},
+		{"opus", "design", "claude-opus-5-5", true},
+		{"sonnet", "bounded", "claude-sonnet-5-5", true},
+		{"haiku", "routine", "claude-haiku-5-5", true},
+		{"fable", "frontier", "claude-fable-5-2", true},
+		{"Opus", "design", "claude-opus-5-5", false},
 	} {
 		t.Run(tc.model, func(t *testing.T) {
-			ctx := tierFixture(t, facts.Tiers, types.Job{ID: "scout", Model: tc.tier, ReadOnly: true, State: types.StateDeclared})
+			ctx := tierFixture(t, facts.Tiers, types.Job{ID: "scout", Agent: &typesagent.Spec{Model: typesagent.Model{Tier: tc.tier}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}, ReadOnly: true, State: types.StateDeclared})
 			deps := strictDeps(t)
-			deps.ModelTiers = func() *types.ModelTierSet { return facts.Tiers }
+			deps.ModelTiers = func() *typesagent.ModelTierSet { return facts.Tiers }
 			deps.ModelRows = func() []types.ModelPricing { return facts.Rows }
 			at := hookLocation(ctx, deps)
 			hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
@@ -727,7 +728,7 @@ func TestSpawnNamesModelNamesTheHostEntryToAdd(t *testing.T) {
 	set := testModelTiers(t, "other-host")
 	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
 	deps := strictDeps(t)
-	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	deps.ModelTiers = func() *typesagent.ModelTierSet { return set }
 	at := hookLocation(ctx, deps)
 	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
 
@@ -744,7 +745,7 @@ func TestSpawnAboveModelTierAdvisesByRank(t *testing.T) {
 	set := testModelTiers(t, "claude-code")
 	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
 	deps := levelDeps(t, types.GuardProfileStandard)
-	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	deps.ModelTiers = func() *typesagent.ModelTierSet { return set }
 	at := hookLocation(ctx, deps)
 	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
 
@@ -808,16 +809,16 @@ func levelDeps(t *testing.T, level types.GuardProfile) Dependencies {
 }
 
 // tierWithin is magus.TierCeiling's ordering, which this package cannot import.
-func tierWithin(parent, child types.ModelTier) error { return child.Within(parent) }
+func tierWithin(parent, child typesagent.ModelTier) error { return child.Within(parent) }
 
 // testModelTiers is the shipped tier shape with host mapping its aliases and an economy
 // context cap of 100k.
-func testModelTiers(t *testing.T, host string) *types.ModelTierSet {
+func testModelTiers(t *testing.T, host string) *typesagent.ModelTierSet {
 	t.Helper()
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
 		Enum: "ModelTier", Site: "hack/tiers.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
-		Bounds: []types.ModelTierBounds{{MaxContext: 100_000}, {}, {}},
-		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
+		Bounds: []typesagent.ModelTierBounds{{MaxContext: 100_000}, {}, {}},
+		Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort, typesagent.SkillVariantShort},
 		Hosts:  map[string][]string{host: {"haiku", "sonnet", "opus"}},
 	})
 	require.NoError(t, err)
@@ -826,12 +827,12 @@ func testModelTiers(t *testing.T, host string) *types.ModelTierSet {
 
 // tierFixture forks rows through a job store that assigns their model tiers from set, every
 // one at economy by a matrix, and pins the location there.
-func tierFixture(t *testing.T, set *types.ModelTierSet, rows ...types.Job) context.Context {
+func tierFixture(t *testing.T, set *typesagent.ModelTierSet, rows ...types.Job) context.Context {
 	t.Helper()
 	testkit.Isolate(t)
-	root, cacheDir := t.TempDir(), t.TempDir()
-	matrix := func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error) {
-		return &types.JobModelTier{Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Reason: "two files", Site: "hack/tiers.buzz:12"}, nil
+	root, cacheDir := testkit.NewRepository(t, nil).Root(), t.TempDir()
+	matrix := func(context.Context, types.ModelTierRequest) (*typesagent.JobModelTier, error) {
+		return &typesagent.JobModelTier{Name: "economy", Rank: 0, Skills: typesagent.SkillVariantFull, Reason: "two files", Site: "hack/tiers.buzz:12"}, nil
 	}
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, ModelTiers: set, ModelTierMatrix: matrix, SpawnRule: tierWithin})
 	for _, row := range rows {
@@ -931,12 +932,13 @@ func (s *RootCitedReadSuite) judge(line string) types.GuardJudgment {
 func TestRootCitedReadSuite(t *testing.T) { suite.Run(t, new(RootCitedReadSuite)) }
 
 func (s *RootCitedReadSuite) SetupTest() {
-	research := types.Job{ID: "research", ReadOnly: true, State: types.StateExited, Result: &types.JobResult{
-		ChangedPaths:    []string{},
-		UnresolvedRisks: []string{"`docs/guide/page.md:12` contradicts internal/guard/root.go"},
-	}}
+	research := types.Job{ID: "research", ReadOnly: true, State: types.StateExited}
 	s.layers, _ = fleetLayers(s.T(), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared}, research)
 	s.deps = levelDeps(s.T(), types.GuardProfileLight)
+	storeTries(s.T(), hookLocation(s.testContext(), s.deps), filedResult("research", &types.JobResult{
+		ChangedPaths:    []string{},
+		UnresolvedRisks: []string{"`docs/guide/page.md:12` contradicts internal/guard/root.go"},
+	}))
 	hostGate(hookLocation(s.testContext(), s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
 	s.Require().NotEqual(decisionDeny, judgeSpawn(s.testContext(), s.T(), s.deps, "haiku").Decision)
 }
@@ -1004,7 +1006,7 @@ func TestARowNamingFableSpawnsOnFable(t *testing.T) {
 	set := testModelTiers(t, "claude-code")
 	economy, ok := set.At(0)
 	require.True(t, ok)
-	f := forkedTier{job: "j", record: types.JobModelTier{Name: "economy", Model: "claude-fable-5-1"}, tier: economy, set: set, rows: tierlessFableRows()}
+	f := forkedTier{job: "j", record: typesagent.JobModelTier{Name: "economy", Model: "claude-fable-5-1"}, tier: economy, set: set, rows: tierlessFableRows()}
 
 	assert.Empty(t, f.refusal("claude-code", "fable"), "the row names Fable by id, the spawn by alias")
 }
@@ -1013,7 +1015,7 @@ func TestATieredRowStillRefusesFable(t *testing.T) {
 	set := testModelTiers(t, "claude-code")
 	economy, ok := set.At(0)
 	require.True(t, ok)
-	f := forkedTier{job: "j", record: types.JobModelTier{Name: "economy"}, tier: economy, set: set, rows: tierlessFableRows()}
+	f := forkedTier{job: "j", record: typesagent.JobModelTier{Name: "economy"}, tier: economy, set: set, rows: tierlessFableRows()}
 
 	assert.Contains(t, f.refusal("claude-code", "claude-fable-5-1"), "maps to no model tier")
 }

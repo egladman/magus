@@ -58,7 +58,7 @@ const RegeneratedLimit = 12
 // It sees declarations only. A coupling nobody declares, such as a version constant a test
 // pins, is not here.
 func RegeneratedOutside(root string, row types.Job, projects []*types.Project, ignored func([]string) []string) []RegeneratedOutput {
-	if row.ReadOnly || len(row.WritePaths) == 0 {
+	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil
 	}
 	type candidate struct {
@@ -203,10 +203,10 @@ func regeneratedLines(outputs []RegeneratedOutput) []string {
 // `docs/rules/*.md` holds `docs/rules/*.md` and `docs` holds both. A deny path touching
 // the output takes some of it back out.
 func outputInside(row types.Job, g types.Glob) bool {
-	if slices.ContainsFunc(row.DenyPaths, func(d string) bool { return types.PathsIntersect(d, g.Pattern) }) {
+	if slices.ContainsFunc(row.Paths.Deny, func(d string) bool { return types.PathsIntersect(d, g.Pattern) }) {
 		return false
 	}
-	return slices.ContainsFunc(row.WritePaths, func(w string) bool {
+	return slices.ContainsFunc(row.Paths.Write, func(w string) bool {
 		p, decl := types.SplitClaim(w)
 		return decl == "" && coversPath(p, g.Pattern)
 	})
@@ -218,7 +218,7 @@ func outputInside(row types.Job, g types.Glob) bool {
 func writtenFiles(root string, row types.Job) []string {
 	tree := os.DirFS(root)
 	var out []string
-	for _, entry := range row.WritePaths {
+	for _, entry := range row.Paths.Write {
 		p, _ := types.SplitClaim(entry)
 		if p = path.Clean(p); p == "" {
 			continue
@@ -233,7 +233,7 @@ func writtenFiles(root string, row types.Job) []string {
 			files = []string{p}
 		}
 		for _, f := range files {
-			if _, denied := matching(WholeFileDenies(row.DenyPaths, f), f); !denied && !slices.Contains(out, f) {
+			if _, denied := matching(WholeFileDenies(row.Paths.Deny, f), f); !denied && !slices.Contains(out, f) {
 				out = append(out, f)
 			}
 		}

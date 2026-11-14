@@ -1,13 +1,13 @@
 package commands
 
-import "github.com/egladman/magus/libs/cmdline"
+import "github.com/egladman/magus/libs/clikit/command"
 
 // selfInstallShorthandCommand documents `magus self install-shorthand`. It lives
 // outside the build-tagged self pages because the shorthand does not depend on
 // the updater, so both the default and the -tags noselfupdate build ship it.
-var selfInstallShorthandCommand = cmdline.Command{
+var selfInstallShorthandCommand = command.Command{
 	Name:   "install-shorthand",
-	Effect: cmdline.EffectLocalWrite,
+	Effect: command.EffectLocalWrite,
 	Short:  "Symlink mgs, the magus shorthand, to the running binary",
 	Long: `Create mgs, the shorthand for magus, as a symlink to the running binary.
 
@@ -19,11 +19,11 @@ every shipped completion script already registers mgs alongside magus.
 The shorthand survives magus self update: the updater resolves symlinks before
 it swaps, so the real binary is replaced underneath a link that keeps pointing
 at it. An existing mgs is left alone unless --force is given.`,
-	Flags: []cmdline.Flag{
-		{Name: "dir", Kind: cmdline.String, Doc: "Directory for the shorthand (default: the running binary's directory)"},
-		{Name: "force", Kind: cmdline.Bool, Default: false, Doc: "Replace an existing file at the shorthand path"},
+	Flags: []command.Flag{
+		{Name: "dir", Kind: command.String, Doc: "Directory for the shorthand (default: the running binary's directory)"},
+		{Name: "force", Kind: command.Bool, Default: false, Doc: "Replace an existing file at the shorthand path"},
 	},
-	Examples: []cmdline.Example{
+	Examples: []command.Example{
 		{Comment: "Install mgs next to magus", Command: "magus self install-shorthand"},
 		{Comment: "Install it into ~/.local/bin instead", Command: "magus self install-shorthand --dir ~/.local/bin"},
 		{Comment: "Replace an existing mgs", Command: "magus self install-shorthand --force"},

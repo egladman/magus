@@ -14,9 +14,10 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
-func (r *runner) checkJobTree() types.Check {
+func (r *runner) checkJobTree() check.Check {
 	return checkJobTree(r.jobPlace(), r.opts.cfg.Jobs, time.Now().Unix())
 }
 
@@ -31,12 +32,12 @@ func (r *runner) jobPlace() job.Location {
 // dependency that ended without passing. Reading the store has already ended every row
 // magus could prove dead (see job.Store.List), so what is left is work somebody took and
 // went quiet on, and the finding names the exit command a person runs for it.
-func checkJobTree(loc job.Location, limits config.Jobs, now int64) types.Check {
+func checkJobTree(loc job.Location, limits config.Jobs, now int64) check.Check {
 	const name = "job-tree"
 
 	rows, err := job.NewStore(job.Location{Root: loc.Root, StateBase: loc.StateBase}).List()
 	if err != nil {
-		return types.Check{Name: name, Status: types.CheckFail, Evidence: types.EvidenceUnknown,
+		return check.Check{Name: name, Status: check.Fail, Evidence: check.EvidenceUnknown,
 			Message: fmt.Sprintf("could not read the job store: %v", err)}
 	}
 	flagged := types.NewJobList(rows).Flag(now, limits.StaleAfter)
@@ -55,7 +56,7 @@ func checkJobTree(loc job.Location, limits config.Jobs, now int64) types.Check {
 		}
 	}
 	if len(parts) == 0 {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "every live job has a live root and a recent update"}
+		return check.Check{Name: name, Status: check.OK, Message: "every live job has a live root and a recent update"}
 	}
 	seen := map[string]bool{}
 	for _, id := range append(slices.Clone(flagged.Stale), stuck...) {
@@ -65,10 +66,10 @@ func checkJobTree(loc job.Location, limits config.Jobs, now int64) types.Check {
 		}
 	}
 	details = append(details, "magus ends a row itself only when it can prove nobody holds it; these it cannot")
-	return types.Check{Name: name, Status: types.CheckAdvice, Message: strings.Join(parts, "; "), Details: details}
+	return check.Check{Name: name, Status: check.Advice, Message: strings.Join(parts, "; "), Details: details}
 }
 
-func (r *runner) checkBoundLease(ctx context.Context) types.Check {
+func (r *runner) checkBoundLease(ctx context.Context) check.Check {
 	wired, err := workspace.WiredHarnesses(r.ws)
 	if err != nil {
 		return unknownWiring("bound-lease", err)
@@ -87,18 +88,18 @@ func (r *runner) checkBoundLease(ctx context.Context) types.Check {
 //
 // Named for the subject (the bound lease), not "binding": that word rhymes with
 // guard-wiring / checkpoint-wiring and suggests a wiring check, which this is not.
-func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) types.Check {
+func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) check.Check {
 	const name = "bound-lease"
 
 	claimed := trail.LeaseFromEnv()
 	id, from := job.ActingLease(loc, claimed)
 	if id == "" {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no lease bound; the guard advises only"}
+		return check.Check{Name: name, Status: check.OK, Message: "no lease bound; the guard advises only"}
 	}
 	if from == types.LeaseSourceContested {
-		return types.Check{
+		return check.Check{
 			Name:    name,
-			Status:  types.CheckFail,
+			Status:  check.Fail,
 			Message: fmt.Sprintf("this checkout's marker binds lease %q while the environment claims %q", id, claimed),
 			Details: []string{
 				fmt.Sprintf("the guard wrote the marker when a caller whose host names no session ran `%s` here, so magus grades every write under %s and ignores the claim: a record of where the work is beats an assertion a shell can rewrite", hint.JobExec.String(), id),
@@ -109,22 +110,22 @@ func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) typ
 
 	rows, err := job.NewStore(job.Location{Root: loc.Root, StateBase: loc.StateBase}).List()
 	if err != nil {
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckFail,
-			Evidence: types.EvidenceUnknown,
+			Status:   check.Fail,
+			Evidence: check.EvidenceUnknown,
 			Message:  fmt.Sprintf("could not read the job store: %v", err),
 		}
 	}
 	i := slices.IndexFunc(rows, func(lease types.Job) bool { return lease.ID == id })
 	if i < 0 {
-		return types.Check{
+		return check.Check{
 			Name:    name,
-			Status:  types.CheckFail,
+			Status:  check.Fail,
 			Message: fmt.Sprintf("lease %q is bound here, and no row declares it", id),
 			Details: []string{
 				"the guard grades every write here as an unattributed edit: advisory, never denied",
-				"declare the row under this id: " + hint.JobFork.With(id, "--criteria", "<criteria>"),
+				"declare the row under this id: " + hint.JobFork.With(id, "--instructions", "<instructions>"),
 			},
 		}
 	}
@@ -141,35 +142,35 @@ func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) typ
 		if state == "" {
 			state = "no state"
 		}
-		return types.Check{
+		return check.Check{
 			Name:    name,
-			Status:  types.CheckFail,
+			Status:  check.Fail,
 			Message: fmt.Sprintf("lease %q is bound here and not live (%s), so its lease-scoped rules are inert", id, state),
 			Details: []string{"every write here grades as an unattributed edit until this checkout binds a live lease"},
 		}
 	}
 
 	if row.Registered == 0 {
-		return types.Check{
+		return check.Check{
 			Name:    name,
-			Status:  types.CheckFail,
+			Status:  check.Fail,
 			Message: fmt.Sprintf("lease %q is bound here and live, but has no registered base, so the guard denies every write until one is recorded", id),
 			Details: []string{fmt.Sprintf("record one: %s, then exec it on this lease", hint.VCSCheckpoint.With("-o", "name"))},
 		}
 	}
 
 	if len(guardHookConfigs(ctx, loc.Root, wired...)) == 0 {
-		return types.Check{
+		return check.Check{
 			Name:    name,
-			Status:  types.CheckAdvice,
+			Status:  check.Advice,
 			Message: fmt.Sprintf("lease %q is bound here, live and registered, but no host hook config in this checkout invokes the guard", id),
 			Details: []string{"the guard-wiring check names what is missing; MCP calls are not checked here"},
 		}
 	}
 
-	return types.Check{
+	return check.Check{
 		Name:    name,
-		Status:  types.CheckOK,
+		Status:  check.OK,
 		Message: fmt.Sprintf("lease %q is bound here, live, registered, and a host hook is wired to judge it", id),
 	}
 }

@@ -17,6 +17,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 const (
@@ -36,7 +37,7 @@ declareDefault(modeltiers\ModelTier, modeltiers\defaultTier, modeltiers\bounds, 
 // registerModelTiers binds magus\modelTiers onto magus:
 //
 //	final cc = magus\harness.provider(claudecode);
-//	magus\modelTiers(ModelTier, default: ModelTier.standard,
+//	magus\modelTiers(ModelTier, default: ModelTier.bounded,
 //	    hosts: {cc: claudeModel}, bounds: bounds, skills: skills);
 //
 // The functions run here, once per case, and are not kept. Every misdeclaration is
@@ -45,10 +46,12 @@ declareDefault(modeltiers\ModelTier, modeltiers\defaultTier, modeltiers\bounds, 
 // the shipped magus/modeltiers declaration, built when a fork first asks for it.
 // Nothing declared here selects a model at run time.
 func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, magus vm.Value) {
-	if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
+	// A load that holds no tiers, as the guard's, still checks a declaration.
+	tiers := agent.ModelTierStateFromContext(ctx)
+	if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil && tiers != nil {
 		// The context outlives the load that built it: a fork asks long after.
 		defaultCtx := context.WithoutCancel(ctx)
-		reg.SetDefaultModelTiers(func() (*types.ModelTierSet, error) { return defaultModelTierSet(defaultCtx, reg.Harnesses()) })
+		tiers.SetDefault(func() (*agent.ModelTierSet, error) { return defaultModelTierSet(defaultCtx, reg.Harnesses()) })
 	}
 	// Per session, not per registry, as registerFunctionRule counts.
 	registered := false
@@ -68,6 +71,7 @@ func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.Direct
 			}
 			return vm.Null
 		}
+		var set *agent.ModelTierSet
 		if arg(0).IsNull() {
 			for i := 1; i < 5; i++ {
 				if !arg(i).IsNull() {
@@ -75,24 +79,32 @@ func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.Direct
 						"null turns model tiers off and takes no other argument, got %s as argument %d", arg(i).Kind(), i+1)
 				}
 			}
-			reg.SetModelTiers(nil)
-			return vm.Null, nil
-		}
-		decl, err := declareModelTiers(callCtx, sess, arg(0), arg(1), arg(2), arg(3), arg(4))
-		if err != nil {
+		} else if set, err = declaredModelTierSet(ctx, callCtx, sess, reg, arg); err != nil {
 			return vm.Null, err
 		}
-		decl.Site = modelTierSite(ctx)
-		if err := checkWiredHarnesses(decl, reg.Harnesses()); err != nil {
-			return vm.Null, err
+		if tiers != nil {
+			tiers.Declare(set)
 		}
-		set, err := types.NewModelTierSet(decl)
-		if err != nil {
-			return vm.Null, modelTierUnusable(modelTiersMember, "%v", err)
-		}
-		reg.SetModelTiers(set)
 		return vm.Null, nil
 	}))
+}
+
+// declaredModelTierSet checks the magus\modelTiers arguments in callCtx against
+// the harnesses reg wired.
+func declaredModelTierSet(ctx, callCtx context.Context, sess *buzz.Session, reg *workspace.WorkspaceRegistry, arg func(int) vm.Value) (*agent.ModelTierSet, error) {
+	decl, err := declareModelTiers(callCtx, sess, arg(0), arg(1), arg(2), arg(3), arg(4))
+	if err != nil {
+		return nil, err
+	}
+	decl.Site = modelTierSite(ctx)
+	if err := checkWiredHarnesses(decl, reg.Harnesses()); err != nil {
+		return nil, err
+	}
+	set, err := agent.NewModelTierSet(decl)
+	if err != nil {
+		return nil, modelTierUnusable(modelTiersMember, "%v", err)
+	}
+	return set, nil
 }
 
 // registerModelTierMatrix binds magus\modelTier onto magus:
@@ -117,7 +129,7 @@ func registerModelTierMatrix(ctx context.Context, sess *buzz.Session, obs buzz.D
 				"already registered in this magusfile, and a workspace has one matrix; fold the second one into the first")
 		}
 		registered = true
-		reg.SetModelTierMatrix(buzzModelTierMatrix(sess, reg, args[0], modelTierSite(ctx)))
+		reg.SetModelTierMatrix(buzzModelTierMatrix(sess, agent.ModelTierStateFromContext(ctx), args[0], modelTierSite(ctx)))
 		// The fork calls it after this load has closed.
 		reg.Keep(sess.Keep())
 		return vm.Null, nil
@@ -150,7 +162,7 @@ func modelTierSite(ctx context.Context) string {
 
 // checkWiredHarnesses reads the wiring as it stands, so the declaration must follow the
 // magus\harness.provider calls it maps.
-func checkWiredHarnesses(decl types.ModelTierDeclaration, wired []string) error {
+func checkWiredHarnesses(decl agent.ModelTierDeclaration, wired []string) error {
 	var missing []string
 	for id := range decl.Hosts {
 		if !slices.Contains(wired, id) {
@@ -173,59 +185,59 @@ func checkWiredHarnesses(decl types.ModelTierDeclaration, wired []string) error 
 // declareModelTiers calls hosts, bounds and skills once per case and checks identity,
 // never a name: tiers is an enum definition, default one of its cases, each hosts key the
 // id magus\harness.provider returned. Every problem is MGS1052. The caller sets Site.
-func declareModelTiers(ctx context.Context, sess *buzz.Session, tiers, def, hosts, bounds, skills vm.Value) (types.ModelTierDeclaration, error) {
+func declareModelTiers(ctx context.Context, sess *buzz.Session, tiers, def, hosts, bounds, skills vm.Value) (agent.ModelTierDeclaration, error) {
 	enum, cases, ok := tiers.EnumDef()
 	if !ok {
-		return types.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember,
-			"tiers must be an enum, such as enum ModelTier { economy, standard, principal }, cheapest first, got %s", tiers.Kind())
+		return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember,
+			"tiers must be an enum, such as enum ModelTier { routine, bounded, design, frontier }, cheapest first, got %s", tiers.Kind())
 	}
 	if len(cases) == 0 {
-		return types.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "enum %s declares no cases", enum)
+		return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "enum %s declares no cases", enum)
 	}
 	defEnum, defCase, ok := def.EnumCase()
 	if !ok || defEnum != enum || !slices.Contains(cases, defCase) {
-		return types.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember,
+		return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember,
 			"default must be a case of %s (%s), got %s", enum, strings.Join(cases, ", "), describeValue(def))
 	}
 	if !bounds.IsFun() {
-		return types.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember,
-			"bounds must be a function from a %s to magus\\ModelTierBounds, got %s", enum, bounds.Kind())
+		return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember,
+			"bounds must be a function from a %s to magus\\agent\\ModelTierBounds, got %s", enum, bounds.Kind())
 	}
 	if !skills.IsFun() {
-		return types.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember,
-			"skills must be a function from a %s to magus\\SkillVariant, got %s", enum, skills.Kind())
+		return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember,
+			"skills must be a function from a %s to magus\\agent\\SkillVariant, got %s", enum, skills.Kind())
 	}
 	caseValues, err := enumCaseValues(ctx, sess, tiers, cases)
 	if err != nil {
-		return types.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "reading the cases of %s: %v", enum, err)
+		return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "reading the cases of %s: %v", enum, err)
 	}
 
-	decl := types.ModelTierDeclaration{
+	decl := agent.ModelTierDeclaration{
 		Enum:    enum,
 		Cases:   cases,
 		Default: slices.Index(cases, defCase),
-		Bounds:  make([]types.ModelTierBounds, len(cases)),
-		Skills:  make([]types.SkillVariant, len(cases)),
+		Bounds:  make([]agent.ModelTierBounds, len(cases)),
+		Skills:  make([]agent.SkillVariant, len(cases)),
 	}
 	for i, tier := range caseValues {
 		rv, err := sess.CallValue(ctx, bounds, []vm.Value{tier})
 		if err != nil {
-			return types.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "bounds raised for %s.%s: %v", enum, cases[i], err)
+			return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "bounds raised for %s.%s: %v", enum, cases[i], err)
 		}
 		if decl.Bounds[i], err = decodeTierBounds(enum, cases[i], rv); err != nil {
-			return types.ModelTierDeclaration{}, err
+			return agent.ModelTierDeclaration{}, err
 		}
 		rv, err = sess.CallValue(ctx, skills, []vm.Value{tier})
 		if err != nil {
-			return types.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "skills raised for %s.%s: %v", enum, cases[i], err)
+			return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "skills raised for %s.%s: %v", enum, cases[i], err)
 		}
 		if decl.Skills[i], err = decodeSkillVariant(rv); err != nil {
-			return types.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "skills for %s.%s: %v", enum, cases[i], err)
+			return agent.ModelTierDeclaration{}, modelTierUnusable(modelTiersMember, "skills for %s.%s: %v", enum, cases[i], err)
 		}
 	}
 	if !hosts.IsNull() {
 		if decl.Hosts, err = declareTierHosts(ctx, sess, enum, cases, caseValues, hosts); err != nil {
-			return types.ModelTierDeclaration{}, err
+			return agent.ModelTierDeclaration{}, err
 		}
 	}
 	return decl, nil
@@ -280,13 +292,13 @@ func decodeHarnessID(v vm.Value) (string, error) {
 	return v.AsString(), nil
 }
 
-func decodeTierBounds(enum, tier string, v vm.Value) (types.ModelTierBounds, error) {
+func decodeTierBounds(enum, tier string, v vm.Value) (agent.ModelTierBounds, error) {
 	fields, ok := v.MapView()
 	if !ok {
-		return types.ModelTierBounds{}, modelTierUnusable(modelTiersMember,
-			"bounds answered %s for %s.%s, and it must answer a magus\\ModelTierBounds", v.Kind(), enum, tier)
+		return agent.ModelTierBounds{}, modelTierUnusable(modelTiersMember,
+			"bounds answered %s for %s.%s, and it must answer a magus\\agent\\ModelTierBounds", v.Kind(), enum, tier)
 	}
-	var out types.ModelTierBounds
+	var out agent.ModelTierBounds
 	for _, field := range []struct {
 		name string
 		into func(int64)
@@ -299,7 +311,7 @@ func decodeTierBounds(enum, tier string, v vm.Value) (types.ModelTierBounds, err
 			continue
 		}
 		if !fv.IsInt() {
-			return types.ModelTierBounds{}, modelTierUnusable(modelTiersMember,
+			return agent.ModelTierBounds{}, modelTierUnusable(modelTiersMember,
 				"bounds for %s.%s has a %s %s, and it is an int", enum, tier, fv.Kind(), field.name)
 		}
 		field.into(fv.AsInt())
@@ -307,12 +319,12 @@ func decodeTierBounds(enum, tier string, v vm.Value) (types.ModelTierBounds, err
 	return out, nil
 }
 
-func decodeSkillVariant(v vm.Value) (types.SkillVariant, error) {
+func decodeSkillVariant(v vm.Value) (agent.SkillVariant, error) {
 	enum, name, ok := v.EnumCase()
 	if !ok || enum != skillVariantEnum {
-		return "", fmt.Errorf("%s is not a magus\\SkillVariant, short or full", describeValue(v))
+		return "", fmt.Errorf("%s is not a magus\\agent\\SkillVariant, short or full", describeValue(v))
 	}
-	variant := types.SkillVariant(name)
+	variant := agent.SkillVariant(name)
 	if !variant.Valid() {
 		return "", fmt.Errorf("%q is not a skill variant, and the variants are %s", name, strings.Join(variant.Values(), ", "))
 	}
@@ -352,7 +364,7 @@ func enumCaseValues(ctx context.Context, sess *buzz.Session, def vm.Value, cases
 
 // defaultModelTierSet maps each harness in wired whose model rows declare tiers to those
 // rows' exact model ids (harnessTierHosts), and no other harness.
-func defaultModelTierSet(ctx context.Context, wired []string) (*types.ModelTierSet, error) {
+func defaultModelTierSet(ctx context.Context, wired []string) (*agent.ModelTierSet, error) {
 	// No registry on this session: it declares nothing into the workspace.
 	ctx = workspace.ContextWithRegistry(ctx, nil)
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()))
@@ -363,7 +375,7 @@ func defaultModelTierSet(ctx context.Context, wired []string) (*types.ModelTierS
 	}
 
 	var (
-		decl     types.ModelTierDeclaration
+		decl     agent.ModelTierDeclaration
 		declared bool
 	)
 	sess.SetGlobal("declareDefault", vm.DirectValue("declareDefault", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
@@ -387,23 +399,29 @@ func defaultModelTierSet(ctx context.Context, wired []string) (*types.ModelTierS
 		return nil, fmt.Errorf("magus/modeltiers: %w", err)
 	}
 	decl.Hosts = hosts
-	return types.NewModelTierSet(decl)
+	return agent.NewModelTierSet(decl)
 }
 
 // buzzModelTierMatrix checks the answer against the declaration in force when it is
 // called, since the modelTiers and modelTier calls may come in either order.
-func buzzModelTierMatrix(sess *buzz.Session, reg *workspace.WorkspaceRegistry, matrix vm.Value, site string) types.ModelTierMatrix {
-	return func(ctx context.Context, req types.ModelTierRequest) (*types.JobModelTier, error) {
-		set := reg.ModelTiers(ctx)
+func buzzModelTierMatrix(sess *buzz.Session, tiers *agent.ModelTierState, matrix vm.Value, site string) types.ModelTierMatrix {
+	return func(ctx context.Context, req types.ModelTierRequest) (*agent.JobModelTier, error) {
+		if tiers == nil {
+			return nil, fmt.Errorf("%s: the load that registered the matrix holds no model tiers", modelTierMember)
+		}
+		set, err := tiers.Tiers()
+		if err != nil {
+			return nil, fmt.Errorf("%s: the default model tier declaration does not load: %w", modelTierMember, err)
+		}
 		if set == nil {
 			return nil, fmt.Errorf("%s: the workspace has no model tiers to choose among: magus\\modelTiers(null) turned them off", modelTierMember)
 		}
-		return callModelTierMatrix(ctx, sess, set, matrix, req, site, types.ModelTierSourceMatrix)
+		return callModelTierMatrix(ctx, sess, set, matrix, req, site, agent.ModelTierSourceMatrix)
 	}
 }
 
 // callModelTierMatrix calls choose in sess and checks its answer against set.
-func callModelTierMatrix(ctx context.Context, sess *buzz.Session, set *types.ModelTierSet, choose vm.Value, req types.ModelTierRequest, site string, source types.ModelTierSource) (choice *types.JobModelTier, err error) {
+func callModelTierMatrix(ctx context.Context, sess *buzz.Session, set *agent.ModelTierSet, choose vm.Value, req types.ModelTierRequest, site string, source agent.ModelTierSource) (choice *agent.JobModelTier, err error) {
 	// The fork runs the matrix inside the store's own write, so a read of the store
 	// would wait on itself: every magus\job member raises under a failed snapshot.
 	ctx = job.WithSnapshot(ctx, job.Snapshot{Err: errors.New(
@@ -423,15 +441,15 @@ func callModelTierMatrix(ctx context.Context, sess *buzz.Session, set *types.Mod
 
 // UserModelTierMatrix is the person's matrix: choose, from the module at path.
 // tiers names the declaration its answer must be a case of.
-func UserModelTierMatrix(path string, tiers func(context.Context) *types.ModelTierSet) types.ModelTierMatrix {
+func UserModelTierMatrix(path string, tiers func(context.Context) *agent.ModelTierSet) types.ModelTierMatrix {
 	return userModelTierMatrix(path, tiers)
 }
 
 // userModelTierMatrix loads path afresh per call and closes it after.
 // A daemon holds no session between forks. Every failure is an error.
-func userModelTierMatrix(path string, tiers func(context.Context) *types.ModelTierSet) types.ModelTierMatrix {
+func userModelTierMatrix(path string, tiers func(context.Context) *agent.ModelTierSet) types.ModelTierMatrix {
 	label := fmt.Sprintf("the user model tier matrix %s", path)
-	return func(ctx context.Context, req types.ModelTierRequest) (*types.JobModelTier, error) {
+	return func(ctx context.Context, req types.ModelTierRequest) (*agent.JobModelTier, error) {
 		if !filepath.IsAbs(path) || filepath.Ext(path) != ".buzz" {
 			return nil, fmt.Errorf("%s: jobs.model_tier_matrix must be the absolute path of a .buzz module", label)
 		}
@@ -456,7 +474,7 @@ func userModelTierMatrix(path string, tiers func(context.Context) *types.ModelTi
 		if err != nil || !choose.IsFun() {
 			return nil, fmt.Errorf("%s exports no choose function: export fun choose(req: ModelTierRequest) > Choice?", label)
 		}
-		choice, err := callModelTierMatrix(ctx, sess, set, choose, req, path, types.ModelTierSourceUserMatrix)
+		choice, err := callModelTierMatrix(ctx, sess, set, choose, req, path, agent.ModelTierSourceUserMatrix)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", label, err)
 		}
@@ -464,7 +482,7 @@ func userModelTierMatrix(path string, tiers func(context.Context) *types.ModelTi
 	}
 }
 
-func decodeModelTierChoice(set *types.ModelTierSet, v vm.Value, site string, source types.ModelTierSource) (*types.JobModelTier, error) {
+func decodeModelTierChoice(set *agent.ModelTierSet, v vm.Value, site string, source agent.ModelTierSource) (*agent.JobModelTier, error) {
 	if v.IsNull() {
 		return nil, nil //nolint:nilnil // documented: nil leaves the declared default to decide
 	}
@@ -486,7 +504,7 @@ func decodeModelTierChoice(set *types.ModelTierSet, v vm.Value, site string, sou
 	}
 	skillsValue, present := fields.MapGet("skills")
 	if !present || skillsValue.IsNull() {
-		return nil, fmt.Errorf("%s: the matrix's answer has no skills, a magus\\SkillVariant", modelTierMember)
+		return nil, fmt.Errorf("%s: the matrix's answer has no skills, a magus\\agent\\SkillVariant", modelTierMember)
 	}
 	skills, err := decodeSkillVariant(skillsValue)
 	if err != nil {
@@ -496,7 +514,7 @@ func decodeModelTierChoice(set *types.ModelTierSet, v vm.Value, site string, sou
 	if !present || !reasonValue.IsString() || strings.TrimSpace(reasonValue.AsString()) == "" {
 		return nil, fmt.Errorf("%s: the matrix's answer has no reason, and every assignment records why", modelTierMember)
 	}
-	return &types.JobModelTier{
+	return &agent.JobModelTier{
 		Name:   tier.Name(),
 		Rank:   tier.Rank(),
 		Skills: skills,

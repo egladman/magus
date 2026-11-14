@@ -154,7 +154,7 @@ func readClaimFacts(tree string, row types.Job, seen Observed, asked []string, p
 	}
 	if projects != nil && seen.ChangedKnown {
 		facts.outputsKnown = true
-		facts.regenerated = RegeneratedOutside(tree, types.Job{WritePaths: changed}, projects, nil)
+		facts.regenerated = RegeneratedOutside(tree, types.Job{Paths: types.JobPaths{Write: changed}}, projects, nil)
 	}
 	return facts
 }
@@ -176,7 +176,7 @@ func heldBeside(tree string, row types.Job, asked []string) []string {
 		entries, _ := os.ReadDir(filepath.Join(tree, filepath.FromSlash(dir)))
 		for _, e := range entries {
 			f := path.Join(dir, e.Name())
-			if !e.IsDir() && !types.IsTestPath(f) && slices.ContainsFunc(row.WritePaths, func(w string) bool { return covers(w, f) }) {
+			if !e.IsDir() && !types.IsTestPath(f) && slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, f) }) {
 				out = append(out, f)
 			}
 		}
@@ -189,7 +189,7 @@ func heldBeside(tree string, row types.Job, asked []string) []string {
 func changedInside(row types.Job, seen Observed) []string {
 	var out []string
 	for _, f := range seen.Changed {
-		if slices.ContainsFunc(row.WritePaths, func(w string) bool { return covers(w, f) }) {
+		if slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, f) }) {
 			out = append(out, path.Clean(f))
 		}
 	}
@@ -492,7 +492,7 @@ func declaredName(decl string) string {
 }
 
 func proveTest(row types.Job, rel, subject string, facts claimFacts) (string, error) {
-	if types.IsTestPath(subject) || !slices.ContainsFunc(row.WritePaths, func(w string) bool { return covers(w, subject) }) {
+	if types.IsTestPath(subject) || !slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, subject) }) {
 		return "", fmt.Errorf("%s is not a file the job holds or claimed, other than a test", subject)
 	}
 	dir := path.Dir(subject)
@@ -582,9 +582,9 @@ func checkClaimPath(row types.Job, rel string, rows []types.Job) error {
 // path is the one a dead proof takes.
 func checkClaimPathPast(row types.Job, rel string, rows []types.Job, dead string) error {
 	switch {
-	case slices.ContainsFunc(row.WritePaths, func(w string) bool { return covers(w, rel) }):
+	case slices.ContainsFunc(row.Paths.Write, func(w string) bool { return covers(w, rel) }):
 		return fmt.Errorf("%s is already a write path of %s", rel, row.ID)
-	case slices.ContainsFunc(row.DenyPaths, func(d string) bool { return covers(d, rel) }):
+	case slices.ContainsFunc(row.Paths.Deny, func(d string) bool { return covers(d, rel) }):
 		return fmt.Errorf("%s is a deny path of %s, and only whoever forked the job lifts one", rel, row.ID)
 	}
 	ancestors := types.JobAncestors(rows, row.ID)
@@ -592,7 +592,7 @@ func checkClaimPathPast(row types.Job, rel string, rows []types.Job, dead string
 		if other.ID == row.ID || other.ID == dead || !Editing(other) || slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
 			continue
 		}
-		if slices.ContainsFunc(other.WritePaths, func(w string) bool { return covers(w, rel) }) {
+		if slices.ContainsFunc(other.Paths.Write, func(w string) bool { return covers(w, rel) }) {
 			return fmt.Errorf("[%s] %s is held by live job %s, and a proof never takes a path another job holds", string(types.WritePathFileShared), rel, other.ID)
 		}
 	}
@@ -787,7 +787,7 @@ func takeFromDeadHolder(ctx context.Context, s *Store, rows []types.Job, taker, 
 		return err
 	}
 	holder := &rows[j]
-	holder.WritePaths = slices.DeleteFunc(holder.WritePaths, func(p string) bool { return p == rel })
+	holder.Paths.Write = slices.DeleteFunc(holder.Paths.Write, func(p string) bool { return p == rel })
 	holder.Releases = append(holder.Releases, types.JobRelease{
 		Path: rel, Digest: s.digest(ctx, rel), ReleasedAt: now, Revoked: true, TakenBy: taker, DeadBecause: d.Why,
 	})
@@ -822,7 +822,7 @@ func grantClaim(actor Actor, cur *types.Job, reqs []types.JobClaimRequest, facts
 		if err != nil {
 			return claimRefusal(actor, cur.ID, err.Error())
 		}
-		cur.WritePaths = append(cur.WritePaths, rel)
+		cur.Paths.Write = append(cur.Paths.Write, rel)
 		cur.Claims = append(cur.Claims, types.JobClaim{Path: rel, Evidence: e, Proof: proof, At: now, By: by})
 	}
 	return nil
@@ -841,15 +841,15 @@ func authorizeClaim(actor Actor, id string, prev, next types.Job, exists bool, r
 	case prev.State != types.StateRunning && prev.State != types.StateExited:
 		return claimRefusal(actor, id, fmt.Sprintf("%s is %s, and only a running or exited job claims", id, cmp.Or(string(prev.State), "unstated")))
 	}
-	if fields := changedFields(prev, next); !slices.Equal(fields, []string{"write_paths"}) {
+	if fields := changedFields(prev, next); !slices.Equal(fields, []string{"paths.write"}) {
 		return claimRefusal(actor, id, "a claim adds write paths and changes nothing else, and this one changes "+strings.Join(fields, ", "))
 	}
-	n, w := len(prev.WritePaths), len(prev.Claims)
-	if len(next.WritePaths) < n || !slices.Equal(next.WritePaths[:n], prev.WritePaths) ||
-		len(next.Claims) < w || !slices.Equal(next.Claims[:w], prev.Claims) || len(next.Claims)-w != len(next.WritePaths)-n {
+	n, w := len(prev.Paths.Write), len(prev.Claims)
+	if len(next.Paths.Write) < n || !slices.Equal(next.Paths.Write[:n], prev.Paths.Write) ||
+		len(next.Claims) < w || !slices.Equal(next.Claims[:w], prev.Claims) || len(next.Claims)-w != len(next.Paths.Write)-n {
 		return claimRefusal(actor, id, "a claim appends one proved write path per proof and drops none")
 	}
-	for k, p := range next.WritePaths[n:] {
+	for k, p := range next.Paths.Write[n:] {
 		if next.Claims[w+k].Path != p {
 			return claimRefusal(actor, id, p+" carries no proof")
 		}

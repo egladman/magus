@@ -1087,7 +1087,7 @@ func (m *Magus) buildSkew(ctx context.Context) string {
 		if res.VCS == nil {
 			return nil, fmt.Errorf("no version control answered in %s", m.ws.Root)
 		}
-		return job.ChangedBuildInputs(ctx, res.VCS, m.ws.Root, built, head)
+		return job.ChangedBuildInputs(ctx, res.VCS, m.ws.Root, m.All(), built, head)
 	})
 }
 
