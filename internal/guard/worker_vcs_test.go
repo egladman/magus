@@ -557,22 +557,33 @@ func TestIntegrationHolderMergesItsBranchesOnEveryPath(t *testing.T) {
 	assert.False(t, mergesBase("done-a", "", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
 }
 
-// standingWorker is a worker row on a checkout its fork made.
+// standingWorker is a worker row on a checkout its fork made. Its suites
+// share one repository and fail if a test changed it; each test gets a fresh
+// ledger.
 type standingWorker struct {
 	suite.Suite
 	layers ctxLayers
 	repo   worktreeRepo
+	before string
 	own    string
 	worker types.Job
 }
 
-func (s *standingWorker) SetupTest() {
+func (s *standingWorker) SetupSuite() {
 	s.repo = newWorktreeRepository(s.T())
 	s.own = s.repo.add("lease-job")
 	s.worker = narrowLease()
 	s.worker.Parent = "orchestrator"
 	s.worker.CheckoutRoot = s.own
 	s.worker.Worktree = &types.JobWorktree{Root: s.own}
+	s.before = s.repo.state()
+}
+
+func (s *standingWorker) TearDownSuite() {
+	s.repo.assertUnchanged(s.T(), s.before)
+}
+
+func (s *standingWorker) SetupTest() {
 	s.layers, _ = fleetLayers(s.T(), s.worker)
 	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{s.worker}}))
 }
@@ -699,7 +710,15 @@ func (s *WorkerReattachSuite) TestARowWithNoCheckoutOfItsOwnIsRefused() {
 	s.Contains(denyLeaseScopedVCS(ctx, Dependencies{callDir: s.own}, row.ID, "git switch -C "+row.ID), "`git switch`")
 }
 
-func (s *WorkerReattachSuite) TestADetachedCommitNamesTheLineThatKeepsIt() {
+// DetachedWorkerSuite detaches the worker's checkout, so no other test
+// shares its repository.
+type DetachedWorkerSuite struct{ standingWorker }
+
+func TestDetachedWorkerSuite(t *testing.T) { suite.Run(t, new(DetachedWorkerSuite)) }
+
+func (s *DetachedWorkerSuite) TearDownSuite() {}
+
+func (s *DetachedWorkerSuite) TestADetachedCommitNamesTheLineThatKeepsIt() {
 	s.repo.git(s.own, "switch", "--detach")
 	reason := s.from(s.own, "git commit -m done")
 	s.Contains(reason, "has no branch checked out")
@@ -825,29 +844,50 @@ func contextWithLedger(t *testing.T, at location) context.Context {
 	return context.WithValue(t.Context(), locationKey{}, at)
 }
 
-// WorkerRevertSuite pins row 602: a worker reverts its own commit on its own
-// branch, graded like a cherry-pick by the paths it writes.
-type WorkerRevertSuite struct {
+// workerRevert pins row 602: a worker reverts its own commit on its own
+// branch, graded like a cherry-pick by the paths it writes. Its suites share
+// one repository and fail if a test changed it; each test gets a fresh ledger.
+type workerRevert struct {
 	suite.Suite
 	at     location
 	repo   worktreeRepo
+	before string
 	worker types.Job
 	wt     string
 }
 
-func TestWorkerRevertSuite(t *testing.T) { suite.Run(t, new(WorkerRevertSuite)) }
+func (s *workerRevert) SetupSuite() {
+	_, s.repo, s.worker, s.wt = leaseVCSRepository(s.T())
+	s.before = s.repo.state()
+}
 
-func (s *WorkerRevertSuite) SetupTest() {
-	var ctx context.Context
-	ctx, s.repo, s.worker, s.wt = leaseVCSRepository(s.T())
+func (s *workerRevert) TearDownSuite() {
+	s.repo.assertUnchanged(s.T(), s.before)
+}
+
+func (s *workerRevert) SetupTest() {
+	ctx, _ := fleetFixture(s.T(), s.worker)
 	s.at = ledgerAt(s.T(), ctx)
 }
 
-func (s *WorkerRevertSuite) judge(command string) string {
+func (s *workerRevert) judge(command string) string {
 	return denyLeaseScopedVCS(contextWithLedger(s.T(), s.at), Dependencies{callDir: s.wt}, s.worker.ID, command)
 }
 
-func (s *WorkerRevertSuite) TestRevertsItsOwnCommit() {
+// WorkerRevertSuite judges reverts of the base commit.
+type WorkerRevertSuite struct{ workerRevert }
+
+func TestWorkerRevertSuite(t *testing.T) { suite.Run(t, new(WorkerRevertSuite)) }
+
+// WorkerRevertOwnCommitSuite commits on the worker's branch, so no other test
+// shares its repository.
+type WorkerRevertOwnCommitSuite struct{ workerRevert }
+
+func TestWorkerRevertOwnCommitSuite(t *testing.T) { suite.Run(t, new(WorkerRevertOwnCommitSuite)) }
+
+func (s *WorkerRevertOwnCommitSuite) TearDownSuite() {}
+
+func (s *WorkerRevertOwnCommitSuite) TestRevertsItsOwnCommit() {
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.wt, "cmd", "magus"), 0o755))
 	s.repo.commitFiles(s.wt, map[string]string{"cmd/magus/x.go": "package main\n"})
 	s.Empty(s.judge("git revert --no-edit HEAD"))
