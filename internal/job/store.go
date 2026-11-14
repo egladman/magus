@@ -32,6 +32,7 @@ import (
 
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/internal/trail"
@@ -126,7 +127,8 @@ type storeConfig struct {
 	modelRows       func() []types.ModelPricing
 	modelTierMatrix func(context.Context, types.ModelTierRequest) (*agent.JobModelTier, error)
 	spawnRule       func(parent, child agent.ModelTier) error
-	owners          func(context.Context, []string) ([]string, error)
+	spawnCeiling    func(context.Context) (builtin.Setting, error)
+	owners         func(context.Context, []string) ([]string, error)
 	// priceContext is Location.PriceContext.
 	priceContext func(calls []types.AgentFacts) (tokens int64, usd float64, ok bool)
 	// workspace is what validation reads the record against (see [Store.InWorkspace]);
@@ -202,6 +204,10 @@ type Location struct {
 	// whose tier and its parent's are both proven. Such a row with no rule
 	// is refused.
 	SpawnRule func(parent, child agent.ModelTier) error
+	// SpawnCeiling reads the workspace's spawn-above-parent-tier setting. A row
+	// SpawnRule ranks above its parent is refused only under deny. Such a row
+	// with no reader is refused.
+	SpawnCeiling func(context.Context) (builtin.Setting, error)
 	// Owners names the projects that own a list of files, the ownership `describe job`
 	// reports as a job's projects. It is asked only to fill a matrix's request, so a Store
 	// with no matrix never calls it; nil leaves the request's WriteProjects empty.
@@ -225,7 +231,7 @@ type Location struct {
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
 	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
-		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, spawnRule: loc.SpawnRule, owners: loc.Owners, priceContext: loc.PriceContext,
+		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, spawnRule: loc.SpawnRule, spawnCeiling: loc.SpawnCeiling, owners: loc.Owners, priceContext: loc.PriceContext,
 		migrations: jobMigrations}}
 	s.path, s.err = jobsPath(loc)
 	return s

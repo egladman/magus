@@ -7,6 +7,8 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
@@ -132,6 +134,12 @@ func TierCeiling(parent, child agent.ModelTier) error {
 // TierCeiling, the reference rule the CLI passes.
 func WithSpawnRule(rule SpawnRule) Option {
 	return sdkOption("WithSpawnRule", func(o *options) { o.spawnRule = rule })
+}
+
+// SpawnCeiling is the workspace's approved spawn-above-parent-tier setting,
+// which a fork above its parent's tier follows as the guard's spawn does.
+func (w internals) SpawnCeiling(ctx context.Context) (builtin.Setting, error) {
+	return guard.SpawnCeilingSetting(ctx, w.Root())
 }
 
 // WithVersion supplies the running build's version so Open and Inspect can check it

@@ -34,6 +34,7 @@ import (
 	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
@@ -272,6 +273,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 		loc.ModelTiers = m.ModelTiers(ctx)
 		loc.ModelTierMatrix = composeModelTierMatrix(m.ModelTierMatrix(), user.Jobs.ModelTierMatrix, m.ModelTiers)
 		loc.SpawnRule = viewInternals(m).CheckSpawn
+		loc.SpawnCeiling = func(ctx context.Context) (builtin.Setting, error) { return guard.SpawnCeilingSetting(ctx, root) }
 		loc.Owners = func(ctx context.Context, files []string) ([]string, error) {
 			res, err := m.AffectedFromPaths(ctx, files)
 			if err != nil {

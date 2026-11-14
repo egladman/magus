@@ -288,7 +288,7 @@ func (w *rowWrite) assignTier(ctx context.Context) error {
 		row.ModelTier = &assigned
 	}
 	if !w.exists() || prev.Agent.RequestedModel() != row.Agent.RequestedModel() || prev.Parent != row.Parent {
-		return refuseAboveParent(w.s.modelTiers, w.s.spawnRule, *row, w.f.Jobs)
+		return refuseAboveParent(ctx, w.s.modelTiers, w.s.spawnRule, w.s.spawnCeiling, *row, w.f.Jobs)
 	}
 	return nil
 }

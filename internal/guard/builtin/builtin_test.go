@@ -60,7 +60,7 @@ func TestDefaults(t *testing.T) {
 		"guard-unfinished":     Advise,
 
 		"orchestrator-groundwork": Deny,
-		"spawn-above-parent-tier": Deny,
+		"spawn-above-parent-tier": Advise,
 
 		"root-context-budget":    Off,
 		"root-heavy-command":     Off,

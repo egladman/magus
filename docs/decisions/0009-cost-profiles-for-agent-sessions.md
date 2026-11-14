@@ -116,7 +116,7 @@ once per session per threshold:
 | root-repeat             | off                                                     | advise on the second identical read or command               | deny the third                                                                |
 | spawn-names-model       | off                                                     | advise on a spawn naming no model                            | deny a spawn naming none, or one not at its job row's model tier              |
 | spawn-above-model-tier  | off                                                     | advise on a spawn whose model tier ranks above its job row's | the same; never deny                                                          |
-| spawn-above-parent-tier | deny a spawn whose model tier ranks above its spawner's | the same                                                     | the same                                                                      |
+| spawn-above-parent-tier | advise on a spawn above its spawner's tier, with cost   | the same                                                     | the same                                                                      |
 
 The delegable commands are recursive search, `cat` and `sed -n` of source, a whole-file host
 read, `git diff` and `git log -p` without `--stat` or `--name-only`, non-gate `magus run`
@@ -137,12 +137,15 @@ and compare ranks, never model names or prices.
   `hosts` entry to add.
 - `spawn-above-model-tier` advises on a spawn whose tier ranks above its row's, and never
   denies: work can outgrow its row, and the remedy is a re-fork that records why.
-- `spawn-above-parent-tier` refuses a spawn whose tier ranks above its spawner's: a child
-  never outranks its parent. The spawner's model is the one its host reported, and an
-  inferred one only advises. A model that is no exact alias, such as a transcript's full
-  id, has an unknown tier; magus never infers one and advises naming why. The way up is a
-  person forking the higher-tier row, and `magus job fork` holds a child row to its
-  parent's tier the same way.
+- `spawn-above-parent-tier` advises on a spawn whose tier ranks above its spawner's: the
+  way up is allowed, and the advice names both tiers and ranks, each model's input and
+  output price per million tokens from its `mgs_listModels` row (unknown when no row gives
+  one), the alias at the parent's tier, and that setting the rule off stops it. Set to
+  deny, a spawn whose spawner's model its host reported is refused; an inferred one only
+  advises. A model that is no exact alias, such as a transcript's full id, has an unknown
+  tier; magus never infers one and advises naming why. `magus job fork` follows the same
+  setting for a child row above its parent's tier: advised, refused under deny, silent
+  when off.
 - `model-tier-context-cap` advises a leased worker whose reported context passes its tier's
   `maxContext` bound, and set to deny refuses the worker's writes, as a passed deadline does.
   It advises at every level by default; the shipped declaration caps only routine.

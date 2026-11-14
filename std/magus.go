@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -1581,10 +1582,11 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 		ModelTiers(ctx context.Context) *agent.ModelTierSet
 		ModelTierMatrix() types.ModelTierMatrix
 		CheckSpawn(parent, child agent.ModelTier) error
+		SpawnCeiling(ctx context.Context) (builtin.Setting, error)
 	}
 	if tiers, ok := ws.(modelTiered); ok {
 		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(ctx), tiers.ModelTierMatrix()
-		loc.SpawnRule = tiers.CheckSpawn
+		loc.SpawnRule, loc.SpawnCeiling = tiers.CheckSpawn, tiers.SpawnCeiling
 	}
 	// std cannot import internal/agent, which loads the harness spells, so the workspace
 	// supplies the reader.

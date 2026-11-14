@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
@@ -448,8 +449,17 @@ func tieredStore(t *testing.T, set *agent.ModelTierSet, matrix func(context.Cont
 	t.Helper()
 	loc := tempLocation(t, t.TempDir())
 	loc.ModelTiers, loc.ModelTierMatrix, loc.SpawnRule = set, matrix, tierWithin
+	loc.SpawnCeiling = ceilingAt(builtin.Setting{Decision: builtin.Advise})
 	return NewStore(loc)
 }
+
+// ceilingAt reads spawn-above-parent-tier as s.
+func ceilingAt(s builtin.Setting) func(context.Context) (builtin.Setting, error) {
+	return func(context.Context) (builtin.Setting, error) { return s, nil }
+}
+
+// denied is spawn-above-parent-tier set to deny.
+var denied = builtin.Setting{Decision: builtin.Deny}
 
 // tierWithin is magus.TierCeiling's ordering, which this package cannot import.
 func tierWithin(parent, child agent.ModelTier) error { return child.Within(parent) }
@@ -665,10 +675,11 @@ func TestStoreFailsAForkWhoseOwnersCannotBeFound(t *testing.T) {
 	assert.Zero(t, matrix.calls, "the matrix is not fed a request with the projects missing")
 }
 
-func TestStoreRefusesAChildAboveItsParentsTier(t *testing.T) {
+func TestStoreRefusesAChildAboveItsParentsTierUnderDeny(t *testing.T) {
 	t.Parallel()
 
 	s := tieredStore(t, tierSet(t), nil)
+	s.spawnCeiling = ceilingAt(denied)
 	parent := lease("p")
 	parent.Agent.Model = agent.Model{Tier: "routine"}
 	seed(t, s, parent)
@@ -679,7 +690,7 @@ func TestStoreRefusesAChildAboveItsParentsTier(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "c would run at model tier design (rank 2)")
 	assert.ErrorContains(t, err, "its parent p was forked at routine (rank 0)")
-	assert.ErrorContains(t, err, "fork it at routine or lower (`--model routine`), or a person forks it at design as a row of its own")
+	assert.ErrorContains(t, err, "this workspace sets spawn-above-parent-tier to deny, so fork it at routine or lower (`--model routine`)")
 	verdict := types.ClassifyRetry(err)
 	assert.False(t, verdict.Retryable)
 	assert.Equal(t, types.RetryAfterPerson, verdict.Change)
@@ -715,10 +726,11 @@ func TestStoreForksAChildAtOrBelowItsParentsTier(t *testing.T) {
 	assert.Equal(t, "design", seed(t, s, orphan).ModelTier.Name, "a row with no parent has no ceiling")
 }
 
-func TestStoreRefusesReparentingUnderALowerTier(t *testing.T) {
+func TestStoreRefusesReparentingUnderALowerTierUnderDeny(t *testing.T) {
 	t.Parallel()
 
 	s := tieredStore(t, tierSet(t), nil)
+	s.spawnCeiling = ceilingAt(denied)
 	low := lease("low")
 	low.Agent.Model = agent.Model{Tier: "routine"}
 	seed(t, s, low)
@@ -731,31 +743,146 @@ func TestStoreRefusesReparentingUnderALowerTier(t *testing.T) {
 	assert.ErrorContains(t, err, "its parent low was forked at routine (rank 0)")
 }
 
-func TestRefuseAboveParentJudgesOnlyAProvenPair(t *testing.T) {
-	t.Parallel()
+// refuseAboveParentSuite judges a design child c under a parent p.
+type refuseAboveParentSuite struct {
+	suite.Suite
+	set    *agent.ModelTierSet
+	child  types.Job
+	proven []types.Job
+}
 
-	set := tierSet(t)
-	design := &agent.JobModelTier{Name: "design", Rank: 2}
-	tests := []struct {
-		name string
-		plan []types.Job
-	}{
-		{"parent missing from the plan", nil},
-		{"parent records no tier", []types.Job{{ID: "p"}}},
-		{"parent's tier is declared at another rank", []types.Job{{ID: "p", ModelTier: &agent.JobModelTier{Name: "routine", Rank: 1}}}},
-		{"parent's tier is no longer declared", []types.Job{{ID: "p", ModelTier: &agent.JobModelTier{Name: "tiny", Rank: 0}}}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.NoError(t, refuseAboveParent(set, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: design}, tt.plan))
-		})
-	}
+func TestRefuseAboveParent(t *testing.T) { suite.Run(t, new(refuseAboveParentSuite)) }
 
-	proven := []types.Job{{ID: "p", ModelTier: &agent.JobModelTier{Name: "routine", Rank: 0}}}
-	require.Error(t, refuseAboveParent(set, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: design}, proven))
-	require.NoError(t, refuseAboveParent(nil, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: design}, proven), "a workspace without tiers bounds nothing")
-	assert.ErrorContains(t, refuseAboveParent(set, nil, types.Job{ID: "c", Parent: "p", ModelTier: design}, proven), "no spawn rule", "a proven pair with no rule is refused, never allowed")
+func (s *refuseAboveParentSuite) SetupTest() {
+	s.set = tierSet(s.T())
+	s.child = types.Job{ID: "c", Parent: "p", ModelTier: &agent.JobModelTier{Name: "design", Rank: 2}}
+	s.proven = []types.Job{{ID: "p", ModelTier: &agent.JobModelTier{Name: "routine", Rank: 0}}}
+}
+
+func (s *refuseAboveParentSuite) refuse(plan []types.Job, ceiling builtin.Setting) error {
+	return refuseAboveParent(s.T().Context(), s.set, tierWithin, ceilingAt(ceiling), s.child, plan)
+}
+
+func (s *refuseAboveParentSuite) TestAParentMissingFromThePlanBoundsNothing() {
+	s.NoError(s.refuse(nil, denied))
+}
+
+func (s *refuseAboveParentSuite) TestAParentRecordingNoTierBoundsNothing() {
+	s.NoError(s.refuse([]types.Job{{ID: "p"}}, denied))
+}
+
+func (s *refuseAboveParentSuite) TestAParentsTierAtAnotherRankBoundsNothing() {
+	s.NoError(s.refuse([]types.Job{{ID: "p", ModelTier: &agent.JobModelTier{Name: "routine", Rank: 1}}}, denied))
+}
+
+func (s *refuseAboveParentSuite) TestAParentsTierNoLongerDeclaredBoundsNothing() {
+	s.NoError(s.refuse([]types.Job{{ID: "p", ModelTier: &agent.JobModelTier{Name: "tiny", Rank: 0}}}, denied))
+}
+
+func (s *refuseAboveParentSuite) TestAProvenPairUnderDenyIsRefused() {
+	s.ErrorContains(s.refuse(s.proven, denied), "this workspace sets spawn-above-parent-tier to deny")
+}
+
+func (s *refuseAboveParentSuite) TestAProvenPairUnderAdviseIsAllowed() {
+	s.NoError(s.refuse(s.proven, builtin.Setting{Decision: builtin.Advise}))
+}
+
+func (s *refuseAboveParentSuite) TestAProvenPairUnderOffIsAllowed() {
+	s.NoError(s.refuse(s.proven, builtin.Setting{Decision: builtin.Off}))
+}
+
+func (s *refuseAboveParentSuite) TestAWorkspaceWithoutTiersBoundsNothing() {
+	s.NoError(refuseAboveParent(s.T().Context(), nil, tierWithin, ceilingAt(denied), s.child, s.proven))
+}
+
+// A proven pair with no rule is refused, never allowed.
+func (s *refuseAboveParentSuite) TestAProvenPairWithNoRuleIsRefused() {
+	s.ErrorContains(refuseAboveParent(s.T().Context(), s.set, nil, ceilingAt(denied), s.child, s.proven), "no spawn rule")
+}
+
+func (s *refuseAboveParentSuite) TestAProvenPairWithNoSettingReaderIsRefused() {
+	err := refuseAboveParent(s.T().Context(), s.set, tierWithin, nil, s.child, s.proven)
+	s.ErrorContains(err, "opened with no spawn-above-parent-tier setting to judge it")
+}
+
+func (s *refuseAboveParentSuite) TestASettingThatFailsToReadIsRefused() {
+	failing := func(context.Context) (builtin.Setting, error) { return builtin.Setting{}, errors.New("magus.yaml does not load") }
+	err := refuseAboveParent(s.T().Context(), s.set, tierWithin, failing, s.child, s.proven)
+	s.ErrorContains(err, "c ranks above its parent p: magus.yaml does not load")
+}
+
+// forkAboveParentSuite forks c on opus under p on haiku in a tiered store.
+type forkAboveParentSuite struct {
+	suite.Suite
+	store *Store
+	child types.Job
+}
+
+func TestForkAboveParent(t *testing.T) { suite.Run(t, new(forkAboveParentSuite)) }
+
+func (s *forkAboveParentSuite) SetupTest() {
+	s.store = tieredStore(s.T(), tierSet(s.T()), nil)
+	s.store.modelRows = func() []types.ModelPricing {
+		return []types.ModelPricing{
+			{ID: "claude-haiku-5-5", Alias: "haiku", Input: 1, Output: 5},
+			{ID: "claude-opus-5-5", Alias: "opus", Input: 5, Output: 25},
+		}
+	}
+	parent := lease("p")
+	parent.Agent.Model = agent.Model{ID: "haiku"}
+	seed(s.T(), s.store, parent)
+	s.child = lease("c")
+	s.child.Parent, s.child.Agent.Model = "p", agent.Model{ID: "opus"}
+}
+
+// notes forks the child and returns the notes the fork owes its reader.
+func (s *forkAboveParentSuite) notes() []string {
+	stored := seed(s.T(), s.store, s.child)
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+	return ForkNotes(s.T().Context(), s.store, rows, stored)
+}
+
+func (s *forkAboveParentSuite) TestAForkAboveItsParentIsAllowedByDefault() {
+	stored := seed(s.T(), s.store, s.child)
+
+	s.Equal("design", stored.ModelTier.Name)
+}
+
+func (s *forkAboveParentSuite) TestForkNotesAdviseAForkAboveItsParentWithItsCost() {
+	s.Contains(s.notes(), "c runs at model tier design (rank 2), above its parent p at routine (rank 0);"+
+		" per million tokens, opus costs $5.00 input and $25.00 output, and haiku costs $1.00 input and $5.00 output."+
+		" `--model routine` keeps it at the parent's tier, and setting spawn-above-parent-tier off in magus\\guard.builtins stops this advice")
+}
+
+func (s *forkAboveParentSuite) TestForkNotesSayNothingOfAForkAtItsParentsTier() {
+	s.child.Agent.Model = agent.Model{ID: "haiku"}
+
+	for _, note := range s.notes() {
+		s.NotContains(note, "above its parent")
+	}
+}
+
+func (s *forkAboveParentSuite) TestOffLetsAForkThroughAndSilencesForkNotes() {
+	s.store.spawnCeiling = ceilingAt(builtin.Setting{Decision: builtin.Off})
+
+	notes := s.notes()
+
+	for _, note := range notes {
+		s.NotContains(note, "above its parent")
+	}
+}
+
+func (s *forkAboveParentSuite) TestForkNotesSayASettingThatFailsToRead() {
+	stored := seed(s.T(), s.store, s.child)
+	s.store.spawnCeiling = func(context.Context) (builtin.Setting, error) {
+		return builtin.Setting{}, errors.New("magus.yaml does not load")
+	}
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+
+	s.Contains(ForkNotes(s.T().Context(), s.store, rows, stored),
+		"c ranks above its parent p, and the spawn-above-parent-tier setting did not read: magus.yaml does not load")
 }
 
 // fourModelTiersSuite pins the migration that respells the three shipped

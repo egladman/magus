@@ -1,12 +1,14 @@
 package job
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
@@ -293,37 +295,120 @@ func (s *Store) writeProjects(ctx context.Context, row types.Job) ([]string, err
 	return s.owners(ctx, files)
 }
 
-// refuseAboveParent refuses row's tier when it ranks above the tier row's parent in plan
-// was forked at. Only a proven pair is judged: a parent missing from plan, recording no
-// tier, or recording one set no longer declares at that rank bounds nothing. The way up is
-// a person's: a child never outranks the work that handed it out.
-func refuseAboveParent(set *agent.ModelTierSet, rule func(parent, child agent.ModelTier) error, row types.Job, plan []types.Job) error {
+// spawnAboveParentTier is the guard rule whose setting a fork follows.
+const spawnAboveParentTier = "spawn-above-parent-tier"
+
+// tierPair is a row's proven tier beside its parent's. above is why the
+// spawn rule refuses the pair, nil when it ranks at or below the parent.
+type tierPair struct {
+	parentRow     types.Job
+	parent, child agent.ModelTier
+	above         error
+}
+
+// aboveParent judges row's tier against its parent's in plan. Only a proven
+// pair is judged. A parent missing from plan, or a tier set no longer
+// declares, gives a zero pair. A proven pair with no rule is an error.
+func aboveParent(set *agent.ModelTierSet, rule func(parent, child agent.ModelTier) error, row types.Job, plan []types.Job) (tierPair, error) {
 	if set == nil || row.Parent == "" || row.ModelTier == nil {
-		return nil
+		return tierPair{}, nil
 	}
 	i := slices.IndexFunc(plan, func(r types.Job) bool { return r.ID == row.Parent })
 	if i < 0 {
-		return nil
+		return tierPair{}, nil
 	}
 	parent, ok := declaredTier(set, plan[i].ModelTier)
 	if !ok {
-		return nil
+		return tierPair{}, nil
 	}
 	child, ok := declaredTier(set, row.ModelTier)
 	if !ok {
-		return nil
+		return tierPair{}, nil
 	}
 	if rule == nil {
-		return fmt.Errorf("job: %s and its parent %s both carry a model tier, and this store was opened with no spawn rule to judge them", row.ID, row.Parent)
+		return tierPair{}, fmt.Errorf("job: %s and its parent %s both carry a model tier, and this store was opened with no spawn rule to judge them", row.ID, row.Parent)
 	}
-	refused := rule(parent, child)
-	if refused == nil {
+	return tierPair{parentRow: plan[i], parent: parent, child: child, above: rule(parent, child)}, nil
+}
+
+// refuseAboveParent refuses row's tier above its parent's only when the
+// spawn-above-parent-tier setting is deny; advise and off let it through.
+// A store with no setting reader, or one that fails, is an error.
+func refuseAboveParent(ctx context.Context, set *agent.ModelTierSet, rule func(parent, child agent.ModelTier) error, ceiling func(context.Context) (builtin.Setting, error), row types.Job, plan []types.Job) error {
+	pair, err := aboveParent(set, rule, row, plan)
+	if err != nil || pair.above == nil {
+		return err
+	}
+	if ceiling == nil {
+		return fmt.Errorf("job: %s ranks above its parent %s, and this store was opened with no %s setting to judge it", row.ID, row.Parent, spawnAboveParentTier)
+	}
+	s, err := ceiling(ctx)
+	if err != nil {
+		return fmt.Errorf("job: %s ranks above its parent %s: %w", row.ID, row.Parent, err)
+	}
+	if s.Decision != builtin.Deny {
 		return nil
 	}
-	err := fmt.Errorf("job: %s would run at model tier %s, and its parent %s was forked at %s,"+
-		" so fork it at %s or lower (`--model %s`), or a person forks it at %s as a row of its own: %w",
-		row.ID, row.ModelTier, row.Parent, plan[i].ModelTier, parent.Name(), parent.Name(), child.Name(), refused)
-	return types.NonRetryable(err, types.RetryAfterPerson, "a person forks the higher-tier row")
+	err = fmt.Errorf("job: %s would run at model tier %s, and its parent %s was forked at %s,"+
+		" and this workspace sets %s to deny, so fork it at %s or lower (`--model %s`): %w",
+		row.ID, row.ModelTier, row.Parent, pair.parentRow.ModelTier, spawnAboveParentTier, pair.parent.Name(), pair.parent.Name(), pair.above)
+	return types.NonRetryable(err, types.RetryAfterPerson, "a person forks the higher-tier row or sets the rule to advise")
+}
+
+// aboveParentNote advises a fork above its parent's tier, "" when it is not
+// or the setting is off. A setting that fails to read is said, not dropped.
+func aboveParentNote(ctx context.Context, store *Store, row types.Job, plan []types.Job) string {
+	pair, err := aboveParent(store.modelTiers, store.spawnRule, row, plan)
+	if err != nil || pair.above == nil || store.spawnCeiling == nil {
+		return ""
+	}
+	s, err := store.spawnCeiling(ctx)
+	if err != nil {
+		return fmt.Sprintf("%s ranks above its parent %s, and the %s setting did not read: %v", row.ID, row.Parent, spawnAboveParentTier, err)
+	}
+	if s.Decision == builtin.Off {
+		return ""
+	}
+	var models []types.ModelPricing
+	if store.modelRows != nil {
+		models = store.modelRows()
+	}
+	return fmt.Sprintf("%s runs at model tier %s (rank %d), above its parent %s at %s (rank %d); %s."+
+		" `--model %s` keeps it at the parent's tier, and setting %s off in magus\\guard.builtins stops this advice",
+		row.ID, pair.child.Name(), pair.child.Rank(), row.Parent, pair.parent.Name(), pair.parent.Rank(),
+		ModelCost(models, tierModel(row), tierModel(pair.parentRow)), pair.parent.Name(), spawnAboveParentTier)
+}
+
+// tierModel names the model a row runs: its tier's alias, its requested
+// id, or the tier's name when neither is recorded.
+func tierModel(row types.Job) string {
+	return cmp.Or(row.ModelTier.Model, row.Agent.RequestedModel().ID, row.ModelTier.Name)
+}
+
+// ModelCost says what model and parent each cost per million tokens, input
+// and output, from the harness model rows (mgs_listModels) matched by exact
+// id or alias. A price no row gives is said to be unknown, never zero.
+func ModelCost(rows []types.ModelPricing, model, parent string) string {
+	return fmt.Sprintf("per million tokens, %s, and %s", modelPrice(rows, model), modelPrice(rows, parent))
+}
+
+// modelPrice is one model's prices as ModelCost says them.
+func modelPrice(rows []types.ModelPricing, model string) string {
+	i := slices.IndexFunc(rows, func(r types.ModelPricing) bool {
+		return r.ID == model || r.Alias != "" && r.Alias == model
+	})
+	if i < 0 {
+		return model + "'s price is unknown, since no mgs_listModels row names it"
+	}
+	return fmt.Sprintf("%s costs %s and %s", model, usdPrice(rows[i].Input, "input"), usdPrice(rows[i].Output, "output"))
+}
+
+// usdPrice says p for what; a row leaves an unknown price 0.
+func usdPrice(p types.USDPerMTok, what string) string {
+	if p <= 0 {
+		return fmt.Sprintf("an unknown %s price", what)
+	}
+	return fmt.Sprintf("$%.2f %s", float64(p), what)
 }
 
 // declaredTier is the tier record names in set, false when record is nil or set has no

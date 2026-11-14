@@ -698,6 +698,7 @@ func wordByte(b byte) bool {
 // file row shares with a job in the same checkout, or not yet taken (write_proof
 // overlapping), gets the claim pair that would split it.
 // A granted hold names what its holder now holds (see grantNotes).
+// A row above its parent's tier is advised so, unless the setting is off.
 // Nothing is written to a row.
 // A nil store, or one with no workspace root, has no tree and returns nil.
 func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Job) []string {
@@ -705,6 +706,9 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		return nil
 	}
 	notes := grantNotes(rows, row)
+	if note := aboveParentNote(ctx, store, row, rows); note != "" {
+		notes = append(notes, note)
+	}
 	var configs []string
 	if note := claimLimitAdvice(row); note != "" {
 		notes = append(notes, note)

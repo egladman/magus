@@ -1,18 +1,21 @@
 package guard
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 )
 
-// denyRuleSpawnAboveParentTier refuses a spawn whose model's tier ranks above the tier of
-// the model its spawner runs on, the ceiling `magus job fork` holds a child row to.
+// denyRuleSpawnAboveParentTier judges a spawn whose model's tier ranks above
+// its spawner's, as `magus job fork` judges a child row. It advises by
+// default and refuses only under a deny setting.
 const denyRuleSpawnAboveParentTier denyRuleName = "spawn-above-parent-tier"
 
 // gradeSpawnCeiling judges a spawn by spawn-above-parent-tier. Both models resolve to tiers
@@ -92,14 +95,34 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 	if err != nil {
 		alias = spawner.model
 	}
+	say := fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above %s, %s, model tier %s (rank %d); %s",
+		env.DeclaredModel, child.Name(), child.Rank(), spawner.says, spawner.model, parent.Name(), parent.Rank(), job.ModelCost(rows, env.DeclaredModel, spawner.model))
+	if s.Decision == builtin.Deny {
+		say += fmt.Sprintf(": this workspace sets %s to deny, so spawn it on %s or lower.", denyRuleSpawnAboveParentTier, alias)
+	} else {
+		say += fmt.Sprintf(". %s stays at the parent's tier, and setting %s off in magus\\guard.builtins stops this advice.", alias, denyRuleSpawnAboveParentTier)
+	}
 	return applyFindings(gate, verdict, []costFinding{{
 		rule: denyRuleSpawnAboveParentTier,
 		deny: s.Decision == builtin.Deny,
 		key:  hint.MarkerKind(denyRuleSpawnAboveParentTier),
-		say: fmt.Sprintf("magus workspace: this spawn runs %s, model tier %s (rank %d), above %s, %s, model tier %s (rank %d): "+
-			"a child never outranks its parent, so spawn it on %s or lower.",
-			env.DeclaredModel, child.Name(), child.Rank(), spawner.says, spawner.model, parent.Name(), parent.Rank(), alias),
+		say:  say,
 	}}, from)
+}
+
+// SpawnCeilingSetting is root's approved spawn-above-parent-tier setting, as
+// LoadApprovedBuiltins resolves it: the setting `magus job fork` holds a row
+// above its parent's tier to. A magus.yaml that does not load is an error.
+func SpawnCeilingSetting(ctx context.Context, root string) (builtin.Setting, error) {
+	settings, err := LoadApprovedBuiltins(ctx, root)
+	if err != nil {
+		return builtin.Setting{}, fmt.Errorf("reading the %s setting: %w", denyRuleSpawnAboveParentTier, err)
+	}
+	s, ok := settings[string(denyRuleSpawnAboveParentTier)]
+	if !ok {
+		return builtin.Setting{}, fmt.Errorf("guard: the resolved builtins carry no %s setting", denyRuleSpawnAboveParentTier)
+	}
+	return s, nil
 }
 
 // modelTierByExactID is model's tier: the case the declaration maps model to for host, else the

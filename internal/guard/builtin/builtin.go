@@ -349,7 +349,6 @@ var defaults = map[string]decision{
 	"spawn-unvalidated":     Deny,
 	"spawn-unisolated-row":  Deny,
 	"spawn-warm-worker":     Deny,
-	spawnAboveParentTier:    Deny,
 	"stale-binary":          Deny,
 	"token-state":           Deny,
 	"vcs-off-switch":        Deny,
@@ -405,6 +404,10 @@ var defaults = map[string]decision{
 	// so no level names this rule and the off level leaves it on. It judges only a session
 	// magus recorded handing out work: proof refuses, an inference advises.
 	orchestratorGroundwork: Deny,
+
+	// A child may outrank its parent: the advice names both tiers and the cost.
+	// Only a deny setting refuses it, here and at `magus job fork`.
+	spawnAboveParentTier: Advise,
 
 	// The cost rules and the stall rule are off until a level turns them on, and the
 	// level a workspace gets when it declares none is light.

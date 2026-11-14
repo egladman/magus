@@ -711,8 +711,8 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 				if tc.model == "sonnet" {
 					deps.Builtins = levelDeps(t, types.GuardProfileStandard).Builtins
 					higher := judgeSpawn(ctx, t, deps, "opus")
-					assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, judgedAs(higher))
-					assert.Contains(t, higher.Reason, "above this session's model")
+					assert.Equal(t, decisionAdvise, higher.Decision, "a child above its parent is advised, never refused")
+					assert.Contains(t, higher.Context, "above this session's model")
 				}
 			} else {
 				assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnNamesModel)}, judgedAs(v))
