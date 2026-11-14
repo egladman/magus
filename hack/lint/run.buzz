@@ -150,74 +150,159 @@ final PRUNED_PATHS = {".claude/worktrees": true};
 final KEPT_PATHS = {"docs/site/diagrams/gen": true, "internal/handler/mcp/gen": true};
 
 // KEPT_IGNORED are ignored trees walked anyway: each checkout installs
-// .claude, and the rules read its settings and skills. Everything under
-// one inherits its ignore, so the walk stops asking the VCS there.
+// .claude, and the rules read its settings and skills. The listing leaves
+// out an ignored tree, so the walk reads one from disk and keeps all of it.
 final KEPT_IGNORED = {".claude": true};
 
-// walk returns every file under root outside the pruned trees and the
-// VCS ignore rules, as root-relative paths.
+// walk returns every file under root outside the pruned trees and the VCS
+// ignore rules, as root-relative paths, in the order a depth-first walk of
+// sorted directories meets them. The vcs module has no call that lists the
+// tree, so one git ls-files through vcs\cmd lists it. Another VCS is refused.
 export fun walk(root: str) > [str] !> any {
+    final seen = mut {<str: bool>};
     final acc = mut [<str>];
-    walkInto(root, rel: "", kept: false, acc: acc);
-    return acc;
-}
-
-fun walkInto(root: str, rel: str, kept: bool, acc: mut [str]) > void !> any {
-    final dir = if (rel == "") root else root + "/" + rel;
-    final names = fs\listDir(dir);
-    final ignored = mut {<str, bool>};
-    if (!kept) {
-        final paths = mut [<str>];
-        foreach (name in names) {
-            paths.append(if (rel == "") name else rel + "/" + name);
-        }
-        foreach (p in vcs\ignoredFiles(paths, dir: root)) {
-            ignored[p] = true;
+    foreach (p in listed(root)) {
+        if (seen[p] == null and !pruned(p)) {
+            seen[p] = true;
+            acc.append(p);
         }
     }
-    foreach (name in names) {
-        final p = if (rel == "") name else rel + "/" + name;
-        if (ignored[p] != null and KEPT_IGNORED[p] == null) {
+    final kept = mut [<str>];
+    foreach (dir, _ in KEPT_IGNORED) {
+        if (fs\isDir(root + "/" + dir)) {
+            kept.append(dir);
+        }
+    }
+    foreach (dir in vcs\ignoredFiles(kept, dir: root)) {
+        final under = mut [<str>];
+        walkKept(root, rel: dir, acc: under);
+        foreach (p in under) {
+            if (seen[p] == null) {
+                seen[p] = true;
+                acc.append(p);
+            }
+        }
+    }
+    return walkOrder(acc);
+}
+
+// listed is the files git lists under root: tracked and on disk, or untracked
+// and not ignored. A repeated path, such as an unmerged file, repeats.
+fun listed(root: str) > [str] !> any {
+    if (vcs\name() != "git") {
+        throw "lint: the walk lists the tree with git ls-files, and the vcs module has no listing call for \"{vcs\name()}\"";
+    }
+    // -t tags a tracked file deleted from disk R, beside its cached entry.
+    final stdout = vcs\cmd(["ls-files", "-z", "-t", "--cached", "--deleted", "--others", "--exclude-standard"],
+        opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout;
+    final gone = mut {<str: bool>};
+    final entries = mut [<str>];
+    foreach (entry in stdout.split(std\char(0))) {
+        if (entry == "") {
             continue;
         }
+        final p = entry.sub(2, len: entry.len() - 2);
+        if (p.endsWith("/")) {
+            throw "lint: {p} is a repository nested in the tree, which git ls-files does not list into";
+        }
+        if (entry.startsWith("R ")) {
+            gone[p] = true;
+        } else {
+            entries.append(p);
+        }
+    }
+    return entries.filter(fun (index: int, p: str) > bool => gone[p] == null);
+}
+
+// walkOrder sorts paths as a depth-first walk of sorted directories meets
+// them. A separator below every byte a name holds makes that byte order:
+// directory a's files come before its sibling a.b.
+fun walkOrder(paths: [str]) > [str] {
+    final sep = std\char(1);
+    final keys = mut [<str>];
+    foreach (p in paths) {
+        keys.append(p.replace("/", with: sep));
+    }
+    final sorted = mut [<str>];
+    foreach (k in keys.sort(fun (left: str, right: str) > bool => left < right)) {
+        sorted.append(k.replace(sep, with: "/"));
+    }
+    return sorted;
+}
+
+// pruned reports whether a directory above p is one the walk never enters.
+fun pruned(p: str) > bool {
+    final parts = p.split("/");
+    var dir = "";
+    for (var i = 0; i < parts.len() - 1; i = i + 1) {
+        dir = if (i == 0) parts[0] else dir + "/" + parts[i];
+        if (PRUNED_PATHS[dir] != null or (PRUNED[parts[i]] != null and KEPT_PATHS[dir] == null)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun walkKept(root: str, rel: str, acc: mut [str]) > void !> any {
+    foreach (name in fs\listDir(root + "/" + rel)) {
+        final p = rel + "/" + name;
         if (!fs\isDir(root + "/" + p)) {
             acc.append(p);
         } else if ((PRUNED[name] == null or KEPT_PATHS[p] != null) and PRUNED_PATHS[p] == null) {
-            walkInto(root, rel: p, kept: kept or ignored[p] != null, acc: acc);
+            walkKept(root, rel: p, acc: acc);
         }
     }
 }
 
-// select returns the files each of reads matches, and the globs matching none.
-export fun select(files: [str], reads: [str]) > obj{ matched: [Path], unmatched: [str] } !> any {
+// Selected is the files a rule's reads match, and the globs matching none.
+export object Selected {
+    matched: [Path],
+    unmatched: [str],
+}
+
+// select matches files against reads in one pass. Only a matched file can
+// hit a glob, so only it is tested against the globs no file has hit yet.
+export fun select(files: [str], reads: [str]) > Selected !> any {
     final matched = mut [<Path>];
-    final unmatched = mut [<str>];
-    foreach (glob in reads) {
-        var hit = false;
-        foreach (f in files) {
-            if (path\matches(glob, path: f)) {
-                hit = true;
-                break;
-            }
-        }
-        if (!hit) {
-            unmatched.append(glob);
-        }
-    }
+    var pending = reads;
     foreach (f in files) {
-        if (path\matchesAny(reads, path: f)) {
-            matched.append(Path{ value = f });
+        if (!path\matchesAny(reads, path: f)) {
+            continue;
+        }
+        matched.append(Path{ value = f });
+        if (pending.len() > 0) {
+            final still = mut [<str>];
+            foreach (glob in pending) {
+                if (!path\matches(glob, path: f)) {
+                    still.append(glob);
+                }
+            }
+            pending = still;
         }
     }
-    return .{ matched = matched, unmatched = unmatched };
+    return Selected{ matched = matched, unmatched = pending };
+}
+
+// selectEach is select for each of rules, by rule name.
+fun selectEach(rules: [Rule], files: [str]) > {str: Selected} !> any {
+    final selected = mut {<str: Selected>};
+    foreach (r in rules) {
+        selected[r.name] = select(files, reads: r.reads);
+    }
+    return selected;
 }
 
 // run applies each rule to the files it reads and returns every finding, stamped with
 // its rule.
 export fun run(rules: [Rule], files: [str]) > [Finding] !> any {
+    return apply(rules, selected: selectEach(rules, files: files));
+}
+
+// apply runs each of rules over its entry in selected, which holds them all.
+fun apply(rules: [Rule], selected: {str: Selected}) > [Finding] !> any {
     final found = mut [<Finding>];
     foreach (r in rules) {
-        final sel = select(files, reads: r.reads);
+        final sel = selected[r.name]!;
         foreach (glob in sel.unmatched) {
             found.append(Finding{ path = "hack/lint/" + r.name + ".buzz", rule = r.name,
                 message = "reads " + glob + ", which matches no file in the tree",
@@ -301,22 +386,18 @@ export fun footprintFindings(read: [str], declared: [str], nested: [str], line: 
 }
 
 // footprint runs footprintFindings against the tree: the files rules reads, the root's
-// conventions declaration and the workspace's nested projects.
-fun footprint(rules: [Rule], files: [str]) > [Finding] !> any {
-    final seen = mut {<str: bool>};
-    final read = mut [<str>];
-    final globs = mut [<str>];
-    foreach (glob in SOURCES) {
-        globs.append(glob);
-    }
+// conventions declaration and the workspace's nested projects. selected
+// holds every one of rules.
+fun footprint(rules: [Rule], files: [str], selected: {str: Selected}) > [Finding] !> any {
+    final matched = mut {<str: bool>};
     foreach (r in rules) {
-        foreach (glob in r.reads) {
-            globs.append(glob);
+        foreach (f in selected[r.name]!.matched) {
+            matched[f.value] = true;
         }
     }
+    final read = mut [<str>];
     foreach (f in files) {
-        if (seen[f] == null and path\matchesAny(globs, path: f)) {
-            seen[f] = true;
+        if (matched[f] != null or path\matchesAny(SOURCES, path: f)) {
             read.append(f);
         }
     }
@@ -490,13 +571,16 @@ export fun check(sel: Selection) > Report !> any {
     final all = rules();
     final picked = pick(all, sel: sel);
     final files = walk(".");
-    var found = run(picked, files: files);
     var magusfile = sel.paths.len() == 0;
     foreach (p in sel.paths) {
         magusfile = magusfile or p == "magusfile.buzz";
     }
-    if (sel.rule == null and magusfile) {
-        found = found + footprint(all, files: files);
+    final footprinted = sel.rule == null and magusfile;
+    // The footprint reads every rule's matches, so its run selects for all.
+    final selected = selectEach(if (footprinted) all else picked, files: files);
+    var found = apply(picked, selected: selected);
+    if (footprinted) {
+        found = found + footprint(all, files: files, selected: selected);
     }
     return Report{ rules = picked.len(), findings = at(found, paths: sel.paths) };
 }
@@ -732,6 +816,18 @@ test "the walk skips what the VCS ignores and keeps what it does not" {
     assert\contains(got, item: "kept.lock", message: "untracked, not ignored");
     assert\contains(got, item: ".claude/skills/a/SKILL.md", message: "a file deep in a kept ignored tree");
     assert\equal(got.len(), want: 4, message: "ignored dir and file skipped");
+}
+
+test "the walk leaves out a deleted tracked file and lists a directory before its dotted sibling" {
+    final root = fs\tempDir("lint-order-");
+    foreach (p in ["a.b", "a/c", "a-d", "gone.lock"]) {
+        fs\mkdirAll(fs\dirname(root + "/" + p));
+        fs\writeFile(root + "/" + p, content: "");
+    }
+    _ = vcs\cmd(["init", "--quiet"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    _ = vcs\cmd(["add", "a.b", "gone.lock"], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    fs\remove(root + "/gone.lock");
+    assert\equal(walk(root), want: ["a/c", "a-d", "a.b"], message: "sorted names, depth first");
 }
 
 test "--record and --session reach the selection, and a path with --record is refused" {
