@@ -1,22 +1,28 @@
 package magus
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/symbols/buzzindex"
@@ -139,6 +145,7 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 	if err != nil {
 		return "", fmt.Errorf("conformance: measure %s: %w", commit, err)
 	}
+	m.seedHeadIndexes(ctx, tree, present, head)
 	out.Unmeasured = absent
 	line, err := json.Marshal(out)
 	if err != nil {
@@ -290,9 +297,10 @@ func keyMismatch(want conformanceKey, name string) string {
 }
 
 // baseIndex is one in-process symbol index of a project, over the base tree.
+// op names the pack head's index of the project is kept in.
 type baseIndex struct {
-	project, language string
-	ix                symbols.UnitIndexer
+	project, language, op string
+	ix                    symbols.UnitIndexer
 }
 
 // baseExternal is a project's index that only an external indexer writes: its language and
@@ -318,6 +326,16 @@ func (p baseIndexPlan) unmeasured(file string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// index is the plan's index of project that op writes.
+func (p baseIndexPlan) index(project, op string) (baseIndex, bool) {
+	for _, ix := range p.indexes {
+		if ix.project == project && ix.op == op {
+			return ix, true
+		}
+	}
+	return baseIndex{}, false
 }
 
 // splitAbsent parts the indexes by whether tree holds their project. The plan
@@ -376,7 +394,7 @@ func (m *Magus) baseIndexPlan(ctx context.Context, tree string) (baseIndexPlan, 
 				plan.external = append(plan.external, baseExternal{dir: p.Path, language: byName[name].Language, extensions: byName[name].Extensions})
 				continue
 			}
-			plan.indexes = append(plan.indexes, baseIndex{project: p.Path, language: byName[name].Language, ix: ix})
+			plan.indexes = append(plan.indexes, baseIndex{project: p.Path, language: byName[name].Language, op: si.OpName(), ix: ix})
 		}
 	}
 	return plan, nil
@@ -441,16 +459,35 @@ func indexBase(ctx context.Context, tree, pack string, b baseIndex) ([]types.Kno
 	return parsed, nil
 }
 
-// measureTree indexes tree with plan's in-process indexers and measures it under this
-// workspace's policy. A source an indexer cannot read fails, naming it.
+// basePack is where measureTree writes the pack of tree's i-th index.
+func basePack(tree string, i int) string {
+	return filepath.Join(tree, ".magus", "conformance", fmt.Sprintf("%d.pack", i))
+}
+
+// measureTree indexes tree with plan's in-process indexers,
+// several at once, and measures it under this workspace's policy.
+// A source an indexer cannot read fails, naming it.
 func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan) (types.Conformance, error) {
+	parsed := make([][]types.KnowledgeSymbol, len(plan.indexes))
+	indexing, ictx := errgroup.WithContext(ctx)
+	indexing.SetLimit(runtime.GOMAXPROCS(0))
+	for i, b := range plan.indexes {
+		indexing.Go(func() error {
+			got, err := indexBase(ictx, tree, basePack(tree, i), b)
+			if err != nil {
+				return fmt.Errorf("%s %s index: %w", b.project, b.language, err)
+			}
+			parsed[i] = got
+			return nil
+		})
+	}
+	if err := indexing.Wait(); err != nil {
+		return types.Conformance{}, err
+	}
+	// In plan order: the measure is the same whichever indexer ends first.
 	syms := map[string][]types.KnowledgeSymbol{}
 	for i, b := range plan.indexes {
-		parsed, err := indexBase(ctx, tree, filepath.Join(tree, ".magus", "conformance", fmt.Sprintf("%d.pack", i)), b)
-		if err != nil {
-			return types.Conformance{}, fmt.Errorf("%s %s index: %w", b.project, b.language, err)
-		}
-		syms[b.project] = append(syms[b.project], parsed...)
+		syms[b.project] = append(syms[b.project], parsed[i]...)
 	}
 	graph, err := m.TargetGraph(ctx)
 	if err != nil {
@@ -477,6 +514,75 @@ func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan
 		return types.Conformance{}, errors.New("the in-process indexers read no symbols, so no ceiling can be judged against it")
 	}
 	return out, nil
+}
+
+// seedHeadIndexes copies each pack measureTree wrote to where head keeps
+// that index, when head keeps none. Digests are paths and bytes, so head's
+// first freshen re-indexes only what moved. A refused seed is logged.
+func (m *Magus) seedHeadIndexes(ctx context.Context, tree string, base, head baseIndexPlan) {
+	cacheDir := resolveCacheDir(m.ws.Root, m.cfg)
+	for i, b := range base.indexes {
+		dest := symbols.IndexPath(cacheDir, b.project, b.op)
+		if _, err := os.Stat(dest); err == nil {
+			continue
+		}
+		attrs := []any{slog.String("project", b.project), slog.String("language", b.language), slog.String("index", dest)}
+		seeded, err := seedPack(tree, basePack(tree, i), dest, b, head, cacheImmutable(m.cfg))
+		switch {
+		case err != nil:
+			slog.InfoContext(ctx, "head's symbol index is not seeded from the base measure's, so its first freshen builds it whole",
+				append(attrs, attr.Error(err))...)
+		case seeded:
+			slog.InfoContext(ctx, "seeded head's symbol index from the base measure's, so its first freshen re-indexes only what moved", attrs...)
+		}
+	}
+}
+
+// seedPack links a copy of pack, b's index of tree, in at dest. It is false
+// when dest appeared meanwhile, which it never replaces. It refuses a pack
+// head's indexer would not take, or one naming tree's path.
+func seedPack(tree, pack, dest string, b baseIndex, head baseIndexPlan, readOnly bool) (bool, error) {
+	if readOnly {
+		return false, errors.New("the cache is read-only")
+	}
+	h, ok := head.index(b.project, b.op)
+	if !ok {
+		return false, fmt.Errorf("head declares no %s index of %s", b.op, b.project)
+	}
+	if got, want := b.ix.Version(), h.ix.Version(); got != want {
+		return false, fmt.Errorf("the base tree's indexer is %q and head's is %q", got, want)
+	}
+	data, err := os.ReadFile(pack)
+	if err != nil {
+		return false, err
+	}
+	resolved, err := filepath.EvalSymlinks(tree)
+	if err != nil {
+		return false, err
+	}
+	for _, dir := range []string{tree, resolved} {
+		if bytes.Contains(data, []byte(dir)) {
+			return false, fmt.Errorf("its shards name the base tree's path %s", dir)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return false, err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(dest), "."+filepath.Base(dest)+".seed-*")
+	if err != nil {
+		return false, err
+	}
+	defer os.Remove(tmp.Name())
+	_, err = tmp.Write(data)
+	if err = errors.Join(err, tmp.Chmod(0o644), tmp.Close()); err != nil {
+		return false, err
+	}
+	// A link, not a rename: rename would replace an index head built meanwhile.
+	err = os.Link(tmp.Name(), dest)
+	if errors.Is(err, fs.ErrExist) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // conformanceTree is outside the workspace on purpose. Mise walks up from

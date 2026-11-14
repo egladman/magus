@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/symbols/buzzindex"
 	"github.com/egladman/magus/internal/symbols/goindex"
 	"github.com/egladman/magus/internal/symbols/shindex"
@@ -137,6 +139,102 @@ func (s *ConformanceBaseSuite) TestTheBaseTreeIsMadeInThePoliciesPrivateTempDir(
 	s.T().Cleanup(func() { _ = os.RemoveAll(tree) })
 
 	s.Equal(private, filepath.Dir(tree))
+}
+
+// versioned is an indexer known only by its version.
+type versioned string
+
+func (v versioned) Version() string { return string(v) }
+
+func (versioned) Units(context.Context) ([]symbols.Unit, error) { return nil, nil }
+
+func (versioned) Index(context.Context, []symbols.Unit) ([]symbols.Shard, error) {
+	return nil, nil
+}
+
+// seed hands seedPack a base pack holding body, written by an indexer at base,
+// for head's indexer at headVersion. It returns where head keeps the index.
+func (s *ConformanceBaseSuite) seed(base, headVersion, body string, readOnly bool) (string, bool, error) {
+	tree := s.T().TempDir()
+	pack := filepath.Join(tree, "0.pack")
+	s.Require().NoError(os.WriteFile(pack, []byte(body), 0o600))
+	dest := filepath.Join(s.T().TempDir(), "symbols", "p", "scip.pack")
+	b := baseIndex{project: "p", op: "scip", ix: versioned(base)}
+	head := baseIndexPlan{indexes: []baseIndex{{project: "p", op: "scip", ix: versioned(headVersion)}}}
+	seeded, err := seedPack(tree, pack, dest, b, head, readOnly)
+	return dest, seeded, err
+}
+
+func (s *ConformanceBaseSuite) TestASeedLandsTheBasePacksBytes() {
+	dest, seeded, err := s.seed("goindex 4", "goindex 4", "pack", false)
+	s.Require().NoError(err)
+	s.True(seeded)
+	got, err := os.ReadFile(dest)
+	s.Require().NoError(err)
+	s.Equal("pack", string(got))
+}
+
+func (s *ConformanceBaseSuite) TestASeedLeavesNoTemporaryFileBehind() {
+	dest, _, err := s.seed("goindex 4", "goindex 4", "pack", false)
+	s.Require().NoError(err)
+	entries, err := os.ReadDir(filepath.Dir(dest))
+	s.Require().NoError(err)
+	s.Len(entries, 1)
+}
+
+func (s *ConformanceBaseSuite) TestAPackOfAnotherIndexerVersionIsNotSeeded() {
+	dest, seeded, err := s.seed("goindex 4 go1.25", "goindex 4 go1.26", "pack", false)
+	s.Require().ErrorContains(err, `the base tree's indexer is "goindex 4 go1.25" and head's is "goindex 4 go1.26"`)
+	s.False(seeded)
+	s.NoFileExists(dest)
+}
+
+func (s *ConformanceBaseSuite) TestAReadOnlyCacheIsNotSeeded() {
+	dest, seeded, err := s.seed("goindex 4", "goindex 4", "pack", true)
+	s.Require().ErrorContains(err, "read-only")
+	s.False(seeded)
+	s.NoFileExists(dest)
+}
+
+func (s *ConformanceBaseSuite) TestAnIndexHeadLacksIsNotSeeded() {
+	tree := s.T().TempDir()
+	b := baseIndex{project: "p", op: "scip", ix: versioned("v")}
+	_, err := seedPack(tree, filepath.Join(tree, "0.pack"), filepath.Join(tree, "dest.pack"), b, baseIndexPlan{}, false)
+	s.ErrorContains(err, "head declares no scip index of p")
+}
+
+// A shard naming the base tree points readers at a removed directory.
+func (s *ConformanceBaseSuite) TestAPackNamingTheBaseTreeIsNotSeeded() {
+	tree := s.T().TempDir()
+	pack := filepath.Join(tree, "0.pack")
+	s.Require().NoError(os.WriteFile(pack, []byte("doc "+filepath.Join(tree, "a.go")), 0o600))
+	dest := filepath.Join(s.T().TempDir(), "scip.pack")
+	b := baseIndex{project: "p", op: "scip", ix: versioned("v")}
+	head := baseIndexPlan{indexes: []baseIndex{b}}
+
+	seeded, err := seedPack(tree, pack, dest, b, head, false)
+
+	s.Require().ErrorContains(err, "its shards name the base tree's path")
+	s.False(seeded)
+	s.NoFileExists(dest)
+}
+
+// Head's indexer may write its pack while the base is measured.
+func (s *ConformanceBaseSuite) TestASeedNeverReplacesAnIndexHeadWrote() {
+	tree := s.T().TempDir()
+	pack := filepath.Join(tree, "0.pack")
+	s.Require().NoError(os.WriteFile(pack, []byte("base"), 0o600))
+	dest := filepath.Join(s.T().TempDir(), "scip.pack")
+	s.Require().NoError(os.WriteFile(dest, []byte("head"), 0o600))
+	b := baseIndex{project: "p", op: "scip", ix: versioned("v")}
+
+	seeded, err := seedPack(tree, pack, dest, b, baseIndexPlan{indexes: []baseIndex{b}}, false)
+
+	s.Require().NoError(err)
+	s.False(seeded)
+	got, err := os.ReadFile(dest)
+	s.Require().NoError(err)
+	s.Equal("head", string(got))
 }
 
 func (s *ConformanceBaseSuite) keep(body string) string {
@@ -333,4 +431,62 @@ func (s *ConformanceBaseBoxSuite) TestACheckoutAtAnotherPathReusesTheCacheDirsMe
 	info, err := os.Stat(kept[0])
 	s.Require().NoError(err)
 	s.True(info.ModTime().Equal(stamp), "the second checkout reused the kept measure rather than measuring again")
+}
+
+const (
+	boxGreet = "export fun greet() > str {\n    return \"hi\";\n}\n"
+	boxOther = "export fun other() > int {\n    return 1;\n}\n"
+)
+
+// measureEditedRepo measures the base of a repository whose head edited one
+// of its Buzz files. It returns head's index and where head keeps its pack.
+func (s *ConformanceBaseBoxSuite) measureEditedRepo(before func(head baseIndex, pack string)) (baseIndex, string) {
+	cfg := config.Defaults()
+	cfg.Cache.Dir = s.T().TempDir()
+	repo := testkit.NewRepository(s.T(), map[string]string{
+		"magusfile.buzz": boxMagusfile, "lib/greet.buzz": boxGreet, "lib/other.buzz": boxOther,
+	})
+	repo.Commit("edit", map[string]string{"lib/greet.buzz": strings.Replace(boxGreet, "hi", "hello", 1)})
+	m := s.inspect(repo.Root(), cfg)
+	plan, err := m.baseIndexPlan(s.T().Context(), m.Root())
+	s.Require().NoError(err)
+	s.Require().Len(plan.indexes, 1)
+	head := plan.indexes[0]
+	pack := symbols.IndexPath(m.CacheDir(), head.project, head.op)
+	before(head, pack)
+
+	_, err = m.MeasureConformanceBase(s.T().Context(), "HEAD~1")
+	s.Require().NoError(err)
+	return head, pack
+}
+
+func (s *ConformanceBaseBoxSuite) read(path string) []byte {
+	data, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	return data
+}
+
+// The seed is the base's pack, so head's freshen re-indexes the edited file
+// alone and writes what a cold index of head writes.
+func (s *ConformanceBaseBoxSuite) TestASeededIndexFreshensToTheColdIndex() {
+	head, seeded := s.measureEditedRepo(func(baseIndex, string) {})
+	s.Require().FileExists(seeded)
+
+	res, err := symbols.UpdatePack(s.T().Context(), seeded, head.ix)
+	s.Require().NoError(err)
+	cold := filepath.Join(s.T().TempDir(), "cold.pack")
+	_, err = symbols.UpdatePack(s.T().Context(), cold, head.ix)
+	s.Require().NoError(err)
+
+	s.False(res.Rebuilt)
+	s.Equal([]string{"lib/greet.buzz"}, res.Indexed)
+	s.Equal(s.read(cold), s.read(seeded))
+}
+
+func (s *ConformanceBaseBoxSuite) TestHeadsOwnIndexIsNotSeeded() {
+	_, pack := s.measureEditedRepo(func(_ baseIndex, pack string) {
+		s.Require().NoError(os.MkdirAll(filepath.Dir(pack), 0o755))
+		s.Require().NoError(os.WriteFile(pack, []byte("head's own"), 0o600))
+	})
+	s.Equal("head's own", string(s.read(pack)))
 }
