@@ -129,6 +129,9 @@ type GateResult struct {
 	// DeferredTo is set on an OutcomeDeferred record: the commit of the green
 	// gate the refusal pointed at.
 	DeferredTo string `json:"deferred_to,omitempty"`
+	// RepairedFiles are the files the run's repairs left uncommitted, each
+	// with the digest it held. See [LatestRepair].
+	RepairedFiles []types.RepairedFile `json:"repaired_files,omitempty"`
 }
 
 // BranchVerdict reports whether this result is a verdict on the branch: a pass or fail
@@ -169,6 +172,25 @@ func LatestGate(fold Fold, ref, target string) (GateRecord, bool) {
 			continue
 		}
 		if g.Ref != ref || g.Target != target || !g.BranchVerdict() {
+			continue
+		}
+		return GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)}, true
+	}
+	return GateRecord{}, false
+}
+
+// LatestRepair returns the newest gate result for target that carries
+// RepairedFiles, on any ref and at any commit. Neither a commit that leaves
+// the repairs out nor a branch switch moves past it. The caller tests each
+// file's digest, which is what makes an old record harmless.
+func LatestRepair(fold Fold, target string) (GateRecord, bool) {
+	for i := len(fold.Records) - 1; i >= 0; i-- {
+		rec := fold.Records[i]
+		if rec.Kind != KindGateResult {
+			continue
+		}
+		var g GateResult
+		if json.Unmarshal(rec.Payload, &g) != nil || g.Target != target || len(g.RepairedFiles) == 0 {
 			continue
 		}
 		return GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)}, true

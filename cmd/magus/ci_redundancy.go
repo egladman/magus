@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/vcs"
@@ -43,7 +44,7 @@ var gatePoolProbeTimeout = 2 * time.Second
 type gateRedundancy struct {
 	m        *magus.Magus
 	root     string
-	drv      types.HistoryReporter
+	drv      types.VCSDriver
 	target   string
 	ref      string
 	commit   string
@@ -166,6 +167,10 @@ func (g *gateRedundancy) evaluate(ctx context.Context, disabled bool) error {
 	if g == nil {
 		return nil
 	}
+	// Not a redundancy check, so --no-redundancy-check does not skip it.
+	if err := g.uncommittedRepair(ctx); err != nil {
+		return err
+	}
 	finding, redundant := g.finding(ctx, disabled)
 	// Probed for the message, not the decision: a refusal should say what the machine was
 	// doing. DecideGate does not read it.
@@ -189,6 +194,48 @@ func (g *gateRedundancy) evaluate(ctx context.Context, disabled bool) error {
 			g.target, g.renderFinding(finding), pool), attr.Notice(""), attr.Component("magus"))
 	}
 	return nil
+}
+
+// uncommittedRepair refuses with MGS3057 while a file the newest repairing
+// ci run left still holds those bytes uncommitted, on any branch. It records
+// nothing, so the repair's record stays newest. An unanswered check is said.
+func (g *gateRedundancy) uncommittedRepair(ctx context.Context) error {
+	rec, held, err := g.heldRepairs(ctx)
+	switch {
+	case err != nil:
+		slog.InfoContext(ctx, "not checking for an uncommitted ci repair", attr.Error(err), attr.Component("gate redundancy"))
+	case len(held) > 0:
+		paths := make([]string, len(held))
+		for i, f := range held {
+			paths[i] = f.Path
+		}
+		return types.DiagnosticErrorf(types.UncommittedRepair,
+			"not running the %s gate: run %s repaired %s still uncommitted: %s. Commit them and run ci again; an uncommitted repair gets no verdict",
+			g.target, cmp.Or(rec.Inv, "unrecorded"), plural.Count(len(held), "file", "files"), strings.Join(paths, ", "))
+	}
+	return nil
+}
+
+// heldRepairs is the newest record of a repairing ci run and those of its
+// files that still hold the repaired bytes uncommitted.
+func (g *gateRedundancy) heldRepairs(ctx context.Context) (sessions.GateRecord, []types.RepairedFile, error) {
+	dir, err := sessions.Dir(g.root)
+	if err != nil {
+		return sessions.GateRecord{}, nil, err
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return sessions.GateRecord{}, nil, err
+	}
+	rec, ok := sessions.LatestRepair(fold, g.target)
+	if !ok {
+		return rec, nil, nil
+	}
+	if g.drv == nil {
+		return rec, nil, fmt.Errorf("run %s recorded repairs and no VCS driver is in hand", cmp.Or(rec.Inv, "unrecorded"))
+	}
+	held, err := magus.UncommittedRepairs(ctx, g.drv, g.root, rec.RepairedFiles)
+	return rec, held, err
 }
 
 // finding looks up the newest gate verdict for this branch and reports whether
@@ -346,6 +393,11 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool
 			outcome = sessions.OutcomeUnrun
 		}
 	}
+	var repair *types.UncommittedRepairError
+	var repaired []types.RepairedFile
+	if errors.As(runErr, &repair) {
+		repaired = repair.Files
+	}
 	g.append(ctx, sessions.GateResult{
 		Target:          g.target,
 		Scope:           g.scope,
@@ -359,6 +411,7 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool
 		UndeclaredSeeds: g.undeclared,
 		Tier:            string(g.tier),
 		Inv:             journal.InvocationIDFromContext(ctx),
+		RepairedFiles:   repaired,
 	})
 }
 
