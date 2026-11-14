@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -935,6 +936,106 @@ func BenchmarkSessionImportedTypes(b *testing.B) {
 			}
 		}
 	}
+}
+
+// BenchmarkSessionsParallel runs sessions on every -cpu goroutine at once, so
+// ns/op against -cpu 1 shows what the process-wide heap lock costs. Load opens
+// and closes a session per iteration; Run keeps one session per goroutine and
+// allocates inside it. b.Error stands in for b.Fatal, which a RunParallel body
+// must not call.
+func BenchmarkSessionsParallel(b *testing.B) {
+	ctx := context.Background()
+	b.Run("Load", func(b *testing.B) {
+		typesSrc := hostShapedDecls("T", 120, 0)
+		hostSrc := hostShapedDecls("H", 20, 80)
+		files := make([]string, 12)
+		for i := range files {
+			files[i] = fmt.Sprintf("import \"types\";\n"+
+				"fun f%d(x: T%d) > int { return x.n; }\n"+
+				"fun useHost%d() > H%d !> any { return host\\h%d(\"x\", n: 1); }\n"+
+				"export fun g%d() > int { return f%d(T%d{}); }\n", i, i, i, i, i, i, i, i)
+		}
+		b.ReportAllocs()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				s := NewSession(ctx, WithEmbedded())
+				s.SetGlobal("host", vm.NewMap())
+				s.DeclareModuleTypes("host", hostSrc)
+				s.SetModuleDecls("types", typesSrc)
+				for _, f := range files {
+					if err := s.Exec(ctx, f); err != nil {
+						b.Error(err)
+						return
+					}
+				}
+				if err := s.Close(); err != nil {
+					b.Error(err)
+					return
+				}
+			}
+		})
+	})
+	b.Run("Run", func(b *testing.B) {
+		// The source of BenchmarkListHigherOrder, run whole each iteration:
+		// about 4,000 list and closure allocations against the session's owner.
+		const src = `var seed = mut [<int>];
+foreach (i in 0..2000) {
+    seed.append(i);
+}
+final doubled = seed.map(fun (_: int, v: int) > int => v * 2);
+final evens = doubled.filter(fun (_: int, v: int) > bool => v % 4 == 0);
+final __r = evens.reduce::<int>(fun (_: int, v: int, acc: int) > int => acc + v, initial: 0);`
+		b.ReportAllocs()
+		b.RunParallel(func(pb *testing.PB) {
+			s := NewSession(ctx, WithEmbedded())
+			defer func() {
+				if err := s.Close(); err != nil {
+					b.Error(err)
+				}
+			}()
+			for pb.Next() {
+				if err := s.Exec(ctx, src); err != nil {
+					b.Error(err)
+					return
+				}
+			}
+		})
+	})
+}
+
+// BenchmarkSessionChurn opens a session, builds 1,000 distinct 100-byte strings
+// and one list of them, and closes it. Its metrics are what each closed session
+// leaves behind after a forced GC: live heap slots, str slots, Go heap bytes.
+// Under buzz_safe or buzz_unsafe the two slot metrics read 0.
+func BenchmarkSessionChurn(b *testing.B) {
+	ctx := context.Background()
+	src := `final parts: mut [str] = mut [];
+foreach (i in 0..1000) {
+    parts.append("` + strings.Repeat("x", 92) + `{10000000 + i}");
+}`
+	sample := func() (live, strs int, inuse uint64) {
+		runtime.GC()
+		var ms runtime.MemStats
+		runtime.ReadMemStats(&ms)
+		return vm.ReadHeapStats().Objects, vm.HeapProfile()["str"], ms.HeapInuse
+	}
+	b.ReportAllocs()
+	live0, strs0, inuse0 := sample()
+	n := 0
+	for b.Loop() {
+		s := NewSession(ctx, WithEmbedded())
+		if err := s.Exec(ctx, src); err != nil {
+			b.Fatal(err)
+		}
+		if err := s.Close(); err != nil {
+			b.Fatal(err)
+		}
+		n++
+	}
+	live1, strs1, inuse1 := sample()
+	b.ReportMetric(float64(live1-live0)/float64(n), "liveslots/op")
+	b.ReportMetric(float64(strs1-strs0)/float64(n), "strslots/op")
+	b.ReportMetric((float64(inuse1)-float64(inuse0))/float64(n), "heapinuse-B/op")
 }
 
 // skipWithoutHeapAttribution skips a test that reads vm's heap attribution, which only
