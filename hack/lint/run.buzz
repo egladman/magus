@@ -136,8 +136,9 @@ export fun rules() > [Rule] {
     ];
 }
 
-// PRUNED are the directories the walk never enters, ignored or not. gen is
+// PRUNED are the names the walk never enters or lists, ignored or not. gen is
 // tracked output the ignore rules cannot exclude; the rest spare the VCS query.
+// A worktree's .git is a file.
 final PRUNED = {".git": true, ".magus": true, "node_modules": true, ".pnpm-store": true, ".testcache": true, "gen": true};
 
 // PRUNED_PATHS are pruned by their whole path: other checkouts of this repository, whose
@@ -185,9 +186,12 @@ fun walkInto(root: str, rel: str, kept: bool, acc: mut [str]) > void !> any {
         if (ignored[p] != null and KEPT_IGNORED[p] == null) {
             continue;
         }
+        if ((PRUNED[name] != null and KEPT_PATHS[p] == null) or PRUNED_PATHS[p] != null) {
+            continue;
+        }
         if (!fs\isDir(root + "/" + p)) {
             acc.append(p);
-        } else if ((PRUNED[name] == null or KEPT_PATHS[p] != null) and PRUNED_PATHS[p] == null) {
+        } else {
             walkInto(root, rel: p, kept: kept or ignored[p] != null, acc: acc);
         }
     }
@@ -200,7 +204,7 @@ fun walkListing(root: str) > [str] !> any {
     final listed = mut [<ListedPath>];
     final tracked = mut [<str>];
     foreach (l in gitListing(root)) {
-        if (!inPrunedTree(if (l.dir) l.path + "/" else l.path)) {
+        if (!isPruned(l.path)) {
             listed.append(l);
             if (l.tracked) {
                 tracked.append(l.path);
@@ -298,12 +302,12 @@ fun walkOrder(paths: [str]) > [str] {
     return sorted;
 }
 
-// inPrunedTree reports whether a directory above p is one the walk never
-// enters. A directory's own path ends in a slash.
-fun inPrunedTree(p: str) > bool {
+// isPruned reports whether p, or a directory above it, has a name or path
+// the walk never enters or lists.
+fun isPruned(p: str) > bool {
     final parts = p.split("/");
     var dir = "";
-    for (var i = 0; i < parts.len() - 1; i = i + 1) {
+    for (var i = 0; i < parts.len(); i = i + 1) {
         dir = if (i == 0) parts[0] else dir + "/" + parts[i];
         if (PRUNED_PATHS[dir] != null or (PRUNED[parts[i]] != null and KEPT_PATHS[dir] == null)) {
             return true;
@@ -892,7 +896,7 @@ test "the walk leaves out a deleted tracked file and lists a directory before it
 test "the listing selects what the per-directory walk selects, ignored tracked files and nested repositories included" {
     final root = fs\tempDir("lint-parity-");
     final files = [".gitignore", "plain", "keep.log", "ig/t.txt", "ig/u.txt", "stray.log", "kept.lock", "nest/g",
-                   "x/node_modules/r/f", ".claude/worktrees/w/f", ".claude/skills/a/SKILL.md"];
+                   "x/gen", "x/node_modules/r/f", ".claude/worktrees/w/f", ".claude/skills/a/SKILL.md"];
     foreach (p in files) {
         fs\mkdirAll(fs\dirname(root + "/" + p));
         fs\writeFile(root + "/" + p, content: if (p == ".gitignore") "*.log\nig/\n" else "");
