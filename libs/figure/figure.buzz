@@ -514,6 +514,8 @@ fun overlapLen(p1: int, p2: int, q1: int, q2: int) > int {
 // automatic placement too, which is exactly where this goes wrong unnoticed.
 fun overlappingConnectors(d: Diagram) > [Fault] {
     final errs: mut [Fault] = mut [<Fault>];
+    final segs: mut [[[int]]] = mut [<[[int]]>];
+    foreach (e in d.edges) { segs.append(edgeSegments(d, e: e)); }
     var i = 0;
     while (i < d.edges.len()) {
         var j = i + 1;
@@ -521,8 +523,8 @@ fun overlappingConnectors(d: Diagram) > [Fault] {
             final a = d.edges[i];
             final b = d.edges[j];
             var found = false;
-            foreach (sa in edgeSegments(d, e: a)) {
-                foreach (sb in edgeSegments(d, e: b)) {
+            foreach (sa in segs[i]) {
+                foreach (sb in segs[j]) {
                     if (segmentsOverlap(sa, b: sb)) { found = true; }
                 }
             }
@@ -6914,10 +6916,20 @@ export fun draw(f: Figure, theme: Theme, anchorHref: str = "") > str !> str { //
     if (d.error -> e) {
         throw e.message; //nolint:no-throw // the exported call raises
     }
+    return drawDiagram(d.value!, theme: theme, anchorHref: anchorHref);
+}
+
+// drawDiagram paints d, a Figure's diagram(), with theme, as draw
+// does. Painting one figure in several themes lays it out once.
+export fun drawDiagram(d: Diagram, theme: Theme, anchorHref: str = "") > str !> str { //nolint:no-throw // the exported call raises
+    final named: str? = theme.value;
+    if (named == null) {
+        throw "diagram {quote(d.id)}: drawDiagram takes theme: Theme.<case>, not a string"; //nolint:no-throw // the exported call raises
+    }
     var p = pagePalette();
     if (theme == Theme.light) { p = lightPalette(); }
     if (theme == Theme.dark) { p = darkPalette(); }
-    final painted = renderSvg(d.value!, p: p, s: Style{ anchorHref = anchorHref });
+    final painted = renderSvg(d, p: p, s: Style{ anchorHref = anchorHref });
     if (painted.error -> e) {
         throw e.message; //nolint:no-throw // the exported call raises
     }
@@ -7814,6 +7826,15 @@ test "draw paints each theme" {
     std\assert(dark.indexOf("<style>") == null and dark.indexOf("magus-fill-") == null and dark.startsWith(XmlDeclaration + "<svg") and page.startsWith("<svg")
         and (draw(f, theme: Theme.light) catch "threw").startsWith(XmlDeclaration + "<svg"),
         message: "dark bakes hex");
+}
+
+test "drawDiagram paints a figure's diagram the bytes draw paints" {
+    final f = serverHttp(handlers()) catch of("x");
+    final d = f.diagram() catch Diagram{};
+    foreach (theme in [Theme.dark, Theme.light, Theme.page]) {
+        assert\equal(drawDiagram(d, theme: theme) catch "laid out threw", want: draw(f, theme: theme) catch "draw threw",
+            message: "theme {theme.value}");
+    }
 }
 
 // varAttrs names every attribute value in svg that holds a var(), which strict
