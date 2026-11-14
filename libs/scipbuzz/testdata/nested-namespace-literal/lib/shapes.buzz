@@ -1,0 +1,5 @@
+namespace geo\shapes;
+
+export object Point {
+    x: int = 0,
+}
