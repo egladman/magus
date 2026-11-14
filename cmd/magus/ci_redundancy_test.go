@@ -425,6 +425,25 @@ func fold2(t *testing.T, dir string) sessions.Fold {
 	return fold
 }
 
+func TestCIRecordSuite(t *testing.T) { suite.Run(t, new(CIRecordSuite)) }
+
+// CIRecordSuite pins what a ci run's verdict record says.
+type CIRecordSuite struct{ suite.Suite }
+
+func (s *CIRecordSuite) TestRepairedRunRecordsAFailure() {
+	testkit.Isolate(s.T())
+	root := s.T().TempDir()
+	dir, err := sessions.Dir(root)
+	s.Require().NoError(err)
+	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
+
+	g.record(context.Background(), types.DiagnosticErrorf(types.UncommittedRepair, "ci changed 1 version-controlled file: a.txt"), false, nil)
+
+	rec, ok := sessions.LatestGate(fold2(s.T(), dir), "b", types.TargetCI)
+	s.Require().True(ok)
+	s.Equal(sessions.OutcomeFail, rec.Outcome, "HEAD's bytes failed; the repair is not committed")
+}
+
 type GateUnrunSuite struct {
 	suite.Suite
 	g *gateRedundancy

@@ -112,7 +112,8 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 		if *step {
 			ciOpts = append(ciOpts, magus.WithStep())
 		}
-		return runAndEmit(ctx, m, "ci", nil, ciTargets, ciOpts)
+		charms := withDefaultCharms(nil, globalCfg.DefaultCharms, false)
+		return runAndEmit(ctx, m, "ci", nil, ciTargets, withCharms(ciOpts, charms))
 	}
 	// Expand short aliases.
 	targetName = canonicalTarget(targetName)
