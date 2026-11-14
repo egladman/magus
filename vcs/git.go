@@ -3486,6 +3486,118 @@ func (v gitVCS) DiffTrees(ctx context.Context, root, a, b string) ([]string, err
 	return gitDiffTree(ctx, root, a, b, nil)
 }
 
+// diffTreesAgainst implements manyTreesDiffer: cat-file resolves every
+// revision, then one diff-tree --stdin compares each distinct commit to head.
+// A process per revision spent a push judgment's deadline.
+func (gitVCS) diffTreesAgainst(ctx context.Context, root, head string, revisions []string) (map[string][]string, error) {
+	if err := checkRequiredRev(head); err != nil {
+		return nil, err
+	}
+	ids, err := gitCommitIDs(ctx, root, append([]string{head}, revisions...))
+	if err != nil {
+		return nil, err
+	}
+	headID, ok := ids[head]
+	if !ok {
+		return nil, fmt.Errorf("git: no commit for %q: %w", head, ErrObjectMissing)
+	}
+	revsByID := map[string][]string{}
+	var in strings.Builder
+	for _, rev := range revisions {
+		id, held := ids[rev]
+		if !held || slices.Contains(revsByID[id], rev) {
+			continue
+		}
+		if _, asked := revsByID[id]; !asked {
+			fmt.Fprintf(&in, "%s %s\n", id, headID)
+		}
+		revsByID[id] = append(revsByID[id], rev)
+	}
+	if len(revsByID) == 0 {
+		return map[string][]string{}, nil
+	}
+	// --always prints each line's first id even when nothing differs, which
+	// is what tells one answer from the next.
+	out, err := gitExec(ctx, root, gitOpts{Stdin: []byte(in.String())}, "diff-tree", "--stdin", "-r", "--no-renames", "-z", "--always").Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff-tree --stdin: %w", gitStderr(err))
+	}
+	return parseDiffTreeAnswers(string(out), revsByID)
+}
+
+// parseDiffTreeAnswers reads `diff-tree --stdin -r -z --always` output into
+// the paths each asked revision differs in. revsByID names, by each commit
+// id asked, the revisions it answers for.
+func parseDiffTreeAnswers(out string, revsByID map[string][]string) (map[string][]string, error) {
+	differ := map[string][]string{}
+	tokens := strings.Split(strings.TrimSuffix(out, "\x00"), "\x00")
+	var paths []string
+	var answering []string
+	flush := func() {
+		for _, rev := range answering {
+			differ[rev] = paths
+		}
+	}
+	for i := 0; i < len(tokens); i++ {
+		entry := tokens[i]
+		if !strings.HasPrefix(entry, ":") {
+			revs, asked := revsByID[entry]
+			if !asked {
+				return nil, fmt.Errorf("git diff-tree: an answer for %q, which was not asked", entry)
+			}
+			flush()
+			answering, paths = revs, []string{}
+			continue
+		}
+		// An entry is ":<mode> <mode> <blob> <blob> <status>", then its
+		// path. A mode change alone differs, as DiffTrees names it.
+		if answering == nil || len(strings.Fields(entry)) != 5 || i+1 == len(tokens) {
+			return nil, fmt.Errorf("git diff-tree: unread entry %q", entry)
+		}
+		i++
+		paths = append(paths, tokens[i])
+	}
+	flush()
+	for id, revs := range revsByID {
+		if _, answered := differ[revs[0]]; !answered {
+			return nil, fmt.Errorf("git diff-tree: no answer for %s", id)
+		}
+	}
+	return differ, nil
+}
+
+// gitCommitIDs is the commit id of each of revs the repository at root
+// holds, asked of one cat-file. A revision it lacks, or that is ambiguous or
+// unsafe to pass, has no entry.
+func gitCommitIDs(ctx context.Context, root string, revs []string) (map[string]string, error) {
+	var in strings.Builder
+	var asked []string
+	for _, rev := range revs {
+		if rev != "" && checkRev(rev) == nil && !strings.ContainsAny(rev, "\n\r") && !slices.Contains(asked, rev) {
+			fmt.Fprintf(&in, "%s^{commit}\n", rev)
+			asked = append(asked, rev)
+		}
+	}
+	ids := map[string]string{}
+	if len(asked) == 0 {
+		return ids, nil
+	}
+	out, err := gitExec(ctx, root, gitOpts{Stdin: []byte(in.String())}, "cat-file", "--batch-check").Output()
+	if err != nil {
+		return nil, fmt.Errorf("git cat-file --batch-check: %w", gitStderr(err))
+	}
+	lines := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n")
+	if len(lines) != len(asked) {
+		return nil, fmt.Errorf("git cat-file: %d answers for %d revisions", len(lines), len(asked))
+	}
+	for i, rev := range asked {
+		if fields := strings.Fields(lines[i]); len(fields) == 3 && fields[1] == "commit" {
+			ids[rev] = fields[0]
+		}
+	}
+	return ids, nil
+}
+
 // MergeTrees implements types.TreeMerger with `merge-tree --write-tree`, which exits 1 when
 // the merge conflicts: an answer, read as one.
 func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) (types.TreeMergeResult, error) {

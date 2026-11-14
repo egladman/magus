@@ -1,19 +1,15 @@
 package guard
 
 import (
-	"bufio"
-	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -58,10 +54,8 @@ func narrowCoverageAt(ctx context.Context, deps Dependencies, at location, dir, 
 	ev := newRunEvidence(res.VCS, realPath(root), realPath(at.workspace), ws, runs, commit)
 	weigh, hostless := splitHostless(ev.root, changed)
 	n.hostless = hostless
-	if res.VCS.Name() == string(backendGit) {
-		if err := ev.readGitFiles(ctx, weigh); err != nil {
-			return narrowCoverage{unread: fmt.Sprintf("the changed files are unread: %v", err)}
-		}
+	if err := ev.readRevisions(ctx, weigh); err != nil {
+		return narrowCoverage{unread: fmt.Sprintf("the changed files are unread: %v", err)}
 	}
 	n.weighed, n.changed = true, changed
 	for _, file := range weigh {
@@ -83,13 +77,16 @@ type runEvidence struct {
 	commit          string
 	files           map[revisionFile]fileAt
 	revisions       map[string]bool
-	// prints is each run's footprint, by its index in runs, and declared
-	// each magusfile target's. Both name glob sets by index in sets.
-	prints   []runFootprint
-	declared []declaredTarget
-	sets     [][]types.Glob
-	// held memoizes holding.
-	held map[string][]bool
+	// differingPaths is, per clean run's revision the repository holds, the
+	// files it holds unlike commit.
+	differingPaths map[string]map[string]bool
+	// footprints is each run's, by its index in runs, and declared each
+	// magusfile target's. Both name glob sets by index in globSets.
+	footprints []runFootprint
+	declared   []declaredTarget
+	globSets   [][]types.Glob
+	// claimed memoizes claiming.
+	claimed map[string][]bool
 }
 
 // newRunEvidence weighs runs, recorded in the checkout at root, against what
@@ -97,7 +94,7 @@ type runEvidence struct {
 func newRunEvidence(driver types.VCSDriver, root, workspace string, ws types.WorkspaceRepository, runs []cache.OutputDescriptor, commit string) *runEvidence {
 	ev := &runEvidence{
 		driver: driver, root: root, workspace: workspace, ws: ws, runs: runs, commit: commit,
-		files: map[revisionFile]fileAt{}, revisions: map[string]bool{}, held: map[string][]bool{},
+		files: map[revisionFile]fileAt{}, revisions: map[string]bool{}, claimed: map[string][]bool{},
 	}
 	ev.index()
 	return ev
@@ -142,7 +139,7 @@ func (ev *runEvidence) index() {
 		return fp
 	}
 	named := map[[2]string][]string{}
-	ev.prints = make([]runFootprint, len(ev.runs))
+	ev.footprints = make([]runFootprint, len(ev.runs))
 	for i, d := range ev.runs {
 		p := ev.ws.Get(d.Project)
 		if p == nil || d.Target == "" {
@@ -154,7 +151,7 @@ func (ev *runEvidence) index() {
 			paths = ev.namedPaths(d)
 			named[key] = paths
 		}
-		ev.prints[i] = runFootprint{targetFootprint: footprint(p, types.Normalize(bareTarget(d.Target))), known: true, named: paths}
+		ev.footprints[i] = runFootprint{targetFootprint: footprint(p, types.Normalize(bareTarget(d.Target))), known: true, named: paths}
 	}
 	for _, p := range ev.ws.All() {
 		for _, target := range p.MagusfileTargets {
@@ -165,8 +162,8 @@ func (ev *runEvidence) index() {
 	}
 }
 
-// globSet is the index in ev.sets of a set matching as globs do, added when
-// none does. Targets of one project often share its sources.
+// globSet is the index in ev.globSets of a set matching as globs do, added
+// when none does. Targets of one project often share its sources.
 func (ev *runEvidence) globSet(ids map[string]int, globs []types.Glob) int {
 	var key strings.Builder
 	for _, g := range globs {
@@ -178,23 +175,23 @@ func (ev *runEvidence) globSet(ids map[string]int, globs []types.Glob) int {
 	}
 	id, ok := ids[key.String()]
 	if !ok {
-		id = len(ev.sets)
-		ev.sets = append(ev.sets, globs)
+		id = len(ev.globSets)
+		ev.globSets = append(ev.globSets, globs)
 		ids[key.String()] = id
 	}
 	return id
 }
 
-// holding reports, for each of ev.sets, whether it claims rel.
-func (ev *runEvidence) holding(rel string) []bool {
-	if got, ok := ev.held[rel]; ok {
+// claiming reports, for each of ev.globSets, whether it claims rel.
+func (ev *runEvidence) claiming(rel string) []bool {
+	if got, ok := ev.claimed[rel]; ok {
 		return got
 	}
-	got := make([]bool, len(ev.sets))
-	for i, set := range ev.sets {
+	got := make([]bool, len(ev.globSets))
+	for i, set := range ev.globSets {
 		got[i] = slices.ContainsFunc(set, func(g types.Glob) bool { return g.Match(rel) })
 	}
-	ev.held[rel] = got
+	ev.claimed[rel] = got
 	return got
 }
 
@@ -213,12 +210,12 @@ func (ev *runEvidence) covered(ctx context.Context, file string) bool {
 	if !inside {
 		return false
 	}
-	held := ev.holding(rel)
+	claims := ev.claiming(rel)
 	for i, d := range ev.runs {
 		if d.Failed {
 			continue
 		}
-		if ev.reads(i, held, rel, true) && ev.heldAsCommit(ctx, file, d, false) || ev.writes(i, held) && ev.heldAsCommit(ctx, file, d, true) {
+		if ev.reads(i, claims, rel, true) && ev.heldAsCommit(ctx, file, d, false) || ev.writes(i, claims) && ev.heldAsCommit(ctx, file, d, true) {
 			return true
 		}
 	}
@@ -232,7 +229,7 @@ func (ev *runEvidence) wouldCover(file string) []string {
 	if !inside {
 		return nil
 	}
-	held := ev.holding(rel)
+	claims := ev.claiming(rel)
 	var out []string
 	add := func(command string) {
 		if len(out) < 3 && !slices.Contains(out, command) {
@@ -243,22 +240,22 @@ func (ev *runEvidence) wouldCover(file string) []string {
 		if len(out) == 3 {
 			return out
 		}
-		if ev.writes(i, held) {
+		if ev.writes(i, claims) {
 			add(hint.Run.With(bareTarget(d.Target), d.Project))
 			continue
 		}
-		if !ev.reads(i, held, rel, false) {
+		if !ev.reads(i, claims, rel, false) {
 			continue
 		}
 		target := bareTarget(d.Target)
-		if len(ev.prints[i].named) > 0 {
+		if len(ev.footprints[i].named) > 0 {
 			add(hint.Run.With(target, d.Project, "--", projectRelative(d.Project, rel)))
 		} else {
 			add(hint.Run.With(target, d.Project))
 		}
 	}
 	for _, t := range ev.declared {
-		if held[t.inputs] || held[t.outputs] {
+		if claims[t.inputs] || claims[t.outputs] {
 			add(hint.Run.With(t.target, t.project))
 		}
 	}
@@ -277,11 +274,11 @@ func (ev *runEvidence) workspacePath(file string) (string, bool) {
 	return strings.CutPrefix(file, prefix+"/")
 }
 
-// reads reports whether run i's target declares rel among its inputs. held
-// is holding(rel). scoped also holds a file-scoped run to the paths it named.
-func (ev *runEvidence) reads(i int, held []bool, rel string, scoped bool) bool {
-	r := ev.prints[i]
-	if !r.known || !held[r.inputs] {
+// reads reports whether run i's target declares rel among its inputs. claims
+// is claiming(rel). scoped also holds a file-scoped run to the paths it named.
+func (ev *runEvidence) reads(i int, claims []bool, rel string, scoped bool) bool {
+	r := ev.footprints[i]
+	if !r.known || !claims[r.inputs] {
 		return false
 	}
 	if !scoped || len(r.named) == 0 {
@@ -313,10 +310,10 @@ func (ev *runEvidence) namedPaths(d cache.OutputDescriptor) []string {
 }
 
 // writes reports whether run i's target declares, among its outputs, the
-// file held is holding of.
-func (ev *runEvidence) writes(i int, held []bool) bool {
-	r := ev.prints[i]
-	return r.known && held[r.outputs]
+// file claims is claiming of.
+func (ev *runEvidence) writes(i int, claims []bool) bool {
+	r := ev.footprints[i]
+	return r.known && claims[r.outputs]
 }
 
 // heldAsCommit reports whether run d read file (wrote it, when wrote is set)
@@ -329,7 +326,9 @@ func (ev *runEvidence) heldAsCommit(ctx context.Context, file string, d cache.Ou
 		return false
 	}
 	if d.Revision != "" && !d.Dirty {
-		return ev.at(ctx, d.Revision, file) == want
+		// readRevisions answered every revision the repository holds.
+		differing, held := ev.differingPaths[d.Revision]
+		return held && !differing[file]
 	}
 	started := time.UnixMilli(d.TimestampMs - d.DurationMs)
 	if wrote {
@@ -379,48 +378,79 @@ func (ev *runEvidence) known(ctx context.Context, rev string) bool {
 	return known
 }
 
-// readGitFiles reads every file a run over files would be compared on, in one
-// `git cat-file --batch`. A process per file spent a branch of seven hundred
-// changed files past the guard's deadline.
-func (ev *runEvidence) readGitFiles(ctx context.Context, files []string) error {
-	var want []revisionFile
-	seen := map[revisionFile]bool{}
-	add := func(rev, file string) {
-		key := revisionFile{rev: rev, path: file}
-		// cat-file reads one object name per line.
-		if seen[key] || strings.ContainsAny(rev+file, "\n\r") || !ev.known(ctx, rev) {
-			return
-		}
-		seen[key] = true
-		want = append(want, revisionFile{rev: rev, path: file})
-	}
+// readRevisions answers what heldAsCommit compares of files: which files
+// each clean run's revision holds unlike commit, and commit's copy of each.
+// A process per file and revision spent a 1104-file push's deadline.
+func (ev *runEvidence) readRevisions(ctx context.Context, files []string) error {
+	var weighed []string
+	compared := map[string][]string{}
+	asked := map[revisionFile]bool{}
 	for _, file := range files {
 		rel, inside := ev.workspacePath(file)
 		if !inside {
 			continue
 		}
-		held := ev.holding(rel)
+		claims := ev.claiming(rel)
+		read := false
 		for i, d := range ev.runs {
-			if d.Failed || !ev.reads(i, held, rel, true) && !ev.writes(i, held) {
+			if d.Failed || !ev.reads(i, claims, rel, true) && !ev.writes(i, claims) {
 				continue
 			}
-			add(ev.commit, file)
-			if d.Revision != "" && !d.Dirty {
-				add(d.Revision, file)
+			read = true
+			key := revisionFile{rev: d.Revision, path: file}
+			if d.Revision != "" && !d.Dirty && !asked[key] {
+				asked[key] = true
+				compared[d.Revision] = append(compared[d.Revision], file)
 			}
 		}
+		if read {
+			weighed = append(weighed, file)
+		}
 	}
-	if len(want) == 0 {
+	if len(weighed) == 0 {
 		return nil
 	}
-	got, err := gitFilesAt(ctx, ev.root, want)
+	differing, err := vcs.DifferingPathsByRevision(ctx, ev.driver, ev.root, ev.commit, compared)
 	if err != nil {
 		return err
 	}
-	for i, w := range want {
-		ev.files[w] = got[i]
+	ev.differingPaths = make(map[string]map[string]bool, len(differing))
+	for rev, paths := range differing {
+		ev.differingPaths[rev] = make(map[string]bool, len(paths))
+		for _, p := range paths {
+			ev.differingPaths[rev][p] = true
+		}
 	}
-	return nil
+	return ev.readCommitFiles(ctx, weighed)
+}
+
+// readCommitFiles reads commit's copy of each of files through one batch,
+// where the driver opens one. Otherwise at reads each when asked.
+func (ev *runEvidence) readCommitFiles(ctx context.Context, files []string) error {
+	opener, ok := ev.driver.(vcs.ObjectBatchOpener)
+	if !ok || !ev.known(ctx, ev.commit) {
+		return nil
+	}
+	batch, err := opener.OpenObjectBatch(ctx, ev.root, ev.commit)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		// A batch request is one line.
+		if strings.ContainsAny(file, "\n\r") {
+			continue
+		}
+		body, err := batch.Read(file)
+		switch {
+		case errors.Is(err, vcs.ErrObjectMissing):
+			ev.files[revisionFile{rev: ev.commit, path: file}] = fileAt{known: true}
+		case err != nil:
+			return errors.Join(fmt.Errorf("read %s at %s: %w", file, ev.commit, err), batch.Close())
+		default:
+			ev.files[revisionFile{rev: ev.commit, path: file}] = fileAt{body: body, present: true, known: true}
+		}
+	}
+	return batch.Close()
 }
 
 // revisionFile is one repository-relative path at one revision.
@@ -428,46 +458,106 @@ type revisionFile struct {
 	rev, path string
 }
 
-// gitFilesAt reads each of want in the checkout at root, in order, in one
-// process. A path its revision lacks is known and not present.
-func gitFilesAt(ctx context.Context, root string, want []revisionFile) ([]fileAt, error) {
-	var in strings.Builder
-	for _, w := range want {
-		fmt.Fprintf(&in, "%s:%s\n", w.rev, w.path)
+// admits reports a coverage that lets a push out. Each rests on a read that
+// finished: a read the budget cuts answers no coverage.
+func (c gateCoverage) admits() bool {
+	switch c {
+	case gatePassed, gateWaived, gateNarrow, gateUnrun, gateRemote:
+		return true
 	}
-	cmd := exec.CommandContext(ctx, "git", "-C", root, "cat-file", "--batch")
-	cmd.Env = append(os.Environ(), "GIT_NO_REPLACE_OBJECTS=1", "GIT_OPTIONAL_LOCKS=0")
-	cmd.Stdin = strings.NewReader(in.String())
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git cat-file: %w", err)
+	return false
+}
+
+// pushLapse is the read of pushCoverage underway when its budget ran out.
+type pushLapse struct {
+	// cut is that read's phase, "" when none ran out.
+	cut    string
+	budget time.Duration
+}
+
+// reason words the lapse as the refusal of commit, "" when it went unread.
+func (l pushLapse) reason(commit string) string {
+	what := cmp.Or(commit, "this revision")
+	cut := lapseWording{pushReadWording(l.cut), "finish"}.clause(l.budget)
+	return fmt.Sprintf("magus did not judge pushing %s: %s. "+
+		"A push is weighed within a share of the guard's %s, and one it cannot judge is refused, never let through. "+
+		"A retry passes only if judging costs less this time, such as on a less loaded machine; if it lapses twice, report it rather than repeat it.\n",
+		what, cut, hookBudget)
+}
+
+// pushReadWording names phase, a read pushCoverage makes, for a refusal.
+func pushReadWording(phase string) string {
+	switch phase {
+	case phasePushRevision:
+		return "reading the pushed revision"
+	case phasePushGateHistory:
+		return "reading the recorded `ci` verdicts"
+	case phasePushRunLog:
+		return "reading the run log"
+	case phasePushLineage:
+		return "placing the commit against passing `ci` runs"
+	case phasePushWaiver:
+		return "reading the waivers"
+	case phasePushNarrow:
+		return "weighing the changed files against recorded runs"
+	case phaseInspect:
+		return "opening the workspace to weigh the changed files"
+	case phasePushRemoteGate:
+		return "reading ci.remote_gate"
+	case phasePushMoves:
+		return "reading what the line runs before the push"
 	}
-	r := bufio.NewReader(bytes.NewReader(out))
-	got := make([]fileAt, len(want))
-	for i, w := range want {
-		header, err := r.ReadString('\n')
-		if err != nil {
-			return nil, fmt.Errorf("git cat-file: no answer for %s:%s", w.rev, w.path)
-		}
-		header = strings.TrimSuffix(header, "\n")
-		if strings.HasSuffix(header, " missing") || strings.HasSuffix(header, " ambiguous") {
-			got[i] = fileAt{known: true}
-			continue
-		}
-		fields := strings.Fields(header)
-		if len(fields) != 3 {
-			return nil, fmt.Errorf("git cat-file: unread header %q for %s:%s", header, w.rev, w.path)
-		}
-		size, err := strconv.Atoi(fields[2])
-		if err != nil {
-			return nil, fmt.Errorf("git cat-file: unread size in %q: %w", header, err)
-		}
-		// The body is followed by one newline.
-		body := make([]byte, size+1)
-		if _, err := io.ReadFull(r, body); err != nil {
-			return nil, fmt.Errorf("git cat-file: short body for %s:%s: %w", w.rev, w.path, err)
-		}
-		got[i] = fileAt{body: string(body[:size]), present: true, known: true}
+	return fmt.Sprintf("the %s read", phase)
+}
+
+// pushCoverageShare is the most of the hook's budget pushCoverage spends,
+// half as jobRowsBudget is, so the workspace rules judged after it keep the
+// rest.
+const pushCoverageShare = hookBudget / 2
+
+// pushCoverageBudget is share, or what remains of ctx's deadline less
+// judgeReserve when that is less, as rereadJobStoreRows bounds its wait. A
+// dry run has no share: it gets the whole of what remains.
+func pushCoverageBudget(ctx context.Context, share time.Duration) time.Duration {
+	left, bounded := untilReserve(ctx)
+	switch {
+	case !bounded:
+		return share
+	case isDryRun(ctx):
+		return left
 	}
-	return got, nil
+	return min(share, left)
+}
+
+// pushReads records the reads of one pushCoverage as phases of log, and
+// lapse, the first a budget cut.
+type pushReads struct {
+	log *phaseLog
+	// budget is pushCoverage's own.
+	budget time.Duration
+	lapse  pushLapse
+}
+
+// pushStep runs read as phase, one read of pushCoverage bounded by ctx. A
+// read is cut when ctx is done by its end. A phase of its own that lapsed
+// inside it, such as the workspace open, is the cut, with its budget.
+func pushStep[T any](ctx context.Context, r *pushReads, phase string, read func() T) T {
+	r.log.begin(phase)
+	start := time.Now()
+	before := len(r.log.finished())
+	v := read()
+	cut := r.lapse.cut == "" && ctx.Err() != nil
+	if r.lapse.cut == "" {
+		for _, p := range r.log.finished()[before:] {
+			if p.Lapsed {
+				r.lapse = pushLapse{cut: p.Name, budget: time.Duration(p.BudgetMs) * time.Millisecond}
+				break
+			}
+		}
+	}
+	if cut && r.lapse.cut == "" {
+		r.lapse = pushLapse{cut: phase, budget: r.budget}
+	}
+	r.log.record(timedPhase(phase, time.Since(start), 0, cut))
+	return v
 }
