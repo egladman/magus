@@ -1399,100 +1399,124 @@ func typeWarnings(t *testing.T, src string) []typeError {
 	return warnings
 }
 
-// TestStringAccumulationWarnsInEveryLoopForm covers the shape BZZ3002 exists for. Each
-// body rebuilds a str from itself, which copies the whole buffer per iteration and (on
-// the nanbox build) pins every copy for the life of the process.
-func TestStringAccumulationWarnsInEveryLoopForm(t *testing.T) {
-	for _, tc := range []struct{ name, src string }{
-		{"while", `var s = ""; var i = 0; while (i < 3) { s = s + "x"; i = i + 1; }`},
-		{"foreach", `var s = ""; foreach (p in ["a"]) { s = s + p; }`},
-		{"for", `var s = ""; for (i: int = 0; i < 3; i = i + 1) { s = s + "x"; }`},
-		{"do until", `var s = ""; var i = 0; do { s = s + "x"; i = i + 1; } until (i > 2);`},
-		{"accumulator on the right", `var s = ""; foreach (p in ["a"]) { s = p + s; }`},
-		{"deep in the concat spine", `var s = ""; foreach (p in ["a"]) { s = "<" + s + p + ">"; }`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got := typeWarnings(t, tc.src)
-			require.Len(t, got, 1)
-			assert.Equal(t, diagnostics.Code("BZZ3002"), got[0].Code)
-			assert.Equal(t, SeverityWarning, got[0].Severity, "BZZ3002 must never fail a compile")
-			assert.Contains(t, got[0].Msg, `"s"`)
-		})
-	}
-}
-
-// TestStringAccumulationStaysQuiet pins the boundaries. Each of these rebuilds or
-// concatenates something without growing a string across iterations, and warning on them
-// would make the check noise rather than signal.
-func TestStringAccumulationStaysQuiet(t *testing.T) {
-	for _, tc := range []struct{ name, src string }{
-		{"outside any loop", `var s = ""; s = s + "x";`},
-		{"int counter", `var i = 0; foreach (p in ["a"]) { i = i + 1; }`},
-		{"rebuilt but not grown", `var s = "ab"; foreach (p in ["a"]) { s = s.trim(); }`},
-		{"a different accumulator", `var s = ""; var t = "x"; foreach (p in ["a"]) { s = t + p; }`},
-		{"list append, the fix itself", `final parts: mut [str] = mut [<str>]; foreach (p in ["a"]) { parts.append(p); }`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Empty(t, typeWarnings(t, tc.src))
-		})
-	}
-}
-
-// TestStringAccumulationReportedOnce guards the speculative return-inference pass, which
-// walks function bodies ahead of the real check purely to learn types. It discards errors;
-// it must discard warnings too, or every accumulation inside a function is reported twice.
-func TestStringAccumulationReportedOnce(t *testing.T) {
-	got := typeWarnings(t, `fun build(xs: [str]) > str { var s = ""; foreach (x in xs) { s = s + x; } return s; }`)
-	require.Len(t, got, 1, "the speculative pass must not double-report")
-}
-
-// accumulationSuite covers BZZ3002 past a bare str `+` spine.
+// accumulationSuite pins BZZ3002: what rebuilds an accumulator from itself
+// in a loop, and what only looks like it.
 type accumulationSuite struct{ suite.Suite }
 
 func TestAccumulationSuite(t *testing.T) { suite.Run(t, new(accumulationSuite)) }
 
-// warnsOnce asserts src carries exactly one BZZ3002 naming kind.
-func (s *accumulationSuite) warnsOnce(src, kind string) {
+// warnsOnce asserts src carries exactly one BZZ3002 on name, naming kind.
+func (s *accumulationSuite) warnsOnce(src, name, kind string) {
 	got := typeWarnings(s.T(), src)
 	s.Require().Len(got, 1)
-	s.Equal(StringAccumulation, got[0].Code)
-	s.Equal(SeverityWarning, got[0].Severity)
+	s.Equal(LoopAccumulation, got[0].Code)
+	s.Equal(SeverityWarning, got[0].Severity, "BZZ3002 must never fail a compile")
+	s.Contains(got[0].Msg, `"`+name+`"`)
 	s.Contains(got[0].Msg, "the whole "+kind)
 }
 
-func (s *accumulationSuite) TestAStrRebuiltFromItsOwnSubstrings() {
-	s.warnsOnce(`var r = "a<b>c"; var i = 0;
-while (i < 3) { r = r.sub(0, len: 1) + r.sub(2); i = i + 1; }`, "string")
+func (s *accumulationSuite) TestAStrGrownInAWhile() {
+	s.warnsOnce(`var s = ""; var i = 0; while (i < 3) { s = s + "x"; i = i + 1; }`, "s", "string")
 }
 
-func (s *accumulationSuite) TestAStrMethodCallOnTheRightOfTheSpine() {
-	s.warnsOnce(`var r = "x"; foreach (p in ["a"]) { r = p + r.trim(); }`, "string")
+func (s *accumulationSuite) TestAStrGrownInAForeach() {
+	s.warnsOnce(`var s = ""; foreach (p in ["a"]) { s = s + p; }`, "s", "string")
+}
+
+func (s *accumulationSuite) TestAStrGrownInAForBody() {
+	s.warnsOnce(`var s = ""; for (i: int = 0; i < 3; i = i + 1) { s = s + "x"; }`, "s", "string")
+}
+
+func (s *accumulationSuite) TestAStrGrownInADoUntil() {
+	s.warnsOnce(`var s = ""; var i = 0; do { s = s + "x"; i = i + 1; } until (i > 2);`, "s", "string")
+}
+
+func (s *accumulationSuite) TestAStrPrepended() {
+	s.warnsOnce(`var s = ""; foreach (p in ["a"]) { s = p + s; }`, "s", "string")
+}
+
+func (s *accumulationSuite) TestAStrDeepInTheConcatSpine() {
+	s.warnsOnce(`var s = ""; foreach (p in ["a"]) { s = "<" + s + p + ">"; }`, "s", "string")
+}
+
+func (s *accumulationSuite) TestAStrGrownByInterpolation() {
+	s.warnsOnce(`var s = ""; foreach (p in ["a"]) { s = "{s}{p}"; }`, "s", "string")
+}
+
+func (s *accumulationSuite) TestAnInterpolationInsideTheConcatSpine() {
+	s.warnsOnce(`var s = ""; foreach (p in ["a"]) { s = "{s}," + p; }`, "s", "string")
+}
+
+// The post clause runs every pass, so it accumulates as the body does.
+func (s *accumulationSuite) TestAStrGrownInAForPostClause() {
+	s.warnsOnce(`var s = ""; for (i: int = 0; i < 3; i = i + 1, s = s + "x") { }`, "s", "string")
+}
+
+// A binding the for clause makes runs once, so the body grows it every pass.
+func (s *accumulationSuite) TestAStrDeclaredInTheForClause() {
+	s.warnsOnce(`for (s: str = "", i: int = 0; i < 3; i = i + 1) { s = s + "x"; }`, "s", "string")
+}
+
+func (s *accumulationSuite) TestAnOuterStrRebuiltInANestedLoop() {
+	s.warnsOnce(`var r = "";
+foreach (p in ["a"]) {
+    final q = p;
+    foreach (c in ["b"]) { r = r + q + c; }
+}`, "r", "string")
 }
 
 func (s *accumulationSuite) TestAListGrownByConcatenation() {
-	s.warnsOnce(`var xs = [<int>]; foreach (x in [1, 2]) { xs = xs + [x]; }`, "list")
+	s.warnsOnce(`var xs = [<int>]; foreach (x in [1, 2]) { xs = xs + [x]; }`, "xs", "list")
 }
 
 func (s *accumulationSuite) TestAListPrependedByConcatenation() {
-	s.warnsOnce(`var xs = [<int>]; foreach (x in [1, 2]) { xs = [x] + xs; }`, "list")
+	s.warnsOnce(`var xs = [<int>]; foreach (x in [1, 2]) { xs = [x] + xs; }`, "xs", "list")
 }
 
 func (s *accumulationSuite) TestAMapGrownByConcatenation() {
-	s.warnsOnce(`var m = {<str: int>}; foreach (k in ["a"]) { m = m + {k: 1}; }`, "map")
+	s.warnsOnce(`var m = {<str: int>}; foreach (k in ["a"]) { m = m + {k: 1}; }`, "m", "map")
 }
 
 func (s *accumulationSuite) TestTheListFixNamesAppend() {
-	got := typeWarnings(s.T(), `var xs = [<int>]; foreach (x in [1]) { xs = xs + [x]; }`)
+	got := typeWarnings(s.T(), `var xs = [<int>]; foreach (x in [1]) { xs = xs + [x, x]; }`)
 	s.Require().Len(got, 1)
-	s.Contains(got[0].Msg, "append()")
+	s.Contains(got[0].Msg, "append() each element")
 }
 
-func (s *accumulationSuite) TestAListConcatOutsideALoopStaysQuiet() {
-	s.Empty(typeWarnings(s.T(), `var xs = [<int>]; xs = xs + [1];`))
+// The speculative return-inference pass discards warnings, or this reports twice.
+func (s *accumulationSuite) TestAnAccumulationInAFunctionIsReportedOnce() {
+	got := typeWarnings(s.T(), `fun build(xs: [str]) > str { var s = ""; foreach (x in xs) { s = s + x; } return s; }`)
+	s.Len(got, 1)
+}
+
+func (s *accumulationSuite) TestAConcatOutsideALoopStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `var s = ""; s = s + "x"; var xs = [<int>]; xs = xs + [1];`))
+}
+
+func (s *accumulationSuite) TestAnIntCounterStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `var i = 0; foreach (p in ["a"]) { i = i + 1; }`))
 }
 
 func (s *accumulationSuite) TestAnIntBuiltFromAMethodCallStaysQuiet() {
 	s.Empty(typeWarnings(s.T(), `var n = 0; foreach (p in ["a"]) { n = n + p.len(); }`))
+}
+
+func (s *accumulationSuite) TestAStrRebuiltWithoutGrowingStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `var s = "ab"; foreach (p in ["a"]) { s = s.trim(); }`))
+}
+
+// Each pass cuts r shorter, so the copies shrink rather than accumulate.
+func (s *accumulationSuite) TestATruncationFromItsOwnSubstringsStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `var r = "a<b>c"; var i = 0;
+while (i < 3) { r = r.sub(0, len: 1) + r.sub(2); i = i + 1; }`))
+}
+
+func (s *accumulationSuite) TestADifferentAccumulatorStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `var s = ""; final t = "x"; foreach (p in ["a"]) { s = t + p; }`))
+}
+
+func (s *accumulationSuite) TestAnInterpolationOfOtherNamesStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `var s = ""; final t = "x"; foreach (p in ["a"]) { s = "{t}{p}"; }`))
 }
 
 func (s *accumulationSuite) TestAMethodCallOnAnotherNameStaysQuiet() {
@@ -1500,10 +1524,19 @@ func (s *accumulationSuite) TestAMethodCallOnAnotherNameStaysQuiet() {
 foreach (p in ["a"]) { r = t.sub(1) + p; }`))
 }
 
+func (s *accumulationSuite) TestAListAppendStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `final parts: mut [str] = mut [<str>]; foreach (p in ["a"]) { parts.append(p); }`))
+}
+
+func (s *accumulationSuite) TestAListRebuiltWithoutConcatenationStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `var xs = [1, 2]; foreach (x in [1]) { xs = xs.sub(1); }`))
+}
+
+// A binding the body declares starts over each pass, so it never accumulates.
 func (s *accumulationSuite) TestAStrDeclaredInsideTheLoopStaysQuiet() {
 	s.Empty(typeWarnings(s.T(), `foreach (p in ["<a>"]) {
     var tag = p;
-    tag = "<b " + tag.sub(3);
+    tag = "<b " + tag;
 }`))
 }
 
@@ -1512,18 +1545,6 @@ func (s *accumulationSuite) TestAStrDeclaredInsideAForBodyStaysQuiet() {
     var tag = "x";
     tag = tag + "y";
 }`))
-}
-
-func (s *accumulationSuite) TestAnOuterStrRebuiltInANestedLoopWarns() {
-	s.warnsOnce(`var r = "";
-foreach (p in ["a"]) {
-    final q = p;
-    foreach (c in ["b"]) { r = r + q + c; }
-}`, "string")
-}
-
-func (s *accumulationSuite) TestAListRebuiltWithoutConcatenationStaysQuiet() {
-	s.Empty(typeWarnings(s.T(), `var xs = [1, 2]; foreach (x in [1]) { xs = xs.sub(1); }`))
 }
 
 func TestImmutableWriteIsRejected(t *testing.T) {

@@ -98,12 +98,11 @@ type checker struct {
 	// warnings are non-fatal diagnostics; they never fail Exec/Compile. Kept apart from
 	// errors so a caller cannot mistake one for the other by length alone.
 	warnings []typeError
-	// loopScopes holds len(scopes) at each enclosing loop body's entry,
-	// so a statement can ask whether it runs repeatedly.
-	// Only the BODY counts: a for-clause is not a loop body.
-	loopScopes []int
-	scopes     []map[string]scopeEntry
-	retTyp    types.Type
+	// loops holds each enclosing loop, so a statement can ask whether it
+	// runs repeatedly and whether a name outlives one pass.
+	loops  []loopEntry
+	scopes []map[string]scopeEntry
+	retTyp types.Type
 	// retWant is the expected type for a returned value: retTyp, or the
 	// anonObjectType of an `obj{ ... }` return annotation that retTyp erases.
 	retWant types.Type
@@ -487,17 +486,37 @@ func (c *checker) define(name string, typ types.Type, isConst bool) {
 	c.scopes[len(c.scopes)-1][name] = scopeEntry{typ: typ, isConst: isConst}
 }
 
-func (c *checker) enterLoop() { c.loopScopes = append(c.loopScopes, len(c.scopes)) }
+// loopEntry is one enclosing loop. scope is the first scope index a pass
+// starts over. A for body shares its clause's scope, so clause names the
+// bindings in it that the clause made once.
+type loopEntry struct {
+	scope  int
+	clause map[string]bool
+}
 
-func (c *checker) leaveLoop() { c.loopScopes = c.loopScopes[:len(c.loopScopes)-1] }
+func (c *checker) enterLoop() {
+	c.loops = append(c.loops, loopEntry{scope: len(c.scopes)})
+}
+
+// enterForLoop enters a for loop whose clause scope is the innermost one.
+func (c *checker) enterForLoop() {
+	inner := len(c.scopes) - 1
+	clause := make(map[string]bool, len(c.scopes[inner]))
+	for name := range c.scopes[inner] {
+		clause[name] = true
+	}
+	c.loops = append(c.loops, loopEntry{scope: inner, clause: clause})
+}
+
+func (c *checker) leaveLoop() { c.loops = c.loops[:len(c.loops)-1] }
 
 // declaredOutsideLoop reports whether name binds outside the innermost loop
 // body, so every pass of that loop sees the value the last one left.
 func (c *checker) declaredOutsideLoop(name string) bool {
-	entry := c.loopScopes[len(c.loopScopes)-1]
+	loop := c.loops[len(c.loops)-1]
 	for i := len(c.scopes) - 1; i >= 0; i-- {
 		if _, ok := c.scopes[i][name]; ok {
-			return i < entry
+			return i < loop.scope || (i == loop.scope && loop.clause[name])
 		}
 	}
 	return true
@@ -921,11 +940,11 @@ func (c *checker) checkStmt(n ast.Node) {
 				c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "for condition must be bool, got %s", cond.TypeName())
 			}
 		}
+		// Post runs every pass, so it is checked inside the loop.
+		c.enterForLoop()
 		for _, post := range v.Post {
 			c.checkStmt(post)
 		}
-		// The body shares the clause scope, so both count as inside the loop.
-		c.loopScopes = append(c.loopScopes, len(c.scopes)-1)
 		for _, s := range v.Body.Stmts {
 			c.checkStmt(s)
 		}
@@ -1031,7 +1050,7 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 }
 
 func (c *checker) checkAssign(v *ast.AssignStmt) {
-	c.flagStringAccumulation(v)
+	c.flagLoopAccumulation(v)
 	if id, ok := v.Target.(*ast.IdentExpr); ok {
 		// `_` is the discard target: accept any value and bind nothing.
 		if id.Name == "_" {
@@ -1226,21 +1245,11 @@ func (c *checker) checkBlock(b *ast.BlockStmt) {
 	c.popScope()
 }
 
-// flagStringAccumulation warns on `s = s + part` inside a loop. Every iteration copies the
-// whole string built so far, and on the default nanbox build each intermediate is pinned in
-// the global object heap for the life of the process, so none of those copies is ever
-// reclaimed: the cost is quadratic in time and unbounded in memory. Collecting the parts in
-// a list and joining once is the fix.
-//
-// Deliberately narrow: only a bare `+` spine with the target as one of its operands counts,
-// so `s = trim(s)` or `s = s.sub(1)` stay quiet. Those rebuild s too, but they do not GROW
-// it, and warning on every mention of s on the right would make this noise.
-//
-// A list or map `+` copies the same way. An operand may be a method call on the
-// target, as in `r = r.sub(0, len: i) + r.sub(j)`, which copies r per pass. A
-// target declared inside the loop body starts over each pass and stays quiet.
-func (c *checker) flagStringAccumulation(v *ast.AssignStmt) {
-	if len(c.loopScopes) == 0 {
+// flagLoopAccumulation warns on a str, list or map rebuilt from itself in a
+// loop, copying it whole every pass. Only the bare target as an operand counts,
+// since `s = s.sub(1)` or a truncation does not grow s.
+func (c *checker) flagLoopAccumulation(v *ast.AssignStmt) {
+	if len(c.loops) == 0 {
 		return
 	}
 	id, ok := v.Target.(*ast.IdentExpr)
@@ -1251,28 +1260,33 @@ func (c *checker) flagStringAccumulation(v *ast.AssignStmt) {
 	if !found {
 		return
 	}
-	kind, fix := accumulationFix(e.typ)
-	if fix == "" || !concatSpineRefers(v.Value, id.Name) {
+	kind := accumulatorKind(e.typ)
+	if kind == "" || !growsFrom(v.Value, id.Name) {
 		return
 	}
-	c.warnfc(v.Pos, StringAccumulation,
+	c.warnfc(v.Pos, LoopAccumulation,
 		"%q is rebuilt from itself inside a loop, copying the whole %s every iteration; %s",
-		id.Name, kind, fix)
+		id.Name, kind, accumulatorFixes[kind])
 }
 
-// accumulationFix names what a `+` rebuild of a t copies and what to write
-// instead. fix is empty for a type whose `+` copies nothing that grows.
-func accumulationFix(t types.Type) (kind, fix string) {
+// accumulatorKind names a type whose rebuild copies a value that grows, or "".
+func accumulatorKind(t types.Type) string {
 	switch t.(type) {
 	case *types.ListType:
-		return "list", "append() to a mut list instead"
+		return "list"
 	case *types.MapType:
-		return "map", "set the keys on a mut map instead"
+		return "map"
 	}
 	if t == types.Str {
-		return "string", "collect the parts in a list and join() it once"
+		return "string"
 	}
-	return "", ""
+	return ""
+}
+
+var accumulatorFixes = map[string]string{
+	"string": "collect the parts in a list and join() it once",
+	"list":   "append() each element to a mut list instead",
+	"map":    "set each key on a mut map instead",
 }
 
 // flagRedundantUnwrap warns on `!` applied to an operand proven non-optional.
@@ -1306,37 +1320,30 @@ func (c *checker) flagDiscardedValue(v *ast.ExprStmt, t types.Type) {
 	c.warnfc(v.Pos, DiscardedValue, "discarded value of type `%s`", t.TypeName())
 }
 
-// concatSpineRefers reports whether n is a `+` chain carrying name, or a method
-// call on name, as a direct operand.
-func concatSpineRefers(n ast.Node, name string) bool {
-	bin, ok := n.(*ast.BinaryExpr)
-	if !ok || bin.Op != "+" {
-		return false
-	}
-	for _, side := range []ast.Node{bin.Left, bin.Right} {
-		if isIdentNamed(side, name) || isMethodCallOn(side, name) {
-			return true
+// growsFrom reports whether n is a `+` chain or an interpolated string
+// carrying name as a direct operand.
+func growsFrom(n ast.Node, name string) bool {
+	switch v := n.(type) {
+	case *ast.BinaryExpr:
+		if v.Op != "+" {
+			return false
 		}
-		if concatSpineRefers(side, name) {
-			return true
+		return carries(v.Left, name) || carries(v.Right, name)
+	case *ast.InterpExpr:
+		for _, part := range v.Parts {
+			if part.Expr != nil && carries(part.Expr, name) {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-func isIdentNamed(n ast.Node, name string) bool {
-	id, ok := n.(*ast.IdentExpr)
-	return ok && id.Name == name
-}
-
-// isMethodCallOn reports whether n is `name.method(...)`.
-func isMethodCallOn(n ast.Node, name string) bool {
-	call, ok := n.(*ast.CallExpr)
-	if !ok {
-		return false
+func carries(n ast.Node, name string) bool {
+	if id, ok := n.(*ast.IdentExpr); ok && id.Name == name {
+		return true
 	}
-	member, ok := call.Callee.(*ast.MemberExpr)
-	return ok && !member.Namespaced && isIdentNamed(member.Object, name)
+	return growsFrom(n, name)
 }
 
 func (c *checker) checkForEach(v *ast.ForEachStmt) {
