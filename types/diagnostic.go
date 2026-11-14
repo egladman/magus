@@ -875,10 +875,10 @@ const ModelTierAboveParent DiagnosticCode = "MGS3055"
 // from two model-tier declarations. The spawn rule cannot order them.
 const ModelTiersIncomparable DiagnosticCode = "MGS3056"
 
-// UncommittedRepair is a ci run under rw that changed files in the working
-// tree: it repaired a declared writer, or a verify pass regenerated an
-// output. The verdict belongs to the committed bytes, so the run fails until
-// the person commits the change and runs ci again.
+// UncommittedRepair is a ci run under rw whose repairs changed files in the
+// working tree: a declared writer it ran under rw, or a stale output a
+// verify pass regenerated. The verdict belongs to the committed bytes. The
+// run fails, and the next one refuses, until the person commits the change.
 const UncommittedRepair DiagnosticCode = "MGS3057"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
@@ -1339,6 +1339,26 @@ func AllDiagnosticCodes() []DiagnosticCode {
 func DiagnosticErrorf(c DiagnosticCode, format string, args ...any) *DiagnosticError {
 	return mgs.Errorf(c, format, args...)
 }
+
+// RepairedFile is one file a ci repair left in the working tree: its path
+// relative to the checkout root, and the hex SHA-256 of the bytes it held.
+type RepairedFile struct {
+	Path   string `json:"path"`
+	Digest string `json:"digest"`
+}
+
+// UncommittedRepairError is a ci run whose repairs changed files that are
+// not committed. Writers are the targets that wrote them. Files hold each
+// path with its digest, so a record reads them without parsing a message.
+// It unwraps to its [UncommittedRepair] diagnostic.
+type UncommittedRepairError struct {
+	Writers    []TargetRef
+	Files      []RepairedFile
+	Diagnostic *DiagnosticError
+}
+
+func (e *UncommittedRepairError) Error() string { return e.Diagnostic.Error() }
+func (e *UncommittedRepairError) Unwrap() error { return e.Diagnostic }
 
 // FormatDiagnostic formats a diagnostic message with code and doc URL for slog logging.
 func FormatDiagnostic(c DiagnosticCode, msg string) string {
