@@ -641,7 +641,7 @@ func TestBuzzCheck_WarningFails(t *testing.T) {
 	clean := filepath.Join(dir, "clean.buzz")
 	require.NoError(t, os.WriteFile(clean, []byte("fun main() > void {}\n"), 0o644))
 	warned := filepath.Join(dir, "warned.buzz")
-	require.NoError(t, os.WriteFile(warned, []byte("fun main() > void { var s = \"\"; foreach (p in [\"a\"]) { s = s + p; } }\n"), 0o644))
+	require.NoError(t, os.WriteFile(warned, []byte("fun main() > void { var s = \"\"; foreach (p in [\"a\"]) { s = p + s; } }\n"), 0o644))
 
 	diags, err := buzzCheckFile(t.Context(), warned, false)
 	require.NoError(t, err)
