@@ -31,7 +31,7 @@ func (s *emitMagusLogSuite) SetupTest() {
 	s.previous = slog.Default()
 	// The display's text handler, redacting as cmd/magus installs it.
 	slog.SetDefault(slog.New(secret.NewRedactingHandler(slog.NewTextHandler(&s.process, &slog.HandlerOptions{
-		Level:       slog.LevelInfo,
+		Level: slog.LevelInfo,
 		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {
 				return slog.Attr{}
