@@ -451,6 +451,12 @@ export object ExecResult {
     ok: bool = false,
 }
 
+export object Subcommand {
+    sub: str = "",
+    args: [str] = [],
+    opts: CommandOptions = CommandOptions{},
+}
+
 export object DiagnosticCode {
     code: str = "",
     origin: DiagnosticOrigin = DiagnosticOrigin.unknown,
@@ -2761,6 +2767,7 @@ export extern fun canonicalName(name: str) > str;
 export extern fun change(base: str = "", opts: ChangeOptions? = null) > Change !> any;
 export extern fun clean(args: [str], opts: CommandOptions? = null) > CleanReport !> any;
 export extern fun cmd(sub: str, args: [str], opts: CommandOptions? = null) > ExecResult !> any;
+export extern fun cmdAll(commands: [Subcommand]) > [ExecResult] !> any;
 export extern fun diagnosticCode(text: str) > DiagnosticCode !> any;
 export extern fun doctor(args: [str], opts: CommandOptions? = null) > DoctorReport !> any;
 export extern fun fatal(msg: str = "") > void;
