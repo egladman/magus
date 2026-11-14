@@ -2167,7 +2167,7 @@ func TestGuardRuleLoadPastItsDeadlineWarmsTheNextHook(t *testing.T) {
 	chunks := func() []string {
 		var out []string
 		_ = filepath.WalkDir(filepath.Join(cache, "magus", "buzz-bytecode"), func(p string, d os.DirEntry, err error) error {
-			if err == nil && !d.IsDir() {
+			if err == nil && !d.IsDir() && d.Name() != ".swept" {
 				out = append(out, p)
 			}
 			return nil
