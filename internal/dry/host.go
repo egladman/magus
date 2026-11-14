@@ -277,6 +277,15 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("cmd", function("magus.cmd", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return emptyExecResult(), nil
 	}))
+	m.MapSet("cmdAll", function("magus.cmdAll", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		var results []vm.Value
+		if len(args) > 0 && args[0].IsList() {
+			for range args[0].ListItems() {
+				results = append(results, emptyExecResult())
+			}
+		}
+		return vm.ListValue(results), nil
+	}))
 
 	// The read-only verbs return workspace data on the real module. A dry run has no
 	// workspace, so each is stubbed with its result SHAPE (an empty but correctly-keyed
