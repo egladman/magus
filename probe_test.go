@@ -618,3 +618,21 @@ func (s *ProbeMiseGlobalsSuite) TestADirectoryInsideItsTimestampTickKeysNothing(
 	_, err := s.keyAt(tick.Add(time.Second))
 	s.Error(err)
 }
+
+// ProbeEnvSuite pins which variables move a probe's key.
+type ProbeEnvSuite struct{ suite.Suite }
+
+func TestProbeEnvSuite(t *testing.T) { suite.Run(t, new(ProbeEnvSuite)) }
+
+// No cached probe picks its version on CI, and a runner sets it per job.
+func (s *ProbeEnvSuite) TestCIDoesNotMoveTheKey() {
+	dir := probeFixture(s.T(), "node", []byte("\x7fELF binary"))
+	probe := spells.Command{Bin: "node", Args: []string{"--version"}}
+	s.T().Setenv("CI", "false")
+	key, ok := probeCacheKey(probe, dir)
+	s.Require().True(ok)
+
+	s.T().Setenv("CI", "true")
+	ci, _ := probeCacheKey(probe, dir)
+	s.Equal(key, ci)
+}

@@ -316,7 +316,7 @@ func writeDirEntries(b *strings.Builder, dir string) {
 // benchmark harness or a terminal can set a variable per invocation, and every probe
 // then missed.
 var probeEnvPrefixes = []string{
-	"PATH=", "HOME=", "CI=", "XDG_", "MISE_", "RTX_", "ASDF_", "NODE_", "NPM_CONFIG_", "PNPM_", "COREPACK_",
+	"PATH=", "HOME=", "XDG_", "MISE_", "RTX_", "ASDF_", "NODE_", "NPM_CONFIG_", "PNPM_", "COREPACK_",
 }
 
 // writeEnv records the variables the cached tools read to decide their version.
