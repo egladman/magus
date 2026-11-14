@@ -97,7 +97,8 @@ heap: 30660 objects live, 30660 peak this run
   growth by source position, largest first:
     coverage.buzz:88                         30352
   a position that climbs with input size is quadratic in memory;
-  build into a list and join once rather than reassigning a string.
+  a list or map built with + copies every pass, so append to a mut one;
+  a string grows in place only as the first operand: s = s + x, not s = x + s.
 ```
 
 `.heap` sits alongside `.where`, `.locals` and `.globals`; see

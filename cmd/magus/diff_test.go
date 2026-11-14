@@ -1145,14 +1145,14 @@ fun main() > void !> any {
 }
 `
 
-// warningAdvisor trips BZZ3002 (string rebuilt in a loop) and still publishes, the shape
-// of every shipped advisor that lints imperfectly but runs.
+// warningAdvisor trips BZZ3002 (text put before a string in a loop)
+// and still publishes, like a shipped advisor that lints imperfectly.
 const warningAdvisor = `import "advice";
 
 fun main() > void !> any {
     var text = "";
-    foreach (part in ["still", "standing"]) {
-        text = text + part;
+    foreach (part in ["standing", "still"]) {
+        text = part + text;
     }
     advice\publish("", pr: "", name: "warned", title: "Ran anyway", body: text);
 }
@@ -1281,6 +1281,20 @@ func TestCollectAdviceSurvivesABrokenAdvisor(t *testing.T) {
 // nearly abandoned the repo, assuming they had broken something.
 func TestCollectAdviceDropsWarningsFromAnAdvisorThatRan(t *testing.T) {
 	dir := adviceDirWith(t, map[string]string{"warned.buzz": warningAdvisor})
+
+	// Without a warning to drop, the empty notes below would prove nothing.
+	restore, err := setAdviceEnv("main")
+	if err != nil {
+		t.Fatalf("setAdviceEnv: %v", err)
+	}
+	_, warnings, err := runAdvisor(context.Background(), dir, "warned.buzz")
+	restore()
+	if err != nil {
+		t.Fatalf("runAdvisor: %v", err)
+	}
+	if !slices.ContainsFunc(warnings, func(w string) bool { return strings.Contains(w, "[BZZ3002]") }) {
+		t.Fatalf("warnings = %v, want BZZ3002 from the fixture", warnings)
+	}
 
 	sections, notes, err := collectAdvice(context.Background(), dir, []string{"warned.buzz"}, "main")
 	if err != nil {
