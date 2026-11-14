@@ -1000,6 +1000,9 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 			dirs := []string{hookLocation(ctx, deps).cacheDir, os.Getenv("XDG_STATE_HOME")}
 			checked := req
 			checked.DryRun = true
+			// A first load makes the state dir's bytecode sealing key, dry run
+			// or not, so that is settled before the rounds look.
+			Judge(ctx, deps, checked)
 			for round := range 2 {
 				before := treeState(t, dirs...)
 				preview := Judge(ctx, deps, checked)
