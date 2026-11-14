@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -109,7 +110,7 @@ var miseDirInputs = []string{
 
 // probeCacheFormat changes whenever the key's composition or the records' encoding
 // does, so an older entry is never read under a new meaning.
-const probeCacheFormat = "probe-cache/3"
+const probeCacheFormat = "probe-cache/4"
 
 // lookupProbeSpec returns what decides probe's answer, and false for a probe never cached.
 func lookupProbeSpec(probe spells.Command) (probeSpec, bool) {
@@ -132,19 +133,8 @@ func probeCacheKey(probe spells.Command, dir string) (string, bool) {
 	if !ok || !filepath.IsAbs(dir) {
 		return "", false
 	}
-	// A relative PATH entry resolves against the probe's directory, which the lookup
-	// below does not model.
-	for _, entry := range filepath.SplitList(os.Getenv("PATH")) {
-		if !filepath.IsAbs(entry) {
-			return "", false
-		}
-	}
-	found, err := exec.LookPath(probe.Bin)
-	if err != nil {
-		return "", false
-	}
-	target, err := filepath.EvalSymlinks(found)
-	if err != nil {
+	found, target, ok := lookupProbeBin(probe.Bin)
+	if !ok {
 		return "", false
 	}
 	var b strings.Builder
@@ -159,7 +149,7 @@ func probeCacheKey(probe spells.Command, dir string) (string, bool) {
 	case base == "mise":
 		names = append(slices.Clone(spec.files), miseDirInputs...)
 		names = append(names, miseEnvInputs()...)
-		writeMiseGlobals(&b)
+		writeMiseGlobals(&b, time.Now())
 	case strings.Contains(base, "shim") || slices.Contains([]string{"asdf", "volta", "proto", "corepack", "rustup"}, base):
 		return "", false
 	}
@@ -294,6 +284,11 @@ func writeFileIdentity(b *strings.Builder, path string) {
 		fmt.Fprintf(b, "%s -\n", path)
 		return
 	}
+	writeInfoIdentity(b, path, fi)
+}
+
+// writeInfoIdentity is writeFileIdentity for path already lstat as fi.
+func writeInfoIdentity(b *strings.Builder, path string, fi os.FileInfo) {
 	ino, _, _ := file.Identity(fi)
 	fmt.Fprintf(b, "%s %d %d %d %o", path, fi.Size(), fi.ModTime().UnixNano(), ino, fi.Mode())
 	if fi.Mode()&os.ModeSymlink != 0 {
@@ -321,7 +316,7 @@ func writeDirEntries(b *strings.Builder, dir string) {
 // benchmark harness or a terminal can set a variable per invocation, and every probe
 // then missed.
 var probeEnvPrefixes = []string{
-	"PATH=", "HOME=", "XDG_", "MISE_", "RTX_", "ASDF_", "NODE_", "NPM_CONFIG_", "PNPM_", "COREPACK_",
+	"PATH=", "HOME=", "CI=", "XDG_", "MISE_", "RTX_", "ASDF_", "NODE_", "NPM_CONFIG_", "PNPM_", "COREPACK_",
 }
 
 // writeEnv records the variables the cached tools read to decide their version.
@@ -360,7 +355,7 @@ func miseEnvInputs() []string {
 // writeMiseGlobals records what a mise shim reads outside the directory chain: the
 // system and explicitly named configs, which configs are trusted, and which versions
 // are installed, since a fuzzy request such as "24" or "lts" resolves against those.
-func writeMiseGlobals(b *strings.Builder) {
+func writeMiseGlobals(b *strings.Builder, now time.Time) {
 	home, _ := os.UserHomeDir()
 	xdg := func(env, fallback string) string {
 		if v := os.Getenv(env); v != "" {
@@ -392,12 +387,13 @@ func writeMiseGlobals(b *strings.Builder) {
 	}
 	writeDirEntries(b, filepath.Join(config, "conf.d"))
 	writeDirEntries(b, "/etc/mise/conf.d")
-	writeDirEntries(b, filepath.Join(state, "trusted-configs"))
+	writeDirWitness(b, filepath.Join(state, "trusted-configs"), now)
+	writeDirWitness(b, filepath.Join(state, "ignored-configs"), now)
 	// tracked-configs is left out: it is the list `mise prune` reads to see which configs
 	// still name a version, one symlink per config mise ever loaded (hundreds on a machine
 	// with many worktrees), and nothing in it changes which version a shim runs. Keying on
 	// it cost every probe a readlink per entry.
-	writeDirEntries(b, filepath.Join(data, "installs"))
+	writeDirWitness(b, filepath.Join(data, "installs"), now)
 }
 
 // probeFailureTTL bounds how long a cached failure answers. A success is a function of
@@ -549,3 +545,96 @@ type absentTool struct {
 }
 
 func (e *absentTool) Error() string { return e.cause }
+
+// dirSettle is how far in the past a directory's modification time must lie
+// before it witnesses the directory's names. FAT keeps two-second times.
+const dirSettle = 3 * time.Second
+
+// writeDirWitness records dir by its own identity, not one lstat and readlink
+// per entry. Creating, removing or renaming an entry moves the directory's
+// modification time, and no call retargets a symlink in place.
+// now must be read before any stat.
+func writeDirWitness(b *strings.Builder, dir string, now time.Time) {
+	fi, err := os.Stat(dir)
+	if err != nil {
+		fmt.Fprintf(b, "%s/ -\n", dir)
+		return
+	}
+	ino, _, ok := file.Identity(fi)
+	if !walkUnsettled(b, dir, fi, ok, now) {
+		return
+	}
+	f, err := os.Open(dir)
+	if err != nil {
+		fmt.Fprintf(b, "%s/ -\n", dir)
+		return
+	}
+	// optimization: f.ReadDir skips os.ReadDir's sort of every name; only the
+	// few entries kept below are sorted, for a stable key.
+	entries, err := f.ReadDir(-1)
+	_ = f.Close() // opened read-only, so a close error loses nothing
+	if err != nil {
+		fmt.Fprintf(b, "%s/ unreadable\n", dir)
+		return
+	}
+	fmt.Fprintf(b, "%s/ %d %d %d %o\n", dir, fi.Size(), fi.ModTime().UnixNano(), ino, fi.Mode())
+	// A file rewritten in place leaves the directory alone, as mise's paranoid
+	// .hash files are. A subdirectory's own time witnesses its names in turn.
+	var kept []string
+	for _, e := range entries {
+		if e.Type()&os.ModeSymlink == 0 {
+			kept = append(kept, e.Name())
+		}
+	}
+	slices.Sort(kept)
+	for _, name := range kept {
+		path := filepath.Join(dir, name)
+		sub, err := os.Lstat(path)
+		if err != nil {
+			fmt.Fprintf(b, "%s -\n", path)
+			continue
+		}
+		writeInfoIdentity(b, path, sub)
+		if sub.IsDir() {
+			walkUnsettled(b, path, sub, true, now)
+		}
+	}
+}
+
+// walkUnsettled records every entry of dir when fi cannot witness them, says
+// why, and reports whether fi can. A directory changed within dirSettle could
+// change again inside one timestamp tick.
+func walkUnsettled(b *strings.Builder, dir string, fi os.FileInfo, hasInode bool, now time.Time) bool {
+	var reason string
+	switch age := now.Sub(fi.ModTime()); {
+	case !hasInode:
+		reason = "the platform reports no inode, so a recreated directory looks the same"
+	case age < dirSettle:
+		reason = fmt.Sprintf("modified %s before the probe, within %s", age, dirSettle)
+	default:
+		return true
+	}
+	slog.Debug("recorded every entry of a directory whose own identity cannot witness them", slog.String("dir", dir), slog.String("reason", reason))
+	writeDirEntries(b, dir)
+	return false
+}
+
+// lookupProbeBin returns where PATH finds bin and the file it resolves to, and
+// false when either lookup fails. A relative PATH entry resolves against the
+// probe's directory, which this lookup does not model, so it refuses too.
+func lookupProbeBin(bin string) (found, target string, ok bool) {
+	for _, entry := range filepath.SplitList(os.Getenv("PATH")) {
+		if !filepath.IsAbs(entry) {
+			return "", "", false
+		}
+	}
+	found, err := exec.LookPath(bin)
+	if err != nil {
+		return "", "", false
+	}
+	target, err = filepath.EvalSymlinks(found)
+	if err != nil {
+		return "", "", false
+	}
+	return found, target, true
+}
