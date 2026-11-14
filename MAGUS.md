@@ -81,7 +81,7 @@ magus graph export -o json  # the whole graph
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                       |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------- |
 | [.](MAGUS.md)                                                               |      71 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                |
-| [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `build`, `lint`, `install`                        |
+| [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `lint`, `build`, `install`                        |
 | [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `catalog-docs-generate`, `site-generate`, `lint`  |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |      10 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                   |
 | [libs/apiversion](libs/apiversion/MAGUS.md)                                 |       8 | `magus query project=libs/apiversion`                 | `format`, `ci`, `build`                           |
@@ -102,7 +102,7 @@ magus graph export -o json  # the whole graph
 | [libs/text](libs/text/MAGUS.md)                                             |       8 | `magus query project=libs/text`                       | `format`, `ci`, `test`                            |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                         |
 | [libs/xdg](libs/xdg/MAGUS.md)                                               |       8 | `magus query project=libs/xdg`                        | `format`, `build`, `test`                         |
-| [proto](proto/MAGUS.md)                                                     |       6 | `magus query project=proto`                           | `generate`, `ci`, `format`                        |
+| [proto](proto/MAGUS.md)                                                     |       6 | `magus query project=proto`                           | `generate`, `format`, `breaking`                  |
 | testdata/latex/onepage                                                      |       4 | `magus query project=testdata/latex/onepage`          | `build`, `format`, `ci`                           |
 
 ## Project: magus
