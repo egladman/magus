@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -26,11 +27,12 @@ func TestMain(m *testing.M) {
 	testkit.Main(m, shardChildEnv)
 }
 
-// Any other flag, such as -run or a coverage profile, keeps the run in one
-// process: a split would change what it selects or measures.
+// Any other flag, such as -run or -bench, keeps the run in one process: a
+// split would change what it selects.
 var shardableFlags = []string{
 	"-test.v", "-test.timeout", "-test.paniconexit0", "-test.testlogfile",
 	"-test.count=1", "-test.short", "-test.failfast",
+	"-test.coverprofile", "-test.gocoverdir", "-test.outputdir",
 }
 
 func shardable(args []string) bool {
@@ -83,9 +85,14 @@ func runShards(args []string) int {
 		chunks[k] = append(chunks[k], regexp.QuoteMeta(name))
 	}
 
-	verbose, logPath, forwarded := false, "", []string(nil)
+	verbose, logPath, coverPath, outDir, forwarded := false, "", "", "", []string(nil)
 	for _, a := range args {
 		switch {
+		case strings.HasPrefix(a, "-test.coverprofile="):
+			coverPath = strings.TrimPrefix(a, "-test.coverprofile=")
+		case strings.HasPrefix(a, "-test.outputdir="):
+			outDir = strings.TrimPrefix(a, "-test.outputdir=")
+			forwarded = append(forwarded, a)
 		case a == "-test.v" || a == "-test.v=true":
 			verbose = true
 			forwarded = append(forwarded, a)
@@ -96,6 +103,9 @@ func runShards(args []string) int {
 		}
 	}
 
+	if coverPath != "" && !filepath.IsAbs(coverPath) {
+		coverPath = filepath.Join(outDir, coverPath)
+	}
 	var (
 		mu     sync.Mutex
 		failed bool
@@ -107,7 +117,7 @@ func runShards(args []string) int {
 		go func() {
 			defer wg.Done()
 			for i := range jobs {
-				res := runChunk(exe, forwarded, logPath, i, chunks[i])
+				res := runChunk(exe, forwarded, logPath, coverPath, i, chunks[i])
 				mu.Lock()
 				if res.err != nil {
 					failed = true
@@ -131,6 +141,9 @@ func runShards(args []string) int {
 	if logPath != "" {
 		mergeTestLogs(logPath, len(chunks))
 	}
+	if coverPath != "" {
+		mergeCoverProfiles(coverPath, len(chunks))
+	}
 	if failed {
 		fmt.Println("FAIL")
 		return 1
@@ -139,10 +152,13 @@ func runShards(args []string) int {
 	return 0
 }
 
-func runChunk(exe string, forwarded []string, logPath string, i int, chunk []string) shardResult {
+func runChunk(exe string, forwarded []string, logPath, coverPath string, i int, chunk []string) shardResult {
 	args := append([]string{"-test.run=^(" + strings.Join(chunk, "|") + ")$"}, forwarded...)
 	if logPath != "" {
 		args = append(args, fmt.Sprintf("-test.testlogfile=%s.shard%d", logPath, i))
+	}
+	if coverPath != "" {
+		args = append(args, fmt.Sprintf("-test.coverprofile=%s.shard%d", coverPath, i))
 	}
 	cmd := exec.Command(exe, args...)
 	cmd.Env = append(os.Environ(), shardChildEnv+"=run")
@@ -150,6 +166,31 @@ func runChunk(exe string, forwarded []string, logPath string, i int, chunk []str
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()
 	return shardResult{output: out.Bytes(), err: err}
+}
+
+// The profile parser sums duplicate blocks, so each child's blocks follow the
+// first child's mode line.
+func mergeCoverProfiles(coverPath string, chunks int) {
+	var merged []byte
+	for i := range chunks {
+		part := fmt.Sprintf("%s.shard%d", coverPath, i)
+		b, err := os.ReadFile(part)
+		if err != nil {
+			continue
+		}
+		os.Remove(part)
+		header, body, _ := bytes.Cut(b, []byte("\n"))
+		if merged == nil {
+			merged = append(append([]byte(nil), header...), '\n')
+		}
+		merged = append(merged, body...)
+	}
+	if merged == nil {
+		return
+	}
+	if err := os.WriteFile(coverPath, merged, 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "guard shard: writing cover profile:", err)
+	}
 }
 
 // go test keys its result cache on this log, so it must name what every
