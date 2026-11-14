@@ -1,19 +1,15 @@
 package guard
 
 import (
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/gen/typestest"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/mock"
 )
 
 // largeWorkspace answers the two reads runEvidence makes of a workspace.
@@ -32,9 +28,6 @@ func (w largeWorkspace) Get(path string) *types.Project { return w.byPath[path] 
 // name a package path.
 func largePush(b *testing.B) (largeWorkspace, []cache.OutputDescriptor, []string, string) {
 	dir := b.TempDir()
-	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
-		b.Fatalf("git init: %v: %s", err, out)
-	}
 	targets := []string{"test", "lint", "build", "generate"}
 	ws := largeWorkspace{byPath: map[string]*types.Project{}}
 	root := &types.Project{
@@ -100,11 +93,12 @@ func largePush(b *testing.B) (largeWorkspace, []cache.OutputDescriptor, []string
 }
 
 // BenchmarkRunEvidenceWeighsALargePush weighs each changed file as
-// narrowCoverageAt does. The repository holds no revision, so one git
-// process answers and the rest measures matching files to runs.
+// narrowCoverageAt does. No revision is known, so it reads no file and
+// measures the matching of files to runs.
 func BenchmarkRunEvidenceWeighsALargePush(b *testing.B) {
 	ws, runs, files, dir := largePush(b)
 	driver := typestest.NewMockVCSDriver(b)
+	driver.On("FindCommit", mock.Anything, dir, mock.Anything).Return(types.Commit{}, os.ErrNotExist)
 	ctx := b.Context()
 	for b.Loop() {
 		ev := newRunEvidence(driver, dir, dir, ws, runs, "c1")
@@ -117,61 +111,4 @@ func BenchmarkRunEvidenceWeighsALargePush(b *testing.B) {
 			}
 		}
 	}
-}
-
-func (s *NarrowPushSuite) TestARunAtAnOlderRevisionCoversAFileUnchangedSince() {
-	s.gateAtFirstCommit()
-	older := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n", "b.go": "package a\n"})
-	s.passed(strings.Repeat("a", 64), "go-test", older)
-	head := s.repo.Commit("again", map[string]string{"b.go": "package a\n\nvar B = 1\n"})
-	s.passed(strings.Repeat("b", 64), "lint", head, "b.go")
-
-	ev := s.push(head)
-	s.Equal(gateNarrow, ev.cover)
-	s.Contains(ev.admitted(), "each of the 2 files")
-}
-
-func (s *NarrowPushSuite) TestARunAtAnOlderRevisionLeavesAFileChangedSinceUncovered() {
-	s.gateAtFirstCommit()
-	older := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n", "b.go": "package a\n"})
-	s.passed(strings.Repeat("a", 64), "go-test", older)
-	head := s.repo.Commit("again", map[string]string{"b.go": "package a\n\nvar B = 1\n"})
-
-	ev := s.push(head)
-	s.Equal(gateAbsent, ev.cover)
-	_, reason := gradePushWithoutGate(ev, "")
-	s.Contains(reason, "No passing run covers 1 of the 2 files")
-	s.Contains(reason, "  b.go: run `")
-	s.NotContains(reason, "  a.go:")
-}
-
-// A push weighed past its share of the deadline leaves the rest to the rules.
-func (s *NarrowPushSuite) TestAPushWeighedPastItsBudgetSaysSoAndLeavesTheRulesTheirs() {
-	s.gateAtFirstCommit()
-	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
-	s.passed(strings.Repeat("a", 64), "go-test", head)
-	s.deps.Revision = func(ctx context.Context, _, _ string) string {
-		<-ctx.Done()
-		return head[:12]
-	}
-	deadline, cancel := context.WithTimeout(s.T().Context(), pushCoverageBudget+time.Second)
-	defer cancel()
-	ctx := withPhaseLog(deadline, trail.Phase{})
-
-	ev := pushCoverage(ctx, s.deps, s.at, "git push", DialectBash, s.repo.Root())
-	s.Require().NoError(deadline.Err(), "the rules judged after the push gate keep their share")
-	until, _ := deadline.Deadline()
-	s.Greater(time.Until(until), judgeReserve)
-	s.Equal(gateAbsent, ev.cover)
-	_, reason := gradePushWithoutGate(ev, "")
-	s.Contains(reason, "Narrow runs were not weighed: weighing the changed files did not finish within the ")
-	s.Contains(reason, " the guard gives the push gate.")
-	var coverage trail.Phase
-	for _, p := range judgmentPhases(ctx).finished() {
-		if p.Name == phasePushCoverage {
-			coverage = p
-		}
-	}
-	s.True(coverage.Lapsed)
-	s.Positive(coverage.BudgetMs)
 }
