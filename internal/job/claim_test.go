@@ -388,10 +388,12 @@ func TestIntegrationHoldNarrowsToTheDeclarationsItsMergeChanged(t *testing.T) {
 }
 
 // grantUntouchedSuite pins the grant of declarations a holder left alone,
-// and each case that still refuses.
+// and each case that still refuses. Its tests only read the two repositories,
+// so they share them and fail if one of them changed either.
 type grantUntouchedSuite struct {
 	suite.Suite
 	root, holderRoot, checkpoint string
+	shared                       []*testkit.SharedRepository
 }
 
 func TestGrantUntouched(t *testing.T) {
@@ -399,12 +401,19 @@ func TestGrantUntouched(t *testing.T) {
 	suite.Run(t, new(grantUntouchedSuite))
 }
 
-func (s *grantUntouchedSuite) SetupTest() {
+func (s *grantUntouchedSuite) SetupSuite() {
 	s.root = testkit.NewRepository(s.T(), claimFiles).Root()
 	holder := testkit.NewRepository(s.T(), claimFiles)
 	s.checkpoint = holder.Head()
 	holder.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1)})
 	s.holderRoot = holder.Root()
+	s.shared = []*testkit.SharedRepository{testkit.ShareRepository(s.T(), s.root), testkit.ShareRepository(s.T(), s.holderRoot)}
+}
+
+func (s *grantUntouchedSuite) TearDownTest() {
+	for _, shared := range s.shared {
+		shared.AssertUnchanged(s.T())
+	}
 }
 
 // judge seeds A, holding run.go whole with A touched, and judges fork B.

@@ -18,29 +18,37 @@ import (
 )
 
 // integratedDirectorySuite pins MGS3018 against a branch replacing a directory.
+// Its tests only read the repository, so they share it and fail if one of them
+// changed it.
 type integratedDirectorySuite struct {
 	suite.Suite
-	repo  *testkit.Repo
-	store *Store
+	repo   *testkit.Repo
+	shared *testkit.SharedRepository
+	store  *Store
 }
 
 func TestIntegratedDirectory(t *testing.T) { suite.Run(t, new(integratedDirectorySuite)) }
 
-func (s *integratedDirectorySuite) SetupTest() {
+func (s *integratedDirectorySuite) SetupSuite() {
 	s.repo = testkit.NewRepository(s.T(), map[string]string{
 		"skills/a/SKILL.md": "a\n",
 		"skills/keep.md":    "keep\n",
 		"shared/a/SKILL.md": "a\n",
 	})
-	s.store = NewStore(tempLocation(s.T(), s.repo.Root()))
-
 	s.repo.Git("checkout", "-q", "-b", "replaces-dir")
 	s.repo.Git("rm", "-q", "-r", "skills/a")
 	s.Require().NoError(os.Symlink("../shared/a", filepath.Join(s.repo.Root(), "skills", "a")))
 	s.repo.Git("add", "skills/a")
 	s.repo.Git("commit", "-q", "-m", "replace the directory with a symlink")
 	s.repo.Git("checkout", "-q", "-")
+	s.shared = testkit.ShareRepository(s.T(), s.repo.Root())
 }
+
+func (s *integratedDirectorySuite) SetupTest() {
+	s.store = NewStore(tempLocation(s.T(), s.repo.Root()))
+}
+
+func (s *integratedDirectorySuite) TearDownTest() { s.shared.AssertUnchanged(s.T()) }
 
 func (s *integratedDirectorySuite) row(write ...string) types.Job {
 	return types.Job{ID: "integrate", Paths: types.JobPaths{Write: write}}

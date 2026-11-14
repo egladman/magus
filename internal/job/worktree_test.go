@@ -1109,11 +1109,6 @@ func (s *ReviewCheckoutSuite) TestAFailedStepKeepsTheCheckoutAndNamesItsRemoval(
 	s.DirExists(dir)
 }
 
-func (s *ReviewCheckoutSuite) TestARevisionThatIsNotThereIsRefused() {
-	_, err := s.r.Checkout(s.T().Context(), "0123456789abcdef0123456789abcdef01234567", "", true)
-	s.Require().ErrorContains(err, "vcs checkout: git cannot find 0123456789abcdef0123456789abcdef01234567")
-}
-
 func (s *ReviewCheckoutSuite) TestFetchBringsInARefTheCheckoutNeeds() {
 	upstream := testkit.NewRepository(s.T(), map[string]string{"pr.txt": "pr\n"})
 	head := upstream.Head()
@@ -1133,30 +1128,65 @@ func (s *ReviewCheckoutSuite) TestRemoveRemovesTheCheckout() {
 	s.NoDirExists(rec.Path)
 }
 
-func (s *ReviewCheckoutSuite) TestRemoveRefusesADirectoryOutsideTheBase() {
+// ReviewCheckoutRefusalSuite holds the requests ReviewCheckout refuses before
+// it makes a checkout. Its tests only read the repository, so they share it and
+// fail if one of them changed it.
+type ReviewCheckoutRefusalSuite struct {
+	suite.Suite
+	root   string
+	shared *testkit.SharedRepository
+	r      ReviewCheckout
+}
+
+func TestReviewCheckoutRefusalSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(ReviewCheckoutRefusalSuite))
+}
+
+func (s *ReviewCheckoutRefusalSuite) SetupSuite() {
+	s.root = testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"}).Root()
+	s.shared = testkit.ShareRepository(s.T(), s.root)
+}
+
+func (s *ReviewCheckoutRefusalSuite) SetupTest() {
+	drv, why := resolveDriver(s.T().Context(), s.root)
+	s.Require().NotNil(drv, why)
+	s.r = ReviewCheckout{Root: s.root, Base: s.T().TempDir(), Driver: drv}
+}
+
+func (s *ReviewCheckoutRefusalSuite) TearDownTest() { s.shared.AssertUnchanged(s.T()) }
+
+func (s *ReviewCheckoutRefusalSuite) TestARevisionThatIsNotThereIsRefused() {
+	_, err := s.r.Checkout(s.T().Context(), "0123456789abcdef0123456789abcdef01234567", "", true)
+	s.Require().ErrorContains(err, "vcs checkout: git cannot find 0123456789abcdef0123456789abcdef01234567")
+}
+
+func (s *ReviewCheckoutRefusalSuite) TestRemoveRefusesADirectoryOutsideTheBase() {
 	elsewhere := s.T().TempDir()
 	err := s.r.Remove(s.T().Context(), elsewhere)
 	s.Require().EqualError(err, fmt.Sprintf("vcs checkout --remove: %s is not under %s, where magus vcs checkout makes its checkouts", elsewhere, s.r.Base))
 }
 
-func (s *ReviewCheckoutSuite) TestRemoveRefusesTheBaseItself() {
+func (s *ReviewCheckoutRefusalSuite) TestRemoveRefusesTheBaseItself() {
 	err := s.r.Remove(s.T().Context(), s.r.Base)
 	s.Require().ErrorContains(err, "is not under "+s.r.Base)
 }
 
-func (s *ReviewCheckoutSuite) TestTheRecordKeepsTheFieldNamesTheConsoleReads() {
+func TestReviewCheckoutRecordKeepsTheFieldNamesTheConsoleReads(t *testing.T) {
+	t.Parallel()
 	data, err := json.Marshal(ReviewCheckoutRecord{Bootstrap: ReviewBootstrap{Install: []string{}}})
-	s.Require().NoError(err)
-	s.JSONEq(`{"path":"","revision":"","vcs":"","bootstrap":{"ran":false,"install":[],"harnesses":false,"hook":"","hook_note":""},"remove":""}`, string(data))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"path":"","revision":"","vcs":"","bootstrap":{"ran":false,"install":[],"harnesses":false,"hook":"","hook_note":""},"remove":""}`, string(data))
 }
 
-func (s *ReviewCheckoutSuite) TestInstallTargetsListsOnlyProjectsDeclaringInstall() {
+func TestInstallTargetsListsOnlyProjectsDeclaringInstall(t *testing.T) {
+	t.Parallel()
 	projects := []*types.Project{
 		{Path: "web", MagusfileTargets: []string{"build", "install"}},
 		{Path: ".", MagusfileTargets: []string{"install"}},
 		{Path: "docs", MagusfileTargets: []string{"build"}},
 	}
-	s.Equal([]string{".", "web"}, InstallTargets(projects))
+	assert.Equal(t, []string{".", "web"}, InstallTargets(projects))
 }
 
 type ForkAgainSuite struct {

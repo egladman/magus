@@ -109,18 +109,26 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 }
 
 // narrowHoldSuite pins NarrowHold over a workspace where cfg holds every Buzz file by a
-// pattern and lit holds notes.buzz by name.
+// pattern and lit holds notes.buzz by name. Its tests write only the ledger, so
+// they share one repository and fail if one of them changed it.
 type narrowHoldSuite struct {
 	suite.Suite
-	root string
-	loc  Location
-	s    *Store
+	root   string
+	shared *testkit.SharedRepository
+	loc    Location
+	s      *Store
 }
 
 func TestNarrowHold(t *testing.T) { suite.Run(t, new(narrowHoldSuite)) }
 
-func (s *narrowHoldSuite) SetupTest() {
+func (s *narrowHoldSuite) SetupSuite() {
 	s.root = testkit.NewRepository(s.T(), configFiles).Root()
+	s.shared = testkit.ShareRepository(s.T(), s.root)
+}
+
+func (s *narrowHoldSuite) TearDownTest() { s.shared.AssertUnchanged(s.T()) }
+
+func (s *narrowHoldSuite) SetupTest() {
 	s.loc = tempLocation(s.T(), s.root)
 	s.s = NewStore(s.loc)
 	seed(s.T(), s.s, types.Job{ID: "cfg", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"**/*.buzz"}}, Check: forkCheck()})
