@@ -207,6 +207,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 // lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
+    ctx.needs(format);
     ctx.needs(textsearch\lint);
     ctx.needs(proofread\proofread_build);
     // proofread's digest and the decisions table key this target, so a change to a rule reruns
