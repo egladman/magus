@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -557,42 +558,54 @@ func TestIntegrationHolderMergesItsBranchesOnEveryPath(t *testing.T) {
 	assert.False(t, mergesBase("done-a", "", types.Job{ID: "worker"}), "a row integrating nothing merges nothing")
 }
 
-// standingWorker is a worker row on a checkout its fork made. Its suites
-// share one repository and fail if a test changed it; each test gets a fresh
-// ledger.
+// standingWorker is a worker row on a checkout its fork made. Each test gets a
+// fresh ledger.
 type standingWorker struct {
 	suite.Suite
 	layers ctxLayers
 	repo   worktreeRepo
-	before string
 	own    string
 	worker types.Job
 }
 
-func (s *standingWorker) SetupSuite() {
+func (s *standingWorker) build() {
 	s.repo = newWorktreeRepository(s.T())
 	s.own = s.repo.add("lease-job")
 	s.worker = narrowLease()
 	s.worker.Parent = "orchestrator"
 	s.worker.CheckoutRoot = s.own
 	s.worker.Worktree = &types.JobWorktree{Root: s.own}
-	s.before = s.repo.state()
 }
 
-func (s *standingWorker) TearDownSuite() {
-	s.repo.assertUnchanged(s.T(), s.before)
-}
-
-func (s *standingWorker) SetupTest() {
+func (s *standingWorker) ledger() {
 	s.layers, _ = fleetLayers(s.T(), s.worker)
 	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{s.worker}}))
 }
+
+// judgedWorker is a standingWorker whose suite's tests only judge, so they
+// share one repository and fail if one of them changed it.
+type judgedWorker struct {
+	standingWorker
+	shared *testkit.SharedRepository
+}
+
+func (s *judgedWorker) SetupSuite() {
+	s.build()
+	s.shared = s.repo.share()
+}
+
+func (s *judgedWorker) SetupTest() {
+	s.repo = s.repo.of(s.T())
+	s.ledger()
+}
+
+func (s *judgedWorker) TearDownTest() { s.shared.AssertUnchanged(s.T()) }
 
 func (s *standingWorker) from(dir, line string) string {
 	return denyLeaseScopedVCS(s.testContext(), Dependencies{callDir: dir}, s.worker.ID, line)
 }
 
-type WorkerMoveSuite struct{ standingWorker }
+type WorkerMoveSuite struct{ judgedWorker }
 
 func TestWorkerMoveSuite(t *testing.T) { suite.Run(t, new(WorkerMoveSuite)) }
 
@@ -659,7 +672,7 @@ func (s *WorkerMoveSuite) TestAnAliasNamedMvStaysAnAlias() {
 	s.Contains(s.from(s.own, "git -c alias.mv=push mv origin"), "`git -c alias.mv`")
 }
 
-type WorkerReattachSuite struct{ standingWorker }
+type WorkerReattachSuite struct{ judgedWorker }
 
 func TestWorkerReattachSuite(t *testing.T) { suite.Run(t, new(WorkerReattachSuite)) }
 
@@ -710,13 +723,16 @@ func (s *WorkerReattachSuite) TestARowWithNoCheckoutOfItsOwnIsRefused() {
 	s.Contains(denyLeaseScopedVCS(ctx, Dependencies{callDir: s.own}, row.ID, "git switch -C "+row.ID), "`git switch`")
 }
 
-// DetachedWorkerSuite detaches the worker's checkout, so no other test
-// shares its repository.
+// DetachedWorkerSuite detaches the worker's checkout, so each test builds a
+// repository of its own.
 type DetachedWorkerSuite struct{ standingWorker }
 
 func TestDetachedWorkerSuite(t *testing.T) { suite.Run(t, new(DetachedWorkerSuite)) }
 
-func (s *DetachedWorkerSuite) TearDownSuite() {}
+func (s *DetachedWorkerSuite) SetupTest() {
+	s.build()
+	s.ledger()
+}
 
 func (s *DetachedWorkerSuite) TestADetachedCommitNamesTheLineThatKeepsIt() {
 	s.repo.git(s.own, "switch", "--detach")
@@ -727,7 +743,7 @@ func (s *DetachedWorkerSuite) TestADetachedCommitNamesTheLineThatKeepsIt() {
 
 // UnboundCommitSuite is a worker whose row has a checkout from its fork, before
 // job exec stamped checkout_root there.
-type UnboundCommitSuite struct{ standingWorker }
+type UnboundCommitSuite struct{ judgedWorker }
 
 func TestWorkerVCSUnboundCommitSuite(t *testing.T) { suite.Run(t, new(UnboundCommitSuite)) }
 
@@ -845,27 +861,21 @@ func contextWithLedger(t *testing.T, at location) context.Context {
 }
 
 // workerRevert pins row 602: a worker reverts its own commit on its own
-// branch, graded like a cherry-pick by the paths it writes. Its suites share
-// one repository and fail if a test changed it; each test gets a fresh ledger.
+// branch, graded like a cherry-pick by the paths it writes. Each test gets a
+// fresh ledger.
 type workerRevert struct {
 	suite.Suite
 	at     location
 	repo   worktreeRepo
-	before string
 	worker types.Job
 	wt     string
 }
 
-func (s *workerRevert) SetupSuite() {
+func (s *workerRevert) build() {
 	_, s.repo, s.worker, s.wt = leaseVCSRepository(s.T())
-	s.before = s.repo.state()
 }
 
-func (s *workerRevert) TearDownSuite() {
-	s.repo.assertUnchanged(s.T(), s.before)
-}
-
-func (s *workerRevert) SetupTest() {
+func (s *workerRevert) ledger() {
 	ctx, _ := fleetFixture(s.T(), s.worker)
 	s.at = ledgerAt(s.T(), ctx)
 }
@@ -874,18 +884,37 @@ func (s *workerRevert) judge(command string) string {
 	return denyLeaseScopedVCS(contextWithLedger(s.T(), s.at), Dependencies{callDir: s.wt}, s.worker.ID, command)
 }
 
-// WorkerRevertSuite judges reverts of the base commit.
-type WorkerRevertSuite struct{ workerRevert }
+// WorkerRevertSuite judges reverts of the base commit. Its tests only judge,
+// so they share one repository and fail if one of them changed it.
+type WorkerRevertSuite struct {
+	workerRevert
+	shared *testkit.SharedRepository
+}
 
 func TestWorkerRevertSuite(t *testing.T) { suite.Run(t, new(WorkerRevertSuite)) }
 
-// WorkerRevertOwnCommitSuite commits on the worker's branch, so no other test
-// shares its repository.
+func (s *WorkerRevertSuite) SetupSuite() {
+	s.build()
+	s.shared = s.repo.share()
+}
+
+func (s *WorkerRevertSuite) SetupTest() {
+	s.repo = s.repo.of(s.T())
+	s.ledger()
+}
+
+func (s *WorkerRevertSuite) TearDownTest() { s.shared.AssertUnchanged(s.T()) }
+
+// WorkerRevertOwnCommitSuite commits on the worker's branch, so each test
+// builds a repository of its own.
 type WorkerRevertOwnCommitSuite struct{ workerRevert }
 
 func TestWorkerRevertOwnCommitSuite(t *testing.T) { suite.Run(t, new(WorkerRevertOwnCommitSuite)) }
 
-func (s *WorkerRevertOwnCommitSuite) TearDownSuite() {}
+func (s *WorkerRevertOwnCommitSuite) SetupTest() {
+	s.build()
+	s.ledger()
+}
 
 func (s *WorkerRevertOwnCommitSuite) TestRevertsItsOwnCommit() {
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.wt, "cmd", "magus"), 0o755))
