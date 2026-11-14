@@ -405,9 +405,10 @@ func (s *goindexSuite) TestAnotherTreesPackUpdatesToTheColdIndex() {
 	s.Require().NoError(err)
 	_, cold := s.update(s.indexer())
 
-	s.False(res.Rebuilt)
-	s.Equal([]string{"example.com/m/a", "example.com/m/c"}, res.Indexed)
-	s.Equal([]string{"example.com/m/b"}, res.Dependents)
+	s.Equal(symbols.UpdateResult{
+		Indexed:    []string{"example.com/m/a", "example.com/m/c"},
+		Dependents: []string{"example.com/m/b"},
+	}, res)
 	s.Equal(s.read(cold), s.read(seeded))
 }
 
@@ -435,8 +436,9 @@ func (s *goindexSuite) TestAMethodAnEmbeddedTypeGainsReachesTheEmbeddersPack() {
 	s.Require().NoError(err)
 	_, cold := s.update(s.indexer())
 
-	s.Equal([]string{"example.com/m/a"}, res.Indexed)
-	s.Equal([]string{"example.com/m/d"}, res.Dependents)
+	s.Equal(symbols.UpdateResult{
+		Indexed: []string{"example.com/m/a"}, Dependents: []string{"example.com/m/d"}, Kept: 2,
+	}, res)
 	s.Equal(s.read(cold), s.read(pack))
 }
 

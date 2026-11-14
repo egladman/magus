@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -241,7 +242,7 @@ func (s *ConformanceBaseSuite) TestASeedNeverReplacesAnIndexHeadWrote() {
 func (s *ConformanceBaseSuite) keep(measure string) string {
 	name := s.want().file()
 	entry := filepath.Join(s.T().TempDir(), name)
-	line := `{"name":"` + name + `","measure":` + measure + "}\n"
+	line := fmt.Sprintf("{\"name\":%q,\"measure\":%s}\n", name, measure)
 	s.Require().NoError(os.WriteFile(entry, []byte(line), 0o600))
 	return entry
 }
@@ -481,9 +482,10 @@ const (
 	boxOther = "export fun other() > int {\n    return 1;\n}\n"
 )
 
-// measureEditedRepo measures the base of a repository whose head edited one
-// of its Buzz files. It returns head's index and where head keeps its pack.
-func (s *ConformanceBaseBoxSuite) measureEditedRepo(before func(head baseIndex, pack string)) (baseIndex, string) {
+// measureEditedRepository measures the base of a repository whose head
+// edited one of its Buzz files. It returns head's index and where head keeps
+// its pack.
+func (s *ConformanceBaseBoxSuite) measureEditedRepository(before func(head baseIndex, pack string)) (baseIndex, string) {
 	cfg := config.Defaults()
 	cfg.Cache.Dir = s.T().TempDir()
 	repo := testkit.NewRepository(s.T(), map[string]string{
@@ -512,7 +514,7 @@ func (s *ConformanceBaseBoxSuite) read(path string) []byte {
 // The seed is the base's pack, so head's freshen re-indexes the edited file
 // alone and writes what a cold index of head writes.
 func (s *ConformanceBaseBoxSuite) TestASeededIndexFreshensToTheColdIndex() {
-	head, seeded := s.measureEditedRepo(func(baseIndex, string) {})
+	head, seeded := s.measureEditedRepository(func(baseIndex, string) {})
 	s.Require().FileExists(seeded)
 
 	res, err := symbols.UpdatePack(s.T().Context(), seeded, head.ix)
@@ -527,7 +529,7 @@ func (s *ConformanceBaseBoxSuite) TestASeededIndexFreshensToTheColdIndex() {
 }
 
 func (s *ConformanceBaseBoxSuite) TestHeadsOwnIndexIsNotSeeded() {
-	_, pack := s.measureEditedRepo(func(_ baseIndex, pack string) {
+	_, pack := s.measureEditedRepository(func(_ baseIndex, pack string) {
 		s.Require().NoError(os.MkdirAll(filepath.Dir(pack), 0o755))
 		s.Require().NoError(os.WriteFile(pack, []byte("head's own"), 0o600))
 	})

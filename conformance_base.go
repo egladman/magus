@@ -598,13 +598,13 @@ func seedPack(tree, pack, dest string, b baseIndex, head baseIndexPlan, readOnly
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return false, err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(dest), "."+filepath.Base(dest)+".seed-*")
+	tmp, err := os.CreateTemp(filepath.Dir(dest), fmt.Sprintf(".%s.seed-*", filepath.Base(dest)))
 	if err != nil {
 		return false, err
 	}
 	defer os.Remove(tmp.Name())
-	_, err = tmp.Write(data)
-	if err = errors.Join(err, tmp.Chmod(0o644), tmp.Close()); err != nil {
+	_, written := tmp.Write(data)
+	if err := errors.Join(written, tmp.Chmod(0o644), tmp.Close()); err != nil {
 		return false, err
 	}
 	// A link, not a rename: rename would replace an index head built meanwhile.
