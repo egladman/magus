@@ -486,7 +486,7 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
     // Build waits for lint's format instead of racing it (MGS4008).
-    ctx.needs(generate, lint, test);
+    ctx.needs(generate, lint, test, security);
     ctx.needs(build);
     // Units of their own on every CI: the plan packs them apart from the site by
     // memory, and computes the symbol digest they share once (ADR 0027).

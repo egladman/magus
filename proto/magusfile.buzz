@@ -76,7 +76,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     buf["buf-lint"](ctx, {"args": ["."]});
 }
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(generate, lint, breaking);
+    ctx.needs(generate, format, lint, breaking);
 }
 
 // breaking runs buf-breaking against the default branch, less the findings the

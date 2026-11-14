@@ -253,7 +253,7 @@ fun judgeCssComments() > void !> any {
 
 // `format:rw` maintains declared source inputs.
 export fun format(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(install);
+    ctx.needs(install, generate);
     ctx.writesFiles([
         "src/**/*.ts", "src/**/*.css", "src/**/*.html", "scripts/**/*.mjs",
         "index.html", "manifest.webmanifest", "sw.js", "package.json",
@@ -272,9 +272,9 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     if (!advisories\inheritedFatal(args)) {
-        ctx.needs(generate, lint, test, build, security);
+        ctx.needs(generate, format, lint, test, build, security);
         return;
     }
-    ctx.needs(generate, lint, test, build);
+    ctx.needs(generate, format, lint, test, build);
     security(ctx, args: args);
 }
