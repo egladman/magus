@@ -54,10 +54,7 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
             why: "the blast radius of a changeset, which affected reads after the load")
         .except(figure\without(packages\goPackages("internal/interp/**"), drop: [interp]),
             why: "the engine seam, host bindings, MCP client and transforms an evaluation calls through; the Evaluate box is where an export becomes a target")
-        .except([magus\graph().dir("types/enum"), magus\graph().dir("types/daemon"), magus\graph().dir("types/diff"),
-                 magus\graph().dir("types/events"), magus\graph().dir("types/image"), magus\graph().dir("types/trail"),
-                 magus\graph().dir("types/agent"), magus\graph().dir("types/check"), magus\graph().dir("types/impact"),
-                 magus\graph().dir("types/release"), magus\graph().dir("types/vcs")],
+        .except(packages\dataTypes(),
             why: "the closed string sets every package checks values against, and data-type packages the figure does not trace; no part of the project model")
         .except([magus\graph().dir("internal/cache/reflink"), magus\graph().dir("internal/cache/remotetest")],
             why: "copying files in and out of the store, and a fake remote cache for tests; the key is computed in internal/cache")
