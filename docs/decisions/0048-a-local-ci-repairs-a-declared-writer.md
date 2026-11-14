@@ -136,19 +136,19 @@ need made by a direct call the graph does not see) are a workspace's to sanction
 
 ### State
 
-| item                                                                                    | State                                 |
-| --------------------------------------------------------------------------------------- | ------------------------------------- |
-| `declaresOwnWrite` and the declared-writer test                                         | done                                  |
-| `NeedMember.Project`, wrapping every named member, the inline wrap, `cache.FailedNeeds` | done                                  |
-| the repair loop in `RunCI`, its retry and its stops                                     | done                                  |
-| the content snapshot of the working tree's changed paths                                | done                                  |
-| MGS3057 `UncommittedRepair`                                                             | done                                  |
-| the MGS3057 reference page                                                              | done                                  |
-| `magus run ci`, `magus affected ci` and `magus x ci` carry the charms                   | done                                  |
-| the sized-run line                                                                      | done                                  |
-| the guard's `affected` case                                                             | not built (see Alternatives)          |
-| the needs-direction precedent family and its lint branch                                | done                                  |
-| the sentences that said ci never writes                                                 | done                                  |
+| item                                                                                    | State                        |
+| --------------------------------------------------------------------------------------- | ---------------------------- |
+| `declaresOwnWrite` and the declared-writer test                                         | done                         |
+| `NeedMember.Project`, wrapping every named member, the inline wrap, `cache.FailedNeeds` | done                         |
+| the repair loop in `RunCI`, its retry and its stops                                     | done                         |
+| the content snapshot of the working tree's changed paths                                | done                         |
+| MGS3057 `UncommittedRepair`                                                             | done                         |
+| the MGS3057 reference page                                                              | done                         |
+| `magus run ci`, `magus affected ci` and `magus x ci` carry the charms                   | done                         |
+| the sized-run line                                                                      | done                         |
+| the guard's `affected` case                                                             | not built (see Alternatives) |
+| the needs-direction precedent family and its lint branch                                | done                         |
+| the sentences that said ci never writes                                                 | done                         |
 
 ### Principles checked
 
