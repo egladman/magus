@@ -173,7 +173,9 @@ fun renderPagerLink(page: DocPage, dir: str, cls: str, climbPrefix: str) > str !
 fun renderPager(rel: str, site: Site) > str !> any {
     final parts = rel.split("/");
     final base = parts[parts.len() - 1];
-    final sibs = site.indexDocPages().siblings[parts.sub(0, parts.len() - 1).join("/")];
+    final built = site.builtDocIndex();
+    if (built.error -> e) { throw e; }
+    final sibs = built.value!.siblings[parts.sub(0, len: parts.len() - 1).join("/")];
     if (sibs == null) { return ""; }
     final ordered = sibs!;
     if (ordered.len() < 2) { return ""; }

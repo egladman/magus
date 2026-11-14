@@ -42,7 +42,7 @@ export fun firstPathSegment(url: str) > str {
     return url.sub(0, len: i);
 }
 
-// pad4 zero-pads a small non-negative int to four digits so scores sort lexically.
+// pad4 zero-pads a small non-negative int to four digits so keys sort lexically.
 export fun pad4(n: int) > str {
     final s = "{n}";
     if (s.len() >= 4) { return s; }
