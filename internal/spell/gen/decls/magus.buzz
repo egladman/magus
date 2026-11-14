@@ -226,6 +226,7 @@ export enum<str> PrecedentFamily {
     paramOrder = "param-order",
     ctxFirst = "ctx-first",
     errorLast = "error-last",
+    needsDirection = "needs-direction",
 }
 
 export enum<str> DuplicationPlacement {
