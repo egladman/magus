@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -112,7 +113,10 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 		if *step {
 			ciOpts = append(ciOpts, magus.WithStep())
 		}
-		charms := withDefaultCharms(nil, globalCfg.DefaultCharms, false)
+		charms, note := execCICharms(withDefaultCharms(nil, globalCfg.DefaultCharms, false))
+		if note != "" {
+			slog.InfoContext(ctx, note, attr.Notice(""), attr.Component("magus"))
+		}
 		return runAndEmit(ctx, m, "ci", nil, ciTargets, withCharms(ciOpts, charms))
 	}
 	// Expand short aliases.
@@ -129,6 +133,19 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 		xOpts = append(xOpts, magus.WithCharms(charms...))
 	}
 	return runAndEmit(ctx, m, targetName, nil, targets, xOpts)
+}
+
+// execCICharms is the set `magus x ci` runs under: charms without the
+// write-granting ones, since x verifies only and never repairs. note says
+// so when rw was carried, and is empty otherwise.
+func execCICharms(charms []string) (verify []string, note string) {
+	verify = magus.CharmsForCI(charms)
+	if slices.ContainsFunc(charms, func(c string) bool {
+		return types.NormalizeCharm(c) == types.CharmReadWrite
+	}) {
+		note = "rw is carried, but magus x verifies only, so this ci run repairs nothing; `magus run ci` repairs"
+	}
+	return verify, note
 }
 
 // runAndEmit runs what x picked and renders it as `magus run` does.
