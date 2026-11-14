@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 
@@ -176,6 +177,79 @@ func (s *ConformanceBaseSuite) TestAnEntryWithDistributionsIsRead() {
 	s.Len(got.Distributions, 1)
 }
 
+// oldLayoutName is a measure named by one digest of its whole key.
+const oldLayoutName = "abc123-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.jsonl"
+
+func (s *ConformanceBaseSuite) TestAKeyReadsBackFromItsFileName() {
+	key := conformanceKey{commit: "abc123", version: "7", policy: "p1", indexers: "i1"}
+
+	got, ok := parseConformanceKey(key.file())
+
+	s.True(ok)
+	s.Equal(key, got)
+}
+
+func (s *ConformanceBaseSuite) TestAnOldLayoutNameIsNoKey() {
+	_, ok := parseConformanceKey(oldLayoutName)
+
+	s.False(ok)
+}
+
+// remeasure is whyRemeasure's answer for want with names kept beside it.
+func (s *ConformanceBaseSuite) remeasure(want conformanceKey, names ...string) string {
+	dir := s.T().TempDir()
+	for _, name := range names {
+		s.Require().NoError(os.WriteFile(filepath.Join(dir, name), []byte("{}\n"), 0o600))
+	}
+	return whyRemeasure(filepath.Join(dir, want.file()))
+}
+
+func (s *ConformanceBaseSuite) want() conformanceKey {
+	return conformanceKey{commit: "abc123", version: "7", policy: "p1", indexers: "i1"}
+}
+
+func (s *ConformanceBaseSuite) TestNothingKeptSaysSo() {
+	other := conformanceKey{commit: "def456", version: "7", policy: "p1", indexers: "i1"}
+
+	s.Equal("no measure of it is kept", s.remeasure(s.want(), other.file()))
+}
+
+func (s *ConformanceBaseSuite) TestAnotherMeasureVersionIsNamed() {
+	old := s.want()
+	old.version = "6"
+
+	s.Equal("the kept measure of it is measure version 6, and this magus measures version 7",
+		s.remeasure(s.want(), old.file()))
+}
+
+func (s *ConformanceBaseSuite) TestAnotherPolicyIsNamed() {
+	other := s.want()
+	other.policy = "p2"
+
+	s.Contains(s.remeasure(s.want(), other.file()), "another knowledge.conformance policy")
+}
+
+func (s *ConformanceBaseSuite) TestOtherIndexerVersionsAreNamed() {
+	other := s.want()
+	other.indexers = "i2"
+
+	s.Contains(s.remeasure(s.want(), other.file()), "other indexer versions")
+}
+
+func (s *ConformanceBaseSuite) TestAnOlderLayoutIsNamed() {
+	s.Contains(s.remeasure(s.want(), oldLayoutName), "older key layout")
+}
+
+func (s *ConformanceBaseSuite) TestEachDistinctMismatchIsNamed() {
+	policy, indexers := s.want(), s.want()
+	policy.policy, indexers.indexers = "p2", "i2"
+
+	got := s.remeasure(s.want(), policy.file(), indexers.file())
+
+	s.Contains(got, "policy")
+	s.Contains(got, "indexer versions")
+}
+
 type ConformanceBaseBoxSuite struct {
 	suite.Suite
 }
@@ -235,4 +309,28 @@ func (s *ConformanceBaseBoxSuite) TestCheckoutsOfOneWorkspaceReadOneMeasure() {
 	_, kept, err := readConformanceEntry(entry)
 	s.Require().NoError(err)
 	s.True(kept, "the sibling checkout finds the measure the first one kept")
+}
+
+// CI's gate checks out at a new path in each job.
+// The cache dir is the one path the jobs share.
+func (s *ConformanceBaseBoxSuite) TestACheckoutAtAnotherPathReusesTheCacheDirsMeasure() {
+	cfg := config.Defaults()
+	cfg.Cache.Dir = s.T().TempDir()
+	repo := testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": boxMagusfile})
+	elsewhere := repo.AddWorktree("elsewhere")
+	commit, err := s.inspect(repo.Root(), cfg).MeasureConformanceBase(s.T().Context(), "HEAD")
+	s.Require().NoError(err)
+	kept, err := filepath.Glob(filepath.Join(cfg.Cache.Dir, "conformance", commit+"-*.jsonl"))
+	s.Require().NoError(err)
+	s.Require().Len(kept, 1)
+	stamp := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
+	s.Require().NoError(os.Chtimes(kept[0], stamp, stamp))
+
+	again, err := s.inspect(elsewhere.Root(), cfg).MeasureConformanceBase(s.T().Context(), "HEAD")
+	s.Require().NoError(err)
+
+	s.Equal(commit, again)
+	info, err := os.Stat(kept[0])
+	s.Require().NoError(err)
+	s.True(info.ModTime().Equal(stamp), "the second checkout reused the kept measure rather than measuring again")
 }

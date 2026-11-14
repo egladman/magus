@@ -3,8 +3,10 @@ package magus
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -71,8 +73,8 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head t
 		return types.Conformance{}, err
 	}
 	if !ok {
-		return types.Conformance{}, fmt.Errorf("conformance: no measure of base %s under this workspace's configuration, "+
-			"which magus\\change().mergeBase measures and `magus run conformance-base .` runs here", commit)
+		return types.Conformance{}, fmt.Errorf("conformance: no measure of base %s under this workspace's configuration (%s), "+
+			"which magus\\change().mergeBase measures and `magus run conformance-base .` runs here", commit, whyRemeasure(entry))
 	}
 	judged := touched[:0:0]
 	for _, p := range touched {
@@ -94,9 +96,10 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head t
 // MeasureConformanceBase measures the merge base of base and HEAD with magus's in-process
 // indexers under this workspace's configuration. It keeps the measure in the
 // workspace store every checkout shares, keyed by commit, policy, indexer
-// versions and baseMeasureVersion.
+// versions and baseMeasureVersion. No part of the key names the checkout.
 // The base is exported there too, since a sandboxed gate writes only to the
 // store and the temp dir. It returns the commit, and reuses a kept measure.
+// It logs which it did, and why a kept measure of the commit did not match.
 func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string, error) {
 	v, commit, err := m.conformanceBaseCommit(ctx, base)
 	if err != nil {
@@ -118,8 +121,12 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 		return "", err
 	}
 	if _, ok, err := readConformanceEntry(entry); err != nil || ok {
+		if ok {
+			slog.InfoContext(ctx, "reusing the kept conformance measure of base "+commit, slog.String("entry", entry))
+		}
 		return commit, err
 	}
+	slog.InfoContext(ctx, fmt.Sprintf("measuring conformance base %s, since %s", commit, whyRemeasure(entry)))
 	if err := v.ExportRevision(ctx, m.ws.Root, commit, tree); err != nil {
 		return "", fmt.Errorf("conformance: export %s: %w", commit, err)
 	}
@@ -198,23 +205,88 @@ func readConformanceEntry(entry string) (types.Conformance, bool, error) {
 }
 
 // conformanceEntry is the cache file of commit's measure under this workspace's policy and
-// plan's indexers, under baseMeasureVersion.
+// plan's indexers, under baseMeasureVersion. Its name keeps the key's parts
+// apart, so whyRemeasure can name the one that moved.
 func (m *Magus) conformanceEntry(commit string, plan baseIndexPlan) (string, error) {
 	policy, err := json.Marshal(m.cfg.Knowledge.Conformance)
 	if err != nil {
 		return "", fmt.Errorf("conformance: digest the policy: %w", err)
 	}
-	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00", baseMeasureVersion)
-	fmt.Fprintf(h, "%s", policy)
+	indexers := sha256.New()
 	for _, ix := range plan.indexes {
-		fmt.Fprintf(h, "\x00%s\x00%s\x00%s", ix.project, ix.language, ix.ix.Version())
+		fmt.Fprintf(indexers, "%s\x00%s\x00%s\x00", ix.project, ix.language, ix.ix.Version())
 	}
 	store, err := config.StoreDir(m.ws.Root, m.cfg)
 	if err != nil {
 		return "", fmt.Errorf("conformance: %w", err)
 	}
-	return filepath.Join(store, "conformance", fmt.Sprintf("%s-%x.jsonl", commit, h.Sum(nil))), nil
+	key := conformanceKey{
+		commit:   commit,
+		version:  baseMeasureVersion,
+		policy:   shortDigest(sha256.Sum256(policy)),
+		indexers: shortDigest([sha256.Size]byte(indexers.Sum(nil))),
+	}
+	return filepath.Join(store, "conformance", key.file()), nil
+}
+
+// shortDigest is sum's first 8 bytes in hex: a key part, not a checksum.
+func shortDigest(sum [sha256.Size]byte) string { return hex.EncodeToString(sum[:8]) }
+
+// conformanceKey is what a kept measure's file name holds.
+type conformanceKey struct {
+	commit, version, policy, indexers string
+}
+
+func (k conformanceKey) file() string {
+	return fmt.Sprintf("%s-v%s-%s-%s.jsonl", k.commit, k.version, k.policy, k.indexers)
+}
+
+// parseConformanceKey reads a kept measure's file name.
+// It is false for a name in another layout.
+func parseConformanceKey(name string) (conformanceKey, bool) {
+	stem, ok := strings.CutSuffix(name, ".jsonl")
+	parts := strings.Split(stem, "-")
+	if !ok || len(parts) != 4 || !strings.HasPrefix(parts[1], "v") {
+		return conformanceKey{}, false
+	}
+	return conformanceKey{commit: parts[0], version: parts[1][1:], policy: parts[2], indexers: parts[3]}, true
+}
+
+// whyRemeasure says why no kept measure answers entry.
+// It names the key part each kept measure of the commit differs in.
+func whyRemeasure(entry string) string {
+	const none = "no measure of it is kept"
+	want, ok := parseConformanceKey(filepath.Base(entry))
+	if !ok {
+		return none
+	}
+	kept, err := filepath.Glob(filepath.Join(filepath.Dir(entry), want.commit+"-*.jsonl"))
+	if err != nil || len(kept) == 0 {
+		return none
+	}
+	var reasons []string
+	for _, path := range kept {
+		reasons = append(reasons, keyMismatch(want, filepath.Base(path)))
+	}
+	slices.Sort(reasons)
+	return "the kept measure of it " + strings.Join(slices.Compact(reasons), "; another ")
+}
+
+// keyMismatch names the first part of name's key that differs from want's.
+func keyMismatch(want conformanceKey, name string) string {
+	got, ok := parseConformanceKey(name)
+	switch {
+	case !ok:
+		return "is filed under an older key layout"
+	case got.version != want.version:
+		return fmt.Sprintf("is measure version %s, and this magus measures version %s", got.version, want.version)
+	case got.policy != want.policy:
+		return "was measured under another knowledge.conformance policy"
+	case got.indexers != want.indexers:
+		return "was indexed by other indexer versions (the Go toolchain, scipbuzz or the sh parser)"
+	default:
+		return "has this key but did not read as a measure"
+	}
 }
 
 // baseIndex is one in-process symbol index of a project, over the base tree.
