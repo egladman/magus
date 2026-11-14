@@ -1953,6 +1953,9 @@ const (
 	PrecedentCtxFirst PrecedentFamily = "ctx-first"
 	// PrecedentErrorLast is whether a function returning an error returns it last.
 	PrecedentErrorLast PrecedentFamily = "error-last"
+	// PrecedentNeedsDirection is whether, in a project defining two
+	// targets of those names, the first's needs reach the second.
+	PrecedentNeedsDirection PrecedentFamily = "needs-direction"
 )
 
 // Precedent is what a body of cases in the graph establishes: Follow of Cohort cases share one
@@ -1976,6 +1979,7 @@ type Precedent struct {
 
 // PrecedentScope is where a precedent's cases were drawn from. Which fields are set depends on
 // the family: Layers for the dep families, Language for the rest.
+// A needs-direction row sets none: its cases are the workspace's projects.
 type PrecedentScope struct {
 	// Layers are top-level directories, "." for the workspace root: the sorted pair a
 	// dep-direction row compares, or the one layer a imported-packages row counts imports into.
@@ -1988,6 +1992,7 @@ type PrecedentScope struct {
 // names its one shape.
 type PrecedentKey struct {
 	// From and To are the layers a dep-direction precedent says imports run from and to.
+	// For needs-direction they are target names: From's needs reach To.
 	From string `json:"from,omitempty"`
 	To   string `json:"to,omitempty"`
 	// MaxImports is the most packages under the layer a imported-packages precedent lets one package
@@ -2011,9 +2016,11 @@ type PrecedentKey struct {
 type Case struct {
 	// Node is the graph node the case was read from: a symbol, a file, or for a dep family the
 	// importing package's namespace.
+	// For needs-direction it is the project's From target.
 	Node string `json:"node"`
 	// Source is a workspace-relative path, with a line when the index recorded one. For a dep
 	// family it is the importing package's directory.
+	// For needs-direction it is the project's path.
 	Source string `json:"source"`
 	// Imports are the directories a dep family case imports that the row counted, sorted.
 	Imports []string `json:"imports,omitempty"`
@@ -2022,6 +2029,7 @@ type Case struct {
 // Holds is magus\graph().precedents' answer, and later magus\holds'.
 // It is the majority shapes the indexes establish, and each one's freshness.
 // A stale index contributed nothing or something old, so check Indexes first.
+// A needs-direction row is read off the targets and reads no index.
 // ADR 0022: domain noun, not PrecedentReport.
 type Holds struct {
 	Holds   []Precedent         `json:"holds"`

@@ -12,7 +12,7 @@ func TestEnumPrecedentFamilyClosesItsSet(t *testing.T) {
 	assert.Equal(t,
 		[]string{
 			"dep-direction", "imported-packages", "err-sentinel-name", "test-package-name", "param-name-by-type",
-			"param-order", "ctx-first", "error-last",
+			"param-order", "ctx-first", "error-last", "needs-direction",
 		},
 		PrecedentFamily("").Values())
 	assert.Equal(t,

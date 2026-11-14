@@ -87,7 +87,7 @@ func (v ConflictKind) String() string   { return enum.String(v) }
 
 var precedentFamilies = enum.Set[PrecedentFamily]{
 	PrecedentDepDirection, PrecedentImportedPackages, PrecedentErrSentinelName, PrecedentTestPackageName,
-	PrecedentParamNameByType, PrecedentParamOrder, PrecedentCtxFirst, PrecedentErrorLast,
+	PrecedentParamNameByType, PrecedentParamOrder, PrecedentCtxFirst, PrecedentErrorLast, PrecedentNeedsDirection,
 }
 
 func (v PrecedentFamily) Values() []string { return precedentFamilies.Strings() }

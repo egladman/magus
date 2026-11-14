@@ -13,8 +13,9 @@ import "hack/lint/support" as support;
 // error-last repeat revive's rules, but revive does not lint every nested module (gopherbuzz
 // runs go vet alone), and these read every Go index. param-name-by-type and param-order stay advice: measured at 3e29af6ff they
 // establish 176 and 435 keys, most of them a local habit (a rune named r), with 144 and 76
-// departures.
-export final FAMILIES = [magus\PrecedentFamily.ctxFirst, magus\PrecedentFamily.errSentinelName, magus\PrecedentFamily.errorLast, magus\PrecedentFamily.testPackageName];
+// departures. needs-direction reads the targets' needs, so it has no language.
+export final FAMILIES = [magus\PrecedentFamily.ctxFirst, magus\PrecedentFamily.errSentinelName, magus\PrecedentFamily.errorLast,
+    magus\PrecedentFamily.needsDirection, magus\PrecedentFamily.testPackageName];
 
 // LANGUAGES are the indexes the rule judges. Buzz joins once CI installs scip-buzz; until
 // then a Buzz row would hold on one machine and not another.
@@ -37,7 +38,16 @@ final THIS = "hack/lint/code-follows-mined-precedents.buzz";
 export fun reads() > [str] {
     return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
         "libs/figure/**/*.go","libs/gopherbuzz/**/*.go", "libs/proofread/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go",
-        "libs/text/**/*.go", "libs/xdg/**/*.go", "libs/clikit/**/*.go"];
+        "libs/text/**/*.go", "libs/xdg/**/*.go", "libs/clikit/**/*.go", "**/magusfile.buzz"];
+}
+
+// languages are the scopes family's rows are judged in: "" alone for a
+// family whose rows carry no language.
+fun languages(family: magus\PrecedentFamily) > [str] {
+    if (family == magus\PrecedentFamily.needsDirection) {
+        return [""];
+    }
+    return LANGUAGES;
 }
 
 // check fails every departure from an established precedent in FAMILIES.
@@ -78,8 +88,10 @@ export fun judge(report: magus\Holds, sanctioned: {str: str}) > [Finding] !> any
     }
 
     final departed = mut {<str: bool>};
-    foreach (lang in LANGUAGES) {
-        foreach (family in FAMILIES) {
+    foreach (family in FAMILIES) {
+        foreach (lang in languages(family)) {
+            final what = if (lang == "") family.value else "{lang} {family.value}";
+            final cases = if (lang == "") "projects" else "{lang} cases";
             // A keyed family (a parameter type, a pair of names) makes a row per key, and each
             // established one is held.
             final held = mut [<magus\Precedent>];
@@ -89,7 +101,7 @@ export fun judge(report: magus\Holds, sanctioned: {str: str}) > [Finding] !> any
                 }
             }
             if (held.len() == 0) {
-                found.append(Finding{ path = ".", message = "the index establishes no {lang} {family.value} precedent to hold",
+                found.append(Finding{ path = ".", message = "the graph establishes no {what} precedent to hold",
                     fix = "The miner or the index changed under this rule; read `magus\\graph().precedents()` before dropping the family." });
                 continue;
             }
@@ -97,16 +109,17 @@ export fun judge(report: magus\Holds, sanctioned: {str: str}) > [Finding] !> any
                 final follow = row.follow;
                 final cohort = row.cohort;
                 final departures = row.departures;
+                final key = if (lang == "") " ({row.key.from} reaches {row.key.to})" else "";
                 foreach (d in departures) {
                     final node: str = d.node;
-                    departed[node] = true;
-                    if (sanctioned[node] != null) {
+                    departed[node + key] = true;
+                    if (sanctioned[node + key] != null) {
                         continue;
                     }
                     final at = position(d.source);
                     found.append(Finding{ path = at.path, line = at.line,
-                        message = "departs from the {family.value} precedent that {follow} of {cohort} {lang} cases follow: {node}",
-                        fix = "Follow it, or add the node to SANCTIONED in " + THIS + " with the reason it departs." });
+                        message = "departs from the {what} precedent that {follow} of {cohort} {cases} follow{key}: {node}",
+                        fix = "Follow it, or add \"{node}{key}\" to SANCTIONED in " + THIS + " with the reason it departs." });
                 }
             }
         }
@@ -143,7 +156,7 @@ fun fresh(lang: str) > magus\SymbolIndexStatus {
 }
 
 fun row(family: magus\PrecedentFamily, departures: [magus\Case]) > magus\Precedent {
-    return magus\Precedent{ family = family, scope = magus\PrecedentScope{ language = "go" }, established = true,
+    return magus\Precedent{ family = family, scope = magus\PrecedentScope{ language = languages(family)[0] }, established = true,
         follow = 85, cohort = 86, departures = departures };
 }
 
@@ -221,4 +234,35 @@ test "every established row of a keyed family is held and an unestablished one i
     final got = judge(magus\Holds{ indexes = r.indexes, holds = keyed }, sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "the second established row's departure, and not the loose row's");
     assert\equal(got[0].path, want: "vm/operators.go", message: got[0].message);
+}
+
+test "a family with no language is judged once and its departure names the pair" {
+    final r = report([fresh("go")], departures: [<magus\Case>]);
+    final rows = mut [<magus\Precedent>];
+    foreach (p in r.holds) {
+        rows.append(p);
+    }
+    rows.append(magus\Precedent{ family = magus\PrecedentFamily.needsDirection, established = true, follow = 14, cohort = 17,
+        key = magus\PrecedentKey{ from = "format", to = "generate" },
+        departures = [magus\Case{ node = "target:console:format", source = "console" }] });
+    final got = judge(magus\Holds{ indexes = r.indexes, holds = rows }, sanctioned: {<str: str>});
+    assert\equal(got.len(), want: 1, message: "one departure, not one per language");
+    assert\equal(got[0].path, want: "console", message: "the project");
+    assert\equal(got[0].message.indexOf("14 of 17 projects follow (format reaches generate)") != null, want: true, message: got[0].message);
+    final kept = judge(magus\Holds{ indexes = r.indexes, holds = rows },
+        sanctioned: {"target:console:format (format reaches generate)": "its generate is a different job"});
+    assert\equal(kept.len(), want: 0, message: "a sanction names the node and the pair");
+}
+
+test "a family with no language that establishes nothing fails without naming a language" {
+    final r = report([fresh("go")], departures: [<magus\Case>]);
+    final kept = mut [<magus\Precedent>];
+    foreach (p in r.holds) {
+        if (p.family != magus\PrecedentFamily.needsDirection) {
+            kept.append(p);
+        }
+    }
+    final got = judge(magus\Holds{ indexes = r.indexes, holds = kept }, sanctioned: {<str: str>});
+    assert\equal(got.len(), want: 1, message: "needs-direction is missing");
+    assert\equal(got[0].message, want: "the graph establishes no needs-direction precedent to hold", message: got[0].message);
 }

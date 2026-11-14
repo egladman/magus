@@ -32,13 +32,14 @@ type PrecedentOptions struct {
 
 // Precedents mines the precedents g's cases establish; g must carry its symbols. Rows come
 // back ordered by family, scope and key, so two runs over one graph agree byte for byte. A graph
-// with no symbols yields no rows, never an error.
+// with no symbols yields no symbol rows, never an error.
+// The needs-direction rows read the targets alone.
 func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated, Conformance: o.Conformance})
 	m := precedentMiner{g: g, x: x, conformance: o.Conformance, fileNS: g.fileNamespaces()}
 	pk := m.packages()
 	rows := slices.Concat(m.depDirection(pk), m.importedPackages(pk), m.errorSentinelName(), m.testPackageName(pk),
-		m.paramNameByType(), m.paramOrder(), m.contextFirst(), m.errorLast())
+		m.paramNameByType(), m.paramOrder(), m.contextFirst(), m.errorLast(), m.needsDirection())
 	for i := range rows {
 		r := &rows[i]
 		if r.Cohort > 0 {
@@ -56,6 +57,8 @@ func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 			cmp.Compare(a.Key.Prefix, b.Key.Prefix),
 			cmp.Compare(a.Key.Type, b.Key.Type),
 			slices.Compare(a.Key.Order, b.Key.Order),
+			cmp.Compare(a.Key.From, b.Key.From),
+			cmp.Compare(a.Key.To, b.Key.To),
 		)
 	})
 	return rows
