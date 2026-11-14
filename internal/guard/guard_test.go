@@ -1006,7 +1006,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				before := treeState(t, dirs...)
 				preview := Judge(ctx, deps, checked)
 				assert.Equal(t, before, treeState(t, dirs...), "round %d: the dry run wrote", round)
-				leftover, err := filepath.Glob(filepath.Join(os.TempDir(), "magus-guard-dry-run-*"))
+				leftover, err := filepath.Glob(filepath.Join(dryRunCopies(), "*"))
 				require.NoError(t, err)
 				assert.Empty(t, leftover, "round %d: the dry run left its copy behind", round)
 
@@ -1053,11 +1053,13 @@ func TestSessionCopyRemovesTheCopyOfAnExitedProcess(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 	const exited = 1 << 30
-	orphan := filepath.Join(tmp, fmt.Sprintf("%s%d-1", dryRunCopyPrefix, exited))
+	parent := dryRunCopies()
+	require.Equal(t, filepath.Clean(tmp), filepath.Dir(parent), "copies go under the temporary directory")
+	orphan := filepath.Join(parent, fmt.Sprintf("%d-1", exited))
 	require.False(t, hint.NewGate(orphan, "s1").MarkFired("told"), "a late write recreates the copy")
 	require.DirExists(t, orphan)
-	live := filepath.Join(tmp, fmt.Sprintf("%s%d-1", dryRunCopyPrefix, os.Getpid()))
-	unnamed := filepath.Join(tmp, dryRunCopyPrefix+"2837461923")
+	live := filepath.Join(parent, fmt.Sprintf("%d-1", os.Getpid()))
+	unnamed := filepath.Join(parent, "2837461923")
 	for _, dir := range []string{live, unnamed} {
 		require.NoError(t, os.Mkdir(dir, 0o755))
 	}

@@ -2639,9 +2639,12 @@ func hardenCovering(rows []types.Job, rel string, harden func([]types.Job) []typ
 	return out
 }
 
-// dryRunCopyPrefix starts the name of a dry run's session copy in the temporary directory;
-// the pid of the process that made it follows.
-const dryRunCopyPrefix = "magus-guard-dry-run-"
+// dryRunCopies is the per-user directory a dry run's session copy is
+// made in, named for the pid that made it. The sweep reads only this
+// directory: the temporary directory can hold 100k entries.
+func dryRunCopies() string {
+	return filepath.Join(os.TempDir(), "magus-guard-dry-run-"+strconv.Itoa(os.Getuid()))
+}
 
 // sessionCopy copies into a new temporary directory what the gates keyed on keys hold under
 // cacheDir, and the served-next journal, keeping modification times, since an anonymous
@@ -2658,7 +2661,11 @@ func sessionCopy(cacheDir string, keys ...string) (dir string, release func()) {
 		return "", release
 	}
 	removeOrphanedCopies()
-	dir, err := os.MkdirTemp("", fmt.Sprintf("%s%s-", dryRunCopyPrefix, strconv.Itoa(os.Getpid())))
+	parent := dryRunCopies()
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return "", release
+	}
+	dir, err := os.MkdirTemp(parent, strconv.Itoa(os.Getpid())+"-")
 	if err != nil {
 		return "", release
 	}
@@ -2710,14 +2717,15 @@ func copyWithModTime(src, dst string) error {
 	return os.Chtimes(dst, info.ModTime(), info.ModTime())
 }
 
-// removeOrphanedCopies removes the session copies whose process has exited. A name that
-// carries no pid, as one made by an older magus, is kept: its process may still read it.
+// removeOrphanedCopies removes the session copies whose process has
+// exited. A name that carries no pid is kept: its process may still read it.
 func removeOrphanedCopies() {
-	copies, _ := filepath.Glob(filepath.Join(os.TempDir(), dryRunCopyPrefix+"*"))
-	for _, path := range copies {
-		owner, _, named := strings.Cut(strings.TrimPrefix(filepath.Base(path), dryRunCopyPrefix), "-")
+	parent := dryRunCopies()
+	copies, _ := os.ReadDir(parent)
+	for _, c := range copies {
+		owner, _, named := strings.Cut(c.Name(), "-")
 		if n, err := strconv.Atoi(owner); named && err == nil && !pid.Alive(n) {
-			_ = os.RemoveAll(path)
+			_ = os.RemoveAll(filepath.Join(parent, c.Name()))
 		}
 	}
 }
