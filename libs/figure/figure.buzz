@@ -7832,12 +7832,17 @@ test "draw paints each theme" {
 }
 
 test "drawDiagram paints a figure's diagram the bytes draw paints" {
-    final f = serverHttp(handlers()) catch of("x");
-    final d = f.diagram() catch Diagram{};
-    foreach (theme in [Theme.dark, Theme.light, Theme.page]) {
-        assert\equal(drawDiagram(d, theme: theme) catch "laid out threw", want: draw(f, theme: theme) catch "draw threw",
-            message: "theme {theme.value}");
+    var threw = "";
+    try {
+        final f = serverHttp(handlers());
+        final d = f.diagram();
+        foreach (theme in [Theme.dark, Theme.light, Theme.page]) {
+            assert\equal(drawDiagram(d, theme: theme), want: draw(f, theme: theme), message: "theme {theme.value}");
+        }
+    } catch (e: str) {
+        threw = e;
     }
+    assert\equal(threw, want: "", message: "the fixture lays out and paints");
 }
 
 // varAttrs names every attribute value in svg that holds a var(), which strict
