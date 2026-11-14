@@ -1048,6 +1048,22 @@ func skipWithoutHeapAttribution(t *testing.T) {
 	}
 }
 
+// A range expression evaluated in a session takes its slot from the
+// session's owner, so closing the session frees it. Unowned, it stayed for
+// the process: one slot per execution of the expression.
+func TestRangeIsReleasedWithItsSession(t *testing.T) {
+	skipWithoutHeapAttribution(t)
+	ctx := context.Background()
+	ranges := func() int { return vm.HeapProfile()["range"] }
+	before := ranges()
+	for range 10 {
+		s := NewSession(ctx, WithEmbedded())
+		require.NoError(t, s.Exec(ctx, `var n = 0; foreach (i in 0..10) { n = n + i; }`))
+		require.NoError(t, s.Close())
+	}
+	assert.Equal(t, before, ranges(), "range slots kept by ten closed sessions")
+}
+
 // The attribution has to name the loop that is growing the heap. Reporting a
 // large heap without saying where leaves the reader bisecting a magusfile by
 // hand, which is the whole reason this exists.

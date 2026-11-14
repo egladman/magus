@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 )
@@ -382,6 +383,10 @@ func (*udObj) heapKind() valueTag        { return tagUD }
 // without a content scan for any string that was created through StringValue.
 var strIntern sync.Map // string → *strObj
 
+// internedStrings and internedBytes count strIntern's entries and their
+// total length for HeapStats. No entry is ever removed.
+var internedStrings, internedBytes atomic.Int64
+
 func internString(s string) *strObj {
 	if v, ok := strIntern.Load(s); ok {
 		return v.(*strObj)
@@ -390,6 +395,8 @@ func internString(s string) *strObj {
 	if actual, loaded := strIntern.LoadOrStore(s, obj); loaded {
 		return actual.(*strObj)
 	}
+	internedStrings.Add(1)
+	internedBytes.Add(int64(len(s)))
 	return obj
 }
 

@@ -184,6 +184,9 @@ var (
 	// reads it: the table length stops growing once slots are reused, but a
 	// line that allocates in a loop is still the line to name.
 	gHeapAllocs atomic.Int64
+	// gHeapUnowned is the number of live non-string slots no owner holds.
+	// Written under gHeapMu.
+	gHeapUnowned atomic.Int64
 	// claimStack is the claim walk's work list, reused across walks. Only
 	// touched under gHeapMu.
 	claimStack []Value
@@ -217,6 +220,8 @@ func gHeapAlloc(ptr heapVal, o *Owner) uint64 {
 	if o != nil {
 		gHeapOwner[idx] = o
 		o.slots = append(o.slots, idx)
+	} else if ptr.heapKind() != tagStr {
+		gHeapUnowned.Add(1)
 	}
 	gHeapMu.Unlock()
 	return idx
@@ -290,6 +295,7 @@ func walkLocked(o *Owner, root Value, seen map[uint64]bool) {
 			}
 			gHeapOwner[idx] = o
 			o.slots = append(o.slots, idx)
+			gHeapUnowned.Add(-1)
 		case owner == o && seen != nil && !seen[idx]:
 			seen[idx] = true
 		default:

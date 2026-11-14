@@ -2,7 +2,10 @@
 
 package vm
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 // Live and peak agree until an owner release lowers the live count, and the peak
 // is what a diagnostic reports after that. Asserting the relationship rather
@@ -184,4 +187,28 @@ func TestReleasedSlotReadPanicsUnderRace(t *testing.T) {
 		}
 	}()
 	_ = v.asList()
+}
+
+// UnownedObjects counts what no release can reach: a claim takes a slot out
+// of it, and a string never enters it.
+func TestUnownedObjectsCountsUnownedSlotsButStrings(t *testing.T) {
+	unowned := func() int { return ReadHeapStats().UnownedObjects }
+	before := unowned()
+	list := ListValue(nil)
+	gHeapAlloc(&strObj{}, nil)
+	if got := unowned() - before; got != 1 {
+		t.Fatalf("one unowned list and one string: UnownedObjects rose by %d, want 1", got)
+	}
+	o := &Owner{}
+	o.Claim(list)
+	vm := NewVM(context.Background())
+	vm.SetOwner(o)
+	alloc(vm, tagList, &listObj{})
+	if got := unowned() - before; got != 0 {
+		t.Fatalf("after the claim and an owned allocation UnownedObjects is %+d, want +0", got)
+	}
+	o.Release()
+	if got := unowned() - before; got != 0 {
+		t.Fatalf("a release frees owned slots only, yet UnownedObjects moved %+d", got)
+	}
 }

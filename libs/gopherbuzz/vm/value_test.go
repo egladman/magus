@@ -422,3 +422,40 @@ func (s *strBufSuite) TestBufferStringDoesNotCopy() {
 	b.WriteString("d")
 	s.Equal(unsafe.StringData(sink), unsafe.StringData(b.String()))
 }
+
+// heapCountersSuite pins the HeapStats counters every build reports.
+type heapCountersSuite struct{ suite.Suite }
+
+func TestHeapCountersSuite(t *testing.T) { suite.Run(t, new(heapCountersSuite)) }
+
+// unique is text no other test interns.
+func (s *heapCountersSuite) unique() string {
+	return s.T().Name() + time.Now().Format(time.RFC3339Nano)
+}
+
+func (s *heapCountersSuite) TestInternedStringsCountEachNewTextOnce() {
+	text := s.unique()
+	before := ReadHeapStats()
+	StringValue(text)
+	StringValue(text)
+	after := ReadHeapStats()
+	s.Equal(1, after.InternedStrings-before.InternedStrings)
+	s.Equal(len(text), after.InternedBytes-before.InternedBytes)
+}
+
+func (s *heapCountersSuite) TestBufferedStringIsNotInterned() {
+	long := StringValue(s.unique() + strings.Repeat("a", strBufThreshold))
+	before := ReadHeapStats()
+	appendString(long, []byte("b"))
+	s.Equal(before.InternedStrings, ReadHeapStats().InternedStrings)
+}
+
+func (s *heapCountersSuite) TestUnownedObjectsFollowsTheTable() {
+	before := ReadHeapStats().UnownedObjects
+	ListValue(nil)
+	want := 1
+	if HeapProfile() == nil {
+		want = 0 // no table: the Go collector reclaims every object
+	}
+	s.Equal(want, ReadHeapStats().UnownedObjects-before)
+}
