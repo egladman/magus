@@ -3,8 +3,10 @@ package ffi
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
+	"weak"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -58,6 +60,24 @@ func (enumBacking) Instance(_ string, names []string, fields []vm.Value) vm.Valu
 	return m
 }
 
+// compileLocks holds a mutex per session that sessionEnums compiles into. A
+// Session compiles for one goroutine at a time, and a guard rule's session
+// judges calls that run at once. An entry goes when its session is collected.
+var compileLocks sync.Map // weak.Pointer[buzz.Session] -> *sync.Mutex
+
+// compiling runs f holding sess's entry in compileLocks.
+func compiling(sess *buzz.Session, f func() error) error {
+	key := weak.Make(sess)
+	v, loaded := compileLocks.LoadOrStore(key, new(sync.Mutex))
+	if !loaded {
+		runtime.AddCleanup(sess, func(k weak.Pointer[buzz.Session]) { compileLocks.Delete(k) }, key)
+	}
+	mu, _ := v.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+	return f()
+}
+
 type sessionEnums struct {
 	ctx    context.Context //nolint:containedctx // class b: EnumCases is called by 420 generated encoder sites with no ctx; no benchmark or optimization: comment (29d8b3deb)
 	sess   *buzz.Session
@@ -85,10 +105,16 @@ func (s *sessionEnums) Instance(object string, names []string, fields []vm.Value
 		fn := "__object_" + strings.ReplaceAll(object, `\`, "_")
 		decl := fmt.Sprintf("import %q; fun %s(%s) > any { return %s{ %s }; }",
 			s.importPath(object), fn, strings.Join(params, ", "), s.qualify(object), strings.Join(inits, ", "))
-		if _, err := s.sess.Eval(s.ctx, decl); err != nil {
+		err := compiling(s.sess, func() error {
+			if _, err := s.sess.Eval(s.ctx, decl); err != nil {
+				return err
+			}
+			ctor = s.sess.GetGlobal(fn)
+			return nil
+		})
+		if err != nil {
 			panic(fmt.Sprintf("declaring %s's constructor: %v", s.qualify(object), err))
 		}
-		ctor = s.sess.GetGlobal(fn)
 		s.mu.Lock()
 		if s.defs == nil {
 			s.defs = map[string]vm.Value{}
@@ -111,8 +137,12 @@ func (s *sessionEnums) Case(enum, value string) vm.Value {
 	cases, ok := s.cases[enum]
 	s.mu.Unlock()
 	if !ok {
-		var err error
-		if cases, err = s.read(enum); err != nil {
+		err := compiling(s.sess, func() error {
+			var err error
+			cases, err = s.read(enum)
+			return err
+		})
+		if err != nil {
 			panic(fmt.Sprintf("reading %s: %v", s.qualify(enum), err))
 		}
 		s.mu.Lock()
