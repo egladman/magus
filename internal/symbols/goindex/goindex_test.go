@@ -359,6 +359,31 @@ func (s *goindexSuite) TestAGoModEditMovesEveryUnit() {
 	}
 }
 
+func (s *goindexSuite) goflags(env []string) []string {
+	var out []string
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "GOFLAGS="); ok {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func (s *goindexSuite) TestTheBuildCacheIsKeyedByContentNotDirectory() {
+	ix := &Indexer{Dir: s.dir, Env: []string{"PATH=/bin"}}
+	s.Equal([]string{"-trimpath"}, s.goflags(ix.env(nil)))
+}
+
+func (s *goindexSuite) TestTheCallersGoflagsAreKept() {
+	ix := &Indexer{Dir: s.dir, Env: []string{"GOFLAGS=-mod=mod"}}
+	s.Equal([]string{"-mod=mod", "-mod=mod -trimpath"}, s.goflags(ix.env(nil)))
+}
+
+func (s *goindexSuite) TestGoflagsThatTrimAlreadyAreLeftAlone() {
+	ix := &Indexer{Dir: s.dir, Env: []string{"GOFLAGS=-trimpath -mod=mod"}}
+	s.Equal([]string{"-trimpath -mod=mod"}, s.goflags(ix.env(nil)))
+}
+
 // moveTree copies the module to a new directory, which later writes edit.
 func (s *goindexSuite) moveTree() {
 	moved := s.T().TempDir()

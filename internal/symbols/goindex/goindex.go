@@ -98,7 +98,22 @@ func (ix *Indexer) env(overlay map[string]string) []string {
 	for _, k := range sortedKeys(overlay) {
 		env = append(env, fmt.Sprintf("%s=%s", k, overlay[k]))
 	}
-	return env
+	return trimPaths(env)
+}
+
+// trimPaths adds -trimpath to env's GOFLAGS. The build cache then keys export
+// data by content, not directory, so a tree exported to a fresh path reuses it.
+func trimPaths(env []string) []string {
+	flags := ""
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "GOFLAGS="); ok {
+			flags = v
+		}
+	}
+	if slices.Contains(strings.Fields(flags), "-trimpath") {
+		return env
+	}
+	return append(env, "GOFLAGS="+strings.TrimSpace(flags+" -trimpath"))
 }
 
 func (ix *Indexer) patterns() []string {
