@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
@@ -664,6 +665,7 @@ func (s *SpawnRuleSuite) TestAForkAboveItsParentIsRefusedWithTheRulesCode() {
 	store := job.NewStore(job.Location{
 		StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir(), Actor: &job.Actor{},
 		ModelTiers: set, SpawnRule: TierCeiling,
+		SpawnCeiling: func(context.Context) (builtin.Setting, error) { return builtin.Setting{Decision: builtin.Deny}, nil },
 	})
 	put := func(id, parent, model string) error {
 		row := types.Job{

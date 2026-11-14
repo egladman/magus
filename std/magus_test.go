@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
@@ -1013,6 +1014,9 @@ type ratedWorkspace struct {
 func (w *ratedWorkspace) ModelTiers(context.Context) *agent.ModelTierSet { return w.tiers }
 func (w *ratedWorkspace) ModelTierMatrix() types.ModelTierMatrix         { return nil }
 func (w *ratedWorkspace) CheckSpawn(_, _ agent.ModelTier) error          { return nil }
+func (w *ratedWorkspace) SpawnCeiling(context.Context) (builtin.Setting, error) {
+	return builtin.Setting{Decision: builtin.Advise}, nil
+}
 func (w *ratedWorkspace) Models(context.Context) func() []types.ModelPricing {
 	return func() []types.ModelPricing { return w.rows }
 }
