@@ -464,41 +464,16 @@ jobs:
             ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-
             ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-
 
-      - name: Name the conformance base
-        id: conformance
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        shell: bash
-        run: |
-          version=$(sed -n 's/^const baseMeasureVersion = "\(.*\)"$/\1/p' conformance_base.go)
-          if [ -z "$version" ]; then
-            echo "::error title=conformance::conformance_base.go declares no baseMeasureVersion this step reads; fix its sed"
-            exit 1
-          fi
-          if [ -n "$BASE_REF" ]; then
-            base=$(git merge-base HEAD "origin/$BASE_REF")
-          else
-            base=$(git rev-parse HEAD)
-          fi
-          echo "conformance base $base, measure version $version"
-          echo "base=$base" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Restore the conformance base's measure
+      - name: Restore the conformance measures of the pull request
         if: github.event_name == 'pull_request'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .magus/conformance
-          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}
+          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-stage0-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}-
+            ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-
 
-      - name: Note the conformance measures already kept
-        id: conformance-kept
-        shell: bash
-        run: echo "digest=${{ hashFiles(format('.magus/conformance/{0}-*.jsonl', steps.conformance.outputs.base)) }}" >> "$GITHUB_OUTPUT"
-
-      - name: Restore the symbol index
+      - name: Restore the symbol index of the pull request
         if: github.event_name == 'pull_request'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -594,12 +569,12 @@ jobs:
             .magus/spell-caches/golang/GOMODCACHE
           key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage0-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
-      - name: Save the conformance base's measure
-        if: (success() || failure()) && hashFiles(format('.magus/conformance/{0}-*.jsonl', steps.conformance.outputs.base)) != steps.conformance-kept.outputs.digest
+      - name: Save the conformance measures of the pull request
+        if: github.event_name == 'pull_request' && (success() || failure()) && hashFiles('.magus/conformance/*.jsonl') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .magus/conformance
-          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}-stage0-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-stage0-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload the cache stage zero built
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -770,52 +745,27 @@ jobs:
 
       # conformance-base measures the base commit, cold, in every gate: 3m33 to 5m10 (runs
       # 42030377752, 42002954798; 4m41 in 43519003561). The measure is kept in
-      # .magus/conformance as <commit>-v<baseMeasureVersion>-<policy>-<indexers>.jsonl, a
-      # name with no checkout path in it, so a restored one answers this gate's checkout.
-      # The cache key names the commit and the measure version; magus matches the rest
-      # by file name, and logs "reusing the kept measure" or why it measured again.
+      # .magus/conformance under a file name of its commit, measure version, policy and
+      # indexers, with no checkout path in it, so a restored one answers this gate's
+      # checkout. magus picks the entry by that name, refuses a line kept under another,
+      # and logs "reusing the kept measure" or why it measured again. So the cache key
+      # names neither the commit nor the version: the newest save holds whatever is kept.
       #
-      # The base is what the gate's magus measures. On main that is HEAD itself (the base
-      # each main run logged was its own head), so main keeps the measure of every commit
-      # a pull request can fork from. A pull request's is the merge base of its merge
-      # commit and the base branch.
-      - name: Name the conformance base
-        id: conformance
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        shell: bash
-        run: |
-          version=$(sed -n 's/^const baseMeasureVersion = "\(.*\)"$/\1/p' conformance_base.go)
-          if [ -z "$version" ]; then
-            echo "::error title=conformance::conformance_base.go declares no baseMeasureVersion this step reads; fix its sed"
-            exit 1
-          fi
-          if [ -n "$BASE_REF" ]; then
-            base=$(git merge-base HEAD "origin/$BASE_REF")
-          else
-            base=$(git rev-parse HEAD)
-          fi
-          echo "conformance base $base, measure version $version"
-          echo "base=$base" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      # Pull request only, as every unverified restore here is. What it restores is a main
-      # run's save, or this pull request's. The merge queue's gate restores nothing, so no
-      # merge verdict rests on a restored measure.
-      - name: Restore the conformance base's measure
+      # Pull request only, both ways, as the local tier is: a push restores the measures
+      # its pull request's earlier pushes saved, and main saves none. Nothing restored is
+      # verified, and an entry from outside the pull request's own saves can only be one
+      # planted in main's scope by a queue validation (docs/concepts/merge-queue.md). The
+      # queue's gate restores nothing and measures cold, so a planted measure can green
+      # a pull request's run, never a merge. A first push measures cold, and seeds head's
+      # symbol packs from the base's, so its own index re-indexes only what moved.
+      - name: Restore the conformance measures of the pull request
         if: github.event_name == 'pull_request'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .magus/conformance
-          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}
+          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-stage1-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}-
-
-      # The save below runs only when the gate kept a measure the restore did not bring.
-      - name: Note the conformance measures already kept
-        id: conformance-kept
-        shell: bash
-        run: echo "digest=${{ hashFiles(format('.magus/conformance/{0}-*.jsonl', steps.conformance.outputs.base)) }}" >> "$GITHUB_OUTPUT"
+            ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-
 
       # The symbol packs, so the gate's scip freshens only the packages that changed: the
       # cold Go index took 4m33 of stage zero's critical path in run 43519003561, where
@@ -823,9 +773,10 @@ jobs:
       # A pack sits at a path keyed on the project's workspace-relative directory, and a
       # unit's digest hashes paths relative to the package, so no checkout path enters
       # either. Only the packs: a .fresh stamp holds the step key, which a restore never
-      # matches. Any older pack is a valid start, since UpdatePack re-indexes each unit
-      # whose digest moved. A pull request restores its own newest save, else main's.
-      - name: Restore the symbol index
+      # matches. Any older pack is a valid start: UpdatePack re-indexes each unit whose
+      # digest moved, and each dependent such a unit made stale. Pull request only, both
+      # ways, as the measures above are, and as unverified.
+      - name: Restore the symbol index of the pull request
         if: github.event_name == 'pull_request'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1050,20 +1001,19 @@ jobs:
             .magus/spell-caches/golang/GOMODCACHE
           key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage1-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
-      # Saved by whichever shard measured the base, on main and on a pull request alike:
-      # main's save lands in the scope every pull request reads, a pull request's in its own.
-      # A measure is of the base commit, not the shard, so a red shard's is as good.
-      - name: Save the conformance base's measure
-        if: (success() || failure()) && hashFiles(format('.magus/conformance/{0}-*.jsonl', steps.conformance.outputs.base)) != steps.conformance-kept.outputs.digest
+      # Saved by each shard holding a measure. A measure is of the base commit, not the
+      # shard, so a red shard's is as good.
+      - name: Save the conformance measures of the pull request
+        if: github.event_name == 'pull_request' && (success() || failure()) && hashFiles('.magus/conformance/*.jsonl') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .magus/conformance
-          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}-stage1-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-stage1-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # One save a run, from the shard holding the most root units, so the packs of every
       # push do not crowd the remote tier's entries out of the Actions cache quota.
-      - name: Save the symbol index
-        if: (success() || failure()) && contains(format(' {0} ', matrix.duties), ' cache-export ') && hashFiles('.magus/symbols/*/scip.pack') != ''
+      - name: Save the symbol index of the pull request
+        if: github.event_name == 'pull_request' && (success() || failure()) && contains(format(' {0} ', matrix.duties), ' cache-export ') && hashFiles('.magus/symbols/*/scip.pack') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .magus/symbols/*/*.pack
