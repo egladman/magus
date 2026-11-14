@@ -1321,6 +1321,7 @@
 {"group":"dir:internal/guard","path":"internal/guard/search_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/session_advise.go"}
 {"group":"dir:internal/guard","path":"internal/guard/session_advise_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/shard_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/shell.go"}
 {"group":"dir:internal/guard","path":"internal/guard/shell_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/skill.go"}
