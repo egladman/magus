@@ -1902,6 +1902,7 @@
 {"group":"dir:libs/proofread/train/wordclass","path":"libs/proofread/train/wordclass/sentences_test.go"}
 {"group":"dir:libs/proofread/train/wordclass","path":"libs/proofread/train/wordclass/train.go"}
 {"group":"dir:libs/proofread/train/wordclass","path":"libs/proofread/train/wordclass/train_test.go"}
+{"group":"dir:libs/scipbuzz/testdata/nested-namespace-literal/lib","path":"libs/scipbuzz/testdata/nested-namespace-literal/lib/shapes.buzz"}
 {"group":"dir:libs/scipbuzz/testdata/snapshots/gen/closures","path":"libs/scipbuzz/testdata/snapshots/gen/closures/main.buzz"}
 {"group":"dir:libs/scipbuzz/testdata/snapshots/gen/generics","path":"libs/scipbuzz/testdata/snapshots/gen/generics/main.buzz"}
 {"group":"dir:libs/scipbuzz/testdata/snapshots/input/imports_relative/lib","path":"libs/scipbuzz/testdata/snapshots/input/imports_relative/lib/util.buzz"}
