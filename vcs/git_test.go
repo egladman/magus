@@ -4233,19 +4233,15 @@ func TestCreateCheckoutReusesABranchAtTheRevision(t *testing.T) {
 	require.ErrorContains(t, err, "would strand them", "a branch holding commits past the revision is never reused")
 }
 
+// AttrsSpaceSuite builds a repository only in the test that installs into it.
 type AttrsSpaceSuite struct {
 	suite.Suite
-	dir string
 }
 
 func TestAttrsSpaceSuite(t *testing.T) { suite.Run(t, new(AttrsSpaceSuite)) }
 
-func (s *AttrsSpaceSuite) SetupTest() {
-	s.dir = testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"}).Root()
-}
-
-func (s *AttrsSpaceSuite) attr(name, path string) string {
-	out, err := exec.Command("git", "-C", s.dir, "check-attr", name, "--", path).Output()
+func (s *AttrsSpaceSuite) attr(dir, name, path string) string {
+	out, err := exec.Command("git", "-C", dir, "check-attr", name, "--", path).Output()
 	s.Require().NoError(err)
 	return strings.TrimSpace(string(out))
 }
@@ -4263,15 +4259,16 @@ func (s *AttrsSpaceSuite) TestPatternWithoutASpaceStaysBare() {
 }
 
 func (s *AttrsSpaceSuite) TestGitMatchesAQuotedPatternAndCheckPasses() {
+	dir := testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"}).Root()
 	globs := types.MergeDriverGlobs{Outputs: []string{"docs/reference/config *.md"}}
-	s.Require().NoError(gitVCS{}.InstallMergeDriver(s.T().Context(), s.dir, globs))
+	s.Require().NoError(gitVCS{}.InstallMergeDriver(s.T().Context(), dir, globs))
 
-	got := s.attr("merge", "docs/reference/config x.md")
-	ok, err := gitVCS{}.CheckMergeDriver(s.T().Context(), s.dir)
+	got := s.attr(dir, "merge", "docs/reference/config x.md")
+	ok, err := gitVCS{}.CheckMergeDriver(s.T().Context(), dir)
 
 	s.Equal("docs/reference/config x.md: merge: magus", got)
 	s.Require().NoError(err)
 	s.True(ok)
-	_, statErr := os.Stat(filepath.Join(s.dir, ".gitattributes"))
+	_, statErr := os.Stat(filepath.Join(dir, ".gitattributes"))
 	s.NoError(statErr)
 }
