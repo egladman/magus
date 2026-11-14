@@ -28,7 +28,7 @@ import (
 
 // formatVersion changes whenever a shard this indexer writes would come out different
 // for the same source, so a pack written before is rebuilt whole.
-const formatVersion = "goindex 4"
+const formatVersion = "goindex 5"
 
 // scheme is the SCIP scheme of every symbol the indexer names. Keys drop it with the
 // version, so a key matches the one scip-go named the same symbol by.
@@ -778,6 +778,10 @@ func receiverNamed(t types.Type) *types.Named {
 // scanFields records the owner path of every field of p's named struct types, nested
 // anonymous structs included (Outer#field.inner), and of a package-level variable's
 // anonymous struct (v:field.), the descriptors scip-go gave each.
+//
+// Types declared one from another (type b A) share one struct, so a field has
+// several owners. The first in scope order wins. Exported names sort first,
+// so a load from export data, which omits unexported types, names it too.
 func (w *walker) scanFields(p *types.Package) {
 	if w.scanned[p] {
 		return
@@ -788,7 +792,9 @@ func (w *walker) scanFields(p *types.Package) {
 		for i := range st.NumFields() {
 			f := st.Field(i)
 			descs := append(slices.Clone(prefix), &scip.Descriptor{Name: f.Name(), Suffix: scip.Descriptor_Term})
-			w.owners[f] = descs
+			if _, owned := w.owners[f]; !owned {
+				w.owners[f] = descs
+			}
 			if inner, ok := f.Type().(*types.Struct); ok {
 				walk(inner, descs)
 			}

@@ -442,6 +442,21 @@ func (s *goindexSuite) TestAMethodAnEmbeddedTypeGainsReachesTheEmbeddersPack() {
 	s.Equal(s.read(cold), s.read(pack))
 }
 
+// Re-indexing d alone loads a from export data, which omits admissionWire.
+func (s *goindexSuite) TestAFieldTwoTypesShareNamesOneOwnerUnderEveryLoad() {
+	s.write("a/wire.go", "package a\n\ntype Admission struct{ Project string }\n\ntype admissionWire Admission\n")
+	s.write("d/d.go", "package d\n\nimport \"example.com/m/a\"\n\nfunc P(x a.Admission) string { return x.Project }\n")
+	_, pack := s.update(s.indexer())
+	s.write("d/d.go", "package d\n\nimport \"example.com/m/a\"\n\nfunc P(x a.Admission) string { return x.Project + \"\" }\n")
+
+	res, err := symbols.UpdatePack(s.T().Context(), pack, s.indexer())
+	s.Require().NoError(err)
+	_, cold := s.update(s.indexer())
+
+	s.Equal(symbols.UpdateResult{Indexed: []string{"example.com/m/d"}, Kept: 3}, res)
+	s.Equal(s.read(cold), s.read(pack))
+}
+
 func (s *goindexSuite) read(path string) []byte {
 	data, err := os.ReadFile(path)
 	s.Require().NoError(err)
