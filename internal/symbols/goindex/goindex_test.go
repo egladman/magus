@@ -424,6 +424,22 @@ func (s *goindexSuite) TestAnotherTreesPackOfTheSameSourceIsKeptWhole() {
 	s.Equal(before, s.read(seeded))
 }
 
+// d's digest never moves, but the method its Wrapper promotes from a.Base does.
+func (s *goindexSuite) TestAMethodAnEmbeddedTypeGainsReachesTheEmbeddersPack() {
+	s.write("a/base.go", "package a\n\ntype Base struct{}\n\nfunc (Base) First() {}\n")
+	s.write("d/d.go", "package d\n\nimport \"example.com/m/a\"\n\ntype Wrapper struct{ a.Base }\n")
+	_, pack := s.update(s.indexer())
+	s.write("a/base.go", "package a\n\ntype Base struct{}\n\nfunc (Base) First() {}\n\nfunc (Base) Second() {}\n")
+
+	res, err := symbols.UpdatePack(s.T().Context(), pack, s.indexer())
+	s.Require().NoError(err)
+	_, cold := s.update(s.indexer())
+
+	s.Equal([]string{"example.com/m/a"}, res.Indexed)
+	s.Equal([]string{"example.com/m/d"}, res.Dependents)
+	s.Equal(s.read(cold), s.read(pack))
+}
+
 func (s *goindexSuite) read(path string) []byte {
 	data, err := os.ReadFile(path)
 	s.Require().NoError(err)
