@@ -115,6 +115,25 @@ output` follows the same hops as before.
 verifies under. A sized `magus affected ci` gets the stripped set and says `this sized
 ci run verifies only` when rw was carried.
 
+### 5. The needs-direction precedent
+
+`needs-direction` mines one row per ordered pair of target names from the graph alone:
+target nodes and the `depends_on` edges between targets of one project. The cohort is
+the projects that define both targets, the projects whose first target reaches the
+second through its needs follow, and the rest are departures. A cross-project need
+orders projects, not one project's targets, so it is not followed. A pair no project
+follows makes no row. The gates are the other families' (`min_cohort` 5, `min_share`
+0.8). No target name is written anywhere: the pairs are whatever the workspace's own
+projects define.
+
+No rule drops a departure that follows from another. A project whose `format` does
+not reach `generate` also departs from `ci` reaching `generate`, and both are listed:
+fixing the cause clears them together. `hack/lint/code-follows-mined-precedents.buzz`
+judges the family once, with no language, and a sanction names the node and the pair.
+It is not a shipped doctor check: the doctor runner has no graph, and the known false
+firings (a test fixture, a target that does a different job under a common name, a
+need made by a direct call the graph does not see) are a workspace's to sanction.
+
 ### State
 
 | item                                                                                    | State                                 |
@@ -124,11 +143,11 @@ ci run verifies only` when rw was carried.
 | the repair loop in `RunCI`, its retry and its stops                                     | done                                  |
 | the content snapshot of the working tree's changed paths                                | done                                  |
 | MGS3057 `UncommittedRepair`                                                             | done                                  |
-| the MGS3057 reference page                                                              | planned (outside this change's lease) |
+| the MGS3057 reference page                                                              | done                                  |
 | `magus run ci`, `magus affected ci` and `magus x ci` carry the charms                   | done                                  |
 | the sized-run line                                                                      | done                                  |
 | the guard's `affected` case                                                             | not built (see Alternatives)          |
-| the needs-direction precedent family and its lint branch                                | planned (outside this change's lease) |
+| the needs-direction precedent family and its lint branch                                | done                                  |
 | the sentences that said ci never writes                                                 | done                                  |
 
 ### Principles checked

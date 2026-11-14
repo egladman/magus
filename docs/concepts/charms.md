@@ -83,7 +83,7 @@ The project is a **positional** argument, not part of the token. See the full gr
 
 `rw` carries no special flag. Like every other charm, you activate it with a `:rw` suffix (`magus run format:rw`). There is no `-w`/`--write` shortcut and no `--write` flag: the suffix is the one way to ask for it.
 
-**CI verifies read-only.** Every pass of `Magus.RunCI` runs with `rw` and `update` stripped, so the verdict is always a verify pass over the bytes as they stand. `rw` and `update` are the two charms with this strip status; the other built-ins (`cd`, `gha`) and every workspace charm you define are ordinary vocabulary that survive into `ci`. When the run carries `rw` (`ci:rw`, or `default_charms: [rw]`), a failing target that itself declares a write and reads `rw` is run once under `rw`, then ci verifies again. A run that changed the working tree fails with MGS3057 until you commit the change; [ADR 0048](../decisions/0048-a-local-ci-repairs-a-declared-writer.md) says which targets qualify. A run without `rw`, such as a CI runner's `--no-default-charms` run, never writes.
+**CI verifies read-only.** Every pass of `Magus.RunCI` runs with `rw` and `update` stripped, so the verdict is always a verify pass over the bytes as they stand. `rw` and `update` are the two charms with this strip status; the other built-ins (`cd`, `gha`) and every workspace charm you define are ordinary vocabulary that survive into `ci`. When the run carries `rw` (`ci:rw`, or `default_charms: [rw]`), a failing target that itself declares a write and reads `rw` is run once under `rw`, then ci verifies again. A run that changed the working tree fails with [MGS3057](../reference/codes/sandbox/MGS3057.md) until you commit the change; [ADR 0048](../decisions/0048-a-local-ci-repairs-a-declared-writer.md) says which targets qualify. A run without `rw`, such as a CI runner's `--no-default-charms` run, never writes.
 
 ## The `update` charm
 
@@ -184,7 +184,7 @@ default_charms: [rw] # `magus run format` now writes; no :rw needed
 Per-run charms stack on top, exactly as if you had typed the whole set. Three things keep it safe:
 
 - **A CI runner passes `--no-default-charms`** to its ci run (`magus run ci --no-default-charms`, `magus affected ci --no-default-charms`), so it carries no `rw` and only verifies.
-- **`RunCI` verifies with `rw` and `update` stripped**, so a local `magus run ci` never re-resolves dependencies or refreshes a scanner database. Under a default `rw` it repairs a failing declared writer, then fails naming the changed files until you commit them (MGS3057). A sized `magus affected ci` verifies only.
+- **`RunCI` verifies with `rw` and `update` stripped**, so a local `magus run ci` never re-resolves dependencies or refreshes a scanner database. Under a default `rw` it repairs a failing declared writer, then fails naming the changed files until you commit them ([MGS3057](../reference/codes/sandbox/MGS3057.md)). A sized `magus affected ci` verifies only.
 - **`--no-default-charms`** ignores the defaults for one run (`magus run format --no-default-charms` to check without rewriting).
 
 `MAGUS_DEFAULT_CHARMS` (comma-separated) is the environment equivalent. It only sets the default baseline; it never changes what a charm means, so `has_charm("rw")` in spells and targets is unaffected.
