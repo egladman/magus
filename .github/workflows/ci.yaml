@@ -464,6 +464,49 @@ jobs:
             ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-
             ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-
 
+      - name: Name the conformance base
+        id: conformance
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        shell: bash
+        run: |
+          version=$(sed -n 's/^const baseMeasureVersion = "\(.*\)"$/\1/p' conformance_base.go)
+          if [ -z "$version" ]; then
+            echo "::error title=conformance::conformance_base.go declares no baseMeasureVersion this step reads; fix its sed"
+            exit 1
+          fi
+          if [ -n "$BASE_REF" ]; then
+            base=$(git merge-base HEAD "origin/$BASE_REF")
+          else
+            base=$(git rev-parse HEAD)
+          fi
+          echo "conformance base $base, measure version $version"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the conformance base's measure
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .magus/conformance
+          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}-
+
+      - name: Note the conformance measures already kept
+        id: conformance-kept
+        shell: bash
+        run: echo "digest=${{ hashFiles(format('.magus/conformance/{0}-*.jsonl', steps.conformance.outputs.base)) }}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the symbol index
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .magus/symbols/*/*.pack
+          key: ${{ github.workflow }}-magus-symbols-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-symbols-v1-${{ runner.os }}-
+
       - name: Restore the spells' caches
         uses: ./.github/actions/magus
         env:
@@ -503,9 +546,15 @@ jobs:
           name: magus-plan-${{ github.run_attempt }}
           path: ${{ github.workspace }}/.magus
 
-      - name: Free runner disk and report it
+      - name: Free runner disk if it is short, and report it
         run: |
           df -h / "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          free=$(df --output=avail -BG / | tail -n 1 | tr -dc 0-9)
+          if [ "$free" -ge 40 ]; then
+            echo "${free}G free on /, at least 40G: nothing removed"
+            exit 0
+          fi
+          echo "${free}G free on /, under 40G: removing the unused preinstalled SDKs"
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
 
@@ -544,6 +593,13 @@ jobs:
             .magus/spell-caches/golang/GOCACHE
             .magus/spell-caches/golang/GOMODCACHE
           key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage0-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Save the conformance base's measure
+        if: (success() || failure()) && hashFiles(format('.magus/conformance/{0}-*.jsonl', steps.conformance.outputs.base)) != steps.conformance-kept.outputs.digest
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .magus/conformance
+          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}-stage0-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload the cache stage zero built
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -712,6 +768,72 @@ jobs:
             ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-
             ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-
 
+      # conformance-base measures the base commit, cold, in every gate: 3m33 to 5m10 (runs
+      # 42030377752, 42002954798; 4m41 in 43519003561). The measure is kept in
+      # .magus/conformance as <commit>-v<baseMeasureVersion>-<policy>-<indexers>.jsonl, a
+      # name with no checkout path in it, so a restored one answers this gate's checkout.
+      # The cache key names the commit and the measure version; magus matches the rest
+      # by file name, and logs "reusing the kept measure" or why it measured again.
+      #
+      # The base is what the gate's magus measures. On main that is HEAD itself (the base
+      # each main run logged was its own head), so main keeps the measure of every commit
+      # a pull request can fork from. A pull request's is the merge base of its merge
+      # commit and the base branch.
+      - name: Name the conformance base
+        id: conformance
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        shell: bash
+        run: |
+          version=$(sed -n 's/^const baseMeasureVersion = "\(.*\)"$/\1/p' conformance_base.go)
+          if [ -z "$version" ]; then
+            echo "::error title=conformance::conformance_base.go declares no baseMeasureVersion this step reads; fix its sed"
+            exit 1
+          fi
+          if [ -n "$BASE_REF" ]; then
+            base=$(git merge-base HEAD "origin/$BASE_REF")
+          else
+            base=$(git rev-parse HEAD)
+          fi
+          echo "conformance base $base, measure version $version"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Pull request only, as every unverified restore here is. What it restores is a main
+      # run's save, or this pull request's. The merge queue's gate restores nothing, so no
+      # merge verdict rests on a restored measure.
+      - name: Restore the conformance base's measure
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .magus/conformance
+          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}-
+
+      # The save below runs only when the gate kept a measure the restore did not bring.
+      - name: Note the conformance measures already kept
+        id: conformance-kept
+        shell: bash
+        run: echo "digest=${{ hashFiles(format('.magus/conformance/{0}-*.jsonl', steps.conformance.outputs.base)) }}" >> "$GITHUB_OUTPUT"
+
+      # The symbol packs, so the gate's scip freshens only the packages that changed: the
+      # cold Go index took 4m33 of stage zero's critical path in run 43519003561, where
+      # stage one found that pack kept=246 rebuilt=false under another gate checkout path.
+      # A pack sits at a path keyed on the project's workspace-relative directory, and a
+      # unit's digest hashes paths relative to the package, so no checkout path enters
+      # either. Only the packs: a .fresh stamp holds the step key, which a restore never
+      # matches. Any older pack is a valid start, since UpdatePack re-indexes each unit
+      # whose digest moved. A pull request restores its own newest save, else main's.
+      - name: Restore the symbol index
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .magus/symbols/*/*.pack
+          key: ${{ github.workflow }}-magus-symbols-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-symbols-v1-${{ runner.os }}-
+
       # The caches the spells declare (Go's GOCACHE and GOMODCACHE), from the bundle main
       # signed, so a magus miss rebuilds only what changed. Restored in a box of the same
       # --cache as the gate's, which keeps them under it, where the gate's box builds with
@@ -811,15 +933,24 @@ jobs:
             fi
           done
 
-      # Run 41956616259 shard 0 hit ENOSPC in scip with 70 MB left, the log held no df, and
-      # the runner's 14 GB free is shared by the checkout, the gate's box copy with its own
-      # go build cache, test binaries, the OCI layout and .magus/symbols. The android SDK,
-      # dotnet, ghc and CodeQL are preinstalled and unused here, and removing them gives
-      # back about 25 GB. The two disk lines bracket the gate so the next overrun names
-      # what grew.
-      - name: Free runner disk and report it
+      # Run 41956616259 shard 0 hit ENOSPC in scip with 70 MB left. The checkout, the gate's
+      # box copy with its own go build cache, test binaries, the OCI layout and .magus/symbols
+      # share the root disk. Two runner shapes answer ubuntu-latest: most have a 145G root
+      # with 74-81G free, and some (image 20261018.96.1, which that ENOSPC ran on; run
+      # 42002954798's docs shard) a 72G root with 4.3G free. A shard grew .magus to 18G at
+      # most (run 42030377752). So the android SDK, dotnet, ghc and CodeQL, about 18G
+      # preinstalled and unused here, go only under 40G free: removing them cost 69-265 s a
+      # job on runners that never needed the room (run 43519003561). The two disk lines
+      # bracket the gate so the next overrun names what grew.
+      - name: Free runner disk if it is short, and report it
         run: |
           df -h / "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          free=$(df --output=avail -BG / | tail -n 1 | tr -dc 0-9)
+          if [ "$free" -ge 40 ]; then
+            echo "${free}G free on /, at least 40G: nothing removed"
+            exit 0
+          fi
+          echo "${free}G free on /, under 40G: removing the unused preinstalled SDKs"
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
 
@@ -918,6 +1049,25 @@ jobs:
             .magus/spell-caches/golang/GOCACHE
             .magus/spell-caches/golang/GOMODCACHE
           key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage1-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # Saved by whichever shard measured the base, on main and on a pull request alike:
+      # main's save lands in the scope every pull request reads, a pull request's in its own.
+      # A measure is of the base commit, not the shard, so a red shard's is as good.
+      - name: Save the conformance base's measure
+        if: (success() || failure()) && hashFiles(format('.magus/conformance/{0}-*.jsonl', steps.conformance.outputs.base)) != steps.conformance-kept.outputs.digest
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .magus/conformance
+          key: ${{ github.workflow }}-magus-conformance-v1-${{ runner.os }}-m${{ steps.conformance.outputs.version }}-${{ steps.conformance.outputs.base }}-stage1-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # One save a run, from the shard holding the most root units, so the packs of every
+      # push do not crowd the remote tier's entries out of the Actions cache quota.
+      - name: Save the symbol index
+        if: (success() || failure()) && contains(format(' {0} ', matrix.duties), ' cache-export ') && hashFiles('.magus/symbols/*/scip.pack') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .magus/symbols/*/*.pack
+          key: ${{ github.workflow }}-magus-symbols-v1-${{ runner.os }}-${{ github.sha }}-${{ github.run_attempt }}
 
       # The notes store's anchors, gated on the ONE finding worth blocking a merge for.
       #
