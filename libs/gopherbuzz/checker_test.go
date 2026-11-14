@@ -15,6 +15,7 @@ import (
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func checkSource(src string) []typeError {
@@ -1443,6 +1444,86 @@ func TestStringAccumulationStaysQuiet(t *testing.T) {
 func TestStringAccumulationReportedOnce(t *testing.T) {
 	got := typeWarnings(t, `fun build(xs: [str]) > str { var s = ""; foreach (x in xs) { s = s + x; } return s; }`)
 	require.Len(t, got, 1, "the speculative pass must not double-report")
+}
+
+// accumulationSuite covers BZZ3002 past a bare str `+` spine.
+type accumulationSuite struct{ suite.Suite }
+
+func TestAccumulationSuite(t *testing.T) { suite.Run(t, new(accumulationSuite)) }
+
+// warnsOnce asserts src carries exactly one BZZ3002 naming kind.
+func (s *accumulationSuite) warnsOnce(src, kind string) {
+	got := typeWarnings(s.T(), src)
+	s.Require().Len(got, 1)
+	s.Equal(StringAccumulation, got[0].Code)
+	s.Equal(SeverityWarning, got[0].Severity)
+	s.Contains(got[0].Msg, "the whole "+kind)
+}
+
+func (s *accumulationSuite) TestAStrRebuiltFromItsOwnSubstrings() {
+	s.warnsOnce(`var r = "a<b>c"; var i = 0;
+while (i < 3) { r = r.sub(0, len: 1) + r.sub(2); i = i + 1; }`, "string")
+}
+
+func (s *accumulationSuite) TestAStrMethodCallOnTheRightOfTheSpine() {
+	s.warnsOnce(`var r = "x"; foreach (p in ["a"]) { r = p + r.trim(); }`, "string")
+}
+
+func (s *accumulationSuite) TestAListGrownByConcatenation() {
+	s.warnsOnce(`var xs = [<int>]; foreach (x in [1, 2]) { xs = xs + [x]; }`, "list")
+}
+
+func (s *accumulationSuite) TestAListPrependedByConcatenation() {
+	s.warnsOnce(`var xs = [<int>]; foreach (x in [1, 2]) { xs = [x] + xs; }`, "list")
+}
+
+func (s *accumulationSuite) TestAMapGrownByConcatenation() {
+	s.warnsOnce(`var m = {<str: int>}; foreach (k in ["a"]) { m = m + {k: 1}; }`, "map")
+}
+
+func (s *accumulationSuite) TestTheListFixNamesAppend() {
+	got := typeWarnings(s.T(), `var xs = [<int>]; foreach (x in [1]) { xs = xs + [x]; }`)
+	s.Require().Len(got, 1)
+	s.Contains(got[0].Msg, "append()")
+}
+
+func (s *accumulationSuite) TestAListConcatOutsideALoopStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `var xs = [<int>]; xs = xs + [1];`))
+}
+
+func (s *accumulationSuite) TestAnIntBuiltFromAMethodCallStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `var n = 0; foreach (p in ["a"]) { n = n + p.len(); }`))
+}
+
+func (s *accumulationSuite) TestAMethodCallOnAnotherNameStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `var r = ""; final t = "ab";
+foreach (p in ["a"]) { r = t.sub(1) + p; }`))
+}
+
+func (s *accumulationSuite) TestAStrDeclaredInsideTheLoopStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `foreach (p in ["<a>"]) {
+    var tag = p;
+    tag = "<b " + tag.sub(3);
+}`))
+}
+
+func (s *accumulationSuite) TestAStrDeclaredInsideAForBodyStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `for (i: int = 0; i < 2; i = i + 1) {
+    var tag = "x";
+    tag = tag + "y";
+}`))
+}
+
+func (s *accumulationSuite) TestAnOuterStrRebuiltInANestedLoopWarns() {
+	s.warnsOnce(`var r = "";
+foreach (p in ["a"]) {
+    final q = p;
+    foreach (c in ["b"]) { r = r + q + c; }
+}`, "string")
+}
+
+func (s *accumulationSuite) TestAListRebuiltWithoutConcatenationStaysQuiet() {
+	s.Empty(typeWarnings(s.T(), `var xs = [1, 2]; foreach (x in [1]) { xs = xs.sub(1); }`))
 }
 
 func TestImmutableWriteIsRejected(t *testing.T) {

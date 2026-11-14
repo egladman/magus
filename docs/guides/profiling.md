@@ -155,10 +155,11 @@ fine and stays fine. The cost is the pattern multiplied by the input, so the
 same three lines are harmless over a config file and fatal over a coverage
 profile.
 
-That is also why magus does not lint for it. A source scan for `x = x + …` across
-this repository flags several hundred sites, nearly all of them loop counters and
-small string building. No static check can see the input size, so magus measures
-instead and speaks only when the measurement says something.
+The Buzz checker warns on the shape, as BZZ3002: a `str`, list or map declared
+outside a loop and rebuilt inside it with `+` from itself. It reads types, so
+loop counters stay quiet, and the warning never fails a run. No static check can
+see the input size, so magus also measures, and speaks only when the
+measurement says something.
 
 ## Declaring what a target needs
 

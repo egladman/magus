@@ -98,10 +98,11 @@ type checker struct {
 	// warnings are non-fatal diagnostics; they never fail Exec/Compile. Kept apart from
 	// errors so a caller cannot mistake one for the other by length alone.
 	warnings []typeError
-	// loopDepth counts the enclosing loop bodies being checked, so a statement can ask
-	// whether it runs repeatedly. Only the BODY counts: a for-clause is not a loop body.
-	loopDepth int
-	scopes    []map[string]scopeEntry
+	// loopScopes holds len(scopes) at each enclosing loop body's entry,
+	// so a statement can ask whether it runs repeatedly.
+	// Only the BODY counts: a for-clause is not a loop body.
+	loopScopes []int
+	scopes     []map[string]scopeEntry
 	retTyp    types.Type
 	// retWant is the expected type for a returned value: retTyp, or the
 	// anonObjectType of an `obj{ ... }` return annotation that retTyp erases.
@@ -484,6 +485,22 @@ func (c *checker) popScope() {
 
 func (c *checker) define(name string, typ types.Type, isConst bool) {
 	c.scopes[len(c.scopes)-1][name] = scopeEntry{typ: typ, isConst: isConst}
+}
+
+func (c *checker) enterLoop() { c.loopScopes = append(c.loopScopes, len(c.scopes)) }
+
+func (c *checker) leaveLoop() { c.loopScopes = c.loopScopes[:len(c.loopScopes)-1] }
+
+// declaredOutsideLoop reports whether name binds outside the innermost loop
+// body, so every pass of that loop sees the value the last one left.
+func (c *checker) declaredOutsideLoop(name string) bool {
+	entry := c.loopScopes[len(c.loopScopes)-1]
+	for i := len(c.scopes) - 1; i >= 0; i-- {
+		if _, ok := c.scopes[i][name]; ok {
+			return i < entry
+		}
+	}
+	return true
 }
 
 func (c *checker) lookup(name string) (scopeEntry, bool) {
@@ -882,13 +899,13 @@ func (c *checker) checkStmt(n ast.Node) {
 		if cond != types.Any && cond != types.Unknown && cond != types.Bool {
 			c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "while condition must be bool, got %s", cond.TypeName())
 		}
-		c.loopDepth++
+		c.enterLoop()
 		c.checkBlock(v.Body)
-		c.loopDepth--
+		c.leaveLoop()
 	case *ast.DoStmt:
-		c.loopDepth++
+		c.enterLoop()
 		c.checkBlock(v.Body)
-		c.loopDepth--
+		c.leaveLoop()
 		cond := c.infer(v.Cond)
 		if cond != types.Any && cond != types.Unknown && cond != types.Bool {
 			c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "do-until condition must be bool, got %s", cond.TypeName())
@@ -907,16 +924,17 @@ func (c *checker) checkStmt(n ast.Node) {
 		for _, post := range v.Post {
 			c.checkStmt(post)
 		}
-		c.loopDepth++
+		// The body shares the clause scope, so both count as inside the loop.
+		c.loopScopes = append(c.loopScopes, len(c.scopes)-1)
 		for _, s := range v.Body.Stmts {
 			c.checkStmt(s)
 		}
-		c.loopDepth--
+		c.leaveLoop()
 		c.popScope()
 	case *ast.ForEachStmt:
-		c.loopDepth++
+		c.enterLoop()
 		c.checkForEach(v)
-		c.loopDepth--
+		c.leaveLoop()
 	case *ast.FunDecl:
 		c.checkFunDecl(v)
 	case *ast.TestDecl:
@@ -1217,23 +1235,44 @@ func (c *checker) checkBlock(b *ast.BlockStmt) {
 // Deliberately narrow: only a bare `+` spine with the target as one of its operands counts,
 // so `s = trim(s)` or `s = s.sub(1)` stay quiet. Those rebuild s too, but they do not GROW
 // it, and warning on every mention of s on the right would make this noise.
+//
+// A list or map `+` copies the same way. An operand may be a method call on the
+// target, as in `r = r.sub(0, len: i) + r.sub(j)`, which copies r per pass. A
+// target declared inside the loop body starts over each pass and stays quiet.
 func (c *checker) flagStringAccumulation(v *ast.AssignStmt) {
-	if c.loopDepth == 0 {
+	if len(c.loopScopes) == 0 {
 		return
 	}
 	id, ok := v.Target.(*ast.IdentExpr)
-	if !ok {
+	if !ok || !c.declaredOutsideLoop(id.Name) {
 		return
 	}
-	if e, found := c.lookup(id.Name); !found || e.typ != types.Str {
+	e, found := c.lookup(id.Name)
+	if !found {
 		return
 	}
-	if !concatSpineRefers(v.Value, id.Name) {
+	kind, fix := accumulationFix(e.typ)
+	if fix == "" || !concatSpineRefers(v.Value, id.Name) {
 		return
 	}
 	c.warnfc(v.Pos, StringAccumulation,
-		"%q is rebuilt from itself inside a loop, copying the whole string every iteration; collect the parts in a list and join() it once",
-		id.Name)
+		"%q is rebuilt from itself inside a loop, copying the whole %s every iteration; %s",
+		id.Name, kind, fix)
+}
+
+// accumulationFix names what a `+` rebuild of a t copies and what to write
+// instead. fix is empty for a type whose `+` copies nothing that grows.
+func accumulationFix(t types.Type) (kind, fix string) {
+	switch t.(type) {
+	case *types.ListType:
+		return "list", "append() to a mut list instead"
+	case *types.MapType:
+		return "map", "set the keys on a mut map instead"
+	}
+	if t == types.Str {
+		return "string", "collect the parts in a list and join() it once"
+	}
+	return "", ""
 }
 
 // flagRedundantUnwrap warns on `!` applied to an operand proven non-optional.
@@ -1267,14 +1306,15 @@ func (c *checker) flagDiscardedValue(v *ast.ExprStmt, t types.Type) {
 	c.warnfc(v.Pos, DiscardedValue, "discarded value of type `%s`", t.TypeName())
 }
 
-// concatSpineRefers reports whether n is a `+` chain carrying name as a direct operand.
+// concatSpineRefers reports whether n is a `+` chain carrying name, or a method
+// call on name, as a direct operand.
 func concatSpineRefers(n ast.Node, name string) bool {
 	bin, ok := n.(*ast.BinaryExpr)
 	if !ok || bin.Op != "+" {
 		return false
 	}
 	for _, side := range []ast.Node{bin.Left, bin.Right} {
-		if id, ok := side.(*ast.IdentExpr); ok && id.Name == name {
+		if isIdentNamed(side, name) || isMethodCallOn(side, name) {
 			return true
 		}
 		if concatSpineRefers(side, name) {
@@ -1282,6 +1322,21 @@ func concatSpineRefers(n ast.Node, name string) bool {
 		}
 	}
 	return false
+}
+
+func isIdentNamed(n ast.Node, name string) bool {
+	id, ok := n.(*ast.IdentExpr)
+	return ok && id.Name == name
+}
+
+// isMethodCallOn reports whether n is `name.method(...)`.
+func isMethodCallOn(n ast.Node, name string) bool {
+	call, ok := n.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	member, ok := call.Callee.(*ast.MemberExpr)
+	return ok && !member.Namespaced && isIdentNamed(member.Object, name)
 }
 
 func (c *checker) checkForEach(v *ast.ForEachStmt) {
