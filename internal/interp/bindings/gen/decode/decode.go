@@ -8499,6 +8499,45 @@ func decodeMagusDiffOptions(v vm.Value, path string) (types.MagusDiffOptions, er
 	return out, nil
 }
 
+// DecodeMagusSubcommand decodes a Buzz Subcommand, an object instance or a map, into a types.MagusSubcommand.
+func DecodeMagusSubcommand(v vm.Value) (types.MagusSubcommand, error) {
+	return decodeMagusSubcommand(v, "subcommand")
+}
+
+func decodeMagusSubcommand(v vm.Value, path string) (types.MagusSubcommand, error) {
+	var out types.MagusSubcommand
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Subcommand", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "sub":
+			sSub, err := decodeString(item, path+".sub")
+			if err != nil {
+				return out, err
+			}
+			out.Sub = sSub
+		case "args":
+			strsArgs, err := decodeStringList(item, path+".args")
+			if err != nil {
+				return out, err
+			}
+			out.Args = strsArgs
+		case "opts":
+			xOpts, err := decodeMagusCommandOptions(item, path+".opts")
+			if err != nil {
+				return out, err
+			}
+			out.Opts = xOpts
+		default:
+			return out, unknownMember(path, "Subcommand", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeJobModelTier decodes a Buzz JobModelTier, an object instance or a map, into a typesagent.JobModelTier.
 func DecodeJobModelTier(v vm.Value) (typesagent.JobModelTier, error) {
 	return decodeJobModelTier(v, "jobModelTier")

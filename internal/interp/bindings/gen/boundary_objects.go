@@ -6604,6 +6604,18 @@ func ObjectMagusDiffOptions(v types.MagusDiffOptions) vm.Value {
 	return out
 }
 
+func ObjectMagusSubcommand(v types.MagusSubcommand) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("sub", vm.StringValue(v.Sub))
+	itemsArgs := make([]vm.Value, len(v.Args))
+	for indexArgs := range v.Args {
+		itemsArgs[indexArgs] = vm.StringValue(v.Args[indexArgs])
+	}
+	out.MapSet("args", vm.ListValue(itemsArgs))
+	out.MapSet("opts", ObjectMagusCommandOptions(v.Opts))
+	return out
+}
+
 func ObjectTrailReadOptions(v trail.ReadOptions) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("session", vm.StringValue(v.Session))

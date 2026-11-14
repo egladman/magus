@@ -295,6 +295,8 @@ magus\project({
         // Four of a 10-core machine's 10 slots: the seat runs go test -p 4 with GOMAXPROCS=4,
         // so two suites and the other workers' builds share the machine the broker counts.
         "go-test": {"slots": 4},
+        // Its magus\cmdAll runs one `magus buzz -t` per slot the step holds.
+        "buzz-test": {"slots": 4},
         // Measured over 159 scip-go runs longer than 10 s: p75 width 3.6 cores, p75 peak 1.7 GiB,
         // max 2.9 GiB. Undeclared, each claimed 1 slot and 0 MiB, so the broker admitted
         // every worker's graph build at once and scip-go took every core.
@@ -2426,25 +2428,9 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // proofread_build above links the binary that hack/lint/run.buzz invokes.
     fs\mkdirAll("coverage/buzz");
     final runs = buzzcov\runs();
-    // A batch shares one opts, so one batch per dir. Each runs to its end, so
-    // every failure is named before the target fails.
-    final dirs = mut [<str>];
-    foreach (run in runs) {
-        if (dirs.indexOf(run.dir) == null) { dirs.append(run.dir); }
-    }
-    final failed = mut [<str>];
-    foreach (dir in dirs) {
-        final argvs = mut [<[str]>];
-        foreach (run in runs) {
-            if (run.dir == dir) { argvs.append(run.argv); }
-        }
-        try {
-            _ = magus\cmdAll("buzz", args: argvs, opts: magus\CommandOptions{dir = dir});
-        } catch (e: any) {
-            failed.append("{e}");
-        }
-    }
-    if (failed.len() > 0) { throw failed.join("\n"); }
+    // Every command runs to its end, so the failure names each one that failed.
+    _ = magus\cmdAll(runs.map(fun (index: int, run: buzzcov\Run) > magus\Subcommand
+        => magus\Subcommand{sub = "buzz", args = run.argv, opts = magus\CommandOptions{dir = run.dir}}));
     final fragments = mut [<str>];
     foreach (run in runs) {
         buzzcov\keep(fragments, run: run);

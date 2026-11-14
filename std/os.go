@@ -19,7 +19,6 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/libs/termkit"
@@ -659,75 +658,100 @@ func ProcWithSlots(ctx context.Context, n int, cb func(ctx context.Context) erro
 	return cb(ctx)
 }
 
-// eachSeated runs run(ctx, i) for each i below n, one limiter slot each.
-// The caller's slots are handed back meanwhile. Output is replayed in index
-// order. Every started call finishes; errs[i] is call i's error.
-func eachSeated(ctx context.Context, n int, label func(i int) string, run func(ctx context.Context, i int) error) []error {
+// runSeated runs call(ctx, i) for each i below n, as many at once as the
+// caller's step holds slots. The step keeps them throughout, so a batch runs
+// as wide as it was granted. errs[i] is call i's error.
+func runSeated(ctx context.Context, n int, label func(i int) string, call func(ctx context.Context, i int) error) []error {
 	errs := make([]error, n)
-	lim := cache.LimiterFromContext(ctx)
-	if lim == nil {
-		// A bare `magus buzz` script: nothing budgets the machine.
-		if n > 1 {
-			slog.InfoContext(ctx, "no concurrency limiter on the context, so the commands run one at a time", "commands", n)
-		}
-		for i := range n {
-			errs[i] = run(ctx, i)
-		}
-		return errs
-	}
-	_ = proc.RunChildSync(ctx, lim, func() error {
-		seatAll(ctx, lim, n, label, run, errs)
-		return nil
-	})
-	return errs
-}
-
-// seatAll admits each call in index order and replays each one's output in
-// that order once it ends. A refused slot starts nothing further.
-func seatAll(ctx context.Context, lim *cache.Limiter, n int, label func(i int) string, run func(ctx context.Context, i int) error, errs []error) {
-	outputs := make([]*orderedOutput, n)
-	done := make([]chan struct{}, n)
-	for i := range n {
-		outputs[i] = &orderedOutput{beat: cache.ProgressFromContext(ctx).Beat}
-		done[i] = make(chan struct{})
-	}
-	flushed := make(chan struct{})
-	go func() {
-		defer close(flushed)
-		stdout, stderr := spawn.OutputWriters(ctx)
-		for i := range n {
-			<-done[i]
-			outputs[i].replay(stdout, stderr)
-		}
-	}()
+	stdout, stderr := spawn.OutputWriters(ctx)
+	sink := &blockSink{stdout: stdout, stderr: stderr}
+	beat := cache.ProgressFromContext(ctx).Beat
+	seats := make(chan struct{}, seatWidth(ctx, n))
 	var wg sync.WaitGroup
 	for i := range n {
-		seat, release, err := lim.Admit(ctx, label(i))
-		if err != nil {
+		if err := takeSeat(ctx, seats); err != nil {
 			for j := i; j < n; j++ {
 				errs[j] = fmt.Errorf("%s: not started: %w", label(j), err)
-				close(done[j])
 			}
 			break
 		}
-		seat = spawn.WithOutputWriters(seat, outputs[i].writer(false), outputs[i].writer(true))
+		out := &callOutput{sink: sink, beat: beat}
+		seated := spawn.WithOutputWriters(ctx, streamWriter{out: out}, streamWriter{out: out, stderr: true})
 		wg.Go(func() {
-			defer close(done[i])
-			defer release()
-			errs[i] = run(seat, i)
+			defer func() { <-seats }()
+			defer out.flush()
+			errs[i] = call(seated, i)
 		})
 	}
 	wg.Wait()
-	<-flushed
+	return errs
 }
 
-// orderedOutput keeps one call's writes to both streams in write order.
-// Each write beats the step's progress: the run's taps see nothing until
-// the replay.
-type orderedOutput struct {
+// takeSeat takes one of seats. A done ctx refuses even with a seat free,
+// so a cancelled batch starts nothing more.
+func takeSeat(ctx context.Context, seats chan struct{}) error {
+	if err := context.Cause(ctx); err != nil {
+		return err
+	}
+	select {
+	case seats <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	}
+}
+
+// seatWidth is how many of n calls runSeated runs at once.
+func seatWidth(ctx context.Context, n int) int {
+	if n < 2 {
+		return 1
+	}
+	if cache.LimiterFromContext(ctx) == nil {
+		slog.InfoContext(ctx, "no concurrency limiter on the context, so the commands run one at a time", "commands", n)
+		return 1
+	}
+	held := cache.SlotsHeld(ctx)
+	if held < 1 {
+		slog.InfoContext(ctx, "the caller holds no slot of the concurrency limiter, so the commands run one at a time", "commands", n)
+		return 1
+	}
+	return held
+}
+
+// callBlockBytes bounds what one call buffers before its output so far is
+// written as a block.
+const callBlockBytes = 1 << 20
+
+// blockSink writes one block at a time, so two calls' output never
+// interleaves inside a block.
+type blockSink struct {
+	mu     sync.Mutex
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func (s *blockSink) write(block []outputChunk) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range block {
+		w := s.stdout
+		if c.stderr {
+			w = s.stderr
+		}
+		_, _ = w.Write(c.data) // a failed console write has nowhere else to go
+	}
+}
+
+// callOutput holds one call's writes to both streams in write order. They are
+// written as a block when the call ends, or once callBlockBytes have built up.
+// Each write beats the step's progress: its taps see nothing until then.
+type callOutput struct {
+	sink *blockSink
+	beat func()
+	// mu is held across a block's write, so one call's blocks keep order.
 	mu     sync.Mutex
 	chunks []outputChunk
-	beat   func()
+	size   int
 }
 
 type outputChunk struct {
@@ -735,32 +759,37 @@ type outputChunk struct {
 	data   []byte
 }
 
-func (o *orderedOutput) writer(stderr bool) io.Writer {
-	return outputStream{o: o, stderr: stderr}
+func (o *callOutput) write(stderr bool, p []byte) {
+	o.mu.Lock()
+	o.chunks = append(o.chunks, outputChunk{stderr: stderr, data: slices.Clone(p)})
+	o.size += len(p)
+	if o.size >= callBlockBytes {
+		o.flushLocked()
+	}
+	o.mu.Unlock()
+	o.beat()
 }
 
-func (o *orderedOutput) replay(stdout, stderr io.Writer) {
+func (o *callOutput) flush() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	for _, c := range o.chunks {
-		w := stdout
-		if c.stderr {
-			w = stderr
-		}
-		_, _ = w.Write(c.data)
-	}
-	o.chunks = nil
+	o.flushLocked()
 }
 
-type outputStream struct {
-	o      *orderedOutput
+func (o *callOutput) flushLocked() {
+	if len(o.chunks) > 0 {
+		o.sink.write(o.chunks)
+	}
+	o.chunks, o.size = nil, 0
+}
+
+// streamWriter is one stream of a callOutput.
+type streamWriter struct {
+	out    *callOutput
 	stderr bool
 }
 
-func (s outputStream) Write(p []byte) (int, error) {
-	s.o.mu.Lock()
-	s.o.chunks = append(s.o.chunks, outputChunk{stderr: s.stderr, data: slices.Clone(p)})
-	s.o.mu.Unlock()
-	s.o.beat()
+func (w streamWriter) Write(p []byte) (int, error) {
+	w.out.write(w.stderr, p)
 	return len(p), nil
 }

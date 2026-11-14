@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -960,32 +961,95 @@ func TestProcExecDetachRefusesWhatNothingCouldHonor(t *testing.T) {
 	_, err := ProcExec(ctx, "true", nil, "", types.ExecOptions{Detach: true})
 	assert.ErrorContains(t, err, "sandbox policy")
 }
+type RunSeatedSuite struct{ suite.Suite }
 
-type EachSeatedSuite struct{ suite.Suite }
-
-func TestEachSeatedSuite(t *testing.T) { suite.Run(t, new(EachSeatedSuite)) }
+func TestRunSeatedSuite(t *testing.T) { suite.Run(t, new(RunSeatedSuite)) }
 
 func seatLabel(i int) string { return fmt.Sprintf("call %d", i) }
 
-// The later calls finish first, yet each call's output reaches the run's
-// writers in index order.
-func (s *EachSeatedSuite) TestOutputReplaysInIndexOrder() {
-	var out bytes.Buffer
-	ctx := spawn.WithOutputWriters(cache.ContextWithLimiter(s.T().Context(), cache.NewLimiter(4)), &out, &out)
-	errs := eachSeated(ctx, 4, seatLabel, func(ctx context.Context, i int) error {
-		time.Sleep(time.Duration(4-i) * 10 * time.Millisecond)
+// stepHolding is a context whose step holds n slots of a limiter of capacity.
+func (s *RunSeatedSuite) stepHolding(capacity, n int) (context.Context, *cache.Limiter) {
+	lim := cache.NewLimiter(capacity)
+	s.Require().NoError(lim.AcquireN(s.T().Context(), n))
+	s.T().Cleanup(func() { lim.ReleaseN(n) })
+	return cache.WithSlotsHeld(cache.ContextWithLimiter(s.T().Context(), lim), n), lim
+}
+
+// recorder is a run writer a call can watch from inside the batch.
+type recorder struct {
+	mu   sync.Mutex
+	buf  bytes.Buffer
+	seen map[string]chan struct{}
+}
+
+func newRecorder(watch ...string) *recorder {
+	r := &recorder{seen: map[string]chan struct{}{}}
+	for _, w := range watch {
+		r.seen[w] = make(chan struct{})
+	}
+	return r
+}
+
+func (r *recorder) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.buf.Write(p)
+	if ch, ok := r.seen[string(p)]; ok {
+		close(ch)
+		delete(r.seen, string(p))
+	}
+	return len(p), nil
+}
+
+func (r *recorder) String() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.buf.String()
+}
+
+// Call 0 waits until call 1's output reached the console, so a slow call
+// holds back only its own output.
+func (s *RunSeatedSuite) TestOutputReachesTheWritersAsEachCallEnds() {
+	out := newRecorder("1;")
+	wrote := out.seen["1;"]
+	ctx, _ := s.stepHolding(2, 2)
+	errs := runSeated(spawn.WithOutputWriters(ctx, out, out), 2, seatLabel, func(ctx context.Context, i int) error {
 		stdout, _ := spawn.OutputWriters(ctx)
+		if i == 0 {
+			select {
+			case <-wrote:
+			case <-time.After(5 * time.Second):
+				return errors.New("call 1's output was held back")
+			}
+		}
 		_, err := fmt.Fprintf(stdout, "%d;", i)
 		return err
 	})
-	s.Equal([]error{nil, nil, nil, nil}, errs)
-	s.Equal("0;1;2;3;", out.String())
+	s.Equal([]error{nil, nil}, errs)
+	s.Equal("1;0;", out.String())
 }
 
-func (s *EachSeatedSuite) TestStdoutAndStderrKeepTheirStreams() {
+func (s *RunSeatedSuite) TestOneCallsOutputIsNotInterleavedWithAnothers() {
+	out := newRecorder()
+	ctx, _ := s.stepHolding(4, 4)
+	runSeated(spawn.WithOutputWriters(ctx, out, out), 4, seatLabel, func(ctx context.Context, i int) error {
+		stdout, _ := spawn.OutputWriters(ctx)
+		for range 3 {
+			_, _ = fmt.Fprintf(stdout, "%d", i)
+		}
+		return nil
+	})
+	got := out.String()
+	s.Len(got, 12)
+	for i := range 4 {
+		s.Contains(got, strings.Repeat(strconv.Itoa(i), 3))
+	}
+}
+
+func (s *RunSeatedSuite) TestStdoutAndStderrKeepTheirStreams() {
 	var out, errw bytes.Buffer
-	ctx := spawn.WithOutputWriters(cache.ContextWithLimiter(s.T().Context(), cache.NewLimiter(2)), &out, &errw)
-	eachSeated(ctx, 1, seatLabel, func(ctx context.Context, _ int) error {
+	ctx, _ := s.stepHolding(1, 1)
+	runSeated(spawn.WithOutputWriters(ctx, &out, &errw), 1, seatLabel, func(ctx context.Context, _ int) error {
 		stdout, stderr := spawn.OutputWriters(ctx)
 		_, _ = fmt.Fprint(stdout, "o")
 		_, _ = fmt.Fprint(stderr, "e")
@@ -995,47 +1059,63 @@ func (s *EachSeatedSuite) TestStdoutAndStderrKeepTheirStreams() {
 	s.Equal("e", errw.String())
 }
 
-func (s *EachSeatedSuite) TestNoMoreRunAtOnceThanTheLimiterSeats() {
-	lim := cache.NewLimiter(3)
-	var running, peak atomic.Int32
-	eachSeated(cache.ContextWithLimiter(s.T().Context(), lim), 12, seatLabel, func(context.Context, int) error {
-		n := running.Add(1)
-		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
-		}
-		time.Sleep(10 * time.Millisecond)
-		running.Add(-1)
+// A call that writes callBlockBytes has its output written before it ends,
+// so buffering stays bounded.
+func (s *RunSeatedSuite) TestAChattyCallsOutputIsWrittenBeforeItEnds() {
+	out := newRecorder()
+	ctx, _ := s.stepHolding(1, 1)
+	var before int
+	runSeated(spawn.WithOutputWriters(ctx, out, out), 1, seatLabel, func(ctx context.Context, _ int) error {
+		stdout, _ := spawn.OutputWriters(ctx)
+		_, _ = stdout.Write(bytes.Repeat([]byte("x"), callBlockBytes))
+		before = len(out.String())
+		_, _ = fmt.Fprint(stdout, "end")
 		return nil
 	})
-	s.Equal(int32(3), peak.Load())
-	s.Equal(0, lim.Snapshot().Running)
+	s.Equal(callBlockBytes, before)
+	s.Len(out.String(), callBlockBytes+3)
 }
 
-// The caller's held slot is handed back, so a limiter of two runs two calls.
-func (s *EachSeatedSuite) TestTheCallersSlotIsHandedBack() {
-	lim := cache.NewLimiter(2)
-	s.Require().NoError(lim.Acquire(s.T().Context()))
-	ctx := cache.WithSlotHeld(cache.ContextWithLimiter(s.T().Context(), lim))
-	both := make(chan struct{})
-	var arrived atomic.Int32
-	errs := eachSeated(ctx, 2, seatLabel, func(context.Context, int) error {
-		if arrived.Add(1) == 2 {
-			close(both)
+// Calls wait for their siblings, so a batch any wider than the step's two
+// slots would run three at once.
+func (s *RunSeatedSuite) TestNoMoreRunAtOnceThanTheStepHoldsSlots() {
+	ctx, lim := s.stepHolding(8, 2)
+	var running, peak, arrived atomic.Int32
+	all := make(chan struct{})
+	errs := runSeated(ctx, 3, seatLabel, func(context.Context, int) error {
+		n := running.Add(1)
+		defer running.Add(-1)
+		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
+		}
+		if arrived.Add(1) == 3 {
+			close(all)
 		}
 		select {
-		case <-both:
-			return nil
-		case <-time.After(5 * time.Second):
-			return errors.New("the other call never ran beside this one")
+		case <-all:
+		case <-time.After(100 * time.Millisecond):
 		}
+		return nil
 	})
-	s.Equal([]error{nil, nil}, errs)
-	s.Equal(1, lim.Snapshot().Running, "the caller's slot is taken back")
+	s.Equal([]error{nil, nil, nil}, errs)
+	s.Equal(int32(2), peak.Load())
+	s.Equal(2, lim.Snapshot().Running, "the step's slots, never handed back")
 }
 
-func (s *EachSeatedSuite) TestEveryCallFinishesBeforeFailuresReturn() {
+func (s *RunSeatedSuite) TestTheStepKeepsItsSlotsWhileItsCallsRun() {
+	ctx, lim := s.stepHolding(2, 2)
+	var during int
+	runSeated(ctx, 1, seatLabel, func(context.Context, int) error {
+		during = lim.Snapshot().Running
+		return nil
+	})
+	s.Equal(2, during)
+}
+
+func (s *RunSeatedSuite) TestEveryCallRunsAndKeepsItsOwnError() {
+	ctx, _ := s.stepHolding(2, 2)
 	var ran atomic.Int32
 	boom := errors.New("boom")
-	errs := eachSeated(cache.ContextWithLimiter(s.T().Context(), cache.NewLimiter(2)), 6, seatLabel, func(_ context.Context, i int) error {
+	errs := runSeated(ctx, 6, seatLabel, func(_ context.Context, i int) error {
 		ran.Add(1)
 		if i == 1 || i == 4 {
 			return boom
@@ -1046,50 +1126,58 @@ func (s *EachSeatedSuite) TestEveryCallFinishesBeforeFailuresReturn() {
 	s.Equal([]error{nil, boom, nil, nil, boom, nil}, errs)
 }
 
-func (s *EachSeatedSuite) TestARefusedSlotStartsNothingFurther() {
-	lim := cache.NewLimiter(1)
-	s.Require().NoError(lim.Acquire(s.T().Context()))
-	defer lim.Release()
-	ctx, cancel := context.WithTimeout(s.T().Context(), 50*time.Millisecond)
+func (s *RunSeatedSuite) TestACancelledBatchStartsNothingMore() {
+	step, _ := s.stepHolding(1, 1)
+	ctx, cancel := context.WithCancel(step)
 	defer cancel()
 	var ran atomic.Int32
-	errs := eachSeated(cache.ContextWithLimiter(ctx, lim), 2, seatLabel, func(context.Context, int) error {
+	errs := runSeated(ctx, 3, seatLabel, func(context.Context, int) error {
 		ran.Add(1)
+		cancel()
 		return nil
 	})
-	s.Equal(int32(0), ran.Load())
-	s.Require().Len(errs, 2)
-	s.ErrorContains(errs[0], "call 0: not started")
+	s.Equal(int32(1), ran.Load())
+	s.Require().Len(errs, 3)
+	s.Require().NoError(errs[0])
+	s.ErrorIs(errs[1], context.Canceled)
 	s.ErrorContains(errs[1], "call 1: not started")
+	s.ErrorContains(errs[2], "call 2: not started")
 }
 
-func (s *EachSeatedSuite) TestWithNoLimiterTheCallsRunOneAtATime() {
-	var running, peak atomic.Int32
-	eachSeated(s.T().Context(), 4, seatLabel, func(context.Context, int) error {
-		n := running.Add(1)
-		peak.Store(max(peak.Load(), n))
-		running.Add(-1)
-		return nil
-	})
-	s.Equal(int32(1), peak.Load())
+func (s *RunSeatedSuite) TestWithNoLimiterTheCallsRunOneAtATime() {
+	s.Equal(1, seatWidth(s.T().Context(), 4))
 }
 
-// BenchmarkEachSeated is 32 processes sleeping 50ms each, with 8 slots and
-// with none, which runs them one at a time.
-func BenchmarkEachSeated(b *testing.B) {
+func (s *RunSeatedSuite) TestACallerHoldingNoSlotRunsTheCallsOneAtATime() {
+	ctx := cache.ContextWithLimiter(s.T().Context(), cache.NewLimiter(8))
+	s.Equal(1, seatWidth(ctx, 4))
+}
+
+func (s *RunSeatedSuite) TestTheWidthIsTheSlotsTheStepHolds() {
+	ctx, _ := s.stepHolding(8, 3)
+	s.Equal(3, seatWidth(ctx, 4))
+}
+
+// BenchmarkRunSeated is 32 processes sleeping 50ms each, on a step holding 8
+// slots and on one holding none, which runs them one at a time.
+func BenchmarkRunSeated(b *testing.B) {
 	sleep := func(ctx context.Context, _ int) error {
 		_, err := spawn.Exec(ctx, "sleep", []string{"0.05"}, spawn.ExecOptions{Quiet: true})
 		return err
 	}
 	b.Run("slots=8", func(b *testing.B) {
-		ctx := cache.ContextWithLimiter(b.Context(), cache.NewLimiter(8))
+		lim := cache.NewLimiter(8)
+		if err := lim.AcquireN(b.Context(), 8); err != nil {
+			b.Fatal(err)
+		}
+		ctx := cache.WithSlotsHeld(cache.ContextWithLimiter(b.Context(), lim), 8)
 		for b.Loop() {
-			eachSeated(ctx, 32, seatLabel, sleep)
+			runSeated(ctx, 32, seatLabel, sleep)
 		}
 	})
 	b.Run("serial", func(b *testing.B) {
 		for b.Loop() {
-			eachSeated(b.Context(), 32, seatLabel, sleep)
+			runSeated(b.Context(), 32, seatLabel, sleep)
 		}
 	})
 }

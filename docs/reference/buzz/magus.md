@@ -32,6 +32,18 @@ Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method
 
 **Returns:** map[string]any
 
+### cmdAll
+
+Run several nested magus commands at once. Each is magus\cmd's sub, args and opts as one Subcommand record, so commands may differ in subcommand, dir and every option. They run on the slots the calling target's step holds, as many at once as it holds, so a batch runs as wide as its step was granted and never past it: declare the target's slots to widen it. With no budget on the context, as in a bare `magus buzz` script, or a caller that holds no slot, they run one at a time and a line says so. Results come back in input order. Each command's output is buffered and written to the console as one block when it ends, in the order the commands end, or every 1 MiB for one that writes more. Every started command runs to its end whatever its siblings do; then the call raises naming each command that failed, unless that command's opts.allowFailure is set, which returns its result instead: set it on every command to read every result. A cancelled run starts no further command. run and affected are refused, since this run's pool adopts them and they would wait for a slot the batch holds: call magus\run for those. A command is not handed this run's pool socket, so a nested run it starts is its own invocation, which the workspace lock refuses for any project this run holds.
+
+**Signature:** `magus\cmdAll(commands) -> [ExecResult]` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
+
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `commands` | `any` |          |             |
+
+**Returns:** any
+
 ### where
 
 Return the project path containing dir, or null when dir is inside no project. Served in-process from the workspace on the context - no subprocess.

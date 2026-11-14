@@ -6,6 +6,7 @@ ci
 ci.provider
 clean
 cmd
+cmdAll
 describe
 describe.charm
 describe.evaluatedProject

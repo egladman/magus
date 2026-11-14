@@ -9,13 +9,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/libs/diagnostics"
@@ -1053,11 +1056,47 @@ type MagusCommandAllSuite struct{ suite.Suite }
 
 func TestMagusCommandAllSuite(t *testing.T) { suite.Run(t, new(MagusCommandAllSuite)) }
 
-func (s *MagusCommandAllSuite) TestAnAdoptedSubcommandIsRefused() {
-	_, err := MagusCommandAll(s.T().Context(), "run", [][]string{{"build", "."}}, types.MagusCommandOptions{})
-	s.ErrorContains(err, `magus\cmdAll: run is refused`)
+func (s *MagusCommandAllSuite) TestAnAdoptedSubcommandIsRefusedBeforeAnyStarts() {
+	_, err := MagusCommandAll(s.T().Context(), []types.MagusSubcommand{
+		{Sub: "buzz", Args: []string{"-t", "a.buzz"}},
+		{Sub: "run", Args: []string{"build", "."}},
+	})
+	s.ErrorContains(err, "magus.cmdAll: command 1: magus run is refused")
 }
 
 func (s *MagusCommandAllSuite) TestRootPrecedesTheSubcommand() {
 	s.Equal([]string{"--root", "w", "buzz", "-t"}, nestedArgv([]string{"buzz", "-t"}, types.MagusCommandOptions{Root: "w"}))
+}
+
+// At concurrency 1 the batch's step holds the only slot. A command that
+// reached this run's pool would queue for that slot behind itself.
+func (s *MagusCommandAllSuite) TestACommandCannotReenterThePoolItsStepHolds() {
+	s.T().Setenv(proc.SocketEnv, "unix:///nowhere.sock")
+	lim := cache.NewLimiter(1)
+	step, release, err := lim.Admit(cache.ContextWithLimiter(s.T().Context(), lim), "buzz-test")
+	s.Require().NoError(err)
+	defer release()
+	errs := runSeated(step, 1, seatLabel, func(ctx context.Context, _ int) error {
+		reaches := slices.ContainsFunc(batchCommandEnv(ctx), func(kv string) bool {
+			return strings.HasPrefix(kv, proc.SocketEnv+"=")
+		})
+		if !reaches {
+			return nil
+		}
+		// The pool admits a forwarded run as it admits any other work.
+		adopted, cancel := context.WithTimeout(s.T().Context(), 2*time.Second)
+		defer cancel()
+		_, done, err := lim.Admit(adopted, "nested run")
+		if err != nil {
+			return fmt.Errorf("the nested run hung on the slot its batch holds: %w", err)
+		}
+		done()
+		return nil
+	})
+	s.Equal([]error{nil}, errs)
+}
+
+func (s *MagusCommandAllSuite) TestACommandKeepsItsCallersLease() {
+	ctx := types.WithJobLease(s.T().Context(), "fleet/captured")
+	s.Equal([]string{"BAGGAGE=magus.lease=fleet/captured"}, batchCommandEnv(ctx))
 }

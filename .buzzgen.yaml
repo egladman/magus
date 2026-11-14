@@ -147,6 +147,7 @@ packages:
       LogLevel: {config: {zeroCase: ""}}
       MagusCommandOptions: {config: {name: CommandOptions, module: magus}}
       MagusDiffOptions: {config: {name: DiffOptions, module: magus}}
+      MagusSubcommand: {config: {name: Subcommand, module: magus}}
       MagusWorkspace: {config: {name: Workspace}}
       ModuleEntry: {config: {name: Module}}
       ProjectsOutput: {config: {name: Projects}}

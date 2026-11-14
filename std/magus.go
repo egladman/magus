@@ -94,12 +94,10 @@ var Magus = Module{
 			Impl:    MagusCommand,
 		},
 		{
-			Name: "cmdAll",
-			Doc:  "magus\\cmd for a batch: run `magus <sub> <argv>` once per argv in args, all with the same opts, as many at once as the run's concurrency budget seats. Each child holds one slot of that budget while it runs, the one proc\\with_slots reserves from, after the calling target hands its own back, so a batch never runs the machine past its budget. With no budget on the context, as in a bare `magus buzz` script, the children run one at a time and a line says so. Children start in input order, and the results come back in input order. Each child's output is buffered and written to the console in input order once it ends, so the log reads as if they ran one after another. Every child runs to its end whatever its siblings do; then a non-zero exit raises, naming every failed command, unless opts.AllowFailure is set, which returns every result instead. opts is magus\\cmd's, applied to each child. run and affected are refused: this run's pool adopts a nested run, which would then queue for the slots its siblings hold. Use magus\\run, which takes several targets, for those.",
+			Name: "cmd_all",
+			Doc:  "Run several nested magus commands at once. Each is magus\\cmd's sub, args and opts as one Subcommand record, so commands may differ in subcommand, dir and every option. They run on the slots the calling target's step holds, as many at once as it holds, so a batch runs as wide as its step was granted and never past it: declare the target's slots to widen it. With no budget on the context, as in a bare `magus buzz` script, or a caller that holds no slot, they run one at a time and a line says so. Results come back in input order. Each command's output is buffered and written to the console as one block when it ends, in the order the commands end, or every 1 MiB for one that writes more. Every started command runs to its end whatever its siblings do; then the call raises naming each command that failed, unless that command's opts.allowFailure is set, which returns its result instead: set it on every command to read every result. A cancelled run starts no further command. run and affected are refused, since this run's pool adopts them and they would wait for a slot the batch holds: call magus\\run for those. A command is not handed this run's pool socket, so a nested run it starts is its own invocation, which the workspace lock refuses for any project this run holds.",
 			Args: []Arg{
-				{Name: "sub"},
-				{Name: "args"},
-				{Name: "opts", Optional: true, Object: "CommandOptions"},
+				{Name: "commands", Object: "[Subcommand]"},
 			},
 			Returns: []Ret{{Object: "[ExecResult]"}},
 			Raises:  true,
@@ -1276,41 +1274,48 @@ func MagusCommand(ctx context.Context, sub string, args []string, opts types.Mag
 	return runMagusSub(ctx, sub, args, opts)
 }
 
-// MagusCommandAll implements magus\cmdAll: magus\cmd once per argv, each child
-// holding one limiter slot, results in input order. Every child runs to its
-// end before a failure raises. run and affected are refused: this run's pool
-// adopts them, and an adopted child queues for the slots its siblings hold.
-func MagusCommandAll(ctx context.Context, sub string, args [][]string, opts types.MagusCommandOptions) ([]types.ExecResult, error) {
-	if sub == "run" || sub == "affected" {
-		return nil, fmt.Errorf(`magus\cmdAll: %s is refused: this run's pool adopts a nested magus %s, which then queues for the slots its siblings hold; call magus\cmd for each`, sub, sub)
+// MagusCommandAll implements magus\cmdAll: each command as magus\cmd runs it,
+// as many at once as the calling step holds slots. Results keep input order.
+// Every started command ends before a failure raises.
+func MagusCommandAll(ctx context.Context, commands []types.MagusSubcommand) ([]types.ExecResult, error) {
+	for i, c := range commands {
+		if adoptedSubcommand(c.Sub) {
+			return nil, fmt.Errorf(`magus.cmdAll: command %d: magus %s is refused: this run's pool adopts it, where it would wait for a slot the batch holds, so call magus\run for it`, i, c.Sub)
+		}
 	}
 	self, err := os.Executable()
 	if err != nil {
-		return nil, fmt.Errorf(`magus\cmdAll: executable: %w`, err)
+		return nil, fmt.Errorf("magus.cmdAll: executable: %w", err)
 	}
-	env := recursiveMagusEnv(ctx)
-	fulls := make([][]string, len(args))
-	for i, argv := range args {
-		warnIfTypedSubcommand(ctx, sub, argv)
-		fulls[i] = nestedArgv(append([]string{sub}, argv...), opts)
+	env := batchCommandEnv(ctx)
+	argvs := make([][]string, len(commands))
+	for i, c := range commands {
+		warnIfTypedSubcommand(ctx, c.Sub, c.Args)
+		argvs[i] = nestedArgv(append([]string{c.Sub}, c.Args...), c.Opts)
 	}
-	results := make([]types.ExecResult, len(args))
-	label := func(i int) string { return "magus " + strings.Join(fulls[i], " ") }
-	errs := eachSeated(ctx, len(args), label, func(ctx context.Context, i int) error {
-		res, err := spawn.Exec(nestedMagusContext(ctx), self, fulls[i], nestedExecOptions(ctx, opts, env))
-		results[i], err = nestedResult("cmdAll", fulls[i], res, err, opts)
+	label := func(i int) string { return "magus " + strings.Join(argvs[i], " ") }
+	results := make([]types.ExecResult, len(commands))
+	errs := runSeated(ctx, len(commands), label, func(ctx context.Context, i int) error {
+		res, err := spawn.Exec(nestedMagusContext(ctx), self, argvs[i], nestedExecOptions(ctx, commands[i].Opts, env))
+		results[i], err = nestedResult("cmdAll", argvs[i], res, err, commands[i].Opts)
 		return err
 	})
-	var failed []error
+	failed := 0
 	for _, err := range errs {
 		if err != nil {
-			failed = append(failed, err)
+			failed++
 		}
 	}
-	if len(failed) > 0 {
-		return nil, fmt.Errorf("magus.cmdAll: %d of %d commands failed:\n%w", len(failed), len(args), errors.Join(failed...))
+	if failed > 0 {
+		return nil, fmt.Errorf("magus.cmdAll: %d of %d commands failed: %w", failed, len(commands), errors.Join(errs...))
 	}
 	return results, nil
+}
+
+// adoptedSubcommand reports whether this run's pool adopts a nested magus sub
+// rather than letting it start a pool of its own.
+func adoptedSubcommand(sub string) bool {
+	return sub == "run" || sub == "affected"
 }
 
 // warnIfTypedSubcommand warns when sub (and, for describe, its noun) names a
@@ -2091,10 +2096,7 @@ func nestedMagusContext(ctx context.Context) context.Context {
 // It deliberately rebuilds BAGGAGE from the context instead of forwarding the mutable
 // process value, so a script cannot shed its bound lease before calling magus\cmd.
 func recursiveMagusEnv(ctx context.Context) []string {
-	var env []string
-	if lease := types.JobLeaseFromContext(ctx); lease != "" {
-		env = append(env, fmt.Sprintf("%s=%s=%s", trail.EnvBaggage, trail.BaggageLease, lease))
-	}
+	env := leaseEnv(ctx)
 	for _, k := range spawn.ProcForwardVars {
 		if v := os.Getenv(k); v != "" {
 			env = append(env, fmt.Sprintf("%s=%s", k, v))
@@ -2103,6 +2105,27 @@ func recursiveMagusEnv(ctx context.Context) []string {
 		}
 	}
 	return env
+}
+
+// leaseEnv is the BAGGAGE through which a nested magus keeps its caller's lease.
+func leaseEnv(ctx context.Context) []string {
+	if lease := types.JobLeaseFromContext(ctx); lease != "" {
+		return []string{fmt.Sprintf("%s=%s=%s", trail.EnvBaggage, trail.BaggageLease, lease)}
+	}
+	return nil
+}
+
+// batchCommandEnv is a magus\cmdAll command's: the lease without this run's
+// pool socket. The command holds a slot of its step, so a nested run it
+// forwarded here would queue for that slot.
+func batchCommandEnv(ctx context.Context) []string {
+	for _, k := range spawn.ProcForwardVars {
+		if os.Getenv(k) != "" {
+			slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,
+				`magus socket withheld from a magus\cmdAll command`), "var", k)
+		}
+	}
+	return leaseEnv(ctx)
 }
 
 // MagusDiagnoseDrift diagnoses a generate gate's drift into a coded diagnostic. Given the

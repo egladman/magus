@@ -48,6 +48,13 @@ type MagusCommandOptions struct {
 	AllowFailure bool
 }
 
+// MagusSubcommand is one command of magus\cmdAll: magus\cmd's sub, args and opts.
+type MagusSubcommand struct {
+	Sub  string
+	Args []string
+	Opts MagusCommandOptions
+}
+
 // MagusDiffOptions are magus\change().diff's options.
 // diff.Options is the in-process
 // review's, which takes a parsed baseline; this one names files and a range for the
