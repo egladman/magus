@@ -602,7 +602,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 				start = 0
 			}
 			if start > len(lo.Items) {
-				return listValue(nil, lo.Mut), nil
+				return vm.listValue(nil, lo.Mut), nil
 			}
 			end := len(lo.Items)
 			if len(args) >= 2 && args[1].IsInt() {
@@ -616,7 +616,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			}
 			cp := make([]Value, end-start)
 			copy(cp, lo.Items[start:end])
-			return listValue(cp, lo.Mut), nil
+			return vm.listValue(cp, lo.Mut), nil
 		})
 	case "indexOf":
 		return newDirect("list.indexOf", func(_ context.Context, args []Value) (Value, error) {
@@ -670,7 +670,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 				}
 				out[i] = v
 			}
-			return ListValue(out), nil
+			return vm.listValue(out, false), nil
 		})
 	case "filter":
 		return newDirect("list.filter", func(ctx context.Context, args []Value) (Value, error) {
@@ -688,7 +688,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 					out = append(out, it)
 				}
 			}
-			return listValue(out, lo.Mut), nil
+			return vm.listValue(out, lo.Mut), nil
 		})
 	case "reduce":
 		return newDirect("list.reduce", func(ctx context.Context, args []Value) (Value, error) {
@@ -738,7 +738,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			for i, v := range lo.Items {
 				cp[len(lo.Items)-1-i] = v
 			}
-			return listValue(cp, lo.Mut), nil
+			return vm.listValue(cp, lo.Mut), nil
 		})
 	case "fill":
 		// fill(value, start: int?, len: int?): upstream fills a RANGE, defaulting to
@@ -779,7 +779,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 		return newDirect("list."+name, func(_ context.Context, _ []Value) (Value, error) {
 			cp := make([]Value, len(lo.Items))
 			copy(cp, lo.Items)
-			return listValue(cp, mut), nil
+			return vm.listValue(cp, mut), nil
 		})
 	}
 	return nil
@@ -831,13 +831,13 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 		return newDirect("map.keys", func(_ context.Context, _ []Value) (Value, error) {
 			out := make([]Value, len(mp.keyVals))
 			copy(out, mp.keyVals)
-			return ListValue(out), nil
+			return vm.listValue(out, false), nil
 		})
 	case "values":
 		return newDirect("map.values", func(_ context.Context, _ []Value) (Value, error) {
 			out := make([]Value, len(mp.Vals))
 			copy(out, mp.Vals)
-			return ListValue(out), nil
+			return vm.listValue(out, false), nil
 		})
 	case "forEach":
 		return newDirect("map.forEach", func(ctx context.Context, args []Value) (Value, error) {
@@ -863,7 +863,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.map: requires a callback function")
 			}
 			cb := newCallback(ctx, vm, args[0])
-			out := NewMap()
+			out := vm.mapValue(false)
 			for i, k := range mp.keyVals {
 				entry, err := cb.call(k, mp.Vals[i])
 				if err != nil {
@@ -887,7 +887,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.filter: requires a callback function")
 			}
 			cb := newCallback(ctx, vm, args[0])
-			out := mapValue(mp.Mut)
+			out := vm.mapValue(mp.Mut)
 			for i, k := range mp.keyVals {
 				v, err := cb.call(k, mp.Vals[i])
 				if err != nil {
@@ -928,7 +928,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 		// and copyImmutable are upstream's aliases for the two clone forms.
 		mut := name == "cloneMutable" || name == "copyMutable"
 		return newDirect("map."+name, func(_ context.Context, _ []Value) (Value, error) {
-			nm := mapValue(mut)
+			nm := vm.mapValue(mut)
 			for i, k := range mp.keyVals {
 				nm.asMap().setVal(k, mp.Vals[i])
 			}
@@ -940,7 +940,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.diff: requires a map argument")
 			}
 			other := args[0]
-			out := mapValue(mp.Mut)
+			out := vm.mapValue(mp.Mut)
 			for i, k := range mp.keyVals {
 				if _, ok := other.asMap().getVal(k); !ok {
 					out.asMap().setVal(k, mp.Vals[i])
@@ -954,7 +954,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.intersect: requires a map argument")
 			}
 			other := args[0]
-			out := mapValue(mp.Mut)
+			out := vm.mapValue(mp.Mut)
 			for i, k := range mp.keyVals {
 				if _, ok := other.asMap().getVal(k); ok {
 					out.asMap().setVal(k, mp.Vals[i])
@@ -1148,7 +1148,7 @@ func stringMethod(vm *VM, s Value, name string) *directObj {
 			for i, p := range parts {
 				out[i] = StringValue(p)
 			}
-			return ListValue(out), nil
+			return vm.listValue(out, false), nil
 		})
 	case "sub":
 		return newDirect("str.sub", func(_ context.Context, args []Value) (Value, error) {
@@ -1231,7 +1231,7 @@ func stringMethod(vm *VM, s Value, name string) *directObj {
 					out = append(out, StringValue(string(r)))
 				}
 			}
-			return ListValue(out), nil
+			return vm.listValue(out, false), nil
 		})
 	}
 	return nil
@@ -1262,7 +1262,7 @@ func rngMethod(vm *VM, r Value, name string) *directObj {
 		})
 	case "invert":
 		return newDirect("rng.invert", func(context.Context, []Value) (Value, error) {
-			return rangeValue(ro.Hi, ro.Lo), nil
+			return alloc(vm, tagRange, &rangeObj{Lo: ro.Hi, Hi: ro.Lo}), nil
 		})
 	case "toList":
 		return newDirect("rng.toList", func(context.Context, []Value) (Value, error) {
@@ -1274,7 +1274,7 @@ func rngMethod(vm *VM, r Value, name string) *directObj {
 			for i := ro.Lo; i != ro.Hi; i += step {
 				items = append(items, IntValue(i))
 			}
-			return ListValue(items), nil
+			return vm.listValue(items, false), nil
 		})
 	case "contains":
 		return newDirect("rng.contains", func(_ context.Context, args []Value) (Value, error) {

@@ -1465,8 +1465,8 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			if lo.tag() != tagInt || hi.tag() != tagInt {
 				return Null, errorRangeOperands(lo, hi)
 			}
-			// Owned, not rangeValue: an unowned slot here outlives the session,
-			// one per execution of the range expression.
+			// Owned: an unowned slot here outlives the session, one per
+			// execution of the range expression.
 			vm.push(alloc(vm, tagRange, &rangeObj{Lo: lo.AsInt(), Hi: hi.AsInt()}))
 
 		case OpIs:

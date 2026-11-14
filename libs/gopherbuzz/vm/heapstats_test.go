@@ -212,3 +212,46 @@ func TestUnownedObjectsCountsUnownedSlotsButStrings(t *testing.T) {
 		t.Fatalf("a release frees owned slots only, yet UnownedObjects moved %+d", got)
 	}
 }
+
+// A builtin's fresh result belongs to the calling VM from the start, so the
+// adopt at the call site walks none of its items.
+func TestBuiltinResultIsOwnedByItsVM(t *testing.T) {
+	ctx := context.Background()
+	o := &Owner{}
+	vm := NewVM(ctx)
+	vm.SetOwner(o)
+	list := ListValue([]Value{IntValue(1), IntValue(2)})
+	m := NewMap()
+	m.MapSet("k", IntValue(1))
+	calls := map[string]*directObj{
+		"list.reverse": listMethod(vm, list, "reverse"),
+		"list.clone":   listMethod(vm, list, "clone"),
+		"map.keys":     mapMethod(vm, m, "keys"),
+		"map.clone":    mapMethod(vm, m, "clone"),
+	}
+	for name, d := range calls {
+		got, err := d.Fn(ctx, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if owner := gHeapOwner[uint64(got)&idxMaskHeap]; owner != o {
+			t.Fatalf("%s returned a slot owned by %p, want the VM's owner %p", name, owner, o)
+		}
+	}
+	o.Release()
+}
+
+// BenchmarkClaimIntList claims a fresh 2,000-int list, the shape a host
+// callable hands back: the claim walk holds gHeapMu throughout.
+func BenchmarkClaimIntList(b *testing.B) {
+	items := make([]Value, 2000)
+	for i := range items {
+		items[i] = IntValue(int64(i))
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		o := &Owner{}
+		o.Claim(ListValue(items))
+		o.Release()
+	}
+}

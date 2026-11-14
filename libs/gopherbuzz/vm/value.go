@@ -454,8 +454,9 @@ func ListValue(items []Value) Value {
 // clone family). Upstream types those from `obj_list` itself, so a `mut [int]`
 // keeps its mutability across them; building the result immutable made
 // `list.cloneMutable().sub(0)` reject the very mutation upstream permits.
-func listValue(items []Value, mut bool) Value {
-	return heapValue(tagList, &listObj{Items: items, Mut: mut})
+// The list is vm's from the start, so adopting it walks no items.
+func (vm *VM) listValue(items []Value, mut bool) Value {
+	return alloc(vm, tagList, &listObj{Items: items, Mut: mut})
 }
 
 // DirectValue wraps a Go Callable as a Buzz function value bound to name.
@@ -472,11 +473,6 @@ func DirectValue(name string, fn Callable) Value {
 // getMember builds. See builtinMethod.
 func newDirect(name string, fn Callable) *directObj {
 	return &directObj{Name: name, Fn: fn}
-}
-
-// rangeValue constructs a range [lo, hi]. Package-internal; use the .. operator in Buzz.
-func rangeValue(lo, hi int64) Value {
-	return heapValue(tagRange, &rangeObj{Lo: lo, Hi: hi})
 }
 
 // ObjDeclValue wraps *ast.ObjectDecl as a Buzz value (used by the compiler).
@@ -1182,10 +1178,11 @@ func NewMap() Value { return heapValue(tagMap, newMapObj()) }
 // mapValue is NewMap with an explicit mutability, the map counterpart of
 // listValue: the built-in methods returning a map of the RECEIVER's own type
 // (filter, diff, intersect, and the clone family) have to carry it across.
-func mapValue(mut bool) Value {
+// Like listValue it allocates under vm's owner.
+func (vm *VM) mapValue(mut bool) Value {
 	m := newMapObj()
 	m.Mut = mut
-	return heapValue(tagMap, m)
+	return vm.allocMap(m)
 }
 
 // MapSet stores key→val on a map Value. No-op if v is not a map. On a map a
