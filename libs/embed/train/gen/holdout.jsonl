@@ -1293,6 +1293,7 @@
 {"group":"dir:internal/guard","path":"internal/guard/process_signal_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/push.go"}
 {"group":"dir:internal/guard","path":"internal/guard/push_coverage.go"}
+{"group":"dir:internal/guard","path":"internal/guard/push_coverage_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/push_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/read.go"}
 {"group":"dir:internal/guard","path":"internal/guard/read_test.go"}
