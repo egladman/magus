@@ -274,6 +274,7 @@
 {"group":"file:changes/unreleased/pr-checks-run-locally.md","path":"changes/unreleased/pr-checks-run-locally.md"}
 {"group":"file:changes/unreleased/probe-failure-quotes-the-error.md","path":"changes/unreleased/probe-failure-quotes-the-error.md"}
 {"group":"file:changes/unreleased/probe-knows-silent-hooks.md","path":"changes/unreleased/probe-knows-silent-hooks.md"}
+{"group":"file:changes/unreleased/probe-mise-dir-witness.md","path":"changes/unreleased/probe-mise-dir-witness.md"}
 {"group":"file:changes/unreleased/proc-exec-timeout-detach.md","path":"changes/unreleased/proc-exec-timeout-detach.md"}
 {"group":"file:changes/unreleased/proofread-fix6-round5.md","path":"changes/unreleased/proofread-fix6-round5.md"}
 {"group":"file:changes/unreleased/proofread-fix8-adjectives.md","path":"changes/unreleased/proofread-fix8-adjectives.md"}
