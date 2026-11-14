@@ -318,8 +318,8 @@ func (s *FinishedWorkerWorktreeSuite) TestAPlainRemovalIsServedTheForcedTwiceLin
 		v := r.judgeWith(deps, r.main, command, workerRow(types.StatePass, s.wt))
 		assertRemovalDenied(s.T(), v, "locked over the worker your session spawned for job w1")
 		s.Require().Len(v.Next, 1, "%q", command)
-		s.Equal(want, v.Next[0].Argv)
-		s.Equal("git worktree remove -f -f "+s.wt, v.Next[0].Run)
+		got := v.Next[0]
+		s.Equal(types.NextStep{ID: got.ID, Run: "git worktree remove -f -f " + s.wt, Argv: want, Why: got.Why}, got)
 	}
 }
 

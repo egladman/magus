@@ -138,8 +138,7 @@ func (s *symbolIndexLanguageSuite) TestGraphMethodHoldsTheIndexWithItsOpeningLan
 
 type symbolIndexMemoSuite struct {
 	suite.Suite
-	ws  *rebuildingWorkspace
-	ctx context.Context
+	ws *rebuildingWorkspace
 }
 
 func TestSymbolIndexMemoSuite(t *testing.T) {
@@ -148,41 +147,48 @@ func TestSymbolIndexMemoSuite(t *testing.T) {
 
 func (s *symbolIndexMemoSuite) SetupTest() {
 	s.ws = indexWorkspace(s.T())
-	s.ctx = types.WithEvalMemo(types.WithWorkspace(s.T().Context(), s.ws))
+}
+
+func (s *symbolIndexMemoSuite) evaluation() context.Context {
+	return types.WithEvalMemo(types.WithWorkspace(s.T().Context(), s.ws))
 }
 
 func (s *symbolIndexMemoSuite) TestOneEvaluationFreshensOnceForEveryGraphRead() {
-	g, err := MagusGraphOpen(s.ctx, nil)
+	ctx := s.evaluation()
+	g, err := MagusGraphOpen(ctx, nil)
 	s.Require().NoError(err)
-	s.Require().NoError(heldGraph(s.ctx, g, "dir"))
-	_, err = MagusGraphOpen(s.ctx, nil)
+	s.Require().NoError(heldGraph(ctx, g, "dir"))
+	_, err = MagusGraphOpen(ctx, nil)
 	s.Require().NoError(err)
 	s.Equal(1, s.ws.calls)
 }
 
 func (s *symbolIndexMemoSuite) TestEachLanguagesListFreshensOnItsOwn() {
-	_, err := MagusSymbolIndexDigest(s.ctx, []string{"go"})
+	ctx := s.evaluation()
+	_, err := MagusSymbolIndexDigest(ctx, []string{"go"})
 	s.Require().NoError(err)
-	got, err := MagusSymbolIndexDigest(s.ctx, nil)
+	got, err := MagusSymbolIndexDigest(ctx, nil)
 	s.Require().NoError(err)
 	s.Equal([][]string{{"go"}, nil}, s.ws.scopes)
 	s.Nil(got.Languages)
 }
 
 func (s *symbolIndexMemoSuite) TestAFailedFreshenIsTriedAgain() {
+	ctx := s.evaluation()
 	s.ws.freshen = assert.AnError
-	_, err := MagusSymbolIndexDigest(s.ctx, nil)
+	_, err := MagusSymbolIndexDigest(ctx, nil)
 	s.Require().ErrorIs(err, assert.AnError)
 	s.ws.freshen = nil
-	_, err = MagusSymbolIndexDigest(s.ctx, nil)
+	_, err = MagusSymbolIndexDigest(ctx, nil)
 	s.Require().NoError(err)
 	s.Equal(2, s.ws.calls)
 }
 
 func (s *symbolIndexMemoSuite) TestANewEvaluationFreshensAgain() {
-	_, err := MagusSymbolIndexDigest(s.ctx, nil)
+	ctx := s.evaluation()
+	_, err := MagusSymbolIndexDigest(ctx, nil)
 	s.Require().NoError(err)
-	_, err = MagusSymbolIndexDigest(types.WithEvalMemo(s.ctx), nil)
+	_, err = MagusSymbolIndexDigest(types.WithEvalMemo(ctx), nil)
 	s.Require().NoError(err)
 	s.Equal(2, s.ws.calls)
 }
