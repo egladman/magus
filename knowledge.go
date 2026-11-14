@@ -2470,7 +2470,14 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 		root := m.Root()
 		cfg := m.cfg
 		m.warmGraph = newWarmGraph(func(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
-			return ensureKnowledgeGraph(ctx, m, root, cfg, refresh, knowledge.AllClasses, slog.Default())
+			g, err := ensureKnowledgeGraph(ctx, m, root, cfg, refresh, knowledge.AllClasses, slog.Default())
+			if err != nil {
+				return nil, err
+			}
+			// Marked before Get publishes g, so a clone for a symbol read
+			// shares its maps instead of copying them.
+			g.MarkShared()
+			return g, nil
 		}, slog.Default())
 	})
 	return m.warmGraph
@@ -2478,44 +2485,44 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 
 // knowledgeGraph returns the workspace knowledge graph req asks for.
 //
-// Without symbols it answers from the warm in-memory graph: in the server, once
-// WatchKnowledgeGraph is running, without re-parsing magusfiles; otherwise (and on
-// refresh) by a cache-first rebuild. It is always fresh, since the warm graph is served
+// It answers from the warm graph, or rebuilds it cache-first
+// when no watcher runs.
+// It is always fresh, since the warm graph is served
 // only while a watcher can invalidate it.
 //
-// With symbols, as magus\graph().refs asks, it builds a FRESH graph.
-// It merges the @symbols shards into that one.
+// With symbols, it merges the @symbols shards into a clone.
 // So the warm graph other MCP tools read never holds a huge symbol set.
 // A scope that targets one symbol merges only the shards that mention it.
 func (m *Magus) knowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
-	if !req.Symbols.Loaded() {
-		return m.warmKnowledgeGraph().Get(ctx, req.Refresh)
+	g, err := m.evaluationKnowledgeGraph(ctx, req.Refresh)
+	if err != nil || !req.Symbols.Loaded() {
+		return g, err
 	}
-	g, err := buildKnowledgeGraph(ctx, m, m.Root(), m.cfg, req.Refresh, slog.Default())
+	return cloneWithSymbols(ctx, m, m.Root(), m.cfg, g, req.Symbols, slog.Default())
+}
+
+// optimization: read the warm graph once per evaluation, not per scope.
+// measured: diagrams-generate memoGraphs.KnowledgeGraph 5.52s to 3.96s.
+// trade-off: an evaluation reads the graph as it began.
+// assumes: the digest rebuilds on a fresh memo after its freshen.
+func (m *Magus) evaluationKnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
+	if refresh {
+		return m.warmKnowledgeGraph().Get(ctx, true)
+	}
+	v, err := types.EvalMemoFromContext(ctx).Do("magus:knowledge-graph", func() (any, error) {
+		return m.warmKnowledgeGraph().Get(ctx, false)
+	})
 	if err != nil {
 		return nil, err
 	}
-	if err := mergeSymbolScope(ctx, m, m.Root(), m.cfg, g, req.Symbols, slog.Default()); err != nil {
-		return nil, err
-	}
+	g, _ := v.(*knowledge.Graph)
 	return g, nil
 }
 
-// KnowledgeGraphWithSymbols returns a copy of base with the symbol shards scope
-// selects merged in. base is left as it was, so one evaluation can merge every
-// scope it reads onto the one default graph it built.
-func (w internals) KnowledgeGraphWithSymbols(ctx context.Context, base *knowledge.Graph, scope types.SymbolScope) (*knowledge.Graph, error) {
-	return knowledgeGraphWithSymbols(ctx, w.Magus, w.Root(), w.cfg, base, scope, slog.Default())
-}
-
-func knowledgeGraphWithSymbols(ctx context.Context, ws types.Inspector, root string, cfg config.Config, base *knowledge.Graph, scope types.SymbolScope, log *slog.Logger) (*knowledge.Graph, error) {
-	if !scope.Loaded() {
-		return nil, errors.New("knowledge graph with symbols: the scope names no symbols, so there is nothing to merge")
-	}
-	g := knowledge.NewGraph()
-	g.SetRoot(base.Root())
-	// The merge writes into g, and base may be the warm graph others read.
-	knowledge.UnionInto(g, base)
+// cloneWithSymbols merges the shards scope selects into a clone of base,
+// which may be the warm graph concurrent requests read.
+func cloneWithSymbols(ctx context.Context, ws types.Inspector, root string, cfg config.Config, base *knowledge.Graph, scope types.SymbolScope, log *slog.Logger) (*knowledge.Graph, error) {
+	g := base.Clone()
 	if err := mergeSymbolScope(ctx, ws, root, cfg, g, scope, log); err != nil {
 		return nil, err
 	}

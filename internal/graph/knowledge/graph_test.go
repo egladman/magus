@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestMain(m *testing.M) {
@@ -177,4 +179,108 @@ func TestConcurrentQueriesDoNotRaceOnLazyIndices(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// cloneSuite clones the graph a store read returns, as a symbol read
+// clones the warm graph before merging into it.
+type cloneSuite struct {
+	suite.Suite
+	cacheDir string
+	stamps   Stamps
+	in       Inputs
+}
+
+func TestCloneSuite(t *testing.T) {
+	suite.Run(t, new(cloneSuite))
+}
+
+func (s *cloneSuite) SetupTest() {
+	s.cacheDir, s.in = symbolQueryFixture(s.T())
+	enableReadCache(s.T(), 64<<20)
+	s.stamps = stampsAll("v1")
+	ensure(s.T(), s.cacheDir, s.stamps, AllClasses, s.in)
+}
+
+// published is the default graph as the warm graph publishes it.
+func (s *cloneSuite) published() *Graph {
+	g, _ := ensure(s.T(), s.cacheDir, s.stamps, DefaultClasses, s.in)
+	g.MarkShared()
+	return g
+}
+
+func (s *cloneSuite) merged(base *Graph) *Graph {
+	g := base.Clone()
+	s.Require().NoError(NewStore(s.cacheDir, false, 0, nil, nil).MergeSymbolShards(context.Background(), g))
+	return g
+}
+
+func (s *cloneSuite) TestACloneMergesWhatAFreshReadMerges() {
+	want := uncached(func() string { return outputJSON(s.T(), symbolRead(s.T(), s.cacheDir, s.stamps, s.in)) })
+	s.Equal(want, outputJSON(s.T(), s.merged(s.published())))
+}
+
+func (s *cloneSuite) TestASecondCloneAdoptsTheMergeTheFirstCached() {
+	base := s.published()
+	s.Require().NotEmpty(base.base, "the store read names its shards")
+	first := s.merged(base)
+	second := s.merged(base)
+	s.True(second.shared, "the second merge adopts the first one's cached graph")
+	s.Equal(outputJSON(s.T(), first), outputJSON(s.T(), second))
+}
+
+func (s *cloneSuite) TestAMergeLeavesTheSourceUnchanged() {
+	base := s.published()
+	before := outputJSON(s.T(), base)
+	s.merged(base)
+	s.Equal(before, outputJSON(s.T(), base))
+	s.False(base.HasSymbols())
+}
+
+func (s *cloneSuite) TestACloneOfAnUnsharedGraphNeverSharesItsMaps() {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "dir:a", Kind: types.KindDir})
+	c := g.Clone()
+	c.AddNode(types.KnowledgeNode{ID: "dir:b", Kind: types.KindDir})
+	g.AddNode(types.KnowledgeNode{ID: "dir:c", Kind: types.KindDir})
+	s.False(g.shared, "Clone never writes its source")
+	s.Equal([]string{"dir:a", "dir:c"}, sortedNodeIDs(g))
+	s.Equal([]string{"dir:a", "dir:b"}, sortedNodeIDs(c))
+}
+
+// copySource is a published default graph of a mid-size workspace.
+func copySource() *Graph {
+	g := NewGraph()
+	for i := range 20000 {
+		id := fmt.Sprintf("file:pkg%d/f%d.go", i%400, i)
+		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindFile, Label: id, Doc: "a file"})
+		g.AddEdge(extractedEdge(fmt.Sprintf("dir:pkg%d", i%400), id, types.RelationContains, "fs"))
+		g.AddEdge(extractedEdge(id, fmt.Sprintf("file:pkg%d/f%d.go", (i+1)%400, i+1), types.RelationReferences, "scip"))
+	}
+	g.MarkShared()
+	return g
+}
+
+func BenchmarkCopyForASymbolMergeByUnion(b *testing.B) {
+	src := copySource()
+	for b.Loop() {
+		g := NewGraph()
+		UnionInto(g, src)
+		g.AddNode(types.KnowledgeNode{ID: "symbol:x A().", Kind: types.KindSymbol})
+	}
+}
+
+func BenchmarkCopyForASymbolMergeByClone(b *testing.B) {
+	src := copySource()
+	for b.Loop() {
+		g := src.Clone()
+		g.AddNode(types.KnowledgeNode{ID: "symbol:x A().", Kind: types.KindSymbol})
+	}
+}
+
+func sortedNodeIDs(g *Graph) []string {
+	var ids []string
+	for _, n := range g.Nodes() {
+		ids = append(ids, n.ID)
+	}
+	return ids
 }

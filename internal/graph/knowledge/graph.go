@@ -205,6 +205,36 @@ func (g *Graph) share() *Graph {
 	return &Graph{nodes: g.nodes, edges: g.edges, out: g.out, in: g.in, search: g.searchHolder(), root: g.root, shared: true}
 }
 
+// MarkShared makes the first write to g, or to a Clone of it, copy
+// the maps instead of changing what other readers hold. It writes g,
+// so call it once, before g reaches concurrent readers.
+func (g *Graph) MarkShared() { g.shared = true }
+
+// Clone returns a graph with g's content, root and base, and never
+// writes g. The kept base lets the read cache answer a symbol merge
+// into the clone. A clone of a shared graph holds g's maps until its
+// first write; a clone of an unshared one copies them now. Nothing is
+// sorted or sanitized again.
+//
+// optimization: alias or copy the maps instead of UnionInto.
+//
+//	measured: BenchmarkCopyForASymbolMerge -92.87% (benchstat, n=10).
+//	trade-off: a clone shares maps until its first write.
+//	assumes: nothing writes a shared graph's maps in place.
+func (g *Graph) Clone() *Graph {
+	g.adjMu.Lock()
+	out, in := g.out, g.in
+	g.adjMu.Unlock()
+	c := &Graph{
+		nodes: g.nodes, edges: g.edges, out: out, in: in, search: g.searchHolder(),
+		root: g.root, base: g.base, shared: g.shared,
+	}
+	if !g.shared {
+		c.nodes, c.edges = maps.Clone(g.nodes), maps.Clone(g.edges)
+	}
+	return c
+}
+
 // adopt makes g hold cached's content, its adjacency included, as a shared graph. g keeps
 // its own root.
 func (g *Graph) adopt(cached *Graph) {

@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// rebuildingWorkspace builds its knowledge store from in on every KnowledgeGraph call, as
-// the real workspace rebuilds cache-first.
+// rebuildingWorkspace builds its knowledge store from in once per
+// evaluation, as the real workspace reads its warm graph once.
 type rebuildingWorkspace struct {
 	types.WorkspaceRepository
 	cacheDir string
@@ -25,24 +25,29 @@ type rebuildingWorkspace struct {
 	freshen  error
 	calls    int
 	scopes   [][]string
-	builds   []types.GraphRequest
-	merges   []types.SymbolScope
+	// indexed is what the next freshen writes into in.Symbols, as a
+	// rebuilt index does.
+	indexed map[string][]types.KnowledgeSymbol
 }
 
 func (f *rebuildingWorkspace) FreshenSymbolIndexes(_ context.Context, languages []string) error {
 	f.calls++
 	f.scopes = append(f.scopes, languages)
+	if f.indexed != nil {
+		f.in.Symbols = f.indexed
+	}
 	return f.freshen
 }
 
-func (f *rebuildingWorkspace) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
-	f.builds = append(f.builds, req)
-	return knowledge.Build(ctx, f.cacheDir, knowledge.BuildOptions{}, f.in, nil)
-}
-
-func (f *rebuildingWorkspace) KnowledgeGraphWithSymbols(_ context.Context, base *knowledge.Graph, scope types.SymbolScope) (*knowledge.Graph, error) {
-	f.merges = append(f.merges, scope)
-	return base, nil
+func (f *rebuildingWorkspace) KnowledgeGraph(ctx context.Context, _ types.GraphRequest) (*knowledge.Graph, error) {
+	v, err := types.EvalMemoFromContext(ctx).Do("rebuilding-workspace", func() (any, error) {
+		return knowledge.Build(ctx, f.cacheDir, knowledge.BuildOptions{}, f.in, nil)
+	})
+	if err != nil {
+		return nil, err
+	}
+	g, _ := v.(*knowledge.Graph)
+	return g, nil
 }
 
 func (f *rebuildingWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
@@ -51,7 +56,7 @@ func (f *rebuildingWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymb
 
 func (f *rebuildingWorkspace) CacheDir() string { return f.cacheDir }
 
-func indexWorkspace(t *testing.T) *rebuildingWorkspace {
+func indexWorkspace(t testing.TB) *rebuildingWorkspace {
 	return &rebuildingWorkspace{
 		cacheDir: filepath.Join(t.TempDir(), ".magus"),
 		in: knowledge.Inputs{Graph: types.TargetGraphOutput{Projects: []types.TargetGraphProject{
@@ -201,23 +206,23 @@ func (s *symbolIndexMemoSuite) TestANewEvaluationFreshensAgain() {
 	s.Equal(2, s.ws.calls)
 }
 
-type symbolIndexSharedBuildSuite struct {
+type symbolIndexFreshenSuite struct {
 	suite.Suite
 	ws *rebuildingWorkspace
 }
 
-func TestSymbolIndexSharedBuildSuite(t *testing.T) {
-	suite.Run(t, new(symbolIndexSharedBuildSuite))
+func TestSymbolIndexFreshenSuite(t *testing.T) {
+	suite.Run(t, new(symbolIndexFreshenSuite))
 }
 
-func (s *symbolIndexSharedBuildSuite) SetupTest() {
+func (s *symbolIndexFreshenSuite) SetupTest() {
 	s.ws = indexWorkspace(s.T())
 	s.ws.in.Symbols = map[string][]types.KnowledgeSymbol{
 		"pkg/a": {{Key: "example.com/a Foo#", Label: "Foo", Source: "pkg/a/a.go:1", Defs: []string{"pkg/a/a.go"}}},
 	}
 }
 
-func (s *symbolIndexSharedBuildSuite) TestTheMemoizedDigestIsTheStoresDigest() {
+func (s *symbolIndexFreshenSuite) TestTheMemoizedDigestIsTheStoresDigest() {
 	plain, err := MagusSymbolIndexDigest(types.WithWorkspace(s.T().Context(), s.ws), nil)
 	s.Require().NoError(err)
 	memo, err := MagusSymbolIndexDigest(types.WithEvalMemo(types.WithWorkspace(s.T().Context(), s.ws)), nil)
@@ -229,14 +234,70 @@ func (s *symbolIndexSharedBuildSuite) TestTheMemoizedDigestIsTheStoresDigest() {
 	s.Equal(plain, memo)
 }
 
-func (s *symbolIndexSharedBuildSuite) TestADigestAndASymbolReadShareOneDefaultBuild() {
-	ctx := types.WithEvalMemo(types.WithWorkspace(s.T().Context(), s.ws))
-	_, err := MagusSymbolIndexDigest(ctx, nil)
-	s.Require().NoError(err)
+func (s *symbolIndexFreshenSuite) evaluation() context.Context {
+	return types.WithEvalMemo(types.WithWorkspace(s.T().Context(), s.ws))
+}
+
+// indexB has the next freshen index pkg/b beside pkg/a.
+func (s *symbolIndexFreshenSuite) indexB() {
+	s.ws.indexed = map[string][]types.KnowledgeSymbol{
+		"pkg/a": s.ws.in.Symbols["pkg/a"],
+		"pkg/b": {{Key: "example.com/b Bar#", Label: "Bar", Source: "pkg/b/b.go:1", Defs: []string{"pkg/b/b.go"}}},
+	}
+}
+
+func (s *symbolIndexFreshenSuite) read(ctx context.Context, req types.GraphRequest) {
 	g, err := graphsFromContext(ctx, "dir")
 	s.Require().NoError(err)
-	_, err = g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	_, err = g.KnowledgeGraph(ctx, req)
 	s.Require().NoError(err)
-	s.Equal([]types.GraphRequest{{}}, s.ws.builds)
-	s.Equal([]types.SymbolScope{types.AllSymbols}, s.ws.merges)
+}
+
+func (s *symbolIndexFreshenSuite) TestASecondLanguagesListDigestsTheStoreItsFreshenMoved() {
+	ctx := s.evaluation()
+	first, err := MagusSymbolIndexDigest(ctx, []string{"go"})
+	s.Require().NoError(err)
+	s.indexB()
+	second, err := MagusSymbolIndexDigest(ctx, nil)
+	s.Require().NoError(err)
+	s.Equal([]string{"pkg/a"}, first.Projects)
+	s.Equal([]string{"pkg/a", "pkg/b"}, second.Projects)
+}
+
+func (s *symbolIndexFreshenSuite) TestADigestAfterAGraphReadDigestsTheStoreItsFreshenMoved() {
+	ctx := s.evaluation()
+	s.read(ctx, types.GraphRequest{})
+	s.indexB()
+	got, err := MagusSymbolIndexDigest(ctx, nil)
+	s.Require().NoError(err)
+	s.Equal([]string{"pkg/a", "pkg/b"}, got.Projects)
+}
+
+// graphHandleReads is a figure's shape: it opens magus\graph(), then
+// holds the handle to its index on every member call.
+func graphHandleReads(ctx context.Context, b *testing.B) {
+	b.Helper()
+	g, err := MagusGraphOpen(ctx, nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	for range 20 {
+		if err := heldGraph(ctx, g, "dir"); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkGraphHandleReadsWithoutMemo(b *testing.B) {
+	ws := indexWorkspace(b)
+	for b.Loop() {
+		graphHandleReads(types.WithWorkspace(b.Context(), ws), b)
+	}
+}
+
+func BenchmarkGraphHandleReadsInOneEvaluation(b *testing.B) {
+	ws := indexWorkspace(b)
+	for b.Loop() {
+		graphHandleReads(types.WithEvalMemo(types.WithWorkspace(b.Context(), ws)), b)
+	}
 }

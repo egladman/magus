@@ -663,12 +663,6 @@ func (f *builtGraphWorkspace) All() []*types.Project { return f.projects }
 func (f *builtGraphWorkspace) KnowledgeGraph(context.Context, types.GraphRequest) (*knowledge.Graph, error) {
 	return f.g, nil
 }
-
-// KnowledgeGraphWithSymbols returns base, which already holds every symbol.
-func (f *builtGraphWorkspace) KnowledgeGraphWithSymbols(_ context.Context, base *knowledge.Graph, _ types.SymbolScope) (*knowledge.Graph, error) {
-	return base, nil
-}
-
 func (f *builtGraphWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
 	return nil, true
 }
