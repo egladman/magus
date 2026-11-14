@@ -265,6 +265,7 @@ github.com/egladman/magus.TargetHandler type func(context.Context, *github.com/e
 github.com/egladman/magus.TargetLabel func(targets []github.com/egladman/magus/types.Target, source string) string
 github.com/egladman/magus.TargetOption type = github.com/egladman/magus/internal/workspace.TargetOption
 github.com/egladman/magus.TierCeiling func(parent github.com/egladman/magus/types/agent.ModelTier, child github.com/egladman/magus/types/agent.ModelTier) error
+github.com/egladman/magus.UncommittedRepairs func(ctx context.Context, drv github.com/egladman/magus/types.VCSDriver, dir string, files []github.com/egladman/magus/types.RepairedFile) ([]github.com/egladman/magus/types.RepairedFile, error)
 github.com/egladman/magus.WithBaseRef func(ref string) RunOption
 github.com/egladman/magus.WithBroker func(b *github.com/egladman/magus/broker.Client) Option
 github.com/egladman/magus.WithBrokerPolicy func(p github.com/egladman/magus/types.BrokerPolicy) Option
@@ -4140,6 +4141,7 @@ github.com/egladman/magus/types.PrecedentKey.Order field []string "json:\"order,
 github.com/egladman/magus/types.PrecedentKey.Prefix field string "json:\"prefix,omitempty\""
 github.com/egladman/magus/types.PrecedentKey.To field string "json:\"to,omitempty\""
 github.com/egladman/magus/types.PrecedentKey.Type field string "json:\"type,omitempty\""
+github.com/egladman/magus/types.PrecedentNeedsDirection const PrecedentFamily = "needs-direction"
 github.com/egladman/magus/types.PrecedentParamNameByType const PrecedentFamily = "param-name-by-type"
 github.com/egladman/magus/types.PrecedentParamOrder const PrecedentFamily = "param-order"
 github.com/egladman/magus/types.PrecedentScope type struct
@@ -4385,6 +4387,9 @@ github.com/egladman/magus/types.RemoteSyncer.embeds RevisionFetcher
 github.com/egladman/magus/types.RemovedOption const DiagnosticCode = "MGS1038"
 github.com/egladman/magus/types.RemovedOptions var map[string]string
 github.com/egladman/magus/types.RenamedCharmError func(name string) error
+github.com/egladman/magus/types.RepairedFile type struct
+github.com/egladman/magus/types.RepairedFile.Digest field string "json:\"digest\""
+github.com/egladman/magus/types.RepairedFile.Path field string "json:\"path\""
 github.com/egladman/magus/types.ReplyReviewRequest type struct
 github.com/egladman/magus/types.ReplyReviewRequest.Body field string
 github.com/egladman/magus/types.ReplyReviewRequest.ID field string
@@ -5133,6 +5138,13 @@ github.com/egladman/magus/types.URL.Port field string
 github.com/egladman/magus/types.URL.Query field string
 github.com/egladman/magus/types.URL.Scheme field string
 github.com/egladman/magus/types.USDPerMTok type float64
+github.com/egladman/magus/types.UncommittedRepair const DiagnosticCode = "MGS3057"
+github.com/egladman/magus/types.UncommittedRepairError type struct
+github.com/egladman/magus/types.UncommittedRepairError.Diagnostic field *DiagnosticError
+github.com/egladman/magus/types.UncommittedRepairError.Error method(ptr) func() string
+github.com/egladman/magus/types.UncommittedRepairError.Files field []RepairedFile
+github.com/egladman/magus/types.UncommittedRepairError.Unwrap method(ptr) func() error
+github.com/egladman/magus/types.UncommittedRepairError.Writers field []TargetRef
 github.com/egladman/magus/types.UncompressResult type struct
 github.com/egladman/magus/types.UncompressResult.Bytes field int
 github.com/egladman/magus/types.UncompressResult.Files field []Path
