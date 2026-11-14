@@ -86,8 +86,8 @@ export object BlogPost {
     tags: str = "",
 }
 
-// DocPage is one docs page's relatedness metadata. tags is ||-joined (split back out
-// by sharedTagCount); overview is true for a landing/index page (page_type: overview).
+// DocPage is one docs page's relatedness metadata. tags is ||-joined;
+// overview is true for a landing/index page (page_type: overview).
 // renderRelated() scores these to fill each page's "Related" cards, and
 // DemoLink points a concept page at the tour step that demonstrates it: the step's title
 // and its card anchor on /tour/. Built by tour.collectDemos, consumed by the demo callout.
@@ -107,6 +107,106 @@ export object DocPage {
     overview: bool = false,
     srcRel: str = "",
     generatedFrom: str = "",
+    // Frontmatter `order:` for the pager; 0 when absent or not positive.
+    order: int = 0,
+    // No frontmatter title and no H1, so title fell back to the path.
+    untitled: bool = false,
+}
+
+// DocIndex is docPages looked up by source and URL, and inverted from each
+// tag and linked term to the pages carrying it. Scoring a page then visits
+// only the pages it shares something with. Site.indexDocPages builds it.
+export object DocIndex {
+    // The docPages and pageTerms sizes it was built from.
+    pages: int = 0,
+    terms: int = 0,
+    // The first docPages index per srcRel and per url.
+    bySrc: mut {str: int},
+    byUrl: mut {str: int},
+    overviews: mut [int],
+    documentation: mut [int],
+    bySection: mut {str: mut [int]},
+    byTag: mut {str: mut [int]},
+    byTerm: mut {str: mut [int]},
+    // Pageable docs per docs-relative directory, in pager order.
+    siblings: mut {str: mut [int]},
+    // renderRelated's scratch, one slot per page, zero between calls.
+    tagHits: mut [int],
+    termHits: mut [int],
+    seen: mut [bool],
+}
+
+// relatedRank is one Related candidate's score: shared terms, then tag signal.
+object relatedRank {
+    page: int = 0,
+    url: str = "",
+    terms: int = 0,
+    tags: int = 0,
+}
+
+// outranks orders Related candidates by shared terms, then tag signal.
+// URL and then docPages order break ties.
+fun outranks(a: relatedRank, b: relatedRank) > bool {
+    if (a.terms != b.terms) { return a.terms > b.terms; }
+    if (a.tags != b.tags) { return a.tags > b.tags; }
+    if (a.url != b.url) { return a.url < b.url; }
+    return a.page < b.page;
+}
+
+// appendIndex appends page to the list m holds under key.
+fun appendIndex(m: mut {str: mut [int]}, key: str, page: int) > void {
+    final have = m[key];
+    if (have -> pages) {
+        pages.append(page);
+    } else {
+        m[key] = mut [page];
+    }
+}
+
+// indexEach files page under each distinct non-empty entry of a ||-joined list.
+fun indexEach(m: mut {str: mut [int]}, joined: str, page: int) > void {
+    if (joined == "") { return; }
+    final seen = mut {<str: bool>};
+    foreach (key in joined.split("||")) {
+        if (key == "" or seen[key] != null) { continue; }
+        seen[key] = true;
+        appendIndex(m, key: key, page: page);
+    }
+}
+
+// countShared adds one to hits[j] for each entry of joined that page j carries,
+// repeats included, and appends each page it first reaches to reached.
+fun countShared(joined: str, byKey: {str: mut [int]}, hits: mut [int], seen: mut [bool], reached: mut [int]) > void {
+    if (joined == "") { return; }
+    foreach (key in joined.split("||")) {
+        if (key == "") { continue; }
+        final pages = byKey[key];
+        if (pages -> ps) {
+            foreach (j in ps) {
+                if (seen[j] == false) {
+                    seen[j] = true;
+                    reached.append(j);
+                }
+                hits[j] = hits[j] + 1;
+            }
+        }
+    }
+}
+
+// UNORDERED sorts a page without a frontmatter `order:` after every page
+// with one, so a directory can be curated a few pages at a time.
+final UNORDERED = 1000000;
+
+// pagerRank is a page's place in the pager: its order, unordered pages last.
+fun pagerRank(p: DocPage) > int {
+    if (p.order > 0) { return p.order; }
+    return UNORDERED;
+}
+
+// pagerName is the file name a pager sorts and links a page by.
+export fun pagerName(srcRel: str) > str {
+    final segs = srcRel.split("/");
+    return segs[segs.len() - 1];
 }
 
 // Release is one entry read from releases/v<semver>.yaml. body is the trimmed markdown for
@@ -193,7 +293,7 @@ export object Inputs {
     // sorted set of glossary anchors it mentions. Built pre-walk by collectPageTerms so
     // renderRelated can rank a page's neighbors by shared vocabulary - the "graph" signal -
     // before the first page renders. Joined with "||" (never in an anchor slug)
-    // so sharedTagCount counts the overlap without a second helper.
+    // like DocPage.tags, so indexDocPages inverts both alike.
     pageTerms: mut {str: str},
 
     // Code-entity catalog (diagnostic codes, and later commands/methods/config), parsed
@@ -311,6 +411,9 @@ export object Site {
     // pick its Related neighbors.
     docPages: mut [DocPage],
 
+    // docPages and pageTerms indexed for lookup; see indexDocPages.
+    pageIndex: DocIndex? = null,
+
     // --- Methods that manage this state (pure helpers stay free functions below) ---
 
     // latestStable is the release the site advertises as current: the newest that
@@ -381,11 +484,22 @@ export object Site {
         f.close();
         final fm = serialize\jsonDecode(markdown\frontmatter(md));
         var title = fm.q("title").stringValue();
-        if (title == "") { title = deriveTitle(md, rel); }
+        var untitled = false;
+        if (title == "") {
+            // "\n" is never a trimmed H1, so it marks the no-heading fallback.
+            final heading = deriveTitle(md, "\n");
+            untitled = heading == "\n";
+            title = if (untitled) rel else heading;
+        }
+        var order = 0;
+        final n = fm.q("order").integer();
+        if (n -> o) {
+            if (o > 0) { order = o; }
+        }
         final desc = fm.q("description").stringValue();
         final url = cleanURL(rel, this.inputs.blog);
         // Join tags with "||" (never present in a tag) so the record stays flat;
-        // sharedTagCount splits it back out.
+        // indexDocPages splits it back out.
         final tagParts = mut [<str>];
         foreach (t in parseTags(md)) { tagParts.append(t); }
         final joined = tagParts.join("||");
@@ -398,6 +512,8 @@ export object Site {
             overview = pageType(md) == "overview",
             srcRel = this.inputs.docs + "/" + rel,
             generatedFrom = generatedFrom(md),
+            order = order,
+            untitled = untitled,
         });
     }
 
@@ -534,23 +650,13 @@ export object Site {
     // overview. Up to four cards; ties (same term overlap AND same tag signal) broken by
     // URL for stability.
     fun renderRelated(srcRel: str, root: str) > str !> any {
-        var curTags = "";
-        var curSection = "";
-        var curUrl = "";
-        var curOverview = false;
-        var found = false;
-        foreach (p in this.docPages) {
-            if (p.srcRel == srcRel) {
-                curTags = p.tags;
-                curSection = p.section;
-                curUrl = p.url;
-                curOverview = p.overview;
-                found = true;
-                break;
-            }
-        }
-        if (found == false) { return ""; }
-        if (curOverview) { return ""; }
+        final idx = this.indexDocPages();
+        final at = idx.bySrc[srcRel];
+        if (at == null) { return ""; }
+        final cur = this.docPages[at!];
+        if (cur.overview) { return ""; }
+        final curUrl = cur.url;
+        final curSection = cur.section;
 
         // picks is the final ordered card list; used dedups by URL (a page never links
         // to itself or lists the same neighbor twice).
@@ -563,13 +669,12 @@ export object Site {
         var leadUrl = "";
         var leadTitle = "";
         var leadDesc = "";
-        foreach (p in this.docPages) {
-            if (p.overview and p.url != curUrl and curUrl.startsWith(p.url)) {
-                if (p.url.len() > leadUrl.len()) {
-                    leadUrl = p.url;
-                    leadTitle = p.title;
-                    leadDesc = p.desc;
-                }
+        foreach (j in idx.overviews) {
+            final p = this.docPages[j];
+            if (p.url != curUrl and curUrl.startsWith(p.url) and p.url.len() > leadUrl.len()) {
+                leadUrl = p.url;
+                leadTitle = p.title;
+                leadDesc = p.desc;
             }
         }
         if (leadUrl != "") {
@@ -577,41 +682,52 @@ export object Site {
             used[leadUrl] = true;
         }
 
-        // The current page's linked-term set, for the shared-vocabulary (graph) score.
-        var curTerms = "";
-        if (this.inputs.pageTerms[curUrl] != null) { curTerms = this.inputs.pageTerms[curUrl]!; }
-
-        // Stage 2: score every remaining page and fill up to four cards. The sort key is
-        // the shared-term overlap in the high digits and the tag/section signal in the low
-        // digits, so a lexical compare ranks by shared vocabulary first and falls back to
-        // the tag signal, then to URL. A page qualifies when either signal is positive.
-        var scored: mut [{str: str}] = mut [<{str: str}>];
-        foreach (p in this.docPages) {
-            if (used[p.url] == null) {
-                var tagSignal = 3 * sharedTagCount(curTags, p.tags);
-                if (curSection != "" and p.section == curSection) { tagSignal = tagSignal + 4; }
-                if (p.overview) { tagSignal = tagSignal + 3; }
-                if (p.srcRel == this.inputs.docs + "/documentation.md") { tagSignal = tagSignal + 1; }
-                var pTerms = "";
-                if (this.inputs.pageTerms[p.url] != null) { pTerms = this.inputs.pageTerms[p.url]!; }
-                final termOverlap = sharedTagCount(curTerms, pTerms);
-                if (termOverlap > 0 or tagSignal > 0) {
-                    scored.append(mut {
-                        "key": pad4(termOverlap) + pad4(tagSignal), "url": p.url, "title": p.title, "desc": p.desc
-                    });
-                }
+        // Stage 2: count shared tags and terms through the index, visiting only
+        // pages that share one. Section, overview and documentation pages score
+        // regardless.
+        final reached = mut [<int>];
+        countShared(cur.tags, byKey: idx.byTag, hits: idx.tagHits, seen: idx.seen, reached: reached);
+        countShared(this.inputs.pageTerms[curUrl] ?? "", byKey: idx.byTerm, hits: idx.termHits, seen: idx.seen, reached: reached);
+        final always = mut [<int>];
+        if (curSection != "") {
+            final sectionPages = idx.bySection[curSection];
+            if (sectionPages -> ps) { foreach (j in ps) { always.append(j); } }
+        }
+        foreach (j in idx.overviews) { always.append(j); }
+        foreach (j in idx.documentation) { always.append(j); }
+        foreach (j in always) {
+            if (idx.seen[j] == false) {
+                idx.seen[j] = true;
+                reached.append(j);
             }
         }
-        // Highest score first; ties by URL ascending. Padded keys compare lexically
-        // the same as numerically, so strLess on the key is a numeric compare.
-        final sorted = scored.sort(fun (a: {str: str}, b: {str: str}) > bool {
-            if (a["key"] != b["key"]) { return strLess(b["key"], a["key"]); }
-            return strLess(a["url"], b["url"]);
-        });
-        foreach (r in sorted) {
-            if (picks.len() < 4) {
-                picks.append(mut {"url": r["url"], "title": r["title"], "desc": r["desc"], "hasDesc": r["desc"] != ""});
+
+        // The best cards, best first: up to four in all, the lead included.
+        final want = 4 - picks.len();
+        final best = mut [<relatedRank>];
+        foreach (j in reached) {
+            final p = this.docPages[j];
+            final termOverlap = idx.termHits[j];
+            var tagSignal = 3 * idx.tagHits[j];
+            idx.tagHits[j] = 0;
+            idx.termHits[j] = 0;
+            idx.seen[j] = false;
+            if (used[p.url] != null) { continue; }
+            if (curSection != "" and p.section == curSection) { tagSignal = tagSignal + 4; }
+            if (p.overview) { tagSignal = tagSignal + 3; }
+            if (p.srcRel == this.inputs.docs + "/documentation.md") { tagSignal = tagSignal + 1; }
+            if (termOverlap == 0 and tagSignal == 0) { continue; }
+            final rank = relatedRank{ page = j, url = p.url, terms = termOverlap, tags = tagSignal };
+            var pos = best.len();
+            while (pos > 0 and outranks(rank, b: best[pos - 1])) { pos = pos - 1; }
+            if (pos < want) {
+                best.insert(pos, value: rank);
+                if (best.len() > want) { _ = best.pop(); }
             }
+        }
+        foreach (r in best) {
+            final p = this.docPages[r.page];
+            picks.append(mut {"url": p.url, "title": p.title, "desc": p.desc, "hasDesc": p.desc != ""});
         }
 
         if (picks.len() == 0) { return ""; }
@@ -639,16 +755,18 @@ export object Site {
         if (curUrl == "") { return ""; }
         // The section root: this page if it is itself an overview, else the longest
         // overview-URL prefix of this page's URL (the nearest-ancestor overview).
+        final idx = this.indexDocPages();
         var selfOverview = false;
-        foreach (p in this.docPages) {
-            if (p.srcRel == srcRel and p.overview) { selfOverview = true; break; }
+        foreach (j in idx.overviews) {
+            if (this.docPages[j].srcRel == srcRel) { selfOverview = true; break; }
         }
         var rootUrl = "";
         if (selfOverview) {
             rootUrl = curUrl;
         } else {
-            foreach (p in this.docPages) {
-                if (p.overview and p.url != curUrl and curUrl.startsWith(p.url) and p.url.len() > rootUrl.len()) {
+            foreach (j in idx.overviews) {
+                final p = this.docPages[j];
+                if (p.url != curUrl and curUrl.startsWith(p.url) and p.url.len() > rootUrl.len()) {
                     rootUrl = p.url;
                 }
             }
@@ -765,7 +883,7 @@ export object Site {
     // collectDocPages + collectGlossaryTerms) over docPages, so the map is complete before
     // any page's Related block renders. The glossary index names every term, so it would
     // relate to everything and is skipped. Anchors are sorted and "||"-joined so
-    // sharedTagCount counts overlap.
+    // indexDocPages inverts them like tags.
     fun collectPageTerms() > void {
         foreach (p in this.docPages) {
             if (p.srcRel == this.inputs.docs + "/glossary.md") { continue; }
@@ -914,10 +1032,67 @@ export object Site {
     // "modules/" -> "magus stdlib"), or "" when no docs page owns that URL. Used by
     // renderBreadcrumb so an intermediate crumb reads as its destination page's real title.
     fun lookupTitle(url: str) > str {
-        foreach (p in this.docPages) {
-            if (p.url == url) { return p.title; }
-        }
+        final at = this.indexDocPages().byUrl[url];
+        if (at -> j) { return this.docPages[j].title; }
         return "";
+    }
+
+    // indexDocPages returns the DocIndex over docPages and pageTerms. It is
+    // rebuilt once either has grown, since the collect passes append to both.
+    fun indexDocPages() > DocIndex {
+        if (this.pageIndex -> built) {
+            if (built.pages == this.docPages.len() and built.terms == this.inputs.pageTerms.len()) { return built; }
+        }
+        final idx = mut DocIndex{
+            pages = this.docPages.len(),
+            terms = this.inputs.pageTerms.len(),
+            bySrc = mut {},
+            byUrl = mut {},
+            overviews = mut [<int>],
+            documentation = mut [<int>],
+            bySection = mut {},
+            byTag = mut {},
+            byTerm = mut {},
+            siblings = mut {},
+            tagHits = mut [<int>],
+            termHits = mut [<int>],
+            seen = mut [<bool>],
+        };
+        final docsDir = this.inputs.docs + "/";
+        foreach (j, p in this.docPages) {
+            if (idx.bySrc[p.srcRel] == null) { idx.bySrc[p.srcRel] = j; }
+            if (idx.byUrl[p.url] == null) { idx.byUrl[p.url] = j; }
+            if (p.overview) { idx.overviews.append(j); }
+            if (p.srcRel == docsDir + "documentation.md") { idx.documentation.append(j); }
+            if (p.section != "") { appendIndex(idx.bySection, key: p.section, page: j); }
+            indexEach(idx.byTag, joined: p.tags, page: j);
+            indexEach(idx.byTerm, joined: this.inputs.pageTerms[p.url] ?? "", page: j);
+            if (p.srcRel.startsWith(docsDir)) {
+                final segs = p.srcRel.sub(docsDir.len()).split("/");
+                final name = segs[segs.len() - 1];
+                // README.md and index.md land on the parent's URL, which a
+                // sibling link cannot express; the walk never renders a
+                // generator file.
+                if (name.endsWith(".md") and name != "README.md" and name != "index.md"
+                    and name.startsWith("_") == false and isGeneratorFile(name, this.inputs.config.generatorFiles) == false) {
+                    appendIndex(idx.siblings, key: segs.sub(0, segs.len() - 1).join("/"), page: j);
+                }
+            }
+            idx.tagHits.append(0);
+            idx.termHits.append(0);
+            idx.seen.append(false);
+        }
+        final docs = this.docPages;
+        foreach (sibs in idx.siblings.values()) {
+            _ = sibs.sort(fun (a: int, b: int) > bool {
+                final ra = pagerRank(docs[a]);
+                final rb = pagerRank(docs[b]);
+                if (ra != rb) { return ra < rb; }
+                return pagerName(docs[a].srcRel) < pagerName(docs[b].srcRel);
+            });
+        }
+        this.pageIndex = idx;
+        return idx;
     }
 }
 

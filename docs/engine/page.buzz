@@ -151,39 +151,16 @@ export fun writeOffline(site: Site) > void !> any {
 }
 
 
-// renderPagerLink renders one prev/next card, reading the sibling's source so it credits
-// the same title (frontmatter title, else first H1) the sibling page renders with.
-fun renderPagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str) > str !> any {
-    final f = io\File.open(srcDir + "/" + name, io\FileMode.read);
-    final md = f.readAll();
-    f.close();
-    final fm = serialize\jsonDecode(markdown\frontmatter(md));
-    var title = fm.q("title").stringValue();
-    if (title == "") { title = deriveTitle(md, name); }
+// renderPagerLink renders one prev/next card, crediting the title the sibling
+// renders with, or its file name when it has none.
+fun renderPagerLink(page: DocPage, dir: str, cls: str, climbPrefix: str) > str !> any {
+    final name = pagerName(page.srcRel);
+    final title = if (page.untitled) name else page.title;
     // A regular page lives in its own <slug>/ subdir, so it climbs one level to reach a
     // sibling (../<slug>/); an index.md landing sits in the parent, so it does not.
     final slug = name.sub(0, name.len() - 3);   // drop ".md"
     return template\render(`      <a class="{{cls}}" href="{{climbPrefix}}{{slug}}/"><span class="page-nav-dir">{{dir}}</span><span class="page-nav-title">{{title}}</span></a>
 `, {"cls": cls, "climbPrefix": climbPrefix, "slug": slug, "dir": dir, "title": title});
-}
-
-
-// UNORDERED sorts every page without a frontmatter `order:` after every page with one, so a
-// directory can be curated a few pages at a time instead of all-or-nothing.
-final UNORDERED = 1000000;
-
-// pageOrder reads one sibling's frontmatter `order:`. Orders start at 1; absent reads as 0
-// from .integer(), which is why 0 counts as unordered rather than first.
-fun pageOrder(srcDir: str, name: str) > int !> any {
-    final f = io\File.open(srcDir + "/" + name, io\FileMode.read);
-    final md = f.readAll();
-    f.close();
-    final fm = serialize\jsonDecode(markdown\frontmatter(md));
-    // .integer() is null when the key is absent, so the null check comes BEFORE any compare.
-    final n = fm.q("order").integer();
-    if (n == null) { return UNORDERED; }
-    if (n! <= 0) { return UNORDERED; }
-    return n!;
 }
 
 // renderPager builds the prev/next links among a page's siblings - the other rendered
@@ -196,38 +173,15 @@ fun pageOrder(srcDir: str, name: str) > int !> any {
 fun renderPager(rel: str, site: Site) > str !> any {
     final parts = rel.split("/");
     final base = parts[parts.len() - 1];
-    var srcDir = fs\join(site.inputs.root, site.inputs.docs);
-    if (parts.len() > 1) { srcDir = srcDir + "/" + parts.sub(0, parts.len() - 1).join("/"); }
-
-    var sibs: mut [str] = mut [<str>];
-    foreach (name in fs\listDir(srcDir)) {
-        // README.md/index.md are the directory's landing page (reached via breadcrumb and
-        // nav, not a prev/next peer), and their clean URL is the parent dir, which a sibling
-        // link can't express - so they stay out. isGeneratorFile drops the SSG's own
-        // MAGUS.md: the walk never renders it, so a pager link would dangle.
-        if (name.endsWith(".md") and name != "README.md" and name != "index.md"
-            and name.startsWith("_") == false and isGeneratorFile(name, site.inputs.config.generatorFiles) == false) {
-            sibs.append(name);
-        }
-    }
-    if (sibs.len() < 2) { return ""; }
-    // Precomputed, not read inside the comparator: a comparator runs O(n log n) times, and
-    // each call would otherwise open and parse a file.
-    var orders: mut {str: int} = mut {<str: int>};
-    foreach (name in sibs) { orders[name] = pageOrder(srcDir, name); }
-    final ordered = sibs.sort(fun (a: str, b: str) > bool {
-        // Force-unwrap is safe: orders is populated from sibs, and the comparator only ever
-        // sees names from that same list.
-        final oa = orders[a]!;
-        final ob = orders[b]!;
-        if (oa != ob) { return oa < ob; }
-        return strLess(a, b);
-    });
+    final sibs = site.indexDocPages().siblings[parts.sub(0, parts.len() - 1).join("/")];
+    if (sibs == null) { return ""; }
+    final ordered = sibs!;
+    if (ordered.len() < 2) { return ""; }
 
     var pos = -1;
     var i = 0;
     while (i < ordered.len()) {
-        if (ordered[i] == base) { pos = i; }
+        if (pagerName(site.docPages[ordered[i]].srcRel) == base) { pos = i; }
         i = i + 1;
     }
     if (pos < 0) { return ""; }
@@ -237,8 +191,8 @@ fun renderPager(rel: str, site: Site) > str !> any {
     final climbPrefix = "../";
 
     var body = "";
-    if (pos > 0) { body = body + renderPagerLink(srcDir, ordered[pos - 1], "Previous", "page-nav-prev", climbPrefix); }
-    if (pos < ordered.len() - 1) { body = body + renderPagerLink(srcDir, ordered[pos + 1], "Next", "page-nav-next", climbPrefix); }
+    if (pos > 0) { body = body + renderPagerLink(site.docPages[ordered[pos - 1]], dir: "Previous", cls: "page-nav-prev", climbPrefix: climbPrefix); }
+    if (pos < ordered.len() - 1) { body = body + renderPagerLink(site.docPages[ordered[pos + 1]], dir: "Next", cls: "page-nav-next", climbPrefix: climbPrefix); }
     if (body == "") { return ""; }
     return template\render(`    <nav class="page-nav" aria-label="Pagination">
 {{{body}}}    </nav>
