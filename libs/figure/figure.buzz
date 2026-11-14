@@ -358,10 +358,13 @@ object LegendItem {
     label: str = "",
 }
 
-// Diagram is the whole figure. id namespaces the SVG's marker ids: several diagrams inlined
-// into one page share a document id space, and duplicate marker ids silently repoint every
-// arrowhead at the first definition.
-object Diagram {
+// Diagram is a figure laid out: what Figure.diagram() returns and
+// drawDiagram paints. A caller that reads the layout, as the docs
+// registry's drift stamp does, paints it in each theme without a second
+// layout. id namespaces the SVG's marker ids: several diagrams inlined
+// into one page share a document id space, and duplicate marker ids
+// silently repoint every arrowhead at the first definition.
+export object Diagram {
     id: str = "",
     title: str = "",
     eyebrow: str = "",
