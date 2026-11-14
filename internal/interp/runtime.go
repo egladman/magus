@@ -536,65 +536,182 @@ func guardRules(ctx context.Context) bool {
 // and the one on PATH) each keep their own.
 const staleStampAge = 24 * time.Hour
 
-// guardBytecodeStore is where a guard-rules load keeps compiled chunks for the
-// workspace at root: <user cache>/magus/buzz-bytecode/<compiler stamp>/<root
-// hash>. It is outside the workspace because a stored chunk runs as it is
-// read back, and the working tree is writable by the agents the guard judges.
-//
-// A cache is not a place only this user writes: CI restores it, a sync can fill
-// it, and a spell's sandbox can be granted part of it. So every chunk is sealed
-// with a key kept in the user's state dir, and one that does not verify is
-// compiled over.
-//
-// Nil when the cache or the key is unavailable, and the load compiles every time.
-func guardBytecodeStore(root string) buzz.BytecodeStore { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+// worktreeBytecodeStore keeps a working-tree load's chunks in the user cache.
+// A stored chunk runs as read, and agents the guard judges can write the tree.
+// Chunks are sealed with a state-dir key, since others can write a cache.
+func worktreeBytecodeStore(root string) (buzz.BytecodeStore, error) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	return sealedBytecodeStoreUnder("buzz-bytecode", root)
 }
 
-// approvedBytecodeStore is guardBytecodeStore for a load of approved sources, under
-// buzz-bytecode-approved. A chunk's key is a digest of the source bytes the approved reader
-// returned, and every import it was compiled against is checked by digest through that
-// reader before it runs, so an entry is found only for content the approval authority holds
-// now. Working-tree loads never write here, and the seal covers the directory, so a chunk
-// compiled from working-tree bytes and moved in does not verify.
-func approvedBytecodeStore(root string) buzz.BytecodeStore { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+// approvedBytecodeStore is worktreeBytecodeStore for approved sources. Keys and
+// imports are digests of what the approved reader returns. Working-tree loads
+// never write here, and the seal covers the directory.
+func approvedBytecodeStore(root string) (buzz.BytecodeStore, error) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	return sealedBytecodeStoreUnder("buzz-bytecode-approved", root)
 }
 
-// sealedBytecodeStoreUnder is the sealed store for the workspace at root under the user
-// cache's magus/<name>/<compiler stamp>, nil when it is unavailable.
-func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+// sealedBytecodeStoreUnder is the sealed store for root under the user cache's
+// magus/<name>/<compiler stamp>/<root hash>. The error says why there is none.
+func sealedBytecodeStoreUnder(name, root string) (buzz.BytecodeStore, error) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	if root == "" {
-		return nil
+		return nil, errors.New("no workspace root")
 	}
 	stamp := compilerStamp()
 	if stamp == "" {
-		return nil
+		return nil, errors.New("this build has no build id to stamp chunks with")
 	}
 	base, err := xdg.CacheDir()
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("no user cache: %w", err)
 	}
 	secret, err := bytecodeSecret()
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("no sealing key: %w", err)
 	}
 	abs, err := filepath.Abs(root)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	stamps := filepath.Join(base, "magus", name)
 	dir := filepath.Join(stamps, stamp)
 	now := time.Now()
 	if err := os.Chtimes(dir, now, now); errors.Is(err, fs.ErrNotExist) {
-		if os.MkdirAll(dir, 0o700) != nil {
-			return nil
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, fmt.Errorf("no user cache: %w", err)
 		}
 		pruneStamps(stamps, stamp, now.Add(-staleStampAge))
 	}
 	sum := sha256.Sum256([]byte(abs))
 	dir = filepath.Join(dir, hex.EncodeToString(sum[:]))
-	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: types.NewSecret(string(secret)), scope: dir}
+	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: types.NewSecret(string(secret)), scope: dir}, nil
+}
+
+// errReaderKeepsNoChunks is a load reading a caller's reader, such as a
+// revision. A store shared with other loads must hold only their bytes.
+var errReaderKeepsNoChunks = errors.New("its sources come from a reader that is neither the working tree nor the approved sources")
+
+// magusfileBytecodeStore is where a load in dir keeps its chunks. Approved
+// sources get a store that working-tree loads never write.
+func magusfileBytecodeStore(ctx context.Context, dir string) (buzz.BytecodeStore, error) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+	switch {
+	case sourceReaderFromContext(ctx) == nil:
+		return worktreeBytecodeStore(dir)
+	case approvedSources(ctx):
+		return approvedBytecodeStore(dir)
+	}
+	return nil, errReaderKeepsNoChunks
+}
+
+// noStoreReported holds each no-store reason this process warned about. The
+// reasons are the environment's, alike for every magusfile, so once says it.
+var noStoreReported sync.Map
+
+func reportNoBytecodeStore(ctx context.Context, dir string, err error) {
+	log := slog.With(attr.Component("interp"))
+	if errors.Is(err, errReaderKeepsNoChunks) {
+		log.DebugContext(ctx, "magusfile compiles on every load: no bytecode store", slog.String("dir", dir), attr.Error(err))
+		return
+	}
+	if _, seen := noStoreReported.LoadOrStore(err.Error(), true); seen {
+		return
+	}
+	log.WarnContext(ctx, "magusfiles compile on every load: no sealed bytecode store", slog.String("dir", dir), attr.Error(err))
+}
+
+// loadSalt is what a chunk was checked against that its record does not name.
+// Parse mode installs another magus namespace. Earlier files declared names.
+func loadSalt(parseMode bool, ran []string) string {
+	parts := make([]string, 1, 1+len(ran))
+	parts[0] = "run"
+	if parseMode {
+		parts[0] = "parse"
+	}
+	for _, code := range ran {
+		parts = append(parts, ContentID([]byte(code)))
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+// loadBytecodeStore salts every key with loadSalt and records each compile a
+// stored chunk did not spare, for report to log under the load's context.
+type loadBytecodeStore struct {
+	inner buzz.BytecodeStore
+
+	mu     sync.Mutex
+	salt   string
+	loaded map[string]bool
+	events []storeEvent
+}
+
+// storeEvent is one compile the store did not spare: a miss, a stale chunk, or
+// an unusable one (err set).
+type storeEvent struct {
+	msg string
+	key string
+	err error
+}
+
+func newLoadBytecodeStore(inner buzz.BytecodeStore) *loadBytecodeStore {
+	return &loadBytecodeStore{inner: inner, loaded: map[string]bool{}}
+}
+
+func (s *loadBytecodeStore) setSalt(salt string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.salt = salt
+}
+
+func (s *loadBytecodeStore) key(key string) string {
+	s.mu.Lock()
+	salt := s.salt
+	s.mu.Unlock()
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s\x00%s", salt, key))
+	return hex.EncodeToString(sum[:])
+}
+
+func (s *loadBytecodeStore) Load(key string) ([]byte, error) {
+	k := s.key(key)
+	blob, err := s.inner.Load(k)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch {
+	case err == nil:
+		s.loaded[k] = true
+	case errors.Is(err, fs.ErrNotExist):
+		s.events = append(s.events, storeEvent{msg: "no stored chunk for this source: compiling", key: k})
+	default:
+		s.events = append(s.events, storeEvent{msg: "stored chunk is unusable: compiling over it", key: k, err: err})
+	}
+	return blob, err
+}
+
+// Store after a Load of the same key means the session found that chunk stale.
+func (s *loadBytecodeStore) Store(key string, blob []byte) error {
+	k := s.key(key)
+	s.mu.Lock()
+	if s.loaded[k] {
+		s.events = append(s.events, storeEvent{msg: "stored chunk is stale against its imports: compiled again", key: k})
+	}
+	s.mu.Unlock()
+	return s.inner.Store(k, blob)
+}
+
+// report logs and forgets what the store recorded. An unusable chunk is a
+// warning, since a chunk this build stored verifies.
+func (s *loadBytecodeStore) report(ctx context.Context, path string) {
+	s.mu.Lock()
+	events := s.events
+	s.events = nil
+	s.mu.Unlock()
+	log := slog.With(attr.Component("interp"))
+	for _, e := range events {
+		if e.err != nil {
+			log.WarnContext(ctx, e.msg, slog.String("file", path), slog.String("key", e.key), attr.Error(e.err))
+			continue
+		}
+		log.DebugContext(ctx, e.msg, slog.String("file", path), slog.String("key", e.key))
+	}
 }
 
 // PolicyStore is the guard's policy snapshot file for one workspace, under
@@ -1276,25 +1393,17 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 	// A profile on ctx records the same events for a human reading a trace.
 	AttachSessionObservers(ctx, buzzSess, ModeMagusfile)
 	buzzSess.AddCompileObserver(buzz.ProfileFromContext(ctx))
-	var store buzz.BytecodeStore
 	if guardRules(ctx) {
 		buzzSess.SetEntryFilter(guardRulesFilterID, guardRulesFilter)
-		// A hook loads these rules in a fresh process, and compiling them is the
-		// part of that load the source bytes do not have to repeat. Ordinary
-		// magusfile loads are left alone. A load of approved sources trusts nothing
-		// but the bytes its reader returns, so it gets a store only working-tree
-		// loads never write, and any other reader gets none.
-		switch {
-		case sourceReaderFromContext(ctx) == nil:
-			store = guardBytecodeStore(src.Dir)
-		case approvedSources(ctx):
-			store = approvedBytecodeStore(src.Dir)
-		}
-		if store != nil {
-			buzzSess.SetBytecodeStore(store)
-		} else {
-			slog.With(attr.Component("interp")).WarnContext(ctx, "guard rules compile on every load: no sealed bytecode store (no root, build id, cache dir or seal key, or a reader that is neither the working tree nor the approved sources)", "dir", src.Dir)
-		}
+	}
+	store, storeErr := magusfileBytecodeStore(ctx, src.Dir)
+	var loadStore *loadBytecodeStore
+	if storeErr != nil {
+		reportNoBytecodeStore(ctx, src.Dir, storeErr)
+	} else {
+		loadStore = newLoadBytecodeStore(store)
+		loadStore.setSalt(loadSalt(parseMode, nil))
+		buzzSess.SetBytecodeStore(loadStore)
 	}
 
 	targetMap := buzzSess.Targets()
@@ -1308,6 +1417,9 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 			return nil, err
 		}
 	}
+	if loadStore != nil {
+		loadStore.report(ctx, src.Dir)
+	}
 
 	// Import names across all the project's magusfiles, to catch a target that shadows one.
 	importNames := map[string]string{}
@@ -1315,6 +1427,7 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 	// magus.Context first argument at dispatch (injected below) instead of running
 	// on the bare `args` signature the old form uses.
 	ctxForm := map[string]bool{}
+	var ran []string
 	for _, path := range src.Files {
 		// rel names the offending file relative to its project dir, so a magusfiles/
 		// directory (several files) is unambiguous; the project itself is already in
@@ -1330,6 +1443,10 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 			return nil, fmt.Errorf("magusfile: read %s: %w", rel, err)
 		}
 		code := string(data)
+		if loadStore != nil {
+			loadStore.setSalt(loadSalt(parseMode, ran))
+			ran = append(ran, code)
+		}
 		facts := loadMagusfileFacts(store, code)
 		maps.Copy(importNames, facts.Imports)
 		for _, key := range facts.CtxForm {
@@ -1364,6 +1481,9 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 			return nil, fmt.Errorf("magusfile: %s: %w", rel, removedAPIError(facts.RemovedCall, facts.Replacement))
 		}
 		execErr := TimeExec(ctx, ModeMagusfile, func() error { return buzzSess.Exec(ctx, code) })
+		if loadStore != nil {
+			loadStore.report(ctx, path)
+		}
 		// An import that failed to bind is the cause of whatever Exec tripped on next,
 		// so it wins over Exec's own error.
 		if err := importErrs.take(); err != nil {

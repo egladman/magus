@@ -1,6 +1,7 @@
 package interp
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -505,7 +507,9 @@ func TestGuardBytecodeStorePrunesStaleStamps(t *testing.T) {
 	long := time.Now().Add(-2 * staleStampAge)
 	require.NoError(t, os.Chtimes(old, long, long))
 
-	require.NotNil(t, guardBytecodeStore(t.TempDir()))
+	store, err := worktreeBytecodeStore(t.TempDir())
+	require.NoError(t, err)
+	require.NotNil(t, store)
 	assert.NoDirExists(t, old)
 	assert.DirExists(t, recent)
 	assert.DirExists(t, filepath.Join(stamps, compilerStamp()))
@@ -527,7 +531,9 @@ func TestGuardBytecodeStoreIsOffWithoutABuildID(t *testing.T) {
 	compilerStamp = func() string { return "" }
 	t.Cleanup(func() { compilerStamp = old })
 
-	assert.Nil(t, guardBytecodeStore(t.TempDir()))
+	store, err := worktreeBytecodeStore(t.TempDir())
+	require.ErrorContains(t, err, "no build id")
+	assert.Nil(t, store)
 	assert.NoDirExists(t, filepath.Join(cache, "magus", "buzz-bytecode"))
 }
 
@@ -873,4 +879,150 @@ fun body() > void !> any {
 `, want)
 	assert.Same(t, want, err, "uncaught, the target fails with the dependency's own error")
 	assert.False(t, sess.Globals()["after"].AsBool(), "the body must not run past the failed need")
+}
+
+// BytecodeCacheSuite pins the store an ordinary magusfile load keeps: a warm
+// load runs stored chunks, and every input a chunk was checked against
+// compiles it again.
+type BytecodeCacheSuite struct {
+	suite.Suite
+	cache string
+	w     *testkit.Workspace
+}
+
+func TestBytecodeCacheSuite(t *testing.T) {
+	suite.Run(t, new(BytecodeCacheSuite))
+}
+
+func (s *BytecodeCacheSuite) SetupTest() {
+	s.cache = s.T().TempDir()
+	s.T().Setenv("XDG_CACHE_HOME", s.cache)
+	s.T().Setenv("XDG_STATE_HOME", s.T().TempDir())
+	s.T().Setenv("MAGUS_CACHE_DIR", "")
+	s.w = testkit.NewWorkspace(s.T())
+	s.w.Magusfile("import \"helper\";\nexport final marker = helper\\value();\n")
+	s.w.Write("helper.buzz", "export fun value() > str { return \"one\"; }\n")
+}
+
+// load runs src the way a command does and returns its marker export, and
+// whether anything was compiled.
+func (s *BytecodeCacheSuite) load(ctx context.Context, src *Source, parseMode bool) (string, bool) {
+	profile := buzz.NewProfile()
+	load, err := execBuzzSource(buzz.WithProfile(ctx, profile), src, parseMode)
+	s.Require().NoError(err)
+	defer func() { _ = load.Session.Close() }()
+	return load.Session.GetGlobal("marker").AsString(), profile.Report() != ""
+}
+
+func (s *BytecodeCacheSuite) source() *Source {
+	src, err := Find(s.w.Root())
+	s.Require().NoError(err)
+	return src
+}
+
+// captureLog sends the default logger to a buffer for the rest of the test.
+func (s *BytecodeCacheSuite) captureLog() *bytes.Buffer {
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	s.T().Cleanup(func() { slog.SetDefault(old) })
+	return &buf
+}
+
+func (s *BytecodeCacheSuite) TestWarmLoadCompilesNothing() {
+	marker, compiled := s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one", true}, []any{marker, compiled})
+
+	marker, compiled = s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one", false}, []any{marker, compiled}, "the stored chunk ran")
+}
+
+func (s *BytecodeCacheSuite) TestEditedMagusfileCompilesAgain() {
+	s.load(s.T().Context(), s.source(), true)
+	s.w.Magusfile("import \"helper\";\nexport final marker = helper\\value() + \"!\";\n")
+
+	marker, compiled := s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one!", true}, []any{marker, compiled})
+}
+
+func (s *BytecodeCacheSuite) TestEditedImportCompilesAgain() {
+	s.load(s.T().Context(), s.source(), true)
+	s.w.Write("helper.buzz", "export fun value() > str { return \"two\"; }\n")
+
+	marker, compiled := s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"two", true}, []any{marker, compiled})
+}
+
+func (s *BytecodeCacheSuite) TestOtherBuildCompilesAgain() {
+	s.load(s.T().Context(), s.source(), true)
+	old := compilerStamp
+	compilerStamp = func() string { return "0123456789abcdef" }
+	s.T().Cleanup(func() { compilerStamp = old })
+
+	marker, compiled := s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one", true}, []any{marker, compiled})
+}
+
+func (s *BytecodeCacheSuite) TestRunModeKeepsItsOwnChunk() {
+	s.load(s.T().Context(), s.source(), true)
+
+	_, compiled := s.load(s.T().Context(), s.source(), false)
+	s.True(compiled, "a parse-mode chunk is not run-mode's")
+	_, compiled = s.load(s.T().Context(), s.source(), false)
+	s.False(compiled)
+}
+
+// A later file was checked against the names the earlier ones declared, so
+// its chunk is not reused once they change, though its own bytes did not.
+func (s *BytecodeCacheSuite) TestEditedEarlierFileCompilesTheLaterOne() {
+	first := s.w.Write("magusfiles/a.buzz", "export final base = \"one\";\n")
+	second := s.w.Write("magusfiles/b.buzz", "export final marker = base;\n")
+	src := &Source{Dir: s.w.Root(), Files: []string{first, second}, Engine: "buzz"}
+	s.load(s.T().Context(), src, true)
+	before := storedChunks(s.T(), s.cache)
+	s.w.Write("magusfiles/a.buzz", "export final base = \"two\";\n")
+
+	marker, _ := s.load(s.T().Context(), src, true)
+	s.Equal("two", marker)
+	s.Len(storedChunks(s.T(), s.cache), len(before)+2, "both files compiled again")
+}
+
+func (s *BytecodeCacheSuite) TestNoBuildIDCompilesEveryLoadAndSaysSo() {
+	logs := s.captureLog()
+	noStoreReported.Clear()
+	s.T().Cleanup(noStoreReported.Clear)
+	old := compilerStamp
+	compilerStamp = func() string { return "" }
+	s.T().Cleanup(func() { compilerStamp = old })
+
+	_, first := s.load(s.T().Context(), s.source(), true)
+	_, second := s.load(s.T().Context(), s.source(), true)
+	s.Equal([]bool{true, true}, []bool{first, second})
+	s.Empty(storedChunks(s.T(), s.cache))
+	s.Equal(1, strings.Count(logs.String(), "no sealed bytecode store"), "said once per process: %s", logs)
+	s.Contains(logs.String(), "no build id")
+}
+
+func (s *BytecodeCacheSuite) TestReaderLoadKeepsNothingAndSaysSo() {
+	logs := s.captureLog()
+	read := func(path string) ([]byte, error) { return os.ReadFile(path) }
+	ctx := WithSourceReader(s.T().Context(), read)
+
+	_, first := s.load(ctx, s.source(), true)
+	_, second := s.load(ctx, s.source(), true)
+	s.Equal([]bool{true, true}, []bool{first, second})
+	s.Empty(storedChunks(s.T(), s.cache))
+	s.Contains(logs.String(), "magusfile compiles on every load")
+}
+
+func (s *BytecodeCacheSuite) TestUnusableChunkIsCompiledOverAndSaysSo() {
+	s.load(s.T().Context(), s.source(), true)
+	for path := range storedChunks(s.T(), s.cache) {
+		s.Require().NoError(os.WriteFile(path, []byte("not a chunk"), 0o600))
+	}
+	logs := s.captureLog()
+
+	marker, compiled := s.load(s.T().Context(), s.source(), true)
+	s.Equal([]any{"one", true}, []any{marker, compiled})
+	s.Contains(logs.String(), "stored chunk is unusable")
 }
