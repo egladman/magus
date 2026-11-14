@@ -1354,19 +1354,33 @@ func (g commitGraph) ancestors(id string) map[string]bool {
 	return seen
 }
 
-// footprintHolds reports whether target's source footprint in p holds rel. It
+// rootedInputs is target's source footprint in p, rooted at the workspace. It
 // copies job.targetSources, which internal/job keeps unexported.
-func footprintHolds(p *types.Project, target, rel string) bool {
+func rootedInputs(p *types.Project, target string) []types.Glob {
 	if refs := p.TargetInputs[target]; len(refs) > 0 {
-		return slices.ContainsFunc(refs, func(r types.InputRef) bool { return r.Rooted(p.Path).Match(rel) })
+		out := make([]types.Glob, len(refs))
+		for i, r := range refs {
+			out[i] = r.Rooted(p.Path)
+		}
+		return out
 	}
-	return slices.ContainsFunc(p.Sources, func(g types.Glob) bool { return g.Root(p.Path).Match(rel) })
+	out := make([]types.Glob, len(p.Sources))
+	for i, g := range p.Sources {
+		out[i] = g.Root(p.Path)
+	}
+	return out
 }
 
-// outputsHold reports whether target's own declared outputs in p hold rel.
-// Project outputs do not count: any clean run would then cover them.
-func outputsHold(p *types.Project, target, rel string) bool {
-	return slices.ContainsFunc(p.TargetOutputs[target], func(r types.OutputRef) bool { return r.Rooted(p.Path).Match(rel) })
+// rootedOutputs is target's own declared outputs in p, rooted at the
+// workspace. Project outputs do not count: any clean run would then cover
+// them.
+func rootedOutputs(p *types.Project, target string) []types.Glob {
+	refs := p.TargetOutputs[target]
+	out := make([]types.Glob, len(refs))
+	for i, r := range refs {
+		out[i] = r.Rooted(p.Path)
+	}
+	return out
 }
 
 // bareTarget strips the charms a stored run's target carries (`lint:rw`).

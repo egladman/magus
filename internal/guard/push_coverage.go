@@ -55,10 +55,7 @@ func narrowCoverageAt(ctx context.Context, deps Dependencies, at location, dir, 
 	if err != nil {
 		return narrowCoverage{unread: fmt.Sprintf("the output store is unread: %v", err)}
 	}
-	ev := runEvidence{
-		driver: res.VCS, root: realPath(root), workspace: realPath(at.workspace), ws: ws, runs: runs, commit: commit,
-		files: map[string]fileAt{}, revisions: map[string]bool{},
-	}
+	ev := newRunEvidence(res.VCS, realPath(root), realPath(at.workspace), ws, runs, commit)
 	weigh, hostless := splitHostless(ev.root, changed)
 	n.hostless = hostless
 	if res.VCS.Name() == string(backendGit) {
@@ -84,8 +81,121 @@ type runEvidence struct {
 	ws              types.WorkspaceRepository
 	runs            []cache.OutputDescriptor
 	commit          string
-	files           map[string]fileAt
+	files           map[revisionFile]fileAt
 	revisions       map[string]bool
+	// prints is each run's footprint, by its index in runs, and declared
+	// each magusfile target's. Both name glob sets by index in sets.
+	prints   []runFootprint
+	declared []declaredTarget
+	sets     [][]types.Glob
+	// held memoizes holding.
+	held map[string][]bool
+}
+
+// newRunEvidence weighs runs, recorded in the checkout at root, against what
+// commit holds. workspace is the workspace inside root.
+func newRunEvidence(driver types.VCSDriver, root, workspace string, ws types.WorkspaceRepository, runs []cache.OutputDescriptor, commit string) *runEvidence {
+	ev := &runEvidence{
+		driver: driver, root: root, workspace: workspace, ws: ws, runs: runs, commit: commit,
+		files: map[revisionFile]fileAt{}, revisions: map[string]bool{}, held: map[string][]bool{},
+	}
+	ev.index()
+	return ev
+}
+
+// targetFootprint names the glob sets one target declares as its inputs and
+// its outputs.
+type targetFootprint struct {
+	inputs, outputs int
+}
+
+// runFootprint is one run's target footprint and the paths its args name.
+// known is false when the run names no target of a project the workspace
+// holds.
+type runFootprint struct {
+	targetFootprint
+	known bool
+	named []string
+}
+
+// declaredTarget is a magusfile target wouldCover may name.
+type declaredTarget struct {
+	project, target string
+	targetFootprint
+}
+
+// index roots each target's globs and reads each run's named paths once.
+// Done per changed file, they spent a 1104-file push's whole deadline.
+func (ev *runEvidence) index() {
+	setIDs := map[string]int{}
+	targets := map[[2]string]targetFootprint{}
+	footprint := func(p *types.Project, target string) targetFootprint {
+		key := [2]string{p.Path, target}
+		fp, ok := targets[key]
+		if !ok {
+			fp = targetFootprint{
+				inputs:  ev.globSet(setIDs, rootedInputs(p, target)),
+				outputs: ev.globSet(setIDs, rootedOutputs(p, target)),
+			}
+			targets[key] = fp
+		}
+		return fp
+	}
+	named := map[[2]string][]string{}
+	ev.prints = make([]runFootprint, len(ev.runs))
+	for i, d := range ev.runs {
+		p := ev.ws.Get(d.Project)
+		if p == nil || d.Target == "" {
+			continue
+		}
+		key := [2]string{d.Project, strings.Join(d.ExtraArgs, "\x00")}
+		paths, ok := named[key]
+		if !ok {
+			paths = ev.namedPaths(d)
+			named[key] = paths
+		}
+		ev.prints[i] = runFootprint{targetFootprint: footprint(p, types.Normalize(bareTarget(d.Target))), known: true, named: paths}
+	}
+	for _, p := range ev.ws.All() {
+		for _, target := range p.MagusfileTargets {
+			if target != string(types.TargetCI) {
+				ev.declared = append(ev.declared, declaredTarget{project: p.Path, target: target, targetFootprint: footprint(p, target)})
+			}
+		}
+	}
+}
+
+// globSet is the index in ev.sets of a set matching as globs do, added when
+// none does. Targets of one project often share its sources.
+func (ev *runEvidence) globSet(ids map[string]int, globs []types.Glob) int {
+	var key strings.Builder
+	for _, g := range globs {
+		key.WriteString(g.Pattern)
+		for _, e := range g.Except {
+			key.WriteString("\x01" + e)
+		}
+		key.WriteString("\x00")
+	}
+	id, ok := ids[key.String()]
+	if !ok {
+		id = len(ev.sets)
+		ev.sets = append(ev.sets, globs)
+		ids[key.String()] = id
+	}
+	return id
+}
+
+// holding reports, for each of ev.sets, whether it claims rel.
+func (ev *runEvidence) holding(rel string) []bool {
+	if got, ok := ev.held[rel]; ok {
+		return got
+	}
+	got := make([]bool, len(ev.sets))
+	for i, set := range ev.sets {
+		got[i] = slices.ContainsFunc(set, func(g types.Glob) bool { return g.Match(rel) })
+	}
+	ev.held[rel] = got
+	return got
 }
 
 // fileAt is one file at one revision; known is false when the revision is not
@@ -103,11 +213,12 @@ func (ev *runEvidence) covered(ctx context.Context, file string) bool {
 	if !inside {
 		return false
 	}
-	for _, d := range ev.runs {
+	held := ev.holding(rel)
+	for i, d := range ev.runs {
 		if d.Failed {
 			continue
 		}
-		if ev.reads(d, rel, true) && ev.heldAsCommit(ctx, file, d, false) || ev.writes(d, rel) && ev.heldAsCommit(ctx, file, d, true) {
+		if ev.reads(i, held, rel, true) && ev.heldAsCommit(ctx, file, d, false) || ev.writes(i, held) && ev.heldAsCommit(ctx, file, d, true) {
 			return true
 		}
 	}
@@ -121,32 +232,34 @@ func (ev *runEvidence) wouldCover(file string) []string {
 	if !inside {
 		return nil
 	}
+	held := ev.holding(rel)
 	var out []string
 	add := func(command string) {
 		if len(out) < 3 && !slices.Contains(out, command) {
 			out = append(out, command)
 		}
 	}
-	for _, d := range ev.runs {
-		if ev.writes(d, rel) {
+	for i, d := range ev.runs {
+		if len(out) == 3 {
+			return out
+		}
+		if ev.writes(i, held) {
 			add(hint.Run.With(bareTarget(d.Target), d.Project))
 			continue
 		}
-		if !ev.reads(d, rel, false) {
+		if !ev.reads(i, held, rel, false) {
 			continue
 		}
 		target := bareTarget(d.Target)
-		if len(ev.namedPaths(d)) > 0 {
+		if len(ev.prints[i].named) > 0 {
 			add(hint.Run.With(target, d.Project, "--", projectRelative(d.Project, rel)))
 		} else {
 			add(hint.Run.With(target, d.Project))
 		}
 	}
-	for _, p := range ev.ws.All() {
-		for _, target := range p.MagusfileTargets {
-			if target != string(types.TargetCI) && (footprintHolds(p, target, rel) || outputsHold(p, target, rel)) {
-				add(hint.Run.With(target, p.Path))
-			}
+	for _, t := range ev.declared {
+		if held[t.inputs] || held[t.outputs] {
+			add(hint.Run.With(t.target, t.project))
 		}
 	}
 	return out
@@ -164,18 +277,17 @@ func (ev *runEvidence) workspacePath(file string) (string, bool) {
 	return strings.CutPrefix(file, prefix+"/")
 }
 
-// reads reports whether run d's target declares rel among its inputs. scoped
-// also holds a file-scoped run to the paths it named.
-func (ev *runEvidence) reads(d cache.OutputDescriptor, rel string, scoped bool) bool {
-	p := ev.ws.Get(d.Project)
-	if p == nil || d.Target == "" || !footprintHolds(p, types.Normalize(bareTarget(d.Target)), rel) {
+// reads reports whether run i's target declares rel among its inputs. held
+// is holding(rel). scoped also holds a file-scoped run to the paths it named.
+func (ev *runEvidence) reads(i int, held []bool, rel string, scoped bool) bool {
+	r := ev.prints[i]
+	if !r.known || !held[r.inputs] {
 		return false
 	}
-	named := ev.namedPaths(d)
-	if !scoped || len(named) == 0 {
+	if !scoped || len(r.named) == 0 {
 		return true
 	}
-	return slices.ContainsFunc(named, func(n string) bool { return n == rel || strings.HasPrefix(rel, n+"/") })
+	return slices.ContainsFunc(r.named, func(n string) bool { return n == rel || strings.HasPrefix(rel, n+"/") })
 }
 
 // namedPaths are the workspace paths run d's forwarded args name, read
@@ -200,10 +312,11 @@ func (ev *runEvidence) namedPaths(d cache.OutputDescriptor) []string {
 	return out
 }
 
-// writes reports whether run d's target declares rel among its outputs.
-func (ev *runEvidence) writes(d cache.OutputDescriptor, rel string) bool {
-	p := ev.ws.Get(d.Project)
-	return p != nil && d.Target != "" && outputsHold(p, types.Normalize(bareTarget(d.Target)), rel)
+// writes reports whether run i's target declares, among its outputs, the
+// file held is holding of.
+func (ev *runEvidence) writes(i int, held []bool) bool {
+	r := ev.prints[i]
+	return r.known && held[r.outputs]
 }
 
 // heldAsCommit reports whether run d read file (wrote it, when wrote is set)
@@ -237,7 +350,7 @@ func (ev *runEvidence) heldAsCommit(ctx context.Context, file string, d cache.Ou
 }
 
 func (ev *runEvidence) at(ctx context.Context, rev, file string) fileAt {
-	key := fileKey(rev, file)
+	key := revisionFile{rev: rev, path: file}
 	if got, ok := ev.files[key]; ok {
 		return got
 	}
@@ -255,8 +368,6 @@ func (ev *runEvidence) at(ctx context.Context, rev, file string) fileAt {
 	return got
 }
 
-func fileKey(rev, file string) string { return fmt.Sprintf("%s\x00%s", rev, file) }
-
 // known reports whether the repository holds rev, asked once per revision.
 func (ev *runEvidence) known(ctx context.Context, rev string) bool {
 	known, asked := ev.revisions[rev]
@@ -273,9 +384,9 @@ func (ev *runEvidence) known(ctx context.Context, rev string) bool {
 // changed files past the guard's deadline.
 func (ev *runEvidence) readGitFiles(ctx context.Context, files []string) error {
 	var want []revisionFile
-	seen := map[string]bool{}
+	seen := map[revisionFile]bool{}
 	add := func(rev, file string) {
-		key := fileKey(rev, file)
+		key := revisionFile{rev: rev, path: file}
 		// cat-file reads one object name per line.
 		if seen[key] || strings.ContainsAny(rev+file, "\n\r") || !ev.known(ctx, rev) {
 			return
@@ -288,8 +399,9 @@ func (ev *runEvidence) readGitFiles(ctx context.Context, files []string) error {
 		if !inside {
 			continue
 		}
-		for _, d := range ev.runs {
-			if d.Failed || !ev.reads(d, rel, true) && !ev.writes(d, rel) {
+		held := ev.holding(rel)
+		for i, d := range ev.runs {
+			if d.Failed || !ev.reads(i, held, rel, true) && !ev.writes(i, held) {
 				continue
 			}
 			add(ev.commit, file)
@@ -306,7 +418,7 @@ func (ev *runEvidence) readGitFiles(ctx context.Context, files []string) error {
 		return err
 	}
 	for i, w := range want {
-		ev.files[fileKey(w.rev, w.path)] = got[i]
+		ev.files[w] = got[i]
 	}
 	return nil
 }

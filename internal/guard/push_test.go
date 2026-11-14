@@ -1163,7 +1163,7 @@ func TestADeadlineCutReadCoversNothing(t *testing.T) {
 		Return("", context.Canceled)
 	ev := runEvidence{
 		driver: driver, root: "/repo", commit: "c1",
-		files: map[string]fileAt{}, revisions: map[string]bool{},
+		files: map[revisionFile]fileAt{}, revisions: map[string]bool{},
 	}
 
 	run := cache.OutputDescriptor{Revision: "r1"}
