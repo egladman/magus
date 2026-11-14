@@ -335,10 +335,14 @@ github.com/egladman/magus/libs/testkit.Repo.Head method(ptr) func() string
 github.com/egladman/magus/libs/testkit.Repo.Magusfile method func(body string) string
 github.com/egladman/magus/libs/testkit.Repo.Path method func(rel ...string) string
 github.com/egladman/magus/libs/testkit.Repo.Root method func() string
+github.com/egladman/magus/libs/testkit.Repo.Under method(ptr) func(tb TB) *Repo
 github.com/egladman/magus/libs/testkit.Repo.Workspace embedded *Workspace
 github.com/egladman/magus/libs/testkit.Repo.Write method func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Repo.WriteExecutable method func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Repo.WriteTree method func(files map[string]string)
+github.com/egladman/magus/libs/testkit.ShareRepository func(tb TB, dir string) *SharedRepository
+github.com/egladman/magus/libs/testkit.SharedRepository type struct
+github.com/egladman/magus/libs/testkit.SharedRepository.AssertUnchanged method(ptr) func(t testing.TB)
 github.com/egladman/magus/libs/testkit.TB type interface
 github.com/egladman/magus/libs/testkit.TB.Cleanup imethod func(func())
 github.com/egladman/magus/libs/testkit.TB.Fatalf imethod func(format string, args ...any)
@@ -547,6 +551,7 @@ github.com/egladman/magus/std.MagusChangeTier func(ctx context.Context, c github
 github.com/egladman/magus/std.MagusClean func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.CleanReport, error)
 github.com/egladman/magus/std.MagusClearJob func(ctx context.Context) (int, error)
 github.com/egladman/magus/std.MagusCommand func(ctx context.Context, sub string, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ExecResult, error)
+github.com/egladman/magus/std.MagusCommandAll func(ctx context.Context, commands []github.com/egladman/magus/types.MagusSubcommand) ([]github.com/egladman/magus/types.ExecResult, error)
 github.com/egladman/magus/std.MagusConformance func(ctx context.Context, checks []string, base string) (github.com/egladman/magus/types.ConformanceReport, error)
 github.com/egladman/magus/std.MagusConformanceBase func(ctx context.Context, base string) (string, error)
 github.com/egladman/magus/std.MagusDescribeCharm func(ctx context.Context, name string, opts github.com/egladman/magus/types.MagusCommandOptions) ([]github.com/egladman/magus/types.CharmEntry, error)
@@ -3680,6 +3685,10 @@ github.com/egladman/magus/types.MagusDiffOptions.MinShare field float64
 github.com/egladman/magus/types.MagusDiffOptions.Patch field string
 github.com/egladman/magus/types.MagusDiffOptions.Rev field string
 github.com/egladman/magus/types.MagusNotImported const DiagnosticCode = "MGS1039"
+github.com/egladman/magus/types.MagusSubcommand type struct
+github.com/egladman/magus/types.MagusSubcommand.Args field []string
+github.com/egladman/magus/types.MagusSubcommand.Opts field MagusCommandOptions
+github.com/egladman/magus/types.MagusSubcommand.Sub field string
 github.com/egladman/magus/types.MagusVersionFromContext func(ctx context.Context) string
 github.com/egladman/magus/types.MagusWorkspace type struct
 github.com/egladman/magus/types.MagusWorkspace.Dir field string "json:\"dir\""

@@ -961,6 +961,7 @@ func TestProcExecDetachRefusesWhatNothingCouldHonor(t *testing.T) {
 	_, err := ProcExec(ctx, "true", nil, "", types.ExecOptions{Detach: true})
 	assert.ErrorContains(t, err, "sandbox policy")
 }
+
 type RunSeatedSuite struct{ suite.Suite }
 
 func TestRunSeatedSuite(t *testing.T) { suite.Run(t, new(RunSeatedSuite)) }
