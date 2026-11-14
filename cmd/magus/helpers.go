@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/gcpolicy"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
@@ -366,6 +367,7 @@ type magusInternals interface {
 	LastRecordedRun(ctx context.Context, projectPath, target string) (cache.RecordedRun, error)
 	Telemetry() observability.Provider
 	CheckSpawn(parent, child agent.ModelTier) error
+	SpawnCeiling(ctx context.Context) (builtin.Setting, error)
 }
 
 // viewInternals is m as workspace.ViewAs shows it to magus's own packages. It is also what a
