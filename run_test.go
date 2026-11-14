@@ -3696,6 +3696,46 @@ func (s *ciRepairSuite) TestRepairDoesNotInheritANarrowedSelection() {
 		"no narrowing, since it is less than the writer; no cache, since a replay writes nothing; never update")
 }
 
+// A ci run under rw makes several runs on one cache, so each footer must
+// count its own run.
+func (s *ciRepairSuite) TestFooterCountsItsOwnRunOnly() {
+	m, _ := s.open(`export fun one(ctx: magus\Context, args: [str]) > void {}
+export fun two(ctx: magus\Context, args: [str]) > void {}
+`, nil)
+	targets := []types.Target{{Path: ".", Name: "one"}, {Path: ".", Name: "two"}}
+	var footers []map[string]any
+	for range 2 {
+		var stream bytes.Buffer
+		sink, err := NewSink(output.JSONL, &stream, io.Discard)
+		s.Require().NoError(err)
+		s.Require().NoError(m.Run(context.Background(), targets, WithSink(sink)))
+		s.Require().NoError(sink.Close())
+		footers = append(footers, runSummaries(s.T(), stream.String())...)
+	}
+
+	s.Require().Len(footers, 2, "each run prints one footer")
+	counted := func(f map[string]any) float64 {
+		hits, _ := f["hits"].(float64)
+		misses, _ := f["misses"].(float64)
+		return hits + misses
+	}
+	s.InDelta(2.0, counted(footers[1]), 0, "the second run counted two targets, not four: %v", footers[1])
+}
+
+// runSummaries decodes each run.summary record of a JSONL stream.
+func runSummaries(t *testing.T, stream string) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for line := range strings.Lines(stream) {
+		var rec map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &rec), "line %q", line)
+		if rec["type"] == "run.summary" {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
 func (s *ciRepairSuite) TestRunWithoutReadWriteRepairsNothing() {
 	m, repo := s.open(ciNeedsTidy, nil)
 

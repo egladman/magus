@@ -2943,6 +2943,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if m.cache == nil {
 		return fmt.Errorf("magus: workspace was constructed with Inspect, use Open to enable Run")
 	}
+	counted := m.cache.Stats()
 	// One service supervisor per run: a service op reached as a dependency is started
 	// and readiness-gated, deduped by fingerprint so N dependents share one instance,
 	// and released when the run ends (warm on the broker, or stopped in-process).
@@ -3050,7 +3051,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	// Footer summary for a fan-out: a single line tallying the per-project results.
 	// Skipped for a single project, where the per-project status line already says it all.
-	if s := m.cache.Stats(); s.Hit+s.Miss+s.Permitted+s.Error > 1 {
+	if s := statsSince(m.cache.Stats(), counted); s.Hit+s.Miss+s.Permitted+s.Error > 1 {
 		out.emit(ctx, report.RunSummary{
 			Hits: s.Hit, Misses: s.Miss, Permitted: s.Permitted, Errors: s.Error, Files: s.Files, Slots: s.Slots,
 			DurationMs: time.Since(start).Milliseconds(),
@@ -3064,6 +3065,16 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 
 	return runErr
+}
+
+// statsSince is the work one run counted. The cache's counters are never
+// reset, and a ci run or the daemon makes several runs on one cache.
+func statsSince(now, base cache.Stats) cache.Stats {
+	return cache.Stats{
+		Hit: now.Hit - base.Hit, Miss: now.Miss - base.Miss, Error: now.Error - base.Error,
+		Permitted: now.Permitted - base.Permitted, SavedMs: now.SavedMs - base.SavedMs,
+		Files: now.Files - base.Files, Slots: now.Slots - base.Slots,
+	}
 }
 
 // withoutAdvisory leaves out each failure a composer carried on past: an
