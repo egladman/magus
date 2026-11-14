@@ -417,6 +417,8 @@ func withCharms(opts []magus.RunOption, charms []string) []magus.RunOption {
 
 // failedResults collects the failed target results the invocation's journal records, in
 // the order they arrive, so a gate that scrolled its failures away can name them again.
+// A ci run under rw verifies more than once, so a later pass clears a
+// failure.
 type failedResults struct {
 	mu     sync.Mutex
 	events []journal.Event
@@ -425,14 +427,25 @@ type failedResults struct {
 func (c *failedResults) Enabled(context.Context, slog.Level) bool { return true }
 
 func (c *failedResults) Handle(_ context.Context, r slog.Record) error {
-	e, ok := journal.EventFromRecord(r)
-	if !ok || e.Kind != journal.KindResult || e.Status != journal.StatusFail {
-		return nil
+	if e, ok := journal.EventFromRecord(r); ok {
+		c.add(e)
+	}
+	return nil
+}
+
+// add keeps each target's newest result when it failed.
+func (c *failedResults) add(e journal.Event) {
+	if e.Kind != journal.KindResult {
+		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.events = append(c.events, e)
-	return nil
+	c.events = slices.DeleteFunc(c.events, func(f journal.Event) bool {
+		return f.Project == e.Project && f.Target == e.Target
+	})
+	if e.Status == journal.StatusFail {
+		c.events = append(c.events, e)
+	}
 }
 
 func (c *failedResults) WithAttrs([]slog.Attr) slog.Handler { return c }

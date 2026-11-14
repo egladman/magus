@@ -37,6 +37,49 @@ func (s *PrintRunRefSuite) TestPrintsNothingWithoutAnInvocation() {
 	s.Empty(out.String())
 }
 
+func TestFailedResultsSuite(t *testing.T) { suite.Run(t, new(FailedResultsSuite)) }
+
+// FailedResultsSuite pins the failures a run closes with, across the
+// verify passes of a ci run under rw.
+type FailedResultsSuite struct{ suite.Suite }
+
+func resultEvent(project, target, status string) journal.Event {
+	return journal.Event{Kind: journal.KindResult, Project: project, Target: target, Status: status}
+}
+
+func (s *FailedResultsSuite) TestClearedFailureIsNotPrinted() {
+	c := &failedResults{}
+	c.add(resultEvent(".", "tidy", journal.StatusFail))
+	c.add(resultEvent("docs", "lint", journal.StatusFail))
+	c.add(resultEvent(".", "tidy", journal.StatusPass))
+
+	s.Equal([]journal.Event{resultEvent("docs", "lint", journal.StatusFail)}, c.list())
+}
+
+func (s *FailedResultsSuite) TestCachedPassClearsAFailure() {
+	c := &failedResults{}
+	c.add(resultEvent(".", "tidy", journal.StatusFail))
+	c.add(resultEvent(".", "tidy", journal.StatusCached))
+
+	s.Empty(c.list())
+}
+
+func (s *FailedResultsSuite) TestAFailureInEveryPassIsPrintedOnce() {
+	c := &failedResults{}
+	c.add(resultEvent(".", "broken", journal.StatusFail))
+	c.add(resultEvent(".", "broken", journal.StatusFail))
+
+	s.Equal([]journal.Event{resultEvent(".", "broken", journal.StatusFail)}, c.list())
+}
+
+func (s *FailedResultsSuite) TestFailureAfterAPassIsKept() {
+	c := &failedResults{}
+	c.add(resultEvent(".", "tidy", journal.StatusPass))
+	c.add(resultEvent(".", "tidy", journal.StatusFail))
+
+	s.Equal([]journal.Event{resultEvent(".", "tidy", journal.StatusFail)}, c.list())
+}
+
 func TestPrintFailedResultsNamesEachFailureByRefOrCode(t *testing.T) {
 	t.Parallel()
 
