@@ -64,18 +64,10 @@ func runShards(args []string) int {
 		fmt.Fprintln(os.Stderr, "guard shard:", err)
 		return 1
 	}
-	list := exec.Command(exe, "-test.list=^Test")
-	list.Env = append(os.Environ(), shardChildEnv+"=list")
-	listed, err := list.Output()
+	names, err := listTests(exe)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "guard shard: listing tests:", err)
 		return 1
-	}
-	var names []string
-	for _, line := range strings.Split(string(listed), "\n") {
-		if strings.HasPrefix(line, "Test") {
-			names = append(names, line)
-		}
 	}
 
 	workers := min(runtime.NumCPU(), 8)
@@ -85,27 +77,8 @@ func runShards(args []string) int {
 		chunks[k] = append(chunks[k], regexp.QuoteMeta(name))
 	}
 
-	verbose, logPath, coverPath, outDir, forwarded := false, "", "", "", []string(nil)
-	for _, a := range args {
-		switch {
-		case strings.HasPrefix(a, "-test.coverprofile="):
-			coverPath = strings.TrimPrefix(a, "-test.coverprofile=")
-		case strings.HasPrefix(a, "-test.outputdir="):
-			outDir = strings.TrimPrefix(a, "-test.outputdir=")
-			forwarded = append(forwarded, a)
-		case a == "-test.v" || a == "-test.v=true":
-			verbose = true
-			forwarded = append(forwarded, a)
-		case strings.HasPrefix(a, "-test.testlogfile="):
-			logPath = strings.TrimPrefix(a, "-test.testlogfile=")
-		default:
-			forwarded = append(forwarded, a)
-		}
-	}
-
-	if coverPath != "" && !filepath.IsAbs(coverPath) {
-		coverPath = filepath.Join(outDir, coverPath)
-	}
+	flags := parseShardFlags(args)
+	verbose, logPath, coverPath, forwarded := flags.verbose, flags.logPath, flags.coverPath, flags.forwarded
 	var (
 		mu     sync.Mutex
 		failed bool
@@ -150,6 +123,57 @@ func runShards(args []string) int {
 	}
 	fmt.Println("PASS")
 	return 0
+}
+
+// listTests is every top-level test the binary at exe holds.
+func listTests(exe string) ([]string, error) {
+	list := exec.Command(exe, "-test.list=^Test")
+	list.Env = append(os.Environ(), shardChildEnv+"=list")
+	listed, err := list.Output()
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, line := range strings.Split(string(listed), "\n") {
+		if strings.HasPrefix(line, "Test") {
+			names = append(names, line)
+		}
+	}
+	return names, nil
+}
+
+// shardFlags splits the parent's test flags into what each child is passed
+// and what the parent merges itself: the test log and the cover profile.
+type shardFlags struct {
+	verbose   bool
+	logPath   string
+	coverPath string
+	forwarded []string
+}
+
+func parseShardFlags(args []string) shardFlags {
+	var f shardFlags
+	outDir := ""
+	for _, a := range args {
+		switch {
+		case strings.HasPrefix(a, "-test.coverprofile="):
+			f.coverPath = strings.TrimPrefix(a, "-test.coverprofile=")
+		case strings.HasPrefix(a, "-test.outputdir="):
+			outDir = strings.TrimPrefix(a, "-test.outputdir=")
+			f.forwarded = append(f.forwarded, a)
+		case a == "-test.v" || a == "-test.v=true":
+			f.verbose = true
+			f.forwarded = append(f.forwarded, a)
+		case strings.HasPrefix(a, "-test.testlogfile="):
+			f.logPath = strings.TrimPrefix(a, "-test.testlogfile=")
+		default:
+			f.forwarded = append(f.forwarded, a)
+		}
+	}
+	if f.coverPath != "" && !filepath.IsAbs(f.coverPath) {
+		f.coverPath = filepath.Join(outDir, f.coverPath)
+	}
+	return f
 }
 
 func runChunk(exe string, forwarded []string, logPath, coverPath string, i int, chunk []string) shardResult {
