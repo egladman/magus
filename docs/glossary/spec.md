@@ -35,10 +35,15 @@ magus describe job my-job
 
 In the docs:
 
-- [ADR 0043: split the row into spec and status fields](../decisions/0043-job-records-are-buzz-data.md#split-the-row-into-spec-and-status-fields) (rejected as an alternative)
-- [The glossary index](../glossary.md#spec)
+- [D. Implement spec assembly in Go only, with no Buzz module](../decisions/0018-magus-assembles-oci-images.md#d-implement-spec-assembly-in-go-only-with-no-buzz-module)
+- [2026-11-13: the row is split into spec and status after all](../decisions/0043-job-records-are-buzz-data.md#2026-11-13-the-row-is-split-into-spec-and-status-after-all)
 
-In the code: none. `magus refs` finds no symbol named for the term; the word appears only in prose.
+In the code (`magus refs <name>` lists every site):
+
+- `image\Spec` (Buzz host type)
+- `image.Spec` (Go)
+- `agent.Spec` (Go)
+- `ast.Spec` (Go)
 
 <!-- END GLOSSARY USAGE -->
 
