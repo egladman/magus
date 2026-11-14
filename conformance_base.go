@@ -44,7 +44,7 @@ const projectNewAtHead = "its project is new at head, so the base holds no measu
 // empty and reads as a base of zero.
 // It replaces the magus build in the key: a gate measures under one
 // binary and lint reads under the checkout's own.
-const baseMeasureVersion = "7"
+const baseMeasureVersion = "8"
 
 // ConformanceCeilings is head, the lens over the working tree, with c.Base's ceilings: each file
 // changed since c.Base whose count of violations of a metric in c.Checks rose past its count
@@ -147,15 +147,8 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 	}
 	m.seedHeadIndexes(ctx, tree, present, head)
 	out.Unmeasured = absent
-	line, err := json.Marshal(out)
-	if err != nil {
-		return "", fmt.Errorf("conformance: encode %s: %w", commit, err)
-	}
-	if err := os.MkdirAll(filepath.Dir(entry), 0o700); err != nil {
-		return "", fmt.Errorf("conformance: %w", err)
-	}
-	if err := file.WriteFileAtomic(entry, append(line, '\n'), 0o600); err != nil {
-		return "", fmt.Errorf("conformance: keep %s: %w", commit, err)
+	if err := writeConformanceEntry(entry, out); err != nil {
+		return "", err
 	}
 	return commit, nil
 }
@@ -183,15 +176,51 @@ func (m *Magus) conformanceBaseCommit(ctx context.Context, base string) (types.V
 	return res.VCS, commit, nil
 }
 
+// keptMeasure is a kept measure's one line. Name is the file name its key
+// gives, so a line read under any other name is not this key's measure.
+type keptMeasure struct {
+	Name    string            `json:"name"`
+	Measure types.Conformance `json:"measure"`
+}
+
+// writeConformanceEntry keeps out at entry, a path conformanceEntry gave.
+func writeConformanceEntry(entry string, out types.Conformance) error {
+	line, err := json.Marshal(keptMeasure{Name: filepath.Base(entry), Measure: out})
+	if err != nil {
+		return fmt.Errorf("conformance: encode %s: %w", entry, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(entry), 0o700); err != nil {
+		return fmt.Errorf("conformance: %w", err)
+	}
+	if err := file.WriteFileAtomic(entry, append(line, '\n'), 0o600); err != nil {
+		return fmt.Errorf("conformance: keep %s: %w", entry, err)
+	}
+	return nil
+}
+
 // readConformanceEntry is the measure kept at entry, and false when none is.
+// A line naming another key is refused: CI restores this directory from a
+// cache, so a file there may have been kept under another name.
 func readConformanceEntry(entry string) (types.Conformance, bool, error) {
-	raw, err := os.ReadFile(entry)
+	data, err := os.ReadFile(entry)
 	if errors.Is(err, os.ErrNotExist) {
 		return types.Conformance{}, false, nil
 	}
 	if err != nil {
 		return types.Conformance{}, false, fmt.Errorf("conformance: read %s: %w", entry, err)
 	}
+	var line struct {
+		Name    string          `json:"name"`
+		Measure json.RawMessage `json:"measure"`
+	}
+	if err := json.Unmarshal(data, &line); err != nil {
+		return types.Conformance{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
+	}
+	if line.Name != filepath.Base(entry) {
+		return types.Conformance{}, false, fmt.Errorf("conformance: %s holds the measure kept as %q, "+
+			"so delete it and measure the base again with `magus run conformance-base .`", entry, line.Name)
+	}
+	raw := line.Measure
 	var out types.Conformance
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return types.Conformance{}, false, fmt.Errorf("conformance: %s does not parse, so delete it and measure the base again: %w", entry, err)
@@ -459,9 +488,10 @@ func indexBase(ctx context.Context, tree, pack string, b baseIndex) ([]types.Kno
 	return parsed, nil
 }
 
-// basePack is where measureTree writes the pack of tree's i-th index.
-func basePack(tree string, i int) string {
-	return filepath.Join(tree, ".magus", "conformance", fmt.Sprintf("%d.pack", i))
+// basePack is where measureTree writes b's pack of tree: the path head keeps
+// that index at, under the tree's own cache dir.
+func basePack(tree string, b baseIndex) string {
+	return symbols.IndexPath(filepath.Join(tree, ".magus"), b.project, b.op)
 }
 
 // measureTree indexes tree with plan's in-process indexers,
@@ -473,7 +503,7 @@ func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan
 	indexing.SetLimit(runtime.GOMAXPROCS(0))
 	for i, b := range plan.indexes {
 		indexing.Go(func() error {
-			got, err := indexBase(ictx, tree, basePack(tree, i), b)
+			got, err := indexBase(ictx, tree, basePack(tree, b), b)
 			if err != nil {
 				return fmt.Errorf("%s %s index: %w", b.project, b.language, err)
 			}
@@ -521,13 +551,13 @@ func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan
 // first freshen re-indexes only what moved. A refused seed is logged.
 func (m *Magus) seedHeadIndexes(ctx context.Context, tree string, base, head baseIndexPlan) {
 	cacheDir := resolveCacheDir(m.ws.Root, m.cfg)
-	for i, b := range base.indexes {
+	for _, b := range base.indexes {
 		dest := symbols.IndexPath(cacheDir, b.project, b.op)
 		if _, err := os.Stat(dest); err == nil {
 			continue
 		}
 		attrs := []any{slog.String("project", b.project), slog.String("language", b.language), slog.String("index", dest)}
-		seeded, err := seedPack(tree, basePack(tree, i), dest, b, head, cacheImmutable(m.cfg))
+		seeded, err := seedPack(tree, basePack(tree, b), dest, b, head, cacheImmutable(m.cfg))
 		switch {
 		case err != nil:
 			slog.InfoContext(ctx, "head's symbol index is not seeded from the base measure's, so its first freshen builds it whole",

@@ -237,9 +237,12 @@ func (s *ConformanceBaseSuite) TestASeedNeverReplacesAnIndexHeadWrote() {
 	s.Equal("head", string(got))
 }
 
-func (s *ConformanceBaseSuite) keep(body string) string {
-	entry := filepath.Join(s.T().TempDir(), "base.jsonl")
-	s.Require().NoError(os.WriteFile(entry, []byte(body+"\n"), 0o600))
+// keep writes measure as the line kept under the want key.
+func (s *ConformanceBaseSuite) keep(measure string) string {
+	name := s.want().file()
+	entry := filepath.Join(s.T().TempDir(), name)
+	line := `{"name":"` + name + `","measure":` + measure + "}\n"
+	s.Require().NoError(os.WriteFile(entry, []byte(line), 0o600))
 	return entry
 }
 
@@ -273,6 +276,46 @@ func (s *ConformanceBaseSuite) TestAnEntryWithDistributionsIsRead() {
 	s.Require().NoError(err)
 	s.True(ok)
 	s.Len(got.Distributions, 1)
+}
+
+// A cache restore can bring another commit's measure under this one's name.
+func (s *ConformanceBaseSuite) TestAnEntryNamingAnotherKeyIsRefused() {
+	entry := s.keep(`{"distributions":[{"key":{"metric":"file-split"},"n":1}],"answer":{"verdict":"found"}}`)
+	other := filepath.Join(filepath.Dir(entry), conformanceKey{commit: "def456", version: "8", policy: "p1", indexers: "i1"}.file())
+	s.Require().NoError(os.Rename(entry, other))
+
+	_, ok, err := readConformanceEntry(other)
+
+	s.False(ok)
+	s.Require().Error(err)
+	s.Contains(err.Error(), s.want().file())
+	s.Contains(err.Error(), "magus run conformance-base .")
+}
+
+func (s *ConformanceBaseSuite) TestAnEntryBeforeTheNameWasKeptIsRefused() {
+	entry := filepath.Join(s.T().TempDir(), s.want().file())
+	s.Require().NoError(os.WriteFile(entry, []byte(`{"distributions":[{"n":1}],"answer":{"verdict":"found"}}`+"\n"), 0o600))
+
+	_, ok, err := readConformanceEntry(entry)
+
+	s.False(ok)
+	s.Require().Error(err)
+	s.Contains(err.Error(), entry)
+}
+
+func (s *ConformanceBaseSuite) TestAWrittenEntryReadsBack() {
+	entry := filepath.Join(s.T().TempDir(), "conformance", s.want().file())
+	want := types.Conformance{
+		Distributions: []types.ConformanceDistribution{{N: 1}},
+		Answer:        types.KnowledgeAnswer{Verdict: types.VerdictFound},
+	}
+	s.Require().NoError(writeConformanceEntry(entry, want))
+
+	got, ok, err := readConformanceEntry(entry)
+
+	s.Require().NoError(err)
+	s.True(ok)
+	s.Equal(want, got)
 }
 
 // oldLayoutName is a measure named by one digest of its whole key.
