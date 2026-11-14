@@ -957,6 +957,52 @@ while (i < 100) {
 	}
 }
 
+// accumulationSizes are the line counts the accumulation benchmarks run at.
+// The largest once pinned 32.7 GB building one string this way.
+var accumulationSizes = []struct {
+	name  string
+	lines int
+}{{"1e3", 1000}, {"1e4", 10000}, {"3e4", 30803}}
+
+// benchAccumulation joins 68-byte lines at each accumulation size: decl
+// declares the accumulator, step extends it from line, tail leaves the
+// result in kept.
+func benchAccumulation(b *testing.B, decl, step, tail string) {
+	for _, size := range accumulationSizes {
+		b.Run(size.name, func(b *testing.B) {
+			chunk, env := benchSetup(b, "", fmt.Sprintf(`final pad = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefg";
+%s
+for (var i = 0; i < %d; i = i + 1) {
+    final line = "{pad}{10000000 + i}\n";
+    %s
+}
+%s
+final __r = kept.len();`, decl, size.lines, step, tail))
+			benchRun(b, chunk, env)
+		})
+	}
+}
+
+// BenchmarkStringConcatLoop extends one string with `+` per line. B/op and
+// ns/op stay linear in the line count only while each step shares the
+// buffer of the step before it.
+func BenchmarkStringConcatLoop(b *testing.B) {
+	benchAccumulation(b, `var kept = "";`, `kept = kept + line;`, "")
+}
+
+// BenchmarkStringInterpLoop is BenchmarkStringConcatLoop through an
+// interpolation whose first part is the accumulator.
+func BenchmarkStringInterpLoop(b *testing.B) {
+	benchAccumulation(b, `var kept = "";`, `kept = "{kept}{line}";`, "")
+}
+
+// BenchmarkJoinLoop collects the same lines in a list and joins them once,
+// the linear baseline for the two benchmarks above.
+func BenchmarkJoinLoop(b *testing.B) {
+	benchAccumulation(b, `final parts: mut [str] = mut [];`,
+		`parts.append(line);`, `final kept = parts.join("");`)
+}
+
 // BenchmarkCall measures the overhead of calling a simple Buzz function
 // repeatedly — frame allocation, parameter binding, and return.
 func BenchmarkCall(b *testing.B) {

@@ -1586,17 +1586,30 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			//     overwriting strScratch on the next OpBuildStr is safe.
 			n := int(ins.A)
 			parts := vm.stack[len(vm.stack)-n:]
+			// A long leading str is the accumulator of `s = "{s}{x}"`, and
+			// appendString extends it. A short one stays here: routing it
+			// through cost BenchmarkStringInterp 12%.
+			first := Null
 			buf := vm.strScratch[:0]
-			for _, p := range parts {
+			for i, p := range parts {
 				if p.tag() == tagStr {
-					buf = append(buf, vm.asString(p).V...)
+					s := vm.asString(p)
+					if i == 0 && (s.buf != nil || len(s.V) >= strBufThreshold) {
+						first = p
+						continue
+					}
+					buf = append(buf, s.V...)
 				} else {
 					buf = append(buf, p.String()...)
 				}
 			}
 			vm.strScratch = buf // retain the (possibly grown) backing array
 			vm.stack = vm.stack[:len(vm.stack)-n]
-			vm.push(StringValue(string(buf)))
+			if first.tag() == tagStr {
+				vm.push(appendString(first, buf))
+			} else {
+				vm.push(StringValue(string(buf)))
+			}
 
 		case OpBinLC:
 			// optimization: fused GetLocal;LoadConst;<binop>. Reads the local and the

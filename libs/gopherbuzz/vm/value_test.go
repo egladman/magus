@@ -2,11 +2,15 @@ package vm
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestValueConstructorsAndPredicates(t *testing.T) {
@@ -297,4 +301,124 @@ func TestValueMapKeyValues(t *testing.T) {
 	for _, v := range []Value{StringValue("m"), ListValue(nil), NullValue(), high} {
 		assert.Nil(t, v.MapKeyValues(), "%s is not a map", v.Kind())
 	}
+}
+
+// strBufSuite pins appendString: a long string extended at its end shares
+// one buffer, and every string over that buffer keeps its own text.
+type strBufSuite struct {
+	suite.Suite
+	long string // exactly strBufThreshold bytes, so it buffers on first append
+}
+
+func TestStrBufSuite(t *testing.T) { suite.Run(t, new(strBufSuite)) }
+
+func (s *strBufSuite) SetupTest() { s.long = strings.Repeat("a", strBufThreshold) }
+
+// extend appends text to left through appendString.
+func extend(left Value, text string) Value { return appendString(left, []byte(text)) }
+
+func (s *strBufSuite) TestAppendToTheNewestPrefixSharesTheBuffer() {
+	first := extend(StringValue(s.long), "b")
+	second := extend(first, "c")
+	s.Require().NotNil(first.asString().buf)
+	s.Same(first.asString().buf, second.asString().buf)
+	s.Equal(s.long+"bc", second.AsString())
+}
+
+func (s *strBufSuite) TestAppendToAnOlderPrefixCopies() {
+	prefix := extend(StringValue(s.long), "b")
+	newest := extend(prefix, "c")
+	other := extend(prefix, "d")
+	s.NotSame(prefix.asString().buf, other.asString().buf)
+	s.Equal(s.long+"bc", newest.AsString())
+	s.Equal(s.long+"bd", other.AsString())
+}
+
+func (s *strBufSuite) TestEarlierPrefixKeepsItsText() {
+	v := StringValue(s.long)
+	var kept []Value
+	for range 2000 {
+		v = extend(v, "0123456789")
+		kept = append(kept, v)
+	}
+	for i, k := range kept {
+		s.Require().Equal(s.long+strings.Repeat("0123456789", i+1), k.AsString(), "prefix %d", i)
+	}
+}
+
+func (s *strBufSuite) TestEmptyAppendReturnsTheLeftOperand() {
+	for _, left := range []Value{StringValue("ab"), extend(StringValue(s.long), "b")} {
+		got := appendString(left, nil)
+		s.True(sameObj(left, got), "%q", left.AsString())
+	}
+}
+
+func (s *strBufSuite) TestShortLeftOperandIsInterned() {
+	got := extend(StringValue("ab"), "c")
+	s.Nil(got.asString().buf)
+	s.Same(internString("abc"), got.asString())
+}
+
+func (s *strBufSuite) TestBufferedAndInternedStringsOfEqualTextAreEqual() {
+	buffered := extend(StringValue(s.long), "b")
+	interned := StringValue(s.long + "b")
+	s.True(valuesEqual(buffered, interned))
+	s.True(valuesEqual(interned, buffered))
+	s.True(mapKeyEqual(buffered, interned))
+	s.False(valuesEqual(buffered, StringValue(s.long+"c")))
+}
+
+func (s *strBufSuite) TestBufferedStringIsAMapKeyByContent() {
+	m := newMapObj()
+	m.setVal(extend(StringValue(s.long), "b"), IntValue(1))
+	got, ok := m.getVal(StringValue(s.long + "b"))
+	s.Require().True(ok)
+	s.Equal(int64(1), got.AsInt())
+
+	m.setVal(StringValue(s.long+"b"), IntValue(2))
+	s.Len(m.Keys, 1, "an interned key of the same text replaces the entry")
+}
+
+func (s *strBufSuite) TestTwoGoroutinesExtendingOnePrefixBothKeepTheirText() {
+	prefix := extend(StringValue(s.long), "b")
+	got := make([]Value, 2)
+	var wg sync.WaitGroup
+	for g, tail := range []string{"x", "y"} {
+		wg.Go(func() {
+			v := prefix
+			for range 500 {
+				v = extend(v, tail)
+			}
+			got[g] = v
+		})
+	}
+	wg.Wait()
+	s.Equal(s.long+"b"+strings.Repeat("x", 500), got[0].AsString())
+	s.Equal(s.long+"b"+strings.Repeat("y", 500), got[1].AsString())
+	s.Equal(s.long+"b", prefix.AsString())
+}
+
+func (s *strBufSuite) TestInterpolationStartingWithAStringAppends() {
+	prefix := extend(StringValue(s.long), "b")
+	c := &Chunk{}
+	c.Emit(OpLoadConst, c.AddConst(prefix), 0)
+	c.Emit(OpLoadConst, c.AddConst(IntValue(7)), 0)
+	c.Emit(OpBuildStr, 2, 0)
+	c.Emit(OpReturn, 0, 0)
+	got, err := NewVM(context.Background()).Run(c, NewEnv())
+	s.Require().NoError(err)
+	s.Equal(s.long+"b7", got.AsString())
+	s.Same(prefix.asString().buf, got.asString().buf)
+}
+
+// TestBufferStringDoesNotCopy pins what Go does not document: String hands
+// out the builder's own bytes, which is what makes sharing a buffer cheap.
+func (s *strBufSuite) TestBufferStringDoesNotCopy() {
+	var b strings.Builder
+	b.Grow(16)
+	b.WriteString("abc")
+	var sink string
+	s.Zero(testing.AllocsPerRun(100, func() { sink = b.String() }))
+	b.WriteString("d")
+	s.Equal(unsafe.StringData(sink), unsafe.StringData(b.String()))
 }

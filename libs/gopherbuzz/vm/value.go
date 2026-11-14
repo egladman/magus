@@ -76,9 +76,21 @@ const (
 // every Value for the same content shares one heap entry instead of appending a
 // fresh one on each StringValue call. The safe/unsafe builds store the *strObj
 // pointer in the Value directly and never read it.
+//
+// buf is set on a string appendString built past strBufThreshold. Such a
+// string is a prefix of buf, and it is neither hashed nor interned.
 type strObj struct {
 	V       string
 	heapIdx uint64
+	buf     *strBuf
+}
+
+// strBuf is the buffer a long string extended by + or interpolation shares
+// with every earlier prefix built on it. b only appends, and an array b
+// outgrows stays with the strings over it, so no handed-out byte changes.
+type strBuf struct {
+	mu sync.Mutex
+	b  strings.Builder
 }
 
 // udObj boxes a foreign FFI pointer (`ud`). It is heap-allocated because a full
@@ -388,6 +400,39 @@ func internString(s string) *strObj {
 // content does not churn the heap), while the safe/unsafe builds carry the
 // pointer in the Value directly.
 func StringValue(s string) Value { return internedStringValue(internString(s)) }
+
+// optimization: a str this long extended at its end shares one buffer.
+// measured: BenchmarkStringConcatLoop/1e4 -99% sec/op, -99.8% B/op (n=6).
+// trade-off: buffered strs are not interned; 256 and 4096 measured no better.
+// assumes: Builder.String shares its bytes (TestBufferStringDoesNotCopy).
+const strBufThreshold = 1024
+
+// appendString returns the str left followed by rest. A left that is all of
+// its buffer is extended in place; any other long left is copied once into
+// a new buffer. Shorter results are interned exactly as StringValue does.
+func appendString(left Value, rest []byte) Value {
+	if len(rest) == 0 {
+		return left
+	}
+	l := left.asString()
+	if l.buf != nil {
+		l.buf.mu.Lock()
+		if len(l.V) == l.buf.b.Len() {
+			l.buf.b.Write(rest)
+			s := l.buf.b.String()
+			l.buf.mu.Unlock()
+			return heapValue(tagStr, &strObj{V: s, buf: l.buf})
+		}
+		l.buf.mu.Unlock()
+	} else if len(l.V) < strBufThreshold {
+		return StringValue(l.V + string(rest))
+	}
+	buf := &strBuf{}
+	buf.b.Grow(len(l.V) + len(rest))
+	buf.b.WriteString(l.V)
+	buf.b.Write(rest)
+	return heapValue(tagStr, &strObj{V: buf.b.String(), buf: buf})
+}
 
 // UDValue boxes a foreign FFI pointer (`ud`). See udObj for why it is heap-boxed.
 func UDValue(addr uintptr) Value { return heapValue(tagUD, &udObj{Addr: addr}) }

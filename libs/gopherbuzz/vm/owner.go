@@ -17,7 +17,8 @@ package vm
 //
 // Strings are never owned: StringValue interns them process-wide and caches the
 // slot on the interned object, so a freed string slot would be handed out again
-// by the very next StringValue of that content.
+// by the very next StringValue of that content. A buffered string from
+// appendString is not interned and stays unowned all the same.
 //
 // Only the default representation has a table to release from; the safe and
 // unsafe builds carry each object as a Go pointer the collector reclaims, so

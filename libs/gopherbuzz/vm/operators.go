@@ -27,7 +27,8 @@ func arith(vm *VM, op OpCode, left, right Value) (Value, error) {
 	// String concatenation (OpAdd only)
 	if op == OpAdd {
 		if left.tag() == tagStr {
-			return StringValue(vm.asString(left).V + right.String()), nil
+			vm.strScratch = append(vm.strScratch[:0], right.String()...)
+			return appendString(left, vm.strScratch), nil
 		}
 		if left.tag() == tagList && right.tag() == tagList {
 			leftList, rightList := vm.asList(left), vm.asList(right)
