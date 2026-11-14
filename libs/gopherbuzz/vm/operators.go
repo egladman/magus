@@ -1365,7 +1365,7 @@ func newCallback(ctx context.Context, caller *VM, callee Value) callback {
 }
 
 // optimization: one VM runs every callback of a builtin call.
-// measured: BenchmarkMapCallback (libs/gopherbuzz) -91% ns/op, -99% allocs.
+// measured: BenchmarkMapCallback (libs/gopherbuzz) -86% ns/op, -99.8% allocs.
 // trade-off: the VM outlives one callback, so it must come back empty.
 // assumes: a builtin stops at its first error; Exec returns frameless.
 func (c *callback) call(args ...Value) (Value, error) {
