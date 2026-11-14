@@ -112,7 +112,7 @@ func (ix *Indexer) patterns() []string {
 // has one, which holds every file the plain package does, and its external test package
 // as a unit of its own. A unit's digest covers its files' paths and bytes, the files the
 // host's build constraints exclude included, so an edit to a _windows.go file on a Mac
-// moves it too.
+// moves it too. It covers the module's go.mod as well.
 // `./...` skips a package the host excludes whole, so each of Builds lists too.
 func (ix *Indexer) Units(ctx context.Context) ([]symbols.Unit, error) {
 	overlays := slices.Concat([]map[string]string{nil}, ix.Builds)
@@ -122,7 +122,7 @@ func (ix *Indexer) Units(ctx context.Context) ([]symbols.Unit, error) {
 		g.Go(func() error {
 			cfg := &packages.Config{
 				Context: gctx, Dir: ix.Dir, Env: ix.env(overlay), Tests: true,
-				Mode: packages.NeedName | packages.NeedFiles | packages.NeedImports,
+				Mode: packages.NeedName | packages.NeedFiles | packages.NeedImports | packages.NeedModule,
 			}
 			pkgs, err := packages.Load(cfg, ix.patterns()...)
 			if err != nil {
@@ -143,7 +143,7 @@ func (ix *Indexer) Units(ctx context.Context) ([]symbols.Unit, error) {
 				continue
 			}
 			files := slices.Concat(p.GoFiles, goOnly(p.IgnoredFiles))
-			digest, err := ix.digest(files)
+			digest, err := ix.digest(files, p.Module)
 			if err != nil {
 				return nil, err
 			}
@@ -219,8 +219,13 @@ func goOnly(files []string) []string {
 	return out
 }
 
-func (ix *Indexer) digest(files []string) (string, error) {
+// digest covers files and mod's go.mod, whose requirements give the version
+// each symbol of a dependency carries.
+func (ix *Indexer) digest(files []string, mod *packages.Module) (string, error) {
 	files = slices.Clone(files)
+	if mod != nil && mod.GoMod != "" {
+		files = append(files, mod.GoMod)
+	}
 	slices.Sort(files)
 	h := sha256.New()
 	for _, f := range files {

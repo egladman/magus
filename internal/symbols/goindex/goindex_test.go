@@ -345,6 +345,66 @@ func (s *goindexSuite) TestEditToAnExcludedFileMovesItsUnit() {
 	s.Equal(before[1].Digest, after[1].Digest)
 }
 
+// go.mod's requirements name the version in every symbol of a dependency.
+func (s *goindexSuite) TestAGoModEditMovesEveryUnit() {
+	ix := s.indexer()
+	before, err := ix.Units(s.T().Context())
+	s.Require().NoError(err)
+	s.write("go.mod", "module example.com/m\n\ngo 1.23\n")
+	after, err := ix.Units(s.T().Context())
+	s.Require().NoError(err)
+	s.Require().Len(after, len(before))
+	for i := range before {
+		s.NotEqual(before[i].Digest, after[i].Digest, before[i].ID)
+	}
+}
+
+// moveTree copies the module to a new directory, which later writes edit.
+func (s *goindexSuite) moveTree() {
+	moved := s.T().TempDir()
+	s.Require().NoError(os.CopyFS(moved, os.DirFS(s.dir)))
+	s.dir = moved
+}
+
+// A pack holds no path of its tree, so another tree's pack updates to the
+// bytes a cold index of this one writes.
+func (s *goindexSuite) TestAnotherTreesPackUpdatesToTheColdIndex() {
+	_, seeded := s.update(s.indexer())
+	s.moveTree()
+	content, err := os.ReadFile(filepath.Join(s.dir, "a/a.go"))
+	s.Require().NoError(err)
+	s.write("a/a.go", strings.Replace(string(content), "func Old() int", "func New() int", 1))
+	s.write("c/c.go", "package c\n\nfunc C() { _ = 1 }\n")
+
+	res, err := symbols.UpdatePack(s.T().Context(), seeded, s.indexer())
+	s.Require().NoError(err)
+	_, cold := s.update(s.indexer())
+
+	s.False(res.Rebuilt)
+	s.Equal([]string{"example.com/m/a", "example.com/m/c"}, res.Indexed)
+	s.Equal([]string{"example.com/m/b"}, res.Dependents)
+	s.Equal(s.read(cold), s.read(seeded))
+}
+
+// An unchanged tree at another path keeps every shard of its pack.
+func (s *goindexSuite) TestAnotherTreesPackOfTheSameSourceIsKeptWhole() {
+	_, seeded := s.update(s.indexer())
+	before := s.read(seeded)
+	s.moveTree()
+
+	res, err := symbols.UpdatePack(s.T().Context(), seeded, s.indexer())
+	s.Require().NoError(err)
+
+	s.Equal(symbols.UpdateResult{Kept: 3}, res)
+	s.Equal(before, s.read(seeded))
+}
+
+func (s *goindexSuite) read(path string) []byte {
+	data, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	return data
+}
+
 const (
 	benchPackages = 60
 	benchFiles    = 3
