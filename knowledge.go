@@ -2491,20 +2491,43 @@ func (m *Magus) knowledgeGraph(ctx context.Context, req types.GraphRequest) (*kn
 	if !req.Symbols.Loaded() {
 		return m.warmKnowledgeGraph().Get(ctx, req.Refresh)
 	}
-	root := m.Root()
-	g, err := buildKnowledgeGraph(ctx, m, root, m.cfg, req.Refresh, slog.Default())
+	g, err := buildKnowledgeGraph(ctx, m, m.Root(), m.cfg, req.Refresh, slog.Default())
 	if err != nil {
 		return nil, err
 	}
-	if ref := req.Symbols.Ref(); ref != "" {
-		err = mergeWorkspaceSymbolsForRef(ctx, m, root, m.cfg, g, ref, slog.Default())
-	} else {
-		err = mergeWorkspaceSymbols(ctx, m, root, m.cfg, g, slog.Default())
-	}
-	if err != nil {
+	if err := mergeSymbolScope(ctx, m, m.Root(), m.cfg, g, req.Symbols, slog.Default()); err != nil {
 		return nil, err
 	}
 	return g, nil
+}
+
+// KnowledgeGraphWithSymbols returns a copy of base with the symbol shards scope
+// selects merged in. base is left as it was, so one evaluation can merge every
+// scope it reads onto the one default graph it built.
+func (w internals) KnowledgeGraphWithSymbols(ctx context.Context, base *knowledge.Graph, scope types.SymbolScope) (*knowledge.Graph, error) {
+	return knowledgeGraphWithSymbols(ctx, w.Magus, w.Root(), w.cfg, base, scope, slog.Default())
+}
+
+func knowledgeGraphWithSymbols(ctx context.Context, ws types.Inspector, root string, cfg config.Config, base *knowledge.Graph, scope types.SymbolScope, log *slog.Logger) (*knowledge.Graph, error) {
+	if !scope.Loaded() {
+		return nil, errors.New("knowledge graph with symbols: the scope names no symbols, so there is nothing to merge")
+	}
+	g := knowledge.NewGraph()
+	g.SetRoot(base.Root())
+	// The merge writes into g, and base may be the warm graph others read.
+	knowledge.UnionInto(g, base)
+	if err := mergeSymbolScope(ctx, ws, root, cfg, g, scope, log); err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+// mergeSymbolScope merges the symbol shards scope selects into g.
+func mergeSymbolScope(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, scope types.SymbolScope, log *slog.Logger) error {
+	if ref := scope.Ref(); ref != "" {
+		return mergeWorkspaceSymbolsForRef(ctx, ws, root, cfg, g, ref, log)
+	}
+	return mergeWorkspaceSymbols(ctx, ws, root, cfg, g, log)
 }
 
 // WriteGuardIndex writes the file a guard hook answers graph questions from (see

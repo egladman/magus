@@ -1652,3 +1652,65 @@ func TestRootModuleGapsDropsDirectoryExcludedByBuildConstraint(t *testing.T) {
 
 	assert.Equal(t, []string{"internal/built"}, got)
 }
+
+// knowledgeGraphWithSymbolsSuite merges symbols onto a default graph another
+// reader holds, as one evaluation's symbol reads share its default build.
+type knowledgeGraphWithSymbolsSuite struct {
+	suite.Suite
+	root string
+	ws   types.WorkspaceRepository
+	cfg  config.Config
+	log  *slog.Logger
+	base *knowledge.Graph
+}
+
+func TestKnowledgeGraphWithSymbolsSuite(t *testing.T) {
+	suite.Run(t, new(knowledgeGraphWithSymbolsSuite))
+}
+
+func (s *knowledgeGraphWithSymbolsSuite) SetupTest() {
+	s.root, s.ws, s.cfg = indexedWorkspace(s.T())
+	s.log = slog.New(slog.DiscardHandler)
+	var err error
+	s.base, err = ensureKnowledgeGraph(s.T().Context(), s.ws, s.root, s.cfg, false, knowledge.AllClasses, s.log)
+	s.Require().NoError(err)
+}
+
+func (s *knowledgeGraphWithSymbolsSuite) output(g *knowledge.Graph) string {
+	b, err := json.Marshal(g.Output())
+	s.Require().NoError(err)
+	return string(b)
+}
+
+func (s *knowledgeGraphWithSymbolsSuite) TestAMergeLeavesTheSharedGraphUnchanged() {
+	before := s.output(s.base)
+	merged, err := knowledgeGraphWithSymbols(s.T().Context(), s.ws, s.root, s.cfg, s.base, types.AllSymbols, s.log)
+	s.Require().NoError(err)
+	s.True(merged.HasSymbols(), "the fixture's index is merged into the copy")
+	s.False(s.base.HasSymbols())
+	s.Equal(before, s.output(s.base))
+}
+
+func (s *knowledgeGraphWithSymbolsSuite) TestTheMergedCopyEqualsAFreshMerge() {
+	want, err := buildKnowledgeGraph(s.T().Context(), s.ws, s.root, s.cfg, false, s.log)
+	s.Require().NoError(err)
+	s.Require().NoError(mergeWorkspaceSymbols(s.T().Context(), s.ws, s.root, s.cfg, want, s.log))
+	got, err := knowledgeGraphWithSymbols(s.T().Context(), s.ws, s.root, s.cfg, s.base, types.AllSymbols, s.log)
+	s.Require().NoError(err)
+	s.Equal(s.output(want), s.output(got))
+	s.Equal(s.root, got.Root())
+}
+
+func (s *knowledgeGraphWithSymbolsSuite) TestARefScopeEqualsAFreshRefMerge() {
+	want, err := buildKnowledgeGraph(s.T().Context(), s.ws, s.root, s.cfg, false, s.log)
+	s.Require().NoError(err)
+	s.Require().NoError(mergeWorkspaceSymbolsForRef(s.T().Context(), s.ws, s.root, s.cfg, want, "Foo", s.log))
+	got, err := knowledgeGraphWithSymbols(s.T().Context(), s.ws, s.root, s.cfg, s.base, types.SymbolsMentioning("Foo"), s.log)
+	s.Require().NoError(err)
+	s.Equal(s.output(want), s.output(got))
+}
+
+func (s *knowledgeGraphWithSymbolsSuite) TestAScopeWithoutSymbolsIsRefused() {
+	_, err := knowledgeGraphWithSymbols(s.T().Context(), s.ws, s.root, s.cfg, s.base, types.NoSymbols, s.log)
+	s.ErrorContains(err, "names no symbols")
+}

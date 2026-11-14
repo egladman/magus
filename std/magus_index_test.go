@@ -25,6 +25,8 @@ type rebuildingWorkspace struct {
 	freshen  error
 	calls    int
 	scopes   [][]string
+	builds   []types.GraphRequest
+	merges   []types.SymbolScope
 }
 
 func (f *rebuildingWorkspace) FreshenSymbolIndexes(_ context.Context, languages []string) error {
@@ -33,8 +35,14 @@ func (f *rebuildingWorkspace) FreshenSymbolIndexes(_ context.Context, languages 
 	return f.freshen
 }
 
-func (f *rebuildingWorkspace) KnowledgeGraph(ctx context.Context, _ types.GraphRequest) (*knowledge.Graph, error) {
+func (f *rebuildingWorkspace) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
+	f.builds = append(f.builds, req)
 	return knowledge.Build(ctx, f.cacheDir, knowledge.BuildOptions{}, f.in, nil)
+}
+
+func (f *rebuildingWorkspace) KnowledgeGraphWithSymbols(_ context.Context, base *knowledge.Graph, scope types.SymbolScope) (*knowledge.Graph, error) {
+	f.merges = append(f.merges, scope)
+	return base, nil
 }
 
 func (f *rebuildingWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
@@ -191,4 +199,44 @@ func (s *symbolIndexMemoSuite) TestANewEvaluationFreshensAgain() {
 	_, err = MagusSymbolIndexDigest(types.WithEvalMemo(ctx), nil)
 	s.Require().NoError(err)
 	s.Equal(2, s.ws.calls)
+}
+
+type symbolIndexSharedBuildSuite struct {
+	suite.Suite
+	ws *rebuildingWorkspace
+}
+
+func TestSymbolIndexSharedBuildSuite(t *testing.T) {
+	suite.Run(t, new(symbolIndexSharedBuildSuite))
+}
+
+func (s *symbolIndexSharedBuildSuite) SetupTest() {
+	s.ws = indexWorkspace(s.T())
+	s.ws.in.Symbols = map[string][]types.KnowledgeSymbol{
+		"pkg/a": {{Key: "example.com/a Foo#", Label: "Foo", Source: "pkg/a/a.go:1", Defs: []string{"pkg/a/a.go"}}},
+	}
+}
+
+func (s *symbolIndexSharedBuildSuite) TestTheMemoizedDigestIsTheStoresDigest() {
+	plain, err := MagusSymbolIndexDigest(types.WithWorkspace(s.T().Context(), s.ws), nil)
+	s.Require().NoError(err)
+	memo, err := MagusSymbolIndexDigest(types.WithEvalMemo(types.WithWorkspace(s.T().Context(), s.ws)), nil)
+	s.Require().NoError(err)
+	stored, err := knowledge.NewStore(s.ws.cacheDir, true, 0, nil, nil).SymbolIndexDigest()
+	s.Require().NoError(err)
+	s.Require().True(stored.Indexed, "the fixture indexes pkg/a")
+	s.Equal(stored, memo)
+	s.Equal(plain, memo)
+}
+
+func (s *symbolIndexSharedBuildSuite) TestADigestAndASymbolReadShareOneDefaultBuild() {
+	ctx := types.WithEvalMemo(types.WithWorkspace(s.T().Context(), s.ws))
+	_, err := MagusSymbolIndexDigest(ctx, nil)
+	s.Require().NoError(err)
+	g, err := graphsFromContext(ctx, "dir")
+	s.Require().NoError(err)
+	_, err = g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
+	s.Require().NoError(err)
+	s.Equal([]types.GraphRequest{{}}, s.ws.builds)
+	s.Equal([]types.SymbolScope{types.AllSymbols}, s.ws.merges)
 }

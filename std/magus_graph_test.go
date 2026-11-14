@@ -189,17 +189,23 @@ func TestDirLayerAndNeighborhoodRefuseBadInput(t *testing.T) {
 	}
 }
 
-// countingGraphs counts the graph builds a sequence of members asks for.
+// countingGraphs counts the graph builds and symbol merges members ask for.
 type countingGraphs struct {
 	*builtGraphWorkspace
 	builds int
 	reqs   []types.GraphRequest
+	merges []types.SymbolScope
 }
 
 func (c *countingGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
 	c.builds++
 	c.reqs = append(c.reqs, req)
 	return c.builtGraphWorkspace.KnowledgeGraph(ctx, req)
+}
+
+func (c *countingGraphs) KnowledgeGraphWithSymbols(ctx context.Context, base *knowledge.Graph, scope types.SymbolScope) (*knowledge.Graph, error) {
+	c.merges = append(c.merges, scope)
+	return c.builtGraphWorkspace.KnowledgeGraphWithSymbols(ctx, base, scope)
 }
 
 // One evaluation builds the graph once however many members it calls; the next
@@ -221,8 +227,8 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 	assert.Equal(t, 2, ws.builds, "a new evaluation rebuilds")
 }
 
-// A refs lookup asks for the shards of its own symbol, and one evaluation builds that
-// scope once while a different symbol builds its own.
+// A refs lookup merges its own symbol's shards onto the one default build.
+// It merges once per symbol, and a different symbol merges its own.
 func TestRefsMemoizesPerSymbolScope(t *testing.T) {
 	t.Parallel()
 	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
@@ -234,12 +240,14 @@ func TestRefsMemoizesPerSymbolScope(t *testing.T) {
 	assert.Equal(t, countingGraphs{
 		builtGraphWorkspace: ws.builtGraphWorkspace,
 		builds:              1,
-		reqs:                []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}},
+		reqs:                []types.GraphRequest{{}},
+		merges:              []types.SymbolScope{types.SymbolsMentioning(graphSymbol)},
 	}, *ws)
 
 	_, err := MagusRefs(eval, "symbol:example.com/x Bar#", types.KnowledgeRefsOptions{})
 	require.NoError(t, err)
-	assert.Equal(t, 2, ws.builds, "a second symbol is a second scope")
+	assert.Equal(t, 1, ws.builds, "a second symbol merges onto the same build")
+	assert.Len(t, ws.merges, 2, "a second symbol is a second scope")
 }
 
 // precedentGraphs is a workspace whose indexes have the given freshness and whose declared
@@ -540,6 +548,10 @@ type diskGraphWorkspace struct {
 
 func (w *diskGraphWorkspace) KnowledgeGraph(ctx context.Context, _ types.GraphRequest) (*knowledge.Graph, error) {
 	return knowledge.Build(ctx, w.cacheDir, knowledge.BuildOptions{Root: w.root}, knowledge.Inputs{Root: w.root}, slog.Default())
+}
+
+func (w *diskGraphWorkspace) KnowledgeGraphWithSymbols(ctx context.Context, _ *knowledge.Graph, scope types.SymbolScope) (*knowledge.Graph, error) {
+	return w.KnowledgeGraph(ctx, types.GraphRequest{Symbols: scope})
 }
 
 func (w *diskGraphWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {

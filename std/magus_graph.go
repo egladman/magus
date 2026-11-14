@@ -24,6 +24,8 @@ import (
 // the same reason Analyzer is: std cannot import root magus.
 type knowledgeGraphs interface {
 	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
+	// KnowledgeGraphWithSymbols merges scope's shards into a copy of base.
+	KnowledgeGraphWithSymbols(ctx context.Context, base *knowledge.Graph, scope types.SymbolScope) (*knowledge.Graph, error)
 	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 }
 
@@ -49,16 +51,26 @@ type memoGraphs struct {
 	memo *types.EvalMemo
 }
 
-// KnowledgeGraph builds once per distinct scope; a refresh always rebuilds.
+// KnowledgeGraph builds the default graph once, and merges each distinct symbol
+// scope once onto a copy of it; a refresh always rebuilds.
 func (m memoGraphs) KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
 	if req.Refresh {
 		return m.g.KnowledgeGraph(ctx, req)
 	}
-	key := "graph"
-	if req.Symbols.Loaded() {
-		key = "graph+symbols:" + req.Symbols.Ref()
+	if !req.Symbols.Loaded() {
+		return memoGraph(m.memo, "graph", func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, req) })
 	}
-	return memoGraph(m.memo, key, func() (*knowledge.Graph, error) { return m.g.KnowledgeGraph(ctx, req) })
+	return memoGraph(m.memo, "graph+symbols:"+req.Symbols.Ref(), func() (*knowledge.Graph, error) {
+		base, err := m.KnowledgeGraph(ctx, types.GraphRequest{})
+		if err != nil {
+			return nil, err
+		}
+		return m.g.KnowledgeGraphWithSymbols(ctx, base, req.Symbols)
+	})
+}
+
+func (m memoGraphs) KnowledgeGraphWithSymbols(ctx context.Context, base *knowledge.Graph, scope types.SymbolScope) (*knowledge.Graph, error) {
+	return m.g.KnowledgeGraphWithSymbols(ctx, base, scope)
 }
 
 func (m memoGraphs) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool) {

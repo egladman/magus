@@ -14,9 +14,8 @@ import (
 // symbolIndexWorkspace is the part of *magus.Magus magus\graph reads,
 // recovered by assertion because std cannot import root magus.
 type symbolIndexWorkspace interface {
+	knowledgeGraphs
 	FreshenSymbolIndexes(ctx context.Context, languages []string) error
-	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
-	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 	CacheDir() string
 }
 
@@ -55,7 +54,13 @@ func symbolIndexDigest(ctx context.Context, languages []string) (types.SymbolInd
 	if err := w.FreshenSymbolIndexes(ctx, languages); err != nil {
 		return types.SymbolIndexDigest{}, err
 	}
-	if _, err := w.KnowledgeGraph(ctx, types.GraphRequest{}); err != nil {
+	// The build writes the shards the digest reads. Through the memo,
+	// it is also the default graph every read of the evaluation shares.
+	g, err := graphsFromContext(ctx, "graph")
+	if err != nil {
+		return types.SymbolIndexDigest{}, err
+	}
+	if _, err := g.KnowledgeGraph(ctx, types.GraphRequest{}); err != nil {
 		return types.SymbolIndexDigest{}, err
 	}
 	d, err := knowledge.NewStore(w.CacheDir(), true, 0, nil, nil).SymbolIndexDigest()
