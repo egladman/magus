@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -130,7 +131,7 @@ func lookupProbeSpec(probe spells.Command) (probeSpec, bool) {
 //
 // Every environment read under it is this process's, never the workspace's (WithEnv): a
 // probe forks with the process environment, so that is what decides the version it caches.
-func probeCacheKey(probe spells.Command, dir string) (string, bool) {
+func probeCacheKey(ctx context.Context, probe spells.Command, dir string) (string, bool) {
 	spec, ok := lookupProbeSpec(probe)
 	if !ok || !filepath.IsAbs(dir) {
 		return "", false
@@ -152,7 +153,7 @@ func probeCacheKey(probe spells.Command, dir string) (string, bool) {
 		names = append(slices.Clone(spec.files), miseDirInputs...)
 		names = append(names, miseEnvInputs()...)
 		if err := writeMiseGlobals(&b, time.Now()); err != nil {
-			slog.Info("probing "+probe.Bin+" uncached: a mise directory changed too recently to key on", attr.Error(err))
+			slog.InfoContext(ctx, fmt.Sprintf("probing %s uncached: a mise directory changed too recently to key on", probe.Bin), attr.Error(err))
 			return "", false
 		}
 	case strings.Contains(base, "shim") || slices.Contains([]string{"asdf", "volta", "proto", "corepack", "rustup"}, base):
@@ -423,7 +424,7 @@ const probeAbsentSuffix = ".absent"
 // see the same inputs share a key, so a sweep over seven Go projects forks `go version`
 // once rather than seven times.
 func (m *Magus) probeCached(ctx context.Context, probe spells.Command, dir string, fork func() (string, error)) (string, error) {
-	key, cacheable := probeCacheKey(probe, dir)
+	key, cacheable := probeCacheKey(ctx, probe, dir)
 	// A Magus with no workspace has no cache directory to answer from.
 	if !cacheable || m.ws == nil {
 		return fork()
@@ -572,7 +573,7 @@ func (e *unsettledDir) Error() string {
 func writeDirIdentity(b *strings.Builder, dir string, depth int, now time.Time) error {
 	fi, err := os.Stat(dir)
 	if err != nil {
-		fmt.Fprintf(b, "%s/ -\n", dir)
+		writeDirAbsence(b, dir, err)
 		return nil
 	}
 	// A symlink costs no readlink, so only dir's time sees one retargeted under
@@ -582,7 +583,7 @@ func writeDirIdentity(b *strings.Builder, dir string, depth int, now time.Time) 
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		fmt.Fprintf(b, "%s/ unreadable\n", dir)
+		writeDirAbsence(b, dir, err)
 		return nil
 	}
 	ino, _, _ := file.Identity(fi)
@@ -609,6 +610,16 @@ func writeDirIdentity(b *strings.Builder, dir string, depth int, now time.Time) 
 	}
 	fmt.Fprintf(b, "%s/ names %x\n", dir, names.Sum(nil))
 	return nil
+}
+
+// writeDirAbsence records that dir has no entries to key on, and whether it
+// is absent or unreadable. Either is an input the key sees, not a failure.
+func writeDirAbsence(b *strings.Builder, dir string, err error) {
+	if errors.Is(err, fs.ErrNotExist) {
+		fmt.Fprintf(b, "%s/ -\n", dir)
+		return
+	}
+	fmt.Fprintf(b, "%s/ unreadable\n", dir)
 }
 
 // lookupProbeBin returns where PATH finds bin and the file it resolves to, and

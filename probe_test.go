@@ -43,30 +43,30 @@ var pnpmProbe = spells.Command{Bin: "pnpm", Args: []string{"--version"}}
 // pick its version changes the key, and anything else leaves it alone.
 func TestProbeCacheKeyMovesWithEveryInput(t *testing.T) {
 	dir := probeFixture(t, "pnpm", []byte("\x7fELF binary"))
-	key, ok := probeCacheKey(pnpmProbe, dir)
+	key, ok := probeCacheKey(t.Context(), pnpmProbe, dir)
 	require.True(t, ok)
 
-	same, _ := probeCacheKey(pnpmProbe, dir)
+	same, _ := probeCacheKey(t.Context(), pnpmProbe, dir)
 	assert.Equal(t, key, same)
 
 	t.Setenv("HYPERFINE_RANDOMIZED_ENVIRONMENT_OFFSET", "17")
-	unrelated, _ := probeCacheKey(pnpmProbe, dir)
+	unrelated, _ := probeCacheKey(t.Context(), pnpmProbe, dir)
 	assert.Equal(t, key, unrelated, "a variable the tool never reads must not miss")
 
 	t.Setenv("npm_config_manage_package_manager_versions", "false")
-	configured, _ := probeCacheKey(pnpmProbe, dir)
+	configured, _ := probeCacheKey(t.Context(), pnpmProbe, dir)
 	assert.NotEqual(t, key, configured)
 
 	// The manifest that pins a version may sit in any ancestor, the workspace root included.
 	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(dir), "package.json"), []byte(`{"packageManager":"pnpm@9.0.0"}`), 0o644))
-	pinned, _ := probeCacheKey(pnpmProbe, dir)
+	pinned, _ := probeCacheKey(t.Context(), pnpmProbe, dir)
 	assert.NotEqual(t, configured, pinned)
 
-	parent, _ := probeCacheKey(pnpmProbe, filepath.Dir(dir))
+	parent, _ := probeCacheKey(t.Context(), pnpmProbe, filepath.Dir(dir))
 	assert.Equal(t, pinned, parent, "two directories that see the same files share an answer")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"packageManager":"pnpm@10.0.0"}`), 0o644))
-	own, _ := probeCacheKey(pnpmProbe, dir)
+	own, _ := probeCacheKey(t.Context(), pnpmProbe, dir)
 	assert.NotEqual(t, pinned, own, "a manifest created in the directory itself moves its key")
 }
 
@@ -74,20 +74,20 @@ func TestProbeCacheKeyMovesWithEveryInput(t *testing.T) {
 // list, and a relative PATH entry all fork every time.
 func TestProbeCacheKeyRefusesWhatItCannotEnumerate(t *testing.T) {
 	dir := probeFixture(t, "pnpm", []byte("#!/bin/sh\necho 10.0.0\n"))
-	_, ok := probeCacheKey(pnpmProbe, dir)
+	_, ok := probeCacheKey(t.Context(), pnpmProbe, dir)
 	assert.False(t, ok, "a script decides what runs from inputs nothing here lists")
 
 	dir = probeFixture(t, "cargo", []byte("\x7fELF binary"))
-	_, ok = probeCacheKey(spells.Command{Bin: "cargo", Args: []string{"--version"}}, dir)
+	_, ok = probeCacheKey(t.Context(), spells.Command{Bin: "cargo", Args: []string{"--version"}}, dir)
 	assert.False(t, ok, "a probe with no input list forks")
 
 	dir = probeFixture(t, "govulncheck", []byte("\x7fELF binary"))
-	_, ok = probeCacheKey(spells.Command{Bin: "govulncheck", Args: []string{"-version"}}, dir)
+	_, ok = probeCacheKey(t.Context(), spells.Command{Bin: "govulncheck", Args: []string{"-version"}}, dir)
 	assert.False(t, ok, "govulncheck reports a database that moves on a clock")
 
 	dir = probeFixture(t, "node", []byte("\x7fELF binary"))
 	t.Setenv("PATH", fmt.Sprintf("%s%snode_modules/.bin", os.Getenv("PATH"), string(os.PathListSeparator)))
-	_, ok = probeCacheKey(spells.Command{Bin: "node", Args: []string{"--version"}}, dir)
+	_, ok = probeCacheKey(t.Context(), spells.Command{Bin: "node", Args: []string{"--version"}}, dir)
 	assert.False(t, ok, "a relative PATH entry resolves per directory")
 }
 
@@ -222,7 +222,7 @@ func TestAPresentToolThatCannotBeProbedFailsEveryRun(t *testing.T) {
 		assert.Contains(t, err.Error(), "Cannot find module 'typescript/lib/tsc.js'")
 	}
 	assert.Equal(t, 1, *calls, "the second run replays the recorded failure")
-	key, ok := probeCacheKey(tscProbe, p.Dir)
+	key, ok := probeCacheKey(t.Context(), tscProbe, p.Dir)
 	require.True(t, ok)
 	assert.NoFileExists(t, filepath.Join(m.CacheDir(), "probes", key+probeAbsentSuffix), "a broken tool is not recorded as absent")
 }
@@ -234,7 +234,7 @@ func TestAnAbsenceOutlivesTheFailureTTL(t *testing.T) {
 	_, err := m.toolVersionsByProject(t.Context(), []*types.Project{p})
 	require.NoError(t, err)
 
-	key, ok := probeCacheKey(tscProbe, p.Dir)
+	key, ok := probeCacheKey(t.Context(), tscProbe, p.Dir)
 	require.True(t, ok)
 	expired := time.Now().Add(-probeFailureTTL - time.Hour)
 	require.NoError(t, os.Chtimes(filepath.Join(m.CacheDir(), "probes", key+probeAbsentSuffix), expired, expired))
@@ -249,20 +249,20 @@ func TestAnAbsenceOutlivesTheFailureTTL(t *testing.T) {
 // falls back to.
 func TestTscProbeKeyFollowsTheInstall(t *testing.T) {
 	dir := probeFixture(t, "pnpm", []byte("\x7fELF binary"))
-	bare, ok := probeCacheKey(tscProbe, dir)
+	bare, ok := probeCacheKey(t.Context(), tscProbe, dir)
 	require.True(t, ok)
 
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "node_modules"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "node_modules", ".modules.yaml"), nil, 0o644))
-	stamped, _ := probeCacheKey(tscProbe, dir)
+	stamped, _ := probeCacheKey(t.Context(), tscProbe, dir)
 	assert.NotEqual(t, bare, stamped, "an install's stamp")
 
 	require.NoError(t, os.Symlink(".pnpm/typescript@5.8.3/node_modules/typescript", filepath.Join(dir, "node_modules", "typescript")))
-	linked, _ := probeCacheKey(tscProbe, dir)
+	linked, _ := probeCacheKey(t.Context(), tscProbe, dir)
 	assert.NotEqual(t, stamped, linked, "the link that names the version")
 
 	require.NoError(t, os.WriteFile(filepath.Join(os.Getenv("PATH"), "tsc"), []byte("\x7fELF binary"), 0o755))
-	onPath, ok := probeCacheKey(tscProbe, dir)
+	onPath, ok := probeCacheKey(t.Context(), tscProbe, dir)
 	require.True(t, ok)
 	assert.NotEqual(t, linked, onPath, "a tsc on PATH, which pnpm exec falls back to")
 }
@@ -278,29 +278,29 @@ func TestProbeCacheKeyKeysGoOnItsToolchainLines(t *testing.T) {
 	t.Setenv("GOWORK", "")
 	gomod := filepath.Join(dir, "go.mod")
 	require.NoError(t, os.WriteFile(gomod, []byte("module a\n\ngo 1.25.0\n"), 0o644))
-	key, ok := probeCacheKey(goProbe, dir)
+	key, ok := probeCacheKey(t.Context(), goProbe, dir)
 	require.True(t, ok)
 
 	require.NoError(t, os.WriteFile(gomod, []byte("module a\n\ngo 1.25.0\n\nrequire example.com/x v1.0.0\n"), 0o644))
-	required, _ := probeCacheKey(goProbe, dir)
+	required, _ := probeCacheKey(t.Context(), goProbe, dir)
 	assert.Equal(t, key, required, "a require line does not pick a toolchain")
 
 	sibling := filepath.Join(filepath.Dir(dir), "lib")
 	require.NoError(t, os.MkdirAll(sibling, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(sibling, "go.mod"), []byte("module b\n\ngo 1.25.0\n"), 0o644))
-	shared, _ := probeCacheKey(goProbe, sibling)
+	shared, _ := probeCacheKey(t.Context(), goProbe, sibling)
 	assert.Equal(t, key, shared, "a second module on the same toolchain shares the answer")
 
 	require.NoError(t, os.WriteFile(gomod, []byte("module a\n\ngo 1.25.0\n\ntoolchain go1.26.1\n"), 0o644))
-	pinned, _ := probeCacheKey(goProbe, dir)
+	pinned, _ := probeCacheKey(t.Context(), goProbe, dir)
 	assert.NotEqual(t, key, pinned, "a toolchain line switches toolchains")
 
 	t.Setenv("GOTOOLCHAIN", "go1.27.0")
-	forced, _ := probeCacheKey(goProbe, dir)
+	forced, _ := probeCacheKey(t.Context(), goProbe, dir)
 	assert.NotEqual(t, pinned, forced, "GOTOOLCHAIN switches toolchains")
 
 	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(dir), "go.work"), []byte("go 1.26.0\n\nuse ./web\n"), 0o644))
-	worked, _ := probeCacheKey(goProbe, dir)
+	worked, _ := probeCacheKey(t.Context(), goProbe, dir)
 	assert.NotEqual(t, forced, worked, "a go.work above the module decides the toolchain")
 }
 
@@ -370,7 +370,7 @@ func TestProbeCachedCachesAFailureForItsTTL(t *testing.T) {
 	require.EqualError(t, err, "version probe pnpm [exec tsc --version]: exit status 254")
 	assert.Equal(t, 1, forks, "the second ask replays the failure")
 
-	key, ok := probeCacheKey(probe, dir)
+	key, ok := probeCacheKey(t.Context(), probe, dir)
 	require.True(t, ok)
 	expired := time.Now().Add(-probeFailureTTL - time.Minute)
 	require.NoError(t, os.Chtimes(filepath.Join(m.CacheDir(), "probes", key+probeFailedSuffix), expired, expired))
@@ -380,7 +380,7 @@ func TestProbeCachedCachesAFailureForItsTTL(t *testing.T) {
 
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "node_modules", ".bin"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "node_modules", ".bin", "tsc"), []byte("#!/bin/sh\n"), 0o755))
-	installed, _ := probeCacheKey(probe, dir)
+	installed, _ := probeCacheKey(t.Context(), probe, dir)
 	assert.NotEqual(t, key, installed, "an install moves the key, so a cached failure cannot outlive it")
 }
 
@@ -394,7 +394,7 @@ func TestProbeCachedDoesNotCacheACancelledProbe(t *testing.T) {
 	_, err := m.probeCached(ctx, probe, dir, func() (string, error) { return "", ctx.Err() })
 	require.Error(t, err)
 
-	key, _ := probeCacheKey(probe, dir)
+	key, _ := probeCacheKey(t.Context(), probe, dir)
 	assert.NoFileExists(t, filepath.Join(m.CacheDir(), "probes", key+probeFailedSuffix))
 }
 
@@ -603,7 +603,7 @@ func (s *ProbeMiseGlobalsSuite) TestAProbeForkedForAFreshDirectorySaysSo() {
 	now := time.Now()
 	s.Require().NoError(os.Chtimes(s.st.trusted, now, now))
 
-	_, ok := probeCacheKey(spells.Command{Bin: "node", Args: []string{"--version"}}, dir)
+	_, ok := probeCacheKey(s.T().Context(), spells.Command{Bin: "node", Args: []string{"--version"}}, dir)
 	s.False(ok)
 	s.Contains(logs.String(), "level=INFO")
 	s.Contains(logs.String(), "trusted-configs")
@@ -629,10 +629,10 @@ func (s *ProbeEnvSuite) TestCIDoesNotMoveTheKey() {
 	dir := probeFixture(s.T(), "node", []byte("\x7fELF binary"))
 	probe := spells.Command{Bin: "node", Args: []string{"--version"}}
 	s.T().Setenv("CI", "false")
-	key, ok := probeCacheKey(probe, dir)
+	key, ok := probeCacheKey(s.T().Context(), probe, dir)
 	s.Require().True(ok)
 
 	s.T().Setenv("CI", "true")
-	ci, _ := probeCacheKey(probe, dir)
+	ci, _ := probeCacheKey(s.T().Context(), probe, dir)
 	s.Equal(key, ci)
 }
