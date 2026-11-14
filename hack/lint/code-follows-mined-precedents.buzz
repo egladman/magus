@@ -30,6 +30,8 @@ export final SANCTIONED = {
     "target:testdata/latex/onepage:ci (ci reaches lint)": "a test fixture for the latex spell, not a project this repository lints",
     "target:libs/embed/train:ci (ci reaches generate)": "its generate trains the embedding model, a different job under the common name",
     "target:libs/embed/train:format (format reaches generate)": "its generate trains the embedding model, a different job under the common name",
+    "target:docs/guides/integrations/agents:format (format reaches generate)": "its generate writes the cursor schemas outside a docs worker's lease, so ci orders generate before format instead",
+    "target:docs/guides/integrations/agents:format (format reaches index-generate)": "its generate writes the cursor schemas outside a docs worker's lease, so ci orders generate before format instead",
 };
 
 // THIS is where a finding sends a reader to sanction a departure.
