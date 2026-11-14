@@ -49,7 +49,7 @@ const (
 	UnusedImport diagnostics.Code = "BZZ3001" // an import whose namespace binding is never referenced
 
 	// Warnings (checker.go).
-	LoopAccumulation diagnostics.Code = "BZZ3002" // a str, list or map rebuilt from itself in a loop
+	LoopAccumulation diagnostics.Code = "BZZ3002" // a list, map or prefixed str rebuilt from itself in a loop
 	RedundantUnwrap  diagnostics.Code = "BZZ3003" // a force-unwrap ! on an operand that is not optional
 	DiscardedValue   diagnostics.Code = "BZZ3004" // an expression statement whose non-void value is unused
 )

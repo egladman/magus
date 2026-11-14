@@ -1247,7 +1247,8 @@ func (c *checker) checkBlock(b *ast.BlockStmt) {
 
 // flagLoopAccumulation warns on a str, list or map rebuilt from itself in a
 // loop, copying it whole every pass. Only the bare target as an operand counts,
-// since `s = s.sub(1)` or a truncation does not grow s.
+// since `s = s.sub(1)` or a truncation does not grow s. A str that leads its
+// rebuild is exempt: vm.appendString extends it in place.
 func (c *checker) flagLoopAccumulation(v *ast.AssignStmt) {
 	if len(c.loops) == 0 {
 		return
@@ -1264,9 +1265,31 @@ func (c *checker) flagLoopAccumulation(v *ast.AssignStmt) {
 	if kind == "" || !extends(v.Value, id.Name) {
 		return
 	}
+	if kind == "string" {
+		if !leads(v.Value, id.Name) {
+			c.warnfc(v.Pos, LoopAccumulation,
+				"%q is rebuilt with text before it inside a loop, copying the whole string every iteration; make %q the first operand, which extends it in place",
+				id.Name, id.Name)
+		}
+		return
+	}
 	c.warnfc(v.Pos, LoopAccumulation,
-		"%q is rebuilt from itself inside a loop, copying the whole %s every iteration; %s",
+		"%q is rebuilt from itself with + inside a loop, copying the whole %s every iteration; %s",
 		id.Name, kind, accumulatorFixes[kind])
+}
+
+// leads reports whether name is the operand the VM extends in place. That is
+// the left end of a `+` chain or the first part of an interpolation.
+func leads(n ast.Node, name string) bool {
+	switch v := n.(type) {
+	case *ast.IdentExpr:
+		return v.Name == name
+	case *ast.BinaryExpr:
+		return v.Op == "+" && leads(v.Left, name)
+	case *ast.InterpExpr:
+		return len(v.Parts) > 0 && v.Parts[0].Expr != nil && leads(v.Parts[0].Expr, name)
+	}
+	return false
 }
 
 // accumulatorKind names a type whose rebuild copies a value that grows, or "".
@@ -1284,9 +1307,8 @@ func accumulatorKind(t types.Type) string {
 }
 
 var accumulatorFixes = map[string]string{
-	"string": "collect the parts in a list and join() it once",
-	"list":   "append() each element to a mut list instead",
-	"map":    "set each key on a mut map instead",
+	"list": "append() each element to a mut list instead",
+	"map":  "set each key on a mut map instead",
 }
 
 // flagRedundantUnwrap warns on `!` applied to an operand proven non-optional.
