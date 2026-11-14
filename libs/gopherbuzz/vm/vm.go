@@ -2318,38 +2318,43 @@ func (vm *VM) Call(callee Value, args []Value) error {
 		return nil
 
 	case tagFun:
-		fn := vm.asFun(callee)
-		if fn.Chunk == nil {
-			return fmt.Errorf("buzz: function has no compiled chunk")
-		}
-		if len(vm.frames) >= maxFrames {
-			return fmt.Errorf("buzz: call stack overflow (limit %d)", maxFrames)
-		}
-		base := len(vm.stack)
-		// Push args into slot positions 0..argCount-1
-		for _, arg := range args {
-			vm.push(arg)
-		}
-		// Pre-allocate remaining local slots
-		localCount := fn.Chunk.LocalCount
-		for i := len(args); i < localCount; i++ {
-			vm.push(Null)
-		}
-		// Receiver rides in frame.this, not a per-call Env — see OpCall.
-		vm.frames = append(vm.frames, frame{
-			chunk: fn.Chunk,
-			ip:    0,
-			env:   fn.Env,
-			fun:   fn,
-			base:  base,
-			retSP: base, // truncate back to base on return (no callee on stack)
-			this:  fn.This,
-		})
-		return nil
+		return vm.callFun(vm.asFun(callee), args)
 
 	default:
 		return fmt.Errorf("buzz: %s is not callable", callee.buzzKind())
 	}
+}
+
+// callFun pushes fn's frame for Exec to run. Unlike Call it never hands args
+// to a host function, so args does not escape.
+func (vm *VM) callFun(fn *funObj, args []Value) error {
+	if fn.Chunk == nil {
+		return fmt.Errorf("buzz: function has no compiled chunk")
+	}
+	if len(vm.frames) >= maxFrames {
+		return fmt.Errorf("buzz: call stack overflow (limit %d)", maxFrames)
+	}
+	base := len(vm.stack)
+	// Push args into slot positions 0..argCount-1
+	for _, arg := range args {
+		vm.push(arg)
+	}
+	// Pre-allocate remaining local slots
+	localCount := fn.Chunk.LocalCount
+	for i := len(args); i < localCount; i++ {
+		vm.push(Null)
+	}
+	// Receiver rides in frame.this, not a per-call Env — see OpCall.
+	vm.frames = append(vm.frames, frame{
+		chunk: fn.Chunk,
+		ip:    0,
+		env:   fn.Env,
+		fun:   fn,
+		base:  base,
+		retSP: base, // truncate back to base on return (no callee on stack)
+		this:  fn.This,
+	})
+	return nil
 }
 
 // Invoke runs receiver.name(args) to completion: the embedder's OpInvoke, resolving
