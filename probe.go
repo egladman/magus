@@ -13,11 +13,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/spells"
 )
 
@@ -149,7 +151,10 @@ func probeCacheKey(probe spells.Command, dir string) (string, bool) {
 	case base == "mise":
 		names = append(slices.Clone(spec.files), miseDirInputs...)
 		names = append(names, miseEnvInputs()...)
-		writeMiseGlobals(&b, time.Now())
+		if err := writeMiseGlobals(&b, time.Now()); err != nil {
+			slog.Info("probing "+probe.Bin+" uncached: a mise directory changed too recently to key on", attr.Error(err))
+			return "", false
+		}
 	case strings.Contains(base, "shim") || slices.Contains([]string{"asdf", "volta", "proto", "corepack", "rustup"}, base):
 		return "", false
 	}
@@ -284,11 +289,6 @@ func writeFileIdentity(b *strings.Builder, path string) {
 		fmt.Fprintf(b, "%s -\n", path)
 		return
 	}
-	writeInfoIdentity(b, path, fi)
-}
-
-// writeInfoIdentity is writeFileIdentity for path already lstat as fi.
-func writeInfoIdentity(b *strings.Builder, path string, fi os.FileInfo) {
 	ino, _, _ := file.Identity(fi)
 	fmt.Fprintf(b, "%s %d %d %d %o", path, fi.Size(), fi.ModTime().UnixNano(), ino, fi.Mode())
 	if fi.Mode()&os.ModeSymlink != 0 {
@@ -355,7 +355,8 @@ func miseEnvInputs() []string {
 // writeMiseGlobals records what a mise shim reads outside the directory chain: the
 // system and explicitly named configs, which configs are trusted, and which versions
 // are installed, since a fuzzy request such as "24" or "lts" resolves against those.
-func writeMiseGlobals(b *strings.Builder, now time.Time) {
+// It fails with an *unsettledDir for a directory too fresh to key on.
+func writeMiseGlobals(b *strings.Builder, now time.Time) error {
 	home, _ := os.UserHomeDir()
 	xdg := func(env, fallback string) string {
 		if v := os.Getenv(env); v != "" {
@@ -387,13 +388,18 @@ func writeMiseGlobals(b *strings.Builder, now time.Time) {
 	}
 	writeDirEntries(b, filepath.Join(config, "conf.d"))
 	writeDirEntries(b, "/etc/mise/conf.d")
-	writeDirWitness(b, filepath.Join(state, "trusted-configs"), now)
-	writeDirWitness(b, filepath.Join(state, "ignored-configs"), now)
+	for _, dir := range []string{filepath.Join(state, "trusted-configs"), filepath.Join(state, "ignored-configs")} {
+		if err := writeDirIdentity(b, dir, 0, now); err != nil {
+			return err
+		}
+	}
 	// tracked-configs is left out: it is the list `mise prune` reads to see which configs
 	// still name a version, one symlink per config mise ever loaded (hundreds on a machine
 	// with many worktrees), and nothing in it changes which version a shim runs. Keying on
 	// it cost every probe a readlink per entry.
-	writeDirWitness(b, filepath.Join(data, "installs"), now)
+	//
+	// An install is a version directory below its tool's.
+	return writeDirIdentity(b, filepath.Join(data, "installs"), 1, now)
 }
 
 // probeFailureTTL bounds how long a cached failure answers. A success is a function of
@@ -546,77 +552,63 @@ type absentTool struct {
 
 func (e *absentTool) Error() string { return e.cause }
 
-// dirSettle is how far in the past a directory's modification time must lie
-// before it witnesses the directory's names. FAT keeps two-second times.
-const dirSettle = 3 * time.Second
+// dirSettleAge is how long ago a directory must have changed before
+// writeDirIdentity keys on it. FAT keeps two-second times.
+const dirSettleAge = 3 * time.Second
 
-// writeDirWitness records dir by its own identity, not one lstat and readlink
-// per entry. Creating, removing or renaming an entry moves the directory's
-// modification time, and no call retargets a symlink in place.
-// now must be read before any stat.
-func writeDirWitness(b *strings.Builder, dir string, now time.Time) {
+// unsettledDir is a directory that changed within dirSettleAge of the probe.
+type unsettledDir struct {
+	dir string
+	age time.Duration
+}
+
+func (e *unsettledDir) Error() string {
+	return fmt.Sprintf("%s changed %s before the probe, within %s", e.dir, e.age.Round(time.Millisecond), dirSettleAge)
+}
+
+// writeDirIdentity records dir's identity and each entry's name and type from
+// one ReadDir, recursing into subdirectories while depth lasts. now must be
+// read before any stat.
+func writeDirIdentity(b *strings.Builder, dir string, depth int, now time.Time) error {
 	fi, err := os.Stat(dir)
 	if err != nil {
 		fmt.Fprintf(b, "%s/ -\n", dir)
-		return
+		return nil
 	}
-	ino, _, ok := file.Identity(fi)
-	if !walkUnsettled(b, dir, fi, ok, now) {
-		return
+	// A symlink costs no readlink, so only dir's time sees one retargeted under
+	// its own name. A retarget later in this tick would leave that time alone.
+	if age := now.Sub(fi.ModTime()); age < dirSettleAge {
+		return &unsettledDir{dir: dir, age: age}
 	}
-	f, err := os.Open(dir)
-	if err != nil {
-		fmt.Fprintf(b, "%s/ -\n", dir)
-		return
-	}
-	// optimization: f.ReadDir skips os.ReadDir's sort of every name; only the
-	// few entries kept below are sorted, for a stable key.
-	entries, err := f.ReadDir(-1)
-	_ = f.Close() // opened read-only, so a close error loses nothing
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		fmt.Fprintf(b, "%s/ unreadable\n", dir)
-		return
+		return nil
 	}
+	ino, _, _ := file.Identity(fi)
 	fmt.Fprintf(b, "%s/ %d %d %d %o\n", dir, fi.Size(), fi.ModTime().UnixNano(), ino, fi.Mode())
-	// A file rewritten in place leaves the directory alone, as mise's paranoid
-	// .hash files are. A subdirectory's own time witnesses its names in turn.
-	var kept []string
+	// optimization: the other names fold into one digest per directory, not
+	// a key line each. A machine trusts hundreds of configs; see
+	// BenchmarkWriteMiseGlobals.
+	names := sha256.New()
+	var line []byte
 	for _, e := range entries {
-		if e.Type()&os.ModeSymlink == 0 {
-			kept = append(kept, e.Name())
+		switch {
+		case e.Type().IsRegular():
+			// mise's paranoid mode rewrites a .hash file in place.
+			writeFileIdentity(b, filepath.Join(dir, e.Name()))
+		case e.IsDir() && depth > 0:
+			if err := writeDirIdentity(b, filepath.Join(dir, e.Name()), depth-1, now); err != nil {
+				return err
+			}
+		default:
+			line = append(append(line[:0], e.Name()...), ' ')
+			line = append(strconv.AppendUint(line, uint64(e.Type()), 8), '\n')
+			_, _ = names.Write(line) // a hash.Hash never fails a write
 		}
 	}
-	slices.Sort(kept)
-	for _, name := range kept {
-		path := filepath.Join(dir, name)
-		sub, err := os.Lstat(path)
-		if err != nil {
-			fmt.Fprintf(b, "%s -\n", path)
-			continue
-		}
-		writeInfoIdentity(b, path, sub)
-		if sub.IsDir() {
-			walkUnsettled(b, path, sub, true, now)
-		}
-	}
-}
-
-// walkUnsettled records every entry of dir when fi cannot witness them, says
-// why, and reports whether fi can. A directory changed within dirSettle could
-// change again inside one timestamp tick.
-func walkUnsettled(b *strings.Builder, dir string, fi os.FileInfo, hasInode bool, now time.Time) bool {
-	var reason string
-	switch age := now.Sub(fi.ModTime()); {
-	case !hasInode:
-		reason = "the platform reports no inode, so a recreated directory looks the same"
-	case age < dirSettle:
-		reason = fmt.Sprintf("modified %s before the probe, within %s", age, dirSettle)
-	default:
-		return true
-	}
-	slog.Debug("recorded every entry of a directory whose own identity cannot witness them", slog.String("dir", dir), slog.String("reason", reason))
-	writeDirEntries(b, dir)
-	return false
+	fmt.Fprintf(b, "%s/ names %x\n", dir, names.Sum(nil))
+	return nil
 }
 
 // lookupProbeBin returns where PATH finds bin and the file it resolves to, and

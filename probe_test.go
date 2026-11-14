@@ -442,56 +442,70 @@ func BenchmarkWriteMiseGlobals(b *testing.B) {
 	newMiseState(b, 830, 40)
 	for b.Loop() {
 		var key strings.Builder
-		writeMiseGlobals(&key, time.Now())
+		if err := writeMiseGlobals(&key, time.Now()); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
-// ProbeMiseWitnessSuite pins what moves a mise shim's key: which configs are
+// ProbeMiseGlobalsSuite pins what moves a mise shim's key: which configs are
 // trusted or ignored and which versions are installed.
-type ProbeMiseWitnessSuite struct {
+type ProbeMiseGlobalsSuite struct {
 	suite.Suite
 	st miseState
 }
 
-func TestProbeMiseWitnessSuite(t *testing.T) { suite.Run(t, new(ProbeMiseWitnessSuite)) }
+func TestProbeMiseGlobalsSuite(t *testing.T) { suite.Run(t, new(ProbeMiseGlobalsSuite)) }
 
-func (s *ProbeMiseWitnessSuite) SetupTest() { s.st = newMiseState(s.T(), 830, 4) }
+func (s *ProbeMiseGlobalsSuite) SetupTest() { s.st = newMiseState(s.T(), 830, 4) }
 
-// key reads the globals an hour on, when every directory has settled, so
-// each directory's own identity stands in for its entries.
-func (s *ProbeMiseWitnessSuite) key() string {
-	return s.keyAt(time.Now().Add(time.Hour))
+// key reads the globals an hour on, when every directory has settled.
+func (s *ProbeMiseGlobalsSuite) key() string {
+	key, err := s.keyAt(time.Now().Add(time.Hour))
+	s.Require().NoError(err)
+	return key
 }
 
-func (s *ProbeMiseWitnessSuite) keyAt(now time.Time) string {
+func (s *ProbeMiseGlobalsSuite) keyAt(now time.Time) (string, error) {
 	var b strings.Builder
-	writeMiseGlobals(&b, now)
-	return b.String()
+	err := writeMiseGlobals(&b, now)
+	return b.String(), err
 }
 
-func (s *ProbeMiseWitnessSuite) trust(name, config string) {
+func (s *ProbeMiseGlobalsSuite) stat(dir string) os.FileInfo {
+	fi, err := os.Stat(dir)
+	s.Require().NoError(err)
+	return fi
+}
+
+// restore puts back the modification time dir had when before was read.
+func (s *ProbeMiseGlobalsSuite) restore(dir string, before os.FileInfo) {
+	s.Require().NoError(os.Chtimes(dir, before.ModTime(), before.ModTime()))
+}
+
+func (s *ProbeMiseGlobalsSuite) trust(name, config string) {
 	s.Require().NoError(os.Symlink(config, filepath.Join(s.st.trusted, name)))
 }
 
-func (s *ProbeMiseWitnessSuite) TestUnchangedDirectoriesKeepTheKey() {
+func (s *ProbeMiseGlobalsSuite) TestUnchangedDirectoriesKeepTheKey() {
 	key := s.key()
 	s.Equal(key, s.key())
-	s.NotContains(key, "tree-0-mise.toml", "a settled directory is not walked")
+	s.NotContains(key, " -> ", "a symlink entry costs no readlink")
 }
 
-func (s *ProbeMiseWitnessSuite) TestAnAddedTrustedConfigMovesTheKey() {
+func (s *ProbeMiseGlobalsSuite) TestAnAddedTrustedConfigMovesTheKey() {
 	key := s.key()
 	s.trust("new-mise.toml-00ff", "/work/new/mise.toml")
 	s.NotEqual(key, s.key())
 }
 
-func (s *ProbeMiseWitnessSuite) TestARemovedTrustedConfigMovesTheKey() {
+func (s *ProbeMiseGlobalsSuite) TestARemovedTrustedConfigMovesTheKey() {
 	key := s.key()
 	s.Require().NoError(os.Remove(filepath.Join(s.st.trusted, fmt.Sprintf("tree-7-mise.toml-%016x", 7))))
 	s.NotEqual(key, s.key())
 }
 
-func (s *ProbeMiseWitnessSuite) TestARetargetedTrustSymlinkMovesTheKey() {
+func (s *ProbeMiseGlobalsSuite) TestARetargetedTrustSymlinkMovesTheKey() {
 	name := fmt.Sprintf("tree-7-mise.toml-%016x", 7)
 	key := s.key()
 	s.Require().NoError(os.Remove(filepath.Join(s.st.trusted, name)))
@@ -500,7 +514,7 @@ func (s *ProbeMiseWitnessSuite) TestARetargetedTrustSymlinkMovesTheKey() {
 }
 
 // A symlink renamed over the old one is how an atomic retarget is done.
-func (s *ProbeMiseWitnessSuite) TestATrustSymlinkReplacedByRenameMovesTheKey() {
+func (s *ProbeMiseGlobalsSuite) TestATrustSymlinkReplacedByRenameMovesTheKey() {
 	name := fmt.Sprintf("tree-7-mise.toml-%016x", 7)
 	key := s.key()
 	s.trust("staged", "/work/elsewhere/mise.toml")
@@ -510,7 +524,7 @@ func (s *ProbeMiseWitnessSuite) TestATrustSymlinkReplacedByRenameMovesTheKey() {
 
 // Paranoid mode rewrites a .hash file in place, which leaves the directory's
 // own time alone.
-func (s *ProbeMiseWitnessSuite) TestAHashRewrittenInPlaceMovesTheKey() {
+func (s *ProbeMiseGlobalsSuite) TestAHashRewrittenInPlaceMovesTheKey() {
 	hash := filepath.Join(s.st.trusted, "tree-7-mise.toml-0007.hash")
 	s.Require().NoError(os.WriteFile(hash, []byte("aaaa"), 0o644))
 	backdate(s.T(), s.st.trusted)
@@ -525,7 +539,7 @@ func (s *ProbeMiseWitnessSuite) TestAHashRewrittenInPlaceMovesTheKey() {
 	s.NotEqual(key, s.key())
 }
 
-func (s *ProbeMiseWitnessSuite) TestAnIgnoredConfigMovesTheKey() {
+func (s *ProbeMiseGlobalsSuite) TestAnIgnoredConfigMovesTheKey() {
 	key := s.key()
 	ignored := filepath.Join(filepath.Dir(s.st.trusted), "ignored-configs")
 	s.Require().NoError(os.MkdirAll(ignored, 0o755))
@@ -533,13 +547,13 @@ func (s *ProbeMiseWitnessSuite) TestAnIgnoredConfigMovesTheKey() {
 	s.NotEqual(key, s.key())
 }
 
-func (s *ProbeMiseWitnessSuite) TestANewInstallMovesTheKey() {
+func (s *ProbeMiseGlobalsSuite) TestANewInstallMovesTheKey() {
 	key := s.key()
 	s.Require().NoError(os.Mkdir(filepath.Join(s.st.installs, "tool-0", "1.2.0"), 0o755))
 	s.NotEqual(key, s.key())
 }
 
-func (s *ProbeMiseWitnessSuite) TestARetargetedRuntimeSymlinkMovesTheKey() {
+func (s *ProbeMiseGlobalsSuite) TestARetargetedRuntimeSymlinkMovesTheKey() {
 	link := filepath.Join(s.st.installs, "tool-0", "1")
 	key := s.key()
 	s.Require().NoError(os.Remove(link))
@@ -547,32 +561,60 @@ func (s *ProbeMiseWitnessSuite) TestARetargetedRuntimeSymlinkMovesTheKey() {
 	s.NotEqual(key, s.key())
 }
 
-// A directory changed within dirSettle records every entry, and says so.
-func (s *ProbeMiseWitnessSuite) TestARecentlyChangedDirectoryRecordsEveryEntry() {
+// tar, rsync and a cache restore put a directory's old time back. So does a
+// filesystem whose clock lags the process's.
+func (s *ProbeMiseGlobalsSuite) TestATrustReplacedUnderARestoredTimeMovesTheKey() {
+	before := s.stat(s.st.trusted)
+	key := s.key()
+	s.Require().NoError(os.Remove(filepath.Join(s.st.trusted, fmt.Sprintf("tree-7-mise.toml-%016x", 7))))
+	s.trust(fmt.Sprintf("tree-7-mise.toml-%016x", 0xff), "/work/tree-new/mise.toml")
+	s.restore(s.st.trusted, before)
+	s.NotEqual(key, s.key())
+}
+
+// A version is a name two levels below installs.
+func (s *ProbeMiseGlobalsSuite) TestAnInstallReplacedUnderARestoredTimeMovesTheKey() {
+	tool := filepath.Join(s.st.installs, "tool-0")
+	before := s.stat(tool)
+	key := s.key()
+	s.Require().NoError(os.Remove(filepath.Join(tool, "1.0.0")))
+	s.Require().NoError(os.Mkdir(filepath.Join(tool, "1.2.0"), 0o755))
+	s.restore(tool, before)
+	s.NotEqual(key, s.key())
+}
+
+// One state keys one way: a directory changed within dirSettleAge keys
+// nothing, rather than keying differently until the window passes.
+func (s *ProbeMiseGlobalsSuite) TestARecentlyChangedDirectoryKeysNothing() {
+	_, err := s.keyAt(s.stat(s.st.trusted).ModTime().Add(time.Second))
+	s.ErrorContains(err, "trusted-configs")
+}
+
+// The probe that forks uncached for a fresh directory says so at the level
+// a person sees by default.
+func (s *ProbeMiseGlobalsSuite) TestAProbeForkedForAFreshDirectorySaysSo() {
 	var logs bytes.Buffer
 	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	s.T().Cleanup(func() { slog.SetDefault(prev) })
-	fi, err := os.Stat(s.st.trusted)
-	s.Require().NoError(err)
+	dir := probeFixture(s.T(), "mise", []byte("\x7fELF binary"))
+	bin := os.Getenv("PATH")
+	s.Require().NoError(os.Symlink(filepath.Join(bin, "mise"), filepath.Join(bin, "node")))
+	now := time.Now()
+	s.Require().NoError(os.Chtimes(s.st.trusted, now, now))
 
-	key := s.keyAt(fi.ModTime().Add(time.Second))
-	s.Contains(key, "tree-0-mise.toml-0000000000000000 ")
-	s.Contains(key, "-> /work/tree-0/mise.toml")
-	s.Contains(logs.String(), "recorded every entry of a directory")
+	_, ok := probeCacheKey(spells.Command{Bin: "node", Args: []string{"--version"}}, dir)
+	s.False(ok)
+	s.Contains(logs.String(), "level=INFO")
 	s.Contains(logs.String(), "trusted-configs")
 }
 
-// On a filesystem with one-second times, a change inside the tick of the
-// last one leaves the directory's time where it was. A retarget keeps its size.
-func (s *ProbeMiseWitnessSuite) TestAChangeInsideOneTimestampTickMovesTheKey() {
+// On a filesystem with one-second times, a change later in the tick leaves
+// the directory's time alone. A symlink retargeted under its own name
+// changes no name either.
+func (s *ProbeMiseGlobalsSuite) TestADirectoryInsideItsTimestampTickKeysNothing() {
 	tick := time.Now().Add(-time.Minute).Truncate(time.Second)
 	s.Require().NoError(os.Chtimes(s.st.trusted, tick, tick))
-	key := s.keyAt(tick.Add(time.Second))
-
-	name := fmt.Sprintf("tree-7-mise.toml-%016x", 7)
-	s.Require().NoError(os.Remove(filepath.Join(s.st.trusted, name)))
-	s.trust(name, "/work/tree-8/mise.toml")
-	s.Require().NoError(os.Chtimes(s.st.trusted, tick, tick))
-	s.NotEqual(key, s.keyAt(tick.Add(1500*time.Millisecond)))
+	_, err := s.keyAt(tick.Add(time.Second))
+	s.Error(err)
 }
