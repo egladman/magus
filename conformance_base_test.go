@@ -1,16 +1,26 @@
 package magus
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/symbols"
@@ -403,12 +413,19 @@ func TestConformanceBaseBoxSuite(t *testing.T) {
 const boxMagusfile = "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n"
 
 func (s *ConformanceBaseBoxSuite) inspect(root string, cfg config.Config) *Magus {
+	return inspectBuzzWorkspace(s.T(), root, cfg)
+}
+
+// inspectBuzzWorkspace is root as one Buzz project, inspected with no build
+// cache.
+func inspectBuzzWorkspace(t *testing.T, root string, cfg config.Config) *Magus {
+	t.Helper()
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("buzz"))
-	inspected, err := Inspect(s.T().Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling), workspace.WithLoadedConfig(cfg))
-	s.Require().NoError(err)
+	inspected, err := Inspect(t.Context(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling), workspace.WithLoadedConfig(cfg))
+	require.NoError(t, err)
 	m := inspected.(*Magus)
-	s.T().Cleanup(func() { _ = m.Close() })
+	t.Cleanup(func() { _ = m.Close() })
 	return m
 }
 
@@ -535,3 +552,269 @@ func (s *ConformanceBaseBoxSuite) TestHeadsOwnIndexIsNotSeeded() {
 	})
 	s.Equal("head's own", string(s.read(pack)))
 }
+
+type ConformanceBaseRemoteSuite struct {
+	suite.Suite
+	backend    *cache.FSRemoteBackend
+	backendDir string
+	pub        ed25519.PublicKey
+	seed       []byte
+	root       string
+	logs       *bytes.Buffer
+}
+
+// TestConformanceBaseRemoteSuite is serial: it swaps the default logger.
+func TestConformanceBaseRemoteSuite(t *testing.T) {
+	suite.Run(t, new(ConformanceBaseRemoteSuite))
+}
+
+func (s *ConformanceBaseRemoteSuite) SetupTest() {
+	s.backendDir = s.T().TempDir()
+	backend, err := cache.NewFSRemoteBackend(s.backendDir)
+	s.Require().NoError(err)
+	s.backend = backend
+	s.pub, s.seed = s.keypair()
+	s.root = testkit.NewRepository(s.T(), map[string]string{
+		"magusfile.buzz": boxMagusfile, "lib/greet.buzz": boxGreet, "lib/other.buzz": boxOther,
+	}).Root()
+	s.logs = &bytes.Buffer{}
+	prior := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(s.logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	s.T().Cleanup(func() { slog.SetDefault(prior) })
+}
+
+func (s *ConformanceBaseRemoteSuite) keypair() (ed25519.PublicKey, []byte) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	s.Require().NoError(err)
+	return pub, priv.Seed()
+}
+
+// workspace is the repository with a fresh local store, its build cache
+// opened with opts, or none when opts is nil.
+func (s *ConformanceBaseRemoteSuite) workspace(opts ...cache.Option) *Magus {
+	cfg := config.Defaults()
+	cfg.Cache.Dir = s.T().TempDir()
+	m := inspectBuzzWorkspace(s.T(), s.root, cfg)
+	if opts != nil {
+		c, err := cache.Open(s.T().Context(), filepath.Join(s.T().TempDir(), ".magus"), opts...)
+		s.Require().NoError(err)
+		m.cache = c
+	}
+	return m
+}
+
+// reader may read the remote tier, and write nothing to it.
+func (s *ConformanceBaseRemoteSuite) reader() *Magus {
+	return s.workspace(cache.WithRemoteBackend(s.backend), cache.WithTrustedKeys([][]byte{s.pub}))
+}
+
+// writer may write the remote tier, signing with seed.
+func (s *ConformanceBaseRemoteSuite) writer(pub ed25519.PublicKey, seed []byte) *Magus {
+	return s.workspace(cache.WithRemoteBackend(s.backend), cache.WithTrustedKeys([][]byte{pub}), cache.WithSigningKey(seed))
+}
+
+// entry is where m keeps the measure of HEAD.
+func (s *ConformanceBaseRemoteSuite) entry(m *Magus) string {
+	_, commit, err := m.conformanceBaseCommit(s.T().Context(), "HEAD")
+	s.Require().NoError(err)
+	plan, err := m.baseIndexPlan(s.T().Context(), m.Root())
+	s.Require().NoError(err)
+	entry, err := m.conformanceEntry(commit, plan)
+	s.Require().NoError(err)
+	return entry
+}
+
+// planted is a measure line no cold measure of the repository gives.
+func (s *ConformanceBaseRemoteSuite) planted(entry string) []byte {
+	kept := filepath.Join(s.T().TempDir(), filepath.Base(entry))
+	s.Require().NoError(writeConformanceEntry(kept, types.Conformance{
+		Distributions: []types.ConformanceDistribution{{N: 4242}},
+		Answer:        types.KnowledgeAnswer{Verdict: types.VerdictFound},
+	}))
+	data, err := os.ReadFile(kept)
+	s.Require().NoError(err)
+	return data
+}
+
+// plant stores data as m's measure of HEAD through a writer signing with seed.
+func (s *ConformanceBaseRemoteSuite) plant(entry string, pub ed25519.PublicKey, seed []byte, data []byte) {
+	w := s.writer(pub, seed)
+	ns := w.cache.RemoteNamespace(conformanceRemoteNamespace)
+	s.Require().NoError(ns.Put(s.T().Context(), filepath.Base(entry), bytes.NewReader(data)))
+}
+
+// measure runs MeasureConformanceBase on m and returns the measure it kept.
+func (s *ConformanceBaseRemoteSuite) measure(m *Magus) types.Conformance {
+	_, err := m.MeasureConformanceBase(s.T().Context(), "HEAD")
+	s.Require().NoError(err)
+	got, ok, err := readConformanceEntry(s.entry(m))
+	s.Require().NoError(err)
+	s.Require().True(ok)
+	return got
+}
+
+// isPlanted reports whether c is the measure planted gives.
+func isPlanted(c types.Conformance) bool {
+	return len(c.Distributions) == 1 && c.Distributions[0].N == 4242
+}
+
+// pair is a gzip tar of members, the layout the remote tier signs.
+func (s *ConformanceBaseRemoteSuite) pair(members ...[2]string) []byte {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for _, m := range members {
+		s.Require().NoError(tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: m[0], Size: int64(len(m[1])), Mode: 0o644}))
+		_, err := tw.Write([]byte(m[1]))
+		s.Require().NoError(err)
+	}
+	s.Require().NoError(tw.Close())
+	s.Require().NoError(gz.Close())
+	return buf.Bytes()
+}
+
+// members reads the gzip tar stored under key.
+func (s *ConformanceBaseRemoteSuite) members(key string) [][2]string {
+	rc, err := s.backend.GetArtifact(s.T().Context(), conformanceRemoteNamespace, key)
+	s.Require().NoError(err)
+	defer rc.Close()
+	gz, err := gzip.NewReader(rc)
+	s.Require().NoError(err)
+	tr := tar.NewReader(gz)
+	var out [][2]string
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return out
+		}
+		s.Require().NoError(err)
+		data, err := io.ReadAll(tr)
+		s.Require().NoError(err)
+		out = append(out, [2]string{h.Name, string(data)})
+	}
+}
+
+// overwrite replaces what the backend stores under key, which its Put
+// refuses to do.
+func (s *ConformanceBaseRemoteSuite) overwrite(key string, data []byte) {
+	found, err := filepath.Glob(filepath.Join(s.backendDir, "*", key+".tar.gz"))
+	s.Require().NoError(err)
+	s.Require().Len(found, 1)
+	s.Require().NoError(os.WriteFile(found[0], data, 0o600))
+}
+
+func (s *ConformanceBaseRemoteSuite) TestASignedMeasureIsUsed() {
+	m := s.reader()
+	entry := s.entry(m)
+	s.plant(entry, s.pub, s.seed, s.planted(entry))
+
+	got := s.measure(m)
+
+	s.True(isPlanted(got), "the signed measure was kept, not a cold one")
+	s.Contains(s.logs.String(), "reusing the signed conformance measure of base")
+}
+
+func (s *ConformanceBaseRemoteSuite) TestASignedMeasureSeedsHeadsPacks() {
+	s.measure(s.writer(s.pub, s.seed))
+	m := s.reader()
+	plan, err := m.baseIndexPlan(s.T().Context(), m.Root())
+	s.Require().NoError(err)
+	s.Require().Len(plan.indexes, 1)
+
+	s.measure(m)
+
+	s.FileExists(symbols.IndexPath(m.CacheDir(), plan.indexes[0].project, plan.indexes[0].op))
+	s.Contains(s.logs.String(), "seeded head's symbol index from the remote tier's signed pack")
+}
+
+func (s *ConformanceBaseRemoteSuite) TestAnUnsignedMeasureIsMeasuredAgainAndSaysSo() {
+	m := s.reader()
+	entry := s.entry(m)
+	key := filepath.Base(entry)
+	meta := fmt.Sprintf(`{"namespace":%q,"key":%q}`, conformanceRemoteNamespace, key)
+	unsigned := s.pair([2]string{"object.json", meta}, [2]string{"object", string(s.planted(entry))})
+	s.Require().NoError(s.backend.PutArtifact(s.T().Context(), conformanceRemoteNamespace, key, bytes.NewReader(unsigned)))
+
+	got := s.measure(m)
+
+	s.False(isPlanted(got), "the unsigned measure was used")
+	s.Contains(s.logs.String(), "is refused, so measuring cold")
+	s.Contains(s.logs.String(), entry)
+}
+
+func (s *ConformanceBaseRemoteSuite) TestAMeasureSignedByAnUntrustedKeyIsMeasuredAgainAndSaysSo() {
+	m := s.reader()
+	entry := s.entry(m)
+	pub, seed := s.keypair()
+	s.plant(entry, pub, seed, s.planted(entry))
+
+	got := s.measure(m)
+
+	s.False(isPlanted(got), "a measure no trusted key signed was used")
+	s.Contains(s.logs.String(), "is refused, so measuring cold")
+	s.Contains(s.logs.String(), entry)
+}
+
+func (s *ConformanceBaseRemoteSuite) TestATamperedMeasureIsMeasuredAgainAndSaysSo() {
+	m := s.reader()
+	entry := s.entry(m)
+	key := filepath.Base(entry)
+	s.plant(entry, s.pub, s.seed, s.planted(entry))
+	members := s.members(key)
+	for i, member := range members {
+		if member[0] == "object" {
+			members[i][1] = strings.Replace(member[1], "4242", "4243", 1)
+		}
+	}
+	s.overwrite(key, s.pair(members...))
+
+	got := s.measure(m)
+
+	s.NotContains(fmt.Sprint(got.Distributions), "4243", "the tampered measure was used")
+	s.Contains(s.logs.String(), "is refused, so measuring cold")
+}
+
+func (s *ConformanceBaseRemoteSuite) TestNoRemoteTierIsMeasuredAgainAndSaysSo() {
+	s.measure(s.workspace())
+
+	s.Contains(s.logs.String(), "no remote tier is wired")
+}
+
+func (s *ConformanceBaseRemoteSuite) TestAnInactiveBackendIsMeasuredAgainAndStoresNothing() {
+	m := s.workspace(cache.WithRemoteBackend(inactiveBackend{s.backend}), cache.WithTrustedKeys([][]byte{s.pub}), cache.WithSigningKey(s.seed))
+
+	s.measure(m)
+
+	s.Contains(s.logs.String(), "no remote tier is wired here: its fs backend is not active in this environment")
+	s.NotContains(s.logs.String(), "stored the conformance measure")
+}
+
+func (s *ConformanceBaseRemoteSuite) TestAColdMeasureIsSignedAndStored() {
+	w := s.writer(s.pub, s.seed)
+	entry := s.entry(w)
+
+	s.measure(w)
+
+	s.Contains(s.logs.String(), "stored the conformance measure of base")
+	data, err := getRemote(s.T().Context(), s.reader().cache.RemoteNamespace(conformanceRemoteNamespace), filepath.Base(entry))
+	s.Require().NoError(err)
+	kept, err := os.ReadFile(entry)
+	s.Require().NoError(err)
+	s.Equal(kept, data)
+}
+
+func (s *ConformanceBaseRemoteSuite) TestARunThatMayNotWriteStoresNothingAndSaysSo() {
+	m := s.reader()
+
+	s.measure(m)
+
+	s.Contains(s.logs.String(), "stored nothing on the remote tier for conformance base")
+	ok, err := s.backend.HasArtifact(s.T().Context(), conformanceRemoteNamespace, filepath.Base(s.entry(m)))
+	s.Require().NoError(err)
+	s.False(ok)
+}
+
+// inactiveBackend is a backend its environment turned off.
+type inactiveBackend struct{ types.CacheBackend }
+
+func (inactiveBackend) Active(context.Context) bool { return false }

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -18,6 +19,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -106,6 +108,11 @@ func (m *Magus) ConformanceCeilings(ctx context.Context, c types.Ceiling, head t
 // The base is exported there too, since a sandboxed gate writes only to the
 // store and the temp dir. It returns the commit, and reuses a kept measure.
 // It logs which it did, and why a kept measure of the commit did not match.
+//
+// With none kept it uses the remote tier's measure of the key only when
+// that verifies against the trust set, and seeds head's packs from the
+// signed packs beside it. A cold measure is signed and stored there when
+// the run may write the tier. It logs why either did not happen.
 func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string, error) {
 	v, commit, err := m.conformanceBaseCommit(ctx, base)
 	if err != nil {
@@ -132,7 +139,10 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 		}
 		return commit, err
 	}
-	slog.InfoContext(ctx, fmt.Sprintf("measuring conformance base %s, since %s", commit, whyRemeasure(entry)))
+	remote, reused := m.reuseRemoteMeasure(ctx, entry, commit, head)
+	if reused {
+		return commit, nil
+	}
 	if err := v.ExportRevision(ctx, m.ws.Root, commit, tree); err != nil {
 		return "", fmt.Errorf("conformance: export %s: %w", commit, err)
 	}
@@ -150,7 +160,164 @@ func (m *Magus) MeasureConformanceBase(ctx context.Context, base string) (string
 	if err := writeConformanceEntry(entry, out); err != nil {
 		return "", err
 	}
+	if remote != nil {
+		m.publishConformanceBase(ctx, remote, entry, commit, tree, present)
+	}
 	return commit, nil
+}
+
+// reuseRemoteMeasure keeps the remote tier's measure at entry when one
+// verifies, and logs why it measures cold when none does. It returns the
+// tier to store a cold measure in, nil when there is none.
+func (m *Magus) reuseRemoteMeasure(ctx context.Context, entry, commit string, head baseIndexPlan) (*cache.RemoteNamespace, bool) {
+	why := whyRemeasure(entry)
+	remote, none := m.conformanceRemote(ctx)
+	if remote == nil {
+		slog.InfoContext(ctx, fmt.Sprintf("measuring conformance base %s cold, since %s and %s", commit, why, none))
+		return nil, false
+	}
+	err := m.restoreConformanceBase(ctx, remote, entry, commit, head)
+	switch {
+	case err == nil:
+		slog.InfoContext(ctx, fmt.Sprintf("reusing the signed conformance measure of base %s from the remote tier", commit), slog.String("entry", entry))
+		return remote, true
+	case errors.Is(err, types.ErrCacheMiss):
+		slog.InfoContext(ctx, fmt.Sprintf("measuring conformance base %s cold, since %s and the remote tier holds no signed measure of it", commit, why))
+	default:
+		slog.WarnContext(ctx, fmt.Sprintf("the remote tier's conformance measure of base %s is refused, so measuring cold", commit),
+			slog.String("entry", entry), attr.Error(err))
+	}
+	return remote, false
+}
+
+// conformanceRemoteNamespace holds signed base measures and their packs.
+// The leading @ keeps it clear of every project path.
+const conformanceRemoteNamespace = "@conformance"
+
+// conformanceRemote is the remote tier's view for base measures, or nil
+// and why there is none to ask.
+func (m *Magus) conformanceRemote(ctx context.Context) (*cache.RemoteNamespace, string) {
+	if m.cache == nil {
+		return nil, "no remote tier is wired: this workspace opened no build cache"
+	}
+	ns := m.cache.RemoteNamespace(conformanceRemoteNamespace)
+	if ns == nil {
+		return nil, "no remote tier is wired"
+	}
+	if !ns.Active(ctx) {
+		return nil, fmt.Sprintf("no remote tier is wired here: its %s backend is not active in this environment", ns.Backend())
+	}
+	return ns, ""
+}
+
+// conformancePackKey is the remote tier's key of b's pack of commit. The
+// project and indexer version are digested: a key is one path segment.
+func conformancePackKey(commit string, b baseIndex) string {
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s\x00%s\x00%s", b.project, b.op, b.ix.Version()))
+	return fmt.Sprintf("%s-pack-%s", commit, shortDigest(sum))
+}
+
+// restoreConformanceBase keeps the remote tier's measure at entry and
+// seeds head's packs from the packs beside it. It returns
+// [types.ErrCacheMiss] when the tier holds none, and the verification's
+// error when no trusted key signed it for this key.
+func (m *Magus) restoreConformanceBase(ctx context.Context, remote *cache.RemoteNamespace, entry, commit string, head baseIndexPlan) error {
+	data, err := getRemote(ctx, remote, filepath.Base(entry))
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(entry), 0o700); err != nil {
+		return fmt.Errorf("conformance: %w", err)
+	}
+	if err := file.WriteFileAtomic(entry, data, 0o600); err != nil {
+		return fmt.Errorf("conformance: keep %s: %w", entry, err)
+	}
+	if _, _, err := readConformanceEntry(entry); err != nil {
+		return errors.Join(err, os.Remove(entry))
+	}
+	m.seedRemotePacks(ctx, remote, commit, head)
+	return nil
+}
+
+// getRemote reads the verified object stored under key.
+func getRemote(ctx context.Context, remote *cache.RemoteNamespace, key string) ([]byte, error) {
+	rc, err := remote.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(rc)
+	return data, errors.Join(err, rc.Close())
+}
+
+// seedRemotePacks seeds each pack head keeps none of from the remote
+// tier's pack of commit. The key holds head's indexer version, so another
+// indexer's pack is a miss. A pack not seeded is logged.
+func (m *Magus) seedRemotePacks(ctx context.Context, remote *cache.RemoteNamespace, commit string, head baseIndexPlan) {
+	cacheDir := resolveCacheDir(m.ws.Root, m.cfg)
+	for _, h := range head.indexes {
+		dest := symbols.IndexPath(cacheDir, h.project, h.op)
+		if _, err := os.Stat(dest); err == nil {
+			continue
+		}
+		attrs := []any{slog.String("project", h.project), slog.String("language", h.language), slog.String("index", dest)}
+		seeded, err := seedRemotePack(ctx, remote, conformancePackKey(commit, h), dest, cacheImmutable(m.cfg))
+		switch {
+		case err != nil:
+			slog.InfoContext(ctx, "head's symbol index is not seeded from the remote tier's signed pack of the base, so its first freshen builds it whole",
+				append(attrs, attr.Error(err))...)
+		case seeded:
+			slog.InfoContext(ctx, "seeded head's symbol index from the remote tier's signed pack of the base, so its first freshen re-indexes only what moved", attrs...)
+		}
+	}
+}
+
+// seedRemotePack links the verified pack stored under key in at dest, as
+// seedPack does.
+func seedRemotePack(ctx context.Context, remote *cache.RemoteNamespace, key, dest string, readOnly bool) (bool, error) {
+	if readOnly {
+		return false, errors.New("the cache is read-only")
+	}
+	data, err := getRemote(ctx, remote, key)
+	if errors.Is(err, types.ErrCacheMiss) {
+		return false, errors.New("the remote tier holds no signed pack of it")
+	}
+	if err != nil {
+		return false, err
+	}
+	return linkPack(data, dest)
+}
+
+// publishConformanceBase signs and stores the measure at entry and each
+// pack it wrote on the remote tier. A failed store is only logged, since
+// the measure is kept here already.
+func (m *Magus) publishConformanceBase(ctx context.Context, remote *cache.RemoteNamespace, entry, commit, tree string, present baseIndexPlan) {
+	data, err := os.ReadFile(entry)
+	if err == nil {
+		err = remote.Put(ctx, filepath.Base(entry), bytes.NewReader(data))
+	}
+	switch {
+	case errors.Is(err, cache.ErrRemoteReadOnly):
+		slog.InfoContext(ctx, "stored nothing on the remote tier for conformance base "+commit, attr.Error(err))
+		return
+	case err != nil:
+		slog.WarnContext(ctx, fmt.Sprintf("conformance base %s is not stored on the remote tier", commit), slog.String("entry", entry), attr.Error(err))
+		return
+	}
+	stored := 0
+	for _, b := range present.indexes {
+		data, err := readBasePack(tree, basePack(tree, b))
+		if err == nil {
+			err = remote.Put(ctx, conformancePackKey(commit, b), bytes.NewReader(data))
+		}
+		if err != nil {
+			slog.WarnContext(ctx, "the base's symbol pack is not stored on the remote tier",
+				slog.String("project", b.project), slog.String("language", b.language), attr.Error(err))
+			continue
+		}
+		stored++
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("stored the conformance measure of base %s and %d of its %d symbol packs on the remote tier, signed",
+		commit, stored, len(present.indexes)), slog.String("entry", entry))
 }
 
 // conformanceBaseCommit is the commit base and HEAD fork from, the one ChangedFiles diffs
@@ -199,8 +366,8 @@ func writeConformanceEntry(entry string, out types.Conformance) error {
 }
 
 // readConformanceEntry is the measure kept at entry, and false when none is.
-// A line naming another key is refused: CI restores this directory from a
-// cache, so a file there may have been kept under another name.
+// A line naming another key is refused: a file copied or renamed to this
+// name holds another key's measure.
 func readConformanceEntry(entry string) (types.Conformance, bool, error) {
 	data, err := os.ReadFile(entry)
 	if errors.Is(err, os.ErrNotExist) {
@@ -582,19 +749,35 @@ func seedPack(tree, pack, dest string, b baseIndex, head baseIndexPlan, readOnly
 	if got, want := b.ix.Version(), h.ix.Version(); got != want {
 		return false, fmt.Errorf("the base tree's indexer is %q and head's is %q", got, want)
 	}
-	data, err := os.ReadFile(pack)
+	data, err := readBasePack(tree, pack)
 	if err != nil {
 		return false, err
+	}
+	return linkPack(data, dest)
+}
+
+// readBasePack is pack's bytes. It refuses a pack naming tree's path,
+// which points every reader at a removed directory.
+func readBasePack(tree, pack string) ([]byte, error) {
+	data, err := os.ReadFile(pack)
+	if err != nil {
+		return nil, err
 	}
 	resolved, err := filepath.EvalSymlinks(tree)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	for _, dir := range []string{tree, resolved} {
 		if bytes.Contains(data, []byte(dir)) {
-			return false, fmt.Errorf("its shards name the base tree's path %s", dir)
+			return nil, fmt.Errorf("its shards name the base tree's path %s", dir)
 		}
 	}
+	return data, nil
+}
+
+// linkPack links a file holding data in at dest. It is false when dest
+// appeared meanwhile, which it never replaces.
+func linkPack(data []byte, dest string) (bool, error) {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return false, err
 	}
