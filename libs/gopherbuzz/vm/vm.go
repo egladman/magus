@@ -104,9 +104,8 @@ type VM struct {
 	// see gc_collect.go for why reachability is computed over the VM's own roots
 	// rather than left to Go's GC.
 	collectables []*objectInst
-	// gcParent links a fiber's VM to the VM that created it; nil on a root VM. It
-	// carries the registry lookup and the "currently executing" chain the sweep
-	// walks. See gcRoot.
+	// gcParent links a fiber, callback or collector VM to the VM that started
+	// it; nil on a root VM. The registry lookup and the sweep walk it.
 	gcParent *VM
 	// gcThreshold is the registry length that arms an automatic sweep, and
 	// gcSweeping declines a sweep nested inside one already running. Meaningful only
@@ -2318,16 +2317,16 @@ func (vm *VM) Call(callee Value, args []Value) error {
 		return nil
 
 	case tagFun:
-		return vm.callFun(vm.asFun(callee), args)
+		return vm.pushFrame(vm.asFun(callee), args)
 
 	default:
 		return fmt.Errorf("buzz: %s is not callable", callee.buzzKind())
 	}
 }
 
-// callFun pushes fn's frame for Exec to run. Unlike Call it never hands args
-// to a host function, so args does not escape.
-func (vm *VM) callFun(fn *funObj, args []Value) error {
+// pushFrame pushes fn's frame for Exec to run. Unlike Call it never hands
+// args to a host function, so args does not escape.
+func (vm *VM) pushFrame(fn *funObj, args []Value) error {
 	if fn.Chunk == nil {
 		return fmt.Errorf("buzz: function has no compiled chunk")
 	}

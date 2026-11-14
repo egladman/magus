@@ -722,20 +722,9 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			// a stale array.
 			snapshot := make([]Value, len(lo.Items))
 			copy(snapshot, lo.Items)
-			var sortErr error
-			slices.SortStableFunc(snapshot, lessCmp(func(a, b Value) bool {
-				if sortErr != nil {
-					return false
-				}
-				v, err := cb.call(a, b)
-				if err != nil {
-					sortErr = err
-					return false
-				}
-				return v.Bool()
-			}))
-			if sortErr != nil {
-				return Null, sortErr
+			identity := func(v Value) Value { return v }
+			if err := sortStable(snapshot, &cb, identity); err != nil {
+				return Null, err
 			}
 			// Only as many elements as the list still has: a comparator that shrank it
 			// must not resurrect the dropped tail.
@@ -991,20 +980,9 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			for i, k := range mp.keyVals {
 				pairs[i] = pair{mp.Keys[i], k, mp.Vals[i]}
 			}
-			var sortErr error
-			sort.SliceStable(pairs, func(i, j int) bool {
-				if sortErr != nil {
-					return false
-				}
-				v, err := cb.call(pairs[i].k, pairs[j].k)
-				if err != nil {
-					sortErr = err
-					return false
-				}
-				return v.Bool()
-			})
-			if sortErr != nil {
-				return Null, sortErr
+			key := func(p pair) Value { return p.k }
+			if err := sortStable(pairs, &cb, key); err != nil {
+				return Null, err
 			}
 			// Upstream "sorts the map key order IN PLACE ... and returns the map", so its
 			// tests discard the result and iterate the receiver. Building a fresh map left
@@ -1344,18 +1322,33 @@ func fibMethod(vm *VM, fib Value, name string) *directObj {
 	return nil
 }
 
-// optimization: a Buzz less comparator for slices.SortStableFunc.
-// measured: BenchmarkSortCallback -14% ns/op, -2 allocs/op (benchstat, n=20).
-// trade-off: "not less" answers 0, sound while the sort tests only cmp < 0.
-// assumes: Go 1.21 to 1.26, whose stable sort does just that.
-func lessCmp(less func(a, b Value) bool) func(a, b Value) int {
-	return func(a, b Value) int {
-		if less(a, b) {
-			return -1
+// sortStable sorts items by the Buzz comparator cb, stably, as upstream's
+// insertion sort does. sort.Stable asks only Less, the one answer a Buzz
+// comparator gives. The first comparator error ends the calls.
+func sortStable[T any](items []T, cb *callback, key func(T) Value) error {
+	var sortErr error
+	sort.Stable(byLess[T]{items: items, less: func(a, b T) bool {
+		if sortErr != nil {
+			return false
 		}
-		return 0
-	}
+		v, err := cb.call(key(a), key(b))
+		if err != nil {
+			sortErr = err
+			return false
+		}
+		return v.Bool()
+	}})
+	return sortErr
 }
+
+type byLess[T any] struct {
+	items []T
+	less  func(a, b T) bool
+}
+
+func (s byLess[T]) Len() int           { return len(s.items) }
+func (s byLess[T]) Less(i, j int) bool { return s.less(s.items[i], s.items[j]) }
+func (s byLess[T]) Swap(i, j int)      { s.items[i], s.items[j] = s.items[j], s.items[i] }
 
 // callback runs the callbacks of one higher-order list or map builtin call.
 // Each builtin call builds its own, so a callback that itself calls map runs
@@ -1364,7 +1357,7 @@ type callback struct {
 	ctx    context.Context
 	caller *VM
 	callee Value
-	run    *VM
+	vm     *VM
 }
 
 func newCallback(ctx context.Context, caller *VM, callee Value) callback {
@@ -1372,9 +1365,9 @@ func newCallback(ctx context.Context, caller *VM, callee Value) callback {
 }
 
 // optimization: one VM runs every callback of a builtin call.
-// measured: BenchmarkMapCallback -91% ns/op, -99% allocs/op (benchstat, n=10).
-// trade-off: a VM an error left mid-frame is replaced, never reused.
-// assumes: a returning Exec leaves no frames and the stack at its base.
+// measured: BenchmarkMapCallback (libs/gopherbuzz) -91% ns/op, -99% allocs.
+// trade-off: the VM outlives one callback, so it must come back empty.
+// assumes: a builtin stops at its first error; Exec returns frameless.
 func (c *callback) call(args ...Value) (Value, error) {
 	switch c.callee.tag() {
 	case tagDirect:
@@ -1386,16 +1379,16 @@ func (c *callback) call(args ...Value) (Value, error) {
 		c.caller.adopt(result)
 		return result, nil
 	case tagFun:
-		if c.run == nil || len(c.run.frames) != 0 {
-			c.run = NewVM(c.ctx)
-			// Parented to the caller's tree, so a collectable the callback
-			// allocates joins the one registry and its collect() runs.
-			c.run.gcParent = c.caller.gcRoot()
+		if c.vm == nil {
+			c.vm = NewVM(c.ctx)
+			// The sweep marks from the requesting VM up through gcParent, so
+			// parenting to the root would skip an outer callback's frames.
+			c.vm.gcParent = c.caller
 		}
-		if err := c.run.callFun(c.caller.asFun(c.callee), args); err != nil {
+		if err := c.vm.pushFrame(c.caller.asFun(c.callee), args); err != nil {
 			return Null, err
 		}
-		return c.run.Exec()
+		return c.vm.Exec()
 	default:
 		kind := c.callee.buzzKind()
 		return Null, fmt.Errorf("buzz: value of kind %q is not callable", kind)

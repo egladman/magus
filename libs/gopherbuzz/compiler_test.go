@@ -1538,6 +1538,41 @@ return [failed, [4, 5].map(fun (_: int, v: int) > int => v + 1)];`)
 	s.Equal("[true, [5, 6]]", got)
 }
 
+// The inner callback's garbage arms the automatic sweep. The outer callback
+// still holds held in a local, so the sweep must mark its VM.
+func (s *callbackSuite) TestASweepInANestedCallbackKeepsTheOuterCallbacksLocals() {
+	got := evalString(s.T(), `var heldCollected = false;
+
+object Held {
+    id: int,
+
+    fun collect() > void {
+        heldCollected = true;
+    }
+}
+
+object Garbage {
+    id: int,
+
+    fun collect() > void {}
+}
+
+return [1].map(fun (_: int, _: int) > bool {
+    final held = Held{ id = 1 };
+    _ = [1].map(fun (_: int, _: int) > int {
+        var i = 0;
+        while (i < 600) {
+            _ = Garbage{ id = i };
+            i = i + 1;
+        }
+        return i;
+    });
+    _ = held.id;
+    return heldCollected;
+});`)
+	s.Equal("[false]", got)
+}
+
 func (s *callbackSuite) TestSortKeepsEqualElementsInTheirOrder() {
 	got := evalString(s.T(), `var l = mut ["bb", "a", "cc", "d", "ee", "f"];
 l.sort(fun (a: str, b: str) > bool => a.len() < b.len());
