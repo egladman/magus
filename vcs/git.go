@@ -3612,10 +3612,27 @@ func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) 
 		args = append(args, "--merge-base="+m.Base)
 	}
 	args = append(args, m.Ours, m.Theirs)
+	// git killed while a merge driver runs leaves its .merge_file_* copies in
+	// the work tree. A cancelled caller returns, and git finishes its cleanup.
 	var stderr bytes.Buffer
-	cmd := gitExec(ctx, root, gitOpts{Isolated: true}, args...)
+	cmd := gitExec(context.WithoutCancel(ctx), root, gitOpts{Isolated: true}, args...)
 	cmd.Stderr = &stderr
-	out, err := cmd.Output()
+	type merged struct {
+		out []byte
+		err error
+	}
+	done := make(chan merged, 1)
+	go func() {
+		out, err := cmd.Output()
+		done <- merged{out, err}
+	}()
+	var res merged
+	select {
+	case res = <-done:
+	case <-ctx.Done():
+		return types.TreeMergeResult{}, fmt.Errorf("git merge-tree %s %s: %w", m.Ours, m.Theirs, ctx.Err())
+	}
+	out, err := res.out, res.err
 	switch code := exitCode(err); {
 	case err == nil, code == 1:
 	case code == 129:

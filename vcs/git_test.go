@@ -4272,3 +4272,36 @@ func (s *AttrsSpaceSuite) TestGitMatchesAQuotedPatternAndCheckPasses() {
 	_, statErr := os.Stat(filepath.Join(dir, ".gitattributes"))
 	s.NoError(statErr)
 }
+
+type GitCancelSuite struct{ suite.Suite }
+
+func TestGitCancelSuite(t *testing.T) { suite.Run(t, new(GitCancelSuite)) }
+
+// TestACancelledMergeLeavesNoDriverTempFiles pins that a merge cut off
+// while its driver runs returns at the deadline and still leaves no
+// .merge_file_* copies. The stop hook's merged check cancels it this way.
+func (s *GitCancelSuite) TestACancelledMergeLeavesNoDriverTempFiles() {
+	t := s.T()
+	dir := testkit.NewRepository(t, map[string]string{"f.txt": "base\n", ".gitattributes": "f.txt merge=slow\n"}).Root()
+	gitRun(t, dir, "config", "merge.slow.driver", "sleep 3")
+	base := gitTestOutput(t, dir, "rev-parse", "HEAD")
+	writeRepositoryFile(t, dir, "f.txt", "ours\n")
+	gitRun(t, dir, "commit", "-q", "-am", "ours")
+	ours := gitTestOutput(t, dir, "rev-parse", "HEAD")
+	gitRun(t, dir, "checkout", "-q", base)
+	writeRepositoryFile(t, dir, "f.txt", "theirs\n")
+	gitRun(t, dir, "commit", "-q", "-am", "theirs")
+	theirs := gitTestOutput(t, dir, "rev-parse", "HEAD")
+
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := gitVCS{}.MergeTrees(ctx, dir, types.TreeMerge{Ours: ours, Theirs: theirs})
+	s.Require().ErrorIs(err, context.DeadlineExceeded)
+	s.Less(time.Since(start), 2*time.Second, "the caller does not wait out the driver")
+
+	s.Eventually(func() bool {
+		leaked, err := filepath.Glob(filepath.Join(dir, ".merge_file_*"))
+		return err == nil && len(leaked) == 0
+	}, 15*time.Second, 100*time.Millisecond, "git removes the driver's copies once it finishes")
+}
