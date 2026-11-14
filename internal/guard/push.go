@@ -436,6 +436,10 @@ const (
 	phasePushMoves       = "push_coverage_moves"
 )
 
+// pushCoverageBudget bounds pushCoverage, half the hook's budget as
+// jobRowsBudget is, so the workspace rules judged after it keep the rest.
+const pushCoverageBudget = hookBudget / 2
+
 // pushStep runs read as phase, one read of pushCoverage.
 func pushStep[T any](log *phaseLog, phase string, read func() T) T {
 	log.begin(phase)
@@ -452,7 +456,15 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 	log := judgmentPhases(ctx)
 	log.begin(phasePushCoverage)
 	start := time.Now()
-	defer func() { log.record(timedPhase(phasePushCoverage, time.Since(start), 0, false)) }()
+	budget := pushCoverageBudget
+	if deadline, bounded := ctx.Deadline(); bounded && (isDryRun(ctx) || time.Until(deadline) < budget) {
+		budget = max(time.Until(deadline), 0)
+	}
+	ctx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	defer func() {
+		log.record(timedPhase(phasePushCoverage, time.Since(start), budget, ctx.Err() != nil))
+	}()
 	push, located := locatePush(command, d, cwd)
 	if !located {
 		return pushEvidence{}
@@ -464,7 +476,7 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 	ev := pushEvidence{commit: pushStep(log, phasePushRevision, func() string { return deps.revision(ctx, push.dir, push.rev) })}
 	dir := cmp.Or(push.dir, at.workspace)
 	lineage := ev.readGates(ctx, deps, at, dir)
-	ev.readUngated(ctx, deps, at, dir, lineage)
+	ev.readUngated(ctx, deps, at, dir, lineage, budget)
 	// Only a question that could be asked becomes a refusal: a fresh clone or a host with
 	// no run log still has nothing to prove.
 	if ev.cover != gateUnknown && pushStep(log, phasePushMoves, func() bool { return revisionMovesBeforePush(command, d, cwd) }) {
@@ -513,14 +525,22 @@ func (ev *pushEvidence) readGates(ctx context.Context, deps Dependencies, at loc
 }
 
 // readUngated weighs a commit no gate covers: narrow runs, then the
-// workspace's remote gate.
-func (ev *pushEvidence) readUngated(ctx context.Context, deps Dependencies, at location, dir string, lineage gateLineage) {
+// workspace's remote gate. Weighing past ctx's deadline leaves the runs
+// unread, saying it ran out of budget.
+func (ev *pushEvidence) readUngated(ctx context.Context, deps Dependencies, at location, dir string, lineage gateLineage, budget time.Duration) {
 	log := judgmentPhases(ctx)
 	// A failed gate here is a red verdict that no narrow pass outweighs.
 	switch ev.cover {
 	case gateAbsent, gateIncomplete, gateProjectScoped, gateUnscoped:
 		ev.narrow = pushStep(log, phasePushNarrow, func() narrowCoverage {
-			return narrowCoverageAt(ctx, deps, at, dir, ev.commit, lineage)
+			n, err := awaitDeadline(ctx, func() (narrowCoverage, error) {
+				return narrowCoverageAt(ctx, deps, at, dir, ev.commit, lineage), nil
+			})
+			// A read the deadline cut short errs for the cut, not the files.
+			if err != nil || ctx.Err() != nil {
+				return narrowCoverage{unread: fmt.Sprintf("weighing the changed files did not finish within the %s the guard gives the push gate", roundBudget(budget))}
+			}
+			return n
 		})
 		if ev.narrow.covers() {
 			ev.cover = gateNarrow

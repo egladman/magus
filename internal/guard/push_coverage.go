@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
@@ -83,6 +84,8 @@ type runEvidence struct {
 	commit          string
 	files           map[revisionFile]fileAt
 	revisions       map[string]bool
+	// differs is, per revision, the files it holds unlike commit.
+	differs map[string]map[string]bool
 	// prints is each run's footprint, by its index in runs, and declared
 	// each magusfile target's. Both name glob sets by index in sets.
 	prints   []runFootprint
@@ -329,6 +332,10 @@ func (ev *runEvidence) heldAsCommit(ctx context.Context, file string, d cache.Ou
 		return false
 	}
 	if d.Revision != "" && !d.Dirty {
+		// readGitFiles answered git's revisions; other backends read the file.
+		if differs, ok := ev.differs[d.Revision]; ok {
+			return !differs[file]
+		}
 		return ev.at(ctx, d.Revision, file) == want
 	}
 	started := time.UnixMilli(d.TimestampMs - d.DurationMs)
@@ -379,21 +386,13 @@ func (ev *runEvidence) known(ctx context.Context, rev string) bool {
 	return known
 }
 
-// readGitFiles reads every file a run over files would be compared on, in one
-// `git cat-file --batch`. A process per file spent a branch of seven hundred
-// changed files past the guard's deadline.
+// readGitFiles answers what heldAsCommit compares in three git processes:
+// the commit's copy of each covered file, and which files each clean
+// revision changes. A body per file and revision spent a 1104-file deadline.
 func (ev *runEvidence) readGitFiles(ctx context.Context, files []string) error {
 	var want []revisionFile
-	seen := map[revisionFile]bool{}
-	add := func(rev, file string) {
-		key := revisionFile{rev: rev, path: file}
-		// cat-file reads one object name per line.
-		if seen[key] || strings.ContainsAny(rev+file, "\n\r") || !ev.known(ctx, rev) {
-			return
-		}
-		seen[key] = true
-		want = append(want, revisionFile{rev: rev, path: file})
-	}
+	weighed := map[string]bool{}
+	revs := map[string]bool{ev.commit: true}
 	for _, file := range files {
 		rel, inside := ev.workspacePath(file)
 		if !inside {
@@ -404,13 +403,25 @@ func (ev *runEvidence) readGitFiles(ctx context.Context, files []string) error {
 			if d.Failed || !ev.reads(i, held, rel, true) && !ev.writes(i, held) {
 				continue
 			}
-			add(ev.commit, file)
+			// cat-file reads one object name per line.
+			if !weighed[file] && !strings.ContainsAny(file, "\n\r") {
+				want = append(want, revisionFile{rev: ev.commit, path: file})
+			}
+			weighed[file] = true
 			if d.Revision != "" && !d.Dirty {
-				add(d.Revision, file)
+				revs[d.Revision] = true
 			}
 		}
 	}
-	if len(want) == 0 {
+	if len(weighed) == 0 {
+		return nil
+	}
+	commits, err := ev.readGitCommits(ctx, slices.Sorted(maps.Keys(revs)))
+	if err != nil {
+		return err
+	}
+	pushed, ok := commits[ev.commit]
+	if !ok {
 		return nil
 	}
 	got, err := gitFilesAt(ctx, ev.root, want)
@@ -420,7 +431,107 @@ func (ev *runEvidence) readGitFiles(ctx context.Context, files []string) error {
 	for i, w := range want {
 		ev.files[w] = got[i]
 	}
-	return nil
+	ev.differs, err = gitDiffers(ctx, ev.root, pushed, commits, weighed)
+	return err
+}
+
+// readGitCommits records, as known would, which of revs the repository
+// holds, asked in one process. It returns each held revision's commit id.
+func (ev *runEvidence) readGitCommits(ctx context.Context, revs []string) (map[string]string, error) {
+	var in strings.Builder
+	var asked []string
+	for _, rev := range revs {
+		if !strings.ContainsAny(rev, "\n\r") {
+			fmt.Fprintf(&in, "%s^{commit}\n", rev)
+			asked = append(asked, rev)
+		}
+	}
+	commits := map[string]string{}
+	if len(asked) == 0 {
+		return commits, nil
+	}
+	out, err := gitPlumbing(ctx, ev.root, in.String(), "cat-file", "--batch-check")
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n")
+	if len(lines) != len(asked) {
+		return nil, fmt.Errorf("git cat-file: %d answers for %d revisions", len(lines), len(asked))
+	}
+	for i, rev := range asked {
+		fields := strings.Fields(lines[i])
+		held := len(fields) == 3 && fields[1] == "commit"
+		ev.revisions[rev] = held
+		if held {
+			commits[rev] = fields[0]
+		}
+	}
+	return commits, nil
+}
+
+// gitDiffers is, for each revision commits names, which of files it holds
+// with other content than pushed. One diff-tree compares them all, by blob,
+// so a mode change alone differs in nothing.
+func gitDiffers(ctx context.Context, root, pushed string, commits map[string]string, files map[string]bool) (map[string]map[string]bool, error) {
+	revsByID := map[string][]string{}
+	var in strings.Builder
+	for _, rev := range slices.Sorted(maps.Keys(commits)) {
+		id := commits[rev]
+		if _, asked := revsByID[id]; !asked {
+			fmt.Fprintf(&in, "%s %s\n", id, pushed)
+		}
+		revsByID[id] = append(revsByID[id], rev)
+	}
+	// --always prints each line's commit id even when nothing differs.
+	out, err := gitPlumbing(ctx, root, in.String(), "diff-tree", "--stdin", "-r", "-z", "--always")
+	if err != nil {
+		return nil, err
+	}
+	differs := map[string]map[string]bool{}
+	var paths map[string]bool
+	tokens := strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00")
+	for i := 0; i < len(tokens); i++ {
+		entry := tokens[i]
+		if !strings.HasPrefix(entry, ":") {
+			revs, asked := revsByID[entry]
+			if !asked {
+				return nil, fmt.Errorf("git diff-tree: an answer for %q, which was not asked", entry)
+			}
+			paths = map[string]bool{}
+			for _, rev := range revs {
+				differs[rev] = paths
+			}
+			continue
+		}
+		// An entry is ":<mode> <mode> <blob> <blob> <status>", then its path.
+		fields := strings.Fields(entry)
+		if paths == nil || len(fields) != 5 || i+1 == len(tokens) {
+			return nil, fmt.Errorf("git diff-tree: unread entry %q", entry)
+		}
+		i++
+		if fields[2] != fields[3] && files[tokens[i]] {
+			paths[tokens[i]] = true
+		}
+	}
+	for id, revs := range revsByID {
+		if _, answered := differs[revs[0]]; !answered {
+			return nil, fmt.Errorf("git diff-tree: no answer for %s", id)
+		}
+	}
+	return differs, nil
+}
+
+// gitPlumbing runs git's args in the checkout at root over input, its
+// replace refs off and its optional locks untaken.
+func gitPlumbing(ctx context.Context, root, input string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_NO_REPLACE_OBJECTS=1", "GIT_OPTIONAL_LOCKS=0")
+	cmd.Stdin = strings.NewReader(input)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git %s: %w", args[0], err)
+	}
+	return out, nil
 }
 
 // revisionFile is one repository-relative path at one revision.
@@ -435,12 +546,9 @@ func gitFilesAt(ctx context.Context, root string, want []revisionFile) ([]fileAt
 	for _, w := range want {
 		fmt.Fprintf(&in, "%s:%s\n", w.rev, w.path)
 	}
-	cmd := exec.CommandContext(ctx, "git", "-C", root, "cat-file", "--batch")
-	cmd.Env = append(os.Environ(), "GIT_NO_REPLACE_OBJECTS=1", "GIT_OPTIONAL_LOCKS=0")
-	cmd.Stdin = strings.NewReader(in.String())
-	out, err := cmd.Output()
+	out, err := gitPlumbing(ctx, root, in.String(), "cat-file", "--batch")
 	if err != nil {
-		return nil, fmt.Errorf("git cat-file: %w", err)
+		return nil, err
 	}
 	r := bufio.NewReader(bytes.NewReader(out))
 	got := make([]fileAt, len(want))
