@@ -108,15 +108,15 @@ advice costs one line.
 _Done._ Seven rules join the compiled defaults, each disableable by name and each firing
 once per session per threshold:
 
-| rule                    | light                                                   | standard                                                     | strict                                                                        |
-| ----------------------- | ------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| root-context-budget     | advise once at half the window                          | advise at 250k metered, 400k quota, 300k unknown             | advise at 150k, 250k or 200k; deny delegable commands from 300k, 450k or 350k |
-| root-heavy-command      | off                                                     | advise after 8 delegable calls since a spawn                 | advise at 5, deny from 8                                                      |
-| root-result-cap         | advise once above 40k characters                        | 20k, once per tool class                                     | 10k, once per tool class                                                      |
-| root-repeat             | off                                                     | advise on the second identical read or command               | deny the third                                                                |
-| spawn-names-model       | off                                                     | advise on a spawn naming no model                            | deny a spawn naming none, or one not at its job row's model tier              |
-| spawn-above-model-tier  | off                                                     | advise on a spawn whose model tier ranks above its job row's | the same; never deny                                                          |
-| spawn-above-parent-tier | advise on a spawn above its spawner's tier, with cost   | the same                                                     | the same                                                                      |
+| rule                    | light                                                 | standard                                                     | strict                                                                        |
+| ----------------------- | ----------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| root-context-budget     | advise once at half the window                        | advise at 250k metered, 400k quota, 300k unknown             | advise at 150k, 250k or 200k; deny delegable commands from 300k, 450k or 350k |
+| root-heavy-command      | off                                                   | advise after 8 delegable calls since a spawn                 | advise at 5, deny from 8                                                      |
+| root-result-cap         | advise once above 40k characters                      | 20k, once per tool class                                     | 10k, once per tool class                                                      |
+| root-repeat             | off                                                   | advise on the second identical read or command               | deny the third                                                                |
+| spawn-names-model       | off                                                   | advise on a spawn naming no model                            | deny a spawn naming none, or one not at its job row's model tier              |
+| spawn-above-model-tier  | off                                                   | advise on a spawn whose model tier ranks above its job row's | the same; never deny                                                          |
+| spawn-above-parent-tier | advise on a spawn above its spawner's tier, with cost | the same                                                     | the same                                                                      |
 
 The delegable commands are recursive search, `cat` and `sed -n` of source, a whole-file host
 read, `git diff` and `git log -p` without `--stat` or `--name-only`, non-gate `magus run`

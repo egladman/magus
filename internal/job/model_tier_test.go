@@ -806,7 +806,9 @@ func (s *refuseAboveParentSuite) TestAProvenPairWithNoSettingReaderIsRefused() {
 }
 
 func (s *refuseAboveParentSuite) TestASettingThatFailsToReadIsRefused() {
-	failing := func(context.Context) (builtin.Setting, error) { return builtin.Setting{}, errors.New("magus.yaml does not load") }
+	failing := func(context.Context) (builtin.Setting, error) {
+		return builtin.Setting{}, errors.New("magus.yaml does not load")
+	}
 	err := refuseAboveParent(s.T().Context(), s.set, tierWithin, failing, s.child, s.proven)
 	s.ErrorContains(err, "c ranks above its parent p: magus.yaml does not load")
 }

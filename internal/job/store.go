@@ -128,7 +128,7 @@ type storeConfig struct {
 	modelTierMatrix func(context.Context, types.ModelTierRequest) (*agent.JobModelTier, error)
 	spawnRule       func(parent, child agent.ModelTier) error
 	spawnCeiling    func(context.Context) (builtin.Setting, error)
-	owners         func(context.Context, []string) ([]string, error)
+	owners          func(context.Context, []string) ([]string, error)
 	// priceContext is Location.PriceContext.
 	priceContext func(calls []types.AgentFacts) (tokens int64, usd float64, ok bool)
 	// workspace is what validation reads the record against (see [Store.InWorkspace]);
