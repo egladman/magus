@@ -135,3 +135,54 @@ func (s *symbolIndexLanguageSuite) TestGraphMethodHoldsTheIndexWithItsOpeningLan
 	s.Require().NoError(heldGraph(ctx, g, "precedents"))
 	s.Equal([][]string{{"go", "typescript"}, {"go", "typescript"}}, ws.scopes)
 }
+
+type symbolIndexMemoSuite struct {
+	suite.Suite
+	ws  *rebuildingWorkspace
+	ctx context.Context
+}
+
+func TestSymbolIndexMemoSuite(t *testing.T) {
+	suite.Run(t, new(symbolIndexMemoSuite))
+}
+
+func (s *symbolIndexMemoSuite) SetupTest() {
+	s.ws = indexWorkspace(s.T())
+	s.ctx = types.WithEvalMemo(types.WithWorkspace(s.T().Context(), s.ws))
+}
+
+func (s *symbolIndexMemoSuite) TestOneEvaluationFreshensOnceForEveryGraphRead() {
+	g, err := MagusGraphOpen(s.ctx, nil)
+	s.Require().NoError(err)
+	s.Require().NoError(heldGraph(s.ctx, g, "dir"))
+	_, err = MagusGraphOpen(s.ctx, nil)
+	s.Require().NoError(err)
+	s.Equal(1, s.ws.calls)
+}
+
+func (s *symbolIndexMemoSuite) TestEachLanguagesListFreshensOnItsOwn() {
+	_, err := MagusSymbolIndexDigest(s.ctx, []string{"go"})
+	s.Require().NoError(err)
+	got, err := MagusSymbolIndexDigest(s.ctx, nil)
+	s.Require().NoError(err)
+	s.Equal([][]string{{"go"}, nil}, s.ws.scopes)
+	s.Nil(got.Languages)
+}
+
+func (s *symbolIndexMemoSuite) TestAFailedFreshenIsTriedAgain() {
+	s.ws.freshen = assert.AnError
+	_, err := MagusSymbolIndexDigest(s.ctx, nil)
+	s.Require().ErrorIs(err, assert.AnError)
+	s.ws.freshen = nil
+	_, err = MagusSymbolIndexDigest(s.ctx, nil)
+	s.Require().NoError(err)
+	s.Equal(2, s.ws.calls)
+}
+
+func (s *symbolIndexMemoSuite) TestANewEvaluationFreshensAgain() {
+	_, err := MagusSymbolIndexDigest(s.ctx, nil)
+	s.Require().NoError(err)
+	_, err = MagusSymbolIndexDigest(types.WithEvalMemo(s.ctx), nil)
+	s.Require().NoError(err)
+	s.Equal(2, s.ws.calls)
+}
