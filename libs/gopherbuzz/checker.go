@@ -1261,7 +1261,7 @@ func (c *checker) flagLoopAccumulation(v *ast.AssignStmt) {
 		return
 	}
 	kind := accumulatorKind(e.typ)
-	if kind == "" || !growsFrom(v.Value, id.Name) {
+	if kind == "" || !extends(v.Value, id.Name) {
 		return
 	}
 	c.warnfc(v.Pos, LoopAccumulation,
@@ -1320,9 +1320,9 @@ func (c *checker) flagDiscardedValue(v *ast.ExprStmt, t types.Type) {
 	c.warnfc(v.Pos, DiscardedValue, "discarded value of type `%s`", t.TypeName())
 }
 
-// growsFrom reports whether n is a `+` chain or an interpolated string
+// extends reports whether n is a `+` chain or an interpolated string
 // carrying name as a direct operand.
-func growsFrom(n ast.Node, name string) bool {
+func extends(n ast.Node, name string) bool {
 	switch v := n.(type) {
 	case *ast.BinaryExpr:
 		if v.Op != "+" {
@@ -1343,7 +1343,7 @@ func carries(n ast.Node, name string) bool {
 	if id, ok := n.(*ast.IdentExpr); ok && id.Name == name {
 		return true
 	}
-	return growsFrom(n, name)
+	return extends(n, name)
 }
 
 func (c *checker) checkForEach(v *ast.ForEachStmt) {

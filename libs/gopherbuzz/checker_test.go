@@ -1415,31 +1415,31 @@ func (s *accumulationSuite) warnsOnce(src, name, kind string) {
 	s.Contains(got[0].Msg, "the whole "+kind)
 }
 
-func (s *accumulationSuite) TestAStrGrownInAWhile() {
+func (s *accumulationSuite) TestAStringGrownInAWhile() {
 	s.warnsOnce(`var s = ""; var i = 0; while (i < 3) { s = s + "x"; i = i + 1; }`, "s", "string")
 }
 
-func (s *accumulationSuite) TestAStrGrownInAForeach() {
+func (s *accumulationSuite) TestAStringGrownInAForeach() {
 	s.warnsOnce(`var s = ""; foreach (p in ["a"]) { s = s + p; }`, "s", "string")
 }
 
-func (s *accumulationSuite) TestAStrGrownInAForBody() {
+func (s *accumulationSuite) TestAStringGrownInAForBody() {
 	s.warnsOnce(`var s = ""; for (i: int = 0; i < 3; i = i + 1) { s = s + "x"; }`, "s", "string")
 }
 
-func (s *accumulationSuite) TestAStrGrownInADoUntil() {
+func (s *accumulationSuite) TestAStringGrownInADoUntil() {
 	s.warnsOnce(`var s = ""; var i = 0; do { s = s + "x"; i = i + 1; } until (i > 2);`, "s", "string")
 }
 
-func (s *accumulationSuite) TestAStrPrepended() {
+func (s *accumulationSuite) TestAStringPrepended() {
 	s.warnsOnce(`var s = ""; foreach (p in ["a"]) { s = p + s; }`, "s", "string")
 }
 
-func (s *accumulationSuite) TestAStrDeepInTheConcatSpine() {
+func (s *accumulationSuite) TestAStringDeepInTheConcatSpine() {
 	s.warnsOnce(`var s = ""; foreach (p in ["a"]) { s = "<" + s + p + ">"; }`, "s", "string")
 }
 
-func (s *accumulationSuite) TestAStrGrownByInterpolation() {
+func (s *accumulationSuite) TestAStringGrownByInterpolation() {
 	s.warnsOnce(`var s = ""; foreach (p in ["a"]) { s = "{s}{p}"; }`, "s", "string")
 }
 
@@ -1448,16 +1448,16 @@ func (s *accumulationSuite) TestAnInterpolationInsideTheConcatSpine() {
 }
 
 // The post clause runs every pass, so it accumulates as the body does.
-func (s *accumulationSuite) TestAStrGrownInAForPostClause() {
+func (s *accumulationSuite) TestAStringGrownInAForPostClause() {
 	s.warnsOnce(`var s = ""; for (i: int = 0; i < 3; i = i + 1, s = s + "x") { }`, "s", "string")
 }
 
 // A binding the for clause makes runs once, so the body grows it every pass.
-func (s *accumulationSuite) TestAStrDeclaredInTheForClause() {
+func (s *accumulationSuite) TestAStringDeclaredInTheForClause() {
 	s.warnsOnce(`for (s: str = "", i: int = 0; i < 3; i = i + 1) { s = s + "x"; }`, "s", "string")
 }
 
-func (s *accumulationSuite) TestAnOuterStrRebuiltInANestedLoop() {
+func (s *accumulationSuite) TestAnOuterStringRebuiltInANestedLoop() {
 	s.warnsOnce(`var r = "";
 foreach (p in ["a"]) {
     final q = p;
@@ -1501,7 +1501,7 @@ func (s *accumulationSuite) TestAnIntBuiltFromAMethodCallStaysQuiet() {
 	s.Empty(typeWarnings(s.T(), `var n = 0; foreach (p in ["a"]) { n = n + p.len(); }`))
 }
 
-func (s *accumulationSuite) TestAStrRebuiltWithoutGrowingStaysQuiet() {
+func (s *accumulationSuite) TestAStringRebuiltWithoutGrowingStaysQuiet() {
 	s.Empty(typeWarnings(s.T(), `var s = "ab"; foreach (p in ["a"]) { s = s.trim(); }`))
 }
 
@@ -1533,14 +1533,14 @@ func (s *accumulationSuite) TestAListRebuiltWithoutConcatenationStaysQuiet() {
 }
 
 // A binding the body declares starts over each pass, so it never accumulates.
-func (s *accumulationSuite) TestAStrDeclaredInsideTheLoopStaysQuiet() {
+func (s *accumulationSuite) TestAStringDeclaredInsideTheLoopStaysQuiet() {
 	s.Empty(typeWarnings(s.T(), `foreach (p in ["<a>"]) {
     var tag = p;
     tag = "<b " + tag;
 }`))
 }
 
-func (s *accumulationSuite) TestAStrDeclaredInsideAForBodyStaysQuiet() {
+func (s *accumulationSuite) TestAStringDeclaredInsideAForBodyStaysQuiet() {
 	s.Empty(typeWarnings(s.T(), `for (i: int = 0; i < 2; i = i + 1) {
     var tag = "x";
     tag = tag + "y";
