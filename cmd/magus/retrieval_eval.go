@@ -98,7 +98,7 @@ func (r replayer) replay(ctx context.Context, j rankeval.Judgment) (rankeval.Run
 			answer = res.Out.Answer
 			out := res.Out
 			out.Answer = withIndexCause(ctx, r.root, out.Answer)
-			err = writeRefsText(&printed, out)
+			err = knowledge.WriteRefsText(&printed, refsEnv(ctx, r.root), out)
 		}
 	default:
 		return run, fmt.Errorf("no replay for verb %q", j.Verb)

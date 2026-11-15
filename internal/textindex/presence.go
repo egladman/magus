@@ -1,4 +1,4 @@
-package main
+package textindex
 
 import (
 	"bytes"
@@ -9,18 +9,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
-// classifyFunc classifies workspace-relative (or absolute, in-workspace) paths
-// against declared project globs. It is how textPresence learns which searched
-// files are generated, without this file depending on how a workspace gets
-// loaded: refs.go supplies the real one (types.WorkspaceRepository.ClassifyFiles),
-// a test supplies a fake, and a nil classify degrades to "unknown" rather than
-// failing the search; see textPresence's classified return.
-type classifyFunc func(ctx context.Context, paths []string) ([]types.FileEntry, error)
+// ClassifyFunc classifies workspace-relative (or absolute, in-workspace) paths
+// against declared project globs. It is how a search learns which files are generated
+// without depending on how a workspace gets loaded: the caller supplies the real one
+// (types.WorkspaceRepository.ClassifyFiles), a test supplies a fake, and a nil classify
+// degrades to "unknown" rather than failing the search; see Search's classified return.
+type ClassifyFunc func(ctx context.Context, paths []string) ([]types.FileEntry, error)
 
 // maxSearchableFile is the size past which a file is skipped rather than searched.
 //
@@ -41,7 +39,7 @@ var skipSearchDirs = map[string]bool{
 // searchableFiles returns the files a raw-text search should read under each of scopes,
 // plus the count it skipped. Empty scopes searches root whole, which is what a symbol
 // verdict's corroborating count wants; a caller that named paths passes them resolved and
-// checked by resolveSearchScopes.
+// checked by ResolveScopes.
 //
 // The skipped count is returned rather than swallowed because it is the difference
 // between a search a reader can trust and one they cannot: a short result that does not
@@ -95,7 +93,7 @@ func searchableFiles(root string, scopes []string) (paths []string, skipped int,
 	return paths, skipped, nil
 }
 
-// resolveSearchScopes turns the path operands of `refs --text` into absolute paths
+// ResolveScopes turns the path operands of `refs --text` into absolute paths
 // inside root, in the order given. Empty args yields nil, which searchableFiles reads as
 // the whole workspace.
 //
@@ -105,7 +103,7 @@ func searchableFiles(root string, scopes []string) (paths []string, skipped int,
 // under-report every accounting in this file exists to rule out. Refusing to leave the
 // workspace is also the rule the rest of magus holds to, so a text search is not the place
 // to make an exception to it.
-func resolveSearchScopes(root string, args []string) ([]string, error) {
+func ResolveScopes(root string, args []string) ([]string, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
@@ -136,7 +134,7 @@ func resolveSearchScopes(root string, args []string) ([]string, error) {
 // A NUL byte in the first pageful is the same heuristic grep uses to call a file
 // binary. Matching inside one produces a line nobody can read and a column nobody can
 // act on, so it is skipped rather than reported.
-func refusingBinary(read textindex.ReadFunc) textindex.ReadFunc {
+func refusingBinary(read ReadFunc) ReadFunc {
 	return func(path string) ([]byte, error) {
 		body, err := read(path)
 		if err != nil {
@@ -175,10 +173,10 @@ func refusingBinary(read textindex.ReadFunc) textindex.ReadFunc {
 // reports whether that count means anything at all: false means no workspace could
 // classify these paths, and the caller must say so rather than imply zero generated
 // files exist.
-func textPresence(ctx context.Context, root, pattern string, noGenerated bool, classify classifyFunc) (hits, files, searched, skipped, generated int, classified bool, err error) {
+func textPresence(ctx context.Context, root, pattern string, noGenerated bool, classify ClassifyFunc) (hits, files, searched, skipped, generated int, classified bool, err error) {
 	// No scope: this corroborates a symbol verdict about the WHOLE workspace, so
 	// narrowing the walk would let it report absent for a name that is present.
-	matches, searched, skipped, generated, classified, err := textScan(ctx, root, pattern, nil, noGenerated, classify)
+	matches, searched, skipped, generated, classified, err := Search(ctx, root, pattern, nil, noGenerated, classify)
 	if err != nil {
 		return 0, 0, searched, skipped, generated, classified, err
 	}
@@ -189,12 +187,12 @@ func textPresence(ctx context.Context, root, pattern string, noGenerated bool, c
 	return len(matches), len(seen), searched, skipped, generated, classified, nil
 }
 
-// textScan is the search both textPresence and `refs --text` run: walk root,
+// Search is the search both textPresence and `refs --text` run: walk root,
 // apply the same --no-generated exclusion, and return every literal match plus
 // the accounting a reader needs to trust the result (see searchableFiles and
 // textPresence's own doc comment). textPresence reduces the matches to counts;
 // refs --text prints them, which is the one thing this shares with grep.
-func textScan(ctx context.Context, root, pattern string, scopes []string, noGenerated bool, classify classifyFunc) (matches []textindex.Match, searched, skipped, generated int, classified bool, err error) {
+func Search(ctx context.Context, root, pattern string, scopes []string, noGenerated bool, classify ClassifyFunc) (matches []Match, searched, skipped, generated int, classified bool, err error) {
 	paths, skipped, err := searchableFiles(root, scopes)
 	if err != nil {
 		return nil, 0, skipped, 0, false, err
@@ -219,10 +217,10 @@ func textScan(ctx context.Context, root, pattern string, scopes []string, noGene
 		}
 	}
 
-	r := textindex.NewReader()
+	r := NewReader()
 	defer func() { _ = r.Close() }()
 
-	matches, err = textindex.Scan(paths, refusingBinary(r.Read), pattern, false)
+	matches, err = Scan(paths, refusingBinary(r.Read), pattern, false)
 	if err != nil {
 		return nil, len(paths), skipped, generated, classified, err
 	}
@@ -249,14 +247,14 @@ func textScan(ctx context.Context, root, pattern string, scopes []string, noGene
 	return matches, len(paths), skipped, generated, classified, nil
 }
 
-// textPresenceNotes renders the parenthetical that extends refs' text-presence line:
+// PresenceNotes renders the parenthetical that extends refs' text-presence line:
 // what a search declined to read (skipped) and what it declined to search or chose to
 // mark (generated), so the accounting stays one clause added to the existing line
 // rather than a second line a reader could miss.
 //
 // matchedFiles is only used to phrase the "marked" case ("N of M generated"); it is
 // meaningless, and unused, in every other case.
-func textPresenceNotes(skipped, generated, matchedFiles int, classified, noGenerated bool) []string {
+func PresenceNotes(skipped, generated, matchedFiles int, classified, noGenerated bool) []string {
 	var notes []string
 	if skipped > 0 {
 		notes = append(notes, fmt.Sprintf("%d skipped: binary, empty, or over %d bytes", skipped, maxSearchableFile))
