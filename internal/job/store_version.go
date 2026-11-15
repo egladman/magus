@@ -20,7 +20,7 @@ const storePathToken = "<store>"
 // staleStoreFix is how a person gets past the job store at path, which an
 // older magus wrote. A newer magus's lines are kept whole.
 func staleStoreFix(path string) string {
-	return "move " + path + " aside, or delete it, and fork the jobs again"
+	return fmt.Sprintf("move %s aside, or delete it, and fork the jobs again", path)
 }
 
 // pathNamed is err with its message naming the store file where it held

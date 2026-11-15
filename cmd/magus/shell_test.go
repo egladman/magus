@@ -2977,6 +2977,10 @@ func (s *StaleToolRowsSuite) TestRowsOfAnotherStampRefuseWithTheInstallStep() {
 	s.False(known)
 	s.Require().NotNil(refusal)
 	s.Require().Error(refusal.err)
-	s.Equal([]string{"magus", "agent", "harness", "install", "--id", "claude-code"}, refusal.next.Argv)
-	s.Equal("harness-install", refusal.next.ID)
+	s.Equal(types.NextStep{
+		ID:   "harness-install",
+		Run:  "magus agent harness install --id claude-code",
+		Argv: []string{"magus", "agent", "harness", "install", "--id", "claude-code"},
+		Why:  "installs the tool rows of claude-code, when the workspace loads that harness",
+	}, refusal.next)
 }
