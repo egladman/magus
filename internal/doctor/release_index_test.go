@@ -45,9 +45,8 @@ func TestCheckReleaseIndexExpiry(t *testing.T) {
 			got := r.checkReleaseIndexExpiry()
 			require.Equal(t, c.wantStatus, got.Status)
 			require.Contains(t, got.Message, c.wantMsg)
-			// No Fix: re-signing is a human running a workflow. The arms this used to carry dispatched `run
-			// release-index`, a target no workspace declares, so the first finding would
-			// have taken `doctor --fix` down with it.
+			// No Fix: re-signing is a human running a workflow. The arms this used to carry named `run
+			// release-index`, a target no workspace declares.
 			require.Empty(t, got.Fix)
 		})
 	}

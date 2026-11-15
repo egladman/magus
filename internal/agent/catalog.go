@@ -973,10 +973,10 @@ var (
 // grades stale or missing: every location it discovers comes from a harness
 // descriptor (see HarnessSkillLocations), whose ID is validated non-empty at
 // load, so "harness install --id" always clears the finding. Doctor's
-// structured --fix (internal/doctor's checkAgentSkills) calls this directly,
+// structured Fix (internal/doctor's checkAgentSkills) calls this directly,
 // and the free-text Detail sentences below go through ReinstallHint rather
-// than building their own copy, so the printed remedy and the one --fix runs
-// are always the same command.
+// than building their own copy, so the two printed remedies are always the
+// same command.
 func ReinstallCommand(id string) []string {
 	return []string{"agent", "harness", "install", "--id", id}
 }

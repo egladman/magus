@@ -611,11 +611,6 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "the permitted problems and the checks that could not run, and exits 1 while any")
 			fmt.Fprintln(os.Stderr, "problem remains. A deviation in the record keeps a broad write path, an output a")
 			fmt.Fprintln(os.Stderr, "target regenerates outside the write paths, or a ci target the job does not run.")
-			fmt.Fprintln(os.Stderr, "--fix makes the edits those problems name (the output added to the write paths,")
-			fmt.Fprintln(os.Stderr, "or permitted for the integrator; the gate's goal added), validating again until no")
-			fmt.Fprintln(os.Stderr, "edit is left, says each one it made, and lists only the problems that need a")
-			fmt.Fprintln(os.Stderr, "person. With --checkout it also moves a checkpoint this checkout cannot place to")
-			fmt.Fprintln(os.Stderr, "its HEAD. Without it, the list says how many --fix would apply.")
 			fmt.Fprintln(os.Stderr, "A fork also notes a check whose last real run took longer than a wired agent host")
 			fmt.Fprintln(os.Stderr, "lets a foreground call wait, which its holder cannot wait on.")
 			fmt.Fprintln(os.Stderr, "When this machine's build budget is full it says how full and which run has held")
@@ -778,11 +773,6 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	row, notes := extendedFootprint(ctx, store, graph, root, row, jobWS)
 	for _, n := range notes {
 		slog.InfoContext(ctx, n, attr.Notice("note"))
-	}
-	if spec.Fix {
-		if row, err = fixFork(ctx, store, row, reader); err != nil {
-			return err
-		}
 	}
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -1996,9 +1986,6 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		for _, n := range notes {
 			slog.InfoContext(ctx, fmt.Sprintf("%s: %s", records[i].ID, n), attr.Notice("note"))
 		}
-	}
-	if flags.Fix {
-		records = fixApply(ctx, store, records, graphSymbolReader(graph.load), checkpoint)
 	}
 	applied, err := job.Apply(ctx, store, records, globalCfg.Jobs, graphSymbolReader(graph.load), checkpoint, globalCfg.DryRun)
 	if err != nil {

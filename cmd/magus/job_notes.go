@@ -68,16 +68,6 @@ func collectNotes(ctx context.Context, m *magus.Magus, row types.Job) job.RowNot
 	return job.RowNotesWith(ctx, m.Root(), m.All(), row, hostForegroundMax(ctx, m))
 }
 
-// fixFork is [job.FixForkNoted] under the configured limits.
-func fixFork(ctx context.Context, store *job.Store, row types.Declaration, read job.SymbolReader) (types.Declaration, error) {
-	return job.FixForkNoted(ctx, store, row, globalCfg.Jobs, read)
-}
-
-// fixApply is [job.FixApplyNoted] under the configured limits.
-func fixApply(ctx context.Context, store *job.Store, records []types.Declaration, read job.SymbolReader, checkpoint func() string) []types.Declaration {
-	return job.FixApplyNoted(ctx, store, records, globalCfg.Jobs, read, checkpoint)
-}
-
 // hostForegroundMax is the shortest foreground maximum among the harnesses m wires. The
 // harness spells load on the first call and are kept for the rest, so a check with no
 // recorded run costs none of it.

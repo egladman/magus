@@ -816,7 +816,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		got := r.checkAgentSkills(t.Context())
 
 		// Misconfiguration is a failure, not a warning, and a reinstall changes nothing here,
-		// so --fix has nothing to run.
+		// so there is no remedy command to print.
 		assert.Equal(t, check.Check{
 			Name:    "agent-skills",
 			Status:  check.Fail,

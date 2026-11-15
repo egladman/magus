@@ -820,7 +820,7 @@ magus doctor
 fails when it is older than your working tree; **guard wiring** probes it with a
 known-denied command and then looks for a host config that invokes a current
 template; **agent skills** grades the installed copies against the running binary
-and `--fix` reinstalls whatever it reports stale.
+and names the reinstall command for whatever it reports stale.
 
 Commit `.claude/settings.json` once you are happy with it. Until a checkout has
 that file, its guard rules are correct and entirely unenforced, with nothing in
