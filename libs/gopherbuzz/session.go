@@ -33,8 +33,8 @@ type Session struct {
 	// released is set by the one release. Its slots may be reused afterwards, so a second
 	// pass would free another holder's values and a call would run on dangling ones.
 	released atomic.Bool
-	targets        map[string]vmpackage.Callable
-	tests          []TestEntry
+	targets  map[string]vmpackage.Callable
+	tests    []TestEntry
 	// exportedNames is every name any chunk exported, imports included. It answers
 	// VISIBILITY: a name a flat import made private stays visible if another module
 	// exported it.
