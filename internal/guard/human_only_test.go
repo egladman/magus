@@ -235,6 +235,7 @@ func TestHumanOnlyLeavesOtherRunsAlone(t *testing.T) {
 // nothing it could read.
 func TestHumanOnlyRefusesARunWhosePoliciesLapsed(t *testing.T) {
 	ctx, _ := fleetFixture(t)
+	waitForLapsedWork(t)
 	ctx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
 	defer cancel()
 	ctx = context.WithValue(ctx, phaseLogKey{}, &phaseLog{start: time.Now()})

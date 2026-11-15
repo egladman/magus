@@ -177,6 +177,7 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 
 	t.Run("a source this call's policy read, while its rule loops", func(t *testing.T) {
 		ctx, root, _ := writeFixture(t)
+		waitForLapsedWork(t)
 		ctx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
 		loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
@@ -214,6 +215,7 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 		}
 
 		repo, ctx := committedPolicyFixture(t)
+		waitForLapsedWork(t)
 		for name, deps := range unanswered {
 			v := judge(ctx, deps, repo.Root())
 			assert.Equal(t, "advise", v.Decision, "%s: no policy change is pending, so the committed rule stands", name)
