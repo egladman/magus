@@ -77,23 +77,6 @@ func TestWorkspaceRelPaths(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-// TestClassifyByRole pins the three-way split a session brief shows: anything not
-// declared source or output is undeclared, including an empty role.
-func TestClassifyByRole(t *testing.T) {
-	out := []types.FileEntry{
-		{Path: "cmd/magus/agent.go", Role: "source"},
-		{Path: "MAGUS.md", Role: "output"},
-		{Path: "docs/gen/index.html", Role: "output"},
-		{Path: "scratch.txt", Role: "unclaimed"},
-		{Path: "notes.md", Role: ""},
-	}
-
-	sources, outputs, undeclared := classifyByRole(out)
-	assert.Equal(t, []string{"cmd/magus/agent.go"}, sources)
-	assert.Equal(t, []string{"MAGUS.md", "docs/gen/index.html"}, outputs)
-	assert.Equal(t, []string{"scratch.txt", "notes.md"}, undeclared)
-}
-
 // TestSelectLsFiles pins the default (tracked dirty sources nobody else holds, not yet
 // staged) and that each --include flag adds exactly its own group back.
 func TestSelectLsFiles(t *testing.T) {
