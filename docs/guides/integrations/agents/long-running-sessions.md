@@ -103,9 +103,10 @@ rows come from secondary sources and are unverified.
 ## The cloud risk
 
 A cloud task starts from a fresh clone. The clone has no `./magus`, and the
-[guard](guard.md) fails open when no magus binary is reachable: the hooks judge
-nothing, so the session is unguarded. Leases, denials and the stall rule are all
-absent, and the host's auto mode runs what the model asks.
+[guard](guard.md) refuses every call when no magus binary is reachable: the
+hooks judge nothing, so nothing but the repair runs, and with no magus at all
+not even that. A host wired some other way, or not wired, still runs what the
+model asks.
 
 Fix it in the environment's setup script, not in the prompt. The script builds or
 downloads `./magus` and places it at the checkout root before the session starts,

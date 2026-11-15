@@ -91,7 +91,7 @@ final SUBMIT_CONTINUE = `{"continue":true}`;
 final EMPTY = `{}`;
 
 final UNAVAILABLE_TEXT = "magus guard could not judge this call: no magus binary was found";
-final UNREADABLE = "magus guard is NOT running for this call: the hook event on stdin was not JSON, so its deny and advise rules were not applied. Check the Cursor hook configuration and version.";
+final UNREADABLE = "magus guard could not judge this call, so it is refused: the hook event on stdin was not JSON. Check the Cursor hook configuration and version.";
 final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was judged. Merge what 'magus describe harness' prints into the host's hook configuration; the commands it prints name the host.";
 
 final AGENT_NAME = "--agent-name";
@@ -607,7 +607,7 @@ fun gateReply(v: Verdict, eventName: str, command: str) > str {
         return blockedAsk(v.reason, command: command);
     }
     if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
-    if (v.decision == UNJUDGED and (hook\recovers(command, root: v.root) or hook\exitsJob(command))) {
+    if (v.decision == UNJUDGED and hook\recovers(command, root: v.root)) {
         return json\stringify({
             "permission": "allow",
             "user_message": hook\firstLine(v.reason),
@@ -1008,12 +1008,12 @@ fun dispatch(event: any?, eventName: str, scope: Scope) > str {
 fun main(args: [str]) > void {
     final event = json\parse(io\stdin.readAll() catch "") catch null;
     if (event == null) {
-        // No event name to gate on, so this answers with an explicit allow, said
-        // out loud.
+        // No event name to gate on, so this refuses whatever the event was; an event
+        // that reads no permission still logs the reason.
         if (hook\noticeOnce("", family: "unreadable", file: "cursor-hook.buzz")) {
             io\stderr.write(UNREADABLE + "\n") catch void;
         }
-        io\stdout.write(ALLOW) catch void;
+        io\stdout.write(denyBoth(UNREADABLE)) catch void;
         return;
     }
     final eventName = readEventName(event);

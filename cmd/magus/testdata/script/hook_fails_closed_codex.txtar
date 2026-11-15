@@ -1,0 +1,114 @@
+# A Codex hook that cannot judge refuses its call. Codex marks a hook that exits anything
+# but 0 or 2 as failed and runs the call; the rendered wiring turns any other exit into 2,
+# and magus answers its own startup failure with 2, passing only the repair the workspace
+# declares. A stop that cannot be judged ends instead, with exit 1.
+#
+# Each case runs the wiring `magus describe harness` renders, as the host would.
+
+[windows] skip 'the wiring is POSIX sh'
+
+env SAVED_PATH=$PATH
+
+# The workspace imports the shipped spell from its own tree, as a workspace does.
+mkdir $WORK/release/spells/harness/codex
+cp $__MAGUS_TEMPLATES/../../../../spells/harness/codex/spell.buzz $WORK/release/spells/harness/codex/spell.buzz
+
+cd $WORK/release
+exec magus describe harness codex -o 'template={{range .wired}}{{if eq .key "hooks.PreToolUse"}}{{(index (index .entries 0).hooks 0).command}}{{end}}{{end}}'
+cp stdout $WORK/pre.sh
+exec magus describe harness codex -o 'template={{range .wired}}{{if eq .key "hooks.Stop"}}{{(index (index .entries 0).hooks 0).command}}{{end}}{{end}}'
+cp stdout $WORK/stop.sh
+mkdir docs/guides/integrations
+symlink docs/guides/integrations/agents -> $__MAGUS_TEMPLATES
+
+# A magus.yaml this magus cannot read refuses an ordinary call and names the update.
+cp $WORK/unreadable.yaml magus.yaml
+stdin $WORK/touch.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/pre.sh
+stdout '^exit 2$'
+stderr 'magus guard could not judge this call, so it is refused'
+stderr '`magus self update`'
+
+# The update it names passes.
+stdin $WORK/self-update.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/pre.sh
+stdout '^exit 0$'
+! stderr .
+
+# A stop ends unjudged rather than sending the agent back to work.
+stdin $WORK/stop.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/stop.sh
+stdout '^exit 1$'
+stderr 'magus guard could not judge this stop, so it ends unjudged'
+
+# A bad MAGUS_* value refuses the same way, and the update still passes.
+cp $WORK/readable.yaml magus.yaml
+env MAGUS_CONCURRENCY=many
+stdin $WORK/touch.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/pre.sh
+stdout '^exit 2$'
+stderr 'MAGUS_CONCURRENCY'
+stdin $WORK/self-update.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/pre.sh
+stdout '^exit 0$'
+env MAGUS_CONCURRENCY=
+
+# No magus anywhere: the hook exits 127, which the wiring turns into a refusal.
+env PATH=/usr/bin:/bin
+stdin $WORK/touch.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/pre.sh
+stdout '^exit 2$'
+stderr '127 means no magus was found'
+env PATH=$SAVED_PATH
+
+# --- a checkout of magus, which builds its own ./magus -----------------------------
+
+cd $WORK/source
+mkdir docs/guides/integrations
+symlink docs/guides/integrations/agents -> $__MAGUS_TEMPLATES
+
+cp $WORK/source-unreadable.yaml magus.yaml
+stdin $WORK/touch.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/pre.sh
+stdout '^exit 2$'
+stderr 'GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache \.'
+! stderr 'self update'
+stdin $WORK/bootstrap.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/pre.sh
+stdout '^exit 0$'
+
+-- release/magusfile.buzz --
+import "magus";
+import "spells/harness/codex";
+magus\harness.provider(codex);
+-- release/magus.yaml --
+{}
+-- unreadable.yaml --
+knowledge:
+  conformance:
+    checks:
+      dep-fanout:
+        max: 3
+-- readable.yaml --
+{}
+-- source/go.mod --
+module github.com/egladman/magus
+
+go 1.25
+-- source/magusfile.buzz --
+-- source/magus.yaml --
+{}
+-- source-unreadable.yaml --
+knowledge:
+  conformance:
+    checks:
+      dep-fanout:
+        max: 3
+-- touch.json --
+{"session_id":"s1","turn_id":"t1","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"touch x"}}
+-- self-update.json --
+{"session_id":"s1","turn_id":"t1","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"magus self update"}}
+-- bootstrap.json --
+{"session_id":"s1","turn_id":"t1","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."}}
+-- stop.json --
+{"session_id":"s1","turn_id":"t1","hook_event_name":"Stop","stop_hook_active":false}

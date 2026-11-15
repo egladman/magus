@@ -1013,10 +1013,10 @@ stdout '"permissionDecision":"deny"'
 stdout '"systemMessage":"magus guard could not judge this call: no magus binary was found'
 stdout 'Install magus'
 
-# A read changes nothing, so it passes, and the person is still told.
+# A read is refused too: no policy loaded to say which reads the workspace guards.
 stdin observe-read.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-! stdout 'permissionDecision'
+stdout '"permissionDecision":"deny"'
 stdout '"systemMessage":"magus guard could not judge this call'
 
 # Every call the path template sees is a write, so it is refused.

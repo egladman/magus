@@ -1511,9 +1511,9 @@ undocumented file format, and `stop` does not fire under `-p`, so it is unverifi
 live.
 
 Cursor fails open on a hook crash or malformed JSON unless the hook sets
-`failClosed`. The script above matches that stance instead of pretending to be
-stricter than the surrounding contract. For strict behavior, set `failClosed` on
-the hook and change its missing-binary branch to a deny.
+`failClosed`, so every entry the harness writes sets it but `stop` and
+`subagentStop`, whose block would resume the agent on work no rule can judge. The
+script refuses a call no magus judged, and an event it cannot read, the same way.
 
 A [session-load adapter](session-load.md#cursor) reads Cursor's transcripts into
 `magus session load`, as the other hosts' adapters do.

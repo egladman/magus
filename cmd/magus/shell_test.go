@@ -2738,9 +2738,9 @@ func (s *unjudgedHookSuite) TestClaudeCodeRefusesACallThatMayChangeState() {
 	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["claude-code"]).Validate(reply))
 }
 
-func (s *unjudgedHookSuite) TestClaudeCodeLetsAReadPassAndStillTellsThePerson() {
+func (s *unjudgedHookSuite) TestClaudeCodeRefusesAReadAndTellsThePerson() {
 	reply := s.reply("magus-command.buzz", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"README.md"}}`)
-	s.NotContains(reply["hookSpecificOutput"], "permissionDecision")
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
 	s.Contains(reply["systemMessage"], "could not judge this call")
 }
 
