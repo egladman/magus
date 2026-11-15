@@ -1787,13 +1787,13 @@ func (s *StaleStampSuite) TestRefusesAnIntegerRow() {
 	plantRaw(s.T(), s.store, `{"id":"a","schema_version":13,"state":"running","created":1,"updated":1}`)
 	_, err := s.store.List()
 	s.ErrorContains(err, "record carries no apiVersion")
-	s.ErrorContains(err, "move jobs.jsonl aside, or delete it, and fork the jobs again")
+	s.ErrorContains(err, "move "+s.store.path+" aside, or delete it, and fork the jobs again")
 }
 
 func (s *StaleStampSuite) TestRefusesAMalformedVersion() {
 	plantRaw(s.T(), s.store, `{"id":"a","api_version":"13","state":"running","created":1,"updated":1}`)
 	_, err := s.store.List()
-	s.ErrorContains(err, "move jobs.jsonl aside, or delete it")
+	s.ErrorContains(err, "move "+s.store.path+" aside, or delete it")
 }
 
 // authoritySuite pins ADR 0045's Authority: computed by the store at a fork
