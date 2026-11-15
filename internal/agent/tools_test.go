@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -251,4 +252,48 @@ func TestFindToolRowsByHost(t *testing.T) {
 	assert.Contains(t, missing.Err.Error(), "no tool rows are installed for cursor")
 	_, err = missing.Limits()
 	require.Error(t, err)
+}
+
+// installedPrimary is a primary checkout with claude-code tool rows installed and a linked
+// worktree of it that holds none, as a fresh .claude/worktrees/agent-* checkout does.
+func installedPrimary(t *testing.T) (primary, worktree string) {
+	t.Helper()
+	primary = t.TempDir()
+	tools := types.HarnessTools{Dir: ".claude/magus/tools", Tools: shellRow()}
+	writeToolFiles(t, primary, append(ToolFiles(tools, nil), hostFiles(tools.Dir, "claude-code", types.Limits{})...))
+	worktree = filepath.Join(primary, ".claude", "worktrees", "agent-1")
+	gitdir := filepath.Join(primary, ".git", "worktrees", "agent-1")
+	require.NoError(t, os.MkdirAll(worktree, 0o755))
+	require.NoError(t, os.MkdirAll(gitdir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(worktree, ".git"), fmt.Appendf(nil, "gitdir: %s\n", gitdir), 0o644))
+	return primary, worktree
+}
+
+func TestFindToolRowsFallsBackToThePrimaryCheckoutAndSaysSo(t *testing.T) {
+	primary, worktree := installedPrimary(t)
+
+	rows := FindToolRows(worktree, "claude-code")
+	require.NoError(t, rows.Err)
+	assert.Equal(t, primary, rows.FellBackTo)
+	assert.NotEmpty(t, rows.Capability("Shell"))
+}
+
+func TestFindToolRowsPrefersTheCheckoutsOwnRows(t *testing.T) {
+	_, worktree := installedPrimary(t)
+	tools := types.HarnessTools{Dir: ".claude/magus/tools", Tools: shellRow()}
+	writeToolFiles(t, worktree, append(ToolFiles(tools, nil), hostFiles(tools.Dir, "claude-code", types.Limits{})...))
+
+	rows := FindToolRows(worktree, "claude-code")
+	require.NoError(t, rows.Err)
+	assert.Empty(t, rows.FellBackTo)
+}
+
+func TestFindToolRowsStillFailsWhenNeitherCheckoutInstalledThem(t *testing.T) {
+	primary, worktree := installedPrimary(t)
+	require.NoError(t, os.RemoveAll(filepath.Join(primary, ".claude", "magus")))
+
+	rows := FindToolRows(worktree, "claude-code")
+	require.Error(t, rows.Err)
+	assert.Empty(t, rows.FellBackTo)
+	assert.Equal(t, "claude-code", rows.Host)
 }
