@@ -1,26 +1,21 @@
-package main
+package watch
 
 import (
 	"bytes"
 	"context"
 	"io"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/egladman/magus"
 )
 
-// TestReadBatches_NewlineMode verifies that blank-line-delimited batches are
 // correctly split and sent on the channel.
 func TestReadBatches_NewlineMode(t *testing.T) {
 	t.Parallel()
 	input := "a\nb\n\nc\nd\n\n"
-	ch := readBatches(context.Background(), strings.NewReader(input), false)
+	ch := ReadBatches(context.Background(), strings.NewReader(input), false)
 	var got [][]string
 	for batch := range ch {
 		got = append(got, batch)
@@ -34,7 +29,7 @@ func TestReadBatches_NewlineMode(t *testing.T) {
 func TestReadBatches_TrailingNoBoundary(t *testing.T) {
 	t.Parallel()
 	input := "x\ny"
-	ch := readBatches(context.Background(), strings.NewReader(input), false)
+	ch := ReadBatches(context.Background(), strings.NewReader(input), false)
 	var got [][]string
 	for batch := range ch {
 		got = append(got, batch)
@@ -51,7 +46,7 @@ func TestReadBatches_TrailingNoBoundary(t *testing.T) {
 func TestReadBatches_NullMode(t *testing.T) {
 	t.Parallel()
 	input := "a\x00b\x00\x00\x00c\x00\x00\x00"
-	ch := readBatches(context.Background(), bytes.NewBufferString(input), true)
+	ch := ReadBatches(context.Background(), bytes.NewBufferString(input), true)
 	var got [][]string
 	for batch := range ch {
 		got = append(got, batch)
@@ -68,14 +63,14 @@ func TestReadBatches_ContextCancel(t *testing.T) {
 	cancel()
 	pr, pw := io.Pipe()
 	defer pw.Close()
-	ch := readBatches(ctx, pr, false)
+	ch := ReadBatches(ctx, pr, false)
 	for range ch {
 		// drain any items that may have squeezed through before cancel
 	}
 	// Channel must be closed; we must not block here.
 }
 
-// The leak this closes: the ctx checks inside readBatches only run BETWEEN reads, so a
+// The leak this closes: the ctx checks inside ReadBatches only run BETWEEN reads, so a
 // cancelled stream whose input had merely gone quiet left the reader goroutine parked in
 // a blocking read that no cancellation could reach.
 func TestReadBatches_CancelUnblocksAParkedRead(t *testing.T) {
@@ -84,72 +79,18 @@ func TestReadBatches_CancelUnblocksAParkedRead(t *testing.T) {
 	pr, pw := io.Pipe()
 	defer pw.Close()
 
-	ch := readBatches(ctx, pr, false) // nothing is ever written, so the read parks
+	ch := ReadBatches(ctx, pr, false) // nothing is ever written, so the read parks
 	cancel()
 
 	select {
 	case _, ok := <-ch:
 		assert.False(t, ok, "the channel closes once the parked read is released")
 	case <-time.After(5 * time.Second):
-		t.Fatal("readBatches stayed parked in a read after its ctx was cancelled")
+		t.Fatal("ReadBatches stayed parked in a read after its ctx was cancelled")
 	}
 }
 
 // TestStream_ContextCancellation verifies that streamAffected returns when ctx is
-// already cancelled on entry.
-func TestStream_ContextCancellation(t *testing.T) {
-	t.Parallel()
-	m := &magus.Magus{}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	pr, pw := io.Pipe()
-	pw.Close()
-	streamAffected(ctx, m, pr, "build", false, nil)
-}
-
-// TestStream_EmptyBatchSkipped verifies that an input containing only blank
-// lines produces no handler invocations (and no error).
-func TestStream_EmptyBatchSkipped(t *testing.T) {
-	t.Parallel()
-	m := &magus.Magus{}
-	var errCalled bool
-	pr, pw := io.Pipe()
-	go func() {
-		io.WriteString(pw, "\n\n\n")
-		pw.Close()
-	}()
-	streamAffected(context.Background(), m, pr, "build", false, func(error) { errCalled = true })
-	assert.False(t, errCalled, "streamAffected (empty input): errFn called unexpectedly")
-}
-
-// TestStream_BatchErrorDoesNotStopTheLoop pins that a failed batch is reported through
-// errFn and skipped rather than ending the stream: the next change still gets a turn.
-// Under --watch that is what turns a refused run (exit
-// 75, another invocation holding the lock) into a retry on the next change.
-//
-// A zero Magus has no workspace, so every batch fails in AffectedFromPaths; the loop's
-// handling of a failure is what this pins, whatever the cause.
-func TestStream_BatchErrorDoesNotStopTheLoop(t *testing.T) {
-	t.Parallel()
-	m := &magus.Magus{}
-	var errs atomic.Int32
-	firstFailed := make(chan struct{})
-	var once sync.Once
-	pr, pw := io.Pipe()
-	go func() {
-		_, _ = io.WriteString(pw, "a\n\n")
-		// The next change arrives only after the first batch has failed, so it cannot be
-		// merged into the batch it is meant to follow.
-		<-firstFailed
-		_, _ = io.WriteString(pw, "b\n\n")
-		_ = pw.Close()
-	}()
-	streamAffected(context.Background(), m, pr, "build", false, func(error) {
-		errs.Add(1)
-		once.Do(func() { close(firstFailed) })
-	})
-	assert.Equal(t, int32(2), errs.Load(), "both the failing batch and the next change must be attempted")
-}
 
 // TestMergePaths verifies dedup + lex ordering, the contract callers
 // rely on for deterministic stream-driven affected output.
@@ -159,7 +100,7 @@ func TestMergePaths(t *testing.T) {
 	// merge normalizes a nil result to an empty slice so the comparison is
 	// against a non-nil expected value (assert.Equal distinguishes nil/empty).
 	merge := func(a, b []string) []string {
-		got := mergePaths(a, b)
+		got := MergePaths(a, b)
 		if got == nil {
 			got = []string{}
 		}
