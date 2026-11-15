@@ -171,3 +171,47 @@ func TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory(t *testing.T) {
 	assert.Contains(t, summary.Rejects[0], "line 1: longer than any event")
 	assert.Contains(t, summary.Rejects[1], "line 3: longer than any event")
 }
+
+// adapterCases holds one line per event kind, each the shape a shipped session-load
+// adapter emitted against a synthetic host store. The fixture stays synthetic: a real
+// transcript carries a person's own commands, paths and prompts, and a fixture is
+// committed forever.
+var adapterCases = map[string]string{
+	EventSkillLoad:    `{"host":"claude-code","session":"s1","ts":1788955200100,"kind":"skill.load","ref":"t1","text":"magus-run","outcome":{"exit":null,"denied":false,"interrupted":false}}`,
+	EventShellCommand: `{"host":"claude-code","session":"s1","ts":1788955202000,"kind":"shell.command","ref":"t2","text":"blocked-command","outcome":{"exit":null,"denied":true,"interrupted":false}}`,
+	EventHookOutput:   `{"host":"claude-code","session":"s1","ts":1788955202500,"kind":"hook.output","ref":"t2","text":"the guard said so"}`,
+	EventSpawn:        `{"host":"claude-code","session":"s1","ts":1788955204000,"kind":"spawn","ref":"t3","text":"Explore"}`,
+	EventFileRead:     `{"host":"claude-code","session":"s1","ts":1788955206000,"kind":"file.read","ref":"t5","text":"README.md"}`,
+	EventFileWrite:    `{"host":"claude-code","session":"s1","ts":1788955207000,"kind":"file.write","ref":"t6","text":"AGENTS.md"}`,
+	EventMagusCall:    `{"host":"claude-code","session":"s1","ts":1788955208000,"kind":"magus.call","ref":"t7","text":"mcp__magus__magus_query"}`,
+}
+
+// A kind the session contract gains with no adapter case is a kind no load has
+// ever been shown to store.
+func TestSessionAdapterCasesCoverEveryKind(t *testing.T) {
+	for _, kind := range EventKinds {
+		assert.Contains(t, adapterCases, kind,
+			"adapterCases has no line for %q: every kind in the session contract needs one", kind)
+	}
+}
+
+func TestLoadStoresEveryAdapterCase(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+
+	lines := make([]string, 0, len(adapterCases))
+	for _, kind := range EventKinds {
+		lines = append(lines, adapterCases[kind])
+	}
+	summary, err := loadStream(t, root, lines...)
+	require.NoError(t, err)
+
+	want := map[string]int{}
+	for _, kind := range EventKinds {
+		want[kind] = 1
+	}
+	assert.Equal(t, want, summary.ByKind, "each adapter line loads as the kind it names")
+	command := loadedEvent(t, root, "s1", 0)
+	require.Equal(t, EventShellCommand, command.Kind)
+	assert.True(t, command.Denied, "the denial rides on the command it belongs to")
+}
