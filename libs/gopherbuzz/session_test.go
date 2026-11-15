@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1003,39 +1004,100 @@ final __r = evens.reduce::<int>(fun (_: int, v: int, acc: int) > int => acc + v,
 	})
 }
 
-// BenchmarkSessionChurn opens a session, builds 1,000 distinct 100-byte strings
-// and one list of them, and closes it. Its metrics are what each closed session
-// leaves behind after a forced GC: live heap slots, str slots, Go heap bytes.
-// Under buzz_safe or buzz_unsafe the two slot metrics read 0.
-func BenchmarkSessionChurn(b *testing.B) {
-	ctx := context.Background()
-	src := `final parts: mut [str] = mut [];
-foreach (i in 0..1000) {
-    parts.append("` + strings.Repeat("x", 92) + `{10000000 + i}");
+// churnSource defines build, which makes 1,000 100-byte strings and one list of
+// them. run is part of every string, so two calls share content only when they
+// pass the same run.
+var churnSource = `fun build(run: int) > void {
+    final parts: mut [str] = mut [];
+    foreach (i in 0..1000) {
+        parts.append("` + strings.Repeat("x", 84) + `{10000000 + run}{10000000 + i}");
+    }
 }`
-	sample := func() (live, strs int, inuse uint64) {
-		runtime.GC()
-		var ms runtime.MemStats
-		runtime.ReadMemStats(&ms)
-		return vm.ReadHeapStats().Objects, vm.HeapProfile()["str"], ms.HeapInuse
+
+// churnRun numbers the Distinct runs. Interning is process-wide, so a number
+// reused by a later -count pass or by the other churn benchmark would find its
+// strings already interned and report nothing kept.
+var churnRun atomic.Int64
+
+// churnSample is the process-wide heap state the churn benchmarks difference.
+type churnSample struct {
+	live, interned, internedBytes int
+	inuse                         uint64
+	kinds                         map[string]int
+}
+
+func sampleChurn() churnSample {
+	runtime.GC()
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	hs := vm.ReadHeapStats()
+	return churnSample{
+		live:          hs.Objects,
+		interned:      hs.InternedStrings,
+		internedBytes: hs.InternedBytes,
+		inuse:         ms.HeapInuse,
+		kinds:         vm.HeapProfile(),
 	}
-	b.ReportAllocs()
-	live0, strs0, inuse0 := sample()
-	n := 0
-	for b.Loop() {
+}
+
+// reportChurn reports what n runs left behind, per run, and logs the kept slots
+// by kind. Under buzz_safe or buzz_unsafe the slot metrics read 0.
+func reportChurn(b *testing.B, before, after churnSample, n int) {
+	b.Helper()
+	per := func(d int) float64 { return float64(d) / float64(n) }
+	b.ReportMetric(per(after.live-before.live), "liveslots/op")
+	b.ReportMetric(per(after.kinds["str"]-before.kinds["str"]), "strslots/op")
+	b.ReportMetric(per(after.interned-before.interned), "internedstrs/op")
+	b.ReportMetric(per(after.internedBytes-before.internedBytes), "internedB/op")
+	b.ReportMetric((float64(after.inuse)-float64(before.inuse))/float64(n), "heapinuse-B/op")
+	var kept []string
+	for kind, count := range after.kinds {
+		if d := count - before.kinds[kind]; d != 0 {
+			kept = append(kept, fmt.Sprintf("%s=%.3f", kind, per(d)))
+		}
+	}
+	sort.Strings(kept)
+	b.Logf("slots kept per run by kind: %s", strings.Join(kept, " "))
+}
+
+// BenchmarkSessionChurn opens a session, calls build once and closes it. Its
+// metrics are what each closed session leaves behind after a forced GC.
+// Repeated builds the same strings in every session, so interning finds them
+// after the first; Distinct builds strings no earlier session made.
+func BenchmarkSessionChurn(b *testing.B) {
+	b.Run("Repeated", func(b *testing.B) { benchSessionChurn(b, false) })
+	b.Run("Distinct", func(b *testing.B) { benchSessionChurn(b, true) })
+}
+
+func benchSessionChurn(b *testing.B, distinct bool) {
+	ctx := context.Background()
+	churn := func(run int64) {
 		s := NewSession(ctx, WithEmbedded())
-		if err := s.Exec(ctx, src); err != nil {
+		if err := s.Exec(ctx, churnSource); err != nil {
+			b.Fatal(err)
+		}
+		if _, err := s.CallValue(ctx, s.Globals()["build"], []vm.Value{vm.IntValue(run)}); err != nil {
 			b.Fatal(err)
 		}
 		if err := s.Close(); err != nil {
 			b.Fatal(err)
 		}
+	}
+	// One run outside the samples: it pays the one-time interning of run 0's
+	// strings and of the source's own literals.
+	churn(0)
+	b.ReportAllocs()
+	before := sampleChurn()
+	var run int64
+	n := 0
+	for b.Loop() {
+		if distinct {
+			run = churnRun.Add(1)
+		}
+		churn(run)
 		n++
 	}
-	live1, strs1, inuse1 := sample()
-	b.ReportMetric(float64(live1-live0)/float64(n), "liveslots/op")
-	b.ReportMetric(float64(strs1-strs0)/float64(n), "strslots/op")
-	b.ReportMetric((float64(inuse1)-float64(inuse0))/float64(n), "heapinuse-B/op")
+	reportChurn(b, before, sampleChurn(), n)
 }
 
 // skipWithoutHeapAttribution skips a test that reads vm's heap attribution, which only
