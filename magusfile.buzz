@@ -268,6 +268,13 @@ magus\project({
             "slots": 4,
             "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
         },
+        // cmd/magus alone, so it runs beside test's other needs.
+        "cli-test": {
+            "timeout": "25m",
+            "memory_mb": 10240,
+            "slots": 4,
+            "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
+        },
         // The confinement tests read their children's /proc entries.
         "landlock-test": {
             "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
@@ -2275,7 +2282,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // generate writes MAGUS.md and the *.lock fixtures this suite reads; without the
     // edge, coverage-render's parallel needs(generate, test) is MGS4008 at doctor time.
     ctx.needs(generate);
-    ctx.needs(advice_test, landlock_test);
+    ctx.needs(advice_test, landlock_test, cli_test);
     // extended adds the tests that need a C toolchain and a docker daemon.
     if (ctx.hasCharm("extended")) {
         ctx.needs(compress_cgo_test, completion_test);
@@ -2311,17 +2318,44 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // The guard's pull-request-text test runs the binary proofread-build links.
     ctx.needs(buzz_test, proofreadlib\proofread_build);
     // Explicit args replace go-test's `./...` default and the `-- -run` passthrough, hence
-    // `args`. cmd/magus runs without -race: its TestScripts re-exec the raced binary hundreds
-    // of times, and the engine's concurrency lives in the raced packages.
+    // `args`.
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
         {"args": ["-race", "-covermode=atomic", "-coverprofile=" + cov\profilePath(COVERAGE_PROFILE, args: args)] + raced_packages() + args});
-    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-covermode=atomic", "-coverprofile=" + cov\profilePath(CMD_MAGUS_PROFILE, args: args), CMD_MAGUS_PKG] + args});
     cov\settle(cov\Profiles{ whole = COVERAGE_PROFILE, cmd = CMD_MAGUS_PROFILE, hand = COVERAGE_HAND_PROFILE,
         every = ".magus/coverage*.out" }, args: args, gomod: fs\readFile("go.mod"));
     // No percentage floor: removing well-covered code would trip one. The
     // touched-functions-keep-change-risk-under-10 lint rule holds each changed
     // file's covered lines against its base instead.
+}
+
+// Tests of the magus CLI, without -race: its TestScripts re-exec the
+// raced binary hundreds of times. test settles its profile.
+export fun cli_test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate, proofreadlib\proofread_build);
+    ctx.writesFiles([".magus/coverage.cmd*.out"]);
+    // test's list, copied: each target's own ctx takes a literal list.
+    ctx.readsFiles(["**/*.go", "**/*.txtar", "**/*.s", "**/*.S", "**/*.c", "**/*.h",
+                    "go.mod", "go.sum", "go.work", "go.work.sum",
+                    "**/*.buzz", "mise.toml", "magus.yaml",
+                    "**/*.lock",
+                    "internal/agent/skills/**", "internal/agent/agents-section.md",
+                    "docs/reference/codes/**/*.md",
+                    "docs/guides/jobs.md", "docs/guides/jobs/*.md",
+                    "internal/hint/testdata/*", "internal/job/testdata/*",
+                    "internal/queue/testdata/**",
+                    "benchmarks/agent/internal/bench/testdata/*",
+                    "internal/selfupdate/release-keys.json"]);
+    ctx.readsFiles(["benchmarks/agent/internal/pricing/rates.json"]);
+    ctx.readsFiles([".github/actions/setup-magus/action.yml", "docs/gen/install",
+                    ".github/workflows/ci.yaml", ".github/workflows/queue.yaml"]);
+    ctx.readsFiles(["docs/guides/integrations/agents/*.buzz",
+                    "docs/guides/integrations/agents/lib/*.buzz", "docs/guides/integrations/agents/*.json",
+                    "docs/guides/integrations/agents/*.ts", "docs/src/styles/site.css"]);
+    ctx.readsFiles(["console/src/styles/base/tokens.css", "console/src/apps/graph/graph.css",
+                    "console/src/apps/graph/main.ts", "console/src/apps/graph/shapes.ts"]);
+    ctx.readsFiles(["MAGUS.md"]);
+    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
+        {"args": ["-covermode=atomic", "-coverprofile=" + cov\profilePath(CMD_MAGUS_PROFILE, args: args), CMD_MAGUS_PKG] + args});
 }
 
 final CMD_MAGUS_PKG = "./cmd/magus";
