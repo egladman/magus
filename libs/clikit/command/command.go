@@ -475,16 +475,17 @@ func Parse(fs *flag.FlagSet, args []string) error {
 		}
 		return err
 	}
+	suggestion := ""
 	if name, ok := strings.CutPrefix(err.Error(), "flag provided but not defined: -"); ok {
 		if near := nearestFlag(fs, name); near != "" {
-			err = fmt.Errorf("%w (did you mean -%s?)", err, near)
+			suggestion = "did you mean -" + near + "? "
 		}
 	}
 	cmd := strings.TrimSpace(strings.TrimPrefix("magus "+fs.Name(), "magus magus"))
 	if cmd == "" {
 		cmd = "magus"
 	}
-	return fmt.Errorf("%w; `%s -h` lists the flags", err, cmd)
+	return fmt.Errorf("%w: %s`%s -h` lists the flags", err, suggestion, cmd)
 }
 
 // nearestFlag is the registered flag closest to name by edit distance, or ""

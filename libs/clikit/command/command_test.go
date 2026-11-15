@@ -243,7 +243,7 @@ func (s *ParseSuite) TestUnknownFlagNamesTheNearestFlagWithoutUsage() {
 	fs, out := s.flagSet(func() { called = true })
 	err := Parse(fs, []string{"--goal", "y"})
 	s.Require().Error(err)
-	s.Contains(err.Error(), "flag provided but not defined: -goal (did you mean -goals?)")
+	s.Contains(err.Error(), "flag provided but not defined: -goal: did you mean -goals? `magus job fork -h`")
 	s.Contains(err.Error(), "`magus job fork -h`")
 	s.False(called)
 	s.Empty(out.String())
