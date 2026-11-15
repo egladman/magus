@@ -17,7 +17,7 @@ import "magus/spell/go";
 // (XDG_CACHE_HOME/magus-embed, else ~/.cache/magus-embed), which no cache entry records.
 magus\project({
     "spells": [go],
-    "sources": ["embed/inputs.jsonl"],
+    "sources": ["embed/inputs.jsonl", "inputs.jsonl", "config/*.yaml"],
     "targets": {
         "install": {"skip_cache": "downloads into the shared module cache, which no cache entry records"},
         "security": {"skip_cache": "reads the Go vulnerability database, which changes independently of this tree"},
@@ -30,6 +30,11 @@ magus\project({
         "table": {"skip_cache": "hashes the table convert writes to the cache root, outside the tree"},
         "bench": {"skip_cache": "reads the exported subsets under the cache root and writes teacher shards and runs there, outside the tree"},
         "oov": {"skip_cache": "reads the pinned tarballs and the converted table under the cache root, outside the tree"},
+        // A pinned model is gigabytes, so the downloads and pilots outlast the default timeout.
+        "models": {"skip_cache": "downloads the pinned models into the cache root, outside the tree", "timeout": "4h"},
+        "fertility": {"skip_cache": "reads tokenizers from the cache root, outside the tree, and appends to runs.jsonl"},
+        "pilot": {"skip_cache": "trains from weights in the cache root, outside the tree, and appends a measurement of this machine to runs.jsonl", "timeout": "2h"},
+        "gguf-bench": {"skip_cache": "reads GGUFs from the cache root, outside the tree, and appends a measurement of this machine to runs.jsonl", "timeout": "1h"},
     },
 });
 
@@ -243,4 +248,52 @@ export fun table(ctx: magus\Context, args: [str]) > void !> any {
 // The anchor `magus affected ci` keys off.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint, build, test, security);
+}
+
+// Downloads the inputs inputs.jsonl pins into the cache root and verifies each sha256,
+// through `embed fetch`. A file already there is hashed, not fetched again. Args after
+// -- name input prefixes in place of stage S0's, e.g. `-- mellum2-12b-a2.5b-base/`.
+export fun models(ctx: magus\Context, args: [str]) > void !> any {
+    // What stage S0 reads: the small files of every model (licenses, configs, tokenizers),
+    // the weights the three pilots train, and every GGUF. The other base weights stay
+    // pinned and unfetched until a later stage reads them.
+    final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus");
+    var prefixes = [
+        "qwen2.5-coder-0.5b/",
+        "qwen2.5-coder-1.5b-instruct/",
+        "qwen2.5-coder-1.5b/LICENSE", "qwen2.5-coder-1.5b/config.json", "qwen2.5-coder-1.5b/tokenizer",
+        "mellum-4b-base/README.md", "mellum-4b-base/config.json", "mellum-4b-base/tokenizer",
+        "mellum2-12b-a2.5b-base/README.md", "mellum2-12b-a2.5b-base/config.json", "mellum2-12b-a2.5b-base/tokenizer",
+        "devstral-small-2-24b/README.md", "devstral-small-2-24b/config.json", "devstral-small-2-24b/tokenizer",
+        "mellum2-12b-a2.5b-instruct-mlx-4bit/",
+        "gguf/",
+    ];
+    if (args.len() > 0) {
+        prefixes = args;
+    }
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./embed/cmd/embed", "fetch", "-inputs", "inputs.jsonl", "-cache", cache] + prefixes});
+}
+
+// Appends, per tokenizer, the tokens per byte of held-in hand-written Buzz, Go and TS
+// (gen/sources.jsonl's train split) to runs.jsonl. Args after -- go to `train fertility`.
+export fun fertility(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["runs.jsonl"]);
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "fertility"] + args});
+}
+
+// Runs one 200-step mlx_lm.lora pilot on train-split Buzz and appends its tokens/s, peak
+// memory and load average to runs.jsonl. Needs `-- -config config/<pilot>.yaml -model
+// <input prefix>`. Heavy: run one pilot at a time, with tests idle. Manual, never part of
+// ci.
+export fun pilot(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["runs.jsonl"]);
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "pilot"] + args});
+}
+
+// Runs llama-bench pp512 and tg128 over every pinned GGUF and appends each one's rates to
+// runs.jsonl. Args after -- go to `train gguf-bench`, e.g. `-- -prefix gguf/qwen`. Manual,
+// never part of ci.
+export fun gguf_bench(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["runs.jsonl"]);
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "gguf-bench"] + args});
 }

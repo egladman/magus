@@ -2585,7 +2585,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "**/*.html", "console/**/*.html", "docs/**/*.html",
                     "**/*.mjs", "console/**/*.mjs",
                     "**/*.yaml", "console/**/*.yaml", "docs/**/*.yaml",
-                    "docs/guides/integrations/agents/**/*.yaml", "libs/textsearch/**/*.yaml",
+                    "docs/guides/integrations/agents/**/*.yaml", "libs/textsearch/**/*.yaml", "libs/train/**/*.yaml",
                     "proto/**/*.yaml",
                     "**/*.yml", "libs/testpairing/**/*.yml",
                     "proto/**/*.proto", "**/*.txtar"]);

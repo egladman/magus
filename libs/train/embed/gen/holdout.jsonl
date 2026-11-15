@@ -1895,6 +1895,7 @@
 {"group":"dir:libs/testkit/script","path":"libs/testkit/script/script_test.go"}
 {"group":"dir:libs/text","path":"libs/text/README.md"}
 {"group":"dir:libs/text","path":"libs/text/magusfile.buzz"}
+{"group":"dir:libs/train/cmd/train","path":"libs/train/cmd/train/main.go"}
 {"group":"dir:project/impact","path":"project/impact/impact.go"}
 {"group":"dir:project/impact","path":"project/impact/impact_test.go"}
 {"group":"file:proto/MAGUS.md","path":"proto/MAGUS.md"}
