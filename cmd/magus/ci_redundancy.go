@@ -385,14 +385,7 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool
 	if g == nil || cutShort || errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
 		return
 	}
-	outcome := sessions.OutcomePass
-	var unrun []string
-	if runErr != nil {
-		outcome = sessions.OutcomeFail
-		if unrun = g.unrun(failed); len(unrun) > 0 {
-			outcome = sessions.OutcomeUnrun
-		}
-	}
+	outcome, unrun := internalci.GateOutcome(runErr, failed)
 	var repair *types.UncommittedRepairError
 	var repaired []types.RepairedFile
 	if errors.As(runErr, &repair) {
@@ -413,20 +406,6 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool
 		Inv:             journal.InvocationIDFromContext(ctx),
 		RepairedFiles:   repaired,
 	})
-}
-
-// unrun names each failed target as "project:target: cause" when every one
-// failed for a capability this host lacks. Any other failure makes it nil.
-func (g *gateRedundancy) unrun(failed []journal.Event) []string {
-	var out []string
-	for _, e := range failed {
-		if !types.CapabilityAbsent(types.DiagnosticCode(e.DiagnosticCode)) {
-			return nil
-		}
-		cause, _, _ := strings.Cut(strings.TrimSpace(e.Text), "\n")
-		out = append(out, fmt.Sprintf("%s:%s: %s", e.Project, e.Target, cause))
-	}
-	return out
 }
 
 // recordDeferral persists the refusal itself, pointing at the green gate it

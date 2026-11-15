@@ -1,6 +1,7 @@
 package ci
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
@@ -227,4 +229,57 @@ func TestSavedPlanJSONContainsTypedInputsWithoutMarkdown(t *testing.T) {
 		assert.NotContains(t, string(body), "summary")
 		assert.NotContains(t, string(body), "# CI plan")
 	}
+}
+
+func TestGateOutcomeSuite(t *testing.T) { suite.Run(t, new(GateOutcomeSuite)) }
+
+// GateOutcomeSuite pins the verdict a finished gate records: a gate whose every failure
+// was a capability this host lacks is unrun, naming each target, and still not a pass.
+type GateOutcomeSuite struct{ suite.Suite }
+
+func absent(project, target string) journal.Event {
+	return journal.Event{Project: project, Target: target, DiagnosticCode: string(types.ToolNotReady),
+		Text: "MGS3004 docker is installed but not ready\nCannot connect to the Docker daemon"}
+}
+
+var errGate = errors.New("1 target failed")
+
+func (s *GateOutcomeSuite) TestARunWithNoErrorPasses() {
+	outcome, unrun := GateOutcome(nil, nil)
+	s.Equal(sessions.OutcomePass, outcome)
+	s.Nil(unrun)
+}
+
+func (s *GateOutcomeSuite) TestEveryFailureAnAbsentCapabilityNamesEachTarget() {
+	outcome, unrun := GateOutcome(errGate, []journal.Event{absent("images/magus", "image-build"), absent("images/web", "image-build")})
+	s.Equal(sessions.OutcomeUnrun, outcome)
+	s.Equal([]string{
+		"images/magus:image-build: MGS3004 docker is installed but not ready",
+		"images/web:image-build: MGS3004 docker is installed but not ready",
+	}, unrun)
+}
+
+func (s *GateOutcomeSuite) TestOneFailureOfTheCodeMakesTheGateFail() {
+	outcome, unrun := GateOutcome(errGate, []journal.Event{absent("images/magus", "image-build"), {Project: ".", Target: "go-test", Text: "FAIL"}})
+	s.Equal(sessions.OutcomeFail, outcome)
+	s.Nil(unrun)
+}
+
+func (s *GateOutcomeSuite) TestNoFailedTargetFails() {
+	outcome, unrun := GateOutcome(errGate, nil)
+	s.Equal(sessions.OutcomeFail, outcome, "a run that failed before any target ran failed")
+	s.Nil(unrun)
+}
+
+// The failures FailedResults keeps are what GateOutcome judges: a capability failure
+// keeps its code through the journal record, so the gate can tell it from a code failure.
+func (s *GateOutcomeSuite) TestFailedResultsKeepTheCodeTheOutcomeReads() {
+	c := &FailedResults{}
+	failure := absent(".", "ci")
+	failure.Kind, failure.Status = journal.KindResult, journal.StatusFail
+	journal.Emit(journal.WithLogger(s.T().Context(), journal.NewLogger(c)), failure)
+
+	outcome, unrun := GateOutcome(errGate, c.List())
+	s.Equal(sessions.OutcomeUnrun, outcome)
+	s.Equal([]string{".:ci: MGS3004 docker is installed but not ready"}, unrun)
 }

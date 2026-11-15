@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 )
@@ -328,4 +329,26 @@ func (c *FailedResults) List() []journal.Event {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.events)
+}
+
+// GateOutcome is the verdict a finished gate records: sessions.OutcomePass when runErr
+// is nil, sessions.OutcomeUnrun when every failed target failed for a capability this
+// host lacks, and sessions.OutcomeFail otherwise. unrun names each target of an unrun
+// gate as "project:target: cause" and is nil for any other outcome. A run that failed
+// with no failed target failed: nothing showed a capability was missing.
+func GateOutcome(runErr error, failed []journal.Event) (outcome string, unrun []string) {
+	if runErr == nil {
+		return sessions.OutcomePass, nil
+	}
+	for _, e := range failed {
+		if !types.CapabilityAbsent(types.DiagnosticCode(e.DiagnosticCode)) {
+			return sessions.OutcomeFail, nil
+		}
+		cause, _, _ := strings.Cut(strings.TrimSpace(e.Text), "\n")
+		unrun = append(unrun, fmt.Sprintf("%s:%s: %s", e.Project, e.Target, cause))
+	}
+	if len(unrun) == 0 {
+		return sessions.OutcomeFail, nil
+	}
+	return sessions.OutcomeUnrun, unrun
 }
