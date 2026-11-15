@@ -14,7 +14,6 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/release"
 )
 
 // Env is what the caller supplies: the loaded config, and the loaders that live with the
@@ -38,7 +37,6 @@ type Env struct {
 	DomainGraph     func(ctx context.Context, m *magus.Magus) (*knowledge.Graph, error)
 	// Notes are the regenerated outputs and unrun gates of row in m.
 	Notes func(ctx context.Context, m *magus.Magus, row types.Job) ([]job.RegeneratedOutput, []job.UnrunGate)
-	Stage func(ctx context.Context, m *magus.Magus) release.Stage
 	// HolderCell names a row's holder in a plan figure.
 	HolderCell func(row types.Job) string
 	// GateMergeScanLimit is how many commits the green-gate scan reads for a merge.

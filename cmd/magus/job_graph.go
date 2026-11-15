@@ -47,7 +47,6 @@ func jobEvidenceEnv() evidence.Env {
 			notes := collectNotes(ctx, m, row)
 			return notes.RegeneratedOutside, notes.UnrunGates
 		},
-		Stage:              workspaceStage,
 		HolderCell:         jobHolderCell,
 		GateMergeScanLimit: gateMergeScanLimit,
 	}

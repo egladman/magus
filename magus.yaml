@@ -150,7 +150,18 @@ knowledge:
         source: { percentile: 50, anchor: 80 }
         main: { percentile: 50, anchor: 80 }
       imported-packages:
-        source: { percentile: 95, anchor: 62, scopes: { cmd/magus: 89, internal: 14 } }
+        source:
+          percentile: 95
+          anchor: 62
+          scopes:
+            cmd/magus: 89
+            internal: 14
+            # job evidence moved out of cmd/magus: *magus.Magus runs through every
+            # signature and the shared boundary names the config.Filename constant.
+            internal/job/evidence: 17
+            # the callers claim moved out of cmd/magus: knowledge is in the ClaimEnv and
+            # ReadSymbolDelta signatures, and workspacegraph serves its one occurrence read.
+            internal/job: 28
       export-scope:
         source: { percentile: 0, anchor: 0 }
         main: { percentile: 0, anchor: 0 }

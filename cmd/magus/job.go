@@ -50,7 +50,6 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/release"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -1198,20 +1197,6 @@ func forkCheckout(ctx context.Context, store *job.Store, root string, row types.
 		return row, exit.Usagef("magus job fork: %s is an integration job forked from %s, the forker's own linked checkout, where its holder would be bound: pass --checkout <dir>, a new directory the fork makes or the linked checkout the integrator runs in", row.ID, here)
 	}
 	return row, nil
-}
-
-// workspaceStage is the release stage of m's newest root tag, unknown when its VCS lists
-// none.
-func workspaceStage(ctx context.Context, m *magus.Magus) release.Stage {
-	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
-	if err != nil || res.VCS == nil {
-		return release.Stage{}
-	}
-	tags, err := res.VCS.Tags(ctx, m.Root(), "")
-	if err != nil {
-		return release.Stage{}
-	}
-	return types.NewestReleaseStage(tags)
 }
 
 // jobEnter records an entry into job id's path rel, the --stdin record's other shape.

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // DeletionCandidates is the unreferenced symbols in row's write paths, or nil when the
@@ -88,7 +89,7 @@ func LeaseBoundary(ctx context.Context, root string, store *job.Store, row types
 		RegeneratedOutside: regenerated,
 		UnrunGates:         unrun,
 		Affinity:           leaseAffinity(ctx, m, affected.Seed),
-		Stage:              env.Stage(ctx, m),
+		Stage:              types.NewestReleaseStage(rootTags(ctx, m)),
 		DeletionCandidates: DeletionCandidates(ctx, graph.LoadScoped(row.Paths.Write), row),
 		TestScope:          job.NarrowTestScope(m.All(), row.Paths.Write, here),
 	}
@@ -166,6 +167,20 @@ func leasedBoundary(row types.Job, leases []types.Job, here string, projects job
 		}
 	}
 	return out
+}
+
+// rootTags is every tag of m's root, none when its VCS will not list them, which leaves
+// the release stage unknown.
+func rootTags(ctx context.Context, m *magus.Magus) []types.VCSTag {
+	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
+	if err != nil || res.VCS == nil {
+		return nil
+	}
+	tags, err := res.VCS.Tags(ctx, m.Root(), "")
+	if err != nil {
+		return nil
+	}
+	return tags
 }
 
 // sharedBoundary is the files in the workspace root and the lease's own project
