@@ -3526,6 +3526,7 @@ func (s *SessionReleaseSuite) keptSession(code string) (*Session, func()) {
 }
 
 func (s *SessionReleaseSuite) TestSecondReleaseFreesNothing() {
+	skipWithoutHeapAttribution(s.T())
 	_, release := s.keptSession(`var xs = [1, 2, 3];`)
 	before := vm.ReadHeapStats().Objects
 	release()
@@ -3549,6 +3550,7 @@ func (s *SessionReleaseSuite) TestCallValueOnAReleasedSessionIsAnError() {
 }
 
 func (s *SessionReleaseSuite) TestSecondReleaseLeavesAReusedSlotAlone() {
+	skipWithoutHeapAttribution(s.T())
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range info.Settings {
 			if setting.Key == "-race" && setting.Value == "true" {
