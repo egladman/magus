@@ -1,0 +1,46 @@
+// Package evidence reads what the workspace and its knowledge graph say about a job
+// row: the graph a command loads once, the boundary a lease derives, the gates a
+// verification grades and the figures of a plan.
+//
+// It sits beside internal/job rather than in it, because cache, guard, bindings and
+// workspace all import job. What the command line owns arrives in an [Env].
+package evidence
+
+import (
+	"context"
+
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/release"
+)
+
+// Env is what the caller supplies: the loaded config, and the loaders that live with the
+// command line. A field a read never reaches may stay nil.
+type Env struct {
+	Config  config.Config
+	Version string
+	// Options are what every workspace the CLI opens is given.
+	Options []magus.Option
+	// LoadMagus opens the workspace at root.
+	LoadMagus func(ctx context.Context, root string) (*magus.Magus, error)
+	// RootStale and FindStale judge the stale symbol indexes of the workspace at root and
+	// of an opened one.
+	RootStale func(ctx context.Context, root string) []types.KnowledgeStaleIndex
+	FindStale func(ctx context.Context, m *magus.Magus) []types.KnowledgeStaleIndex
+	// RootRefsGraph and RootDomainGraph load the symbol graph and the domain graph of the
+	// workspace at root; RefsGraph and DomainGraph do the same for an opened one.
+	RootRefsGraph   func(ctx context.Context, root string) (*knowledge.Graph, error)
+	RootDomainGraph func(ctx context.Context, root string) (*knowledge.Graph, error)
+	RefsGraph       func(ctx context.Context, m *magus.Magus) (*knowledge.Graph, error)
+	DomainGraph     func(ctx context.Context, m *magus.Magus) (*knowledge.Graph, error)
+	// Notes are the regenerated outputs and unrun gates of row in m.
+	Notes func(ctx context.Context, m *magus.Magus, row types.Job) ([]job.RegeneratedOutput, []job.UnrunGate)
+	Stage func(ctx context.Context, m *magus.Magus) release.Stage
+	// HolderCell names a row's holder in a plan figure.
+	HolderCell func(row types.Job) string
+	// GateMergeScanLimit is how many commits the green-gate scan reads for a merge.
+	GateMergeScanLimit int
+}

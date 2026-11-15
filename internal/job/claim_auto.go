@@ -2,7 +2,11 @@ package job
 
 import (
 	"cmp"
+	"context"
 	"fmt"
+	"go/parser"
+	"go/token"
+	"log/slog"
 	"maps"
 	"os"
 	"path"
@@ -12,8 +16,12 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // hubFanIn is the fan-in at which a file is a hub, which the guard never claims on its
@@ -149,13 +157,13 @@ func hubStop(rel string, src sourceFacts, fanIn fanInFunc) string {
 	return ""
 }
 
-// CallerClaims is one request per declaration holding a non-definition occurrence, in file
+// callerClaims is one request per declaration holding a non-definition occurrence, in file
 // then line order. pkg and dir are the defining file's package name and directory: a
 // caller outside dir uses `<pkg>.<ident>`, so that is what its proof names. declarations
 // places every line of a file, as RegionsBetween does against an empty file. An error
 // names what the caller fixes: a stale symbol index, or an occurrence no declaration
 // claim covers.
-func CallerClaims(ident, pkg, dir string, files []types.SymbolOccurrenceFile, declarations func(file string) ([]types.RegionChange, error)) ([]types.JobClaimRequest, error) {
+func callerClaims(ident, pkg, dir string, files []types.SymbolOccurrenceFile, declarations func(file string) ([]types.RegionChange, error)) ([]types.JobClaimRequest, error) {
 	var out []types.JobClaimRequest
 	for _, f := range slices.SortedFunc(slices.Values(files), func(a, b types.SymbolOccurrenceFile) int { return cmp.Compare(a.File, b.File) }) {
 		if f.Stale {
@@ -238,4 +246,183 @@ func declarationWords(decl string) []string {
 		words = append(words, fmt.Sprintf("%s) %s", m[1], m[2]))
 	}
 	return append(words, decl)
+}
+
+// ClaimEnv is what applying a claim record asks of the command line: the workspace
+// reads, the symbol lookups and the config the symbol graph is built under.
+type ClaimEnv struct {
+	Config config.Config
+	// OpenWorkspace opens the workspace at root for a read.
+	OpenWorkspace func(ctx context.Context, root string) (types.WorkspaceRepository, error)
+	// Workspace is the workspace at root, for the projects a claim is proved on.
+	Workspace func(ctx context.Context, root string) Workspace
+	// RefsGraph loads the symbol graph of ws under cfg, targeted to the symbol ref names.
+	RefsGraph func(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, ref string) (*knowledge.Graph, error)
+	// PickSymbol resolves ref to one symbol id, or lists the ids it is ambiguous between.
+	PickSymbol func(g *knowledge.Graph, ref string) (symbol string, ambiguous []string)
+	// RenameBlindSpots lists what keeps a symbol's references from being read whole.
+	RenameBlindSpots func(id, language string, cov knowledge.Coverage) []types.EditRefusal
+	// SymbolCoverage is how much of the workspace the symbol indexes cover; seeded says the
+	// input is a symbol id.
+	SymbolCoverage func(ctx context.Context, root, input string, seeded bool) knowledge.Coverage
+}
+
+// ApplyClaim applies the one claim record records holds: each path proved against the
+// job's diff before the store's lock and again under it. It returns the stored row and how
+// many claims it added. open is called once the record is valid, so a refused record opens
+// no store.
+func ApplyClaim(ctx context.Context, root string, records []types.Declaration, open func() (*Store, error), dryRun bool, env ClaimEnv) (types.Job, int, error) {
+	if len(records) != 1 {
+		return types.Job{}, 0, exit.Usagef("magus job apply: a claim record applies alone, and this input holds %d records", len(records))
+	}
+	rec := records[0]
+	if err := rec.Validate(); err != nil {
+		return types.Job{}, 0, exit.Usagef("magus job apply: %s", err)
+	}
+	store, err := open()
+	if err != nil {
+		return types.Job{}, 0, err
+	}
+	rows, err := store.List()
+	if err != nil {
+		return types.Job{}, 0, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
+	if i < 0 {
+		return types.Job{}, 0, exit.Usagef("magus job apply: nothing declares job %s, so nothing claims", rec.ID)
+	}
+	reqs, err := expandCallerClaims(ctx, root, rows[i], rec.Claim, env)
+	if err != nil {
+		return types.Job{}, 0, err
+	}
+	if len(reqs) == 0 {
+		return types.Job{}, 0, exit.Usagef("magus job apply: %s already holds every declaration the callers name, so nothing claims", rec.ID)
+	}
+	asked := make([]string, len(reqs))
+	for k, w := range reqs {
+		asked[k], _ = types.SplitClaim(w.Path)
+	}
+	facts := ObserveClaim(ctx, root, rows[i], asked, env.Workspace(ctx, root).Projects)
+	stored, err := store.Claim(ctx, rec.ID, reqs, facts, env.Config.Jobs, dryRun)
+	return stored, len(reqs), err
+}
+
+// expandCallerClaims replaces each callers request with one request per declaration
+// holding an occurrence of the symbol, leaving out one row already holds, which the store
+// would refuse. It lives here so the store never reads the symbol index; the store
+// still proves every request it returns.
+func expandCallerClaims(ctx context.Context, root string, row types.Job, reqs []types.JobClaimRequest, env ClaimEnv) ([]types.JobClaimRequest, error) {
+	if !slices.ContainsFunc(reqs, func(r types.JobClaimRequest) bool { return r.Callers != "" }) {
+		return reqs, nil
+	}
+	ws, err := env.OpenWorkspace(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	res, err := vcs.Resolve(ctx, ws.Root(), "", types.VCSOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("magus job apply: resolving the version control backend to place callers: %w", err)
+	}
+	if res.VCS == nil {
+		return nil, exit.Usagef("magus job apply: version control is disabled here, so no caller of a symbol can be placed in a declaration")
+	}
+	declarations := func(file string) ([]types.RegionChange, error) {
+		body, err := os.ReadFile(filepath.Join(ws.Root(), filepath.FromSlash(file)))
+		if err != nil {
+			return nil, err
+		}
+		return res.VCS.RegionsBetween(ctx, ws.Root(), file, nil, body)
+	}
+	var out []types.JobClaimRequest
+	for _, req := range reqs {
+		if req.Callers == "" {
+			out = append(out, req)
+			continue
+		}
+		name := strings.TrimSpace(req.Callers)
+		g, err := env.RefsGraph(ctx, ws, env.Config, false, name)
+		if err != nil {
+			return nil, err
+		}
+		id, err := callersSymbol(g, name, env.PickSymbol)
+		if err != nil {
+			return nil, err
+		}
+		language := g.SymbolLanguage(id)
+		if blind := env.RenameBlindSpots(id, language, env.SymbolCoverage(ctx, root, id, true)); len(blind) > 0 {
+			return nil, callersRefusal(name, blind)
+		}
+		read, probed := workspacegraph.SymbolOccurrences(ctx, ws, ws.Root(), env.Config, slog.Default(), strings.TrimPrefix(id, types.KindSymbol+":"))
+		if !probed {
+			return nil, exit.Usagef("magus job apply: callers of %s: cannot read the symbol indexes", name)
+		}
+		var unreadable []types.EditRefusal
+		for _, gap := range knowledge.NarrowGaps(read.Unreadable, language) {
+			unreadable = append(unreadable, types.EditRefusal{Reason: fmt.Sprintf("project %s: symbol index %s; rebuild it with `%s`", gap.Project.Path, gap.Describe(), hint.GraphBuild)})
+		}
+		if len(unreadable) > 0 {
+			return nil, callersRefusal(name, unreadable)
+		}
+		refs, _ := g.Refs(id)
+		var defined string
+		if len(refs.Defs) > 0 {
+			defined = refs.Defs[0].File
+		}
+		ident := cmp.Or(append(slices.Clone(read.Names), refs.Label)...)
+		expanded, err := callerClaims(ident, goPackageName(ws.Root(), defined), path.Dir(defined), read.Files, declarations)
+		if err != nil {
+			return nil, exit.Usagef("magus job apply: %v", err)
+		}
+		for _, e := range expanded {
+			if !heldClaim(row, e.Path) {
+				out = append(out, e)
+			}
+		}
+	}
+	return out, nil
+}
+
+// callersSymbol resolves name to the one symbol it names, refusing a name the index does
+// not resolve or resolves to several.
+func callersSymbol(g *knowledge.Graph, name string, pick func(*knowledge.Graph, string) (string, []string)) (string, error) {
+	id, ambiguous := pick(g, name)
+	if len(ambiguous) > 0 {
+		return "", exit.Usagef("magus job apply: callers %q names %d symbols defined in this workspace, so name one by id: %s",
+			name, len(ambiguous), strings.Join(ambiguous, ", "))
+	}
+	if _, ok := g.Refs(id); !ok {
+		return "", exit.Usagef("magus job apply: callers %q names no symbol the index holds; check the name, or bring the index current with `%s`", name, hint.GraphBuild)
+	}
+	return id, nil
+}
+
+func callersRefusal(name string, refused []types.EditRefusal) error {
+	reasons := make([]string, len(refused))
+	for i, r := range refused {
+		reasons[i] = r.Reason
+	}
+	return exit.Usagef("magus job apply: callers of %s cannot be listed whole: %s", name, strings.Join(reasons, "; "))
+}
+
+// goPackageName is the package clause of the Go file rel under root, "" when it is not Go
+// or does not parse.
+func goPackageName(root, rel string) string {
+	if path.Ext(rel) != ".go" {
+		return ""
+	}
+	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(root, filepath.FromSlash(rel)), nil, parser.PackageClauseOnly)
+	if err != nil {
+		return ""
+	}
+	return f.Name.Name
+}
+
+// heldClaim says row already holds claim: by the claim itself, or by a write path covering
+// its whole file.
+func heldClaim(row types.Job, claim string) bool {
+	file, _ := types.SplitClaim(claim)
+	return slices.ContainsFunc(row.Paths.Write, func(w string) bool {
+		_, word := types.SplitClaim(w)
+		return w == claim || word == "" && Covers(w, file)
+	})
 }
