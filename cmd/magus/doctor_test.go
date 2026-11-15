@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,4 +39,17 @@ func TestBuildServerInfoRespectsServerDisabled(t *testing.T) {
 	assert.Empty(t, di.SockAddr, "a disabled server must not even resolve an address")
 	assert.False(t, di.Reachable, "a disabled server must never be dialled")
 	assert.Empty(t, di.Workspaces, "no workspaces are reported from a server that was not asked")
+}
+
+// TestStatusGlyph maps every documented status to its plain (uncoloured) marker and
+// confirms the unknown-status fallback.
+func TestStatusGlyph(t *testing.T) {
+	assert.Equal(t, "[pass]", statusGlyph(check.OK, false))
+	assert.Equal(t, "[fail]", statusGlyph(check.Fail, false))
+	assert.Equal(t, "[?]", statusGlyph("", false))
+	assert.Equal(t, "[?]", statusGlyph("unknown", false))
+	assert.Equal(t, "[?]", statusGlyph("OK", false)) // case-sensitive by design
+	// Coloured variant wraps the marker in ANSI but preserves the label.
+	assert.Contains(t, statusGlyph(check.Fail, true), "[fail]")
+	assert.Contains(t, statusGlyph(check.Fail, true), "\x1b[31m")
 }

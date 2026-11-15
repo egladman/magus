@@ -11,6 +11,8 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/fixture"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
@@ -362,4 +364,61 @@ func TestAgentHarnessHasNoWritingVerb(t *testing.T) {
 		assert.Contains(t, err.Error(), "unknown subcommand", verb)
 		assert.Contains(t, err.Error(), "want install, link, or verify", verb)
 	}
+}
+
+// The checkpoint's spawn ancestry is read from the environment, so its lease must be the
+// environment's claim too: a hook process forwards none, and checkoutLease has to agree with
+// job.ActingLease over trail.SpawnFromEnv for every source.
+func TestCheckoutLeaseAnswersWhatTheCheckpointClaimedFromTheEnvironment(t *testing.T) {
+	for name, tc := range map[string]struct{ claim, bound string }{
+		"nothing":                 {},
+		"the claim alone":         {claim: "fleet/f3"},
+		"the binding alone":       {bound: "fleet/bound"},
+		"the binding and a claim": {claim: "fleet/f3", bound: "fleet/bound"},
+		"an invalid claim":        {claim: "not a lease id"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := attentionTestRoot(t)
+			cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+			require.NoError(t, err)
+			if tc.bound != "" {
+				bindCheckout(t, cacheDir, tc.bound)
+			}
+			t.Setenv(trail.EnvBaggage, "")
+			if tc.claim != "" {
+				t.Setenv(trail.EnvBaggage, fmt.Sprintf("%s=%s", trail.BaggageLease, tc.claim))
+			}
+
+			wantLease, wantFrom := job.ActingLease(job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}, trail.SpawnFromEnv().Lease)
+			lease, from, err := checkoutLease(context.Background(), root)
+			require.NoError(t, err)
+			assert.Equal(t, wantLease, lease)
+			assert.Equal(t, wantFrom, from)
+		})
+	}
+}
+
+func TestHarnessSourceLinksRefuseBoundCommandBeforeReadingStdin(t *testing.T) {
+	saved := globalCfg
+	t.Cleanup(func() { globalCfg = saved })
+	globalCfg = config.Config{}
+	t.Setenv(trail.EnvBaggage, "")
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
+	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+	bindCheckout(t, cacheDir, "fleet/bound")
+
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	defer reader.Close()
+	defer writer.Close()
+	previous := os.Stdin
+	os.Stdin = reader
+	t.Cleanup(func() { os.Stdin = previous })
+	err = agentHarnessLinksCommand(context.Background(), root, []string{"--stdin"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
+	_, err = writer.Write([]byte(`{"links":{}}`))
+	assert.NoError(t, err, "stdin remains unread while the checkout is bound")
 }

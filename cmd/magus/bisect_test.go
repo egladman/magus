@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -55,41 +54,4 @@ func parseBisectLog(out []byte) (string, error) {
 		}
 	}
 	return "", errors.New("could not parse culprit from git bisect log")
-}
-
-// TestSelfUpdateCmdSignatureCompat is a compile-time check: self_update.go
-// (!noselfupdate) and self_update_stub.go (noselfupdate) must expose the same
-// `func selfUpdateCommand(context.Context, []string) error`, because self.go calls it
-// untagged. If the signatures differ the package simply won't compile under one of
-// the two build tags, which `go build` catches. This test documents the intent so a
-// future reader understands why the stub imports "context".
-//
-// It used to assert this about selfCommand, back when the whole dispatcher was written
-// twice. Only the updater is tagged now, so the dispatcher is not the pair that can
-// drift; this one is.
-func TestSelfUpdateCmdSignatureCompat(t *testing.T) {
-	// Compile-time signature assertion: selfUpdateCommand must have exactly this type
-	// or this file fails to compile. That guarantee is the entire test — there
-	// is nothing to assert at runtime (a package func is never nil).
-	var _ func(context.Context, []string) error = selfUpdateCommand //nolint:staticcheck // QF1011: the explicit type is the compile-time signature assertion this test exists for
-}
-
-// TestSelfNounSurvivesNoSelfUpdate is the property narrowing the tag bought: a
-// subcommand with nothing to do with updating must stay reachable in a build that
-// compiled the updater out, and the usage must not offer `update` where it would
-// only refuse. A distro-packaged magus, where the package manager owns the binary,
-// still installs the mgs shorthand.
-//
-// Properties rather than the exact string: this list grows, and pinning it would
-// fail on every addition without catching anything.
-func TestSelfNounSurvivesNoSelfUpdate(t *testing.T) {
-	got := selfSubcommands()
-	for _, want := range []string{"install-shorthand"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("selfSubcommands() = %q, missing %q; it does not depend on the updater", got, want)
-		}
-	}
-	if strings.Contains(got, "update") != selfUpdateCompiled {
-		t.Errorf("selfSubcommands() = %q, but selfUpdateCompiled = %v", got, selfUpdateCompiled)
-	}
 }

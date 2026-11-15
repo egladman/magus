@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -322,4 +323,70 @@ func TestMarkFileFocusStampsEachEntry(t *testing.T) {
 	assert.Equal(t, []string{types.FocusIn, types.FocusIn, types.FocusOut, types.FocusIn},
 		[]string{files[0].Focus, files[1].Focus, files[2].Focus, files[3].Focus},
 		"the sibling is the only one out; a root file and a declared dependency are in")
+}
+
+func TestFirstLine(t *testing.T) {
+	assert.Equal(t, "", firstLine(""))
+	assert.Equal(t, "one", firstLine("one"))
+	assert.Equal(t, "one", firstLine("one\ntwo\nthree"))
+	assert.Equal(t, "", firstLine("\ntwo"))
+}
+func TestFilterByNameAndNamesOf(t *testing.T) {
+	items := []types.SpellVersion{{Tool: "go"}, {Tool: "node"}}
+	nameOf := func(v types.SpellVersion) string { return v.Tool }
+
+	assert.Equal(t, []types.SpellVersion{{Tool: "node"}}, filterByName(items, "node", nameOf))
+	assert.Nil(t, filterByName(items, "rustc", nameOf))
+	assert.Equal(t, []string{"go", "node"}, collectNames(items, nameOf))
+	assert.Empty(t, collectNames(nil, nameOf))
+}
+
+// TestUnknownEntitySuggestsAndExitsTwo pins both halves: a near miss earns a suggestion,
+// and the caller gets the already-printed sentinel so the message is not doubled.
+func TestUnknownEntitySuggestsAndExitsTwo(t *testing.T) {
+	var err error
+	out := notices(t, func() {
+		err = unknownEntity("spell", "gol", []string{"go", "typescript"})
+	})
+
+	assert.Equal(t, exit.Reported(exit.Usage), err)
+	assert.Contains(t, out, `magus describe spell: unknown spell "gol"`)
+	assert.Contains(t, out, `did you mean "go"?`)
+
+	out = notices(t, func() {
+		err = unknownEntity("spell", "zzzzzzzz", []string{"go"})
+	})
+	assert.Equal(t, exit.Reported(exit.Usage), err)
+	assert.NotContains(t, out, "did you mean")
+}
+
+// TestHashOfKeyInputsIsOrderSensitive guards the property a cache key needs: the same lines
+// in a different order are a different key, because the join is what is hashed.
+func TestHashOfKeyInputsIsOrderSensitive(t *testing.T) {
+	a := hashOfKeyInputs([]string{"a", "b"})
+	assert.Len(t, a, 64)
+	assert.Equal(t, a, hashOfKeyInputs([]string{"a", "b"}))
+	assert.NotEqual(t, a, hashOfKeyInputs([]string{"b", "a"}))
+	assert.NotEqual(t, a, hashOfKeyInputs(nil))
+}
+
+// TestPrintSpellVersionsSeparatesFailureFromSilence pins the three readings a probe can
+// have: a version, a tool that reported none, and a probe that failed. Collapsing any two
+// would make a broken toolchain look like a quiet one.
+func TestPrintSpellVersionsSeparatesFailureFromSilence(t *testing.T) {
+	assert.Empty(t, captureStdout(t, func() { printSpellVersions(nil) }))
+
+	out := captureStdout(t, func() {
+		printSpellVersions([]types.SpellVersion{
+			{Tool: "go", Version: "go1.25.0", CacheKey: "abc123"},
+			{Tool: "node", Error: "executable file not found"},
+			{Tool: "tsc"},
+		})
+	})
+
+	assert.Contains(t, out, "versions (probed just now, never cached)")
+	assert.Contains(t, out, "go1.25.0")
+	assert.Contains(t, out, "key: abc123")
+	assert.Contains(t, out, "probe failed: executable file not found")
+	assert.Contains(t, out, "(no version reported)")
 }

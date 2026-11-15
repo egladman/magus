@@ -571,3 +571,45 @@ func TestCmdParseRefusesUnsupportedOutput(t *testing.T) {
 		assert.Contains(t, err.Error(), "-o is not supported by this command")
 	}
 }
+
+func TestFlagIsBool(t *testing.T) {
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	fs.Bool("force", false, "")
+	fs.String("dir", "", "")
+
+	assert.True(t, flagIsBool(fs.Lookup("force")))
+	assert.False(t, flagIsBool(fs.Lookup("dir")))
+}
+
+// TestIsFlagNamedAndFlagValueOf pins all four spellings Go's flag package accepts. A
+// hand-rolled scanner that handles three of them fails invisibly on the fourth, which is
+// exactly how `magus affected -explain .` came to read "." as a target name.
+func TestIsFlagNamedAndFlagValueOf(t *testing.T) {
+	assert.True(t, isFlagNamed("-explain", "explain"))
+	assert.True(t, isFlagNamed("--explain", "explain"))
+	assert.False(t, isFlagNamed("-explain=web", "explain"))
+	assert.False(t, isFlagNamed("--explains", "explain"))
+
+	assert.Equal(t, "web", parseFlagValue("-explain=web", "explain"))
+	assert.Equal(t, "web", parseFlagValue("--explain=web", "explain"))
+	assert.Equal(t, "", parseFlagValue("--explain", "explain"))
+	assert.Equal(t, "", parseFlagValue("--base=main", "explain"))
+}
+func TestOutputOptionsOrDefault(t *testing.T) {
+	prev := global.output
+	t.Cleanup(func() { global.output = prev })
+
+	global.output = ""
+	opts, err := outputOptionsOrDefault()
+	require.NoError(t, err)
+	assert.Equal(t, outputText, opts.Format)
+
+	global.output = "json"
+	opts, err = outputOptionsOrDefault()
+	require.NoError(t, err)
+	assert.Equal(t, outputJSON, opts.Format)
+
+	global.output = "nonsense"
+	_, err = outputOptionsOrDefault()
+	assert.Error(t, err)
+}

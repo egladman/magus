@@ -1022,3 +1022,9 @@ func TestWithIndexCauseFillsOnlyAnIndexBehind(t *testing.T) {
 	clean := withIndexCause(t.Context(), w.Root(), types.ClassifyAnswer(true, "", nil))
 	assert.Nil(t, clean.IndexCause)
 }
+
+func TestLinesSuffix(t *testing.T) {
+	assert.Equal(t, "", linesSuffix(nil))
+	assert.Equal(t, "  lines 7", linesSuffix([]int{7}))
+	assert.Equal(t, "  lines 7,19,42", linesSuffix([]int{7, 19, 42}))
+}

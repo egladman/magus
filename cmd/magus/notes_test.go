@@ -3,16 +3,20 @@ package main
 import (
 	"context"
 	"github.com/egladman/magus/types/diff"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	store "github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -294,4 +298,28 @@ func TestNotesLsByTagListsOpenGapsWithTheirFindLines(t *testing.T) {
 	assert.Contains(t, out, "gap-wait-poll")
 	assert.NotContains(t, out, "cache-pairing", "a note without the tag is not listed")
 	assert.Contains(t, out, "  find it:\n    magus query 'kind=diagnostic id=MGS3009'\n")
+}
+
+func TestServerReviewCommentsRevokesItsToken(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	var presented string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		presented = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		cred, ok := auth.Verify(presented)
+		if !ok || cred.Kind != types.KindStored {
+			http.Error(w, "no", http.StatusForbidden)
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	prevAddr := globalCfg.MCP.Address
+	t.Cleanup(func() { globalCfg.MCP.Address = prevAddr })
+	globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
+
+	_, _, served := serverReviewComments(context.Background())
+
+	assert.True(t, served)
+	_, ok := auth.Verify(presented)
+	assert.False(t, ok)
 }

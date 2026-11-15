@@ -2,12 +2,10 @@ package main
 
 import (
 	"archive/tar"
-	"bytes"
 	"cmp"
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,13 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/script"
 	"github.com/egladman/magus/types"
@@ -706,43 +700,4 @@ func TestAgentEval(t *testing.T) {
 			})
 		}
 	}
-}
-
-func TestHarnessSourceLinksRefuseBoundCommandBeforeReadingStdin(t *testing.T) {
-	saved := globalCfg
-	t.Cleanup(func() { globalCfg = saved })
-	globalCfg = config.Config{}
-	t.Setenv(trail.EnvBaggage, "")
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
-	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
-	require.NoError(t, err)
-	bindCheckout(t, cacheDir, "fleet/bound")
-
-	reader, writer, err := os.Pipe()
-	require.NoError(t, err)
-	defer reader.Close()
-	defer writer.Close()
-	previous := os.Stdin
-	os.Stdin = reader
-	t.Cleanup(func() { os.Stdin = previous })
-	err = agentHarnessLinksCommand(context.Background(), root, []string{"--stdin"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
-	_, err = writer.Write([]byte(`{"links":{}}`))
-	assert.NoError(t, err, "stdin remains unread while the checkout is bound")
-}
-
-func TestPointAtConsoleNamesTheServerStartOnlyWhenAsked(t *testing.T) {
-	testkit.Isolate(t)
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	pointAtConsole(t.Context(), "some-job", false)
-	assert.Empty(t, buf.String(), "nobody asked for the server")
-
-	pointAtConsole(t.Context(), "some-job", true)
-	assert.Contains(t, buf.String(), "the console is not running")
 }

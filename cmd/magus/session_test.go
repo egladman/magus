@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -755,4 +756,57 @@ func TestPromptCacheForCheckoutReadsThisCheckoutsTrail(t *testing.T) {
 	clock := promptCacheForCheckout(root, time.Now())
 	assert.Equal(t, "s1", clock.Session)
 	assert.Len(t, clock.Providers, len(sessions.PromptCacheProviders))
+}
+
+// A tree before its first commit, or under no VCS, still has a location worth naming.
+func TestCheckpointWhereNamesTheWorkspaceWithoutARevision(t *testing.T) {
+	assert.Equal(t, "/repo", checkpointWhere(sessions.Checkpoint{Workspace: "/repo"}))
+	assert.Equal(t, "codex /repo", checkpointWhere(sessions.Checkpoint{Host: "codex", Workspace: "/repo"}))
+}
+func TestRenderCheckpointsBoundsTheListAndPointsAtTheRest(t *testing.T) {
+	at := time.Date(2026, 9, 8, 12, 42, 45, 0, time.UTC)
+	var records []sessions.CheckpointRecord
+	for _, branch := range []string{"one", "two", "three", "four", "five"} {
+		records = append(records, sessions.CheckpointRecord{
+			Checkpoint: sessions.Checkpoint{Workspace: "/repo", Tree: vcs.Checkpoint{Revision: "abcdef012345", Branch: branch}},
+			At:         at,
+		})
+	}
+
+	var b strings.Builder
+	renderCheckpoints(context.Background(), "", &b, records)
+	got := b.String()
+
+	assert.Contains(t, got, "on one")
+	assert.Contains(t, got, "on three")
+	assert.NotContains(t, got, "on four", "only the newest few are shown")
+	assert.Contains(t, got, "and 2 more")
+	assert.Contains(t, got, "2026-09-08 12:42:45")
+}
+func TestRenderCheckpointsShowsTheHostPointersWhenThereAreAny(t *testing.T) {
+	var b strings.Builder
+	renderCheckpoints(context.Background(), "", &b, []sessions.CheckpointRecord{{
+		Checkpoint: sessions.Checkpoint{
+			Host:        "codex",
+			HostSession: "01a07dab-240a",
+			Transcript:  "/tmp/rollout.jsonl",
+			Workspace:   "/repo",
+			Tree:        vcs.Checkpoint{Revision: "abcdef012345", Branch: "main"},
+			Note:        "usage limit",
+		},
+		At: time.Now(),
+	}})
+	got := b.String()
+
+	assert.Contains(t, got, "session 01a07dab-240a")
+	assert.Contains(t, got, "transcript /tmp/rollout.jsonl")
+	assert.Contains(t, got, "usage limit")
+}
+
+// Nothing recorded prints nothing at all, so the listing keeps its shape for the common
+// case of a repository where every session finished what it started.
+func TestRenderCheckpointsIsSilentWithNothingRecorded(t *testing.T) {
+	var b strings.Builder
+	renderCheckpoints(context.Background(), "", &b, nil)
+	assert.Empty(t, b.String())
 }

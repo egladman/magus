@@ -734,3 +734,27 @@ func TestRefreshVCSHooksRefreshesHgFamilySections(t *testing.T) {
 		})
 	}
 }
+
+// TestServerAndBrokerSocketsSitApart pins the two addresses: each a unix socket in the
+// private socket directory, named for what listens there, and never the same file.
+func TestServerAndBrokerSocketsSitApart(t *testing.T) {
+	server, brk := proc.ServerDefaultAddr(), broker.DefaultAddr()
+	assert.True(t, strings.HasPrefix(server, "unix://"), server)
+	assert.True(t, strings.HasSuffix(server, "/server.sock"), server)
+	assert.True(t, strings.HasPrefix(brk, "unix://"), brk)
+	assert.True(t, strings.HasSuffix(brk, "/"+broker.SocketName), brk)
+	assert.Equal(t, filepath.Dir(server), filepath.Dir(brk))
+}
+
+// TestResolveServerAddrNeverConsultsTheAdoptionSocket pins that the server's address is
+// config or server.sock, never MAGUS_PROC_SOCKET: inside a run that variable names the
+// run's own per-process pool, which dies with it.
+func TestResolveServerAddrNeverConsultsTheAdoptionSocket(t *testing.T) {
+	defer snapshotGlobals()()
+	t.Setenv(proc.SocketEnv, "unix:///tmp/magus-1-abc.sock")
+	globalCfg.Server.Address = ""
+	assert.Equal(t, proc.ServerDefaultAddr(), resolveServerAddr(""))
+	globalCfg.Server.Address = "unix:///tmp/configured.sock"
+	assert.Equal(t, "unix:///tmp/configured.sock", resolveServerAddr(""))
+	assert.Equal(t, "unix:///tmp/flag.sock", resolveServerAddr("unix:///tmp/flag.sock"))
+}

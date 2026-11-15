@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestForgeBlobBase(t *testing.T) {
 	cases := []struct {
@@ -25,4 +29,47 @@ func TestForgeBlobBase(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestParseGitRemote covers both remote spellings a forge hands out, plus the refusals that
+// keep a wrong link from being emitted.
+func TestParseGitRemote(t *testing.T) {
+	tests := []struct {
+		remote            string
+		host, owner, repo string
+	}{
+		{"git@github.com:egladman/magus.git", "github.com", "egladman", "magus"},
+		{"https://github.com/egladman/magus.git", "github.com", "egladman", "magus"},
+		{"https://user@git.example.com:8443/team/repo", "git.example.com", "team", "repo"},
+		{"ssh://git@github.com/egladman/magus", "github.com", "egladman", "magus"},
+		{"  git@github.com:egladman/magus  ", "github.com", "egladman", "magus"},
+		{"github.com/egladman/magus", "", "", ""},
+		{"git@github.com", "", "", ""},
+		{"https://github.com/egladman", "github.com", "", ""},
+	}
+
+	for _, tc := range tests {
+		host, owner, repo := parseGitRemote(tc.remote)
+		assert.Equal(t, tc.host, host, tc.remote)
+		assert.Equal(t, tc.owner, owner, tc.remote)
+		assert.Equal(t, tc.repo, repo, tc.remote)
+	}
+}
+
+// TestGithubRawBase pins the deliberate narrowness: other forges serve raw content from
+// different hosts, so an unmapped one yields no link rather than a wrong one.
+func TestGithubRawBase(t *testing.T) {
+	assert.Equal(t,
+		"https://raw.githubusercontent.com/egladman/magus/main",
+		githubRawBase("https://github.com/egladman/magus/blob/main"))
+
+	assert.Equal(t, "", githubRawBase("https://gitlab.com/o/r/-/blob/main"))
+	assert.Equal(t, "", githubRawBase(""))
+}
+
+// TestGraphExplorerLinkNeedsACommittedGraph covers the guard that keeps MAGUS.md from
+// carrying a link that 404s. No docs/graph.json means no link, decided before any VCS
+// resolution is attempted.
+func TestGraphExplorerLinkNeedsACommittedGraph(t *testing.T) {
+	assert.Equal(t, "", graphExplorerLink(t.Context(), t.TempDir()))
 }

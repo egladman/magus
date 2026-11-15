@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 )
@@ -143,4 +144,24 @@ func TestMCPCmdRefusesArguments(t *testing.T) {
 
 	err = mcpCommand(context.Background(), "", []string{"serve"})
 	assert.ErrorContains(t, err, `magus mcp: takes no arguments (got "serve")`)
+}
+
+// TestMCPAddrFallsBackToTheDefault covers both arms of the address resolution. The
+// unconfigured case has to yield a parseable host:port on its own, because that is what
+// the doctor bridge check probes when nothing declares an address.
+func TestMCPAddrFallsBackToTheDefault(t *testing.T) {
+	prev := globalCfg.MCP.Address
+	t.Cleanup(func() { globalCfg.MCP.Address = prev })
+
+	globalCfg.MCP.Address = ""
+	assert.Equal(t, internalmcp.DefaultAddress, mcpAddrString())
+	parsed, err := mcpAddrPort()
+	require.NoError(t, err)
+	assert.NotZero(t, parsed.Port())
+
+	globalCfg.MCP.Address = "127.0.0.1:9999"
+	assert.Equal(t, "127.0.0.1:9999", mcpAddrString())
+	parsed, err = mcpAddrPort()
+	require.NoError(t, err)
+	assert.Equal(t, uint16(9999), parsed.Port())
 }

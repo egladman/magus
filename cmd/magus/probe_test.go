@@ -7,16 +7,15 @@ import (
 	"github.com/egladman/magus/types/daemon"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
@@ -438,153 +437,271 @@ func TestReadinessHTTPHandlerMatchesHealthHTTPHandlerGate(t *testing.T) {
 	}
 }
 
-// TestResolveDeclaredWorkspacesMergesAndDedupes verifies that cfg and env
-// inputs are merged, deduplicated, resolved to absolute paths, and that
-// non-existent or non-directory entries are skipped.
-func TestResolveDeclaredWorkspacesMergesAndDedupes(t *testing.T) {
-	a := t.TempDir()
-	b := t.TempDir()
-	c := t.TempDir()
-
-	// Non-existent path should be dropped silently.
-	missing := filepath.Join(t.TempDir(), "does-not-exist")
-
-	got := resolveDeclaredWorkspaces(
-		[]string{a, b}, // cfg
-		fmt.Sprintf("%s%s%s%s%s", b, string(filepath.ListSeparator), c, string(filepath.ListSeparator), missing), // env (b is duplicate)
-	)
-	require.Len(t, got, 3)
-	want := map[string]bool{a: true, b: true, c: true}
-	for _, root := range got {
-		assert.True(t, want[root], "unexpected root in result: %q", root)
+func TestProbeMCPReadiness(t *testing.T) {
+	t.Run("ready-200", func(t *testing.T) {
+		assert.Equal(t, http.StatusOK, probeMCPReadiness(context.Background(), readyzServer(t, http.StatusOK)))
+	})
+	t.Run("not-ready-503", func(t *testing.T) {
+		assert.Equal(t, http.StatusServiceUnavailable, probeMCPReadiness(context.Background(), readyzServer(t, http.StatusServiceUnavailable)))
+	})
+	t.Run("answered-other-status-reads-as-ok", func(t *testing.T) {
+		// An older server without /readyz still proves a listener is up: any answered
+		// status collapses to OK so the endpoint reads as reachable.
+		assert.Equal(t, http.StatusOK, probeMCPReadiness(context.Background(), readyzServer(t, http.StatusTeapot)))
+	})
+	t.Run("nothing-listening-returns-zero", func(t *testing.T) {
+		// Reserved-for-docs TEST-NET-1 address that refuses fast; 0 == unreachable.
+		assert.Equal(t, 0, probeMCPReadiness(context.Background(), "127.0.0.1:1"))
+	})
+}
+func TestMCPAddress(t *testing.T) {
+	assert.Equal(t, "127.0.0.1:9000", mcpAddress(config.MCP{Address: "127.0.0.1:9000"}))
+	assert.Equal(t, internalmcp.DefaultAddress, mcpAddress(config.MCP{}), "empty address falls back to the default")
+}
+func TestBuildMCPEndpointStatus(t *testing.T) {
+	ctx := context.Background()
+	t.Run("disabled", func(t *testing.T) {
+		got := buildMCPEndpointStatus(ctx, mcpDisabled())
+		require.NotNil(t, got)
+		assert.False(t, got.Enabled)
+		assert.Equal(t, "disabled", got.State)
+		assert.False(t, got.Reachable)
+	})
+	t.Run("serving", func(t *testing.T) {
+		got := buildMCPEndpointStatus(ctx, mcpServing(t, http.StatusOK))
+		require.NotNil(t, got)
+		assert.True(t, got.Enabled)
+		assert.True(t, got.Reachable)
+		assert.Equal(t, "serving", got.State)
+		assert.Contains(t, got.URL, "/mcp")
+	})
+	t.Run("not-ready", func(t *testing.T) {
+		got := buildMCPEndpointStatus(ctx, mcpServing(t, http.StatusServiceUnavailable))
+		require.NotNil(t, got)
+		assert.True(t, got.Reachable)
+		assert.Equal(t, "not-ready", got.State)
+	})
+	t.Run("unreachable-points-at-server-start", func(t *testing.T) {
+		got := buildMCPEndpointStatus(ctx, mcpUnreachable())
+		require.NotNil(t, got)
+		assert.False(t, got.Reachable)
+		assert.Equal(t, "unreachable", got.State)
+		assert.Contains(t, got.Note, "magus server start")
+	})
+}
+func TestPrintMCPEndpointStatus(t *testing.T) {
+	render := func(m *daemon.MCPEndpoint) string {
+		var b strings.Builder
+		printMCPEndpointStatus(&b, m)
+		return b.String()
 	}
+
+	t.Run("nil-renders-nothing", func(t *testing.T) {
+		assert.Empty(t, render(nil))
+	})
+	t.Run("serving-shows-url-and-state", func(t *testing.T) {
+		out := render(&daemon.MCPEndpoint{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"})
+		assert.Contains(t, out, "mcp endpoint")
+		assert.Contains(t, out, "http://127.0.0.1:7391/mcp")
+		assert.Contains(t, out, "serving")
+	})
+	t.Run("unreachable-shows-note", func(t *testing.T) {
+		out := render(&daemon.MCPEndpoint{Enabled: true, URL: "http://127.0.0.1:7391/mcp", State: "unreachable", Note: "start the server: magus server start"})
+		assert.Contains(t, out, "unreachable")
+		assert.Contains(t, out, "magus server start")
+	})
+	t.Run("disabled-omits-url", func(t *testing.T) {
+		out := render(&daemon.MCPEndpoint{State: "disabled", Note: "MCP is disabled (mcp.enabled=false); no agent tools are served."})
+		assert.Contains(t, out, "disabled")
+		assert.NotContains(t, out, "url")
+	})
 }
-
-func TestResolveDeclaredWorkspacesEmpty(t *testing.T) {
-	assert.Nil(t, resolveDeclaredWorkspaces(nil, ""), "expected nil for empty inputs")
-}
-
-// TestAcquireRejectsNonDeclared confirms that once setDeclared has been
-// called with an allowlist, acquire of a root outside the list fails.
-func TestAcquireRejectsNonDeclared(t *testing.T) {
-	allowed := t.TempDir()
-	forbidden := t.TempDir()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	lim := cache.NewLimiter(1)
-	reg := newWSRegistry(ctx, lim, nil, 0, nil)
-	defer reg.close()
-
-	reg.setDeclared([]string{allowed})
-
-	_, err := reg.acquire(forbidden)
-	require.ErrorIs(t, err, errWorkspaceUndeclared)
-}
-
-// TestAcquireAdmitsDeclaredEvenWithoutMagusYaml verifies that a declared
-// workspace without a magus.yaml falls back to defaults rather than being
-// rejected as undeclared. Without an actual workspace layout the load will
-// still fail; we only verify that the allowlist check passes (the failure
-// surfaces from magus.Open, not from the declared gate).
-func TestAcquireAdmitsDeclaredEvenWithoutMagusYaml(t *testing.T) {
-	allowed := t.TempDir()
-	// Write an empty magus.yaml so config loading succeeds and the test
-	// reaches the magus.Open step deterministically.
-	require.NoError(t, os.WriteFile(filepath.Join(allowed, "magus.yaml"), []byte(""), 0o644))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	lim := cache.NewLimiter(1)
-	reg := newWSRegistry(ctx, lim, nil, 0, nil)
-	defer reg.close()
-	reg.setDeclared([]string{allowed})
-
-	// acquire may fail at magus.Open (no real workspace), but it must NOT
-	// fail with the declared-list gate.
-	_, err := reg.acquire(allowed)
-	assert.NotErrorIs(t, err, errWorkspaceUndeclared,
-		"acquire of declared root was wrongly rejected by the allowlist gate")
-}
-
-// TestWarmRespectsContextCancellation verifies that warm exits promptly when
-// the context is already cancelled, without hanging on acquire.
-func TestWarmRespectsContextCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancel before warm is called
-
-	lim := cache.NewLimiter(2)
-	reg := newWSRegistry(context.Background(), lim, nil, 0, nil)
-	defer reg.close()
-
-	// Supply several roots; warm should bail after the first ctx.Err() check.
-	roots := []string{t.TempDir(), t.TempDir(), t.TempDir()}
-	reg.setDeclared(roots)
-
-	done := make(chan struct{})
-	go func() {
-		reg.warm(ctx, roots)
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("warm did not return promptly after context cancellation")
+func TestParseProbeKind(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want probeKind
+	}{
+		{"liveness", probeLiveness},
+		{"readiness", probeReadiness},
+		{"mcp", probeMCP},
+	} {
+		kind, err := parseProbeKind(tc.in)
+		require.NoError(t, err, tc.in)
+		assert.Equal(t, tc.want, kind, tc.in)
 	}
+	_, err := parseProbeKind("bogus")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mcp")
 }
+func TestProbeName(t *testing.T) {
+	assert.Equal(t, "liveness", probeName(probeLiveness))
+	assert.Equal(t, "readiness", probeName(probeReadiness))
+	assert.Equal(t, "mcp", probeName(probeMCP))
+	assert.Equal(t, "unknown", probeName(probeKind(99)))
+}
+func TestParseProbeKinds(t *testing.T) {
+	t.Run("single", func(t *testing.T) {
+		kinds, err := parseProbeKinds("liveness")
+		require.NoError(t, err)
+		assert.Equal(t, []probeKind{probeLiveness}, kinds)
+	})
+	t.Run("comma-combined-in-order", func(t *testing.T) {
+		kinds, err := parseProbeKinds("liveness,mcp")
+		require.NoError(t, err)
+		assert.Equal(t, []probeKind{probeLiveness, probeMCP}, kinds)
+	})
+	t.Run("trims-and-tolerates-empty-segments", func(t *testing.T) {
+		kinds, err := parseProbeKinds(" mcp , ,liveness,")
+		require.NoError(t, err)
+		assert.Equal(t, []probeKind{probeMCP, probeLiveness}, kinds)
+	})
+	t.Run("dedupes", func(t *testing.T) {
+		kinds, err := parseProbeKinds("mcp,mcp")
+		require.NoError(t, err)
+		assert.Equal(t, []probeKind{probeMCP}, kinds)
+	})
+	t.Run("unknown-errors", func(t *testing.T) {
+		_, err := parseProbeKinds("liveness,bogus")
+		require.Error(t, err)
+	})
+	t.Run("all-empty-errors", func(t *testing.T) {
+		_, err := parseProbeKinds(" , ,")
+		require.Error(t, err)
+	})
+}
+func TestEvaluateMCPHealth(t *testing.T) {
+	t.Run("serving-passes", func(t *testing.T) {
+		ok, reason := evaluateMCPHealth(&daemon.MCPEndpoint{Reachable: true, State: "serving", URL: "http://127.0.0.1:7391/mcp"})
+		assert.True(t, ok)
+		assert.Contains(t, reason, "serving")
+	})
+	t.Run("not-ready-passes", func(t *testing.T) {
+		// The endpoint is up; a liveness/ensure check should not restart the server.
+		ok, _ := evaluateMCPHealth(&daemon.MCPEndpoint{Reachable: true, State: "not-ready", URL: "http://127.0.0.1:7391/mcp"})
+		assert.True(t, ok)
+	})
+	t.Run("unreachable-fails-with-note", func(t *testing.T) {
+		ok, reason := evaluateMCPHealth(&daemon.MCPEndpoint{State: "unreachable", Note: "start the server: magus server start"})
+		assert.False(t, ok)
+		assert.Contains(t, reason, "magus server start")
+	})
+	t.Run("disabled-fails", func(t *testing.T) {
+		ok, reason := evaluateMCPHealth(&daemon.MCPEndpoint{State: "disabled", Note: "MCP is disabled (mcp.enabled=false); no agent tools are served."})
+		assert.False(t, ok)
+		assert.Contains(t, reason, "disabled")
+	})
+	t.Run("nil-fails", func(t *testing.T) {
+		ok, _ := evaluateMCPHealth(nil)
+		assert.False(t, ok)
+	})
+	t.Run("unreachable-without-note-falls-back-to-state", func(t *testing.T) {
+		ok, reason := evaluateMCPHealth(&daemon.MCPEndpoint{State: "unreachable"})
+		assert.False(t, ok)
+		assert.Equal(t, "mcp endpoint unreachable", reason)
+	})
+}
+func TestEvaluateProbes(t *testing.T) {
+	ctx := context.Background()
+	aliveServer := &daemon.Output{ParentPID: 42, Workspaces: []daemon.Workspace{{Root: "/ws"}}}
 
-// TestWarmCompletesAndPopulatesStatus verifies that warm runs to completion
-// and that any successfully loaded workspaces appear in status() afterwards.
-// Warm must not panic, hang, or silently skip entries.
-func TestWarmCompletesAndPopulatesStatus(t *testing.T) {
-	root1 := t.TempDir()
-	root2 := t.TempDir()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	lim := cache.NewLimiter(2)
-	reg := newWSRegistry(ctx, lim, nil, 0, nil)
-	defer reg.close()
-	reg.setDeclared([]string{root1, root2})
-
-	done := make(chan struct{})
-	go func() {
-		reg.warm(ctx, []string{root1, root2})
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(30 * time.Second):
-		t.Fatal("warm did not complete within timeout")
+	t.Run("liveness-alone-passes-and-dials-once", func(t *testing.T) {
+		calls := 0
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), config.MCP{}, []probeKind{probeLiveness}, "")
+		require.Len(t, res, 1)
+		assert.True(t, res[0].ok)
+		assert.Equal(t, 1, calls)
+	})
+	t.Run("two-socket-probes-dial-once", func(t *testing.T) {
+		calls := 0
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), config.MCP{}, []probeKind{probeLiveness, probeReadiness}, "")
+		require.Len(t, res, 2)
+		assert.True(t, res[0].ok)
+		assert.True(t, res[1].ok)
+		assert.Equal(t, 1, calls, "the server snapshot is fetched once and reused")
+	})
+	t.Run("mcp-only-never-dials-the-server", func(t *testing.T) {
+		calls := 0
+		res := evaluateProbes(ctx, recordingStatus(&calls, nil, errors.New("must not be called")), mcpServing(t, http.StatusOK), []probeKind{probeMCP}, "")
+		require.Len(t, res, 1)
+		assert.True(t, res[0].ok)
+		assert.Equal(t, 0, calls, "an mcp-only probe makes no proc RPC")
+	})
+	t.Run("combined-liveness-and-mcp-both-evaluated", func(t *testing.T) {
+		calls := 0
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), mcpUnreachable(), []probeKind{probeLiveness, probeMCP}, "")
+		require.Len(t, res, 2)
+		assert.True(t, res[0].ok, "server is alive")
+		assert.False(t, res[1].ok, "mcp endpoint is down")
+		assert.Equal(t, probeMCP, res[1].kind)
+	})
+}
+func TestRunProbesMCPOnly(t *testing.T) {
+	ctx := context.Background()
+	t.Run("serving-returns-nil", func(t *testing.T) {
+		// socket "" is never dialed for an mcp-only probe, so this makes no proc RPC.
+		require.NoError(t, runProbes(ctx, "", mcpServing(t, http.StatusOK), []probeKind{probeMCP}, ""))
+	})
+	t.Run("unreachable-exits-1", func(t *testing.T) {
+		err := runProbes(ctx, "", mcpUnreachable(), []probeKind{probeMCP}, "")
+		require.Error(t, err)
+		var silent reportedExit
+		require.ErrorAs(t, err, &silent)
+		assert.Equal(t, 1, silent.ExitCode())
+	})
+}
+func TestRenderProbeResults(t *testing.T) {
+	render := func(results []probeResult) (string, string, bool) {
+		var out strings.Builder
+		var ok bool
+		errb := notices(t, func() { ok = renderProbeResults(t.Context(), &out, results) })
+		return out.String(), errb, ok
 	}
-	// Any workspace that loaded successfully must appear in status().
-	// The exact count depends on whether magus.Open succeeds for bare dirs.
-	assert.NotPanics(t, func() { _ = reg.status() })
+
+	t.Run("single-pass-no-label", func(t *testing.T) {
+		out, errb, ok := render([]probeResult{{kind: probeLiveness, ok: true, reason: "server pid 42 is alive"}})
+		assert.True(t, ok)
+		assert.Equal(t, "ok: server pid 42 is alive\n", out)
+		assert.Empty(t, errb)
+	})
+	t.Run("single-fail-exit-signal", func(t *testing.T) {
+		out, errb, ok := render([]probeResult{{kind: probeMCP, ok: false, reason: "unreachable"}})
+		assert.False(t, ok)
+		assert.Empty(t, out)
+		assert.Contains(t, errb, "unreachable")
+	})
+	t.Run("multi-labels-each-and-fails-if-any-fails", func(t *testing.T) {
+		out, errb, ok := render([]probeResult{
+			{kind: probeLiveness, ok: true, reason: "alive"},
+			{kind: probeMCP, ok: false, reason: "down"},
+		})
+		assert.False(t, ok)
+		assert.Contains(t, out, "ok: liveness: alive")
+		assert.Contains(t, errb, "mcp: down")
+	})
+	t.Run("multi-all-pass", func(t *testing.T) {
+		_, _, ok := render([]probeResult{
+			{kind: probeLiveness, ok: true, reason: "alive"},
+			{kind: probeMCP, ok: true, reason: "serving"},
+		})
+		assert.True(t, ok)
+	})
 }
 
-// TestWarmInBackgroundTrackedByClose verifies that close() waits for an
-// in-flight warm rather than racing it — otherwise a workspace could be
-// acquired (and leaked) after close() swept the entry map.
-func TestWarmInBackgroundTrackedByClose(t *testing.T) {
-	root := t.TempDir()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+// mcpUnreachable returns an enabled MCP config whose address nothing listens on.
+func mcpUnreachable() config.MCP {
+	return config.MCP{Address: "127.0.0.1:1", Enabled: new(true)}
+}
 
-	lim := cache.NewLimiter(2)
-	reg := newWSRegistry(ctx, lim, nil, 0, nil)
-	reg.setDeclared([]string{root})
-	reg.warmInBackground(ctx, []string{root})
+// mcpDisabled returns an MCP config with the server turned off.
+func mcpDisabled() config.MCP {
+	return config.MCP{Enabled: new(false)}
+}
 
-	// close() must return: its wg.Wait() should account for the warm goroutine
-	// (plus the janitor) and not hang.
-	done := make(chan struct{})
-	go func() {
-		reg.close()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(30 * time.Second):
-		t.Fatal("close did not return; warm goroutine not tracked by the waitgroup?")
+// recordingStatus is a statusFunc that counts calls and returns a fixed snapshot/err, so
+// tests can assert how many times (if at all) the server socket was dialed.
+func recordingStatus(calls *int, out *daemon.Output, err error) statusFunc {
+	return func(context.Context) (*daemon.Output, error) {
+		*calls++
+		return out, err
 	}
 }

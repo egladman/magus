@@ -3203,3 +3203,17 @@ func (s *DescribeJobRecordSuite) TestTheJobMemberAloneRoundTripsThroughApply() {
 	s.Require().Len(rows, 1)
 	s.Equal([]string{"a.go"}, rows[0].Paths.Write)
 }
+
+func TestPointAtConsoleNamesTheServerStartOnlyWhenAsked(t *testing.T) {
+	testkit.Isolate(t)
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	pointAtConsole(t.Context(), "some-job", false)
+	assert.Empty(t, buf.String(), "nobody asked for the server")
+
+	pointAtConsole(t.Context(), "some-job", true)
+	assert.Contains(t, buf.String(), "the console is not running")
+}

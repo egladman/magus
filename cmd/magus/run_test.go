@@ -971,3 +971,21 @@ func (s *SameCharmsSuite) TestADifferentCharmDiffers() {
 func (s *SameCharmsSuite) TestNoCharmsEqualsNoCharms() {
 	s.True(sameCharms(nil, []string{}))
 }
+
+func TestParseTarget(t *testing.T) {
+	t.Parallel()
+	assertTarget := func(input, wantPack, wantName string) {
+		t.Run(input, func(t *testing.T) {
+			pack, target := parseTarget(input)
+			assert.Equal(t, wantPack, pack)
+			assert.Equal(t, wantName, target)
+		})
+	}
+
+	assertTarget("build", "", "build")
+	assertTarget("lint", "", "lint")
+	assertTarget("typescript::lint", "typescript", "lint")
+	assertTarget("go::test", "go", "test")
+	assertTarget("rust::build", "rust", "build")
+	assertTarget("::lint", "", "lint") // empty spell — treated as no filter
+}

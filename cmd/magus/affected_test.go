@@ -593,3 +593,17 @@ func (s *ShardNameSuite) TestUpToThreeProjectsAreListed() {
 func (s *ShardNameSuite) TestMoreThanThreeElideTheRest() {
 	s.Equal(". docs proto +2", shardName([]string{".", "docs", "proto", "console", "libs/textsearch"}))
 }
+
+func TestHasModeFlagAcceptsEverySpelling(t *testing.T) {
+	for _, arg := range []string{"--plan", "-plan", "--plan=3", "-plan=3"} {
+		assert.True(t, hasModeFlag([]string{"ci", arg}, "plan"), arg)
+	}
+	assert.False(t, hasModeFlag([]string{"ci", "--planner"}, "plan"))
+	assert.False(t, hasModeFlag(nil, "plan"))
+}
+func TestImpactPct(t *testing.T) {
+	assert.Equal(t, "0%", impactPct(0))
+	assert.Equal(t, "25%", impactPct(0.25))
+	assert.Equal(t, "76%", impactPct(0.756))
+	assert.Equal(t, "100%", impactPct(1))
+}

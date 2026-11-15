@@ -2487,27 +2487,3 @@ func TestDialDiffBridgeCarriesAConsoleTokenAndRevokesIt(t *testing.T) {
 	_, ok = auth.Verify(presented)
 	assert.False(t, ok, "close revokes it")
 }
-
-func TestServerReviewCommentsRevokesItsToken(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	var presented string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		presented = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		cred, ok := auth.Verify(presented)
-		if !ok || cred.Kind != types.KindStored {
-			http.Error(w, "no", http.StatusForbidden)
-			return
-		}
-		_, _ = w.Write([]byte(`{}`))
-	}))
-	t.Cleanup(srv.Close)
-	prevAddr := globalCfg.MCP.Address
-	t.Cleanup(func() { globalCfg.MCP.Address = prevAddr })
-	globalCfg.MCP.Address = strings.TrimPrefix(srv.URL, "http://")
-
-	_, _, served := serverReviewComments(context.Background())
-
-	assert.True(t, served)
-	_, ok := auth.Verify(presented)
-	assert.False(t, ok)
-}
