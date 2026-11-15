@@ -408,7 +408,7 @@ func TestModelTierMatrixMisdeclarationIsCoded(t *testing.T) {
 	fn := vm.DirectValue("matrix", func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil })
 	register := func(ctx context.Context) vm.Value {
 		jobMap := vm.NewMap()
-		registerModelTierMatrix(workspace.ContextWithRegistry(ctx, workspace.NewWorkspaceRegistry()), nil, nil, jobMap)
+		registerModelTierMatrix(workspace.ContextWithRegistry(ctx, workspace.NewWorkspaceRegistry()), nil, nil, jobMap, true)
 		return requireDirect(t, jobMap, "modelTier")
 	}
 

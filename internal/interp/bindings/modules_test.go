@@ -19,6 +19,7 @@ import (
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -1451,6 +1452,36 @@ func TestRunDirRetainsNothingPerEvaluation(t *testing.T) {
 	}
 	if grew := vm.ReadHeapStats().Objects - objects; grew > 300 {
 		t.Fatalf("300 evaluations grew the Buzz heap by %d objects; a closed session must leave none", grew)
+	}
+}
+
+// TestRunDirRetainsNothingWhenTheMagusfileRegistersARule pins that a rule is stored by
+// the parse-mode load alone: the registry already holds the workspace's rule, so each
+// run-mode evaluation of the same magusfile must free what it allocates.
+func TestRunDirRetainsNothingWhenTheMagusfileRegistersARule(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, "import \"magus\";\n"+
+		"magus\\guard.command(fun (req: magus\\CommandRequest) > magus\\GuardVerdict { return magus\\guard.allow(); });\n"+
+		"export fun build(ctx: magus\\Context, args: [str]) > void {}\n")
+	reg := workspace.NewWorkspaceRegistry()
+	defer func() { _ = reg.Close() }()
+	ctx := workspace.ContextWithRegistry(context.Background(), reg)
+	srcs, err := interp.FindAll(dir)
+	require.NoError(t, err)
+	_, err = interp.Parse(ctx, srcs[0])
+	require.NoError(t, err)
+	require.NotNil(t, reg.CommandRule(), "the parse-mode load must store the rule")
+	evaluate := func(n int) {
+		for range n {
+			_, err := interp.RunDir(ctx, dir, "build", nil)
+			require.NoError(t, err)
+		}
+	}
+	evaluate(10)
+	objects := vm.ReadHeapStats().Objects
+	evaluate(100)
+	if grew := vm.ReadHeapStats().Objects - objects; grew > 100 {
+		t.Fatalf("100 evaluations grew the Buzz heap by %d objects; a run-mode load must keep nothing", grew)
 	}
 }
 
