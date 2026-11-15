@@ -2697,8 +2697,9 @@ fun lintFiles(ctx: magus\Context, args: [str]) > void !> any {
     golangci\linkFresh();
     final failures = mut [<str>];
     // The rules judge from the symbol indexes.
-    // magus\graph().precedents() freshens them, as in conventions.
-    _ = magus\graph().precedents();
+    // magus\graph() freshens them, as in conventions.
+    // A bare magus\graph() freshens without mining precedents; the child mines its own.
+    _ = magus\graph();
     if (!magus\cmd("buzz", args: ["hack/lint/run.buzz", "--"] + files, opts: magus\CommandOptions{allowFailure = true}).ok) {
         failures.append("hack/lint/run.buzz reported findings above");
     }
