@@ -2591,7 +2591,8 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "proto/**/*.proto", "**/*.txtar"]);
     // Rules reading magus\graph() unscoped freshen every index.
     // Freshen them all under this lock: the child is refused it (MGS3007).
-    _ = magus\graph().precedents();
+    // A bare magus\graph() freshens without mining precedents; the child mines its own.
+    _ = magus\graph();
     _ = magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 
