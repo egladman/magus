@@ -66,7 +66,7 @@ func TestDirHandlerRendersComponentByFormat(t *testing.T) {
 	ctx := std.WithCurrentWorkingDirectory(context.Background(), "/ws/api")
 
 	var pretty bytes.Buffer
-	slog.New(dirHandler{cache.NewPrettyHandler(&pretty, slog.LevelInfo)}).
+	slog.New(dirHandler{cache.NewLogHandler(&pretty, "pretty", &slog.HandlerOptions{Level: slog.LevelInfo})}).
 		With(attr.ComponentKey, "knowledge").
 		WarnContext(ctx, "cannot decode symbol index", "index", "a.scip")
 	assert.Equal(t, "[warn] knowledge: cannot decode symbol index index=a.scip\n", pretty.String())

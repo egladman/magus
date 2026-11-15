@@ -1,7 +1,9 @@
 package cache
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -97,6 +99,32 @@ func (r *TargetRuns) Passed(project string) []string {
 	return out
 }
 
+// TargetFailure is one target a run reached that ended with an error.
+type TargetFailure struct {
+	Ref types.TargetRef
+	Err error
+}
+
+// Failed lists every target that completed with an error, sorted by ref.
+// A target whose error is the run's cancellation or deadline is left out.
+// A sibling's failure or a timed-out batch stopped it; it failed no check.
+func (r *TargetRuns) Failed() []TargetFailure {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []TargetFailure
+	for ref, run := range r.runs {
+		done, err := run.outcome()
+		if !done || err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			continue
+		}
+		out = append(out, TargetFailure{Ref: ref, Err: err})
+	}
+	slices.SortFunc(out, func(a, b TargetFailure) int {
+		return cmp.Or(cmp.Compare(a.Ref.Project, b.Ref.Project), cmp.Compare(a.Ref.Target, b.Ref.Target))
+	})
+	return out
+}
+
 // Complete publishes err as the run's outcome and releases every waiter. Only the first
 // call counts, so a deferred Complete after an explicit one is harmless.
 func (t *TargetRun) Complete(err error) {
@@ -117,10 +145,15 @@ func (t *TargetRun) Wait(ctx context.Context) error {
 }
 
 func (t *TargetRun) passed() bool {
+	done, err := t.outcome()
+	return done && err == nil
+}
+
+func (t *TargetRun) outcome() (done bool, err error) {
 	select {
 	case <-t.done:
-		return t.err == nil
+		return true, t.err
 	default:
-		return false
+		return false, nil
 	}
 }

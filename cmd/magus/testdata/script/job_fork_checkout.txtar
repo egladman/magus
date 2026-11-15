@@ -12,7 +12,7 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'shop'
 
-exec magus job fork scout --read-only --criteria 'read the pricing code' --checkout $WORK/scout
+exec magus job fork scout --read-only --instructions 'read the pricing code' --checkout $WORK/scout
 stdout '^checkout .*scout: made for job scout at '
 stdout 'placed no magus: the forking checkout runs magus from PATH'
 exists $WORK/scout/magusfile.buzz
@@ -23,7 +23,7 @@ stdout '^checkout .*scout: made for job scout'
 ! exec magus job exec scout
 stderr 'owns the checkout .*scout, which its fork made for it'
 
-! exec magus job fork scout --read-only --criteria 'again' --checkout $WORK/elsewhere
+! exec magus job fork scout --read-only --instructions 'again' --checkout $WORK/elsewhere
 stderr 'already owns the checkout .*scout'
 ! exists $WORK/elsewhere
 
@@ -34,7 +34,7 @@ stdout '^checkout .*scout: removed once job scout ended'
 
 # A checkout changed only in the tool rows the wired harness's install writes is magus's own
 # work: it is restored, and the checkout goes.
-exec magus job fork rows --read-only --criteria 'install the tool rows' --checkout $WORK/rows
+exec magus job fork rows --read-only --instructions 'install the tool rows' --checkout $WORK/rows
 cp $WORK/runs-rewritten $WORK/rows/host/tools/runs
 cp $WORK/runs-rewritten $WORK/rows/host/tools/models
 exec magus job exit rows
@@ -42,7 +42,7 @@ stdout '^checkout .*rows: removed once job rows ended'
 ! exists $WORK/rows
 
 # Any other change beside them keeps it, and the rows are still restored.
-exec magus job fork held-rows --read-only --criteria 'install the tool rows and edit a note' --checkout $WORK/held
+exec magus job fork held-rows --read-only --instructions 'install the tool rows and edit a note' --checkout $WORK/held
 cp $WORK/runs-rewritten $WORK/held/host/tools/runs
 cp $WORK/runs-rewritten $WORK/held/notes.md
 exec magus job exit held-rows
@@ -54,13 +54,13 @@ grep 'Shell' $WORK/held/host/tools/runs
 exec git switch -q -c side
 exec git commit -q --allow-empty -m 'side'
 exec git switch -q main
-exec magus job fork sibling --read-only --criteria 'read the pricing code' --checkpoint side --checkout $WORK/sibling
+exec magus job fork sibling --read-only --instructions 'read the pricing code' --checkpoint side --checkout $WORK/sibling
 stdout '^checkout .*sibling: made for job sibling at '
 exists $WORK/sibling/magusfile.buzz
 
 # A checkpoint this checkout cannot place (MGS3041) is refused, and --fix does not move it
 # (job_fork_fix_checkpoint.txtar).
-! exec magus job fork moved --read-only --criteria 'read the pricing code' --checkpoint 0123456789abcdef0123456789abcdef01234567 --checkout $WORK/moved
+! exec magus job fork moved --read-only --instructions 'read the pricing code' --checkpoint 0123456789abcdef0123456789abcdef01234567 --checkout $WORK/moved
 stderr '\[MGS3041\] checkpoint: checkpoint "0123456789abcdef0123456789abcdef01234567" names no revision this repository holds'
 ! exists $WORK/moved
 
@@ -96,7 +96,7 @@ export fun mgs_getSkills() > HarnessSkills {
 }
 
 export fun mgs_listTools() > HarnessTools {
-    return HarnessTools{dir = "host/tools", rows = [HarnessTool{name = "Shell", capability = ToolCapability.runs}]};
+    return HarnessTools{dir = "host/tools", tools = [HarnessTool{name = "Shell", capability = ToolCapability.runs}]};
 }
 -- shop/magusfile.buzz --
 import "magus";

@@ -46,6 +46,7 @@ var ContractFuncs = []ContractFunc{
 	{Name: "mgs_getSymbolIndexer", Field: "SymbolIndexer", Returns: "SymbolIndexer", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractSymbolIndexer(v) }},
 	{Name: "mgs_getCoverage", Field: "Coverage", Returns: "Coverage", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractCoverage(v) }},
 	{Name: "mgs_getSandbox", Field: "Sandbox", Returns: "Sandbox", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractSandbox(v) }},
+	{Name: "mgs_getScopes", Field: "Scopes", Returns: "Command", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractScopes(v) }},
 	{Name: "mgs_isOpaque", Field: "Opaque", Returns: "bool", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractOpaque(v) }},
 	{Name: "mgs_getModeArgs", Field: "ModeArgs", Returns: "{str: [str]}", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractModeArgs(v) }},
 	{Name: "mgs_listTargets", Field: "Targets", Returns: "{str: fun(Target) Command}", Required: false, Handler: true, Decode: func(v vm.Value) (any, error) { return decodeContractTargets(v) }},
@@ -63,7 +64,7 @@ var HarnessFuncs = []ContractFunc{
 	{Name: "mgs_getMcp", Field: "MCP", Returns: "McpServer", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncMCP(v) }},
 	{Name: "mgs_listTools", Field: "Tools", Returns: "HarnessTools", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncTools(v) }},
 	{Name: "mgs_getLimits", Field: "Limits", Returns: "Limits", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncLimits(v) }},
-	{Name: "mgs_listModels", Field: "Models", Returns: "[ModelRow]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncModels(v) }},
+	{Name: "mgs_listModels", Field: "Models", Returns: "[HarnessModel]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncModels(v) }},
 	{Name: "mgs_listSettings", Field: "Settings", Returns: "[Setting]", Params: "", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncSettings(v) }},
 	{Name: "mgs_renderAgents", Field: "RenderAgents", Returns: "[AgentFile]", Params: "agents: [ShippedAgent]", Required: false, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncRenderAgents(v) }},
 	{Name: "mgs_renderPrompts", Field: "RenderPrompts", Returns: "[Prompt]", Params: "humanOnly: {str: str}", Required: true, Decode: func(v vm.Value) (any, error) { return decodeHarnessFuncRenderPrompts(v) }},
@@ -258,6 +259,20 @@ func decodeContractSandbox(v vm.Value) (*spells.Sandbox, error) {
 	return out, nil
 }
 
+func decodeContractScopes(v vm.Value) (*spells.Command, error) {
+	var out *spells.Command
+	if !v.IsNull() {
+		var optScopes spells.Command
+		xScopes, err := decodeCommand(v, "mgs_getScopes")
+		if err != nil {
+			return out, err
+		}
+		optScopes = xScopes
+		out = &optScopes
+	}
+	return out, nil
+}
+
 func decodeContractOpaque(v vm.Value) (bool, error) {
 	var out bool
 	bOpaque, err := decodeBool(v, "mgs_isOpaque")
@@ -447,16 +462,16 @@ func decodeHarnessFuncLimits(v vm.Value) (types.Limits, error) {
 	return out, nil
 }
 
-func decodeHarnessFuncModels(v vm.Value) ([]types.ModelRow, error) {
-	var out []types.ModelRow
-	listModels, err := decodeList(v, "mgs_listModels", "[ModelRow]")
+func decodeHarnessFuncModels(v vm.Value) ([]types.HarnessModel, error) {
+	var out []types.HarnessModel
+	listModels, err := decodeList(v, "mgs_listModels", "[HarnessModel]")
 	if err != nil {
 		return out, err
 	}
 	if len(listModels) > 0 {
-		itemsModels := make([]types.ModelRow, len(listModels))
+		itemsModels := make([]types.HarnessModel, len(listModels))
 		for indexModels, itemModels := range listModels {
-			xModelsItem, err := decodeModelRow(itemModels, fmt.Sprintf("%s[%d]", "mgs_listModels", indexModels))
+			xModelsItem, err := decodeHarnessModel(itemModels, fmt.Sprintf("%s[%d]", "mgs_listModels", indexModels))
 			if err != nil {
 				return out, err
 			}

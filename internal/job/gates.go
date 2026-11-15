@@ -95,7 +95,7 @@ func UnrunGates(root string, row types.Job, projects []*types.Project, regenerat
 // unrunGates is [UnrunGates] graded by grade. The second result names each
 // gate an ancestor kept because its owner's targets could not be listed.
 func unrunGates(root string, row types.Job, projects []*types.Project, regenerated []RegeneratedOutput, grade gradeFunc) ([]UnrunGate, []string) {
-	if row.ReadOnly || len(row.WritePaths) == 0 {
+	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil, nil
 	}
 	byPath := map[string]*types.Project{}

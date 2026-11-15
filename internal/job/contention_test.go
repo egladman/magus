@@ -23,7 +23,7 @@ func TestUnusedWritePaths(t *testing.T) {
 	s := NewStore(tempLocation(t, root))
 
 	holder := func(paths ...string) types.Job {
-		return types.Job{ID: "A", State: types.StateRunning, WritePaths: paths, Checkpoint: rev, CheckoutRoot: holderRepo.Root()}
+		return types.Job{ID: "A", State: types.StateRunning, Paths: types.JobPaths{Write: paths}, Checkpoint: rev, CheckoutRoot: holderRepo.Root()}
 	}
 
 	t.Run("the paths and claims no changed line falls under", func(t *testing.T) {

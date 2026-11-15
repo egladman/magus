@@ -14,13 +14,14 @@ import (
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // outcomeStore is a Store whose workspace names its own history file, so a test reads back
 // exactly what the store recorded.
-func outcomeStore(t *testing.T, set *types.ModelTierSet, matrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error), dryRun bool) (*Store, string) {
+func outcomeStore(t *testing.T, set *agent.ModelTierSet, matrix func(context.Context, types.ModelTierRequest) (*agent.JobModelTier, error), dryRun bool) (*Store, string) {
 	t.Helper()
 	root := execRepository(t).Root()
 	history := filepath.Join(t.TempDir(), "history.json")
@@ -47,40 +48,41 @@ func TestNewJobOutcomeReadsTheEndedRow(t *testing.T) {
 	t.Parallel()
 
 	row := lease("a")
-	row.Model = "sonnet"
+	row.Agent.Model = agent.Model{ID: "sonnet"}
 	row.State = types.StateFail
 	row.Created = 100
 	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
-	row.WritePaths = []string{"pkg/a.go#func A", "pkg/a.go#func B", "pkg/b.go"}
+	row.Paths.Write = []string{"pkg/a.go#func A", "pkg/a.go#func B", "pkg/b.go"}
 	row.Attempt = &types.JobAttempt{}
 	row.GateAttempts = []types.JobGateAttempt{{}, {}}
 	row.ReworkRounds, row.Widenings = 2, 1
-	row.ModelTier = &types.JobModelTier{
-		Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Source: types.ModelTierSourceMatrix,
+	row.ModelTier = &agent.JobModelTier{
+		Name: "routine", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix,
 		Reason: "small checked job", Site: "magusfile.buzz:20", Model: "haiku",
 	}
 
-	got := newJobOutcome(row, 160_000)
+	got := newJobOutcome(row, nil, 160_000)
 
 	assert.Equal(t, types.JobOutcome{
-		Job: "a", ModelTier: "economy", Kind: types.JobKindCheck, Skills: types.SkillVariantFull,
-		Model: "haiku", Source: types.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20",
+		Job: "a", ModelTier: "routine", Kind: types.JobKindCheck, Skills: agent.SkillVariantFull,
+		Model: "haiku", Source: agent.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20",
 		WriteFiles: 2, State: types.StateFail, ChecksRun: 3, DurationMs: 60_000, Ended: 160_000,
 		ReworkRounds: 2, Widenings: 1, Attempt: 1,
 	}, got)
 }
 
-// The ending's attempt number and its classification ride the outcome, from the row alone.
+// The ending's attempt number and its classification ride the outcome,
+// from the row and its tries.
 func TestNewJobOutcomeNumbersTheAttemptAndClassifiesIt(t *testing.T) {
 	t.Parallel()
 
 	row := lease("a")
 	row.State = types.StateFail
-	row.Attempts = 2
-	row.Prior = []types.PriorAttempt{{N: 1, State: types.StateFail, Unmet: []types.VerificationStatus{{ID: "check"}}}}
 	row.Rejection = &types.JobRejection{Unmet: []types.VerificationStatus{{ID: "check"}}}
+	tries := types.NewJobAttempts([]types.Attempt{{Job: "a", N: 1, Status: types.AttemptStatus{
+		State: types.StateFail, Unmet: []types.VerificationStatus{{ID: "check"}}}}})
 
-	got := newJobOutcome(row, 5_000)
+	got := newJobOutcome(row, tries, 5_000)
 
 	want := got
 	want.Attempt = 2
@@ -94,10 +96,10 @@ func TestNewJobOutcomeOfARowWithNoTierNamesNone(t *testing.T) {
 	row := lease("a")
 	row.State = types.StatePass
 
-	got := newJobOutcome(row, 5)
+	got := newJobOutcome(row, nil, 5)
 
 	assert.Empty(t, got.ModelTier)
-	assert.Equal(t, "standard", got.Model, "the model the row named")
+	assert.Equal(t, "bounded", got.Model, "the model the row named")
 	assert.Zero(t, got.DurationMs, "a row with no creation time has no duration")
 }
 
@@ -108,20 +110,20 @@ func outcome(job, tier string, kind types.JobKind, state types.JobState) types.J
 func TestModelTierRecordsFoldsEachTierAndKind(t *testing.T) {
 	t.Parallel()
 
-	economyPass := func(job string) types.JobOutcome {
-		o := outcome(job, "economy", types.JobKindCheck, types.StatePass)
+	routinePass := func(job string) types.JobOutcome {
+		o := outcome(job, "routine", types.JobKindCheck, types.StatePass)
 		o.ChecksRun, o.CostUSD, o.Tokens = 2, new(0.5), new(int64(100))
 		return o
 	}
-	failed := outcome("a", "economy", types.JobKindCheck, types.StateFail)
+	failed := outcome("a", "routine", types.JobKindCheck, types.StateFail)
 	failed.ChecksRun, failed.CostUSD, failed.Tokens, failed.ReworkRounds, failed.Widenings = 4, new(1.5), new(int64(300)), 3, 1
 	outcomes := []types.JobOutcome{
-		economyPass("a"), failed, economyPass("b"),
-		outcome("c", "economy", types.JobKindProse, types.StateNoReturn),
-		outcome("d", "principal", types.JobKindCheck, types.StatePass),
+		routinePass("a"), failed, routinePass("b"),
+		outcome("c", "routine", types.JobKindProse, types.StateNoReturn),
+		outcome("d", "design", types.JobKindCheck, types.StatePass),
 		outcome("e", "retired", types.JobKindCheck, types.StatePass),
 		outcome("f", "", types.JobKindCheck, types.StatePass),
-		outcome("g", "economy", types.JobKindCheck, types.StateRunning),
+		outcome("g", "routine", types.JobKindCheck, types.StateRunning),
 	}
 
 	got := ModelTierRecords(outcomes, tierSet(t))
@@ -135,7 +137,7 @@ func TestModelTierRecordsFoldsEachTierAndKind(t *testing.T) {
 	assert.InDelta(t, volatility.WilsonLower(1, 1), got[3].FirstPassLower, 1e-12)
 	got[0].PassLower, got[3].PassLower, got[0].FirstPassLower, got[3].FirstPassLower = 0, 0, 0, 0
 	assert.Equal(t, types.ModelTierRecord{
-		Rank: 0, ModelTier: "economy", Kind: types.JobKindCheck,
+		Rank: 0, ModelTier: "routine", Kind: types.JobKindCheck,
 		Jobs: 3, Pass: 2, Fail: 1,
 		ChecksPerJob: 8.0 / 3, ForksPerID: 3.0 / 2, ReworkPerJob: 1, WideningsPerJob: 1.0 / 3,
 		MeanCostUSD: new(2.5 / 3), MedianTokens: new(int64(100)), FirstAttempts: 3, FirstPass: 2,
@@ -143,10 +145,10 @@ func TestModelTierRecordsFoldsEachTierAndKind(t *testing.T) {
 	assert.Nil(t, got[2].MeanCostUSD, "no outcome carries a cost, so it is unknown and not 0")
 	assert.Nil(t, got[2].MedianTokens)
 	wantProse := got[1]
-	wantProse.ModelTier, wantProse.Kind, wantProse.NoReturn = "economy", types.JobKindProse, 1
+	wantProse.ModelTier, wantProse.Kind, wantProse.NoReturn = "routine", types.JobKindProse, 1
 	assert.Equal(t, wantProse, got[1])
 	assert.Zero(t, got[1].PassLower)
-	assert.Equal(t, 2, got[2].Rank, "principal ranks after economy")
+	assert.Equal(t, 2, got[2].Rank, "design ranks after routine")
 	assert.Equal(t, types.ModelTierRecord{Rank: -1, ModelTier: "retired", Kind: types.JobKindCheck, Jobs: 1, Pass: 1, ChecksPerJob: 0, ForksPerID: 1,
 		FirstAttempts: 1, FirstPass: 1}, got[3],
 		"a tier the declaration dropped keeps its record, last, at rank -1")
@@ -159,7 +161,7 @@ func TestModelTierRecordsCountsFirstAttemptsAndNotRetryableEndings(t *testing.T)
 	t.Parallel()
 
 	attempt := func(job string, n int, state types.JobState, retry types.RetryChange) types.JobOutcome {
-		o := outcome(job, "economy", types.JobKindCheck, state)
+		o := outcome(job, "routine", types.JobKindCheck, state)
 		o.Attempt, o.Retry = n, retry
 		return o
 	}
@@ -181,7 +183,7 @@ func TestModelTierRecordsCountsFirstAttemptsAndNotRetryableEndings(t *testing.T)
 func TestModelTierRecordsWithoutADeclarationRanksEveryTierMinusOne(t *testing.T) {
 	t.Parallel()
 
-	got := ModelTierRecords([]types.JobOutcome{outcome("a", "economy", types.JobKindCheck, types.StatePass)}, nil)
+	got := ModelTierRecords([]types.JobOutcome{outcome("a", "routine", types.JobKindCheck, types.StatePass)}, nil)
 
 	require.Len(t, got, 1)
 	assert.Equal(t, -1, got[0].Rank)
@@ -193,7 +195,7 @@ func TestModelTierRecordsMedianOfAnEvenCountIsTheMiddlePairsMean(t *testing.T) {
 
 	var outcomes []types.JobOutcome
 	for i, tokens := range []int64{400, 100, 300, 200} {
-		o := outcome("job"+strconv.Itoa(i), "economy", types.JobKindCheck, types.StatePass)
+		o := outcome("job"+strconv.Itoa(i), "routine", types.JobKindCheck, types.StatePass)
 		o.Tokens = &tokens
 		outcomes = append(outcomes, o)
 	}
@@ -206,9 +208,9 @@ func TestModelTierRecordsMedianOfAnEvenCountIsTheMiddlePairsMean(t *testing.T) {
 func TestModelTierRecordsFigureSomeOutcomesLackIsUnknown(t *testing.T) {
 	t.Parallel()
 
-	known := outcome("a", "economy", types.JobKindCheck, types.StatePass)
+	known := outcome("a", "routine", types.JobKindCheck, types.StatePass)
 	known.CostUSD, known.Tokens = new(1.0), new(int64(100))
-	got := ModelTierRecords([]types.JobOutcome{known, outcome("b", "economy", types.JobKindCheck, types.StatePass)}, tierSet(t))
+	got := ModelTierRecords([]types.JobOutcome{known, outcome("b", "routine", types.JobKindCheck, types.StatePass)}, tierSet(t))
 
 	require.Len(t, got, 1)
 	assert.Nil(t, got[0].MeanCostUSD)
@@ -220,7 +222,7 @@ func TestStoreRecordsAnOutcomeWhenARowEnds(t *testing.T) {
 
 	s, history := outcomeStore(t, tierSet(t), nil, false)
 	row := lease("a")
-	row.Model = ""
+	row.Agent.Model = agent.Model{}
 	running := endWith(t, s, row, types.StateRunning)
 	require.Empty(t, recordedJobs(t, history), "a row that is still taken has no outcome")
 
@@ -229,12 +231,12 @@ func TestStoreRecordsAnOutcomeWhenARowEnds(t *testing.T) {
 
 	jobs := recordedJobs(t, history)
 	require.Len(t, jobs, 1)
-	wantJob := newJobOutcome(ended, jobs[0].Ended)
-	wantJob.ModelTier, wantJob.State = "standard", types.StateFail
+	wantJob := newJobOutcome(ended, nil, jobs[0].Ended)
+	wantJob.ModelTier, wantJob.State = "bounded", types.StateFail
 	assert.Equal(t, wantJob, jobs[0])
 	assert.Positive(t, jobs[0].Ended)
 
-	row.Criteria = "reworded after it failed"
+	row.Agent = agent.Instructed("reworded after it failed")
 	endWith(t, s, row, types.StateFail)
 	assert.Len(t, recordedJobs(t, history), 1, "a row that was already over records nothing again")
 }
@@ -244,7 +246,7 @@ func TestStoreRecordsNothingForADryRunOrAnUntieredRow(t *testing.T) {
 
 	dry, dryHistory := outcomeStore(t, tierSet(t), nil, true)
 	row := lease("a")
-	row.Model = ""
+	row.Agent.Model = agent.Model{}
 	endWith(t, dry, endWith(t, dry, row, types.StateRunning), types.StatePass)
 	assert.NoFileExists(t, dryHistory, "a dry run writes no history")
 
@@ -258,7 +260,7 @@ func TestStoreRefusesToEndARowWhoseConfigDoesNotRead(t *testing.T) {
 
 	s, _ := outcomeStore(t, tierSet(t), nil, false)
 	row := lease("a")
-	row.Model = ""
+	row.Agent.Model = agent.Model{}
 	running := endWith(t, s, row, types.StateRunning)
 	require.NoError(t, os.WriteFile(filepath.Join(s.root, config.Filename), []byte("history_path: [not, a, path]\n"), 0o644))
 
@@ -275,20 +277,20 @@ func TestStoreRefusesToEndARowWhoseConfigDoesNotRead(t *testing.T) {
 func TestStoreFeedsRecordedOutcomesToTheMatrix(t *testing.T) {
 	t.Parallel()
 
-	matrix := countingMatrix{answer: economyAnswer()}
+	matrix := countingMatrix{answer: routineAnswer()}
 	s, _ := outcomeStore(t, tierSet(t), matrix.choose, false)
 	first := lease("a")
-	first.Model = ""
+	first.Agent.Model = agent.Model{}
 	endWith(t, s, endWith(t, s, first, types.StateRunning), types.StatePass)
 	require.Empty(t, matrix.seen.History, "the first fork has no history to read")
 
 	second := lease("b")
-	second.Model = ""
+	second.Agent.Model = agent.Model{}
 	seed(t, s, second)
 
 	require.Len(t, matrix.seen.History, 1)
 	wantHistory := matrix.seen.History[0]
-	wantHistory.ModelTier, wantHistory.Pass = "economy", 1
+	wantHistory.ModelTier, wantHistory.Pass = "routine", 1
 	assert.Equal(t, wantHistory, matrix.seen.History[0])
 }
 
@@ -299,7 +301,7 @@ func TestStoreCountsAWideningOnlyForATakenRowThatGainsWritePaths(t *testing.T) {
 	row := lease("a")
 
 	declared := seed(t, s, row)
-	row.WritePaths = []string{"internal/a", "internal/more"}
+	row.Paths.Write = []string{"internal/a", "internal/more"}
 	row.State = types.StateDeclared
 	stillDeclared := seed(t, s, row)
 	assert.Zero(t, declared.Widenings)
@@ -309,11 +311,11 @@ func TestStoreCountsAWideningOnlyForATakenRowThatGainsWritePaths(t *testing.T) {
 	taken := seed(t, s, row)
 	assert.Zero(t, taken.Widenings, "taking a row adds no path")
 
-	row.WritePaths = []string{"internal/a", "internal/more", "internal/other"}
+	row.Paths.Write = []string{"internal/a", "internal/more", "internal/other"}
 	widened := seed(t, s, row)
 	assert.Equal(t, 1, widened.Widenings)
 
-	row.WritePaths = []string{"internal/a"}
+	row.Paths.Write = []string{"internal/a"}
 	narrowed := seed(t, s, row)
 	assert.Equal(t, 1, narrowed.Widenings, "giving a path up is not a widening")
 
@@ -322,7 +324,7 @@ func TestStoreCountsAWideningOnlyForATakenRowThatGainsWritePaths(t *testing.T) {
 	assert.Equal(t, 1, forged.Widenings, "a caller cannot set the counter")
 
 	row.State = types.StateExited
-	row.WritePaths = []string{"internal/a", "internal/late"}
+	row.Paths.Write = []string{"internal/a", "internal/late"}
 	exited := seed(t, s, row)
 	assert.Equal(t, 2, exited.Widenings, "an exited row has been taken too")
 }
@@ -358,7 +360,7 @@ func staleTieredRow(s *Store, now int64) types.Job {
 	s.landed = func(context.Context, types.Job) string { return "" }
 	return types.Job{
 		ID: "idle", State: types.StateDeclared, Updated: now - int64((3 * time.Hour).Seconds()),
-		ModelTier: &types.JobModelTier{Name: "economy", Source: types.ModelTierSourceMatrix, Site: "magusfile.buzz:40"},
+		ModelTier: &agent.JobModelTier{Name: "routine", Source: agent.ModelTierSourceMatrix, Site: "magusfile.buzz:40"},
 	}
 }
 
@@ -428,10 +430,10 @@ func TestStoreRecordsTheParentAttemptProjectsAndWork(t *testing.T) {
 	s, history := outcomeStore(t, tierSet(t), nil, false)
 	s.owners = func(context.Context, []string) ([]string, error) { return []string{"internal/job", "types"}, nil }
 	parent := lease("root")
-	parent.Model = ""
+	parent.Agent.Model = agent.Model{}
 	seed(t, s, parent)
 	child := lease("w")
-	child.Model, child.Parent = "", "root"
+	child.Agent.Model, child.Parent = agent.Model{}, "root"
 	running := endWith(t, s, child, types.StateRunning)
 	call(t, s.cacheDir, "w", "file.read", 10_000, "pass")
 	call(t, s.cacheDir, "w", "file.write", 30_000, "pass")
@@ -460,7 +462,7 @@ func TestStoreRecordsNoWorkForAHolderWithNoObservedCall(t *testing.T) {
 
 	s, history := outcomeStore(t, tierSet(t), nil, false)
 	row := lease("a")
-	row.Model = ""
+	row.Agent.Model = agent.Model{}
 	endWith(t, s, endWith(t, s, row, types.StateRunning), types.StatePass)
 
 	jobs := recordedJobs(t, history)

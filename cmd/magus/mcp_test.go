@@ -57,7 +57,7 @@ func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 	stdout := os.Stdout
 	var notices strings.Builder
 	prevLog := slog.Default()
-	slog.SetDefault(slog.New(cache.NewPrettyHandler(&notices, slog.LevelInfo)))
+	slog.SetDefault(slog.New(cache.NewLogHandler(&notices, "pretty", &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() { slog.SetDefault(prevLog) })
 	logged := testkit.CaptureStderr(t, func() {
 		inR, inW := io.Pipe()

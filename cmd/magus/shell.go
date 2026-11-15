@@ -27,12 +27,12 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline/exit"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // magus shell is the guard with one door.
@@ -67,7 +67,9 @@ func shellUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "A person passes the command as one quoted argument; a host pipes it on")
 	fmt.Fprintln(w, "stdin, as plain text or as the JSON envelope it already writes. Same")
-	fmt.Fprintln(w, "command, same verdict, same exit codes.")
+	fmt.Fprintln(w, "command, same verdict, same exit codes. A program that is not a host")
+	fmt.Fprintln(w, "pipes a step record ({\"api_version\": \"magus.step/v1alpha1\", \"kind\": ...});")
+	fmt.Fprintln(w, "a step of kind tool is judged as the envelope it stands for.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  magus shell 'go test ./...'")
@@ -286,7 +288,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 				Decision:   "deny",
 				Reason: fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared.\nNext: %s",
 					refusal.err.Error(), refusal.next.Run),
-				Next: []types.NextStep{refusal.next},
+				NextSteps: []types.NextStep{refusal.next},
 			}
 			if err := writeGuardVerdict(out, opts, verdict); err != nil {
 				return err
@@ -311,12 +313,14 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		// The hook ignores --root and loads no workspace up front: the one it judges in is
 		// wherever the host runs it, or a checkout whose own ./magus was passed over and whose
 		// tree this binary cannot load, so its stale-binary rule refuses what changes state.
-		deps := guardDependencies(ctx, judgeRoot)
 		if judgeRoot != "" {
-			if cache, err := deps.CacheDir(judgeRoot); err == nil {
+			if cache, err := guardCacheDir(judgeRoot)(judgeRoot); err == nil {
 				ctx = guard.WithLocation(ctx, cache, judgeRoot, judgeRoot)
 			}
 		}
+		// A leased call is judged by its row's checkout and authority, so
+		// the lease resolves before the policy loads.
+		deps, _ := loadGuardDependenciesAt(ctx, judgeRoot, guard.ResolveAuthority(ctx, base, req))
 		stopJudge := traceFromContext(ctx).phase("guard.judge")
 		defer stopJudge()
 		return guard.Judge(ctx, deps, req)
@@ -407,12 +411,27 @@ func checkoutJudgeDeps(ctx context.Context, deps guard.Dependencies, root, binar
 // loadGuardDependencies is guardDependencies that also returns the rules it loaded, nil
 // when none loaded, for a caller that must know which files they came from.
 func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Dependencies, *guard.WorkspaceRules) {
+	return loadGuardDependenciesAt(ctx, rootOverride, guard.CallAuthority{})
+}
+
+// loadGuardDependenciesAt is loadGuardDependencies for a call whose authority
+// resolved: its policy loads from the row's checkout at the row's revision.
+func loadGuardDependenciesAt(ctx context.Context, rootOverride string, authority guard.CallAuthority) (guard.Dependencies, *guard.WorkspaceRules) {
 	if failure, ok := ctx.Value(staleConfigKey{}).(error); ok {
 		return staleConfigDependencies(ctx, rootOverride, failure), nil
 	}
 	root, err := guardRoot(rootOverride)
 	if err != nil {
 		root = ""
+	}
+	policyRoot := root
+	if authority.Checkout != "" {
+		leased, err := guardRoot(authority.Checkout)
+		if err != nil {
+			slog.WarnContext(ctx, "the lease's checkout holds no workspace, so its call is judged by this checkout's policy",
+				attr.Error(err), attr.Component("magus shell"))
+		}
+		policyRoot = cmp.Or(leased, root)
 	}
 	inspect := func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 		if root == "" {
@@ -424,7 +443,8 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	// An unresolvable path leaves the trail row without one; the version still records.
 	binary, _ := runningBinaryPath()
 	deps, rules := guard.NewDependencies(ctx, guard.Wiring{
-		Root:                 root,
+		Root:                 policyRoot,
+		Authority:            authority.Revision,
 		Config:               globalCfg,
 		BinaryVersion:        version,
 		Binary:               binary,
@@ -476,7 +496,7 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 		facts, err := tools.Models()
 		if err == nil {
 			deps.ModelRows = func() []types.ModelPricing { return facts.Rows }
-			deps.ModelTiers = func() *types.ModelTierSet { return facts.Tiers }
+			deps.ModelTiers = func() *typesagent.ModelTierSet { return facts.Tiers }
 			return deps, rules
 		}
 		slog.WarnContext(ctx, "the guard loads the whole workspace for its model rows and tiers, which can miss the hook's deadline",
@@ -578,7 +598,7 @@ func guardModelRows(ctx context.Context, rootOverride string) func() []types.Mod
 // It opens the workspace whole, as guardModelRows does.
 // The guard's rule load keeps only magus\guard registrations.
 // So it holds no magus\modelTiers call and no harness aliases.
-func guardModelTiers(ctx context.Context, rootOverride string) func() *types.ModelTierSet {
+func guardModelTiers(ctx context.Context, rootOverride string) func() *typesagent.ModelTierSet {
 	if _, err := workspace.FindRoot(rootOverride); err != nil {
 		return nil
 	}
@@ -589,10 +609,10 @@ func guardModelTiers(ctx context.Context, rootOverride string) func() *types.Mod
 
 // workspaceModelTiers is the lazy reader of the model tiers the workspace inspect opens
 // declares. A workspace that does not load or declares no tiers yields nil.
-func workspaceModelTiers(ctx context.Context, inspect func(context.Context) (types.WorkspaceRepository, error)) func() *types.ModelTierSet {
-	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) *types.ModelTierSet {
+func workspaceModelTiers(ctx context.Context, inspect func(context.Context) (types.WorkspaceRepository, error)) func() *typesagent.ModelTierSet {
+	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) *typesagent.ModelTierSet {
 		tiered, ok := ws.(interface {
-			ModelTiers(ctx context.Context) *types.ModelTierSet
+			ModelTiers(ctx context.Context) *typesagent.ModelTierSet
 		})
 		if !ok {
 			return nil
@@ -1039,24 +1059,19 @@ func binaryCheckout(bin string) string {
 	return dir
 }
 
-// foreignCheckout says why root is not a checkout of the session's
-// repository, or "" when it is. A magus.yaml dir inside a checkout is not
-// a checkout root. A VCS that lists no other checkouts trusts only its own.
-func foreignCheckout(root, session string) string {
-	here, others, err := vcs.Checkouts(session)
+// unpinnedBinary says why the session's job store does not pin own, "" when a
+// live row records own and its hash (ADR 0045 section 4). The read skips the
+// sweep's writes.
+func unpinnedBinary(ctx context.Context, own, session string) string {
+	store, err := openJobs(ctx, session, jobOpen{DryRun: true})
 	if err != nil {
-		return fmt.Sprintf("the checkouts of the session's repository at %s could not be listed: %v", session, err)
+		return fmt.Sprintf("the job store of %s, which pins every binary this hands a call to, did not open: %v", session, err)
 	}
-	if here == "" {
-		return fmt.Sprintf("the session's directory %s is in no checkout, so no checkout's binary is trusted", session)
+	why, err := store.PinRefusal(own)
+	if err != nil {
+		return fmt.Sprintf("whether a job row pins it cannot be read: %v", err)
 	}
-	want := realPath(root)
-	for _, c := range append([]string{here}, others...) {
-		if realPath(c) == want {
-			return ""
-		}
-	}
-	return fmt.Sprintf("%s is not a checkout of the session's repository at %s, so its binary is not trusted to judge", root, here)
+	return why
 }
 
 // realPath is p with symlinks resolved, or p cleaned when they cannot be.
@@ -1100,7 +1115,7 @@ func checkoutBinary(dir, running string) string {
 }
 
 // delegateToCheckout hands a hook call to the ./magus of the checkout
-// it lands in, when that is a checkout of the session's own repository.
+// it lands in, when a live row of the session's job store pins it.
 // A ./magus behind HEAD judges too, and its own stale-binary
 // rules name the bootstrap. On handled false this binary judges, and declined
 // says why.
@@ -1127,9 +1142,9 @@ func delegateToCheckout(ctx context.Context, input string, opts output.Options, 
 	if session == "" {
 		return false, decline("", "this binary is no checkout's own ./magus, so it trusts no checkout's binary"), nil
 	}
-	// A foreign root's rules are not loaded either: this binary judges the
+	// An unpinned root's rules are not loaded either: this binary judges the
 	// call as it would one into a tree with no ./magus.
-	if why := foreignCheckout(filepath.Dir(own), session); why != "" {
+	if why := unpinnedBinary(ctx, own, session); why != "" {
 		return false, decline("", why), nil
 	}
 	// The sentinel keeps the delegate from re-execing into the ./magus of this process's

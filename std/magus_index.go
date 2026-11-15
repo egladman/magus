@@ -5,6 +5,7 @@ package std
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
@@ -13,9 +14,8 @@ import (
 // symbolIndexWorkspace is the part of *magus.Magus magus\graph reads,
 // recovered by assertion because std cannot import root magus.
 type symbolIndexWorkspace interface {
+	knowledgeGraphs
 	FreshenSymbolIndexes(ctx context.Context, languages []string) error
-	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
-	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 	CacheDir() string
 }
 
@@ -25,7 +25,30 @@ type symbolIndexWorkspace interface {
 // workflow-specific graph-build step. It raises when the gap probe cannot run, since the
 // digest would then claim completeness.
 // languages limits the freshen to those indexes; empty freshens all.
+// One evaluation computes the digest once per languages list, so every
+// graph read sees the index as the evaluation began, as EvalMemo promises.
+//
+// optimization: one freshen and digest per languages list.
+//
+//	measured: BenchmarkGraphHandleReads -96.25% (benchstat, n=10).
+//	trade-off: an evaluation never sees an index move it caused.
+//	assumes: heldGraph compares digests within one evaluation.
 func MagusSymbolIndexDigest(ctx context.Context, languages []string) (types.SymbolIndexDigest, error) {
+	memo := types.EvalMemoFromContext(ctx)
+	if memo == nil {
+		return symbolIndexDigest(ctx, languages)
+	}
+	v, err := memo.Do("symbol-index-digest:"+strings.Join(languages, ","), func() (any, error) {
+		return symbolIndexDigest(ctx, languages)
+	})
+	if err != nil {
+		return types.SymbolIndexDigest{}, err
+	}
+	d, _ := v.(types.SymbolIndexDigest)
+	return d, nil
+}
+
+func symbolIndexDigest(ctx context.Context, languages []string) (types.SymbolIndexDigest, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return types.SymbolIndexDigest{}, errorNoWorkspace("graph")
@@ -37,7 +60,10 @@ func MagusSymbolIndexDigest(ctx context.Context, languages []string) (types.Symb
 	if err := w.FreshenSymbolIndexes(ctx, languages); err != nil {
 		return types.SymbolIndexDigest{}, err
 	}
-	if _, err := w.KnowledgeGraph(ctx, types.GraphRequest{}); err != nil {
+	// The build writes the shards the digest reads. It runs on a fresh
+	// memo, since a graph this evaluation built before the freshen
+	// predates the shards the freshen moved.
+	if _, err := w.KnowledgeGraph(types.WithEvalMemo(ctx), types.GraphRequest{}); err != nil {
 		return types.SymbolIndexDigest{}, err
 	}
 	d, err := knowledge.NewStore(w.CacheDir(), true, 0, nil, nil).SymbolIndexDigest()

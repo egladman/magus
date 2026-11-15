@@ -13,7 +13,7 @@ var magusObjects = []Object{
 				Name: "jobs",
 				Doc: "Every row of the job store as one typed report: {jobs, overlaps}. jobs are in the order " +
 					"they were declared; overlaps are derived on this read - every pair of live (non-terminal) " +
-					"jobs whose declared write_paths intersect, the derivation the console's JobService.ListJobs " +
+					"jobs whose declared paths.write intersect, the derivation the console's JobService.ListJobs " +
 					"uses too. Read straight off the workspace already open on the context - no subprocess. " +
 					"Inside a magus\\guard.spawn, command, write or stop rule it answers from the rows the guard " +
 					"read for that call, and every other job member raises there: the store is read-only to a rule.",
@@ -24,7 +24,7 @@ var magusObjects = []Object{
 			{
 				Name: "putJob",
 				Doc: "Record or advance one row, merging only the fields opts names: parent, criteria, checkpoint, " +
-					"write_paths, deny_paths, read_paths, depends_on, model, check (`<target> <project> [-- args]`), " +
+					"paths (an object of write, deny and read), depends_on, model, check (`<target> <project> [-- args]`), " +
 					"state (declared, running, exited, pass, fail, no_return), read_only, max_attempts. A key opts " +
 					"omits is left untouched, so a later put advances a row without erasing what an earlier put " +
 					"declared; a key present with an empty value is an explicit clear. id is the row's identity to " +
@@ -32,7 +32,7 @@ var magusObjects = []Object{
 					"cannot be set here. A put is validated whole before anything is stored, and raises every " +
 					"problem at once (MGS3037 through MGS3046), each with its field and the fix. The record's " +
 					"schema is what `magus job fork --schema` prints. A put that CREATES a row raises when its " +
-					"write_paths cover a file the workspace has to load while another live job with write paths is " +
+					"paths.write cover a file the workspace has to load while another live job with write paths is " +
 					"bound to this checkout. Returns the stored row.",
 				Args: []Arg{
 					{Name: "id"},
@@ -313,7 +313,7 @@ var magusObjects = []Object{
 			},
 			{
 				Name:    "conformance",
-				Doc:     "The conformance lens as data: {definition, rows, excluded, answer, indexes, base, ceilings, unmeasured}, keyed as JSON is. Each row is {key, n, p50, p90, p95, p99, live, value, propose, violations}: key names a metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens, export-scope, call-sequence, shared-body, shared-reach, caller-spread, mode-knobs, alias-share, name-clash), a population (source, main, test) and a scope; value is the anchor knowledge.conformance configures; live is the configured percentile today; violations are the files, symbols, packages or clone groups past value, each {id, source, measure}. propose is zero, or a tighter anchor a person may configure; it is never looser than value, and nothing enforces live. checks and base hold a change to a conformance ceiling: base is a revision, and ceilings are the files changed since it whose count of violations of a metric in checks rose past their count there, each {key, file, base, head, violations}; a drop is progress, and unmeasured lists each touched file only an external indexer reads, {file, language, reason}, which holds no ceiling. No count is stored in the workspace: it reads the base's measure magus\\change().mergeBase kept in the user cache, and raises when none is kept or the base has no checks. excluded counts the files knowledge.conformance.exclude hides. answer is unknown, never a pass, when a symbol index is missing. indexes is each declared symbol index as `magus server status` judges it, judged just before the graph is read, as magus\\graph().precedents reports it: an index not `up-to-date` gave the rows something old, so a gate on them checks indexes first. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises on a policy it cannot honor or a base it cannot measure whole.",
+				Doc:     "The conformance lens as data: {definition, rows, excluded, answer, indexes, base, ceilings, unmeasured}, keyed as JSON is. Each row is {key, n, p50, p90, p95, p99, live, value, propose, violations}: key names a metric (file-lines, func-lines, type-methods, file-symbols, imported-packages, clone-tokens, export-scope, call-sequence, shared-body, shared-reach, caller-spread, mode-knobs, alias-share, name-clash), a population (source, main, test) and a scope; value is the anchor knowledge.conformance configures; live is the configured percentile today; violations are the files, symbols, packages or clone groups past value, each {id, source, measure}. propose is zero, or a tighter anchor a person may configure; it is never looser than value, and nothing enforces live. checks and base hold a change to a conformance ceiling: base is a revision, and ceilings are the files changed since it whose count of violations of a metric in checks rose past their count there, each {key, file, base, head, violations}; a drop is progress, and unmeasured lists each touched file only an external indexer reads, {file, language, reason}, which holds no ceiling. No count is stored in the workspace: it reads the base's measure magus\\change().mergeBase kept in the user cache, and raises when none is kept or the base has no checks. excluded counts the files knowledge.conformance.exclude hides. answer is unknown, never a pass, when a symbol index is missing. indexes is each declared symbol index as `magus server status` judges it, judged just before the graph is read, as magus\\graph().precedents reports it: an index not `up-to-date` gave the rows something old, so a gate on them checks indexes first. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises on a policy it cannot honor or a base it cannot measure whole.",
 				Args:    []Arg{{Name: "checks", Optional: true}},
 				Returns: []Ret{{Object: "ConformanceReport"}},
 				Raises:  true,
@@ -452,7 +452,7 @@ var magusObjects = []Object{
 					"observations, spawns}. An empty session is the one with the newest observation in the window. " +
 					"Reads the trail of every checkout of this repository that changed inside the window, because a " +
 					"session's hooks record into the checkout they ran from. An unreadable time raises.",
-				Returns: []Ret{{Object: "Trail"}},
+				Returns: []Ret{{Object: `magus\trail\Trail`}},
 				Raises:  true,
 				Impl:    MagusSessionTrail,
 			},
@@ -461,7 +461,7 @@ var magusObjects = []Object{
 				Doc: "Every verdict a person recorded on a trail row in this repository, oldest first; a later mark " +
 					"on an id supersedes an earlier one. Kept per repository identity, so every checkout and every " +
 					"session reads the same marks. Raises on a store line that does not decode.",
-				Returns: []Ret{{Object: "[TrailMark]"}},
+				Returns: []Ret{{Object: `[magus\trail\Mark]`}},
 				Raises:  true,
 				Impl:    MagusSessionMarks,
 			},
@@ -472,8 +472,8 @@ var magusObjects = []Object{
 					"next-not-taken, verdict one of should-deny, should-advise, wrong-deny, fine; key names the rule " +
 					"or shape the row groups by. Appends to the per-repository store and rewrites nothing. Raises on " +
 					"a malformed mark or an unwritable store.",
-				Args:    []Arg{{Name: "mark", Object: "TrailMark"}},
-				Returns: []Ret{{Object: "TrailMark"}},
+				Args:    []Arg{{Name: "mark", Object: `magus\trail\Mark`}},
+				Returns: []Ret{{Object: `magus\trail\Mark`}},
 				Raises:  true,
 				Impl:    MagusSessionMark,
 			},

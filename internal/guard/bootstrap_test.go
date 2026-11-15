@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -75,8 +74,9 @@ func TestRankOwnBuild(t *testing.T) {
 
 	tests := []struct {
 		name, cwd, command string
-		// advise is true for the exemption; otherwise deny is whether the line is refused.
-		advise, deny bool
+		// advise is true for the exemption, relinks for the relink and regenerate;
+		// otherwise deny is whether the line is refused.
+		advise, relinks, deny bool
 		// says is a fragment the verdict text must carry.
 		says string
 	}{
@@ -86,9 +86,9 @@ func TestRankOwnBuild(t *testing.T) {
 		{name: "subcommand -C inside the workspace", cwd: filepath.Dir(fresh), command: fmt.Sprintf("GOEXPERIMENT=jsonv2 go run -C %s -trimpath ./cmd/magus run go-build --no-cache .", filepath.Base(fresh)), advise: true, says: fresh},
 
 		{name: "binary exists", cwd: built, command: ward.BootstrapCommand, deny: true, says: "already has a magus binary"},
-		{name: "a bare link with a binary", cwd: built, command: "go build -o magus ./cmd/magus", deny: true, says: "already has a magus binary"},
-		{name: "a bare link is served the bootstrap", cwd: fresh, command: "go build -o magus ./cmd/magus", deny: true, says: "go -C " + fresh},
-		{name: "a trimmed link is served the bootstrap", cwd: fresh, command: "go build -trimpath -o magus ./cmd/magus", deny: true, says: "go -C " + fresh},
+		{name: "a bare link with a binary", cwd: built, command: "go build -o magus ./cmd/magus", relinks: true},
+		{name: "a bare link with no binary", cwd: fresh, command: "go build -o magus ./cmd/magus", relinks: true},
+		{name: "a trimmed link", cwd: fresh, command: "go build -trimpath -o magus ./cmd/magus", relinks: true},
 		{name: "without the prefix", cwd: fresh, command: "go run -trimpath ./cmd/magus run go-build --no-cache .", deny: true, says: "go -C " + fresh},
 		{name: "another experiment", cwd: fresh, command: "GOEXPERIMENT=none go run -trimpath ./cmd/magus run go-build --no-cache .", deny: true, says: "go -C " + fresh},
 		{name: "a second prefix", cwd: fresh, command: "CGO_ENABLED=0 " + ward.BootstrapCommand, deny: true, says: "go -C " + fresh},
@@ -97,7 +97,7 @@ func TestRankOwnBuild(t *testing.T) {
 		{name: "without -trimpath", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run ./cmd/magus run go-build --no-cache .", deny: true, says: "go -C " + fresh},
 		{name: "another target", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run test --no-cache .", deny: true},
 		{name: "another package", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus-docs run go-build --no-cache .", deny: true},
-		{name: "go generate", cwd: fresh, command: "go generate ./...", deny: true, says: "go -C " + fresh},
+		{name: "go generate", cwd: fresh, command: "go generate ./...", relinks: true},
 		{name: "chained", cwd: fresh, command: ward.BootstrapCommand + " && go vet ./...", deny: true, says: "alone on its line"},
 		{name: "foreign module", cwd: foreign, command: ward.BootstrapCommand, deny: true},
 
@@ -118,6 +118,9 @@ func TestRankOwnBuild(t *testing.T) {
 				assert.Contains(t, v.Context, "bootstrap allowed")
 				assert.Contains(t, fmt.Sprintf(`%s
 %s`, v.Context, v.Why), tt.says)
+			case tt.relinks:
+				assert.Empty(t, v.Deny)
+				assert.Contains(t, v.Context, "the relink and the regenerate run")
 			case tt.deny:
 				assert.Equal(t, denyRuleRawTool, v.Rule.Name)
 				assert.Contains(t, v.Deny+hint.Render(v.Next, func(types.NextStep) string { return "" }), tt.says,
@@ -188,25 +191,23 @@ var recoveryForms = []string{
 	"GOEXPERIMENT=jsonv2 go generate ./internal/handler/mcp",
 }
 
-// A checkout that cannot load its own sources gets the relink and the generators, with or
-// without a binary, and nothing else.
-func TestRankOwnBuildAllowsRecoveryWhileTheWorkspaceCannotLoad(t *testing.T) {
-	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "this build does not provide that name")
+// The fixed recovery runs for any caller in its own checkout, with or
+// without a binary, and loads nothing to decide it.
+func TestRankOwnBuildAllowsTheFixedRecovery(t *testing.T) {
 	for _, withBinary := range []bool{true, false} {
 		root := checkoutFixture(t, ownModule, withBinary)
 		for _, command := range recoveryForms {
 			loads := 0
-			v := judgeOwnBuildWith(loadingAs(stale, &loads), root, command)
+			v := judgeOwnBuildWith(loadingAs(nil, &loads), root, command)
 			assert.Empty(t, v.Deny, command)
 			assert.Equal(t, denyRuleRawTool, v.Rule.Name, command)
-			assert.Contains(t, v.Context, "recovery allowed", command)
-			assert.Equal(t, 1, loads, command)
+			assert.Contains(t, v.Context, "the relink and the regenerate run", command)
+			assert.Zero(t, loads, command)
 		}
 	}
 }
 
-func TestRankOwnBuildDeniesEverythingElseWhileTheWorkspaceCannotLoad(t *testing.T) {
-	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date")
+func TestRankOwnBuildDeniesEverythingButTheFixedRecovery(t *testing.T) {
 	root := checkoutFixture(t, ownModule, true)
 	for _, command := range []string{
 		"go test ./...",
@@ -235,171 +236,78 @@ func TestRankOwnBuildDeniesEverythingElseWhileTheWorkspaceCannotLoad(t *testing.
 		"go generate ./cmd/magus-utils && go vet ./...",
 		"go generate ./cmd/magus-utils > generate.log",
 	} {
-		loads := 0
-		v := judgeOwnBuildWith(loadingAs(stale, &loads), root, command)
+		v := judgeOwnBuild(root, command)
 		assert.Equal(t, denyRuleRawTool, v.Rule.Name, command)
 		assert.NotEmpty(t, v.Deny, command)
 	}
 }
 
-// Only a line that could pass pays for the workspace load.
-func TestRankOwnBuildLoadsTheWorkspaceOnlyForARecoveryForm(t *testing.T) {
-	root := checkoutFixture(t, ownModule, true)
-	loads := 0
-	deps := loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads)
-	for _, command := range []string{"go test ./...", "go vet ./...", "go run ./cmd/magus-utils cut"} {
-		judgeOwnBuildWith(deps, root, command)
-	}
-	assert.Zero(t, loads)
+// RelinkSuite pins who relinks ./magus with go: the root and the integrator,
+// never a worker, whose relink would leave a binary no row pins.
+type RelinkSuite struct {
+	suite.Suite
+	layers ctxLayers
+	built  string
 }
 
-// A workspace that loads, or fails for any reason but MGS1021, keeps every recovery form
-// denied.
-func TestRankOwnBuildDeniesRecoveryWhenTheWorkspaceLoads(t *testing.T) {
-	built := checkoutFixture(t, ownModule, true)
-	fresh := checkoutFixture(t, ownModule, false)
-	for name, loadErr := range map[string]error{
-		"loads":        nil,
-		"syntax error": errors.New("magusfile: syntax error"),
-		"other code":   types.DiagnosticErrorf(types.NoWorkspaceRoot, "no root"),
-	} {
-		for _, command := range recoveryForms {
-			loads := 0
-			v := judgeOwnBuildWith(loadingAs(loadErr, &loads), built, command)
-			assert.Equal(t, denyRuleRawTool, v.Rule.Name, fmt.Sprintf("%s: %s", name, command))
-			assert.NotEmpty(t, v.Deny, fmt.Sprintf("%s: %s", name, command))
-			assert.NotContains(t, v.Context, "recovery allowed", fmt.Sprintf("%s: %s", name, command))
-
-			v = judgeOwnBuildWith(loadingAs(loadErr, &loads), fresh, command)
-			assert.Contains(t, v.Deny, "has no magus binary yet", fmt.Sprintf("%s without a binary: %s", name, command))
-			require.Len(t, v.Next, 1, fmt.Sprintf("%s without a binary: %s", name, command))
-			assert.Equal(t, fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", fresh), v.Next[0].Run, fmt.Sprintf("%s without a binary: %s", name, command))
-		}
-	}
+func TestRelinkSuite(t *testing.T) {
+	suite.Run(t, new(RelinkSuite))
 }
 
-func TestJudgeAllowsTheRelinkWhileTheWorkspaceCannotLoad(t *testing.T) {
-	testkit.Isolate(t)
-	built := checkoutFixture(t, ownModule, true)
-	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: built})
-	envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"%s\",\"tool_input\":{\"command\":\"GOEXPERIMENT=jsonv2 go build -o magus ./cmd/magus\"}}", built)
-	loads := 0
-
-	v := Judge(ctx, loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads), Request{Input: envelope})
-
-	assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
-	assert.Contains(t, v.Context, "cannot load its own sources")
+func (s *RelinkSuite) SetupTest() {
+	testkit.Isolate(s.T())
+	s.built = checkoutFixture(s.T(), ownModule, true)
+	servesPlacement(s.T(), s.built)
+	s.layers = ctxLayers{atLayer(location{cacheDir: s.T().TempDir(), workspace: s.built})}
 }
 
-// ./magus exists but predates the tree, so "already has a magus binary; rebuild with
-// ./magus run go-build ." sends the reader to the one tool that cannot run. The exact
-// bootstrap passes then, and nothing else does.
-func TestRankOwnBuildAllowsTheBootstrapWhileTheBinaryCannotLoadTheTree(t *testing.T) {
-	built := checkoutFixture(t, ownModule, true)
-	loads := 0
-	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, `unknown built-in rule "architecture-unbriefed"`)
-
-	v := judgeOwnBuildWith(loadingAs(stale, &loads), built, ward.BootstrapCommand)
-
-	assert.Empty(t, v.Deny)
-	assert.Equal(t, denyRuleRawTool, v.Rule.Name)
-	assert.Contains(t, v.Context, "bootstrap allowed")
-	assert.Contains(t, v.Context, "cannot load it")
-	assert.Equal(t, 1, loads)
+func (s *RelinkSuite) judge(lease, command string) types.GuardJudgment {
+	deps := strict(testDependencies())
+	deps.lease = lease
+	envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"%s\",\"tool_input\":{\"command\":\"%s\"}}", s.built, command)
+	return Judge(s.layers.of(s.T()), deps, Request{Input: envelope})
 }
 
-// The allowance is the bootstrap and only the bootstrap: a missing prefix, a second prefix,
-// a second command or any other go call keeps the deny it had.
-func TestRankOwnBuildDeniesEverythingButTheBootstrapWhileTheBinaryCannotLoadTheTree(t *testing.T) {
-	built := checkoutFixture(t, ownModule, true)
-	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date")
-	for _, command := range []string{
-		"go run -trimpath ./cmd/magus run go-build --no-cache .",
-		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build .",
-		"CGO_ENABLED=0 " + ward.BootstrapCommand,
-		ward.BootstrapCommand + " && go vet ./...",
-		"go test ./...",
-	} {
-		loads := 0
-		v := judgeOwnBuildWith(loadingAs(stale, &loads), built, command)
-		assert.Equal(t, denyRuleRawTool, v.Rule.Name, command)
-		assert.NotEmpty(t, v.Deny, command)
-	}
+func (s *RelinkSuite) TestTheRootRelinks() {
+	v := s.judge("", ward.RelinkAt(""))
+	s.Equal(verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
+	s.Contains(v.Context, "for the root and the integrator")
 }
 
-// A tree the binary loads, or fails on for another reason, keeps "not a bootstrap".
-func TestRankOwnBuildDeniesTheBootstrapWhenTheBinaryLoadsTheTree(t *testing.T) {
+func (s *RelinkSuite) worker() Dependencies {
+	deps := strict(testDependencies())
+	deps.lease = "worker"
+	return deps
+}
+
+func (s *RelinkSuite) TestAWorkerDoesNotRelink() {
+	s.Equal(workerBuildVerdict, judgeOwnBuildWith(s.worker(), s.built, ward.RelinkAt("")).Deny)
+}
+
+func (s *RelinkSuite) TestAWorkerDoesNotRegenerate() {
+	s.Equal(workerBuildVerdict, judgeOwnBuildWith(s.worker(), s.built, "go generate ./internal/spell").Deny)
+}
+
+// A binary that exists keeps "not a bootstrap" whatever its load says:
+// the relink replaces it, and the deny names that line.
+func TestRankOwnBuildDeniesTheBootstrapOverABinary(t *testing.T) {
 	built := checkoutFixture(t, ownModule, true)
 	for name, loadErr := range map[string]error{
 		"loads":        nil,
 		"syntax error": errors.New("magusfile: syntax error"),
-		"other code":   types.DiagnosticErrorf(types.GuardRuleMisdeclared, "name must not be empty"),
+		"stale":        types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"),
 	} {
 		loads := 0
 		v := judgeOwnBuildWith(loadingAs(loadErr, &loads), built, ward.BootstrapCommand)
 		assert.Contains(t, v.Deny, "already has a magus binary", name)
-	}
-}
-
-func TestJudgeAllowsTheBootstrapWhileTheBinaryCannotLoadTheTree(t *testing.T) {
-	testkit.Isolate(t)
-	built := checkoutFixture(t, ownModule, true)
-	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: built})
-	envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"%s\",\"tool_input\":{\"command\":\"%s\"}}", built, ward.BootstrapCommand)
-	loads := 0
-
-	v := Judge(ctx, loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads), Request{Input: envelope})
-
-	assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
-	assert.Contains(t, v.Context, "cannot load it")
-}
-
-// A native shell's workdir, not the healthy parent session, selects the tree whose
-// binary needs recovery. An explicit go -C is also permitted without workdir.
-func TestJudgeBootstrapRecoveryInAnotherCheckout(t *testing.T) {
-	testkit.Isolate(t)
-	parent := checkoutFixture(t, ownModule, true)
-	checkout := checkoutFixture(t, ownModule, true)
-	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: parent})
-	for _, tc := range []struct {
-		name, command, workdir string
-		deny                   bool
-	}{
-		{name: "native workdir", command: ward.BootstrapCommand, workdir: checkout},
-		{name: "explicit Go directory", command: fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", checkout)},
-		{name: "healthy parent", command: ward.BootstrapCommand, deny: true},
-		{name: "unrelated raw tool", command: "go test ./...", workdir: checkout, deny: true},
-		{name: "additional command", command: ward.BootstrapCommand + " && go vet ./...", workdir: checkout, deny: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			deps := strict(testDependencies())
-			deps.Inspect = func(_ context.Context, root string) (types.WorkspaceRepository, error) {
-				if root == checkout {
-					return nil, types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "undefined type CommandOptions")
-				}
-				return nil, nil
-			}
-			input := map[string]any{"cmd": tc.command}
-			if tc.workdir != "" {
-				input["workdir"] = tc.workdir
-			}
-			v := Judge(ctx, deps, Request{Input: toolEnvelope(t, "s1", parent, "exec_command", input), Tools: testTools(t)})
-			if tc.deny {
-				assert.Equal(t, decisionDeny, v.Decision)
-			} else if tc.workdir == "" {
-				assert.Equal(t, decisionPass, v.Decision)
-			} else {
-				assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
-				assert.Contains(t, v.Context, "cannot load it")
-			}
-		})
+		assert.Contains(t, v.Deny, ward.RelinkAt(built), name)
 	}
 }
 
 func TestBootstrapRemedyNamesTheCheckout(t *testing.T) {
 	fresh := filepath.Join(t.TempDir(), "landing $cache 'quoted'")
 	require.NoError(t, os.Rename(checkoutFixture(t, ownModule, false), fresh))
-	v := judgeOwnBuild(fresh, "go build -o magus ./cmd/magus")
+	v := judgeOwnBuild(fresh, "go run ./cmd/magus")
 	require.Len(t, v.Next, 1)
 	assert.Equal(t, []string{"GOEXPERIMENT=jsonv2", "go", "-C", fresh, "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."}, v.Next[0].Argv)
 	commands, parsed := ParseCommandsDialect(v.Next[0].Run, effectiveDialect(""))
@@ -412,37 +320,13 @@ func TestBootstrapRemedyNamesTheCheckout(t *testing.T) {
 	assert.Empty(t, judgeOwnBuild(t.TempDir(), v.Next[0].Run).Deny)
 }
 
-func TestRankOwnBuildKeepsWorkerRecoveryDenied(t *testing.T) {
+func TestRankOwnBuildKeepsAWorkersBootstrapDenied(t *testing.T) {
 	checkout := checkoutFixture(t, ownModule, true)
-	loads := 0
-	deps := loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads)
+	servesPlacement(t, checkout)
+	deps := strict(testDependencies())
 	deps.lease = "worker"
 	v := judgeOwnBuildWith(deps, checkout, ward.BootstrapCommand)
 	assert.Equal(t, workerBuildVerdict, v.Deny)
-}
-
-// A ./magus older than a source it is stamped from lets the bootstrap through though it
-// still loads the tree. A touched test file is not linked into it and changes nothing.
-func TestRankOwnBuildAllowsTheBootstrapOverAStaleBinaryThatLoads(t *testing.T) {
-	built := checkoutFixture(t, ownModule, true)
-	ageBinary(t, built)
-	writeSource(t, built, "internal/guard/x_test.go")
-	loads := 0
-	assert.Contains(t, judgeOwnBuildWith(loadingAs(nil, &loads), built, ward.BootstrapCommand).Deny, "already has a magus binary")
-
-	writeSource(t, built, "internal/guard/x.go")
-	loads = 0
-	v := judgeOwnBuildWith(loadingAs(nil, &loads), built, ward.BootstrapCommand)
-	assert.Empty(t, v.Deny)
-	assert.Contains(t, v.Context, "older than its sources")
-	assert.Zero(t, loads, "staleness is read off the files, before any load")
-}
-
-// ageBinary dates root's ./magus an hour back, so a source written now is newer.
-func ageBinary(t *testing.T, root string) {
-	t.Helper()
-	old := time.Now().Add(-time.Hour)
-	require.NoError(t, os.Chtimes(filepath.Join(root, "magus"), old, old))
 }
 
 func writeSource(t *testing.T, root, rel string) {
@@ -491,55 +375,67 @@ func (s *CheckoutHookSuite) TestTheDeclaredHookMatchesItsBootstrapLine() {
 	s.Equal(s.root, dir)
 }
 
-func (s *CheckoutHookSuite) TestAMovedCheckoutWithNoHookAsksForAPlacement() {
-	s.Equal("A row that moved the checkout it owns asks the root for a placement: no checkout.bootstrap declared.", movedCheckoutRebuild(""))
+// CheckoutBootstrapSuite pins who runs the checkout bootstrap: the root and
+// the integrator. Any other lease is refused, the checkout's holder included,
+// since a ./magus it built there is pinned by no row.
+type CheckoutBootstrapSuite struct {
+	suite.Suite
+	layers         ctxLayers
+	root, checkout string
+	holder, other  types.Job
 }
 
-func (s *CheckoutHookSuite) TestAMovedCheckoutRunsTheHookHere() {
-	s.Equal("A row that moved the checkout it owns finishes with `./magus buzz "+testCheckoutHook+" -- --here`.", movedCheckoutRebuild(testCheckoutHook))
+func TestCheckoutBootstrapSuite(t *testing.T) {
+	suite.Run(t, new(CheckoutBootstrapSuite))
 }
 
-// A checkout forked at a commit no placed binary matches gets one from the checkout
-// bootstrap, which the root and the job holding that checkout run; any other lease is a
-// worker building magus.
-func TestRankOwnBuildLetsOnlyTheRootAndTheHolderBootstrapACheckout(t *testing.T) {
-	checkout := t.TempDir()
-	ctx, root := fleetFixture(t)
-	holder := types.Job{ID: "pages-fix", State: types.StateRunning, Registered: 1, CheckoutRoot: checkout, Worktree: &types.JobWorktree{Root: checkout, Source: root}}
-	other := types.Job{ID: "other", State: types.StateRunning, Registered: 1}
-	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{holder, other}})
-	declareCheckoutHook(t, root)
-	line := job.CheckoutBootstrap(testCheckoutHook, checkout)
+func (s *CheckoutBootstrapSuite) SetupTest() {
+	s.checkout = s.T().TempDir()
+	s.layers, s.root = fleetLayers(s.T())
+	s.holder = types.Job{ID: "pages-fix", State: types.StateRunning, Registered: 1, CheckoutRoot: s.checkout, Worktree: &types.JobWorktree{Root: s.checkout, Source: s.root}}
+	s.other = types.Job{ID: "other", State: types.StateRunning, Registered: 1}
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{s.holder, s.other}}))
+	declareCheckoutHook(s.T(), s.root)
+}
 
-	for _, tt := range []struct {
-		name, lease, cwd, command string
-		deny                      bool
-	}{
-		{name: "the root", cwd: root, command: line},
-		{name: "the holder", lease: holder.ID, cwd: checkout, command: line},
-		{name: "the holder by a relative path", lease: holder.ID, cwd: filepath.Dir(checkout), command: "./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout=" + filepath.Base(checkout)},
-		{name: "another lease", lease: other.ID, cwd: root, command: line, deny: true},
-		{name: "another lease by the script's absolute path", lease: other.ID, cwd: root, command: fmt.Sprintf("./magus buzz %s -- --checkout %s", filepath.Join(root, testCheckoutHook), checkout), deny: true},
-		{name: "the holder in its checkout with --here", lease: holder.ID, cwd: checkout, command: "./magus buzz hack/dev/bootstrap-checkout.buzz -- --here"},
-		{name: "another lease with --here", lease: other.ID, cwd: root, command: "./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", deny: true},
-		{name: "another lease running another script", lease: other.ID, cwd: root, command: "./magus buzz hack/dev/ls-uncommitted.buzz"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			deps := strict(testDependencies())
-			deps.lease = tt.lease
-			deps.caller = job.Caller{Host: "claude", Session: "s1"}
-			if tt.lease != "" {
-				deps.caller.Agent = "agent-a1b2c3"
-			}
-			d := effectiveDialect("")
-			v := rankOwnBuild(Evaluate(deps, tt.command), ownBuildVerdict(ctx, deps, tt.cwd, tt.command, d))
-			if !tt.deny {
-				assert.Empty(t, v.Deny)
-				return
-			}
-			assert.Equal(t, denyRuleRawTool, v.Rule.Name)
-			assert.Contains(t, v.Deny, "builds ./magus in a checkout lease other does not own")
-			assert.Contains(t, v.Deny, "--checkout ", "names the command")
-		})
+func (s *CheckoutBootstrapSuite) verdict(lease, cwd, command string) ShellVerdict {
+	deps := strict(testDependencies())
+	deps.lease = lease
+	deps.caller = job.Caller{Host: "claude", Session: "s1"}
+	if lease != "" {
+		deps.caller.Agent = "agent-a1b2c3"
 	}
+	return rankOwnBuild(Evaluate(deps, command), ownBuildVerdict(s.layers.of(s.T()), deps, cwd, command, effectiveDialect("")))
+}
+
+func (s *CheckoutBootstrapSuite) refused(v ShellVerdict, lease string) {
+	s.Equal(denyRuleRawTool, v.Rule.Name)
+	s.Contains(v.Deny, "builds ./magus under lease "+lease)
+	s.Contains(v.Deny, "--checkout ", "names the command")
+	s.Contains(v.Why, unpinnedRebuild)
+}
+
+func (s *CheckoutBootstrapSuite) TestTheRootRunsIt() {
+	s.Empty(s.verdict("", s.root, job.CheckoutBootstrap(testCheckoutHook, s.checkout)).Deny)
+}
+
+func (s *CheckoutBootstrapSuite) TestTheHolderOfTheCheckoutIsRefused() {
+	s.refused(s.verdict(s.holder.ID, s.checkout, job.CheckoutBootstrap(testCheckoutHook, s.checkout)), s.holder.ID)
+}
+
+func (s *CheckoutBootstrapSuite) TestTheHolderIsRefusedHere() {
+	s.refused(s.verdict(s.holder.ID, s.checkout, "./magus buzz hack/dev/bootstrap-checkout.buzz -- --here"), s.holder.ID)
+}
+
+func (s *CheckoutBootstrapSuite) TestAnotherLeaseIsRefused() {
+	s.refused(s.verdict(s.other.ID, s.root, job.CheckoutBootstrap(testCheckoutHook, s.checkout)), s.other.ID)
+}
+
+func (s *CheckoutBootstrapSuite) TestAnotherLeaseIsRefusedByTheScriptsAbsolutePath() {
+	command := fmt.Sprintf("./magus buzz %s -- --checkout %s", filepath.Join(s.root, testCheckoutHook), s.checkout)
+	s.refused(s.verdict(s.other.ID, s.root, command), s.other.ID)
+}
+
+func (s *CheckoutBootstrapSuite) TestAnotherScriptPasses() {
+	s.Empty(s.verdict(s.other.ID, s.root, "./magus buzz hack/dev/ls-uncommitted.buzz").Deny)
 }

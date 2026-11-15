@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,15 +29,15 @@ func TestCheckReleaseIndexExpiry(t *testing.T) {
 	cases := []struct {
 		name       string
 		body       string
-		wantStatus types.CheckStatus
+		wantStatus check.Status
 		wantMsg    string
 	}{
-		{"good for months", fmt.Sprintf(`{"expires_at":%q}`, inDays(170)), types.CheckOK, "good for another"},
-		{"inside the warning window", fmt.Sprintf(`{"expires_at":%q}`, inDays(10)), types.CheckAdvice, "expires in"},
-		{"already expired", fmt.Sprintf(`{"expires_at":%q}`, inDays(-3)), types.CheckFail, "is refusing it"},
-		{"no bound at all", `{"schema_version":1}`, types.CheckFail, "declares no expires_at"},
-		{"unreadable bound", `{"expires_at":"soon"}`, types.CheckFail, "not RFC3339"},
-		{"not json", `{`, types.CheckFail, "does not parse"},
+		{"good for months", fmt.Sprintf(`{"expires_at":%q}`, inDays(170)), check.OK, "good for another"},
+		{"inside the warning window", fmt.Sprintf(`{"expires_at":%q}`, inDays(10)), check.Advice, "expires in"},
+		{"already expired", fmt.Sprintf(`{"expires_at":%q}`, inDays(-3)), check.Fail, "is refusing it"},
+		{"no bound at all", `{"schema_version":1}`, check.Fail, "declares no expires_at"},
+		{"unreadable bound", `{"expires_at":"soon"}`, check.Fail, "not RFC3339"},
+		{"not json", `{`, check.Fail, "does not parse"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -58,7 +58,7 @@ func TestCheckReleaseIndexExpiry(t *testing.T) {
 // fail for every user of magus.
 func TestCheckReleaseIndexExpirySilentElsewhere(t *testing.T) {
 	got := (&runner{root: t.TempDir()}).checkReleaseIndexExpiry()
-	require.Equal(t, types.CheckOK, got.Status)
+	require.Equal(t, check.OK, got.Status)
 	require.Contains(t, got.Message, "not served from this workspace")
 }
 
@@ -67,7 +67,7 @@ func TestCheckReleaseIndexExpirySilentElsewhere(t *testing.T) {
 // here rather than by a user.
 func TestServedIndexPassesItsOwnCheck(t *testing.T) {
 	got := (&runner{root: filepath.Join("..", "..")}).checkReleaseIndexExpiry()
-	require.Equal(t, types.CheckOK, got.Status, got.Message)
+	require.Equal(t, check.OK, got.Status, got.Message)
 }
 
 func TestRoughly(t *testing.T) {

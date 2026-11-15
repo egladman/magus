@@ -167,7 +167,9 @@ fun main(args: [str]) > void {
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
     final bin = hook\resolveBin(cwd: cwd);
     final note = hook\fallbackNote(cwd);
-    var fix = hook\magusFix(hook\workspaceRootAt(cwd));
+    var root = hook\workspaceRootAt(cwd);
+    if (root == "") { root = hook\binRoot(""); }
+    var fix = hook\recoveryFix(root);
     if (note != "") { fix = note + ". " + fix; }
     if (bin == "" or !hook\isExecutable(bin)) {
         io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: hook\refusal(
@@ -209,7 +211,7 @@ fun main(args: [str]) > void {
     if (!hook\wholeEvent(event, dotPath: eventPath, toolPath: toolPath)) {
         payload = hook\rawField(event, dotPath: eventPath) + "\n";
     }
-    final guard = Guard{ bin = bin, payload = payload, response = response, dir = cwd };
+    final marked = hook\unloadedTemplate(response);
 
     // Attribution is BEST EFFORT; the verdict is not. --agent-name, --session and --agent postdate
     // the current magus release, and an older binary rejects the unknown flag outright,
@@ -223,10 +225,20 @@ fun main(args: [str]) > void {
         attributed.append(word);
     }
     foreach (flag in rendersAsk) { attributed.append(flag); }
-    var result = judge(guard, extra: attributed) catch null;
-    if (rejectedFlag(result)) {
-        result = judge(guard, extra: [<str>]) catch null;
+    final judged = hook\judgeFirstLoaded(hook\binCandidates(bin, cwd: cwd), ask: fun (candidate: str) > proc\ExecResult? {
+        final asked = Guard{ bin = candidate, payload = payload, response = marked, dir = cwd };
+        final attempt = judge(asked, extra: attributed) catch null;
+        if (rejectedFlag(attempt)) { return judge(asked, extra: [<str>]) catch null; }
+        return attempt;
+    });
+    final result = judged.result;
+    if (judged.by == "") {
+        io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: hook\refusal(
+            hook\unloadedVerdict(judged, what: "write"), fix: fix))) catch void;
+        return;
     }
+    var trail = "";
+    if (judged.trail.len() > 0) { trail = judged.trail.join("\n") + "\n"; }
 
     // A pass and a broken guard both render nothing; see magus-command.buzz for why
     // telling them apart matters. Every call here is a write, so it is refused.
@@ -235,13 +247,17 @@ fun main(args: [str]) > void {
         if (result != null) { why = "it printed no error (exit code {result!.code})"; }
         if (result != null and hook\firstLine(result!.stderr) != "") { why = hook\firstLine(result!.stderr); }
         io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: hook\refusal(
-            "magus guard could not judge this write: {bin} said: {why}",
-            fix: "Rebuild or update {bin}. {fix}"))) catch void;
+            "{trail}magus guard could not judge this write: {judged.by} said: {why}",
+            fix: "Rebuild or update {judged.by}. {fix}"))) catch void;
         return;
     }
     var reply = hook\trimTrailingNewlines(result!.stdout);
     if (note != "" and hook\noticeOnce(session, family: "bin-fallback", file: "magus-path.buzz")) {
         reply = hook\withNotice(reply, text: "magus-path.buzz: " + note);
+    }
+    final fell = hook\fellToNotice(judged, what: "write", root: root);
+    if (fell != "" and hook\noticeOnce(session, family: "bin-unloaded", file: "magus-path.buzz")) {
+        reply = hook\withNotice(reply, text: "magus-path.buzz: " + fell);
     }
     io\stdout.write(reply) catch void;
 }

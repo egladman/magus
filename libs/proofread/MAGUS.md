@@ -12,6 +12,7 @@ Query: `magus query project=libs/proofread`
 | `generate`           | Regenerates MAGUS.md and fails on drift.                                                                                               |
 | `wordclass-generate` | Trains the word-class tagger's model on UD English EWT, fetched by a pinned digest, and writes the test split its accuracy test reads. |
 | `format`             |                                                                                                                                        |
+| `golangci-lint`      | The tree-wide conventions over this module, through .magus/custom-gcl.                                                                 |
 | `proofread-build`    | Links proofread, so the pull request guard and the writing checks never wait on the compiler.                                          |
 | `ci`                 | The anchor `magus affected ci` keys off.                                                                                               |
 | `index-generate`     | Renders MAGUS.md, this project's target catalog.                                                                                       |

@@ -1,46 +1,13 @@
 package ward
 
 import (
-	"errors"
-	"fmt"
-	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/guard/builtin"
-	"github.com/egladman/magus/libs/diagnostics"
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
-
-// UnknownConfigKeySuite pins which MGS1040 failures a rebuild fixes.
-type UnknownConfigKeySuite struct {
-	suite.Suite
-}
-
-func TestUnknownConfigKeySuite(t *testing.T) {
-	suite.Run(t, new(UnknownConfigKeySuite))
-}
-
-func (s *UnknownConfigKeySuite) TestAKeyThisBuildPredatesIsStaleShaped() {
-	err := types.DiagnosticErrorf(types.UnknownConfigKey,
-		"magus.yaml has a key this magus does not know:\n  - guard.newest  (line 4)\n\nthis magus is older than the tree")
-	s.True(IsStaleBinary(err))
-}
-
-func (s *UnknownConfigKeySuite) TestASuggestedKeyIsATypoARebuildReportsAgain() {
-	err := types.DiagnosticErrorf(types.UnknownConfigKey,
-		"magus.yaml has a key this magus does not know:\n  - guard.lease  (line 4; did you mean %q?)", "guard.leases")
-	s.False(IsStaleBinary(err))
-}
-
-func (s *UnknownConfigKeySuite) TestARenamedKeyIsNotStaleShaped() {
-	err := types.DiagnosticErrorf(types.UnknownConfigKey,
-		"magus.yaml has a key this magus does not know:\n  - old  (line 2; renamed to %q)", "new")
-	s.False(IsStaleBinary(err))
-}
 
 func TestCheckRequiredVersion(t *testing.T) {
 	t.Run("a satisfied floor passes", func(t *testing.T) {
@@ -123,234 +90,25 @@ func TestCheckRequiredVersion_ShippedReleaseBelowTheFloorIsRefused(t *testing.T)
 	assert.Contains(t, err.Error(), "v0.3.1", "the message names the build that is too old")
 }
 
-// realBuzzError compiles src and returns the failure wrapped the way workspace load wraps it.
-//
-// It goes through the checker rather than hand-building a *diagnostics.Error, and that is the
-// whole point of the helper. The hand-built fixture is not the shape gopherbuzz returns (the
-// checker returns its own unexported error type), so a test built on it proved that errors.As
-// works and nothing else. It was green for the entire time the BZZ1002 half of this explainer
-// could not fire.
-//
-// The test-only import of gopherbuzz does not move this package's production dependency floor,
-// which is why version.go still spells the codes as literals.
-func realBuzzError(t *testing.T, src string) error {
-	t.Helper()
-	err := buzz.NewSession(t.Context()).Exec(t.Context(), src)
-	require.Error(t, err, "the fixture must actually fail to compile, or it pins nothing")
-	return fmt.Errorf("magusfile: exec magusfile.buzz: %w", err)
+// RelinkSuite pins the one recovery line the guard and the hook glue serve.
+type RelinkSuite struct {
+	suite.Suite
 }
 
-// buzzError builds a coded diagnostic directly, for codes no Buzz source can produce here (a
-// magus code, an unrelated BZZ one). The positive cases go through realBuzzError instead.
-func buzzError(code, msg string) error {
-	return fmt.Errorf("magusfile: exec magusfile.buzz: %w", &diagnostics.Error{
-		Code: diagnostics.Code(code),
-		Msg:  msg,
-	})
+func TestRelinkSuite(t *testing.T) {
+	suite.Run(t, new(RelinkSuite))
 }
 
-// TestExplainStaleBinary_AnnotatesTheDeadlockShapes covers the two codes an
-// out-of-date binary actually produces. Both were observed together in one incident:
-// a spell referenced a type the binary did not provide (BZZ1002), which made the
-// module unresolvable to the magusfile importing it (BZZ2001).
-func TestExplainStaleBinary_AnnotatesTheDeadlockShapes(t *testing.T) {
-	for _, tc := range []struct{ name, src, want string }{
-		{"undefined type from a spell", `final s = Secret{value = "x"};`, `undefined type "Secret"`},
-		{"the import it cascades into", `import "spells/github/actions";`, "module not found"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			src := realBuzzError(t, tc.src)
-			got := ExplainStaleBinary(src, "v0.3.9", ">= 0.4.0")
-			require.Error(t, got)
-			assert.Contains(t, src.Error(), tc.want, "the fixture must be the shape it names")
-			// A coded cause reads inline, so the error prints its own see: line alone.
-			assert.Equal(t, types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", fmt.Sprintf("%s\n"+
-				"This build does not provide that name; unless it is misspelled, this magus is out of date.\n\n"+
-				"This magus (v0.3.9) is older than the workspace needs (>= 0.4.0).\n"+
-				"Fix it:\n"+
-				"  - released binary: magus self update", types.InlineDiagnostic(src))).Error(), got.Error())
-			assert.ErrorIs(t, got, src, "the original diagnostic stays in the chain")
-		})
-	}
+func (s *RelinkSuite) TestAimsTheLinkAtTheRoot() {
+	s.Equal("GOEXPERIMENT=jsonv2 go -C /src/magus build -trimpath -o magus ./cmd/magus", RelinkAt("/src/magus"))
 }
 
-// A magusfile calling a host member this build predates (`magus\guard.builtins` on a binary
-// built before it) fails with an uncoded "has no field or method", the third shape an
-// out-of-date binary produces. It must read as stale, or the verdict never says so.
-func TestExplainStaleBinary_AnnotatesAMissingObjectMember(t *testing.T) {
-	err := realBuzzError(t, "object Guard { rules: int }\nfinal g = Guard{ rules = 1 };\ng.builtins(1);")
-	require.ErrorContains(t, err, `has no field or method "builtins"`)
-
-	got := ExplainStaleBinary(err, "v0.3.9", ">= 0.4.0")
-	require.ErrorIs(t, got, types.WorkspaceNeedsNewerMagus)
-	assert.Contains(t, got.Error(), "this magus is out of date")
-	assert.Contains(t, got.Error(), "Fix it:")
-	assert.True(t, IsStaleBinary(err), "the raw load failure is stale-shaped")
-	assert.True(t, IsStaleBinary(got), "and so is the annotated one")
+func (s *RelinkSuite) TestNoRootIsTheBareLine() {
+	s.Equal("GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus", RelinkAt(""))
 }
 
-func TestIsStaleBinary(t *testing.T) {
-	missingMember := errors.New(`magusfile: exec magusfile.buzz: object guard has no field or method "builtins"`)
-	unknownRule := types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-		`magus\guard.builtins: "architecture-unbriefed": unknown built-in rule "architecture-unbriefed"`)
-	typoedRule := types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-		`unknown built-in rule "read-navigaton"; did you mean "read-navigation"?`)
-	for name, tc := range map[string]struct {
-		err  error
-		want bool
-	}{
-		"nil":                          {nil, false},
-		"a plain error":                {errors.New("magusfile: unexpected '}'"), false},
-		"a different buzz code":        {buzzError("BZZ1006", "call may raise"), false},
-		"an undefined type":            {buzzError("BZZ1002", `undefined type "Secret"`), true},
-		"an unresolved import":         {buzzError("BZZ2001", "module not found"), true},
-		"a missing object member":      {missingMember, true},
-		"a missing object field":       {errors.New(`magusfile: exec magusfile.buzz: object guard has no field "builtins"`), true},
-		"an unknown built-in rule":     {unknownRule, true},
-		"a typoed built-in rule":       {typoedRule, false},
-		"another misdeclared rule":     {types.DiagnosticErrorf(types.GuardRuleMisdeclared, "name must not be empty"), false},
-		"one stale branch of a join":   {errors.Join(errors.New("other"), missingMember), true},
-		"no stale branch in a join":    {errors.Join(errors.New("a"), errors.New("b")), false},
-		"an already annotated failure": {types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "old"), true},
-	} {
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, tc.want, IsStaleBinary(tc.err))
-		})
-	}
-}
-
-// An unknown built-in rule is the same binary-older-than-tree skew as a missing type, so it
-// must annotate as MGS1021 and name the rebuild instead of reading as a typo.
-func TestExplainStaleBinary_AnnotatesAnUnknownBuiltinRule(t *testing.T) {
-	err := fmt.Errorf("magusfile: exec magusfile.buzz: %w", types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-		`unknown built-in rule "architecture-unbriefed"; `+"`magus describe rules` lists every name"))
-
-	got := ExplainStaleBinary(err, "v0.5.0", "")
-	require.ErrorIs(t, got, types.WorkspaceNeedsNewerMagus)
-	assert.Contains(t, got.Error(), "this magus is out of date")
-	assert.Contains(t, got.Error(), "Fix it:")
-	assert.True(t, IsStaleBinary(err))
-}
-
-// The messages are builtin's own, so a rewording there fails here instead of silently
-// turning every unknown rule stale, or none.
-func TestStaleShapedReadsTheBuiltinComplaint(t *testing.T) {
-	for name, tc := range map[string]struct {
-		declared string
-		want     bool
-	}{
-		"a name nothing is near": {"frobnicate", true},
-		"a typo with a near one": {"read-navigaton", false},
-	} {
-		t.Run(name, func(t *testing.T) {
-			_, err := builtin.Resolve(map[string]builtin.Setting{tc.declared: {Decision: builtin.Deny}})
-			require.Error(t, err)
-			assert.Equal(t, tc.want, IsStaleBinary(err), err.Error())
-		})
-	}
-}
-
-// A misspelled rule gets a near-name suggestion from the build, and a rebuild reports it
-// the same way, so the stale-binary deny would trap the edit that fixes it.
-func TestExplainStaleBinary_LeavesATypoedBuiltinRuleAlone(t *testing.T) {
-	err := types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-		`unknown built-in rule "read-navigaton"; did you mean "read-navigation"?`)
-	assert.Equal(t, error(err), ExplainStaleBinary(err, "v0.5.0", ""))
-	assert.False(t, IsStaleBinary(err))
-}
-
-func TestExplainStaleBinary_LeavesAnotherMisdeclaredRuleAlone(t *testing.T) {
-	err := types.DiagnosticErrorf(types.GuardRuleMisdeclared, "name must not be empty")
-	assert.Equal(t, error(err), ExplainStaleBinary(err, "v0.5.0", ""))
-}
-
-// TestExplainStaleBinary_LeavesEverythingElseAlone is the half that keeps this honest.
-// A hint attached to every load failure would be noise on a plain syntax error, and
-// worse, it would teach people to ignore it.
-func TestExplainStaleBinary_LeavesEverythingElseAlone(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		err  error
-	}{
-		{"nil", nil},
-		{"a plain error", errors.New("magusfile: exec magusfile.buzz: unexpected '}'")},
-		{"a different buzz code", buzzError("BZZ1006", "call may raise but is neither declared with !> nor caught")},
-		{"a magus code", buzzError("MGS1002", "duplicate spell source")},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got := ExplainStaleBinary(tc.err, "0.4.0", ">= 0.4.0")
-			assert.Equal(t, tc.err, got, "must be returned untouched")
-		})
-	}
-}
-
-// A file naming a namespace it never imported lacks an import line, which no newer magus
-// supplies, so "self update" would send its author in a circle.
-func TestExplainStaleBinary_LeavesAMissingImportAlone(t *testing.T) {
-	for _, src := range []string{
-		`fun f(ctx: magus\Context) > void {}`,
-		`final s = magus\Secret{value = "x"};`,
-		`final p = magus\project;`,
-	} {
-		t.Run(src, func(t *testing.T) {
-			err := realBuzzError(t, src)
-			require.ErrorContains(t, err, "no import binds magus in this module")
-			got := ExplainStaleBinary(err, "v0.3.9", ">= 0.4.0")
-			assert.Equal(t, err, got, "must be returned untouched")
-			assert.NotErrorIs(t, got, types.WorkspaceNeedsNewerMagus)
-		})
-	}
-}
-
-// TestExplainStaleBinary_WorksWithNothingDeclared is the case that matters for every
-// workspace that is not this one: no required_version, and a build with no stamp. The
-// hint still has to say something useful, because a workspace with no floor is exactly
-// the one whose users get no warning from CheckRequiredVersion.
-func TestExplainStaleBinary_WorksWithNothingDeclared(t *testing.T) {
-	got := ExplainStaleBinary(realBuzzError(t, `final s = Secret{value = "x"};`), DevVersion, "")
-	require.Error(t, got)
-	assert.Contains(t, got.Error(), "\n\nThis magus is an unstamped build, so its version is unknown, "+
-		"and the workspace declares no required_version floor.\n"+
-		"Fix it:\n"+
-		"  - released binary: magus self update\n"+
-		"  - built from source, in the checkout it came from: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\n",
-		"an unstamped build was built from source, so a rebuild is among the fixes")
-}
-
-// TestExplainStaleBinary_AppliesToDevBuilds pins the deliberate difference from
-// CheckRequiredVersion, which exempts them. A dev build predating a pull is the most
-// common way to reach this, so exempting it here would skip the majority case.
-func TestExplainStaleBinary_AppliesToDevBuilds(t *testing.T) {
-	got := ExplainStaleBinary(realBuzzError(t, `final s = Secret{value = "x"};`), DevVersion, ">= 0.4.0")
-	require.ErrorIs(t, got, types.WorkspaceNeedsNewerMagus)
-	assert.Contains(t, got.Error(), "this magus is out of date")
-
-	// And the contrast, in one place so the asymmetry is visible: the floor ward does
-	// exempt the same build.
-	assert.Nil(t, CheckRequiredVersion(">= 99.0.0", DevVersion),
-		"CheckRequiredVersion exempts dev builds; ExplainStaleBinary deliberately does not")
-}
-
-// TestExplainStaleBinary_NotesOnlyTheBranchItExplains pins the joined load error: one
-// stale-shaped failure among several must not relabel the others as a stale binary, and
-// the version gap is stated once however many branches are stale.
-func TestExplainStaleBinary_NotesOnlyTheBranchItExplains(t *testing.T) {
-	first := realBuzzError(t, `final s = Secret{value = "x"};`)
-	other := buzzError("MGS1038", "option removed")
-	second := realBuzzError(t, `import "spells/github/actions";`)
-	got := ExplainStaleBinary(errors.Join(first, other, second), "v0.3.9", ">= 0.4.0")
-
-	multi, ok := got.(interface{ Unwrap() []error })
-	require.True(t, ok, "the join must survive")
-	branches := multi.Unwrap()
-	require.Len(t, branches, 3)
-	note := "This build does not provide that name; unless it is misspelled, this magus is out of date."
-	assert.Equal(t, types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s\n%s", first, note).Error(),
-		branches[0].Error(), "an earlier stale branch carries the note, not the advice")
-	assert.Equal(t, other, branches[1], "an unrelated branch is returned untouched")
-	assert.Equal(t, types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s\n%s\n\n%s", second, note,
-		StaleBuild{Running: "v0.3.9", Floor: ">= 0.4.0"}.Advice()).Error(), branches[2].Error())
-	assert.Equal(t, 1, strings.Count(got.Error(), "Fix it:"), "the advice is stated once")
+func (s *RelinkSuite) TestQuotesARootAShellWouldSplit() {
+	s.Equal(`GOEXPERIMENT=jsonv2 go -C '/a b/it'\''s' build -trimpath -o magus ./cmd/magus`, RelinkAt("/a b/it's"))
 }
 
 func TestPinnedRelease(t *testing.T) {
@@ -441,16 +199,4 @@ func TestStaleBuildAdvice(t *testing.T) {
 			assert.Equal(t, tc.want, tc.build.Advice())
 		})
 	}
-}
-
-// TestExplainStaleBinary_KeepsAMultiWrapWhole pins that only a join splits: a
-// "%w: %w" wrapper keeps its own text and is noted as one error.
-func TestExplainStaleBinary_KeepsAMultiWrapWhole(t *testing.T) {
-	stale := realBuzzError(t, `final s = Secret{value = "x"};`)
-	wrapped := fmt.Errorf("project a: %w: %w", errors.New("load"), stale)
-	got := ExplainStaleBinary(wrapped, "0.4.0", ">= 0.4.0")
-
-	assert.ErrorIs(t, got, wrapped)
-	assert.Contains(t, got.Error(), wrapped.Error(), "the wrapper's own text survives")
-	assert.Equal(t, 1, strings.Count(got.Error(), "Fix it:"))
 }

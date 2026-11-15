@@ -94,7 +94,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.G
 	// of its own pending that must not open the policy to an unjudged edit.
 	spared := asked.lapse != nil && isGuardSource(deps, at, path) &&
 		(asked.approvedAnswered() || asked.approvedRuleless || !policyPending(ctx, deps, at))
-	denied := !spared && asked.denyShort(func() judgedCall {
+	denied := !spared && asked.denyShort(ctx, func() judgedCall {
 		return judgedCall{seam: seamWrite, changes: !outsideAnyWorkspace(path, at), what: "this file write", lease: lease, path: path, guardSource: isGuardSource(deps, at, path)}
 	}, at)
 	decided := ""
@@ -110,7 +110,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.G
 	}
 	note := ruleFailureNote(ruleFailureReport{
 		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamWrite, failures: asked.failures, answered: asked.answered, toldInFull: asked.lapse != nil,
-		judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, lease) },
+		judging: func() string { return judgingBinaryNote(ctx, deps, at, asked.loadFailure, lease) },
 		lead:    loadFailureLead(deps.LoadFailure, at.workspace),
 	})
 	if spared {

@@ -114,7 +114,7 @@ type Arg struct {
 	// changes only the DECLARED signature: an enum case is a string at runtime, so
 	// the Impl still receives a string and needs no decoder.
 	//
-	// The name must be a boundaryEnums entry in cmd/magus-utils. Without it a
+	// The name must be an enum buzzgen.Reach finds. Without it a
 	// closed-set parameter reads as `str`, and naming an algorithm magus does not
 	// implement is a runtime throw rather than something the checker catches.
 	Enum string
@@ -149,9 +149,9 @@ type Ret struct {
 // Namespace is a group of related host functions a module exposes behind one of its
 // members: `magus\cache.remote(...)`, `magus\secret.read(...)`.
 //
-// NOT a nested module: Buzz has no nested namespace, and the call site says so:
-// `magus\cache.remote(x)` is a backslash (namespace access) then a DOT (member access
-// on a value). The group is an OBJECT held by the module, upstream's own shape.
+// NOT a nested namespace like magus\agent (ADR 0047). In the call
+// `magus\cache.remote(x)` a backslash (namespace access) precedes a DOT
+// (member access on a value). The group is an OBJECT held by the module.
 //
 // Declaring it buys checking a bare value cannot: an object reports an unknown member,
 // so a typo is a load error instead of a null reaching the VM. The runtime binding is

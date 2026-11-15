@@ -47,44 +47,13 @@ fun isWordByte(b: int) > bool {
     return (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122);
 }
 
-// lowerByte lowercases an ASCII byte (A-Z -> a-z), leaving others untouched. Used to compare
-// bytes case-insensitively WITHOUT allocating a lowercased substring per position - the hot
-// path here runs over every character of every page for every term, so allocation-free
-// byte comparison is what keeps a full-site render fast.
-fun lowerByte(b: int) > int {
-    if (b >= 65 and b <= 90) { return b + 32; }
-    return b;
-}
-
-// scanPastByte returns the index just past the next `target` byte at/after `from`, or the
-// end of html. An allocation-free replacement for html.sub(from).indexOf(<char>) + 1.
-fun scanPastByte(html: str, start: int, target: int) > int {
-    final total = html.len();
-    var j = start;
-    while (j < total) {
-        if (html.byte(j) == target) { return j + 1; }
-        j = j + 1;
-    }
-    return total;
-}
-
-// scanPast returns the index just past the next occurrence of s at/after `from`, or the end
-// of html. Allocation-free replacement for html.sub(from).indexOf(s) + s.len().
+// scanPast returns the index just past the next s at/after `start`, or
+// the end of html. Native indexOf(from:) copies nothing; a loop of
+// html.byte() calls stepped the interpreter through every page byte.
 fun scanPast(html: str, start: int, s: str) > int {
-    final total = html.len();
-    final m = s.len();
-    var j = start;
-    while (j + m <= total) {
-        var k = 0;
-        var eq = true;
-        while (k < m) {
-            if (html.byte(j + k) != s.byte(k)) { eq = false; break; }
-            k = k + 1;
-        }
-        if (eq) { return j + m; }
-        j = j + 1;
-    }
-    return total;
+    final at = html.indexOf(s, from: start);
+    if (at == null) { return html.len(); }
+    return at! + s.len();
 }
 
 // tagNameLower reads the tag name at a '<' (skipping a leading '/'), lowercased.
@@ -155,7 +124,7 @@ fun maskLinkable(html: str, skipInlineCode: bool) > str {
             } else {
                 final isClose = (i + 1 < total and html.byte(i + 1) == 47);
                 final name = tagNameLower(html, at: i);
-                final tagEnd = scanPastByte(html, start: i + 1, target: 62);
+                final tagEnd = scanPast(html, start: i + 1, s: ">");
                 if (isClose == false and (isSkipContainer(name, skipInlineCode: skipInlineCode)
                         or hasNoLinkAttr(html, start: i, tagEnd: tagEnd))) {
                     end = scanPast(html, start: i + 1, s: "</" + name + ">");
@@ -167,8 +136,7 @@ fun maskLinkable(html: str, skipInlineCode: bool) > str {
             i = end;
         } else {   // a run of linkable text up to the next '<'
             final start = i;
-            i = i + 1;
-            while (i < total and html.byte(i) != 60) { i = i + 1; }
+            i = html.indexOf("<", from: i + 1) ?? total;
             pieces.append(html.sub(start, len: i - start).lower());
         }
     }
@@ -187,11 +155,6 @@ fun acceptable(searchable: str, pos: int, n: int, ins: [linkIns]) > bool {
     return true;
 }
 
-// applyLinks wraps the first acceptable occurrence of each token (tokens/opens/keys are
-// parallel and longest-first) in open ... </a>, matching natively on the masked `searchable`
-// and inserting into html right-to-left so earlier positions never shift. Returns the linked
-// html and the keys linked (longest-first). If masking changed the length (a non-ASCII case
-// fold, not expected in these docs), it returns html unlinked rather than misplace a link.
 // requireIndexOfFrom fails fast when the running magus predates str.indexOf's `from:`
 // argument, which applyLinks below depends on to resume a scan without copying.
 //
@@ -217,7 +180,10 @@ export fun requireIndexOfFrom() > void {
     }
 }
 
-fun applyLinks(html: str, searchable: str, tokens: [str], opens: [str], keys: [str]) > GlossaryLinkResult {
+// applyLinks wraps the first acceptable match of each token in
+// opener(index) ... </a>, and returns the keys it linked. tokens and keys are
+// parallel, longest-first. A mask of another length leaves html unlinked.
+fun applyLinks(html: str, searchable: str, tokens: [str], keys: [str], opener: fun (index: int) > str) > GlossaryLinkResult {
     if (searchable.len() != html.len()) {
         return GlossaryLinkResult{ html = html, linked = mut [<str>] };
     }
@@ -237,7 +203,7 @@ fun applyLinks(html: str, searchable: str, tokens: [str], opens: [str], keys: [s
             pos = searchable.indexOf(needle, from: pos! + 1);
         }
         if (pos != null) {
-            ins.append(linkIns{ pos = pos!, len = n, open = opens[t] });
+            ins.append(linkIns{ pos = pos!, len = n, open = opener(t) });
             linked.append(keys[t]);
         }
         t = t + 1;
@@ -276,15 +242,15 @@ export fun linkGlossaryTerms(html: str, terms: [GlossaryTerm], relToGlossary: st
     // The definition is baked into each link (data-def) so the client popover/reveal needs no
     // fetch; the href is the term's own page.
     final tokens: mut [str] = mut [<str>];
-    final opens: mut [str] = mut [<str>];
     final keys: mut [str] = mut [<str>];
     foreach (t in terms) {
         tokens.append(t.term.lower());
-        opens.append("<a class=\"glossary-term\" href=\"" + relToGlossary + t.anchor
-            + "/\" data-def=\"" + htmlcodec\escape(t.def) + "\">");
         keys.append(t.anchor);
     }
-    return applyLinks(html, searchable: maskLinkable(html, skipInlineCode: true), tokens: tokens, opens: opens, keys: keys);   // prose: mask inline code
+    // prose: mask inline code
+    return applyLinks(html, searchable: maskLinkable(html, skipInlineCode: true), tokens: tokens, keys: keys,
+        opener: fun (index: int) > str => "<a class=\"glossary-term\" href=\"" + relToGlossary + terms[index].anchor
+            + "/\" data-def=\"" + htmlcodec\escape(terms[index].def) + "\">");
 }
 
 // Entity is one linkable domain reference recognized in INLINE code (and prose), never in
@@ -331,19 +297,24 @@ export fun sortEntitiesLongestFirst(entities: [Entity]) > [Entity] {
 // MUST be longest-match-first; pageDir is the linking page's clean gen-root dir (for the href).
 export fun linkCodeEntities(html: str, entities: [Entity], pageDir: str) > str {
     final tokens: mut [str] = mut [<str>];
-    final opens: mut [str] = mut [<str>];
     final keys: mut [str] = mut [<str>];
     foreach (e in entities) {
-        final base = relativePath(fromDir: pageDir, toUrl: e.url);
-        final href = if (e.anchor != "") base + "#" + e.anchor else base;
         tokens.append(e.token.lower());
-        opens.append("<a class=\"code-xref\" href=\"" + href + "\" data-kind=\"" + e.kind
-            + "\" data-def=\"" + htmlcodec\escape(e.summary) + "\">");
         keys.append(e.token);
     }
     // code mode: inline <code> stays linkable (that is where these references appear); only
     // fenced <pre> blocks, tags, and links are masked out.
-    return applyLinks(html, searchable: maskLinkable(html, skipInlineCode: false), tokens: tokens, opens: opens, keys: keys).html;
+    return applyLinks(html, searchable: maskLinkable(html, skipInlineCode: false), tokens: tokens, keys: keys,
+        opener: fun (index: int) > str => entityOpen(entities[index], pageDir: pageDir)).html;
+}
+
+// entityOpen is the opening <a> linking one entity from pageDir. Built only
+// for an entity the page links: a page meets every entity and links a few.
+fun entityOpen(e: Entity, pageDir: str) > str {
+    final base = relativePath(fromDir: pageDir, toUrl: e.url);
+    final href = if (e.anchor != "") base + "#" + e.anchor else base;
+    return "<a class=\"code-xref\" href=\"" + href + "\" data-kind=\"" + e.kind
+        + "\" data-def=\"" + htmlcodec\escape(e.summary) + "\">";
 }
 
 // ConfigKey is a parsed config.md table row: the dotted key and a popover summary built

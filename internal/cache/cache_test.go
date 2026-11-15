@@ -168,6 +168,105 @@ func TestCacheHitReplaysLogToStderrNotStdout(t *testing.T) {
 	assert.Contains(t, stderrOut, marker, "hit replay must write to stderr, like the miss path")
 }
 
+type logReplaySuite struct {
+	suite.Suite
+	root, cdir string
+	step       Step
+}
+
+func TestLogReplay(t *testing.T) { suite.Run(t, new(logReplaySuite)) }
+
+func (s *logReplaySuite) SetupTest() {
+	s.root, s.cdir = s.T().TempDir(), filepath.Join(s.T().TempDir(), ".magus")
+	writeMain(s.T(), s.root, "package main")
+	s.step = makeStep(s.root)
+}
+
+// logs is a target body that prints a line and logs one record at debug
+// and one at info, then returns err.
+func logs(err error) func(context.Context) error {
+	return func(ctx context.Context) error {
+		stdout, _ := spawn.OutputWriters(ctx)
+		_, _ = fmt.Fprintln(stdout, "OUTPUT MARKER")
+		for _, r := range []slog.Record{
+			slog.NewRecord(time.Now(), slog.LevelDebug, "quiet", 0),
+			slog.NewRecord(time.Now(), slog.LevelInfo, "loud", 0),
+		} {
+			if _, logErr := LogToStep(ctx, r); logErr != nil {
+				return logErr
+			}
+		}
+		return err
+	}
+}
+
+// hit runs the step once to store it, then again at level, and returns
+// what the hit printed on stderr.
+func (s *logReplaySuite) hit(level slog.Level) string {
+	c, err := Open(s.T().Context(), s.cdir, WithLocalWrite(true), WithLog("text", slog.LevelInfo))
+	s.Require().NoError(err)
+	_ = testkit.CaptureStderr(s.T(), func() {
+		_, err = c.Run(s.T().Context(), s.step, logs(nil))
+	})
+	s.Require().NoError(err)
+
+	c, err = Open(s.T().Context(), s.cdir, WithLocalWrite(false), WithLog("text", level))
+	s.Require().NoError(err)
+	var r Result
+	out := testkit.CaptureStderr(s.T(), func() {
+		r, err = c.Run(s.T().Context(), s.step, logs(nil))
+	})
+	s.Require().NoError(err)
+	s.Require().True(r.Hit)
+	return out
+}
+
+func (s *logReplaySuite) TestAHitHidesARecordBelowTheConsolesLevel() {
+	out := s.hit(slog.LevelInfo)
+
+	s.Contains(out, "OUTPUT MARKER\n")
+	s.Contains(out, "level=INFO msg=loud\n")
+	s.NotContains(out, "msg=quiet")
+}
+
+func (s *logReplaySuite) TestAHitAtDebugShowsEveryRecord() {
+	out := s.hit(slog.LevelDebug)
+
+	s.Contains(out, "OUTPUT MARKER\nlevel=DEBUG msg=quiet\nlevel=INFO msg=loud\n")
+}
+
+func (s *logReplaySuite) TestAFailureDumpHidesARecordBelowTheConsolesLevel() {
+	c, err := Open(s.T().Context(), s.cdir, WithLocalWrite(true), WithLog("text", slog.LevelInfo), WithCollapse(true))
+	s.Require().NoError(err)
+
+	out := testkit.CaptureStderr(s.T(), func() {
+		_, err = c.Run(s.T().Context(), s.step, logs(errors.New("boom")))
+	})
+
+	s.Require().Error(err)
+	s.Contains(out, "OUTPUT MARKER\n")
+	s.Contains(out, "level=INFO msg=loud\n")
+	s.NotContains(out, "msg=quiet")
+}
+
+func (s *logReplaySuite) TestARecordOffItsLinesShowsTheLogWholeWithAnError() {
+	data := []byte("out\nlevel=DEBUG msg=quiet\n")
+
+	shown, err := logAtLevel(data, []logSpan{{Offset: 4, Length: 5, Level: slog.LevelDebug}}, slog.LevelInfo)
+
+	s.Require().ErrorIs(err, errLogRecordsMismatch)
+	s.Equal(data, shown)
+}
+
+func (s *logReplaySuite) TestARecordAtTheLevelStays() {
+	data := []byte("out\nlevel=WARN msg=loud\n")
+
+	shown, err := logAtLevel(data, []logSpan{{Offset: 4, Length: 20, Level: slog.LevelWarn}}, slog.LevelInfo)
+
+	s.Require().NoError(err)
+	s.Equal(data, shown)
+}
+
 // TestRunSnapshotFailureReportsLikeRunErr verifies that a snapshot failure
 // after a successful fn is reported the same way an fn failure is: OnResult
 // fires with the error, the Error stat is incremented, and
@@ -793,7 +892,7 @@ func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
 	lp := c.logPath("svc/api", "deadbeef")
 
 	out := testkit.CaptureStderr(t, func() {
-		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling lots of noisy output...")
 			return nil
@@ -812,7 +911,7 @@ func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
 	want := errors.New("boom")
 
 	stderrOut := testkit.CaptureStderr(t, func() {
-		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "lint: undefined symbol foo")
 			return want
@@ -836,7 +935,7 @@ func captureLog(t *testing.T, fn func()) string {
 	t.Helper()
 	var buf bytes.Buffer
 	prev := slog.Default()
-	slog.SetDefault(slog.New(NewPrettyHandler(&buf, slog.LevelInfo)))
+	slog.SetDefault(slog.New(prettyHandler(&buf, slog.LevelInfo)))
 	defer slog.SetDefault(prev)
 
 	fn()
@@ -853,11 +952,11 @@ func silentCache(t *testing.T) *Cache {
 func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 	c := silentCache(t)
 	var buf bytes.Buffer
-	c.log = slog.New(NewPrettyHandler(&buf, slog.LevelError))
+	c.log = slog.New(prettyHandler(&buf, slog.LevelError))
 	lp := c.logPath("svc/api", "deadbeef")
 
 	out := testkit.CaptureStderr(t, func() {
-		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling...")
 			fmt.Fprintln(stdout, "magus:notice: deployed api v1.2.3")
@@ -879,7 +978,7 @@ func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
 	want := errors.New("boom")
 
 	out := testkit.CaptureStderr(t, func() {
-		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			for i := 0; i < maxFailTailLines+10; i++ {
 				fmt.Fprintf(stdout, "line %d\n", i)
@@ -909,7 +1008,7 @@ func TestCaptureRunQuietRetainsFailureLog(t *testing.T) {
 	want := errors.New("boom")
 
 	_ = testkit.CaptureStderr(t, func() {
-		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "line 0")
 			return want
@@ -927,7 +1026,7 @@ func TestCaptureRunSilentPassNoNoticeIsSilent(t *testing.T) {
 	lp := c.logPath("svc/api", "feedface")
 
 	out := testkit.CaptureStderr(t, func() {
-		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+		_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := spawn.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "all good, nothing to report")
 			return nil

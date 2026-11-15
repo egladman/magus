@@ -71,13 +71,9 @@ Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/
 | `id`              | string                                                 | 6  | the bare row id, without the "jobs/" collection segment                                                                                                                                                                                                                                                                                                                                                                            |
 | `holder`          | [JobHolder](#jobholder)                                | 7  | who runs it                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `state`           | string                                                 | 8  | state is the row's lifecycle position: declared, running, exited, pass, fail or no\_return. A string rather than an enum because the vocabulary is the job store's and a second closed set here would be a second place to add a value to.                                                                                                                                                                                         |
-| `criteria`        | string                                                 | 9  | The facts a DELEGATED job carries, empty on a catalog job. These are what an orchestrator declared, never a verdict magus reached. Renamed from `goal`; the field NUMBER is the wire identity, so a peer built before the rename still reads and writes this field.                                                                                                                                                                |
 | `parent`          | string                                                 | 10 | the job this one was handed out under, empty for a root                                                                                                                                                                                                                                                                                                                                                                            |
-| `model`           | string                                                 | 11 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `check`           | string                                                 | 12 | the one check this job runs, rendered as the command that runs it                                                                                                                                                                                                                                                                                                                                                                  |
-| `write_paths`     | repeated string                                        | 13 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `deny_paths`      | repeated string                                        | 14 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `read_paths`      | repeated string                                        | 15 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `paths`           | [JobPaths](#jobpaths)                                  | 47 | what the job may write, may not write and may read                                                                                                                                                                                                                                                                                                                                                                                 |
 | `depends_on`      | repeated string                                        | 16 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `read_only`       | bool                                                   | 17 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `checkpoint`      | string                                                 | 18 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -99,7 +95,7 @@ Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/
 | `unattributed`    | [repeated JobUnattributedWrite](#jobunattributedwrite) | 34 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `entries`         | [repeated JobEntry](#jobentry)                         | 35 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `integration`     | [JobIntegration](#jobintegration)                      | 36 | unset until the integrator verified the job                                                                                                                                                                                                                                                                                                                                                                                        |
-| `schema_version`  | int32                                                  | 38 | The row's schema envelope: the newest store schema any writer of it used, and the features a reader must implement to act on it (see ListJobsResponse.read\_only).                                                                                                                                                                                                                                                                 |
+| `api_version`     | string                                                 | 45 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `requires`        | repeated string                                        | 37 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `waiter_evidence` | [JobIntegration](#jobintegration)                      | 39 | waiter\_evidence is the goals whose passing run came from the waiter's checkout rather than the holder's, unset unless `magus job wait --evidence` took some. gate\_attempts keep the holder's own attempts untouched; this is the second fact beside them.                                                                                                                                                                        |
 | `breaks`          | repeated string                                        | 40 | breaks are the flags, JSON keys, exported symbols or stored formats the root approved this job breaking; empty means it breaks nothing on its own authority.                                                                                                                                                                                                                                                                       |
@@ -107,6 +103,49 @@ Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/
 | `rework_rounds`   | int32                                                  | 42 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `widenings`       | int32                                                  | 43 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `brief_format`    | string                                                 | 44 | brief\_format is markdown or buzz; empty defers to magus.yaml's agents.brief\_format.                                                                                                                                                                                                                                                                                                                                              |
+| `agent`           | [JobAgent](#jobagent)                                  | 46 | agent is the job's agent section, unset for ordinary work.                                                                                                                                                                                                                                                                                                                                                                         |
+
+_Reserved: 9, 11, 13, 14, 15, 38; `criteria`, `model`, `write_paths`, `deny_paths`, `read_paths`, `schema_version`._
+
+Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
+
+### JobAgent
+
+JobAgent is what the agent taking a job is asked for.
+
+Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
+
+| Field          | Type                              | # | Description |
+| -------------- | --------------------------------- | - | ----------- |
+| `model`        | [JobAgentModel](#jobagentmodel)   | 1 |             |
+| `instructions` | string                            | 2 |             |
+| `worker`       | [JobAgentWorker](#jobagentworker) | 3 |             |
+
+Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
+
+### JobAgentModel
+
+JobAgentModel is the requested model: a host model id, a tier, or both.
+
+Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
+
+| Field  | Type   | # | Description |
+| ------ | ------ | - | ----------- |
+| `id`   | string | 1 |             |
+| `tier` | string | 2 |             |
+
+Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
+
+### JobAgentWorker
+
+JobAgentWorker says whether the warm worker takes the job: type is resumed or new, and reason says why a new one starts.
+
+Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
+
+| Field    | Type   | # | Description |
+| -------- | ------ | - | ----------- |
+| `type`   | string | 1 |             |
+| `reason` | string | 2 |             |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -259,6 +298,21 @@ Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/
 | `reason`  | string          | 3 |             |
 
 Used by: [ListJobs (response)](job.md#listjobs).
+
+### JobPaths
+
+JobPaths is a delegated job's declared boundary. soft are the write entries that overlap nothing until the holder's diff touches them.
+
+Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
+
+| Field   | Type            | # | Description |
+| ------- | --------------- | - | ----------- |
+| `write` | repeated string | 1 |             |
+| `read`  | repeated string | 2 |             |
+| `deny`  | repeated string | 3 |             |
+| `soft`  | repeated string | 4 |             |
+
+Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
 ### JobReadOnly
 

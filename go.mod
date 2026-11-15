@@ -15,7 +15,6 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/google/uuid v1.6.0
-	github.com/kkyr/fig v0.5.0
 	github.com/klauspost/compress v1.20.2
 	github.com/klauspost/pgzip v1.2.6
 	github.com/mark3labs/mcp-go v0.48.0
@@ -88,7 +87,8 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
-	github.com/egladman/magus/libs/cmdline v0.1.0
+	github.com/egladman/magus/libs/apiversion v0.1.0
+	github.com/egladman/magus/libs/clikit v0.1.0
 	github.com/egladman/magus/libs/diagnostics v0.2.0
 	github.com/egladman/magus/libs/embed v0.1.0
 	github.com/egladman/magus/libs/gopherbuzz v0.2.0
@@ -108,7 +108,6 @@ require (
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
-	github.com/mitchellh/mapstructure v1.5.1-0.20231216201459-8508981c8b6c // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
@@ -141,7 +140,9 @@ tool (
 // the code beside it. Their one cost downstream is `go install
 // github.com/egladman/magus/cmd/magus@...`, which refuses any module whose go.mod
 // carries a replace directive (see internal/agent/skills/magus-sdk/SKILL.md).
-replace github.com/egladman/magus/libs/cmdline => ./libs/cmdline
+replace github.com/egladman/magus/libs/apiversion => ./libs/apiversion
+
+replace github.com/egladman/magus/libs/clikit => ./libs/clikit
 
 replace github.com/egladman/magus/libs/diagnostics => ./libs/diagnostics
 

@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/langservice"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 )
 
 // lspCommand implements `magus buzz lsp`: a stdio Language Server that exposes the

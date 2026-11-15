@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // ExitedHolderBindingSuite pins decision 127: a holder's own `job exit` keeps
@@ -34,9 +35,9 @@ func TestExitedHolderBindingSuite(t *testing.T) {
 const heldJob = "held-job"
 
 func (s *ExitedHolderBindingSuite) SetupTest() {
-	held := types.Job{ID: heldJob, Criteria: "land the held package", State: types.StateRunning, WritePaths: []string{"internal/held/**"},
+	held := types.Job{ID: heldJob, Agent: agent.Instructed("land the held package"), State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/held/**"}},
 		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1}
-	next := types.Job{ID: "next-job", Criteria: "the next one", State: types.StateDeclared, WritePaths: []string{"internal/next/**"}}
+	next := types.Job{ID: "next-job", Agent: agent.Instructed("the next one"), State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/next/**"}}}
 	s.layers, s.root = fleetLayers(s.T(), held, next)
 	s.at = hookLocation(s.testContext(), Dependencies{})
 	s.who = hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}

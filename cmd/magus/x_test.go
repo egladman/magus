@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
@@ -135,4 +136,24 @@ func TestFilterPathsIsCaseInsensitiveSubstring(t *testing.T) {
 	assert.Equal(t, []string{"cmd/magus/diff.go", "types/diff.go"}, filterPaths(items, "DIFF"))
 	assert.Equal(t, []string{"internal/CACHE/log.go"}, filterPaths(items, "cache"))
 	assert.Nil(t, filterPaths(items, "nothing-matches"))
+}
+
+func TestExecCISuite(t *testing.T) { suite.Run(t, new(ExecCISuite)) }
+
+// ExecCISuite pins `magus x ci`: it verifies only, and says so when rw was
+// carried.
+type ExecCISuite struct{ suite.Suite }
+
+func (s *ExecCISuite) TestExecCIVerifiesOnly() {
+	charms, note := execCICharms([]string{types.CharmReadWrite, types.CharmUpdate, "quiet"})
+
+	s.Equal([]string{"quiet"}, charms)
+	s.Contains(note, "magus x verifies only")
+}
+
+func (s *ExecCISuite) TestExecCIWithoutReadWriteSaysNothing() {
+	charms, note := execCICharms([]string{"quiet"})
+
+	s.Equal([]string{"quiet"}, charms)
+	s.Empty(note)
 }

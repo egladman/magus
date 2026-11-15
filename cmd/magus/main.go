@@ -23,7 +23,7 @@
 //
 // Run any subcommand with -h/--help for its own flag list.
 //
-//go:generate go run ../magus-utils config -config ../../internal/config/config.go -fields-out ../../schema/gen/fields.go -fields-pkg schemagen -bind-out gen/bind.go -bind-pkg flaggen -apply-env-out ../../internal/config/gen/env.go -apply-env-pkg configgen
+//go:generate go run ../magus-utils config -config ../../internal/config/config.go -settings-out ../../internal/config/gen/settings/settings.go -settings-pkg settings -apply-env-out ../../internal/config/gen/env.go -apply-env-pkg configgen
 //go:generate go run ../magus-utils cliflags -out gen/cli_flags.go -pkg flaggen
 //go:generate go run ../magus-utils completions -out completions
 package main
@@ -61,9 +61,8 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/diagnostics"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
@@ -762,8 +761,8 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	if err != nil {
 		err = config.WithRunningVersion(err, version)
 		// A hook reads a guard that exits as no verdict and refuses the
-		// call, the rebuild included. The guard judges a stale binary instead.
-		if peekedSub == "shell" && ward.IsStaleBinary(err) {
+		// call, the rebuild included. The guard judges the failure instead.
+		if peekedSub == "shell" {
 			return rootCtx, startupResult{cleanup: cleanup}, mapExitCode(shellCommand(withStaleConfig(rootCtx, err), peekedSubArgs))
 		}
 		// Printed rather than logged: the unknown-key error names a file, a line and a
@@ -1072,7 +1071,7 @@ func logForwardFallback(ctx context.Context, log *slog.Logger, err error) {
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
 	group := ""
-	for _, c := range commands.Root.Children {
+	for _, c := range commands.Root.Spec.Children {
 		if c.Group != group {
 			group = c.Group
 			fmt.Fprintf(os.Stderr, "\n%s:\n", group)

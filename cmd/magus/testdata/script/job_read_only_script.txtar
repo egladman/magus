@@ -35,7 +35,7 @@ stdout 'goal check: verified \(out[0-9a-f]{12}\)'
 # A check-less scout has nothing a wait could grade, so the result its holder files is the
 # grade: `magus job exit --stdin` records it pass and ends it. One ending with no result is
 # recorded no_return, with an end_reason saying it was ungraded rather than abandoned.
-exec magus job fork scout/notes --read-only --criteria 'list the tax rules'
+exec magus job fork scout/notes --read-only --instructions 'list the tax rules'
 exec magus job exec scout/notes
 stdin $WORK/notes.json
 exec magus job exit scout/notes --stdin
@@ -47,7 +47,7 @@ stdin $WORK/notes.json
 ! exec magus job exit scout/notes --stdin
 stderr 'scout/notes already ended pass'
 
-exec magus job fork scout/prose --read-only --criteria 'summarize the tests'
+exec magus job fork scout/prose --read-only --instructions 'summarize the tests'
 exec magus job exec scout/prose
 exec magus job exit scout/prose
 stdout '^ended scout/prose, recorded no_return: ended ungraded: a read-only row declaring no check or goal'
@@ -55,13 +55,13 @@ stdout '^ended scout/prose, recorded no_return: ended ungraded: a read-only row 
 
 # A scout that forgets --read-only names no write paths, which bounds nothing, so fork
 # refuses it and says how to declare it.
-! exec magus job fork scout/loose --criteria 'read the tests'
+! exec magus job fork scout/loose --instructions 'read the tests'
 stderr 'scout/loose names no write paths and is not read-only'
 stderr '--read-only'
 
 -- scout.json --
 {"api_version": "magus.job/v1alpha1", "id": "scout/pricing", "read_only": true,
- "criteria": "say which file computes the total",
+ "agent": {"instructions": "say which file computes the total", "worker": {"type": "resumed"}},
  "check": {"script": "probes/pricing.buzz"}}
 -- result.in.json --
 {"api_version": "magus.job-result/v1alpha1", "job": "scout/pricing",

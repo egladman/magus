@@ -109,6 +109,10 @@ func hostModuleBinds(modules ffi.Set) []buzz.Module {
 				if src, ok := spell.ModuleDecls(name); ok {
 					s.SetModuleDecls(importPath, src)
 				}
+				// The declarations may import a nested namespace, magus/agent.
+				if err := spell.SetNamespaceDecls(s); err != nil {
+					return err
+				}
 				// Buzz's stdlib may already own this bare name (os, fs, crypto): take
 				// its members onto the magus module so callers see the union (magus
 				// wins on the few shared keys, e.g. os.exit/fs.exists, its forms

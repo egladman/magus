@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -112,7 +113,7 @@ func TestCommandRuleSeesABareCommand(t *testing.T) {
 // A worker's request carries its lease row, resolved the way every lease-scoped rule
 // resolves it.
 func TestCommandRuleSeesTheWorkersLease(t *testing.T) {
-	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	row := types.Job{ID: "wave/worker", Agent: agent.Instructed("the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
 	bindCaller(t, ctx, hookAttribution{Host: "claude-code", Session: "8f2c6a1e"}, row.ID)
 
@@ -122,13 +123,13 @@ func TestCommandRuleSeesTheWorkersLease(t *testing.T) {
 	assert.Equal(t, types.AgentRoleWorker, probe.asked[0].Role)
 	require.NotNil(t, probe.asked[0].Lease)
 	assert.Equal(t, row.ID, probe.asked[0].Lease.ID)
-	assert.Equal(t, row.WritePaths, probe.asked[0].Lease.WritePaths)
+	assert.Equal(t, row.Paths.Write, probe.asked[0].Lease.Paths.Write)
 }
 
 // A worker's request names the checkout its row owns, and not one another job's fork made.
 func TestCommandRuleSeesTheCheckoutsTheCallerOwns(t *testing.T) {
-	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
-	other := types.Job{ID: "wave/other", Criteria: "the docs", WritePaths: []string{"docs/**"}, State: types.StateRunning, Registered: 1}
+	row := types.Job{ID: "wave/worker", Agent: agent.Instructed("the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}}, State: types.StateRunning, Registered: 1}
+	other := types.Job{ID: "wave/other", Agent: agent.Instructed("the docs"), Paths: types.JobPaths{Write: []string{"docs/**"}}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row, other)
 	at, _ := ctx.Value(locationKey{}).(location)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})

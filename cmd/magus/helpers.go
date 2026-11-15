@@ -18,10 +18,12 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/gcpolicy"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // withDefaultCharms combines the workspace default charms (magus.yaml
@@ -364,7 +366,8 @@ type magusInternals interface {
 	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 	LastRecordedRun(ctx context.Context, projectPath, target string) (cache.RecordedRun, error)
 	Telemetry() observability.Provider
-	CheckSpawn(parent, child types.ModelTier) error
+	CheckSpawn(parent, child agent.ModelTier) error
+	SpawnCeiling(ctx context.Context) (builtin.Setting, error)
 }
 
 // viewInternals is m as workspace.ViewAs shows it to magus's own packages. It is also what a

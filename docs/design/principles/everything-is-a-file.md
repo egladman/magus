@@ -106,8 +106,8 @@ The stores that do not follow the format yet, as found on 2026-10-14:
 One entry per line; a change appends, and the last line for a key wins.
 
 ```jsonl
-{"id":"docs-index","state":"open","model":"economy"}
-{"id":"docs-index","state":"pass","model":"economy"}
+{"id":"docs-index","state":"open","model":"routine"}
+{"id":"docs-index","state":"pass","model":"routine"}
 ```
 
 ## Bad
@@ -115,7 +115,7 @@ One entry per line; a change appends, and the last line for a key wins.
 ```json
 {
   "jobs": [
-    { "id": "docs-index", "state": "pass", "model": "economy" }
+    { "id": "docs-index", "state": "pass", "model": "routine" }
   ]
 }
 ```

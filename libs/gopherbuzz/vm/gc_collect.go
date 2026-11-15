@@ -164,20 +164,10 @@ func (vm *VM) callCollector(inst *objectInst) error {
 		// vtable is the unbound definition shared by every instance.
 		fn := *m.Fn
 		fn.This = heapValue(tagObject, inst)
-		// A fresh VM, not vm.Call + vm.Exec: this runs from inside a host call on a VM
-		// that is already mid-execution, and driving that same VM re-entrantly walks
-		// off its own frame stack. That is what callValue does for a map.filter
-		// callback, and this is callValue's tagFun arm with one addition -- the VM is
-		// PARENTED to this tree.
-		//
-		// The parent is why this is not just callValue. A collector body may allocate
-		// a collectable of its own; on callValue's detached VM (gcParent nil, so its
-		// own gcRoot) that instance joined a registry thrown away with the VM, and its
-		// collect() never ran at all. Measured before the parent was added: 3000
-		// collectors each allocating one instance produced ZERO collections of those
-		// instances, even after two explicit gc\collect() calls.
+		// A fresh VM: re-entering vm mid-execution walks off its frames.
+		// Parented, so what the collector allocates joins this registry.
 		callVM := NewVM(vm.ctx)
-		callVM.gcParent = vm.gcRoot()
+		callVM.gcParent = vm
 		if err := callVM.Call(heapValue(tagFun, &fn), nil); err != nil {
 			return err
 		}

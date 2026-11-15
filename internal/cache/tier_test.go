@@ -449,7 +449,7 @@ func TestRemoteNamespaceIsSignedVerifiedAndGated(t *testing.T) {
 
 	// No signing key, so the remote tier is read-only: the put is refused.
 	err = reader.RemoteNamespace("@shards").Put(t.Context(), "k3", strings.NewReader("x"))
-	assert.ErrorContains(t, err, "may not write the remote tier")
+	assert.ErrorIs(t, err, ErrRemoteReadOnly)
 }
 
 // A bundle publish is a remote-tier write, so a run that may not write it refuses.

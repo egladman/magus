@@ -40,6 +40,7 @@ In the docs:
 In the code (`magus refs <name>` lists every site):
 
 - `dry.Project` (Go)
+- `impact.Project` (Go)
 - `types.Project` (Go)
 - `scipbuzz.Project` (Go)
 

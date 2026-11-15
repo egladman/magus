@@ -27,7 +27,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -467,6 +467,7 @@ const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 // worktree can run nothing, its check included, until its dependencies are there. Every
 // other run it lets through, the check included, is held to the write paths under the rw
 // charm. rowJudge decides all of it, so a brief is refused exactly when its worker would be.
+// A product build passes too: it links where no hook runs (ADR 0045).
 //
 // Silent where there is nothing to hold the run to: no lease, no live row, the checkout's
 // integrator, which builds, regenerates and gates there, the gate itself for the holder of a
@@ -511,7 +512,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 			return opRewriteDenial(v, me, deps.DefaultCharms)
 		case len(v.outside) > 0:
 			return rewriteDenial(v, me, deps.DefaultCharms)
-		case v.permitted, vetsWritePaths(v.run, me.WritePaths, deps):
+		case v.permitted, vetsWritePaths(v.run, me.Paths.Write, deps):
 			continue
 		}
 		r = v.run
@@ -519,14 +520,14 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		for i, c := range checks {
 			commands[i] = fmt.Sprintf("`%s`", checkCommand(c))
 		}
+		if buildsProduct(judge.workspace, r) {
+			continue
+		}
 		if buildsCheckoutBinary(judge.workspace, r) {
-			if judge.leavesBuildToRule(r) && ownsCheckout(ctx, deps, at, at.workspace) {
-				continue
-			}
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
-				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks. %s",
-					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0], movedCheckoutRebuild(checkoutHook(at.workspace))),
+				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator %s Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks.%s %s",
+					onePerBase, placementClause(at.workspace, me.ID), commands[0], productRemedy(judge.workspace, r), unpinnedRebuild),
 			}
 		}
 		if readsOwnProjects(r, me) {
@@ -562,7 +563,7 @@ func readsOwnProjects(r targetRun, row types.Job) bool {
 	if r.verb != "run" || !r.noDefaultCharms || r.rewrites(nil) {
 		return false
 	}
-	paths := slices.Concat(row.WritePaths, row.ReadPaths)
+	paths := slices.Concat(row.Paths.Write, row.Paths.Read)
 	checks := rowChecks(row)
 	return !slices.ContainsFunc(r.selection(), func(p string) bool {
 		p = path.Clean(p)
@@ -608,8 +609,6 @@ type rowJudge struct {
 	others func() []types.Job
 	// ignored asks the VCS at root which paths it ignores, for job.RegeneratedOutside.
 	ignored func() func([]string) []string
-	// commandRuled reports a command rule on either side of the policy.
-	commandRuled func() bool
 }
 
 func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at location, workspace func() (types.WorkspaceRepository, error)) rowJudge {
@@ -625,12 +624,11 @@ func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at locat
 			return job.VCSIgnored(ctx, at.workspace)
 		}),
 		produces: sync.OnceValue(func() func(target, project string) bool {
-			return leaseProducers(ctx, workspace, row.WritePaths)
+			return leaseProducers(ctx, workspace, row.Paths.Write)
 		}),
 		composes: sync.OnceValue(func() func(target, project string) bool {
 			return checksCompose(graph, checks)
 		}),
-		commandRuled: sync.OnceValue(func() bool { return holdsCommandRule(ctx, deps) }),
 	}
 }
 
@@ -720,7 +718,7 @@ func (j rowJudge) verdict(r targetRun) runVerdict {
 		v.op, v.composers = true, r.composers(j.graph)
 		return v
 	}
-	v.outside = r.writesOutside(projects, j.row.WritePaths, own)
+	v.outside = r.writesOutside(projects, j.row.Paths.Write, own)
 	return v
 }
 
@@ -756,7 +754,7 @@ func (j rowJudge) heldBy(own []job.RegeneratedOutput, projects []*types.Project)
 			if apart, _ := job.HeldApart(j.root, other, func() ([]*types.Project, string) { return projects, "" }, pattern); apart {
 				continue
 			}
-			if writePathsTouch(other.WritePaths, pattern) || slices.Contains(theirs, o) {
+			if writePathsTouch(other.Paths.Write, pattern) || slices.Contains(theirs, o) {
 				return o.Output, other
 			}
 		}
@@ -802,8 +800,8 @@ func knockClause(root string, holder types.Job) string {
 // asked instead.
 func heldDenial(v runVerdict, me types.Job, root string) denial {
 	wait := hint.JobWait.With(v.holder.ID)
-	why := fmt.Sprintf("lease %s's write paths (%s) hold it", v.holder.ID, strings.Join(v.holder.WritePaths, ", "))
-	if !writePathsTouch(v.holder.WritePaths, strings.Fields(v.held)[0]) {
+	why := fmt.Sprintf("lease %s's write paths (%s) hold it", v.holder.ID, strings.Join(v.holder.Paths.Write, ", "))
+	if !writePathsTouch(v.holder.Paths.Write, strings.Fields(v.held)[0]) {
 		why = fmt.Sprintf("lease %s regenerates it from its own write paths too, and was declared before lease %s", v.holder.ID, me.ID)
 	}
 	next := fmt.Sprintf("run `%s`", wait)
@@ -1000,12 +998,12 @@ func parseTargetRun(c hint.Invocation) (targetRun, bool) {
 // verbFlagTakesValue reports whether a flag consumes the next word, asking verb's own flags
 // in the registry the CLI parses with before magus's global set.
 func verbFlagTakesValue(verb, name string) bool {
-	for _, cmd := range commands.Root.Children {
+	for _, cmd := range commands.Root.Spec.Children {
 		if cmd.Name != verb {
 			continue
 		}
-		if i := slices.IndexFunc(cmd.Flags, func(f cmdline.Flag) bool { return f.Name == name }); i >= 0 {
-			return cmd.Flags[i].Kind != cmdline.Bool
+		if i := slices.IndexFunc(cmd.Flags, func(f command.Flag) bool { return f.Name == name }); i >= 0 {
+			return cmd.Flags[i].Kind != command.Bool
 		}
 	}
 	takes, _ := MagusFlagTakesValue(name)
@@ -1379,37 +1377,44 @@ func buildsCheckoutBinary(workspace func() (types.WorkspaceRepository, error), r
 	return runRelinks(types.IndexTargetPolicies(ws), r)
 }
 
-// leavesBuildToRule reports a build the workspace's command rule answers next.
-// A charm, another project, or no rule on either side stays refused here. A
-// rule that raises or runs out of time is denied when asked.
-func (j rowJudge) leavesBuildToRule(r targetRun) bool {
-	_, t, err := r.parse()
-	if err != nil || len(t.Charms) > 0 || !slices.Equal(runProjects(r), []string{"."}) {
+// buildsProduct reports a run of the target a relinking one names as the
+// writer of its product path. No hook runs that binary, so a worker may.
+func buildsProduct(workspace func() (types.WorkspaceRepository, error), r targetRun) bool {
+	ws, err := workspace()
+	if err != nil || r.verb != "run" {
 		return false
 	}
-	return j.commandRuled()
+	ix := types.IndexTargetPolicies(ws)
+	for _, project := range runProjects(r) {
+		if _, ok := ix.ProductBuild(types.TargetRef{Project: project, Target: targetName(r.target)}); !ok {
+			return false
+		}
+	}
+	return true
 }
 
-// holdsCommandRule reports a command rule on either side. The approved side is
-// always wired, so only resolving it says whether it holds one.
-func holdsCommandRule(ctx context.Context, deps Dependencies) bool {
-	if deps.CommandRule != nil {
-		return true
+// productRemedy is the sentence naming where a worker builds r's binary
+// instead, "" when r's target declares no product.
+func productRemedy(workspace func() (types.WorkspaceRepository, error), r targetRun) string {
+	ws, err := workspace()
+	if err != nil {
+		return ""
 	}
-	if deps.ApprovedCommandRule == nil {
-		return false
+	pol, ok := runPolicy(types.IndexTargetPolicies(ws), r)
+	if !ok || pol.Product == "" {
+		return ""
 	}
-	rule, err := deps.ApprovedCommandRule(ctx)
-	return err == nil && rule != nil
+	return fmt.Sprintf(" To try this unit's own edits, build them at %s, which no hook runs: `magus run %s %s`.",
+		pol.Product, pol.ProductTarget, pol.Project)
 }
 
 // runsOffCheck reports a run a brief may teach though no check permits it.
-// A brief has no checkout yet, so the row's standing one stands in for it.
+// A worker never relinks the binary that judges it, and builds its product.
 func (j rowJudge) runsOffCheck(r targetRun) bool {
-	if buildsCheckoutBinary(j.workspace, r) {
-		return j.leavesBuildToRule(r) && j.row.Worktree.Standing()
+	if buildsProduct(j.workspace, r) {
+		return true
 	}
-	return readsOwnProjects(r, j.row)
+	return !buildsCheckoutBinary(j.workspace, r) && readsOwnProjects(r, j.row)
 }
 
 // rowChecks are the runs a row names as its checks: the check record and every check goal.
@@ -1629,6 +1634,25 @@ func denyUndeclaredLease(standing leaseStanding, actingLease, command string) de
 		Say: fmt.Sprintf("magus workspace: lease %s is not declared; `%s` lists the ids.", actingLease, hint.LsJobs.String()),
 		Why: "Every lease-scoped rule reads that row, so a call naming a row this workspace's ledger does not carry is graded by nothing at all. That is the shape a typo'd id takes: an agent that believes it is inside a boundary, running outside every one.\n" +
 			"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run, so you can find the id you were handed and bind to it.",
+	}
+}
+
+// denyUnauthorizedLease refuses a live row that records no Authority every
+// state-changing line, passing the remedy lines denyUndeclaredLease passes.
+// Without an authority nothing says which revision may judge the worker.
+func denyUnauthorizedLease(standing leaseStanding, actingLease, command string) denial {
+	if !standing.declared || !standing.state.Live() || standing.row.Authority != "" {
+		return denial{}
+	}
+	if command != "" && undeclaredLeaseRepairs(command) {
+		return denial{}
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: lease %s records no authority; stop and report it, as only your orchestrator can fork the job again.", actingLease),
+		Why: fmt.Sprintf("The store records the revision a worker is judged from when the job is forked, and this row has none: an older magus forked it, or the root's version control named no committed revision. "+
+			"Without one the guard cannot tell the root's rules from the worker's own edits, so it refuses the work rather than judge it from the worker's tree. "+
+			"The orchestrator ends the job with `%s` and forks it again.\n"+
+			"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run.", hint.JobExit.With(actingLease)),
 	}
 }
 
@@ -2080,7 +2104,7 @@ func childForkRebind(f childFork, h holder, verb, ask string) rebind {
 	case slices.ContainsFunc(held.rows, func(r types.Job) bool { return r.ID == f.id }):
 		return rebind{problem: fmt.Sprintf("would %s over %s, which already exists", verb, f.id), ask: "change it",
 			why: "A worker writes no row but its own and the children it hands out."}
-	case !f.readOnly && !f.writePaths && (held.row.ReadOnly || len(held.row.WritePaths) > 0):
+	case !f.readOnly && !f.writePaths && (held.row.ReadOnly || len(held.row.Paths.Write) > 0):
 		return rebind{problem: fmt.Sprintf("would %s that can write anywhere", verb), fix: "fork it --read-only or with --write-paths inside your own.",
 			why: "A child that is not read-only and names no write paths is scoped by nothing."}
 	case (!f.readOnly || f.bounded) && h.storeLease() != h.id:
@@ -2093,7 +2117,7 @@ func childForkRebind(f childFork, h holder, verb, ask string) rebind {
 // forkFlagsUnbounded are the `job fork` flags, and the magus\job.put opts, that declare no
 // boundary: the lineage, the prose, the timing, read_only and the checkout the child works in.
 var forkFlagsUnbounded = map[string]bool{
-	"parent": true, "criteria": true, "model": true, "timeout": true, "checkpoint": true, "checkout": true,
+	"parent": true, "instructions": true, "new-worker": true, "agent": true, "model": true, "timeout": true, "checkpoint": true, "checkout": true,
 	"read-only": true, "read_only": true, "depends-on": true, "depends_on": true,
 	"stdin": true, "op": true, "id": true,
 }
@@ -2110,8 +2134,8 @@ func cliFork(args []string, stdin string) childFork {
 		}
 		scriptOnly := row.Check != nil && row.Check.Target == "" && row.Check.Script != ""
 		return childFork{
-			id: row.ID, parent: row.Parent, readOnly: row.ReadOnly, writePaths: len(row.WritePaths) > 0,
-			bounded: len(row.WritePaths)+len(row.ReadPaths)+len(row.DenyPaths)+len(row.Goals) > 0 ||
+			id: row.ID, parent: row.Parent, readOnly: row.ReadOnly, writePaths: len(row.Paths.Write) > 0,
+			bounded: len(row.Paths.Write)+len(row.Paths.Read)+len(row.Paths.Deny)+len(row.Goals) > 0 ||
 				(row.Check != nil && !scriptOnly) || row.Validation != "" || (row.State != "" && row.State != types.StateDeclared),
 		}
 	}
@@ -2148,7 +2172,7 @@ func verbArgv(args []string, verb hint.Command) (operands []string, flags map[st
 		name, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
 		takes, _ := MagusFlagTakesValue(name)
 		if own, ok := verbFlag(verb, name); ok {
-			takes = own.Kind != cmdline.Bool
+			takes = own.Kind != command.Bool
 		}
 		switch {
 		case joined:
@@ -2164,8 +2188,8 @@ func verbArgv(args []string, verb hint.Command) (operands []string, flags map[st
 }
 
 // verbFlag looks name up among verb's own flags in the registry the CLI parses with.
-func verbFlag(verb hint.Command, name string) (cmdline.Flag, bool) {
-	for _, group := range commands.Root.Children {
+func verbFlag(verb hint.Command, name string) (command.Flag, bool) {
+	for _, group := range commands.Root.Spec.Children {
 		if group.Name != verb.Head() {
 			continue
 		}
@@ -2173,12 +2197,12 @@ func verbFlag(verb hint.Command, name string) (cmdline.Flag, bool) {
 			if sub.Name != verb.Leaf() {
 				continue
 			}
-			if i := slices.IndexFunc(sub.Flags, func(f cmdline.Flag) bool { return f.Name == name }); i >= 0 {
+			if i := slices.IndexFunc(sub.Flags, func(f command.Flag) bool { return f.Name == name }); i >= 0 {
 				return sub.Flags[i], true
 			}
 		}
 	}
-	return cmdline.Flag{}, false
+	return command.Flag{}, false
 }
 
 // stdinRecord is the text a statement feeds its command from a heredoc or a here-string,
@@ -2309,11 +2333,11 @@ func shrinksWritePaths(params map[string]string, row types.Job) bool {
 		}
 	}
 	proposed := strings.Split(declared, ",")
-	if !present || len(proposed) >= len(row.WritePaths) {
+	if !present || len(proposed) >= len(row.Paths.Write) {
 		return false
 	}
 	for _, decl := range proposed {
-		if !slices.Contains(row.WritePaths, strings.TrimSpace(decl)) {
+		if !slices.Contains(row.Paths.Write, strings.TrimSpace(decl)) {
 			return false
 		}
 	}
@@ -3055,7 +3079,7 @@ func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Jo
 	}
 	list := strings.Join(outside, " ")
 	return fmt.Sprintf("It commits %s, outside the lease's write paths (%s). Unstage them with `git restore --staged -- %s` and file them owed: you may commit an output a target declares when you wrote a source it reads (the target ran, so its output is yours), and your orchestrator widens the row for anything else.",
-		list, strings.Join(row.WritePaths, ", "), list)
+		list, strings.Join(row.Paths.Write, ", "), list)
 }
 
 // pathsOutsideLease is the sorted paths row may not commit: outside its write
@@ -3064,7 +3088,7 @@ func commitPathsRefusal(ctx context.Context, opts types.VCSOptions, row types.Jo
 func pathsOutsideLease(row types.Job, paths []string, site vcsSite) ([]string, error) {
 	var outside []string
 	for _, p := range paths {
-		if _, held, _ := declarationCovering(row.WritePaths, p); !held && !types.IsMagusMaintained(p) && !slices.Contains(outside, p) {
+		if _, held, _ := declarationCovering(row.Paths.Write, p); !held && !types.IsMagusMaintained(p) && !slices.Contains(outside, p) {
 			outside = append(outside, p)
 		}
 	}
@@ -3108,7 +3132,7 @@ func pickPathsRefusal(ctx context.Context, row types.Job, inv hint.Invocation, r
 		return ""
 	}
 	return fmt.Sprintf("It picks commits writing %s, outside the lease's write paths (%s). Take only the paths you hold with `git checkout <commit> -- <path>` and commit them, or file the rest owed: you may commit an output a target declares when you wrote a source it reads, and your orchestrator widens the row for anything else.",
-		strings.Join(outside, " "), strings.Join(row.WritePaths, ", "))
+		strings.Join(outside, " "), strings.Join(row.Paths.Write, ", "))
 }
 
 // denyLeaseScriptVCS judges each shell script the line runs by its lines, since
@@ -4046,6 +4070,11 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	removed := append(removedOrMovedOperands(command, 0, dialect, start, home), boundPathOperands(command, dialect, start)...)
 	destinations := destinationOperands(command, dialect, start, home)
 	candidates := placedWriteCandidates(command, dialect, start, home)
+	// Read only for a refused write: it can open the workspace.
+	products := sync.OnceValue(func() []string {
+		ix, _, _ := declaredPolicies(ctx, deps, checkout, lazyWorkspace(ctx, deps, checkout))
+		return ix.Products()
+	})
 	for _, w := range slices.Concat(candidates, destinations, removed) {
 		if target, placed := w.place(home); placed {
 			if g := denyOwnBinaryWrite(actingLease, target); g.Decision == decisionDeny {
@@ -4082,7 +4111,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			// No lease declares it, so the acting lease's own write paths decide, as for the
 			// editor tool. Only a redirect target or an existing file counts: sed's `s/a/b`
 			// is spelled like a path. A remove or move is graded below, holder-made files kept.
-			if !enrolled || len(me.WritePaths) == 0 || slices.ContainsFunc(removed, func(o placedWord) bool {
+			if !enrolled || len(me.Paths.Write) == 0 || slices.ContainsFunc(removed, func(o placedWord) bool {
 				t, ok := o.place(home)
 				return ok && t == target
 			}) {
@@ -4096,11 +4125,12 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			// A catch-all covers every word, `print(1)` included.
 			continue
 		}
-		if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
+		// A worker builds its own magus at a product path; no hook runs it.
+		if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny && !slices.Contains(products(), rel) {
 			return g.Reason
 		}
 	}
-	if !enrolled || len(me.WritePaths) == 0 {
+	if !enrolled || len(me.Paths.Write) == 0 {
 		return ""
 	}
 	if unread := unreadHandedScripts(command, dialect); len(unread) > 0 {
@@ -4123,7 +4153,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		if err != nil || !info.Mode().IsRegular() {
 			return false
 		}
-		if _, denied, err := declarationCovering(me.DenyPaths, rel); err != nil || denied {
+		if _, denied, err := declarationCovering(me.Paths.Deny, rel); err != nil || denied {
 			return false
 		}
 		revision, _ := types.ParseCheckpointToken(cmp.Or(me.Checkpoint, me.ReportedBase))
@@ -4161,7 +4191,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			}
 			return denial{
 				Say: fmt.Sprintf("magus workspace: %s outside the paths lease %s was given (%s); "+leaseActorClause("widen these write paths"),
-					what, me.ID, strings.Join(me.WritePaths, ", ")),
+					what, me.ID, strings.Join(me.Paths.Write, ", ")),
 				Why: fmt.Sprintf("A remove or move writes each path it names, and a directory with everything in it, so every one of them must be inside the write paths lease %s (%s) declared and outside its deny paths. "+
 					"`%s` shows what the job holds.\n"+leaseActorWhy,
 					me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID)),
@@ -4227,8 +4257,8 @@ func reachOutside(checkout string, me types.Job, rel string) string {
 	root := filepath.Join(checkout, filepath.FromSlash(rel))
 	// Lstat: a remove of a link to a directory removes the link.
 	if info, err := os.Lstat(root); err != nil || !info.IsDir() {
-		_, denied, errDeny := declarationCovering(me.DenyPaths, rel)
-		_, mine, errMine := declarationCovering(me.WritePaths, rel)
+		_, denied, errDeny := declarationCovering(me.Paths.Deny, rel)
+		_, mine, errMine := declarationCovering(me.Paths.Write, rel)
 		if errDeny != nil || errMine != nil || mine && !denied {
 			return ""
 		}
@@ -4245,17 +4275,17 @@ func reachOutside(checkout string, me types.Job, rel string) string {
 			return filepath.SkipAll
 		}
 		r := path.Join(rel, filepath.ToSlash(under))
-		_, denied, errDeny := declarationCovering(me.DenyPaths, r)
-		_, mine, errMine := declarationCovering(me.WritePaths, r)
+		_, denied, errDeny := declarationCovering(me.Paths.Deny, r)
+		_, mine, errMine := declarationCovering(me.Paths.Write, r)
 		switch {
 		case errDeny != nil || errMine != nil:
 			return filepath.SkipAll
 		case denied:
-		case mine && d.IsDir() && !holdsDeclaredPath(me.DenyPaths, r):
+		case mine && d.IsDir() && !holdsDeclaredPath(me.Paths.Deny, r):
 			return filepath.SkipDir
 		case mine:
 			return nil
-		case d.IsDir() && holdsDeclaredPath(me.WritePaths, r):
+		case d.IsDir() && holdsDeclaredPath(me.Paths.Write, r):
 			return nil
 		}
 		outside = r
@@ -4289,7 +4319,7 @@ func holdsDeclaredPath(decls []string, dir string) bool {
 // mentions is not treated as a path at all.
 func declaredPath(live []types.Job, rel string) (declared, byCatchAll bool) {
 	for _, u := range live {
-		for _, decls := range [][]string{u.WritePaths, u.DenyPaths} {
+		for _, decls := range [][]string{u.Paths.Write, u.Paths.Deny} {
 			decl, ok, _ := declarationCovering(decls, rel)
 			if !ok {
 				continue

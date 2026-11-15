@@ -73,15 +73,17 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
 // Job lint goals pass written files, including generated Go and config files.
 // Buf accepts one module input; lint the module so these paths cannot become inputs.
 export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
     buf["buf-lint"](ctx, {"args": ["."]});
 }
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(generate, lint, breaking);
+    ctx.needs(generate, format, lint, breaking);
 }
 
 // breaking runs buf-breaking against the default branch, less the findings the
 // ledger permits.
 export fun breaking(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(format);
     ctx.readsFiles(["buf-breaking.deviations.jsonl", "**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"]);
     final ledger = "buf-breaking.deviations.jsonl";
     // buf reads the baseline from git only.

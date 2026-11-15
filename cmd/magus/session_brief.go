@@ -185,11 +185,11 @@ type briefTree struct {
 
 // briefLease is one live lease and the single command that binds it here.
 type briefLease struct {
-	ID         string `json:"id"`
-	State      string `json:"state,omitempty"`
-	Exec       string `json:"exec"`
-	Criteria   string `json:"criteria,omitempty"`
-	Validation string `json:"validation,omitempty"`
+	ID           string `json:"id"`
+	State        string `json:"state,omitempty"`
+	Exec         string `json:"exec"`
+	Instructions string `json:"instructions,omitempty"`
+	Validation   string `json:"validation,omitempty"`
 	// Claims are the write paths the job added with a proof, by `magus job apply` or by the
 	// guard on a write, each as path, evidence and proof.
 	Claims []string `json:"claims,omitempty"`
@@ -351,14 +351,15 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	if res, err := vcs.Resolve(ctx, root, "", vcsOpts); err == nil && res.VCS != nil {
 		brief.readVCS(ctx, res, ws)
 	}
-	if rows, err := readJobRows(ctx, root); err != nil {
-		brief.Jobs = &briefJobTree{Unread: err.Error()}
-		brief.Unmerged.Unknown = err.Error()
+	if snap := readJobSnapshot(ctx, root); snap.Err != nil {
+		brief.Jobs = &briefJobTree{Unread: snap.Err.Error()}
+		brief.Unmerged.Unknown = snap.Err.Error()
 	} else {
-		brief.Unmerged = job.Unmerged(ctx, root, rows)
+		rows, tries := snap.Rows, types.NewJobAttempts(snap.Attempts)
+		brief.Unmerged = job.Unmerged(ctx, root, rows, tries)
 		acting, _, _ := checkoutLease(ctx, root)
 		brief.Leases, brief.OtherLeases = briefLeases(rows, acting, root)
-		brief.Jobs = sessionJobTree(ctx, rows, acting, root, vcsOpts)
+		brief.Jobs = sessionJobTree(ctx, rows, tries, acting, root, vcsOpts)
 		if brief.Jobs != nil {
 			// The tree names the jobs this session owns, which is the count a reader acts on.
 			brief.OtherLeases = 0
@@ -510,17 +511,17 @@ func briefLeases(rows []types.Job, acting, root string) (leases []briefLease, ot
 			others++
 			continue
 		}
-		criteria, _, _ := strings.Cut(strings.TrimSpace(row.Criteria), "\n")
+		criteria, _, _ := strings.Cut(strings.TrimSpace(row.Instructions()), "\n")
 		if criteria == "" {
-			criteria = "no criteria recorded"
+			criteria = "no instructions recorded"
 		}
 		item := briefLease{
-			ID:         row.ID,
-			State:      string(row.State),
-			Exec:       hint.JobExec.With(row.ID),
-			Criteria:   criteria,
-			Validation: row.Validation,
-			Claims:     claimLines(row.Claims),
+			ID:           row.ID,
+			State:        string(row.State),
+			Exec:         hint.JobExec.With(row.ID),
+			Instructions: criteria,
+			Validation:   row.Validation,
+			Claims:       claimLines(row.Claims),
 		}
 		if row.State.Editing() {
 			editing = append(editing, item)
@@ -544,11 +545,20 @@ func readJobRows(ctx context.Context, root string) ([]types.Job, error) {
 	return store.List()
 }
 
+// readJobSnapshot is readJobRows with the store's tries.
+func readJobSnapshot(ctx context.Context, root string) job.Snapshot {
+	store, err := openJobs(ctx, root, jobOpen{})
+	if err != nil {
+		return job.Snapshot{Err: err}
+	}
+	return job.ReadSnapshot(store)
+}
+
 // sessionJobTree is the jobs under this session's root, nil when it owns none. The CLI
 // cannot see the host session, so the checkout names the root: the job acted under here,
 // else the jobs forked from here, each tree only while something in it is live or still
 // holds a checkout.
-func sessionJobTree(ctx context.Context, rows []types.Job, acting, root string, vcsOpts types.VCSOptions) *briefJobTree {
+func sessionJobTree(ctx context.Context, rows []types.Job, tries types.JobAttempts, acting, root string, vcsOpts types.VCSOptions) *briefJobTree {
 	var tree []types.Job
 	if acting != "" {
 		tree = types.JobDescendants(rows, acting)
@@ -576,7 +586,7 @@ func sessionJobTree(ctx context.Context, rows []types.Job, acting, root string, 
 			out.More++
 			continue
 		}
-		brief := briefTreeJob(ctx, rows, line.Job, vcsOpts)
+		brief := briefTreeJob(ctx, rows, tries.Result(line.Job.ID), line.Job, vcsOpts)
 		brief.Depth = line.Depth
 		out.Jobs = append(out.Jobs, brief)
 	}
@@ -599,7 +609,7 @@ func withoutParent(rows []types.Job, parent string) []types.Job {
 }
 
 // briefTreeJob reads one job's row and its checkout.
-func briefTreeJob(ctx context.Context, rows []types.Job, row types.Job, vcsOpts types.VCSOptions) briefJob {
+func briefTreeJob(ctx context.Context, rows []types.Job, result *types.JobResult, row types.Job, vcsOpts types.VCSOptions) briefJob {
 	job := briefJob{ID: row.ID, State: string(row.State), Checkout: row.CheckoutRoot}
 	if row.Worktree.Standing() {
 		job.Checkout = row.Worktree.Root
@@ -612,8 +622,8 @@ func briefTreeJob(ctx context.Context, rows []types.Job, row types.Job, vcsOpts 
 		}
 		job.DependsOn = append(job.DependsOn, d)
 	}
-	if row.Result != nil && len(row.Result.UnresolvedRisks) > 0 {
-		job.Risk = row.Result.UnresolvedRisks[0]
+	if result != nil && len(result.UnresolvedRisks) > 0 {
+		job.Risk = result.UnresolvedRisks[0]
 	}
 	if job.Checkout != "" {
 		if _, err := os.Stat(job.Checkout); err != nil {
@@ -907,7 +917,7 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 		briefLine(s, "leases live here:")
 	}
 	for _, l := range b.Leases {
-		briefLine(s, "  %s (%s): %s", l.ID, orDash(l.State), orDash(l.Criteria))
+		briefLine(s, "  %s (%s): %s", l.ID, orDash(l.State), orDash(l.Instructions))
 		briefLine(s, "    exec: %s", l.Exec)
 		if l.Validation != "" {
 			briefLine(s, "    validation: %s", l.Validation)

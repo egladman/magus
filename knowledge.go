@@ -95,7 +95,7 @@ func init() { //nolint:gochecknoinits // workspacegraph cannot import this packa
 					if row.ID != lease || !row.State.Live() {
 						continue
 					}
-					for _, wp := range row.WritePaths {
+					for _, wp := range row.Paths.Write {
 						// A claim names a declaration in a file; a glob, its directory.
 						wp, _, _ = strings.Cut(wp, "#")
 						if i := strings.IndexAny(wp, "*?[{"); i >= 0 {
@@ -2470,7 +2470,14 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 		root := m.Root()
 		cfg := m.cfg
 		m.warmGraph = newWarmGraph(func(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
-			return ensureKnowledgeGraph(ctx, m, root, cfg, refresh, knowledge.AllClasses, slog.Default())
+			g, err := ensureKnowledgeGraph(ctx, m, root, cfg, refresh, knowledge.AllClasses, slog.Default())
+			if err != nil {
+				return nil, err
+			}
+			// Marked before Get publishes g, so a clone for a symbol read
+			// shares its maps instead of copying them.
+			g.MarkShared()
+			return g, nil
 		}, slog.Default())
 	})
 	return m.warmGraph
@@ -2478,33 +2485,56 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 
 // knowledgeGraph returns the workspace knowledge graph req asks for.
 //
-// Without symbols it answers from the warm in-memory graph: in the server, once
-// WatchKnowledgeGraph is running, without re-parsing magusfiles; otherwise (and on
-// refresh) by a cache-first rebuild. It is always fresh, since the warm graph is served
+// It answers from the warm graph, or rebuilds it cache-first
+// when no watcher runs.
+// It is always fresh, since the warm graph is served
 // only while a watcher can invalidate it.
 //
-// With symbols, as magus\graph().refs asks, it builds a FRESH graph.
-// It merges the @symbols shards into that one.
+// With symbols, it merges the @symbols shards into a clone.
 // So the warm graph other MCP tools read never holds a huge symbol set.
 // A scope that targets one symbol merges only the shards that mention it.
 func (m *Magus) knowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error) {
-	if !req.Symbols.Loaded() {
-		return m.warmKnowledgeGraph().Get(ctx, req.Refresh)
+	g, err := m.evaluationKnowledgeGraph(ctx, req.Refresh)
+	if err != nil || !req.Symbols.Loaded() {
+		return g, err
 	}
-	root := m.Root()
-	g, err := buildKnowledgeGraph(ctx, m, root, m.cfg, req.Refresh, slog.Default())
+	return cloneWithSymbols(ctx, m, m.Root(), m.cfg, g, req.Symbols, slog.Default())
+}
+
+// optimization: read the warm graph once per evaluation, not per scope.
+// measured: diagrams-generate memoGraphs.KnowledgeGraph 5.52s to 3.96s.
+// trade-off: an evaluation reads the graph as it began.
+// assumes: the digest rebuilds on a fresh memo after its freshen.
+func (m *Magus) evaluationKnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
+	if refresh {
+		return m.warmKnowledgeGraph().Get(ctx, true)
+	}
+	v, err := types.EvalMemoFromContext(ctx).Do("magus:knowledge-graph", func() (any, error) {
+		return m.warmKnowledgeGraph().Get(ctx, false)
+	})
 	if err != nil {
 		return nil, err
 	}
-	if ref := req.Symbols.Ref(); ref != "" {
-		err = mergeWorkspaceSymbolsForRef(ctx, m, root, m.cfg, g, ref, slog.Default())
-	} else {
-		err = mergeWorkspaceSymbols(ctx, m, root, m.cfg, g, slog.Default())
-	}
-	if err != nil {
+	g, _ := v.(*knowledge.Graph)
+	return g, nil
+}
+
+// cloneWithSymbols merges the shards scope selects into a clone of base,
+// which may be the warm graph concurrent requests read.
+func cloneWithSymbols(ctx context.Context, ws types.Inspector, root string, cfg config.Config, base *knowledge.Graph, scope types.SymbolScope, log *slog.Logger) (*knowledge.Graph, error) {
+	g := base.Clone()
+	if err := mergeSymbolScope(ctx, ws, root, cfg, g, scope, log); err != nil {
 		return nil, err
 	}
 	return g, nil
+}
+
+// mergeSymbolScope merges the symbol shards scope selects into g.
+func mergeSymbolScope(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, scope types.SymbolScope, log *slog.Logger) error {
+	if ref := scope.Ref(); ref != "" {
+		return mergeWorkspaceSymbolsForRef(ctx, ws, root, cfg, g, ref, log)
+	}
+	return mergeWorkspaceSymbols(ctx, ws, root, cfg, g, log)
 }
 
 // WriteGuardIndex writes the file a guard hook answers graph questions from (see

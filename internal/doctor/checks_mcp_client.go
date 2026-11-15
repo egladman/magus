@@ -6,13 +6,13 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // checkMCPClient reports whether wired harness spells declare user-owned MCP
 // setup guidance (hint, docs, and/or register sketch). Magus does not write or
 // inspect host MCP client files.
-func (r *runner) checkMCPClient(ctx context.Context) types.Check {
+func (r *runner) checkMCPClient(ctx context.Context) check.Check {
 	const name = "mcp-client"
 	root := r.ws.Root()
 	wired, err := workspace.WiredHarnesses(r.ws)
@@ -22,10 +22,10 @@ func (r *runner) checkMCPClient(ctx context.Context) types.Check {
 	ctx = agent.ContextWithWiredHarnesses(ctx, wired)
 	ids, err := agent.KnownHarnesses(ctx, wired...)
 	if err != nil {
-		return types.Check{Name: name, Status: types.CheckAdvice, Message: "cannot list harnesses: " + err.Error()}
+		return check.Check{Name: name, Status: check.Advice, Message: "cannot list harnesses: " + err.Error()}
 	}
 	if len(ids) == 0 {
-		return types.Check{Name: name, Status: types.CheckOK, Message: "no harnesses wired"}
+		return check.Check{Name: name, Status: check.OK, Message: "no harnesses wired"}
 	}
 
 	var details []string
@@ -56,10 +56,10 @@ func (r *runner) checkMCPClient(ctx context.Context) types.Check {
 
 	msg := fmt.Sprintf("%d wired harness(es); %d declare MCP setup hints (Magus does not write host MCP config)",
 		len(ids), guided)
-	status := types.CheckOK
+	status := check.OK
 	if problems > 0 {
-		status = types.CheckAdvice
+		status = check.Advice
 		msg = fmt.Sprintf("%s; %d load problem(s)", msg, problems)
 	}
-	return types.Check{Name: name, Status: status, Message: msg, Details: details, Evidence: types.EvidenceDeclared}
+	return check.Check{Name: name, Status: status, Message: msg, Details: details, Evidence: check.EvidenceDeclared}
 }

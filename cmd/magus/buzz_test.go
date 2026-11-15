@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -179,7 +179,7 @@ func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
 
 const (
 	buzzVanillaScript  = "import \"std\";\n\nfun main(args: [str]) > void {\n    std\\print(\"hi\");\n}\n"
-	buzzUnmergedScript = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final r = magus\\workspace().unmerged();\n    std\\print(\"rows={r.rows.len()}\");\n}\n"
+	buzzUnmergedScript = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final r = magus\\workspace().unmerged();\n    std\\print(\"jobs={r.jobs.len()}\");\n}\n"
 	buzzMemberScript   = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final p = magus\\describe.project();\n    std\\print(\"{p.projects.len()}\");\n}\n"
 )
 
@@ -261,7 +261,7 @@ func TestBuzzCmd_WorkspaceHandleReadsTheScriptsWorkspace(t *testing.T) {
 	stdout := captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-s", script}) })
 
 	require.NoError(t, runErr)
-	assert.Equal(t, "rows=0\n", stdout)
+	assert.Equal(t, "jobs=0\n", stdout)
 	assert.Equal(t, 1, *opens)
 }
 
@@ -641,7 +641,7 @@ func TestBuzzCheck_WarningFails(t *testing.T) {
 	clean := filepath.Join(dir, "clean.buzz")
 	require.NoError(t, os.WriteFile(clean, []byte("fun main() > void {}\n"), 0o644))
 	warned := filepath.Join(dir, "warned.buzz")
-	require.NoError(t, os.WriteFile(warned, []byte("fun main() > void { var s = \"\"; foreach (p in [\"a\"]) { s = s + p; } }\n"), 0o644))
+	require.NoError(t, os.WriteFile(warned, []byte("fun main() > void { var s = \"\"; foreach (p in [\"a\"]) { s = p + s; } }\n"), 0o644))
 
 	diags, err := buzzCheckFile(t.Context(), warned, false)
 	require.NoError(t, err)

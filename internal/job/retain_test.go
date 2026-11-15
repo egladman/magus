@@ -37,7 +37,7 @@ func TestRetireDropsWhatIsOverAndOld(t *testing.T) {
 	parent := aged("parent", types.StatePass, 9)
 	parent.Parent = "grandparent"
 	server := aged("server", types.StatePass, 9)
-	server.Holder = types.HolderServer
+	server.RegisteredBy = types.Origin{EntryPoint: types.EntryPointServer}
 	rows := []types.Job{
 		aged("passed", types.StatePass, 8),
 		aged("failed", types.StateFail, 8),

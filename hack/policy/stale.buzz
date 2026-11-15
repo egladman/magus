@@ -4,6 +4,7 @@ namespace agentpolicy\stale;
 import "std";
 import "magus";
 import "fs";
+import "os";
 import "path";
 import "proc";
 import "crypto";
@@ -25,10 +26,11 @@ export fun sameFile(a: str, b: str) > bool {
 // The sources a ./magus answers from: the guard rules and hook plumbing compiled into it,
 // the skills it serves, and the host declarations and spell sources it embeds, which are
 // what a magusfile loads against. go-build links a digest of each into the binary.
+// The contract digest covers only api.lock and generated Buzz.
 final stampGlobs = [
     "internal/guard/*.go", "internal/interp/bindings/guard_*.go", "cmd/magus/shell*.go",
     "cmd/magus/guard_*.go", "internal/agent/*.go", "internal/agent/skills/*/SKILL.md",
-    "internal/spell/gen/decls/*.buzz", "spells/*/*.buzz",
+    "internal/spell/gen/decls/**/*.buzz", "spells/*/*.buzz",
 ];
 
 // stampFiles are the stamped files under root, root-relative, tests left out: a test is
@@ -90,58 +92,68 @@ export fun stampedInputs(stamp: str) > str {
     return "";
 }
 
-// The files that decide the module graph a Go build resolves, at the root.
-export final moduleFiles =["go.mod", "go.sum", "go.work", "go.work.sum"];
-
-// goListFormat prints a linked package as its directory, then each file it compiles or
-// embeds after a "|". Test files are not among them; a standard-library package prints "".
-export final goListFormat =`{{if not .Standard}}{{.Dir}}{{range .GoFiles}}|{{.}}{{end}}{{range .CgoFiles}}|{{.}}{{end}}`
-    + `{{range .CFiles}}|{{.}}{{end}}{{range .HFiles}}|{{.}}{{end}}{{range .SFiles}}|{{.}}{{end}}`
-    + `{{range .SysoFiles}}|{{.}}{{end}}{{range .EmbedFiles}}|{{.}}{{end}}{{end}}`;
-
-// goInputs are the files under root a build of ./cmd/magus reads, root-relative, from
-// listed, `go list -deps -f goListFormat` output. A module-cache package is not under root
-// and drops out: go.sum pins it.
-export fun goInputs(listed: str, root: str) > [str] {
+// goInputs are the files under root that listed names, root-relative. listed
+// is one glob per line, absolute or relative to root, ! excluding. A glob
+// outside root drops out. job.ChangedBuildInputs matches the same globs.
+export fun goInputs(listed: str, root: str) > [str] !> any {
     final base = path\clean(root);
-    final files = mut [<str>];
+    final includes = mut [<str>];
+    final excludes = mut [<str>];
     foreach (line in listed.split("\n")) {
-        if (line.trim() == "") {
+        final glob = line.trim();
+        if (glob == "") {
             continue;
         }
-        final fields = line.trim().split("|");
-        final dir = path\clean(fields[0]);
-        var prefix = "";
-        if (dir != base) {
-            if (!dir.startsWith(base + "/")) {
+        final excluded = glob.startsWith("!");
+        var pattern = if (excluded) glob.sub(1) else glob;
+        if (!path\isAbs(pattern)) {
+            pattern = "{base}/{pattern}";
+        }
+        if (!pattern.startsWith(base + "/")) {
+            continue;
+        }
+        final rel = pattern.sub(base.len() + 1);
+        if (excluded) {
+            excludes.append(rel);
+        } else {
+            includes.append(rel);
+        }
+    }
+    final seen = mut {<str: bool>};
+    final files = mut [<str>];
+    foreach (rel in includes) {
+        foreach (found in fs\glob("{base}/{rel}")) {
+            final at = path\abs(found.value);
+            if (!at.startsWith(base + "/")) {
                 continue;
             }
-            prefix = dir.sub(base.len() + 1) + "/";
-        }
-        foreach (name in fields.sub(1)) {
-            files.append(prefix + name);
+            final file = at.sub(base.len() + 1);
+            if (!(seen[file] ?? false) and !path\matchesAny(excludes, path: file) and fs\isFile(at)) {
+                seen[file] = true;
+                files.append(file);
+            }
         }
     }
     return files;
 }
 
-// goInputsDigest hashes every Go build input of ./cmd/magus under root: each linked
-// package's non-test sources and embedded files, and the root's module files. Two trees
-// with one digest build one binary, whatever their commits. go list loads packages without
-// compiling any; magus refuses to load without jsonv2.
+// scopesProbe prints the globs the tree's go spell names for ./cmd/magus. It
+// runs as its own script: imported here, under the magusfile, the spell would
+// collide with the embedded one.
+final scopesProbe = `import "std"; import "proc"; import "spells/golang/spell" as go;`
+    + ` fun main(args: [str]) > void !> any { final c = go\mgs_getScopes();`
+    + ` std\print(proc\exec(c.bin, args: c.args + ["./cmd/magus"], dir: ".", opts: proc\ExecOptions{ quiet = true }).stdout); }`;
+
+// goInputsDigest hashes every file under root the go spell's mgs_getScopes
+// names for ./cmd/magus. Two trees with one digest build one binary.
 export fun goInputsDigest(root: str) > str !> any {
     final base = path\abs(root);
-    final listed = proc\exec("env", args: ["GOEXPERIMENT=jsonv2", "go", "list", "-deps", "-f", goListFormat, "./cmd/magus"],
+    final listed = proc\exec(os\executable(), args: ["buzz", "-C", base, "-e", scopesProbe],
         dir: base, opts: proc\ExecOptions{ quiet = true, allowFailure = true });
     if (listed.code != 0) {
-        throw "`go list -deps ./cmd/magus` in {base} exited {listed.code}:\n{listed.stderr.trim()}";
+        throw "the go spell's mgs_getScopes for ./cmd/magus in {base} exited {listed.code}:\n{listed.stderr.trim()}";
     }
     final files = goInputs(listed.stdout, root: base).cloneMutable();
-    foreach (name in moduleFiles) {
-        if (fs\isFile("{base}/{name}")) {
-            files.append(name);
-        }
-    }
     _ = files.sort(fun (left: str, right: str) > bool => left < right);
     final lines = mut [<str>];
     foreach (rel in files) {
@@ -534,11 +546,24 @@ test "the stamp records every stamped source, and movedSince names what changed"
     fs\removeAll(root) catch void;
 }
 
-test "the Go inputs are each linked package's files under the root" {
-    final listed = "/work/magus|run.go|assets/a.txt\n/work/magus/internal/guard|brief.go|rules/embedded.txt\n"
-        + "/home/me/go/pkg/mod/dario.cat/mergo@v1.0.2|merge.go\n/work/magus-other/x|x.go\n\n";
-    std\assert(goInputs(listed, root: "/work/magus").join(",") == "run.go,assets/a.txt,internal/guard/brief.go,internal/guard/rules/embedded.txt",
-        message: "module-cache and sibling directories drop out");
+test "the Go inputs are the files under the root the scopes name, less the excluded" {
+    final root = fs\tempDir("goinputs") catch "";
+    std\assert(root != "", message: "a temp dir");
+    fs\mkdirAll("{root}/internal/guard/rules") catch void;
+    fs\writeFile("{root}/run.go", content: "package magus\n") catch void;
+    fs\writeFile("{root}/go.mod", content: "module x\n") catch void;
+    fs\writeFile("{root}/internal/guard/brief.go", content: "package guard\n") catch void;
+    fs\writeFile("{root}/internal/guard/brief_test.go", content: "package guard\n") catch void;
+    fs\writeFile("{root}/internal/guard/rules/embedded.txt", content: "a\n") catch void;
+    final base = path\abs(root) catch root;
+    final listed = "{base}/*.go\n{base}/internal/guard/*.go\n!{base}/internal/guard/*_test.go\n"
+        + "{base}/internal/guard/rules\n{base}/internal/guard/rules/**\ngo.mod\n{base}/go.work\n"
+        + "/home/me/go/pkg/mod/dario.cat/mergo@v1.0.2/*.go\n{base}-other/x/*.go\n\n";
+    final files = (goInputs(listed, root: base) catch [<str>]).cloneMutable();
+    _ = files.sort(fun (left: str, right: str) > bool => left < right);
+    std\assert(files.join(",") == "go.mod,internal/guard/brief.go,internal/guard/rules/embedded.txt,run.go",
+        message: "tests, missing files and directories outside the root drop out: {files.join(",")}");
+    fs\removeAll(root) catch void;
     std\assert(stampedInputs("a.go=1,@commit=2,@inputs=0123456789abcdef") == "0123456789abcdef", message: "the digest");
     std\assert(stampedInputs("a.go=1,@commit=2") == "", message: "a stamp from before the digest");
 }

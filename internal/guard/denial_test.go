@@ -321,12 +321,12 @@ func (s *DenialRouteSuite) TestALongLeaseNamesItsNearestPathsAndCountsTheRest() 
 	for i := range 40 {
 		paths = append(paths, fmt.Sprintf("libs/x/f%d.go", i))
 	}
-	got := nearestWritePaths(types.Job{ID: "big", WritePaths: paths}, "internal/job/exit.go")
+	got := nearestWritePaths(types.Job{ID: "big", Paths: types.JobPaths{Write: paths}}, "internal/job/exit.go")
 	s.Equal("internal/job/fork.go, internal/job/fork_test.go, internal/job/wait.go and 42 more; `magus describe job big` lists them", got)
 }
 
 func (s *DenialRouteSuite) TestAShortLeaseIsNamedWhole() {
-	s.Equal("a.go, b.go", nearestWritePaths(types.Job{ID: "small", WritePaths: []string{"a.go", "b.go"}}, "c.go"))
+	s.Equal("a.go, b.go", nearestWritePaths(types.Job{ID: "small", Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}}, "c.go"))
 }
 
 func (s *DenialRouteSuite) TestAContractPickNamesTheForkThatLandsIt() {

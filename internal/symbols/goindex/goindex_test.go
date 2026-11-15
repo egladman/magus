@@ -345,6 +345,124 @@ func (s *goindexSuite) TestEditToAnExcludedFileMovesItsUnit() {
 	s.Equal(before[1].Digest, after[1].Digest)
 }
 
+// go.mod's requirements name the version in every symbol of a dependency.
+func (s *goindexSuite) TestAGoModEditMovesEveryUnit() {
+	ix := s.indexer()
+	before, err := ix.Units(s.T().Context())
+	s.Require().NoError(err)
+	s.write("go.mod", "module example.com/m\n\ngo 1.23\n")
+	after, err := ix.Units(s.T().Context())
+	s.Require().NoError(err)
+	s.Require().Len(after, len(before))
+	for i := range before {
+		s.NotEqual(before[i].Digest, after[i].Digest, before[i].ID)
+	}
+}
+
+func (s *goindexSuite) goflags(env []string) []string {
+	var out []string
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "GOFLAGS="); ok {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func (s *goindexSuite) TestTheBuildCacheIsKeyedByContentNotDirectory() {
+	ix := &Indexer{Dir: s.dir, Env: []string{"PATH=/bin"}}
+	s.Equal([]string{"-trimpath"}, s.goflags(ix.env(nil)))
+}
+
+func (s *goindexSuite) TestTheCallersGoflagsAreKept() {
+	ix := &Indexer{Dir: s.dir, Env: []string{"GOFLAGS=-mod=mod"}}
+	s.Equal([]string{"-mod=mod", "-mod=mod -trimpath"}, s.goflags(ix.env(nil)))
+}
+
+func (s *goindexSuite) TestGoflagsThatTrimAlreadyAreLeftAlone() {
+	ix := &Indexer{Dir: s.dir, Env: []string{"GOFLAGS=-trimpath -mod=mod"}}
+	s.Equal([]string{"-trimpath -mod=mod"}, s.goflags(ix.env(nil)))
+}
+
+// moveTree copies the module to a new directory, which later writes edit.
+func (s *goindexSuite) moveTree() {
+	moved := s.T().TempDir()
+	s.Require().NoError(os.CopyFS(moved, os.DirFS(s.dir)))
+	s.dir = moved
+}
+
+// A pack holds no path of its tree, so another tree's pack updates to the
+// bytes a cold index of this one writes.
+func (s *goindexSuite) TestAnotherTreesPackUpdatesToTheColdIndex() {
+	_, seeded := s.update(s.indexer())
+	s.moveTree()
+	content, err := os.ReadFile(filepath.Join(s.dir, "a/a.go"))
+	s.Require().NoError(err)
+	s.write("a/a.go", strings.Replace(string(content), "func Old() int", "func New() int", 1))
+	s.write("c/c.go", "package c\n\nfunc C() { _ = 1 }\n")
+
+	res, err := symbols.UpdatePack(s.T().Context(), seeded, s.indexer())
+	s.Require().NoError(err)
+	_, cold := s.update(s.indexer())
+
+	s.Equal(symbols.UpdateResult{
+		Indexed:    []string{"example.com/m/a", "example.com/m/c"},
+		Dependents: []string{"example.com/m/b"},
+	}, res)
+	s.Equal(s.read(cold), s.read(seeded))
+}
+
+// An unchanged tree at another path keeps every shard of its pack.
+func (s *goindexSuite) TestAnotherTreesPackOfTheSameSourceIsKeptWhole() {
+	_, seeded := s.update(s.indexer())
+	before := s.read(seeded)
+	s.moveTree()
+
+	res, err := symbols.UpdatePack(s.T().Context(), seeded, s.indexer())
+	s.Require().NoError(err)
+
+	s.Equal(symbols.UpdateResult{Kept: 3}, res)
+	s.Equal(before, s.read(seeded))
+}
+
+// d's digest never moves, but the method its Wrapper promotes from a.Base does.
+func (s *goindexSuite) TestAMethodAnEmbeddedTypeGainsReachesTheEmbeddersPack() {
+	s.write("a/base.go", "package a\n\ntype Base struct{}\n\nfunc (Base) First() {}\n")
+	s.write("d/d.go", "package d\n\nimport \"example.com/m/a\"\n\ntype Wrapper struct{ a.Base }\n")
+	_, pack := s.update(s.indexer())
+	s.write("a/base.go", "package a\n\ntype Base struct{}\n\nfunc (Base) First() {}\n\nfunc (Base) Second() {}\n")
+
+	res, err := symbols.UpdatePack(s.T().Context(), pack, s.indexer())
+	s.Require().NoError(err)
+	_, cold := s.update(s.indexer())
+
+	s.Equal(symbols.UpdateResult{
+		Indexed: []string{"example.com/m/a"}, Dependents: []string{"example.com/m/d"}, Kept: 2,
+	}, res)
+	s.Equal(s.read(cold), s.read(pack))
+}
+
+// Re-indexing d alone loads a from export data, which omits admissionWire.
+func (s *goindexSuite) TestAFieldTwoTypesShareNamesOneOwnerUnderEveryLoad() {
+	s.write("a/wire.go", "package a\n\ntype Admission struct{ Project string }\n\ntype admissionWire Admission\n")
+	s.write("d/d.go", "package d\n\nimport \"example.com/m/a\"\n\nfunc P(x a.Admission) string { return x.Project }\n")
+	_, pack := s.update(s.indexer())
+	s.write("d/d.go", "package d\n\nimport \"example.com/m/a\"\n\nfunc P(x a.Admission) string { return x.Project + \"\" }\n")
+
+	res, err := symbols.UpdatePack(s.T().Context(), pack, s.indexer())
+	s.Require().NoError(err)
+	_, cold := s.update(s.indexer())
+
+	s.Equal(symbols.UpdateResult{Indexed: []string{"example.com/m/d"}, Kept: 3}, res)
+	s.Equal(s.read(cold), s.read(pack))
+}
+
+func (s *goindexSuite) read(path string) []byte {
+	data, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	return data
+}
+
 const (
 	benchPackages = 60
 	benchFiles    = 3

@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ func worked(job string, ended, durationMs, setup, contextTokens int64, projects 
 
 func shapeRow(t *testing.T, out types.Grouping, shape types.GroupingShape) types.GroupingRecord {
 	t.Helper()
-	for _, r := range out.Rows {
+	for _, r := range out.Shapes {
 		if r.Shape == shape {
 			return r
 		}
@@ -101,8 +102,8 @@ func TestGroupingRecordsIsUnknownBelowTheSampleOrWithoutTrails(t *testing.T) {
 		}, got, name)
 	}
 	empty := GroupingRecords(nil, nil)
-	require.Len(t, empty.Rows, 3, "every shape answers, unknown when nothing was recorded")
-	for _, r := range empty.Rows {
+	require.Len(t, empty.Shapes, 3, "every shape answers, unknown when nothing was recorded")
+	for _, r := range empty.Shapes {
 		assert.Equal(t, types.GroupingUnknown, r.Verdict)
 	}
 }
@@ -144,7 +145,7 @@ func TestStoreGroupingLensReadsTheRecordedOutcomes(t *testing.T) {
 
 	s, _ := outcomeStore(t, tierSet(t), nil, false)
 	row := lease("a")
-	row.Model = ""
+	row.Agent.Model = agent.Model{}
 	endWith(t, s, endWith(t, s, row, types.StateRunning), types.StatePass)
 
 	got, err := s.GroupingLens(t.Context(), nil)

@@ -146,12 +146,13 @@ const (
 type Orchestration string
 
 const (
-	// OrchestrationInferred rests on evidence short of proof: a spawn bound to no job row,
-	// a loaded multi-agent skill, or proof on a thread the host did not report. A rule
-	// reading it only advises.
+	// OrchestrationInferred rests on evidence short of proof: a spawn bound to
+	// no job, a loaded multi-agent skill, or proof on an unreported thread. A
+	// rule reading it only advises.
 	OrchestrationInferred Orchestration = "inferred"
-	// OrchestrationProven is a main thread the host reported that forked a job row the
-	// store then showed live, or spawned a worker bound to one. It lasts the session.
+	// OrchestrationProven is a main thread the host reported that forked a job
+	// the store then showed live, or spawned a worker bound to one. It lasts
+	// the session.
 	OrchestrationProven Orchestration = "proven"
 )
 
@@ -303,10 +304,11 @@ type PriceStep struct {
 	Multiplier float64
 }
 
-// ModelPricing is one model's row in the table magus prices agent context against.
+// ModelPricing is one model's entry in the table magus prices agent context
+// against.
 type ModelPricing struct {
-	// ID is the model id the row matches, exactly: a provider prefix, a date or a context
-	// suffix makes another id, which needs a row of its own.
+	// ID is the model id the entry matches exactly. A provider prefix, a date
+	// or a context suffix makes another id, with an entry of its own.
 	ID string
 	// Tier is the model-tier case this exact id runs, "" for none.
 	Tier string

@@ -42,23 +42,7 @@ export fun firstPathSegment(url: str) > str {
     return url.sub(0, len: i);
 }
 
-// sharedTagCount counts tags common to two ||-joined tag strings (relatedness signal).
-export fun sharedTagCount(aJoined: str, bJoined: str) > int {
-    if (aJoined == "" or bJoined == "") { return 0; }
-    final aList = aJoined.split("||");
-    final bList = bJoined.split("||");
-    var n = 0;
-    foreach (t in aList) {
-        if (t != "") {
-            foreach (u in bList) {
-                if (t == u) { n = n + 1; break; }
-            }
-        }
-    }
-    return n;
-}
-
-// pad4 zero-pads a small non-negative int to four digits so scores sort lexically.
+// pad4 zero-pads a small non-negative int to four digits so keys sort lexically.
 export fun pad4(n: int) > str {
     final s = "{n}";
     if (s.len() >= 4) { return s; }
@@ -80,17 +64,9 @@ export fun strToNat(s: str) > int {
     return n;
 }
 
-// strLess is lexicographic byte ordering; buzz has no `<` on str, so the sibling
-// pager spells it out to sort filenames deterministically.
+// strLess is lexicographic byte ordering, the order str `<` compares in.
 export fun strLess(a: str, b: str) > bool {
-    final n = a.len();
-    final m = b.len();
-    var i = 0;
-    while (i < n and i < m) {
-        if (a.byte(i) != b.byte(i)) { return a.byte(i) < b.byte(i); }
-        i = i + 1;
-    }
-    return n < m;
+    return a < b;
 }
 
 // capitalizeFirst upper-cases the first character of a slug (a breadcrumb label).
@@ -179,12 +155,6 @@ test "decodeEntities decodes EVERY occurrence, ampersand last" {
     // would turn the literal text "&amp;lt;" into "<" instead of "&lt;".
     assert\equal(decodeEntities("&amp;lt;"), want: "&lt;", message: "an escaped entity survives one decode");
     assert\equal(decodeEntities("no entities here"), want: "no entities here", message: "no-op on plain text");
-}
-
-test "sharedTagCount counts common bar-joined tags" {
-    assert\equal(sharedTagCount("a||b||c", bJoined: "b||c||d"), want: 2, message: "b and c shared");
-    assert\equal(sharedTagCount("a", bJoined: "b"), want: 0, message: "none shared");
-    assert\equal(sharedTagCount("", bJoined: "a||b"), want: 0, message: "empty side -> 0");
 }
 
 test "relativePath walks from a dir to a target URL" {

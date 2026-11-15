@@ -471,7 +471,7 @@ func (s *jsonScanner) next() (vm.Value, error) {
 	case '[':
 		return s.array()
 	case '"':
-		str, err := s.str()
+		str, err := s.stringLiteral()
 		if err != nil {
 			return vm.Null, err
 		}
@@ -503,7 +503,7 @@ func (s *jsonScanner) object() (vm.Value, error) {
 			s.i++
 			s.skipSpace()
 		}
-		key, err := s.str()
+		key, err := s.stringLiteral()
 		if err != nil {
 			return vm.Null, err
 		}
@@ -537,8 +537,8 @@ func (s *jsonScanner) array() (vm.Value, error) {
 	}
 }
 
-// str hands the string literal at the cursor to the codec to unescape.
-func (s *jsonScanner) str() (string, error) {
+// stringLiteral hands the literal at the cursor to the codec to unescape.
+func (s *jsonScanner) stringLiteral() (string, error) {
 	start := s.i
 	s.i++
 	for s.b[s.i] != '"' {

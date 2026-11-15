@@ -295,12 +295,15 @@ final DENY_HEAD = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"h
 final PASS_AND_ADVISE_TAIL = `{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}`;
 
 // A block's reason sends the agent back to work and shows the person, so it carries the
-// first line and additionalContext the rest. A systemMessage shows the person a notice and
-// lets the stop through. Spliced through STOP_EVENT_SLOT: Stop and SubagentStop share it.
+// first line and additionalContext the rest. An advise lets the stop through
+// and goes to additionalContext, which only the agent reads.
+// Spliced through STOP_EVENT_SLOT: Stop and SubagentStop share it.
 final STOP_EVENT_SLOT = "__MAGUS_STOP_EVENT__";
-final STOP_REPLY = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"decision":"block","reason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"hookSpecificOutput":{"hookEventName":"__MAGUS_STOP_EVENT__","additionalContext":{{toJson .}}}{{end}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
-// Codex's Stop reply takes no hookSpecificOutput, so its block carries the whole reason.
-final STOP_REPLY_CODEX = `{{if eq .decision "deny"}}{"decision":"block","reason":{{toJson .reason}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
+final STOP_REPLY = `{{if eq .decision "deny"}}{{$r := splitList "\n" .reason}}{"decision":"block","reason":{{toJson (first $r)}}{{with join (rest $r) "\n"}},"hookSpecificOutput":{"hookEventName":"__MAGUS_STOP_EVENT__","additionalContext":{{toJson .}}}{{end}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"__MAGUS_STOP_EVENT__","additionalContext":{{toJson .context}}}}{{end}}`;
+// Codex's Stop reply takes no hookSpecificOutput, so its block carries the
+// whole reason. Its only other text field, systemMessage, shows the person,
+// so an advise prints nothing there.
+final STOP_REPLY_CODEX = `{{if eq .decision "deny"}}{"decision":"block","reason":{{toJson .reason}}}{{end}}`;
 
 final PERMISSION_NO_DECISION = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`;
 final PERMISSION_ALLOW = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`;
@@ -310,6 +313,10 @@ final PERMISSION_UNKNOWN = `{{else}}{"hookSpecificOutput":{"hookEventName":"Perm
 // The Claude Code tools its harness spell lists as reads. Copied: an unjudged
 // call has no magus to ask, and a read may pass it.
 final READ_TOOLS = ["Read", "NotebookRead", "Glob", "Grep", "LS"];
+
+// A subagent files its report through this tool. Refusing it while no magus
+// judges leaves the parent with no word on why the child stopped.
+final HANDBACK_TOOLS = ["SubagentHandback"];
 
 // Nothing arrived, so no rule was ever offered the call. `magus shell`
 // denies an unreadable payload too and leaves this case to its caller.
@@ -532,8 +539,6 @@ fun recordMessage(bin: str, message: str, dir: str, session: str, host: str, att
 // printed, which is not necessarily what went wrong. WARN lines are dropped because a
 // config the binary is too old to parse warns BEFORE it fails, and that warning is a
 // symptom of the same staleness, not the error.
-final FAILURE_LINES = 12;
-
 fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
     var version = "";
     // In the binary's own directory, or version re-execs into another ./magus.
@@ -541,13 +546,8 @@ fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
     if (probe != null) { version = hook\firstLine(probe!.stdout); }
     if (version == "") { version = "version unreadable"; }
 
-    final lines = mut [<str>];
-    if (failed != null) {
-        foreach (line in failed!.stderr.split("\n")) {
-            if (line != "" and line.indexOf("WARN") == null and lines.len() < FAILURE_LINES) { lines.append(line); }
-        }
-    }
-    var why = lines.join("\n");
+    var why = "";
+    if (failed != null) { why = hook\errorLines(failed!.stderr); }
     if (why == "" and failed != null) { why = "it printed no error (exit code {failed!.code})"; }
     if (why == "") { why = "it could not be run"; }
 
@@ -569,8 +569,8 @@ fun binDir(bin: str) > str {
 // unjudgedReply answers a call no magus judged. Every event shows the person
 // systemMessage. A PreToolUse call that is not a read is refused. A
 // PermissionRequest leaves the decision to the person's own prompt. The
-// bootstrap line passes: it is the fix the notice names.
-fun unjudgedReply(eventName: str, toolName: str, command: str, verdict: str, fix: str) > str {
+// bootstrap line passes, bare or aimed at root: it is the fix the notice names.
+fun unjudgedReply(eventName: str, toolName: str, command: str, verdict: str, fix: str, root: str = "") > str {
     final text = "{verdict}\n{fix}";
     if (eventName == "Stop" or eventName == "SubagentStop") {
         return json\stringify({"systemMessage": text}) catch "";
@@ -579,7 +579,8 @@ fun unjudgedReply(eventName: str, toolName: str, command: str, verdict: str, fix
         return json\stringify({"systemMessage": text,
             "hookSpecificOutput": {"hookEventName": eventName}}) catch PERMISSION_NO_DECISION;
     }
-    if (eventName == "PostToolUse" or READ_TOOLS.indexOf(toolName) != null or hook\isBootstrap(command)) {
+    if (eventName == "PostToolUse" or READ_TOOLS.indexOf(toolName) != null or HANDBACK_TOOLS.indexOf(toolName) != null
+        or hook\recovers(command, root: root) or hook\exitsJob(command)) {
         final named = if (eventName == "PostToolUse") eventName else "PreToolUse";
         return json\stringify({"systemMessage": text,
             "hookSpecificOutput": {"hookEventName": named, "additionalContext": text}}) catch "";
@@ -723,12 +724,16 @@ fun main(args: [str]) > void {
 
     // Every unjudged call names a fallback from ./magus; a judged one, once.
     final note = hook\fallbackNote(cwd);
-    var fix = hook\magusFix(hook\workspaceRootAt(cwd));
+    var root = hook\workspaceRootAt(cwd);
+    if (root == "") { root = hook\binRoot(""); }
+    // Absolute, so the recovery line builds one checkout from anywhere.
+    if (root != "") { root = path\abs(root) catch root; }
+    var fix = hook\recoveryFix(root);
     if (note != "") { fix = note + ". " + fix; }
     if (bin == "" or !hook\isExecutable(bin)) {
         final verdict = "magus guard could not judge this call: no magus binary was found";
         io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE",
-            fallback: unjudgedReply(eventName, toolName: toolName, command: commandLine, verdict: verdict, fix: fix))) catch void;
+            fallback: unjudgedReply(eventName, toolName: toolName, command: commandLine, verdict: verdict, fix: fix, root: root))) catch void;
         return;
     }
 
@@ -736,7 +741,7 @@ fun main(args: [str]) > void {
     if (!rawEvent) {
         payload = hook\rawField(event, dotPath: eventPath) + "\n";
     }
-    final guard = Guard{ bin = bin, payload = payload, response = response, dir = cwd };
+    final marked = hook\unloadedTemplate(response);
 
     // Attribution is BEST EFFORT; the verdict is not.
     //
@@ -767,6 +772,47 @@ fun main(args: [str]) > void {
     if (shellCall) {
         foreach (word in callFlags(event)) { newest.append(word); }
     }
+    final judged = hook\judgeFirstLoaded(hook\binCandidates(bin, cwd: cwd),
+        ask: fun (candidate: str) > proc\ExecResult? => ask(Guard{ bin = candidate, payload = payload, response = marked, dir = cwd },
+            attributed: attributed, newest: newest));
+    final result = judged.result;
+
+    // No binary here loads the tree, so none may judge. The rebuild the fix
+    // names runs; every other call that may change state is refused.
+    if (judged.by == "") {
+        final refused = unjudgedReply(eventName, toolName: toolName, command: commandLine,
+            verdict: hook\unloadedVerdict(judged, what: "call"), fix: fix, root: root);
+        io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: refused)) catch void;
+        return;
+    }
+    final by = Guard{ bin = judged.by, payload = payload, response = response, dir = cwd };
+
+    // A PASS and a BROKEN GUARD both render nothing, and telling them apart is the whole
+    // point of this block. A pass exits 0 with empty output because there was nothing to
+    // say; a binary that cannot run, too old for `magus shell`, unable to load the
+    // workspace, half-written by a concurrent build, exits non-zero with empty output, and
+    // printing that as a pass silently disables every rule with nothing anywhere saying so.
+    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+        var verdict = failureNotice(by, failed: result);
+        if (judged.trail.len() > 0) { verdict = judged.trail.join("\n") + "\n" + verdict; }
+        final refused = unjudgedReply(eventName, toolName: toolName, command: commandLine,
+            verdict: verdict, fix: "Rebuild or update {judged.by}. {fix}", root: root);
+        io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: refused)) catch void;
+        return;
+    }
+    var reply = hook\trimTrailingNewlines(result!.stdout);
+    if (note != "" and hook\noticeOnce(session, family: "bin-fallback", file: "magus-command.buzz")) {
+        reply = hook\withNotice(reply, text: "magus-command.buzz: " + note);
+    }
+    final fell = hook\fellToNotice(judged, what: "call", root: root);
+    if (fell != "" and hook\noticeOnce(session, family: "bin-unloaded", file: "magus-command.buzz")) {
+        reply = hook\withNotice(reply, text: "magus-command.buzz: " + fell);
+    }
+    io\stdout.write(reply) catch void;
+}
+
+// ask judges with guard.bin, dropping flags only when that binary refused one.
+fun ask(guard: Guard, attributed: [str], newest: [str]) > proc\ExecResult? {
     var result: proc\ExecResult? = null;
     if (newest.len() > 0) {
         final newer = mut [<str>];
@@ -780,23 +826,7 @@ fun main(args: [str]) > void {
     if (rejectedFlag(result)) {
         result = judge(guard, extra: [<str>]) catch null;
     }
-
-    // A PASS and a BROKEN GUARD both render nothing, and telling them apart is the whole
-    // point of this block. A pass exits 0 with empty output because there was nothing to
-    // say; a binary that cannot run, too old for `magus shell`, unable to load the
-    // workspace, half-written by a concurrent build, exits non-zero with empty output, and
-    // printing that as a pass silently disables every rule with nothing anywhere saying so.
-    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
-        final refused = unjudgedReply(eventName, toolName: toolName, command: commandLine,
-            verdict: failureNotice(guard, failed: result), fix: "Rebuild or update {bin}. {fix}");
-        io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: refused)) catch void;
-        return;
-    }
-    var reply = hook\trimTrailingNewlines(result!.stdout);
-    if (note != "" and hook\noticeOnce(session, family: "bin-fallback", file: "magus-command.buzz")) {
-        reply = hook\withNotice(reply, text: "magus-command.buzz: " + note);
-    }
-    io\stdout.write(reply) catch void;
+    return result;
 }
 
 fun replyOf(text: str) > {str: any} {
@@ -828,6 +858,12 @@ test "an unjudged read passes, and the person still hears of it" {
     std\assert(reply["systemMessage"] == "v\nf", message: "{reply}");
 }
 
+test "a stop advise reaches the agent alone" {
+    std\assert(STOP_REPLY.indexOf("systemMessage") == null, message: STOP_REPLY);
+    std\assert(STOP_REPLY.indexOf("toJson .context") != null, message: STOP_REPLY);
+    std\assert(STOP_REPLY_CODEX.indexOf("systemMessage") == null and STOP_REPLY_CODEX.indexOf("advise") == null, message: STOP_REPLY_CODEX);
+}
+
 test "the lifecycle events carry the notice in their own dialect" {
     foreach (name in ["Stop", "SubagentStop"]) {
         final reply = replyOf(unjudgedReply(name, toolName: "", command: "", verdict: "v", fix: "f"));
@@ -845,6 +881,23 @@ test "a message with no magus to record it says so once per session" {
     final session = "record-{std\random(min: 0, max: 1000000)}";
     std\assert(recordMessage("", message: "m", dir: "", session: session, host: "claude-code", attribution: [<str>]).indexOf("systemMessage") != null, message: "first");
     std\assert(recordMessage("", message: "m", dir: "", session: session, host: "claude-code", attribution: [<str>]) == "", message: "second");
+}
+
+test "while no magus judges, the recovery line alone runs" {
+    final root = fs\tempDir("command-recovery-");
+    fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
+    final line = hook\recoveryLine(root);
+    foreach (command in [line, " {line} "]) {
+        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: root));
+        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+        std\assert(spec["permissionDecision"] == null, message: "{command}: {reply}");
+    }
+    foreach (command in [line + " && git stash", "git stash"]) {
+        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: root));
+        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+        std\assert(spec["permissionDecision"] == "deny", message: "{command}: {reply}");
+    }
+    fs\removeAll(root);
 }
 ```
 
@@ -1024,7 +1077,9 @@ fun main(args: [str]) > void {
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
     final bin = hook\resolveBin(cwd: cwd);
     final note = hook\fallbackNote(cwd);
-    var fix = hook\magusFix(hook\workspaceRootAt(cwd));
+    var root = hook\workspaceRootAt(cwd);
+    if (root == "") { root = hook\binRoot(""); }
+    var fix = hook\recoveryFix(root);
     if (note != "") { fix = note + ". " + fix; }
     if (bin == "" or !hook\isExecutable(bin)) {
         io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: hook\refusal(
@@ -1066,7 +1121,7 @@ fun main(args: [str]) > void {
     if (!hook\wholeEvent(event, dotPath: eventPath, toolPath: toolPath)) {
         payload = hook\rawField(event, dotPath: eventPath) + "\n";
     }
-    final guard = Guard{ bin = bin, payload = payload, response = response, dir = cwd };
+    final marked = hook\unloadedTemplate(response);
 
     // Attribution is BEST EFFORT; the verdict is not. --agent-name, --session and --agent postdate
     // the current magus release, and an older binary rejects the unknown flag outright,
@@ -1080,10 +1135,20 @@ fun main(args: [str]) > void {
         attributed.append(word);
     }
     foreach (flag in rendersAsk) { attributed.append(flag); }
-    var result = judge(guard, extra: attributed) catch null;
-    if (rejectedFlag(result)) {
-        result = judge(guard, extra: [<str>]) catch null;
+    final judged = hook\judgeFirstLoaded(hook\binCandidates(bin, cwd: cwd), ask: fun (candidate: str) > proc\ExecResult? {
+        final asked = Guard{ bin = candidate, payload = payload, response = marked, dir = cwd };
+        final attempt = judge(asked, extra: attributed) catch null;
+        if (rejectedFlag(attempt)) { return judge(asked, extra: [<str>]) catch null; }
+        return attempt;
+    });
+    final result = judged.result;
+    if (judged.by == "") {
+        io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: hook\refusal(
+            hook\unloadedVerdict(judged, what: "write"), fix: fix))) catch void;
+        return;
     }
+    var trail = "";
+    if (judged.trail.len() > 0) { trail = judged.trail.join("\n") + "\n"; }
 
     // A pass and a broken guard both render nothing; see magus-command.buzz for why
     // telling them apart matters. Every call here is a write, so it is refused.
@@ -1092,13 +1157,17 @@ fun main(args: [str]) > void {
         if (result != null) { why = "it printed no error (exit code {result!.code})"; }
         if (result != null and hook\firstLine(result!.stderr) != "") { why = hook\firstLine(result!.stderr); }
         io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: hook\refusal(
-            "magus guard could not judge this write: {bin} said: {why}",
-            fix: "Rebuild or update {bin}. {fix}"))) catch void;
+            "{trail}magus guard could not judge this write: {judged.by} said: {why}",
+            fix: "Rebuild or update {judged.by}. {fix}"))) catch void;
         return;
     }
     var reply = hook\trimTrailingNewlines(result!.stdout);
     if (note != "" and hook\noticeOnce(session, family: "bin-fallback", file: "magus-path.buzz")) {
         reply = hook\withNotice(reply, text: "magus-path.buzz: " + note);
+    }
+    final fell = hook\fellToNotice(judged, what: "write", root: root);
+    if (fell != "" and hook\noticeOnce(session, family: "bin-unloaded", file: "magus-path.buzz")) {
+        reply = hook\withNotice(reply, text: "magus-path.buzz: " + fell);
     }
     io\stdout.write(reply) catch void;
 }
@@ -2034,8 +2103,9 @@ It declares no `magus-guard-coverage` line, for the reason
 //
 // A proofread that is missing, stale, exits 2 or prints unreadable JSON
 // judged nothing. That gets one notice per session naming the binary and its
-// fix, a systemMessage on claude-code and codex, else stderr. The reply is
-// never blocked. It always exits 0.
+// fix. claude-code gets it as additionalContext, which only the agent reads.
+// codex prints none, since its Stop output has no such field. Else stderr.
+// The reply is never blocked. It always exits 0.
 //
 // In a checkout of magus the proofread it builds judges, checked for
 // staleness by that checkout's own proofread module.
@@ -2283,13 +2353,15 @@ fun judge(bin: str, decisions: str, reply: str) > Judgment {
     return Judgment{ found = found! };
 }
 
-// noticeReply tells the person, once per session, that replies go unjudged.
-// The reply stays unblocked. Only Claude Code and Codex show a Stop notice.
-fun noticeReply(host: str, session: str, why: str, fix: str) > str {
+// noticeReply tells the agent, once per session, that replies go unjudged.
+// The reply stays unblocked. Codex has no field only the agent reads, so it
+// prints nothing there and takes no once-mark.
+fun noticeReply(host: str, event: str, session: str, why: str, fix: str) > str {
+    if (host == CODEX) { return ""; }
     if (!hook\noticeOnce(session, family: "proofread-reply", file: "proofread-reply.buzz")) { return ""; }
     final text = "proofread-reply judges no reply: {why}. {fix}";
-    if (host == CLAUDE_CODE or host == CODEX) {
-        return json\stringify({"systemMessage": text}) catch "";
+    if (host == CLAUDE_CODE) {
+        return json\stringify({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}) catch "";
     }
     warn(text);
     return "";
@@ -2495,11 +2567,11 @@ fun main(args: [str]) > void {
 
     var printed = "";
     if (reader.why != "") {
-        printed = noticeReply(host, session: session, why: reader.why, fix: reader.fix);
+        printed = noticeReply(host, event: "Stop", session: session, why: reader.why, fix: reader.fix);
     } else {
         final judgment = judge(reader.bin, decisions: decisions, reply: stop.reply);
         if (judgment.failure != "") {
-            printed = noticeReply(host, session: session, why: judgment.failure,
+            printed = noticeReply(host, event: "Stop", session: session, why: judgment.failure,
                 fix: "Run `{reader.bin} agent-reply --stdin` on a reply and read why.");
         } else {
             printed = held(pendingStore(), host: host, session: session,
@@ -2661,12 +2733,30 @@ test "a binary that is missing or fails says why it judged nothing" {
     std\assert(named.why.indexOf("not an executable") != null and named.fix == RELEASE_FIX, message: named.why);
 }
 
-test "the notice reaches the person once per session and never blocks" {
+test "the notice at Stop reaches the agent alone, once per session, and never blocks" {
     final session = "proofread-reply-{std\random(min: 0, max: 1000000)}";
-    final first: {str: any} = json\parse(noticeReply(CLAUDE_CODE, session: session, why: "w", fix: "f")) catch {<str: any>};
-    std\assert(first["systemMessage"] == "proofread-reply judges no reply: w. f", message: "{first}");
+    final first: {str: any} = json\parse(noticeReply(CLAUDE_CODE, event: "Stop", session: session, why: "w", fix: "f")) catch {<str: any>};
+    final hooked: {str: any} = first["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(hooked["hookEventName"] == "Stop", message: "{first}");
+    std\assert(hooked["additionalContext"] == "proofread-reply judges no reply: w. f", message: "{first}");
+    std\assert(first["systemMessage"] == null, message: "the person is not shown the notice: {first}");
     std\assert(first["decision"] == null, message: "the reply is never blocked");
-    std\assert(noticeReply(CLAUDE_CODE, session: session, why: "w", fix: "f") == "", message: "once per session");
+    std\assert(noticeReply(CLAUDE_CODE, event: "Stop", session: session, why: "w", fix: "f") == "", message: "once per session");
+}
+
+test "the notice at UserPromptSubmit names that event and reaches the agent alone" {
+    final session = "proofread-reply-{std\random(min: 0, max: 1000000)}";
+    final printed: {str: any} = json\parse(noticeReply(CLAUDE_CODE, event: "UserPromptSubmit", session: session, why: "w", fix: "f")) catch {<str: any>};
+    final hooked: {str: any} = printed["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(hooked["hookEventName"] == "UserPromptSubmit", message: "{printed}");
+    std\assert(hooked["additionalContext"] == "proofread-reply judges no reply: w. f", message: "{printed}");
+    std\assert(printed["systemMessage"] == null, message: "the person is not shown the notice: {printed}");
+}
+
+test "codex prints no notice and does not spend the session's once" {
+    final session = "proofread-reply-{std\random(min: 0, max: 1000000)}";
+    std\assert(noticeReply(CODEX, event: "Stop", session: session, why: "w", fix: "f") == "", message: "codex prints nothing");
+    std\assert(noticeReply(CLAUDE_CODE, event: "Stop", session: session, why: "w", fix: "f") != "", message: "claude-code still gets the notice");
 }
 
 test "a checkout's own proofread is checked for staleness by its magus" {

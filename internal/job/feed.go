@@ -53,12 +53,12 @@ func AttributeWrite(rows []types.Job, rel string) (Attribution, bool) {
 		if !row.State.Live() {
 			continue
 		}
-		declared, covered := matching(row.WritePaths, rel)
+		declared, covered := matching(row.Paths.Write, rel)
 		if !covered {
 			continue
 		}
 		// A deny naming one declaration of rel leaves the file in the job's boundary.
-		if _, denied := matching(WholeFileDenies(row.DenyPaths, rel), rel); denied {
+		if _, denied := matching(WholeFileDenies(row.Paths.Deny, rel), rel); denied {
 			continue
 		}
 		claimants = append(claimants, row.ID)

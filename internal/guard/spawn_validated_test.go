@@ -13,7 +13,7 @@ import (
 
 func TestSpawnUnvalidatedRefusesARowNothingChecked(t *testing.T) {
 	const title = "orchestrator/impl guard-facts"
-	row := types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"a/**"}}
+	row := types.Job{ID: "guard-facts", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a/**"}}}
 	spawn := func(t *testing.T, description string, validated int64) types.GuardJudgment {
 		t.Helper()
 		ctx, _ := fleetFixture(t, row)

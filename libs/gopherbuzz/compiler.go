@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -659,16 +660,25 @@ func (c *compiler) qualifiedType(ns, name string) (*ast.ObjectDecl, bool, string
 }
 
 // moduleEnum reports whether m names an enum an import bound as m's object exports.
+// A nested `a\b\E` is keyed by its whole path, a\b.
 func (c *compiler) moduleEnum(m *ast.MemberExpr) bool {
-	id, ok := m.Object.(*ast.IdentExpr)
+	var segments []string
+	var obj ast.Node = m.Object
+	for mem, ok := obj.(*ast.MemberExpr); ok; mem, ok = obj.(*ast.MemberExpr) {
+		segments = append(segments, mem.Name)
+		obj = mem.Object
+	}
+	id, ok := obj.(*ast.IdentExpr)
 	if !ok {
 		return false
 	}
+	segments = append(segments, id.Name)
+	slices.Reverse(segments)
 	root := c
 	for root.parent != nil {
 		root = root.parent
 	}
-	for _, n := range root.moduleTypes[id.Name] {
+	for _, n := range root.moduleTypes[strings.Join(segments, `\`)] {
 		if ed, isEnum := n.(*ast.EnumDecl); isEnum && ed.Name == m.Name {
 			return true
 		}

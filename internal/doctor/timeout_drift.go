@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 const (
@@ -45,7 +46,7 @@ const (
 // Advice, never a failure. How much headroom a runaway guard should carry is a
 // judgment about the worst machine the target will ever run on, which magus has not
 // seen.
-func (r *runner) checkTimeoutDeclarations(ctx context.Context, projects []*types.Project) types.Check {
+func (r *runner) checkTimeoutDeclarations(ctx context.Context, projects []*types.Project) check.Check {
 	const name = "timeout-declarations"
 
 	var h forecast.History
@@ -71,22 +72,22 @@ func (r *runner) checkTimeoutDeclarations(ctx context.Context, projects []*types
 	}
 
 	if declared == 0 {
-		return types.Check{
-			Name: name, Status: types.CheckOK,
+		return check.Check{
+			Name: name, Status: check.OK,
 			Message: "no target declares a timeout, so every target is unbounded",
 		}
 	}
 	if len(details) == 0 {
-		return types.Check{
-			Name: name, Status: types.CheckOK,
+		return check.Check{
+			Name: name, Status: check.OK,
 			Message: fmt.Sprintf("%d declared timeout(s) still bracket what magus measured", declared),
 		}
 	}
 	slices.Sort(details)
 	details = slices.Compact(details)
-	return types.Check{
+	return check.Check{
 		Name:   name,
-		Status: types.CheckAdvice,
+		Status: check.Advice,
 		Message: fmt.Sprintf(
 			"%d of %d declared timeout(s) no longer describe the target; a ceiling is only a guard while it brackets real runs (see %s)",
 			len(details), declared, types.CodeURL(types.TimeoutDeclarationDrift)),

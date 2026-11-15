@@ -1,0 +1,6 @@
+import "lib/shapes";
+
+fun main(args: [str]) > void {
+    final p = geo\shapes\Point{ x = 1 };
+    _ = p;
+}

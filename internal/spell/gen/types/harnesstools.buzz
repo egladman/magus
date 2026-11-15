@@ -7,5 +7,5 @@
 
 export object HarnessTools {
     dir: str = "",
-    rows: [HarnessTool] = [],
+    tools: [HarnessTool] = [],
 }

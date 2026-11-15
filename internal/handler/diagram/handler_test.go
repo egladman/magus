@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/libs/figure"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,11 +51,11 @@ func (f cannedWorkspace) ReviewOrigin(context.Context) diff.ReviewOrigin {
 	return diff.ReviewOrigin{Remote: f.remote}
 }
 
-func (f cannedWorkspace) RevisionCheckpoint(_ context.Context, rev string) (types.VCSCheckpoint, error) {
+func (f cannedWorkspace) RevisionCheckpoint(_ context.Context, rev string) (vcs.Checkpoint, error) {
 	if f.head == "" {
-		return types.VCSCheckpoint{}, errors.New("no revision")
+		return vcs.Checkpoint{}, errors.New("no revision")
 	}
-	return types.VCSCheckpoint{Revision: f.head, Branch: rev}, nil
+	return vcs.Checkpoint{Revision: f.head, Branch: rev}, nil
 }
 
 // chainWorkspace is app -> lib -> core -> base, plus a tool project depending on nothing.

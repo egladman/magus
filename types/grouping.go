@@ -103,5 +103,5 @@ type Grouping struct {
 	Definition   string           `json:"definition"   yaml:"definition"`
 	MinSample    int              `json:"min_sample"   yaml:"min_sample"`
 	Unclassified int              `json:"unclassified" yaml:"unclassified"`
-	Rows         []GroupingRecord `json:"rows"         yaml:"rows"`
+	Shapes       []GroupingRecord `json:"shapes"       yaml:"shapes"`
 }

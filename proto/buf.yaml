@@ -20,8 +20,7 @@ lint:
   #
   # RPC_REQUEST_RESPONSE_UNIQUE falls out of the same choice rather than being a second
   # decision: once a response IS the resource, any two RPCs returning the same resource share
-  # a type. MemoryService.GetCursor and UpdateCursor both return Cursor, which is exactly what
-  # AIP-156 prescribes for a singleton.
+  # a type, which is exactly what AIP-156 prescribes for a singleton's Get and Update.
   #
   # This is NOT the waiver that used to sit here. That one was ignore_only-scoped to
   # job.proto to permit four near-identical trigger RPCs - a design smell, since removed by

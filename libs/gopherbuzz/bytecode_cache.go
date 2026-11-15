@@ -27,6 +27,19 @@ type BytecodeStore interface {
 	Store(key string, blob []byte) error
 }
 
+// UnusableChunkReporter is a BytecodeStore told when a blob Load returned does
+// not decode, which a changed import never causes. The session then compiles
+// as it does for an absent key.
+type UnusableChunkReporter interface {
+	Unusable(key string, err error)
+}
+
+func (s *Session) reportUnusableChunk(key string, err error) {
+	if r, ok := s.bytecodeStore.(UnusableChunkReporter); ok {
+		r.Unusable(key, err)
+	}
+}
+
 // DiskBytecodeStore reads and writes one file per key under a directory. A
 // missing file is an absent key. Store writes a temporary file and renames it
 // into place, so a reader never observes a partial blob.
@@ -182,16 +195,19 @@ func (s *Session) loadCachedChunk(ctx context.Context, code string) (*vmpackage.
 	if s.lineCover != nil || s.repl {
 		return nil, nil, false, nil
 	}
-	blob, err := s.bytecodeStore.Load(s.bytecodeKey(code))
+	key := s.bytecodeKey(code)
+	blob, err := s.bytecodeStore.Load(key)
 	if err != nil {
 		return nil, nil, false, nil
 	}
 	rec, err := decodeBytecodeRecord(blob)
 	if err != nil {
+		s.reportUnusableChunk(key, err)
 		return nil, nil, false, nil
 	}
 	chunk, err := rec.chunk(s.sourceFile)
 	if err != nil {
+		s.reportUnusableChunk(key, err)
 		return nil, nil, false, nil
 	}
 	// Decoding builds fresh constants per session, exactly as compiling does.

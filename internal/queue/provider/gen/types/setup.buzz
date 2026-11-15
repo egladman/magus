@@ -6,8 +6,8 @@
 // `go generate`, never this file.
 
 export object QueueSetup {
-    statusContext: str = "",
-    credential: QueueIntegration = QueueIntegration{},
+    statusContext: str,
+    credential: QueueIntegration,
     requiredChecks: [QueueRequiredCheck] = [],
     settings: [QueueSetting] = [],
     app: QueueApp? = null,

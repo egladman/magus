@@ -163,6 +163,110 @@ func (s *symbolsSuite) TestUpdatePackReindexesDependentsReferencingARemovedSymbo
 	s.Equal(UpdateResult{Indexed: []string{"a"}, Dependents: []string{"b"}, Kept: 1}, res)
 }
 
+const (
+	symAT      = "magus gomod example.com/m . `example.com/m/a`/T#"
+	symAFirst  = "magus gomod example.com/m . `example.com/m/a`/T#First()."
+	symASecond = "magus gomod example.com/m . `example.com/m/a`/T#Second()."
+	symBW      = "magus gomod example.com/m . `example.com/m/b`/W#"
+	symCV      = "magus gomod example.com/m . `example.com/m/c`/V#"
+)
+
+func methodSet(typ string, methods ...string) MethodSet {
+	ms := MethodSet{Symbol: typ}
+	for _, m := range methods {
+		ms.Methods = append(ms.Methods, Method{Name: m, Signature: "func()", Symbol: m})
+	}
+	return ms
+}
+
+// embedding is a's T, which b's W embeds, and c's V, which embeds b's W.
+// c depends on b alone.
+func embedding(tMethods ...string) *fakeIndexer {
+	ix := &fakeIndexer{
+		version: versionV1,
+		units: []Unit{
+			{ID: "a", Digest: "a1"},
+			{ID: "b", Digest: "b1", Deps: []string{"a"}},
+			{ID: "c", Digest: "c1", Deps: []string{"b"}},
+		},
+		shards: map[string]Shard{
+			"a": testShard("a", "a/a.go", append([]string{symAT}, tMethods...)),
+			"b": testShard("b", "b/b.go", []string{symBW}, symAT),
+			"c": testShard("c", "c/c.go", []string{symCV}, symBW),
+		},
+	}
+	ix.grow(tMethods...)
+	return ix
+}
+
+// grow gives T methods, and W and V each the methods they promote from it.
+func (f *fakeIndexer) grow(methods ...string) {
+	set := func(unit, typ string) {
+		sh := f.shards[unit]
+		sh.MethodSets = nil
+		if len(methods) > 0 {
+			sh.MethodSets = []MethodSet{methodSet(typ, methods...)}
+		}
+		f.shards[unit] = sh
+	}
+	set("a", symAT)
+	set("b", symBW)
+	set("c", symCV)
+}
+
+// A method T gains reaches W, whose digest never moved, and V through W.
+func (s *symbolsSuite) TestUpdatePackReindexesTheEmbeddersOfATypeWhoseMethodSetGrew() {
+	path, ix := s.packPath(), embedding(symAFirst)
+	_, err := UpdatePack(s.T().Context(), path, ix)
+	s.Require().NoError(err)
+
+	ix.asked = nil
+	ix.units[0].Digest = "a2"
+	ix.grow(symAFirst, symASecond)
+	res, err := UpdatePack(s.T().Context(), path, ix)
+	s.Require().NoError(err)
+	s.Equal(UpdateResult{Indexed: []string{"a"}, Dependents: []string{"b", "c"}}, res)
+	s.Equal(ix.shards["c"], s.shard(path, "c"))
+}
+
+// W promoted nothing of T's before, so only its reference to T ties them.
+func (s *symbolsSuite) TestUpdatePackReindexesAnEmbedderWhenTheTypeGainsItsFirstMethod() {
+	path, ix := s.packPath(), embedding()
+	_, err := UpdatePack(s.T().Context(), path, ix)
+	s.Require().NoError(err)
+
+	ix.asked = nil
+	ix.units[0].Digest = "a2"
+	ix.shards["a"] = testShard("a", "a/a.go", []string{symAT, symAFirst})
+	ix.grow(symAFirst)
+	res, err := UpdatePack(s.T().Context(), path, ix)
+	s.Require().NoError(err)
+	s.Equal([]string{"b", "c"}, res.Dependents)
+	s.Equal(ix.shards["b"], s.shard(path, "b"))
+}
+
+func (s *symbolsSuite) TestUpdatePackKeepsTheEmbeddersOfAnUnchangedMethodSet() {
+	path, ix := s.packPath(), embedding(symAFirst)
+	_, err := UpdatePack(s.T().Context(), path, ix)
+	s.Require().NoError(err)
+
+	ix.asked = nil
+	ix.units[0].Digest = "a2"
+	res, err := UpdatePack(s.T().Context(), path, ix)
+	s.Require().NoError(err)
+	s.Equal([]string{"a"}, ix.asked)
+	s.Equal(UpdateResult{Indexed: []string{"a"}, Kept: 2}, res)
+}
+
+func (s *symbolsSuite) shard(path, unit string) Shard {
+	p, err := openPack(path)
+	s.Require().NoError(err)
+	defer p.Close()
+	got, err := p.Shard(unit)
+	s.Require().NoError(err)
+	return got
+}
+
 func (s *symbolsSuite) TestUpdatePackDropsAUnitNoLongerDeclared() {
 	path, ix := s.packPath(), threeUnits()
 	_, err := UpdatePack(s.T().Context(), path, ix)

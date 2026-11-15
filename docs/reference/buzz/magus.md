@@ -32,6 +32,18 @@ Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method
 
 **Returns:** map[string]any
 
+### cmdAll
+
+Run several nested magus commands at once. Each is magus\cmd's sub, args and opts as one Subcommand record, so commands may differ in subcommand, dir and every option. They run on the slots the calling target's step holds, as many at once as it holds, so a batch runs as wide as its step was granted and never past it: declare the target's slots to widen it. With no budget on the context, as in a bare `magus buzz` script, or a caller that holds no slot, they run one at a time and a line says so. Results come back in input order. Each command's output is buffered and written to the console as one block when it ends, in the order the commands end, or every 1 MiB for one that writes more. Every started command runs to its end whatever its siblings do; then the call raises naming each command that failed, unless that command's opts.allowFailure is set, which returns its result instead: set it on every command to read every result. A cancelled run starts no further command. run and affected are refused, since this run's pool adopts them and they would wait for a slot the batch holds: call magus\run for those. A command is not handed this run's pool socket, so a nested run it starts is its own invocation, which the workspace lock refuses for any project this run holds.
+
+**Signature:** `magus\cmdAll(commands) -> [ExecResult]` - [source](https://github.com/egladman/magus/blob/main/std/magus.go)
+
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `commands` | `any` |          |             |
+
+**Returns:** any
+
 ### where
 
 Return the project path containing dir, or null when dir is inside no project. Served in-process from the workspace on the context - no subprocess.
@@ -255,7 +267,7 @@ Select the workspace provider, given an imported spell handle. Declared at the t
 
 ### modelTiers
 
-Declare the model tiers a fork assigns: an enum of your own, cheapest case first, which magus reads once at load. tiers is that enum and default one of its cases. hosts maps each harness the magusfile wired, keyed by the harness id magus\harness.provider returns, to a function from a tier to the model alias that harness spawns; bounds maps a tier to its magus\ModelTierBounds (maxLive, maxContext; a zero field is no cap); skills maps a tier to the magus\SkillVariant its workers load. Write each function as an exhaustive match over the enum, so a tier added later fails `magus check` until every function covers it. No model name is magus's: the aliases are yours. hosts, bounds and skills are checked at load against the enum, and the declaration must follow the magus\harness.provider calls it maps. A declaration magus cannot use is MGS1052, and so is a second call or one outside the root magusfile. magus\modelTiers(null) turns tiers off. With no call the workspace gets the magus/modeltiers module: economy, standard and principal. This declares; it never selects a model for a call, retries or escalates, and prints nothing. The recorded outcomes per tier are magus\workspace().tierOutcomes().
+Declare the model tiers a fork assigns: an enum of your own, cheapest case first, which magus reads once at load. tiers is that enum and default one of its cases. hosts maps each harness the magusfile wired, keyed by the harness id magus\harness.provider returns, to a function from a tier to the model alias that harness spawns; bounds maps a tier to its magus\agent\ModelTierBounds (maxLive, maxContext; a zero field is no cap); skills maps a tier to the magus\agent\SkillVariant its workers load. Write each function as an exhaustive match over the enum, so a tier added later fails `magus check` until every function covers it. No model name is magus's: the aliases are yours. hosts, bounds and skills are checked at load against the enum, and the declaration must follow the magus\harness.provider calls it maps. A declaration magus cannot use is MGS1052, and so is a second call or one outside the root magusfile. magus\modelTiers(null) turns tiers off. With no call the workspace gets the magus/modeltiers module: routine, bounded, design and frontier. Adjacent tiers may share a host's alias, for a host with fewer models than tiers. This declares; it never selects a model for a call, retries or escalates, and prints nothing. The recorded outcomes per tier are magus\workspace().tierOutcomes().
 
 **Signature:** `magus\modelTiers(tiers, [default], [hosts], [bounds], [skills])`
 

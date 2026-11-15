@@ -159,7 +159,7 @@ env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
 exec git init -q
 exec git -c user.email=t@example.com -c user.name=T commit -q --allow-empty -m init
-exec magus job fork harness/mcp-worker --read-only --criteria 'the transport test set, held so the rebind rule has a job to read'
+exec magus job fork harness/mcp-worker --read-only --instructions 'the transport test set, held so the rebind rule has a job to read'
 stdin $WORK/exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 
@@ -234,7 +234,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 ! stdout .
 
 # case: mcp/advise
-# Another server's tool carries nothing magus can read, so unjudged-tool names it rather
+# Another server's tool carries nothing magus can read, so unjudged-step names it rather
 # than letting it run unseen. It denies by default; this fixture workspace sets it to
 # advise, which says it once a session, and its cache dir holds it to once.
 cd read-ws
@@ -519,7 +519,7 @@ env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
 exec git init -q
 exec git -c user.email=t@example.com -c user.name=T commit -q --allow-empty -m init
-exec magus job fork harness/cursor-mcp-worker --read-only --criteria 'the cursor MCP transport cases, held so the rebind rule has a job to read'
+exec magus job fork harness/cursor-mcp-worker --read-only --instructions 'the cursor MCP transport cases, held so the rebind rule has a job to read'
 stdin $WORK/cursor-exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 
@@ -576,7 +576,7 @@ env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 exec git init -q
 exec git -c user.email=t@example.com -c user.name=T commit -q --allow-empty -m init
-exec magus job fork harness/cursor-mcp-string --read-only --criteria 'the cursor MCP string-input case, held so the rebind rule has a job to read'
+exec magus job fork harness/cursor-mcp-string --read-only --instructions 'the cursor MCP string-input case, held so the rebind rule has a job to read'
 stdin $WORK/cursor-exec-mcp-string.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdin $WORK/cursor-mcp-call-string.json
@@ -892,13 +892,14 @@ exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claud
 ! stdout .
 ! stderr .
 
-# A proofread that is missing, or that fails, judged nothing, and the person is told: one
-# systemMessage per session naming the binary and its fix. The reply is never blocked.
+# A proofread that is missing, or that fails, judged nothing, and the agent is told: one
+# additionalContext per session naming the binary and its fix. The reply is never blocked.
 env TMPDIR=$WORK/n-proofread-missing
 env __PROOFREAD_BIN=$WORK/nonexistent-proofread
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
-stdout '"systemMessage":"proofread-reply judges no reply: .*nonexistent-proofread is not an executable file'
+stdout '"additionalContext":"proofread-reply judges no reply: .*nonexistent-proofread is not an executable file'
+! stdout '"systemMessage"'
 ! stdout '"decision"'
 
 # Once per session: the next turn of the same session is not told again.
@@ -910,7 +911,7 @@ env TMPDIR=$WORK/n-proofread-failing
 env __PROOFREAD_BIN=$WORK/failing-proofread
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
-stdout '"systemMessage":"proofread-reply judges no reply: .*failing-proofread exited 2: proofread: cannot judge'
+stdout '"additionalContext":"proofread-reply judges no reply: .*failing-proofread exited 2: proofread: cannot judge'
 ! stdout '"decision"'
 
 # An envelope with no reply has nothing to judge, so it is silent and exits 0.
@@ -1069,6 +1070,66 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdout 'host-chose-this'
 ! stdout 'stale-magus'
 env __MAGUS_FAILED_RESPONSE=
+
+# --- a binary that cannot load the tree never judges: the next one does ------
+#
+# A build older than the workspace's magus.yaml exits on the key it does not know. The
+# glue passes it over for the next candidate, here the magus on PATH, and tells the person
+# once per session which binary it tried, why that one could not load, and which judged.
+
+env __MAGUS_BIN=$WORK/unloadable-magus
+chmod 0755 $WORK/unloadable-magus
+env TMPDIR=$WORK/n-unloadable
+stdin deny-command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'whole-tree git stash'
+stdout 'tried \S*unloadable-magus, which could not load this tree: \[MGS1040\]'
+stdout 'ci.remote_gate'
+stdout 'fell to \S*magus, which judged this call'
+stdin deny-command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout 'whole-tree git stash'
+! stdout 'could not load this tree'
+
+env TMPDIR=$WORK/n-unloadable-path
+stdin pass-path.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
+! stdout 'permissionDecision'
+stdout 'tried \S*unloadable-magus, which could not load this tree'
+stdout 'which judged this write'
+
+# Cursor shows the person a message only with a refusal, so it says the fallback on stderr.
+env TMPDIR=$WORK/n-unloadable-cursor
+stdin cursor-shell-deny.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"deny"'
+stdout 'whole-tree git stash'
+stderr 'tried \S*unloadable-magus, which could not load this tree'
+stderr 'which judged this call'
+
+# A binary that loads the config but not the policy denies under stale-binary. That deny
+# is a guess too. When no binary left can load the tree, none judges: the refusal names
+# each one tried, and only the rebuild it names runs.
+env __MAGUS_BIN=
+env TMPDIR=$WORK/n-none-loads
+stdin unloaded-write.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'no magus it tried can load this tree'
+stdout 'tried \S*magus, which could not load this tree: \S'
+stdout 'no other magus is left to fall to'
+stdout 'go -C \S*/unloaded-ws run -trimpath ./cmd/magus run go-build --no-cache \.'
+# The line names the checkout by absolute path, which only the script knows.
+exec sh -c 'printf "{\"session_id\": \"u1\", \"hook_event_name\": \"PreToolUse\", \"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"GOEXPERIMENT=jsonv2 go -C %s/unloaded-ws run -trimpath ./cmd/magus run go-build --no-cache .\"}, \"cwd\": \"unloaded-ws\"}" "$WORK" > unloaded-recovery.json'
+stdin unloaded-recovery.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout 'permissionDecision'
+stdin unloaded-path.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'no magus it tried can load this tree'
+env __MAGUS_BIN=$WORK/stale-magus
 
 # --- every unjudged call is refused and said, never once per session ---------
 #
@@ -1365,7 +1426,7 @@ stdout '"permissionDecision":"deny"'
 # takes the job through its own template first.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
-exec magus job fork harness/push-worker --parent harness --read-only --criteria 'the push transport cases, held so the push gate has a worker to refuse'
+exec magus job fork harness/push-worker --parent harness --read-only --instructions 'the push transport cases, held so the push gate has a worker to refuse'
 stdin $WORK/exec-push-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdin $WORK/push-approval.json
@@ -1599,6 +1660,29 @@ exit 1
 echo 'magus: WARN config: unknown or unexpected keys in config file' >&2
 echo 'magus: unknown subcommand "session"' >&2
 exit 2
+-- unloadable-magus --
+#!/bin/sh
+# Stands in for a build older than the workspace's magus.yaml: it exits on the key it
+# does not know before it judges anything.
+cat > /dev/null
+[ "$1" = version ] && { echo 'magus v0.0.1-unloadable'; exit 0; }
+echo '[MGS1040] magus.yaml has a key this magus does not know:' >&2
+echo '  - ci.remote_gate  (line 3)' >&2
+exit 1
+-- unloaded-ws/go.mod --
+module github.com/egladman/magus
+
+go 1.25
+-- unloaded-ws/magus.yaml --
+a_section_from_a_newer_magus:
+  enabled: true
+-- unloaded-ws/magusfile.buzz --
+import "magus";
+magus\guard.command(judge);
+-- unloaded-write.json --
+{"session_id": "u1", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "touch notes.txt"}, "cwd": "unloaded-ws"}
+-- unloaded-path.json --
+{"session_id": "u1", "hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "unloaded-ws/notes.txt", "content": "x\n"}, "cwd": "unloaded-ws"}
 -- deny-command.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git stash"}}
 -- deny-command-s2.json --
@@ -1678,7 +1762,7 @@ magus\project({
     "sources": ["*.go"],
     "no_language": "fixture workspace: only the read rule's view of a long Go file matters here",
 });
-magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}, "unjudged-tool": "advise"});
+magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}, "unjudged-step": "advise"});
 -- .testscript/magus/tools/version --
 magus.tool-rows/v1alpha1
 -- .testscript/magus/tools/runs --

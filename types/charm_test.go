@@ -52,7 +52,7 @@ func TestReservedCharms(t *testing.T) {
 
 func TestReservedCharmDoc(t *testing.T) {
 	assert.Equal(t,
-		"mutate in place: flip check-only targets (format, lint, generate) to write; stripped from ci",
+		"mutate in place: flip check-only targets (format, lint, generate) to write; stripped from ci's verify passes, which repair a failing declared writer under it",
 		ReservedCharmDoc("RW"), "casing-insensitive lookup for rw")
 	assert.Equal(t,
 		"continuous-delivery: a target reads it to publish its artifact; survives into ci",
@@ -61,7 +61,7 @@ func TestReservedCharmDoc(t *testing.T) {
 		"GitHub Actions output: swap a tool's reporter to inline workflow annotations; survives into ci",
 		ReservedCharmDoc("gha"))
 	assert.Equal(t,
-		"move pinned upstream state forward (a lockfile, a scanner database) instead of verifying it; stripped from ci",
+		"move pinned upstream state forward (a lockfile, a scanner database) instead of verifying it; stripped from ci and its repairs",
 		ReservedCharmDoc("update"))
 	assert.Empty(t, ReservedCharmDoc("container"), "a non-reserved charm has no built-in doc")
 }

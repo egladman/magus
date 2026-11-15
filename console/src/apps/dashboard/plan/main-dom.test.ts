@@ -288,7 +288,10 @@ test("a served but empty listing is a different sentence from a refusal", async 
 test("the jobs draw one node and one list row each", async () => {
   serve({
     jobs: okJobs([
-      sessionJob("root", { state: "running", criteria: "ship it" }),
+      sessionJob("root", {
+        state: "running",
+        agent: { instructions: "ship it", worker: { type: "resumed" } },
+      }),
       sessionJob("b1", { parent: "root", state: "pass" }),
       sessionJob("b2", {
         parent: "root",
@@ -332,7 +335,7 @@ test("a row says who holds the job, and the server's own carry what they maintai
         target: { sizeBytes: "2048", itemCount: "12" },
         lastRun: { endTime: new Date(Date.now() - 120_000).toISOString(), ok: true },
       }),
-      sessionJob("docs-rename", { model: "opus" }),
+      sessionJob("docs-rename", { agent: { model: { id: "opus" }, worker: { type: "resumed" } } }),
     ]),
   });
   const { host, teardown } = mount();
@@ -570,13 +573,14 @@ test("selecting a job shows its criteria, checkpoint, model, check and paths", a
   serve({
     jobs: okJobs([
       sessionJob("root", {
-        criteria: "draw the jobs",
+        agent: {
+          instructions: "draw the jobs",
+          model: { id: "opus" },
+          worker: { type: "resumed" },
+        },
         checkpoint: "after the stage lands",
-        model: "opus",
         check: "console:test",
-        writePaths: ["console/src/console/plan/"],
-        denyPaths: ["internal/"],
-        readPaths: ["docs/"],
+        paths: { write: ["console/src/console/plan/"], read: ["docs/"], deny: ["internal/"] },
       }),
     ]),
     feeds: true,
@@ -607,10 +611,13 @@ test("selecting a job shows its criteria, checkpoint, model, check and paths", a
 test("a row shows its kind and its goals - criteria and parent - not only the detail sheet", async () => {
   serve({
     jobs: okJobs([
-      sessionJob("root", { criteria: "draw the jobs" }),
+      sessionJob("root", { agent: { instructions: "draw the jobs", worker: { type: "resumed" } } }),
       sessionJob("child", {
         parent: "root",
-        criteria: "make the card say what it is for, same as the row does",
+        agent: {
+          instructions: "make the card say what it is for, same as the row does",
+          worker: { type: "resumed" },
+        },
       }),
     ]),
   });
@@ -634,7 +641,10 @@ test("the card carries the job's kind and a truncated criteria", async () => {
   serve({
     jobs: okJobs([
       sessionJob("root", {
-        criteria: "a criteria sentence long enough that the card has to cut it off somewhere",
+        agent: {
+          instructions: "a criteria sentence long enough that the card has to cut it off somewhere",
+          worker: { type: "resumed" },
+        },
       }),
     ]),
   });
@@ -805,8 +815,8 @@ test("an overlap warns on both rows and names the other job in the detail", asyn
   serve({
     jobs: okJobs(
       [
-        sessionJob("a", { state: "running", writePaths: ["internal/job"] }),
-        sessionJob("b", { writePaths: ["internal/job/store.go"] }),
+        sessionJob("a", { state: "running", paths: { write: ["internal/job"] } }),
+        sessionJob("b", { paths: { write: ["internal/job/store.go"] } }),
         sessionJob("c", { state: "pass" }),
       ],
       [
@@ -884,7 +894,7 @@ test("a released path shows with a short digest", async () => {
     jobs: okJobs([
       sessionJob("a", {
         state: "running",
-        writePaths: ["docs"],
+        paths: { write: ["docs"] },
         releases: [
           {
             path: "internal/job/store.go",
@@ -1417,7 +1427,10 @@ test("a changed model repaints the row that carries it", async () => {
     jobs: () => {
       reads++;
       return okJobs([
-        sessionJob("root", { state: "running", model: reads > 1 ? "sonnet" : "opus" }),
+        sessionJob("root", {
+          state: "running",
+          agent: { model: { id: reads > 1 ? "sonnet" : "opus" }, worker: { type: "resumed" } },
+        }),
       ])();
     },
   });

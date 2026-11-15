@@ -49,8 +49,7 @@ func pass() types.GuardJudgment {
 func (s *SessionAdviseSuite) TestARootStopIsHeldOnceToShowTheAdvisory() {
 	a := s.post("")
 	v := adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass())
-	s.Equal(decisionDeny, v.Decision)
-	s.Equal(string(denyRulePersonAdvisory), v.Rule)
+	s.Equal(ruledAs(decisionDeny, string(denyRulePersonAdvisory)), judgedAs(v))
 	s.Contains(v.Reason, a.ID)
 	s.Contains(v.Reason, "not a relay from another agent")
 	s.Equal(decisionPass, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)

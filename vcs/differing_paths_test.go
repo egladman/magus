@@ -115,3 +115,89 @@ func (s *differingPathsSuite) TestAnInvalidRevisionIsNotAMissingPath() {
 	s.Error(err)
 	s.NotErrorIs(err, ErrObjectMissing)
 }
+
+// pairwise answers as git does without comparing many trees at once, as
+// hg, jj and sapling do.
+type pairwise struct{ revisionReader }
+
+func (s *differingPathsSuite) byRevision() map[string][]string {
+	return map[string][]string{s.a: s.paths(), s.b: s.paths(), "f00dfeed": s.paths()}
+}
+
+func (s *differingPathsSuite) TestEachRevisionIsComparedToTheHead() {
+	got, err := DifferingPathsByRevision(s.T().Context(), gitVCS{}, s.repo.Root(), s.b, s.byRevision())
+
+	s.Require().NoError(err)
+	s.Equal(map[string][]string{s.a: {"edited.txt", "removed.txt", "added.txt"}, s.b: nil}, got)
+}
+
+func (s *differingPathsSuite) TestARevisionIsComparedOnlyOnItsOwnPaths() {
+	got, err := DifferingPathsByRevision(s.T().Context(), gitVCS{}, s.repo.Root(), s.b, map[string][]string{s.a: {"same.txt", "added.txt"}})
+
+	s.Require().NoError(err)
+	s.Equal(map[string][]string{s.a: {"added.txt"}}, got)
+}
+
+func (s *differingPathsSuite) TestTwoNamesForOneCommitAreBothAnswered() {
+	got, err := DifferingPathsByRevision(s.T().Context(), gitVCS{}, s.repo.Root(), s.b, map[string][]string{s.a: {"edited.txt"}, s.a[:12]: {"edited.txt"}})
+
+	s.Require().NoError(err)
+	s.Equal(map[string][]string{s.a: {"edited.txt"}, s.a[:12]: {"edited.txt"}}, got)
+}
+
+func (s *differingPathsSuite) TestAModeChangeAloneDiffers() {
+	s.repo.Git("update-index", "--chmod=+x", "same.txt")
+	s.repo.Git("commit", "-q", "-m", "mode")
+
+	got, err := DifferingPathsByRevision(s.T().Context(), gitVCS{}, s.repo.Root(), s.repo.Head(), map[string][]string{s.b: {"same.txt"}})
+
+	s.Require().NoError(err)
+	s.Equal(map[string][]string{s.b: {"same.txt"}}, got)
+}
+
+func (s *differingPathsSuite) TestABackendAskedARevisionAtATimeGivesTheSameAnswer() {
+	batched, err := DifferingPathsByRevision(s.T().Context(), gitVCS{}, s.repo.Root(), s.b, s.byRevision())
+	s.Require().NoError(err)
+
+	paired, err := DifferingPathsByRevision(s.T().Context(), pairwise{gitVCS{}}, s.repo.Root(), s.b, s.byRevision())
+
+	s.Require().NoError(err)
+	s.Equal(batched, paired)
+}
+
+func (s *differingPathsSuite) TestAHeadTheRepositoryLacksIsAnError() {
+	_, err := DifferingPathsByRevision(s.T().Context(), gitVCS{}, s.repo.Root(), "f00dfeed", s.byRevision())
+
+	s.ErrorIs(err, ErrObjectMissing)
+}
+
+func (s *differingPathsSuite) TestAHeadARevisionAtATimeLacksIsAnError() {
+	_, err := DifferingPathsByRevision(s.T().Context(), pairwise{gitVCS{}}, s.repo.Root(), "f00dfeed", s.byRevision())
+
+	s.Error(err)
+}
+
+func (s *differingPathsSuite) TestAnEndedContextIsAnErrorForManyRevisions() {
+	spent, cancel := context.WithCancel(s.T().Context())
+	cancel()
+
+	_, err := DifferingPathsByRevision(spent, gitVCS{}, s.repo.Root(), s.b, s.byRevision())
+
+	s.Error(err)
+}
+
+func (s *differingPathsSuite) TestAnEndedContextIsAnErrorARevisionAtATime() {
+	spent, cancel := context.WithCancel(s.T().Context())
+	cancel()
+
+	_, err := DifferingPathsByRevision(spent, pairwise{gitVCS{}}, s.repo.Root(), s.b, s.byRevision())
+
+	s.Error(err)
+}
+
+func (s *differingPathsSuite) TestNoRevisionsAskNothing() {
+	got, err := DifferingPathsByRevision(s.T().Context(), brokenTrees{}, s.repo.Root(), "f00dfeed", nil)
+
+	s.Require().NoError(err)
+	s.Empty(got)
+}

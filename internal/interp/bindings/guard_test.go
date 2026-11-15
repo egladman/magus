@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
@@ -13,6 +14,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -602,7 +604,7 @@ func TestSpawnHelpersRefuseOutsideARule(t *testing.T) {
 import "magus";
 final told = magus\guard.once("x");
 `)
-	require.ErrorContains(t, err, "only callable inside a magus\\guard.spawn, command or write rule")
+	require.ErrorContains(t, err, "only callable inside a magus\\guard.spawn, command, write, stop or step rule")
 }
 
 // A rule reads the job rows the guard pinned and the facts magus recorded about a
@@ -617,7 +619,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
     foreach (row in list.jobs) { ids = ids + row.id + ";"; }
     var wrote = "refused";
     if (req.kind == magus\SpawnKind.spawn) {
-        magus\workspace().putJob("smuggled", opts: {"criteria": "from a rule"});
+        magus\workspace().putJob("smuggled", opts: {"agent": {"instructions": "from a rule", "worker": {"type": "resumed"}}});
         wrote = "written";
     }
     var target = "";
@@ -729,4 +731,98 @@ magus\guard.stop(fun (req: StopRequest) > GuardVerdict => magus\guard.allow());
 
 func (s *StopRuleBindingSuite) testContext() context.Context {
 	return workspace.ContextWithRegistry(s.T().Context(), s.reg)
+}
+
+type StepRuleBindingSuite struct {
+	suite.Suite
+	reg   *workspace.WorkspaceRegistry
+	steps *steps.Group
+	sess  *buzz.Session
+}
+
+func TestStepRuleBindingSuite(t *testing.T) { suite.Run(t, new(StepRuleBindingSuite)) }
+
+func (s *StepRuleBindingSuite) SetupTest() {
+	s.reg, s.steps = workspace.NewWorkspaceRegistry(), &steps.Group{}
+	s.T().Cleanup(func() { _ = s.reg.Close() })
+	s.sess = buzz.NewSession(s.testContext(), buzz.WithEmbedded())
+	registerAllBuzz(s.testContext(), s.sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+}
+
+func (s *StepRuleBindingSuite) testContext() context.Context {
+	return steps.WithGroup(workspace.ContextWithRegistry(s.T().Context(), s.reg), s.steps)
+}
+
+func (s *StepRuleBindingSuite) TestTheRuleSeesTheStepAfterTheLoadCloses() {
+	s.Require().NoError(s.sess.Exec(s.testContext(), `
+import "magus";
+import "magus/agent";
+
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict {
+    return magus\guard.deny("{req.step.kind}|{req.step.name}|{req.step.dir}|{req.capabilities.join(",")}|{req.lease}|{req.step.input["amount"]}");
+});
+`))
+	_ = s.sess.Close()
+	rule := s.steps.Rule("refund")
+	s.Require().NotNil(rule)
+
+	got, err := rule(s.T().Context(), agent.StepRequest{
+		Step:         agent.Step{Kind: "refund", Name: "card", Dir: "/repo", Input: map[string]any{"amount": 250.0}},
+		Capabilities: []string{"network"}, Lease: "job-1",
+	}, hint.NewGate(s.T().TempDir(), "s"))
+	s.Require().NoError(err)
+	s.Equal(types.GuardVerdict{Decision: types.GuardDeny, Reason: "refund|card|/repo|network|job-1|250"}, got)
+}
+
+func (s *StepRuleBindingSuite) TestEachKindKeepsItsOwnRule() {
+	s.Require().NoError(s.sess.Exec(s.testContext(), `
+import "magus";
+import "magus/agent";
+
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("egress", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+`))
+	s.Equal([]string{"egress", "refund"}, s.steps.Kinds())
+}
+
+func (s *StepRuleBindingSuite) TestRegisteringAKindTwiceIsMisdeclared() {
+	err := s.sess.Exec(s.testContext(), `
+import "magus";
+import "magus/agent";
+
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "MGS1045")
+	s.Contains(err.Error(), `kind "refund" is already registered`)
+}
+
+func (s *StepRuleBindingSuite) TestAKindNamedForASeamIsMisdeclared() {
+	err := s.sess.Exec(s.testContext(), `
+import "magus";
+import "magus/agent";
+
+magus\guard.step("step", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "MGS1045")
+	s.Contains(err.Error(), "reserved")
+	s.Nil(s.steps.Kinds())
+}
+
+func (s *StepRuleBindingSuite) TestAProjectMagusfileIsMisdeclared() {
+	ctx := interp.WithProjectPath(s.testContext(), "libs/foo")
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+	err := sess.Exec(ctx, `
+import "magus";
+import "magus/agent";
+
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "MGS1045")
+	s.Contains(err.Error(), "root magusfile")
+	s.Nil(s.steps.Kinds())
 }

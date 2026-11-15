@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // DecodePut reads one put from a param map shaped like magus\job.put's opts, the map
@@ -42,11 +43,13 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 		}
 	}
 	str("parent", &put.Parent)
-	str("criteria", &put.Criteria)
+	if spec, ok, e := decodeAgent(params); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		put.Agent = &spec
+	}
 	str("checkpoint", &put.Checkpoint)
-	str("model", &put.Model)
 	str("follows", &put.Follows)
-	str("fresh_reason", &put.FreshReason)
 	str("delivery", &put.Delivery)
 	str("parent_head", &put.ParentHead)
 	if v, ok, e := mergeString(params, "brief_format"); e != nil {
@@ -57,9 +60,11 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	}
 	str("timeout", &put.Timeout)
 	str("enter", &put.Enter)
-	list("write_paths", &put.WritePaths)
-	list("deny_paths", &put.DenyPaths)
-	list("read_paths", &put.ReadPaths)
+	if paths, e := decodePutPaths(params); e != nil {
+		err = errors.Join(err, e)
+	} else {
+		put.Paths = paths
+	}
 	list("depends_on", &put.DependsOn)
 	list("breaks", &put.Breaks)
 	if goals, ok, e := decodeObjects[types.Goal](params, "goals", "goals"); e != nil {
@@ -167,25 +172,23 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 		v := strings.TrimSpace(*p.Parent)
 		set = append(set, func(u *types.Job) { u.Parent = v })
 	}
-	if p.Criteria != nil {
-		v := *p.Criteria
-		set = append(set, func(u *types.Job) { u.Criteria = v })
+	if p.Agent != nil {
+		switch spec := p.Agent.Trimmed(); {
+		case *spec == agent.Spec{}:
+			set = append(set, func(u *types.Job) { u.Agent = nil })
+		case spec.Validate() != nil:
+			err = errors.Join(err, fmt.Errorf("job: %w", spec.Validate()))
+		default:
+			set = append(set, func(u *types.Job) { u.Agent = spec.Clone() })
+		}
 	}
 	if p.Checkpoint != nil {
 		v := strings.TrimSpace(*p.Checkpoint)
 		set = append(set, func(u *types.Job) { u.Checkpoint = v })
 	}
-	if p.Model != nil {
-		v := strings.TrimSpace(*p.Model)
-		set = append(set, func(u *types.Job) { u.Model = v })
-	}
 	if p.Follows != nil {
 		v := strings.TrimSpace(*p.Follows)
 		set = append(set, func(u *types.Job) { u.Follows = v })
-	}
-	if p.FreshReason != nil {
-		v := strings.TrimSpace(*p.FreshReason)
-		set = append(set, func(u *types.Job) { u.FreshReason = v })
 	}
 	if p.BriefFormat != nil {
 		if f := *p.BriefFormat; f != "" && !f.Valid() {
@@ -202,9 +205,9 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 		v     *[]string
 		apply func(*types.Job, []string)
 	}{
-		{p.WritePaths, func(u *types.Job, v []string) { u.WritePaths = v }},
-		{p.DenyPaths, func(u *types.Job, v []string) { u.DenyPaths = v }},
-		{p.ReadPaths, func(u *types.Job, v []string) { u.ReadPaths = v }},
+		{p.Paths.Write, func(u *types.Job, v []string) { u.Paths.Write = v }},
+		{p.Paths.Deny, func(u *types.Job, v []string) { u.Paths.Deny = v }},
+		{p.Paths.Read, func(u *types.Job, v []string) { u.Paths.Read = v }},
 		{p.DependsOn, func(u *types.Job, v []string) { u.DependsOn = v }},
 		{p.Breaks, func(u *types.Job, v []string) { u.Breaks = v }},
 	} {
@@ -332,12 +335,12 @@ func declaredKeys(p types.JobPut) []string {
 		key string
 		set bool
 	}{
-		{"parent", p.Parent != nil}, {"criteria", p.Criteria != nil}, {"checkpoint", p.Checkpoint != nil},
-		{"model", p.Model != nil}, {"brief_format", p.BriefFormat != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
-		{"check", p.Check != nil}, {"write_paths", p.WritePaths != nil}, {"deny_paths", p.DenyPaths != nil},
-		{"read_paths", p.ReadPaths != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
+		{"parent", p.Parent != nil}, {"agent", p.Agent != nil}, {"checkpoint", p.Checkpoint != nil},
+		{"brief_format", p.BriefFormat != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
+		{"check", p.Check != nil}, {"paths.write", p.Paths.Write != nil}, {"paths.deny", p.Paths.Deny != nil},
+		{"paths.read", p.Paths.Read != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
 		{"goals", p.Goals != nil}, {"deviations", p.Deviations != nil}, {"read_only", p.ReadOnly != nil},
-		{"max_attempts", p.MaxAttempts != nil}, {"max_claims", p.MaxClaims != nil}, {"follows", p.Follows != nil}, {"fresh_reason", p.FreshReason != nil},
+		{"max_attempts", p.MaxAttempts != nil}, {"max_claims", p.MaxClaims != nil}, {"follows", p.Follows != nil},
 		{"weight", p.Weight != nil}, {"delivery", p.Delivery != nil}, {"parent_head", p.ParentHead != nil},
 	} {
 		if f.set {
@@ -350,9 +353,9 @@ func declaredKeys(p types.JobPut) []string {
 // mergeFields are the row fields a put may carry. `op` and `id` ride alongside them
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
-	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
-	"depends_on", "breaks", "model", "brief_format", "check", "validation", "goals", "deviations", "state", "read_only",
-	"timeout", "max_attempts", "max_claims", "weight", "enter", "follows", "fresh_reason",
+	"parent", "agent", "checkpoint", "paths",
+	"depends_on", "breaks", "brief_format", "check", "validation", "goals", "deviations", "state", "read_only",
+	"timeout", "max_attempts", "max_claims", "weight", "enter", "follows",
 	"delivery", "parent_head",
 }
 
@@ -462,6 +465,77 @@ func mergeList(params map[string]any, key string) ([]string, bool, error) {
 		return out, true, nil
 	}
 	return nil, false, badType
+}
+
+// putPathKeys are the members a put's paths may carry. Soft paths are absent
+// because only the store narrows them.
+var putPathKeys = []string{"write", "read", "deny"}
+
+// decodePutPaths reads a put's paths, an object or the JSON string of one.
+// Each member reads as [mergeList] reads a list, named paths.<member>.
+func decodePutPaths(params map[string]any) (types.JobPathsPut, error) {
+	var put types.JobPathsPut
+	v, present := params["paths"]
+	if !present {
+		return put, nil
+	}
+	if s, ok := v.(string); ok {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(s), &m); err != nil {
+			return put, fmt.Errorf("job: paths must be an object of %s: %w", strings.Join(putPathKeys, ", "), err)
+		}
+		v = m
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return put, fmt.Errorf("job: paths must be an object of %s", strings.Join(putPathKeys, ", "))
+	}
+	named := make(map[string]any, len(m))
+	var err error
+	for key, value := range m {
+		if !slices.Contains(putPathKeys, key) {
+			err = errors.Join(err, fmt.Errorf("job: a put's paths carry %s, not %s", strings.Join(putPathKeys, ", "), key))
+		}
+		named["paths."+key] = value
+	}
+	for _, f := range []struct {
+		key string
+		dst **[]string
+	}{{"write", &put.Write}, {"read", &put.Read}, {"deny", &put.Deny}} {
+		list, ok, e := mergeList(named, "paths."+f.key)
+		switch {
+		case e != nil:
+			err = errors.Join(err, e)
+		case ok:
+			*f.dst = &list
+		}
+	}
+	return put, err
+}
+
+// decodeAgent reads the agent section, strictly. It also takes the section
+// as a JSON string, for a client held to scalars. Null decodes to the zero
+// Spec, which [PutMerge] reads as a clear.
+func decodeAgent(params map[string]any) (agent.Spec, bool, error) {
+	v, present := params["agent"]
+	if !present {
+		return agent.Spec{}, false, nil
+	}
+	if v == nil {
+		return agent.Spec{}, true, nil
+	}
+	body, err := json.Marshal(v)
+	if s, ok := v.(string); ok {
+		body, err = []byte(s), nil
+	}
+	var spec agent.Spec
+	if err == nil {
+		err = json.UnmarshalStrict(body, &spec)
+	}
+	if err != nil {
+		return agent.Spec{}, false, fmt.Errorf("job: agent must be an object of model {id, tier}, instructions and worker {type, reason}: %w", err)
+	}
+	return spec, true, nil
 }
 
 // decodeObjects accepts the natural JSON/Buzz object array, or that array as a JSON string

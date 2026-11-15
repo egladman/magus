@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/commands"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 type UnknownMagusArgvSuite struct {
@@ -131,7 +131,7 @@ func (s *UnknownMagusArgvSuite) TestOtherProgramsAreNotJudged() {
 }
 
 func (s *UnknownMagusArgvSuite) TestEveryDeclaredCommandAndFlagIsBound() {
-	cmdline.Walk(commands.Root, func(path string, c cmdline.Command) {
+	command.Walk(commands.Root.Spec.Command, func(path string, c command.Command) {
 		if len(c.Children) > 0 {
 			return
 		}
@@ -139,12 +139,12 @@ func (s *UnknownMagusArgvSuite) TestEveryDeclaredCommandAndFlagIsBound() {
 		if flag := firstFlag(c); flag != "" {
 			argv = append(argv, "--"+flag)
 		}
-		got, bad := unknownArgvOf(argv)
+		got, bad := resolveUnknownArgv(argv)
 		s.False(bad, "%s: %+v", path, got)
 	})
 }
 
-func firstFlag(c cmdline.Command) string {
+func firstFlag(c command.Command) string {
 	if len(c.Flags) == 0 {
 		return ""
 	}

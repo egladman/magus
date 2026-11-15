@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 )
 
 //go:embed completions/magus.bash

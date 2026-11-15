@@ -46,9 +46,9 @@ func callbackAdapterName(t reflect.Type) string {
 	return emit.CallbackFuncName(t, typeIdent)
 }
 
-// implCallbacks returns every distinct callback type an Impl in mods takes,
-// sorted by adapter name. Two types sharing a name is an error.
-func implCallbacks(mods []std.Module) ([]reflect.Type, error) {
+// implementationCallbacks returns every distinct callback type an Impl in mods
+// takes, sorted by adapter name. Two types sharing a name is an error.
+func implementationCallbacks(mods []std.Module) ([]reflect.Type, error) {
 	byName := map[string]reflect.Type{}
 	for _, m := range mods {
 		for _, meth := range slices.Concat(m.Methods, m.ObjectExterns()) {

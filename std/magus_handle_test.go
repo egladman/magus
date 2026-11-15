@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -40,7 +41,7 @@ func (s *magusHandleSuite) TestJobResultRefusesAFieldTheVerifierIgnores() {
 }
 
 func (s *magusHandleSuite) TestMovedPathsNamesEachDigestThatMoved() {
-	at := types.VCSCheckpoint{Revision: "r1"}
+	at := typesvcs.Checkpoint{Revision: "r1"}
 	c := types.Change{At: at, Files: map[string]string{"a.go": "1", "b.go": "2"}}
 
 	got := movedPaths(c, at, map[string]string{"a.go": "1", "b.go": "3", "c.go": "4"})
@@ -49,9 +50,9 @@ func (s *magusHandleSuite) TestMovedPathsNamesEachDigestThatMoved() {
 }
 
 func (s *magusHandleSuite) TestMovedPathsNamesAMovedRevision() {
-	c := types.Change{At: types.VCSCheckpoint{Revision: "r1"}}
+	c := types.Change{At: typesvcs.Checkpoint{Revision: "r1"}}
 
-	got := movedPaths(c, types.VCSCheckpoint{Revision: "r2"}, nil)
+	got := movedPaths(c, typesvcs.Checkpoint{Revision: "r2"}, nil)
 
 	s.Equal([]string{"HEAD r1 -> r2"}, got)
 }
@@ -69,7 +70,7 @@ func (s *magusHandleSuite) TestTierOptionsKeepNamedPaths() {
 }
 
 func (s *magusHandleSuite) TestMovedPathsIsEmptyForTheSameTree() {
-	at := types.VCSCheckpoint{Revision: "r1", PatchDigest: "p"}
+	at := typesvcs.Checkpoint{Revision: "r1", PatchDigest: "p"}
 	c := types.Change{At: at, Files: map[string]string{"a.go": "1"}}
 
 	s.Empty(movedPaths(c, at, map[string]string{"a.go": "1"}))

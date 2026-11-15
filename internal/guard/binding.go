@@ -3,7 +3,9 @@ package guard
 import (
 	"cmp"
 	"context"
+	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -13,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/types"
 )
 
@@ -53,6 +55,66 @@ func resolveLease(who hookAttribution, explicit, bound string) (string, types.Le
 		q.CheckoutJob = bound
 	}
 	return q.Resolve()
+}
+
+// CallAuthority is where a call's policy loads and the revision its approved
+// sources are read at (ADR 0045, sections 3 and 6).
+type CallAuthority struct {
+	// Lease is the row the call acts under, "" for none.
+	Lease string
+	// Checkout is the row's checkout, which its policy loads from. "" loads
+	// the caller's own.
+	Checkout string
+	// Revision is the authority's, "" for the checkout's committed revision.
+	Revision string
+}
+
+// ResolveAuthority resolves req's lease as Judge does, before any policy
+// loads, so every door loads the row's. base locates the job store: its
+// CacheDir and JobReader. A call with no row keeps its checkout and takes
+// req.Authority. ADR 0015 is unchanged: a path in the call still resolves
+// where its line runs.
+func ResolveAuthority(ctx context.Context, base Dependencies, req Request) CallAuthority {
+	unleased := CallAuthority{Revision: req.Authority}
+	if req.PendingRow != nil {
+		// A fork grading its check has no authority until the store writes it.
+		unleased.Lease = req.PendingRow.ID
+		return unleased
+	}
+	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent}
+	if filepath.IsAbs(req.Dir) {
+		ctx = hookContextAt(ctx, base, req.Dir)
+	}
+	if env, ok := decodeHookEnvelope(req.Input, req.Tools); ok {
+		ctx = hookContextAt(ctx, base, env.Cwd)
+		who.Session = cmp.Or(who.Session, env.Who.Session)
+		who.Agent = cmp.Or(who.Agent, env.Who.Agent)
+	}
+	at := hookLocation(ctx, base)
+	if at.cacheDir == "" && at.rows == nil {
+		return unleased
+	}
+	binding := bindingUnlessEnded(ctx, at, boundJob(who, at))
+	lease, _ := resolveLease(who, req.Lease, binding.Job)
+	unleased.Lease = lease
+	row, ok := leaseRow(ctx, at, lease)
+	if !ok {
+		return unleased
+	}
+	return CallAuthority{Lease: lease, Checkout: rowCheckout(row), Revision: row.Authority}
+}
+
+// rowCheckout is the checkout row's holder works in, "" when none stands.
+// A checkout gone from disk ends its row, so the caller's own judges it.
+func rowCheckout(row types.Job) string {
+	dir := row.CheckoutRoot
+	if row.Worktree != nil && row.Worktree.Removed == 0 {
+		dir = cmp.Or(row.Worktree.Root, dir)
+	}
+	if fi, err := os.Stat(dir); dir == "" || err != nil || !fi.IsDir() {
+		return ""
+	}
+	return dir
 }
 
 // execTarget is the job a command line takes, through `magus job exec <job>` or a client
@@ -111,7 +173,7 @@ func execFlagTakesValue(name string) bool {
 	if takes, known := MagusFlagTakesValue(name); known {
 		return takes
 	}
-	for _, group := range commands.Root.Children {
+	for _, group := range commands.Root.Spec.Children {
 		if group.Name != hint.JobExec.Head() {
 			continue
 		}
@@ -119,8 +181,8 @@ func execFlagTakesValue(name string) bool {
 			if verb.Name != hint.JobExec.Leaf() {
 				continue
 			}
-			i := slices.IndexFunc(verb.Flags, func(f cmdline.Flag) bool { return f.Name == name })
-			return i >= 0 && verb.Flags[i].Kind != cmdline.Bool
+			i := slices.IndexFunc(verb.Flags, func(f command.Flag) bool { return f.Name == name })
+			return i >= 0 && verb.Flags[i].Kind != command.Bool
 		}
 	}
 	return false

@@ -203,18 +203,18 @@ func ungradedCheckProblem(id, which string, check types.LeaseCheck, why string) 
 // The compiling check grades only Go, so another row gets its own kind.
 func replacementCheckFix(row types.Job) string {
 	writes := func(ext string) (string, bool) {
-		i := slices.IndexFunc(row.WritePaths, func(p string) bool { return path.Ext(p) == ext })
+		i := slices.IndexFunc(row.Paths.Write, func(p string) bool { return path.Ext(p) == ext })
 		if i < 0 {
 			return "", false
 		}
-		return row.WritePaths[i], true
+		return row.Paths.Write[i], true
 	}
 	_, goSource := writes(".go")
 	script, buzz := writes(".buzz")
 	switch {
 	case !goSource && buzz:
 		return fmt.Sprintf(`declare the script check that tests what it writes, with "check": {"script": %q, "test": true}`, script)
-	case !goSource && len(row.WritePaths) > 0:
+	case !goSource && len(row.Paths.Write) > 0:
 		return fmt.Sprintf("declare a check that grades what it writes, with `magus job fork %s --check '<target> <project>'`", row.ID)
 	}
 	compiling := CompilingCheck()

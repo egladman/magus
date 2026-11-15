@@ -40,9 +40,6 @@ export object Spawn {
     prompt: str = "",
     // checkout is the checkout the spawn runs in, "" when unread.
     checkout: str = "",
-    // ownBuild: the spawned job owns its checkout and its write paths cover a build input of
-    // ./cmd/magus there, so its worker builds ./magus (see builds\OwnBuild).
-    ownBuild: bool = false,
     // agentType is the host's subagent type. No rule reads it: the type is the
     // orchestrator's choice, and the host enforces the tools it carries.
     agentType: str = "",
@@ -69,11 +66,11 @@ fun lineage(title: str) > Lineage? {
 // would share the spawning checkout, then a brief that tells its worker to build magus. rows is null when the store could not be read, which
 // unreadable says why: the row rule then advises and never denies. A continue starts
 // nothing, so it passes both.
-export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
+export fun decideSpawn(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVerdict {
     if (spawn.kind != magus\SpawnKind.spawn) {
         return magus\guard.allow();
     }
-    final row = decideJobRow(spawn, rows: rows, unreadable: unreadable);
+    final row = decideNamedJob(spawn, rows: rows, unreadable: unreadable);
     if (row.decision == magus\GuardDecision.deny) {
         return row;
     }
@@ -83,17 +80,17 @@ export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) >
     if (helpers\titleRole(spawn.title) == integrateRole) {
         return row;
     }
-    final building = builds\briefDenial(spawn.prompt, ownBuild: spawn.ownBuild);
+    final building = builds\briefDenial(spawn.prompt);
     if (building != "") {
         return magus\guard.deny(building);
     }
     return row;
 }
 
-// decideJobRow is spawn-without-job-row: the title must name a live row the spawner may hand
+// decideNamedJob is spawn-without-job-row: the title must name a live row the spawner may hand
 // out, or the guard cannot bind the child to its lease. The job is the row `<job>`, else
 // `<parent>/<job>`, the same resolution the guard binds with.
-fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
+fun decideNamedJob(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVerdict {
     if (rows == null) {
         return magus\guard.advise("The job store could not be read ({unreadable}), so whether this spawn "
             + "names a live job row went unchecked and it passes. Its child will not be bound to a lease. "
@@ -105,7 +102,7 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
             + "The description is `{spawn.title}`, and <job> is a live row in this workspace's job store. "
             + remedy(spawn, line: null));
     }
-    var found: helpers\JobRow? = null;
+    var found: helpers\JobSummary? = null;
     foreach (id in [line!.job, "{line!.parent}/{line!.job}"]) {
         foreach (r in rows!) {
             if (found == null and r.id == id) {
@@ -133,14 +130,14 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
             + "`{found!.checkoutRoot}`, where the guard takes its lease and the child would find no lease to hold. "
             + "The holder of a `--checkout` row runs the gate in that checkout itself, so it needs no integrator from here. "
             + "Otherwise spawn it from a session in `{found!.checkoutRoot}`, or fork a row bound to this checkout: "
-            + "`magus job fork {found!.id}-here --write-paths <paths> --criteria \"<what done means>\"` (no --checkout), "
+            + "`magus job fork {found!.id}-here --write-paths <paths> --instructions \"<what done means>\"` (no --checkout), "
             + "then spawn with `{line!.parent}/integrate {found!.id}-here`.");
     }
     return magus\guard.allow();
 }
 
 // descends reports whether job is ancestor or has ancestor in its parent chain.
-fun descends(rows: [helpers\JobRow], job: str, ancestor: str) > bool {
+fun descends(rows: [helpers\JobSummary], job: str, ancestor: str) > bool {
     final parents = mut {<str: str>};
     foreach (r in rows) {
         parents[r.id] = r.parent;
@@ -182,16 +179,16 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
         tool = tool + "parent = \"{parent}\", ";
     }
     fork = fork + " --model {model}";
-    tool = tool + "model = \"{model}\"";
+    final modelKey = if (spawn.model != "") "id" else "tier";
     if (thinkingRoles.indexOf(role) != null) {
         fork = fork + " --read-only";
-        tool = tool + ", read_only = true";
+        tool = tool + "read_only = true";
     } else {
         fork = fork + " --write-paths <paths>";
-        tool = tool + ", write_paths = [\"<paths>\"]";
+        tool = tool + "paths = .\{ write = [\"<paths>\"] }";
     }
-    fork = fork + " --criteria \"<what done means>\"";
-    tool = tool + ", criteria = \"<what done means>\" })";
+    fork = fork + " --instructions \"<what done means>\"";
+    tool = tool + ", agent = \{\"model\": \{\"{modelKey}\": \"{model}\"}, \"instructions\": \"<what done means>\", \"worker\": \{\"type\": \"resume\"}} })";
     var scope = "";
     if (spawn.lease != "") {
         scope = " Under your lease the row is a child of `{spawn.lease}`: its write paths are ones "
@@ -207,18 +204,18 @@ fun request(title: str, isolated: bool) > Spawn {
 }
 
 final store = [
-    helpers\JobRow{ id = "guard-command", state = magus\JobState.running },
-    helpers\JobRow{ id = "naming-advisory", state = magus\JobState.declared },
-    helpers\JobRow{ id = "changelog-fragments", state = magus\JobState.exited },
-    helpers\JobRow{ id = "v050-prep", state = magus\JobState.running },
-    helpers\JobRow{ id = "v050-prep/scout-callers", state = magus\JobState.declared, parent = "v050-prep" },
-    helpers\JobRow{ id = "drop-improve", state = magus\JobState.pass, parent = "v050-prep" },
-    helpers\JobRow{ id = "footprint", state = magus\JobState.noReturn },
-    helpers\JobRow{ id = "elsewhere", state = magus\JobState.running },
+    helpers\JobSummary{ id = "guard-command", state = magus\JobState.running },
+    helpers\JobSummary{ id = "naming-advisory", state = magus\JobState.declared },
+    helpers\JobSummary{ id = "changelog-fragments", state = magus\JobState.exited },
+    helpers\JobSummary{ id = "v050-prep", state = magus\JobState.running },
+    helpers\JobSummary{ id = "v050-prep/scout-callers", state = magus\JobState.declared, parent = "v050-prep" },
+    helpers\JobSummary{ id = "drop-improve", state = magus\JobState.pass, parent = "v050-prep" },
+    helpers\JobSummary{ id = "footprint", state = magus\JobState.noReturn },
+    helpers\JobSummary{ id = "elsewhere", state = magus\JobState.running },
 ];
 
 // judged is decideSpawn with every denial held to the verdict shape.
-fun judged(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
+fun judged(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVerdict {
     return verdict\checked(decideSpawn(spawn, rows: rows, unreadable: unreadable), label: spawn.title);
 }
 
@@ -289,9 +286,9 @@ test "a code-changing spawn without its own checkout is denied" {
 
 test "an integrate spawn is refused for a row bound to another checkout, naming where to spawn it" {
     final rows = [
-        helpers\JobRow{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
-        helpers\JobRow{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
-        helpers\JobRow{ id = "unbound", state = magus\JobState.declared },
+        helpers\JobSummary{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
+        helpers\JobSummary{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
+        helpers\JobSummary{ id = "unbound", state = magus\JobState.declared },
     ];
     final at = fun (title: str) > Spawn {
         return Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = false, checkout = "/w/main" };
@@ -312,7 +309,7 @@ test "a thinking role, an isolated worker and a continue pass" {
 }
 
 test "a spawn differing only in agent type gets the same verdict" {
-    final rows = [helpers\JobRow{ id = "guard-command", state = magus\JobState.running }];
+    final rows = [helpers\JobSummary{ id = "guard-command", state = magus\JobState.running }];
     foreach (title in ["orchestrator/review guard-command", "orchestrator/feat guard-command", "orchestrator/review nothing-here"]) {
         foreach (isolated in [true, false]) {
             final plain = judged(Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = isolated }, rows: rows, unreadable: "");
@@ -363,11 +360,10 @@ test "a brief that forbids the build or builds something else passes" {
     std\assert(judged(continued, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a continue starts nothing");
 }
 
-test "a spawn whose job builds its own binary may brief the build" {
+test "a brief for a job that owns its checkout may not teach the build either" {
     final prompt = "Run `magus run go-build .` first.";
-    final own = Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/feat guard-command", isolated = true, prompt = prompt, ownBuild = true };
-    std\assert(judged(own, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "its own build");
-    std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == magus\GuardDecision.deny, message: "the same brief for any other job");
+    final own = Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/feat guard-command", isolated = true, prompt = prompt };
+    std\assert(judged(own, rows: store, unreadable: "").decision == magus\GuardDecision.deny, message: "no row pins a worker's build");
 }
 
 // A starting guess, not a measurement: change it here when it stops fitting.

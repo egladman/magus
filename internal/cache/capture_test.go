@@ -32,7 +32,7 @@ func TestCaptureRunFailsLoudlyWhenLogDirUnwritable(t *testing.T) {
 	lp := filepath.Join(blockedDir, "deadbeef.log")
 
 	fnCalled := false
-	_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(context.Context) error {
+	_, _, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(context.Context) error {
 		fnCalled = true
 		return nil
 	})

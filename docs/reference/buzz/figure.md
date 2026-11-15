@@ -73,6 +73,20 @@ draw lays f out and paints it with theme. anchorHref is a URL template: {path} t
 
 **Returns:** str
 
+### drawDiagram
+
+drawDiagram paints d, a Figure's diagram(), with theme, as draw
+
+**Signature:** `figure\drawDiagram(d, theme, [anchorHref]) -> str`
+
+| Parameter    | Type      | Optional | Description |
+| ------------ | --------- | -------- | ----------- |
+| `d`          | `Diagram` |          |             |
+| `theme`      | `Theme`   |          |             |
+| `anchorHref` | `str`     | yes      |             |
+
+**Returns:** str
+
 ### nodeFact
 
 nodeFact is the line a figure's stamp records for n. A box anchoring a symbol records the

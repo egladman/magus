@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 type BudgetAdmissionsSuite struct{ suite.Suite }
@@ -23,7 +24,7 @@ func (s *BudgetAdmissionsSuite) TestCountsRefusalsInTheLastDayOnly() {
 		{At: admissionsNow.Add(-23 * time.Hour), Outcome: types.AdmissionRefused},
 		{At: admissionsNow.Add(-25 * time.Hour), Outcome: types.AdmissionRefused},
 	}, admissionsNow)
-	s.Equal(types.CheckOK, got.Status)
+	s.Equal(check.OK, got.Status)
 	s.Contains(got.Message, "2 refusal(s)")
 }
 
@@ -38,13 +39,13 @@ func (s *BudgetAdmissionsSuite) TestCountsWaitsPastAQuarterOfTheirBound() {
 
 func (s *BudgetAdmissionsSuite) TestAnEmptyStoreReportsZeros() {
 	got := gradeBudgetAdmissions(nil, admissionsNow)
-	s.Equal(types.CheckOK, got.Status)
+	s.Equal(check.OK, got.Status)
 	s.Contains(got.Message, "0 refusal(s)")
 }
 
 func (s *BudgetAdmissionsSuite) TestWithoutAReaderTheCheckIsSkipped() {
 	got := (&runner{}).checkBudgetAdmissions(context.Background())
-	s.Equal(types.CheckOK, got.Status)
+	s.Equal(check.OK, got.Status)
 	s.Contains(got.Message, "skipped")
 }
 
@@ -53,6 +54,6 @@ func (s *BudgetAdmissionsSuite) TestAnUnreadableStoreIsAdviceNotAFailure() {
 		return nil, errors.New("line 3 does not decode")
 	})
 	got := (&runner{}).checkBudgetAdmissions(ctx)
-	s.Equal(types.CheckAdvice, got.Status)
+	s.Equal(check.Advice, got.Status)
 	s.Contains(got.Message, "line 3 does not decode")
 }

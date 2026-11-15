@@ -9,26 +9,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func TestEnvName_NoPrefix(t *testing.T) {
-	assert.Equal(t, "CACHE_DIR", EnvName("", "cache", "dir"))
-}
-
-func TestEnvName_WithPrefix(t *testing.T) {
-	assert.Equal(t, "MAGUS_CACHE_DIR", EnvName("MAGUS", "cache", "dir"))
-}
-
-func TestEnvName_HyphenReplaced(t *testing.T) {
-	assert.Equal(t, "MAGUS_DRY_RUN", EnvName("MAGUS", "dry-run"))
-}
-
-func TestFlagName_Parts(t *testing.T) {
-	assert.Equal(t, "cache-dir", FlagName("cache", "dir"))
-}
-
-func TestFlagName_UnderscoreReplaced(t *testing.T) {
-	assert.Equal(t, "dry-run", FlagName("dry_run"))
-}
-
 // Known is the registry, the per-VCS base-ref pattern, and what an older parent passes
 // down; a retired name is not known, so the startup check can say what replaced it.
 func TestKnownEnvVar(t *testing.T) {
@@ -92,9 +72,11 @@ func TestMisconfiguredEnvNamesEachProblem(t *testing.T) {
 // pass it without saying what happened to it.
 func TestRetiredEnvIsNotRegistered(t *testing.T) {
 	for old := range retiredEnv {
-		assert.False(t, registeredEnv()[old], "%s is retired but still in EnvVars", old)
+		_, listed := Spec.Variable(old)
+		assert.False(t, listed, "%s is retired but still in Configuration", old)
 	}
 	for name := range inheritedEnv {
-		assert.False(t, registeredEnv()[name], "%s is inherited-only but also in EnvVars", name)
+		_, listed := Spec.Variable(name)
+		assert.False(t, listed, "%s is inherited-only but also in Configuration", name)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // ownBinaryToken is how a committed hook command names the workspace's own binary.
@@ -87,7 +88,7 @@ func nearestDirWith(dir, name string) string {
 // project directory. The root's answer stands unless it already fails; a worktree with no
 // ./magus fails before the PATH fallback can call it healthy; and any project directory
 // whose hook would run a different build, or none, fails the check too.
-func (r *runner) checkGuardBinaryEverywhere(ctx context.Context, projects []*types.Project) types.Check {
+func (r *runner) checkGuardBinaryEverywhere(ctx context.Context, projects []*types.Project) check.Check {
 	root := r.ws.Root()
 	if info, err := os.Stat(filepath.Join(root, "magus")); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
 		if wt, ok := worktreeWithoutBinary(root, r.cacheDir()); ok {
@@ -95,7 +96,7 @@ func (r *runner) checkGuardBinaryEverywhere(ctx context.Context, projects []*typ
 		}
 	}
 	got := r.checkGuardBinary(ctx)
-	if got.Status == types.CheckFail {
+	if got.Status == check.Fail {
 		return got
 	}
 	if skew, ok := projectBinarySkew(ctx, root, projects, r.ownVersion()); ok {
@@ -109,14 +110,14 @@ const servedScriptsCheck = "served-scripts"
 
 // checkServedScripts fails when the scripts index names a script whose file is gone: the
 // guard serves nothing for its situations then, and says so only here.
-func (r *runner) checkServedScripts() types.Check {
+func (r *runner) checkServedScripts() check.Check {
 	missing, _ := hint.MissingScripts(r.cacheDir())
 	if len(missing) == 0 {
-		return types.Check{Name: servedScriptsCheck, Status: types.CheckOK, Message: "every script the guard's scripts index names exists"}
+		return check.Check{Name: servedScriptsCheck, Status: check.OK, Message: "every script the guard's scripts index names exists"}
 	}
-	return types.Check{
+	return check.Check{
 		Name:    servedScriptsCheck,
-		Status:  types.CheckFail,
+		Status:  check.Fail,
 		Message: fmt.Sprintf("the guard's scripts index names %d script(s) that are gone, so their situations serve nothing", len(missing)),
 		Details: append(missing, fmt.Sprintf("restore each, or rebuild the index without it: %s", hint.GraphBuild.With())),
 	}
@@ -127,9 +128,9 @@ func (r *runner) checkServedScripts() types.Check {
 // and fail to load it; and a checkout that cannot load its policy is one the guard can only
 // advise on. A main checkout stays an ordinary state to report elsewhere: a build machine
 // legitimately has no ./magus yet.
-func worktreeWithoutBinary(root, cacheDir string) (types.Check, bool) {
+func worktreeWithoutBinary(root, cacheDir string) (check.Check, bool) {
 	if info, err := os.Lstat(filepath.Join(root, ".git")); err != nil || info.IsDir() {
-		return types.Check{}, false
+		return check.Check{}, false
 	}
 	details := []string{
 		"its guard hooks judge with the magus on PATH, which may not load this tree",
@@ -142,9 +143,9 @@ func worktreeWithoutBinary(root, cacheDir string) (types.Check, bool) {
 		details = append(details, fmt.Sprintf("no script in this workspace declares SERVES %q, so magus names none of its own",
 			hint.SituationDoctor+guardBinaryCheck))
 	}
-	return types.Check{
+	return check.Check{
 		Name:    guardBinaryCheck,
-		Status:  types.CheckFail,
+		Status:  check.Fail,
 		Message: "this worktree has no ./magus",
 		Details: details,
 	}, true
@@ -158,7 +159,7 @@ func worktreeWithoutBinary(root, cacheDir string) (types.Check, bool) {
 //
 // Returns false when every directory resolves to a binary that matches, or this binary's
 // own version is unknown.
-func projectBinarySkew(ctx context.Context, root string, projects []*types.Project, own string) (types.Check, bool) {
+func projectBinarySkew(ctx context.Context, root string, projects []*types.Project, own string) (check.Check, bool) {
 	checked := map[string]bool{}
 	for _, p := range projects {
 		if p == nil || p.Dir == "" {
@@ -166,9 +167,9 @@ func projectBinarySkew(ctx context.Context, root string, projects []*types.Proje
 		}
 		bin := hookBinary(p.Dir)
 		if bin == "" {
-			return types.Check{
+			return check.Check{
 				Name:    guardBinaryCheck,
-				Status:  types.CheckFail,
+				Status:  check.Fail,
 				Message: fmt.Sprintf("no magus resolves for a hook run in %s, so no guard rule judges a call made there", p.Dir),
 				Details: []string{"build one: " + hint.Run.With("build", ".")},
 			}, true
@@ -182,7 +183,7 @@ func projectBinarySkew(ctx context.Context, root string, projects []*types.Proje
 			return skew, true
 		}
 	}
-	return types.Check{}, false
+	return check.Check{}, false
 }
 
 // interpreterSkew fails when the magus a hook would run as its interpreter is a different
@@ -193,9 +194,9 @@ func projectBinarySkew(ctx context.Context, root string, projects []*types.Proje
 // runs the call unjudged. A FAIL, because the wiring is not honored as written.
 //
 // Returns false when there is nothing to compare: this binary's own version is unknown.
-func interpreterSkew(ctx context.Context, bin, own string) (types.Check, bool) {
+func interpreterSkew(ctx context.Context, bin, own string) (check.Check, bool) {
 	if own == "" {
-		return types.Check{}, false
+		return check.Check{}, false
 	}
 	// The hook's own budget, not a tighter one: an interpreter that answers within it runs
 	// every hook, so failing it sooner reports a hang that is only a loaded machine.
@@ -209,20 +210,20 @@ func interpreterSkew(ctx context.Context, bin, own string) (types.Check, bool) {
 		if err != nil {
 			reason = err.Error()
 		}
-		return types.Check{
+		return check.Check{
 			Name:    guardBinaryCheck,
-			Status:  types.CheckFail,
+			Status:  check.Fail,
 			Message: fmt.Sprintf("the hook interpreter %s did not answer `version` (%s), so no guard hook it runs can render a verdict", bin, reason),
 			Details: []string{"rebuild: " + hint.Run.With("build", ".")},
 			Fix:     hint.Run.Argv("build", "."),
 		}, true
 	}
 	if fields[1] == own {
-		return types.Check{}, false
+		return check.Check{}, false
 	}
-	return types.Check{
+	return check.Check{
 		Name:   guardBinaryCheck,
-		Status: types.CheckFail,
+		Status: check.Fail,
 		Message: fmt.Sprintf("the hook interpreter is %s (%s) and this magus is %s, so hooks run a build other than the one checked here",
 			bin, fields[1], own),
 		Details: []string{

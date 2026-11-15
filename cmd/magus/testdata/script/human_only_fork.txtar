@@ -13,7 +13,7 @@ cp $WORK/bench.buzz magusfile.buzz
 exec git add -A
 exec git commit -q -m 'start'
 
-! exec magus job fork wave/bench --criteria 'run it' --write-paths code.go --check 'bench .'
+! exec magus job fork wave/bench --instructions 'run it' --write-paths code.go --check 'bench .'
 stderr 'wave/bench''s check `magus run bench \.` is a target a person runs \(human-only\)'
 stderr 'launches paid sessions'
 stderr 'declare a check its worker may run in its place'
@@ -23,7 +23,7 @@ stdin goal.json
 ! exec magus job fork --stdin
 stderr 'wave/goal''s goal paid''s check `magus run bench \.` is a target a person runs \(human-only\)'
 
-exec magus job fork wave/lint --criteria 'lint it' --write-paths code.go --check 'lint .'
+exec magus job fork wave/lint --instructions 'lint it' --write-paths code.go --check 'lint .'
 exec magus ls jobs -o name
 stdout 'wave/lint'
 ! stdout 'wave/bench'
@@ -54,10 +54,10 @@ export fun bench(ctx: magus\Context, args: [str]) > void {}
 
 export fun lint(ctx: magus\Context, args: [str]) > void {}
 -- goal.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/goal", "criteria": "run it", "write_paths": ["code.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/goal", "agent": {"instructions": "run it", "worker": {"type": "resumed"}}, "paths": {"write": ["code.go"]},
  "goals": [{"id": "paid", "kind": "check", "check": {"target": "bench", "project": "."}}]}
 -- apply.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/lint", "criteria": "lint it", "write_paths": ["code.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/lint", "agent": {"instructions": "lint it", "worker": {"type": "resumed"}}, "paths": {"write": ["code.go"]},
  "check": {"target": "lint", "project": "."},
  "goals": [{"id": "paid", "kind": "check", "check": {"target": "bench", "project": "."}}]}
 -- code.go --

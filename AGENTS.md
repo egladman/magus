@@ -66,10 +66,11 @@ skill beside them.
 Before your first subagent spawn, read `.agents/skills/magus-multi-agent/SKILL.md` and
 follow the job, lease and validation steps it gives.
 
-- Start delegated jobs at the `economy` tier and name the model explicitly in every spawn.
-- Economy covers mechanical edits, fixtures, docs, inventory and read-only evidence.
-- Use `standard` for bounded implementation.
-- Use `principal` for architecture, ambiguous ownership, public APIs, migrations, security and integration.
+- Start delegated jobs at the `routine` tier and name the model explicitly in every spawn.
+- Routine covers mechanical edits, fixtures, docs, inventory and read-only evidence.
+- Use `bounded` for bounded implementation.
+- Use `design` for architecture, ambiguous ownership, public APIs, migrations, security and integration.
+- `frontier` sits above `design`; a job reaches it only by moving up.
 - Move a job up only after it fails its criteria or its scope has a concrete higher-tier need.
 - Fork the same row at the higher tier.
 - Never promote an automatic retry.

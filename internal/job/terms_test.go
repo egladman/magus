@@ -9,6 +9,8 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/types/release"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -51,13 +53,18 @@ func briefRow() types.Job {
 	return types.Job{
 		ID:     "harness/ledger-per-repo",
 		Parent: "harness",
-		Criteria: "Move the lease ledger to the per-repository state dir.\n" +
-			"Done when a row put from one checkout is listed from a second worktree of the same repo.",
+		Agent: &agent.Spec{
+			Instructions: "Move the lease ledger to the per-repository state dir.\n" +
+				"Done when a row put from one checkout is listed from a second worktree of the same repo.",
+			Model:  agent.Model{Tier: "design"},
+			Worker: agent.Worker{Type: agent.WorkerTypeResumed},
+		},
 		Checkpoint: "cf5509d09",
-		WritePaths: []string{"internal/ledger", "cmd/magus/ledger.go"},
-		DenyPaths:  []string{"MAGUS.md", "docs/gen"},
+		Paths: types.JobPaths{
+			Write: []string{"internal/ledger", "cmd/magus/ledger.go"},
+			Deny:  []string{"MAGUS.md", "docs/gen"},
+		},
 		DependsOn:  []string{"harness/session-load"},
-		Model:      "principal",
 		Validation: "magus run test internal/ledger",
 		State:      types.StateDeclared,
 	}
@@ -92,7 +99,7 @@ func TestTermsNamesAWorkspaceThatWouldNotLoad(t *testing.T) {
 
 	b := NewTerms(briefRow(), TermsFacts{WorkspaceCold: true})
 	assert.Contains(t, b.String(), "this workspace would not load")
-	assert.Contains(t, b.String(), briefRow().Criteria, "the row is rendered whatever the workspace does")
+	assert.Contains(t, b.String(), briefRow().Instructions(), "the row is rendered whatever the workspace does")
 }
 
 // The unrun gates are a section of the terms, after the regenerated outputs, and a row with
@@ -159,7 +166,7 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 	}
 	row.Breaks = []string{"--old-flag", "ledger.Open"}
 	facts := TermsFacts{
-		Stage:              types.ReleaseStage{Tag: "v0.4.0"},
+		Stage:              release.Stage{Tag: "v0.4.0"},
 		DeletionCandidates: []types.UnreferencedEntry{{ID: "a", Label: "stale", Kind: "Function", Source: "internal/ledger/x.go:4"}},
 	}
 
@@ -170,7 +177,7 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 		"  Open (signature): func Open(root string) error\n" +
 		"    opens the ledger at root\n" +
 		"  OpenLegacy (absent)\n" +
-		"\ncriteria\n"
+		"\ninstructions\n"
 	assert.True(t, strings.HasPrefix(got, want), "got:\n%s", got)
 	for _, section := range []string{
 		"\nmay break\n  --old-flag\n  ledger.Open\n",
@@ -192,13 +199,13 @@ func TestTermsRendersTheInterfaceFirstThenWhatMayBreak(t *testing.T) {
 func TestTermsDropsEmptyInterfaceStageAndCandidates(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, NewTerms(briefRow(), TermsFacts{}).String(), NewTerms(briefRow(), TermsFacts{Stage: types.ReleaseStage{}}).String())
+	assert.Equal(t, NewTerms(briefRow(), TermsFacts{}).String(), NewTerms(briefRow(), TermsFacts{Stage: release.Stage{}}).String())
 	bare := NewTerms(briefRow(), TermsFacts{}).String()
 	for _, heading := range []string{"interface", "may break", "release stage", deletionHeading} {
 		assert.NotContains(t, bare, heading)
 	}
 
-	got := NewTerms(briefRow(), TermsFacts{Stage: types.ReleaseStage{Tag: "v1.2.0", Major: 1}}).String()
+	got := NewTerms(briefRow(), TermsFacts{Stage: release.Stage{Tag: "v1.2.0", Major: 1}}).String()
 	assert.Contains(t, got, "\nrelease stage\n  newest release v1.2.0\n")
 }
 
@@ -208,7 +215,7 @@ func TestTermsRendersOnlyTheRow(t *testing.T) {
 	t.Parallel()
 
 	row := briefRow()
-	row.Criteria, row.DependsOn, row.DenyPaths = "", nil, nil
+	row.Agent, row.DependsOn, row.Paths.Deny = nil, nil, nil
 	got := NewTerms(row, TermsFacts{}).String()
 
 	assert.NotContains(t, got, "goal")
@@ -225,18 +232,18 @@ func TestTermsNamesTheModelTierAndItsSource(t *testing.T) {
 
 	tests := []struct {
 		name string
-		tier types.JobModelTier
+		tier agent.JobModelTier
 		want string
 	}{
 		{
 			name: "a matrix answer names its reason and site",
-			tier: types.JobModelTier{Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Source: types.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
-			want: "job: harness/ledger-per-repo\nmodel tier: economy (rank 0), matrix: \"small checked job\" at magusfile.buzz:20\nskills: full\n",
+			tier: agent.JobModelTier{Name: "routine", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
+			want: "job: harness/ledger-per-repo\nmodel tier: routine (rank 0), matrix: \"small checked job\" at magusfile.buzz:20\nskills: full\n",
 		},
 		{
 			name: "a default has no site",
-			tier: types.JobModelTier{Name: "standard", Rank: 1, Skills: types.SkillVariantShort, Source: types.ModelTierSourceDefault, Reason: "the declared default"},
-			want: "job: harness/ledger-per-repo\nmodel tier: standard (rank 1), default: \"the declared default\"\nskills: short\n",
+			tier: agent.JobModelTier{Name: "bounded", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceDefault, Reason: "the declared default"},
+			want: "job: harness/ledger-per-repo\nmodel tier: bounded (rank 1), default: \"the declared default\"\nskills: short\n",
 		},
 	}
 	for _, tt := range tests {
@@ -255,26 +262,29 @@ func TestTermsPrintsNoModelTierForARowWithout(t *testing.T) {
 	assert.NotContains(t, NewTerms(briefRow(), TermsFacts{}).String(), "model tier")
 }
 
-// retriedRow is a job on its third attempt of four: the second ended failing with
-// everything an attempt can leave, the first ended by the sweep.
+// retriedRow is a job on its third attempt of four.
 func retriedRow() types.Job {
-	first := types.PriorAttempt{N: 1, State: types.StateNoReturn, EndReason: "its checkout is gone", ModelTier: "economy", DenialsKnown: true}
+	row := types.Job{ID: "harness/retry", Agent: agent.Instructed("Retry the store."), State: types.StateDeclared}
+	row.Paths.Write = []string{"internal/ledger"}
+	row.Validation = "magus run test internal/ledger"
+	row.MaxAttempts = 4
+	return row
+}
+
+// retriedTries are retriedRow's two ended tries: the second failing with
+// everything a try can leave, the first ended by the sweep.
+func retriedTries() []types.Attempt {
+	first := types.AttemptStatus{State: types.StateNoReturn, EndReason: "its checkout is gone", ModelTier: "routine", DenialsKnown: true}
 	first.Retry = types.RetryVerdict{Retryable: true}
-	second := types.PriorAttempt{N: 2, State: types.StateFail, ModelTier: "standard", ReworkRounds: 2, Widenings: 1, DenialsKnown: true}
+	second := types.AttemptStatus{State: types.StateFail, ModelTier: "bounded", ReworkRounds: 2, Widenings: 1, DenialsKnown: true}
 	second.Unmet = []types.VerificationStatus{{ID: "check"}, {ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
 	second.Violations = []string{`changed path "docs/x.md" is outside the job's write paths (internal/ledger)`}
-	second.UnresolvedRisks = []string{"the second worktree was not tried"}
+	second.Result = &types.JobResult{UnresolvedRisks: []string{"the second worktree was not tried"}}
 	second.Denials = []types.JobDenial{{Rule: "lease-write", Reason: "docs/x.md belongs to no lease you hold\nask the orchestrator"}}
 	second.FailingRefs = []string{"out0123456789ab"}
 	second.Retry = types.RetryVerdict{Change: types.RetryAfterWidening,
 		Reason: "the guard denied its holder under lease-write: docs/x.md belongs to no lease you hold"}
-
-	row := types.Job{ID: "harness/retry", Criteria: "Retry the store.", State: types.StateDeclared}
-	row.WritePaths = []string{"internal/ledger"}
-	row.Validation = "magus run test internal/ledger"
-	row.Attempts, row.MaxAttempts = 3, 4
-	row.Prior = []types.PriorAttempt{first, second}
-	return row
+	return []types.Attempt{{Job: "harness/retry", N: 1, Status: first}, {Job: "harness/retry", N: 2, Status: second}}
 }
 
 // The previous attempt is what the next holder starts from, so it renders byte for byte
@@ -284,17 +294,17 @@ func TestTermsRendersThePreviousAttemptGolden(t *testing.T) {
 
 	want, err := os.ReadFile(filepath.Join("testdata", "previous_attempt.golden"))
 	require.NoError(t, err)
-	first := NewTerms(retriedRow(), TermsFacts{}).String()
+	first := NewTerms(retriedRow(), TermsFacts{Attempts: retriedTries()}).String()
 	assert.Equal(t, string(want), first)
-	assert.Equal(t, first, NewTerms(retriedRow(), TermsFacts{}).String())
+	assert.Equal(t, first, NewTerms(retriedRow(), TermsFacts{Attempts: retriedTries()}).String())
 }
 
 func TestTermsSaysWhenAnAttemptsDenialsAreUnknown(t *testing.T) {
 	t.Parallel()
 
-	row := retriedRow()
-	row.Prior[1].Denials, row.Prior[1].DenialsKnown = nil, false
-	got := NewTerms(row, TermsFacts{}).String()
+	tries := retriedTries()
+	tries[1].Status.Denials, tries[1].Status.DenialsKnown = nil, false
+	got := NewTerms(retriedRow(), TermsFacts{Attempts: tries}).String()
 	assert.Contains(t, got, "    (denials unknown: the trail was rotated)\n")
 	assert.NotContains(t, got, "denied:")
 }
@@ -303,7 +313,6 @@ func TestTermsNamesTheAttemptOnlyPastTheFirstOrUnderACap(t *testing.T) {
 	t.Parallel()
 
 	first := briefRow()
-	first.Attempts = 1
 	assert.NotContains(t, NewTerms(first, TermsFacts{}).String(), "attempt")
 
 	capped := briefRow()
@@ -314,7 +323,7 @@ func TestTermsNamesTheAttemptOnlyPastTheFirstOrUnderACap(t *testing.T) {
 
 	uncapped := retriedRow()
 	uncapped.MaxAttempts = 0
-	assert.Contains(t, NewTerms(uncapped, TermsFacts{}).String(), "\nattempt 3\n")
+	assert.Contains(t, NewTerms(uncapped, TermsFacts{Attempts: retriedTries()}).String(), "\nattempt 3\n")
 }
 
 type termsTestScopeSuite struct{ suite.Suite }

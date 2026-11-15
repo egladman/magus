@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // A spell bound only for its symbol index, as buzz is, contributes something; a spell with
@@ -846,4 +847,84 @@ func TestParseBuzzProjectOpts_Layers(t *testing.T) {
 		require.NoError(t, got[0](p))
 		assert.ErrorContains(t, again[0](p), `declared as both "cli" and "tool"`)
 	})
+}
+
+// productSuite pins how targets[name].product is read beside relinks.
+type productSuite struct {
+	suite.Suite
+}
+
+func TestProductSuite(t *testing.T) {
+	suite.Run(t, new(productSuite))
+}
+
+// policy relinks ./magus and declares product.
+func (s *productSuite) policy(product vm.Value) vm.Value {
+	pol := vm.NewMap()
+	pol.MapSet("relinks", vm.StringValue("./magus"))
+	pol.MapSet("product", product)
+	return pol
+}
+
+func (s *productSuite) product(path, target string) vm.Value {
+	m := vm.NewMap()
+	m.MapSet("path", vm.StringValue(path))
+	m.MapSet("target", vm.StringValue(target))
+	return m
+}
+
+func (s *productSuite) refusal(pol vm.Value) string {
+	_, err := parseBuzzProjectOptions(context.Background(), targetsOptions("go-build", pol))
+	s.Require().Error(err)
+	return err.Error()
+}
+
+func (s *productSuite) TestTheDeclarationReachesThePolicy() {
+	pol := s.policy(s.product("./bin/magus", "go-build-product"))
+	p := applyOptions(s.T(), targetsOptions("go-build", pol))
+	want := types.Target{Relinks: "./magus", Product: "bin/magus", ProductTarget: "go-build-product"}
+	s.Equal(want, p.TargetPolicies["go-build"])
+}
+
+func (s *productSuite) TestABarePathIsRefused() {
+	got := s.refusal(s.policy(vm.StringValue("bin/magus")))
+	s.Contains(got, `"target": "go-build-product"`)
+}
+
+func (s *productSuite) TestAMissingTargetIsRefused() {
+	m := vm.NewMap()
+	m.MapSet("path", vm.StringValue("bin/magus"))
+	s.Contains(s.refusal(s.policy(m)), "needs both path and target")
+}
+
+func (s *productSuite) TestAMistypedKeyIsRefused() {
+	m := s.product("bin/magus", "go-build-product")
+	m.MapSet("targt", vm.StringValue("x"))
+	s.Contains(s.refusal(s.policy(m)), `targets["go-build"].product`)
+}
+
+func (s *productSuite) TestAProductWithoutRelinksIsRefused() {
+	pol := vm.NewMap()
+	pol.MapSet("product", s.product("bin/magus", "go-build-product"))
+	s.Contains(s.refusal(pol), "needs relinks on the same target")
+}
+
+func (s *productSuite) TestAPathOutsideTheWorkspaceIsRefused() {
+	got := s.refusal(s.policy(s.product("../magus", "go-build-product")))
+	s.Contains(got, "inside the workspace")
+}
+
+func (s *productSuite) TestTheRelinkedBinaryIsRefusedAsItsOwnProduct() {
+	got := s.refusal(s.policy(s.product("magus", "go-build-product")))
+	s.Contains(got, "is the binary the target relinks")
+}
+
+func (s *productSuite) TestAProductWithAnotherFileNameIsRefused() {
+	got := s.refusal(s.policy(s.product("bin/magus-dev", "go-build-product")))
+	s.Contains(got, `keep the file name of the binary it relinks, "magus"`)
+}
+
+func (s *productSuite) TestTheRelinkingTargetIsRefusedAsItsProductTarget() {
+	got := s.refusal(s.policy(s.product("bin/magus", "go-build")))
+	s.Contains(got, "name the sibling target")
 }

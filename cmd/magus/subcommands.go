@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 )
 
 func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, subArgs []string) error {
@@ -86,8 +86,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 // knownSubcommands is the dispatcher's set, read from the registry so it cannot
 // disagree with help, the man pages or the completions.
 var knownSubcommands = func() []string {
-	names := make([]string, 0, len(commands.Root.Children)+1)
-	for _, c := range commands.Root.Children {
+	names := make([]string, 0, len(commands.Root.Spec.Children)+1)
+	for _, c := range commands.Root.Spec.Children {
 		names = append(names, c.Name)
 	}
 	return append(names, commands.Help.Name)

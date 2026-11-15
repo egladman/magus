@@ -155,31 +155,70 @@ func (c *checker) undefinedTypeName(qual, name string) string {
 	return fmt.Sprintf(`undefined type "%s"`, name)
 }
 
-// unboundQualifier reports whether qual is a single namespace segment this chunk
-// binds nowhere. Upstream resolves `ns\T` only through the importing script's own
-// globals, so a module that did not import ns cannot name its types, however the
-// session came to know them.
+// unboundQualifier reports whether this chunk binds qual nowhere. Upstream
+// resolves `ns\T` only through the importing script's own globals, so a module
+// that did not import ns cannot name its types, however the session came to
+// know them. A nested qualifier an import declared is bound.
 func (c *checker) unboundQualifier(qual string) bool {
-	if qual == "" || strings.IndexByte(qual, '\\') >= 0 {
+	if qual == "" {
 		return false
 	}
-	_, ok := c.lookup(qual)
+	head, _, nested := strings.Cut(qual, `\`)
+	if nested && c.namespaceType(qual) != nil {
+		return c.nested != nil && !c.nested.bound[qual]
+	}
+	_, ok := c.lookup(head)
 	return !ok
 }
 
-// namespaceMemberType resolves `qual\name` through the namespace bound to qual.
-// known is false when qual is not a namespace the checker built; t is nil when it
-// is one that declares no type name.
+// chunkNamespaces are the nested namespaces one chunk's imports bind.
+type chunkNamespaces struct {
+	// bound holds each nested namespace the chunk may name, a\b.
+	bound map[string]bool
+	// relatives maps each nested import path of the chunk to the single
+	// segment it also binds inside a namespace sharing its prefix, or "".
+	relatives map[string]string
+}
+
+// relative is the single-segment spelling the nested import at path binds,
+// and whether path is a nested import of the chunk at all.
+func (n *chunkNamespaces) relative(path string) (string, bool) {
+	if n == nil {
+		return "", false
+	}
+	rel, ok := n.relatives[path]
+	return rel, ok
+}
+
+// nestedPath spells the namespaced member chain `a\b` as the namespace a\b,
+// or "" when v is no chain of two or more segments.
+func nestedPath(v *ast.MemberExpr) string {
+	if !v.Namespaced {
+		return ""
+	}
+	switch o := v.Object.(type) {
+	case *ast.IdentExpr:
+		return o.Name + `\` + v.Name
+	case *ast.MemberExpr:
+		if outer := nestedPath(o); outer != "" {
+			return outer + `\` + v.Name
+		}
+	}
+	return ""
+}
+
+// namespaceMemberType resolves `qual\name` through the namespace bound to qual,
+// or for a nested qual through the module that declared it. known is false when
+// qual is not a namespace the checker built; t is nil when it is one that
+// declares no type name.
 func (c *checker) namespaceMemberType(qual, name string) (t types.Type, known bool) {
+	var ns *types.ObjectType
 	if strings.IndexByte(qual, '\\') >= 0 {
-		return nil, false
+		ns = c.namespaceType(qual)
+	} else if e, ok := c.lookup(qual); ok {
+		ns, _ = e.typ.(*types.ObjectType)
 	}
-	e, ok := c.lookup(qual)
-	if !ok {
-		return nil, false
-	}
-	ns, isNS := e.typ.(*types.ObjectType)
-	if !isNS || !ns.IsNamespace {
+	if ns == nil || !ns.IsNamespace {
 		return nil, false
 	}
 	switch member := ns.Fields[name].(type) {

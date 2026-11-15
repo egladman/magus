@@ -342,3 +342,74 @@ func (s *HarnessWriteSuite) TestARepeatAppendsANewerRecord() {
 	s.True(second.At.After(first.At))
 	s.Equal(first.Paths, second.Paths)
 }
+
+func TestLatestRepairSuite(t *testing.T) { suite.Run(t, new(LatestRepairSuite)) }
+
+// LatestRepairSuite pins the record a ci run's refusal of an uncommitted
+// repair reads.
+type LatestRepairSuite struct {
+	suite.Suite
+	dir string
+}
+
+func (s *LatestRepairSuite) SetupTest() { s.dir = s.T().TempDir() }
+
+func (s *LatestRepairSuite) record(g GateResult) {
+	s.Require().NoError(RecordGate(s.dir, g, InvocationStart{Workspace: "/repo"}))
+	// Records order by (Ts, Session, Seq); a same-millisecond write would tie.
+	time.Sleep(2 * time.Millisecond)
+}
+
+func (s *LatestRepairSuite) fold() Fold {
+	fold, err := ReadAll(s.dir)
+	s.Require().NoError(err)
+	return fold
+}
+
+func (s *LatestRepairSuite) repaired(ref, commit string) GateResult {
+	return GateResult{
+		Target: "ci", Scope: GateScopeAffected, Ref: ref, Commit: commit, Outcome: OutcomeFail,
+		RepairedFiles: []types.RepairedFile{{Path: "a.txt", Digest: "d1"}},
+	}
+}
+
+func (s *LatestRepairSuite) TestRepairedFilesRoundTrip() {
+	s.record(s.repaired("b", "c1"))
+
+	rec, ok := LatestRepair(s.fold(), "ci")
+	s.Require().True(ok)
+	s.Equal([]types.RepairedFile{{Path: "a.txt", Digest: "d1"}}, rec.RepairedFiles)
+}
+
+func (s *LatestRepairSuite) TestALaterPassWithoutRepairsDoesNotHideIt() {
+	s.record(s.repaired("b", "c1"))
+	s.record(GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c2", Outcome: OutcomePass})
+
+	rec, ok := LatestRepair(s.fold(), "ci")
+	s.Require().True(ok)
+	s.Equal("c1", rec.Commit)
+}
+
+func (s *LatestRepairSuite) TestAnyRefIsRead() {
+	s.record(s.repaired("feature", "c1"))
+
+	rec, ok := LatestRepair(s.fold(), "ci")
+	s.Require().True(ok)
+	s.Equal("feature", rec.Ref)
+}
+
+func (s *LatestRepairSuite) TestTheNewestRepairWins() {
+	s.record(s.repaired("b", "c1"))
+	s.record(s.repaired("b", "c2"))
+
+	rec, ok := LatestRepair(s.fold(), "ci")
+	s.Require().True(ok)
+	s.Equal("c2", rec.Commit)
+}
+
+func (s *LatestRepairSuite) TestNoRepairRecordedIsNone() {
+	s.record(GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: OutcomeFail})
+
+	_, ok := LatestRepair(s.fold(), "ci")
+	s.False(ok)
+}

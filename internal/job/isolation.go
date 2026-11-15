@@ -71,8 +71,8 @@ func chooseIsolation(job isolationJob, peers []types.Job, riskTolerance, weight 
 	case level >= isolationOwnCheckout:
 	case job.UnmergedDependency != "":
 		level, reason = isolationOwnCheckout, fmt.Sprintf("depends_on %s is not merged at its checkpoint, so it needs its own base", job.UnmergedDependency)
-	case len(row.WritePaths) > largeWriteSet:
-		level, reason = isolationOwnCheckout, fmt.Sprintf("%d write paths, past the %d a shared checkout takes", len(row.WritePaths), largeWriteSet)
+	case len(row.Paths.Write) > largeWriteSet:
+		level, reason = isolationOwnCheckout, fmt.Sprintf("%d write paths, past the %d a shared checkout takes", len(row.Paths.Write), largeWriteSet)
 	}
 	if level < isolationWave && len(job.LoadFiles) > 0 && len(peers) > 0 {
 		level, reason = isolationWave, fmt.Sprintf("write path %s covers a file the workspace loads, and %s is live in this checkout", job.LoadFiles[0], peers[0].ID)
