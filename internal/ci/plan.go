@@ -116,19 +116,19 @@ type PlanPublish struct {
 type PlanInherit struct {
 	Run    string            `json:"run"`
 	Commit string            `json:"commit"`
-	Paths  []PlanInheritPath `json:"paths"`
+	Paths  []planInheritPath `json:"paths"`
 }
 
 // NewPlanInherit is f as the plan document carries it.
 func NewPlanInherit(f *InheritFinding) *PlanInherit {
 	pi := &PlanInherit{Run: f.Run, Commit: f.Commit}
 	for _, e := range f.Report.Evidence {
-		pi.Paths = append(pi.Paths, PlanInheritPath{Path: e.Path, Tier: string(e.Tier), Class: e.Class, Why: e.Why})
+		pi.Paths = append(pi.Paths, planInheritPath{Path: e.Path, Tier: string(e.Tier), Class: e.Class, Why: e.Why})
 	}
 	return pi
 }
 
-type PlanInheritPath struct {
+type planInheritPath struct {
 	Path  string `json:"path"`
 	Tier  string `json:"tier"`
 	Class string `json:"class"`

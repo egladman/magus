@@ -234,7 +234,7 @@ func TestUndeclaredSeedNoticeCapsEveryList(t *testing.T) {
 	t.Parallel()
 
 	seeds := map[string][]string{}
-	for i := range UndeclaredSeedHintCap + 2 {
+	for i := range undeclaredSeedHintCap + 2 {
 		seeds[fmt.Sprintf("p%d", i)] = []string{"a.txt"}
 	}
 	got := UndeclaredSeedNotice(seeds, false)
@@ -243,7 +243,7 @@ func TestUndeclaredSeedNoticeCapsEveryList(t *testing.T) {
 	assert.Contains(t, got, "and 2 more")
 
 	files := map[string][]string{".": {}}
-	for i := range UndeclaredSeedHintCap + 2 {
+	for i := range undeclaredSeedHintCap + 2 {
 		files["."] = append(files["."], fmt.Sprintf("f%d.txt", i))
 	}
 	got = UndeclaredSeedNotice(files, true)

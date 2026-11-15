@@ -29,7 +29,7 @@ func TestShardSkillsDeriveFromWhatTheShardDoes(t *testing.T) {
 
 func TestAppendUniquePreservesOrderAndDropsBlanks(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, []string{"go", "buzz"}, AppendUnique(nil, "go", "", "buzz", "go"))
+	assert.Equal(t, []string{"go", "buzz"}, appendUnique(nil, "go", "", "buzz", "go"))
 }
 
 // TestFilterShardsIntersectsRatherThanReplaces pins the distinction the filter exists for.

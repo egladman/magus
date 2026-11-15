@@ -109,14 +109,14 @@ func TrackedUndeclaredSeeds(ctx context.Context, root string, opts types.VCSOpti
 	return out
 }
 
-// CappedList bounds an inline list at UndeclaredSeedHintCap, replacing the tail with a
+// CappedList bounds an inline list at undeclaredSeedHintCap, replacing the tail with a
 // count of what it left out.
 func CappedList(items []string) []string {
-	if len(items) <= UndeclaredSeedHintCap {
+	if len(items) <= undeclaredSeedHintCap {
 		return items
 	}
-	return append(items[:UndeclaredSeedHintCap:UndeclaredSeedHintCap],
-		fmt.Sprintf("and %d more", len(items)-UndeclaredSeedHintCap))
+	return append(items[:undeclaredSeedHintCap:undeclaredSeedHintCap],
+		fmt.Sprintf("and %d more", len(items)-undeclaredSeedHintCap))
 }
 
 // CappedUnits is units as project:target, bounded by CappedList.
@@ -124,9 +124,9 @@ func CappedUnits(units []types.Unit) string {
 	return strings.Join(CappedList(types.UnitNames(units)), ", ")
 }
 
-// UndeclaredSeedHintCap bounds how many seed projects (and how many of one project's
+// undeclaredSeedHintCap bounds how many seed projects (and how many of one project's
 // files) MGS1028 names inline.
-const UndeclaredSeedHintCap = 5
+const undeclaredSeedHintCap = 5
 
 // impactFileCap bounds how many changed files are listed per seed project in text
 // mode; a large changeset stays readable while the full set is still one -o json away.

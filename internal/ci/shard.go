@@ -59,15 +59,15 @@ type ShardDetail struct {
 	Writes []string `json:"writes,omitempty"`
 	// Agents is the only agent-specific part, kept in its own object so the rest reads as
 	// what it is: ordinary plan metadata a person wants too.
-	Agents *ShardAgents `json:"agents,omitempty"`
+	Agents *shardAgents `json:"agents,omitempty"`
 }
 
-// ShardAgents is the one part of a shard record that is specific to an agent reader, kept
+// shardAgents is the one part of a shard record that is specific to an agent reader, kept
 // in its own object for that reason. Everything beside it is ordinary plan metadata: this
 // plan exists to fan CI jobs across runners, and it long predates anything agentic. That an
 // agent can use the same record is a consequence of the record being correct, not a
 // feature added for one.
-type ShardAgents struct {
+type shardAgents struct {
 	// Skills names the skills this shard's work routes to; Why states the derivation.
 	// Derived rather than declared so it cannot drift from what the shard does, and
 	// stated, because a routing decision an agent cannot audit is one it should not trust.
@@ -115,7 +115,7 @@ func PlanDetail(ctx context.Context, m ShardSource, target string, shards []type
 		for _, proj := range graph.Projects {
 			for _, node := range proj.Nodes {
 				for _, ref := range node.WritesFiles {
-					writesByProject[proj.Path] = AppendUnique(writesByProject[proj.Path], ref.Rooted(proj.Path).String())
+					writesByProject[proj.Path] = appendUnique(writesByProject[proj.Path], ref.Rooted(proj.Path).String())
 				}
 			}
 		}
@@ -129,21 +129,21 @@ func PlanDetail(ctx context.Context, m ShardSource, target string, shards []type
 			if !ok {
 				continue // a shard naming a project the workspace no longer lists: nothing to say
 			}
-			b.Spells = AppendUnique(b.Spells, p.Spells...)
+			b.Spells = appendUnique(b.Spells, p.Spells...)
 			if p.Spell != "" {
-				b.Spells = AppendUnique(b.Spells, p.Spell)
+				b.Spells = appendUnique(b.Spells, p.Spell)
 			}
 			// Project-relative as declared, rooted at the project, so two briefings can be
 			// compared for overlap without the reader re-deriving where each one sits.
 			if proj := m.Get(path); proj != nil {
 				for _, g := range proj.Outputs {
-					b.Writes = AppendUnique(b.Writes, g.Root(path).String())
+					b.Writes = appendUnique(b.Writes, g.Root(path).String())
 				}
 			}
-			b.Writes = AppendUnique(b.Writes, writesByProject[path]...)
+			b.Writes = appendUnique(b.Writes, writesByProject[path]...)
 		}
 		skills, why := shardSkills(b)
-		b.Agents = &ShardAgents{Skills: skills, Why: why}
+		b.Agents = &shardAgents{Skills: skills, Why: why}
 		out[s.ID] = b
 	}
 	return out, nil
@@ -170,8 +170,8 @@ func shardSkills(b ShardDetail) (skills, why []string) {
 	return skills, why
 }
 
-// AppendUnique appends each value not already present, preserving order.
-func AppendUnique(dst []string, values ...string) []string {
+// appendUnique appends each value not already present, preserving order.
+func appendUnique(dst []string, values ...string) []string {
 	for _, v := range values {
 		if v != "" && !slices.Contains(dst, v) {
 			dst = append(dst, v)
