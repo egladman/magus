@@ -84,10 +84,11 @@ type bpePreTokenizerJSON struct {
 		Regex  *string `json:"Regex"`
 		String *string `json:"String"`
 	} `json:"pattern"`
-	Behavior       string `json:"behavior"`
-	Invert         bool   `json:"invert"`
-	AddPrefixSpace bool   `json:"add_prefix_space"`
-	UseRegex       *bool  `json:"use_regex"`
+	Behavior         string `json:"behavior"`
+	Invert           bool   `json:"invert"`
+	AddPrefixSpace   bool   `json:"add_prefix_space"`
+	UseRegex         *bool  `json:"use_regex"`
+	IndividualDigits bool   `json:"individual_digits"`
 }
 
 type bpePostProcessorJSON struct {
@@ -106,7 +107,7 @@ type bpePostProcessorJSON struct {
 }
 
 // LoadBPE reads a byte-level BPE tokenizer.json. Normalizers NFC, NFD, NFKC and NFKD (or a
-// Sequence of them), ByteLevel and Split (Isolated) pre-tokenizers, a ByteLevel decoder,
+// Sequence of them), ByteLevel, Digits and Split (Isolated) pre-tokenizers, a ByteLevel decoder,
 // and a null, ByteLevel or single-sequence TemplateProcessing post-processor are
 // supported. Anything else is an error, as is a vocabulary missing a byte symbol, a merge
 // whose result is not a token, or an added token that disagrees with the vocabulary.
@@ -248,6 +249,18 @@ func (b *BPE) addStages(p bpePreTokenizerJSON) error {
 			st.re = re
 		}
 		b.splits = append(b.splits, st)
+	// Digits isolates digit runs, or each digit, as tokenizers does with char::is_numeric,
+	// which is \p{N}.
+	case "Digits":
+		pattern := `\p{N}+`
+		if p.IndividualDigits {
+			pattern = `\p{N}`
+		}
+		re, err := newSplitter(pattern)
+		if err != nil {
+			return err
+		}
+		b.splits = append(b.splits, bpeSplit{re: re})
 	case "Split":
 		if p.Behavior != "Isolated" || p.Invert || p.Pattern == nil {
 			return fmt.Errorf("Split pre-tokenizer must be Isolated, not inverted, with a pattern")

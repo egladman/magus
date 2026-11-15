@@ -162,7 +162,7 @@ func TestLoadBPERefuses(t *testing.T) {
 		{"an added token at the wrong id", `"id": 266`, `"id": 300`, "vocabulary says 266"},
 		{"a stripping added token", `"lstrip": false`, `"lstrip": true`, "strips whitespace"},
 		{"another decoder", `"decoder": {"type": "ByteLevel"`, `"decoder": {"type": "Metaspace"`, "decoder"},
-		{"another pre-tokenizer", `"type": "ByteLevel", "add_prefix_space": false`, `"type": "Digits", "add_prefix_space": false`, "pre_tokenizer"},
+		{"another pre-tokenizer", `"type": "ByteLevel", "add_prefix_space": false`, `"type": "Metaspace", "add_prefix_space": false`, "pre_tokenizer"},
 		{"another post-processor", `"TemplateProcessing"`, `"RobertaProcessing"`, "post_processor"},
 		{"another normalizer", `"normalizer": null`, `"normalizer": {"type": "Lowercase"}`, "normalizer"},
 	}
@@ -186,5 +186,28 @@ func TestLoadBPERefuses(t *testing.T) {
 func TestNewSplitterRefusesOtherLookaround(t *testing.T) {
 	if _, err := newSplitter(`a(?=b)|\s+`); err == nil {
 		t.Error("lookahead outside the tail: no error")
+	}
+}
+
+func digitsSplit(t *testing.T, individual bool, text string) []string {
+	t.Helper()
+	var b BPE
+	if err := b.addStages(bpePreTokenizerJSON{Type: "Digits", IndividualDigits: individual}); err != nil {
+		t.Fatal(err)
+	}
+	return b.splits[0].re.split(text)
+}
+
+func TestDigitsPreTokenizerIsolatesEachDigit(t *testing.T) {
+	want := []string{"ab", "1", "2", "3", "c"}
+	if got := digitsSplit(t, true, "ab123c"); !reflect.DeepEqual(got, want) {
+		t.Errorf("split = %q, want %q", got, want)
+	}
+}
+
+func TestDigitsPreTokenizerKeepsADigitRunWhole(t *testing.T) {
+	want := []string{"ab", "123", "c"}
+	if got := digitsSplit(t, false, "ab123c"); !reflect.DeepEqual(got, want) {
+		t.Errorf("split = %q, want %q", got, want)
 	}
 }
