@@ -22,11 +22,10 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/review"
-	"github.com/egladman/magus/internal/trail"
+	reviewimpact "github.com/egladman/magus/internal/review/impact"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
@@ -239,233 +238,6 @@ func TestDiffCountsLineIsWhatTheReaderIsLeftWith(t *testing.T) {
 		"with nothing generated there is no clause either way")
 }
 
-// impactFixture is a changeset every lens had something to say about: the populated case
-// each section's render is pinned against.
-func impactFixture() diffImpact {
-	return diffImpact{
-		Reach: &impactReach{
-			Seeds:    1,
-			Rebuilds: 2,
-			Projects: []impactProject{
-				{Path: "root", Seed: true, Files: 3},
-				{Path: "docs"},
-			},
-		},
-		Ownership: []impactOwner{
-			{Project: "root", Primary: "alice", PrimaryShare: 72, Authors: 4},
-			{Project: "docs", Primary: "bob", PrimaryShare: 100, Authors: 1, BusFactor1: true},
-		},
-		Cost: &impactCost{
-			TotalMs: 260_000,
-			Projects: []impactCostProject{
-				{Project: "root", Target: "ci", Ms: 200_000, Samples: 18, HitRate: 0.4},
-				{Project: "docs", Target: "test", Ms: 60_000, Samples: 1},
-			},
-		},
-		Advisors: []adviceSection{
-			{Name: "exported-api", Title: "A public symbol changed", Body: "diff.Diff is exported.\nBump the minor."},
-			// A retraction sits in the fixture because every real run has several: it must not
-			// read as a finding, and it must not read as an advisor that failed either.
-			{Name: "retracted", Title: "Nothing to retract"},
-		},
-		// A real advisor filename, in the shape collectAdvice stamps. An invented one
-		// ("coverage") read as evidence that a coverage advisor exists; none does, and a
-		// planning pass spent a work item on teaching it to find a profile.
-		AdvisorNotes: []string{"could not run: doctor.buzz: main() returned 1"},
-		// Relative to now, not a fixed date: the rendered age is computed at read time, so a
-		// literal tip would make the expected line drift by a day every day.
-		AdvisorBase: &impactAdvisorBase{
-			Ref: "origin/main",
-			Tip: time.Now().Add(-50 * time.Hour).Format(time.RFC3339),
-		},
-		Anchors: []review.AnchorHit{
-			{Note: "cache-invalidation-pairs", Kind: "file", Target: "internal/cache/cache.go"},
-			{Note: "secret-value-type", Kind: "symbol", Target: "m types/Secret#", Drift: "drifted-anchor"},
-		},
-		LeftBehind: &impactLeftBehind{
-			Markers: []leftMarker{
-				{Path: "internal/cache/signing.go", Line: 32, Marker: "compat(until:", Text: "no store still serves ed25519 envelopes"},
-			},
-			Unreferenced:      []string{"signEd25519 (internal/cache/signing.go:40)"},
-			UnreferencedKnown: true,
-		},
-		Evidence: []trail.Consultation{
-			{Verb: "explain", Subject: "internal/cache", Count: 2},
-			{Verb: "refs", Subject: "m types/Secret#", Count: 1},
-		},
-		Review: &impactReview{
-			Files: 8, Read: 5,
-			Stale:  []string{"internal/cache/cache.go"},
-			Unread: []string{"types/diff.go", "std/magus.go"},
-		},
-	}
-}
-
-// TestImpactRendersEverySection pins the sections a disposer reads before landing.
-//
-// Asserted line by line rather than by substring: these sentences are the whole product of
-// this report, and a section that silently stopped rendering its list would still pass a
-// header-only check.
-func TestImpactRendersEverySection(t *testing.T) {
-	assert.Equal(t, []string{
-		"IMPACT - the blast radius of landing this",
-		"",
-		"REACH: 1 project edited, 2 projects rebuild",
-		"      root - edited, 3 files",
-		"      docs - rebuilds because it depends on one that was",
-		"",
-		"OWNERSHIP: who has been changing the projects in reach",
-		"      root mostly alice (72%), 4 authors",
-		"      docs mostly bob (100%), 1 author - BUS FACTOR 1",
-		"",
-		"COST: ~4m20s to rebuild the reach (history-based estimate: the p75 of past runs, discounted by the cache hit rate they recorded)",
-		"      root ci ~3m20s (18 runs), 40% cache hits",
-		"      docs test ~1m0s (1 run)",
-		"",
-		"BASE: origin/main, tip 2 days old - a local run stays off the network, so anything merged since is outside what the advisors saw; `git fetch origin main` brings it forward",
-		"ADVISORS: 1 finding",
-		"      A public symbol changed",
-		"        diff.Diff is exported.",
-		"        Bump the minor.",
-		"      1 ran and found nothing: retracted",
-		"      could not run: doctor.buzz: main() returned 1",
-		"",
-		"ANCHORS: 2 notes anchored to what you changed",
-		"      note cache-invalidation-pairs anchors file:internal/cache/cache.go",
-		"      note secret-value-type anchors symbol:m types/Secret# [drifted-anchor]",
-		"",
-		"LEFT BEHIND: 1 compat(until:) or Deprecated: marker added",
-		"      internal/cache/signing.go:32 compat(until: no store still serves ed25519 envelopes",
-		"      1 symbol lost the last use here and is still defined",
-		"        signEd25519 (internal/cache/signing.go:40)",
-		"",
-		"EVIDENCE: 2 questions the authors asked magus while writing this",
-		"      explain internal/cache (x2)",
-		"      refs m types/Secret#",
-		"",
-		"REVIEW: 1 file(s) changed after you read them",
-		"      internal/cache/cache.go",
-		"      2 file(s) you have not opened, widest blast radius first",
-		"        types/diff.go",
-		"        std/magus.go",
-		"      record what you read, wherever you read it: magus diff --ack <path>...",
-		"      or step through them here: magus diff",
-	}, impactLines(impactFixture()))
-}
-
-// TestImpactEmptyFormsSayNobodyLooked is the half that matters.
-//
-// Every one of these sections is empty for two completely different reasons (nothing found,
-// or nothing measured), and only one of them is good news. A silent section, or a cost of
-// zero, would report an unmeasured workspace as a cheap safe change.
-func TestImpactEmptyFormsSayNobodyLooked(t *testing.T) {
-	lines := impactLines(diffImpact{})
-
-	assert.Equal(t, []string{
-		"IMPACT - the blast radius of landing this",
-		"",
-		"REACH: no project contains a changed file, so nothing rebuilds",
-		"",
-		"OWNERSHIP: no commit history in the window, so no owner is named",
-		"",
-		"COST: no run history yet, so there is nothing to estimate from",
-		"      Run `magus affected ci` once and the next impact can price this.",
-		"",
-		"ADVISORS: nothing to report",
-		"",
-		"ANCHORS: no note anchors a changed file or symbol",
-		"",
-		"LEFT BEHIND: not measured",
-		"",
-		"EVIDENCE: no agent activity recorded in this checkout, so what the authors consulted is unknown",
-		"      This record is per checkout, and wiring it is `magus agent install`.",
-		"",
-		"REVIEW: read receipts unavailable; step a file through in `magus diff` to earn one",
-	}, lines)
-
-	// The one number that must never appear: a reach nobody has ever timed is not free.
-	assert.NotContains(t, strings.Join(lines, "\n"), "~0s")
-}
-
-// TestImpactCountsFindingsNotSections pins the headline against the retraction shape every
-// real run produces: eleven advisors publish, one has something to say, and ten publish an
-// empty body to withdraw whatever they said last time.
-func TestImpactCountsFindingsNotSections(t *testing.T) {
-	lines := impactAdvisorLines([]adviceSection{
-		{Name: "unclaimed", Title: "Files no project claims"},
-		{Name: "conformance", Title: "A target name diverges", Body: "rename it\n"},
-		{Name: "skip-cache", Title: "A target opted out of the cache"},
-	}, nil, nil)
-
-	assert.Equal(t, []string{
-		"ADVISORS: 1 finding",
-		"      A target name diverges",
-		"        rename it",
-		"      2 ran and found nothing: unclaimed, skip-cache",
-	}, lines)
-}
-
-// TestImpactBaseSeparatesOldFromAbsent pins the distinction the line exists for.
-//
-// A base nobody fetched and a base that is merely stale produce the same silent advisors, and
-// only one of them is a finding about the code. Collapsing them would make an unfetched clone
-// read as a clean review.
-func TestImpactBaseSeparatesOldFromAbsent(t *testing.T) {
-	stale := impactAdvisorBaseLine(&impactAdvisorBase{
-		Ref: "origin/main",
-		Tip: time.Now().Add(-9 * 24 * time.Hour).Format(time.RFC3339),
-	})
-	assert.Contains(t, stale, "tip 9 days old")
-	assert.Contains(t, stale, "`git fetch origin main`")
-
-	absent := impactAdvisorBaseLine(&impactAdvisorBase{Ref: "origin/main"})
-	assert.Contains(t, absent, "is not in this clone")
-	assert.NotContains(t, absent, "tip ")
-
-	// Nil is neither: a backend that cannot date a revision has not measured the base, and
-	// inventing "fresh" for it is the one answer that would mislead.
-	assert.Empty(t, impactAdvisorBaseLine(nil))
-}
-
-// TestImpactBaseQualifiesAnEmptyAdvisorSet is the case the caveat matters most in: no
-// findings against a week-old base is not the same news as no findings against today's.
-func TestImpactBaseQualifiesAnEmptyAdvisorSet(t *testing.T) {
-	lines := impactAdvisorLines(nil, nil, &impactAdvisorBase{Ref: "origin/main"})
-	require.Len(t, lines, 2)
-	assert.Contains(t, lines[0], "origin/main")
-	assert.Equal(t, "ADVISORS: nothing to report", lines[1])
-}
-
-// TestImpactAgeKeepsOneUnit pins the rounding. A reader is deciding whether to fetch, and
-// the order of magnitude is the whole decision.
-func TestImpactAgeKeepsOneUnit(t *testing.T) {
-	for _, tc := range []struct {
-		d    time.Duration
-		want string
-	}{
-		{30 * time.Second, "seconds"},
-		{time.Minute, "1 minute"},
-		{90 * time.Minute, "1 hour"},
-		{25 * time.Hour, "1 day"},
-		{50 * time.Hour, "2 days"},
-	} {
-		assert.Equal(t, tc.want, impactAge(tc.d), tc.d.String())
-	}
-}
-
-// TestImpactListsReportWhatTheyLeftOff guards the bound on every section list. A reach of
-// sixty projects is a real answer and an unreadable one, and a list that stops without saying
-// so reads as the whole answer.
-func TestImpactListsReportWhatTheyLeftOff(t *testing.T) {
-	r := &impactReach{Seeds: 1, Rebuilds: 14}
-	for i := 0; i < 14; i++ {
-		r.Projects = append(r.Projects, impactProject{Path: fmt.Sprintf("p%d", i)})
-	}
-	lines := impactReachLines(r)
-	require.Len(t, lines, 1+impactListCap+1)
-	assert.Equal(t, "      and 4 more", lines[len(lines)-1])
-}
-
 // TestPrintDiffTextWithoutImpactIsUnchanged is the additive guarantee.
 //
 // There is no golden file for this report, so the whole report is spelled out here: any
@@ -507,7 +279,7 @@ func TestPrintDiffTextWithoutImpactIsUnchanged(t *testing.T) {
 // file list, so the ordering of everything a reader already knows how to scan is untouched.
 func TestPrintDiffTextAppendsImpactAboveTheConsoleLink(t *testing.T) {
 	rev := diff.Diff{Files: []diff.File{{Path: "a.go", Role: diff.RoleSource}}}
-	pre := impactFixture()
+	pre := reviewimpact.Report{Reach: &reviewimpact.Reach{Seeds: 1, Rebuilds: 1}}
 
 	out := captureStdout(t, func() {
 		require.NoError(t, printDiffText(rev, false, func(p string) string { return p }, &pre))
@@ -517,86 +289,6 @@ func TestPrintDiffTextAppendsImpactAboveTheConsoleLink(t *testing.T) {
 	assert.Contains(t, out, "\nIMPACT - the blast radius of landing this\n")
 	assert.Less(t, strings.Index(out, "  a.go"), strings.Index(out, "IMPACT"),
 		"the changeset is what a reader came for; the impact follows it")
-}
-
-// TestImpactCostRefusesToPriceAnUnmeasuredReach pins the one number this section must never
-// print.
-//
-// forecast always answers PredictDuration (it falls back to a workspace percentile and then to
-// a compiled-in constant), so a total is computable for a workspace nobody has ever timed. That
-// total is a fabrication wearing a duration, and quoting it would teach a reader to trust every
-// later one.
-func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
-	affected := []impact.Project{{Path: "root", Seed: true, Files: []string{"a.go"}}, {Path: "docs"}}
-
-	t.Run("no history at all", func(t *testing.T) {
-		assert.Nil(t, estimateImpactCost(&forecast.History{}, affected))
-	})
-
-	t.Run("a project below the sample floor is not a measurement", func(t *testing.T) {
-		h := &forecast.History{Projects: map[string]map[string]forecast.Stats{
-			"root": {"ci": {P75Ms: 90_000, Samples: impactMinSamples - 1}},
-		}}
-		assert.Nil(t, estimateImpactCost(h, affected))
-	})
-
-	t.Run("only the measured projects are counted, and the rest are not guessed at", func(t *testing.T) {
-		h := &forecast.History{Projects: map[string]map[string]forecast.Stats{
-			"root": {"ci": {P75Ms: 90_000, Samples: 12}},
-			"docs": {"lint": {P75Ms: 5_000, Samples: 40}},
-		}}
-		c := estimateImpactCost(h, affected)
-		require.NotNil(t, c)
-		require.Len(t, c.Projects, 1, "docs declares no ci or test target the history has timed")
-		assert.Equal(t, &impactCost{
-			TotalMs:  90_000,
-			Projects: []impactCostProject{{Project: "root", Target: "ci", Ms: 90_000, Samples: 12}},
-		}, c)
-	})
-
-	t.Run("ci outranks test as the estimate of a whole rebuild", func(t *testing.T) {
-		h := &forecast.History{Projects: map[string]map[string]forecast.Stats{
-			"root": {
-				"ci":   {P75Ms: 90_000, Samples: 12},
-				"test": {P75Ms: 30_000, Samples: 99},
-			},
-		}}
-		c := estimateImpactCost(h, affected)
-		require.NotNil(t, c)
-		assert.Equal(t, "ci", c.Projects[0].Target)
-	})
-}
-
-// TestImpactOwnersJoinOnlyTheReach pins both halves of the join: a project outside the
-// blast radius is not this changeset's problem, and a project the lens cannot name an owner
-// for is dropped rather than listed with a blank one, which reads as a lookup that failed.
-func TestImpactOwnersJoinOnlyTheReach(t *testing.T) {
-	own := types.Ownership{Projects: []types.OwnershipEntry{
-		{Path: "root", Primary: "alice", PrimaryShare: 72, Authors: 4},
-		{Path: "unrelated", Primary: "carol", PrimaryShare: 51, Authors: 9},
-		{Path: "docs", Authors: 0},
-	}}
-	affected := []impact.Project{{Path: "root"}, {Path: "docs"}, {Path: "never-committed"}}
-
-	got := listImpactOwners(own, affected)
-	assert.Equal(t, []impactOwner{{Project: "root", Primary: "alice", PrimaryShare: 72, Authors: 4}}, got)
-}
-
-// TestImpactReachRendersWhatTheDiffAlreadyKnew guards against the reach section growing its
-// own idea of the blast radius: types.Diff has carried these two fields all along and this
-// section only prints them.
-func TestImpactReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
-	assert.Nil(t, computeImpactReach(diff.Diff{}), "an empty closure is a state, not a lookup failure")
-
-	r := computeImpactReach(diff.Diff{
-		SeedProjects:     []string{"root"},
-		AffectedProjects: []impact.Project{{Path: "root", Seed: true, Files: []string{"a.go", "b.go"}}, {Path: "docs"}},
-	})
-	assert.Equal(t, &impactReach{
-		Seeds:    1,
-		Rebuilds: 2,
-		Projects: []impactProject{{Path: "root", Seed: true, Files: 2}, {Path: "docs"}},
-	}, r)
 }
 
 // heldDiffSession is the server's /api/v1/diff/session route, holding every request until the
@@ -1008,107 +700,6 @@ func TestTerminalSeenMarkingReachesTheStoreTheConsoleWrites(t *testing.T) {
 	seen, err := changeset.NewStore(cache).LoadSeenComments()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"t1", "t2"}, seen)
-}
-
-// Only the markers a change ADDS are left behind by it: a marker already in the file is
-// context, a removed one is the opposite, and one in generated output was written by its
-// generator. A bare mention of the marker outside a comment is not one.
-func TestAddedMarkers(t *testing.T) {
-	patch := "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1,4 +1,6 @@\n package a\n" +
-		" // compat(until: already here): context.\n" +
-		"-// compat(until: gone): removed.\n" +
-		"+// compat(until: no store holds v1 descriptors): keep the branch.\n" +
-		"+const marker = \"compat(until: x)\"\n" +
-		"+// Deprecated: use G.\n" +
-		" func F() {}\n" +
-		"diff --git a/gen/c.go b/gen/c.go\n--- a/gen/c.go\n+++ b/gen/c.go\n@@ -1 +1,2 @@\n package gen\n" +
-		"+// compat(until: whatever): generated.\n"
-
-	got := addedMarkers(patch, map[string]bool{"gen/c.go": true})
-	assert.Equal(t, []leftMarker{
-		{Path: "a.go", Line: 3, Marker: "compat(until:", Text: "no store holds v1 descriptors"},
-		{Path: "a.go", Line: 5, Marker: "Deprecated:", Text: "use G."},
-	}, got)
-}
-
-func TestImpactLeftBehindLines(t *testing.T) {
-	t.Run("each empty form says what it means", func(t *testing.T) {
-		assert.Equal(t, []string{
-			"LEFT BEHIND: no compat(until:) or Deprecated: marker added",
-			"      no symbol it stopped using is still defined",
-		}, impactLeftBehindLines(&impactLeftBehind{UnreferencedKnown: true}))
-		assert.Equal(t, []string{
-			"LEFT BEHIND: no compat(until:) or Deprecated: marker added",
-			"      symbols left unused: not measured, read only for the working tree",
-		}, impactLeftBehindLines(&impactLeftBehind{UnreferencedReason: "read only for the working tree"}))
-	})
-
-	t.Run("the lists are capped", func(t *testing.T) {
-		l := &impactLeftBehind{UnreferencedKnown: true}
-		for i := range impactListCap + 3 {
-			l.Markers = append(l.Markers, leftMarker{Path: "a.go", Line: i, Marker: "Deprecated:", Text: "x"})
-			l.Unreferenced = append(l.Unreferenced, fmt.Sprintf("S%d (a.go:%d)", i, i))
-		}
-		lines := impactLeftBehindLines(l)
-		assert.Equal(t, "      and 3 more", lines[impactListCap+1])
-		assert.Equal(t, fmt.Sprintf("      %d symbols lost the last use here and are still defined", impactListCap+3), lines[impactListCap+2])
-		assert.Equal(t, "      and 3 more", lines[len(lines)-1])
-	})
-}
-
-func TestImpactEvidenceLines(t *testing.T) {
-	t.Run("one line per subject, and no answers", func(t *testing.T) {
-		lines := impactEvidenceLines([]trail.Consultation{
-			{Verb: "explain", Subject: "internal/trail", Count: 2},
-			{Verb: "refs", Subject: "AppendAgentCommand", Count: 1},
-		}, trail.ConsultGapNone)
-		assert.Contains(t, lines[0], "2 questions the authors asked magus")
-		assert.Equal(t, "      explain internal/trail (x2)", lines[1])
-		// A count of one is the common case, and printing "(x1)" on every line is noise.
-		assert.Equal(t, "      refs AppendAgentCommand", lines[2])
-	})
-
-	t.Run("a verb asked with no subject leaves no trailing space", func(t *testing.T) {
-		lines := impactEvidenceLines([]trail.Consultation{{Verb: "query", Count: 1}}, trail.ConsultGapNone)
-		assert.Equal(t, "      query", lines[1])
-	})
-
-	t.Run("the list is capped", func(t *testing.T) {
-		var hits []trail.Consultation
-		for i := range impactListCap + 4 {
-			hits = append(hits, trail.Consultation{Verb: "query", Subject: fmt.Sprintf("kind=op %d", i), Count: 1})
-		}
-		lines := impactEvidenceLines(hits, trail.ConsultGapNone)
-		assert.Equal(t, "      and 4 more", lines[len(lines)-1])
-	})
-}
-
-// TestImpactEvidenceGapsReadDifferently is the half that matters, for the reason the whole
-// empty-forms test exists: three of these four silences are facts about the RECORD, and one
-// sentence covering all four reports a fresh clone as work nobody researched.
-func TestImpactEvidenceGapsReadDifferently(t *testing.T) {
-	seen := map[string]trail.ConsultGap{}
-	for _, gap := range []trail.ConsultGap{
-		trail.ConsultGapUnobserved,
-		trail.ConsultGapUnleased,
-		trail.ConsultGapUnmatched,
-		trail.ConsultGapNoQuestions,
-	} {
-		lines := impactEvidenceLines(nil, gap)
-		require.NotEmpty(t, lines, gap)
-		assert.True(t, strings.HasPrefix(lines[0], "EVIDENCE: "), gap)
-		prior, dup := seen[lines[0]]
-		assert.False(t, dup, "%s and %s render the same headline", gap, prior)
-		seen[lines[0]] = gap
-	}
-
-	// The distinctions each headline has to carry, named rather than left to the count above.
-	assert.Contains(t, impactEvidenceLines(nil, trail.ConsultGapUnobserved)[1], "per checkout")
-	assert.Contains(t, impactEvidenceLines(nil, trail.ConsultGapUnleased)[1], "magus.lease")
-	assert.Contains(t, impactEvidenceLines(nil, trail.ConsultGapUnmatched)[1], "another checkout")
-	// The one gap that is a fact about the change says so without hedging it.
-	assert.Equal(t, []string{"EVIDENCE: the authors of this changeset ran no magus read verb"},
-		impactEvidenceLines(nil, trail.ConsultGapNoQuestions))
 }
 
 // adviceDirWith builds an advisor directory holding the REAL advice.buzz plus the given
@@ -1585,10 +1176,10 @@ func TestCollectReview(t *testing.T) {
 	t.Run("an unacknowledged changeset reports every file unread", func(t *testing.T) {
 		root, cache, rev := reviewFixture(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"}, nil)
 
-		got := collectReview(attach(t, root, cache, rev), nil, nil)
+		got := reviewimpact.CollectReview(attach(t, root, cache, rev), nil, nil)
 		require.NotNil(t, got)
 		assert.ElementsMatch(t, []string{"a.go", "b.go"}, got.Unread, "the fixture writes its files in map order")
-		assert.Equal(t, &impactReview{Files: 2, Unread: got.Unread}, got)
+		assert.Equal(t, &reviewimpact.Review{Files: 2, Unread: got.Unread}, got)
 	})
 
 	t.Run("acknowledging then re-reading reports it read", func(t *testing.T) {
@@ -1598,7 +1189,7 @@ func TestCollectReview(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 1, n)
 
-		got := collectReview(attach(t, root, cache, rev), nil, nil)
+		got := reviewimpact.CollectReview(attach(t, root, cache, rev), nil, nil)
 		require.NotNil(t, got)
 		assert.Equal(t, 1, got.Read)
 		assert.Empty(t, got.Unread)
@@ -1613,11 +1204,11 @@ func TestCollectReview(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n\nfunc G() {}\n"), 0o644))
 
-		got := collectReview(attach(t, root, cache, rev), nil, nil)
+		got := reviewimpact.CollectReview(attach(t, root, cache, rev), nil, nil)
 		require.NotNil(t, got)
 		// Stale is its own list, not an annotated entry in the unopened one: it is a
 		// different finding and it leads the section.
-		assert.Equal(t, &impactReview{Files: 1, Stale: []string{"a.go"}}, got)
+		assert.Equal(t, &reviewimpact.Review{Files: 1, Stale: []string{"a.go"}}, got)
 	})
 
 	// Reading a machine's restatement of an edit made elsewhere is not the review, which is
@@ -1627,7 +1218,7 @@ func TestCollectReview(t *testing.T) {
 			map[string]string{"a.go": "package a\n", "gen/x.go": "package gen\n"},
 			map[string]string{"gen/x.go": diff.RoleOutput})
 
-		got := collectReview(attach(t, root, cache, rev), nil, nil)
+		got := reviewimpact.CollectReview(attach(t, root, cache, rev), nil, nil)
 		require.NotNil(t, got)
 		assert.Equal(t, 1, got.Files)
 
@@ -1646,73 +1237,7 @@ func TestCollectReview(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 0, n)
 
-		assert.Nil(t, collectReview(attach(t, root, cache, rev), nil, nil))
-	})
-}
-
-func TestImpactReviewLines(t *testing.T) {
-	// The empty form is the half that matters: a silent section reads as a clean bill of
-	// health, and here that would mean "somebody read this".
-	t.Run("unmeasured says so rather than saying unread", func(t *testing.T) {
-		lines := impactReviewLines(nil)
-		require.Len(t, lines, 1)
-		assert.Contains(t, lines[0], "unavailable")
-	})
-
-	t.Run("names the unopened files and caps the list", func(t *testing.T) {
-		r := &impactReview{Files: 30, Read: 0}
-		for i := range 30 {
-			r.Unread = append(r.Unread, fmt.Sprintf("f%d.go", i))
-		}
-		lines := impactReviewLines(r)
-		assert.Contains(t, lines[0], "30 file(s) you have not opened")
-		assert.Contains(t, lines[unreadShown+1], "and 20 more")
-	})
-
-	// No ratio, anywhere. A count with a target is one that gets cleared rather than
-	// satisfied, and clearing it takes one keystroke and no reading.
-	t.Run("reports no read ratio", func(t *testing.T) {
-		lines := impactReviewLines(&impactReview{
-			Files: 40, Read: 12,
-			Stale:  []string{"internal/cache/key.go"},
-			Unread: []string{"a.go", "b.go"},
-		})
-		for _, l := range lines {
-			assert.NotContains(t, l, " of 40")
-			assert.NotContains(t, l, "12")
-		}
-	})
-
-	// Stale is the finding, so it leads whatever else the section holds: it is derived
-	// from content rather than from a claim, so no amount of stamping produces it.
-	t.Run("stale leads and is named", func(t *testing.T) {
-		lines := impactReviewLines(&impactReview{
-			Files: 4, Read: 1,
-			Stale:  []string{"internal/cache/key.go"},
-			Unread: []string{"a.go"},
-		})
-		assert.Contains(t, lines[0], "1 file(s) changed after you read them")
-		assert.Equal(t, "      internal/cache/key.go", lines[1])
-	})
-
-	// A small undisturbed change needs no reading plan, and printing one there is how a
-	// reader learns to skip the section before meeting a change big enough to need it.
-	t.Run("says nothing about a small undisturbed change", func(t *testing.T) {
-		assert.Nil(t, impactReviewLines(&impactReview{
-			Files: 3, Unread: []string{"a.go", "b.go", "c.go"},
-		}))
-	})
-
-	// ...but a small change where something moved under the reader is exactly when the
-	// section earns its line.
-	t.Run("a small change still reports stale", func(t *testing.T) {
-		lines := impactReviewLines(&impactReview{Files: 2, Stale: []string{"a.go"}})
-		require.NotEmpty(t, lines)
-		assert.Contains(t, lines[0], "changed after you read them")
-	})
-
-	t.Run("says nothing when everything has been read", func(t *testing.T) {
-		assert.Nil(t, impactReviewLines(&impactReview{Files: 30, Read: 30}))
+		assert.Nil(t, reviewimpact.CollectReview(attach(t, root, cache, rev), nil, nil))
 	})
 }
 
@@ -1747,50 +1272,12 @@ func TestCollectReviewSeparatesRequiredPaths(t *testing.T) {
 		"internal/cache/key.go":    "package cache\n",
 	}, nil)
 
-	got := collectReview(attach(t, root, cache, rev), func(p string) bool {
+	got := reviewimpact.CollectReview(attach(t, root, cache, rev), func(p string) bool {
 		return strings.HasPrefix(p, "internal/secret/")
 	}, nil)
 	require.NotNil(t, got)
 	assert.Equal(t, []string{"internal/secret/value.go"}, got.Required)
 	assert.Len(t, got.Unread, 2)
-}
-
-// A bulk cover is echoed so a file stamped in one keystroke does not read as one somebody
-// sat down with. It is a note the reader left themselves, not a toll they paid.
-func TestImpactReviewLinesReportsBulkReasons(t *testing.T) {
-	lines := impactReviewLines(&impactReview{
-		Files: 8, Read: 4,
-		Unread:  []string{"a.go"},
-		Reasons: []string{"codemod output, spot-checked 3 of 40"},
-	})
-	joined := strings.Join(lines, "\n")
-	assert.Contains(t, joined, "covered in bulk")
-	assert.Contains(t, joined, "codemod output")
-}
-
-func TestImpactReviewLinesListsRequiredUncapped(t *testing.T) {
-	r := &impactReview{Files: 30, Read: 0}
-	for i := range unreadShown + 5 {
-		r.Required = append(r.Required, fmt.Sprintf("internal/secret/f%d.go", i))
-	}
-	r.Unread = append([]string{}, r.Required...)
-	lines := impactReviewLines(r)
-	assert.Contains(t, lines[0], "15 unopened in review_required paths")
-	// Uncapped, unlike the general list: the workspace said these cost something.
-	assert.Contains(t, lines[15], "internal/secret/f14.go")
-}
-
-// A path the workspace flagged is named once, under review_required, and not again in the
-// general list. Saying it twice reads as two findings.
-func TestImpactReviewLinesDoesNotRepeatRequiredPaths(t *testing.T) {
-	lines := impactReviewLines(&impactReview{
-		Files:    8,
-		Required: []string{"internal/secret/value.go"},
-		Unread:   []string{"internal/secret/value.go", "a.go"},
-	})
-	joined := strings.Join(lines, "\n")
-	assert.Equal(t, 1, strings.Count(joined, "internal/secret/value.go"))
-	assert.Contains(t, joined, "1 file(s) you have not opened")
 }
 
 // projectsWorkspace is the narrow slice of the reader the matcher uses.
