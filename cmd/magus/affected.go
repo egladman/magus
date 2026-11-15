@@ -43,10 +43,6 @@ func (c *failedResults) list() []journal.Event { return c.List() }
 
 func planSummaryMarkdown(out planOutput) string { return internalci.PlanSummaryMarkdown(out) }
 
-func appendUnique(dst []string, values ...string) []string {
-	return internalci.AppendUnique(dst, values...)
-}
-
 // affected dispatches `magus affected <target>`; project set is determined by VCS diff.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target

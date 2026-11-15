@@ -44,9 +44,8 @@ type ListFlag []string
 
 func (l *ListFlag) String() string { return strings.Join(*l, ",") }
 
-// SplitSeq rather than Split: the intermediate slice is never used for anything but this
-// loop, and this file already had three copies of the same split before they were folded
-// back into this one.
+// Set appends each comma-separated entry of value and refuses an empty one. SplitSeq
+// rather than Split: the intermediate slice is never used for anything but this loop.
 func (l *ListFlag) Set(value string) error {
 	for part := range strings.SplitSeq(value, ",") {
 		if part = strings.TrimSpace(part); part == "" {

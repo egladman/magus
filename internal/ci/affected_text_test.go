@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+func TestMain(m *testing.M) { testkit.Main(m) }
+
 func explorerLink(seed string) (string, string) { return "http://explorer/" + seed, "auth" }
 
 type PrintRunRefSuite struct{ suite.Suite }

@@ -2,6 +2,7 @@ package job
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -110,5 +111,5 @@ func (s *PinSuite) TestPrintPinnedNamesEachRowTheVerbChanged() {
 	s.Require().NoError(err)
 	var out bytes.Buffer
 	PrintPinned(&out, "pin", rows)
-	s.Equal("pinned "+s.bin+" for pinned-work: "+s.row().Worktree.BinaryDigest+"\n", out.String())
+	s.Equal(fmt.Sprintf("pinned %s for pinned-work: %s\n", s.bin, s.row().Worktree.BinaryDigest), out.String())
 }

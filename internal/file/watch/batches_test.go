@@ -94,8 +94,8 @@ func TestReadBatches_CancelUnblocksAParkedRead(t *testing.T) {
 	}
 }
 
-// batchesOf is a closed channel holding batches, in order.
-func batchesOf(batches ...[]string) <-chan []string {
+// closedBatches is a closed channel holding batches, in order.
+func closedBatches(batches ...[]string) <-chan []string {
 	ch := make(chan []string, len(batches))
 	for _, b := range batches {
 		ch <- b
@@ -117,7 +117,7 @@ func TestRunBatchesReturnsWhenTheContextIsAlreadyCancelled(t *testing.T) {
 func TestRunBatchesSkipsAnEmptyBatch(t *testing.T) {
 	t.Parallel()
 	var ran, failed bool
-	RunBatches(context.Background(), batchesOf(nil, []string{}), func([]string) error {
+	RunBatches(context.Background(), closedBatches(nil, []string{}), func([]string) error {
 		ran = true
 		return nil
 	}, func(error) { failed = true })
@@ -135,7 +135,7 @@ func TestRunBatchesKeepsGoingAfterAFailedBatch(t *testing.T) {
 		ran  [][]string
 		errs []error
 	)
-	RunBatches(context.Background(), batchesOf([]string{"a"}, []string{"b"}), func(p []string) error {
+	RunBatches(context.Background(), closedBatches([]string{"a"}, []string{"b"}), func(p []string) error {
 		mu.Lock()
 		defer mu.Unlock()
 		ran = append(ran, p)

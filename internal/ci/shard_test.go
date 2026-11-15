@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -122,6 +123,6 @@ func TestFilterShardsRefusesAnUnknownProject(t *testing.T) {
 	assert.ErrorContains(t, err, `no project "dcos" in this workspace`)
 
 	got, err := FilterShards(context.Background(), fakeProjects{"docs", "console"}, shards, []string{"console/"})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Empty(t, got)
 }
