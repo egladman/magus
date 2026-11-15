@@ -1,19 +1,16 @@
-package trail_test
+package trail
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/internal/fixture"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,22 +26,20 @@ func emitJournalEvent(t *testing.T, h slog.Handler, e journal.Event) {
 	journal.Emit(journal.WithLogger(context.Background(), journal.NewLogger(h)), e)
 }
 
-// withJournal wires the handler the way the CLI does: a lease resolved through job.RunLease
-// against the checkout record under cacheDir, and a fixed build version.
-func withJournalAt(t *testing.T, cacheDir string, ctx context.Context, handlers []slog.Handler, root, verb string, args []string) []slog.Handler {
-	t.Helper()
-	return trail.WithInvocationJournal(ctx, handlers, root, verb, args, "test", func(ctx context.Context, root string) (string, types.LeaseSource, error) {
-		// The state dir is allowed to be unresolvable: that machine records no lease at all.
-		state, _ := xdg.StateDir()
-		lease, from := job.RunLease(ctx, job.Location{CacheDir: cacheDir, StateBase: state, Root: root})
-		return lease, from, nil
-	})
+// leaseResolver answers every checkout with lease, from and err. Which lease wins is
+// job.RunLease's rule and is tested there; the journal stamps what the resolver says.
+func leaseResolver(lease string, from types.LeaseSource, err error) func(context.Context, string) (string, types.LeaseSource, error) {
+	return func(context.Context, string) (string, types.LeaseSource, error) { return lease, from, err }
 }
 
-// withJournal is withJournalAt over a cache dir that holds no checkout record.
-func withJournal(t *testing.T, ctx context.Context, handlers []slog.Handler, root, verb string, args []string) []slog.Handler {
-	t.Helper()
-	return withJournalAt(t, t.TempDir(), ctx, handlers, root, verb, args)
+// withJournalLease wires the handler with a fixed build version and resolve as the lease.
+func withJournalLease(ctx context.Context, handlers []slog.Handler, root, verb string, args []string, resolve func(context.Context, string) (string, types.LeaseSource, error)) []slog.Handler {
+	return WithInvocationJournal(ctx, handlers, root, verb, args, "test", resolve)
+}
+
+// withJournal is withJournalLease under no lease.
+func withJournal(ctx context.Context, handlers []slog.Handler, root, verb string, args []string) []slog.Handler {
+	return withJournalLease(ctx, handlers, root, verb, args, leaseResolver("", "", nil))
 }
 
 // journalRecordSink keeps the slog.Record journal.Emit builds, so a test can replay the
@@ -89,7 +84,7 @@ func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	handlers := withJournal(t, context.Background(), nil, root, "affected", []string{"ci", "--base", "main"})
+	handlers := withJournal(context.Background(), nil, root, "affected", []string{"ci", "--base", "main"})
 	require.Len(t, handlers, 1)
 
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurationMs: 20, Ref: "out1"})
@@ -105,7 +100,7 @@ func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 	require.Len(t, summaries, 1)
 	assert.Equal(t, "inv1", summaries[0].Invocation, "the journal's invocation id files the facts")
 	assert.Empty(t, summaries[0].Session, "a CLI run is in no host session")
-	assert.Equal(t, trail.LocalOrigin(context.Background()).User, summaries[0].User, "the start records the OS account that ran it")
+	assert.Equal(t, LocalOrigin(context.Background()).User, summaries[0].User, "the start records the OS account that ran it")
 	assert.Equal(t, "affected ci --base main", summaries[0].Command)
 	assert.Equal(t, root, summaries[0].Workspace)
 	assert.Equal(t, []sessions.TargetResult{
@@ -135,11 +130,11 @@ func TestWithInvocationJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 
 	result := journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusCached, DurationMs: 7, Ref: "out9"}
 
-	runHandlers := withJournal(t, context.Background(), nil, runRoot, "run", []string{"ci", "api"})
+	runHandlers := withJournal(context.Background(), nil, runRoot, "run", []string{"ci", "api"})
 	require.Len(t, runHandlers, 1)
 	emitJournalEvent(t, runHandlers[0], result)
 
-	affectedHandlers := withJournal(t, context.Background(), nil, affectedRoot, "affected", []string{"ci"})
+	affectedHandlers := withJournal(context.Background(), nil, affectedRoot, "affected", []string{"ci"})
 	require.Len(t, affectedHandlers, 1)
 	emitJournalEvent(t, affectedHandlers[0], result)
 
@@ -172,7 +167,6 @@ func TestWithInvocationJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 // read as a fleet that stopped working the moment it ran `affected`.
 func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 	testkit.Isolate(t)
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
 
 	for verb, args := range map[string][]string{
 		"run":      {"ci", "api"},
@@ -180,7 +174,7 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 	} {
 		t.Run(verb, func(t *testing.T) {
 			root := t.TempDir()
-			handlers := withJournal(t, context.Background(), nil, root, verb, args)
+			handlers := withJournalLease(context.Background(), nil, root, verb, args, leaseResolver("fleet/f3", types.LeaseSourceEnv, nil))
 			require.Len(t, handlers, 1)
 			emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
 
@@ -192,7 +186,6 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 			summaries := sessions.Summarize(fold)
 			require.Len(t, summaries, 1)
 			assert.Equal(t, "fleet/f3", summaries[0].Lease)
-			// A BAGGAGE lease records as the claim it is.
 			assert.Equal(t, []sessions.TargetResult{
 				{Target: "ci", Project: "api", Outcome: sessions.OutcomePass, Lease: "fleet/f3", LeaseFrom: types.LeaseSourceEnv},
 			}, summaries[0].Targets)
@@ -200,19 +193,14 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 	}
 }
 
-// The journal's lease goes through the one resolver, so a checkout bound by `magus job exec`
-// outranks the claim here as it does for the guard: before, a worker bound to one job that
-// exported another's id recorded every run against the other job.
-func TestWithInvocationJournalRanksTheBindingOverTheClaim(t *testing.T) {
+// A lease that does not resolve records none and says why, rather than recording a
+// claim as if nothing outranked it.
+func TestWithInvocationJournalRecordsNoLeaseWhenTheBindingDoesNotRead(t *testing.T) {
 	testkit.Isolate(t)
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/claimed")
 	root := t.TempDir()
-	cacheDir := t.TempDir()
-	marker := job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}.MarkerPath()
-	require.NoError(t, os.MkdirAll(filepath.Dir(marker), 0o755))
-	require.NoError(t, os.WriteFile(marker, []byte("fleet/bound\n"), 0o644))
 
-	handlers := withJournalAt(t, cacheDir, context.Background(), nil, root, "run", []string{"ci"})
+	handlers := withJournalLease(context.Background(), nil, root, "run", []string{"ci"},
+		leaseResolver("fleet/claimed", types.LeaseSourceEnv, errors.New("marker unreadable")))
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Status: journal.StatusPass})
 
@@ -222,96 +210,8 @@ func TestWithInvocationJournalRanksTheBindingOverTheClaim(t *testing.T) {
 	require.NoError(t, err)
 	summaries := sessions.Summarize(fold)
 	require.Len(t, summaries, 1)
-	assert.Equal(t, types.LeaseSourceContested, summaries[0].LeaseFrom, "the summary carries the start's source")
-	assert.NotEmpty(t, summaries[0].UID, "the summary carries the start's origin whole, uid included")
-	assert.Equal(t, []sessions.TargetResult{
-		{Target: "ci", Outcome: sessions.OutcomePass, Lease: "fleet/bound", LeaseFrom: types.LeaseSourceContested},
-	}, summaries[0].Targets)
-}
-
-// The lease a forwarded run carries beats the environment, because on an adopted run this
-// code executes in the SERVER and the environment it would otherwise read belongs to whoever
-// started the server. Without the preference every server-adopted run in a fleet is attributed
-// to one stranger, or to nobody: the defect this wiring exists to close.
-func TestWithInvocationJournalPrefersTheForwardedLease(t *testing.T) {
-	testkit.Isolate(t)
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/server-env")
-	root := t.TempDir()
-
-	ctx := types.WithJobLease(context.Background(), "fleet/client")
-	handlers := withJournal(t, ctx, nil, root, "run", []string{"ci", "api"})
-	require.Len(t, handlers, 1)
-	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
-
-	dir, err := sessions.Dir(root)
-	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
-	require.NoError(t, err)
-
-	summaries := sessions.Summarize(fold)
-	require.Len(t, summaries, 1)
-	assert.Equal(t, "fleet/client", summaries[0].Lease)
-	require.Len(t, summaries[0].Targets, 1)
-	assert.Equal(t, "fleet/client", summaries[0].Targets[0].Lease)
-}
-
-// The other half of the precedence: a ctx no entry point stamped reads the environment
-// channel, while one stamped with no lease, as the server stamps a client that forwarded
-// none or an id that fails the rule ("the wire lied"), records none rather than lending
-// the server's own.
-func TestWithInvocationJournalReadsTheEnvironmentOnlyWhenNothingStampedALease(t *testing.T) {
-	for name, tc := range map[string]struct {
-		stamp func(context.Context) context.Context
-		want  string
-	}{
-		"unstamped":         {stamp: func(ctx context.Context) context.Context { return ctx }, want: "fleet/local"},
-		"stamped with none": {stamp: func(ctx context.Context) context.Context { return types.WithJobLease(ctx, "") }},
-		"the wire lied":     {stamp: func(ctx context.Context) context.Context { return types.WithJobLease(ctx, "not a lease id") }},
-	} {
-		t.Run(name, func(t *testing.T) {
-			testkit.Isolate(t)
-			t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/local")
-			root := t.TempDir()
-
-			handlers := withJournal(t, tc.stamp(t.Context()), nil, root, "run", []string{"build"})
-			require.Len(t, handlers, 1)
-			emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
-
-			dir, err := sessions.Dir(root)
-			require.NoError(t, err)
-			fold, err := sessions.ReadAll(dir)
-			require.NoError(t, err)
-
-			summaries := sessions.Summarize(fold)
-			require.Len(t, summaries, 1)
-			assert.Equal(t, tc.want, summaries[0].Lease)
-		})
-	}
-}
-
-// A lease that fails the id rule is dropped rather than stamped, which is what keeps the trail's
-// redaction exemption honest. The drop happens in the wiring, because that is where the
-// environment is read; the note explaining it is asserted in internal/trail, where the one-time
-// gate can be reset. Here the observable fact is that nothing was attributed.
-func TestWithInvocationJournalDropsAnInvalidLease(t *testing.T) {
-	testkit.Isolate(t)
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=not a lease id")
-	root := t.TempDir()
-
-	handlers := withJournal(t, context.Background(), nil, root, "run", []string{"build"})
-	require.Len(t, handlers, 1)
-	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
-
-	dir, err := sessions.Dir(root)
-	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
-	require.NoError(t, err)
-
-	summaries := sessions.Summarize(fold)
-	require.Len(t, summaries, 1)
 	assert.Empty(t, summaries[0].Lease)
-	require.Len(t, summaries[0].Targets, 1)
-	assert.Empty(t, summaries[0].Targets[0].Lease)
+	assert.Empty(t, summaries[0].LeaseFrom)
 }
 
 // An unwritable store must cost the run nothing: journaling is best-effort, and a handler
@@ -327,7 +227,7 @@ func TestWithInvocationJournalSurvivesAnUnwritableStore(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(dir), 0o755))
 	require.NoError(t, os.WriteFile(dir, []byte("blocked\n"), 0o644))
 
-	handlers := withJournal(t, context.Background(), nil, root, "affected", []string{"ci"})
+	handlers := withJournal(context.Background(), nil, root, "affected", []string{"ci"})
 	require.Len(t, handlers, 1, "the store is only opened on the first fact, so wiring still succeeds")
 
 	rec := captureJournalRecord(t, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass})
@@ -350,6 +250,6 @@ func TestWithInvocationJournalLeavesHandlersAloneWithoutAStateDir(t *testing.T) 
 	t.Setenv("LocalAppData", "")
 
 	existing := []slog.Handler{&journalRecordSink{}}
-	got := withJournal(t, context.Background(), existing, t.TempDir(), "affected", []string{"ci"})
+	got := withJournal(context.Background(), existing, t.TempDir(), "affected", []string{"ci"})
 	assert.Equal(t, existing, got)
 }
