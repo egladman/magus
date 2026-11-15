@@ -1,6 +1,7 @@
 package command
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -220,5 +221,47 @@ func TestACommandRecordNamesTheClikitCommandGroup(t *testing.T) {
 	}
 	if record.Spec.Name != "tool" {
 		t.Errorf("the spec's root is %q, want tool", record.Spec.Name)
+	}
+}
+
+func parseSet(t *testing.T, usage func()) (*flag.FlagSet, *strings.Builder) {
+	t.Helper()
+	fs := flag.NewFlagSet("job fork", flag.ContinueOnError)
+	fs.String("goals", "", "")
+	fs.String("check", "", "")
+	fs.Usage = usage
+	out := &strings.Builder{}
+	fs.SetOutput(out)
+	return fs, out
+}
+
+func TestParseNamesTheNearestFlagWithoutPrintingUsage(t *testing.T) {
+	called := false
+	fs, out := parseSet(t, func() { called = true })
+	err := Parse(fs, []string{"--goal", "y"})
+	if err == nil || !strings.Contains(err.Error(), "flag provided but not defined: -goal (did you mean -goals?)") {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(err.Error(), "`magus job fork -h`") {
+		t.Fatalf("err names no -h: %v", err)
+	}
+	if called || out.Len() != 0 {
+		t.Fatalf("usage printed on an unknown flag: called=%v out=%q", called, out.String())
+	}
+}
+
+func TestParseOffersNoNameForADistantFlag(t *testing.T) {
+	fs, _ := parseSet(t, func() {})
+	err := Parse(fs, []string{"--zzzzzzzz"})
+	if err == nil || strings.Contains(err.Error(), "did you mean") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestParseHelpStillPrintsFullUsage(t *testing.T) {
+	called := false
+	fs, _ := parseSet(t, func() { called = true })
+	if err := Parse(fs, []string{"-h"}); !errors.Is(err, flag.ErrHelp) || !called {
+		t.Fatalf("err = %v, usage called = %v", err, called)
 	}
 }
