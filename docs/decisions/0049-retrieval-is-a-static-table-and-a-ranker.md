@@ -30,18 +30,18 @@ them with measured rows before this record is accepted.
 
 ## Decision
 
-| Item                                                                                                                                   | State   |
-| -------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| The table stays an OCI artifact, digest-pinned in the repo; `graph build` fetches it when the cache lacks that digest (B1)             | planned |
-| `graph build` prints one line when it fetches, and offline prints that ranking is lexical only                                         | planned |
-| The daemon picks up a newly fetched table without a restart                                                                            | planned |
-| Every node is embedded at graph build into an int8 sidecar, and dense top-K joins the candidates (C1)                                  | planned |
-| A deterministic code-aware ranker runs, with integer weights fit offline once per release on the judged-dev set (D1, D2)               | planned |
-| Training data covers six CoRNStack languages and excludes `hack/**` (E1)                                                               | planned |
-| TypeScript training data waits on the study of its sources (E2)                                                                        | planned |
-| Training is staged; the teacher is GTE-ModernBERT-base under Apache-2.0, or CodeRankEmbed if the F2 gate fails (F1-F3)                 | planned |
-| Per-repo adaptation happens at index time and is integer-only: repo-frequency reweighting and graph-neighbour retrofitting (G1, G2)    | planned |
-| Each step lands only on a recorded gain in `libs/embed/evals.jsonl` or `testdata/retrieval/baseline.jsonl`                            | planned |
+| Item                                                                                                                               | State   |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| The table stays an OCI artifact, digest-pinned in the repo; `graph build` fetches it when the cache lacks that digest (B1)         | planned |
+| `graph build` prints one line when it fetches, and offline prints that ranking is lexical only                                     | planned |
+| The daemon picks up a newly fetched table without a restart                                                                        | planned |
+| Every node is embedded at graph build into an int8 sidecar, and dense top-K joins the candidates (C1)                              | planned |
+| A deterministic code-aware ranker runs, with integer weights fit offline once per release on the judged-dev set (D1, D2)           | planned |
+| Training data covers six CoRNStack languages and excludes `hack/**` (E1)                                                           | planned |
+| TypeScript training data waits on the study of its sources (E2)                                                                    | planned |
+| Training is staged; the teacher is GTE-ModernBERT-base under Apache-2.0, or CodeRankEmbed if the F2 gate fails (F1-F3)             | planned |
+| Per-repo adaptation happens at index time and is integer-only: repo-frequency reweighting and graph-neighbor retrofitting (G1, G2) | planned |
+| Each step lands only on a recorded gain in `libs/embed/evals.jsonl` or `testdata/retrieval/baseline.jsonl`                         | planned |
 
 A fetch on a read verb such as `query` stays refused. `graph build` is an explicit verb,
 so running it is the consent.
@@ -72,8 +72,7 @@ binary. Reopen if an install must rank with embeddings with no registry reachabl
 
 ### A fetch on a read verb
 
-Lost: it is a network act on a verb such as `query`, which [Running magus is the
-consent](0014-running-magus-is-the-consent.md) rules out. Reopen only with new evidence
+Lost: it is a network act on a verb such as `query`, which [Running magus is the consent](0014-running-magus-is-the-consent.md) rules out. Reopen only with new evidence
 against that rule.
 
 ### Qwen3-Embedding-0.6B as teacher
