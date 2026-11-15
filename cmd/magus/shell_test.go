@@ -2951,3 +2951,36 @@ func (s *CheckoutJudgeDepsSuite) TestADelegateKeepsItsRules() {
 	deps := checkoutJudgeDeps(ctx, guard.Dependencies{}, s.root, s.binary)
 	s.NoError(deps.LoadFailure)
 }
+
+type StaleToolRowsSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestStaleToolRowsSuite(t *testing.T) { suite.Run(t, new(StaleToolRowsSuite)) }
+
+func (s *StaleToolRowsSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	dir := filepath.Join(s.root, ".claude", "magus", "tools")
+	s.Require().NoError(os.MkdirAll(dir, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, types.ToolHostFile), []byte("claude-code\n"), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, types.ToolVersionFile), []byte("13\n"), 0o644))
+	saved := guardRoot
+	guardRoot = func(string) (string, error) { return s.root, nil }
+	s.T().Cleanup(func() { guardRoot = saved })
+}
+
+func (s *StaleToolRowsSuite) TestRowsOfAnotherStampRefuseWithTheInstallStep() {
+	req := guard.Request{Host: "claude-code"}
+	_, known, refusal := applyHostFacts(s.T().Context(), &req)
+
+	s.False(known)
+	s.Require().NotNil(refusal)
+	s.Require().Error(refusal.err)
+	s.Equal(types.NextStep{
+		ID:   "harness-install",
+		Run:  "magus agent harness install --id claude-code",
+		Argv: []string{"magus", "agent", "harness", "install", "--id", "claude-code"},
+		Why:  "installs the tool rows of claude-code, when the workspace loads that harness",
+	}, refusal.next)
+}

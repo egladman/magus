@@ -1359,6 +1359,34 @@ func (s *BuzzRecordSuite) TestRecordPrintsItsRefOnStderrWhateverTheLogLevel() {
 	s.Regexp(`^ref  \S+\n$`, string(printed))
 }
 
+func (s *BuzzRecordSuite) TestAStaleJobStoreRecordsTheRunWithoutALease() {
+	s.T().Setenv("BAGGAGE", "")
+	// recordLease keys the store by the resolved root, and a temp dir is a symlink on macOS.
+	root, err := filepath.EvalSymlinks(s.root)
+	s.Require().NoError(err)
+	store, err := openJobs(s.T().Context(), root, jobOpen{})
+	s.Require().NoError(err)
+	path, err := store.Path()
+	s.Require().NoError(err)
+	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+	s.Require().NoError(os.WriteFile(path, []byte(`{"id":"a","schema_version":13,"state":"running","created":1,"updated":1}`+"\n"), 0o644))
+
+	r, w, err := os.Pipe()
+	s.Require().NoError(err)
+	saved := os.Stderr
+	os.Stderr = w
+	recErr := recordBuzzRun(s.T().Context(), root, "p.buzz", "code", nil, true, nil, time.Now(), nil)
+	os.Stderr = saved
+	s.Require().NoError(w.Close())
+	printed, err := io.ReadAll(r)
+	s.Require().NoError(err)
+
+	s.Require().NoError(recErr)
+	s.Contains(string(printed), "recorded without a lease")
+	s.Contains(string(printed), path)
+	s.Regexp(`ref  \S+\n$`, string(printed))
+}
+
 func (s *BuzzRecordSuite) TestRecordReturnsTheReasonWhenTheStoreCannotWrite() {
 	dir, err := magus.ResolveCacheDir(s.root)
 	s.Require().NoError(err)

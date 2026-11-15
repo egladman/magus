@@ -12,9 +12,34 @@ import (
 	"github.com/egladman/magus/types/agent"
 )
 
-// staleStoreFix is how a person gets past a job store an older magus
-// wrote. A newer magus's lines are kept whole.
-const staleStoreFix = "move jobs.jsonl aside, or delete it, and fork the jobs again"
+// storePathToken stands for the store file in a fix text written where the
+// path is not known, such as a migration's row function. [Store.migrate]
+// swaps it for the store's own path.
+const storePathToken = "<store>"
+
+// staleStoreFix is how a person gets past the job store at path, which an
+// older magus wrote. A newer magus's lines are kept whole.
+func staleStoreFix(path string) string {
+	return fmt.Sprintf("move %s aside, or delete it, and fork the jobs again", path)
+}
+
+// pathNamed is err with its message naming the store file where it held
+// [storePathToken]. It still unwraps to err.
+type pathNamed struct {
+	err error
+	msg string
+}
+
+func (p pathNamed) Error() string { return p.msg }
+func (p pathNamed) Unwrap() error { return p.err }
+
+func namePath(err error, path string) error {
+	msg := err.Error()
+	if !strings.Contains(msg, storePathToken) {
+		return err
+	}
+	return pathNamed{err: err, msg: strings.ReplaceAll(msg, storePathToken, path)}
+}
 
 // refuseRecord refuses the record at line of the store, got where this
 // magus reads only want. Another version names staleStoreFix or a newer
@@ -22,7 +47,7 @@ const staleStoreFix = "move jobs.jsonl aside, or delete it, and fork the jobs ag
 func (s *Store) refuseRecord(want, got apiversion.TypeMeta, line int) error {
 	what := fmt.Sprintf("job: %s:%d", s.path, line)
 	if got.APIVersion != want.APIVersion {
-		return types.RefuseVersion(types.APIVersion(want.APIVersion), types.APIVersion(got.APIVersion), what, staleStoreFix)
+		return types.RefuseVersion(types.APIVersion(want.APIVersion), types.APIVersion(got.APIVersion), what, staleStoreFix(s.path))
 	}
 	return types.DiagnosticErrorf(types.StoreLineUndecodable, "%s: %v", what, &apiversion.RefusedError{Want: want, Got: got})
 }
@@ -152,7 +177,7 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 		return nil, fmt.Errorf("reading holder: %w", err)
 	}
 	if _, old := e["schema_version"]; old || (flat.APIVersion != "" && flat.APIVersion.Compare(types.JobAPIVersion) < 0) {
-		return nil, types.RefuseVersion(types.JobAPIVersion, flat.APIVersion, "job: row "+row.ID, staleStoreFix)
+		return nil, types.RefuseVersion(types.JobAPIVersion, flat.APIVersion, "job: row "+row.ID, staleStoreFix(storePathToken))
 	}
 	holder := flat
 	if holder.Holder == "server" {
