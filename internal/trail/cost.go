@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 )
 
@@ -89,9 +90,9 @@ type rootContext struct {
 // delegableShare is the part of the main thread's tool-result characters that came from
 // work a subagent could have done in its place. ByClass counts characters.
 type delegableShare struct {
-	Chars   chars         `json:"chars"`
-	Total   chars         `json:"total"`
-	ByClass []CountedName `json:"by_class,omitempty"`
+	Chars   chars                  `json:"chars"`
+	Total   chars                  `json:"total"`
+	ByClass []sessions.CountedName `json:"by_class,omitempty"`
 }
 
 // Share is Chars as a fraction of Total, 0 when every observed result was empty.
@@ -104,8 +105,8 @@ func (d delegableShare) Share() float64 {
 
 // spawnTally counts the session's spawns by the model each declared, "" for none.
 type spawnTally struct {
-	Total   int           `json:"total"`
-	ByModel []CountedName `json:"by_model,omitempty"`
+	Total   int                    `json:"total"`
+	ByModel []sessions.CountedName `json:"by_model,omitempty"`
 }
 
 // advisoryOutcome counts the cost advisories the main thread was given and how many it
@@ -241,7 +242,7 @@ func spawnsByModel(spawns []costSpawn) *spawnTally {
 	for _, sp := range spawns {
 		tally[sp.Model]++
 	}
-	return &spawnTally{Total: len(spawns), ByModel: counted(tally)}
+	return &spawnTally{Total: len(spawns), ByModel: sessions.Counted(tally)}
 }
 
 func buildRootContext(main []SessionCall) *rootContext {
@@ -287,7 +288,7 @@ func sumDelegable(main []SessionCall) *delegableShare {
 	if !observed {
 		return nil
 	}
-	return &delegableShare{Chars: delegable, Total: total, ByClass: counted(byClass)}
+	return &delegableShare{Chars: delegable, Total: total, ByClass: sessions.Counted(byClass)}
 }
 
 func tallyAdvisories(main []SessionCall, spawns []costSpawn) *advisoryOutcome {
@@ -444,26 +445,4 @@ func abbreviate(n int64) string {
 		return fmt.Sprintf("%dk", n/1_000)
 	}
 	return fmt.Sprint(n)
-}
-
-// CountedName is one repeated thing and how often it appeared.
-type CountedName struct {
-	Name  string `json:"name"`
-	Count int    `json:"count"`
-}
-
-// counted renders a tally most-frequent first, ties broken by name so two runs
-// over one session render identically.
-func counted(tally map[string]int) []CountedName {
-	out := make([]CountedName, 0, len(tally))
-	for name, n := range tally {
-		out = append(out, CountedName{Name: name, Count: n})
-	}
-	slices.SortFunc(out, func(a, b CountedName) int {
-		if c := cmp.Compare(b.Count, a.Count); c != 0 {
-			return c
-		}
-		return strings.Compare(a.Name, b.Name)
-	})
-	return out
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,10 +74,10 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		RootContext: &rootContext{Peak: 600_000, P50: 300_000, Samples: 30, Models: []string{"claude-opus-5-5"}},
 		Delegable: &delegableShare{
 			Chars: 2000, Total: 30_000,
-			ByClass: []CountedName{{Name: "diff", Count: 1000}, {Name: "search", Count: 1000}},
+			ByClass: []sessions.CountedName{{Name: "diff", Count: 1000}, {Name: "search", Count: 1000}},
 		},
 		// An undeclared model is stored as itself; the renderer labels it.
-		Spawns:     &spawnTally{Total: 2, ByModel: []CountedName{{Name: "", Count: 1}, {Name: "claude-sonnet-5-5", Count: 1}}},
+		Spawns:     &spawnTally{Total: 2, ByModel: []sessions.CountedName{{Name: "", Count: 1}, {Name: "claude-sonnet-5-5", Count: 1}}},
 		Advisories: &advisoryOutcome{Given: 2, Followed: 1, Within: followWithin},
 		Shadow: []shadowTally{
 			{Profile: types.GuardProfileLight, Decisions: map[types.GuardDecision]int{types.GuardAllow: 30}},
@@ -103,7 +104,7 @@ func TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts(t *testing.T) {
 
 	got := SummarizeCost(tr, fixtureModels())
 
-	assert.Equal(t, &spawnTally{Total: 1, ByModel: []CountedName{{Name: "claude-sonnet-5-5", Count: 1}}}, got.Spawns)
+	assert.Equal(t, &spawnTally{Total: 1, ByModel: []sessions.CountedName{{Name: "claude-sonnet-5-5", Count: 1}}}, got.Spawns)
 	assert.Nil(t, got.RootContext)
 	assert.Equal(t, noCallFacts, got.NotMeasured[costRootContext])
 	assert.Equal(t, noCallFacts, got.NotMeasured[costAdvisories])

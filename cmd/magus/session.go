@@ -520,10 +520,6 @@ func promptCacheForCheckout(root string, now time.Time) sessions.PromptCacheCloc
 
 // The helpers below keep the names that cmd files outside this one still call.
 
-type countedName = sessions.CountedName
-
-func counted(tally map[string]int) []countedName { return sessions.Counted(tally) }
-
 func orDash(s string) string { return sessions.OrDash(s) }
 
 func invocationsInCheckout(summaries []sessions.Summary, root string) []sessions.Summary {
