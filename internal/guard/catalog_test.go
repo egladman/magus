@@ -700,8 +700,12 @@ func (s *remedyContractSuite) TestOutputRedirect() {
 	)
 }
 
+func (s *remedyContractSuite) TestProcessLookup() {
+	s.contract(denyRuleProcessLookup, refused("pgrep -fl magus", "magus server status"))
+}
+
 func (s *remedyContractSuite) TestProcessPoll() {
-	s.contract(denyRuleProcessPoll, refused("pgrep -fl magus", "magus server status"))
+	s.contract(denyRuleProcessPoll, refused("ps -p 4242", "magus server status"))
 }
 
 func (s *remedyContractSuite) TestProcessSignal() {

@@ -78,6 +78,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocTokenState},
 	{doc: ruleDocOutputPipe},
 	{doc: ruleDocOutputRedirect},
+	{doc: ruleDocProcessLookup},
 	{doc: ruleDocProcessPoll},
 	{doc: ruleDocProcessSignal},
 	{doc: ruleDocPolicyUnloaded},
@@ -498,11 +499,18 @@ var ruleDocOutputRedirect = types.RuleDoc{
 		"`2>&1` alone passes: both streams still reach the reader.",
 }
 
+var ruleDocProcessLookup = types.RuleDoc{
+	Name:    string(denyRuleProcessLookup),
+	Catches: "pgrep or pidof used to look up a process by name",
+	Why: "A name cannot tell your process from another session's, and the lookup fails on this host as operation not permitted. " +
+		"Wait on the host's background-task notification for work you started, `magus server status` for magus runs, or `magus job wait <job>` for a job.",
+}
+
 var ruleDocProcessPoll = types.RuleDoc{
 	Name:    string(denyRuleProcessPoll),
 	Catches: "a process table inspected to wait on magus work the lock already reports",
 	Why: "A magus run holds a project lock and announces itself, and one `magus server status` reads that same lock state: holder PID, command, age. A second run into the lock exits 75 at once, and a run the caller backgrounded under `magus job exec --timeout` announces its own end, so the wait is that completion notice. " +
-		"`pgrep`, `pidof`, `ps` and `kill -0` invent a poll with no bound of its own that answers a question the lock message already answered.",
+		"`ps` and `kill -0` invent a poll with no bound of its own that answers a question the lock message already answered.",
 }
 
 var ruleDocProcessSignal = types.RuleDoc{
