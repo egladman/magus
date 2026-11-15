@@ -1,0 +1,170 @@
+# `magus notes ls`, `get` and `verify` read a declared store and print one shape per format.
+# ls and get exit 0 whatever the store holds, because a listing that exits non-zero over a
+# pending repair is one nothing can pipe; only an invalid note fails ls. verify is the gate:
+# a clean store prints a pass line, a note it cannot read fails, and a dangling anchor fails
+# only under --strict. A name that exists and cannot be read is refused, never scaffolded
+# over by `notes edit`.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+
+# -- a store declared nowhere is an error with instructions, not an empty listing ------
+cd bare
+! exec magus notes ls
+stderr 'declares no notes store'
+! exec magus notes verify
+stderr 'declares no notes store'
+
+# -- ls: text, json, name --------------------------------------------------------------
+cd ../shop
+exec magus notes ls
+stdout 'shared +team-conventions  How this team works  \(project:\.\)'
+stdout 'shared +stale-pointer'
+
+exec magus notes ls --tag guide
+stdout 'team-conventions'
+! stdout 'stale-pointer'
+
+exec magus notes ls -o name
+stdout '^team-conventions$'
+stdout '^stale-pointer$'
+
+exec magus notes ls --reproducible -o json
+stdout '"stores": \['
+stdout '"scope": "shared"'
+stdout '"path": "notes"'
+stdout '"name": "team-conventions"'
+stdout '"path": "notes/team-conventions.md"'
+! stdout '"modified"'
+
+# the same flag pair is refused as opposites
+! exec magus notes ls --shared --private
+stderr 'opposites'
+
+# -- get: text, json, name, and the failure modes --------------------------------------
+exec magus notes get team-conventions
+stdout '^team-conventions  \[shared\]$'
+stdout '^How this team works$'
+stdout '^tags: guide$'
+stdout '^anchors:$'
+stdout '^  project: \.$'
+stdout '^Prose a person wrote\.$'
+
+exec magus notes get team-conventions -o json
+stdout '"name": "team-conventions"'
+stdout '"scope": "shared"'
+
+exec magus notes get team-conventions -o name
+stdout '^team-conventions$'
+
+! exec magus notes get no-such-note
+stderr 'no note named "no-such-note"'
+
+! exec magus notes get
+stderr 'requires exactly one note name'
+
+# -- an unreadable note is refused, and nothing is scaffolded beside it -----------------
+cd ../broken
+mkdir notes/unreadable.md
+! exec magus notes get unreadable
+stderr 'exists but could not be read'
+! exec magus notes edit unreadable
+stderr 'fix the file'
+stderr 'exists but could not be read'
+exists notes/unreadable.md
+! exists notes/unreadable.md/unreadable.md
+
+# an invalid note makes ls and verify exit non-zero, and names the file
+! exec magus notes ls
+stdout '\[fail\] .*malformed\.md'
+stderr '1 invalid note'
+! exec magus notes verify
+stdout '\[fail\] .*malformed\.md'
+stderr '1 invalid note'
+
+# -- verify: pass line on a clean store, dangling only under --strict -------------------
+cd ../clean
+exec magus notes verify
+stdout '^\[pass\] notes: 1 verified$'
+exec magus notes verify -o name
+! stdout .
+
+cd ../shop
+exec magus notes verify
+stdout '\[warn\]'
+stdout 'stale-pointer'
+! exec magus notes verify --strict
+stdout '\[fail\]'
+stderr '1 dangling anchor'
+! exec magus notes verify --strict -o json
+stdout '"code": "dangling-anchor"'
+stderr '1 dangling anchor'
+
+-- bare/magus.yaml --
+concurrency: 2
+-- bare/magusfile.buzz --
+import "magus";
+magus\project({ "no_language": "fixture workspace: only the notes store matters here" });
+-- clean/magus.yaml --
+knowledge:
+  notes:
+    shared: notes
+-- clean/magusfile.buzz --
+import "magus";
+magus\project({ "sources": ["*.md", "notes/**/*.md"], "no_language": "fixture workspace: only the notes store matters here" });
+-- clean/notes/team-conventions.md --
+---
+magus:
+    id: team-conventions
+    title: How this team works
+    anchors:
+        - kind: project
+          target: .
+---
+
+Prose a person wrote.
+-- shop/magus.yaml --
+knowledge:
+  notes:
+    shared: notes
+-- shop/magusfile.buzz --
+import "magus";
+magus\project({ "sources": ["*.md", "notes/**/*.md"], "no_language": "fixture workspace: only the notes store matters here" });
+-- shop/notes/team-conventions.md --
+---
+magus:
+    id: team-conventions
+    title: How this team works
+    tags: [guide]
+    anchors:
+        - kind: project
+          target: .
+---
+
+Prose a person wrote.
+-- shop/notes/stale-pointer.md --
+---
+magus:
+    id: stale-pointer
+    title: Points at a file that is gone
+    anchors:
+        - kind: file
+          target: gone/away.go
+---
+
+Nothing here resolves any more.
+-- broken/magus.yaml --
+knowledge:
+  notes:
+    shared: notes
+-- broken/magusfile.buzz --
+import "magus";
+magus\project({ "sources": ["*.md", "notes/**/*.md"], "no_language": "fixture workspace: only the notes store matters here" });
+-- broken/notes/malformed.md --
+---
+magus:
+    id: malformed
+    title: Anchors of the wrong shape
+    anchors: not-a-list
+---
+
+Not a note magus can read.
