@@ -463,3 +463,5 @@ tags/status/
 reference/rules/unjudged-tool/
 # libs/cmdline became libs/clikit; its generated development page went with the old path.
 development/libs-cmdline/
+# libs/embed/train became libs/train; its generated development page went with the old path.
+development/libs-embed-train/
