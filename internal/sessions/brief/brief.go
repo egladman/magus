@@ -1,0 +1,1102 @@
+package brief
+
+import (
+	"cmp"
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/doctor"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
+)
+
+// The rehydration brief: what a session needs handed back when its host replaces
+// the history with a summary.
+//
+// Every line is READ FROM DISK on the call. A summary is prose about what
+// happened and degrades with each retelling; this is state, so it cannot. It
+// restates no rule either: the trailer names the files the rules live in, because
+// a rule copied here is a second copy to go stale.
+//
+// magus PRINTS it and the host's hook places it, the same split the guard
+// templates keep. Nothing here knows what a session is, when one compacts, or
+// which host asked.
+
+// briefTextWidth is the longest line the text view emits. Criteria and a validation
+// command are as long as their author made them, and this lands
+// in a context window through a hook, so the bound is on the rendered LINE rather
+// than on the fields behind it.
+const briefTextWidth = 160
+
+// briefCommitWalk bounds the unpushed count. Each commit costs the backend one
+// resolution, and past a couple of dozen the answer a reader acts on is "many", so
+// the walk stops and says so rather than paying for precision nobody uses.
+const briefCommitWalk = 20
+
+const (
+	briefFeedbackEvents   = 100
+	briefFeedbackItems    = 1
+	briefFeedbackEvidence = 2
+)
+
+// briefRecentSessions bounds the earlier sessions listed. Three, because this is a
+// pointer into a store rather than the store itself: a reader who wants the fourth has
+// `magus session` for the whole list, and every line here is spent from the context
+// window the brief exists to refill.
+const briefRecentSessions = 3
+
+// briefMaxLeases bounds how many of this checkout's live leases the brief names. Editing
+// jobs (declared / running) come first; exited holders still count as live for the write
+// guard, and a checkout every job was once exec'd in can hold dozens of them.
+const briefMaxLeases = 12
+
+// briefMaxAttention bounds the attention rows the brief names, as briefMaxLeases does for
+// leases: the queue has no expiry, so a pile that built up overnight would otherwise
+// spend the window on rows the count already stands for.
+const briefMaxAttention = 5
+
+// briefMaxJobs bounds the job tree, as briefMaxLeases bounds leases. Each job named costs a
+// VCS read of its checkout, so the bound also caps what the brief spends on the backend.
+const briefMaxJobs = 12
+
+// Payload is the whole brief, and the -o json shape.
+type Payload struct {
+	Workspace string `json:"workspace"`
+	Branch    string `json:"branch,omitempty"`
+	Revision  string `json:"revision,omitempty"`
+	// Unpushed is absent rather than zero when the base ref does not resolve: a
+	// checkout with no upstream and one with nothing to push are different facts.
+	Unpushed *briefUnpushed `json:"unpushed,omitempty"`
+	Tree     briefTree      `json:"tree"`
+	// Leases are the live leases taken in this checkout or bound to the caller.
+	Leases []briefLease `json:"leases,omitempty"`
+	// OtherLeases counts the live leases the brief does not name: every other checkout's,
+	// and this checkout's past briefMaxLeases. The store is repository-wide, so naming them
+	// spent the window on work this session cannot touch.
+	OtherLeases int `json:"other_leases,omitempty"`
+	// Jobs is the tree of jobs this session owns, nil when it owns none. A store that could
+	// not be read is Unread on a non-nil value, so it never reads as a session with no jobs.
+	Jobs     *briefJobTree  `json:"jobs,omitempty"`
+	Failures []briefFailure `json:"failures,omitempty"`
+	// Unintegrated are the finished jobs whose branches hold commits this checkout has not
+	// got, nil when none wait. Without a count here, nothing reminds a session they exist.
+	Unintegrated *briefUnintegrated `json:"unintegrated,omitempty"`
+	// Unmerged is what the checkout's branch does not hold, the facts
+	// the stop rule refuses on.
+	Unmerged types.JobUnmergedReport `json:"unmerged"`
+	// Attention is the open attention queue, the same count `session ls` prints. Nil means
+	// the brief was not gathered, which prints nothing; a store that could not be read is
+	// Unread on a non-nil value, so the two never read as an empty queue.
+	Attention *briefAttention `json:"attention,omitempty"`
+	// GuardWiring is the host hook config paths in this checkout that invoke magus.
+	// Empty means the rules exist here and nothing runs them.
+	GuardWiring []string `json:"guard_wiring,omitempty"`
+	// WiringUnknown says why GuardWiring and Rules were not read, empty when they were: a
+	// checkout whose harness wiring is unknown is not one with nothing wired.
+	WiringUnknown string `json:"wiring_unknown,omitempty"`
+	// Rules are the instruction files and skill directories that exist here, named
+	// so the model re-reads them instead of trusting a summary of them.
+	Rules []string `json:"rules,omitempty"`
+	// Console is where a person opens the console for this checkout, empty when none is
+	// served. It is here because this payload lands in a model's context, and a model
+	// that knows the address can hand it to the person who asked where to look.
+	Console string `json:"console,omitempty"`
+	// PromptCache is how long since a tool call last ran past the guard in this
+	// checkout, against every published cache window: a resume past a closed window
+	// re-pays the whole prompt. Empty Providers when the trail here has seen nothing.
+	PromptCache sessions.PromptCacheClock `json:"prompt_cache,omitzero"`
+	// Feedback is the bounded, recurring guard evidence a compacted session can
+	// review. It is derived from activity on every brief, not copied into a
+	// checkpoint, so an old stop never keeps injecting an already-resolved issue.
+	Feedback []trail.GuardFeedback `json:"feedback,omitempty"`
+	// Recent is what OTHER sessions in this repository did lately, from transcripts a
+	// `magus session load` folded in. Empty until a workspace declares an adapter, and
+	// empty is the honest answer then: nothing was observed, rather than nothing happened.
+	//
+	// The other fields answer "what is this checkout", which one session can work out
+	// alone. This one cannot be worked out alone: a session that starts fresh, or wakes
+	// up compacted, has no way to know another session spent yesterday in the files it is
+	// about to open. That is the whole reason transcripts are loaded at all, and a brief
+	// that omitted it would leave the evidence sitting in a store nobody reads.
+	Recent []briefSession `json:"recent,omitempty"`
+}
+
+// briefUnintegrated counts finished branches off the base. Unknown says why
+// they could not be counted.
+type briefUnintegrated struct {
+	Count    int      `json:"count"`
+	Branches []string `json:"branches,omitempty"`
+	Unknown  string   `json:"unknown,omitempty"`
+}
+
+// briefSession is one earlier session reduced to what makes it worth opening: who it was,
+// when it stopped, and how much it did. Not what it did, which is `magus session show`'s
+// to answer at a length this payload cannot afford.
+type briefSession struct {
+	Session string `json:"session"`
+	Host    string `json:"host,omitempty"`
+	LastMs  int64  `json:"last_ms"`
+	Events  int    `json:"events"`
+}
+
+// briefUnpushed counts the commits this checkout carries that its base ref does not.
+type briefUnpushed struct {
+	Base  string `json:"base"`
+	Count int    `json:"count"`
+	// AtLeast marks a walk that hit briefCommitWalk before reaching the base, so
+	// Count reads as a floor rather than as the number.
+	AtLeast bool `json:"at_least,omitempty"`
+}
+
+// briefTree is the dirty tree, split by the classifier `magus describe file` uses.
+type briefTree struct {
+	// Reported is false when no VCS answered here. A tree nobody could read is not
+	// a clean one, and the two would otherwise print identically.
+	Reported  bool     `json:"reported"`
+	Dirty     int      `json:"dirty"`
+	Sources   []string `json:"sources,omitempty"`
+	Outputs   []string `json:"outputs,omitempty"`
+	Unclaimed []string `json:"unclaimed,omitempty"`
+	// Classified is false when the magusfile would not load, which is when a dirty
+	// path can be listed but not judged. Without it, three empty classes read as a
+	// tree nothing claims rather than as a question nobody could ask.
+	Classified bool `json:"classified"`
+}
+
+// briefLease is one live lease and the single command that binds it here.
+type briefLease struct {
+	ID           string `json:"id"`
+	State        string `json:"state,omitempty"`
+	Exec         string `json:"exec"`
+	Instructions string `json:"instructions,omitempty"`
+	Validation   string `json:"validation,omitempty"`
+	// Claims are the write paths the job added with a proof, by `magus job apply` or by the
+	// guard on a write, each as path, evidence and proof.
+	Claims []string `json:"claims,omitempty"`
+}
+
+// briefJobTree is the jobs under this session's root, parent first, up to briefMaxJobs.
+type briefJobTree struct {
+	// Root is the job this session acts under, whose forks the tree lists; empty for a
+	// root session, whose tree is every job forked from this checkout.
+	Root string     `json:"root,omitempty"`
+	Jobs []briefJob `json:"jobs,omitempty"`
+	More int        `json:"more,omitempty"`
+	// Uncollected are the tree's exited jobs no `magus job wait` graded, past the cap too:
+	// a job nobody waits on ends as no_return with its work unread.
+	Uncollected []string `json:"uncollected,omitempty"`
+	// Unread says why the job store could not be read, empty when it was.
+	Unread string `json:"unread,omitempty"`
+}
+
+// briefJob is one job in the tree, with where its work stands in its own checkout and
+// the step the row says comes next.
+type briefJob struct {
+	ID    string `json:"id"`
+	State string `json:"state,omitempty"`
+	Depth int    `json:"depth,omitempty"`
+	// Checkout is where the job's work lives: the checkout its fork made, else the one it
+	// was taken in. Empty before either exists; Gone when the directory is not there.
+	Checkout string         `json:"checkout,omitempty"`
+	Gone     bool           `json:"gone,omitempty"`
+	Branch   string         `json:"branch,omitempty"`
+	Head     string         `json:"head,omitempty"`
+	Unpushed *briefUnpushed `json:"unpushed,omitempty"`
+	// DependsOn is each declared dependency with the state it is in; one is satisfied
+	// only at pass, as `magus job wait` grades it.
+	DependsOn []briefDependency `json:"depends_on,omitempty"`
+	// Risk is the first unresolved risk the job's filed result names.
+	Risk string `json:"risk,omitempty"`
+	Next string `json:"next,omitempty"`
+}
+
+// briefDependency is one depends_on entry; an empty State is a job no row declares.
+type briefDependency struct {
+	ID        string `json:"id"`
+	State     string `json:"state,omitempty"`
+	Satisfied bool   `json:"satisfied"`
+}
+
+// briefAttention is the open attention queue reduced to a count, the row that has waited
+// longest, and the rows raised since the checkout's previous host session.
+type briefAttention struct {
+	Open   int                `json:"open"`
+	Oldest *briefAttentionRow `json:"oldest,omitempty"`
+
+	// SinceMs is when the previous host session last acted in this checkout, zero when the
+	// store holds no earlier session here and so no "since" to draw.
+	SinceMs   int64               `json:"since_ms,omitempty"`
+	Since     []briefAttentionRow `json:"since,omitempty"`
+	SinceMore int                 `json:"since_more,omitempty"`
+
+	// Unread says why the store could not be read, empty when it was.
+	Unread string `json:"unread,omitempty"`
+}
+
+// briefAttentionRow is one open request: its id, what raised it and when.
+type briefAttentionRow struct {
+	ID       string `json:"id"`
+	Source   string `json:"source,omitempty"`
+	Outcome  string `json:"outcome,omitempty"`
+	OpenedMs int64  `json:"opened_ms"`
+}
+
+// briefFailure is one target the last recorded run failed, and the command that
+// reads its captured output back.
+type briefFailure struct {
+	Target         string `json:"target"`
+	Project        string `json:"project,omitempty"`
+	Ref            string `json:"ref,omitempty"`
+	DiagnosticCode string `json:"diagnostic_code,omitempty"`
+	Inspect        string `json:"inspect,omitempty"`
+	At             string `json:"at,omitempty"`
+}
+
+// briefUnmergedLines caps what the brief prints of the unmerged report.
+const briefUnmergedLines = 10
+
+// Gather reads the checkout. ws is the loaded workspace, or nil when the
+// magusfile would not load, which costs the classification and nothing else.
+//
+// It returns no error: this runs from a hook on a tree that may be mid-bootstrap, and
+// a brief missing a section is worth more than a refusal, so a source that cannot
+// answer contributes nothing instead.
+func Gather(ctx context.Context, root string, ws types.WorkspaceRepository, r Readers) Payload {
+	brief := Payload{Workspace: root}
+
+	vcsOpts := types.VCSOptions{}
+	if ws != nil {
+		vcsOpts = ws.VCSOptions()
+	}
+	if res, err := vcs.Resolve(ctx, root, "", vcsOpts); err == nil && res.VCS != nil {
+		brief.readVCS(ctx, res, ws)
+	}
+	if snap := readJobSnapshot(ctx, r, root); snap.Err != nil {
+		brief.Jobs = &briefJobTree{Unread: snap.Err.Error()}
+		brief.Unmerged.Unknown = snap.Err.Error()
+	} else {
+		rows, tries := snap.Rows, types.NewJobAttempts(snap.Attempts)
+		brief.Unmerged = job.Unmerged(ctx, root, rows, tries)
+		acting := r.ActingLease(ctx, root)
+		brief.Leases, brief.OtherLeases = briefLeases(rows, acting, root)
+		brief.Jobs = sessionJobTree(ctx, rows, tries, acting, root, vcsOpts)
+		if brief.Jobs != nil {
+			// The tree names the jobs this session owns, which is the count a reader acts on.
+			brief.OtherLeases = 0
+		}
+	}
+	brief.Unintegrated = unintegratedBranches(ctx, r, root)
+	brief.Failures = lastRunFailures(r, root)
+	brief.Attention = briefAttentionQueue(r, root)
+	if wired, err := workspace.WiredHarnesses(ws); err == nil {
+		brief.GuardWiring = relativePaths(root, doctor.HookConfigs(ctx, root, wired...))
+		brief.Rules = ruleLocations(ctx, root, wired...)
+	} else {
+		brief.WiringUnknown = err.Error()
+	}
+	brief.PromptCache = r.PromptCache(root, time.Now())
+	if base, err := r.CacheDir(root); err == nil {
+		if feedback, err := trail.RecentGuardFeedback(base, "", briefFeedbackEvents); err == nil {
+			for _, item := range feedback {
+				if item.NeedsReview() {
+					item.Evidence = item.Evidence[:min(len(item.Evidence), briefFeedbackEvidence)]
+					brief.Feedback = append(brief.Feedback, item)
+					if len(brief.Feedback) == briefFeedbackItems {
+						break
+					}
+				}
+			}
+		}
+	}
+	brief.Recent = recentLoadedSessions(r.ResolveRoot(root))
+	brief.Console = r.ConsoleURL()
+	return brief
+}
+
+// recentLoadedSessions lists the last few sessions a transcript load folded in, newest
+// first.
+//
+// Only sessions with loaded EVENTS count. Every run magus performs also writes a row
+// here, so listing rows outright would fill the brief with this checkout's own builds,
+// which the reader already knows about and cannot open anyway.
+//
+// THE CALLER'S OWN SESSION IS NOT EXCLUDED, and that is deliberate rather than a
+// limitation of what a hook can know about itself. This payload exists for a session
+// whose history was replaced by a summary, and the transcript of its own earlier hours is
+// the single most useful thing in the list to that reader.
+//
+// Best-effort and silent, like every other source feeding the brief: a workspace that
+// loads no transcripts contributes nothing instead of an error.
+func recentLoadedSessions(root string) []briefSession {
+	dir, err := sessions.Dir(root)
+	if err != nil {
+		return nil
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return nil
+	}
+	var out []briefSession
+	for _, s := range sessions.Summarize(fold) {
+		if s.Events == 0 {
+			continue
+		}
+		out = append(out, briefSession{Session: s.Session, Host: s.Host, LastMs: s.LastMs, Events: s.Events})
+		if len(out) == briefRecentSessions {
+			break
+		}
+	}
+	return out
+}
+
+// readVCS fills in the branch, the revision, the unpushed count and the dirty tree.
+// ws may be nil, which drops the classification and keeps the counts.
+func (b *Payload) readVCS(ctx context.Context, res types.VCSResolution, ws types.WorkspaceRepository) {
+	if meta, err := res.VCS.Metadata(ctx, b.Workspace); err == nil {
+		b.Branch, b.Revision = meta.Ref, meta.Short
+	}
+	b.Unpushed = unpushedCommits(ctx, res, b.Workspace)
+
+	dirty, err := res.VCS.DirtyFiles(ctx, b.Workspace, nil)
+	if err != nil {
+		return
+	}
+	b.Tree.Reported, b.Tree.Dirty = true, len(dirty)
+	if ws == nil || len(dirty) == 0 {
+		return
+	}
+	files, err := ws.ClassifyFiles(ctx, dirty)
+	if err != nil {
+		return
+	}
+	b.Tree.Sources, b.Tree.Outputs, b.Tree.Unclaimed = classifyByRole(files)
+	b.Tree.Classified = true
+}
+
+// classifyByRole splits classified files by role: declared sources, declared outputs, and
+// everything else, an empty role included.
+func classifyByRole(files []types.FileEntry) (sources, outputs, undeclared []string) {
+	for _, f := range files {
+		switch f.Role {
+		case "source":
+			sources = append(sources, f.Path)
+		case "output":
+			outputs = append(outputs, f.Path)
+		default:
+			undeclared = append(undeclared, f.Path)
+		}
+	}
+	return sources, outputs, undeclared
+}
+
+// unpushedCommits counts how many commits lead back to the base ref, or nil when the
+// base does not resolve here (an unfetched remote, a repository with no upstream).
+//
+// Walked rather than asked: no backend capability reports a commit RANGE, and the
+// four backends magus drives spell one differently enough that inventing that
+// capability for this line would be the wrong trade. briefCommitWalk bounds it.
+func unpushedCommits(ctx context.Context, res types.VCSResolution, root string) *briefUnpushed {
+	if res.Base == "" {
+		return nil
+	}
+	base, err := res.VCS.FindCommit(ctx, root, res.Base)
+	if err != nil || base.ID == "" {
+		return nil
+	}
+	history, err := res.VCS.History(ctx, root, types.HistoryQuery{Limit: briefCommitWalk})
+	if err != nil {
+		return nil
+	}
+	for i, c := range history {
+		if c.ID == base.ID {
+			return &briefUnpushed{Base: res.Base, Count: i}
+		}
+	}
+	return &briefUnpushed{Base: res.Base, Count: len(history), AtLeast: true}
+}
+
+// briefLeases reads the live rows a worker here may still be acting under, through the
+// same filter the write guard applies, so the brief and the refusals agree about which
+// leases are live. It names those taken in this checkout and the caller's own binding,
+// editing jobs first, up to briefMaxLeases, and counts the rest.
+func briefLeases(rows []types.Job, acting, root string) (leases []briefLease, others int) {
+	var editing, exited []briefLease
+	for _, row := range rows {
+		if !row.State.Live() {
+			continue
+		}
+		mine := row.ID == acting ||
+			(row.CheckoutRoot != "" && filepath.Clean(row.CheckoutRoot) == filepath.Clean(root))
+		if !mine {
+			others++
+			continue
+		}
+		criteria, _, _ := strings.Cut(strings.TrimSpace(row.Instructions()), "\n")
+		if criteria == "" {
+			criteria = "no instructions recorded"
+		}
+		item := briefLease{
+			ID:           row.ID,
+			State:        string(row.State),
+			Exec:         hint.JobExec.With(row.ID),
+			Instructions: criteria,
+			Validation:   row.Validation,
+			Claims:       claimLines(row.Claims),
+		}
+		if row.State.Editing() {
+			editing = append(editing, item)
+		} else {
+			exited = append(exited, item)
+		}
+	}
+	live := append(editing, exited...)
+	if len(live) <= briefMaxLeases {
+		return live, others
+	}
+	return live[:briefMaxLeases], others + len(live) - briefMaxLeases
+}
+
+// readJobSnapshot lists the repository's job store once for both the leases and the tree, with its tries.
+func readJobSnapshot(ctx context.Context, r Readers, root string) job.Snapshot {
+	store, err := r.OpenJobs(ctx, root)
+	if err != nil {
+		return job.Snapshot{Err: err}
+	}
+	return job.ReadSnapshot(store)
+}
+
+// sessionJobTree is the jobs under this session's root, nil when it owns none. The CLI
+// cannot see the host session, so the checkout names the root: the job acted under here,
+// else the jobs forked from here, each tree only while something in it is live or still
+// holds a checkout.
+func sessionJobTree(ctx context.Context, rows []types.Job, tries types.JobAttempts, acting, root string, vcsOpts types.VCSOptions) *briefJobTree {
+	var tree []types.Job
+	if acting != "" {
+		tree = types.JobDescendants(rows, acting)
+	} else {
+		for _, row := range rows {
+			if row.Parent != "" || row.Worktree == nil || filepath.Clean(row.Worktree.Source) != filepath.Clean(root) {
+				continue
+			}
+			sub := append([]types.Job{row}, types.JobDescendants(rows, row.ID)...)
+			if slices.ContainsFunc(sub, func(j types.Job) bool { return j.State.Live() || j.Worktree.Standing() }) {
+				tree = append(tree, sub...)
+			}
+		}
+	}
+	if len(tree) == 0 {
+		return nil
+	}
+	out := &briefJobTree{Root: acting}
+	// The root's own row is not in the tree, so its forks are the top level.
+	for _, line := range job.TreeOrder(withoutParent(tree, acting)) {
+		if line.Job.State == types.StateExited && line.Job.Rejection == nil {
+			out.Uncollected = append(out.Uncollected, line.Job.ID)
+		}
+		if len(out.Jobs) == briefMaxJobs {
+			out.More++
+			continue
+		}
+		brief := briefTreeJob(ctx, rows, tries.Result(line.Job.ID), line.Job, vcsOpts)
+		brief.Depth = line.Depth
+		out.Jobs = append(out.Jobs, brief)
+	}
+	return out
+}
+
+// withoutParent clears parent from rows' Parent, so job.TreeOrder places its
+// children at the top level rather than after a row the tree does not carry.
+func withoutParent(rows []types.Job, parent string) []types.Job {
+	if parent == "" {
+		return rows
+	}
+	out := slices.Clone(rows)
+	for i := range out {
+		if out[i].Parent == parent {
+			out[i].Parent = ""
+		}
+	}
+	return out
+}
+
+// briefTreeJob reads one job's row and its checkout.
+func briefTreeJob(ctx context.Context, rows []types.Job, result *types.JobResult, row types.Job, vcsOpts types.VCSOptions) briefJob {
+	job := briefJob{ID: row.ID, State: string(row.State), Checkout: row.CheckoutRoot}
+	if row.Worktree.Standing() {
+		job.Checkout = row.Worktree.Root
+	}
+	for _, dep := range row.DependsOn {
+		d := briefDependency{ID: dep}
+		if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == dep }); i >= 0 {
+			d.State = string(rows[i].State)
+			d.Satisfied = rows[i].State == types.StatePass
+		}
+		job.DependsOn = append(job.DependsOn, d)
+	}
+	if result != nil && len(result.UnresolvedRisks) > 0 {
+		job.Risk = result.UnresolvedRisks[0]
+	}
+	if job.Checkout != "" {
+		if _, err := os.Stat(job.Checkout); err != nil {
+			job.Gone = true
+		} else if res, err := vcs.Resolve(ctx, job.Checkout, "", vcsOpts); err == nil && res.VCS != nil {
+			if meta, err := res.VCS.Metadata(ctx, job.Checkout); err == nil {
+				job.Branch, job.Head = meta.Ref, meta.Short
+			}
+			job.Unpushed = unpushedCommits(ctx, res, job.Checkout)
+		}
+	}
+	job.Next = briefNextStep(rows, row, job.Unpushed)
+	return job
+}
+
+// briefNextStep is the step the row says comes next, "" when it is the holder's to take
+// or nothing is owed.
+func briefNextStep(rows []types.Job, row types.Job, unpushed *briefUnpushed) string {
+	switch row.State {
+	case types.StateExited:
+		return "collect it: " + hint.JobWait.With(row.ID)
+	case types.StateDeclared:
+		if block, blocked := types.JobBlockedOn(rows, row); blocked {
+			if block.State == "" {
+				return fmt.Sprintf("waits on %s, which no job declares", block.On)
+			}
+			return fmt.Sprintf("waits on %s (%s)", block.On, string(block.State))
+		}
+		return "take it: " + hint.JobExec.With(row.ID)
+	case types.StatePass:
+		if unpushed != nil && unpushed.Count > 0 {
+			return fmt.Sprintf("gate it in its checkout (%s), then push", hint.Affected.With("ci"))
+		}
+	case types.StateFail, types.StateNoReturn:
+		return "read why: " + hint.DescribeJob.With(row.ID)
+	}
+	return ""
+}
+
+// lastRunFailures reports the failing targets of the most recent session that ran
+// one, with the command that reads each one's captured output.
+//
+// The most recent SESSION rather than the most recent failure: a session that has
+// since run green answered the question already, and reporting its predecessor's
+// failures would send a reader after work that is done.
+func lastRunFailures(r Readers, root string) []briefFailure {
+	dir, err := sessions.Dir(root)
+	if err != nil {
+		return nil
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return nil
+	}
+	for _, s := range r.InCheckout(sessions.Summarize(fold), root) {
+		if len(s.Targets) == 0 {
+			continue
+		}
+		var out []briefFailure
+		for _, t := range s.Targets {
+			if t.Outcome != sessions.OutcomeFail {
+				continue
+			}
+			f := briefFailure{Target: t.Target, Project: t.Project, Ref: t.Ref, DiagnosticCode: t.DiagnosticCode, At: briefTime(s.LastMs)}
+			if t.Ref != "" {
+				f.Inspect = hint.QueryOutput.With(t.Ref)
+			}
+			out = append(out, f)
+		}
+		return out
+	}
+	return nil
+}
+
+// briefAttentionQueue reads the store `session ls` reads, through the same
+// [sessions.AttentionQueue]. A queue it cannot read is reported as Unread: silence would
+// read as none open. "Since" is the last activity of the checkout's previous host session.
+func briefAttentionQueue(r Readers, root string) *briefAttention {
+	dir, err := sessions.Dir(root)
+	if err != nil {
+		return &briefAttention{Unread: err.Error()}
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return &briefAttention{Unread: err.Error()}
+	}
+	queue := sessions.AttentionQueue(fold)
+	out := &briefAttention{Open: len(queue)}
+	if len(queue) == 0 {
+		return out
+	}
+	out.Oldest = &briefAttentionRow{ID: queue[0].ID, Source: queue[0].Source, Outcome: queue[0].Outcome, OpenedMs: queue[0].OpenedMs}
+
+	summaries := r.InCheckout(sessions.Summarize(fold), root)
+	if len(summaries) > 0 {
+		current := summaries[0].Session
+		for _, s := range summaries {
+			if s.Session != "" && s.Session != current {
+				out.SinceMs = s.LastMs
+				break
+			}
+		}
+	}
+	if out.SinceMs == 0 {
+		return out
+	}
+	for _, req := range queue {
+		if req.OpenedMs <= out.SinceMs {
+			continue
+		}
+		if len(out.Since) == briefMaxAttention {
+			out.SinceMore++
+			continue
+		}
+		out.Since = append(out.Since, briefAttentionRow{ID: req.ID, Source: req.Source, Outcome: req.Outcome, OpenedMs: req.OpenedMs})
+	}
+	return out
+}
+
+// ruleLocations names the instruction files and skill directories that exist in this
+// checkout. What EXISTS, never a recommended list: a path magus prints that is not
+// there teaches a reader to ignore the line. wired are magusfile-selected harness
+// spell names (workspace.WiredHarnesses); a harness with no id in wired names no
+// skill directory here.
+func ruleLocations(ctx context.Context, root string, wired ...string) []string {
+	var out []string
+	if _, err := os.Stat(filepath.Join(root, agent.AgentsFile)); err == nil {
+		out = append(out, agent.AgentsFile)
+	}
+	// Best-effort display: omit skill dirs when descriptors fail to load rather
+	// than inventing Installed state from an empty list.
+	if dirs, err := agent.HarnessSkillDirs(ctx, root, wired...); err == nil {
+		for _, dir := range dirs {
+			if info, err := os.Stat(filepath.Join(root, dir)); err == nil && info.IsDir() {
+				out = append(out, dir)
+			}
+		}
+	}
+	return out
+}
+
+// relativePaths renders absolute paths inside root as workspace-relative ones, which is
+// the spelling every other magus command prints and takes back.
+func relativePaths(root string, paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if rel, err := filepath.Rel(root, p); err == nil && !strings.HasPrefix(rel, "..") {
+			p = filepath.ToSlash(rel)
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// Text renders the brief. Plain ASCII, no escape sequences and no color: a hook
+// writes this into a model's context, where a control sequence is noise that costs
+// tokens and can never be seen. Every line goes through briefLine, so the width
+// bound holds for the output rather than for the fields it was assembled from.
+func (b Payload) Text() string {
+	var s strings.Builder
+	briefLine(&s, "magus brief: read from this checkout just now, not from the summary above")
+
+	if b.Branch != "" {
+		briefLine(&s, "branch: %s  revision: %s", b.Branch, orDash(b.Revision))
+	} else {
+		briefLine(&s, "revision: %s", orDash(b.Revision))
+	}
+
+	if u := b.Unpushed; u != nil {
+		at := ""
+		if u.AtLeast {
+			at = "at least "
+		}
+		briefLine(&s, "unpushed: %s%d commit(s) not on %s", at, u.Count, u.Base)
+	}
+	if b.Console != "" {
+		briefLine(&s, "console: %s (it asks for a token)", b.Console)
+	}
+	b.writeTree(&s)
+	b.writePromptCache(&s)
+	b.writeFailures(&s)
+	b.writeLeases(&s)
+	b.writeUnintegrated(&s)
+	unmerged := b.Unmerged.Lines()
+	for _, line := range unmerged[:min(len(unmerged), briefUnmergedLines)] {
+		briefLine(&s, "%s", line)
+	}
+	if len(unmerged) > briefUnmergedLines {
+		briefLine(&s, "  and %d more; `%s` lists every one", len(unmerged)-briefUnmergedLines, hint.LsJobs.With())
+	}
+	b.writeJobs(&s)
+	b.writeAttention(&s)
+	b.writeFeedback(&s)
+	b.writeRecent(&s)
+
+	if len(b.GuardWiring) > 0 {
+		briefLine(&s, "guard wiring: %s", strings.Join(b.GuardWiring, ", "))
+	} else {
+		briefLine(&s, "guard wiring: none in this checkout, so nothing here runs the rules")
+	}
+	if len(b.Rules) > 0 {
+		briefLine(&s, "rules live in %s; re-read them, nothing above restates one", strings.Join(b.Rules, ", "))
+	}
+	return s.String()
+}
+
+// writeRecent names the earlier sessions and the one command that opens one.
+//
+// It NAMES them rather than summarizing them. A summary of what another session did is
+// prose about prose, two removes from the transcript and wrong in a way the reader cannot
+// detect; the id plus `magus session show` puts them one command from the record itself.
+func (b Payload) writeRecent(s *strings.Builder) {
+	if len(b.Recent) == 0 {
+		return
+	}
+	briefLine(s, "earlier sessions loaded here (%s reads one):", hint.SessionShow)
+	for _, r := range b.Recent {
+		host := r.Host
+		if host == "" {
+			host = "unknown host"
+		}
+		briefLine(s, "  %s  %s, %s, last active %s",
+			r.Session, host, countNoun(r.Events, "event"), humanAge(time.UnixMilli(r.LastMs)))
+	}
+}
+
+func (b Payload) writeFeedback(s *strings.Builder) {
+	if len(b.Feedback) == 0 {
+		return
+	}
+	item := b.Feedback[0]
+	followed := "no later replacement request observed"
+	if item.FollowedSessions > 0 {
+		followed = fmt.Sprintf("replacement requested in %d session(s); execution outcome is unobservable", item.FollowedSessions)
+	}
+	briefLine(s, "improvement review: %s denied %d times across %d session(s); %s", item.Rule, item.Denied, item.Sessions, followed)
+	briefLine(s, "  inspect evidence and choose a human-reviewed action: %s (recurring-guard-denials)", hint.Doctor.String())
+}
+
+func (b Payload) writeTree(s *strings.Builder) {
+	if !b.Tree.Reported {
+		briefLine(s, "tree: no VCS answered here, so nothing is reported about it")
+		return
+	}
+	if b.Tree.Dirty == 0 {
+		briefLine(s, "tree: clean")
+		return
+	}
+	if !b.Tree.Classified {
+		// Said out loud, because the counts a reader expects here are missing for a
+		// reason they can act on.
+		briefLine(s, "tree: %d changed file(s), unclassified (the magusfile did not load)", b.Tree.Dirty)
+		return
+	}
+	// Counts only: the paths are one `git status` away, and a list here would spend
+	// the window this lands in on what the model can read for itself.
+	briefLine(s, "tree: %d changed file(s): %d source, %d output, %d unclaimed",
+		b.Tree.Dirty, len(b.Tree.Sources), len(b.Tree.Outputs), len(b.Tree.Unclaimed))
+}
+
+// writePromptCache splits the windows into the two groups a resuming session acts on,
+// rather than listing each one's closing instant the way the human listing does. The
+// question here is binary and the answer is three lines of context at most: this lands in
+// a model's window through a hook, and a five-row table of clock times would cost more
+// than the decision it informs.
+func (b Payload) writePromptCache(s *strings.Builder) {
+	if len(b.PromptCache.Providers) == 0 {
+		return
+	}
+	var closed, open []string
+	for _, p := range b.PromptCache.Providers {
+		for _, w := range p.Windows {
+			if w.Closed {
+				closed = append(closed, fmt.Sprintf("%s %s", p.Provider, w.Window))
+			} else {
+				open = append(open, fmt.Sprintf("%s %s", p.Provider, w.Window))
+			}
+		}
+	}
+	briefLine(s, "prompt cache: last tool call here %s ago; a resume past a closed window re-pays the prompt", b.PromptCache.SinceText())
+	if len(closed) > 0 {
+		briefLine(s, "  closed: %s", strings.Join(closed, ", "))
+	}
+	if len(open) > 0 {
+		briefLine(s, "  open: %s", strings.Join(open, ", "))
+	}
+}
+
+func (b Payload) writeLeases(s *strings.Builder) {
+	if len(b.Leases) > 0 {
+		briefLine(s, "leases live here:")
+	}
+	for _, l := range b.Leases {
+		briefLine(s, "  %s (%s): %s", l.ID, orDash(l.State), orDash(l.Instructions))
+		briefLine(s, "    exec: %s", l.Exec)
+		if l.Validation != "" {
+			briefLine(s, "    validation: %s", l.Validation)
+		}
+		for _, c := range l.Claims {
+			briefLine(s, "    claimed: %s", c)
+		}
+	}
+	if b.OtherLeases > 0 {
+		briefLine(s, "%d other leases: `%s`", b.OtherLeases, hint.LsJobs.String())
+	}
+}
+
+// unintegratedBranches counts the finished branches waiting off this checkout's revision,
+// nil when none wait. A count that could not be read says why rather than reading as zero.
+func unintegratedBranches(ctx context.Context, r Readers, root string) *briefUnintegrated {
+	out := &briefUnintegrated{}
+	store, err := r.OpenJobs(ctx, root)
+	if err != nil {
+		out.Unknown = err.Error()
+		return out
+	}
+	var waiting []job.Unintegrated
+	waiting, err = store.UnintegratedBranches(ctx)
+	switch {
+	case err != nil:
+		out.Unknown = err.Error()
+		return out
+	case len(waiting) == 0:
+		return nil
+	}
+	out.Count = len(waiting)
+	for _, w := range waiting {
+		out.Branches = append(out.Branches, w.Branch)
+	}
+	return out
+}
+
+func (b Payload) writeUnintegrated(s *strings.Builder) {
+	u := b.Unintegrated
+	switch {
+	case u == nil:
+		return
+	case u.Unknown != "":
+		briefLine(s, "finished branches off the base: unknown, %s", u.Unknown)
+		return
+	}
+	briefLine(s, "finished branches off the base: %d: %s", u.Count, strings.Join(u.Branches, ", "))
+	briefLine(s, "  integrate them: `%s` with a record naming them in integrates", hint.JobFork.With("--stdin", "--checkout", "<dir>"))
+}
+
+func (b Payload) writeJobs(s *strings.Builder) {
+	t := b.Jobs
+	switch {
+	case t == nil:
+		return
+	case t.Unread != "":
+		briefLine(s, "jobs: the store could not be read (%s); `%s` reads the same store", t.Unread, hint.LsJobs)
+		return
+	case t.Root != "":
+		briefLine(s, "jobs forked under %s:", t.Root)
+	default:
+		briefLine(s, "jobs forked from this checkout:")
+	}
+	for _, j := range t.Jobs {
+		indent := strings.Repeat("  ", j.Depth+1)
+		briefLine(s, "%s%s (%s) %s", indent, j.ID, orDash(j.State), b.jobPlace(j))
+		if len(j.DependsOn) > 0 {
+			deps := make([]string, len(j.DependsOn))
+			for i, d := range j.DependsOn {
+				switch {
+				case d.State == "":
+					deps[i] = d.ID + " (not declared)"
+				case d.Satisfied:
+					deps[i] = d.ID + " (pass)"
+				default:
+					deps[i] = fmt.Sprintf("%s (%s, unsatisfied)", d.ID, d.State)
+				}
+			}
+			briefLine(s, "%s  depends on: %s", indent, strings.Join(deps, ", "))
+		}
+		if j.Risk != "" {
+			briefLine(s, "%s  risk: %s", indent, j.Risk)
+		}
+		if j.Next != "" {
+			briefLine(s, "%s  next: %s", indent, j.Next)
+		}
+	}
+	if t.More > 0 {
+		briefLine(s, "  and %d more: `%s`", t.More, hint.LsJobs)
+	}
+	if len(t.Uncollected) > 0 {
+		briefLine(s, "exited and never collected, so each ends as no_return unless waited on:")
+		for _, id := range t.Uncollected {
+			briefLine(s, "  %s", hint.JobWait.With(id))
+		}
+	}
+}
+
+// jobPlace says where a job's work lives: branch, head, checkout and unpushed count.
+func (b Payload) jobPlace(j briefJob) string {
+	switch {
+	case j.Checkout == "":
+		return "no checkout yet"
+	case j.Gone:
+		return fmt.Sprintf("checkout %s is gone", j.Checkout)
+	}
+	where := "in " + j.Checkout
+	if filepath.Clean(j.Checkout) == filepath.Clean(b.Workspace) {
+		where = "in this checkout"
+	}
+	if j.Head != "" {
+		where = fmt.Sprintf("on %s at %s %s", cmp.Or(j.Branch, "a detached head"), j.Head, where)
+	}
+	if u := j.Unpushed; u != nil && u.Count > 0 {
+		at := ""
+		if u.AtLeast {
+			at = "at least "
+		}
+		where += fmt.Sprintf(", %s%d commit(s) not on %s", at, u.Count, u.Base)
+	}
+	return where
+}
+
+func (b Payload) writeAttention(s *strings.Builder) {
+	a := b.Attention
+	switch {
+	case a == nil:
+		return
+	case a.Unread != "":
+		briefLine(s, "attention: the queue could not be read (%s); `%s` reads the same store", a.Unread, hint.SessionAttention)
+		return
+	case a.Open == 0:
+		briefLine(s, "attention: none open")
+		return
+	}
+	briefLine(s, "attention: %d open; `%s` lists them, `%s` closes one", a.Open, hint.SessionAttention, hint.SessionDispose.With("<id>"))
+	if o := a.Oldest; o != nil {
+		briefLine(s, "  oldest: %s %s, raised %s", o.ID, attentionRule(*o), humanAge(time.UnixMilli(o.OpenedMs)))
+	}
+	if a.SinceMs == 0 {
+		briefLine(s, "  no earlier session recorded in this checkout, so nothing is marked as new")
+		return
+	}
+	if len(a.Since) == 0 {
+		briefLine(s, "  none raised since the previous session here, last active %s", humanAge(time.UnixMilli(a.SinceMs)))
+		return
+	}
+	briefLine(s, "  raised since the previous session here, last active %s:", humanAge(time.UnixMilli(a.SinceMs)))
+	for _, r := range a.Since {
+		briefLine(s, "    %s %s, %s", r.ID, attentionRule(r), humanAge(time.UnixMilli(r.OpenedMs)))
+	}
+	if a.SinceMore > 0 {
+		briefLine(s, "    and %d more", a.SinceMore)
+	}
+}
+
+// attentionRule names what raised a row, a dash when the producer sent no source.
+func attentionRule(r briefAttentionRow) string {
+	if r.Outcome == "" {
+		return orDash(r.Source)
+	}
+	return fmt.Sprintf("%s (%s)", orDash(r.Source), r.Outcome)
+}
+
+func (b Payload) writeFailures(s *strings.Builder) {
+	if len(b.Failures) == 0 {
+		return
+	}
+	briefLine(s, "the last recorded run failed:")
+	for _, f := range b.Failures {
+		if f.DiagnosticCode != "" {
+			briefLine(s, "  %s %s [%s] (%s)", f.Target, orDash(f.Project), f.DiagnosticCode, orDash(f.At))
+		} else {
+			briefLine(s, "  %s %s (%s)", f.Target, orDash(f.Project), orDash(f.At))
+		}
+		if f.Inspect != "" {
+			briefLine(s, "    %s", f.Inspect)
+		}
+	}
+}
+
+// briefLine writes one line, clipped to briefTextWidth and marked where it cut.
+func briefLine(s *strings.Builder, format string, args ...any) {
+	line := fmt.Sprintf(format, args...)
+	if len(line) > briefTextWidth {
+		line = line[:briefTextWidth-3] + "..."
+	}
+	s.WriteString(line)
+	s.WriteByte('\n')
+}
+
+// briefTime renders a recorded millisecond stamp, or "" for one that was never set.
+func briefTime(ms int64) string {
+	if ms == 0 {
+		return ""
+	}
+	return time.UnixMilli(ms).Format("2006-01-02 15:04:05")
+}
+
+func claimLines(claims []types.JobClaim) []string {
+	if len(claims) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(claims))
+	for _, c := range claims {
+		lines = append(lines, fmt.Sprintf("%s (%s): %s", c.Path, c.Evidence, c.Proof))
+	}
+	return lines
+}
+
+// Readers are the reads Gather takes from the caller: each depends on the process's
+// configuration or on the job store's wiring, which this package does not own.
+type Readers struct {
+	// OpenJobs opens the job store of the workspace at root.
+	OpenJobs func(ctx context.Context, root string) (*job.Store, error)
+	// ActingLease is the lease a CLI call acts under in root's checkout, "" when none.
+	ActingLease func(ctx context.Context, root string) string
+	// PromptCache is the prompt-cache clock of root's checkout at now.
+	PromptCache func(root string, now time.Time) sessions.PromptCacheClock
+	// CacheDir is the cache directory of the workspace at root.
+	CacheDir func(root string) (string, error)
+	// ResolveRoot returns root, or the workspace found from the working directory when it is empty.
+	ResolveRoot func(root string) string
+	// ConsoleURL is where a person opens the console, "" when none is served.
+	ConsoleURL func() string
+	// InCheckout keeps the invocations that ran in the checkout at root.
+	InCheckout func(summaries []sessions.Summary, root string) []sessions.Summary
+}
+
+// orDash renders an empty or zero column as a dash.
+func orDash(s string) string {
+	if strings.TrimSpace(s) == "" || s == "0" {
+		return "-"
+	}
+	return s
+}
+
+func countNoun(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// humanAge renders how long ago something happened, coarsely: the reader's question is
+// "is this current work or history", which days answer and minutes do not.
+func humanAge(t time.Time) string {
+	if t.IsZero() {
+		return "at an unrecorded time"
+	}
+	switch d := time.Since(t); {
+	case d < time.Hour:
+		return "within the hour"
+	case d < 24*time.Hour:
+		return countNoun(int(d/time.Hour), "hour") + " ago"
+	default:
+		return countNoun(int(d/(24*time.Hour)), "day") + " ago"
+	}
+}
