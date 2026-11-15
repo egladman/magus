@@ -12,8 +12,10 @@ import "./hack/policy/verdict" as verdict;
 import "./hack/policy/mandate" as mandate;
 
 final isolationDenial = "a worker that changes code would share this checkout; spawn it with "
-    + "`isolation: \"worktree\"`.\n"
-    + "A worker that changes code gets its own checkout, and detaches onto its branch "
+    + "`isolation: \"worktree\"`.";
+
+// isolationReason is the rationale for the isolation refusal, sent with the session's first one.
+final isolationReason = "\nA worker that changes code gets its own checkout, and detaches onto its branch "
     + "(`git switch --detach <branch>`) as its first act. Measured 09-22: 312 writes from 7 workers sharing a checkout landed in the "
     + "orchestrator's tree, and no isolated writer's did. Thinking roles (plan, review, research, "
     + "scout) may share it, and so does integrate, which lands the work in this checkout.";
@@ -66,7 +68,7 @@ fun lineage(title: str) > Lineage? {
 // would share the spawning checkout, then a brief that tells its worker to build magus. rows is null when the store could not be read, which
 // unreadable says why: the row rule then advises and never denies. A continue starts
 // nothing, so it passes both.
-export fun decideSpawn(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVerdict {
+export fun decideSpawn(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str, once: fun (key: str) > bool) > GuardVerdict {
     if (spawn.kind != magus\SpawnKind.spawn) {
         return magus\guard.allow();
     }
@@ -75,6 +77,9 @@ export fun decideSpawn(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: st
         return row;
     }
     if (!spawn.isolated and changeRoles.indexOf(helpers\titleRole(spawn.title)) != null) {
+        if (once("spawn-isolation-refusal")) {
+            return magus\guard.deny(isolationDenial + isolationReason);
+        }
         return magus\guard.deny(isolationDenial);
     }
     if (helpers\titleRole(spawn.title) == integrateRole) {
@@ -216,7 +221,7 @@ final store = [
 
 // judged is decideSpawn with every denial held to the verdict shape.
 fun judged(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVerdict {
-    return verdict\checked(decideSpawn(spawn, rows: rows, unreadable: unreadable), label: spawn.title);
+    return verdict\checked(decideSpawn(spawn, rows: rows, unreadable: unreadable, once: fun (key: str) > bool { return false; }), label: spawn.title);
 }
 
 test "a live row passes" {
@@ -274,6 +279,25 @@ test "an unreadable store advises and never denies" {
     std\assert(v.decision == magus\GuardDecision.advise, message: "fails open");
     std\assert(v.reason.indexOf("schema 10") != null, message: "names the cause");
     std\assert(judged(request("orchestrator/feat anything", isolated: false), rows: null, unreadable: "x").decision == magus\GuardDecision.deny, message: "isolation still denies");
+}
+
+test "the isolation refusal gives its rationale with the first refusal only" {
+    final told = mut [<str>];
+    final once = fun (key: str) > bool {
+        if (told.indexOf(key) != null) {
+            return false;
+        }
+        told.append(key);
+        return true;
+    };
+    final first = decideSpawn(request("orchestrator/feat guard-command", isolated: false), rows: store, unreadable: "", once: once);
+    std\assert(first.decision == magus\GuardDecision.deny, message: "first refused");
+    std\assert(first.reason.indexOf("312 writes") != null and first.reason.indexOf("git switch --detach") != null, message: "first carries the rationale");
+    final later = decideSpawn(request("orchestrator/fix naming-advisory", isolated: false), rows: store, unreadable: "", once: once);
+    std\assert(later.decision == magus\GuardDecision.deny, message: "later still refused");
+    std\assert(later.reason.indexOf("isolation: \"worktree\"") != null, message: "later keeps the remedy");
+    std\assert(later.reason.indexOf("312 writes") == null, message: "later omits the rationale");
+    std\assert(decideSpawn(request("orchestrator/review naming-advisory", isolated: true), rows: store, unreadable: "", once: once).decision == magus\GuardDecision.allow, message: "an isolated spawn is told nothing");
 }
 
 test "a code-changing spawn without its own checkout is denied" {
