@@ -9,6 +9,7 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/generate"
 	"github.com/egladman/magus/libs/xdg"
@@ -20,7 +21,7 @@ func manCommand(args []string) error {
 	fs.SetOutput(os.Stderr)
 	fs.Usage = manUsage
 	mf := flaggen.BindSelfMan(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {

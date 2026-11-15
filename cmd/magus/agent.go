@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
@@ -119,7 +120,7 @@ func agentInstallCommand(ctx context.Context, args []string) error {
 	bindDisplayFlags(fset)
 	af := flaggen.BindAgent(fset)
 	fset.Usage = func() { agentUsage(os.Stderr) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+	if err := command.Parse(fset, reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	form, err := agent.ParseForm(af.SkillForm)

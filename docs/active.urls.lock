@@ -185,6 +185,19 @@ decisions/0029-the-mod-draws-magus-figures-it-does-not-compute/
 decisions/0030-buzz-reads-state-through-typed-repositories/
 decisions/0031-a-claim-counts-only-what-runs-in-it/
 decisions/0032-one-dependency-mechanism/
+decisions/0033-a-kind-is-a-reader-and-its-rules/
+decisions/0034-the-docs-site-renders-in-typed-passes/
+decisions/0035-buzz-bindings-come-from-one-config-driven-generator/
+decisions/0036-subagent-structured-io/
+decisions/0037-proofread-judges-a-text-against-its-author/
+decisions/0038-a-person-advises-every-session-through-the-hooks/
+decisions/0039-judging-is-a-pure-computation/
+decisions/0043-job-records-are-buzz-data/
+decisions/0044-a-job-may-carry-an-agent/
+decisions/0045-a-worker-is-judged-by-its-checkpoint/
+decisions/0046-the-judge-takes-any-agent-step/
+decisions/0047-the-magus-module-has-namespaces/
+decisions/0048-a-local-ci-repairs-a-declared-writer/
 dependencies/
 design/
 design/judgment/
@@ -213,6 +226,7 @@ design/principles/built-for-the-expensive-era/
 design/principles/built-for-the-largest-monorepos/
 design/principles/capability-is-not-a-reason/
 design/principles/clear-is-better-than-clever/
+design/principles/compute-once/
 design/principles/delete-before-you-add/
 design/principles/enforcement-not-pinky-promises/
 design/principles/every-answer-has-an-address/
@@ -253,6 +267,8 @@ development/docs-guides-integrations-agents/
 development/docs/
 development/evals/
 development/gopherbuzz/
+development/libs-apiversion/
+development/libs-clikit/
 development/libs-cmdline/
 development/libs-coldread/
 development/libs-commentdash/
@@ -271,9 +287,11 @@ development/libs-pricing/
 development/libs-proofread-train/
 development/libs-proofread/
 development/libs-scipbuzz/
+development/libs-ssg/
 development/libs-termkit/
 development/libs-testpairing/
 development/libs-testsprawl/
+development/libs-text/
 development/libs-textsearch/
 development/libs-xdg/
 development/magus/
@@ -361,6 +379,7 @@ glossary/slot/
 glossary/snapshot/
 glossary/span/
 glossary/spawn-claim/
+glossary/spec/
 glossary/spell/
 glossary/target/
 glossary/tool/
@@ -374,6 +393,7 @@ guides/
 guides/affected/
 guides/agents/
 guides/authoring-spells/
+guides/connecting-workspaces/
 guides/daemon/
 guides/debugging/
 guides/diagrams/
@@ -565,6 +585,7 @@ reference/buzz/flags/
 reference/buzz/fmt/
 reference/buzz/fs/
 reference/buzz/hex/
+reference/buzz/html/
 reference/buzz/http/
 reference/buzz/image/
 reference/buzz/ini/
@@ -800,6 +821,9 @@ reference/codes/sandbox/MGS3051/
 reference/codes/sandbox/MGS3052/
 reference/codes/sandbox/MGS3053/
 reference/codes/sandbox/MGS3054/
+reference/codes/sandbox/MGS3055/
+reference/codes/sandbox/MGS3056/
+reference/codes/sandbox/MGS3057/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -872,6 +896,7 @@ reference/proofread/banned-word/
 reference/proofread/bare-imperative/
 reference/proofread/bare-lgtm/
 reference/proofread/bare-rule/
+reference/proofread/bare-symbol/
 reference/proofread/blame/
 reference/proofread/block-budget/
 reference/proofread/body-separator/
@@ -902,8 +927,10 @@ reference/proofread/date-format/
 reference/proofread/decline-no-reason/
 reference/proofread/deferral-no-link/
 reference/proofread/docstub/
+reference/proofread/emphasis/
 reference/proofread/empty-request-changes/
 reference/proofread/filler/
+reference/proofread/first-person/
 reference/proofread/grade/
 reference/proofread/heading-case/
 reference/proofread/hedge/
@@ -920,6 +947,7 @@ reference/proofread/lead-context/
 reference/proofread/leak/
 reference/proofread/list-marks/
 reference/proofread/list-parallel/
+reference/proofread/local-branch/
 reference/proofread/local-path/
 reference/proofread/long-thread/
 reference/proofread/message-commands/
@@ -934,6 +962,7 @@ reference/proofread/nonspecific/
 reference/proofread/option-list/
 reference/proofread/participles/
 reference/proofread/repeated-marks/
+reference/proofread/repeated-opener/
 reference/proofread/reply-opener/
 reference/proofread/reply-voice/
 reference/proofread/request-recap/
@@ -966,6 +995,7 @@ reference/proofread/tool-length/
 reference/proofread/tool-selling/
 reference/proofread/triad/
 reference/proofread/unbacked-done/
+reference/proofread/uniform/
 reference/proofread/vague/
 reference/proofread/verdict/
 reference/proofread/voice-drift/
@@ -975,6 +1005,7 @@ reference/remote-spells/
 reference/rules/
 reference/rules/agent-sign-off/
 reference/rules/ambiguous-ci-word/
+reference/rules/architecture-before-skill/
 reference/rules/architecture-unbriefed/
 reference/rules/background-left/
 reference/rules/background-silent/
@@ -983,6 +1014,7 @@ reference/rules/backtick-substitution/
 reference/rules/brief-command/
 reference/rules/brief-plain-commands/
 reference/rules/busy-wait/
+reference/rules/buzz-before-skill/
 reference/rules/buzz-unbriefed/
 reference/rules/cache-clear/
 reference/rules/cache-dir-write/
@@ -1025,6 +1057,7 @@ reference/rules/installed-skill/
 reference/rules/instruction-write/
 reference/rules/interpreter-rewrite/
 reference/rules/interpreter-script/
+reference/rules/lease-authority/
 reference/rules/lease-checkout/
 reference/rules/lease-claim/
 reference/rules/lease-gate/
@@ -1051,9 +1084,11 @@ reference/rules/notes-author/
 reference/rules/orchestrator-groundwork/
 reference/rules/output-pipe/
 reference/rules/output-redirect/
+reference/rules/person-advisory/
 reference/rules/person-only/
 reference/rules/policy-unloaded/
 reference/rules/precedent-search/
+reference/rules/process-lookup/
 reference/rules/process-poll/
 reference/rules/process-signal/
 reference/rules/push-gate/
@@ -1083,9 +1118,12 @@ reference/rules/sleep-poll/
 reference/rules/source-read/
 reference/rules/spawn-above-model-tier/
 reference/rules/spawn-above-parent-tier/
+reference/rules/spawn-before-skill/
+reference/rules/spawn-command/
 reference/rules/spawn-duplicate/
 reference/rules/spawn-names-model/
 reference/rules/spawn-nested-waiter/
+reference/rules/spawn-plain-commands/
 reference/rules/spawn-unbriefed/
 reference/rules/spawn-unisolated-row/
 reference/rules/spawn-unplaced/
@@ -1098,12 +1136,16 @@ reference/rules/stage-classify/
 reference/rules/stale-binary/
 reference/rules/stall/
 reference/rules/stdin-closed/
+reference/rules/step-input/
+reference/rules/stop-unfiled/
 reference/rules/symbol-search/
 reference/rules/throwaway-copy/
 reference/rules/timed-magus/
 reference/rules/token-state/
+reference/rules/unjudged-step/
 reference/rules/unjudged-tool/
 reference/rules/unknown-env/
+reference/rules/unknown-magus-argv/
 reference/rules/unleased-write/
 reference/rules/unread-command/
 reference/rules/vcs-off-switch/
@@ -1333,6 +1375,7 @@ tags/globs/
 tags/glossary/
 tags/go/
 tags/goals/
+tags/gopherbuzz/
 tags/grant/
 tags/graph-build/
 tags/graph/
@@ -1423,6 +1466,7 @@ tags/mgs-5002/
 tags/mgs/
 tags/migration/
 tags/mise/
+tags/model-tier/
 tags/model-tiers/
 tags/module/
 tags/monitoring/
@@ -1493,6 +1537,7 @@ tags/queue/
 tags/race/
 tags/readiness/
 tags/reads-files/
+tags/records/
 tags/recursion/
 tags/redaction/
 tags/redundancy/
@@ -1517,6 +1562,7 @@ tags/rules/
 tags/run/
 tags/runaway/
 tags/rust/
+tags/rw/
 tags/sandbox/
 tags/sbom/
 tags/scanners/
@@ -1538,6 +1584,7 @@ tags/service-op/
 tags/services/
 tags/session/
 tags/sessions-and-leases/
+tags/sessions/
 tags/setup/
 tags/shard/
 tags/sharding/
@@ -1567,7 +1614,9 @@ tags/stdin/
 tags/stdio/
 tags/stdlib/
 tags/store/
+tags/stores/
 tags/strengthen-only/
+tags/subagents/
 tags/subscribe/
 tags/supply-chain/
 tags/supported/

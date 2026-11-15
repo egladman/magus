@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/vcs"
@@ -36,7 +37,7 @@ func configCommand(ctx context.Context, root string, cfg config.Config, args []s
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Run `magus config <subcommand> -h` for flags.")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	rest := fs.Args()
@@ -156,7 +157,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Flags:")
 		printOwnDefaults(fs)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	opts, err := outputOptionsOrDefault()

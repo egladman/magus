@@ -33,7 +33,7 @@ var backtickSpan = regexp.MustCompile("`([^`]+)`")
 var waitLines = map[string]string{
 	"busy-wait":    "until ./magus run test .; do sleep 30; done",
 	"sleep-poll":   "sleep 30; ./magus server status; ./magus run test .",
-	"process-poll": "pgrep -f magus; ./magus run test .",
+	"process-poll": "ps -p 4242; ./magus run test .",
 }
 
 func (s *WaitSetSuite) served(line string) ShellVerdict {

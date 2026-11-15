@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 )
 
@@ -78,7 +79,7 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 		fmt.Fprintln(os.Stderr, "Flags:")
 		printOwnDefaults(fs)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	opts, err := outputOptionsOrDefault()
@@ -179,7 +180,7 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 		fmt.Fprintln(os.Stderr, "Flags:")
 		printOwnDefaults(fs)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	opts, err := outputOptionsOrDefault()
@@ -259,7 +260,7 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Flags:")
 		printOwnDefaults(fs)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 

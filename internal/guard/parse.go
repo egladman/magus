@@ -1090,11 +1090,7 @@ func bodyOnlySleeps(body []*syntax.Stmt, d Dialect) bool {
 // the lock message and status already name the holder.
 func processPollFires(cmds []hint.Invocation) bool {
 	for _, c := range cmds {
-		switch path.Base(c.Name) {
-		case "pgrep", "pidof", "ps":
-			return true
-		}
-		if processProbe(c) {
+		if path.Base(c.Name) == "ps" || processProbe(c) {
 			return true
 		}
 	}
