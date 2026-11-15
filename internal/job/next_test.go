@@ -1,13 +1,15 @@
-package main
+package job
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,24 +20,19 @@ var nextFixture = []types.NextStep{
 	{ID: "query-path", Run: "magus explain spell:go --to spell:gomod", Argv: []string{"magus", "explain", "spell:go", "--to", "spell:gomod"}, Why: "explain --to prints the chain."},
 }
 
-func gateAt(base, session string) nextGate {
-	return nextGate{gate: hint.NewGate(base, session), role: hint.RoleUnbound}
+func gateAt(base, session string) NextGate {
+	return NextGate{gate: hint.NewGate(base, session), role: hint.RoleUnbound}
 }
 
 // The Run line is navigation and prints every time; the Why is advice and says nothing
 // the second time, so it fires once per session and the command survives it. The two
 // never share a line: a reader copies the command, and a parenthetical on it comes along.
 func TestPrintNextFiresEachWhyOnce(t *testing.T) {
-	// printNext reads the process-global -s, which an earlier test in the package may
-	// have left set.
-	saved := global
-	t.Cleanup(func() { global = saved })
-	global.silent = false
 	s := gateAt(t.TempDir(), "session-1")
 
 	var first, second bytes.Buffer
-	printNext(&first, s, nextFixture)
-	printNext(&second, s, nextFixture)
+	PrintNext(&first, s, nextFixture, false)
+	PrintNext(&second, s, nextFixture, false)
 
 	assert.Equal(t, "\nnext:\n"+
 		"  magus explain spell:go\n"+
@@ -53,8 +50,8 @@ func TestPrintNextRepeatsWhyInANewSession(t *testing.T) {
 	base := t.TempDir()
 
 	var first, other bytes.Buffer
-	printNext(&first, gateAt(base, "session-1"), nextFixture)
-	printNext(&other, gateAt(base, "session-2"), nextFixture)
+	PrintNext(&first, gateAt(base, "session-1"), nextFixture, false)
+	PrintNext(&other, gateAt(base, "session-2"), nextFixture, false)
 
 	assert.Equal(t, first.String(), other.String())
 }
@@ -63,26 +60,22 @@ func TestPrintNextRepeatsWhyInANewSession(t *testing.T) {
 // the explanation for the next full one.
 func TestPrintNextUnderSilentKeepsRunAndSpendsNothing(t *testing.T) {
 	s := gateAt(t.TempDir(), "session-1")
-	prev := global.silent
-	global.silent = true
-	defer func() { global.silent = prev }()
 
 	var quiet bytes.Buffer
-	printNext(&quiet, s, nextFixture)
+	PrintNext(&quiet, s, nextFixture, true)
 	assert.Equal(t, "\nnext:\n"+
 		"  magus explain spell:go\n"+
 		"  magus explain spell:go --to spell:gomod\n", quiet.String())
 
-	global.silent = false
 	var loud bytes.Buffer
-	printNext(&loud, s, nextFixture)
+	PrintNext(&loud, s, nextFixture, false)
 	assert.Contains(t, loud.String(), "explain names a node's edges.")
 }
 
 // Nothing to suggest prints nothing at all, label included.
 func TestPrintNextPrintsNothingWhenEmpty(t *testing.T) {
 	var buf bytes.Buffer
-	printNext(&buf, gateAt(t.TempDir(), "session-1"), nil)
+	PrintNext(&buf, gateAt(t.TempDir(), "session-1"), nil, false)
 	assert.Empty(t, buf.String())
 }
 
@@ -91,7 +84,7 @@ func TestPrintNextPrintsNothingWhenEmpty(t *testing.T) {
 func TestServedJournalsEveryEntry(t *testing.T) {
 	base := t.TempDir()
 
-	served := gateAt(base, "").served(nextFixture)
+	served := gateAt(base, "").Served(nextFixture)
 	require.Len(t, served, 2)
 
 	raw, err := os.ReadFile(hint.ServedNextPath(base))
@@ -126,9 +119,9 @@ func TestServedFiltersWritesByRole(t *testing.T) {
 		{"worker outside its write paths", hint.RoleWorker, []string{"cmd/magus/**"}, []string{"query-explain", "query-path"}},
 		{"reviewer", hint.RoleReviewer, nil, []string{"query-explain", "query-path"}},
 	} {
-		n := nextGate{gate: hint.NewGate(t.TempDir(), ""), role: tc.role, writePaths: tc.writePaths}
+		n := NextGate{gate: hint.NewGate(t.TempDir(), ""), role: tc.role, writePaths: tc.writePaths}
 		var ids []string
-		for _, entry := range n.served(full) {
+		for _, entry := range n.Served(full) {
 			ids = append(ids, entry.ID)
 		}
 		assert.Equal(t, tc.want, ids, tc.name)
@@ -138,7 +131,7 @@ func TestServedFiltersWritesByRole(t *testing.T) {
 // The wrappers add one key beside the result they carry, and drop it entirely when
 // there is nothing to suggest, so absence stays measurable.
 func TestQueryAndExplainResultsCarryTheNextField(t *testing.T) {
-	q, err := json.Marshal(queryWithNext{
+	q, err := json.Marshal(QueryWithNext{
 		KnowledgeQueryOutput: types.KnowledgeQueryOutput{Query: "kind=spell go", MatchCount: 1},
 		Next:                 nextFixture,
 	})
@@ -146,14 +139,14 @@ func TestQueryAndExplainResultsCarryTheNextField(t *testing.T) {
 	assert.Contains(t, string(q), `"query":"kind=spell go"`, "the result is flattened, not nested under the embedded type")
 	assert.Contains(t, string(q), `"next":[{"id":"query-explain","run":"magus explain spell:go"`)
 
-	x, err := json.Marshal(explainWithNext{
+	x, err := json.Marshal(ExplainWithNext{
 		KnowledgeExplainOutput: types.KnowledgeExplainOutput{Node: types.KnowledgeNode{ID: "spell:go"}},
 	})
 	require.NoError(t, err)
 	assert.Contains(t, string(x), `"id":"spell:go"`)
 	assert.NotContains(t, string(x), "next", "an empty set carries no field, never an empty list")
 
-	f, err := json.Marshal(filesWithNext{
+	f, err := json.Marshal(FilesWithNext{
 		FileReport: types.NewFileReport([]types.FileEntry{{Path: "MAGUS.md", Role: "output"}}),
 		Next:       nextFixture[:1],
 	})
@@ -167,13 +160,18 @@ func TestQueryAndExplainResultsCarryTheNextField(t *testing.T) {
 // protecting against, so the walk descends into the embedded result.
 func TestJSONLStaysAmbiguousForAQueryCarryingNext(t *testing.T) {
 	var buf bytes.Buffer
-	err := renderJSONL(&buf, queryWithNext{Next: nextFixture})
+	err := renderNextJSONL(&buf, QueryWithNext{Next: nextFixture})
 
 	require.Error(t, err)
 	for _, key := range []string{"matches", "nodes", "links", "next"} {
 		assert.Contains(t, err.Error(), key, "the error names every candidate, embedded ones included")
 	}
 	assert.Empty(t, buf.String())
+}
+
+func renderNextJSONL(w io.Writer, v any) error {
+	wr := output.Writer{Codec: output.Codec{Marshal: json.Marshal, Unmarshal: json.Unmarshal}}
+	return wr.Write(w, output.Options{Format: output.JSONL}, v)
 }
 
 // NextStreamable stands in for a result that declares its own stream. Exported because
@@ -191,6 +189,6 @@ func TestJSONLFindsAPrimaryInsideAnEmbeddedResultNext(t *testing.T) {
 	}{NextStreamable: NextStreamable{Rows: []string{"a", "b"}}, Next: nextFixture}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderJSONL(&buf, v))
+	require.NoError(t, renderNextJSONL(&buf, v))
 	assert.Equal(t, []string{`"a"`, `"b"`}, strings.Fields(strings.TrimSpace(buf.String())))
 }

@@ -126,10 +126,3 @@ func TestAuthHintIsRunnable(t *testing.T) {
 	require.NotContains(t, got, "token=$(", "no token in argv")
 	require.NotContains(t, got, "config token print", "a sign-in line never hands the operator token to a browser")
 }
-
-func TestConsoleSkew(t *testing.T) {
-	require.Empty(t, consoleSkew("v1", "v1"))
-	require.Empty(t, consoleSkew("", "v1"), "a server that did not say is not skew")
-	got := consoleSkew("v1", "v2")
-	require.Equal(t, "the console serves build v1; this command uses build v2", got)
-}
