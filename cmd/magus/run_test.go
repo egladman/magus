@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
+	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
@@ -571,7 +572,7 @@ func TestDecodeSavedPlan(t *testing.T) {
 			{Shard: "1", Projects: ". docs", Digest: types.UnitsDigest(one), Units: one},
 			{Shard: "2", Projects: "console", Digest: types.UnitsDigest(two), Units: two},
 		},
-		Outputs: []planPublish{{Name: "count", Value: "2"}},
+		Outputs: []internalci.PlanPublish{{Name: "count", Value: "2"}},
 	}, got)
 
 	refused := []struct {
@@ -733,7 +734,7 @@ func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
 
 	out := planOutput{Target: "ci", Count: 1, MaxParallel: 1,
 		Matrix: []planShard{{Shard: "1", Projects: ". docs", JobName: ". docs", Digest: "d", Duties: "notes-verify"}}}
-	out.Outputs, err = planOutputs(out)
+	out.Outputs, err = internalci.PlanOutputs(out)
 	require.NoError(t, err)
 	out.Summary = planSummaryMarkdown(out)
 
