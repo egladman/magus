@@ -33,7 +33,7 @@ export fun guardPathFigure() > figure\Figure !> any {
         .actor(policy)
         .actor(verdict)
         .edgesFromGraph()
-        .hideEdges([shell], dst: [jobs, sessions, trail],
+        .hideEdges([shell], dst: [catalog, jobs, sessions, trail],
             why: "the shell's own uses are other verbs; a call reaches them through the guard")
         .hideEdges([jobs, trail], dst: [sessions, trail],
             why: "the stores read each other for their own verbs; the guard's path reads each one directly")
