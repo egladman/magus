@@ -48,26 +48,6 @@ func TestOOVScanCountsAnIdentifierAsWholeAndParts(t *testing.T) {
 	assert.Equal(t, []oovFile{{tokens: 3, missing: 1}}, files, "getvalue has no row; get and value do")
 }
 
-func TestOOVRateIntervalFollowsTheFiles(t *testing.T) {
-	rate, low, high, tokens, err := oovRate([]oovFile{{100, 10}, {100, 10}, {100, 10}})
-	require.NoError(t, err)
-	assert.InDelta(t, 0.1, rate, 1e-12)
-	assert.Equal(t, 300, tokens)
-	assert.InDelta(t, 0.1, low, 1e-12, "identical files leave no spread")
-	assert.InDelta(t, 0.1, high, 1e-12)
-
-	rate, low, high, _, err = oovRate([]oovFile{{100, 0}, {100, 40}})
-	require.NoError(t, err)
-	assert.InDelta(t, 0.2, rate, 1e-12)
-	assert.Less(t, low, rate)
-	assert.Greater(t, high, rate)
-	assert.GreaterOrEqual(t, low, 0.0)
-	assert.LessOrEqual(t, high, 1.0)
-
-	_, _, _, _, err = oovRate(nil)
-	assert.Error(t, err, "no tokens means no rate")
-}
-
 func TestOOVRecordAppendsThroughTheEvalWriter(t *testing.T) {
 	rec, err := oovRecord(oovRepos[0], inputRecord{Revision: "abc"}, "digest", []oovFile{{tokens: 10, missing: 1}, {tokens: 10, missing: 3}})
 	require.NoError(t, err)

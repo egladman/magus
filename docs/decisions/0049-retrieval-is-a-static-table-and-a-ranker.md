@@ -38,7 +38,7 @@ them with measured rows before this record is accepted.
 | Every node is embedded at graph build into an int8 sidecar, and dense top-K joins the candidates (C1)                                  | planned |
 | A deterministic code-aware ranker runs, with integer weights fit offline once per release on the judged-dev set (D1, D2)               | planned |
 | Training data covers six CoRNStack languages and excludes `hack/**` (E1)                                                               | planned |
-| TypeScript training data waits on the corpus study (E2)                                                                                | planned |
+| TypeScript training data waits on the study of its sources (E2)                                                                        | planned |
 | Training is staged; the teacher is GTE-ModernBERT-base under Apache-2.0, or CodeRankEmbed if the F2 gate fails (F1-F3)                 | planned |
 | Per-repo adaptation happens at index time and is integer-only: repo-frequency reweighting and graph-neighbour retrofitting (G1, G2)    | planned |
 | Each step lands only on a recorded gain in `libs/embed/evals.jsonl` or `testdata/retrieval/baseline.jsonl`                            | planned |
@@ -65,7 +65,7 @@ GPL-3.0-compatible.
 
 ## Alternatives
 
-### The table built into the binary (+7.9 MB)
+### The table built into the binary
 
 Lost: Eli decided data sets are OCI artifacts, and the table adds 7,897,813 bytes to every
 binary. Reopen if an install must rank with embeddings with no registry reachable.
@@ -121,6 +121,6 @@ Lost: magus never calls a model ([Scope](../scope.md)). Nothing reopens it.
 
 ## Open questions
 
-- The TypeScript corpus.
+- The TypeScript training sources.
 - Whether a cross-repo judged set is built for G2's claim.
 - Vocabulary shape K2 or K6, pending A3.

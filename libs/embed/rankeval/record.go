@@ -1,6 +1,7 @@
 package rankeval
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -63,6 +64,35 @@ func (r EvalRecord) validate() error {
 		return fmt.Errorf("eval record %s on %s: value %v is outside [%v, %v]", r.System, r.Set, r.Value, r.Low, r.High)
 	}
 	return nil
+}
+
+// Cluster is one cluster's hits among its trials, such as one file's
+// tokens with no vocabulary row among all its tokens.
+type Cluster struct{ Trials, Hits int }
+
+// ClusterRatio is the share of hits over all trials, with a 95% interval
+// from the clusters' own spread. Trials within a cluster are not
+// independent, so the interval counts each cluster as one draw.
+func ClusterRatio(clusters []Cluster) (rate, low, high float64, trials int, err error) {
+	var hits int
+	for _, c := range clusters {
+		trials += c.Trials
+		hits += c.Hits
+	}
+	if trials == 0 {
+		return 0, 0, 0, 0, errors.New("no trials in any cluster")
+	}
+	rate = float64(hits) / float64(trials)
+	var ss float64
+	for _, c := range clusters {
+		d := float64(c.Hits) - rate*float64(c.Trials)
+		ss += d * d
+	}
+	half := 0.0
+	if n := float64(len(clusters)); n > 1 {
+		half = 1.96 * math.Sqrt(ss*n/(n-1)) / float64(trials)
+	}
+	return rate, math.Max(0, rate-half), math.Min(1, rate+half), trials, nil
 }
 
 // ReadEvalRecords reads JSON Lines, one EvalRecord per non-blank line, and names the

@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -86,35 +85,14 @@ func scanOOV(r io.Reader, exts []string, vocab map[string]bool) ([]oovFile, erro
 	}
 }
 
-// oovRate is the share of tokens with no vocabulary row and a 95% interval from the
-// files' own spread. Tokens within a file are not independent, so the interval treats
-// each file as one draw (a ratio estimator's cluster variance), not each token.
-func oovRate(files []oovFile) (rate, low, high float64, tokens int, err error) {
-	var missing int
-	for _, f := range files {
-		tokens += f.tokens
-		missing += f.missing
-	}
-	if tokens == 0 {
-		return 0, 0, 0, 0, errors.New("no tokens in any source file")
-	}
-	rate = float64(missing) / float64(tokens)
-	var ss float64
-	for _, f := range files {
-		d := float64(f.missing) - rate*float64(f.tokens)
-		ss += d * d
-	}
-	half := 0.0
-	if n := float64(len(files)); n > 1 {
-		half = 1.96 * math.Sqrt(ss*n/(n-1)) / float64(tokens)
-	}
-	return rate, math.Max(0, rate-half), math.Min(1, rate+half), tokens, nil
-}
-
 // oovRecord is the evals.jsonl row for one repo. Queries carries the token count, the
 // rate's denominator, and Export the commit the tarball is pinned at.
 func oovRecord(r oovRepo, in inputRecord, tableDigest string, files []oovFile) (rankeval.EvalRecord, error) {
-	rate, low, high, tokens, err := oovRate(files)
+	clusters := make([]rankeval.Cluster, len(files))
+	for i, f := range files {
+		clusters[i] = rankeval.Cluster{Trials: f.tokens, Hits: f.missing}
+	}
+	rate, low, high, tokens, err := rankeval.ClusterRatio(clusters)
 	if err != nil {
 		return rankeval.EvalRecord{}, fmt.Errorf("%s: %w", r.name, err)
 	}

@@ -27,6 +27,26 @@ func TestEvalRecordRoundTripLastRowWins(t *testing.T) {
 	require.Equal(t, []EvalRecord{sampleRecord("bm25", 0.35), sampleRecord("potion", 0.40)}, got)
 }
 
+func TestClusterRatioIntervalFollowsTheClusters(t *testing.T) {
+	rate, low, high, trials, err := ClusterRatio([]Cluster{{100, 10}, {100, 10}, {100, 10}})
+	require.NoError(t, err)
+	require.InDelta(t, 0.1, rate, 1e-12)
+	require.Equal(t, 300, trials)
+	require.InDelta(t, 0.1, low, 1e-12, "identical clusters leave no spread")
+	require.InDelta(t, 0.1, high, 1e-12)
+
+	rate, low, high, _, err = ClusterRatio([]Cluster{{100, 0}, {100, 40}})
+	require.NoError(t, err)
+	require.InDelta(t, 0.2, rate, 1e-12)
+	require.Less(t, low, rate)
+	require.Greater(t, high, rate)
+	require.GreaterOrEqual(t, low, 0.0)
+	require.LessOrEqual(t, high, 1.0)
+
+	_, _, _, _, err = ClusterRatio(nil)
+	require.Error(t, err, "no trials means no rate")
+}
+
 func TestEvalRecordRefusesBadRows(t *testing.T) {
 	dir := t.TempDir()
 	require.Error(t, AppendEvalRecord(filepath.Join(dir, "a.jsonl"), sampleRecord("", 0.3)))
