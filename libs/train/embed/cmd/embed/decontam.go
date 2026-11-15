@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/libs/embed/train/teacher"
+	"github.com/egladman/magus/libs/train/embed/teacher"
 )
 
 // Decontamination drops a training text that repeats an eval text: the whole text after

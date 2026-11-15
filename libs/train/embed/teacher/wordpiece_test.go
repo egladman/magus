@@ -46,7 +46,7 @@ func pinnedPotionTokenizer(t *testing.T) string {
 func TestPotionWordPiecePieces(t *testing.T) {
 	path := pinnedPotionTokenizer(t)
 	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
-		t.Skipf("%s is not fetched; run `magus run fetch libs/embed/train -- %s`", path, potionTokenizer)
+		t.Skipf("%s is not fetched; run `magus run fetch libs/train -- %s`", path, potionTokenizer)
 	}
 	w, err := LoadTokenizerJSON(path)
 	if err != nil {

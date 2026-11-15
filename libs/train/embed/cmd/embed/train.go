@@ -13,8 +13,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/embed"
-	"github.com/egladman/magus/libs/embed/train/distill"
-	"github.com/egladman/magus/libs/embed/train/teacher"
+	"github.com/egladman/magus/libs/train/embed/distill"
+	"github.com/egladman/magus/libs/train/embed/teacher"
 )
 
 // pcaSalt picks the training texts whose targets PCA is fitted on.
@@ -28,7 +28,7 @@ type vocabFlags struct {
 }
 
 func (f *vocabFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.texts, "texts", "", "the training texts, JSON lines of {\"id\", \"text\"}, as embed-mine writes them under libs/embed/train/gen/")
+	fs.StringVar(&f.texts, "texts", "", "the training texts, JSON lines of {\"id\", \"text\"}, as embed-mine writes them under libs/train/embed/gen/")
 	fs.StringVar(&f.forced, "forced", "", "forced tokens, one per line; every token embed.Tokens yields from a line is kept")
 	fs.IntVar(&f.minCount, "min-count", 2, "a counted token below this count is left out")
 	fs.IntVar(&f.maxBytes, "max-bytes", 32, "a counted token longer than this is left out")
@@ -162,7 +162,7 @@ func (f *trainFlags) register(fs *flag.FlagSet) {
 	f.vocab.register(fs)
 	fs.StringVar(&f.tokenRun, "token-run", "", "the teacher run directory over `embed vocab`'s token texts")
 	fs.StringVar(&f.textsRun, "texts-run", "", "the teacher run directory over -texts")
-	fs.StringVar(&f.pairs, "pairs", "", "pairs JSON lines (libs/embed/train/gen/pairs.jsonl); required unless -lambda 0")
+	fs.StringVar(&f.pairs, "pairs", "", "pairs JSON lines (libs/train/embed/gen/pairs.jsonl); required unless -lambda 0")
 	fs.StringVar(&f.root, "root", ".", "the tree pair refs resolve against, at the pinned commit")
 	fs.IntVar(&f.dims, "dims", 256, "table dims, a multiple of 64")
 	fs.IntVar(&f.pcaSample, "pca-sample", 131072, "text targets the PCA is fitted on, picked by hash")

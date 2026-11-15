@@ -30,7 +30,7 @@ const (
 	// layerMediaType is the table layer's media type: the bytes embed.ReadTable decodes.
 	layerMediaType = "application/vnd.magus.embed-table.layer.v1"
 	// fileName is the table's name in the cache root and its layer's title, the file
-	// `magus run table libs/embed/train` hashes.
+	// `magus run table libs/train` hashes.
 	fileName = "potion-code-16M-v2.table"
 )
 
@@ -42,7 +42,7 @@ var errAbsent = errors.New("embedtable: no embedding table in the cache")
 // Options locates the cache root.
 type Options struct {
 	// Dir is the cache root holding the table file. Empty means the magus-embed directory
-	// under xdg.CacheDir, the root `magus run table libs/embed/train` writes.
+	// under xdg.CacheDir, the root `magus run table libs/train` writes.
 	Dir string
 }
 
@@ -165,7 +165,7 @@ func publish(ctx context.Context, client *oci.Client, ref oci.Reference, tablePa
 	}
 	data, err := os.ReadFile(tablePath)
 	if errors.Is(err, fs.ErrNotExist) {
-		return false, fmt.Errorf("%w: %s is missing, run `magus run table libs/embed/train`", errAbsent, tablePath)
+		return false, fmt.Errorf("%w: %s is missing, run `magus run table libs/train`", errAbsent, tablePath)
 	}
 	if err != nil {
 		return false, fmt.Errorf("embedtable: %w", err)

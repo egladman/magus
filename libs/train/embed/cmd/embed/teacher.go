@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/libs/embed/train/teacher"
+	"github.com/egladman/magus/libs/train/embed/teacher"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/gobackend"
@@ -107,7 +107,7 @@ func (c *common) register(fs *flag.FlagSet) {
 	if dir, err := xdg.CacheDir(); err == nil {
 		cache = filepath.Join(dir, "magus-embed")
 	}
-	fs.StringVar(&c.inputs, "inputs", "inputs.jsonl", "the pinned inputs file")
+	fs.StringVar(&c.inputs, "inputs", "embed/inputs.jsonl", "the pinned inputs file")
 	fs.StringVar(&c.cache, "cache", cache, "the cache root inputs.jsonl paths are relative to")
 	fs.StringVar(&c.model, "model", "", "the teacher: CodeRankEmbed or nomic-embed-text-v1.5")
 	fs.StringVar(&c.backend, "backend", "xla", "xla (PJRT CPU plugin) or go (pure Go, no cgo kernels)")

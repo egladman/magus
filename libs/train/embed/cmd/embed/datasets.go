@@ -17,8 +17,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/libs/embed/train/distill"
-	"github.com/egladman/magus/libs/embed/train/teacher"
+	"github.com/egladman/magus/libs/train/embed/distill"
+	"github.com/egladman/magus/libs/train/embed/teacher"
 )
 
 // jsonlTexts reads JSON lines of {"id", "text"}, the shape embed-mine writes and the
@@ -46,7 +46,7 @@ func (c jsonlTexts) Texts() iter.Seq2[distill.Text, error] {
 	}
 }
 
-// pairRecord is one line of libs/embed/train/gen/pairs.jsonl: references into the tree at
+// pairRecord is one line of libs/train/embed/gen/pairs.jsonl: references into the tree at
 // the pinned commit, never the text itself.
 type pairRecord struct {
 	Source   string `json:"source"`

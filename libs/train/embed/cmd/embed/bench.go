@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/embed/rankeval"
-	"github.com/egladman/magus/libs/embed/train/teacher"
+	"github.com/egladman/magus/libs/train/embed/teacher"
 )
 
 // benchPrompt is one teacher's query and document prompts. bench puts them in the texts
