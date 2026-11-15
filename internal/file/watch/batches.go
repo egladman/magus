@@ -3,8 +3,10 @@ package watch
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"slices"
+	"sync"
 )
 
 // AllSentinel is a stream-batch marker that triggers a full-workspace selection.
@@ -108,8 +110,79 @@ func ReadBatches(ctx context.Context, r io.Reader, null bool) <-chan []string {
 	return ch
 }
 
-// MergePaths is the sorted union of a and b.
-func MergePaths(a, b []string) []string {
+// RunBatches calls run on each non-empty batch from batches, one batch at a time, and
+// returns once batches closes or ctx ends and the batch in flight has finished. Batches
+// that arrive while one runs are merged and run together after it. A batch that fails,
+// by an error or a panic, goes to errFn and the loop carries on: under --watch the next
+// change is the retry. errFn may be nil.
+func RunBatches(ctx context.Context, batches <-chan []string, run func([]string) error, errFn func(error)) {
+	if errFn == nil {
+		errFn = func(error) {}
+	}
+	var (
+		mu      sync.Mutex
+		pending []string
+		running bool
+		wg      sync.WaitGroup
+	)
+	for {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			return
+		case paths, ok := <-batches:
+			if !ok {
+				wg.Wait()
+				return
+			}
+			if len(paths) == 0 {
+				continue
+			}
+			mu.Lock()
+			if running {
+				pending = mergePaths(pending, paths)
+				mu.Unlock()
+				continue
+			}
+			running = true
+			wg.Add(1)
+			mu.Unlock()
+			go func(p []string) {
+				defer wg.Done()
+				for {
+					runRecovered(run, p, errFn)
+					mu.Lock()
+					next := pending
+					pending = nil
+					if len(next) == 0 || ctx.Err() != nil {
+						running = false
+						mu.Unlock()
+						return
+					}
+					mu.Unlock()
+					p = next
+				}
+			}(paths)
+		}
+	}
+}
+
+// runRecovered runs one batch. A panic is recovered here, per batch, rather than at the
+// worker goroutine: a dead worker would orphan the batches already merged into pending,
+// and the drain loop is the one owner of running=false.
+func runRecovered(run func([]string) error, paths []string, errFn func(error)) {
+	defer func() {
+		if r := recover(); r != nil {
+			errFn(fmt.Errorf("stream: panic: %v", r))
+		}
+	}()
+	if err := run(paths); err != nil {
+		errFn(err)
+	}
+}
+
+// mergePaths is the sorted union of a and b.
+func mergePaths(a, b []string) []string {
 	s := slices.Concat(a, b)
 	slices.Sort(s)
 	return slices.Compact(s)
