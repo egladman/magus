@@ -43,10 +43,10 @@ import (
 //
 // builtins() sets compiled rules by name; see registerBuiltins. profile() picks the level
 // those settings start from; see registerProfile.
-func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) vm.Value {
+func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool) vm.Value {
 	guardMap := vm.NewMap()
 	registerVerdictMembers(ctx, sess, obs, guardMap)
-	registerEventRules(ctx, sess, obs, guardMap)
+	registerEventRules(ctx, sess, obs, guardMap, parseMode)
 	registerBuiltins(ctx, obs, guardMap)
 	registerProfile(ctx, obs, guardMap)
 	guardMap.MapSet("shell", directVal(obs, "magus.guard.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -287,34 +287,38 @@ func parseShellDialect(s string) (string, error) {
 // registerEventRules binds magus\guard.spawn, command, write and stop onto guardMap. Command
 // and write run after the built-in rules; stop runs on each Stop and SubagentStop the
 // built-in stop check lets through.
-func registerEventRules(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value) {
+func registerEventRules(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value, parseMode bool) {
 	for _, r := range []functionRule{
 		{member: "spawn", signature: "fun(req: SpawnRequest) > GuardVerdict", judges: "every agent spawn",
 			set: func(reg *workspace.WorkspaceRegistry, sess *buzz.Session, fn vm.Value) {
 				reg.SetSpawnRule(buzzRule(sess, fn, "spawn", bindgen.ObjectSpawnRequest))
-			}},
+			},
+			stored: func(reg *workspace.WorkspaceRegistry) bool { return reg.SpawnRule() != nil }},
 		{member: "command", signature: "fun(req: CommandRequest) > GuardVerdict", judges: "every agent shell command",
 			set: func(reg *workspace.WorkspaceRegistry, sess *buzz.Session, fn vm.Value) {
 				reg.SetCommandRule(buzzRule(sess, fn, "command", bindgen.ObjectCommandRequest))
-			}},
+			},
+			stored: func(reg *workspace.WorkspaceRegistry) bool { return reg.CommandRule() != nil }},
 		{member: "write", signature: "fun(req: WriteRequest) > GuardVerdict", judges: "every agent file write",
 			set: func(reg *workspace.WorkspaceRegistry, sess *buzz.Session, fn vm.Value) {
 				reg.SetWriteRule(buzzRule(sess, fn, "write", bindgen.ObjectWriteRequest))
-			}},
+			},
+			stored: func(reg *workspace.WorkspaceRegistry) bool { return reg.WriteRule() != nil }},
 		{member: "stop", signature: "fun(req: StopRequest) > GuardVerdict", judges: "every agent stop",
 			set: func(reg *workspace.WorkspaceRegistry, sess *buzz.Session, fn vm.Value) {
 				reg.SetStopRule(buzzRule(sess, fn, "stop", bindgen.ObjectStopRequest))
-			}},
+			},
+			stored: func(reg *workspace.WorkspaceRegistry) bool { return reg.StopRule() != nil }},
 	} {
-		registerFunctionRule(ctx, sess, obs, guardMap, r)
+		registerFunctionRule(ctx, sess, obs, guardMap, r, parseMode)
 	}
-	registerStepRule(ctx, sess, obs, guardMap)
+	registerStepRule(ctx, sess, obs, guardMap, parseMode)
 }
 
 // registerStepRule binds magus\guard.step(kind, fun) onto guardMap. Each kind
 // has one rule, kept on the load's steps.Group rather than its registry.
-// Refusals are MGS1045, as registerFunctionRule's are.
-func registerStepRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value) {
+// Refusals are MGS1045, and only a parse-mode load stores, as registerFunctionRule's are.
+func registerStepRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value, parseMode bool) {
 	const name = `magus\guard.step`
 	// Per session, as registerFunctionRule counts.
 	registered := map[string]bool{}
@@ -337,6 +341,13 @@ func registerStepRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectOb
 		}
 		registered[kind] = true
 		group, reg := steps.GroupFromContext(ctx), workspace.WorkspaceRegistryFromContext(ctx)
+		if !parseMode {
+			if group != nil && group.Rule(kind) == nil {
+				return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+					`%s: kind %q registered while a target runs and not when the workspace loaded; register it at the top of the root magusfile`, name, kind)
+			}
+			return vm.Null, nil
+		}
 		if group != nil && reg != nil && sess != nil {
 			group.Set(kind, steps.Rule(buzzRule(sess, args[1], "step", func(req agent.StepRequest, _ ffi.EnumCases) vm.Value {
 				return bindgen.ObjectStepRequest(req)

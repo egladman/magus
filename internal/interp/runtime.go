@@ -1069,7 +1069,8 @@ func Parse(ctx context.Context, src *Source) ([]Target, error) {
 // targets is the session's dispatchable target registry; exports maps each
 // canonical target key to the exported function value itself, so ctx.needs
 // can verify a passed function IS the exported target (nil when the session
-// has no export discovery, e.g. the REPL). parseMode=true collects names only.
+// has no export discovery, e.g. the REPL). parseMode=true collects names only, and is
+// also the only mode whose function rules are stored; it does not stub target bodies.
 // An error means the magus declarations could not be installed.
 type BuzzHostBindingsFn func(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool) error
 
