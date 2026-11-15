@@ -480,7 +480,11 @@ func Parse(fs *flag.FlagSet, args []string) error {
 			err = fmt.Errorf("%w (did you mean -%s?)", err, near)
 		}
 	}
-	return fmt.Errorf("%w; `magus %s -h` lists the flags", err, fs.Name())
+	cmd := strings.TrimSpace(strings.TrimPrefix("magus "+fs.Name(), "magus magus"))
+	if cmd == "" {
+		cmd = "magus"
+	}
+	return fmt.Errorf("%w; `%s -h` lists the flags", err, cmd)
 }
 
 // nearestFlag is the registered flag closest to name by edit distance, or ""

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/termkit"
 	"io"
 	"net/http"
@@ -151,7 +152,7 @@ func selfUpdateCommand(ctx context.Context, args []string) error {
 	}
 	// -y and --yes are one switch, which the registry expresses with AliasOf.
 	uf := flaggen.BindSelfUpdate(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	format, err := outputOptionsOrDefault()

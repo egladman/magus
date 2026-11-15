@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 )
 
@@ -26,7 +27,7 @@ func completion(args []string) error {
 	fs := flag.NewFlagSet("self completion", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = completionUsage
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {

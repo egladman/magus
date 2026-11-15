@@ -1,7 +1,6 @@
 package command
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/stretchr/testify/suite"
 )
 
 func ExampleWalk() {
@@ -224,8 +224,11 @@ func TestACommandRecordNamesTheClikitCommandGroup(t *testing.T) {
 	}
 }
 
-func parseSet(t *testing.T, usage func()) (*flag.FlagSet, *strings.Builder) {
-	t.Helper()
+type ParseSuite struct{ suite.Suite }
+
+func TestParseSuite(t *testing.T) { suite.Run(t, new(ParseSuite)) }
+
+func (s *ParseSuite) flagSet(usage func()) (*flag.FlagSet, *strings.Builder) {
 	fs := flag.NewFlagSet("job fork", flag.ContinueOnError)
 	fs.String("goals", "", "")
 	fs.String("check", "", "")
@@ -235,33 +238,28 @@ func parseSet(t *testing.T, usage func()) (*flag.FlagSet, *strings.Builder) {
 	return fs, out
 }
 
-func TestParseNamesTheNearestFlagWithoutPrintingUsage(t *testing.T) {
+func (s *ParseSuite) TestUnknownFlagNamesTheNearestFlagWithoutUsage() {
 	called := false
-	fs, out := parseSet(t, func() { called = true })
+	fs, out := s.flagSet(func() { called = true })
 	err := Parse(fs, []string{"--goal", "y"})
-	if err == nil || !strings.Contains(err.Error(), "flag provided but not defined: -goal (did you mean -goals?)") {
-		t.Fatalf("err = %v", err)
-	}
-	if !strings.Contains(err.Error(), "`magus job fork -h`") {
-		t.Fatalf("err names no -h: %v", err)
-	}
-	if called || out.Len() != 0 {
-		t.Fatalf("usage printed on an unknown flag: called=%v out=%q", called, out.String())
-	}
+	s.Require().Error(err)
+	s.Contains(err.Error(), "flag provided but not defined: -goal (did you mean -goals?)")
+	s.Contains(err.Error(), "`magus job fork -h`")
+	s.False(called)
+	s.Empty(out.String())
 }
 
-func TestParseOffersNoNameForADistantFlag(t *testing.T) {
-	fs, _ := parseSet(t, func() {})
+func (s *ParseSuite) TestDistantFlagGetsNoSuggestion() {
+	fs, _ := s.flagSet(func() {})
 	err := Parse(fs, []string{"--zzzzzzzz"})
-	if err == nil || strings.Contains(err.Error(), "did you mean") {
-		t.Fatalf("err = %v", err)
-	}
+	s.Require().Error(err)
+	s.NotContains(err.Error(), "did you mean")
 }
 
-func TestParseHelpStillPrintsFullUsage(t *testing.T) {
+func (s *ParseSuite) TestHelpStillPrintsFullUsage() {
 	called := false
-	fs, _ := parseSet(t, func() { called = true })
-	if err := Parse(fs, []string{"-h"}); !errors.Is(err, flag.ErrHelp) || !called {
-		t.Fatalf("err = %v, usage called = %v", err, called)
-	}
+	fs, _ := s.flagSet(func() { called = true })
+	err := Parse(fs, []string{"-h"})
+	s.ErrorIs(err, flag.ErrHelp)
+	s.True(called)
 }
