@@ -232,7 +232,10 @@ func withoutIgnored(ctx context.Context, root string, ws Workspace, files []stri
 	if ws.Ignored == nil {
 		return files, "no version control could be asked which written files it ignores, so the lint goal keeps every one"
 	}
-	ignored := ws.Ignored(files)
+	ignored, err := ws.Ignored(files)
+	if err != nil {
+		return files, fmt.Sprintf("the lint goal keeps every written file: %v", err)
+	}
 	if len(ignored) == 0 {
 		return files, ""
 	}
@@ -384,7 +387,7 @@ func declaredGateOwner(root string, rows []types.Job, row types.Job) gateOwner {
 // IntegratorDeviations is one deviation per output a target regenerates from row's write paths
 // that sits outside them: the integrator regenerates it after the job. An output a deny
 // path touches stays its owner's, and one a deviation of row accepts already needs no new one.
-func IntegratorDeviations(root string, row types.Job, projects []*types.Project, ignored func([]string) []string) []types.Deviation {
+func IntegratorDeviations(root string, row types.Job, projects []*types.Project, ignored func([]string) ([]string, error)) []types.Deviation {
 	var deviations []types.Deviation
 	for _, o := range RegeneratedOutside(root, row, projects, ignored) {
 		glob, _, _ := strings.Cut(o.Output, " !")

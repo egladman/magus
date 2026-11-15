@@ -608,7 +608,7 @@ type rowJudge struct {
 	// others are the path holders besides row, for who else holds an output a run regenerates.
 	others func() []types.Job
 	// ignored asks the VCS at root which paths it ignores, for job.RegeneratedOutside.
-	ignored func() func([]string) []string
+	ignored func() func([]string) ([]string, error)
 }
 
 func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at location, workspace func() (types.WorkspaceRepository, error)) rowJudge {
@@ -620,7 +620,7 @@ func newRowJudge(ctx context.Context, deps Dependencies, row types.Job, at locat
 			holders := types.PathHolders(actingLeaseStanding(ctx, deps, row.ID).rows)
 			return slices.DeleteFunc(holders, func(r types.Job) bool { return r.ID == row.ID })
 		}),
-		ignored: sync.OnceValue(func() func([]string) []string {
+		ignored: sync.OnceValue(func() func([]string) ([]string, error) {
 			return job.VCSIgnored(ctx, at.workspace)
 		}),
 		produces: sync.OnceValue(func() func(target, project string) bool {

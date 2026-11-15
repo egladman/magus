@@ -3,6 +3,7 @@ package job
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -678,4 +679,16 @@ func (s *LintGoalTrackedFilesSuite) TestAnUnaskableVCSKeepsEveryFileAndSaysSo() 
 
 	s.Equal([]string{"skills/kept/a.md"}, args)
 	s.Contains(note, "keeps every one")
+}
+
+func (s *LintGoalTrackedFilesSuite) TestAFailedIgnoreQueryKeepsEveryFileAndNamesTheError() {
+	repo := testkit.NewRepository(s.T(), map[string]string{"skills/kept/a.md": "# a\n"})
+	ws := s.workspace(repo.Root())
+	ws.Ignored = func([]string) ([]string, error) { return nil, errors.New("git check-ignore: exit status 128") }
+
+	args, note := s.resolve(repo, ws)
+
+	s.Equal([]string{"skills/kept/a.md"}, args)
+	s.Contains(note, "keeps every written file")
+	s.Contains(note, "git check-ignore: exit status 128")
 }
