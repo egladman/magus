@@ -163,7 +163,7 @@ need made by a direct call the graph does not see) are a workspace's to sanction
 - [Human in the loop](../design/principles/human-in-the-loop.md): magus writes the
   repair and stops; the commit stays the person's.
 - [A deliberate break never merges red](../design/principles/a-deliberate-break-never-merges-red.md):
-  the changed behaviour of a local `ci` under rw is recorded in
+  the changed behavior of a local `ci` under rw is recorded in
   `changes/unreleased/local-ci-repairs-a-declared-writer.md`.
 - [refusals.md](../design/refusals.md): the mode follows the charm, never where magus
   runs. A CI runner gets verify-only by passing `--no-default-charms`, not by being
