@@ -1,12 +1,10 @@
-package main
+package guard
 
 import (
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types/vcs"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -14,7 +12,7 @@ func TestReadCheckpointEnvelopeTakesOnlyThePointers(t *testing.T) {
 	body := `{"hook_event_name":"Stop","session_id":"01a07dab","transcript_path":"/tmp/rollout.jsonl",` +
 		`"last_assistant_message":"the model's closing words"}`
 
-	session, transcript := readCheckpointEnvelope(strings.NewReader(body))
+	session, transcript := ReadCheckpointEnvelope(strings.NewReader(body), false)
 
 	assert.Equal(t, "01a07dab", session)
 	assert.Equal(t, "/tmp/rollout.jsonl", transcript)
@@ -31,7 +29,7 @@ func TestReadCheckpointEnvelopeIgnoresWhatItCannotUse(t *testing.T) {
 	}
 	for name, body := range bodies {
 		t.Run(name, func(t *testing.T) {
-			session, transcript := readCheckpointEnvelope(strings.NewReader(body))
+			session, transcript := ReadCheckpointEnvelope(strings.NewReader(body), false)
 			assert.Empty(t, session)
 			assert.Empty(t, transcript)
 		})
@@ -44,7 +42,7 @@ func TestReadCheckpointEnvelopeGivesUpOnAReaderThatNeverEnds(t *testing.T) {
 	type pointers struct{ session, transcript string }
 	done := make(chan pointers, 1)
 	go func() {
-		session, transcript := readCheckpointEnvelope(neverEOF{})
+		session, transcript := ReadCheckpointEnvelope(neverEOF{}, false)
 		done <- pointers{session, transcript}
 	}()
 
@@ -53,7 +51,7 @@ func TestReadCheckpointEnvelopeGivesUpOnAReaderThatNeverEnds(t *testing.T) {
 		assert.Empty(t, got.session)
 		assert.Empty(t, got.transcript)
 	case <-time.After(checkpointEnvelopeWait + 5*time.Second):
-		t.Fatal("readCheckpointEnvelope blocked on a reader that never closes")
+		t.Fatal("ReadCheckpointEnvelope blocked on a reader that never closes")
 	}
 }
 
@@ -62,16 +60,3 @@ func TestReadCheckpointEnvelopeGivesUpOnAReaderThatNeverEnds(t *testing.T) {
 type neverEOF struct{}
 
 func (neverEOF) Read([]byte) (int, error) { select {} }
-
-func TestCheckpointRecordedLineDistinguishesANewOneFromAnUnchangedOne(t *testing.T) {
-	c := sessions.Checkpoint{
-		Workspace: "/repo",
-		Tree:      vcs.Checkpoint{Revision: "9cd51c88aef0d1e2", Branch: "handoff", Dirty: true},
-		Note:      "mid-refactor",
-	}
-
-	assert.Equal(t, "checkpoint at 9cd51c88aef0 on handoff, uncommitted changes: mid-refactor",
-		checkpointRecordedLine(c, true))
-	assert.Equal(t, "unchanged since the last checkpoint at 9cd51c88aef0 on handoff, uncommitted changes: mid-refactor",
-		checkpointRecordedLine(c, false))
-}

@@ -1,33 +1,32 @@
-package main
+package sessions
 
 import (
 	"bytes"
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/sessions"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // loadedStore writes events into a temp session store and folds it back, so the lens
 // is exercised against the store it actually reads rather than a hand-built Fold.
-func loadedStore(t *testing.T, events []sessions.LoadEvent) sessions.Fold {
+func loadedStore(t *testing.T, events []LoadEvent) Fold {
 	t.Helper()
 	dir := t.TempDir()
-	_, err := sessions.LoadEvents(t.Context(), dir, events, sessions.InvocationStart{Workspace: dir})
+	_, err := LoadEvents(t.Context(), dir, events, InvocationStart{Workspace: dir})
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	return fold
 }
 
 // shellCall builds one loaded shell command. ref keys the dedup, so each one is
 // distinct.
-func shellCall(session, ref string, ms int64, digest string, served, followed []string) sessions.LoadEvent {
-	return sessions.LoadEvent{Session: session, Event: sessions.AgentEvent{
+func shellCall(session, ref string, ms int64, digest string, served, followed []string) LoadEvent {
+	return LoadEvent{Session: session, Event: AgentEvent{
 		Host:         "test",
-		Kind:         sessions.EventShellCommand,
+		Kind:         EventShellCommand,
 		Ref:          ref,
 		AtMs:         ms,
 		Program:      "magus",
@@ -40,31 +39,31 @@ func shellCall(session, ref string, ms int64, digest string, served, followed []
 // One id followed, one rejected for another magus verb, and a reflex beside both: the
 // three describe different servings and do not sum to served.
 func TestHintUptakeCountsFollowedRejectedAndReflex(t *testing.T) {
-	fold := loadedStore(t, []sessions.LoadEvent{
+	fold := loadedStore(t, []LoadEvent{
 		shellCall("s1", "a1", 1_000, "d-query", []string{"query-explain", "query-path"}, nil),
 		shellCall("s1", "a2", 2_000, "d-explain", nil, []string{"query-explain"}),
 		shellCall("s1", "a3", 3_000, "d-query", nil, nil),
 	})
 
-	rows := map[string]hintUptakeRow{}
-	for _, r := range hintUptake(fold) {
+	rows := map[string]HintUptakeRow{}
+	for _, r := range HintUptake(fold) {
 		rows[r.ID] = r
 	}
 
 	explain := rows["query-explain"]
 	assert.InDelta(t, 1.0, explain.Rate, 0.001)
-	assert.Equal(t, hintUptakeRow{ID: "query-explain", Served: 1, Followed: 1, Reflex: 1, Rate: explain.Rate}, explain)
+	assert.Equal(t, HintUptakeRow{ID: "query-explain", Served: 1, Followed: 1, Reflex: 1, Rate: explain.Rate}, explain)
 
 	// A magus verb that was not the hinted one is a rejection, and the same command ran again
 	// inside the window.
 	path := rows["query-path"]
-	assert.Equal(t, hintUptakeRow{ID: "query-path", Served: 1, Rejected: 1, Reflex: 1}, path)
+	assert.Equal(t, HintUptakeRow{ID: "query-path", Served: 1, Rejected: 1, Reflex: 1}, path)
 }
 
 // The table leads with the best-converting hint, and hintUptake is where that order is
 // decided; the renderer prints what it is handed.
 func TestHintUptakeSortsByRateThenServed(t *testing.T) {
-	fold := loadedStore(t, []sessions.LoadEvent{
+	fold := loadedStore(t, []LoadEvent{
 		shellCall("s1", "a1", 1_000, "", []string{"file-impact"}, nil),
 		shellCall("s1", "a2", 2_000, "", []string{"query-explain"}, []string{"file-impact"}),
 		shellCall("s1", "a3", 3_000, "", []string{"query-path"}, []string{"query-explain"}),
@@ -74,7 +73,7 @@ func TestHintUptakeSortsByRateThenServed(t *testing.T) {
 	})
 
 	var ids []string
-	for _, r := range hintUptake(fold) {
+	for _, r := range HintUptake(fold) {
 		ids = append(ids, r.ID)
 	}
 	assert.Equal(t, []string{"file-impact", "query-explain", "query-path"}, ids,
@@ -85,14 +84,14 @@ func TestHintUptakeSortsByRateThenServed(t *testing.T) {
 // decision, and magus informs.
 func TestRenderHintUptakeNamesTheFloor(t *testing.T) {
 	var buf bytes.Buffer
-	renderHintUptake(&buf, hintUptakeReport{
-		Floor:     hintFloor,
-		Lookahead: nextLookahead,
-		Hints: []hintUptakeRow{
+	require.NoError(t, RenderHintUptake(&buf, HintUptakeReport{
+		Floor:     HintFloor,
+		Lookahead: NextLookahead,
+		Hints: []HintUptakeRow{
 			{ID: "query-explain", Served: 10, Followed: 4, Rejected: 5, Reflex: 1, Rate: 0.4},
 			{ID: "file-impact", Served: 20, Followed: 1, Rejected: 12, Rate: 0.05},
 		},
-	})
+	}))
 
 	out := buf.String()
 	assert.True(t, strings.Index(out, "query-explain") < strings.Index(out, "file-impact"),
@@ -107,23 +106,23 @@ func TestRenderHintUptakeNamesTheFloor(t *testing.T) {
 // the ids, so every line written after the first load would be uncountable forever.
 func TestHintUptakeRecoversIDsOnASecondLoad(t *testing.T) {
 	dir := t.TempDir()
-	early := []sessions.LoadEvent{
+	early := []LoadEvent{
 		shellCall("s1", "a1", 1_000, "", nil, nil),
 		shellCall("s1", "a2", 2_000, "", nil, nil),
 	}
-	_, err := sessions.LoadEvents(t.Context(), dir, early, sessions.InvocationStart{Workspace: dir})
+	_, err := LoadEvents(t.Context(), dir, early, InvocationStart{Workspace: dir})
 	require.NoError(t, err)
 
-	joined := []sessions.LoadEvent{
+	joined := []LoadEvent{
 		shellCall("s1", "a1", 1_000, "", []string{"query-explain"}, nil),
 		shellCall("s1", "a2", 2_000, "", nil, []string{"query-explain"}),
 	}
-	_, err = sessions.LoadEvents(t.Context(), dir, joined, sessions.InvocationStart{Workspace: dir})
+	_, err = LoadEvents(t.Context(), dir, joined, InvocationStart{Workspace: dir})
 	require.NoError(t, err)
 
-	fold, err := sessions.ReadAll(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
-	assert.Equal(t, []hintUptakeRow{{ID: "query-explain", Served: 1, Followed: 1, Rate: 1}}, hintUptake(fold),
+	assert.Equal(t, []HintUptakeRow{{ID: "query-explain", Served: 1, Followed: 1, Rate: 1}}, HintUptake(fold),
 		"one call, counted once, with the ids the second load recovered")
 }
 
@@ -131,6 +130,6 @@ func TestHintUptakeRecoversIDsOnASecondLoad(t *testing.T) {
 // fact about the store, not a verdict on any hint.
 func TestRenderHintUptakeOnAnEmptyStore(t *testing.T) {
 	var buf bytes.Buffer
-	renderHintUptake(&buf, hintUptakeReport{Floor: hintFloor, Lookahead: nextLookahead})
+	require.NoError(t, RenderHintUptake(&buf, HintUptakeReport{Floor: HintFloor, Lookahead: NextLookahead}))
 	assert.Contains(t, buf.String(), "magus session load")
 }

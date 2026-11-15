@@ -107,3 +107,22 @@ func TestRenderSpan(t *testing.T) {
 		assert.Equal(t, want, renderSpan(d), "renderSpan(%s)", d)
 	}
 }
+
+func TestRenderPromptCacheShowsEveryProvider(t *testing.T) {
+	t.Parallel()
+
+	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	now := last.Add(7 * time.Minute)
+	var out strings.Builder
+	renderPromptCache(&out, PromptCacheAt("s1", last, now), now)
+	text := out.String()
+
+	assert.Contains(t, text, "last tool call here 7m ago, session s1")
+	for _, want := range []string{"Anthropic", "OpenAI", "Google Gemini"} {
+		assert.Containsf(t, text, want, "a reader cannot tell which provider they are on, so every row has to be here")
+	}
+	assert.Contains(t, text, "closed 2m ago", "the 5m window is behind a 7m gap")
+	assert.Contains(t, text, "closes in 53m")
+	// The word magus has no standing to use: it sees a clock, never the provider's cache.
+	assert.NotContains(t, text, "expire")
+}

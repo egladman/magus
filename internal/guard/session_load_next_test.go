@@ -1,4 +1,4 @@
-package main
+package guard
 
 import (
 	"testing"
@@ -26,7 +26,7 @@ func TestJoinServedNextStampsServedAndFollowed(t *testing.T) {
 	}
 	commands := []string{"magus query ledger", "cat notes.md", "./magus explain spell:go"}
 
-	joinServedNext(events, commands, []hint.ServedNextEntry{
+	JoinServedNext(events, commands, []hint.ServedNextEntry{
 		{AtMs: 1_500, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
 	})
 
@@ -42,14 +42,14 @@ func TestJoinServedNextStampsServedAndFollowed(t *testing.T) {
 func TestJoinServedNextStopsAtTheLookahead(t *testing.T) {
 	events := []sessions.LoadEvent{shellAt("s1", 1_000)}
 	commands := []string{"magus query ledger"}
-	for i := range nextLookahead + 1 {
+	for i := range sessions.NextLookahead + 1 {
 		events = append(events, shellAt("s1", int64(2_000+i)))
 		commands = append(commands, "echo nothing")
 	}
 	events = append(events, shellAt("s1", 9_000))
 	commands = append(commands, "magus explain spell:go")
 
-	joinServedNext(events, commands, []hint.ServedNextEntry{
+	JoinServedNext(events, commands, []hint.ServedNextEntry{
 		{AtMs: 1_500, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
 	})
 
@@ -63,7 +63,7 @@ func TestJoinServedNextLeavesUnattributableLinesAlone(t *testing.T) {
 	events := []sessions.LoadEvent{shellAt("s1", 5_000)}
 	commands := []string{"magus query ledger"}
 
-	joinServedNext(events, commands, []hint.ServedNextEntry{
+	JoinServedNext(events, commands, []hint.ServedNextEntry{
 		{AtMs: 1_000, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
 		{AtMs: 5_000 + nextJoinWindow.Milliseconds() + 1, ID: "query-path", Argv: []string{"magus", "explain", "a", "--to", "b"}},
 	})
@@ -77,7 +77,7 @@ func TestJoinServedNextStaysInsideOneSession(t *testing.T) {
 	events := []sessions.LoadEvent{shellAt("s1", 1_000), shellAt("s2", 2_000)}
 	commands := []string{"magus query ledger", "magus explain spell:go"}
 
-	joinServedNext(events, commands, []hint.ServedNextEntry{
+	JoinServedNext(events, commands, []hint.ServedNextEntry{
 		{AtMs: 1_500, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
 	})
 
@@ -92,7 +92,7 @@ func TestJoinServedNextDoesNotCreditALongerArgument(t *testing.T) {
 	events := []sessions.LoadEvent{shellAt("s1", 1_000), shellAt("s1", 2_000), shellAt("s1", 3_000)}
 	commands := []string{"magus query ledger", "magus explain spell:gomod", "echo magus explain spell:go"}
 
-	joinServedNext(events, commands, []hint.ServedNextEntry{
+	JoinServedNext(events, commands, []hint.ServedNextEntry{
 		{AtMs: 1_500, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
 	})
 
@@ -107,7 +107,7 @@ func TestJoinServedNextSurvivesALineWithNoArgv(t *testing.T) {
 	events := []sessions.LoadEvent{shellAt("s1", 1_000)}
 	commands := []string{"magus query ledger"}
 
-	joinServedNext(events, commands, []hint.ServedNextEntry{
+	JoinServedNext(events, commands, []hint.ServedNextEntry{
 		{AtMs: 1_500, ID: "query-explain"},
 		{AtMs: 1_600, ID: "query-path", Argv: []string{"magus"}},
 	})

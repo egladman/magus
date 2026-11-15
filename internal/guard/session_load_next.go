@@ -1,4 +1,4 @@
-package main
+package guard
 
 // The served-next join: `session load` is the one place that holds a host's command
 // text and magus's own record of what it printed at the same time, so it is where the
@@ -13,24 +13,17 @@ import (
 	"slices"
 	"time"
 
-	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 )
 
-const (
-	// nextJoinWindow bounds how long after a call's start a breadcrumb may have been
-	// printed and still belong to it. A host stamps the call when it STARTS and magus
-	// writes the journal line while it runs, so the gap is one command's runtime; ten
-	// minutes covers a slow gate without reaching the call after it.
-	nextJoinWindow = 10 * time.Minute
+// nextJoinWindow bounds how long after a call's start a breadcrumb may have been
+// printed and still belong to it. A host stamps the call when it STARTS and magus
+// writes the journal line while it runs, so the gap is one command's runtime; ten
+// minutes covers a slow gate without reaching the call after it.
+const nextJoinWindow = 10 * time.Minute
 
-	// nextLookahead is how many calls later a breadcrumb still counts as taken up. The
-	// measurement this metric has to be comparable with used five.
-	nextLookahead = 5
-)
-
-// joinServedNext stamps events with the hint ids each call served and took up.
+// JoinServedNext stamps events with the hint ids each call served and took up.
 //
 // commands is positional against events and holds the shell text the store is about
 // to drop. journal is this checkout's served-next lines, oldest first.
@@ -39,7 +32,7 @@ const (
 // the most recent shell command that had started when the line was written. A stream
 // carrying several interleaved sessions can therefore credit the wrong one, which
 // costs a per-id rate some precision and costs the totals nothing.
-func joinServedNext(events []sessions.LoadEvent, commands []string, journal []hint.ServedNextEntry) {
+func JoinServedNext(events []sessions.LoadEvent, commands []string, journal []hint.ServedNextEntry) {
 	if len(events) == 0 || len(journal) == 0 {
 		return
 	}
@@ -57,13 +50,13 @@ func joinServedNext(events []sessions.LoadEvent, commands []string, journal []hi
 			continue
 		}
 		at := order[i]
-		events[at].Event.NextServed = appendUnique(events[at].Event.NextServed, served.ID)
+		events[at].Event.NextServed = appendUniqueID(events[at].Event.NextServed, served.ID)
 
 		want := hint.NormalizeServedArgv(served.Argv)
 		if len(want) == 0 {
 			continue
 		}
-		for _, next := range order[i+1 : min(i+1+nextLookahead, len(order))] {
+		for _, next := range order[i+1 : min(i+1+sessions.NextLookahead, len(order))] {
 			if events[next].Session != events[at].Session {
 				continue
 			}
@@ -71,7 +64,7 @@ func joinServedNext(events []sessions.LoadEvent, commands []string, journal []hi
 			// otherwise counts `explain spell:gomod` as having taken it up, and the
 			// rate is the one number this join exists to produce.
 			if slices.ContainsFunc(ran[next], func(argv []string) bool { return slices.Equal(argv, want) }) {
-				events[next].Event.NextFollowed = appendUnique(events[next].Event.NextFollowed, served.ID)
+				events[next].Event.NextFollowed = appendUniqueID(events[next].Event.NextFollowed, served.ID)
 			}
 		}
 	}
@@ -80,7 +73,7 @@ func joinServedNext(events []sessions.LoadEvent, commands []string, journal []hi
 // ranArgv renders every command a recorded shell line would run, normalized the way
 // the journal's own argv is, so the two are comparable.
 func ranArgv(command string) [][]string {
-	cmds, ok := guard.ParseCommands(command)
+	cmds, ok := ParseCommands(command)
 	if !ok {
 		return nil
 	}
@@ -120,4 +113,12 @@ func servingCall(events []sessions.LoadEvent, order []int, atMs int64) (int, boo
 		return i, true
 	}
 	return 0, false
+}
+
+// appendUniqueID appends id unless the list already holds it, preserving order.
+func appendUniqueID(dst []string, id string) []string {
+	if id == "" || slices.Contains(dst, id) {
+		return dst
+	}
+	return append(dst, id)
 }

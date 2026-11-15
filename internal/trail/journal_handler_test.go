@@ -1,4 +1,4 @@
-package main
+package trail_test
 
 import (
 	"context"
@@ -7,18 +7,45 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
+
+// emitJournalEvent pushes one event through h along the real capture path, rather than
+// hand-building the slog.Record. The attribute key that carries an Event is private
+// to internal/journal, so a hand-built record would be testing a copy of it.
+func emitJournalEvent(t *testing.T, h slog.Handler, e journal.Event) {
+	t.Helper()
+	journal.Emit(journal.WithLogger(context.Background(), journal.NewLogger(h)), e)
+}
+
+// withJournal wires the handler the way the CLI does: a lease resolved through job.RunLease
+// against the checkout record under cacheDir, and a fixed build version.
+func withJournalAt(t *testing.T, cacheDir string, ctx context.Context, handlers []slog.Handler, root, verb string, args []string) []slog.Handler {
+	t.Helper()
+	return trail.WithInvocationJournal(ctx, handlers, root, verb, args, "test", func(ctx context.Context, root string) (string, types.LeaseSource, error) {
+		// The state dir is allowed to be unresolvable: that machine records no lease at all.
+		state, _ := xdg.StateDir()
+		lease, from := job.RunLease(ctx, job.Location{CacheDir: cacheDir, StateBase: state, Root: root})
+		return lease, from, nil
+	})
+}
+
+// withJournal is withJournalAt over a cache dir that holds no checkout record.
+func withJournal(t *testing.T, ctx context.Context, handlers []slog.Handler, root, verb string, args []string) []slog.Handler {
+	t.Helper()
+	return withJournalAt(t, t.TempDir(), ctx, handlers, root, verb, args)
+}
 
 // journalRecordSink keeps the slog.Record journal.Emit builds, so a test can replay the
 // real encoding into another handler and see what that handler RETURNS. Going through
@@ -62,7 +89,7 @@ func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	handlers := withInvocationJournal(context.Background(), nil, root, "affected", []string{"ci", "--base", "main"})
+	handlers := withJournal(t, context.Background(), nil, root, "affected", []string{"ci", "--base", "main"})
 	require.Len(t, handlers, 1)
 
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurationMs: 20, Ref: "out1"})
@@ -108,11 +135,11 @@ func TestWithInvocationJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 
 	result := journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusCached, DurationMs: 7, Ref: "out9"}
 
-	runHandlers := withInvocationJournal(context.Background(), nil, runRoot, "run", []string{"ci", "api"})
+	runHandlers := withJournal(t, context.Background(), nil, runRoot, "run", []string{"ci", "api"})
 	require.Len(t, runHandlers, 1)
 	emitJournalEvent(t, runHandlers[0], result)
 
-	affectedHandlers := withInvocationJournal(context.Background(), nil, affectedRoot, "affected", []string{"ci"})
+	affectedHandlers := withJournal(t, context.Background(), nil, affectedRoot, "affected", []string{"ci"})
 	require.Len(t, affectedHandlers, 1)
 	emitJournalEvent(t, affectedHandlers[0], result)
 
@@ -153,7 +180,7 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 	} {
 		t.Run(verb, func(t *testing.T) {
 			root := t.TempDir()
-			handlers := withInvocationJournal(context.Background(), nil, root, verb, args)
+			handlers := withJournal(t, context.Background(), nil, root, verb, args)
 			require.Len(t, handlers, 1)
 			emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
 
@@ -180,14 +207,12 @@ func TestWithInvocationJournalRanksTheBindingOverTheClaim(t *testing.T) {
 	testkit.Isolate(t)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/claimed")
 	root := t.TempDir()
-	cacheDir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+	cacheDir := t.TempDir()
 	marker := job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t)}.MarkerPath()
 	require.NoError(t, os.MkdirAll(filepath.Dir(marker), 0o755))
 	require.NoError(t, os.WriteFile(marker, []byte("fleet/bound\n"), 0o644))
 
-	handlers := withInvocationJournal(context.Background(), nil, root, "run", []string{"ci"})
+	handlers := withJournalAt(t, cacheDir, context.Background(), nil, root, "run", []string{"ci"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Status: journal.StatusPass})
 
@@ -214,7 +239,7 @@ func TestWithInvocationJournalPrefersTheForwardedLease(t *testing.T) {
 	root := t.TempDir()
 
 	ctx := types.WithJobLease(context.Background(), "fleet/client")
-	handlers := withInvocationJournal(ctx, nil, root, "run", []string{"ci", "api"})
+	handlers := withJournal(t, ctx, nil, root, "run", []string{"ci", "api"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
 
@@ -248,7 +273,7 @@ func TestWithInvocationJournalReadsTheEnvironmentOnlyWhenNothingStampedALease(t 
 			t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/local")
 			root := t.TempDir()
 
-			handlers := withInvocationJournal(tc.stamp(t.Context()), nil, root, "run", []string{"build"})
+			handlers := withJournal(t, tc.stamp(t.Context()), nil, root, "run", []string{"build"})
 			require.Len(t, handlers, 1)
 			emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 
@@ -273,7 +298,7 @@ func TestWithInvocationJournalDropsAnInvalidLease(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=not a lease id")
 	root := t.TempDir()
 
-	handlers := withInvocationJournal(context.Background(), nil, root, "run", []string{"build"})
+	handlers := withJournal(t, context.Background(), nil, root, "run", []string{"build"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 
@@ -302,7 +327,7 @@ func TestWithInvocationJournalSurvivesAnUnwritableStore(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(dir), 0o755))
 	require.NoError(t, os.WriteFile(dir, []byte("blocked\n"), 0o644))
 
-	handlers := withInvocationJournal(context.Background(), nil, root, "affected", []string{"ci"})
+	handlers := withJournal(t, context.Background(), nil, root, "affected", []string{"ci"})
 	require.Len(t, handlers, 1, "the store is only opened on the first fact, so wiring still succeeds")
 
 	rec := captureJournalRecord(t, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass})
@@ -325,6 +350,6 @@ func TestWithInvocationJournalLeavesHandlersAloneWithoutAStateDir(t *testing.T) 
 	t.Setenv("LocalAppData", "")
 
 	existing := []slog.Handler{&journalRecordSink{}}
-	got := withInvocationJournal(context.Background(), existing, t.TempDir(), "affected", []string{"ci"})
+	got := withJournal(t, context.Background(), existing, t.TempDir(), "affected", []string{"ci"})
 	assert.Equal(t, existing, got)
 }
