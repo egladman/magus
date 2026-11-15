@@ -192,7 +192,6 @@ func TestRunBatchesReportsAPanicAndRunsWhatWasPending(t *testing.T) {
 		"a panicking batch must not orphan the batches merged while it ran")
 }
 
-
 // TestMergePaths verifies dedup + lex ordering, the contract callers
 // rely on for deterministic stream-driven affected output.
 func TestMergePaths(t *testing.T) {

@@ -11,13 +11,13 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// AdvisorBase is the revision the advisors compared against, and how current this
+// advisorBase is the revision the advisors compared against, and how current this
 // clone's copy of it is.
 //
 // It is stated ONCE for the whole set rather than per section: a local run never fetches, so
 // the caveat is identical under every advisor, and repeating it ten times is how a reader
 // learns to skip it.
-type AdvisorBase struct {
+type advisorBase struct {
 	// Ref is the revision as the advisors spell it, so a reader can run the same comparison
 	// by hand.
 	Ref string `json:"ref" yaml:"ref"`
@@ -39,10 +39,10 @@ type AdviceSection struct {
 // resolveAdvisorBase dates this clone's copy of the ref the advisors compared against.
 //
 // nil whenever the answer would be a guess: no VCS, or a backend that cannot date a
-// revision. A ref the clone does not HAVE is not that case; it resolves to a
-// AdvisorBase with no Tip, because "you have never fetched this" is the single most
+// revision. A ref the clone does not HAVE is not that case; it resolves to an
+// advisorBase with no Tip, because "you have never fetched this" is the single most
 // useful thing the report can say about why nine advisors went quiet.
-func resolveAdvisorBase(ctx context.Context, root string, opts types.VCSOptions, base string) *AdvisorBase {
+func resolveAdvisorBase(ctx context.Context, root string, opts types.VCSOptions, base string) *advisorBase {
 	res, err := vcs.Resolve(ctx, root, "", opts)
 	if err != nil || res.VCS == nil {
 		return nil
@@ -56,9 +56,9 @@ func resolveAdvisorBase(ctx context.Context, root string, opts types.VCSOptions,
 		return nil
 	}
 	if !found {
-		return &AdvisorBase{Ref: ref}
+		return &advisorBase{Ref: ref}
 	}
-	return &AdvisorBase{Ref: ref, Tip: tip.Format(time.RFC3339)}
+	return &advisorBase{Ref: ref, Tip: tip.Format(time.RFC3339)}
 }
 
 // advisorBaseLine states what the advisors measured against, and how old it is.
@@ -66,7 +66,7 @@ func resolveAdvisorBase(ctx context.Context, root string, opts types.VCSOptions,
 // The age is computed here rather than carried, so it describes when the report is READ.
 // An unparsable Tip degrades to naming the ref: the ref alone is still true, and a
 // malformed date is not worth losing the rest of the line over.
-func advisorBaseLine(b *AdvisorBase) string {
+func advisorBaseLine(b *advisorBase) string {
 	if b == nil {
 		return ""
 	}
@@ -100,7 +100,7 @@ func ageText(d time.Duration) string {
 	}
 }
 
-func advisorLines(sections []AdviceSection, failed []string, base *AdvisorBase) []string {
+func advisorLines(sections []AdviceSection, failed []string, base *advisorBase) []string {
 	// Prepended to whichever headline follows, including "nothing to report": a clean set
 	// measured against a ref from last week is the case where the caveat matters MOST, and
 	// hanging it off a finding count would drop it exactly there.

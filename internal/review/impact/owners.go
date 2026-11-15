@@ -8,8 +8,8 @@ import (
 	"github.com/egladman/magus/types/impact"
 )
 
-// Owner is one project in reach and who has been changing it.
-type Owner struct {
+// projectOwner is one project in reach and who has been changing it.
+type projectOwner struct {
 	Project      string `json:"project"                yaml:"project"`
 	Primary      string `json:"primary"                yaml:"primary"`
 	PrimaryShare int    `json:"primary_share"          yaml:"primary_share"` // percent
@@ -22,18 +22,18 @@ type Owner struct {
 // Projects the lens has nothing to say about are DROPPED rather than listed with an empty
 // author: a project with no commits in the window has no owner to name, and a blank name
 // beside a path reads as a lookup that failed.
-func listOwners(own types.Ownership, affected []impact.Project) []Owner {
+func listOwners(own types.Ownership, affected []impact.Project) []projectOwner {
 	byPath := make(map[string]types.OwnershipEntry, len(own.Projects))
 	for _, e := range own.Projects {
 		byPath[e.Path] = e
 	}
-	var out []Owner
+	var out []projectOwner
 	for _, p := range affected {
 		e, ok := byPath[p.Path]
 		if !ok || e.Primary == "" {
 			continue
 		}
-		out = append(out, Owner{
+		out = append(out, projectOwner{
 			Project:      p.Path,
 			Primary:      e.Primary,
 			PrimaryShare: e.PrimaryShare,
@@ -44,7 +44,7 @@ func listOwners(own types.Ownership, affected []impact.Project) []Owner {
 	return out
 }
 
-func ownershipLines(owners []Owner) []string {
+func ownershipLines(owners []projectOwner) []string {
 	if len(owners) == 0 {
 		return []string{"OWNERSHIP: no commit history in the window, so no owner is named"}
 	}

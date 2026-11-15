@@ -7,7 +7,7 @@ import (
 	difftypes "github.com/egladman/magus/types/diff"
 )
 
-// Review is where a reader left off in this change.
+// reviewSummary is where a reader left off in this change.
 //
 // It is a BOOKMARK, not a score, and the difference decides the whole design. An earlier
 // version led with "N of M files carry a read receipt", which is a completion metric: it
@@ -19,7 +19,7 @@ import (
 // without reading: which files moved after they read them, and which they have not opened.
 // Both are answers to "where was I", and the test any addition here has to pass is whether
 // somebody would still want it if nobody else ever saw the result.
-type Review struct {
+type reviewSummary struct {
 	Files int `json:"files" yaml:"files"`
 	Read  int `json:"read"  yaml:"read"`
 	// Stale are files read and then edited. They lead the section: the signal is derived from
@@ -48,7 +48,7 @@ const unreadShown = 10
 // when the section earns its line.
 const reviewMinFiles = 5
 
-// CollectReview tallies the read state already folded onto the changeset by annotateDiff.
+// collectReview tallies the read state already folded onto the changeset by annotateDiff.
 //
 // It reads DiffFile.ReadState rather than consulting the store a second time, so the
 // terminal report and the console's review app cannot disagree about which files
@@ -59,8 +59,8 @@ const reviewMinFiles = 5
 //
 // Generated files are excluded: reading a machine's restatement of an edit made elsewhere
 // is not the review, the same reason the file list folds them away by default.
-func CollectReview(rev difftypes.Diff, required func(string) bool, reasons []string) *Review {
-	out := &Review{Reasons: reasons}
+func collectReview(rev difftypes.Diff, required func(string) bool, reasons []string) *reviewSummary {
+	out := &reviewSummary{Reasons: reasons}
 	measured := false
 	for _, f := range rev.Files {
 		if f.Generated() {
@@ -107,7 +107,7 @@ func CollectReview(rev difftypes.Diff, required func(string) bool, reasons []str
 //
 // TODO: teach the viewer stale state, so a reader stepping through sees which files moved
 // under them. That is additive; it is not a reason to drop the only telling of it here.
-func reviewLines(r *Review) []string {
+func reviewLines(r *reviewSummary) []string {
 	if r == nil {
 		return []string{fmt.Sprintf("REVIEW: read receipts unavailable; step a file through in `%s` to earn one", hint.Diff.String())}
 	}
@@ -176,7 +176,7 @@ func reviewLines(r *Review) []string {
 
 // unreadRest is the never-opened files the section has not already named under
 // review_required, so no path appears twice.
-func unreadRest(r *Review) []string {
+func unreadRest(r *reviewSummary) []string {
 	if len(r.Required) == 0 {
 		return r.Unread
 	}

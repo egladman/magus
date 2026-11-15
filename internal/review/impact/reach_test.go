@@ -14,9 +14,9 @@ import (
 // sixty projects is a real answer and an unreadable one, and a list that stops without saying
 // so reads as the whole answer.
 func TestImpactListsReportWhatTheyLeftOff(t *testing.T) {
-	r := &Reach{Seeds: 1, Rebuilds: 14}
+	r := &reachSummary{Seeds: 1, Rebuilds: 14}
 	for i := 0; i < 14; i++ {
-		r.Projects = append(r.Projects, Project{Path: fmt.Sprintf("p%d", i)})
+		r.Projects = append(r.Projects, reachedProject{Path: fmt.Sprintf("p%d", i)})
 	}
 	lines := reachLines(r)
 	require.Len(t, lines, 1+listCap+1)
@@ -33,9 +33,9 @@ func TestImpactReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
 		SeedProjects:     []string{"root"},
 		AffectedProjects: []impact.Project{{Path: "root", Seed: true, Files: []string{"a.go", "b.go"}}, {Path: "docs"}},
 	})
-	assert.Equal(t, &Reach{
+	assert.Equal(t, &reachSummary{
 		Seeds:    1,
 		Rebuilds: 2,
-		Projects: []Project{{Path: "root", Seed: true, Files: 2}, {Path: "docs"}},
+		Projects: []reachedProject{{Path: "root", Seed: true, Files: 2}, {Path: "docs"}},
 	}, r)
 }

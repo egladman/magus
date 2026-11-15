@@ -22,7 +22,7 @@ func TestAddedMarkers(t *testing.T) {
 		"+// compat(until: whatever): generated.\n"
 
 	got := addedMarkers(patch, map[string]bool{"gen/c.go": true})
-	assert.Equal(t, []Marker{
+	assert.Equal(t, []addedMarker{
 		{Path: "a.go", Line: 3, Marker: "compat(until:", Text: "no store holds v1 descriptors"},
 		{Path: "a.go", Line: 5, Marker: "Deprecated:", Text: "use G."},
 	}, got)
@@ -33,17 +33,17 @@ func TestImpactLeftBehindLines(t *testing.T) {
 		assert.Equal(t, []string{
 			"LEFT BEHIND: no compat(until:) or Deprecated: marker added",
 			"      no symbol it stopped using is still defined",
-		}, leftBehindLines(&LeftBehind{UnreferencedKnown: true}))
+		}, leftBehindLines(&leftBehind{UnreferencedKnown: true}))
 		assert.Equal(t, []string{
 			"LEFT BEHIND: no compat(until:) or Deprecated: marker added",
 			"      symbols left unused: not measured, read only for the working tree",
-		}, leftBehindLines(&LeftBehind{UnreferencedReason: "read only for the working tree"}))
+		}, leftBehindLines(&leftBehind{UnreferencedReason: "read only for the working tree"}))
 	})
 
 	t.Run("the lists are capped", func(t *testing.T) {
-		l := &LeftBehind{UnreferencedKnown: true}
+		l := &leftBehind{UnreferencedKnown: true}
 		for i := range listCap + 3 {
-			l.Markers = append(l.Markers, Marker{Path: "a.go", Line: i, Marker: "Deprecated:", Text: "x"})
+			l.Markers = append(l.Markers, addedMarker{Path: "a.go", Line: i, Marker: "Deprecated:", Text: "x"})
 			l.Unreferenced = append(l.Unreferenced, fmt.Sprintf("S%d (a.go:%d)", i, i))
 		}
 		lines := leftBehindLines(l)

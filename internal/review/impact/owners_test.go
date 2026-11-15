@@ -20,5 +20,5 @@ func TestImpactOwnersJoinOnlyTheReach(t *testing.T) {
 	affected := []impact.Project{{Path: "root"}, {Path: "docs"}, {Path: "never-committed"}}
 
 	got := listOwners(own, affected)
-	assert.Equal(t, []Owner{{Project: "root", Primary: "alice", PrimaryShare: 72, Authors: 4}}, got)
+	assert.Equal(t, []projectOwner{{Project: "root", Primary: "alice", PrimaryShare: 72, Authors: 4}}, got)
 }

@@ -14,21 +14,21 @@ import (
 // each section's render is pinned against.
 func fixture() Report {
 	return Report{
-		Reach: &Reach{
+		Reach: &reachSummary{
 			Seeds:    1,
 			Rebuilds: 2,
-			Projects: []Project{
+			Projects: []reachedProject{
 				{Path: "root", Seed: true, Files: 3},
 				{Path: "docs"},
 			},
 		},
-		Ownership: []Owner{
+		Ownership: []projectOwner{
 			{Project: "root", Primary: "alice", PrimaryShare: 72, Authors: 4},
 			{Project: "docs", Primary: "bob", PrimaryShare: 100, Authors: 1, BusFactor1: true},
 		},
-		Cost: &Cost{
+		Cost: &costEstimate{
 			TotalMs: 260_000,
-			Projects: []CostProject{
+			Projects: []projectCost{
 				{Project: "root", Target: "ci", Ms: 200_000, Samples: 18, HitRate: 0.4},
 				{Project: "docs", Target: "test", Ms: 60_000, Samples: 1},
 			},
@@ -45,7 +45,7 @@ func fixture() Report {
 		AdvisorNotes: []string{"could not run: doctor.buzz: main() returned 1"},
 		// Relative to now, not a fixed date: the rendered age is computed at read time, so a
 		// literal tip would make the expected line drift by a day every day.
-		AdvisorBase: &AdvisorBase{
+		AdvisorBase: &advisorBase{
 			Ref: "origin/main",
 			Tip: time.Now().Add(-50 * time.Hour).Format(time.RFC3339),
 		},
@@ -53,8 +53,8 @@ func fixture() Report {
 			{Note: "cache-invalidation-pairs", Kind: "file", Target: "internal/cache/cache.go"},
 			{Note: "secret-value-type", Kind: "symbol", Target: "m types/Secret#", Drift: "drifted-anchor"},
 		},
-		LeftBehind: &LeftBehind{
-			Markers: []Marker{
+		LeftBehind: &leftBehind{
+			Markers: []addedMarker{
 				{Path: "internal/cache/signing.go", Line: 32, Marker: "compat(until:", Text: "no store still serves ed25519 envelopes"},
 			},
 			Unreferenced:      []string{"signEd25519 (internal/cache/signing.go:40)"},
@@ -64,7 +64,7 @@ func fixture() Report {
 			{Verb: "explain", Subject: "internal/cache", Count: 2},
 			{Verb: "refs", Subject: "m types/Secret#", Count: 1},
 		},
-		Review: &Review{
+		Review: &reviewSummary{
 			Files: 8, Read: 5,
 			Stale:  []string{"internal/cache/cache.go"},
 			Unread: []string{"types/diff.go", "std/magus.go"},

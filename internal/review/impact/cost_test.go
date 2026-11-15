@@ -38,9 +38,9 @@ func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
 		c := estimateCost(h, affected)
 		require.NotNil(t, c)
 		require.Len(t, c.Projects, 1, "docs declares no ci or test target the history has timed")
-		assert.Equal(t, &Cost{
+		assert.Equal(t, &costEstimate{
 			TotalMs:  90_000,
-			Projects: []CostProject{{Project: "root", Target: "ci", Ms: 90_000, Samples: 12}},
+			Projects: []projectCost{{Project: "root", Target: "ci", Ms: 90_000, Samples: 12}},
 		}, c)
 	})
 

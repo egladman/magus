@@ -14,18 +14,18 @@ import (
 // makes with its pointers. An absent cost is a workspace with no run history, and rendering it
 // as zero would tell a reader the build is free.
 type Report struct {
-	Reach     *Reach          `json:"reach,omitempty"     yaml:"reach,omitempty"`
-	Ownership []Owner         `json:"ownership,omitempty" yaml:"ownership,omitempty"`
-	Cost      *Cost           `json:"cost,omitempty"      yaml:"cost,omitempty"`
+	Reach     *reachSummary   `json:"reach,omitempty"     yaml:"reach,omitempty"`
+	Ownership []projectOwner  `json:"ownership,omitempty" yaml:"ownership,omitempty"`
+	Cost      *costEstimate   `json:"cost,omitempty"      yaml:"cost,omitempty"`
 	Advisors  []AdviceSection `json:"advisors,omitempty"  yaml:"advisors,omitempty"`
 	// AdvisorNotes names each advisor that could not run. Surfaced rather than swallowed, so
 	// an empty advisor list reads as "they all passed" only when it is one.
 	AdvisorNotes []string `json:"advisor_notes,omitempty" yaml:"advisor_notes,omitempty"`
 	// AdvisorBase qualifies everything the advisors said. nil when the backend cannot date a
 	// revision, which is a different fact from a base that is merely old.
-	AdvisorBase *AdvisorBase       `json:"advisor_base,omitempty" yaml:"advisor_base,omitempty"`
+	AdvisorBase *advisorBase       `json:"advisor_base,omitempty" yaml:"advisor_base,omitempty"`
 	Anchors     []review.AnchorHit `json:"anchors,omitempty"      yaml:"anchors,omitempty"`
-	LeftBehind  *LeftBehind        `json:"left_behind,omitempty"  yaml:"left_behind,omitempty"`
+	LeftBehind  *leftBehind        `json:"left_behind,omitempty"  yaml:"left_behind,omitempty"`
 	// Evidence is what this changeset's authors asked magus before writing it. It is the
 	// reasoning half of the record diff.Touch carries: that one names the files an agent
 	// had READ, this one the questions it put to the graph.
@@ -33,7 +33,7 @@ type Report struct {
 	// EvidenceGap says which silence an empty Evidence is, so a consumer of the document can
 	// tell an unresearched change from a record kept in another checkout.
 	EvidenceGap trail.ConsultGap `json:"evidence_gap,omitempty" yaml:"evidence_gap,omitempty"`
-	Review      *Review          `json:"review,omitempty"       yaml:"review,omitempty"`
+	Review      *reviewSummary   `json:"review,omitempty"       yaml:"review,omitempty"`
 }
 
 // Lines renders the report, one claim per line, in the same count-then-list shape

@@ -279,7 +279,7 @@ func TestPrintDiffTextWithoutImpactIsUnchanged(t *testing.T) {
 // file list, so the ordering of everything a reader already knows how to scan is untouched.
 func TestPrintDiffTextAppendsImpactAboveTheConsoleLink(t *testing.T) {
 	rev := diff.Diff{Files: []diff.File{{Path: "a.go", Role: diff.RoleSource}}}
-	pre := reviewimpact.Report{Reach: &reviewimpact.Reach{Seeds: 1, Rebuilds: 1}}
+	var pre reviewimpact.Report
 
 	out := captureStdout(t, func() {
 		require.NoError(t, printDiffText(rev, false, func(p string) string { return p }, &pre))
@@ -1172,27 +1172,32 @@ func attach(t *testing.T, root, cache string, rev diff.Diff) diff.Diff {
 	return rev
 }
 
-func TestCollectReview(t *testing.T) {
-	t.Run("an unacknowledged changeset reports every file unread", func(t *testing.T) {
+// readStates is the read state attach folds onto each file, by path.
+func readStates(rev diff.Diff) map[string]string {
+	out := map[string]string{}
+	for _, f := range rev.Files {
+		out[f.Path] = f.ReadState
+	}
+	return out
+}
+
+// TestAckChangesetFoldsOntoTheChangeset pins the join: what ackChangeset records is what
+// attach reads back onto the changeset, the state impact's review section counts.
+func TestAckChangesetFoldsOntoTheChangeset(t *testing.T) {
+	t.Run("an unacknowledged changeset is unread", func(t *testing.T) {
 		root, cache, rev := reviewFixture(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"}, nil)
 
-		got := reviewimpact.CollectReview(attach(t, root, cache, rev), nil, nil)
-		require.NotNil(t, got)
-		assert.ElementsMatch(t, []string{"a.go", "b.go"}, got.Unread, "the fixture writes its files in map order")
-		assert.Equal(t, &reviewimpact.Review{Files: 2, Unread: got.Unread}, got)
+		assert.Equal(t, map[string]string{"a.go": diff.ReadUnread, "b.go": diff.ReadUnread},
+			readStates(attach(t, root, cache, rev)))
 	})
 
-	t.Run("acknowledging then re-reading reports it read", func(t *testing.T) {
+	t.Run("acknowledging then re-reading reads it read", func(t *testing.T) {
 		root, cache, rev := reviewFixture(t, map[string]string{"a.go": "package a\n"}, nil)
 
 		n, err := ackChangeset(reviewedContent{root: root}, cache, rev, "spot-checked", time.Now())
 		require.NoError(t, err)
 		assert.Equal(t, 1, n)
-
-		got := reviewimpact.CollectReview(attach(t, root, cache, rev), nil, nil)
-		require.NotNil(t, got)
-		assert.Equal(t, 1, got.Read)
-		assert.Empty(t, got.Unread)
+		assert.Equal(t, map[string]string{"a.go": diff.ReadRead}, readStates(attach(t, root, cache, rev)))
 	})
 
 	// The property the whole feature turns on: acknowledging code and then changing it must
@@ -1204,40 +1209,31 @@ func TestCollectReview(t *testing.T) {
 
 		require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n\nfunc G() {}\n"), 0o644))
 
-		got := reviewimpact.CollectReview(attach(t, root, cache, rev), nil, nil)
-		require.NotNil(t, got)
-		// Stale is its own list, not an annotated entry in the unopened one: it is a
-		// different finding and it leads the section.
-		assert.Equal(t, &reviewimpact.Review{Files: 1, Stale: []string{"a.go"}}, got)
+		assert.Equal(t, map[string]string{"a.go": diff.ReadStale}, readStates(attach(t, root, cache, rev)))
 	})
 
 	// Reading a machine's restatement of an edit made elsewhere is not the review, which is
 	// why the file list folds generated output away by default too.
-	t.Run("generated output is not something to have read", func(t *testing.T) {
+	t.Run("generated output is not acknowledged", func(t *testing.T) {
 		root, cache, rev := reviewFixture(t,
 			map[string]string{"a.go": "package a\n", "gen/x.go": "package gen\n"},
 			map[string]string{"gen/x.go": diff.RoleOutput})
-
-		got := reviewimpact.CollectReview(attach(t, root, cache, rev), nil, nil)
-		require.NotNil(t, got)
-		assert.Equal(t, 1, got.Files)
 
 		n, err := ackChangeset(reviewedContent{root: root}, cache, rev, "spot-checked", time.Now())
 		require.NoError(t, err)
 		assert.Equal(t, 1, n)
 	})
 
-	// A file nothing could fingerprint carries no state, and a changeset of only those was
-	// not measured. Reporting it as unread would accuse somebody of skipping a deletion.
-	t.Run("a deleted file is unmeasured, not unread", func(t *testing.T) {
+	// A file nothing could fingerprint carries no state: a receipt against it would cover
+	// every unreadable file forever.
+	t.Run("a deleted file is not acknowledged and carries no state", func(t *testing.T) {
 		root, cache := t.TempDir(), t.TempDir()
 		rev := diff.Diff{Files: []diff.File{{Path: "gone.go", Role: diff.RoleSource}}}
 
 		n, err := ackChangeset(reviewedContent{root: root}, cache, rev, "spot-checked", time.Now())
 		require.NoError(t, err)
 		assert.Equal(t, 0, n)
-
-		assert.Nil(t, reviewimpact.CollectReview(attach(t, root, cache, rev), nil, nil))
+		assert.Equal(t, map[string]string{"gone.go": diff.ReadUnknown}, readStates(attach(t, root, cache, rev)))
 	})
 }
 
@@ -1264,20 +1260,6 @@ func TestReviewRequiredMatcher(t *testing.T) {
 func TestReviewRequiredMatcherNilWhenUndeclared(t *testing.T) {
 	ws := &projectsWorkspace{projects: []*types.Project{{Path: "."}}}
 	assert.Nil(t, reviewRequiredMatcher(ws))
-}
-
-func TestCollectReviewSeparatesRequiredPaths(t *testing.T) {
-	root, cache, rev := reviewFixture(t, map[string]string{
-		"internal/secret/value.go": "package secret\n",
-		"internal/cache/key.go":    "package cache\n",
-	}, nil)
-
-	got := reviewimpact.CollectReview(attach(t, root, cache, rev), func(p string) bool {
-		return strings.HasPrefix(p, "internal/secret/")
-	}, nil)
-	require.NotNil(t, got)
-	assert.Equal(t, []string{"internal/secret/value.go"}, got.Required)
-	assert.Len(t, got.Unread, 2)
 }
 
 // projectsWorkspace is the narrow slice of the reader the matcher uses.

@@ -16,12 +16,12 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// LeftBehind is what a change keeps alive or leaves unused: the markers it added
+// leftBehind is what a change keeps alive or leaves unused: the markers it added
 // (compat(until:) and Deprecated:), and the symbols that lost their last use in it and are
 // still defined. Facts, not reasons: a marker says how long code stays, never whether it
 // should.
-type LeftBehind struct {
-	Markers []Marker `json:"markers,omitempty" yaml:"markers,omitempty"`
+type leftBehind struct {
+	Markers []addedMarker `json:"markers,omitempty" yaml:"markers,omitempty"`
 	// Unreferenced is the symbol delta's Left, known only when UnreferencedKnown is;
 	// UnreferencedReason says why it is not.
 	Unreferenced       []string `json:"unreferenced,omitempty" yaml:"unreferenced,omitempty"`
@@ -29,8 +29,8 @@ type LeftBehind struct {
 	UnreferencedReason string   `json:"unreferenced_reason,omitempty" yaml:"unreferenced_reason,omitempty"`
 }
 
-// Marker is one marker an added line carries.
-type Marker struct {
+// addedMarker is one marker an added line carries.
+type addedMarker struct {
 	Path string `json:"path" yaml:"path"`
 	Line int    `json:"line" yaml:"line"`
 	// Marker and Text are marker.Found's.
@@ -41,12 +41,12 @@ type Marker struct {
 // collectLeftBehind reads the markers from the patch's added lines, in any file the change
 // did not generate, and the symbols it left unused from the graph. Only a working-tree diff
 // reads symbols: the graph describes the tree on disk, which is the head of no other diff.
-func collectLeftBehind(ctx context.Context, ws Workspace, src Sources, rev difftypes.Diff, patch string, working bool) *LeftBehind {
+func collectLeftBehind(ctx context.Context, ws Workspace, src Sources, rev difftypes.Diff, patch string, working bool) *leftBehind {
 	generated := map[string]bool{}
 	for _, f := range rev.Files {
 		generated[f.Path] = f.Generated()
 	}
-	l := &LeftBehind{Markers: addedMarkers(patch, generated)}
+	l := &leftBehind{Markers: addedMarkers(patch, generated)}
 	if !working {
 		l.UnreferencedReason = "read only for the working tree, the tree the symbol graph describes"
 		return l
@@ -77,8 +77,8 @@ func collectLeftBehind(ctx context.Context, ws Workspace, src Sources, rev difft
 
 // addedMarkers are the markers on the added lines of patch, in a comment, outside the paths
 // generated marks.
-func addedMarkers(patch string, generated map[string]bool) []Marker {
-	var out []Marker
+func addedMarkers(patch string, generated map[string]bool) []addedMarker {
+	var out []addedMarker
 	for _, f := range changeset.ParseHunks(patch) {
 		if generated[f.Path] {
 			continue
@@ -89,7 +89,7 @@ func addedMarkers(patch string, generated map[string]bool) []Marker {
 				switch {
 				case strings.HasPrefix(raw, "+"):
 					if mk, ok := marker.Parse(raw[1:]); ok {
-						out = append(out, Marker{Path: f.Path, Line: line, Marker: mk.Marker, Text: mk.Text})
+						out = append(out, addedMarker{Path: f.Path, Line: line, Marker: mk.Marker, Text: mk.Text})
 					}
 					line++
 				case strings.HasPrefix(raw, "-"), strings.HasPrefix(raw, `\`):
@@ -103,7 +103,7 @@ func addedMarkers(patch string, generated map[string]bool) []Marker {
 }
 
 // leftBehindLines renders the section, including its empty forms.
-func leftBehindLines(l *LeftBehind) []string {
+func leftBehindLines(l *leftBehind) []string {
 	if l == nil {
 		return []string{"LEFT BEHIND: not measured"}
 	}

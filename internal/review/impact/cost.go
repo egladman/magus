@@ -10,13 +10,13 @@ import (
 	"github.com/egladman/magus/types/impact"
 )
 
-// Cost is the estimated cost of rebuilding the reach, from recorded run durations.
-type Cost struct {
+// costEstimate is the estimated cost of rebuilding the reach, from recorded run durations.
+type costEstimate struct {
 	TotalMs  int64         `json:"total_ms"           yaml:"total_ms"`
-	Projects []CostProject `json:"projects,omitempty" yaml:"projects,omitempty"`
+	Projects []projectCost `json:"projects,omitempty" yaml:"projects,omitempty"`
 }
 
-type CostProject struct {
+type projectCost struct {
 	Project string `json:"project" yaml:"project"`
 	Target  string `json:"target"  yaml:"target"`
 	Ms      int64  `json:"ms"      yaml:"ms"`
@@ -42,8 +42,8 @@ const minSamples = 3
 // constant, so a total is always computable and a total computed from those is a fabrication
 // wearing a duration. Only projects with enough samples for forecast's own project tier are
 // counted, and a reach whose projects all fall short reports no history at all.
-func estimateCost(h *forecast.History, affected []impact.Project) *Cost {
-	c := &Cost{}
+func estimateCost(h *forecast.History, affected []impact.Project) *costEstimate {
+	c := &costEstimate{}
 	for _, p := range affected {
 		target, stats, ok := costTarget(h, p)
 		if !ok {
@@ -54,7 +54,7 @@ func estimateCost(h *forecast.History, affected []impact.Project) *Cost {
 		// affected project has none, and Tags answers "transitive" for it.
 		d := h.PredictDuration(p.Path, target, forecast.Tags(p.Path, p.Files))
 		c.TotalMs += d.Milliseconds()
-		c.Projects = append(c.Projects, CostProject{
+		c.Projects = append(c.Projects, projectCost{
 			Project: p.Path,
 			Target:  target,
 			Ms:      d.Milliseconds(),
@@ -84,7 +84,7 @@ func costTarget(h *forecast.History, p impact.Project) (string, forecast.Stats, 
 	return "", forecast.Stats{}, false
 }
 
-func costLines(c *Cost) []string {
+func costLines(c *costEstimate) []string {
 	if c == nil {
 		return []string{
 			"COST: no run history yet, so there is nothing to estimate from",

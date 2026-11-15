@@ -32,14 +32,14 @@ func TestImpactCountsFindingsNotSections(t *testing.T) {
 // only one of them is a finding about the code. Collapsing them would make an unfetched clone
 // read as a clean review.
 func TestImpactBaseSeparatesOldFromAbsent(t *testing.T) {
-	stale := advisorBaseLine(&AdvisorBase{
+	stale := advisorBaseLine(&advisorBase{
 		Ref: "origin/main",
 		Tip: time.Now().Add(-9 * 24 * time.Hour).Format(time.RFC3339),
 	})
 	assert.Contains(t, stale, "tip 9 days old")
 	assert.Contains(t, stale, "`git fetch origin main`")
 
-	absent := advisorBaseLine(&AdvisorBase{Ref: "origin/main"})
+	absent := advisorBaseLine(&advisorBase{Ref: "origin/main"})
 	assert.Contains(t, absent, "is not in this clone")
 	assert.NotContains(t, absent, "tip ")
 
@@ -51,7 +51,7 @@ func TestImpactBaseSeparatesOldFromAbsent(t *testing.T) {
 // TestImpactBaseQualifiesAnEmptyAdvisorSet is the case the caveat matters most in: no
 // findings against a week-old base is not the same news as no findings against today's.
 func TestImpactBaseQualifiesAnEmptyAdvisorSet(t *testing.T) {
-	lines := advisorLines(nil, nil, &AdvisorBase{Ref: "origin/main"})
+	lines := advisorLines(nil, nil, &advisorBase{Ref: "origin/main"})
 	require.Len(t, lines, 2)
 	assert.Contains(t, lines[0], "origin/main")
 	assert.Equal(t, "ADVISORS: nothing to report", lines[1])

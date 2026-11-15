@@ -91,6 +91,6 @@ func Collect(ctx context.Context, ws Workspace, src Sources, rev difftypes.Diff,
 	// The trail and window trail.AttachTouches walks for the per-file touches, read here for the
 	// questions the authors asked rather than the files they opened.
 	p.Evidence, p.EvidenceGap = trail.Consulted(ws.Root(), ws.CacheDir(), review.ChangedPaths(rev), trail.DefaultReplayEvents)
-	p.Review = CollectReview(rev, src.RequiredIn(ctx), src.BulkReasons(ws.CacheDir(), rev))
+	p.Review = collectReview(rev, src.RequiredIn(ctx), src.BulkReasons(ws.CacheDir(), rev))
 	return p, nil
 }
