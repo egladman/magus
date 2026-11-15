@@ -6,15 +6,26 @@ import (
 	"os"
 
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/job/evidence"
 	"github.com/egladman/magus/types"
 )
 
 // jobClaimEnv is what applying a claim record asks of the command line.
 func jobClaimEnv() job.ClaimEnv {
 	return job.ClaimEnv{
+		Config:    globalCfg,
+		Workspace: jobWorkspace,
+		Callers: func(ctx context.Context, root, name string) ([]types.JobClaimRequest, error) {
+			return evidence.ExpandCallers(ctx, root, name, jobCallersEnv())
+		},
+	}
+}
+
+// jobCallersEnv is what expanding a callers claim asks of the command line.
+func jobCallersEnv() evidence.CallersEnv {
+	return evidence.CallersEnv{
 		Config:           globalCfg,
 		OpenWorkspace:    openWorkspaceForRead,
-		Workspace:        jobWorkspace,
 		RefsGraph:        loadRefsGraph,
 		PickSymbol:       pickSymbol,
 		RenameBlindSpots: renameBlindSpots,

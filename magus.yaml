@@ -157,11 +157,10 @@ knowledge:
             cmd/magus: 89
             internal: 14
             # job evidence moved out of cmd/magus: *magus.Magus runs through every
-            # signature and the shared boundary names the config.Filename constant.
-            internal/job/evidence: 17
-            # the callers claim moved out of cmd/magus: knowledge is in the ClaimEnv and
-            # ReadSymbolDelta signatures, and workspacegraph serves its one occurrence read.
-            internal/job: 28
+            # signature, the shared boundary names the config.Filename constant, and the
+            # callers claim reads occurrences through workspacegraph. It holds the symbol
+            # reads internal/job cannot: the knowledge and deps tests import job.
+            internal/job/evidence: 19
       export-scope:
         source: { percentile: 0, anchor: 0 }
         main: { percentile: 0, anchor: 0 }

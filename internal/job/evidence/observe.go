@@ -86,5 +86,5 @@ func observeSymbolDelta(ctx context.Context, tree string, row types.Job, seen jo
 	if err != nil || res.Source == types.VCSSourceDisabled {
 		return job.SymbolDelta{}, false
 	}
-	return job.ReadSymbolDelta(ctx, tree, g, res.VCS, seen.ChangedRevision, seen.Changed)
+	return ReadSymbolDelta(ctx, tree, g, res.VCS, seen.ChangedRevision, seen.Changed)
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// A callers claim resolves its name with the picker the claim env wires, so a name two
+// A callers claim resolves its name with the picker the callers env wires, so a name two
 // symbols share reaches job.ApplyClaim as both ids and a name the index lacks as itself.
 func TestJobClaimEnvPicksEverySymbolAnAmbiguousNameNames(t *testing.T) {
 	const a, b = "symbol:x `a`/Parse().", "symbol:x `b`/Parse()."
@@ -18,7 +18,7 @@ func TestJobClaimEnvPicksEverySymbolAnAmbiguousNameNames(t *testing.T) {
 	g := knowledge.NewGraph()
 	g.Merge([]types.KnowledgeNode{{ID: a, Kind: types.KindSymbol, Label: "Parse"}, {ID: b, Kind: types.KindSymbol, Label: "Parse"}},
 		[]types.KnowledgeEdge{defines("a/a.go", a), defines("b/b.go", b)})
-	pick := jobClaimEnv().PickSymbol
+	pick := jobCallersEnv().PickSymbol
 
 	id, ambiguous := pick(g, "Parse")
 	assert.Empty(t, id)

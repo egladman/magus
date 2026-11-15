@@ -2,6 +2,7 @@ package evidence
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,7 +10,9 @@ import (
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // Explain resolves a bare name fuzzily, which is right for a person typing
@@ -67,4 +70,90 @@ func TestLeaseGraphEvidenceBuildsNothingOverAStaleIndex(t *testing.T) {
 	cold, loads = evidence(true, stale)
 	assert.False(t, cold)
 	assert.Equal(t, 1, loads)
+}
+
+func TestCallersSymbolRefusesAnAmbiguousName(t *testing.T) {
+	const a, b = "symbol:x `a`/Parse().", "symbol:x `b`/Parse()."
+	defines := func(file, id string) types.KnowledgeEdge {
+		return types.KnowledgeEdge{Source: "file:" + file, Target: id, Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1}
+	}
+	g := knowledge.NewGraph()
+	g.Merge([]types.KnowledgeNode{{ID: a, Kind: types.KindSymbol, Label: "Parse"}, {ID: b, Kind: types.KindSymbol, Label: "Parse"}},
+		[]types.KnowledgeEdge{defines("a/a.go", a), defines("b/b.go", b)})
+	pick := func(_ *knowledge.Graph, name string) (string, []string) {
+		if name == "Parse" {
+			return "", []string{a, b}
+		}
+		return fmt.Sprintf("symbol:x `c`/%s().", name), nil
+	}
+
+	_, err := callersSymbol(g, "Parse", pick)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, a)
+	assert.ErrorContains(t, err, b)
+
+	_, err = callersSymbol(g, "Missing", pick)
+	assert.ErrorContains(t, err, `callers "Missing" names no symbol the index holds`)
+}
+
+func TestReadSymbolDelta(t *testing.T) {
+	t.Parallel()
+
+	repo := testkit.NewRepository(t, map[string]string{
+		"api.go":  "package a\n\nfunc Old() {}\n\nfunc Keep() { helper() }\n",
+		"util.go": "package a\n\nfunc helper() {}\n",
+	})
+	base := repo.Head()
+	repo.Write("api.go", "package a\n\nfunc Old() {}\n\nfunc Keep() {}\n\nfunc Added() {}\n\nfunc lower() {}\n")
+	res, err := vcs.Resolve(t.Context(), repo.Root(), "", types.VCSOptions{})
+	require.NoError(t, err)
+	g := deltaGraph(map[string]string{
+		"Old": "api.go:3", "Keep": "api.go:5", "Added": "api.go:7", "lower": "api.go:9", "helper": "util.go:3",
+	})
+
+	delta, ok := ReadSymbolDelta(t.Context(), repo.Root(), g, res.VCS, base, []string{"api.go"})
+	require.True(t, ok)
+	assert.Equal(t, job.SymbolDelta{
+		Added: []string{"Added"},
+		Left:  []string{"helper (util.go:3)"},
+	}, delta, "an unexported addition is no export, and a name the diff still holds is not left behind")
+
+	none, ok := ReadSymbolDelta(t.Context(), repo.Root(), g, res.VCS, base, nil)
+	assert.True(t, ok)
+	assert.Equal(t, job.SymbolDelta{}, none, "an empty diff is read, and holds nothing")
+
+	for name, read := range map[string]func() (job.SymbolDelta, bool){
+		"no graph": func() (job.SymbolDelta, bool) {
+			return ReadSymbolDelta(t.Context(), repo.Root(), nil, res.VCS, base, []string{"api.go"})
+		},
+		"no vcs": func() (job.SymbolDelta, bool) {
+			return ReadSymbolDelta(t.Context(), repo.Root(), g, nil, base, []string{"api.go"})
+		},
+		"no base": func() (job.SymbolDelta, bool) {
+			return ReadSymbolDelta(t.Context(), repo.Root(), g, res.VCS, "", []string{"api.go"})
+		},
+		"no symbols": func() (job.SymbolDelta, bool) {
+			return ReadSymbolDelta(t.Context(), repo.Root(), knowledge.NewGraph(), res.VCS, base, []string{"api.go"})
+		},
+	} {
+		_, ok := read()
+		assert.False(t, ok, "%s: a delta nobody could read is unknown, not empty", name)
+	}
+}
+
+func TestGoExport(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		id, name string
+		exported bool
+	}{
+		{"symbol:go a `github.com/x/types`/Goal#Signature.", "Goal#Signature", true},
+		{"symbol:go a `a`/ResolveSymbolGoals().", "ResolveSymbolGoals", true},
+		{"symbol:go a `a`/goal#Signature.", "", false},
+		{"symbol:go a `a`/Goal#Resolve().(ctx)", "", false},
+	} {
+		name, exported := goExport(tc.id)
+		assert.Equal(t, fmt.Sprint(tc.name, tc.exported), fmt.Sprint(name, exported), tc.id)
+	}
 }

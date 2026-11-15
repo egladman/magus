@@ -3,7 +3,8 @@
 // verification grades and the figures of a plan.
 //
 // It sits beside internal/job rather than in it, because cache, guard, bindings and
-// workspace all import job. What the command line owns arrives in an [Env].
+// workspace all import job, and the knowledge and deps tests import it too. What the
+// command line owns arrives in an [Env] or a [CallersEnv].
 package evidence
 
 import (

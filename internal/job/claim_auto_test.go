@@ -2,12 +2,10 @@ package job
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -250,7 +248,7 @@ func TestCallerClaimsExpandToOneRequestPerDeclaration(t *testing.T) {
 		},
 		"lib/use_test.go": {region("lib/use_test.go", 3, 6, "func TestParse(t *testing.T) {")},
 	}
-	got, err := callerClaims("Parse", "lib", "lib", files, func(file string) ([]types.RegionChange, error) { return placed[file], nil })
+	got, err := CallerClaims("Parse", "lib", "lib", files, func(file string) ([]types.RegionChange, error) { return placed[file], nil })
 	require.NoError(t, err)
 	assert.Equal(t, []types.JobClaimRequest{
 		{Path: "lib/lib.go#Client) Run", Because: "refs:Parse"},
@@ -259,7 +257,7 @@ func TestCallerClaimsExpandToOneRequestPerDeclaration(t *testing.T) {
 	}, got, "two occurrences in one declaration claim it once, and the definition claims nothing")
 
 	files[0].Occurrences = []types.SymbolOccurrence{occ(1)}
-	_, err = callerClaims("Parse", "lib", "lib", files, func(file string) ([]types.RegionChange, error) {
+	_, err = CallerClaims("Parse", "lib", "lib", files, func(file string) ([]types.RegionChange, error) {
 		return []types.RegionChange{region(file, 1, 2, "")}, nil
 	})
 	assert.ErrorContains(t, err, "no declaration holds the occurrence at lib/lib.go:8")
@@ -288,30 +286,6 @@ func TestSessionEndedReadsTheHoldersTombstones(t *testing.T) {
 	require.NoError(t, s.Bind(Caller{Host: "claude-code", Session: "s2"}, "w"))
 	_, ended = s.SessionEnded("w")
 	assert.False(t, ended, "a session that bound the job again is working it")
-}
-
-func TestCallersSymbolRefusesAnAmbiguousName(t *testing.T) {
-	const a, b = "symbol:x `a`/Parse().", "symbol:x `b`/Parse()."
-	defines := func(file, id string) types.KnowledgeEdge {
-		return types.KnowledgeEdge{Source: "file:" + file, Target: id, Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1}
-	}
-	g := knowledge.NewGraph()
-	g.Merge([]types.KnowledgeNode{{ID: a, Kind: types.KindSymbol, Label: "Parse"}, {ID: b, Kind: types.KindSymbol, Label: "Parse"}},
-		[]types.KnowledgeEdge{defines("a/a.go", a), defines("b/b.go", b)})
-	pick := func(_ *knowledge.Graph, name string) (string, []string) {
-		if name == "Parse" {
-			return "", []string{a, b}
-		}
-		return fmt.Sprintf("symbol:x `c`/%s().", name), nil
-	}
-
-	_, err := callersSymbol(g, "Parse", pick)
-	require.Error(t, err)
-	assert.ErrorContains(t, err, a)
-	assert.ErrorContains(t, err, b)
-
-	_, err = callersSymbol(g, "Missing", pick)
-	assert.ErrorContains(t, err, `callers "Missing" names no symbol the index holds`)
 }
 
 func TestApplyClaimRefusesPathBesideCallers(t *testing.T) {
