@@ -1131,6 +1131,7 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn(t *testing.T) {
 // loaded workspace is not the one the host reported.
 func TestHookCmdRecordsTheProjectAWriteTouched(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
+	resetWorkspaceMemo(t)
 	t.Setenv(trail.EnvBaggage, "")
 	ws, err := inspectWorkspace(t.Context(), "")
 	require.NoError(t, err)
