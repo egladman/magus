@@ -1,4 +1,4 @@
-package main
+package job
 
 import (
 	"fmt"
@@ -44,29 +44,29 @@ func TestReadSymbolDelta(t *testing.T) {
 		"Old": "api.go:3", "Keep": "api.go:5", "Added": "api.go:7", "lower": "api.go:9", "helper": "util.go:3",
 	})
 
-	delta, ok := readSymbolDelta(t.Context(), repo.Root(), g, res.VCS, base, []string{"api.go"})
+	delta, ok := ReadSymbolDelta(t.Context(), repo.Root(), g, res.VCS, base, []string{"api.go"})
 	require.True(t, ok)
-	assert.Equal(t, symbolDelta{
+	assert.Equal(t, SymbolDelta{
 		Added: []string{"Added"},
 		Left:  []string{"helper (util.go:3)"},
 	}, delta, "an unexported addition is no export, and a name the diff still holds is not left behind")
 
-	none, ok := readSymbolDelta(t.Context(), repo.Root(), g, res.VCS, base, nil)
+	none, ok := ReadSymbolDelta(t.Context(), repo.Root(), g, res.VCS, base, nil)
 	assert.True(t, ok)
-	assert.Equal(t, symbolDelta{}, none, "an empty diff is read, and holds nothing")
+	assert.Equal(t, SymbolDelta{}, none, "an empty diff is read, and holds nothing")
 
-	for name, read := range map[string]func() (symbolDelta, bool){
-		"no graph": func() (symbolDelta, bool) {
-			return readSymbolDelta(t.Context(), repo.Root(), nil, res.VCS, base, []string{"api.go"})
+	for name, read := range map[string]func() (SymbolDelta, bool){
+		"no graph": func() (SymbolDelta, bool) {
+			return ReadSymbolDelta(t.Context(), repo.Root(), nil, res.VCS, base, []string{"api.go"})
 		},
-		"no vcs": func() (symbolDelta, bool) {
-			return readSymbolDelta(t.Context(), repo.Root(), g, nil, base, []string{"api.go"})
+		"no vcs": func() (SymbolDelta, bool) {
+			return ReadSymbolDelta(t.Context(), repo.Root(), g, nil, base, []string{"api.go"})
 		},
-		"no base": func() (symbolDelta, bool) {
-			return readSymbolDelta(t.Context(), repo.Root(), g, res.VCS, "", []string{"api.go"})
+		"no base": func() (SymbolDelta, bool) {
+			return ReadSymbolDelta(t.Context(), repo.Root(), g, res.VCS, "", []string{"api.go"})
 		},
-		"no symbols": func() (symbolDelta, bool) {
-			return readSymbolDelta(t.Context(), repo.Root(), knowledge.NewGraph(), res.VCS, base, []string{"api.go"})
+		"no symbols": func() (SymbolDelta, bool) {
+			return ReadSymbolDelta(t.Context(), repo.Root(), knowledge.NewGraph(), res.VCS, base, []string{"api.go"})
 		},
 	} {
 		_, ok := read()

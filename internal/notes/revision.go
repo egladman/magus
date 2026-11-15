@@ -3,7 +3,6 @@ package notes
 import (
 	"context"
 
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -26,5 +25,6 @@ func Revision(ctx context.Context, root string) string {
 	if err != nil {
 		return ""
 	}
-	return job.ShortRevision(meta.ID)
+	// A copy of job.ShortRevision: job reaches notes through the knowledge graph.
+	return meta.ID[:min(len(meta.ID), 12)]
 }
