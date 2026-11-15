@@ -537,32 +537,89 @@ fun sift(entries: [str], held: fun (branch: str) > result\Result::<bool>) > Sift
     return Sifted{ kept = kept, skipped = skipped, unread = unread };
 }
 
-// landedOnBase is whether merging branch into HEAD, and into the VCS base,
-// leaves either tree unchanged. A conflict reads as not landed.
-export fun landedOnBase(branch: str) > result\Result::<bool> {
+// mergeTreeBudget bounds the merge-tree calls one fork line may make; a branch
+// past it stays counted and the denial says why.
+export final mergeTreeBudget = 6;
+
+// MergedListing is what one fork line reads up front: the bases a branch may
+// have merged into, each base's tree, and every branch already merged into one.
+object MergedListing {
+    bases: [str],
+    trees: [str] = [],
+    merged: {str: bool} = {<str: bool>},
+    failed: str = "",
+}
+
+// mergedListing lists the branches merged into HEAD or the VCS base with one
+// `git branch --merged` call, and both trees with one rev-parse.
+fun mergedListing() > MergedListing {
+    final bases = mut ["HEAD"];
     try {
-        final bases = mut ["HEAD"];
         final base = vcs\base();
         if (base != "" and base != "HEAD") {
             bases.append(base);
         }
+        final args = mut ["branch", "--format=%(refname:short)"];
+        final revs = mut ["rev-parse"];
         foreach (b in bases) {
-            final tree = vcs\cmd(["rev-parse", "{b}^\{tree\}"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
-            if (!tree.ok) {
-                return result\fail::<bool>("git rev-parse {b}: {tree.stderr.trim()}");
-            }
-            final merged = vcs\cmd(["merge-tree", "--write-tree", b, branch], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
-            if (merged.code > 1) {
-                return result\fail::<bool>("git merge-tree {b} {branch}: {merged.stderr.trim()}");
-            }
-            if (merged.code == 0 and merged.stdout.trim() == tree.stdout.trim()) {
-                return result\ok::<bool>(true);
-            }
+            args.append("--merged={b}");
+            revs.append("{b}^\{tree\}");
         }
-        return result\ok::<bool>(false);
+        final listed = vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+        if (!listed.ok) {
+            return MergedListing{ bases = bases, failed = "git branch --merged: {listed.stderr.trim()}" };
+        }
+        final parsed = vcs\cmd(revs, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+        if (!parsed.ok) {
+            return MergedListing{ bases = bases, failed = "git rev-parse trees: {parsed.stderr.trim()}" };
+        }
+        final merged = mut {<str: bool>};
+        foreach (name in listed.stdout.trim().split("\n")) {
+            merged[name] = true;
+        }
+        return MergedListing{ bases = bases, trees = parsed.stdout.trim().split("\n"), merged = merged };
     } catch (err: any) {
-        return result\caught::<bool>(err, doing: "git merge-tree {branch}");
+        return MergedListing{ bases = bases, failed = "git branch --merged: {err}" };
     }
+}
+
+// landedReader answers "does the base already hold branch's change" for every
+// branch. A branch mergedListing names is landed. Only a branch neither base
+// holds (a squash merge) pays merge-tree, at most mergeTreeBudget calls. A
+// conflict reads as not landed.
+export fun landedReader() > fun (branch: str) > result\Result::<bool> {
+    final listing = mergedListing();
+    final bases = listing.bases;
+    final trees = listing.trees;
+    final merged = listing.merged;
+    final why = listing.failed;
+    final spent = mut [0];
+    return fun (branch: str) > result\Result::<bool> {
+        if (why != "") {
+            return result\fail::<bool>(why);
+        }
+        if (merged[branch] ?? false) {
+            return result\ok::<bool>(true);
+        }
+        try {
+            foreach (i, b in bases) {
+                if (spent[0] >= mergeTreeBudget) {
+                    return result\fail::<bool>("git merge-tree {branch}: more than {mergeTreeBudget} merge checks on one line");
+                }
+                spent[0] = spent[0] + 1;
+                final tried = vcs\cmd(["merge-tree", "--write-tree", b, branch], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+                if (tried.code > 1) {
+                    return result\fail::<bool>("git merge-tree {b} {branch}: {tried.stderr.trim()}");
+                }
+                if (tried.code == 0 and tried.stdout.trim() == trees[i]) {
+                    return result\ok::<bool>(true);
+                }
+            }
+            return result\ok::<bool>(false);
+        } catch (err: any) {
+            return result\caught::<bool>(err, doing: "git merge-tree {branch}");
+        }
+    };
 }
 
 fun describeTest(counts: ForkCounts) > str {
@@ -587,7 +644,7 @@ export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (pat
         var counts = withoutPublished(facts(), published: remotePublished());
         // Each landed check merges trees, so only a count at the limit pays.
         if (counts.finishedBranches.len() >= limit) {
-            counts = withoutLanded(counts, landed: landedOnBase);
+            counts = withoutLanded(counts, landed: landedReader());
         }
         final judged = decideFork(fork, counts: counts, limit: limit);
         if (judged.decision != magus\GuardDecision.allow) {
@@ -696,6 +753,12 @@ test "the published check asks git once, and a branch git does not list is not p
     final answer = published("no-such-branch-guard-latency");
     std\assert(answer.error == null and answer.value == false, message: "unknown branch");
     std\assert(published("another-no-such-branch").error == null, message: "same listing answers every branch");
+}
+
+test "the landed check lists merged branches once, and a branch git does not list is not landed" {
+    final landed = landedReader();
+    final answer = landed("no-such-branch-guard-latency");
+    std\assert(answer.error != null or answer.value == false, message: "unknown branch");
 }
 
 test "a branch that is on no remote ref stays counted, and an unreadable one says why" {
