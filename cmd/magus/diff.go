@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -27,7 +26,6 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
@@ -36,19 +34,16 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/marker"
 	"github.com/egladman/magus/internal/review"
+	reviewimpact "github.com/egladman/magus/internal/review/impact"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/termkit"
-	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/impact"
 	typesvcs "github.com/egladman/magus/types/vcs"
-	"github.com/egladman/magus/vcs"
 )
 
 // diffCommand implements `magus diff`: the working tree's changes, annotated and ordered by
@@ -509,9 +504,9 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 		return nil
 	}
 
-	var pre *diffImpact
+	var pre *reviewimpact.Report
 	if impact {
-		p, err := collectImpact(ctx, m, rootOverride, rev, patch, src.kind == inputWorkingTree)
+		p, err := reviewimpact.Collect(ctx, m, impactSources(m, rootOverride), rev, patch, src.kind == inputWorkingTree)
 		if err != nil {
 			return fmt.Errorf("magus diff: %w", err)
 		}
@@ -1629,7 +1624,7 @@ func diffCountsLine(rev difftypes.Diff, showGenerated bool) string {
 //
 // pre is nil unless --impact was passed, and nil prints nothing at all: the report above
 // it must not change shape because a second one was appended.
-func printDiffText(rev difftypes.Diff, showGenerated bool, link func(string) string, pre *diffImpact) error {
+func printDiffText(rev difftypes.Diff, showGenerated bool, link func(string) string, pre *reviewimpact.Report) error {
 	var primary, generated []difftypes.File
 	for _, f := range rev.Files {
 		if f.Generated() {
@@ -1701,7 +1696,7 @@ func printDiffText(rev difftypes.Diff, showGenerated bool, link func(string) str
 	// else, and burying it under forty lines of report would cost it every reader it has.
 	if pre != nil {
 		fmt.Println()
-		for _, line := range impactLines(*pre) {
+		for _, line := range reviewimpact.Lines(*pre) {
 			fmt.Println(line)
 		}
 	}
@@ -1913,493 +1908,44 @@ func capSlice(xs []string, n int) []string {
 // before, so nothing reading `magus diff -o json` today meets a key it has never seen.
 type diffReport struct {
 	difftypes.Diff `yaml:",inline"`
-	Impact         *diffImpact `json:"impact,omitempty" yaml:"impact,omitempty"`
+	Impact         *reviewimpact.Report `json:"impact,omitempty" yaml:"impact,omitempty"`
 }
 
-// diffImpact is what a disposer should know before landing: the consequences a file list
-// structurally cannot show.
+// adviceSection is the advisors' finding type, which the impact report carries.
+// compat: pass 2 of the diff move gives it to internal/review.
+type adviceSection = reviewimpact.AdviceSection
+
+// impactSources hands the impact report the lenses whose readers live in this package.
 //
-// Every field distinguishes "nothing" from "nobody measured", the same refusal diff.File
-// makes with its pointers. An absent cost is a workspace with no run history, and rendering it
-// as zero would tell a reader the build is free.
-type diffImpact struct {
-	Reach     *impactReach    `json:"reach,omitempty"     yaml:"reach,omitempty"`
-	Ownership []impactOwner   `json:"ownership,omitempty" yaml:"ownership,omitempty"`
-	Cost      *impactCost     `json:"cost,omitempty"      yaml:"cost,omitempty"`
-	Advisors  []adviceSection `json:"advisors,omitempty"  yaml:"advisors,omitempty"`
-	// AdvisorNotes names each advisor that could not run. Surfaced rather than swallowed, so
-	// an empty advisor list reads as "they all passed" only when it is one.
-	AdvisorNotes []string `json:"advisor_notes,omitempty" yaml:"advisor_notes,omitempty"`
-	// AdvisorBase qualifies everything the advisors said. nil when the backend cannot date a
-	// revision, which is a different fact from a base that is merely old.
-	AdvisorBase *impactAdvisorBase `json:"advisor_base,omitempty" yaml:"advisor_base,omitempty"`
-	Anchors     []review.AnchorHit `json:"anchors,omitempty"      yaml:"anchors,omitempty"`
-	LeftBehind  *impactLeftBehind  `json:"left_behind,omitempty"  yaml:"left_behind,omitempty"`
-	// Evidence is what this changeset's authors asked magus before writing it. It is the
-	// reasoning half of the record diff.Touch carries: that one names the files an agent
-	// had READ, this one the questions it put to the graph.
-	Evidence []trail.Consultation `json:"evidence,omitempty" yaml:"evidence,omitempty"`
-	// EvidenceGap says which silence an empty Evidence is, so a consumer of the document can
-	// tell an unresearched change from a record kept in another checkout.
-	EvidenceGap trail.ConsultGap `json:"evidence_gap,omitempty" yaml:"evidence_gap,omitempty"`
-	Review      *impactReview    `json:"review,omitempty"       yaml:"review,omitempty"`
-}
-
-// impactAdvisorBase is the revision the advisors compared against, and how current this
-// clone's copy of it is.
-//
-// It is stated ONCE for the whole set rather than per section: a local run never fetches, so
-// the caveat is identical under every advisor, and repeating it ten times is how a reader
-// learns to skip it.
-type impactAdvisorBase struct {
-	// Ref is the revision as the advisors spell it, so a reader can run the same comparison
-	// by hand.
-	Ref string `json:"ref" yaml:"ref"`
-	// Tip is when Ref's commit was authored, RFC3339, and empty when Ref names nothing in
-	// this clone. The AGE a reader sees is derived from this at render rather than stored:
-	// a report teed to a file and read tomorrow must not still claim today's number.
-	Tip string `json:"tip,omitempty" yaml:"tip,omitempty"`
-}
-
-// impactReach is the blast radius: what was edited, and what rebuilds because of it.
-type impactReach struct {
-	Seeds    int             `json:"seeds"              yaml:"seeds"`
-	Rebuilds int             `json:"rebuilds"           yaml:"rebuilds"`
-	Projects []impactProject `json:"projects,omitempty" yaml:"projects,omitempty"`
-}
-
-type impactProject struct {
-	Path  string `json:"path"            yaml:"path"`
-	Seed  bool   `json:"seed"            yaml:"seed"`
-	Files int    `json:"files,omitempty" yaml:"files,omitempty"`
-}
-
-// impactOwner is one project in reach and who has been changing it.
-type impactOwner struct {
-	Project      string `json:"project"                yaml:"project"`
-	Primary      string `json:"primary"                yaml:"primary"`
-	PrimaryShare int    `json:"primary_share"          yaml:"primary_share"` // percent
-	Authors      int    `json:"authors"                yaml:"authors"`
-	BusFactor1   bool   `json:"bus_factor_1,omitempty" yaml:"bus_factor_1,omitempty"`
-}
-
-// impactCost is the estimated cost of rebuilding the reach, from recorded run durations.
-type impactCost struct {
-	TotalMs  int64               `json:"total_ms"           yaml:"total_ms"`
-	Projects []impactCostProject `json:"projects,omitempty" yaml:"projects,omitempty"`
-}
-
-type impactCostProject struct {
-	Project string `json:"project" yaml:"project"`
-	Target  string `json:"target"  yaml:"target"`
-	Ms      int64  `json:"ms"      yaml:"ms"`
-	// Samples is how many runs the estimate rests on, carried so a reader can weigh it. An
-	// estimate from three runs and one from three hundred print the same duration otherwise.
-	Samples int     `json:"samples"           yaml:"samples"`
-	HitRate float64 `json:"hit_rate,omitempty" yaml:"hit_rate,omitempty"`
-}
-
-// impactCostTargets is the target a project's rebuild is estimated by, most representative
-// first. ci is the whole gate; test is the bulk of it where no ci target is declared.
-var impactCostTargets = []string{"ci", "test"}
-
-// impactMinSamples mirrors the tier-3 gate inside forecast.resolvePrediction: below it the
-// prediction is the workspace fallback rather than a measurement of this project, and printing
-// that as an estimate would be inventing a number.
-const impactMinSamples = 3
-
-// impactListCap bounds each section's list. A reach of sixty projects is a real answer and
-// an unreadable one; the remainder is reported rather than truncated in silence.
-const impactListCap = 10
-
-// collectImpact joins the lenses the report needs onto an already-annotated changeset.
-//
-// Every lens is best-effort and every failure degrades to that lens's empty form. A impact
-// that refuses to print because the symbol index is cold or no server is running is a
-// impact nobody runs, and this command reports context rather than passing judgement.
-func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev difftypes.Diff, patch string, working bool) (diffImpact, error) {
-	p := diffImpact{Reach: computeImpactReach(rev)}
-
-	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
-	// sections of one report cannot describe two different windows of history.
-	if own, err := m.Ownership(ctx, types.HistoryMetricsOptions{Commits: diffHistoryCommits}); err == nil {
-		p.Ownership = listImpactOwners(own, rev.AffectedProjects)
+// rootOverride, not m.Root(): the workspace loaders are once-per-process and keyed on the
+// override they were first handed, so each graph or workspace load must spell the root
+// exactly as diffCommand's own load did.
+func impactSources(m *magus.Magus, rootOverride string) reviewimpact.Sources {
+	return reviewimpact.Sources{
+		OwnershipCommits: diffHistoryCommits,
+		HistoryPath:      globalCfg.HistoryPath,
+		Advisors: func(ctx context.Context, base string, rev difftypes.Diff) ([]adviceSection, []string, error) {
+			return runLocalAdvisors(ctx, m, base, rev)
+		},
+		Anchors: func(ctx context.Context, rev difftypes.Diff) ([]review.AnchorHit, error) {
+			return impactAnchors(ctx, rootOverride, rev)
+		},
+		LoadGraph: func(ctx context.Context) (*knowledge.Graph, error) {
+			return loadKnowledgeGraph(ctx, rootOverride, false, false, true)
+		},
+		UnusedSymbols: func(ctx context.Context, g *knowledge.Graph, driver types.RevisionReader, head string, changed []string) ([]string, bool) {
+			delta, ok := readSymbolDelta(ctx, m.Root(), g, driver, head, changed)
+			return delta.Left, ok
+		},
+		RequiredIn: func(ctx context.Context) func(string) bool {
+			ws, err := inspectWorkspace(ctx, rootOverride)
+			if err != nil {
+				return nil
+			}
+			return reviewRequiredMatcher(ws)
+		},
+		BulkReasons: bulkReasons,
 	}
-
-	if path := globalCfg.HistoryPath; path != "" {
-		var h forecast.History
-		if err := h.Load(ctx, path); err == nil {
-			p.Cost = estimateImpactCost(&h, rev.AffectedProjects)
-		}
-	}
-
-	// The configured VCS base ref, never rev.Base: the working diff's base is a STATE
-	// label ("working"), and the advisors compare git revisions (`origin/<base>`), so the
-	// label would send them fetching a branch that does not exist. Their section
-	// therefore describes committed state against the base branch, the most a rev-based
-	// advisor can measure, per the documented limit on runLocalAdvisors.
-	base := m.VCSOptions().BaseRef
-	if base == "" {
-		base = "main"
-	}
-	sections, failed, err := runLocalAdvisors(ctx, m, base, rev)
-	p.Advisors, p.AdvisorNotes = sections, failed
-	if err != nil {
-		p.AdvisorNotes = append(p.AdvisorNotes, fmt.Sprintf("advisors did not run: %v", err))
-	}
-	p.AdvisorBase = resolveImpactAdvisorBase(ctx, m, base)
-
-	// rootOverride, not m.Root(): the workspace loaders are once-per-process and keyed on
-	// the override they were first handed, so the anchors' graph load must spell the root
-	// exactly as diffCommand's own load did.
-	anchors, aerr := impactAnchors(ctx, rootOverride, rev)
-	if aerr != nil {
-		// Not a lens that degrades: a misdeclared notes store is a fault in the workspace's own
-		// config, and an anchors section that went missing would read as a clean tree.
-		return diffImpact{}, aerr
-	}
-	p.Anchors = anchors
-	p.LeftBehind = collectLeftBehind(ctx, m, rootOverride, rev, patch, working)
-	// The trail and window trail.AttachTouches walks for the per-file touches, read here for the
-	// questions the authors asked rather than the files they opened.
-	p.Evidence, p.EvidenceGap = trail.Consulted(m.Root(), m.CacheDir(), review.ChangedPaths(rev), trail.DefaultReplayEvents)
-	var requiredIn func(string) bool
-	if ws, werr := inspectWorkspace(ctx, rootOverride); werr == nil {
-		requiredIn = reviewRequiredMatcher(ws)
-	}
-	p.Review = collectReview(rev, requiredIn, bulkReasons(m.CacheDir(), rev))
-	return p, nil
-}
-
-// computeImpactReach renders what types.Diff has carried since the impact join landed and
-// nothing has ever printed: which projects were edited, and which merely rebuild.
-//
-// nil when the closure is empty, which is a real state: a change entirely outside every
-// project directory seeds nothing.
-func computeImpactReach(rev difftypes.Diff) *impactReach {
-	if len(rev.AffectedProjects) == 0 {
-		return nil
-	}
-	r := &impactReach{Seeds: len(rev.SeedProjects), Rebuilds: len(rev.AffectedProjects)}
-	for _, p := range rev.AffectedProjects {
-		r.Projects = append(r.Projects, impactProject{Path: p.Path, Seed: p.Seed, Files: len(p.Files)})
-	}
-	return r
-}
-
-// listImpactOwners joins the ownership lens onto the reach, in reach order.
-//
-// Projects the lens has nothing to say about are DROPPED rather than listed with an empty
-// author: a project with no commits in the window has no owner to name, and a blank name
-// beside a path reads as a lookup that failed.
-func listImpactOwners(own types.Ownership, affected []impact.Project) []impactOwner {
-	byPath := make(map[string]types.OwnershipEntry, len(own.Projects))
-	for _, e := range own.Projects {
-		byPath[e.Path] = e
-	}
-	var out []impactOwner
-	for _, p := range affected {
-		e, ok := byPath[p.Path]
-		if !ok || e.Primary == "" {
-			continue
-		}
-		out = append(out, impactOwner{
-			Project:      p.Path,
-			Primary:      e.Primary,
-			PrimaryShare: e.PrimaryShare,
-			Authors:      e.Authors,
-			BusFactor1:   e.BusFactor1,
-		})
-	}
-	return out
-}
-
-// estimateImpactCost sums the recorded history's per-project prediction over the reach.
-//
-// nil when the history has nothing to say about ANY project in reach. That case matters more
-// than the happy one: forecast falls back to a workspace-wide default and then to a compiled-in
-// constant, so a total is always computable and a total computed from those is a fabrication
-// wearing a duration. Only projects with enough samples for forecast's own project tier are
-// counted, and a reach whose projects all fall short reports no history at all.
-func estimateImpactCost(h *forecast.History, affected []impact.Project) *impactCost {
-	c := &impactCost{}
-	for _, p := range affected {
-		target, stats, ok := impactCostTarget(h, p)
-		if !ok {
-			continue
-		}
-		// Tags are derived from the changed files inside the project, which is what selects
-		// forecast's per-subdirectory bucket over the project-wide percentile. A transitively
-		// affected project has none, and Tags answers "transitive" for it.
-		d := h.PredictDuration(p.Path, target, forecast.Tags(p.Path, p.Files))
-		c.TotalMs += d.Milliseconds()
-		c.Projects = append(c.Projects, impactCostProject{
-			Project: p.Path,
-			Target:  target,
-			Ms:      d.Milliseconds(),
-			Samples: stats.Samples,
-			HitRate: stats.HitRate,
-		})
-	}
-	if len(c.Projects) == 0 {
-		return nil
-	}
-	return c
-}
-
-// impactCostTarget picks the target a project's rebuild is estimated by, and reports false
-// when the history has no measurement of this project worth quoting.
-func impactCostTarget(h *forecast.History, p impact.Project) (string, forecast.Stats, bool) {
-	targets, ok := h.Projects[p.Path]
-	if !ok {
-		return "", forecast.Stats{}, false
-	}
-	for _, name := range impactCostTargets {
-		s, timed := targets[name]
-		if timed && s.Samples >= impactMinSamples && s.P75Ms > 0 {
-			return name, s, true
-		}
-	}
-	return "", forecast.Stats{}, false
-}
-
-// impactLines renders the report, one claim per line, in the same count-then-list shape
-// the file list above it uses.
-//
-// Lines rather than prints, so every empty form is testable without a terminal, and the empty
-// forms are the half that matters. Each one says what was not measured and what would measure
-// it, because a silent section reads as a clean bill of health.
-func impactLines(p diffImpact) []string {
-	out := []string{"IMPACT - the blast radius of landing this", ""}
-	sections := [][]string{
-		impactReachLines(p.Reach),
-		impactOwnershipLines(p.Ownership),
-		impactCostLines(p.Cost),
-		impactAdvisorLines(p.Advisors, p.AdvisorNotes, p.AdvisorBase),
-		impactAnchorLines(p.Anchors),
-		impactLeftBehindLines(p.LeftBehind),
-		impactEvidenceLines(p.Evidence, p.EvidenceGap),
-		impactReviewLines(p.Review),
-	}
-	for _, s := range sections {
-		// A section may render nothing: REVIEW says nothing about a small change nobody
-		// has disturbed. Skipping it here rather than emitting its blank separator is what
-		// keeps that silence from reading as a section that broke.
-		if len(s) == 0 {
-			continue
-		}
-		if len(out) > 2 {
-			out = append(out, "")
-		}
-		out = append(out, s...)
-	}
-	return out
-}
-
-func impactReachLines(r *impactReach) []string {
-	if r == nil {
-		return []string{"REACH: no project contains a changed file, so nothing rebuilds"}
-	}
-	out := []string{fmt.Sprintf("REACH: %d project%s edited, %d project%s rebuild",
-		r.Seeds, plural.Word(r.Seeds, "", "s"), r.Rebuilds, plural.Word(r.Rebuilds, "", "s"))}
-	for _, p := range impactCap(r.Projects) {
-		if p.Seed {
-			out = append(out, fmt.Sprintf("      %s - edited, %d file%s", p.Path, p.Files, plural.Word(p.Files, "", "s")))
-			continue
-		}
-		out = append(out, fmt.Sprintf("      %s - rebuilds because it depends on one that was", p.Path))
-	}
-	return append(out, impactMoreLine(len(r.Projects))...)
-}
-
-func impactOwnershipLines(owners []impactOwner) []string {
-	if len(owners) == 0 {
-		return []string{"OWNERSHIP: no commit history in the window, so no owner is named"}
-	}
-	out := []string{"OWNERSHIP: who has been changing the projects in reach"}
-	for _, o := range impactCap(owners) {
-		line := fmt.Sprintf("      %s mostly %s (%d%%), %d author%s",
-			o.Project, o.Primary, o.PrimaryShare, o.Authors, plural.Word(o.Authors, "", "s"))
-		if o.BusFactor1 {
-			// The bus factor is the whole point of the lens, so it is stated rather than left
-			// to be inferred from "1 author".
-			line += " - BUS FACTOR 1"
-		}
-		out = append(out, line)
-	}
-	return append(out, impactMoreLine(len(owners))...)
-}
-
-func impactCostLines(c *impactCost) []string {
-	if c == nil {
-		return []string{
-			"COST: no run history yet, so there is nothing to estimate from",
-			fmt.Sprintf("      Run `%s` once and the next impact can price this.", hint.Affected.With("ci")),
-		}
-	}
-	out := []string{fmt.Sprintf(
-		"COST: ~%s to rebuild the reach (history-based estimate: the p75 of past runs, discounted by the cache hit rate they recorded)",
-		impactDuration(c.TotalMs))}
-	for _, p := range impactCap(c.Projects) {
-		line := fmt.Sprintf("      %s %s ~%s (%d run%s)",
-			p.Project, p.Target, impactDuration(p.Ms), p.Samples, plural.Word(p.Samples, "", "s"))
-		if p.HitRate > 0 {
-			line += fmt.Sprintf(", %d%% cache hits", int(p.HitRate*100+0.5))
-		}
-		out = append(out, line)
-	}
-	return append(out, impactMoreLine(len(c.Projects))...)
-}
-
-// resolveImpactAdvisorBase dates this clone's copy of the ref the advisors compared against.
-//
-// nil whenever the answer would be a guess: no VCS, or a backend that cannot date a
-// revision. A ref the clone does not HAVE is not that case; it resolves to a
-// impactAdvisorBase with no Tip, because "you have never fetched this" is the single most
-// useful thing the report can say about why nine advisors went quiet.
-func resolveImpactAdvisorBase(ctx context.Context, m *magus.Magus, base string) *impactAdvisorBase {
-	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
-	if err != nil || res.VCS == nil {
-		return nil
-	}
-	// "origin/" + base is the spelling the advisors themselves use, not a normalization of
-	// it: the line exists so a reader can run the same comparison by hand, and a ref that
-	// reads differently here than in advice.buzz would send them at the wrong one.
-	ref := "origin/" + base
-	tip, found, err := res.VCS.RevTime(ctx, m.Root(), ref)
-	if err != nil {
-		return nil
-	}
-	if !found {
-		return &impactAdvisorBase{Ref: ref}
-	}
-	return &impactAdvisorBase{Ref: ref, Tip: tip.Format(time.RFC3339)}
-}
-
-// impactAdvisorBaseLine states what the advisors measured against, and how old it is.
-//
-// The age is computed here rather than carried, so it describes when the report is READ.
-// An unparsable Tip degrades to naming the ref: the ref alone is still true, and a
-// malformed date is not worth losing the rest of the line over.
-func impactAdvisorBaseLine(b *impactAdvisorBase) string {
-	if b == nil {
-		return ""
-	}
-	refresh := fmt.Sprintf("`git fetch origin %s` brings it forward", strings.TrimPrefix(b.Ref, "origin/"))
-	if b.Tip == "" {
-		return fmt.Sprintf("BASE: %s is not in this clone, so the advisors below had nothing to "+
-			"compare against; %s", b.Ref, refresh)
-	}
-	tip, err := time.Parse(time.RFC3339, b.Tip)
-	if err != nil {
-		return fmt.Sprintf("BASE: %s, as this clone has it - a local run stays off the network; %s", b.Ref, refresh)
-	}
-	return fmt.Sprintf("BASE: %s, tip %s old - a local run stays off the network, so anything "+
-		"merged since is outside what the advisors saw; %s",
-		b.Ref, impactAge(time.Since(tip)), refresh)
-}
-
-// impactAge renders a duration at one unit of precision. A reader deciding whether to
-// fetch needs the order of magnitude ("3 days"), and "3 days 4 hours 11 minutes" buries it.
-func impactAge(d time.Duration) string {
-	switch {
-	case d < time.Minute:
-		return "seconds"
-	case d < time.Hour:
-		return fmt.Sprintf("%d minute%s", int(d.Minutes()), plural.Word(int(d.Minutes()), "", "s"))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%d hour%s", int(d.Hours()), plural.Word(int(d.Hours()), "", "s"))
-	default:
-		days := int(d.Hours() / 24)
-		return fmt.Sprintf("%d day%s", days, plural.Word(days, "", "s"))
-	}
-}
-
-func impactAdvisorLines(sections []adviceSection, failed []string, base *impactAdvisorBase) []string {
-	// Prepended to whichever headline follows, including "nothing to report": a clean set
-	// measured against a ref from last week is the case where the caveat matters MOST, and
-	// hanging it off a finding count would drop it exactly there.
-	var out []string
-	if line := impactAdvisorBaseLine(base); line != "" {
-		out = append(out, line)
-	}
-	if len(sections) == 0 && len(failed) == 0 {
-		return append(out, "ADVISORS: nothing to report")
-	}
-	// An empty Body is a RETRACTION (that advisor ran and found nothing), so it is not a
-	// finding, and counting sections rather than findings reported ten of them where there
-	// was one, each rendered as a title with nothing underneath. A reader who learns the
-	// headline overstates by an order of magnitude stops reading the section.
-	var found []adviceSection
-	var clear []string
-	for _, s := range sections {
-		if strings.TrimRight(s.Body, "\n") == "" {
-			clear = append(clear, s.Name)
-			continue
-		}
-		found = append(found, s)
-	}
-	out = append(out, fmt.Sprintf("ADVISORS: %d finding%s", len(found), plural.Word(len(found), "", "s")))
-	for _, s := range found {
-		out = append(out, "      "+s.Title)
-		for _, line := range strings.Split(strings.TrimRight(s.Body, "\n"), "\n") {
-			out = append(out, "        "+line)
-		}
-	}
-	// Named, not just counted, and kept apart from the notes below: "ran and found nothing"
-	// and "could not run" are the two ways a section goes quiet, and only one of them is
-	// news about the change.
-	if len(clear) > 0 {
-		out = append(out, fmt.Sprintf("      %d ran and found nothing: %s",
-			len(clear), strings.Join(clear, ", ")))
-	}
-	// Named rather than counted: which advisor went quiet is what a reader needs to decide
-	// whether the silence above it means anything. Printed verbatim: each note already
-	// says whether it is a warning or a "could not run" failure, and only collectAdvice
-	// can tell the two apart.
-	for _, f := range failed {
-		out = append(out, "      "+f)
-	}
-	return out
-}
-
-func impactAnchorLines(hits []review.AnchorHit) []string {
-	if len(hits) == 0 {
-		return []string{"ANCHORS: no note anchors a changed file or symbol"}
-	}
-	out := []string{fmt.Sprintf("ANCHORS: %d note%s anchored to what you changed",
-		len(hits), plural.Word(len(hits), "", "s"))}
-	for _, h := range impactCap(hits) {
-		out = append(out, "      "+h.Line())
-	}
-	return append(out, impactMoreLine(len(hits))...)
-}
-
-// impactCap bounds one section's list; impactMoreLine reports what it left off. They
-// are separate because the remainder is a line in the section's own indentation, not an entry
-// in the list it describes.
-func impactCap[T any](xs []T) []T {
-	if len(xs) <= impactListCap {
-		return xs
-	}
-	return xs[:impactListCap]
-}
-
-func impactMoreLine(n int) []string {
-	if n <= impactListCap {
-		return nil
-	}
-	return []string{fmt.Sprintf("      and %d more", n-impactListCap)}
-}
-
-// impactDuration renders an estimate at the precision it deserves. Seconds is the floor:
-// this is a p75 of past runs, and a millisecond figure would claim an accuracy it has not got.
-func impactDuration(ms int64) string {
-	d := (time.Duration(ms) * time.Millisecond).Round(time.Second)
-	if d < time.Second {
-		return "<1s"
-	}
-	return d.String()
 }
 
 // changedPathsFromPatch lists the files a patch touches, in patch order.
@@ -2568,183 +2114,6 @@ func (e *earnedSync) finished() []review.Receipt {
 		add = append(add, review.Receipt{Path: path, Digest: content, At: e.now(), Source: e.content.at})
 	}
 	return add
-}
-
-// impactLeftBehind is what a change keeps alive or leaves unused: the markers it added
-// (compat(until:) and Deprecated:), and the symbols that lost their last use in it and are
-// still defined. Facts, not reasons: a marker says how long code stays, never whether it
-// should.
-type impactLeftBehind struct {
-	Markers []leftMarker `json:"markers,omitempty" yaml:"markers,omitempty"`
-	// Unreferenced is readSymbolDelta's Left, known only when UnreferencedKnown is;
-	// UnreferencedReason says why it is not.
-	Unreferenced       []string `json:"unreferenced,omitempty" yaml:"unreferenced,omitempty"`
-	UnreferencedKnown  bool     `json:"unreferenced_known" yaml:"unreferenced_known"`
-	UnreferencedReason string   `json:"unreferenced_reason,omitempty" yaml:"unreferenced_reason,omitempty"`
-}
-
-// leftMarker is one marker an added line carries.
-type leftMarker struct {
-	Path string `json:"path" yaml:"path"`
-	Line int    `json:"line" yaml:"line"`
-	// Marker and Text are marker.Found's.
-	Marker string `json:"marker" yaml:"marker"`
-	Text   string `json:"text" yaml:"text"`
-}
-
-// collectLeftBehind reads the markers from the patch's added lines, in any file the change
-// did not generate, and the symbols it left unused from the graph. Only a working-tree diff
-// reads symbols: the graph describes the tree on disk, which is the head of no other diff.
-func collectLeftBehind(ctx context.Context, m *magus.Magus, rootOverride string, rev difftypes.Diff, patch string, working bool) *impactLeftBehind {
-	generated := map[string]bool{}
-	for _, f := range rev.Files {
-		generated[f.Path] = f.Generated()
-	}
-	l := &impactLeftBehind{Markers: addedMarkers(patch, generated)}
-	if !working {
-		l.UnreferencedReason = "read only for the working tree, the tree the symbol graph describes"
-		return l
-	}
-	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
-	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
-		l.UnreferencedReason = "no version control answered here"
-		return l
-	}
-	head, err := res.VCS.FindCommit(ctx, m.Root(), "")
-	if err != nil || head.ID == "" {
-		l.UnreferencedReason = "the checkout has no HEAD to compare with"
-		return l
-	}
-	g, err := loadKnowledgeGraph(ctx, rootOverride, false, false, true)
-	if err != nil {
-		l.UnreferencedReason = fmt.Sprintf("the symbol graph could not be read: %v", err)
-		return l
-	}
-	delta, ok := readSymbolDelta(ctx, m.Root(), g, res.VCS, head.ID, review.ChangedPaths(rev))
-	if !ok {
-		l.UnreferencedReason = fmt.Sprintf("the symbol index does not cover the changed files; `%s` builds it", hint.GraphBuild)
-		return l
-	}
-	l.Unreferenced, l.UnreferencedKnown = delta.Left, true
-	return l
-}
-
-// addedMarkers are the markers on the added lines of patch, in a comment, outside the paths
-// generated marks.
-func addedMarkers(patch string, generated map[string]bool) []leftMarker {
-	var out []leftMarker
-	for _, f := range changeset.ParseHunks(patch) {
-		if generated[f.Path] {
-			continue
-		}
-		for _, h := range f.Hunks {
-			line := h.NewStart
-			for _, raw := range h.Lines {
-				switch {
-				case strings.HasPrefix(raw, "+"):
-					if mk, ok := marker.Parse(raw[1:]); ok {
-						out = append(out, leftMarker{Path: f.Path, Line: line, Marker: mk.Marker, Text: mk.Text})
-					}
-					line++
-				case strings.HasPrefix(raw, "-"), strings.HasPrefix(raw, `\`):
-				default:
-					line++
-				}
-			}
-		}
-	}
-	return out
-}
-
-// impactLeftBehindLines renders the section, including its empty forms.
-func impactLeftBehindLines(l *impactLeftBehind) []string {
-	if l == nil {
-		return []string{"LEFT BEHIND: not measured"}
-	}
-	var out []string
-	if len(l.Markers) == 0 {
-		out = append(out, "LEFT BEHIND: no compat(until:) or Deprecated: marker added")
-	} else {
-		out = append(out, fmt.Sprintf("LEFT BEHIND: %d compat(until:) or Deprecated: marker%s added",
-			len(l.Markers), plural.Word(len(l.Markers), "", "s")))
-		for _, mk := range impactCap(l.Markers) {
-			out = append(out, fmt.Sprintf("      %s:%d %s %s", mk.Path, mk.Line, mk.Marker, mk.Text))
-		}
-		out = append(out, impactMoreLine(len(l.Markers))...)
-	}
-	switch {
-	case !l.UnreferencedKnown:
-		out = append(out, "      symbols left unused: not measured, "+cmp.Or(l.UnreferencedReason, "nothing read them"))
-	case len(l.Unreferenced) == 0:
-		out = append(out, "      no symbol it stopped using is still defined")
-	default:
-		out = append(out, fmt.Sprintf("      %d symbol%s lost the last use here and %s still defined",
-			len(l.Unreferenced), plural.Word(len(l.Unreferenced), "", "s"), plural.Word(len(l.Unreferenced), "is", "are")))
-		for _, name := range impactCap(l.Unreferenced) {
-			out = append(out, "        "+name)
-		}
-		out = append(out, impactMoreLine(len(l.Unreferenced))...)
-	}
-	return out
-}
-
-// impactEvidenceLines names the questions this changeset's authors put to magus, so a reviewer
-// can audit the reasoning behind it and not just its result.
-//
-// One line per distinct subject, carrying no answer text. The section sits beside a diff someone
-// is in the middle of reading, and a transcript of what each answer said would cost more
-// attention than the whole report repays. A reader who wants an answer back re-asks the question.
-func impactEvidenceLines(hits []trail.Consultation, gap trail.ConsultGap) []string {
-	if len(hits) == 0 {
-		return impactEvidenceGapLines(gap)
-	}
-	out := []string{fmt.Sprintf("EVIDENCE: %d question%s the authors asked magus while writing this",
-		len(hits), plural.Word(len(hits), "", "s"))}
-	for _, h := range impactCap(hits) {
-		// A trailing space on a subjectless verb reads as a truncated line.
-		line := "      " + h.Verb
-		if h.Subject != "" {
-			line += " " + h.Subject
-		}
-		if h.Count > 1 {
-			line += fmt.Sprintf(" (x%d)", h.Count)
-		}
-		out = append(out, line)
-	}
-	return append(out, impactMoreLine(len(hits))...)
-}
-
-// impactEvidenceGapLines says which silence an empty section is. [trail.ConsultGap] carries why
-// the four have to read differently; this is the sentence each one earns.
-func impactEvidenceGapLines(gap trail.ConsultGap) []string {
-	switch gap {
-	case trail.ConsultGapNoQuestions:
-		return []string{"EVIDENCE: the authors of this changeset ran no magus read verb"}
-	case trail.ConsultGapUnleased:
-		return []string{
-			"EVIDENCE: the agent activity recorded here carries no lease, so no question joins this change",
-			"      Set BAGGAGE magus.lease on the agent and its questions join its writes.",
-		}
-	case trail.ConsultGapUnmatched:
-		return []string{
-			"EVIDENCE: no lease recorded here wrote these files, so their questions sit elsewhere",
-			"      The work was done in another checkout, or it has aged out of the trail.",
-		}
-	default:
-		return []string{
-			"EVIDENCE: no agent activity recorded in this checkout, so what the authors consulted is unknown",
-			fmt.Sprintf("      This record is per checkout, and wiring it is `%s`.", hint.AgentInstall.String()),
-		}
-	}
-}
-
-// adviceSection is one advisor's finding: the section it owns in the pull-request
-// comment, rendered for a local reader instead. An EMPTY Body is a retraction (the
-// advisor ran and found nothing) and is a section like any other, not an absence.
-type adviceSection struct {
-	Name  string `json:"name"  yaml:"name"`
-	Title string `json:"title" yaml:"title"`
-	Body  string `json:"body"  yaml:"body"`
 }
 
 // adviceDirRel is where this repository keeps the advisors. They are checked in as a
@@ -3017,47 +2386,6 @@ func parseAdviceSections(out string) []adviceSection {
 	return got
 }
 
-// impactReview is where a reader left off in this change.
-//
-// It is a BOOKMARK, not a score, and the difference decides the whole design. An earlier
-// version led with "N of M files carry a read receipt", which is a completion metric: it
-// has a target, and the cheapest way to reach the target is to stamp everything without
-// reading it. A count that can be satisfied by typing is worse than no count, because it
-// trains the reader to type something they do not mean.
-//
-// So no ratio is reported. What is reported is the two things a reader cannot produce
-// without reading: which files moved after they read them, and which they have not opened.
-// Both are answers to "where was I", and the test any addition here has to pass is whether
-// somebody would still want it if nobody else ever saw the result.
-type impactReview struct {
-	Files int `json:"files" yaml:"files"`
-	Read  int `json:"read"  yaml:"read"`
-	// Stale are files read and then edited. They lead the section: the signal is derived from
-	// CONTENT rather than from a claim, so inattention cannot fake it. See diff.ReadStale
-	// for why it outranks unread.
-	Stale  []string `json:"stale,omitempty"  yaml:"stale,omitempty"`
-	Unread []string `json:"unread,omitempty" yaml:"unread,omitempty"`
-	// Required are unread files inside a project's declared review_required globs. Listed
-	// separately and in FULL rather than capped: the workspace said an unread change costs
-	// something here, so this is the half of the section that is not just a count.
-	Required []string `json:"required,omitempty" yaml:"required,omitempty"`
-	// Reasons are the distinct bulk-ack justifications covering files in this changeset,
-	// so "somebody read it" and "somebody assumed it was fine, here is why" do not
-	// collapse into one number.
-	Reasons []string `json:"reasons,omitempty" yaml:"reasons,omitempty"`
-}
-
-// unreadShown bounds the never-opened list, which is context rather than the finding.
-const unreadShown = 10
-
-// reviewMinFiles is the changeset size below which the section says nothing at all.
-//
-// A four-file change needs no reading plan, and printing one there is how a reader learns
-// to skip this section before ever meeting a change big enough to need it. Nothing stale is
-// part of the condition: a small change where a file moved after you read it is exactly
-// when the section earns its line.
-const reviewMinFiles = 5
-
 // reviewRequiredMatcher reports whether a workspace-relative path sits inside any project's
 // declared review_required globs.
 //
@@ -3116,53 +2444,6 @@ func bulkReasons(cacheDir string, rev difftypes.Diff) []string {
 		}
 		seen[r.Reason] = true
 		out = append(out, r.Reason)
-	}
-	return out
-}
-
-// collectReview tallies the read state already folded onto the changeset by annotateDiff.
-//
-// It reads DiffFile.ReadState rather than consulting the store a second time, so the
-// terminal report and the console's review app cannot disagree about which files
-// somebody has read: they are looking at one join.
-//
-// nil when no file carries a state at all, which the renderer states as unmeasured rather
-// than as unread. Those are opposite claims and only one of them accuses.
-//
-// Generated files are excluded: reading a machine's restatement of an edit made elsewhere
-// is not the review, the same reason the file list folds them away by default.
-func collectReview(rev difftypes.Diff, required func(string) bool, reasons []string) *impactReview {
-	out := &impactReview{Reasons: reasons}
-	measured := false
-	for _, f := range rev.Files {
-		if f.Generated() {
-			continue
-		}
-		out.Files++
-		switch f.ReadState {
-		case difftypes.ReadRead:
-			measured = true
-			out.Read++
-			continue
-		case difftypes.ReadStale:
-			measured = true
-			out.Stale = append(out.Stale, f.Path)
-			// Not also Required: the section already names it under "changed after you
-			// read them", and listing it again as "unopened" would both contradict itself
-			// and print one path as two findings.
-			continue
-		case difftypes.ReadUnread:
-			measured = true
-			out.Unread = append(out.Unread, f.Path)
-		default:
-			continue
-		}
-		if required != nil && required(f.Path) {
-			out.Required = append(out.Required, f.Path)
-		}
-	}
-	if !measured && out.Files > 0 {
-		return nil
 	}
 	return out
 }
@@ -3273,102 +2554,4 @@ func ackChangeset(content reviewedContent, cacheDir string, rev difftypes.Diff, 
 		return 0, nil
 	}
 	return len(add), review.Record(cacheDir, add)
-}
-
-// impactReviewLines renders the section, or nothing at all.
-//
-// Nil is a real answer here and the common one. A section that always prints is a section
-// people stop reading, and this one has nothing to say about a small change nobody has
-// disturbed since reading.
-//
-// It belongs in the impact report rather than the viewer because the viewer counts hunks read
-// and has no notion of STALE. "This changed after you read it" is the half worth having, and
-// this is the only place it is said.
-//
-// TODO: teach the viewer stale state, so a reader stepping through sees which files moved
-// under them. That is additive; it is not a reason to drop the only telling of it here.
-func impactReviewLines(r *impactReview) []string {
-	if r == nil {
-		return []string{fmt.Sprintf("REVIEW: read receipts unavailable; step a file through in `%s` to earn one", hint.Diff.String())}
-	}
-	// Silence, not a reassurance. "Everything here has been read" would be a claim the
-	// reader can produce by stamping rather than by reading, which is the sentence this
-	// section was rebuilt to stop printing.
-	if r.Files == 0 || (len(r.Stale) == 0 && (r.Files < reviewMinFiles || len(r.Unread) == 0)) {
-		return nil
-	}
-
-	var out []string
-	// Stale leads, always, whatever else is in the section. It is the one finding here
-	// that no amount of stamping produces: the file moved after somebody read it.
-	if len(r.Stale) > 0 {
-		out = append(out, fmt.Sprintf("REVIEW: %d file(s) changed after you read them", len(r.Stale)))
-		for _, p := range r.Stale {
-			out = append(out, "      "+p)
-		}
-	}
-	// Then what the workspace itself said was worth reading, uncapped.
-	if len(r.Required) > 0 {
-		head := fmt.Sprintf("%d unopened in review_required paths:", len(r.Required))
-		if len(out) == 0 {
-			out = append(out, "REVIEW: "+head)
-		} else {
-			out = append(out, "      "+head)
-		}
-		for _, p := range r.Required {
-			out = append(out, "        "+p)
-		}
-	}
-	// Then the rest, as context and capped, in the order the reader would take them.
-	if rest := unreadRest(r); len(rest) > 0 {
-		head := fmt.Sprintf("%d file(s) you have not opened, widest blast radius first", len(rest))
-		if len(out) == 0 {
-			out = append(out, "REVIEW: "+head)
-		} else {
-			out = append(out, "      "+head)
-		}
-		shown := rest
-		if len(shown) > unreadShown {
-			shown = shown[:unreadShown]
-		}
-		for _, p := range shown {
-			out = append(out, "        "+p)
-		}
-		if len(rest) > len(shown) {
-			out = append(out, fmt.Sprintf("        and %d more", len(rest)-len(shown)))
-		}
-	}
-	for _, reason := range r.Reasons {
-		// Echoed so a file covered by one keystroke does not read as one somebody sat
-		// down with. It is a note the reader left themselves, not a toll they paid.
-		out = append(out, fmt.Sprintf("      some were covered in bulk: %q", reason))
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	// Both doors, because the reader's editor is not magus's business: naming only the
-	// viewer told anyone who reviews in vim or magit that their only option was the
-	// blanket ack.
-	return append(out,
-		"      record what you read, wherever you read it: "+hint.Diff.With("--ack", "<path>..."),
-		"      or step through them here: "+hint.Diff.String())
-}
-
-// unreadRest is the never-opened files the section has not already named under
-// review_required, so no path appears twice.
-func unreadRest(r *impactReview) []string {
-	if len(r.Required) == 0 {
-		return r.Unread
-	}
-	named := make(map[string]bool, len(r.Required))
-	for _, p := range r.Required {
-		named[p] = true
-	}
-	var out []string
-	for _, p := range r.Unread {
-		if !named[p] {
-			out = append(out, p)
-		}
-	}
-	return out
 }
