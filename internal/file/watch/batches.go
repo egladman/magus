@@ -28,7 +28,7 @@ func ReadBatches(ctx context.Context, r io.Reader, null bool) <-chan []string {
 		go func() {
 			select {
 			case <-ctx.Done():
-				_ = c.Close()
+				_ = c.Close() // only unblocks the parked read; the read's own error ends the loop
 			case <-done:
 			}
 		}()

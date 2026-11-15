@@ -349,18 +349,18 @@ func PrintFailedResults(w io.Writer, events []journal.Event) {
 	if len(events) == 0 {
 		return
 	}
-	_, _ = fmt.Fprintf(w, "\nfailed: %s; `magus query output <ref>` prints a whole log\n", plural.Count(len(events), "target", "targets"))
+	fprintf(w, "\nfailed: %s; `magus query output <ref>` prints a whole log\n", plural.Count(len(events), "target", "targets"))
 	for _, e := range events {
 		ref := e.Ref
 		if ref == "" {
 			ref = cmp.Or(e.DiagnosticCode, "no-ref")
 		}
 		cause, _, _ := strings.Cut(strings.TrimSpace(e.Text), "\n")
-		_, _ = fmt.Fprintf(w, "  %s %s:%s", ref, e.Project, e.Target)
+		fprintf(w, "  %s %s:%s", ref, e.Project, e.Target)
 		if cause != "" {
-			_, _ = fmt.Fprintf(w, "  %s", cause)
+			fprintf(w, "  %s", cause)
 		}
-		_, _ = fmt.Fprintln(w)
+		fprintln(w)
 	}
 }
 
@@ -369,9 +369,9 @@ func PrintRunRef(w io.Writer, inv string) {
 	if inv == "" {
 		return
 	}
-	_, _ = fmt.Fprintf(w, "\nrun: %s; `%s` prints the whole run\n", inv, hint.QueryInvocation.With(inv))
+	fprintf(w, "\nrun: %s; `%s` prints the whole run\n", inv, hint.QueryInvocation.With(inv))
 }
 
-func fprintf(w io.Writer, format string, a ...any) { _, _ = fmt.Fprintf(w, format, a...) }
+func fprintf(w io.Writer, format string, a ...any) { _, _ = fmt.Fprintf(w, format, a...) } // a report that cannot be written has nowhere better to say so
 
-func fprintln(w io.Writer, a ...any) { _, _ = fmt.Fprintln(w, a...) }
+func fprintln(w io.Writer, a ...any) { _, _ = fmt.Fprintln(w, a...) } // a report that cannot be written has nowhere better to say so

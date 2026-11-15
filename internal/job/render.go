@@ -85,7 +85,7 @@ func PrintInflight(out io.Writer, list types.JobList, all bool) {
 		for _, c := range rows {
 			fmt.Fprintf(w, "  #%s\t%s\t%s\t%s\n", c.ID, clipTitle(c.Title, 48), InflightDetail(c, partitions), inflightJobs(c.Jobs))
 		}
-		_ = w.Flush()
+		_ = w.Flush() // writes to a strings.Builder, which never errors
 		// An empty last column leaves the padding before it at the end of the line.
 		for line := range strings.Lines(table.String()) {
 			fmt.Fprintln(out, strings.TrimRight(line, " \n"))
@@ -216,7 +216,7 @@ func PrintTree(out io.Writer, report types.JobList) {
 			HolderCell(row), state, modelCell(row),
 			len(row.Paths.Write), planDash(string(row.WriteProof)), planDash(row.Validation))
 	}
-	_ = w.Flush()
+	_ = w.Flush() // a report that cannot be written has nowhere better to say so
 
 	for _, section := range []struct {
 		title string
