@@ -878,7 +878,9 @@ stdin $WORK/proofread-prompt.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
 ! stdout .
 
-# --proofread outranks the environment.
+# --proofread outranks the environment. A fresh TMPDIR is a session not yet told of
+# closing-offer, since a rule is named once per session.
+env TMPDIR=$WORK/n-proofread-flag
 env __PROOFREAD_BIN=$WORK/nonexistent-proofread
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name codex --proofread $WORK/fake-proofread
