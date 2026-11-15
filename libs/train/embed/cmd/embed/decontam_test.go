@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/libs/embed/train/teacher"
+	"github.com/egladman/magus/libs/train/embed/teacher"
 )
 
 const evalSentence = "Return the lowercase hex SHA-256 digest of data read from the named file on disk, or an error when it cannot be read"

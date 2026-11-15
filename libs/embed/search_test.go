@@ -858,7 +858,7 @@ func externalReport(bench string, results []externalResult) string {
 	b.WriteString("- BM25: k1 1.2, b 0.75, score order with no matched-term ordering, float64. `bm25` uses Lucene's English analyzer without stemming; `bm25-magustok` uses magus's `embed.Tokens`.\n")
 	b.WriteString("- potion-code-16M-v2 follows model2vec's `StaticModel.encode` at max_length 512, scored by cosine; its tokenizer strips accents for Latin-1 and Latin Extended-A letters only.\n")
 	b.WriteString("- potion-code-16M-v2-converted is the shipped int8 table, scored with the runtime's own `Table.Embed` and `embed.Tokens` at weight 1; it is a separate system from the original potion.\n")
-	b.WriteString("- CodeRankEmbed runs through libs/embed/train's Go teacher at 512 tokens, CLS pooled.\n")
+	b.WriteString("- CodeRankEmbed runs through libs/train's Go teacher at 512 tokens, CLS pooled.\n")
 	b.WriteString("- Fusion: reciprocal rank, k = 60, over the top 100 of each list.\n")
 	b.WriteString("- cosqa-dedup deduplicates cosqa's corpus by exact text before indexing. Read its column apart from cosqa's, never against it.\n")
 	b.WriteString("- csn-go queries lose the declared name they start with. csn-python and csn-go run text to code; ccr-go keeps CoIR's code-to-code direction over the test partition.\n")
@@ -943,7 +943,7 @@ func percentInterval(v, lo, hi float64) string {
 }
 
 // The potion-code-16M-v2 snapshot the Python baseline fetched, pinned by digest since
-// libs/embed/train/inputs.jsonl does not list it.
+// libs/train/embed/inputs.jsonl does not list it.
 const (
 	potionRevision        = "e9d2a44ca6a05ac6685f3b23709ea57eb7352d5b"
 	potionWeightsSHA256   = "75cf7a6c2171b230ad19b1e7d8e0b1aee86da5a02af8e7cacedd9921d227623c"
@@ -1141,7 +1141,7 @@ const wordPieceMaxChars = 100
 // potionTokens is the Hugging Face tokenizers pipeline of potion's tokenizer.json
 // without special tokens: BertNormalizer (clean text, pad CJK, strip accents,
 // lowercase), BertPreTokenizer, and greedy longest-match WordPiece with "##"
-// continuations. It copies libs/embed/train/teacher's WordPiece, which this module
+// continuations. It copies libs/train/embed/teacher's WordPiece, which this module
 // cannot import, and strips accents through latinBase instead of NFD, since this
 // module does not require golang.org/x/text: an accented letter outside Latin-1 and
 // Latin Extended-A keeps its accent.

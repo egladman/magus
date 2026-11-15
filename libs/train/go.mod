@@ -1,4 +1,4 @@
-module github.com/egladman/magus/libs/embed/train
+module github.com/egladman/magus/libs/train
 
 go 1.26.5
 
@@ -28,6 +28,6 @@ require (
 	k8s.io/klog/v2 v2.140.0 // indirect
 )
 
-replace github.com/egladman/magus/libs/embed => ..
+replace github.com/egladman/magus/libs/embed => ../embed
 
-replace github.com/egladman/magus/libs/xdg => ../../xdg
+replace github.com/egladman/magus/libs/xdg => ../xdg

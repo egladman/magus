@@ -137,9 +137,9 @@ func runOOV(args []string) error {
 	fs := flag.NewFlagSet("oov", flag.ExitOnError)
 	var c common
 	c.register(fs)
-	vocabPath := fs.String("vocab", filepath.Join("gen", "vocab.jsonl"), "the shipped vocabulary")
+	vocabPath := fs.String("vocab", filepath.Join("embed", "gen", "vocab.jsonl"), "the shipped vocabulary")
 	tablePath := fs.String("table", "", "the converted table; default <cache>/potion-code-16M-v2.table")
-	evals := fs.String("evals", filepath.Join("..", "evals.jsonl"), "the eval records file the rates are appended to")
+	evals := fs.String("evals", filepath.Join("..", "embed", "evals.jsonl"), "the eval records file the rates are appended to")
 	fs.Usage = func() {
 		fmt.Fprintln(fs.Output(), "usage: embed oov [flags] [repo ...]\n\nfor each pinned repo (default all), appends the share of identifier tokens with no vocabulary row to evals.jsonl")
 		fs.PrintDefaults()

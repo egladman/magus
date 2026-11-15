@@ -9,8 +9,8 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/libs/embed"
-	"github.com/egladman/magus/libs/embed/train/distill"
-	"github.com/egladman/magus/libs/embed/train/teacher"
+	"github.com/egladman/magus/libs/train/embed/distill"
+	"github.com/egladman/magus/libs/train/embed/teacher"
 	"github.com/gomlx/gomlx/core/tensors"
 )
 
@@ -33,7 +33,7 @@ const (
 func runConvert(args []string) error {
 	fs := flag.NewFlagSet("convert", flag.ExitOnError)
 	vocabPath := fs.String("vocab", "", "the vocabulary, JSON lines of {\"token\", \"count\"} as `embed vocab -vocab` writes them")
-	inputs := fs.String("inputs", "inputs.jsonl", "the pinned inputs file")
+	inputs := fs.String("inputs", "embed/inputs.jsonl", "the pinned inputs file")
 	cache := fs.String("cache", cacheRoot(), "the cache root inputs.jsonl paths are relative to")
 	run := fs.String("run", "", "this run's id, recorded in the table")
 	out := fs.String("out", "", "where to write the table")

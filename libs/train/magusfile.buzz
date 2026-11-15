@@ -3,12 +3,12 @@ import "fs";
 import "env";
 import "crypto";
 import "magus";
-import "project/../../.." as workspace;
-import "../../../hack/magusfile/advisories" as advisories;
-import "sources";
-import "holdout";
-import "pairs";
-import "runlog";
+import "project/../.." as workspace;
+import "../../hack/magusfile/advisories" as advisories;
+import "embed/sources";
+import "embed/holdout";
+import "embed/pairs";
+import "embed/runlog";
 
 import "magus/spell/go";
 
@@ -17,7 +17,7 @@ import "magus/spell/go";
 // (XDG_CACHE_HOME/magus-embed, else ~/.cache/magus-embed), which no cache entry records.
 magus\project({
     "spells": [go],
-    "sources": ["inputs.jsonl"],
+    "sources": ["embed/inputs.jsonl"],
     "targets": {
         "install": {"skip_cache": "downloads into the shared module cache, which no cache entry records"},
         "security": {"skip_cache": "reads the Go vulnerability database, which changes independently of this tree"},
@@ -69,12 +69,12 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // tree and the knowledge graph. symbol-index.json keys the cache on the symbol index.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(workspace\symbol_digest_generate);
-    ctx.readsFiles(["sources.buzz", "holdout.buzz", "pairs.buzz",
+    ctx.readsFiles(["embed/sources.buzz", "embed/holdout.buzz", "embed/pairs.buzz",
         workspace\file("gen/symbol-index.json"), workspace\file("**/*.go"), workspace\file("**/*.buzz"),
         workspace\file("**/*.md"), workspace\file("**/*.ts"), workspace\file("**/*.tsx"),
         workspace\file("docs/assets/gen/diagram-*-light.svg")]);
-    ctx.writesFiles(["gen/sources.jsonl", "gen/holdout.jsonl", "gen/pairs.jsonl"]);
-    fs\mkdirAll("gen");
+    ctx.writesFiles(["embed/gen/sources.jsonl", "embed/gen/holdout.jsonl", "embed/gen/pairs.jsonl"]);
+    fs\mkdirAll("embed/gen");
     final loaded = sources\load();
     if (loaded.error -> e) {
         throw e.message;
@@ -84,7 +84,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     foreach (f in c.files) {
         paths.append(f.path);
     }
-    final held = holdout\write(paths, target: fs\join("gen", name: "holdout.jsonl"));
+    final held = holdout\write(paths, target: fs\join("embed/gen", name: "holdout.jsonl"));
     if (held.error -> e) {
         throw e.message;
     }
@@ -92,11 +92,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     if (figs.error -> e) {
         throw e.message;
     }
-    final files = sources\write(c, figures: figs.value!, target: fs\join("gen", name: "sources.jsonl"));
+    final files = sources\write(c, figures: figs.value!, target: fs\join("embed/gen", name: "sources.jsonl"));
     if (files.error -> e) {
         throw e.message;
     }
-    final mined = pairs\write(c, figs: figs.value!, target: fs\join("gen", name: "pairs.jsonl"));
+    final mined = pairs\write(c, figs: figs.value!, target: fs\join("embed/gen", name: "pairs.jsonl"));
     if (mined.error -> e) {
         throw e.message;
     }
@@ -106,7 +106,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 // Downloads every input inputs.jsonl pins, verifying each sha256. Args after -- name
 // input prefixes, e.g. `-- CodeRankEmbed/`.
 export fun fetch(ctx: magus\Context, args: [str]) > void !> any {
-    go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "fetch"] + args});
+    go["go-run"](ctx.withEnv(cgo), {"args": ["./embed/cmd/embed", "fetch"] + args});
 }
 
 // Writes the training texts (gen/sources.jsonl's files at the commit that wrote it, its
@@ -118,19 +118,19 @@ export fun fetch(ctx: magus\Context, args: [str]) > void !> any {
 // appended to runs.jsonl. Args after -- go to `embed vocab`, e.g. `-- -size 16000`.
 // Manual, never part of ci: rewriting gen/vocab.jsonl moves the table's pin.
 export fun vocab(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles(["gen/vocab.jsonl"]);
+    ctx.writesFiles(["embed/gen/vocab.jsonl"]);
     final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
     final dir = fs\join(cache, name: "training");
-    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "texts", "-cache", cache, "-out", dir,
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./embed/cmd/embed", "texts", "-cache", cache, "-out", dir,
         "-eval", fs\join(cache, name: "bench"), "-no-eval", "judged-queries", "-skip", "fineweb-edu/sample/10BT/013_00000.parquet"]});
-    final appended = runlog\appendTexts(dir, target: "runs.jsonl");
+    final appended = runlog\appendTexts(dir, target: "embed/runs.jsonl");
     if (appended.error -> e) {
         throw e.message;
     }
-    fs\mkdirAll("gen");
-    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/embed", "vocab", "-texts", fs\join(dir, name: "texts.jsonl"),
+    fs\mkdirAll("embed/gen");
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./embed/cmd/embed", "vocab", "-texts", fs\join(dir, name: "texts.jsonl"),
         "-forced", fs\join(dir, name: "forced.txt"), "-out", fs\join(dir, name: "tokens.jsonl"),
-        "-vocab", fs\join("gen", name: "vocab.jsonl")] + args});
+        "-vocab", fs\join("embed/gen", name: "vocab.jsonl")] + args});
 }
 
 // Embeds the vocabulary's token texts, then the training texts, each into resumable,
@@ -149,8 +149,8 @@ export fun teacher(ctx: magus\Context, args: [str]) > void !> any {
     }
     foreach (name in ["tokens.jsonl", "texts.jsonl"]) {
         final run = ["-cache", cache, "-max-len", "256", "-texts", fs\join(cache, "training", name), "-model", model];
-        go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "teacher"] + run + args});
-        final recorded = runlog\recordTeacher(cache, model: model, texts: fs\join(cache, "training", name), maxLen: 256, target: "runs.jsonl");
+        go["go-run"](ctx.withEnv(cgo), {"args": ["./embed/cmd/embed", "teacher"] + run + args});
+        final recorded = runlog\recordTeacher(cache, model: model, texts: fs\join(cache, "training", name), maxLen: 256, target: "embed/runs.jsonl");
         if (recorded.error -> e) {
             throw e.message;
         }
@@ -161,7 +161,7 @@ export fun teacher(ctx: magus\Context, args: [str]) > void !> any {
 // reference vectors (cosine >= 0.999) and the tokens against the reference tokenizer, and
 // reports texts/s. Needs `-- -model <name>`.
 export fun teacher_parity(ctx: magus\Context, args: [str]) > void !> any {
-    go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "teacher-parity"] + args});
+    go["go-run"](ctx.withEnv(cgo), {"args": ["./embed/cmd/embed", "teacher-parity"] + args});
 }
 
 // Runs one teacher over the external harness's exported subsets under the cache root's
@@ -195,7 +195,7 @@ export fun bench(ctx: magus\Context, args: [str]) > void !> any {
         }
     }
     foreach (dir in dirs) {
-        go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "bench", "-cache", cache, "-model", model, "-subset", dir] + rest});
+        go["go-run"](ctx.withEnv(cgo), {"args": ["./embed/cmd/embed", "bench", "-cache", cache, "-model", model, "-subset", dir] + rest});
     }
 }
 
@@ -204,16 +204,16 @@ export fun bench(ctx: magus\Context, args: [str]) > void !> any {
 // first; the converted table must be in the cache root (the convert target writes it). Args
 // after -- go to `embed oov`, e.g. `-- guava`.
 export fun oov(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles(["../evals.jsonl"]);
+    ctx.writesFiles(["../embed/evals.jsonl"]);
     fetch(ctx, args: ["oov/"]);
     final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
-    go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "oov", "-cache", cache] + args});
+    go["go-run"](ctx.withEnv(cgo), {"args": ["./embed/cmd/embed", "oov", "-cache", cache] + args});
 }
 
 // Distills and trains the table from finished teacher runs, with the flags `embed train
 // -h` lists after --; manual, never part of ci.
 export fun train(ctx: magus\Context, args: [str]) > void !> any {
-    go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "train"] + args});
+    go["go-run"](ctx.withEnv(cgo), {"args": ["./embed/cmd/embed", "train"] + args});
 }
 
 // Writes potion-code-16M-v2 over gen/vocab.jsonl as the cache root's
@@ -222,8 +222,8 @@ export fun train(ctx: magus\Context, args: [str]) > void !> any {
 export fun convert(ctx: magus\Context, args: [str]) > void !> any {
     fetch(ctx, args: ["potion-code-16M-v2/"]);
     final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
-    go["go-run"](ctx.withEnv(cgo), {"args": ["./cmd/embed", "convert", "-cache", cache,
-        "-vocab", fs\join("gen", name: "vocab.jsonl"), "-run", "convert",
+    go["go-run"](ctx.withEnv(cgo), {"args": ["./embed/cmd/embed", "convert", "-cache", cache,
+        "-vocab", fs\join("embed/gen", name: "vocab.jsonl"), "-run", "convert",
         "-out", fs\join(cache, name: "potion-code-16M-v2.table")] + args});
 }
 
@@ -233,11 +233,11 @@ export fun convert(ctx: magus\Context, args: [str]) > void !> any {
 // importing this project closes a cycle through the root. Manual, never part of ci.
 export fun table(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(convert);
-    ctx.writesFiles(["../gen/table.digest"]);
+    ctx.writesFiles(["../embed/gen/table.digest"]);
     final cache = fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), name: "magus-embed");
     final digest = crypto\sha256File(fs\join(cache, name: "potion-code-16M-v2.table"));
-    fs\mkdirAll(fs\join("..", name: "gen"));
-    fs\writeFile(fs\join("..", "gen", "table.digest"), content: digest + "\n");
+    fs\mkdirAll(fs\join("..", "embed", name: "gen"));
+    fs\writeFile(fs\join("..", "embed", "gen", "table.digest"), content: digest + "\n");
 }
 
 // The anchor `magus affected ci` keys off.

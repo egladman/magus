@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/libs/embed/train/distill"
+	"github.com/egladman/magus/libs/train/embed/distill"
 )
 
 // vocabEntry is one line of gen/vocab.jsonl.

@@ -21,8 +21,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/egladman/magus/libs/embed"
-	"github.com/egladman/magus/libs/embed/train/distill"
-	"github.com/egladman/magus/libs/embed/train/teacher"
+	"github.com/egladman/magus/libs/train/embed/distill"
+	"github.com/egladman/magus/libs/train/embed/teacher"
 	"github.com/egladman/magus/libs/xdg"
 )
 
@@ -80,7 +80,7 @@ func main() {
 // mix and the first shard's rate projects the run.
 const textsSalt = "embed-texts/v1:"
 
-// sourceRecord is one line of libs/embed/train/gen/sources.jsonl, as far as texts reads it.
+// sourceRecord is one line of libs/train/embed/gen/sources.jsonl, as far as texts reads it.
 type sourceRecord struct {
 	Kind      string   `json:"kind"`
 	Path      string   `json:"path"`
@@ -119,8 +119,8 @@ func excludedReason(r sourceRecord) string {
 // digest, so the texts do not move when the tree does.
 func runTexts(args []string) error {
 	fs := flag.NewFlagSet("texts", flag.ExitOnError)
-	sourcesPath := fs.String("sources", "gen/sources.jsonl", "embed-mine's source manifest")
-	root := fs.String("root", "../../..", "the repository the manifest's paths are relative to")
+	sourcesPath := fs.String("sources", "embed/gen/sources.jsonl", "embed-mine's source manifest")
+	root := fs.String("root", "../..", "the repository the manifest's paths are relative to")
 	rev := fs.String("rev", "", "the commit to read files at; default: the last commit that changed -sources")
 	cache := fs.String("cache", cacheRoot(), "the cache root the manifest's input paths are relative to")
 	out := fs.String("out", "", "the directory to write texts.jsonl and forced.txt to; default <cache>/training")

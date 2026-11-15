@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/libs/embed/rankeval"
-	"github.com/egladman/magus/libs/embed/train/teacher"
+	"github.com/egladman/magus/libs/train/embed/teacher"
 )
 
 func TestBenchDenseRunRanksByDotProduct(t *testing.T) {

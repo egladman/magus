@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/libs/embed"
-	"github.com/egladman/magus/libs/embed/train/teacher"
+	"github.com/egladman/magus/libs/train/embed/teacher"
 )
 
 const convertRevision = "0123456789abcdef0123456789abcdef01234567"
