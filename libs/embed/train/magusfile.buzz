@@ -165,8 +165,8 @@ export fun teacher_parity(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Runs one teacher over the external harness's exported subsets under the cache root's
-// bench/ and writes its TREC runs beside them, where `MAGUS_EXTERNAL_EVAL=all` with
-// `-run TestExternalEval` in libs/embed fuses and scores them into evals.jsonl. The
+// bench/ and writes its TREC runs beside them, where TestExternalEval in libs/embed
+// fuses and scores them into evals.jsonl. The
 // teacher is CodeRankEmbed with its query prompt, the ceiling, unless args name another
 // with `-model <name>`; `-subset <dir>` runs one directory instead of the five. A
 // multi-hour pass that needs the machine alone. Manual, never part of ci.
