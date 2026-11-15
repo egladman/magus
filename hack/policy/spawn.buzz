@@ -426,18 +426,45 @@ fun describePublished(counts: ForkCounts) > str {
     return said;
 }
 
-// onRemoteRef is whether a remote ref holds branch's head. A branch git does
-// not know, or a git that fails, is the Result's error.
-export fun onRemoteRef(branch: str) > result\Result::<bool> {
+// remotePublished answers "does a remote ref hold branch's head" for every
+// branch from one `git branch --merged` listing, since a git per branch costs
+// ~0.1s each and the guard has seconds. A git that fails is every branch's
+// error; a branch git does not list is not on a remote.
+export fun remotePublished() > fun (branch: str) > result\Result::<bool> {
+    final held = mut {<str: bool>};
+    var failed = "";
     try {
-        final found = vcs\cmd(["branch", "--remotes", "--contains", branch], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
-        if (!found.ok) {
-            return result\fail::<bool>("git branch --remotes --contains {branch}: {found.stderr.trim()}");
+        final remotes = vcs\cmd(["for-each-ref", "--format=%(refname)", "refs/remotes"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+        if (!remotes.ok) {
+            failed = "git for-each-ref refs/remotes: {remotes.stderr.trim()}";
+        } else {
+            final args = mut ["branch", "--format=%(refname:short)"];
+            foreach (ref in remotes.stdout.trim().split("\n")) {
+                if (ref != "") {
+                    args.append("--merged={ref}");
+                }
+            }
+            if (args.len() > 2) {
+                final listed = vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+                if (!listed.ok) {
+                    failed = "git branch --merged: {listed.stderr.trim()}";
+                } else {
+                    foreach (name in listed.stdout.trim().split("\n")) {
+                        held[name] = true;
+                    }
+                }
+            }
         }
-        return result\ok::<bool>(found.stdout.trim() != "");
     } catch (err: any) {
-        return result\caught::<bool>(err, doing: "git branch --remotes --contains {branch}");
+        failed = "git branch --merged: {err}";
     }
+    final why = failed;
+    return fun (branch: str) > result\Result::<bool> {
+        if (why != "") {
+            return result\fail::<bool>(why);
+        }
+        return result\ok::<bool>(held[branch] ?? false);
+    };
 }
 
 // withoutPublished drops each finished branch whose head a remote ref holds:
@@ -557,7 +584,7 @@ export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (pat
         if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
             continue;
         }
-        var counts = withoutPublished(facts(), published: onRemoteRef);
+        var counts = withoutPublished(facts(), published: remotePublished());
         // Each landed check merges trees, so only a count at the limit pays.
         if (counts.finishedBranches.len() >= limit) {
             counts = withoutLanded(counts, landed: landedOnBase);
@@ -662,6 +689,13 @@ test "a branch the base cannot be checked against stays counted, and says why" {
     std\assert(broken.finishedBranches.len() == 10 and broken.landedSkipped == 0, message: "counted");
     final v = decideFork(mandate\Fork{ id = "next" }, counts: broken, limit: finishedBranchLimit);
     std\assert(v.reason.indexOf("bad object") != null, message: v.reason);
+}
+
+test "the published check asks git once, and a branch git does not list is not published" {
+    final published = remotePublished();
+    final answer = published("no-such-branch-guard-latency");
+    std\assert(answer.error == null and answer.value == false, message: "unknown branch");
+    std\assert(published("another-no-such-branch").error == null, message: "same listing answers every branch");
 }
 
 test "a branch that is on no remote ref stays counted, and an unreadable one says why" {
