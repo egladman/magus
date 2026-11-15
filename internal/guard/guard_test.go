@@ -911,10 +911,15 @@ func withoutRefLine(text, line string) string {
 	return head
 }
 
+type pathState struct {
+	modTime time.Time
+	body    string
+}
+
 // treeState is every path under dirs with its bytes and modification time.
-func treeState(t *testing.T, dirs ...string) map[string]string {
+func treeState(t *testing.T, dirs ...string) map[string]pathState {
 	t.Helper()
-	state := map[string]string{}
+	state := map[string]pathState{}
 	for _, dir := range dirs {
 		require.NoError(t, filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
@@ -924,18 +929,43 @@ func treeState(t *testing.T, dirs ...string) map[string]string {
 			if err != nil {
 				return err
 			}
-			state[path] = info.ModTime().String()
+			s := pathState{modTime: info.ModTime()}
 			if !d.IsDir() {
 				body, err := os.ReadFile(path)
 				if err != nil {
 					return err
 				}
-				state[path] += " " + string(body)
+				s.body = string(body)
 			}
+			state[path] = s
 			return nil
 		}))
 	}
 	return state
+}
+
+// treeChanges names each path added, removed or changed between two treeStates, so a
+// failure says what wrote.
+func treeChanges(before, after map[string]pathState) []string {
+	var changes []string
+	for path, was := range before {
+		now, ok := after[path]
+		switch {
+		case !ok:
+			changes = append(changes, "removed "+path)
+		case now.body != was.body:
+			changes = append(changes, "changed bytes "+path)
+		case !now.modTime.Equal(was.modTime):
+			changes = append(changes, fmt.Sprintf("changed mtime %s: %s -> %s", path, was.modTime.Format(time.RFC3339Nano), now.modTime.Format(time.RFC3339Nano)))
+		}
+	}
+	for path := range after {
+		if _, ok := before[path]; !ok {
+			changes = append(changes, "added "+path)
+		}
+	}
+	slices.Sort(changes)
+	return changes
 }
 
 // A dry run reaches the verdict the call would and leaves the cache dir and the state dir
@@ -1008,7 +1038,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 			for round := range 2 {
 				before := treeState(t, dirs...)
 				preview := Judge(ctx, deps, checked)
-				assert.Equal(t, before, treeState(t, dirs...), "round %d: the dry run wrote", round)
+				assert.Empty(t, treeChanges(before, treeState(t, dirs...)), "round %d: the dry run wrote", round)
 				leftover, err := filepath.Glob(filepath.Join(dryRunCopies(), "*"))
 				require.NoError(t, err)
 				assert.Empty(t, leftover, "round %d: the dry run left its copy behind", round)
@@ -1018,7 +1048,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 					assert.NotContains(t, preview.Reason, verdictRefLine, "a dry run stores no verdict, so it cites none")
 					assert.NotContains(t, preview.Context, adviceRefLine, "nor any advice")
 					assert.Equal(t, withoutVerdictRef(real), preview)
-					assert.NotEqual(t, before, treeState(t, dirs...), "the call itself records something")
+					assert.NotEmpty(t, treeChanges(before, treeState(t, dirs...)), "the call itself records something")
 					got := types.GuardJudgment{Decision: real.Decision, Rule: real.Rule, Lease: real.Lease, LeaseFrom: real.LeaseFrom}
 					if tc.want.Rule == "" {
 						got.Rule = ""

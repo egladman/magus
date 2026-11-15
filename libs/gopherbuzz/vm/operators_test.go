@@ -1,12 +1,16 @@
 package vm
 
 import (
+	"context"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/suite"
 )
 
 // TestBuiltinMethodNamesMatchDispatch reads the `switch name` cases of each
@@ -93,4 +97,45 @@ func TestHasBuiltinMethod(t *testing.T) {
 			t.Errorf("HasBuiltinMethod(%d, %q) = %v, want %v", tc.kind, tc.name, got, tc.want)
 		}
 	}
+}
+
+// arithStrSuite pins + on a str left operand: a short one never stages the
+// right operand in the VM's scratch, and a long one still extends its buffer.
+type arithStrSuite struct {
+	suite.Suite
+	vm *VM
+}
+
+func TestArithStrSuite(t *testing.T) { suite.Run(t, new(arithStrSuite)) }
+
+func (s *arithStrSuite) SetupTest() { s.vm = NewVM(context.Background()) }
+
+func (s *arithStrSuite) TestShortPlusHugeLeavesTheScratchAlone() {
+	huge := strings.Repeat("h", 1<<20)
+	got, err := arith(s.vm, OpAdd, StringValue("ab"), StringValue(huge))
+	s.Require().NoError(err)
+	s.Equal("ab"+huge, got.AsString())
+	s.Less(cap(s.vm.strScratch), len(huge))
+}
+
+func (s *arithStrSuite) TestShortPlusHugeIsInterned() {
+	huge := strings.Repeat("i", 1<<20)
+	got, err := arith(s.vm, OpAdd, StringValue("ab"), StringValue(huge))
+	s.Require().NoError(err)
+	s.Nil(got.asString().buf)
+	s.Same(internString("ab"+huge), got.asString())
+}
+
+func (s *arithStrSuite) TestShortPlusIntFormatsTheInt() {
+	got, err := arith(s.vm, OpAdd, StringValue("n="), IntValue(7))
+	s.Require().NoError(err)
+	s.Equal("n=7", got.AsString())
+}
+
+func (s *arithStrSuite) TestLongLeftExtendsItsBuffer() {
+	long := appendString(StringValue(strings.Repeat("a", strBufThreshold)), []byte("b"))
+	got, err := arith(s.vm, OpAdd, long, IntValue(7))
+	s.Require().NoError(err)
+	s.Equal(strings.Repeat("a", strBufThreshold)+"b7", got.AsString())
+	s.Same(long.asString().buf, got.asString().buf)
 }
