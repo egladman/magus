@@ -838,7 +838,8 @@ type PolicyStore struct {
 }
 
 // GuardPolicyStore is the PolicyStore for the workspace at root. It creates
-// nothing. The error says why there is no store: no root, no build id, no
+// nothing in the cache, and the sealing key in the state dir only when none is
+// there yet. The error says why there is no store: no root, no build id, no
 // user cache, or no sealing key.
 func GuardPolicyStore(root string) (PolicyStore, error) {
 	if root == "" {

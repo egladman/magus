@@ -80,11 +80,18 @@ var (
 	WorkspaceCacheDir func(root string) (string, error)
 )
 
+// unfinishedOpens holds each open testDependencies started that has not returned. A
+// judgment past its budget answers without waiting for its open, which goes on loading
+// Buzz under the XDG dirs of whichever test runs next.
+var unfinishedOpens sync.WaitGroup
+
 // testDependencies resolves the workspace the way the CLI's hookDeps does, so a rule graded
 // here reads the same tree the hook would.
 func testDependencies() Dependencies {
 	return Dependencies{
 		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
+			unfinishedOpens.Add(1)
+			defer unfinishedOpens.Done()
 			if root == "" {
 				found, err := workspace.FindRoot("")
 				if err != nil {
@@ -973,6 +980,8 @@ func treeChanges(before, after map[string]pathState) []string {
 // what the first call wrote: a held advisory stays held, a recorded drift stays quiet.
 // Only a repeated deny is worded differently.
 func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
+	// An earlier test's open would make the bytecode sealing key in a state dir set here.
+	unfinishedOpens.Wait()
 	for _, tc := range []struct {
 		name  string
 		setup func(t *testing.T) (context.Context, Dependencies, Request)
@@ -1032,9 +1041,6 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 			dirs := []string{hookLocation(ctx, deps).cacheDir, os.Getenv("XDG_STATE_HOME")}
 			checked := req
 			checked.DryRun = true
-			// A first load makes the state dir's bytecode sealing key, dry run
-			// or not, so that is settled before the rounds look.
-			Judge(ctx, deps, checked)
 			for round := range 2 {
 				before := treeState(t, dirs...)
 				preview := Judge(ctx, deps, checked)
