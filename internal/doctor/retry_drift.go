@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // judgeableRetries is how many recorded retries a target needs before its declaration is
@@ -31,7 +32,7 @@ const judgeableRetries = 3
 //
 // Advice, never a failure. A retry that has not paid off yet may still be correct about
 // the target, and doctor does not know the flake magus has not seen.
-func (r *runner) checkRetryDeclarations(ctx context.Context, projects []*types.Project) types.Check {
+func (r *runner) checkRetryDeclarations(ctx context.Context, projects []*types.Project) check.Check {
 	const name = "retry-declarations"
 
 	var h forecast.History
@@ -56,21 +57,21 @@ func (r *runner) checkRetryDeclarations(ctx context.Context, projects []*types.P
 	}
 
 	if declared == 0 {
-		return types.Check{
-			Name: name, Status: types.CheckOK,
+		return check.Check{
+			Name: name, Status: check.OK,
 			Message: "no target declares retry_on_volatile, so no failure is retried",
 		}
 	}
 	if len(details) == 0 {
-		return types.Check{
-			Name: name, Status: types.CheckOK,
+		return check.Check{
+			Name: name, Status: check.OK,
 			Message: fmt.Sprintf("%d declared retry policy(s) still rescue the failures they retry", declared),
 		}
 	}
 	slices.Sort(details)
-	return types.Check{
+	return check.Check{
 		Name:   name,
-		Status: types.CheckAdvice,
+		Status: check.Advice,
 		Message: fmt.Sprintf(
 			"%d of %d declared retry policy(s) have not rescued a run; a retry that never turns a failure into a pass buys a second run and no verdict",
 			len(details), declared),

@@ -96,7 +96,7 @@ func (s *Store) EndSession(ctx context.Context, c Caller) (types.Job, bool, erro
 			integrating = true
 			return file.ErrSkipWrite
 		}
-		if i < 0 || !Editing(f.Jobs[i]) || f.Jobs[i].Registered == 0 || f.Jobs[i].Holder.OrSession() == types.HolderServer {
+		if i < 0 || !Editing(f.Jobs[i]) || f.Jobs[i].Registered == 0 || f.Jobs[i].ServerRun() {
 			return file.ErrSkipWrite
 		}
 		if err := readOnly(f.Jobs[i]); err != nil {
@@ -138,7 +138,7 @@ func (s *Store) StampHolderStopped(ctx context.Context, c Caller) error {
 	now := s.now().Unix()
 	return s.update(ctx, func(f *jobsFile) error {
 		i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == b.Job })
-		if i < 0 || !Editing(f.Jobs[i]) || f.Jobs[i].Registered == 0 || f.Jobs[i].Holder.OrSession() == types.HolderServer {
+		if i < 0 || !Editing(f.Jobs[i]) || f.Jobs[i].Registered == 0 || f.Jobs[i].ServerRun() {
 			return file.ErrSkipWrite
 		}
 		if err := readOnly(f.Jobs[i]); err != nil {

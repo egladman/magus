@@ -64,7 +64,7 @@ func TestApplySandboxNarrowsToTheLeaseOnTheContext(t *testing.T) {
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: m.ws.Root})
 	for _, id := range []string{"fleet/client", "fleet/daemon"} {
 		_, err := store.Update(t.Context(), id, func(cur *types.Job) {
-			*cur = types.Job{ID: id, Parent: "fleet/root", State: types.StateRunning, WritePaths: []string{"pkg/**"}}
+			*cur = types.Job{ID: id, Parent: "fleet/root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"pkg/**"}}}
 		})
 		require.NoError(t, err)
 	}

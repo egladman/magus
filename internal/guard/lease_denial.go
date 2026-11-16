@@ -38,11 +38,11 @@ func outsideShown(globs []string) string {
 // writePathsShown lists row's write paths, the first writePathsShownMax of
 // them, then names how many more and where they are.
 func writePathsShown(row types.Job) string {
-	if len(row.WritePaths) <= writePathsShownMax {
-		return strings.Join(row.WritePaths, ", ")
+	if len(row.Paths.Write) <= writePathsShownMax {
+		return strings.Join(row.Paths.Write, ", ")
 	}
-	return fmt.Sprintf("%s and %d more (%s)", strings.Join(row.WritePaths[:writePathsShownMax], ", "),
-		len(row.WritePaths)-writePathsShownMax, hint.DescribeJob.With(row.ID))
+	return fmt.Sprintf("%s and %d more (%s)", strings.Join(row.Paths.Write[:writePathsShownMax], ", "),
+		len(row.Paths.Write)-writePathsShownMax, hint.DescribeJob.With(row.ID))
 }
 
 // denyLeaseCheckout refuses a row's holder a magus call outside the row's

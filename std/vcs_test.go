@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // The vcs accessors had no direct unit coverage at all: they were exercised only through
@@ -487,7 +488,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	dir := testkit.NewRepository(t, nil).Root()
 
 	ws := types.WithWorkspace(WithCurrentWorkingDirectory(t.Context(), dir), &ledgerWorkspace{cacheDir: t.TempDir(), root: dir})
-	_, err := MagusPutJob(ws, "worker", types.JobPut{Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
+	_, err := MagusPutJob(ws, "worker", types.JobPut{Agent: agent.Instructed("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 	var asked []string
 	refusal := errors.New("lease-vcs: refused")

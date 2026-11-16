@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // OrderLines renders the reading order for a terminal: each group, each step with its hunks
@@ -67,7 +67,7 @@ func OrderLines(rev diff.Diff, showGenerated bool) []string {
 // stepRisks is the tier evidence of each file a step reads, once per file,
 // in the words `magus affected ci` prints. A file with no tier is left out.
 func stepRisks(rev diff.Diff, s diff.Step) []string {
-	risk := map[string]*types.TierEvidence{}
+	risk := map[string]*check.TierEvidence{}
 	for _, f := range rev.Files {
 		risk[f.Path] = f.Risk
 	}

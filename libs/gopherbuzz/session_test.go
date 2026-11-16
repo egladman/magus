@@ -7,9 +7,12 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"slices"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -937,6 +940,167 @@ func BenchmarkSessionImportedTypes(b *testing.B) {
 	}
 }
 
+// BenchmarkSessionsParallel runs sessions on every -cpu goroutine at once, so
+// ns/op against -cpu 1 shows what the process-wide heap lock costs. Load opens
+// and closes a session per iteration; Run keeps one session per goroutine and
+// allocates inside it. b.Error stands in for b.Fatal, which a RunParallel body
+// must not call.
+func BenchmarkSessionsParallel(b *testing.B) {
+	ctx := context.Background()
+	b.Run("Load", func(b *testing.B) {
+		typesSrc := hostShapedDecls("T", 120, 0)
+		hostSrc := hostShapedDecls("H", 20, 80)
+		files := make([]string, 12)
+		for i := range files {
+			files[i] = fmt.Sprintf("import \"types\";\n"+
+				"fun f%d(x: T%d) > int { return x.n; }\n"+
+				"fun useHost%d() > H%d !> any { return host\\h%d(\"x\", n: 1); }\n"+
+				"export fun g%d() > int { return f%d(T%d{}); }\n", i, i, i, i, i, i, i, i)
+		}
+		b.ReportAllocs()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				s := NewSession(ctx, WithEmbedded())
+				s.SetGlobal("host", vm.NewMap())
+				s.DeclareModuleTypes("host", hostSrc)
+				s.SetModuleDecls("types", typesSrc)
+				for _, f := range files {
+					if err := s.Exec(ctx, f); err != nil {
+						b.Error(err)
+						return
+					}
+				}
+				if err := s.Close(); err != nil {
+					b.Error(err)
+					return
+				}
+			}
+		})
+	})
+	b.Run("Run", func(b *testing.B) {
+		// The source of BenchmarkListHigherOrder, run whole each iteration:
+		// about 4,000 list and closure allocations against the session's owner.
+		const src = `var seed = mut [<int>];
+foreach (i in 0..2000) {
+    seed.append(i);
+}
+final doubled = seed.map(fun (_: int, v: int) > int => v * 2);
+final evens = doubled.filter(fun (_: int, v: int) > bool => v % 4 == 0);
+final __r = evens.reduce::<int>(fun (_: int, v: int, acc: int) > int => acc + v, initial: 0);`
+		b.ReportAllocs()
+		b.RunParallel(func(pb *testing.PB) {
+			s := NewSession(ctx, WithEmbedded())
+			defer func() {
+				if err := s.Close(); err != nil {
+					b.Error(err)
+				}
+			}()
+			for pb.Next() {
+				if err := s.Exec(ctx, src); err != nil {
+					b.Error(err)
+					return
+				}
+			}
+		})
+	})
+}
+
+// churnSource defines build, which makes 1,000 100-byte strings and one list of
+// them. run is part of every string, so two calls share content only when they
+// pass the same run.
+var churnSource = `fun build(run: int) > void {
+    final parts: mut [str] = mut [];
+    foreach (i in 0..1000) {
+        parts.append("` + strings.Repeat("x", 84) + `{10000000 + run}{10000000 + i}");
+    }
+}`
+
+// churnRun numbers the Distinct runs. Interning is process-wide, so a number
+// reused by a later -count pass or by the other churn benchmark would find its
+// strings already interned and report nothing kept.
+var churnRun atomic.Int64
+
+// churnSample is the process-wide heap state the churn benchmarks difference.
+type churnSample struct {
+	live, interned, internedBytes int
+	inuse                         uint64
+	kinds                         map[string]int
+}
+
+func sampleChurn() churnSample {
+	runtime.GC()
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	hs := vm.ReadHeapStats()
+	return churnSample{
+		live:          hs.Objects,
+		interned:      hs.InternedStrings,
+		internedBytes: hs.InternedBytes,
+		inuse:         ms.HeapInuse,
+		kinds:         vm.HeapProfile(),
+	}
+}
+
+// reportChurn reports what n runs left behind, per run, and logs the kept slots
+// by kind. Under buzz_safe or buzz_unsafe the slot metrics read 0.
+func reportChurn(b *testing.B, before, after churnSample, n int) {
+	b.Helper()
+	per := func(d int) float64 { return float64(d) / float64(n) }
+	b.ReportMetric(per(after.live-before.live), "liveslots/op")
+	b.ReportMetric(per(after.kinds["str"]-before.kinds["str"]), "strslots/op")
+	b.ReportMetric(per(after.interned-before.interned), "internedstrs/op")
+	b.ReportMetric(per(after.internedBytes-before.internedBytes), "internedB/op")
+	b.ReportMetric((float64(after.inuse)-float64(before.inuse))/float64(n), "heapinuse-B/op")
+	var kept []string
+	for kind, count := range after.kinds {
+		if d := count - before.kinds[kind]; d != 0 {
+			kept = append(kept, fmt.Sprintf("%s=%.3f", kind, per(d)))
+		}
+	}
+	sort.Strings(kept)
+	b.Logf("slots kept per run by kind: %s", strings.Join(kept, " "))
+}
+
+// BenchmarkSessionChurn opens a session, calls build once and closes it. Its
+// metrics are what each closed session leaves behind after a forced GC.
+// Repeated builds the same strings in every session, so interning finds them
+// after the first; Distinct builds strings no earlier session made.
+func BenchmarkSessionChurn(b *testing.B) {
+	b.Run("Repeated", func(b *testing.B) { benchSessionChurn(b, false) })
+	b.Run("Distinct", func(b *testing.B) { benchSessionChurn(b, true) })
+}
+
+func benchSessionChurn(b *testing.B, distinct bool) {
+	ctx := context.Background()
+	churn := func(run int64) {
+		s := NewSession(ctx, WithEmbedded())
+		if err := s.Exec(ctx, churnSource); err != nil {
+			b.Fatal(err)
+		}
+		if _, err := s.CallValue(ctx, s.Globals()["build"], []vm.Value{vm.IntValue(run)}); err != nil {
+			b.Fatal(err)
+		}
+		if err := s.Close(); err != nil {
+			b.Fatal(err)
+		}
+	}
+	// One run outside the samples: it pays the one-time interning of run 0's
+	// strings and of the source's own literals.
+	churn(0)
+	b.ReportAllocs()
+	before := sampleChurn()
+	var run int64
+	n := 0
+	for b.Loop() {
+		if distinct {
+			run = churnRun.Add(1)
+		}
+		churn(run)
+		n++
+	}
+	reportChurn(b, before, sampleChurn(), n)
+}
+
 // skipWithoutHeapAttribution skips a test that reads vm's heap attribution, which only
 // the nanbox representation records: under buzz_safe or buzz_unsafe the readers are
 // stubs that report nothing.
@@ -945,6 +1109,22 @@ func skipWithoutHeapAttribution(t *testing.T) {
 	if jitTagged {
 		t.Skip("heap attribution is recorded only by the nanbox Value representation")
 	}
+}
+
+// A range expression evaluated in a session takes its slot from the
+// session's owner, so closing the session frees it. Unowned, it stayed for
+// the process: one slot per execution of the expression.
+func TestRangeIsReleasedWithItsSession(t *testing.T) {
+	skipWithoutHeapAttribution(t)
+	ctx := context.Background()
+	ranges := func() int { return vm.HeapProfile()["range"] }
+	before := ranges()
+	for range 10 {
+		s := NewSession(ctx, WithEmbedded())
+		require.NoError(t, s.Exec(ctx, `var n = 0; foreach (i in 0..10) { n = n + i; }`))
+		require.NoError(t, s.Close())
+	}
+	assert.Equal(t, before, ranges(), "range slots kept by ten closed sessions")
 }
 
 // The attribution has to name the loop that is growing the heap. Reporting a
@@ -3144,4 +3324,257 @@ func (s *callingSessionSuite) TestAHostCallInAHostBuiltFiberFindsTheSession() {
 	_, err = sess.ResumeFiber(context.Background(), fiber)
 	s.Require().NoError(err)
 	s.Same(sess, found)
+}
+
+// nestedNamespaceSuite splits a host module into one declaration file per
+// namespace: shop declares a type naming shop\order's Step.
+type nestedNamespaceSuite struct{ suite.Suite }
+
+func TestNestedNamespaceSuite(t *testing.T) { suite.Run(t, new(nestedNamespaceSuite)) }
+
+const (
+	shopOrderDecls = `namespace shop\order;
+export object Step { sku: str = "" }
+`
+	shopDecls = `namespace shop;
+import "shop/order";
+export object Cart { step: order\Step = order\Step{} }
+`
+)
+
+func (s *nestedNamespaceSuite) eval(src string) (vm.Value, error) {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	sess.SetModuleDecls("shop", shopDecls)
+	return sess.Eval(context.Background(), src)
+}
+
+func (s *nestedNamespaceSuite) TestAFullyQualifiedTypeAnnotatesAParameter() {
+	v, err := s.eval(`import "shop/order";
+fun sku(step: shop\order\Step) > str { return step.sku; }
+return sku(shop\order\Step{ sku = "a" });`)
+	s.Require().NoError(err)
+	s.Equal("a", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestAnAliasedNamespaceAnnotatesAParameter() {
+	v, err := s.eval(`import "shop/order" as order;
+fun sku(step: order\Step) > str { return step.sku; }
+return sku(order\Step{ sku = "b" });`)
+	s.Require().NoError(err)
+	s.Equal("b", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestADeclarationFileNamesAnImportedNamespacesType() {
+	v, err := s.eval(`import "shop";
+import "shop/order";
+final cart = shop\Cart{ step = shop\order\Step{ sku = "c" } };
+return cart.step.sku;`)
+	s.Require().NoError(err)
+	s.Equal("c", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestTheChildImportedFirstMergesIntoTheParent() {
+	v, err := s.eval(`import "shop/order";
+import "shop";
+final cart = shop\Cart{ step = shop\order\Step{ sku = "d" } };
+return cart.step.sku;`)
+	s.Require().NoError(err)
+	s.Equal("d", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestAMismatchedNestedTypeFailsTheCheck() {
+	_, err := s.eval(`import "shop/order";
+fun sku(step: shop\order\Step) > str { return step.sku; }
+return sku("e");`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "Step")
+}
+
+func (s *nestedNamespaceSuite) TestAnotherModulesImportDoesNotBindANestedNamespace() {
+	_, err := s.eval(`import "shop";
+fun sku(step: shop\order\Step) > str { return step.sku; }`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `no import binds shop\order`)
+}
+
+func (s *nestedNamespaceSuite) TestTwoNestedNamespacesKeepTheirOwnStep() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	sess.SetModuleDecls("shop/cart", "namespace shop\\cart;\nexport object Step { line: int = 0 }\n")
+	_, err := sess.Eval(context.Background(), `import "shop/order";
+import "shop/cart";
+final step = shop\cart\Step{ sku = "f" };`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), `has no field "sku"`)
+	v, err := sess.Eval(context.Background(), `fun line(step: shop\cart\Step) > int { return step.line; }
+return line(shop\cart\Step{ line = 2 }) + shop\order\Step{ sku = "ab" }.sku.len();`)
+	s.Require().NoError(err)
+	s.Equal(int64(4), v.AsInt())
+}
+
+func (s *nestedNamespaceSuite) TestAHostDeclarationNamesANestedType() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	sess.SetNativeModule("shop", vm.NewMap())
+	sess.DeclareModuleTypes("shop", shopDecls)
+	_, err := sess.Compile(`import "shop";
+fun sku(cart: shop\Cart) > int { return cart.step.sku; }`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "str")
+}
+
+func (s *nestedNamespaceSuite) TestADeclarationWithNoNamespaceNamesTheFullPath() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	sess.SetNativeModule("till", vm.NewMap())
+	sess.SetModuleDecls("shop/cart", "namespace shop\\cart;\nexport object Step { line: int = 0 }\n")
+	sess.SetModuleDecls("till", `import "shop/order";
+import "shop/cart";
+export extern fun last() > shop\order\Step;
+export extern fun next() > shop\cart\Step;
+`)
+	_, err := sess.Compile(`import "till";
+fun line() > int { return till\next().line; }
+fun sku() > str { return till\last().sku; }`)
+	s.Require().NoError(err)
+	_, err = sess.Compile(`import "till";
+fun sku() > int { return till\last().sku; }`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "str")
+}
+
+func (s *nestedNamespaceSuite) TestAnEnumCaseReadsThroughANestedNamespace() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/size", "namespace shop\\size;\nexport enum<str> Size { small = \"s\", large = \"l\" }\n")
+	sess.SetModuleDecls("shop", "namespace shop;\nexport fun open() > str { return \"open\"; }\n")
+	sess.SetModuleDecls("menu", `namespace menu;
+import "shop/size";
+export fun pick() > shop\size\Size { return shop\size\Size.large; }
+`)
+	v, err := sess.Eval(context.Background(), `import "shop";
+import "shop/size";
+import "menu";
+fun value(size: shop\size\Size) > str { return size.value; }
+return value(menu\pick()) + value(shop\size\Size.small) + shop\open();`)
+	s.Require().NoError(err)
+	s.Equal("lsopen", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestAnEnumConvertsAValueThroughANestedNamespace() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/size", "namespace shop\\size;\nexport enum<str> Size { small = \"s\", large = \"l\" }\n")
+	v, err := sess.Eval(context.Background(), `import "shop/size";
+final found = shop\size\Size("l");
+final missing = shop\size\Size("x");
+return (found?.value ?? "none") + (missing?.value ?? "none");`)
+	s.Require().NoError(err)
+	s.Equal("lnone", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestAnAliasedModulesImportLeavesTheEntrysImportWhole() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	sess.SetModuleDecls("till", `namespace till;
+import "shop/order";
+export fun last() > shop\order\Step { return shop\order\Step{ sku = "t" }; }
+`)
+	v, err := sess.Eval(context.Background(), `import "till" as till;
+import "shop/order";
+fun sku(step: shop\order\Step) > str { return step.sku; }
+return sku(till\last()) + sku(shop\order\Step{ sku = "e" });`)
+	s.Require().NoError(err)
+	s.Equal("te", v.String())
+}
+
+func (s *nestedNamespaceSuite) TestANestedNamespaceLeavesAModuleOfItsLastSegment() {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	sess.SetModuleDecls("shop/order", shopOrderDecls)
+	order := vm.NewMap()
+	order.MapSet("count", vm.IntValue(7))
+	sess.SetNativeModule("order", order)
+	v, err := sess.Eval(context.Background(), `import "order";
+import "shop/order";
+return order\count + shop\order\Step{ sku = "abc" }.sku.len();`)
+	s.Require().NoError(err)
+	s.Equal(int64(10), v.AsInt())
+}
+
+// SessionReleaseSuite pins that a session's slots are freed by one release, whoever
+// asks for it and however often.
+type SessionReleaseSuite struct {
+	suite.Suite
+}
+
+func TestSessionReleaseSuite(t *testing.T) {
+	suite.Run(t, new(SessionReleaseSuite))
+}
+
+func (s *SessionReleaseSuite) keptSession(code string) (*Session, func()) {
+	sess := NewSession(context.Background(), WithEmbedded())
+	s.T().Cleanup(func() { _ = sess.Close() })
+	require.NoError(s.T(), sess.Exec(context.Background(), code))
+	return sess, sess.Keep()
+}
+
+func (s *SessionReleaseSuite) TestSecondReleaseFreesNothing() {
+	skipWithoutHeapAttribution(s.T())
+	_, release := s.keptSession(`var xs = [1, 2, 3];`)
+	before := vm.ReadHeapStats().Objects
+	release()
+	afterFirst := vm.ReadHeapStats().Objects
+	require.Less(s.T(), afterFirst, before, "the first release must free the session's slots")
+	release()
+	s.Equal(afterFirst, vm.ReadHeapStats().Objects, "the second release freed again")
+}
+
+func (s *SessionReleaseSuite) TestCallValueOnAReleasedSessionIsAnError() {
+	sess, release := s.keptSession(`fun one() > int { return 1; }`)
+	fn := sess.GetGlobal("one")
+	got, err := sess.CallValue(context.Background(), fn, nil)
+	require.NoError(s.T(), err)
+	s.Equal(int64(1), got.AsInt())
+	release()
+	_, err = sess.CallValue(context.Background(), fn, nil)
+	s.Error(err, "CallValue on a released session")
+	_, err = sess.CallMethod(context.Background(), fn, "call", nil)
+	s.Error(err, "CallMethod on a released session")
+}
+
+func (s *SessionReleaseSuite) TestSecondReleaseLeavesAReusedSlotAlone() {
+	skipWithoutHeapAttribution(s.T())
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "-race" && setting.Value == "true" {
+				s.T().Skip("the race build poisons a released slot instead of reusing it")
+			}
+		}
+	}
+	sess, release := s.keptSession(`var xs = [1, 2, 3];`)
+	old := sess.GetGlobal("xs")
+	release()
+	// A host-built value takes the freed slot and is not adopted by any owner yet,
+	// which is the state a rule call's request is in.
+	var reused vm.Value
+	var held []vm.Value
+	for range 256 {
+		v := vm.ListValue([]vm.Value{vm.IntValue(7)})
+		if v == old {
+			reused = v
+			break
+		}
+		held = append(held, v)
+	}
+	require.NotZero(s.T(), reused, "no allocation reused the freed slot")
+	release()
+	s.Equal([]vm.Value{vm.IntValue(7)}, reused.ListItems(), "the second release freed a slot another value holds")
+	_ = held
 }

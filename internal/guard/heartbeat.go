@@ -218,7 +218,7 @@ func clearHolderStopped(ctx context.Context, at location, who hookAttribution) {
 // background command. An untaken row, a server's and an unread
 // transcript are never dead.
 func deadHolder(store *job.Store, at location, row types.Job, now time.Time) (job.DeadHolder, bool) {
-	if !job.Editing(row) || row.Registered == 0 || row.Holder.OrSession() == types.HolderServer {
+	if !job.Editing(row) || row.Registered == 0 || row.ServerRun() {
 		return job.DeadHolder{}, false
 	}
 	if since, ok := store.SessionEnded(row.ID); ok {
@@ -278,7 +278,7 @@ func SilentLeases(root, cacheDir string, rows []types.Job, now time.Time, after 
 	var out []SilentLease
 	for _, row := range rows {
 		s, ok := newest[row.ID]
-		if !ok || !job.Editing(row) || row.Holder.OrSession() == types.HolderServer || now.Sub(s.At) <= after {
+		if !ok || !job.Editing(row) || row.ServerRun() || now.Sub(s.At) <= after {
 			continue
 		}
 		silent := SilentLease{Lease: row.ID, Session: s.Session, LastSeen: s.At, SilentSeconds: int64(now.Sub(s.At).Seconds())}

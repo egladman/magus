@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -140,17 +141,17 @@ func newInheritProbe(green string, found bool, history []types.Commit, rep types
 }
 
 var (
-	proseReport = types.TierReport{Tier: types.RiskTrivial, Evidence: []types.TierEvidence{
-		{Path: "docs/x.md", Class: "prose", Tier: types.RiskTrivial, Why: `matches "**/*.md" (built-in default); nothing in ci's chain reads it`},
+	proseReport = types.TierReport{Tier: check.RiskTrivial, Evidence: []check.TierEvidence{
+		{Path: "docs/x.md", Class: "prose", Tier: check.RiskTrivial, Why: `matches "**/*.md" (built-in default); nothing in ci's chain reads it`},
 	}}
-	codeReport = types.TierReport{Tier: types.RiskScoped, Evidence: []types.TierEvidence{
-		{Path: "docs/x.md", Class: "prose", Tier: types.RiskTrivial, Why: "prose"},
-		{Path: "internal/y.go", Class: "code", Tier: types.RiskScoped, Why: "Go package y"},
+	codeReport = types.TierReport{Tier: check.RiskScoped, Evidence: []check.TierEvidence{
+		{Path: "docs/x.md", Class: "prose", Tier: check.RiskTrivial, Why: "prose"},
+		{Path: "internal/y.go", Class: "code", Tier: check.RiskScoped, Why: "Go package y"},
 	}}
 	// embedReport is the regression the tier exists for: markdown a package compiles in
 	// is prose by class, and inheriting over it skipped the tests that read it.
-	embedReport = types.TierReport{Tier: types.RiskScoped, Evidence: []types.TierEvidence{
-		{Path: "internal/agent/skills/run/SKILL.md", Class: "prose", Tier: types.RiskScoped, Why: "embedded by Go package skills (go:embed)"},
+	embedReport = types.TierReport{Tier: check.RiskScoped, Evidence: []check.TierEvidence{
+		{Path: "internal/agent/skills/run/SKILL.md", Class: "prose", Tier: check.RiskScoped, Why: "embedded by Go package skills (go:embed)"},
 	}}
 )
 
@@ -205,7 +206,7 @@ func TestInheritProbeDeclines(t *testing.T) {
 		"green run unnamed":     newInheritProbe("", true, inheritHistory, proseReport),
 		"code in the delta":     newInheritProbe("green0123456789", true, inheritHistory, codeReport),
 		"embedded markdown":     newInheritProbe("green0123456789", true, inheritHistory, embedReport),
-		"a comment-only change": newInheritProbe("green0123456789", true, inheritHistory, types.TierReport{Tier: types.RiskMechanical}),
+		"a comment-only change": newInheritProbe("green0123456789", true, inheritHistory, types.TierReport{Tier: check.RiskMechanical}),
 		"merge in the range":    newInheritProbe("green0123456789", true, pushedMerge, proseReport),
 		"green out of reach":    newInheritProbe("unreachable", true, inheritHistory, proseReport),
 		"disabled":              {Disabled: true},
@@ -238,7 +239,7 @@ func TestInheritProbeSurvivesBrokenInputs(t *testing.T) {
 // An empty delta is the boundary case: nothing changed since green, so the
 // verdict inherits and both reports say so rather than printing an empty table.
 func TestInheritProbeEmptyDelta(t *testing.T) {
-	p := newInheritProbe("green0123456789", true, inheritHistory, types.TierReport{Tier: types.RiskTrivial})
+	p := newInheritProbe("green0123456789", true, inheritHistory, types.TierReport{Tier: check.RiskTrivial})
 	got, ok := p.Evaluate(context.Background())
 	require.True(t, ok)
 	assert.Contains(t, got.AnnotationText(), "\nno paths changed since that run")

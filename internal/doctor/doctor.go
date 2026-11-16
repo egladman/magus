@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // ServerInfo carries live server state for the server-related doctor checks.
@@ -168,19 +169,18 @@ func (r *runner) run(ctx context.Context, wsErr error) types.DoctorReport {
 
 	for _, c := range out.Checks {
 		// A check that did not run is counted as unknown whatever status it carries.
-		// Those checks return CheckOK because there was nothing to report, and
-		// tallying that as a pass is how "44 ok" came to include checks that never
-		// looked at anything.
-		if c.Evidence == types.EvidenceUnknown {
+		// Such a check returns check.OK, so tallying it as a pass would count
+		// checks that never looked.
+		if c.Evidence == check.EvidenceUnknown {
 			out.Summary.Unknown++
 			continue
 		}
 		switch c.Status {
-		case types.CheckOK:
+		case check.OK:
 			out.Summary.OK++
-		case types.CheckFail:
+		case check.Fail:
 			out.Summary.Fail++
-		case types.CheckAdvice:
+		case check.Advice:
 			out.Summary.Advice++
 		}
 	}
@@ -190,13 +190,13 @@ func (r *runner) run(ctx context.Context, wsErr error) types.DoctorReport {
 // checkWorkspace reports whether the magusfile loaded, and is the hinge every check
 // below it in the registry hangs on: a failure here skips them rather than running them
 // against a workspace that is not there.
-func (r *runner) checkWorkspace(projects []*types.Project) types.Check {
+func (r *runner) checkWorkspace(projects []*types.Project) check.Check {
 	if r.wsErr != nil {
-		return types.Check{Name: "workspace", Status: types.CheckFail, Message: r.wsErr.Error()}
+		return check.Check{Name: "workspace", Status: check.Fail, Message: r.wsErr.Error()}
 	}
-	return types.Check{
+	return check.Check{
 		Name:    "workspace",
-		Status:  types.CheckOK,
+		Status:  check.OK,
 		Message: fmt.Sprintf("%d projects discovered", len(projects)),
 	}
 }

@@ -32,7 +32,7 @@ func TestJobFeedAttributesAChangeToTheWritePathThatCoversIt(t *testing.T) {
 	require.NoError(t, err)
 	defer w.Close()
 
-	rows := []types.Job{{ID: "pwa/job-watch", State: types.StateRunning, WritePaths: []string{"internal/trail"}}}
+	rows := []types.Job{{ID: "pwa/job-watch", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/trail"}}}}
 	changes := NewJobFeed(ctx, w, dir, func() []types.Job { return rows }).Subscribe(ctx)
 
 	target := filepath.Join(dir, "internal", "trail", "trail.go")
@@ -150,7 +150,7 @@ func TestJobFeedExitsOnContextCancel(t *testing.T) {
 // asserted rather than raced for: every batch that is graph-relevant signals invalidation,
 // AND every batch reaches every subscriber.
 func TestJobFeedServesInvalidationAndSubscribersFromTheSameBatch(t *testing.T) {
-	rows := []types.Job{{ID: "pwa/job-watch", State: types.StateRunning, WritePaths: []string{"internal/trail"}}}
+	rows := []types.Job{{ID: "pwa/job-watch", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/trail"}}}}
 	f := &JobFeed{
 		subs:       map[chan job.FeedEvent]struct{}{},
 		root:       "/repo",

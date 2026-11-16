@@ -1,7 +1,6 @@
 package config
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,12 +27,8 @@ func TestRetiredEnvNamesEachReplacement(t *testing.T) {
 // sends somebody from one dead name to another.
 func TestRetiredEnvReplacementsAreKnown(t *testing.T) {
 	known := map[string]bool{}
-	for _, key := range KnownKeys() {
-		known[EnvName("MAGUS", strings.Split(key, ".")...)] = true
-	}
-	// A key can carry a flat name of its own (sandbox.mode is MAGUS_SANDBOX).
-	for _, d := range EnvVars() {
-		known[d.Name] = true
+	for _, s := range Spec.Settings {
+		known[s.EnvVar] = true
 	}
 	for old, r := range retiredEnv {
 		if r.replacement == "" {

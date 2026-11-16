@@ -363,13 +363,13 @@ How the provider's own credential is scoped is a separate question, answered und
 Every subcommand writes JSONL events (`mergequeue.event/v1alpha1`) on stdout. Hook output and
 errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 1.
 
-| Subcommand | Reads                                          | Writes                                                                 | Rights                       |
-| ---------- | ---------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------- |
+| Subcommand | Reads                                          | Writes                                                                       | Rights                       |
+| ---------- | ---------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------- |
 | `describe` | the provider                                   | setup steps, or a `mergequeue.capabilities/v1alpha1` document with `-o json` | read                         |
 | `ls`       | the provider                                   | a `mergequeue.changes/v1alpha1` document                                     | read                         |
 | `plan`     | changes (stdin or `--changes`)                 | a `mergequeue.plan/v1alpha1` file                                            | read                         |
 | `validate` | the plan (stdin, with `--stdin`)               | the plan and one `mergequeue.verdict/v1alpha1` per change                    | read; runs the changes' code |
-| `apply`    | a source: the plan, then verdicts as they come | merges through the provider                                            | write; runs no change's code |
+| `apply`    | a source: the plan, then verdicts as they come | merges through the provider                                                  | write; runs no change's code |
 
 ```sh
 magus queue ls --provider github --base main > changes.json

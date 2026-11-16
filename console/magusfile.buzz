@@ -207,6 +207,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 // lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
+    ctx.needs(format);
     ctx.needs(textsearch\lint);
     ctx.needs(proofread\proofread_build);
     // proofread's digest and the decisions table key this target, so a change to a rule reruns
@@ -253,7 +254,7 @@ fun judgeCssComments() > void !> any {
 
 // `format:rw` maintains declared source inputs.
 export fun format(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(install);
+    ctx.needs(install, generate);
     ctx.writesFiles([
         "src/**/*.ts", "src/**/*.css", "src/**/*.html", "scripts/**/*.mjs",
         "index.html", "manifest.webmanifest", "sw.js", "package.json",
@@ -272,9 +273,9 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     if (!advisories\inheritedFatal(args)) {
-        ctx.needs(generate, lint, test, build, security);
+        ctx.needs(generate, format, lint, test, build, security);
         return;
     }
-    ctx.needs(generate, lint, test, build);
+    ctx.needs(generate, format, lint, test, build);
     security(ctx, args: args);
 }

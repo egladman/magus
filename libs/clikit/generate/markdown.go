@@ -1,0 +1,286 @@
+package generate
+
+import (
+	"bytes"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/configuration"
+)
+
+// Markdown renders root's man pages as Markdown for a docs site: <name>.md and
+// <name>-<command>.md, each opening with YAML frontmatter (title, description,
+// tags) and naming source as the file it is generated from. The definition lists
+// use the PHP Markdown Extra syntax ("term\n: body"). The program page's
+// Environment lists config's variables.
+func Markdown(root command.Command, config configuration.ConfigurationSpec, source string) ([]Page, error) {
+	pages := make([]Page, 0, 1+len(root.Children))
+	main, err := renderMainMD(root, config, source)
+	if err != nil {
+		return nil, err
+	}
+	pages = append(pages, Page{Name: root.Name + ".md", Content: main})
+	for _, command := range root.Children {
+		content, err := renderCommandMD(root, command, source)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, Page{Name: fmt.Sprintf("%s-%s.md", root.Name, command.Name), Content: content})
+	}
+	return pages, nil
+}
+
+func renderMainMD(root command.Command, config configuration.ConfigurationSpec, source string) ([]byte, error) {
+	var m mdBuf
+	m.frontmatter(root.Name+" command", root.Description, source, root.Tags)
+	m.h1(root.Name)
+	m.p(fmt.Sprintf("%s - %s", root.Name, mdEsc(root.Short)))
+	m.h2("Synopsis")
+	m.p(synopsisMD(root.Usage))
+	m.h2("Description")
+	for _, para := range splitParas(root.Long) {
+		m.p(mdEsc(para))
+	}
+	if len(root.Flags) > 0 {
+		m.h2("Global Flags")
+		if err := writeFlagListMD(&m, root); err != nil {
+			return nil, err
+		}
+	}
+	m.h2("Subcommands")
+	for _, command := range root.Children {
+		ref := fmt.Sprintf("[%s(1)](%s-%s.md)", mdB(fmt.Sprintf("%s-%s", root.Name, command.Name)), root.Name, command.Name)
+		m.def(mdB(command.Name), fmt.Sprintf("%s. See %s.", mdEsc(command.Short), ref))
+	}
+	writeEnvSectionMD(&m, root.Name, config)
+	writeFilesSectionMD(&m, root.Files)
+	writeSeeAlsoMD(&m, root, "")
+	return m.bytes(), nil
+}
+
+func renderCommandMD(root, command command.Command, source string) ([]byte, error) {
+	var m mdBuf
+	desc := command.Description
+	if desc == "" {
+		desc = command.Short
+	}
+	tags := command.Tags
+	if len(tags) == 0 {
+		tags = []string{"cli", fmt.Sprintf("%s %s", root.Name, command.Name), command.Name}
+	}
+	m.frontmatter(fmt.Sprintf("%s %s", root.Name, command.Name), desc, source, tags)
+	m.h1(fmt.Sprintf("%s-%s", root.Name, command.Name))
+	m.p(mdEsc(command.Short))
+	m.h2("Synopsis")
+	m.p(synopsisMD(command.Usage))
+	if command.Long != "" {
+		m.h2("Description")
+		for _, para := range splitParas(command.Long) {
+			m.p(mdEsc(para))
+		}
+	}
+	if len(command.Flags) > 0 {
+		m.h2("Options")
+		if err := writeFlagListMD(&m, command); err != nil {
+			return nil, err
+		}
+	}
+	// Recursive, matching the roff renderer.
+	if err := writeChildFlagsMD(&m, command.Name, command.Children); err != nil {
+		return nil, err
+	}
+	if len(command.Children) > 0 {
+		m.h2("Subcommands")
+		for _, child := range command.Children {
+			m.def(mdB(child.Name), mdEsc(child.Short))
+		}
+	}
+	if len(command.Operands) > 0 {
+		m.h2("Operands")
+		for _, o := range command.Operands {
+			m.def(mdB(o.Name), mdEsc(o.Short))
+		}
+	}
+	// Before Examples, matching the roff renderer's man(7) section order.
+	writeExitStatusMD(&m, command.ExitStatus)
+	if len(command.Examples) > 0 {
+		m.h2("Examples")
+		for _, ex := range command.Examples {
+			if ex.Comment != "" {
+				m.p(mdI(ex.Comment))
+			}
+			m.code(ex.Command)
+		}
+	}
+	writeSeeAlsoMD(&m, root, command.Name)
+	return m.bytes(), nil
+}
+
+func synopsisMD(usage string) string {
+	if sp := strings.Index(usage, " "); sp >= 0 {
+		return fmt.Sprintf("%s %s", mdB(usage[:sp]), mdEsc(strings.TrimSpace(usage[sp:])))
+	}
+	return mdB(usage)
+}
+
+// writeChildFlagsMD emits an options block for every descendant declaring flags.
+func writeChildFlagsMD(m *mdBuf, path string, children []command.Command) error {
+	for _, child := range children {
+		sub := fmt.Sprintf("%s %s", path, child.Name)
+		if len(child.Flags) > 0 {
+			m.h3(sub + " options")
+			if err := writeFlagListMD(m, child); err != nil {
+				return err
+			}
+		}
+		if err := writeChildFlagsMD(m, sub, child.Children); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeFlagListMD(m *mdBuf, command command.Command) error {
+	helps, err := flagHelp(command)
+	if err != nil {
+		return err
+	}
+	for _, h := range helps {
+		m.def(flagLabelMD(h), mdEsc(h.Usage))
+	}
+	return nil
+}
+
+func writeExitStatusMD(m *mdBuf, codes []command.ExitCode) {
+	if len(codes) == 0 {
+		return
+	}
+	m.h2("Exit status")
+	for _, code := range codes {
+		m.def(mdB(strconv.Itoa(code.Code)), mdEsc(code.Meaning))
+	}
+}
+
+func writeEnvSectionMD(m *mdBuf, program string, config configuration.ConfigurationSpec) {
+	read, set := variables(config)
+	if len(read) == 0 && len(set) == 0 {
+		return
+	}
+	m.h2("Environment")
+	for _, s := range read {
+		body := mdEsc(s.Doc)
+		if s.Default != "" {
+			body += fmt.Sprintf(" (default: %s)", mdEsc(s.Default))
+		}
+		if s.YamlPath != "" {
+			body += fmt.Sprintf(". Config file key: %s.", mdB(s.YamlPath))
+		}
+		m.def(mdB(s.EnvVar), body)
+	}
+	if len(set) == 0 {
+		return
+	}
+	m.h3(setByHeading(program))
+	for _, s := range set {
+		m.def(mdB(s.EnvVar), mdEsc(s.Doc))
+	}
+}
+
+func writeFilesSectionMD(m *mdBuf, files []command.File) {
+	if len(files) == 0 {
+		return
+	}
+	m.h2("Files")
+	for _, f := range files {
+		m.def(mdB(f.Name), mdEsc(strings.Join(splitParas(f.Doc), " ")))
+	}
+}
+
+func writeSeeAlsoMD(m *mdBuf, root command.Command, current string) {
+	m.h2("See Also")
+	var refs []string
+	if current != "" {
+		refs = append(refs, fmt.Sprintf("[%s(1)](%s.md)", mdB(root.Name), root.Name))
+	}
+	for _, command := range root.Children {
+		if command.Name != current {
+			refs = append(refs, fmt.Sprintf("[%s(1)](%s-%s.md)", mdB(fmt.Sprintf("%s-%s", root.Name, command.Name)), root.Name, command.Name))
+		}
+	}
+	m.p(strings.Join(refs, ", "))
+}
+
+// flagLabelMD builds the definition-list term for a flag.
+func flagLabelMD(h command.Help) string {
+	label := mdB(h.Name)
+	if h.Value != "" {
+		label += " " + mdI(h.Value)
+	}
+	if h.Default != "" {
+		label += fmt.Sprintf(" (default: %s)", mdEsc(h.Default))
+	}
+	return label
+}
+
+type mdBuf struct{ b bytes.Buffer }
+
+// frontmatter writes the YAML frontmatter block; tags render as a flow sequence.
+func (m *mdBuf) frontmatter(title, description, source string, tags []string) {
+	m.b.WriteString("---\n")
+	fmt.Fprintf(&m.b, "title: %s\n", yamlScalar(title))
+	fmt.Fprintf(&m.b, "generated_from: %s\n", yamlScalar(source))
+	fmt.Fprintf(&m.b, "description: %s\n", yamlScalar(description))
+	m.b.WriteString("tags: [")
+	for i, t := range tags {
+		if i > 0 {
+			m.b.WriteString(", ")
+		}
+		m.b.WriteString(yamlScalar(t))
+	}
+	m.b.WriteString("]\n---\n\n")
+}
+
+// yamlScalar quotes a value only when YAML would misread it: a colon, a quote, or
+// leading or trailing space.
+func yamlScalar(s string) string {
+	needsQuote := strings.ContainsAny(s, ":\"'") || (len(s) > 0 && (s[0] == ' ' || s[len(s)-1] == ' '))
+	if !needsQuote {
+		return s
+	}
+	return fmt.Sprintf("\"%s\"", strings.ReplaceAll(s, "\"", "\\\""))
+}
+
+func (m *mdBuf) h1(s string) { fmt.Fprintf(&m.b, "# %s\n\n", s) }
+func (m *mdBuf) h2(s string) { fmt.Fprintf(&m.b, "## %s\n\n", s) }
+func (m *mdBuf) h3(s string) { fmt.Fprintf(&m.b, "### %s\n\n", s) }
+func (m *mdBuf) p(s string)  { m.b.WriteString(s + "\n\n") }
+
+func (m *mdBuf) def(term, body string) { fmt.Fprintf(&m.b, "%s\n: %s\n\n", term, body) }
+
+// code writes a fenced block tagged sh, which markdownlint's MD040 asks for.
+func (m *mdBuf) code(lines ...string) {
+	m.b.WriteString("```sh\n")
+	for _, l := range lines {
+		m.b.WriteString(l + "\n")
+	}
+	m.b.WriteString("```\n\n")
+}
+
+func (m *mdBuf) bytes() []byte { return m.b.Bytes() }
+
+// mdEscaper neutralizes the Markdown metacharacters CLI prose carries: raw < > would
+// be dropped as HTML, and a backtick, asterisk or backslash would start code or
+// emphasis. Underscores stay, since GFM ignores intra-word _.
+var mdEscaper = strings.NewReplacer(
+	`\`, `\\`,
+	"`", "\\`",
+	"*", `\*`,
+	"<", `\<`,
+	">", `\>`,
+)
+
+func mdEsc(s string) string { return mdEscaper.Replace(s) }
+func mdB(s string) string   { return fmt.Sprintf("**%s**", mdEsc(s)) }
+func mdI(s string) string   { return fmt.Sprintf("*%s*", mdEsc(s)) }

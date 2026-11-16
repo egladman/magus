@@ -13,7 +13,7 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'shop before the currency work'
 
-exec magus job fork cents --criteria 'prices are integers of cents' --write-paths pricing/total.sh,pricing/scratch.sh,pricing/added.sh --check 'test .'
+exec magus job fork cents --instructions 'prices are integers of cents' --write-paths pricing/total.sh,pricing/scratch.sh,pricing/added.sh --check 'test .'
 exec magus job exec cents
 cp $WORK/scratch.sh pricing/scratch.sh
 cp $WORK/scratch.sh pricing/added.sh
@@ -52,6 +52,6 @@ format() { echo "$1.00"; }
 scratch() { :; }
 -- narrow.json --
 {"api_version": "magus.job/v1alpha1", "id": "cents",
- "criteria": "prices are integers of cents",
- "write_paths": ["pricing/total.sh"],
+ "agent": {"instructions": "prices are integers of cents", "worker": {"type": "resumed"}},
+ "paths": {"write": ["pricing/total.sh"]},
  "check": {"target": "test", "project": "."}}

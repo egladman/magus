@@ -27,7 +27,7 @@ func apartProjects() ([]*types.Project, string) {
 }
 
 func apartHolder(checkout string) types.Job {
-	return types.Job{ID: "holder", State: types.StateRunning, WritePaths: []string{"gen/decode.go"}, CheckoutRoot: checkout}
+	return types.Job{ID: "holder", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"gen/decode.go"}}, CheckoutRoot: checkout}
 }
 
 // apart is HeldApart's first answer for a holder in /repos/landing.
@@ -96,10 +96,10 @@ func (s *jobSuite) forkShare(file string, ws Workspace) error {
 	here := testkit.NewRepository(s.T(), files).Root()
 	there := testkit.NewRepository(s.T(), files)
 	store := NewStore(tempLocation(s.T(), here)).InWorkspace(ws)
-	seed(s.T(), store, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{file}, Checkpoint: there.Head(), CheckoutRoot: there.Root()})
+	seed(s.T(), store, types.Job{ID: "A", State: types.StateRunning, Paths: types.JobPaths{Write: []string{file}}, Checkpoint: there.Head(), CheckoutRoot: there.Root()})
 	rows, err := store.List()
 	s.Require().NoError(err)
-	return unorderedFileShareProblems(s.T().Context(), store, rows, types.Job{ID: "B", WritePaths: []string{file}}).Error()
+	return unorderedFileShareProblems(s.T().Context(), store, rows, types.Job{ID: "B", Paths: types.JobPaths{Write: []string{file}}}).Error()
 }
 
 func generatedWorkspace() Workspace {

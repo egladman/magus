@@ -77,6 +77,7 @@ func WithMaxImportBytes(n int64) Option {
 func WithLog(format string, level slog.Level) Option {
 	return func(c *Cache) {
 		c.log = newLogger(format, level)
+		c.logFormat = format
 		c.logLevel = level
 	}
 }

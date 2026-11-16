@@ -425,7 +425,7 @@ func briefOffCheckWhy(row types.Job, v runVerdict, defaults []string) string {
 	case len(v.outside) > 0:
 		return fmt.Sprintf("Under the rw charm `%s` writes `%s`, which job %s's write paths (%s) do not cover.\n"+
 			"Narrow the brief's command to `%s`, which reports the same drift without writing it, or widen the row's write paths to cover those globs.",
-			v.run.target, strings.Join(v.outside, "`, `"), row.ID, strings.Join(row.WritePaths, ", "), v.run.readOnly(defaults))
+			v.run.target, strings.Join(v.outside, "`, `"), row.ID, strings.Join(row.Paths.Write, ", "), v.run.readOnly(defaults))
 	}
 	return ""
 }

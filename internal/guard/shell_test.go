@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -2155,12 +2155,9 @@ func TestStageAllServesTheSamePathsThroughLsFiles(t *testing.T) {
 // names the lock holder. Measured 2026-09-15: pgrep -fl 'magus|go-build'.
 func TestGuardDeniesProcessPoll(t *testing.T) {
 	for _, cmd := range []string{
-		`pgrep -fl magus`,
-		`pgrep -fl 'magus|go-build|go build'`,
 		`ps -p 85665`,
 		`ps -p 85665 -o pid,etime,command`,
-		`pidof magus`,
-		`bash -c 'pgrep -fl magus'`,
+		`bash -c 'ps -p 85665'`,
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
@@ -2186,11 +2183,34 @@ func TestShellRulesAdviseWhenSetToAdvise(t *testing.T) {
 	}
 }
 
+// pgrep cannot tell the caller's process from another session's and fails here as
+// operation not permitted.
+func TestGuardDeniesProcessLookup(t *testing.T) {
+	for _, cmd := range []string{
+		`pgrep -fl magus`,
+		`pgrep -fl 'magus|go-build|go build'`,
+		`pidof magus`,
+		`/usr/bin/pgrep -f magus`,
+		`bash -c 'pgrep -fl magus'`,
+	} {
+		v := Evaluate(strict(testDependencies()), cmd)
+		assert.Equal(t, denyRuleProcessLookup, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "background-task notification", cmd)
+		assert.Contains(t, v.Deny, "magus server status", cmd)
+		assert.Contains(t, v.Why, "magus job wait", cmd)
+		require.Len(t, v.Next, 1, cmd)
+		assert.Equal(t, hint.ServerStatus.String(), v.Next[0].Run, cmd)
+	}
+	assert.NotEmpty(t, advised(Evaluate(advising(testDependencies(), "process-lookup"), "pgrep magus")))
+}
+
 func TestGuardAllowsMentioningProcessPollWithoutRunningIt(t *testing.T) {
 	for _, cmd := range []string{
+		`echo 'ps -p 4242'`,
 		`echo 'pgrep -fl magus'`,
 		`./magus server status --watch=15s`,
 	} {
+		assert.NotEqual(t, denyRuleProcessLookup, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 		assert.NotEqual(t, denyRuleProcessPoll, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
@@ -2461,10 +2481,10 @@ func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
 	for _, inv := range credentialInvocations {
 		spelled := strings.Join(inv.words, " ")
-		cmds := commands.Root.Children
-		var found *cmdline.Command
+		cmds := commands.Root.Spec.Children
+		var found *command.Command
 		for _, w := range inv.words {
-			i := slices.IndexFunc(cmds, func(c cmdline.Command) bool { return c.Name == w })
+			i := slices.IndexFunc(cmds, func(c command.Command) bool { return c.Name == w })
 			if !assert.GreaterOrEqual(t, i, 0, "%q: no command %q in the registry", spelled, w) {
 				found = nil
 				break
@@ -2475,7 +2495,7 @@ func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
 		if found == nil || inv.flag == "" {
 			continue
 		}
-		assert.True(t, slices.ContainsFunc(found.Flags, func(f cmdline.Flag) bool { return f.Name == inv.flag }),
+		assert.True(t, slices.ContainsFunc(found.Flags, func(f command.Flag) bool { return f.Name == inv.flag }),
 			"%q: no flag --%s in the registry", spelled, inv.flag)
 	}
 }
@@ -2722,7 +2742,7 @@ func (s *PersonLeaseSuite) SetupTest() {
 func (s *PersonLeaseSuite) holdHere(id string, paths ...string) {
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: hookLocation(s.testContext(), Dependencies{}).cacheDir, Root: s.root})
 	_, err := store.Update(s.T().Context(), id, func(cur *types.Job) {
-		*cur = types.Job{ID: id, WritePaths: paths, State: types.StateRunning, CheckoutRoot: s.root}
+		*cur = types.Job{ID: id, Paths: types.JobPaths{Write: paths}, State: types.StateRunning, CheckoutRoot: s.root}
 	})
 	s.Require().NoError(err)
 }
@@ -2855,7 +2875,8 @@ func (s *PersonLeaseSuite) TestACheckoutRecordGradesWithNoClaim() {
 
 func (s *PersonLeaseSuite) TestTheBootstrapScriptsTakeNoClaim() {
 	declareCheckoutHook(s.T(), s.root)
-	for _, script := range []string{placementScript, testCheckoutHook} {
+	servesPlacement(s.T(), s.root)
+	for _, script := range []string{placementScriptAt(s.root), testCheckoutHook} {
 		s.Require().NoError(os.MkdirAll(filepath.Dir(filepath.Join(s.root, script)), 0o755))
 		s.script(script, buzzWritesAFile)
 		s.NotEqual(string(denyRuleEditUngraded), s.judgeBound("./magus buzz "+script).Rule, script)

@@ -25,7 +25,7 @@ The version lives in the store's own header line, as the `migration` member:
 
 ```jsonl
 {"api_version":"magus.job/v1alpha1","migration":1}
-{"id":"docs-index","state":"pass","criteria":"index the docs"}
+{"id":"docs-index","state":"pass","agent":{"instructions":"index the docs","worker":{"type":"resumed"}}}
 ```
 
 A header without the member is at version 0.
@@ -45,6 +45,13 @@ When magus opens a store:
 
   Each store migrates once. The next magus to open it finds it current, and
   no reader keeps the old shape.
+
+- **Older, in a job's checkout**, the job store is refused, and nothing is
+  read or written. A job's checkout is one a live job's fork made or adopted,
+  and the store's own rows say which. Every checkout shares the file, so a
+  worker's binary built from its branch would move it past every other magus.
+  The root integrates the change and migrates the store once, from its own
+  checkout.
 
 - **Newer** than this magus knows, the store is refused, naming both versions,
   and nothing is read or written:

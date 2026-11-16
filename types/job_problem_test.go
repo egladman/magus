@@ -11,7 +11,7 @@ import (
 )
 
 func TestJobProblemErrCarriesItsCodeAndFix(t *testing.T) {
-	p := JobProblem{Code: WritePathIsDirectory, Field: "write_paths[0]", Message: `"internal/job" is a directory`, Fix: "list the files"}
+	p := JobProblem{Code: WritePathIsDirectory, Field: "paths.write[0]", Message: `"internal/job" is a directory`, Fix: "list the files"}
 
 	err := p.Error()
 
@@ -100,7 +100,7 @@ func TestJobEditApplyChangesTheRecordOnce(t *testing.T) {
 		assert.True(t, e.Apply(&d), "%s changes the record", e)
 		assert.False(t, e.Apply(&d), "%s a second time changes nothing", e)
 	}
-	assert.Equal(t, Declaration{WritePaths: []string{"docs/x.md"}, Goals: []Goal{goal}, Deviations: []Deviation{deviation}}, d)
+	assert.Equal(t, Declaration{Paths: JobPaths{Write: []string{"docs/x.md"}}, Goals: []Goal{goal}, Deviations: []Deviation{deviation}}, d)
 	assert.False(t, JobEdit{AddGoal: &Goal{ID: "lint"}}.Apply(&d), "a goal id the record uses is left alone")
 	assert.False(t, JobEdit{}.Apply(&d))
 }

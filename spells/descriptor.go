@@ -365,6 +365,9 @@ type Descriptor struct {
 	// defines, from mgs_listScriptRunners. Not serialized: doctor reads them, no build
 	// does, so correcting one must not invalidate the cache.
 	ScriptRunners []Command `json:"-"`
+	// Scopes prints what a relinked build reads, from mgs_getScopes; nil for a
+	// spell that declares none. Not serialized: no build reads it.
+	Scopes *Command `json:"-"`
 }
 
 // ValidateScriptRunners rejects a runner that is not a plain argv prefix: a bin is

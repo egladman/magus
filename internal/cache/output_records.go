@@ -43,35 +43,17 @@ func readOutputRecords(r io.Reader, limits importLimits, each func(types.StoredO
 // lineBreaks spells out the two controls NeutralizeTerminal lets through.
 var lineBreaks = strings.NewReplacer("\n", "<U+000A>", "\t", "<U+0009>")
 
-// adoptPreFoldStamp reads a record an older magus stamped schema_version
-// 1 as StoredOutputAPIVersion, or as its api_version when it has both.
-// compat(until: the next release): an exported record outlives the binary
-// that wrote it, and `query output --stdin` reads it back.
-func adoptPreFoldStamp(schema *types.Schema) {
-	if string(schema.Unknown["schema_version"]) != "1" {
-		return
-	}
-	delete(schema.Unknown, "schema_version")
-	if len(schema.Unknown) == 0 {
-		schema.Unknown = nil
-	}
-	if schema.Version == "" {
-		schema.Version = types.StoredOutputAPIVersion
-	}
-}
-
 func decodeOutputRecord(raw []byte) (types.StoredOutput, error) {
 	var rec types.StoredOutput
 	if err := json.Unmarshal(raw, &rec); err != nil {
 		return types.StoredOutput{}, fmt.Errorf("not an output record: %w", err)
 	}
-	adoptPreFoldStamp(&rec.Schema)
 	switch {
 	case rec.Version == "":
 		return types.StoredOutput{}, errors.New("not an output record: it has no api_version, `magus query output <ref> -o jsonl` writes one per line")
 	case rec.Version != types.StoredOutputAPIVersion:
 		return types.StoredOutput{}, types.DiagnosticErrorf(types.StoreRecordsNewer, "%v",
-			types.StoredOutputAPIVersion.Refuse("output record", rec.Version, "write it again with this magus"))
+			types.RefuseVersion(types.StoredOutputAPIVersion, rec.Version, "output record", "write it again with this magus"))
 	case len(rec.Unmet(nil)) > 0:
 		return types.StoredOutput{}, types.DiagnosticErrorf(types.StoreRecordsNewer, "output record requires %v, which this magus does not implement", rec.Unmet(nil))
 	case rec.Output != "" && rec.OutputBase64 != nil:

@@ -1,9 +1,13 @@
 package magus
 
 import (
+	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"maps"
@@ -43,6 +47,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -76,6 +81,7 @@ type run struct {
 	session         string // the host session the guard judges the run for; see WithSession
 	observer        types.Observer
 	results         func(types.TargetResult) // see WithTargetResults
+	failures        func([]cache.TargetFailure)
 }
 
 // lockRole is what the run's project locks admit it to.
@@ -341,6 +347,12 @@ func CharmsForCI(charms []string) []string {
 // not a hardcoded preflight...test chain. The magusfile composes the pipeline
 // order via magus.needs.
 //
+// Every pass verifies under [CharmsForCI]. Under rw, the nearest declared
+// writer at or above each original failure runs under rw, then the targets
+// verify again. A run whose repairs changed files fails with a
+// [types.UncommittedRepairError]. A dry run or a tree with no VCS repairs
+// nothing. [WithTargetResults] hears every verify pass.
+//
 // It is judged as Run is, each target as `magus run <target> <project>`: `magus run ci`
 // is the verb that reaches it.
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
@@ -356,6 +368,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 	// Both write-granting charms come off: rw so check-only targets stay check-only,
 	// and update so a ci run verifies the pinned upstream state rather than refreshing
 	// it against whatever the registry or the feed serves today.
+	carried := o.Charms
 	o.Charms = CharmsForCI(o.Charms)
 
 	// ci is the one target that must not silently no-op when undefined. Ordinary
@@ -384,7 +397,442 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 					"so this run would do nothing", types.TargetCI, "magus affected ci", "magus affected --plan")
 		}
 	}
-	return m.redactError(m.runResolved(ctx, targets, o))
+	if !carriesReadWrite(carried) {
+		return m.redactError(m.runResolved(ctx, targets, o))
+	}
+	return m.redactError(m.verifyAndRepair(ctx, o, carried, func(ctx context.Context, o run) ([]cache.TargetFailure, error) {
+		return collectFailures(o, func(o run) error { return m.runResolved(ctx, targets, o) })
+	}))
+}
+
+func carriesReadWrite(charms []string) bool {
+	return slices.ContainsFunc(charms, func(c string) bool {
+		return types.NormalizeCharm(c) == types.CharmReadWrite
+	})
+}
+
+// verifyPass is one verify pass of a ci run under o: the failures it
+// recorded and its error.
+type verifyPass func(ctx context.Context, o run) ([]cache.TargetFailure, error)
+
+// collectFailures runs fn under o and returns what every run fn makes recorded
+// failing, with fn's error.
+func collectFailures(o run, fn func(run) error) ([]cache.TargetFailure, error) {
+	var failed []cache.TargetFailure
+	o.failures = func(f []cache.TargetFailure) { failed = append(failed, f...) }
+	err := fn(o)
+	return failed, err
+}
+
+// verifyAndRepair is the loop of a ci run whose charms carry rw. Each
+// writer is repaired at most once and each stale output retried at most
+// once, so it ends.
+func (m *Magus) verifyAndRepair(ctx context.Context, o run, carried []string, pass verifyPass) error {
+	tree, why, err := m.repairCheckout(ctx, o)
+	if err != nil {
+		return err
+	}
+	if why != "" {
+		o.out(m).EmitNotice(ctx, slog.LevelInfo, "", fmt.Sprintf("rw is carried, but %s, so this ci run verifies only", why))
+		_, err := pass(ctx, o)
+		return err
+	}
+	before, err := tree.snapshot(ctx)
+	if err != nil {
+		return err
+	}
+	loop := repairLoop{repaired: map[types.TargetRef]bool{}, retried: map[types.TargetRef]bool{}}
+	runErr := m.repairPasses(ctx, o, carried, pass, &loop)
+	if ctx.Err() != nil {
+		// A cut-short run is no verdict, so what it changed is not compared.
+		if errors.Is(runErr, ctx.Err()) {
+			return runErr
+		}
+		return errors.Join(runErr, ctx.Err())
+	}
+	after, err := tree.snapshot(ctx)
+	if err != nil {
+		return errors.Join(runErr, err)
+	}
+	files := m.repairedFiles(tree, diff.DiffContent(before, after), after, &loop)
+	if len(files) == 0 {
+		return runErr
+	}
+	return errors.Join(runErr, uncommittedRepair(loop.writers, files))
+}
+
+// repairPasses verifies, repairs what loop decides, and verifies again until
+// a pass passes or nothing is left to try.
+func (m *Magus) repairPasses(ctx context.Context, o run, carried []string, pass verifyPass, loop *repairLoop) error {
+	for {
+		failed, runErr := pass(ctx, o)
+		if runErr == nil || ctx.Err() != nil {
+			return runErr
+		}
+		repairs, retry, again := loop.decide(m, failed)
+		if len(repairs) == 0 && !retry {
+			return errors.Join(runErr, again)
+		}
+		if err := m.repair(ctx, o, carried, repairs); err != nil {
+			return errors.Join(runErr, err)
+		}
+	}
+}
+
+// repairLoop is what one ci run has already done to its failures.
+type repairLoop struct {
+	repaired map[types.TargetRef]bool
+	retried  map[types.TargetRef]bool
+	// writers are the repaired writers and retried stale steps, in order.
+	writers []types.TargetRef
+	// repairs are the repaired writers alone. A changed file inside their
+	// chains' declared writes is theirs.
+	repairs []types.TargetRef
+	// drifted are the retried stale steps. A changed file inside the outputs
+	// their drift gate hashed is theirs.
+	drifted []types.TargetRef
+}
+
+// ciRepair is one declared writer to run under rw and the original failure
+// at or beneath it that chose it.
+type ciRepair struct{ writer, failure types.TargetRef }
+
+// decide reads one verify pass's failures. An original failure is retried
+// once when it is a stale output, and otherwise repaired through its nearest
+// declared writers. again names each writer that failed after its repair.
+func (l *repairLoop) decide(m *Magus, failed []cache.TargetFailure) (repairs []ciRepair, retry bool, again error) {
+	f := newFailureSet(m, failed)
+	var notes []error
+	queued := map[types.TargetRef]bool{}
+	for _, ref := range f.originals() {
+		if drift := (*types.OutputDriftError)(nil); errors.As(f.errs[ref], &drift) {
+			if !l.retried[ref] {
+				l.retried[ref], retry = true, true
+				l.writers = append(l.writers, ref)
+				l.drifted = append(l.drifted, ref)
+			}
+			continue
+		}
+		for _, w := range f.nearestWriters(ref) {
+			if queued[w] {
+				continue
+			}
+			queued[w] = true
+			if l.repaired[w] {
+				notes = append(notes, fmt.Errorf("%s: it failed again after its write arm ran", w.Ref()))
+				continue
+			}
+			repairs = append(repairs, ciRepair{writer: w, failure: ref})
+		}
+	}
+	for _, r := range repairs {
+		l.repaired[r.writer] = true
+		l.writers = append(l.writers, r.writer)
+		l.repairs = append(l.repairs, r.writer)
+	}
+	return repairs, retry, errors.Join(notes...)
+}
+
+// failureSet is one pass's failures, keyed by normalized ref, with the
+// static chain beneath each.
+type failureSet struct {
+	m      *Magus
+	errs   map[types.TargetRef]error
+	chains map[types.TargetRef][]types.TargetRef
+}
+
+func newFailureSet(m *Magus, failed []cache.TargetFailure) failureSet {
+	s := failureSet{m: m, errs: map[types.TargetRef]error{}, chains: map[types.TargetRef][]types.TargetRef{}}
+	for _, f := range failed {
+		s.errs[types.TargetRef{Project: f.Ref.Project, Target: types.Normalize(f.Ref.Target)}] = f.Err
+	}
+	return s
+}
+
+func (s failureSet) failed(ref types.TargetRef) bool {
+	_, ok := s.errs[ref]
+	return ok
+}
+
+// sorted is every failure by project, then target.
+func (s failureSet) sorted() []types.TargetRef {
+	return slices.SortedFunc(maps.Keys(s.errs), func(a, b types.TargetRef) int {
+		return cmp.Or(cmp.Compare(a.Project, b.Project), cmp.Compare(a.Target, b.Target))
+	})
+}
+
+// beneath is every target ref's chain reaches, ref left out. The lookup
+// resolves a cross-project step, which WalkChain skips without one.
+func (s failureSet) beneath(ref types.TargetRef) []types.TargetRef {
+	if chain, ok := s.chains[ref]; ok {
+		return chain
+	}
+	var chain []types.TargetRef
+	visit := func(v types.ChainVisit) error {
+		if v.Depth > 0 {
+			chain = append(chain, types.TargetRef{Project: v.Project.Path, Target: types.Normalize(v.Target)})
+		}
+		return nil
+	}
+	_ = types.WalkChain(s.m.Get(ref.Project), ref.Target, s.m.Get, visit) // visit never errs, so neither does the walk
+	s.chains[ref] = chain
+	return chain
+}
+
+// originals are the failures with no other failure beneath them.
+func (s failureSet) originals() []types.TargetRef {
+	return slices.DeleteFunc(s.sorted(), func(ref types.TargetRef) bool {
+		return slices.ContainsFunc(s.beneath(ref), s.failed)
+	})
+}
+
+// nearestWriters are the failed declared writers that are failure or reach
+// it, less each one that reaches another of them.
+func (s failureSet) nearestWriters(failure types.TargetRef) []types.TargetRef {
+	candidates := slices.DeleteFunc(s.sorted(), func(ref types.TargetRef) bool {
+		reaches := ref == failure || slices.Contains(s.beneath(ref), failure)
+		return !reaches || !s.m.declaresWriter(ref)
+	})
+	return slices.DeleteFunc(slices.Clone(candidates), func(w types.TargetRef) bool {
+		return slices.ContainsFunc(s.beneath(w), func(o types.TargetRef) bool { return slices.Contains(candidates, o) })
+	})
+}
+
+// declaresWriter reports a target ci may repair. It declares its own write
+// and reads rw, so rw is the remedy its failure names.
+func (m *Magus) declaresWriter(ref types.TargetRef) bool {
+	p := m.Get(ref.Project)
+	return p != nil && declaresOwnWrite(p, ref.Target) && m.readsCharm(p, ref.Target, types.CharmReadWrite)
+}
+
+// declaresOwnWrite reports target's own in-place updates or outputs in p.
+// Unlike declaresOutput it walks no chain: a composer of a writer is not one.
+func declaresOwnWrite(p *types.Project, target string) bool {
+	return len(p.TargetUpdates[target]) > 0 || len(p.TargetOutputs[target]) > 0
+}
+
+// repairRun is the run a repair makes, as `magus run <target>:rw` would.
+// The cache is off: a replay of an in-place update writes nothing. The
+// pass's narrowing and collectors stay behind.
+func repairRun(o run, carried []string) run {
+	o.Charms = slices.DeleteFunc(slices.Clone(carried), func(c string) bool {
+		return types.NormalizeCharm(c) == types.CharmUpdate
+	})
+	o.Cache, o.results, o.failures, o.narrowing = false, nil, nil, nil
+	return o
+}
+
+// repair runs each writer under [repairRun]. A member it composes sees rw
+// too.
+func (m *Magus) repair(ctx context.Context, o run, carried []string, repairs []ciRepair) error {
+	o = repairRun(o, carried)
+	for _, r := range repairs {
+		why := "it failed its check"
+		if r.failure != r.writer {
+			why = r.failure.Ref() + " failed beneath it"
+		}
+		o.out(m).EmitNotice(ctx, slog.LevelInfo, "", fmt.Sprintf("repairing %s under rw: %s", r.writer.Ref(), why))
+		if err := m.runResolved(ctx, []types.Target{{Path: r.writer.Project, Name: r.writer.Target}}, o); err != nil {
+			return fmt.Errorf("repairing %s under rw: %w", r.writer.Ref(), err)
+		}
+	}
+	return nil
+}
+
+// repairedFiles are the changed paths a repair wrote, each with its digest
+// in after. A repair wrote what its chains declare or a retried step gates.
+// A path no longer dirty needs no commit.
+func (m *Magus) repairedFiles(tree repairTree, changed []string, after diff.ContentSnap, loop *repairLoop) []types.RepairedFile {
+	var writes []types.Glob
+	for _, w := range loop.repairs {
+		for _, n := range cache.DeclaredNodes(m.Get(w.Project), w.Target, m.Get) {
+			writes = append(writes, n.Writes...)
+		}
+	}
+	for _, d := range loop.drifted {
+		if p := m.Get(d.Project); p != nil {
+			for _, g := range p.AllOutputs() {
+				writes = append(writes, g.Root(p.Path))
+			}
+		}
+	}
+	var out []types.RepairedFile
+	for _, p := range changed {
+		sum, dirty := after[p]
+		rel, inside := tree.workspacePath(p)
+		if !dirty || !inside {
+			continue
+		}
+		if !slices.ContainsFunc(writes, func(g types.Glob) bool { return g.Match(rel) }) {
+			continue
+		}
+		out = append(out, types.RepairedFile{Path: p, Digest: hex.EncodeToString(sum[:])})
+	}
+	slices.SortFunc(out, func(a, b types.RepairedFile) int { return cmp.Compare(a.Path, b.Path) })
+	return out
+}
+
+// uncommittedRepair is the error a run whose repairs changed files ends
+// with.
+func uncommittedRepair(writers []types.TargetRef, files []types.RepairedFile) error {
+	refs := make([]string, len(writers))
+	for i, w := range writers {
+		refs[i] = w.Ref()
+	}
+	paths := make([]string, len(files))
+	for i, f := range files {
+		paths[i] = f.Path
+	}
+	return &types.UncommittedRepairError{
+		Writers: slices.Clone(writers),
+		Files:   files,
+		Diagnostic: types.DiagnosticErrorf(types.UncommittedRepair,
+			"ci repaired %s through %s: %s. Commit them and run ci again; an uncommitted repair gets no verdict",
+			plural.Count(len(files), "file", "files"), strings.Join(refs, ", "), strings.Join(paths, ", ")),
+	}
+}
+
+// UncommittedRepairs returns those of files, recorded from a ci run's
+// [types.UncommittedRepairError], that drv lists dirty in the checkout
+// holding dir and that still hold their recorded digest. A file since
+// committed, discarded or edited further is not returned.
+func UncommittedRepairs(ctx context.Context, drv types.VCSDriver, dir string, files []types.RepairedFile) ([]types.RepairedFile, error) {
+	tree, err := newRepairTree(ctx, drv, dir)
+	if err != nil {
+		return nil, err
+	}
+	dirty, err := tree.dirty(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var held []types.RepairedFile
+	for _, f := range files {
+		if !slices.Contains(dirty, f.Path) {
+			continue
+		}
+		sum, err := tree.hash(f.Path)
+		if err != nil {
+			return nil, err
+		}
+		if hex.EncodeToString(sum[:]) == f.Digest {
+			held = append(held, f)
+		}
+	}
+	return held, nil
+}
+
+// repairTree is the checkout a repairing ci run compares before and after.
+type repairTree struct {
+	vcs  types.VCSDriver
+	root string // the checkout's top level
+	dir  string // the workspace root
+	// prefix is dir relative to root in slash form, "." when they are one.
+	prefix string
+}
+
+// repairCheckout resolves the checkout a repair is told apart in. why says
+// why no repair can be made, "" when one can.
+func (m *Magus) repairCheckout(ctx context.Context, o run) (repairTree, string, error) {
+	if o.DryRun {
+		return repairTree{}, "a dry run executes nothing", nil
+	}
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil {
+		return repairTree{}, "", fmt.Errorf("resolving the VCS a ci repair is told apart in: %w", err)
+	}
+	if res.VCS == nil || res.Source == types.VCSSourceDefault {
+		return repairTree{}, "no version control claims " + m.ws.Root, nil
+	}
+	tree, err := newRepairTree(ctx, res.VCS, m.ws.Root)
+	return tree, "", err
+}
+
+func newRepairTree(ctx context.Context, drv types.VCSDriver, dir string) (repairTree, error) {
+	root, err := drv.Root(ctx, dir)
+	if err != nil {
+		return repairTree{}, fmt.Errorf("reading the checkout root from %s for a ci repair: %w", drv.Name(), err)
+	}
+	// A driver reports its root with symlinks resolved, so both sides are
+	// resolved before they are compared.
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return repairTree{}, fmt.Errorf("resolving the checkout root %s for a ci repair: %w", root, err)
+	}
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return repairTree{}, fmt.Errorf("resolving the workspace root %s for a ci repair: %w", dir, err)
+	}
+	rel, err := filepath.Rel(realRoot, realDir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return repairTree{}, fmt.Errorf("the workspace %s lies outside its checkout %s", dir, root)
+	}
+	return repairTree{vcs: drv, root: root, dir: dir, prefix: filepath.ToSlash(rel)}, nil
+}
+
+// workspacePath is p, relative to the checkout root, made relative to the
+// workspace root. false means p lies outside the workspace.
+func (t repairTree) workspacePath(p string) (string, bool) {
+	if t.prefix == "." {
+		return p, true
+	}
+	return strings.CutPrefix(p, t.prefix+"/")
+}
+
+// dirty lists the changed paths, relative to the checkout root.
+func (t repairTree) dirty(ctx context.Context) ([]string, error) {
+	paths, err := t.vcs.DirtyFiles(ctx, t.dir, nil)
+	if err != nil {
+		return nil, fmt.Errorf("listing the changed files for a ci repair: %w", err)
+	}
+	return paths, nil
+}
+
+// hash reads p literally, never through a glob, since a dirty path may hold
+// glob characters. A missing path or a directory hashes as zero.
+func (t repairTree) hash(p string) ([32]byte, error) {
+	sum, err := hashTreeFile(filepath.Join(t.root, filepath.FromSlash(p)))
+	if err != nil {
+		return sum, fmt.Errorf("reading %s for a ci repair: %w", p, err)
+	}
+	return sum, nil
+}
+
+// snapshot hashes the tree's changed paths by content. An untracked
+// directory's files are not seen.
+func (t repairTree) snapshot(ctx context.Context) (diff.ContentSnap, error) {
+	paths, err := t.dirty(ctx)
+	if err != nil {
+		return nil, err
+	}
+	snap := make(diff.ContentSnap, len(paths))
+	for _, p := range paths {
+		if snap[p], err = t.hash(p); err != nil {
+			return nil, err
+		}
+	}
+	return snap, nil
+}
+
+func hashTreeFile(path string) ([32]byte, error) {
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return [32]byte{}, nil
+	}
+	if err != nil {
+		return [32]byte{}, err
+	}
+	defer func() { _ = f.Close() }() // opened read-only: a close error loses no bytes
+	info, err := f.Stat()
+	if err != nil || info.IsDir() {
+		return [32]byte{}, err
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return [32]byte{}, err
+	}
+	var sum [32]byte
+	copy(sum[:], h.Sum(nil))
+	return sum, nil
 }
 
 // allProvided reports whether every project in the scope came from a workspace
@@ -621,19 +1069,77 @@ func (m *Magus) reservedOpOutput(p *types.Project, target string) (string, bool)
 	return "", false
 }
 
-// buildStep assembles the cache.Step for running target on p.
-func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
-	step := m.baseStep(p)
-	step.Target = target
+// keyInputs is what one target's own declarations put in its cache key.
+type keyInputs struct {
+	sources       []types.Glob
+	ignoreDirs    []string
+	envAllow      []string
+	execOverrides []string
+	observations  []string
+}
+
+// ownKeyInputs is target's key on p before the targets it needs add theirs.
+func (m *Magus) ownKeyInputs(p *types.Project, target string) keyInputs {
+	base := m.baseStep(p)
+	sources := m.footprintBaseline(p, target, base.Sources)
+	for _, s := range p.ResolvedSpells {
+		// A malformed list matches nothing, as it did before it was parsed.
+		if globs, err := types.ParseGlobs(s.TargetSources()[target]); err == nil {
+			sources = append(sources, globs...)
+		}
+	}
+	// Per-target inputs declared via ctx.readsFiles define the cache footprint whenever
+	// present. Each InputRef carries its owning project, rooted by the same rule as
+	// outputs.
+	for _, ref := range p.TargetInputs[target] {
+		sources = append(sources, ref.Rooted(p.Path))
+	}
+	// Per-target ctx.writesFiles(..., editsExistingSource: true) refs fold into Sources exactly as inputs do, and into
+	// Outputs not at all. That asymmetry IS the feature: staying out of the output set
+	// keeps the file off the snapshot/replay path and out of magus clean's reach, while
+	// landing in the source set means editing the authored prose around a generated
+	// region invalidates the target that maintains that region. Declared as an output
+	// instead, the file was excluded from the source hash, so an edit to it could not
+	// invalidate anything.
+	for _, ref := range p.TargetUpdates[target] {
+		sources = append(sources, ref.Rooted(p.Path))
+	}
+	// Each install keys itself (installStep).
+	if len(findInstallOps(p, target)) > 0 {
+		sources = nil
+	}
+	return keyInputs{
+		sources:    sources,
+		ignoreDirs: base.IgnoreDirs,
+		// Names, not values: hashStep reads each variable's process value at hash time.
+		// An op's own EnvKeys travel with it regardless of whether target's body declared
+		// ctx.envInputs: the op knows its result depends on the variable (GOOS, say), the
+		// author composing it may not. Folded against the accumulated set so a name already
+		// present via ctx.envInputs, or shared by two composed ops, is not hashed twice.
+		envAllow: appendMissing(slices.Clone(p.TargetEnvAllow[target]), targetDrivenEnvKeys(p, target)),
+		// ctx.withEnv / ctx.withCwd overrides fold into the KEY, not the sources: they change what the
+		// tool does without naming a file, so two runs differing only by a derived env must
+		// not share an entry.
+		execOverrides: slices.Clone(p.TargetExecOverrides[target]),
+		// ctx.observes: an external fact the answer depends on, keyed so the target stays
+		// cacheable rather than having to opt out with skip_cache.
+		observations: slices.Clone(p.TargetObservations[target]),
+	}
+}
+
+// footprintBaseline is a copy of the source set target on p starts from:
+// baseline, unless the target or its indexer narrows it.
+func (m *Magus) footprintBaseline(p *types.Project, target string, baseline []types.Glob) []types.Glob {
+	sources := baseline
 	// An explicit target footprint is an ownership boundary, not an extra safety
 	// margin.  Keeping the project-wide baseline here made a target that declared
 	// its exact inputs indistinguishable from one that had not: unrelated spell
 	// claims still invalidated it.  Retain the magusfiles (they define the target)
 	// and the target-specific spell inputs, then let the body state the rest.
 	if len(p.TargetInputs[target]) > 0 {
-		step.Sources = magusfileGlobs(p.Path)
+		sources = magusfileGlobs(p.Path)
 		if p.Path != "." {
-			step.Sources = append(step.Sources, magusfileGlobs(".")...)
+			sources = append(sources, magusfileGlobs(".")...)
 		}
 	}
 	// The symbol indexer reads its language's sources and nothing else the project
@@ -645,12 +1151,60 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// beside go leaves the Go index's key where it was.
 	if indexesSymbols(p, target, m.cfg.Spells) {
 		if indexed := symbolIndexSources(p, target, m.cfg.Spells); len(indexed) > 0 {
-			step.Sources = slices.Concat(magusfileGlobs(p.Path), indexed)
+			sources = slices.Concat(magusfileGlobs(p.Path), indexed)
 			if p.Path != "." {
-				step.Sources = append(step.Sources, magusfileGlobs(".")...)
+				sources = append(sources, magusfileGlobs(".")...)
 			}
 		}
 	}
+	return slices.Clone(sources)
+}
+
+// neededKeyInputs unions ownKeyInputs over target's ctx.needs closure, which
+// is what the needed targets' keys hold (ADR 0032 section 7). resolved is
+// false when a needed project is missing, so no key covers it.
+func (m *Magus) neededKeyInputs(p *types.Project, target string) (needed keyInputs, resolved bool) {
+	resolved = true
+	lookup := func(path string) *types.Project {
+		q := m.Get(path)
+		resolved = resolved && q != nil
+		return q
+	}
+	err := types.WalkChain(p, target, lookup, func(v types.ChainVisit) error {
+		if v.Depth == 0 {
+			return nil
+		}
+		// A skip_cache member folds too: its declared inputs are still what it
+		// reads. Its artifact enters through types.ChainSkipCacheOutputs.
+		in := m.ownKeyInputs(v.Project, v.Target)
+		needed.sources = append(needed.sources, in.sources...)
+		needed.ignoreDirs = appendMissing(needed.ignoreDirs, in.ignoreDirs)
+		needed.envAllow = appendMissing(needed.envAllow, in.envAllow)
+		needed.execOverrides = appendMissing(needed.execOverrides, in.execOverrides)
+		needed.observations = appendMissing(needed.observations, in.observations)
+		return nil
+	})
+	return needed, resolved && err == nil
+}
+
+// appendMissing appends each of add that dst lacks. The key hashes a
+// repeated line twice, so a shared name must enter once.
+func appendMissing(dst, add []string) []string {
+	for _, s := range add {
+		if !slices.Contains(dst, s) {
+			dst = append(dst, s)
+		}
+	}
+	return dst
+}
+
+// buildStep assembles the cache.Step for running target on p. Its key
+// carries the keys of the targets it needs (neededKeyInputs).
+func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
+	step := m.baseStep(p)
+	step.Target = target
+	own := m.ownKeyInputs(p, target)
+	needed, resolved := m.neededKeyInputs(p, target)
 	// Gathered BEFORE the ownership boundary below narrows step.Outputs to one target's.
 	// Every project's outputs, not just this one's. The reason is the reason OwnedOutputs
 	// already spans every target rather than the running one (a chained target's writes land
@@ -668,14 +1222,17 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		}
 	}
 	step.OwnedOutputs = types.CompactGlobs(owned)
-	// Every spell's caches and relinked binary, since a chained target writes
-	// inside this window too. With no home dir, MGS4011 names cache writes.
+	// Every spell's caches, relinked binary and product path, since a chained
+	// target writes inside this window too. With no home dir, MGS4011 names
+	// cache writes.
 	home, homeErr := os.UserHomeDir()
 	seen := map[string]bool{}
 	for _, proj := range m.All() {
 		for _, pol := range proj.TargetPolicies {
-			if pol.Relinks != "" {
-				step.WritePaths = append(step.WritePaths, filepath.Join(step.WorkspaceRoot, filepath.FromSlash(pol.Relinks)))
+			for _, binary := range []string{pol.Relinks, pol.Product} {
+				if binary != "" {
+					step.WritePaths = append(step.WritePaths, filepath.Join(step.WorkspaceRoot, filepath.FromSlash(binary)))
+				}
 			}
 		}
 		for _, s := range proj.ResolvedSpells {
@@ -717,13 +1274,6 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.Stamps = append(step.Stamps, out)
 		}
 	}
-	sources := slices.Clone(step.Sources)
-	for _, s := range p.ResolvedSpells {
-		// A malformed list matches nothing, as it did before it was parsed.
-		if globs, err := types.ParseGlobs(s.TargetSources()[target]); err == nil {
-			sources = append(sources, globs...)
-		}
-	}
 	// Which host facts key this step. Workspace-wide today: a per-target override is a
 	// narrower claim, and there is no evidence yet that anyone needs one axis on for
 	// one target and off for another within the same workspace.
@@ -739,40 +1289,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.IncludeArch = *pol.IncludeArch
 		}
 	}
-	// Per-target inputs declared via ctx.readsFiles define the cache footprint whenever
-	// present. Each InputRef carries its owning project, rooted by the same rule as
-	// outputs below.
-	for _, ref := range p.TargetInputs[target] {
-		sources = append(sources, ref.Rooted(p.Path))
-	}
-	// A replay of this step would skip every composed skip_cache target, so key on
-	// their artifacts instead; see types.ChainSkipCacheOutputs.
-	sources = append(sources, types.ChainSkipCacheOutputs(p, target, m.Get)...)
-	// Per-target ctx.writesFiles(..., editsExistingSource: true) refs fold into Sources exactly as inputs do, and into
-	// Outputs not at all. That asymmetry IS the feature: staying out of the output set
-	// keeps the file off the snapshot/replay path and out of magus clean's reach, while
-	// landing in the source set means editing the authored prose around a generated
-	// region invalidates the target that maintains that region. Declared as an output
-	// instead, the file was excluded from the source hash, so an edit to it could not
-	// invalidate anything.
-	// ctx.withEnv / ctx.withCwd overrides fold into the KEY, not the sources: they change what the
-	// tool does without naming a file, so two runs differing only by a derived env must
-	// not share an entry.
-	step.ExecOverrides = append(step.ExecOverrides, p.TargetExecOverrides[target]...)
-	// Names, not values: hashStep reads each variable's process value at hash time.
-	step.EnvAllow = append(step.EnvAllow, p.TargetEnvAllow[target]...)
-	// An op's own EnvKeys travel with it regardless of whether target's body declared
-	// ctx.envInputs: the op knows its result depends on the variable (GOOS, say), the
-	// author composing it may not. Folded against the accumulated set so a name already
-	// present via ctx.envInputs, or shared by two composed ops, is not hashed twice.
-	for _, k := range targetDrivenEnvKeys(p, target) {
-		if !slices.Contains(step.EnvAllow, k) {
-			step.EnvAllow = append(step.EnvAllow, k)
-		}
-	}
-	// ctx.observes: an external fact the answer depends on, keyed so the target stays
-	// cacheable rather than having to opt out with skip_cache.
-	step.Observations = append(step.Observations, p.TargetObservations[target]...)
+	step.ExecOverrides = appendMissing(own.execOverrides, needed.execOverrides)
+	step.EnvAllow = appendMissing(own.envAllow, needed.envAllow)
+	step.Observations = appendMissing(own.observations, needed.observations)
+	step.IgnoreDirs = appendMissing(step.IgnoreDirs, needed.ignoreDirs)
 	if m.binaryAnswerTargets[types.TargetRef{Project: p.Path, Target: target}] {
 		step.Catalogs = answerCatalogs()
 	}
@@ -780,7 +1300,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	for _, ref := range p.TargetUpdates[target] {
 		updates = append(updates, ref.Rooted(p.Path))
 	}
-	step.Sources = types.CompactGlobs(append(sources, updates...))
+	// A replay of this step would skip every composed skip_cache target, so key on
+	// their artifacts instead; see types.ChainSkipCacheOutputs.
+	step.Sources = types.CompactGlobs(slices.Concat(own.sources,
+		types.ChainSkipCacheOutputs(p, target, m.Get), needed.sources))
 	// Also on its own: once folded into Sources the glob can no longer answer "was this
 	// edit declared", which is what MGS4007 asks.
 	//
@@ -810,7 +1333,8 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// A service op is a long-running process: it must never be cached, or a re-run
 	// would replay a completed-target result instead of restarting the process. This
 	// is inherent (not an author opt-in), so OR it into the explicit SkipCache policy.
-	step.NoCache = alwaysRuns(p, target)
+	// A key missing a needed target's inputs could replay a stale pass.
+	step.NoCache = alwaysRuns(p, target) || !resolved
 	if !step.NoCache {
 		step.BeforeKey = types.BeforeKey(p, target, m.Get)
 	}
@@ -2311,7 +2835,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if sandboxErr != nil {
 		return sandboxErr
 	}
-	ctx = installWorkspaceRegistry(ctx, m.wsReg)
+	ctx = m.installWorkspaceRegistry(ctx)
 	ctx = m.ContextWithSecrets(ctx)
 	// So a magusfile binding can record a governance event (a credential granted, an
 	// endpoint opened) without the trail path being threaded through the VM.
@@ -2419,6 +2943,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if m.cache == nil {
 		return fmt.Errorf("magus: workspace was constructed with Inspect, use Open to enable Run")
 	}
+	counted := m.cache.Stats()
 	// One service supervisor per run: a service op reached as a dependency is started
 	// and readiness-gated, deduped by fingerprint so N dependents share one instance,
 	// and released when the run ends (warm on the broker, or stopped in-process).
@@ -2491,6 +3016,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 	}
 	results, runErr := m.cache.RunAll(ctx, steps, runStep(handlerOf, byPath), append(slices.Clone(cacheOpts), cache.WithTargetRunner(composed.runSkipCache))...)
+	if opts.failures != nil {
+		opts.failures(m.withoutAdvisory(runs.Failed(), steps))
+	}
 
 	if volatilityRT != nil {
 		if err := volatilityRT.Save(ctx); err != nil {
@@ -2523,7 +3051,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	// Footer summary for a fan-out: a single line tallying the per-project results.
 	// Skipped for a single project, where the per-project status line already says it all.
-	if s := m.cache.Stats(); s.Hit+s.Miss+s.Permitted+s.Error > 1 {
+	if s := statsSince(m.cache.Stats(), counted); s.Hit+s.Miss+s.Permitted+s.Error > 1 {
 		out.emit(ctx, report.RunSummary{
 			Hits: s.Hit, Misses: s.Miss, Permitted: s.Permitted, Errors: s.Error, Files: s.Files, Slots: s.Slots,
 			DurationMs: time.Since(start).Milliseconds(),
@@ -2537,6 +3065,30 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 
 	return runErr
+}
+
+// statsSince is the work one run counted. The cache's counters are never
+// reset, and a ci run or the daemon makes several runs on one cache.
+func statsSince(now, base cache.Stats) cache.Stats {
+	return cache.Stats{
+		Hit: now.Hit - base.Hit, Miss: now.Miss - base.Miss, Error: now.Error - base.Error,
+		Permitted: now.Permitted - base.Permitted, SavedMs: now.SavedMs - base.SavedMs,
+		Files: now.Files - base.Files, Slots: now.Slots - base.Slots,
+	}
+}
+
+// withoutAdvisory leaves out each failure a composer carried on past: an
+// advisory target's, unless the run scheduled it as a step.
+func (m *Magus) withoutAdvisory(failed []cache.TargetFailure, steps []cache.Step) []cache.TargetFailure {
+	return slices.DeleteFunc(failed, func(f cache.TargetFailure) bool {
+		p := m.Get(f.Ref.Project)
+		if p == nil || !p.TargetPolicies[types.Normalize(f.Ref.Target)].Advisory {
+			return false
+		}
+		return !slices.ContainsFunc(steps, func(s cache.Step) bool {
+			return s.ProjectPath == f.Ref.Project && s.Target == f.Ref.Target
+		})
+	})
 }
 
 // stageObserver bridges the Buzz pool's per-target notifications to the run's sink:

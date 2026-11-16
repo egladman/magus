@@ -14,10 +14,15 @@ import "assert";
 // `# `fs``) so it reads as plain text in <title>, breadcrumb, pager, and search index.
 // Frontmatter titles bypass this and are used verbatim.
 export fun deriveTitle(md: str, rel: str) > str {
+    return firstHeading(md) ?? rel;
+}
+
+// firstHeading is deriveTitle's H1, or null when md has none.
+export fun firstHeading(md: str) > str? {
     foreach (line in md.split("\n")) {
         if (line.startsWith("# ")) { return $"`".replaceAll(line.sub(2).trim(), ""); }
     }
-    return rel;
+    return null;
 }
 
 // parseTags reads the frontmatter `tags:` list as [str] (empty when absent). The one

@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // withVCSLeaseGate registers gate for the test and restores whatever was registered.
@@ -27,7 +28,7 @@ func withVCSLeaseGate(t *testing.T, gate VCSLeaseGate) {
 func TestVcsLeaseRefusalAsksTheGateUnderALiveLease(t *testing.T) {
 	testkit.Isolate(t)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ws, "worker", types.JobPut{Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
+	_, err := MagusPutJob(ws, "worker", types.JobPut{Agent: agent.Instructed("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	var asked []string

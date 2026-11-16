@@ -63,11 +63,12 @@ Four flags reason about the affected set instead of executing the target:
 ## CI
 
 `magus affected ci` is the workhorse of a monorepo pipeline: it runs the `ci`
-anchor for exactly the projects a pull request touched. Because
-[`magus affected` never applies `default_charms`](../charms.md#defaulting-charms-per-workspace-default_charms)
-and `RunCI` strips the `rw` charm, an affected CI run is always read-only no matter
-how the workspace is configured. Fan out at scale with `--plan` feeding a shard
-matrix.
+anchor for exactly the projects a pull request touched. `magus affected` applies
+[`default_charms`](../charms.md#defaulting-charms-per-workspace-default_charms), so
+a CI runner passes `--no-default-charms`, and its run carries no `rw` and only
+verifies. Locally, a default `rw` lets an unsized `magus affected ci` repair a
+failing declared writer and then fail with MGS3057 until you commit the repair; a
+sized one verifies only. Fan out at scale with `--plan` feeding a shard matrix.
 
 How the pipeline clones the repository decides whether any of this works. affected
 needs a reachable merge base, and a checkout that cannot supply one degrades to a full

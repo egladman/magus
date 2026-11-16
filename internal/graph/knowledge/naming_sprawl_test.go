@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 const sprawlDir = "internal/obs"
@@ -29,13 +30,13 @@ func cacheTrio(owner string) []types.KnowledgeSymbol {
 	}
 }
 
-func sprawlMessages(t *testing.T, got map[string][]types.Check) map[string][]string {
+func sprawlMessages(t *testing.T, got map[string][]check.Check) map[string][]string {
 	t.Helper()
 	out := map[string][]string{}
 	for id, checks := range got {
 		for _, c := range checks {
 			require.Equal(t, diff.CheckSiblingSprawl, c.Name)
-			require.Equal(t, types.CheckAdvice, c.Status)
+			require.Equal(t, check.Advice, c.Status)
 			out[id] = append(out[id], c.Message)
 		}
 	}
@@ -51,7 +52,7 @@ func TestSprawlCheckReportsTheCacheTrio(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
 
-	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(diff.CheckSiblingSprawl, cacheTrioMessage,
+	assert.Equal(t, map[string][]check.Check{symID(subj): {advice(diff.CheckSiblingSprawl, cacheTrioMessage,
 		"members: RecordCacheError, RecordCacheHit, RecordCacheMiss",
 		"3 share the parameters func(ctx, string) none: RecordCacheError, RecordCacheHit, RecordCacheMiss",
 	)}}, got)
@@ -193,7 +194,7 @@ func (s *WideTypeSuite) SetupTest() {
 }
 
 // checks is what the sprawl check says of the subject with anchor configured, or none at 0.
-func (s *WideTypeSuite) checks(anchor int) map[string][]types.Check {
+func (s *WideTypeSuite) checks(anchor int) map[string][]check.Check {
 	o := testConformance()
 	if anchor > 0 {
 		key := types.ConformanceKey{Metric: types.ConformanceTypeMethods, Population: types.ConformancePopSource}

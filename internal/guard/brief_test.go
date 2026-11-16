@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 func TestBriefForAnIsolatedWorkerRefusesACompoundCommand(t *testing.T) {
@@ -96,7 +97,7 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 // worker's own runs, so a follow-up message to it is not graded as a fresh brief.
 func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
 	row := types.Job{
-		ID: "guard/slice", Criteria: "fix the guard", WritePaths: []string{"internal/guard/**"},
+		ID: "guard/slice", Agent: agent.Instructed("fix the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}},
 		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
@@ -262,7 +263,7 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 func TestBriefAndWorkerShareOneVerdict(t *testing.T) {
 	deps := composingWorkspace(t)
 	row := types.Job{
-		ID: "guard/slice", Criteria: "fix the guard", WritePaths: []string{"internal/guard/**"},
+		ID: "guard/slice", Agent: agent.Instructed("fix the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}},
 		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)

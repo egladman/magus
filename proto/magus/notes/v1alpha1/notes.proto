@@ -194,8 +194,8 @@ message StoreStatus {
 }
 
 message ListNotesRequest {
-  // Bounded at the same tier as ListActivity and ListMemories; see ListMemoriesRequest for
-  // why the three keep their own flat field rather than sharing a pagination message.
+  // Bounded at the same tier as ListActivityEvents. A flat field rather than a shared
+  // pagination message: each list RPC owns its own bounds.
   int32 page_size = 1 [(buf.validate.field).int32 = {
     gte: 0
     lte: 1000

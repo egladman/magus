@@ -116,7 +116,7 @@ Two failure modes follow, and both are quiet:
 
 When one phase feeds the other, `build` depends on `generate` rather than repeating it; the ordering falls out, and `generate` stays runnable on its own as the fast gate.
 
-`ci` itself is an ordinary magusfile-defined target, not a hardcoded chain; you compose its stages yourself with `magus\needs`. What makes it the one required name is that `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op: a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
+`ci` itself is an ordinary magusfile-defined target, not a hardcoded chain; you compose its stages yourself with `magus\needs`. What makes it the one required name is that `Magus.RunCI` treats it specially in exactly three ways: it verifies with the `rw` charm stripped (under a carried `rw` it repairs a failing declared writer, then fails until the repair is committed; see [ADR 0048](../decisions/0048-a-local-ci-repairs-a-declared-writer.md)), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op: a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
 
 Tool operations compose **into** these targets; they are not targets of their own. All static analysis (`go-vet`, `golangci-lint`, `cargo-clippy`, type-checks) belongs under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet`, `audit`, or `typecheck` target. That is advice about keeping a vocabulary legible, not a constraint the engine enforces: reserve new names for genuinely distinct work (a `deploy`, `release`, or `security`) rather than fragmenting a phase that already has a name.
 
@@ -446,7 +446,7 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 | **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                                         |
 | **Files**  | Repo-relative changed paths within a project. Populated by `ExpandAffected`; nil for explicit targets.                           |
 | **Spell**  | A library of tool-native operations a target composes. Separate from Target; see [spells.md](spells.md).                         |
-| **`ci`**   | An ordinary target you compose with `magus\needs`; `Magus.RunCI` only strips `rw`, anchors `magus affected`, and must-not-no-op. |
+| **`ci`**   | A target that you compose with `magus\needs`; `Magus.RunCI` verifies without `rw`, anchors `magus affected`, and must-not-no-op. |
 
 ## See also
 

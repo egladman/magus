@@ -322,3 +322,44 @@ func TestDiskBytecodeStoreRoundTrip(t *testing.T) {
 	_, err = store.Load("missing")
 	require.ErrorIs(t, err, fs.ErrNotExist)
 }
+
+// reportingBytecodeStore is a memBytecodeStore that hears which chunks the
+// session could not use.
+type reportingBytecodeStore struct {
+	memBytecodeStore
+	unusable []string
+}
+
+func (r *reportingBytecodeStore) Unusable(key string, err error) {
+	r.unusable = append(r.unusable, fmt.Sprintf("%s: %v", key, err))
+}
+
+func TestBytecodeStoreIsToldOfABlobThatDoesNotDecode(t *testing.T) {
+	store := &reportingBytecodeStore{}
+	sess := NewSession(context.Background(), WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+	sess.SetBytecodeStore(store)
+	require.NoError(t, sess.Exec(context.Background(), "var n = 1;"))
+	require.Len(t, store.blobs, 1)
+	for k := range store.blobs {
+		store.blobs[k] = []byte("not a record")
+	}
+	again := NewSession(context.Background(), WithEmbedded())
+	t.Cleanup(func() { _ = again.Close() })
+	again.SetBytecodeStore(store)
+	require.NoError(t, again.Exec(context.Background(), "var n = 1;"))
+	assert.Len(t, store.unusable, 1)
+}
+
+func TestBytecodeStoreIsNotToldOfAStaleImport(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"dep.buzz": "export final v = 1;\n"})
+	store := &reportingBytecodeStore{}
+	var got []string
+	require.NoError(t, cachingSession(t, store, dir, &got).Exec(context.Background(), "import \"dep\" as dep;\nreport(dep\\v);\n"))
+	writeFiles(t, dir, map[string]string{"dep.buzz": "export final v = 2;\n"})
+
+	require.NoError(t, cachingSession(t, store, dir, &got).Exec(context.Background(), "import \"dep\" as dep;\nreport(dep\\v);\n"))
+	assert.Equal(t, []string{"1", "2"}, got)
+	assert.Empty(t, store.unusable)
+}

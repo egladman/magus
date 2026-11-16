@@ -13,7 +13,8 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 )
 
 // adoptionReport measures how often agents reached for the knowledge graph versus a raw text
@@ -212,7 +213,7 @@ func agentAdoptionCommand(args []string) error {
 	bindDisplayFlags(fset)
 	af := flaggen.BindAgentAdoption(fset)
 	fset.Usage = func() { agentAdoptionUsage(os.Stderr) }
-	if err := fset.Parse(args); err != nil {
+	if err := command.Parse(fset, args); err != nil {
 		return err
 	}
 	opts, err := outputOptionsOrDefault()

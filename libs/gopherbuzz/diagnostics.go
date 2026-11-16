@@ -49,9 +49,9 @@ const (
 	UnusedImport diagnostics.Code = "BZZ3001" // an import whose namespace binding is never referenced
 
 	// Warnings (checker.go).
-	StringAccumulation diagnostics.Code = "BZZ3002" // a string rebuilt from itself with + inside a loop
-	RedundantUnwrap    diagnostics.Code = "BZZ3003" // a force-unwrap ! on an operand that is not optional
-	DiscardedValue     diagnostics.Code = "BZZ3004" // an expression statement whose non-void value is unused
+	LoopAccumulation diagnostics.Code = "BZZ3002" // a list, map or prefixed str rebuilt from itself in a loop
+	RedundantUnwrap  diagnostics.Code = "BZZ3003" // a force-unwrap ! on an operand that is not optional
+	DiscardedValue   diagnostics.Code = "BZZ3004" // an expression statement whose non-void value is unused
 )
 
 // allBZZCodes enumerates every BZZ code, in ascending order. Kept in sync with the const block above by
@@ -60,7 +60,7 @@ var allBZZCodes = []diagnostics.Code{
 	UndefinedName, UndefinedType, NonBoolCondition, ArgumentError, TypeMismatch, UnhandledRaise, UnknownMember,
 	RedundantImportAlias, UnimportedNamespace, ImmutableWrite,
 	UnresolvedImport, FiberMisuse, FFIDisabled,
-	UnusedImport, StringAccumulation, RedundantUnwrap, DiscardedValue,
+	UnusedImport, LoopAccumulation, RedundantUnwrap, DiscardedValue,
 }
 
 // Codes returns every BZZ code in ascending order, for a host registering the catalog's
@@ -69,11 +69,10 @@ func Codes() []diagnostics.Code {
 	return append([]diagnostics.Code(nil), allBZZCodes...)
 }
 
-// Severity classifies a BZZ diagnostic. The zero value is SeverityError, so every
-// diagnostic built before Severity existed (and every one the checker still builds
-// without setting it explicitly) keeps its current meaning: it fails Exec/Compile
-// exactly as before this type was introduced. Only a diagnostic that opts in
-// (UnusedImport, StringAccumulation) is a warning, which Exec/Compile must never fail on.
+// Severity classifies a BZZ diagnostic. The zero value is SeverityError, so a
+// diagnostic that never sets it fails Exec/Compile. Only a diagnostic that opts
+// in, as UnusedImport and LoopAccumulation do, is a warning, which Exec and
+// Compile never fail on.
 type Severity int
 
 const (

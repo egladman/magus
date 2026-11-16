@@ -2,6 +2,7 @@ package diff
 
 import (
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,9 +47,9 @@ func TestSortForReadingPutsUnmeasuredAboveMeasuredZero(t *testing.T) {
 // their reach; a file with no assessment ranks as full.
 func TestSortForReadingReadsAnUnprovenFileBeforeAMechanicalOne(t *testing.T) {
 	d := Diff{Files: []File{
-		{Path: "wide-mechanical.go", Role: RoleSource, Reach: reach(40), Risk: &types.TierEvidence{Tier: types.RiskMechanical}},
+		{Path: "wide-mechanical.go", Role: RoleSource, Reach: reach(40), Risk: &check.TierEvidence{Tier: check.RiskMechanical}},
 		{Path: "untiered.go", Role: RoleSource, Reach: reach(0)},
-		{Path: "scoped.go", Role: RoleSource, Reach: reach(1), Risk: &types.TierEvidence{Tier: types.RiskScoped}},
+		{Path: "scoped.go", Role: RoleSource, Reach: reach(1), Risk: &check.TierEvidence{Tier: check.RiskScoped}},
 	}}
 	d.SortForReading()
 

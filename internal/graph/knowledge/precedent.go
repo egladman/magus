@@ -24,21 +24,22 @@ type PrecedentOptions struct {
 	// Generated holds the workspace-relative paths that are generated output. Generated and
 	// test code is never counted.
 	Generated map[string]bool
-	// Conformance supplies the dep-fanout ceilings and the gates that make a row established,
-	// taken as given. A layer with no configured or committed dep-fanout value gets no fan-out
+	// Conformance supplies the imported-packages ceilings and the gates that make a row established,
+	// taken as given. A layer with no configured or committed imported-packages value gets no fan-out
 	// row.
 	Conformance types.ConformanceOptions
 }
 
 // Precedents mines the precedents g's cases establish; g must carry its symbols. Rows come
 // back ordered by family, scope and key, so two runs over one graph agree byte for byte. A graph
-// with no symbols yields no rows, never an error.
+// with no symbols yields no symbol rows, never an error.
+// The needs-direction rows read the targets alone.
 func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated, Conformance: o.Conformance})
 	m := precedentMiner{g: g, x: x, conformance: o.Conformance, fileNS: g.fileNamespaces()}
 	pk := m.packages()
-	rows := slices.Concat(m.depDirection(pk), m.depFanout(pk), m.errorSentinelName(), m.testPackageName(pk),
-		m.paramNameByType(), m.paramOrder(), m.contextFirst(), m.errorLast())
+	rows := slices.Concat(m.depDirection(pk), m.importedPackages(pk), m.errorSentinelName(), m.testPackageName(pk),
+		m.paramNameByType(), m.paramOrder(), m.contextFirst(), m.errorLast(), m.needsDirection())
 	for i := range rows {
 		r := &rows[i]
 		if r.Cohort > 0 {
@@ -46,7 +47,7 @@ func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 		}
 		// A fan-out ceiling is configured, not mined from the cohort, so how many packages sit
 		// under it says how tight it is and gates nothing; only the cohort does.
-		r.Established = r.Cohort >= x.gates.MinCohort && (r.Family == types.PrecedentDepFanout || r.Share >= x.gates.MinShare)
+		r.Established = r.Cohort >= x.gates.MinCohort && (r.Family == types.PrecedentImportedPackages || r.Share >= x.gates.MinShare)
 	}
 	slices.SortFunc(rows, func(a, b types.Precedent) int {
 		return cmp.Or(
@@ -56,6 +57,8 @@ func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 			cmp.Compare(a.Key.Prefix, b.Key.Prefix),
 			cmp.Compare(a.Key.Type, b.Key.Type),
 			slices.Compare(a.Key.Order, b.Key.Order),
+			cmp.Compare(a.Key.From, b.Key.From),
+			cmp.Compare(a.Key.To, b.Key.To),
 		)
 	})
 	return rows
@@ -176,15 +179,11 @@ func compareDirEdges(a, b dirEdge) int {
 	return cmp.Or(cmp.Compare(a.from, b.from), cmp.Compare(a.to, b.to))
 }
 
-// depFanout is, per layer, the distribution of how many distinct packages in it each
-// importing package imports. The cohort is the packages that import the layer at all: a
-// package that never does says nothing about how many is usual.
-//
-// The ceiling is the dep-fanout value Effective enforces for the layer, the committed value
-// else the anchor, and never the cohort's own percentile: a ceiling that follows the code
-// rises as the code grows. The lens counts every workspace import of a package in the layer;
-// this counts only the imports into it, which the value therefore bounds from above.
-func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
+// importedPackages counts, per layer, how many of its packages each
+// importer imports. The cohort is the packages that import the layer.
+// The ceiling is the value Effective enforces, never the cohort's own
+// percentile, which would rise as the code grows.
+func (m precedentMiner) importedPackages(pk precedentPackages) []types.Precedent {
 	// Keyed by directory, not namespace: a language that makes each file a module has many
 	// namespaces per directory, and counting each would add one import per importing file.
 	imports := map[string]map[string]map[string]bool{}
@@ -211,12 +210,12 @@ func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
 		dirs := slices.SortedFunc(maps.Keys(byDir), func(a, b string) int {
 			return cmp.Or(cmp.Compare(len(byDir[b]), len(byDir[a])), cmp.Compare(a, b))
 		})
-		bound, enforced := m.conformance.Effective(types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: layer})
+		bound, enforced := m.conformance.Effective(types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: layer})
 		if !enforced {
 			continue
 		}
 		row := types.Precedent{
-			Family: types.PrecedentDepFanout,
+			Family: types.PrecedentImportedPackages,
 			Scope:  types.PrecedentScope{Layers: []string{layer}},
 			Key:    types.PrecedentKey{MaxImports: bound},
 			Cohort: len(dirs),
@@ -413,4 +412,83 @@ func derefPrecedents(m map[string]*types.Precedent) []types.Precedent {
 		out = append(out, *r)
 	}
 	return out
+}
+
+// needsPair is an ordered pair of target names.
+type needsPair struct{ from, to string }
+
+// needsDirection counts, per ordered pair of target names, the projects
+// defining both by whether the first's needs reach the second. A
+// cross-project need orders projects, not targets, so it is not followed.
+// A pair no project follows makes no row.
+func (m precedentMiner) needsDirection() []types.Precedent {
+	m.g.ensureAdj()
+	byProject := map[string][]string{}
+	for _, n := range m.g.nodes {
+		if n.Kind == types.KindTarget && n.Source != "" {
+			byProject[n.Source] = append(byProject[n.Source], n.Label)
+		}
+	}
+	follow, depart := map[needsPair][]string{}, map[needsPair][]string{}
+	for project, names := range byProject {
+		for _, a := range names {
+			reach := m.needsReach(project, a)
+			for _, b := range names {
+				switch p := (needsPair{a, b}); {
+				case a == b:
+				case reach[b]:
+					follow[p] = append(follow[p], project)
+				default:
+					depart[p] = append(depart[p], project)
+				}
+			}
+		}
+	}
+	out := make([]types.Precedent, 0, len(follow))
+	for _, p := range slices.SortedFunc(maps.Keys(follow), compareNeedsPairs) {
+		f, d := slices.Sorted(slices.Values(follow[p])), slices.Sorted(slices.Values(depart[p]))
+		row := types.Precedent{
+			Family: types.PrecedentNeedsDirection,
+			Key:    types.PrecedentKey{From: p.from, To: p.to},
+			Follow: len(f),
+			Cohort: len(f) + len(d),
+		}
+		for _, project := range f[:min(len(f), precedentCited)] {
+			row.Cited = append(row.Cited, needsCase(project, p.from))
+		}
+		for _, project := range d {
+			row.Departures = append(row.Departures, needsCase(project, p.from))
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// needsReach is every target of project that name's needs reach, directly
+// or through other targets of the same project.
+func (m precedentMiner) needsReach(project, name string) map[string]bool {
+	reach := map[string]bool{}
+	queue := []string{targetID(project, name)}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		for _, e := range m.g.out[id] {
+			to, ok := m.g.nodes[e.Target]
+			if e.Relation != types.RelationDependsOn || !ok || to.Kind != types.KindTarget ||
+				to.Source != project || reach[to.Label] {
+				continue
+			}
+			reach[to.Label] = true
+			queue = append(queue, e.Target)
+		}
+	}
+	return reach
+}
+
+func needsCase(project, name string) types.Case {
+	return types.Case{Node: targetID(project, name), Source: project}
+}
+
+func compareNeedsPairs(a, b needsPair) int {
+	return cmp.Or(cmp.Compare(a.from, b.from), cmp.Compare(a.to, b.to))
 }

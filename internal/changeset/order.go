@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // OrderInput is everything OrderHunks needs. The caller resolves symbols, uses and
@@ -38,7 +38,7 @@ type OrderFile struct {
 	Reach int
 	// Tier is the file's proven tier, the first ranking key.
 	// Empty ranks as full.
-	Tier types.Tier
+	Tier check.Tier
 }
 
 // OrderSite is a use of a changed symbol at Path:Line in the new file.

@@ -11,6 +11,19 @@ type HeapStats struct {
 	// Peak is the high-water count since the last ResetHeapStats, or since the
 	// process started when it has never been called.
 	Peak int
+	// InternedStrings and InternedBytes count the distinct strings interning
+	// holds and their total length. Interning keeps each for the process.
+	InternedStrings int
+	InternedBytes   int
+	// UnownedObjects counts live slots no owner holds, strings aside. No
+	// release reaches such a slot, so growth across closed sessions is a leak.
+	UnownedObjects int
+	// BufferedStrings and BufferedBytes count the strings + and interpolation
+	// built on a shared buffer, and the capacity of every array those buffers
+	// allocated. Each such string keeps an unowned slot and its array for the
+	// process, so growth across identical rebuilds is retention.
+	BufferedStrings int
+	BufferedBytes   int
 }
 
 // ReadHeapStats returns the heap's live and peak object counts.
@@ -32,7 +45,15 @@ func ReadHeapStats() HeapStats {
 	if peak < 0 {
 		peak = 0
 	}
-	return HeapStats{Objects: int(gHeapLive.Load()), Peak: peak}
+	return HeapStats{
+		Objects:         int(gHeapLive.Load()),
+		Peak:            peak,
+		InternedStrings: int(internedStrings.Load()),
+		InternedBytes:   int(internedBytes.Load()),
+		UnownedObjects:  int(gHeapUnowned.Load()),
+		BufferedStrings: int(bufferedStrings.Load()),
+		BufferedBytes:   int(bufferedBytes.Load()),
+	}
 }
 
 // ResetHeapStats rebases the peak and clears the growth attribution, so the next

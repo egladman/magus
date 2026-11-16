@@ -42,10 +42,6 @@ const owedFileName = "magus-owed-regeneration.json"
 type owedDocument struct {
 	APIVersion types.APIVersion   `json:"api_version"`
 	Owed       []OwedRegeneration `json:"owed"`
-	// PreFold is the stamp an older magus wrote for owedAPIVersion.
-	// compat(until: the next release): a merge an older binary made
-	// leaves its record owed until the next one clears it.
-	PreFold int `json:"schema_version,omitzero"`
 }
 
 // owedPaths are where root's record lives and the directory whose lock guards it.
@@ -171,11 +167,7 @@ func readOwed(path string) ([]OwedRegeneration, error) {
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("vcs: parse %s: %w", path, err)
 	}
-	// compat: see owedDocument.PreFold.
-	if doc.PreFold == 1 && doc.APIVersion == "" {
-		doc.APIVersion = owedAPIVersion
-	}
-	if err := owedAPIVersion.Refuse("vcs: "+path, doc.APIVersion, "run the generate targets it names by hand, then delete it"); err != nil {
+	if err := types.RefuseVersion(owedAPIVersion, doc.APIVersion, "vcs: "+path, "run the generate targets it names by hand, then delete it"); err != nil {
 		return nil, err
 	}
 	return doc.Owed, nil

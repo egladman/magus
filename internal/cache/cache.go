@@ -15,6 +15,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -70,6 +71,7 @@ type Cache struct {
 	sizeMB         int
 	maxImportBytes int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
 	log            *slog.Logger
+	logFormat      string     // log.format; a step's captured log renders in it
 	logLevel       slog.Level // effective minimum level; used by captureRun
 	silent         bool       // silent output mode: bounded failure dumps + bubbled important lines
 	collapse       bool       // collapse-on-success: withhold live subprocess output, replay it only on failure
@@ -865,7 +867,7 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	// stdout, matching captureRun's miss path: stdout is reserved for structured
 	// output (-o json|yaml|jsonl|template), so a replayed log on stdout corrupted it.
 	if c.logLevel < slog.LevelError && !c.recordsOnly && len(logData) > 0 {
-		_, _ = os.Stderr.Write(logData)
+		_, _ = os.Stderr.Write(c.shownLog(ctx, s.ProjectPath, reproTarget(s), logData, e.manifest.LogRecords))
 	}
 	c.reportReplayedCheckout(ctx, s, e.manifest.Checkout, logData)
 	// A new attempt, never an earlier one: an earlier attempt carries another run's
@@ -953,7 +955,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	ctx = journal.WithPermits(types.WithExecCost(ctx))
 	watchOverrun(ctx)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
-	rawOutput, runErr := c.captureRun(withWriteWindow(NewContext(ctx, c), win), lp, s.ProjectPath, reproTarget(s), fn)
+	rawOutput, logged, runErr := c.captureRun(withWriteWindow(NewContext(ctx, c), win), lp, s.ProjectPath, reproTarget(s), fn)
 	c.writers.finish(win)
 	result.MaxRSSBytes, result.CPUMs = types.PeakRSS(ctx), types.CPUMs(ctx)
 	result.Permitted = journal.Permits(ctx)
@@ -1057,6 +1059,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 			return fail(fmt.Errorf("magus/cache: snapshot %q: %w", s.ProjectPath, err))
 		}
 		m.Checkout = s.WorkspaceRoot
+		m.LogRecords = logged
 		snap, result.Outputs = m, outs
 	}
 
@@ -2145,6 +2148,127 @@ func (c *Cache) logPath(projectPath, hash string) string {
 	return logPathIn(c.dir, projectPath, hash)
 }
 
+// errStepLogEnded is what [LogToStep] returns once the step's body has
+// returned: its log file is closed, so the record is not in its output.
+var errStepLogEnded = errors.New("the target's step has ended, so its captured output is closed")
+
+// logSpan locates one magus log record in a step's captured log: Length
+// bytes from byte Offset. A hit replays the record only when the console
+// shows its Level, as the run that captured it did.
+type logSpan struct {
+	Offset int64      `json:"offset"`
+	Length int64      `json:"length"`
+	Level  slog.Level `json:"level"`
+}
+
+// stepLog is one target step's captured log. Its mutex orders a record
+// against end, so none reaches the log file after captureRun closes it.
+// A record reaches tap in one write, so sink notes one span for it.
+type stepLog struct {
+	mu    sync.Mutex
+	h     slog.Handler
+	buf   bytes.Buffer
+	tap   *lineTap
+	sink  *recordSink
+	ended bool
+}
+
+type stepLogKey struct{}
+
+func (l *stepLog) end() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.ended = true
+}
+
+// records returns where each record went, in log order.
+func (l *stepLog) records() []logSpan {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.sink.records
+}
+
+// recordSink writes a step's log records into the log the taps share and
+// notes where each landed. It takes the log's own lock so the offset it
+// reads and the bytes it writes cannot be split by a tap's write.
+type recordSink struct {
+	log     *syncWriter
+	raw     *bytes.Buffer // the log's in-memory copy, whose length is the offset
+	level   slog.Level    // of the record being written; set under stepLog.mu
+	records []logSpan
+}
+
+func (s *recordSink) Write(p []byte) (int, error) {
+	s.log.mu.Lock()
+	defer s.log.mu.Unlock()
+	off := s.raw.Len()
+	n, err := s.log.w.Write(p)
+	if wrote := s.raw.Len() - off; wrote > 0 {
+		s.records = append(s.records, logSpan{Offset: int64(off), Length: int64(wrote), Level: s.level})
+	}
+	return n, err
+}
+
+// LogToStep writes r into the captured output of the target step ctx runs
+// in, at any level and in the cache's log format. It drops the time, so a
+// rerun stores the same bytes. The console never sees it. It reports false
+// outside a step, and an error once the step has finished.
+func LogToStep(ctx context.Context, r slog.Record) (bool, error) {
+	l, ok := ctx.Value(stepLogKey{}).(*stepLog)
+	if !ok {
+		return false, nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.ended {
+		return true, errStepLogEnded
+	}
+	l.buf.Reset()
+	if err := l.h.Handle(ctx, r); err != nil {
+		return true, err
+	}
+	l.sink.level = r.Level
+	_, err := l.tap.Write(l.buf.Bytes())
+	return true, err
+}
+
+// errLogRecordsMismatch is why a log replays whole: its record spans do not
+// fall on its lines.
+var errLogRecordsMismatch = errors.New("its log records do not match its log")
+
+// logAtLevel returns data without the records below level. Records come in
+// log order, each a whole number of lines. A span that is not is an error,
+// returned beside data whole.
+func logAtLevel(data []byte, records []logSpan, level slog.Level) ([]byte, error) {
+	var out []byte
+	var at int64
+	for _, r := range records {
+		end := r.Offset + r.Length
+		if r.Offset < at || r.Length <= 0 || end > int64(len(data)) || data[end-1] != '\n' {
+			return data, fmt.Errorf("%w: %d bytes at offset %d in a %d-byte log", errLogRecordsMismatch, r.Length, r.Offset, len(data))
+		}
+		if r.Level >= level {
+			continue
+		}
+		if out == nil {
+			out = make([]byte, 0, len(data))
+		}
+		out = append(out, data[at:r.Offset]...)
+		at = end
+	}
+	if out == nil {
+		return data, nil
+	}
+	return append(out, data[at:]...), nil
+}
+
+func withoutTime(groups []string, a slog.Attr) slog.Attr {
+	if len(groups) == 0 && a.Key == slog.TimeKey {
+		return slog.Attr{}
+	}
+	return a
+}
+
 // captureRun runs fn while teeing stdout/stderr to logPath via context writers.
 // Quiet mode (logLevel >= Error) suppresses live terminal output; on failure it
 // dumps the captured log to stderr.
@@ -2159,7 +2283,7 @@ func (c *Cache) logPath(projectPath, hash string) string {
 // Output is also line-tapped into structured journal events for the output store
 // and the run's sink. The raw paths are untouched so the live view and failure
 // dumps stay verbatim.
-func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target string, fn func(context.Context) error) ([]byte, error) {
+func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target string, fn func(context.Context) error) ([]byte, []logSpan, error) {
 	quiet := c.logLevel >= slog.LevelError
 	// Collapse withholds live output the same way quiet does, but at default
 	// verbosity: a passing project shows only its status line; a failing one has its
@@ -2175,11 +2299,11 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// machinery would leave observers and the journal never seeing the step
 	// finish, and no log file for a later hit to replay.
 	if err := os.MkdirAll(filepath.Dir(logPath), privateDirPerm); err != nil {
-		return nil, fmt.Errorf("magus/cache: create log dir for %s: %w", logPath, err)
+		return nil, nil, fmt.Errorf("magus/cache: create log dir for %s: %w", logPath, err)
 	}
 	logF, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, privateFilePerm)
 	if err != nil {
-		return nil, fmt.Errorf("magus/cache: create log file %s: %w", logPath, err)
+		return nil, nil, fmt.Errorf("magus/cache: create log file %s: %w", logPath, err)
 	}
 
 	col := newLineEmitter(ctx, projectPath, target)
@@ -2207,7 +2331,21 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		stdoutTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStdout)
 		stderrTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStderr)
 	}
+	// The log file and journal only: the console shows a log record through the
+	// process logger, which filters it by level.
+	format := c.logFormat
+	if c.recordsOnly {
+		format = "json" // one JSON object per line, as a -o jsonl reader expects
+	}
+	records := &stepLog{sink: &recordSink{log: safeLogF, raw: &rawBuf}}
+	logTap := col.newLineTap(records.sink, journal.StreamStderr)
+	records.tap = logTap
+	records.h = NewLogHandler(&records.buf, format, &slog.HandlerOptions{
+		Level:       slog.Level(math.MinInt),
+		ReplaceAttr: withoutTime,
+	})
 	captureCtx := spawn.WithOutputWriters(ctx, stdoutTap, stderrTap)
+	captureCtx = context.WithValue(captureCtx, stepLogKey{}, records)
 	// A quiet child's lines skip the taps, yet a nested run's wait for a
 	// seat is still this step's progress (MGS3012).
 	captureCtx = spawn.WithActivity(captureCtx, ProgressFromContext(ctx).Beat)
@@ -2222,9 +2360,12 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	ProgressFromContext(ctx).Record(Mark{Project: projectPath, Target: target, What: "executing", Log: logPath})
 
 	runErr := fn(captureCtx)
+	records.end()
+	logged := records.records()
 	// Emit any trailing partial lines before the records are read.
 	stdoutTap.flush()
 	stderrTap.flush()
+	logTap.flush()
 	if cerr := logF.Close(); cerr != nil && runErr == nil {
 		runErr = cerr
 	}
@@ -2276,6 +2417,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 				})
 			}()
 		}
+		shown := c.shownLog(ctx, projectPath, target, rawBuf.Bytes(), logged)
 		switch {
 		case c.silent:
 			// Bound the dump AND filter it: a plain tail of a test log is mostly
@@ -2283,8 +2425,8 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 			// off the top exactly when they are the only thing wanted. Use the same
 			// diagnostic-focused excerpt the default display uses, and keep the
 			// full-log path so nothing is unreachable.
-			if data, readError := os.ReadFile(logPath); readError == nil && len(data) > 0 {
-				excerpt, omitted := failureExcerpt(data, maxFailTailLines)
+			if len(shown) > 0 {
+				excerpt, omitted := failureExcerpt(shown, maxFailTailLines)
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
 				if omitted > 0 {
 					_, _ = fmt.Fprintf(os.Stderr, "... %d line(s) omitted; showing likely diagnostics; full log: %s\n", omitted, logPath)
@@ -2300,9 +2442,9 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 			// the entire raw log: the latter often hides the cause under successful test
 			// lines. The cache error emitted immediately afterward supplies the output
 			// ref for the complete, verbatim log.
-			if data, readError := os.ReadFile(logPath); readError == nil && len(data) > 0 {
+			if len(shown) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
-				excerpt, omitted := failureExcerpt(data, maxFailureExcerptLines)
+				excerpt, omitted := failureExcerpt(shown, maxFailureExcerptLines)
 				if omitted > 0 {
 					_, _ = fmt.Fprintf(os.Stderr, "... %d log line(s) omitted; showing likely diagnostics\n", omitted)
 				}
@@ -2312,9 +2454,9 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 				}
 			}
 		case quiet:
-			if data, readError := os.ReadFile(logPath); readError == nil && len(data) > 0 {
+			if len(shown) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
-				_, _ = io.WriteString(os.Stderr, ann.Defang(string(data)))
+				_, _ = io.WriteString(os.Stderr, ann.Defang(string(shown)))
 				_, _ = fmt.Fprintln(os.Stderr)
 			}
 		default:
@@ -2329,7 +2471,18 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		// store under a ref so the exact failing output stays retrievable via
 		// `magus query ref...`. It is overwritten on the next run of the same key.
 	}
-	return rawBuf.Bytes(), runErr
+	return rawBuf.Bytes(), logged, runErr
+}
+
+// shownLog is a step's captured log as the console shows it at c's level.
+// A record index that does not match the log shows it whole, and says so.
+func (c *Cache) shownLog(ctx context.Context, projectPath, target string, data []byte, records []logSpan) []byte {
+	shown, err := logAtLevel(data, records, c.logLevel)
+	if err != nil {
+		c.log.WarnContext(ctx, "cache.warn", slog.String("msg", fmt.Sprintf(
+			"showing %s:%s's whole log, records below %s included: %v", projectPath, target, c.logLevel, err)))
+	}
+	return shown
 }
 
 // netAttrs returns the remote-I/O attribute for a step, or nothing when the step did

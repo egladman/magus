@@ -338,9 +338,13 @@ func askUnrenderedDeny(subject string) string {
 
 // gradePushWithoutGate is "deny" for a push nothing covers, whoever pushes, and
 // "" otherwise. Asking the root let two pull requests out ungated. A worker's
-// refusal also sends the commit to the orchestrator.
+// refusal also sends the commit to the orchestrator. A push whose reads ran
+// out of budget before any covered it was not judged, and is refused.
 func gradePushWithoutGate(ev pushEvidence, lease string) (decision, reason string) {
 	cover, commit := ev.cover, ev.commit
+	if ev.lapse.cut != "" && !cover.admits() {
+		return refusePush(ev.lapse.reason(commit), lease)
+	}
 	var state string
 	switch cover {
 	// Unknown passes. This rule refuses on evidence or not at all: no run log, no VCS, or a
@@ -364,6 +368,12 @@ func gradePushWithoutGate(ev pushEvidence, lease string) (decision, reason strin
 		head += "That run is still going or it was killed.\n"
 	}
 	head += ev.narrow.shortfall()
+	return refusePush(head, lease)
+}
+
+// refusePush is the deny for a push, head saying why, bound to job lease
+// unless "".
+func refusePush(head, lease string) (decision, reason string) {
 	gate := fmt.Sprintf("Or run `%s`, which waits for the build budget itself, commit what it regenerates, and push again. CI runs the identical command on the identical tree, so a red push pays twice for one answer.",
 		hint.Affected.With(string(types.TargetCI)))
 	if lease != "" {
@@ -398,6 +408,7 @@ type pushEvidence struct {
 	// narrow is weighed only when nothing else covers the commit and no
 	// gate failed there.
 	narrow narrowCoverage
+	lapse  pushLapse
 }
 
 // admitted says why a passing push went out with no `ci` verdict at its
@@ -436,23 +447,24 @@ const (
 	phasePushMoves       = "push_coverage_moves"
 )
 
-// pushStep runs read as phase, one read of pushCoverage.
-func pushStep[T any](log *phaseLog, phase string, read func() T) T {
-	log.begin(phase)
-	start := time.Now()
-	v := read()
-	log.record(timedPhase(phase, time.Since(start), 0, false))
-	return v
+// pushCoverage is what the stores say about the revision the push on command
+// publishes, read in the checkout it runs in, within pushCoverageBudget. It
+// is gateUnknown when the line relocates the push somewhere this cannot name.
+func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) pushEvidence {
+	return pushCoverageWithin(ctx, pushCoverageBudget(ctx, pushCoverageShare), deps, hook, command, d, cwd)
 }
 
-// pushCoverage is what the stores say about the revision the push on command
-// publishes, read in the checkout it runs in. It is gateUnknown when the line
-// relocates the push somewhere this cannot name.
-func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) pushEvidence {
-	log := judgmentPhases(ctx)
-	log.begin(phasePushCoverage)
+// pushCoverageWithin is pushCoverage within budget. A read the budget cuts
+// is ev.lapse, and the reads after it are made under the cut.
+func pushCoverageWithin(ctx context.Context, budget time.Duration, deps Dependencies, hook location, command string, d Dialect, cwd string) (ev pushEvidence) {
+	r := &pushReads{log: judgmentPhases(ctx), budget: budget}
+	r.log.begin(phasePushCoverage)
 	start := time.Now()
-	defer func() { log.record(timedPhase(phasePushCoverage, time.Since(start), 0, false)) }()
+	ctx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	defer func() {
+		r.log.record(timedPhase(phasePushCoverage, time.Since(start), budget, ev.lapse.cut != ""))
+	}()
 	push, located := locatePush(command, d, cwd)
 	if !located {
 		return pushEvidence{}
@@ -461,35 +473,35 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 	if push.relocated {
 		at = hookLocationAt(deps, push.dir)
 	}
-	ev := pushEvidence{commit: pushStep(log, phasePushRevision, func() string { return deps.revision(ctx, push.dir, push.rev) })}
+	ev = pushEvidence{commit: pushStep(ctx, r, phasePushRevision, func() string { return deps.revision(ctx, push.dir, push.rev) })}
 	dir := cmp.Or(push.dir, at.workspace)
-	lineage := ev.readGates(ctx, deps, at, dir)
-	ev.readUngated(ctx, deps, at, dir, lineage)
+	lineage := ev.readGates(ctx, r, deps, at, dir)
+	ev.readUngated(ctx, r, deps, at, dir, lineage)
 	// Only a question that could be asked becomes a refusal: a fresh clone or a host with
 	// no run log still has nothing to prove.
-	if ev.cover != gateUnknown && pushStep(log, phasePushMoves, func() bool { return revisionMovesBeforePush(command, d, cwd) }) {
+	if ev.cover != gateUnknown && pushStep(ctx, r, phasePushMoves, func() bool { return revisionMovesBeforePush(command, d, cwd) }) {
 		ev.commit, ev.moved = "", true
 	}
+	ev.lapse = r.lapse
 	return ev
 }
 
 // readGates grades ev.commit by the gates recorded in the workspace at, and
 // by a gate on its tree or a waiver. dir is the checkout the push runs in.
-func (ev *pushEvidence) readGates(ctx context.Context, deps Dependencies, at location, dir string) gateLineage {
-	log := judgmentPhases(ctx)
-	gates := pushStep(log, phasePushGateHistory, func() gateHistory { return readGateHistory(at.workspace) })
+func (ev *pushEvidence) readGates(ctx context.Context, r *pushReads, deps Dependencies, at location, dir string) gateLineage {
+	gates := pushStep(ctx, r, phasePushGateHistory, func() gateHistory { return readGateHistory(at.workspace) })
 	var rec sessions.GateRecord
 	ev.cover, rec = gates.recordAt(ev.commit)
 	if ev.cover == gateUnrun {
 		ev.unrun = rec
 	}
 	if ev.cover == gateUnknown {
-		ev.cover = pushStep(log, phasePushRunLog, func() gateCoverage { return gateCoverageAt(workspaceRunsDir(at.cacheDir), ev.commit) })
+		ev.cover = pushStep(ctx, r, phasePushRunLog, func() gateCoverage { return gateCoverageAt(workspaceRunsDir(at.cacheDir), ev.commit) })
 	}
 	var lineage gateLineage
 	// A replay (cherry-pick, rebase) mints new commits over a tree a gate already passed.
 	if ev.cover != gatePassed {
-		lineage = pushStep(log, phasePushLineage, func() gateLineage {
+		lineage = pushStep(ctx, r, phasePushLineage, func() gateLineage {
 			return gateLineageAt(ctx, deps.VCS, dir, ev.commit, gates)
 		})
 		if lineage.replayed {
@@ -501,7 +513,7 @@ func (ev *pushEvidence) readGates(ctx context.Context, deps Dependencies, at loc
 			w      types.GateWaiver
 			waived bool
 		}
-		got := pushStep(log, phasePushWaiver, func() waiver {
+		got := pushStep(ctx, r, phasePushWaiver, func() waiver {
 			w, waived := gateWaiverAt(at, ev.commit)
 			return waiver{w, waived}
 		})
@@ -513,14 +525,19 @@ func (ev *pushEvidence) readGates(ctx context.Context, deps Dependencies, at loc
 }
 
 // readUngated weighs a commit no gate covers: narrow runs, then the
-// workspace's remote gate.
-func (ev *pushEvidence) readUngated(ctx context.Context, deps Dependencies, at location, dir string, lineage gateLineage) {
-	log := judgmentPhases(ctx)
+// workspace's remote gate. A weighing ctx's end cuts short weighs nothing.
+func (ev *pushEvidence) readUngated(ctx context.Context, r *pushReads, deps Dependencies, at location, dir string, lineage gateLineage) {
 	// A failed gate here is a red verdict that no narrow pass outweighs.
 	switch ev.cover {
 	case gateAbsent, gateIncomplete, gateProjectScoped, gateUnscoped:
-		ev.narrow = pushStep(log, phasePushNarrow, func() narrowCoverage {
-			return narrowCoverageAt(ctx, deps, at, dir, ev.commit, lineage)
+		ev.narrow = pushStep(ctx, r, phasePushNarrow, func() narrowCoverage {
+			n, err := awaitDeadline(ctx, func() (narrowCoverage, error) {
+				return narrowCoverageAt(ctx, deps, at, dir, ev.commit, lineage), nil
+			})
+			if err != nil {
+				return narrowCoverage{}
+			}
+			return n
 		})
 		if ev.narrow.covers() {
 			ev.cover = gateNarrow
@@ -528,7 +545,7 @@ func (ev *pushEvidence) readUngated(ctx context.Context, deps Dependencies, at l
 	}
 	switch ev.cover {
 	case gateAbsent, gateIncomplete, gateProjectScoped, gateUnscoped:
-		remote := pushStep(log, phasePushRemoteGate, func() string {
+		remote := pushStep(ctx, r, phasePushRemoteGate, func() string {
 			cfg, err := config.LoadWorkspaceOnly(at.workspace)
 			if err != nil {
 				return ""
@@ -1354,19 +1371,33 @@ func (g commitGraph) ancestors(id string) map[string]bool {
 	return seen
 }
 
-// footprintHolds reports whether target's source footprint in p holds rel. It
+// rootedInputs is target's source footprint in p, rooted at the workspace. It
 // copies job.targetSources, which internal/job keeps unexported.
-func footprintHolds(p *types.Project, target, rel string) bool {
+func rootedInputs(p *types.Project, target string) []types.Glob {
 	if refs := p.TargetInputs[target]; len(refs) > 0 {
-		return slices.ContainsFunc(refs, func(r types.InputRef) bool { return r.Rooted(p.Path).Match(rel) })
+		out := make([]types.Glob, len(refs))
+		for i, r := range refs {
+			out[i] = r.Rooted(p.Path)
+		}
+		return out
 	}
-	return slices.ContainsFunc(p.Sources, func(g types.Glob) bool { return g.Root(p.Path).Match(rel) })
+	out := make([]types.Glob, len(p.Sources))
+	for i, g := range p.Sources {
+		out[i] = g.Root(p.Path)
+	}
+	return out
 }
 
-// outputsHold reports whether target's own declared outputs in p hold rel.
-// Project outputs do not count: any clean run would then cover them.
-func outputsHold(p *types.Project, target, rel string) bool {
-	return slices.ContainsFunc(p.TargetOutputs[target], func(r types.OutputRef) bool { return r.Rooted(p.Path).Match(rel) })
+// rootedOutputs is target's own declared outputs in p, rooted at the
+// workspace. Project outputs do not count: any clean run would then cover
+// them.
+func rootedOutputs(p *types.Project, target string) []types.Glob {
+	refs := p.TargetOutputs[target]
+	out := make([]types.Glob, len(refs))
+	for i, r := range refs {
+		out[i] = r.Rooted(p.Path)
+	}
+	return out
 }
 
 // bareTarget strips the charms a stored run's target carries (`lint:rw`).

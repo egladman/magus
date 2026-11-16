@@ -26,8 +26,8 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/libs/cmdline/exit"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 
@@ -330,8 +330,10 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// state ("here's what's in effect") is visible before any work, and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
 	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, !rf.DefaultCharms)
-	// ci dispatches through RunCI, which drops the write-granting charms. Report what
-	// runs, not what was asked for, or the header contradicts the run it introduces.
+	// RunCI verifies without the write-granting charms and repairs with rw, so
+	// it gets the carried set while the header names what each pass verifies
+	// under.
+	carried := charms
 	if targetName == "ci" {
 		charms = magus.CharmsForCI(charms)
 	}
@@ -364,8 +366,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if isGateInvocation(targetName, partial) {
 		runOpts = append(runOpts, magus.WithGate())
 	}
-	if len(charms) > 0 {
-		runOpts = append(runOpts, magus.WithCharms(charms...))
+	if len(carried) > 0 {
+		runOpts = append(runOpts, magus.WithCharms(carried...))
 	}
 	runOpts = append(runOpts, magus.WithVolatilityRetry(rf.VolatilityRetry))
 	race, err := resolveRace(rf.Race)

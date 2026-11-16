@@ -9,7 +9,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 )
 
 const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
@@ -26,7 +27,7 @@ func configCacheKey(ctx context.Context, _ string, args []string) error {
 		fmt.Fprintln(os.Stderr, "  generate   mint a new keypair (alias: gen)")
 		fmt.Fprintln(os.Stderr, "  id         show the keyid + pubkey for a key (for cache.remote.trusted_keys)")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	rest := fs.Args()
@@ -88,7 +89,7 @@ func configCacheKeyGenerate(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "--tee is refused here: it writes structured output to a FILE, and a signing")
 		fmt.Fprintln(os.Stderr, "key must not come to rest on disk.")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	// --tee mirrors structured output into a file. Every other command wants that;
@@ -173,7 +174,7 @@ func configCacheKeyID(args []string) error {
 		fmt.Fprintln(os.Stderr, "identity - useful to confirm which key CI signs with. The seed is never")
 		fmt.Fprintln(os.Stderr, "printed.")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 

@@ -16,7 +16,8 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/langservice"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 )
 
 // lspCommand implements `magus buzz lsp`: a stdio Language Server that exposes the
@@ -39,7 +40,7 @@ func lspCommand(_ context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Point a generic LSP client at `magus buzz lsp` for the *.buzz language")
 		fmt.Fprintln(os.Stderr, "id; it serves completion, hover, and signature help. See docs/editor.md.")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	return (&lspServer{docs: map[string]string{}}).serve(os.Stdin, os.Stdout)

@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/dry"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,8 +62,8 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any { proc\exec("go"
 	t.Run("no spell declares a runner", func(t *testing.T) {
 		root, projects := workspace(t, map[string]string{"magusfile.buzz": delegating})
 		got := checkManifestScripts(context.Background(), root, projects, []*spells.Spell{spells.NewSpell("golang")})
-		assert.Equal(t, types.Check{
-			Name: "manifest-scripts", Status: types.CheckOK, Evidence: types.EvidenceDeclared,
+		assert.Equal(t, check.Check{
+			Name: "manifest-scripts", Status: check.OK, Evidence: check.EvidenceDeclared,
 			Message: "no registered spell declares a script runner",
 		}, got)
 	})
@@ -70,9 +71,9 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any { proc\exec("go"
 	t.Run("delegating targets fail", func(t *testing.T) {
 		root, projects := workspace(t, map[string]string{"web/magusfile.buzz": delegating})
 		got := checkManifestScripts(context.Background(), root, projects, declaring)
-		assert.Equal(t, types.Check{
+		assert.Equal(t, check.Check{
 			Name:   "manifest-scripts",
-			Status: types.CheckFail,
+			Status: check.Fail,
 			Message: fmt.Sprintf("3 call(s) run a script a manifest defines, so its steps, inputs and outputs are "+
 				"invisible to the cache key; declare those steps in the magusfile (see %s)", types.CodeURL(types.ManifestScriptDelegation)),
 			Details: []string{
@@ -86,8 +87,8 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any { proc\exec("go"
 	t.Run("clean workspace", func(t *testing.T) {
 		root, projects := workspace(t, map[string]string{"magusfile.buzz": clean})
 		got := checkManifestScripts(context.Background(), root, projects, declaring)
-		assert.Equal(t, types.Check{
-			Name: "manifest-scripts", Status: types.CheckOK,
+		assert.Equal(t, check.Check{
+			Name: "manifest-scripts", Status: check.OK,
 			Message: "no target in 1 magusfile(s) runs a manifest-defined script",
 		}, got)
 	})
@@ -98,8 +99,8 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any { proc\exec("go"
 		require.NotNil(t, diag)
 		root, projects := workspace(t, map[string]string{"magusfile.buzz": broken})
 		got := checkManifestScripts(context.Background(), root, projects, declaring)
-		assert.Equal(t, types.Check{
-			Name: "manifest-scripts", Status: types.CheckOK, Evidence: types.EvidenceUnknown,
+		assert.Equal(t, check.Check{
+			Name: "manifest-scripts", Status: check.OK, Evidence: check.EvidenceUnknown,
 			Message: "could not trace 1 of 1 magusfile(s)",
 			Details: []string{fmt.Sprintf("magusfile.buzz:%d: not traced: %s", diag.Line, diag.Msg)},
 		}, got)

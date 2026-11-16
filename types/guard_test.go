@@ -94,4 +94,5 @@ func TestValidateGuardRuleName(t *testing.T) {
 	require.EqualError(t, ValidateGuardRuleName("pull_request"), `guard rule name "pull_request" is not lowercase letters and digits joined by single hyphens, as in "pull-request"`)
 	require.EqualError(t, ValidateGuardRuleName(""), `guard rule name is empty`)
 	require.EqualError(t, ValidateGuardRuleName("command"), `guard rule name "command" is reserved: an unnamed command rule reports under it`)
+	require.EqualError(t, ValidateGuardRuleName("step"), `guard rule name "step" is reserved: an unnamed step rule reports under it`)
 }

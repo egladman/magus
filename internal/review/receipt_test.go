@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/vcs"
 )
 
 // TestReceiptCarriesNoIdentity pins the standing refusal in the package doc: a receipt names
@@ -41,7 +41,7 @@ func TestReceiptCarriesNoIdentity(t *testing.T) {
 	// and hand the store the attributable field the package doc spent itself refusing.
 	// Argued for and admitted because a checkpoint answers "which revision", never "whose".
 	var checkpoint []string
-	ct := reflect.TypeOf(types.VCSCheckpoint{})
+	ct := reflect.TypeOf(vcs.Checkpoint{})
 	for i := range ct.NumField() {
 		checkpoint = append(checkpoint, ct.Field(i).Name)
 	}
@@ -118,7 +118,7 @@ func TestRecordStoreIsOwnerOnly(t *testing.T) {
 func TestReceiptsAreAppendedAsJSONLines(t *testing.T) {
 	dir := t.TempDir()
 	at := time.Date(2026, 10, 14, 9, 30, 0, 0, time.UTC)
-	cp := types.VCSCheckpoint{Revision: "abc123", Branch: "feat", Dirty: true, PatchDigest: "p", UntrackedDigest: "u", VCS: "git", Preserved: "stash"}
+	cp := vcs.Checkpoint{Revision: "abc123", Branch: "feat", Dirty: true, PatchDigest: "p", UntrackedDigest: "u", VCS: "git", Preserved: "stash"}
 	require.NoError(t, Record(dir, []Receipt{
 		{Path: "a b/c.go", Digest: "d1", At: at, Source: cp, Reason: "line one\nline two"},
 		{Path: "other.go", Digest: "d2", At: at},
@@ -276,8 +276,8 @@ func TestReviewedAt(t *testing.T) {
 	early := time.Now().Add(-2 * time.Hour)
 	late := time.Now()
 	require.NoError(t, Record(dir, []Receipt{
-		{Path: "a.go", Digest: "a1", At: late, Source: types.VCSCheckpoint{Revision: "rev-new", VCS: "git"}},
-		{Path: "b.go", Digest: "b1", At: early, Source: types.VCSCheckpoint{Revision: "rev-old", VCS: "git"}},
+		{Path: "a.go", Digest: "a1", At: late, Source: vcs.Checkpoint{Revision: "rev-new", VCS: "git"}},
+		{Path: "b.go", Digest: "b1", At: early, Source: vcs.Checkpoint{Revision: "rev-old", VCS: "git"}},
 		// A working-tree receipt names no revision and cannot answer the question.
 		{Path: "c.go", Digest: "c1", At: late},
 	}))

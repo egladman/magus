@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -67,8 +68,8 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 			State: string(types.StateRunning),
 			Exec:  hint.JobExec.With("f2-guard"),
 			// Longer than a line on purpose: the clip is part of the contract.
-			Criteria:   strings.Repeat("hold the boundary ", 20),
-			Validation: "magus run test internal/ledger",
+			Instructions: strings.Repeat("hold the boundary ", 20),
+			Validation:   "magus run test internal/ledger",
 		}},
 		Failures: []briefFailure{{
 			Target: "test", Project: "internal/ledger",
@@ -245,9 +246,9 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	guardRow := types.Job{
 		ID:           "f2-guard",
 		State:        types.StateRunning,
-		Criteria:     "hold the boundary\nsecond line nobody reads here",
+		Agent:        typesagent.Instructed("hold the boundary\nsecond line nobody reads here"),
 		Validation:   "magus run test internal/ledger",
-		WritePaths:   []string{"internal/ledger"},
+		Paths:        types.JobPaths{Write: []string{"internal/ledger"}},
 		CheckoutRoot: root,
 	}
 	_, err = store.Update(ctx, guardRow.ID, func(cur *types.Job) { *cur = guardRow })
@@ -282,11 +283,11 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 		Rules:       brief.Rules, // asserted by name above
 		// A lease's goal reads as one line here; the rest is `magus describe job`.
 		Leases: []briefLease{{
-			ID:         "f2-guard",
-			State:      string(types.StateRunning),
-			Exec:       hint.JobExec.With("f2-guard"),
-			Criteria:   "hold the boundary",
-			Validation: "magus run test internal/ledger",
+			ID:           "f2-guard",
+			State:        string(types.StateRunning),
+			Exec:         hint.JobExec.With("f2-guard"),
+			Instructions: "hold the boundary",
+			Validation:   "magus run test internal/ledger",
 		}},
 		Failures: []briefFailure{{
 			Target:  "test",
@@ -487,7 +488,7 @@ func TestSessionBriefListsTheJobTreeForkedFromThisCheckout(t *testing.T) {
 	require.NoError(t, err)
 	for _, row := range []types.Job{
 		{ID: "plan", State: types.StateRunning, Worktree: &types.JobWorktree{Root: work, Source: root}},
-		{ID: "plan/exited", Parent: "plan", State: types.StateExited, Result: &types.JobResult{UnresolvedRisks: []string{"merge is the root's", "second"}}},
+		{ID: "plan/exited", Parent: "plan", State: types.StateExited},
 		{ID: "plan/waiting", Parent: "plan", State: types.StateDeclared, DependsOn: []string{"plan/exited"}},
 		{ID: "plan/failed", Parent: "plan", State: types.StateFail},
 		{ID: "landed", State: types.StatePass, Worktree: &types.JobWorktree{Root: t.TempDir(), Source: root, Removed: 1}},
@@ -500,6 +501,7 @@ func TestSessionBriefListsTheJobTreeForkedFromThisCheckout(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
+	seedFiled(t, store, "plan/exited", &types.JobResult{UnresolvedRisks: []string{"merge is the root's", "second"}})
 
 	brief := gatherSessionBrief(ctx, root, nil)
 	require.NotNil(t, brief.Jobs)
@@ -606,7 +608,7 @@ func TestSessionBriefNamesEveryExitedJobNobodyCollected(t *testing.T) {
 	}
 	rows = append(rows, types.Job{ID: "root/rejected", Parent: "root", State: types.StateExited, Rejection: &types.JobRejection{Violations: []string{"check failed"}}})
 
-	tree := sessionJobTree(t.Context(), rows, "root", t.TempDir(), types.VCSOptions{})
+	tree := sessionJobTree(t.Context(), rows, nil, "root", t.TempDir(), types.VCSOptions{})
 	require.NotNil(t, tree)
 	assert.Len(t, tree.Jobs, briefMaxJobs)
 	assert.Equal(t, 3, tree.More)
@@ -623,7 +625,7 @@ func TestSessionBriefNamesEveryExitedJobNobodyCollected(t *testing.T) {
 
 func TestSessionBriefListsWhatIsNotMerged(t *testing.T) {
 	t.Parallel()
-	brief := sessionBrief{Unmerged: types.JobUnmergedReport{Branch: "feat/x", Rows: []types.JobUnmerged{
+	brief := sessionBrief{Unmerged: types.JobUnmergedReport{Branch: "feat/x", Jobs: []types.JobUnmerged{
 		{Job: "w", Head: "abc123", Why: "2 commit(s) are not on feat/x", Remedy: "merge abc123"},
 	}}}
 
@@ -647,7 +649,7 @@ func TestSessionBriefCapsALongUnmergedReport(t *testing.T) {
 		rows = append(rows, types.JobUnmerged{Job: fmt.Sprintf("w%d", i), Why: "off", Remedy: "merge"})
 	}
 
-	text := sessionBrief{Unmerged: types.JobUnmergedReport{Rows: rows}}.Text()
+	text := sessionBrief{Unmerged: types.JobUnmergedReport{Jobs: rows}}.Text()
 
 	assert.Contains(t, text, "and 4 more")
 	assert.NotContains(t, text, "w12")

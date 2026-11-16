@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
@@ -13,6 +14,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -21,7 +23,7 @@ import (
 func TestBuildGuard(t *testing.T) {
 	t.Run("valid shell rule records onto the registry", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil, nil, true)
 
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StringValue("no-curl-prod"))
@@ -43,7 +45,7 @@ func TestBuildGuard(t *testing.T) {
 
 	t.Run("dialect is kept as written", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil, nil, true)
 
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StringValue("x"))
@@ -58,12 +60,12 @@ func TestBuildGuard(t *testing.T) {
 	})
 
 	t.Run("shell is the only rule member", func(t *testing.T) {
-		_, ok := buildGuard(context.Background(), nil, nil).MapGet("bash")
+		_, ok := buildGuard(context.Background(), nil, nil, true).MapGet("bash")
 		assert.False(t, ok)
 	})
 
 	t.Run("invalid dialect is rejected", func(t *testing.T) {
-		guard := buildGuard(context.Background(), nil, nil)
+		guard := buildGuard(context.Background(), nil, nil, true)
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StringValue("x"))
 		rule.MapSet("decision", vm.StringValue("deny"))
@@ -77,7 +79,7 @@ func TestBuildGuard(t *testing.T) {
 
 	t.Run("builtins records the declared settings onto the registry", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil, true)
 
 		lines := vm.NewMap()
 		lines.MapSet("decision", vm.StringValue("deny"))
@@ -94,7 +96,7 @@ func TestBuildGuard(t *testing.T) {
 
 	t.Run("builtins records declared markers", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil, true)
 
 		compat := vm.NewMap()
 		compat.MapSet("decision", vm.StringValue("advise"))
@@ -108,7 +110,7 @@ func TestBuildGuard(t *testing.T) {
 	})
 
 	t.Run("bad decision is rejected", func(t *testing.T) {
-		guard := buildGuard(context.Background(), nil, nil)
+		guard := buildGuard(context.Background(), nil, nil, true)
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StringValue("x"))
 		rule.MapSet("decision", vm.StringValue("warn"))
@@ -185,7 +187,7 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			reg := workspace.NewWorkspaceRegistry()
-			guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+			guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil, true)
 			err := callVoidDirect(t, requireDirect(t, guard, "builtins"), tc.arg)
 			require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 			assert.ErrorContains(t, err, tc.want)
@@ -194,7 +196,7 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 	}
 
 	t.Run("every misdeclaration is reported at once", func(t *testing.T) {
-		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil, true)
 		err := callVoidDirect(t, requireDirect(t, guard, "builtins"), setting(map[string]vm.Value{
 			"whole-tre":  vm.StringValue("deny"),
 			"stage-all":  vm.StringValue("warn"),
@@ -206,7 +208,7 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 		assert.ErrorContains(t, err, `"whole-tree": want`)
 	})
 	t.Run("declared twice", func(t *testing.T) {
-		builtins := requireDirect(t, buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil), "builtins")
+		builtins := requireDirect(t, buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil, true), "builtins")
 		require.NoError(t, callVoidDirect(t, builtins, one("whole-tree", vm.StringValue("deny"))))
 		err := callVoidDirect(t, builtins, one("whole-tree", vm.StringValue("deny")))
 		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
@@ -214,12 +216,12 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 	})
 	t.Run("outside the root magusfile", func(t *testing.T) {
 		ctx := interp.WithProjectPath(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), "libs/foo")
-		err := callVoidDirect(t, requireDirect(t, buildGuard(ctx, nil, nil), "builtins"), one("whole-tree", vm.StringValue("deny")))
+		err := callVoidDirect(t, requireDirect(t, buildGuard(ctx, nil, nil, true), "builtins"), one("whole-tree", vm.StringValue("deny")))
 		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 		assert.ErrorContains(t, err, "root magusfile")
 	})
 	t.Run("tokens on a rule that takes none", func(t *testing.T) {
-		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil, true)
 		err := callVoidDirect(t, requireDirect(t, guard, "builtins"), one("whole-tree", setting(map[string]vm.Value{
 			"decision": vm.StringValue("advise"), "tokens": vm.IntValue(200_000),
 		})))
@@ -227,7 +229,7 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 		assert.ErrorContains(t, err, "takes no tokens parameter")
 	})
 	t.Run("calls below 1 is refused before resolution", func(t *testing.T) {
-		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil)
+		guard := buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil, true)
 		err := callVoidDirect(t, requireDirect(t, guard, "builtins"), one("whole-tree", setting(map[string]vm.Value{
 			"decision": vm.StringValue("advise"), "calls": vm.IntValue(0),
 		})))
@@ -237,7 +239,7 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 
 func TestProfileRecordsTheLevel(t *testing.T) {
 	reg := workspace.NewWorkspaceRegistry()
-	guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+	guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil, true)
 	require.NoError(t, callVoidDirect(t, requireDirect(t, guard, "profile"), vm.StringValue("strict")))
 	assert.Equal(t, types.GuardProfileStrict, reg.Profile())
 }
@@ -258,7 +260,7 @@ func TestProfileMisdeclarationIsCoded(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			reg := workspace.NewWorkspaceRegistry()
-			guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil)
+			guard := buildGuard(workspace.ContextWithRegistry(t.Context(), reg), nil, nil, true)
 			err := callVoidDirect(t, requireDirect(t, guard, "profile"), tc.args...)
 			require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 			assert.ErrorContains(t, err, tc.want)
@@ -266,7 +268,7 @@ func TestProfileMisdeclarationIsCoded(t *testing.T) {
 		})
 	}
 	t.Run("declared twice", func(t *testing.T) {
-		profile := requireDirect(t, buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil), "profile")
+		profile := requireDirect(t, buildGuard(workspace.ContextWithRegistry(t.Context(), workspace.NewWorkspaceRegistry()), nil, nil, true), "profile")
 		require.NoError(t, callVoidDirect(t, profile, vm.StringValue("strict")))
 		err := callVoidDirect(t, profile, vm.StringValue("off"))
 		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
@@ -275,7 +277,7 @@ func TestProfileMisdeclarationIsCoded(t *testing.T) {
 	t.Run("outside the root magusfile", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
 		ctx := interp.WithProjectPath(workspace.ContextWithRegistry(t.Context(), reg), "libs/foo")
-		err := callVoidDirect(t, requireDirect(t, buildGuard(ctx, nil, nil), "profile"), vm.StringValue("strict"))
+		err := callVoidDirect(t, requireDirect(t, buildGuard(ctx, nil, nil, true), "profile"), vm.StringValue("strict"))
 		require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
 		assert.ErrorContains(t, err, "root magusfile")
 		assert.Empty(t, reg.Profile())
@@ -411,7 +413,7 @@ magus\guard.command(fun (req: CommandRequest) > any !> any {
 func TestCommandRuleMisdeclarationIsCoded(t *testing.T) {
 	fn := vm.DirectValue("rule", func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil })
 	register := func(ctx context.Context) vm.Value {
-		return requireDirect(t, buildGuard(workspace.ContextWithRegistry(ctx, workspace.NewWorkspaceRegistry()), nil, nil), "command")
+		return requireDirect(t, buildGuard(workspace.ContextWithRegistry(ctx, workspace.NewWorkspaceRegistry()), nil, nil, true), "command")
 	}
 
 	t.Run("not a function", func(t *testing.T) {
@@ -570,7 +572,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict { return magus\guard.al
 func TestSpawnRuleMisdeclarationIsCoded(t *testing.T) {
 	fn := vm.DirectValue("rule", func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil })
 	register := func(ctx context.Context) vm.Value {
-		return requireDirect(t, buildGuard(workspace.ContextWithRegistry(ctx, workspace.NewWorkspaceRegistry()), nil, nil), "spawn")
+		return requireDirect(t, buildGuard(workspace.ContextWithRegistry(ctx, workspace.NewWorkspaceRegistry()), nil, nil, true), "spawn")
 	}
 
 	t.Run("not a function", func(t *testing.T) {
@@ -602,7 +604,7 @@ func TestSpawnHelpersRefuseOutsideARule(t *testing.T) {
 import "magus";
 final told = magus\guard.once("x");
 `)
-	require.ErrorContains(t, err, "only callable inside a magus\\guard.spawn, command or write rule")
+	require.ErrorContains(t, err, "only callable inside a magus\\guard.spawn, command, write, stop or step rule")
 }
 
 // A rule reads the job rows the guard pinned and the facts magus recorded about a
@@ -617,7 +619,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
     foreach (row in list.jobs) { ids = ids + row.id + ";"; }
     var wrote = "refused";
     if (req.kind == magus\SpawnKind.spawn) {
-        magus\workspace().putJob("smuggled", opts: {"criteria": "from a rule"});
+        magus\workspace().putJob("smuggled", opts: {"agent": {"instructions": "from a rule", "worker": {"type": "resumed"}}});
         wrote = "written";
     }
     var target = "";
@@ -729,4 +731,98 @@ magus\guard.stop(fun (req: StopRequest) > GuardVerdict => magus\guard.allow());
 
 func (s *StopRuleBindingSuite) testContext() context.Context {
 	return workspace.ContextWithRegistry(s.T().Context(), s.reg)
+}
+
+type StepRuleBindingSuite struct {
+	suite.Suite
+	reg   *workspace.WorkspaceRegistry
+	steps *steps.Group
+	sess  *buzz.Session
+}
+
+func TestStepRuleBindingSuite(t *testing.T) { suite.Run(t, new(StepRuleBindingSuite)) }
+
+func (s *StepRuleBindingSuite) SetupTest() {
+	s.reg, s.steps = workspace.NewWorkspaceRegistry(), &steps.Group{}
+	s.T().Cleanup(func() { _ = s.reg.Close() })
+	s.sess = buzz.NewSession(s.testContext(), buzz.WithEmbedded())
+	registerAllBuzz(s.testContext(), s.sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+}
+
+func (s *StepRuleBindingSuite) testContext() context.Context {
+	return steps.WithGroup(workspace.ContextWithRegistry(s.T().Context(), s.reg), s.steps)
+}
+
+func (s *StepRuleBindingSuite) TestTheRuleSeesTheStepAfterTheLoadCloses() {
+	s.Require().NoError(s.sess.Exec(s.testContext(), `
+import "magus";
+import "magus/agent";
+
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict {
+    return magus\guard.deny("{req.step.kind}|{req.step.name}|{req.step.dir}|{req.capabilities.join(",")}|{req.lease}|{req.step.input["amount"]}");
+});
+`))
+	_ = s.sess.Close()
+	rule := s.steps.Rule("refund")
+	s.Require().NotNil(rule)
+
+	got, err := rule(s.T().Context(), agent.StepRequest{
+		Step:         agent.Step{Kind: "refund", Name: "card", Dir: "/repo", Input: map[string]any{"amount": 250.0}},
+		Capabilities: []string{"network"}, Lease: "job-1",
+	}, hint.NewGate(s.T().TempDir(), "s"))
+	s.Require().NoError(err)
+	s.Equal(types.GuardVerdict{Decision: types.GuardDeny, Reason: "refund|card|/repo|network|job-1|250"}, got)
+}
+
+func (s *StepRuleBindingSuite) TestEachKindKeepsItsOwnRule() {
+	s.Require().NoError(s.sess.Exec(s.testContext(), `
+import "magus";
+import "magus/agent";
+
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("egress", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+`))
+	s.Equal([]string{"egress", "refund"}, s.steps.Kinds())
+}
+
+func (s *StepRuleBindingSuite) TestRegisteringAKindTwiceIsMisdeclared() {
+	err := s.sess.Exec(s.testContext(), `
+import "magus";
+import "magus/agent";
+
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "MGS1045")
+	s.Contains(err.Error(), `kind "refund" is already registered`)
+}
+
+func (s *StepRuleBindingSuite) TestAKindNamedForASeamIsMisdeclared() {
+	err := s.sess.Exec(s.testContext(), `
+import "magus";
+import "magus/agent";
+
+magus\guard.step("step", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "MGS1045")
+	s.Contains(err.Error(), "reserved")
+	s.Nil(s.steps.Kinds())
+}
+
+func (s *StepRuleBindingSuite) TestAProjectMagusfileIsMisdeclared() {
+	ctx := interp.WithProjectPath(s.testContext(), "libs/foo")
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	registerAllBuzz(ctx, sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+	err := sess.Exec(ctx, `
+import "magus";
+import "magus/agent";
+
+magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => magus\guard.allow());
+`)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "MGS1045")
+	s.Contains(err.Error(), "root magusfile")
+	s.Nil(s.steps.Kinds())
 }

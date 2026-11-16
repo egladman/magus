@@ -9,13 +9,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // awkwardSubs carries the two characters that have broken a generated script: a colon
 // terminates zsh's name:description pair, and an apostrophe closes the single-quoted
 // string in zsh, fish and PowerShell alike.
-var awkwardSubs = []cmdline.Command{
+var awkwardSubs = []command.Command{
 	{Name: "run", Short: "Run it"},
 	{Name: "query", Short: "a node's neighborhood: really"},
 }

@@ -108,8 +108,8 @@ func lensFixtureOptions() types.ConformanceOptions {
 		{types.ConformanceFuncLines, types.ConformancePopSource, "", 95, 8},
 		{types.ConformanceTypeMethods, types.ConformancePopSource, "", 95, 49},
 		{types.ConformanceFileSymbols, types.ConformancePopSource, "", 95, 82},
-		{types.ConformanceDepFanout, types.ConformancePopSource, "", 95, 62},
-		{types.ConformanceDepFanout, types.ConformancePopMain, "cmd/tool", 0, 89},
+		{types.ConformanceImportedPackages, types.ConformancePopSource, "", 95, 62},
+		{types.ConformanceImportedPackages, types.ConformancePopMain, "cmd/tool", 0, 89},
 		{types.ConformanceCloneTokens, types.ConformancePopSource, "", 50, 80},
 		{types.ConformanceExportScope, types.ConformancePopSource, "", 0, 0},
 		{types.ConformanceExportScope, types.ConformancePopMain, "", 0, 0},
@@ -120,31 +120,32 @@ func lensFixtureOptions() types.ConformanceOptions {
 	return o
 }
 
-func findConformanceRow(t *testing.T, out types.Conformance, m types.ConformanceMetric, p types.ConformancePopulation, scope string) types.ConformanceRow {
+func findConformanceRow(t *testing.T, out types.Conformance, m types.ConformanceMetric, p types.ConformancePopulation, scope string) types.ConformanceDistribution {
 	t.Helper()
-	for _, r := range out.Rows {
+	for _, r := range out.Distributions {
 		if r.Key == (types.ConformanceKey{Metric: m, Population: p, Scope: scope}) {
 			return r
 		}
 	}
 	require.Failf(t, "no row", "%s %s %q", m, p, scope)
-	return types.ConformanceRow{}
+	return types.ConformanceDistribution{}
 }
 
 func TestConformanceMeasuresEveryMetricAndPopulation(t *testing.T) {
 	out := lensFixture().Conformance(lensFixtureOptions())
 
 	var keys []string
-	for _, r := range out.Rows {
+	for _, r := range out.Distributions {
 		keys = append(keys, fmt.Sprintf("%s %s %s", r.Key.Metric, r.Key.Population, r.Key.Scope))
 	}
 	assert.Equal(t, []string{
 		"clone-tokens source ", "clone-tokens test ",
-		"dep-fanout main cmd/tool", "dep-fanout source .", "dep-fanout source internal",
 		"export-scope main ", "export-scope source ",
 		"file-lines main ", "file-lines source ", "file-lines test ",
 		"file-symbols main ", "file-symbols source ", "file-symbols test ",
-		"func-lines main ", "func-lines source ", "func-lines test ", "main-logic main ",
+		"func-lines main ", "func-lines source ", "func-lines test ",
+		"imported-packages main cmd/tool", "imported-packages source .", "imported-packages source internal",
+		"main-logic main ",
 		"mode-knobs source ", "shared-reach source ",
 		"type-methods source ",
 	}, keys, "generated, excluded and fixture files form no row and add no sample")
@@ -153,7 +154,7 @@ func TestConformanceMeasuresEveryMetricAndPopulation(t *testing.T) {
 
 	// The anchor 30 is enforced, not the live p95 40.
 	lines := findConformanceRow(t, out, types.ConformanceFileLines, types.ConformancePopSource, "")
-	assert.Equal(t, types.ConformanceRow{
+	assert.Equal(t, types.ConformanceDistribution{
 		Key: lines.Key, N: 5, P50: 10, P90: 40, P95: 40, P99: 40, Live: 40, Value: 30,
 		Violations: []types.ConformanceItem{{ID: "internal/a/a.go", Source: "internal/a/a.go:1", Measure: 40}},
 	}, lines)
@@ -180,9 +181,9 @@ func TestConformanceMeasuresEveryMetricAndPopulation(t *testing.T) {
 	assert.Equal(t, 2, findConformanceRow(t, out, types.ConformanceFileSymbols, types.ConformancePopMain, "").P50, "main and Run")
 
 	// A package is keyed by its own directory when that directory has a value, else its layer.
-	tool := findConformanceRow(t, out, types.ConformanceDepFanout, types.ConformancePopMain, "cmd/tool")
+	tool := findConformanceRow(t, out, types.ConformanceImportedPackages, types.ConformancePopMain, "cmd/tool")
 	assert.Equal(t, []int{1, 2, 89}, []int{tool.N, tool.P50, tool.Value})
-	internal := findConformanceRow(t, out, types.ConformanceDepFanout, types.ConformancePopSource, "internal")
+	internal := findConformanceRow(t, out, types.ConformanceImportedPackages, types.ConformancePopSource, "internal")
 	assert.Equal(t, []int{2, 1, 62}, []int{internal.N, internal.P99, internal.Value},
 		"b importing the generated package counts; what gen imports would not")
 
@@ -415,7 +416,7 @@ func (s *ProposalSuite) SetupSuite() {
 }
 
 // row is the file-lines source row under anchor with minSample.
-func (s *ProposalSuite) row(anchor, minSample int) types.ConformanceRow {
+func (s *ProposalSuite) row(anchor, minSample int) types.ConformanceDistribution {
 	key := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}
 	o := types.ConformanceOptions{
 		Limits:    map[types.ConformanceKey]types.ConformanceLimit{key: {Percentile: 95, Anchor: anchor}},
@@ -461,10 +462,10 @@ func TestConformanceWithoutSymbolsIsUnknown(t *testing.T) {
 	g.AddNode(types.KnowledgeNode{ID: fileID("a.go"), Kind: types.KindFile, Source: "a.go"})
 	out := g.Conformance(lensFixtureOptions())
 	assert.Equal(t, types.VerdictUnknown, out.Answer.Verdict)
-	assert.Empty(t, out.Rows)
+	assert.Empty(t, out.Distributions)
 }
 
-// nearestRank's float form agrees with the integer form precedent.go's depFanout inlines.
+// nearestRank's float form agrees with the integer form precedent.go's importedPackages inlines.
 func TestNearestRankMatchesTheIntegerForm(t *testing.T) {
 	for n := 1; n <= 500; n++ {
 		sorted := make([]int, n)
@@ -577,7 +578,7 @@ func TestConformanceMainLogic(t *testing.T) {
 	out := assembleLens(boundarySymbols()).Conformance(boundaryOptions())
 	row := findConformanceRow(t, out, types.ConformanceMainLogic, types.ConformancePopMain, "")
 	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
-	assert.Equal(t, types.ConformanceRow{
+	assert.Equal(t, types.ConformanceDistribution{
 		Key: row.Key, N: 7, Value: 119,
 		Violations: []types.ConformanceItem{
 			{ID: "cmd/tool/main.go#compute", Source: "cmd/tool/main.go:10", Measure: 150, Home: "internal/lib"},
@@ -589,7 +590,7 @@ func TestConformanceStorePathExport(t *testing.T) {
 	out := assembleLens(boundarySymbols()).Conformance(boundaryOptions())
 	row := findConformanceRow(t, out, types.ConformanceStorePathExport, types.ConformancePopSource, "")
 	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
-	assert.Equal(t, types.ConformanceRow{
+	assert.Equal(t, types.ConformanceDistribution{
 		Key: row.Key, N: 2,
 		Violations: []types.ConformanceItem{
 			{ID: "internal/store/store.go#LogPath", Source: "internal/store/store.go:3", Measure: 2, Home: "internal/store"},
@@ -612,7 +613,7 @@ func TestConformanceFileSplit(t *testing.T) {
 
 	row := findConformanceRow(t, g.Conformance(options(1500)), types.ConformanceFileSplit, types.ConformancePopSource, "")
 	row.P50, row.P90, row.P95, row.P99, row.Live = 0, 0, 0, 0, 0
-	assert.Equal(t, types.ConformanceRow{
+	assert.Equal(t, types.ConformanceDistribution{
 		Key: row.Key, N: 2, Value: 1500,
 		Violations: []types.ConformanceItem{
 			{ID: "internal/r/r_tasks.go", Source: "internal/r/r_tasks.go:1", Measure: 1100, Home: "internal/r/r.go", Unshared: true},
@@ -662,7 +663,7 @@ func TestConformanceFileSplitNamesOneConcept(t *testing.T) {
 	row := findConformanceRow(t, g.Conformance(o), types.ConformanceFileSplit, types.ConformancePopSource, "")
 	// The distribution is the population's, which other tests pin; this one judges names.
 	row.N, row.P50, row.P90, row.P95, row.P99, row.Live, row.Value, row.Propose = 0, 0, 0, 0, 0, 0, 0, 0
-	assert.Equal(t, types.ConformanceRow{Key: key, Violations: []types.ConformanceItem{
+	assert.Equal(t, types.ConformanceDistribution{Key: key, Violations: []types.ConformanceItem{
 		{ID: "internal/a/job_claim_callers.go", Source: "internal/a/job_claim_callers.go:1", Measure: 3000,
 			Home: "internal/a/job.go", Rename: "internal/a/job_claim.go"},
 		{ID: "internal/b/job_claim_callers.go", Source: "internal/b/job_claim_callers.go:1", Measure: 300,
@@ -723,4 +724,122 @@ func (s *MainLogicReachSuite) TestACallOutsideTheWorkspaceIsNoPackageCall() {
 	dep := kitSym("Say().", "Function", 12)
 	dep.Source, dep.Defs = "", nil
 	s.Equal([]string{"cmd/tool/main.go#compute"}, s.flagged(dep))
+}
+
+// ConformanceIdentitySuite pins that a violation keeps its declaration's
+// identity, so a base and a head measure of one move agree on it.
+type ConformanceIdentitySuite struct {
+	suite.Suite
+}
+
+func TestConformanceIdentitySuite(t *testing.T) {
+	suite.Run(t, new(ConformanceIdentitySuite))
+}
+
+func withDigest(sym types.KnowledgeSymbol, digest string) types.KnowledgeSymbol {
+	sym.BodyDigest = digest
+	return sym
+}
+
+// packageSplitSymbols is a module where internal/w imports lib and types and
+// references Set and its method M. When moved, Set lives in types/agent.
+func packageSplitSymbols(moved bool, mDigest string) []types.KnowledgeSymbol {
+	const w, wGo, lib, libGo, typesGo = "/internal/w", "internal/w/w.go", "/lib", "lib/l.go", "types/t.go"
+	home, homeGo := "/types", typesGo
+	if moved {
+		home, homeGo = "/types/agent", "types/agent/t.go"
+	}
+	syms := []types.KnowledgeSymbol{
+		conformancePkg(w, []string{wGo}),
+		conformancePkg(lib, []string{libGo}, wGo),
+		conformancePkg("/types", []string{typesGo}, wGo),
+		conformanceSym(w, "W().", wGo, 3, 4, 10, "", 0),
+		withDigest(conformanceSym(lib, "L().", libGo, 3, 4, 10, "", 0, wGo), "dL"),
+		withDigest(conformanceSym("/types", "Keep().", typesGo, 40, 41, 50, "", 0, wGo), "dKeep"),
+		withDigest(conformanceSym(home, "Set#", homeGo, 3, 5, 40, "", 0, wGo), "dSet"),
+		withDigest(conformanceSym(home, "Set#M().", homeGo, 7, 30, 40, "", 0, wGo), mDigest),
+	}
+	if moved {
+		syms = append(syms, conformancePkg(home, []string{homeGo}, wGo))
+	}
+	return syms
+}
+
+func splitOptions() types.ConformanceOptions {
+	return types.ConformanceOptions{MinSample: 1, Limits: map[types.ConformanceKey]types.ConformanceLimit{
+		{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource}: {Anchor: 2},
+		{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}:        {Anchor: 8},
+	}}
+}
+
+// ceilings is what the split's head, with M's digest mDigest, is charged.
+func (s *ConformanceIdentitySuite) ceilings(mDigest string) []types.ConformanceCeiling {
+	o := splitOptions()
+	baseGraph := assembleLens(packageSplitSymbols(false, "dM"))
+	base := baseGraph.Conformance(o)
+	base.Packages = baseGraph.ConformancePackages(o)
+	head := assembleLens(packageSplitSymbols(true, mDigest)).Conformance(o)
+	touched := []string{"internal/w/w.go", "types/agent/t.go", "types/t.go"}
+	return types.ConformanceCeilings(base, head, touched,
+		[]types.ConformanceMetric{types.ConformanceImportedPackages, types.ConformanceFuncLines})
+}
+
+func (s *ConformanceIdentitySuite) TestAViolationCarriesItsBodyDigest() {
+	out := assembleLens(packageSplitSymbols(true, "dM")).Conformance(splitOptions())
+	s.Equal([]types.ConformanceItem{
+		{ID: "types/agent/t.go#Set.M", Source: "types/agent/t.go:7", Measure: 24, Digest: "dM"},
+	}, findConformanceRow(s.T(), out, types.ConformanceFuncLines, types.ConformancePopSource, "").Violations)
+}
+
+func (s *ConformanceIdentitySuite) TestAnImportCarriesTheDigestsItReaches() {
+	out := assembleLens(packageSplitSymbols(true, "dM")).Conformance(splitOptions())
+	s.Equal([]types.ConformanceItem{{ID: "internal/w", Source: "internal/w", Measure: 3, Imports: []types.ConformanceImport{
+		{Dir: "lib", Digests: []string{"dL"}},
+		{Dir: "types", Digests: []string{"dKeep"}},
+		{Dir: "types/agent", Digests: []string{"dSet"}},
+	}}}, findConformanceRow(s.T(), out, types.ConformanceImportedPackages, types.ConformancePopSource, "internal").Violations,
+		"a reference to M reaches Set, the declaration that owns it")
+}
+
+func (s *ConformanceIdentitySuite) TestAnImportReachingNoDigestIsUnknown() {
+	syms := packageSplitSymbols(true, "dM")
+	syms[len(syms)-3].BodyDigest = ""
+	out := assembleLens(syms).Conformance(splitOptions())
+	row := findConformanceRow(s.T(), out, types.ConformanceImportedPackages, types.ConformancePopSource, "internal")
+	s.Equal(types.ConformanceImport{Dir: "types/agent"}, row.Violations[0].Imports[2])
+}
+
+func (s *ConformanceIdentitySuite) TestPackagesKeepImportsAndTopLevelDigests() {
+	s.Equal([]types.ConformancePackage{
+		{Dir: "internal/w", Imports: []string{"lib", "types"}},
+		{Dir: "lib", Digests: []string{"dL"}},
+		{Dir: "types", Digests: []string{"dKeep", "dSet"}},
+	}, assembleLens(packageSplitSymbols(false, "dM")).ConformancePackages(splitOptions()),
+		"M is a member of Set, not a top-level declaration")
+}
+
+func (s *ConformanceIdentitySuite) TestASplitIntoANewPackageIsNotCharged() {
+	s.Empty(s.ceilings("dM"))
+}
+
+func (s *ConformanceIdentitySuite) TestAMoveWithAnEditedBodyIsCharged() {
+	got := s.ceilings("dM2")
+	s.Require().Len(got, 1)
+	s.Equal(types.ConformanceFuncLines, got[0].Key.Metric)
+	s.Equal("types/agent/t.go", got[0].File)
+}
+
+func (s *ConformanceIdentitySuite) TestACloneGroupCarriesItsMembersDigests() {
+	syms := lensSymbols()
+	for i := range syms {
+		switch syms[i].Key {
+		case conformanceNS("/internal/a") + "F().":
+			syms[i].BodyDigest = "dF"
+		case conformanceNS("/internal/b") + "G().":
+			syms[i].BodyDigest = "dG"
+		}
+	}
+	out := assembleLens(syms).Conformance(lensFixtureOptions())
+	clones := findConformanceRow(s.T(), out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
+	s.Equal("dF,dG", clones.Violations[0].Digest)
 }

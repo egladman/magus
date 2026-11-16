@@ -594,13 +594,15 @@ export fun commentProblems(path: str, before: str, after: str) > [str] {
 }
 
 // decideCode denies a write whose comments break a limit, naming every problem.
-export fun decideCode(path: str, before: str, after: str) > GuardVerdict {
+// The house style paragraph goes with the first denial of a session only.
+export fun decideCode(path: str, before: str, after: str, once: fun (key: str) > bool) > GuardVerdict {
     final found = commentProblems(path, before: before, after: after);
     if (found.len() == 0) {
         return magus\guard.allow();
     }
+    final style = if (once("comment-house-style")) houseStyle + "\n\n" else "";
     return magus\guard.deny(verdict\opening("a comment breaks the house style", problem: found[0]) + "\n"
-        + houseStyle + "\n\n" + found.join("\n") + "\n\n" + remedy);
+        + style + found.join("\n") + "\n\n" + remedy);
 }
 
 // A CSS comment over this many times its budget is refused.
@@ -763,7 +765,7 @@ export fun decideComments(path: str, before: str, after: str, once: fun (key: st
     if (proseExtensions.indexOf(fileExtension(path)) != null) {
         return magus\guard.allow();
     }
-    final graded = decideCode(path, before: before, after: after);
+    final graded = decideCode(path, before: before, after: after, once: once);
     if (graded.decision != magus\GuardDecision.allow) {
         return graded;
     }
@@ -898,6 +900,17 @@ test "a body comment over 3 lines is refused at once, naming the count and the l
     std\assert(v.reason.indexOf("/w/internal/a.go:4: comment inside a body, 4 lines, over the limit of 3.") != null, message: v.reason);
     std\assert(v.reason.indexOf("repository owner's house style") != null, message: "names whose style");
     std\assert(v.reason.indexOf("Cut each to the why") != null, message: "remedy");
+}
+
+test "the house style paragraph goes with a session's first comment denial only" {
+    final once = spent();
+    final long = inBody(commentLines(4, indent: "\t"));
+    final first = decideComments("/w/a.go", before: "", after: long, once: once);
+    std\assert(first.reason.indexOf("repository owner's house style") != null, message: first.reason);
+    final again = decideComments("/w/b.go", before: "", after: long, once: once);
+    std\assert(again.decision == magus\GuardDecision.deny, message: again.decision);
+    std\assert(again.reason.indexOf("repository owner's house style") == null, message: again.reason);
+    std\assert(again.reason.indexOf("/w/b.go:4: comment inside a body") != null, message: again.reason);
 }
 
 test "a Go Example's output block is no prose, however long" {

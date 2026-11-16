@@ -396,7 +396,9 @@ is why this host cannot receive the advice-only shape Claude Code does. The
 continuation's own `Stop` carries `stop_hook_active`, and the hook stays silent
 on it, so a reply is judged once. It needs `proofread` on `PATH` or in
 `__PROOFREAD_BIN`, prints nothing without it, and `__PROOFREAD_DECISIONS` names a
-decisions file. Codex shows the entry's `statusMessage` while it runs.
+decisions file. Without `proofread` it sends no notice either: Codex's `Stop` output has
+no field only the agent reads, so the notice Claude Code gets as `additionalContext` is
+not printed here. Codex shows the entry's `statusMessage` while it runs.
 
 ### Messages, spawns and the scout
 
@@ -503,7 +505,7 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do; s
 - **Every tool reaches the guard.** One `PreToolUse` entry matches `*`, and the glue
   sends the whole event, so magus judges a command, a patch, an MCP call and a spawn by
   the shape of its input. A call to another MCP server's tool carries nothing magus can
-  read, and the unjudged-tool rule names it (see
+  read, and the unjudged-step rule names it (see
   [Every tool reaches the guard](guard.md#every-tool-reaches-the-guard)).
 - Hooks are not available on Windows, and `[features] hooks = false` turns the
   every hook off. A repo-local `.codex/hooks.json` is also inert until you
@@ -535,7 +537,8 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do; s
   call continues, so the push prompt comes from the rules file. `Stop` output takes
   `decision: "block"` and its reason, no `hookSpecificOutput`, so advice from a reply
   check cannot ride a `Stop` reply; it reaches the model only as the prompt of the
-  continuation turn.
+  continuation turn. A guard advise at `Stop` prints nothing, rather than a
+  `systemMessage` that would show it to you.
 
 ### Events
 

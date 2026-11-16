@@ -1227,5 +1227,6 @@ func printHeap(w io.Writer, useColor bool) {
 		fmt.Fprintln(w, "  (table full: some positions are not listed)")
 	}
 	fmt.Fprintln(w, "  a position that climbs with input size is quadratic in memory;")
-	fmt.Fprintln(w, "  build into a list and join once rather than reassigning a string.")
+	fmt.Fprintln(w, "  a list or map built with + copies every pass, so append to a mut one;")
+	fmt.Fprintln(w, "  a string grows in place only as the first operand: s = s + x, not s = x + s.")
 }

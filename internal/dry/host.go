@@ -277,6 +277,15 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("cmd", function("magus.cmd", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return emptyExecResult(), nil
 	}))
+	m.MapSet("cmdAll", function("magus.cmdAll", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		var results []vm.Value
+		if len(args) > 0 && args[0].IsList() {
+			for range args[0].ListItems() {
+				results = append(results, emptyExecResult())
+			}
+		}
+		return vm.ListValue(results), nil
+	}))
 
 	// The read-only verbs return workspace data on the real module. A dry run has no
 	// workspace, so each is stubbed with its result SHAPE (an empty but correctly-keyed
@@ -390,13 +399,13 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("modelTiers", function("magus.modelTiers", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("definition", vm.StringValue(""))
-		res.MapSet("rows", vm.ListValue(nil))
+		res.MapSet("models", vm.ListValue(nil))
 		return res, nil
 	}))
 	m.MapSet("magus__Workspace__grouping", function("magus.grouping", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("definition", vm.StringValue(""))
-		res.MapSet("rows", vm.ListValue(nil))
+		res.MapSet("shapes", vm.ListValue(nil))
 		return res, nil
 	}))
 	m.MapSet("where", function("magus.where", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
@@ -487,7 +496,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	// Empty for the reason precedents is.
 	m.MapSet("magus__Change__conformance", shaped("magus.conformance", map[string]vm.Value{
-		"definition": vm.StringValue(""), "rows": empty, "stale": empty, "excluded": vm.IntValue(0),
+		"definition": vm.StringValue(""), "distributions": empty, "stale": empty, "excluded": vm.IntValue(0),
 		"answer": vm.NewMap(), "indexes": empty, "base": vm.StringValue(""), "ceilings": empty, "unmeasured": empty,
 	}))
 	// A preview exports and indexes no base, so it names no commit.
@@ -583,7 +592,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return bindgen.ObjectJobUnmergedReport(types.JobUnmergedReport{}), nil
 	}))
 	m.MapSet("magus__Workspace__tierOutcomes", function("magus.Workspace.tierOutcomes", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return historyMetric("rows"), nil
+		return historyMetric("models"), nil
 	}))
 	m.MapSet("magus__Job__exit", function("magus.Job.exit", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectJob(types.Job{}, ffi.SessionEnums(ctx, sess, "magus")), nil

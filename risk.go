@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/risk/golang"
 	"github.com/egladman/magus/project"
@@ -43,7 +44,7 @@ func (m *Magus) AssessRisk(ctx context.Context, target string, o types.TierOptio
 	}
 	defer func() { _ = other.Close() }()
 	if err := other.load(ctx); err != nil {
-		return types.TierReport{}, other.explainStale(err)
+		return types.TierReport{}, explainStale(err, other.Root())
 	}
 	return other.AssessChange(ctx, target, opts)
 }
@@ -126,29 +127,45 @@ func (m *Magus) AssessChange(ctx context.Context, target string, o AssessOptions
 // steps run together; each narrowed step runs its target whole with the step's op
 // narrowed to its packages, so the target body's env and flags still apply, and never
 // through the cache, since the narrowed run is less than the target's key describes.
-// The first failure stops the gate.
+// The first failure stops a pass.
+//
+// Each pass verifies under [CharmsForCI] and repairs as [Magus.RunCI]
+// does: a sized gate chooses what runs, never how a target behaves.
 //
 // It is judged as Run is, once, as `magus affected ci`, the verb that sizes a gate.
 func (m *Magus) RunGate(ctx context.Context, rep types.TierReport, opts ...RunOption) error {
-	ctx = applyRunOptions(opts).observed(ctx)
+	o := applyRunOptions(opts)
+	ctx = o.observed(ctx)
 	lines, err := affectedLine(types.TargetCI, "")
 	if err != nil {
 		return err
 	}
-	if err := m.judgeRun(ctx, applyRunOptions(opts), lines); err != nil {
+	if err := m.judgeRun(ctx, o, lines); err != nil {
 		return err
 	}
-	for _, r := range sizedRuns(rep) {
-		o := applyRunOptions(opts)
-		if r.narrowing != nil {
-			n := *r.narrowing
-			o.narrowing = &n
+	carried := o.Charms
+	o.Charms = CharmsForCI(carried)
+	pass := func(ctx context.Context, o run) ([]cache.TargetFailure, error) {
+		var failed []cache.TargetFailure
+		for _, r := range sizedRuns(rep) {
+			ro := o
+			if r.narrowing != nil {
+				n := *r.narrowing
+				ro.narrowing = &n
+			}
+			f, err := collectFailures(ro, func(ro run) error { return m.runTargets(ctx, r.targets, ro) })
+			failed = append(failed, f...)
+			if err != nil {
+				return failed, err
+			}
 		}
-		if err := m.runTargets(ctx, r.targets, o); err != nil {
-			return err
-		}
+		return failed, nil
 	}
-	return nil
+	if !carriesReadWrite(carried) {
+		_, err := pass(ctx, o)
+		return err
+	}
+	return m.redactError(m.verifyAndRepair(ctx, o, carried, pass))
 }
 
 // sizedRun is one run a sized gate makes.

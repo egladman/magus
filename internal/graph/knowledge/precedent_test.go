@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -85,11 +86,11 @@ func depCase(dir string, imports ...string) types.Case {
 	return types.Case{Node: precedentNamespace(dir, "go"), Source: dir, Imports: imports}
 }
 
-// fanoutConformance configures the dep-fanout ceiling as an anchor beside the shipped gates.
+// fanoutConformance configures the imported-packages ceiling as an anchor beside the shipped gates.
 func fanoutConformance(anchor int) types.ConformanceOptions {
 	o := testConformance()
 	o.Limits = map[types.ConformanceKey]types.ConformanceLimit{
-		{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource}: {Percentile: 95, Anchor: anchor},
+		{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource}: {Percentile: 95, Anchor: anchor},
 	}
 	return o
 }
@@ -354,7 +355,7 @@ func TestPrecedentsNeverCountAGeneratedFileInAMixedPackage(t *testing.T) {
 			Follow: 1, Cohort: 1, Share: 1, Cited: []types.Case{depCase("cmd/app", "internal/a")},
 		},
 		{
-			Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
+			Family: types.PrecedentImportedPackages, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
 			Follow: 1, Cohort: 1, Share: 1, Cited: []types.Case{depCase("cmd/app", "internal/a")},
 		},
 	}, f.g.Precedents(PrecedentOptions{Generated: map[string]bool{"internal/a/zz_generated.go": true}, Conformance: fanoutConformance(1)}),
@@ -441,13 +442,13 @@ func TestPrecedentsFanoutDepartsPastTheConfiguredCeiling(t *testing.T) {
 	f, all := fanoutCohort()
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	assert.Equal(t, types.Precedent{
-		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
+		Family: types.PrecedentImportedPackages, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
 		Follow: 19, Cohort: 20, Share: 19.0 / 20, Established: true,
 		Cited: []types.Case{
 			depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"), depCase("cmd/c02", "internal/p0"),
 		},
 		Departures: []types.Case{depCase("cmd/big", all...)},
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentDepFanout, internal))
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentImportedPackages, internal))
 }
 
 // TestPrecedentsFanoutNeverFollowsTheLiveDistribution: the cohort's own p95 is 1, and a ceiling
@@ -458,12 +459,12 @@ func TestPrecedentsFanoutNeverFollowsTheLiveDistribution(t *testing.T) {
 	f, all := fanoutCohort()
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	assert.Equal(t, types.Precedent{
-		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 12},
+		Family: types.PrecedentImportedPackages, Scope: internal, Key: types.PrecedentKey{MaxImports: 12},
 		Follow: 20, Cohort: 20, Share: 1, Established: true,
 		Cited: []types.Case{
 			depCase("cmd/big", all...), depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"),
 		},
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(12)}), types.PrecedentDepFanout, internal))
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(12)}), types.PrecedentImportedPackages, internal))
 }
 
 func TestPrecedentsFanoutEnforcesTheLayersAnchorOverTheUnscopedOne(t *testing.T) {
@@ -471,16 +472,16 @@ func TestPrecedentsFanoutEnforcesTheLayersAnchorOverTheUnscopedOne(t *testing.T)
 
 	f, all := fanoutCohort()
 	o := fanoutConformance(12)
-	o.Limits[types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "internal"}] = types.ConformanceLimit{Anchor: 2}
+	o.Limits[types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: "internal"}] = types.ConformanceLimit{Anchor: 2}
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	assert.Equal(t, types.Precedent{
-		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 2},
+		Family: types.PrecedentImportedPackages, Scope: internal, Key: types.PrecedentKey{MaxImports: 2},
 		Follow: 19, Cohort: 20, Share: 19.0 / 20, Established: true,
 		Cited: []types.Case{
 			depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"), depCase("cmd/c02", "internal/p0"),
 		},
 		Departures: []types.Case{depCase("cmd/big", all...)},
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: o}), types.PrecedentDepFanout, internal))
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: o}), types.PrecedentImportedPackages, internal))
 }
 
 func TestPrecedentsFanoutHasNoRowWithoutAConfiguredCeiling(t *testing.T) {
@@ -488,7 +489,7 @@ func TestPrecedentsFanoutHasNoRowWithoutAConfiguredCeiling(t *testing.T) {
 
 	f, _ := fanoutCohort()
 	for _, r := range f.g.Precedents(PrecedentOptions{Conformance: testConformance()}) {
-		assert.NotEqual(t, types.PrecedentDepFanout, r.Family, "no ceiling is configured, so none is claimed")
+		assert.NotEqual(t, types.PrecedentImportedPackages, r.Family, "no ceiling is configured, so none is claimed")
 	}
 }
 
@@ -506,14 +507,147 @@ func TestPrecedentsFanoutIsGatedOnItsCohortAlone(t *testing.T) {
 	}
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	want := types.Precedent{
-		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
+		Family: types.PrecedentImportedPackages, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
 		Follow: 4, Cohort: 4, Share: 1, Cited: cited[:3],
 	}
-	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentDepFanout, internal),
+	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentImportedPackages, internal),
 		"four importers are under the minimum cohort of five")
 
 	f.pkg("cmd/c4", 1)
 	f.imports("cmd/c4", "internal/a")
 	want.Follow, want.Cohort, want.Established = 5, 5, true
-	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentDepFanout, internal))
+	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentImportedPackages, internal))
+}
+
+type NeedsDirectionSuite struct {
+	suite.Suite
+	g *Graph
+}
+
+func TestNeedsDirectionSuite(t *testing.T) {
+	suite.Run(t, new(NeedsDirectionSuite))
+}
+
+func (s *NeedsDirectionSuite) SetupTest() { s.g = NewGraph() }
+
+// project defines names as targets of project.
+func (s *NeedsDirectionSuite) project(project string, names ...string) {
+	for _, n := range names {
+		s.g.AddNode(types.KnowledgeNode{ID: targetID(project, n), Kind: types.KindTarget, Label: n, Source: project})
+	}
+}
+
+// needs records that from's target needs to, which may sit in another project.
+func (s *NeedsDirectionSuite) needs(from, to string) {
+	s.g.AddEdge(types.KnowledgeEdge{Source: from, Target: to, Relation: types.RelationDependsOn,
+		Confidence: types.ConfidenceExtracted, Score: 1})
+}
+
+// projects defines format and generate in n projects p0..p(n-1); the first
+// follow of them have format need generate.
+func (s *NeedsDirectionSuite) projects(n, follow int) {
+	for i := range n {
+		p := fmt.Sprintf("p%d", i)
+		s.project(p, "format", "generate")
+		if i < follow {
+			s.needs(targetID(p, "format"), targetID(p, "generate"))
+		}
+	}
+}
+
+func (s *NeedsDirectionSuite) rows() []types.Precedent {
+	var out []types.Precedent
+	for _, r := range s.g.Precedents(PrecedentOptions{Conformance: testConformance()}) {
+		if r.Family == types.PrecedentNeedsDirection {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func (s *NeedsDirectionSuite) row(from, to string) types.Precedent {
+	for _, r := range s.rows() {
+		if r.Key.From == from && r.Key.To == to {
+			return r
+		}
+	}
+	s.Require().FailNow("no row", "%s reaches %s in %+v", from, to, s.rows())
+	return types.Precedent{}
+}
+
+func (s *NeedsDirectionSuite) TestMajorityDirectionIsEstablishedAndListsItsDeparture() {
+	s.projects(5, 4)
+	s.Equal(types.Precedent{
+		Family: types.PrecedentNeedsDirection, Key: types.PrecedentKey{From: "format", To: "generate"},
+		Follow: 4, Cohort: 5, Share: 0.8, Established: true,
+		Cited:      []types.Case{needsCase("p0", "format"), needsCase("p1", "format"), needsCase("p2", "format")},
+		Departures: []types.Case{needsCase("p4", "format")},
+	}, s.row("format", "generate"))
+}
+
+func (s *NeedsDirectionSuite) TestSmallCohortIsEmittedUnestablished() {
+	s.projects(4, 4)
+	r := s.row("format", "generate")
+	s.Equal(4, r.Cohort)
+	s.False(r.Established)
+}
+
+func (s *NeedsDirectionSuite) TestShareUnderMinShareIsNotEstablished() {
+	s.projects(5, 3)
+	r := s.row("format", "generate")
+	s.Equal(3, r.Follow)
+	s.False(r.Established)
+}
+
+func (s *NeedsDirectionSuite) TestReachIsTransitive() {
+	s.project("a", "ci", "lint", "format")
+	s.needs(targetID("a", "ci"), targetID("a", "lint"))
+	s.needs(targetID("a", "lint"), targetID("a", "format"))
+	s.Equal(1, s.row("ci", "format").Follow)
+}
+
+func (s *NeedsDirectionSuite) TestCrossProjectNeedsAreIgnored() {
+	s.project("a", "ci", "format")
+	s.project("b", "ci", "format")
+	s.needs(targetID("a", "ci"), targetID("b", "format"))
+	s.needs(targetID("b", "ci"), targetID("b", "format"))
+	s.Equal(types.Precedent{
+		Family: types.PrecedentNeedsDirection, Key: types.PrecedentKey{From: "ci", To: "format"},
+		Follow: 1, Cohort: 2, Share: 0.5,
+		Cited:      []types.Case{needsCase("b", "ci")},
+		Departures: []types.Case{needsCase("a", "ci")},
+	}, s.row("ci", "format"))
+}
+
+func (s *NeedsDirectionSuite) TestDepartureThatFollowsFromAnotherIsKept() {
+	for i := range 6 {
+		p := fmt.Sprintf("p%d", i)
+		s.project(p, "ci", "format", "generate")
+		s.needs(targetID(p, "ci"), targetID(p, "format"))
+		if i < 5 {
+			s.needs(targetID(p, "format"), targetID(p, "generate"))
+		}
+	}
+	s.Equal([]types.Case{needsCase("p5", "format")}, s.row("format", "generate").Departures)
+	s.Equal([]types.Case{needsCase("p5", "ci")}, s.row("ci", "generate").Departures,
+		"ci misses generate only because format does, and it still departs")
+}
+
+func (s *NeedsDirectionSuite) TestPairNoProjectFollowsMakesNoRow() {
+	s.projects(1, 1)
+	for _, r := range s.rows() {
+		s.NotEqual(types.PrecedentKey{From: "generate", To: "format"}, r.Key)
+	}
+}
+
+func (s *NeedsDirectionSuite) TestRowsSortByTheirKey() {
+	s.project("a", "c", "b", "a")
+	s.needs(targetID("a", "b"), targetID("a", "c"))
+	s.needs(targetID("a", "a"), targetID("a", "c"))
+	s.needs(targetID("a", "a"), targetID("a", "b"))
+	var keys []types.PrecedentKey
+	for _, r := range s.rows() {
+		keys = append(keys, r.Key)
+	}
+	s.Equal([]types.PrecedentKey{{From: "a", To: "b"}, {From: "a", To: "c"}, {From: "b", To: "c"}}, keys)
 }

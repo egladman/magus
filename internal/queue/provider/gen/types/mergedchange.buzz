@@ -6,8 +6,8 @@
 // `go generate`, never this file.
 
 export object QueueMergedChange {
-    id: str = "",
-    head: str = "",
-    commit: str = "",
-    method: str = "",
+    id: str,
+    head: str,
+    commit: str,
+    method: str,
 }

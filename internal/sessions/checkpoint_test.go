@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +15,7 @@ func hostCheckpoint() Checkpoint {
 		HostSession: "01a07dab-240a-75b2-b9fe-816562939726",
 		Transcript:  "/Users/e/.codex/sessions/2026/09/07/rollout.jsonl",
 		Workspace:   "/repo",
-		Tree: types.VCSCheckpoint{
+		Tree: vcs.Checkpoint{
 			Revision: "bcac8934e1a2b3c4d5e6f708192a3b4c5d6e7f80",
 			Branch:   "cache-dynamic-needs",
 			Dirty:    true,
@@ -29,7 +29,7 @@ func hostCheckpoint() Checkpoint {
 func personCheckpoint(workspace, branch, note string) Checkpoint {
 	return Checkpoint{
 		Workspace: workspace,
-		Tree:      types.VCSCheckpoint{Revision: "62660968c1d2e3f4", Branch: branch, VCS: "git"},
+		Tree:      vcs.Checkpoint{Revision: "62660968c1d2e3f4", Branch: branch, VCS: "git"},
 		Note:      note,
 	}
 }
@@ -159,7 +159,7 @@ func TestLatestCheckpointsReportOneThreadPerHostSession(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	codex := hostCheckpoint()
-	claude := Checkpoint{Host: "claude", HostSession: "54023016-5d8b", Workspace: "/repo", Tree: types.VCSCheckpoint{Revision: "62660968c", Branch: "main"}}
+	claude := Checkpoint{Host: "claude", HostSession: "54023016-5d8b", Workspace: "/repo", Tree: vcs.Checkpoint{Revision: "62660968c", Branch: "main"}}
 
 	_, _, err := RecordCheckpoint(dir, codex, InvocationStart{})
 	require.NoError(t, err)
@@ -200,9 +200,9 @@ func TestLatestCheckpointsIsEmptyWithoutAny(t *testing.T) {
 // of work rather than an unbounded stream of them.
 func TestCheckpointKeyFallsBackToTheWorkspace(t *testing.T) {
 	t.Parallel()
-	detached := Checkpoint{Workspace: "/repo", Tree: types.VCSCheckpoint{Revision: "deadbeef"}}
-	other := Checkpoint{Workspace: "/other", Tree: types.VCSCheckpoint{Revision: "deadbeef"}}
+	detached := Checkpoint{Workspace: "/repo", Tree: vcs.Checkpoint{Revision: "deadbeef"}}
+	other := Checkpoint{Workspace: "/other", Tree: vcs.Checkpoint{Revision: "deadbeef"}}
 
-	assert.Equal(t, checkpointKey(detached), checkpointKey(Checkpoint{Workspace: "/repo", Tree: types.VCSCheckpoint{Revision: "cafe"}}))
+	assert.Equal(t, checkpointKey(detached), checkpointKey(Checkpoint{Workspace: "/repo", Tree: vcs.Checkpoint{Revision: "cafe"}}))
 	assert.NotEqual(t, checkpointKey(detached), checkpointKey(other))
 }

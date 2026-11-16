@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 type gateClaimsKey struct{}
@@ -30,10 +31,10 @@ const gateFitsCheck = "gate-fits"
 
 // checkGateFits is MGS3009 ahead of the run: a ci step whose claim exceeds this
 // machine's whole budget is refused every time, so the gate can never pass here.
-func (r *runner) checkGateFits(ctx context.Context, projects []*types.Project) types.Check {
+func (r *runner) checkGateFits(ctx context.Context, projects []*types.Project) check.Check {
 	sizing, ok := ctx.Value(gateClaimsKey{}).(gateSizing)
 	if !ok {
-		return types.Check{Name: gateFitsCheck, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no admission sizer supplied; skipped"}
+		return check.Check{Name: gateFitsCheck, Status: check.OK, Evidence: check.EvidenceUnknown, Message: "no admission sizer supplied; skipped"}
 	}
 	var targets []types.Target
 	for _, p := range projects {
@@ -43,18 +44,18 @@ func (r *runner) checkGateFits(ctx context.Context, projects []*types.Project) t
 		}
 	}
 	if len(targets) == 0 {
-		return types.Check{Name: gateFitsCheck, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no project composes a ci target; skipped"}
+		return check.Check{Name: gateFitsCheck, Status: check.OK, Evidence: check.EvidenceUnknown, Message: "no project composes a ci target; skipped"}
 	}
 	claims, err := sizing.claims(ctx, targets)
 	if err != nil {
-		return types.Check{Name: gateFitsCheck, Status: types.CheckFail, Message: fmt.Sprintf("could not size the ci gate's claims: %v", err)}
+		return check.Check{Name: gateFitsCheck, Status: check.Fail, Message: fmt.Sprintf("could not size the ci gate's claims: %v", err)}
 	}
 	return gradeGateFits(claims, sizing.budgetMB, sizing.budgetSlots)
 }
 
 // gradeGateFits fails on every claim larger than the whole budget on either axis. A
 // non-positive budget is an axis this host could not measure, which bounds nothing.
-func gradeGateFits(claims []types.MachineClaim, budgetMB, budgetSlots int) types.Check {
+func gradeGateFits(claims []types.MachineClaim, budgetMB, budgetSlots int) check.Check {
 	var details []string
 	for _, c := range claims {
 		memory := budgetMB > 0 && c.MemoryMB > budgetMB
@@ -70,16 +71,16 @@ func gradeGateFits(claims []types.MachineClaim, budgetMB, budgetSlots int) types
 		details = append(details, what)
 	}
 	if len(details) == 0 {
-		return types.Check{
-			Name: gateFitsCheck, Status: types.CheckOK,
+		return check.Check{
+			Name: gateFitsCheck, Status: check.OK,
 			Message: fmt.Sprintf("every step of the ci gate fits this machine's build budget of %s across %d slots",
 				types.FormatMB(budgetMB), budgetSlots),
 		}
 	}
 	slices.Sort(details)
-	return types.Check{
+	return check.Check{
 		Name:   gateFitsCheck,
-		Status: types.CheckFail,
+		Status: check.Fail,
 		Message: fmt.Sprintf(
 			"%d step(s) of the ci gate claim more than this machine's whole build budget of %s across %d slots, so `%s` is refused here every time (see %s). Lower the claim: correct a drifted memory_mb (the memory-declarations check compares it to what magus measured), split the target, or run the gate on a bigger machine",
 			len(details), types.FormatMB(budgetMB), budgetSlots, hint.Affected.With("ci"), types.CodeURL(types.MachineBudgetExhausted)),

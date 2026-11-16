@@ -12,8 +12,8 @@ export enum<str> DiscoveryRole {
 }
 
 export object DiscoveredProject {
-    path: str = "",
-    role: DiscoveryRole = DiscoveryRole.none,
+    path: str,
+    role: DiscoveryRole,
     name: str = "",
     dependsOn: [str] = [],
     targets: {str: [str]} = {},

@@ -2,13 +2,18 @@ package magus
 
 import (
 	"context"
+	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // TestSizedRuns: a sized gate's plain steps run together, and each narrowed step runs on
@@ -46,11 +51,11 @@ func TestAssessRiskTiersASmallChangeHereAndInAnotherCheckout(t *testing.T) {
 	var assessor types.RiskAssessor = m
 	here, err := assessor.AssessRisk(context.Background(), types.TargetCI, types.TierOptions{Paths: []string{"notes/v1.md"}})
 	require.NoError(t, err)
-	assert.Equal(t, types.RiskTrivial, here.Tier, here.Lines())
+	assert.Equal(t, check.RiskTrivial, here.Tier, here.Lines())
 
 	there, err := assessor.AssessRisk(context.Background(), types.TargetCI, types.TierOptions{Paths: []string{"magusfile.buzz"}, Checkout: other})
 	require.NoError(t, err)
-	assert.Equal(t, types.RiskFull, there.Tier, there.Lines())
+	assert.Equal(t, check.RiskFull, there.Tier, there.Lines())
 }
 
 // TestAssessChangeTiersFromDeclarations: prose tiers from what the workspace declares.
@@ -75,12 +80,12 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 
 	for _, tc := range []struct {
 		path string
-		tier types.Tier
+		tier check.Tier
 		gate []string
 	}{
-		{"notes/v1.md", types.RiskTrivial, []string{}},
-		{"docs/guide.md", types.RiskScoped, []string{"magus run render . --no-default-charms"}},
-		{"magusfile.buzz", types.RiskFull, []string{"magus run ci . --no-default-charms"}},
+		{"notes/v1.md", check.RiskTrivial, []string{}},
+		{"docs/guide.md", check.RiskScoped, []string{"magus run render . --no-default-charms"}},
+		{"magusfile.buzz", check.RiskFull, []string{"magus run ci . --no-default-charms"}},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			rep, err := m.AssessChange(context.Background(), types.TargetCI, AssessOptions{ChangedPaths: []string{tc.path}})
@@ -98,4 +103,73 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 			assert.Equal(t, tc.gate, rep.Commands())
 		})
 	}
+}
+
+func TestSizedRepairSuite(t *testing.T) { suite.Run(t, new(sizedRepairSuite)) }
+
+// sizedRepairSuite pins a sized gate under rw: it verifies and repairs as
+// RunCI does, over the steps it sized.
+type sizedRepairSuite struct{ suite.Suite }
+
+func (s *sizedRepairSuite) open() (*Magus, *testkit.Repo) {
+	repo := testkit.NewRepository(s.T(), map[string]string{
+		".gitignore":     ".magus/\n",
+		"a.txt":          "messy\n",
+		"input.txt":      "generated\n",
+		"gen.txt":        "generated\n",
+		"magusfile.buzz": ciRepairMagusfile,
+	})
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err, "Open")
+	s.T().Cleanup(func() { _ = m.Close() })
+	return m, repo
+}
+
+func (s *sizedRepairSuite) read(repo *testkit.Repo, rel string) string {
+	b, err := os.ReadFile(repo.Path(rel))
+	s.Require().NoError(err)
+	return string(b)
+}
+
+// gate runs a gate sized to steps. A step that names an op runs on its own.
+func (s *sizedRepairSuite) gate(m *Magus, steps []types.TierGateStep, opts ...RunOption) error {
+	return m.RunGate(context.Background(), types.TierReport{Tier: check.RiskScoped, Gate: steps}, opts...)
+}
+
+func (s *sizedRepairSuite) TestSizedRunVerifiesWithReadWriteWithheld() {
+	m, repo := s.open()
+
+	err := s.gate(m, []types.TierGateStep{{Target: "check", Projects: []string{"."}}}, WithWrite())
+	s.Require().Error(err)
+	s.Contains(err.Error(), "check failed")
+	s.NoFileExists(repo.Path("b.txt"), "check ran without rw, and declares no write to repair")
+}
+
+func (s *sizedRepairSuite) TestSizedRunRepairsAFailingDeclaredWriter() {
+	m, repo := s.open()
+
+	err := s.gate(m, []types.TierGateStep{{Target: "tidy", Projects: []string{"."}}}, WithWrite())
+	s.Require().True(errors.Is(err, types.UncommittedRepair), "got %v", err)
+	s.Contains(err.Error(), "through .:tidy: a.txt")
+	s.Equal("tidy\n", s.read(repo, "a.txt"))
+}
+
+func (s *sizedRepairSuite) TestSizedRunGathersFailuresAcrossItsRuns() {
+	m, repo := s.open()
+
+	err := s.gate(m, []types.TierGateStep{
+		{Target: "regen", Projects: []string{"."}},
+		{Target: "tidy", Projects: []string{"."}, Op: "tidy-op"},
+	}, WithWrite())
+	s.Require().True(errors.Is(err, types.UncommittedRepair), "the second run's failure was read: %v", err)
+	s.Equal("tidy\n", s.read(repo, "a.txt"))
+}
+
+func (s *sizedRepairSuite) TestSizedRunWithoutReadWriteRepairsNothing() {
+	m, repo := s.open()
+
+	err := s.gate(m, []types.TierGateStep{{Target: "tidy", Projects: []string{"."}}})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "a.txt is not tidy")
+	s.Equal("messy\n", s.read(repo, "a.txt"))
 }

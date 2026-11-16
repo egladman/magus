@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 )
@@ -76,9 +77,21 @@ const (
 // every Value for the same content shares one heap entry instead of appending a
 // fresh one on each StringValue call. The safe/unsafe builds store the *strObj
 // pointer in the Value directly and never read it.
+//
+// buf is set on a string appendString built past strBufThreshold. Such a
+// string is a prefix of buf, and it is neither hashed nor interned.
 type strObj struct {
 	V       string
 	heapIdx uint64
+	buf     *strBuf
+}
+
+// strBuf is the buffer a long string extended by + or interpolation shares
+// with every earlier prefix built on it. b only appends, and an array b
+// outgrows stays with the strings over it, so no handed-out byte changes.
+type strBuf struct {
+	mu sync.Mutex
+	b  strings.Builder
 }
 
 // udObj boxes a foreign FFI pointer (`ud`). It is heap-allocated because a full
@@ -370,6 +383,15 @@ func (*udObj) heapKind() valueTag        { return tagUD }
 // without a content scan for any string that was created through StringValue.
 var strIntern sync.Map // string → *strObj
 
+// internedStrings and internedBytes count strIntern's entries and their
+// total length for HeapStats. No entry is ever removed.
+var internedStrings, internedBytes atomic.Int64
+
+// bufferedStrings and bufferedBytes count the strings appendString built on a
+// shared buffer and the capacity of every array those buffers allocated, for
+// HeapStats. Neither falls: an outgrown array stays with the strings over it.
+var bufferedStrings, bufferedBytes atomic.Int64
+
 func internString(s string) *strObj {
 	if v, ok := strIntern.Load(s); ok {
 		return v.(*strObj)
@@ -378,6 +400,8 @@ func internString(s string) *strObj {
 	if actual, loaded := strIntern.LoadOrStore(s, obj); loaded {
 		return actual.(*strObj)
 	}
+	internedStrings.Add(1)
+	internedBytes.Add(int64(len(s)))
 	return obj
 }
 
@@ -388,6 +412,46 @@ func internString(s string) *strObj {
 // content does not churn the heap), while the safe/unsafe builds carry the
 // pointer in the Value directly.
 func StringValue(s string) Value { return internedStringValue(internString(s)) }
+
+// optimization: a str this long extended at its end shares one buffer.
+// measured: BenchmarkStringConcatLoop/1e4 -99% sec/op, -99.8% B/op (n=6).
+// trade-off: buffered strs are not interned; 256 and 4096 measured no better.
+// assumes: Builder.String shares its bytes (TestBufferStringDoesNotCopy).
+const strBufThreshold = 1024
+
+// appendString returns the str left followed by rest. A left that is all of
+// its buffer is extended in place; any other long left is copied once into
+// a new buffer. Shorter results are interned exactly as StringValue does.
+func appendString(left Value, rest []byte) Value {
+	if len(rest) == 0 {
+		return left
+	}
+	l := left.asString()
+	if l.buf != nil {
+		l.buf.mu.Lock()
+		if len(l.V) == l.buf.b.Len() {
+			before := l.buf.b.Cap()
+			l.buf.b.Write(rest)
+			s, after := l.buf.b.String(), l.buf.b.Cap()
+			l.buf.mu.Unlock()
+			if after != before {
+				bufferedBytes.Add(int64(after))
+			}
+			bufferedStrings.Add(1)
+			return heapValue(tagStr, &strObj{V: s, buf: l.buf})
+		}
+		l.buf.mu.Unlock()
+	} else if len(l.V) < strBufThreshold {
+		return StringValue(l.V + string(rest))
+	}
+	buf := &strBuf{}
+	buf.b.Grow(len(l.V) + len(rest))
+	buf.b.WriteString(l.V)
+	buf.b.Write(rest)
+	bufferedStrings.Add(1)
+	bufferedBytes.Add(int64(buf.b.Cap()))
+	return heapValue(tagStr, &strObj{V: buf.b.String(), buf: buf})
+}
 
 // UDValue boxes a foreign FFI pointer (`ud`). See udObj for why it is heap-boxed.
 func UDValue(addr uintptr) Value { return heapValue(tagUD, &udObj{Addr: addr}) }
@@ -402,8 +466,9 @@ func ListValue(items []Value) Value {
 // clone family). Upstream types those from `obj_list` itself, so a `mut [int]`
 // keeps its mutability across them; building the result immutable made
 // `list.cloneMutable().sub(0)` reject the very mutation upstream permits.
-func listValue(items []Value, mut bool) Value {
-	return heapValue(tagList, &listObj{Items: items, Mut: mut})
+// The list is vm's from the start, so adopting it walks no items.
+func (vm *VM) listValue(items []Value, mut bool) Value {
+	return alloc(vm, tagList, &listObj{Items: items, Mut: mut})
 }
 
 // DirectValue wraps a Go Callable as a Buzz function value bound to name.
@@ -420,11 +485,6 @@ func DirectValue(name string, fn Callable) Value {
 // getMember builds. See builtinMethod.
 func newDirect(name string, fn Callable) *directObj {
 	return &directObj{Name: name, Fn: fn}
-}
-
-// rangeValue constructs a range [lo, hi]. Package-internal; use the .. operator in Buzz.
-func rangeValue(lo, hi int64) Value {
-	return heapValue(tagRange, &rangeObj{Lo: lo, Hi: hi})
 }
 
 // ObjDeclValue wraps *ast.ObjectDecl as a Buzz value (used by the compiler).
@@ -1130,10 +1190,11 @@ func NewMap() Value { return heapValue(tagMap, newMapObj()) }
 // mapValue is NewMap with an explicit mutability, the map counterpart of
 // listValue: the built-in methods returning a map of the RECEIVER's own type
 // (filter, diff, intersect, and the clone family) have to carry it across.
-func mapValue(mut bool) Value {
+// Like listValue it allocates under vm's owner.
+func (vm *VM) mapValue(mut bool) Value {
 	m := newMapObj()
 	m.Mut = mut
-	return heapValue(tagMap, m)
+	return vm.allocMap(m)
 }
 
 // MapSet stores key→val on a map Value. No-op if v is not a map. On a map a

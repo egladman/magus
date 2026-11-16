@@ -17,7 +17,7 @@ tags:
 
 A job row can say which model its worker runs on. A model tier names a rung of
 that choice in your own words, cheapest first, so a row, a rule or a report says
-`economy` instead of a model id that changes every few months. The magusfile
+`routine` instead of a model id that changes every few months. The magusfile
 declares the tiers once. magus records the tier on each job when it is forked and
 never changes it afterward.
 
@@ -28,8 +28,17 @@ how much to spend with a [human in the loop](../../design/principles/human-in-th
 
 ## What a workspace gets by default
 
-With no declaration, the workspace uses the `magus/modeltiers` module: `economy`,
-`standard` and `principal`, with `standard` as the default. Economy workers are
+With no declaration, the workspace uses the `magus/modeltiers` module. Its four
+tiers are named for the work each takes:
+
+| tier       | the work                                              | Claude Code row |
+| ---------- | ----------------------------------------------------- | --------------- |
+| `routine`  | mechanical edits, fixtures, docs and lookups          | Haiku           |
+| `bounded`  | implementation inside a known scope, and the default  | Sonnet          |
+| `design`   | architecture, public APIs, migrations and integration | Opus            |
+| `frontier` | work moved up after it failed at `design`             | Fable           |
+
+Routine workers are
 capped at 100000 tokens of context and load the `full` skill bodies, since a smaller model is the reader least able to
 re-derive the steps the `short` form leaves out. No tier caps how many of its jobs
 are live at once; a cap applies only where a magusfile declares one. The module
@@ -45,37 +54,41 @@ Copy the module into the root magusfile and change what you need:
 
 ```buzz
 import "magus";
+import "magus/agent";
 import "spells/harness/claude-code" as claudecode;
 
-enum ModelTier { economy, standard, principal }
+enum ModelTier { routine, bounded, design, frontier }
 
 fun claudeCode(tier: ModelTier) > str {
     return match (tier) {
-        .economy -> "haiku",
-        .standard -> "sonnet",
-        .principal -> "opus",
+        .routine -> "haiku",
+        .bounded -> "sonnet",
+        .design -> "opus",
+        .frontier -> "fable",
     };
 }
 
-fun bounds(tier: ModelTier) > magus\ModelTierBounds {
+fun bounds(tier: ModelTier) > magus\agent\ModelTierBounds {
     return match (tier) {
-        .economy -> magus\ModelTierBounds{ maxContext = 100000 },
-        .standard -> magus\ModelTierBounds{},
-        .principal -> magus\ModelTierBounds{ maxLive = 1 },
+        .routine -> magus\agent\ModelTierBounds{ maxContext = 100000 },
+        .bounded -> magus\agent\ModelTierBounds{},
+        .design -> magus\agent\ModelTierBounds{},
+        .frontier -> magus\agent\ModelTierBounds{ maxLive = 1 },
     };
 }
 
-fun skills(tier: ModelTier) > magus\SkillVariant {
+fun skills(tier: ModelTier) > magus\agent\SkillVariant {
     return match (tier) {
-        .economy -> magus\SkillVariant.full,
-        .standard -> magus\SkillVariant.short,
-        .principal -> magus\SkillVariant.short,
+        .routine -> magus\agent\SkillVariant.full,
+        .bounded -> magus\agent\SkillVariant.short,
+        .design -> magus\agent\SkillVariant.short,
+        .frontier -> magus\agent\SkillVariant.short,
     };
 }
 
 final cc = magus\harness.provider(claudecode);
 
-magus\modelTiers(ModelTier, default: ModelTier.standard,
+magus\modelTiers(ModelTier, default: ModelTier.bounded,
     hosts: {cc: claudeCode},
     bounds: bounds, skills: skills);
 ```
@@ -88,8 +101,10 @@ magus\modelTiers(ModelTier, default: ModelTier.standard,
   harness id; keep it, as `cc` above, and use it as the key. A call that
   ignores the return value wires the harness all the same. The harness must be wired
   above the declaration. The function answers the model alias that harness spawns
-  for the tier, such as the string `sonnet`. Two tiers cannot share an alias on
-  one harness, because a spawn of that alias would name no one tier.
+  for the tier, such as the string `sonnet`. A harness with fewer models than
+  tiers repeats the nearest one: adjacent tiers may share an alias, and a spawn
+  of it resolves to the cheaper of them. Two tiers apart cannot share one, and
+  `magus describe job` names the tiers a job's alias stands for.
 - **`bounds` caps a tier.** `maxLive` is how many jobs at the tier may be live at
   once and `maxContext` the tokens a worker at the tier may reach. A field left
   out is no cap.
@@ -127,7 +142,7 @@ The record holds the tier, its rank, the skill variant, the source, the reason a
 for a matrix, the magusfile that registered it. `magus job fork` prints it:
 
 ```text
-model tier: economy (rank 0), matrix: "1 file" at magusfile.buzz
+model tier: routine (rank 0), matrix: "1 file" at magusfile.buzz
 ```
 
 `magus describe job` prints the same line and the skill variant under it, and
@@ -162,11 +177,12 @@ the fork.
 
 ```buzz
 import "magus";
+import "magus/agent";
 import "magus/modeltiers" as modeltiers;
 
-object Choice { tier: modeltiers\ModelTier, skills: magus\SkillVariant, reason: str }
+object Choice { tier: modeltiers\ModelTier, skills: magus\agent\SkillVariant, reason: str }
 
-fun economyHolds(req: ModelTierRequest) > bool {
+fun routineHolds(req: ModelTierRequest) > bool {
     foreach (r in req.history) {
         if (r.rank == 0 and r.kind == req.kind and r.jobs >= 10 and r.passLower < 0.5) { return false; }
     }
@@ -175,24 +191,24 @@ fun economyHolds(req: ModelTierRequest) > bool {
 
 fun choose(req: ModelTierRequest) > Choice? {
     if (req.readOnly or req.check == null) { return null; }
-    if (req.writeFiles <= 3 and req.writeProjects.len() == 1 and economyHolds(req)) {
+    if (req.writeFiles <= 3 and req.writeProjects.len() == 1 and routineHolds(req)) {
         return Choice{
-            tier = modeltiers\ModelTier.economy,
-            skills = magus\SkillVariant.full,
+            tier = modeltiers\ModelTier.routine,
+            skills = magus\agent\SkillVariant.full,
             reason = "{req.kind.value} job, {req.writeFiles} files",
         };
     }
     return Choice{
-        tier = modeltiers\ModelTier.standard,
-        skills = magus\SkillVariant.short,
-        reason = "wide write set, or economy failing {req.kind.value}",
+        tier = modeltiers\ModelTier.bounded,
+        skills = magus\agent\SkillVariant.short,
+        reason = "wide write set, or routine failing {req.kind.value}",
     };
 }
 
 magus\modelTier(choose);
 ```
 
-This one sends small, checked jobs to economy until economy has failed half of
+This one sends small, checked jobs to routine until routine has failed half of
 ten or more jobs of the same kind. The history is the same set of numbers
 `magus insight` reports and the `model-tier-fit` check in `magus doctor` judges,
 so the matrix and a person read one record.

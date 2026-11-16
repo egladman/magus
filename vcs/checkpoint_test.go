@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -44,7 +45,7 @@ func TestCheckpointCleanTree(t *testing.T) {
 	require.NoError(t, err)
 	// The revision must be the full head id, feedable back to a VCS; a clean tree has no
 	// patch, so no digest.
-	assert.Equal(t, types.VCSCheckpoint{Revision: head, Branch: "work", VCS: "git"}, cp)
+	assert.Equal(t, typesvcs.Checkpoint{Revision: head, Branch: "work", VCS: "git"}, cp)
 }
 
 // TestCheckpointDirtyTree covers the properties a ledger actually relies on: the digest

@@ -111,13 +111,13 @@ func NormalizeCharm(name string) string { return Normalize(name) }
 func ReservedCharmDoc(name string) string {
 	switch NormalizeCharm(name) {
 	case CharmReadWrite:
-		return "mutate in place: flip check-only targets (format, lint, generate) to write; stripped from ci"
+		return "mutate in place: flip check-only targets (format, lint, generate) to write; stripped from ci's verify passes, which repair a failing declared writer under it"
 	case CharmCD:
 		return "continuous-delivery: a target reads it to publish its artifact; survives into ci"
 	case CharmGHA:
 		return "GitHub Actions output: swap a tool's reporter to inline workflow annotations; survives into ci"
 	case CharmUpdate:
-		return "move pinned upstream state forward (a lockfile, a scanner database) instead of verifying it; stripped from ci"
+		return "move pinned upstream state forward (a lockfile, a scanner database) instead of verifying it; stripped from ci and its repairs"
 	case CharmExtended:
 		return "the extended test suite: add the tests that need more of the host (a C toolchain, docker) than the default gate; survives into ci"
 	default:

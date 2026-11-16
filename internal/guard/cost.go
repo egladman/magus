@@ -1177,7 +1177,7 @@ func mainWork(ctx context.Context, at location, st costState, line string) types
 		return class
 	}
 	if class == types.DelegableRead {
-		if rows, err := leaseRows(ctx, at); err == nil && readsCitedResult(rows, line, at) {
+		if tries, err := leaseAttempts(ctx, at); err == nil && readsCitedResult(tries, line, at) {
 			return ""
 		}
 	}
@@ -1207,8 +1207,12 @@ func mainWork(ctx context.Context, at location, st costState, line string) types
 		return class
 	}
 	if readsBack {
+		tries, err := leaseAttempts(ctx, at)
+		if err != nil {
+			return class
+		}
 		for _, row := range rows {
-			if row.Result != nil && row.Result.Validation.OutputRef == words[2] {
+			if r := tries.Result(row.ID); r != nil && r.Validation.OutputRef == words[2] {
 				return ""
 			}
 		}

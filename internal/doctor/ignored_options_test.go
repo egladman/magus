@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // A dropped key means the policy it declared is not in force, and several are opt-outs
@@ -19,7 +20,7 @@ func TestIgnoredOptionsFailsAndNamesTheKey(t *testing.T) {
 		{Path: "console", Name: "console", IgnoredOptions: []string{"gate_something_new"}},
 	})
 
-	assert.Equal(t, types.CheckFail, got.Status, "the workspace asked for something this magus cannot do")
+	assert.Equal(t, check.Fail, got.Status, "the workspace asked for something this magus cannot do")
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "gate_something_new")
 	assert.Contains(t, got.Message, "not in force")
@@ -28,6 +29,6 @@ func TestIgnoredOptionsFailsAndNamesTheKey(t *testing.T) {
 
 func TestIgnoredOptionsIsQuietWhenEveryKeyWasUnderstood(t *testing.T) {
 	got := (&runner{}).checkIgnoredOptions([]*types.Project{{Path: ".", Name: "magus"}})
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.Empty(t, got.Details)
 }

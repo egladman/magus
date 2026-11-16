@@ -19,7 +19,7 @@ exec git commit -q -m 'registry and its generated pages'
 ! exec magus job fork flags/locked --write-paths 'cli/*.go,docs/rules/*.md' --deny-paths cli/testdata/api.lock --check 'test .'
 ! stdout .
 stderr '^\[error\] 1 problem:$'
-stderr '^  1\. \[MGS3044\] write_paths: \.:man-generate regenerates cli/testdata/api\.lock from cli/\*\*/\*\.go'
+stderr '^  1\. \[MGS3044\] paths.write: \.:man-generate regenerates cli/testdata/api\.lock from cli/\*\*/\*\.go'
 stderr '^permitted 1 \(recorded deviations; -o json includes the details\)$'
 ! stderr 'permitted: the integrator regenerates it'
 stderr '^note: 1 regenerated output\(s\) outside the write paths are permitted'
@@ -47,25 +47,25 @@ stdout '"output": "cli/testdata/api\.lock"'
 stdout '"target": "\.:man-generate"'
 stdout '"source": "cli/registry\.go"'
 
-exec magus job fork flags/survey --read-only --criteria 'read the registry'
+exec magus job fork flags/survey --read-only --instructions 'read the registry'
 ! stdout 'regenerated outside'
 
 stdin $WORK/widen.json
 exec magus job apply --stdin
-stdout '^  write_paths \+docs/manpage/\*\.md$'
+stdout '^  paths.write \+docs/manpage/\*\.md$'
 ! stdout 'docs:content-generate'
 
 -- fork.json --
-{"api_version": "magus.job/v1alpha1", "id": "flags/glob", "write_paths": ["cli/*.go", "docs/rules/*.md"],
+{"api_version": "magus.job/v1alpha1", "id": "flags/glob", "paths": {"write": ["cli/*.go", "docs/rules/*.md"]},
  "check": {"target": "test", "project": "."},
  "deviations": [{"code": "MGS3044", "subject": "**", "reason": "the integrator regenerates every one"}]}
 -- fork.out --
 forked flags/glob, declared, with 2 write path(s). Its holder reads the terms with `magus describe job flags/glob` and takes it with `magus job exec flags/glob`
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: bounded (rank 1), default: "the declared default" at magus/modeltiers
 referenced outside the write paths: files that use what the write paths define
   unknown, no symbol index answered; `magus graph build` builds one
 -- widen.json --
-{"api_version": "magus.job/v1alpha1", "id": "flags/shell", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
+{"api_version": "magus.job/v1alpha1", "id": "flags/shell", "paths": {"write": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"]},
  "check": {"target": "test", "project": "."}}
 -- .gitignore --
 .magus/

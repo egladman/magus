@@ -124,8 +124,8 @@ func feedbackMarksDir(ctx context.Context, member string) (string, error) {
 	return trail.FeedbackMarksDir(ws.Root())
 }
 
-// decodeTrailMark reads a TrailMark object, raising on a field of the wrong type
-// rather than storing its zero value.
+// decodeTrailMark reads a magus\trail\Mark object, raising on a field of
+// the wrong type rather than storing its zero value.
 func decodeTrailMark(in map[string]any) (trailtypes.Mark, error) {
 	var m trailtypes.Mark
 	str := func(k string) (string, error) {

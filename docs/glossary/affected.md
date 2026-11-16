@@ -32,8 +32,8 @@ In the docs:
 - [How this connects to affected and the cache](../concepts/workspace.md#how-this-connects-to-affected-and-the-cache)
 - [Affected](../concepts/workspace/affected.md#affected)
 - [6. affected, the cache and CI](../decisions/0028-workspaces-see-each-other.md#6-affected-the-cache-and-ci)
+- [Counting default rw for the guard's affected verb](../decisions/0048-a-local-ci-repairs-a-declared-writer.md#counting-default-rw-for-the-guards-affected-verb)
 - [Sharding by affected project](../guides/integrations/github-actions.md#sharding-by-affected-project)
-- [Re-run only affected projects on each save](../guides/tips.md#re-run-only-affected-projects-on-each-save)
 
 <!-- END GLOSSARY USAGE -->
 

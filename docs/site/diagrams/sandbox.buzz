@@ -34,9 +34,11 @@ export fun sandboxFigure() > figure\Figure !> any {
         .edgesFromGraph()
         .hideEdges([interp, spell], dst: [sandbox, spawn, fs],
             why: "both reach the sandbox through the interpreter's host bindings; one arrow per entry is enough")
+        .hideEdges([spawn], dst: [journal],
+            why: "the spawner records its own exit there; the denial this figure follows reaches the journal through the sandbox")
         .markEdge(sandbox, dst: fs, label: "paths")
         .markEdge(sandbox, dst: env, label: "variables")
-        .markEdge(sandbox, dst: jobs, label: "row")
+        .markEdge(sandbox, dst: jobs, label: "job")
         .legend(figure\Look.focal, label: "the grant")
         .legend(figure\Look.store, label: "records")
         .scope([sandbox, env, fs]);

@@ -746,12 +746,12 @@ const PipeUpstreamFailed DiagnosticCode = "MGS3030"
 // because a claim nothing can check reads as a boundary and is none.
 const WritePathClaimUngradable DiagnosticCode = "MGS3031"
 
-// WritePathFileShared is a job fork whose write path and another live row's, in any
-// checkout, name the same single literal file that has a diff driver, with neither row
-// ordered against the other by parent, child, or depends_on. Refused rather than
-// recorded: the file has one owner unless a claim, a dependency, or a fold says
-// otherwise, and none of the three costs the fork anything a whole-file lease does not
-// already pay.
+// WritePathFileShared is a job fork whose write path and another live job's
+// name the same single literal file, in any checkout, that has a diff driver.
+// Neither job is ordered against the other by parent, child, or depends_on.
+// Refused rather than recorded: the file has one owner unless a claim, a
+// dependency, or a fold says otherwise, and none of the three costs the fork
+// anything a whole-file lease does not already pay.
 const WritePathFileShared DiagnosticCode = "MGS3032"
 
 // MCPBuzzFailed is a rejected or failed buzz tool transform. The message
@@ -823,10 +823,11 @@ const GateNotRun DiagnosticCode = "MGS3045"
 // working in: a half-saved load file stops `magus run` for every job there.
 const CheckoutConfigHeld DiagnosticCode = "MGS3046"
 
-// StoreRecordsNewer is a magus record a newer magus wrote with a requirement or schema
-// version this build lacks: a job row, a stored output, or the run history. The record is
-// kept on disk unchanged. A job row stays listed and graded but is not written; a stored
-// output is not read; a run sizes its claims from declarations and records no history.
+// StoreRecordsNewer is a magus record a newer magus wrote with a requirement or
+// schema version this build lacks: a job record, a stored output, or the run
+// history. The record is kept on disk unchanged. A job record stays listed and
+// graded but is not written. A stored output is not read. A run sizes its
+// claims from declarations and records no history.
 const StoreRecordsNewer DiagnosticCode = "MGS3047"
 
 // PeerFromAnotherBuild is a magus process that answered from another build: a broker
@@ -867,12 +868,18 @@ const ShardCrossesProjects DiagnosticCode = "MGS3054"
 
 // ModelTierAboveParent is a spawn or fork at a model tier ranked above its
 // parent's, which the workspace's spawn rule refuses. A person forks the
-// higher-tier work as a row of its own.
+// higher-tier work as a job of its own.
 const ModelTierAboveParent DiagnosticCode = "MGS3055"
 
 // ModelTiersIncomparable is a spawn or fork whose tier and its parent's come
 // from two model-tier declarations. The spawn rule cannot order them.
 const ModelTiersIncomparable DiagnosticCode = "MGS3056"
+
+// UncommittedRepair is a ci run under rw whose repairs changed files in the
+// working tree: a declared writer it ran under rw, or a stale output a
+// verify pass regenerated. The verdict belongs to the committed bytes. The
+// run fails, and the next one refuses, until the person commits the change.
+const UncommittedRepair DiagnosticCode = "MGS3057"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -1227,6 +1234,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ShardCrossesProjects,
 	ModelTierAboveParent,
 	ModelTiersIncomparable,
+	UncommittedRepair,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,
@@ -1331,6 +1339,26 @@ func AllDiagnosticCodes() []DiagnosticCode {
 func DiagnosticErrorf(c DiagnosticCode, format string, args ...any) *DiagnosticError {
 	return mgs.Errorf(c, format, args...)
 }
+
+// RepairedFile is one file a ci repair left in the working tree: its path
+// relative to the checkout root, and the hex SHA-256 of the bytes it held.
+type RepairedFile struct {
+	Path   string `json:"path"`
+	Digest string `json:"digest"`
+}
+
+// UncommittedRepairError is a ci run whose repairs changed files that are
+// not committed. Writers are the targets that wrote them. Files hold each
+// path with its digest, so a record reads them without parsing a message.
+// It unwraps to its [UncommittedRepair] diagnostic.
+type UncommittedRepairError struct {
+	Writers    []TargetRef
+	Files      []RepairedFile
+	Diagnostic *DiagnosticError
+}
+
+func (e *UncommittedRepairError) Error() string { return e.Diagnostic.Error() }
+func (e *UncommittedRepairError) Unwrap() error { return e.Diagnostic }
 
 // FormatDiagnostic formats a diagnostic message with code and doc URL for slog logging.
 func FormatDiagnostic(c DiagnosticCode, msg string) string {

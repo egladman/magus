@@ -1,6 +1,8 @@
 package scipbuzz
 
 import (
+	"strings"
+
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
 	"github.com/scip-code/scip/bindings/go/scip"
@@ -826,16 +828,45 @@ func (w *walker) objectLit(n *ast.ObjectLit) {
 		}
 		return
 	}
-	if w.s.kind(name-1) != token.Backslash || !w.s.isIdent(name-2, n.Namespace) {
+	first, ok := namespaceStart(w.s, name, n.Namespace)
+	if !ok {
 		w.warn("%d:%d: object literal namespace %s is not before its type", n.Pos.Line, n.Pos.Col, n.Namespace)
 		return
 	}
-	b := w.lookup(n.Namespace)
+	b := w.namespaceBinding(strings.Split(n.Namespace, `\`))
 	if b == nil || b.module == nil {
 		return
 	}
-	w.reference(name-2, b, 0)
+	w.reference(first, b, 0)
 	w.member(b.module, name)
+}
+
+// namespaceBinding follows a namespace path through the nested bindings
+// bindNamespace made, one segment per child.
+func (w *walker) namespaceBinding(segments []string) *binding {
+	b := w.lookup(segments[0])
+	for _, seg := range segments[1:] {
+		if b == nil {
+			return nil
+		}
+		b = b.children[seg]
+	}
+	return b
+}
+
+// namespaceStart returns the index of the first segment of the namespace
+// written before the type name at name. A nested namespace (magus\agent) is
+// one identifier per segment, each followed by a backslash.
+func namespaceStart(s *stream, name int, namespace string) (int, bool) {
+	segments := strings.Split(namespace, `\`)
+	i := name
+	for j := len(segments) - 1; j >= 0; j-- {
+		if s.kind(i-1) != token.Backslash || !s.isIdent(i-2, segments[j]) {
+			return 0, false
+		}
+		i -= 2
+	}
+	return i, true
 }
 
 // openAngle returns the index of the `<` matching the `>` or `>>` at i, or -1.

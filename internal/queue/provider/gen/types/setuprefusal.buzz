@@ -6,7 +6,7 @@
 // `go generate`, never this file.
 
 export object QueueSetupRefusal {
-    reason: str = "",
-    url: str = "",
-    app: str = "",
+    reason: str,
+    url: str,
+    app: str,
 }

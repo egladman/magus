@@ -32,14 +32,20 @@ func grantedRules(deps Dependencies, at location, standing leaseStanding) (Depen
 	if !standing.declared || !standing.state.Live() {
 		return deps, nil
 	}
-	grants, err := job.NewStore(at.jobs()).Grants()
+	store := job.NewStore(at.jobs())
+	grants, err := store.Grants()
 	if err != nil {
 		return deps, nil
 	}
+	tries, err := store.Attempts()
+	if err != nil {
+		return deps, nil
+	}
+	attempt := types.NewJobAttempts(tries).LiveN(standing.row.ID)
 	now := time.Now().Unix()
 	var granted map[string]types.JobGrant
 	for _, g := range grants {
-		if !slices.Contains(GrantableRules(), g.Rule) || !g.Lowers(standing.row, now) {
+		if !slices.Contains(GrantableRules(), g.Rule) || !g.Lowers(standing.row, attempt, now) {
 			continue
 		}
 		if granted == nil {

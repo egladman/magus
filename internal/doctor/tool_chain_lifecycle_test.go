@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // lifecycleWorkspace answers the facts the check reads off a *magus.Magus beyond its
@@ -36,14 +37,14 @@ func goProjects(bounds spells.VersionBounds) []*types.Project {
 func TestCheckToolchainLifecycleNeverFetches(t *testing.T) {
 	t.Run("no provider wired", func(t *testing.T) {
 		got := (&runner{ws: lifecycleWorkspace{root: t.TempDir()}}).checkToolchainLifecycle(t.Context(), goProjects(spells.VersionBounds{}))
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "no lifecycle provider wired")
 	})
 
 	t.Run("no spell names a product", func(t *testing.T) {
 		got := (&runner{ws: lifecycleWorkspace{provider: "endoflife-date", root: t.TempDir()}}).checkToolchainLifecycle(t.Context(), nil)
-		assert.Equal(t, types.Check{
-			Name: "toolchain-lifecycle", Status: types.CheckOK,
+		assert.Equal(t, check.Check{
+			Name: "toolchain-lifecycle", Status: check.OK,
 			Message: "no spell names a lifecycle product",
 		}, got)
 	})
@@ -51,8 +52,8 @@ func TestCheckToolchainLifecycleNeverFetches(t *testing.T) {
 	// Nothing stored is unknown, not fine, and the remedy is the command that asks.
 	t.Run("no stored answer", func(t *testing.T) {
 		got := (&runner{ws: lifecycleWorkspace{provider: "endoflife-date", root: t.TempDir()}}).checkToolchainLifecycle(t.Context(), goProjects(spells.VersionBounds{}))
-		assert.Equal(t, types.Check{
-			Name: "toolchain-lifecycle", Status: types.CheckOK, Evidence: types.EvidenceUnknown,
+		assert.Equal(t, check.Check{
+			Name: "toolchain-lifecycle", Status: check.OK, Evidence: check.EvidenceUnknown,
 			Message: "no stored answer from endoflife-date for this workspace's spells; `magus describe tools` asks it",
 			Fix:     []string{"describe", "tools"},
 		}, got)
@@ -90,8 +91,8 @@ func TestCheckToolchainLifecycleReadsTheStoredAnswer(t *testing.T) {
 		[]workspace.InstalledTool{{Project: ".", Bin: "go", Lifecycle: "go", Version: "v1.20.14"}})
 
 	got := (&runner{ws: ws, root: ""}).checkToolchainLifecycle(t.Context(), projects)
-	assert.Equal(t, types.Check{
-		Status:  types.CheckAdvice,
+	assert.Equal(t, check.Check{
+		Status:  check.Advice,
 		Details: []string{"./go: installed v1.20.14 is in go 1.20, past end of life since 2024-02-06"},
 	}, withoutWording(got))
 	assert.Contains(t, got.Message, "1 past end of life, per endoflife-date as fetched ")

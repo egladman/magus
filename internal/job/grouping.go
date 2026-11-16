@@ -80,7 +80,7 @@ func GroupingRecords(outcomes []types.JobOutcome, projects []string) types.Group
 		}
 	}
 	for _, shape := range shapes {
-		out.Rows = append(out.Rows, folds[shape].record())
+		out.Shapes = append(out.Shapes, folds[shape].record())
 	}
 	return out
 }
@@ -178,11 +178,11 @@ func (f *groupingFold) record() types.GroupingRecord {
 // groupingLines renders the lens one shape a line, facts with their sample and never
 // advice; a lens with no job at all is one line saying so.
 func groupingLines(out types.Grouping) []string {
-	if !slices.ContainsFunc(out.Rows, func(r types.GroupingRecord) bool { return r.Jobs > 0 }) {
+	if !slices.ContainsFunc(out.Shapes, func(r types.GroupingRecord) bool { return r.Jobs > 0 }) {
 		return []string{"none recorded for these projects"}
 	}
-	lines := make([]string, 0, len(out.Rows))
-	for _, r := range out.Rows {
+	lines := make([]string, 0, len(out.Shapes))
+	for _, r := range out.Shapes {
 		sample := fmt.Sprintf("%d groups of %d jobs, %d with a known trail", r.Groups, r.Jobs, r.Known)
 		if r.Verdict != types.GroupingMeasured {
 			lines = append(lines, fmt.Sprintf("%s: unknown, %s (fewer than %d groups, or most trails unknown)", r.Shape, sample, out.MinSample))

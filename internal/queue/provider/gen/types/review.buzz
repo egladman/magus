@@ -6,7 +6,7 @@
 // `go generate`, never this file.
 
 export object QueueReview {
-    id: str = "",
-    reviewer: str = "",
-    commit: str = "",
+    id: str,
+    reviewer: str,
+    commit: str,
 }

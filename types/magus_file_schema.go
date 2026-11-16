@@ -68,6 +68,7 @@ var TargetPolicyOptions = []ProjectOption{
 	{Key: "sandbox", Since: "0.5.0"},
 	{Key: "human_only", Since: "0.5.0"},
 	{Key: "relinks", Since: "0.5.0"},
+	{Key: "product", Since: "0.5.0"},
 	{Key: "integrates", Since: "0.5.0"},
 	{Key: "needs_ready", Since: "0.5.0"},
 }

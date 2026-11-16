@@ -105,7 +105,7 @@ and the one check it runs. It replaces any job with the same id.
 
 ```sh
 magus job fork <job> \
-  --criteria 'move the store' \
+  --instructions 'move the store' \
   --write-paths internal/job/store.go,internal/job/store_test.go \
   --check 'test internal/job'
 
@@ -153,9 +153,11 @@ refuses an unescaped entry that names an existing path, and names both
 spellings.
 
 A row carries `id` and optionally `parent` (the job this one was forked from),
-`criteria` (the prose half; the machine-checkable half is `goals`),
-`checkpoint` (as `magus vcs checkpoint -o name` prints it), `write_paths`,
-`deny_paths`, `read_paths`, `depends_on`, `breaks`, `model`, `check`, `goals`,
+`agent` (the model requested as `{id, tier}`, the `instructions` that are the
+prose half, the machine-checkable half being `goals`, and the `worker`, whose
+`type` is `resumed` or `new` with a `reason`), `checkpoint` (as
+`magus vcs checkpoint -o name` prints it), `paths` (an object of `write`, `deny`
+and `read`), `depends_on`, `breaks`, `check`, `goals`,
 `state`, `read_only`, and `max_attempts` (see
 [attempts and generations](#attempts-and-generations)). A record naming no
 `state` is stored `declared`. The store adds `api_version`, the actor that
@@ -188,7 +190,7 @@ that died, stalled, or was cancelled said nothing. Silence is not a pass.
 Five properties are worth stating plainly.
 
 **One author per job, enforced by the store.** A session holding a lease may
-record the base it landed on, SHRINK its own `write_paths` (which is how it
+record the base it landed on, SHRINK its own `paths.write` (which is how it
 releases a path), end its own job, and fork a child of itself inside its own
 paths. Every other write is refused, by name and with the remedy: widening a
 boundary, changing the plan's shape, and verifying a result are the forking
@@ -218,7 +220,7 @@ Once the held job has exited, passed, failed, or was never returned, the next
 `magus job exec` takes the next job; nothing has to be given up first.
 
 **A workspace-load file needs a worktree of its own.** `fork` refuses a job
-whose `write_paths` cover a file magus must READ to load the workspace (any
+whose `paths.write` cover a file magus must READ to load the workspace (any
 project's `magusfile.buzz` or `magusfiles/*.buzz`, its `magus.yaml`, and the
 workspace-local spell sources those magusfiles import) while another live job
 with write paths was already taken in the same checkout. The refusal names the
@@ -289,7 +291,7 @@ Every key but `stale_after` is unset by default. `magus job fork` refuses past
 Neither is enforcement. Each is something an orchestrator would otherwise derive
 by hand from a table it wrote itself, and each leaves the decision where it was.
 
-**Overlaps.** A list reports every pair of live jobs whose `write_paths`
+**Overlaps.** A list reports every pair of live jobs whose `paths.write`
 intersect, each side's own declarations kept apart, because they are rarely the
 same string and which job claimed which is the part a reader acts on. Derived on
 the read and stored nowhere, so it cannot go out of date with the rows. A path
@@ -300,7 +302,7 @@ because a finished or released job is not competing for anything. Two jobs
 claiming different declarations of one file are still listed, with
 `claims: disjoint`: the pair is an integration order, not a wait.
 
-**Releases.** Shrinking `write_paths` is how a job announces it has finished
+**Releases.** Shrinking `paths.write` is how a job announces it has finished
 editing a path, and the store records each dropped path with the digest that
 path carried at that moment: the file's sha256, or one of three words when it
 cannot be one. `absent` when nothing is there, `dir` for a directory, which has
@@ -489,13 +491,13 @@ file write and every command. It denies:
 | any write, before the holder takes the lease here            | the recorded base                |
 | any write, once the job's timeout has passed                 | `deadline`                       |
 | any write, by a job that gathers evidence and writes nothing | `read_only`                      |
-| a write covered by this job's own deny list                  | `deny_paths`                     |
-| a write covered by another live job's write list             | `write_paths` (that job's)       |
-| an edit landing in a declaration another live job claims     | `write_paths` (that job's `#`)   |
-| a write outside every entry in this job's own write list     | `write_paths`                    |
+| a write covered by this job's own deny list                  | `paths.deny`                     |
+| a write covered by another live job's write list             | `paths.write` (that job's)       |
+| an edit landing in a declaration another live job claims     | `paths.write` (that job's `#`)   |
+| a write outside every entry in this job's own write list     | `paths.write`                    |
 | a command running the `ci` gate                              | `check`                          |
 | a magus call running outside the job's checkout              | `worktree`                       |
-| a READ of a path outside the projects this job may read      | `read_paths`, else `write_paths` |
+| a READ of a path outside the projects this job may read      | `paths.read`, else `paths.write` |
 
 It advises on one more: your own path, written from a base that diverges from
 the checkpoint you were handed.
@@ -553,12 +555,12 @@ file's first declaration passes. A payload carrying no edit, such as a
 whole-file write, is graded by path alone, and the rule reads nothing unless
 another live job claims a declaration of that file.
 
-The read row is the write paths read the other way. `write_paths` stands in when
-`read_paths` is empty, because a holder leased to edit a project was pointed at
+The read row is the write paths read the other way. `paths.write` stands in when
+`paths.read` is empty, because a holder leased to edit a project was pointed at
 that project, and the boundary it opens is those projects plus what they declare
 `depends_on` (see [the guard's focus rule](guard.md#focus-the-read-boundary)). Set
-`read_paths` when a holder must READ something it must not WRITE: widening
-`write_paths` to open a read is how two holders end up owning one file. Without
+`paths.read` when a holder must READ something it must not WRITE: widening
+`paths.write` to open a read is how two holders end up owning one file. Without
 a lease taken on the checkout the same rule only advises, which is the opt-in: a
 hard read boundary needs somebody to have declared one.
 
@@ -569,7 +571,7 @@ refused and handed its own check instead. A row whose `check` names `ci` owns
 the gate and is not refused.
 
 Two absences are boundaries nobody declared rather than boundaries of size zero,
-and both scope nothing: an empty `write_paths` on a row that is not `read_only`,
+and both scope nothing: an empty `paths.write` on a row that is not `read_only`,
 and an empty `check`.
 
 None of that table is visible from the verdict a worker sees, which is exactly
@@ -589,10 +591,10 @@ same job row rather than a second declaration, because a boundary written twice
 is a boundary that disagrees with itself.
 
 When `sandbox.mode` is not `off` and the acting lease resolves to a live row with
-a `parent` and non-empty `write_paths`, every target run and every `magus buzz`
+a `parent` and non-empty `paths.write`, every target run and every `magus buzz`
 script in that checkout gets a filesystem WRITE grant of exactly:
 
-- the `write_paths`, resolved as globs against the workspace root (a glob that
+- the `paths.write`, resolved as globs against the workspace root (a glob that
   matches nothing grants nothing). A LITERAL path that does not exist yet grants
   the nearest directory above it that does, because a job routinely owns a file
   it was forked to create and the guard already admits that write; only a glob
@@ -671,7 +673,7 @@ job's own check. A job that verifies is recorded `pass`.
 
 For a job that writes, the claimed `changed_paths` are held to the diff magus
 observes since the job's checkpoint: every claimed path must appear in it, at
-least one change in it must fall inside `write_paths`, and a diff magus cannot
+least one change in it must fall inside `paths.write`, and a diff magus cannot
 read fails the job rather than passing it. A read-only job has no diff to check.
 `wait` also refuses `pass` while any descendant (by `parent` chain) is still
 live, naming each, and grades a job against its ancestors' symbol goals as well
@@ -699,8 +701,8 @@ it by; a `read_only` job is exempt.
 ```sh
 magus job fork --stdin <<'EOF'
 {"api_version": "magus.job/v1alpha1", "id": "api/migrate",
- "criteria": "move the accounts table to the new schema",
- "write_paths": ["db", "api"], "check": {"target": "go-test", "project": "api"},
+ "agent": {"instructions": "move the accounts table to the new schema", "worker": {"type": "resumed"}},
+ "paths": {"write": ["db", "api"]}, "check": {"target": "go-test", "project": "api"},
  "goals": [
    {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
    {"id": "old-gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}
@@ -762,7 +764,7 @@ record keeps the signature the first one recorded.
 ```
 
 A goal that changes, removes or reshapes a symbol already defined in one file
-the write paths do not cover adds a claim on its declaration to `write_paths`
+the write paths do not cover adds a claim on its declaration to `paths.write`
 (`db/accounts.go#AccountStore) Migrate`), and `fork` prints each one it added and
 lists them as `derived_claims` in its JSON. A read-only job claims nothing, and
 neither does a file with no diff driver. A row carrying a `signature` goal is
@@ -858,8 +860,8 @@ import "std";
 fun declare() > void {
   try {
     magus\workspace().putJob("api/migrate", {
-      "criteria": "move the accounts table to the new schema",
-      "write_paths": ["db", "api"],
+      "agent": {"instructions": "move the accounts table to the new schema", "worker": {"type": "resumed"}},
+      "paths": {"write": ["db", "api"]},
       "goals": [
         {"id": "green", "check": {"target": "go-test", "project": "api"}},
         {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},

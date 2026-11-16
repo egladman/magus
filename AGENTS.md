@@ -66,10 +66,11 @@ skill beside them.
 Before your first subagent spawn, read `.agents/skills/magus-multi-agent/SKILL.md` and
 follow the job, lease and validation steps it gives.
 
-- Start delegated jobs at the `economy` tier and name the model explicitly in every spawn.
-- Economy covers mechanical edits, fixtures, docs, inventory and read-only evidence.
-- Use `standard` for bounded implementation.
-- Use `principal` for architecture, ambiguous ownership, public APIs, migrations, security and integration.
+- Start delegated jobs at the `routine` tier and name the model explicitly in every spawn.
+- Routine covers mechanical edits, fixtures, docs, inventory and read-only evidence.
+- Use `bounded` for bounded implementation.
+- Use `design` for architecture, ambiguous ownership, public APIs, migrations, security and integration.
+- `frontier` sits above `design`; a job reaches it only by moving up.
 - Move a job up only after it fails its criteria or its scope has a concrete higher-tier need.
 - Fork the same row at the higher tier.
 - Never promote an automatic retry.
@@ -86,6 +87,10 @@ saying it, delete it here.
   `.gitignore` negation. Bootstrap links it into every declared host's skill root;
   tool-specific directories are ignored local installations. Keep shared loop
   instructions in `.agents/loops/`.
+- Before a push, run `magus run ci <project>` for each project the diff edits, and
+  one passing run over each changed file. GitHub Actions runs the whole gate
+  (`ci.remote_gate`). Run `magus affected ci` locally only when a change moves
+  packages, renames, or edits a magusfile.
 
 ## Binary
 

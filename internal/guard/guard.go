@@ -23,6 +23,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -32,6 +33,7 @@ import (
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // Dependencies are the workspace facts the rules cannot resolve for themselves: they depend on the
@@ -91,6 +93,11 @@ type Dependencies struct {
 	StopRule workspace.StopRule
 	// ApprovedStopRule is ApprovedSpawnRule for the stop rule, resolved per judgment.
 	ApprovedStopRule func(ctx context.Context) (workspace.StopRule, error)
+	// StepRule is the working tree's magus\guard.step rule for kind,
+	// nil when none is registered for it.
+	StepRule func(kind string) steps.Rule
+	// ApprovedStepRule is ApprovedSpawnRule for the step rule of kind.
+	ApprovedStepRule func(ctx context.Context, kind string) (steps.Rule, error)
 	// ModelRows yields the model rows the workspace's harnesses publish through
 	// mgs_listModels, nil when none does. It can load the workspace and its harness
 	// spells, so it must load them once however often it is called; the guard calls it
@@ -102,10 +109,10 @@ type Dependencies struct {
 	// off or did not load. It opens the workspace whole, so the guard asks only once a job
 	// row the call is bound to records a tier. Nil means no declaration: the tier rules then
 	// have nothing to compare and stay silent.
-	ModelTiers func() *types.ModelTierSet
+	ModelTiers func() *typesagent.ModelTierSet
 	// TierRule is the workspace's magus.WithSpawnRule, which the spawn
 	// ceiling asks. Nil leaves a ceiling it would judge reported unjudged.
-	TierRule func(parent, child types.ModelTier) error
+	TierRule func(parent, child typesagent.ModelTier) error
 	// TargetPolicies answers what the workspace at root declares as target policy from the
 	// record the knowledge store keeps of it, without opening the workspace; "" is the
 	// caller's own. false means it cannot prove the record current, and the rule opens
@@ -193,10 +200,12 @@ type Dependencies struct {
 	// them on every hook row, so a verdict can be tied to the build that reached it.
 	Binary        string
 	BinaryVersion string
-	// BinaryCommit is the commit the running magus was built at, "" when unstamped, and
-	// BinaryDirty whether uncommitted changes went into it.
-	BinaryCommit string
-	BinaryDirty  bool
+	// JobReader is what the lease rules read job rows through, nil for the
+	// job store of the checkout judged. An SDK caller passes its own.
+	JobReader types.JobReader
+	// Steps is the step rows and Go step rules JudgeStep reads.
+	// Zero denies every step as undeclared.
+	Steps StepTable
 
 	// scope is where the judged call runs. Judge fills it from the location it resolved,
 	// so Evaluate can tell a path outside the workspace without reading anything itself.
@@ -647,6 +656,10 @@ type Request struct {
 	DryRun bool
 	// Lease is an explicit --lease; empty resolves through job.LeaseQuery.Resolve.
 	Lease string
+	// Authority is the revision a caller with no row is judged from (ADR
+	// 0045). CI passes its target branch's, so a pull request cannot
+	// approve its own loosening.
+	Authority string
 	// PendingRow is the row of a lease the store does not carry yet, graded as if it did: it
 	// joins the rows the rules read, and Lease defaults to its id. For a fork that must know
 	// what the guard will say to its holder before the holder exists.
@@ -798,6 +811,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 	unjudged := ""
 	// unplaced is the advice a first call gets when no waiting spawn names its caller.
 	unplaced := ""
+	if step, ok := declaredStep(ctx, input, deps.Steps); ok {
+		return judgeStepRecord(ctx, deps, req, step)
+	}
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
@@ -833,6 +849,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			// same session.
 			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.skillsKey()), env.LoadedSkill)
 		}
+		if env.Tool == handbackTool && !req.DryRun && !req.Observe {
+			endHandedBack(ctx, hookLocation(ctx, deps), who, time.Now())
+		}
 		// A foreground spawn returns after its child stopped and a host may send no start for
 		// it, so the child's first call joins it to the spawn too; joinStartedChild leaves a
 		// child it already has a record of alone, and advises one it cannot place, which a
@@ -850,7 +869,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			// list, a search) has nothing any rule can read. Falling through judged the raw
 			// JSON as a shell line, so a denied command merely NAMED inside a todo blocked
 			// the tool call that wrote the todo. A call to a tool the host's tool rows do not
-			// list goes on to unjudged-tool instead.
+			// list goes on to unjudged-step instead.
 			if env.AgentTranscript != "" {
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
@@ -1023,7 +1042,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		if v, refused := pending.hold(deps, ShellVerdict{Deny: d.Say, Why: d.Why, Rule: denyRule{Name: rule}}); refused {
 			verdict.Decision, verdict.Reason, verdict.Context = decisionDeny, v.Deny, ""
 			verdict.Rule = string(rule)
-			verdict.Next = d.Next
+			verdict.NextSteps = d.Next
 			whys[v.Deny] = v.Why
 		}
 	}
@@ -1034,6 +1053,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		}
 		if d := denyUndeclaredLease(standing, actingLease, command); d.refused() {
 			refuseWith(denyRuleLeaseUndeclared, d)
+			return
+		}
+		// A pending row is a fork grading its check, and the store stamps the
+		// authority only as it writes the row.
+		if pendingRowID(ctx) == actingLease {
+			return
+		}
+		if d := denyUnauthorizedLease(standing, actingLease, command); d.refused() {
+			refuseWith(denyRuleLeaseAuthority, d)
 		}
 	}
 	// A served next is magus's own suggestion, and the guard does not argue with it: no
@@ -1055,7 +1083,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// contribution. Running the write rules here would only ever manufacture a false
 		// advisory about editing a file the agent opened read-only.
 	case unjudged != "":
-		refuseWith(denyRuleUnjudgedTool, denyUnjudgedTool(unjudged, req.Tools))
+		refuseWith(denyRuleUnjudgedStep, denyUnjudgedTool(unjudged, req.Tools))
 		pending.speak(markers, &verdict, whys)
 	case env.Enters:
 		if d := denyEnterCheckout(env.Tool, env.Value, env.EntersNew, ownedCheckouts(ctx, deps, location)); d.refused() {
@@ -1642,15 +1670,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		why := whys[verdict.Reason]
 		switch {
 		case len(remedy.Next) > 0 && verdict.Reason == remedy.Deny:
-			next = servableRemedy(ctx, deps, req, who, callDir, standing, actingLease, remedy.Next)
+			next = servableRemedy(ctx, deps, req, who, callDir, location.workspace, standing, actingLease, remedy.Next)
 			if len(next) > 0 {
 				verdict.Reason, why = remedy.Lead, remedy.Why
 			}
-		case len(verdict.Next) > 0:
+		case len(verdict.NextSteps) > 0:
 			// The workspace seam's own deny, which words its reason without the command.
-			next = servableRemedy(ctx, deps, req, who, callDir, standing, actingLease, verdict.Next)
+			next = servableRemedy(ctx, deps, req, who, callDir, location.workspace, standing, actingLease, verdict.NextSteps)
 		}
-		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
+		verdict.Reason, verdictRef, verdict.NextSteps = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
 	}
 	if verdict.Decision == decisionPass && unplaced != "" && !req.Observe {
 		verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, unplaced, string(advisorySpawnUnplaced)
@@ -1816,7 +1844,7 @@ func oneString(rule func(context.Context, Dependencies, string, string) string) 
 // lease, in callDir, judged as not yet served: a served next is pre-authorized, so one the
 // role may not run must never be served. A worker's placement of ./magus is kept whatever
 // its write paths, as the only way a worker gets its base's binary.
-func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir string, standing leaseStanding, actingLease string, next []types.NextStep) []types.NextStep {
+func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, root string, standing leaseStanding, actingLease string, next []types.NextStep) []types.NextStep {
 	if gradingRemedy(ctx) {
 		return nil
 	}
@@ -1824,7 +1852,7 @@ func servableRemedy(ctx context.Context, deps Dependencies, req Request, who hoo
 	candidates := next
 	// The apply line claims the acting lease itself, so the role filter, which reads every
 	// job verb as a write outside the lease, would drop the one remedy written for it.
-	if len(next) != 1 || !placesBinary(next[0], actingLease) && next[0].ID != hint.DenyRemedyPrefix+string(denyRuleLeaseClaim) {
+	if len(next) != 1 || !placesBinary(root, next[0], actingLease) && next[0].ID != hint.DenyRemedyPrefix+string(denyRuleLeaseClaim) {
 		candidates = hint.FilterServable(role, writePaths, next)
 	}
 	ctx = context.WithValue(context.WithValue(ctx, gradingRemedyKey{}, true), judgmentMarkKey{}, judgmentMark{})
@@ -1999,12 +2027,20 @@ const (
 //
 // tools are the host's tool rows, which say what a tool does where the input's shape
 // cannot: a file path is a read or a write, and an inert tool has nothing to judge.
+//
+// A Step record of kind tool reads as the envelope it stands for. A
+// record of any other kind is no envelope: Judge hands it to JudgeStep.
 func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	if !strings.HasPrefix(raw, "{") {
 		return hookRequest{}, false
 	}
 	var env hookEnvelope
-	if err := json.Unmarshal([]byte(raw), &env); err != nil {
+	if step, ok := stepRecord(raw); ok {
+		if !hostToolStep(step) {
+			return hookRequest{}, false
+		}
+		env = stepEnvelope(step)
+	} else if err := json.Unmarshal([]byte(raw), &env); err != nil {
 		return hookRequest{}, false
 	}
 	req := hookRequest{Cwd: env.Cwd, Who: hookAttribution{
@@ -2438,6 +2474,8 @@ type location struct {
 	// policies is what the workspace declares and how it was read, read once per judgment
 	// and only when a rule asks.
 	policies func() declaredIndex
+	// rows is the request's Dependencies.JobReader, nil for the job store.
+	rows types.JobReader
 }
 
 // jobs places the job store and checkout record of the checkout at. A user state dir that
@@ -2479,7 +2517,7 @@ func withJobStoreRows(ctx context.Context, at location) context.Context {
 // rereadJobStoreRows is withJobStoreRows over any rows already pinned, for a judgment
 // that has just written the store.
 func rereadJobStoreRows(ctx context.Context, at location) context.Context {
-	if at.cacheDir == "" {
+	if at.cacheDir == "" && at.rows == nil {
 		return ctx
 	}
 	log := judgmentPhases(ctx)
@@ -2498,17 +2536,30 @@ func rereadJobStoreRows(ctx context.Context, at location) context.Context {
 	wait, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	start := time.Now()
-	dryRun := isDryRun(ctx)
-	loc := at.jobs()
-	loc.DryRun = dryRun
-	store := job.NewStore(loc)
-	rows, err := awaitDeadline(wait, store.List)
+	reader, store := at.rows, (*job.Store)(nil)
+	if reader == nil {
+		store = at.store(isDryRun(ctx))
+		reader = store
+	}
+	rows, err := awaitDeadline(wait, reader.List)
 	if err != nil && wait.Err() != nil {
 		log.record(timedPhase(phaseJobRows, time.Since(start), budget, true))
 	} else {
 		log.idle()
 	}
-	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Err: err})
+	// An embedder's reader answers rows alone: its tasks keep no attempts.
+	var tries []types.Attempt
+	if err == nil && store != nil {
+		tries, err = store.Attempts()
+	}
+	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Attempts: tries, Err: err})
+}
+
+// store is the job store of at's checkout, a dry view for a dry run.
+func (at location) store(dryRun bool) *job.Store {
+	loc := at.jobs()
+	loc.DryRun = dryRun
+	return job.NewStore(loc)
 }
 
 // jobRowsBudget bounds a hook's wait for the job store's rows, half the hook's budget as a
@@ -2540,7 +2591,7 @@ func withPendingRow(ctx context.Context, row types.Job) context.Context {
 	}
 	rows := slices.DeleteFunc(slices.Clone(snap.Rows), func(r types.Job) bool { return r.ID == row.ID })
 	ctx = context.WithValue(ctx, pendingRowKey{}, row.ID)
-	return job.WithSnapshot(ctx, job.Snapshot{Rows: append(rows, row.Clone())})
+	return job.WithSnapshot(ctx, job.Snapshot{Rows: append(rows, row.Clone()), Attempts: snap.Attempts})
 }
 
 type pendingRowKey struct{}
@@ -2557,6 +2608,9 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 	if pinned, ok := job.SnapshotFromContext(ctx); ok {
 		return pinned.Rows, pinned.Err
 	}
+	if at.rows != nil {
+		return at.rows.List()
+	}
 	return job.NewStore(at.jobs()).List()
 }
 
@@ -2567,7 +2621,7 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 func hardenCovering(rows []types.Job, rel string, harden func([]types.Job) []types.Job) []types.Job {
 	narrowed := slices.Clone(rows)
 	for i, row := range rows {
-		narrowed[i].SoftPaths = slices.DeleteFunc(slices.Clone(row.SoftPaths), func(entry string) bool {
+		narrowed[i].Paths.Soft = slices.DeleteFunc(slices.Clone(row.Paths.Soft), func(entry string) bool {
 			_, covers, _ := declarationCovering([]string{entry}, rel)
 			return !covers
 		})
@@ -2575,19 +2629,22 @@ func hardenCovering(rows []types.Job, rel string, harden func([]types.Job) []typ
 	hardened := harden(narrowed)
 	out := slices.Clone(rows)
 	for i := range out {
-		made := slices.DeleteFunc(slices.Clone(narrowed[i].SoftPaths), func(entry string) bool {
-			return slices.Contains(hardened[i].SoftPaths, entry)
+		made := slices.DeleteFunc(slices.Clone(narrowed[i].Paths.Soft), func(entry string) bool {
+			return slices.Contains(hardened[i].Paths.Soft, entry)
 		})
 		if len(made) > 0 {
-			out[i].SoftPaths = slices.DeleteFunc(slices.Clone(rows[i].SoftPaths), func(entry string) bool { return slices.Contains(made, entry) })
+			out[i].Paths.Soft = slices.DeleteFunc(slices.Clone(rows[i].Paths.Soft), func(entry string) bool { return slices.Contains(made, entry) })
 		}
 	}
 	return out
 }
 
-// dryRunCopyPrefix starts the name of a dry run's session copy in the temporary directory;
-// the pid of the process that made it follows.
-const dryRunCopyPrefix = "magus-guard-dry-run-"
+// dryRunCopies is the per-user directory a dry run's session copy is
+// made in, named for the pid that made it. The sweep reads only this
+// directory: the temporary directory can hold 100k entries.
+func dryRunCopies() string {
+	return filepath.Join(os.TempDir(), "magus-guard-dry-run-"+strconv.Itoa(os.Getuid()))
+}
 
 // sessionCopy copies into a new temporary directory what the gates keyed on keys hold under
 // cacheDir, and the served-next journal, keeping modification times, since an anonymous
@@ -2604,7 +2661,11 @@ func sessionCopy(cacheDir string, keys ...string) (dir string, release func()) {
 		return "", release
 	}
 	removeOrphanedCopies()
-	dir, err := os.MkdirTemp("", fmt.Sprintf("%s%s-", dryRunCopyPrefix, strconv.Itoa(os.Getpid())))
+	parent := dryRunCopies()
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return "", release
+	}
+	dir, err := os.MkdirTemp(parent, strconv.Itoa(os.Getpid())+"-")
 	if err != nil {
 		return "", release
 	}
@@ -2656,14 +2717,15 @@ func copyWithModTime(src, dst string) error {
 	return os.Chtimes(dst, info.ModTime(), info.ModTime())
 }
 
-// removeOrphanedCopies removes the session copies whose process has exited. A name that
-// carries no pid, as one made by an older magus, is kept: its process may still read it.
+// removeOrphanedCopies removes the session copies whose process has
+// exited. A name that carries no pid is kept: its process may still read it.
 func removeOrphanedCopies() {
-	copies, _ := filepath.Glob(filepath.Join(os.TempDir(), dryRunCopyPrefix+"*"))
-	for _, path := range copies {
-		owner, _, named := strings.Cut(strings.TrimPrefix(filepath.Base(path), dryRunCopyPrefix), "-")
+	parent := dryRunCopies()
+	copies, _ := os.ReadDir(parent)
+	for _, c := range copies {
+		owner, _, named := strings.Cut(c.Name(), "-")
 		if n, err := strconv.Atoi(owner); named && err == nil && !pid.Alive(n) {
-			_ = os.RemoveAll(path)
+			_ = os.RemoveAll(filepath.Join(parent, c.Name()))
 		}
 	}
 }
@@ -2869,9 +2931,14 @@ func hookLocation(ctx context.Context, deps Dependencies) location {
 		if at.policies == nil {
 			at.policies = policiesAt(ctx, deps, at.workspace)
 		}
+		if at.rows == nil {
+			at.rows = deps.JobReader
+		}
 		return at
 	}
-	return hookLocationAt(deps, "")
+	at := hookLocationAt(deps, "")
+	at.rows = deps.JobReader
+	return at
 }
 
 // hookLocationAt resolves the workspace holding dir, or the process cwd for "".

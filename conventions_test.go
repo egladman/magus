@@ -826,9 +826,9 @@ func TestEveryReadMagusEnvVarIsRegistered(t *testing.T) {
 // hook configs and rendered verdicts against, with the provenance of each in SOURCES.md.
 const hostSchemaDir = "testdata/hosts"
 
-// sourcesRow matches one row of the provenance table, which is the only place a
-// vendored schema's origin and digest are written down.
-var sourcesRow = regexp.MustCompile("(?m)^\\| `([^`]+)` \\| (published|derived-from-binary|derived) \\|.*\\| `([0-9a-f]{64})` \\|")
+// sourcesEntry matches one entry of the provenance table, which is the only
+// place a vendored schema's origin and digest are written down.
+var sourcesEntry = regexp.MustCompile("(?m)^\\| `([^`]+)` \\| (published|derived-from-binary|derived) \\|.*\\| `([0-9a-f]{64})` \\|")
 
 // TestVendoredHostSchemasMatchTheirRecordedDigest keeps the provenance honest.
 //
@@ -840,8 +840,8 @@ func TestVendoredHostSchemasMatchTheirRecordedDigest(t *testing.T) {
 	require.NoError(t, err, "read the provenance table")
 
 	recorded := map[string]string{}
-	for _, row := range sourcesRow.FindAllStringSubmatch(string(body), -1) {
-		recorded[row[1]] = row[3]
+	for _, entry := range sourcesEntry.FindAllStringSubmatch(string(body), -1) {
+		recorded[entry[1]] = entry[3]
 	}
 	require.NotEmpty(t, recorded, "SOURCES.md must carry a row per vendored schema")
 

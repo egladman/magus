@@ -6,38 +6,38 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type PluralSuite struct{ suite.Suite }
+type Suite struct{ suite.Suite }
 
-func TestPluralSuite(t *testing.T) { suite.Run(t, new(PluralSuite)) }
+func TestSuite(t *testing.T) { suite.Run(t, new(Suite)) }
 
-func (s *PluralSuite) TestWordOneIsSingular() {
+func (s *Suite) TestWordOneIsSingular() {
 	s.Equal("target", Word(1, "target", "targets"))
 }
 
-func (s *PluralSuite) TestWordZeroIsPlural() {
+func (s *Suite) TestWordZeroIsPlural() {
 	s.Equal("targets", Word(0, "target", "targets"))
 }
 
-func (s *PluralSuite) TestWordManyIsPlural() {
+func (s *Suite) TestWordManyIsPlural() {
 	s.Equal("targets", Word(2, "target", "targets"))
 }
 
-func (s *PluralSuite) TestWordNegativeOneIsPlural() {
+func (s *Suite) TestWordNegativeOneIsPlural() {
 	s.Equal("targets", Word(-1, "target", "targets"))
 }
 
-func (s *PluralSuite) TestWordUsesTheSpelledForm() {
+func (s *Suite) TestWordUsesTheSpelledForm() {
 	s.Equal("branches", Word(2, "branch", "branches"))
 }
 
-func (s *PluralSuite) TestCountOne() {
+func (s *Suite) TestCountOne() {
 	s.Equal("1 target", Count(1, "target", "targets"))
 }
 
-func (s *PluralSuite) TestCountZero() {
+func (s *Suite) TestCountZero() {
 	s.Equal("0 targets", Count(0, "target", "targets"))
 }
 
-func (s *PluralSuite) TestCountMany() {
+func (s *Suite) TestCountMany() {
 	s.Equal("12 branches", Count(12, "branch", "branches"))
 }

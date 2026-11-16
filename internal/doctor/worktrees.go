@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // worktreesDirRel is where the agent tooling parks per-branch checkouts. It is
@@ -37,16 +38,16 @@ const worktreesDirRel = ".claude/worktrees"
 // worktree and removes on `git worktree remove`/`prune`. A pruned-but-not-deleted
 // directory therefore reads as stale without shelling out to git, which keeps the
 // check cheap enough to run every time and correct when git is unavailable.
-func checkStaleWorktrees(root string) types.Check {
+func checkStaleWorktrees(root string) check.Check {
 	const name = "stale-worktrees"
 	dir := filepath.Join(root, filepath.FromSlash(worktreesDirRel))
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return types.Check{Name: name, Status: types.CheckOK, Message: "no " + worktreesDirRel + " directory"}
+			return check.Check{Name: name, Status: check.OK, Message: "no " + worktreesDirRel + " directory"}
 		}
-		return types.Check{Name: name, Status: types.CheckFail, Message: fmt.Sprintf("scan %s: %v", worktreesDirRel, err)}
+		return check.Check{Name: name, Status: check.Fail, Message: fmt.Sprintf("scan %s: %v", worktreesDirRel, err)}
 	}
 
 	var stale []string
@@ -68,7 +69,7 @@ func checkStaleWorktrees(root string) types.Check {
 		stale = append(stale, e.Name())
 	}
 	if len(stale) == 0 {
-		return types.Check{Name: name, Status: types.CheckOK, Message: fmt.Sprintf("%d live worktree(s); none orphaned", live)}
+		return check.Check{Name: name, Status: check.OK, Message: fmt.Sprintf("%d live worktree(s); none orphaned", live)}
 	}
 	sort.Strings(stale)
 
@@ -77,9 +78,9 @@ func checkStaleWorktrees(root string) types.Check {
 		details = append(details, filepath.Join(worktreesDirRel, s))
 	}
 	details = append(details, "remove the directory, or restore it with `git worktree add` if the work is still wanted")
-	return types.Check{
+	return check.Check{
 		Name:    name,
-		Status:  types.CheckFail,
+		Status:  check.Fail,
 		Message: fmt.Sprintf("%d directory(ies) under %s are not live worktrees; they duplicate spell sources and can trip MGS1002 and fail tests", len(stale), worktreesDirRel),
 		Details: details,
 	}
@@ -119,7 +120,7 @@ func readDiskSamples(path string) ([]types.DiskSample, error) {
 // diskTrend grades the store's samples against the disk thresholds: the newest free space,
 // how fast it fell over the last day, and the last reclaim chunk. Below disk.min_free_mb or
 // falling faster than disk.growth_mb_per_hour is advice, never a failure.
-func diskTrend(samples []types.DiskSample, cfg config.Disk) types.Check {
+func diskTrend(samples []types.DiskSample, cfg config.Disk) check.Check {
 	const name = "disk-trend"
 	thresholds := fmt.Sprintf("disk.min_free_mb %d%s, disk.growth_mb_per_hour %d%s", cfg.MinFreeMB, defaulted(cfg.MinFreeMB, config.Defaults().Disk.MinFreeMB),
 		cfg.GrowthMBPerHour, defaulted(cfg.GrowthMBPerHour, config.Defaults().Disk.GrowthMBPerHour))
@@ -135,7 +136,7 @@ func diskTrend(samples []types.DiskSample, cfg config.Disk) types.Check {
 		}
 	}
 	if last == nil {
-		return types.Check{Name: name, Status: types.CheckAdvice, Message: "no disk samples: nothing has run the reclaim tick on this machine, so nothing would notice a filling disk; a prompt hook, `magus job fork` and `magus run` each start it; " + thresholds}
+		return check.Check{Name: name, Status: check.Advice, Message: "no disk samples: nothing has run the reclaim tick on this machine, so nothing would notice a filling disk; a prompt hook, `magus job fork` and `magus run` each start it; " + thresholds}
 	}
 	for i := range samples {
 		if s := &samples[i]; s.TotalBytes > 0 && s.Path == last.Path && last.At-s.At <= float64(24*time.Hour/time.Millisecond) {
@@ -151,14 +152,14 @@ func diskTrend(samples []types.DiskSample, cfg config.Disk) types.Check {
 		perHour = int64(float64((oldest.FreeBytes-last.FreeBytes)>>20) / hours)
 		msg += fmt.Sprintf("; free space changed %+d MB an hour over %.1fh", -perHour, hours)
 	}
-	status := types.CheckOK
+	status := check.OK
 	if (cfg.MinFreeMB > 0 && freeMB < int64(cfg.MinFreeMB)) || (cfg.GrowthMBPerHour > 0 && perHour > int64(cfg.GrowthMBPerHour)) {
-		status = types.CheckAdvice
+		status = check.Advice
 	}
 	if len(reclaimed) > 3 {
 		reclaimed = reclaimed[len(reclaimed)-3:]
 	}
-	return types.Check{Name: name, Status: status, Message: fmt.Sprintf("%s; %s", msg, thresholds), Details: reclaimed}
+	return check.Check{Name: name, Status: status, Message: fmt.Sprintf("%s; %s", msg, thresholds), Details: reclaimed}
 }
 
 func defaulted(value, def int) string {
@@ -170,14 +171,14 @@ func defaulted(value, def int) string {
 
 // checkDiskTrend reads the reclaim hook's samples and grades them; a store that is not
 // there yet is a fact, and one that cannot be read is advice naming why.
-func (r *runner) checkDiskTrend() types.Check {
+func (r *runner) checkDiskTrend() check.Check {
 	path, err := diskSamplesPath()
 	if err != nil {
-		return types.Check{Name: "disk-trend", Status: types.CheckAdvice, Message: fmt.Sprintf("no state directory to read disk samples from: %v", err)}
+		return check.Check{Name: "disk-trend", Status: check.Advice, Message: fmt.Sprintf("no state directory to read disk samples from: %v", err)}
 	}
 	samples, err := readDiskSamples(path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return types.Check{Name: "disk-trend", Status: types.CheckAdvice, Message: fmt.Sprintf("cannot read the disk samples: %v", err)}
+		return check.Check{Name: "disk-trend", Status: check.Advice, Message: fmt.Sprintf("cannot read the disk samples: %v", err)}
 	}
 	return diskTrend(samples, r.opts.cfg.Disk)
 }

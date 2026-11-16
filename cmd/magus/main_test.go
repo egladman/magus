@@ -25,8 +25,8 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
-	"github.com/egladman/magus/libs/cmdline"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -465,7 +465,7 @@ func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
 	out := buf.String()
 	fs.VisitAll(func(f *flag.Flag) {
 		name := f.Name
-		if base, ok := strings.CutPrefix(name, cmdline.NegationPrefix); ok && fs.Lookup(base) != nil {
+		if base, ok := strings.CutPrefix(name, command.NegationPrefix); ok && fs.Lookup(base) != nil {
 			return
 		}
 		named := strings.Contains(out, "--"+name) || strings.Contains(out, "--[no-]"+name)
@@ -1327,7 +1327,7 @@ func notices(t *testing.T, fn func()) string {
 	t.Helper()
 	var buf bytes.Buffer
 	prev := slog.Default()
-	slog.SetDefault(slog.New(cache.NewPrettyHandler(&buf, slog.LevelDebug)))
+	slog.SetDefault(slog.New(cache.NewLogHandler(&buf, "pretty", &slog.HandlerOptions{Level: slog.LevelDebug})))
 	defer slog.SetDefault(prev)
 	fn()
 	return buf.String()

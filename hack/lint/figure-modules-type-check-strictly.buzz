@@ -138,7 +138,7 @@ test "a figure with an unlabeled argument or a warning is reported, a clean one 
         "docs/site/diagrams/clean.buzz": "namespace clean;\n\n" + lib + "fun sum() > int \{\n    return add(1, b: 2);\n}\n",
         "docs/site/diagrams/positional.buzz": "namespace positional;\n\n" + lib + "fun sum() > int \{\n    return add(1, 2);\n}\n",
         "docs/site/diagrams/rebuilt.buzz": "namespace rebuilt;\n\nfun join(parts: [str]) > str \{\n    var s = \"\";\n"
-            + "    foreach (p in parts) \{\n        s = s + p;\n    }\n    return s;\n}\n",
+            + "    foreach (p in parts) \{\n        s = p + s;\n    }\n    return s;\n}\n",
     }));
     final paths = mut [<str>];
     foreach (f in got) {

@@ -44,6 +44,17 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectExecResult(ret0), nil
 	}))
+	m.MapSet("cmdAll", vm.DirectValue("magus.cmdAll", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		commands, err := ffi.Objects("magus\\cmdAll", "commands", bzArgs, 0, decode.DecodeMagusSubcommand)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusCommandAll(ctx, commands)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.ObjectSlice(ret0, ObjectExecResult), nil
+	}))
 	m.MapSet("where", vm.DirectValue("magus.where", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		dir := ffi.String(bzArgs, 0)
 		ret0, err := std.MagusWhere(ctx, dir)

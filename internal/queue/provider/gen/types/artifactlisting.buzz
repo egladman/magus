@@ -6,8 +6,8 @@
 // `go generate`, never this file.
 
 export object QueueArtifactListing {
-    run: QueueRunOrigin = QueueRunOrigin{},
-    complete: bool = false,
+    run: QueueRunOrigin,
+    complete: bool,
     headers: {str: str} = {},
-    artifacts: [QueueArtifact] = [],
+    artifacts: [QueueArtifact],
 }

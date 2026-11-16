@@ -85,6 +85,9 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		if spec.Sandbox != nil {
 			opts = append(opts, spells.WithSandbox(spec.Sandbox))
 		}
+		if spec.Scopes != nil {
+			opts = append(opts, spells.WithScopes(spec.Scopes))
+		}
 		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(spec.Name, opts...))
 	}
 })
@@ -864,6 +867,9 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	}
 	if m.Sandbox != nil {
 		opts = append(opts, spells.WithSandbox(m.Sandbox))
+	}
+	if m.Scopes != nil {
+		opts = append(opts, spells.WithScopes(m.Scopes))
 	}
 	opts = append(opts, spells.WithOps(m.Ops), spells.WithTools(m.Tools), spells.WithVersionProber(versionProber), spells.WithReadyChecker(toolReady))
 	return opts

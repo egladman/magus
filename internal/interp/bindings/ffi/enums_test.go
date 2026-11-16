@@ -2,6 +2,7 @@ package ffi
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -103,4 +104,24 @@ func TestSessionEnumsCompilesNothingOnceTheModuleIsImported(t *testing.T) {
 	require.True(t, ok, "got %s, not an enum case", got.Kind())
 	assert.Equal(t, "dark", name)
 	assert.Zero(t, compiles.phases)
+}
+
+// A guard rule's session judges calls that run at once, each through its
+// own SessionEnums. Their first reads must not compile into it together.
+func TestSessionEnumsReadConcurrentlyOverOneSession(t *testing.T) {
+	ctx := context.Background()
+	sess := shadeSession(t)
+
+	got := make([]vm.Value, 8)
+	var wg sync.WaitGroup
+	for i := range got {
+		wg.Go(func() { got[i] = SessionEnums(ctx, sess, "paint/shades").Case("Shade", "light") })
+	}
+	wg.Wait()
+
+	for _, v := range got {
+		_, name, ok := v.EnumCase()
+		require.True(t, ok, "got %s, not an enum case", v.Kind())
+		assert.Equal(t, "light", name)
+	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +27,7 @@ func TestAllChecksAreNamedAndDocumented(t *testing.T) {
 		// Unknown is a RESULT, never a declared default: a check whose registry entry
 		// claimed it could never look would be a check with no reason to exist.
 		assert.Contains(t,
-			[]types.Evidence{types.EvidenceMeasured, types.EvidenceDeclared, types.EvidenceInferred},
+			[]check.Evidence{check.EvidenceMeasured, check.EvidenceDeclared, check.EvidenceInferred},
 			def.Evidence,
 			"check %q must declare what its verdict rests on", def.Name)
 	}
@@ -38,7 +39,7 @@ func TestConformanceCeilingIsRegisteredOnce(t *testing.T) {
 		if def.Name == "conformance-ceiling" {
 			n++
 			assert.True(t, def.NeedsWorkspace)
-			assert.Equal(t, types.EvidenceMeasured, def.Evidence)
+			assert.Equal(t, check.EvidenceMeasured, def.Evidence)
 		}
 	}
 	assert.Equal(t, 1, n)
@@ -93,12 +94,12 @@ func TestRunSkipsWorkspaceChecksWhenLoadFailed(t *testing.T) {
 	require.Len(t, report.Checks, want)
 	assert.Equal(t, 1, report.Summary.Fail)
 
-	byName := map[string]types.Check{}
+	byName := map[string]check.Check{}
 	for _, c := range report.Checks {
 		byName[c.Name] = c
 	}
 	require.Contains(t, byName, "workspace")
-	assert.Equal(t, types.CheckFail, byName["workspace"].Status)
+	assert.Equal(t, check.Fail, byName["workspace"].Status)
 	assert.NotContains(t, byName, "vcs-base-ref")
 }
 
@@ -112,15 +113,15 @@ func TestEveryRunCheckStatesItsEvidence(t *testing.T) {
 	}
 }
 
-// TestSkippedCheckReportsUnknown pins the half of the summary arithmetic that can be
-// reached without a workspace: a check that could not look says so, rather than
-// returning the bare CheckOK the ok count would then absorb.
+// TestSkippedCheckReportsUnknown pins the summary arithmetic reachable
+// without a workspace. A check that could not look says so, rather than
+// returning a bare check.OK the ok count would absorb.
 func TestSkippedCheckReportsUnknown(t *testing.T) {
 	got := (&runner{}).checkCITarget(nil)
-	assert.Equal(t, types.Check{
+	assert.Equal(t, check.Check{
 		Name:     "ci-target",
-		Status:   types.CheckOK,
-		Evidence: types.EvidenceUnknown,
+		Status:   check.OK,
+		Evidence: check.EvidenceUnknown,
 		Message:  "no projects; skipped",
 	}, got)
 }

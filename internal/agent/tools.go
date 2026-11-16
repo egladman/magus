@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // ToolRowsVersion is the layout of a tool rows directory this build writes and reads, kept in
@@ -22,17 +23,12 @@ import (
 // another layout is reported rather than misread.
 const ToolRowsVersion types.APIVersion = "magus.tool-rows/v1alpha1"
 
-// preFoldToolRows is the version file an older magus wrote for
-// ToolRowsVersion's layout. compat(until: the next release): a harness
-// installed before the rename keeps its rows until it is reinstalled.
-const preFoldToolRows types.APIVersion = "1"
-
 // ModelFacts is what the guard prices and tiers a call by: the model rows the harness
 // publishes through mgs_listModels, and the workspace's model-tier declaration, nil when it
 // declares none or turned tiers off.
 type ModelFacts struct {
 	Rows  []types.ModelPricing
-	Tiers *types.ModelTierSet
+	Tiers *typesagent.ModelTierSet
 }
 
 func validateHarnessTools(t types.HarnessTools) error {
@@ -40,7 +36,7 @@ func validateHarnessTools(t types.HarnessTools) error {
 		return errors.New("dir must be a workspace-relative path")
 	}
 	seen := map[string]bool{}
-	for i, r := range t.Rows {
+	for i, r := range t.Tools {
 		switch {
 		case r.Name == "" || strings.ContainsAny(r.Name, "\n\r"):
 			return fmt.Errorf("row %d: name must be one non-empty line", i+1)
@@ -60,7 +56,7 @@ func validateHarnessTools(t types.HarnessTools) error {
 // workspace; nil writes neither. The version file tells an installed directory from none.
 func ToolFiles(t types.HarnessTools, models *ModelFacts) []types.AgentFile {
 	byCapability := map[types.ToolCapability][]string{}
-	for _, r := range t.Rows {
+	for _, r := range t.Tools {
 		byCapability[r.Capability] = append(byCapability[r.Capability], r.Name)
 	}
 	capabilities := types.ToolCapabilities()
@@ -79,10 +75,10 @@ func ToolFiles(t types.HarnessTools, models *ModelFacts) []types.AgentFile {
 	}
 	if models != nil {
 		files = append(files,
-			types.AgentFile{Path: path.Join(t.Dir, types.ToolModelRowsFile), Content: encodeModelRows(models.Rows)},
+			types.AgentFile{Path: path.Join(t.Dir, types.ToolModelsFile), Content: encodeModelRows(models.Rows)},
 			types.AgentFile{Path: path.Join(t.Dir, types.ToolTiersFile), Content: encodeTiers(models.Tiers)})
 	}
-	return append(files, types.AgentFile{Path: path.Join(t.Dir, types.ToolRowsVersionFile), Content: string(ToolRowsVersion) + "\n"})
+	return append(files, types.AgentFile{Path: path.Join(t.Dir, types.ToolVersionFile), Content: string(ToolRowsVersion) + "\n"})
 }
 
 // hostFiles are the files that tell a hook which host a tool rows directory in dir belongs
@@ -117,7 +113,7 @@ func InstallHarnessTools(ctx context.Context, root, id string, dryRun bool) ([]s
 		return nil, nil
 	}
 	ws, ok := types.WorkspaceFromContext(ctx).(interface {
-		ModelTiers(ctx context.Context) *types.ModelTierSet
+		ModelTiers(ctx context.Context) *typesagent.ModelTierSet
 	})
 	if !ok {
 		return nil, fmt.Errorf("agent: harness %s: no workspace is loaded, so its model tiers are unknown", id)
@@ -151,7 +147,13 @@ func InstallHarnessTools(ctx context.Context, root, id string, dryRun bool) ([]s
 // there is no table. The zero value is a table that was never asked for.
 type ToolRows struct {
 	// Dir is the directory as the wiring named it, "" when it named none.
-	Dir          string
+	Dir string
+	// Host is the host the rows were looked up for, "" when no lookup named one.
+	Host string
+	// FellBackTo is the primary checkout whose installed rows stand in for root's own, ""
+	// when the rows are root's. A linked worktree is made fresh, so it holds none until
+	// the install runs there.
+	FellBackTo   string
 	abs          string
 	capabilities map[string]types.ToolCapability
 	Err          error
@@ -172,16 +174,13 @@ func readToolRows(root, dir string) ToolRows {
 		abs = filepath.Join(root, dir)
 	}
 	reinstall := "write it with `magus agent harness install`"
-	version, err := os.ReadFile(filepath.Join(abs, types.ToolRowsVersionFile))
+	version, err := os.ReadFile(filepath.Join(abs, types.ToolVersionFile))
 	if err != nil {
 		rows.Err = fmt.Errorf("no tool rows at %s, %s: %w", dir, reinstall, err)
 		return rows
 	}
 	got := types.APIVersion(strings.TrimSpace(string(version)))
-	if got == preFoldToolRows {
-		got = ToolRowsVersion
-	}
-	if err := ToolRowsVersion.Refuse("the tool rows at "+dir, got, reinstall); err != nil {
+	if err := types.RefuseVersion(ToolRowsVersion, got, "the tool rows at "+dir, reinstall); err != nil {
 		rows.Err = err
 		return rows
 	}
@@ -222,7 +221,7 @@ func (r ToolRows) Models() (ModelFacts, error) {
 		return ModelFacts{}, errors.New("no tool rows were read")
 	}
 	reinstall := "rewrite it with `magus agent harness install`"
-	body, err := os.ReadFile(filepath.Join(r.abs, types.ToolModelRowsFile))
+	body, err := os.ReadFile(filepath.Join(r.abs, types.ToolModelsFile))
 	if err != nil {
 		return ModelFacts{}, fmt.Errorf("no model rows at %s, %s: %w", r.Dir, reinstall, err)
 	}
@@ -234,7 +233,7 @@ func (r ToolRows) Models() (ModelFacts, error) {
 	if err != nil {
 		return ModelFacts{}, fmt.Errorf("no model tiers at %s, %s: %w", r.Dir, reinstall, err)
 	}
-	var tiers *types.ModelTierSet
+	var tiers *typesagent.ModelTierSet
 	if lines := jsonLines(body); len(lines) > 0 {
 		if tiers, err = decodeTiers(lines); err != nil {
 			return ModelFacts{}, fmt.Errorf("the model tiers at %s do not read, %s: %w", r.Dir, reinstall, err)
@@ -248,9 +247,25 @@ func (r ToolRows) Models() (ModelFacts, error) {
 const toolRowsGlob = ".*/magus/tools/" + types.ToolHostFile
 
 // FindToolRows reads the tool rows directory installed for host under root: the one whose
-// host file names it. None is an Err naming the install that writes it, so the rules that
-// read the rows report the gap rather than judge without them unsaid.
+// host file names it. A linked worktree with none installed reads the primary checkout's, and
+// the result's FellBackTo names it. None anywhere is an Err naming the install that writes
+// them, so the rules that read the rows report the gap rather than judge without them unsaid.
 func FindToolRows(root, host string) ToolRows {
+	rows := findInstalledRows(root, host)
+	if rows.Dir == "" && rows.Err != nil {
+		if primary, ok := primaryCheckoutRoot(root); ok {
+			if fallback := findInstalledRows(primary, host); fallback.Err == nil {
+				fallback.FellBackTo = primary
+				rows = fallback
+			}
+		}
+	}
+	rows.Host = host
+	return rows
+}
+
+// findInstalledRows is FindToolRows over root alone.
+func findInstalledRows(root, host string) ToolRows {
 	matches, _ := filepath.Glob(filepath.Join(root, filepath.FromSlash(toolRowsGlob)))
 	for _, m := range matches {
 		body, err := os.ReadFile(m)
@@ -264,6 +279,32 @@ func FindToolRows(root, host string) ToolRows {
 		return readToolRows(root, filepath.ToSlash(dir))
 	}
 	return ToolRows{Err: fmt.Errorf("no tool rows are installed for %s, so write them with `magus agent harness install`", host)}
+}
+
+// primaryCheckoutRoot is the primary checkout of the repository a linked worktree at root
+// belongs to. False when root is the primary checkout or no git worktree.
+func primaryCheckoutRoot(root string) (string, bool) {
+	body, err := os.ReadFile(filepath.Join(root, ".git"))
+	if err != nil {
+		return "", false
+	}
+	gitdir, ok := strings.CutPrefix(strings.TrimSpace(string(body)), "gitdir:")
+	if !ok {
+		return "", false
+	}
+	gitdir = strings.TrimSpace(gitdir)
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(root, gitdir)
+	}
+	i := strings.LastIndex(gitdir, fmt.Sprintf("%[1]cworktrees%[1]c", filepath.Separator))
+	if i < 0 {
+		return "", false
+	}
+	common := gitdir[:i]
+	if filepath.Base(common) != ".git" {
+		return "", false
+	}
+	return filepath.Dir(common), true
 }
 
 // Limits reads the host's limits installed beside the rows; the error says why there are
@@ -351,13 +392,13 @@ func decodeModelRows(body []byte) ([]types.ModelPricing, error) {
 // tierLine is a model-tier declaration as the tiers file keeps it: each list by rank,
 // cheapest first, and each host's model alias for every rank.
 type tierLine struct {
-	Enum    string               `json:"enum"`
-	Site    string               `json:"site"`
-	Cases   []string             `json:"cases"`
-	Default int                  `json:"default"`
-	Bounds  []tierBoundsLine     `json:"bounds"`
-	Skills  []types.SkillVariant `json:"skills"`
-	Hosts   map[string][]string  `json:"hosts,omitempty"`
+	Enum    string                    `json:"enum"`
+	Site    string                    `json:"site"`
+	Cases   []string                  `json:"cases"`
+	Default int                       `json:"default"`
+	Bounds  []tierBoundsLine          `json:"bounds"`
+	Skills  []typesagent.SkillVariant `json:"skills"`
+	Hosts   map[string][]string       `json:"hosts,omitempty"`
 }
 
 type tierBoundsLine struct {
@@ -365,7 +406,7 @@ type tierBoundsLine struct {
 	MaxContext int64 `json:"max_context,omitzero"`
 }
 
-func encodeTiers(set *types.ModelTierSet) string {
+func encodeTiers(set *typesagent.ModelTierSet) string {
 	if set == nil {
 		return ""
 	}
@@ -392,7 +433,7 @@ func encodeTiers(set *types.ModelTierSet) string {
 	return b.String()
 }
 
-func decodeTiers(lines [][]byte) (*types.ModelTierSet, error) {
+func decodeTiers(lines [][]byte) (*typesagent.ModelTierSet, error) {
 	if len(lines) != 1 {
 		return nil, fmt.Errorf("%d lines, and a declaration is one", len(lines))
 	}
@@ -400,14 +441,14 @@ func decodeTiers(lines [][]byte) (*types.ModelTierSet, error) {
 	if err := json.Unmarshal(lines[0], &line); err != nil {
 		return nil, err
 	}
-	decl := types.ModelTierDeclaration{Enum: line.Enum, Site: line.Site, Cases: line.Cases, Default: line.Default, Skills: line.Skills}
+	decl := typesagent.ModelTierDeclaration{Enum: line.Enum, Site: line.Site, Cases: line.Cases, Default: line.Default, Skills: line.Skills}
 	for _, b := range line.Bounds {
-		decl.Bounds = append(decl.Bounds, types.ModelTierBounds{MaxLive: b.MaxLive, MaxContext: b.MaxContext})
+		decl.Bounds = append(decl.Bounds, typesagent.ModelTierBounds{MaxLive: b.MaxLive, MaxContext: b.MaxContext})
 	}
 	if len(line.Hosts) > 0 {
 		decl.Hosts = line.Hosts
 	}
-	return types.NewModelTierSet(decl)
+	return typesagent.NewModelTierSet(decl)
 }
 
 // writeJSONLine appends v as one line. Each value written holds only strings, numbers and

@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -334,8 +335,8 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	serverJobStore = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: dir, Root: dir})
 	t.Cleanup(func() { serverJobStore = nil })
 
-	_, err := serverJobStore.Update(t.Context(), "sync-graph", func(row *types.Job) {
-		row.Holder = types.HolderServer
+	ctx := trail.ContextWithEntryPoint(t.Context(), types.EntryPointServer)
+	_, err := serverJobStore.Update(ctx, "sync-graph", func(row *types.Job) {
 		row.State = types.StateRunning
 		row.LastRun = &types.JobRun{Invocation: "inv-1"}
 	})
@@ -348,7 +349,7 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	require.Len(t, rows, 1)
 	got := rows[0]
 	assert.Equal(t, "sync-graph", got.ID)
-	assert.Equal(t, types.HolderServer, got.Holder)
+	assert.True(t, got.ServerRun(), "the server registered its own row")
 	assert.Equal(t, types.StatePass, got.State)
 	require.NotNil(t, got.LastRun)
 	assert.Equal(t, "inv-1", got.LastRun.Invocation)

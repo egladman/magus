@@ -229,6 +229,8 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     // each child links back to the landing, so neither can be registered at render time
     // without the other having rendered first. See collectDevelopmentPages.
     collectDevelopmentPages(site);
+    // After the last pass that adds a page, and before any page renders.
+    site.collectDocIndex();
     // Pre-walk, and after the synthesized overviews join docPages: a tag chip renders during the
     // walk and has to know whether its /tags/<slug>/ destination will be written.
     collectTagIndex(site);

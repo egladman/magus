@@ -6,12 +6,12 @@
 // `go generate`, never this file.
 
 export object QueueApproval {
-    approved: bool = false,
-    head: str = "",
+    approved: bool,
+    head: str,
     reason: str = "",
-    base: str = "",
-    method: str = "",
-    queued: bool = false,
+    base: str,
+    method: str,
+    queued: bool,
     approvedCommit: str = "",
-    branchSharedWith: [str] = [],
+    branchSharedWith: [str],
 }

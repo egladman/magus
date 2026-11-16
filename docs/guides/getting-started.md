@@ -75,7 +75,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(form
 export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); }
 
 // 'ci' is the conventional anchor that `magus affected ci` keys off. magus does
-// not hardcode its steps - compose them here with ctx.needs. magus runs
+// not hardcode its steps - compose them here with ctx.needs. magus verifies
 // ci read-only. Each stage declares its own prerequisites so the DAG is expressed
 // as edges: ci fans out lint/build/test in parallel; they each wait for format,
 // which waits for generate. Shared deps run once.
@@ -88,7 +88,7 @@ Three ideas carry the whole model:
 
 - **Targets are exported functions.** There is no registration call for a target: export a `fun`, and its name becomes a runnable target. See [targets.md](../concepts/targets.md) for the full model and the CLI grammar.
 - **`ctx.needs` declares prerequisites.** `ctx.needs(format)` says "run `format` first"; you pass the target function itself, so a typo is an undefined variable caught at load, not a run-time miss. magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.
-- **`ci` is the anchor.** It is an ordinary target you compose with `ctx.needs`. magus does not hardcode its steps, but it is the target `magus affected` keys off, and it always runs read-only.
+- **`ci` is the anchor.** It is an ordinary target you compose with `ctx.needs`. magus does not hardcode its steps, but it is the target `magus affected` keys off, and it always verifies read-only. Under `rw` it repairs a failing target that declares the write, then fails until you commit the repair.
 
 List what magus discovered, then run the starter `build`:
 
@@ -146,7 +146,7 @@ magus run format:rw   # gofmt -w (rewrite files)
 magus run lint:rw     # golangci-lint --fix (apply autofixes)
 ```
 
-Charms are shared, composable execution modifiers attached after `:`; see [charms.md](../concepts/charms.md). If you want autofix as the local default so you do not type `:rw` each time, set `default_charms: [rw]` in `magus.yaml` (charms.md covers the safeguards that keep CI read-only regardless).
+Charms are shared, composable execution modifiers attached after `:`; see [charms.md](../concepts/charms.md). If you want autofix as the local default so you do not type `:rw` each time, set `default_charms: [rw]` in `magus.yaml` (charms.md covers what a local `ci` then repairs, and why a CI runner passes `--no-default-charms`).
 
 ## 5. Compose a `ci` target and run only what changed
 
@@ -163,7 +163,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 Run the whole pipeline locally:
 
 ```sh
-magus run ci        # lint, build, test (read-only; rw is stripped from ci)
+magus run ci        # lint, build, test (each pass verifies; rw is stripped)
 ```
 
 The payoff arrives with `magus affected`. Instead of running `ci` for every project, it runs `ci` only for the projects a version-control change touched, plus everything transitively downstream of them in the dependency graph:

@@ -88,6 +88,47 @@ func checkUnknownKeys(ctx context.Context, m vm.Value, known []string, where str
 	return ignored, err
 }
 
+// productExample is a complete product declaration, quoted by each refusal.
+const productExample = `{"path": "bin/magus", "target": "go-build-product"}`
+
+// targetProduct reads targets[name].product beside policy's relinks. The
+// path keeps the relinked binary's file name, so the guard reads a line
+// running it as that binary's under every lease rule.
+func targetProduct(ctx context.Context, name string, v, policy vm.Value) (product, target string, err error) {
+	where := fmt.Sprintf("magus.project: targets[%q].product", name)
+	if !v.IsMap() {
+		return "", "", fmt.Errorf("%s needs the path a leased worker builds the relinked binary at and the target that writes it, e.g. %s", where, productExample)
+	}
+	if _, err := checkUnknownKeys(ctx, v, []string{"path", "target"}, where); err != nil {
+		return "", "", err
+	}
+	field := func(m vm.Value, key string) string {
+		f, ok := m.MapGet(key)
+		if !ok || !f.IsString() {
+			return ""
+		}
+		return strings.TrimSpace(f.AsString())
+	}
+	product, target, relinks := field(v, "path"), field(v, "target"), field(policy, "relinks")
+	clean := filepath.Clean(filepath.FromSlash(product))
+	switch {
+	case product == "" || target == "":
+		return "", "", fmt.Errorf("%s needs both path and target, e.g. %s", where, productExample)
+	case relinks == "":
+		return "", "", fmt.Errorf("%s needs relinks on the same target: a product is a worker's build of the binary it relinks", where)
+	case !filepath.IsLocal(clean):
+		return "", "", fmt.Errorf("%s.path %q must be workspace-relative and inside the workspace", where, product)
+	case clean == filepath.Clean(filepath.FromSlash(relinks)):
+		return "", "", fmt.Errorf("%s.path %q is the binary the target relinks, so name a path no hook runs", where, product)
+	case filepath.Base(clean) != filepath.Base(filepath.FromSlash(relinks)):
+		return "", "", fmt.Errorf("%s.path %q must keep the file name of the binary it relinks, %q, so the guard judges a line running it as that binary's",
+			where, product, filepath.Base(filepath.FromSlash(relinks)))
+	case target == name:
+		return "", "", fmt.Errorf("%s.target is %q itself, so name the sibling target that writes the product, not the one that relinks", where, name)
+	}
+	return filepath.ToSlash(clean), target, nil
+}
+
 // buildProject returns magus.project, the callable that customizes the calling
 // project's options. It is OPTIONAL: a magusfile's mere presence registers its
 // directory as a project that runs on defaults — magus.project only layers on
@@ -447,6 +488,13 @@ func parseBuzzProjectOptions(ctx context.Context, v vm.Value) ([]workspace.Proje
 						"magus.project: targets[%q].relinks needs the path of the binary a run replaces, workspace-relative, e.g. \"./magus\"", name)
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.Relinks(binary)))
+			}
+			if prv, ok := pv.MapGet("product"); ok {
+				product, target, err := targetProduct(ctx, name, prv, pv)
+				if err != nil {
+					return nil, err
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.Product(product, target)))
 			}
 			if iv, ok := pv.MapGet("integrates"); ok {
 				reason := ""

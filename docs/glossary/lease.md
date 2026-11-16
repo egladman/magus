@@ -34,7 +34,7 @@ In the docs:
 - [Correlating a spawn to a lease](../guides/integrations/agents/any-host.md#correlating-a-spawn-to-a-lease)
 - [Lease capture](../guides/integrations/agents/claude-code.md#lease-capture)
 - [leaseEnabled](../reference/buzz/termkit.md#leaseenabled)
-- [lease-checkout](../reference/rules/lease-checkout.md#lease-checkout)
+- [lease-authority](../reference/rules/lease-authority.md#lease-authority)
 
 In the code (`magus refs <name>` lists every site):
 

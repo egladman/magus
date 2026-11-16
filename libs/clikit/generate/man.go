@@ -1,0 +1,296 @@
+package generate
+
+import (
+	"bytes"
+	"flag"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/configuration"
+)
+
+// Page is one rendered page and the file name it belongs under.
+type Page struct {
+	Name    string
+	Content []byte
+}
+
+// Roff renders section 1 man pages for root: <name>.1 for the program and
+// <name>-<command>.1 for each top-level command. The program page's ENVIRONMENT
+// lists config's variables. An empty date omits it from the title line, and an
+// empty version leaves the source field as the program name.
+func Roff(root command.Command, config configuration.ConfigurationSpec, date, version string) ([]Page, error) {
+	pages := make([]Page, 0, 1+len(root.Children))
+	main, err := renderMainRoff(root, config, date, version)
+	if err != nil {
+		return nil, err
+	}
+	pages = append(pages, Page{Name: root.Name + ".1", Content: main})
+	for _, command := range root.Children {
+		content, err := renderCommandRoff(root, command, date, version)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, Page{Name: fmt.Sprintf("%s-%s.1", root.Name, command.Name), Content: content})
+	}
+	return pages, nil
+}
+
+func renderMainRoff(root command.Command, config configuration.ConfigurationSpec, date, version string) ([]byte, error) {
+	var buf bytes.Buffer
+	w := newWriter(&buf)
+	w.TH(root.Name, "1", date, thSource(root.Name, version), root.Name+" Manual")
+	w.SH("Name")
+	fmt.Fprintf(&buf, "%s \\- %s\n", escapeHyphen(root.Name), escape(root.Short))
+	writeSynopsisRoff(&buf, root.Usage)
+	w.SH("Description")
+	w.Para(root.Long)
+	if len(root.Flags) > 0 {
+		w.SH("Global Flags")
+		if err := writeFlagListRoff(w, root); err != nil {
+			return nil, err
+		}
+	}
+	w.SH("Subcommands")
+	w.Indent()
+	for _, command := range root.Children {
+		ref := fmt.Sprintf(`\fB%s\-%s\fR(1)`, escapeHyphen(root.Name), escapeHyphen(command.Name))
+		w.TP(w.B(command.Name), fmt.Sprintf(`%s. See %s.`, escape(command.Short), ref))
+	}
+	w.Dedent()
+	writeEnvSectionRoff(w, root.Name, config)
+	writeFilesSectionRoff(w, root.Files)
+	writeSeeAlsoRoff(w, &buf, root, "")
+	return buf.Bytes(), nil
+}
+
+func renderCommandRoff(root, command command.Command, date, version string) ([]byte, error) {
+	var buf bytes.Buffer
+	w := newWriter(&buf)
+	pageName := fmt.Sprintf("%s-%s", root.Name, command.Name)
+	w.TH(pageName, "1", date, thSource(root.Name, version), root.Name+" Manual")
+	w.SH("Name")
+	fmt.Fprintf(&buf, "%s \\- %s\n", escapeHyphen(pageName), escape(command.Short))
+	writeSynopsisRoff(&buf, command.Usage)
+	if command.Long != "" {
+		w.SH("Description")
+		w.Para(command.Long)
+	}
+	if len(command.Flags) > 0 {
+		w.SH("Options")
+		if err := writeFlagListRoff(w, command); err != nil {
+			return nil, err
+		}
+	}
+	// Recursive: a tree nests several levels, and a one-level walk silently dropped
+	// every flag below the second.
+	if err := writeChildFlagsRoff(w, command.Name, command.Children); err != nil {
+		return nil, err
+	}
+	if len(command.Children) > 0 {
+		w.SH("Subcommands")
+		w.Indent()
+		for _, child := range command.Children {
+			w.TP(w.B(child.Name), escape(child.Short))
+		}
+		w.Dedent()
+	}
+	if len(command.Operands) > 0 {
+		w.SH("Operands")
+		w.Indent()
+		for _, operand := range command.Operands {
+			w.TP(w.B(operand.Name), escape(operand.Short))
+		}
+		w.Dedent()
+	}
+	// Before EXAMPLES, per man(7) section order.
+	writeExitStatusRoff(w, command.ExitStatus)
+	if len(command.Examples) > 0 {
+		w.SH("Examples")
+		for _, example := range command.Examples {
+			if example.Comment != "" {
+				fmt.Fprintf(&buf, "\\fI%s\\fR\n", escape(example.Comment))
+				w.P()
+			}
+			w.Example(example.Command)
+			w.P()
+		}
+	}
+	writeSeeAlsoRoff(w, &buf, root, command.Name)
+	return buf.Bytes(), nil
+}
+
+func writeSynopsisRoff(buf *bytes.Buffer, usage string) {
+	fmt.Fprintln(buf, ".SH SYNOPSIS")
+	if split := strings.Index(usage, " "); split < 0 {
+		fmt.Fprintln(buf, `.B `+escapeHyphen(usage))
+	} else {
+		fmt.Fprintln(buf, `.B `+escapeHyphen(usage[:split]))
+		fmt.Fprintln(buf, fmt.Sprintf(`.RI "%s"`, escape(strings.TrimSpace(usage[split:]))))
+	}
+}
+
+// writeChildFlagsRoff emits an options section for every descendant that
+// declares flags, naming each by its full path.
+func writeChildFlagsRoff(w *writer, path string, children []command.Command) error {
+	for _, child := range children {
+		sub := fmt.Sprintf("%s %s", path, child.Name)
+		if len(child.Flags) > 0 {
+			w.SS(escapeHyphen(sub + " options"))
+			if err := writeFlagListRoff(w, child); err != nil {
+				return err
+			}
+		}
+		if err := writeChildFlagsRoff(w, sub, child.Children); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeFlagListRoff(w *writer, command command.Command) error {
+	helps, err := flagHelp(command)
+	if err != nil {
+		return err
+	}
+	w.Indent()
+	for _, h := range helps {
+		w.TP(roffFlagLabel(h), escape(h.Usage))
+	}
+	w.Dedent()
+	return nil
+}
+
+// flagHelp binds c's flags on a throwaway FlagSet and describes them sorted.
+func flagHelp(c command.Command) ([]command.Help, error) {
+	fs := flag.NewFlagSet(c.Name, flag.ContinueOnError)
+	if err := c.BindFlags(fs); err != nil {
+		return nil, err
+	}
+	return command.FlagHelp(fs, nil), nil
+}
+
+// visitFlags binds command's flags on a throwaway FlagSet and visits them sorted.
+func visitFlags(command command.Command, visit func(*flag.Flag)) error {
+	fs := flag.NewFlagSet(command.Name, flag.ContinueOnError)
+	if err := command.BindFlags(fs); err != nil {
+		return err
+	}
+	fs.VisitAll(visit)
+	return nil
+}
+
+func writeExitStatusRoff(w *writer, codes []command.ExitCode) {
+	if len(codes) == 0 {
+		return
+	}
+	w.SH("Exit status")
+	w.Indent()
+	for _, code := range codes {
+		w.TP(w.B(strconv.Itoa(code.Code)), escape(code.Meaning))
+	}
+	w.Dedent()
+}
+
+func writeEnvSectionRoff(w *writer, program string, config configuration.ConfigurationSpec) {
+	read, set := variables(config)
+	if len(read) == 0 && len(set) == 0 {
+		return
+	}
+	w.SH("Environment")
+	w.Indent()
+	for _, s := range read {
+		body := escape(s.Doc)
+		if s.Default != "" {
+			body += fmt.Sprintf(` (default: %s)`, escape(s.Default))
+		}
+		if s.YamlPath != "" {
+			body += fmt.Sprintf(`. Config file key: %s.`, w.B(s.YamlPath))
+		}
+		w.TP(fmt.Sprintf(`\fB%s\fR`, s.EnvVar), body)
+	}
+	w.Dedent()
+	if len(set) == 0 {
+		return
+	}
+	w.SS(escapeHyphen(setByHeading(program)))
+	w.Indent()
+	for _, s := range set {
+		w.TP(fmt.Sprintf(`\fB%s\fR`, s.EnvVar), escape(s.Doc))
+	}
+	w.Dedent()
+}
+
+// variables splits config's variables into those a person may set and the
+// Internal ones the program sets for its children.
+func variables(config configuration.ConfigurationSpec) (read, set []configuration.Setting) {
+	for _, s := range config.Settings {
+		switch {
+		case s.EnvVar == "":
+		case s.Internal:
+			set = append(set, s)
+		default:
+			read = append(read, s)
+		}
+	}
+	return read, set
+}
+
+// setByHeading names the subsection of the variables program sets for the
+// processes it spawns.
+func setByHeading(program string) string {
+	return fmt.Sprintf("Set by %s for the processes it spawns, never by hand", program)
+}
+
+func writeFilesSectionRoff(w *writer, files []command.File) {
+	if len(files) == 0 {
+		return
+	}
+	w.SH("Files")
+	for _, f := range files {
+		w.TP(w.B(f.Name), escapeMulti(f.Doc))
+	}
+}
+
+func writeSeeAlsoRoff(w *writer, buf *bytes.Buffer, root command.Command, current string) {
+	w.SH("See Also")
+	refs := make([]string, 0, 1+len(root.Children))
+	if current != "" {
+		refs = append(refs, fmt.Sprintf(`\fB%s\fR(1)`, escapeHyphen(root.Name)))
+	}
+	for _, command := range root.Children {
+		if command.Name != current {
+			refs = append(refs, fmt.Sprintf(`\fB%s\-%s\fR(1)`, escapeHyphen(root.Name), escapeHyphen(command.Name)))
+		}
+	}
+	fmt.Fprintln(buf, strings.Join(refs, ",\n"))
+	fmt.Fprintln(buf, `.br`)
+}
+
+func thSource(name, version string) string {
+	if version == "" {
+		return name
+	}
+	return fmt.Sprintf("%s %s", name, version)
+}
+
+func roffFlagLabel(h command.Help) string {
+	label := fmt.Sprintf(`\fB%s\fR`, escapeHyphen(h.Name))
+	if h.Value != "" {
+		label += fmt.Sprintf(` \fI%s\fR`, h.Value)
+	}
+	if h.Default != "" {
+		label += fmt.Sprintf(` (default: %s)`, escape(h.Default))
+	}
+	return label
+}
+
+func escapeMulti(text string) string {
+	parts := splitParas(text)
+	for i := range parts {
+		parts[i] = escape(parts[i])
+	}
+	return strings.Join(parts, "\n")
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -91,18 +92,18 @@ func MagusChangeOpen(ctx context.Context, base string, opts types.ChangeOptions)
 }
 
 // changeTree is the checkpoint of ws's tree and a digest of each dirty path.
-func changeTree(ctx context.Context, ws types.WorkspaceRepository) (types.VCSCheckpoint, map[string]string, error) {
+func changeTree(ctx context.Context, ws types.WorkspaceRepository) (typesvcs.Checkpoint, map[string]string, error) {
 	res, err := vcs.Resolve(ctx, ws.Root(), "", ws.VCSOptions())
 	if err != nil {
-		return types.VCSCheckpoint{}, nil, err
+		return typesvcs.Checkpoint{}, nil, err
 	}
 	at, err := vcs.Checkpoint(ctx, ws.Root(), res, false)
 	if err != nil {
-		return types.VCSCheckpoint{}, nil, err
+		return typesvcs.Checkpoint{}, nil, err
 	}
 	paths, err := res.VCS.DirtyFiles(ctx, ws.Root(), nil)
 	if err != nil {
-		return types.VCSCheckpoint{}, nil, err
+		return typesvcs.Checkpoint{}, nil, err
 	}
 	return at, digestFiles(ws.Root(), paths), nil
 }
@@ -146,7 +147,7 @@ func heldChange(ctx context.Context, c types.Change, member string) (types.Works
 
 // movedPaths names what differs between the tree c was built on and now:
 // each path whose content digest moved, and a moved revision.
-func movedPaths(c types.Change, at types.VCSCheckpoint, files map[string]string) []string {
+func movedPaths(c types.Change, at typesvcs.Checkpoint, files map[string]string) []string {
 	var moved []string
 	if c.At.Revision != at.Revision {
 		moved = append(moved, fmt.Sprintf("HEAD %s -> %s", shortRev(c.At.Revision), shortRev(at.Revision)))

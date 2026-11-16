@@ -8,6 +8,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -167,7 +168,7 @@ var sink string
 // NULL: `doctor().checks[0].status` read null rather than "ok", and a magusfile told to
 // branch on status was branching on nothing.
 func TestAnyValNamedStringType(t *testing.T) {
-	got, ok := AnyVal(map[string]any{"status": types.CheckOK}).MapGet("status")
+	got, ok := AnyVal(map[string]any{"status": check.OK}).MapGet("status")
 	require.True(t, ok, "status key missing")
 	require.True(t, got.IsString(), "a named string crossed as %s, not a string", got.Kind())
 	assert.Equal(t, "ok", got.AsString())

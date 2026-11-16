@@ -24,7 +24,7 @@ bug; file it as one.
 
 - The `diagnostic-codes-have-docs-pages` lint fails a diagnostic code with no
   page under [the diagnostics reference](../../reference/diagnostics.md).
-- A guard verdict carries `reason`, `rule` and `next`, the command to run
+- A guard verdict carries `reason`, `rule` and `next_steps`, the command to run
   instead.
 
 ## Good

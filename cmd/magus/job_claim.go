@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -196,7 +196,7 @@ func goPackageName(root, rel string) string {
 // its whole file.
 func heldClaim(row types.Job, claim string) bool {
 	file, _ := types.SplitClaim(claim)
-	return slices.ContainsFunc(row.WritePaths, func(w string) bool {
+	return slices.ContainsFunc(row.Paths.Write, func(w string) bool {
 		_, word := types.SplitClaim(w)
 		return w == claim || word == "" && job.Covers(w, file)
 	})

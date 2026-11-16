@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
+	impacttypes "github.com/egladman/magus/types/impact"
 )
 
 // SymbolStore is the narrow interface the caller and coverage overlays read. The
@@ -339,9 +340,9 @@ func PublicThrough(g CallGraph, id string) []diff.PublicPath {
 }
 
 // toCoverage narrows the knowledge-graph coverage facts to the report's own
-// types.ImpactCoverage, so the impact JSON does not leak the internal graph type.
-func toCoverage(c *Coverage) types.ImpactCoverage {
-	return types.ImpactCoverage{Ratio: c.Ratio, Covered: c.Covered, Total: c.Total}
+// type, so the impact JSON does not leak the internal graph type.
+func toCoverage(c *Coverage) impacttypes.Coverage {
+	return impacttypes.Coverage{Ratio: c.Ratio, Covered: c.Covered, Total: c.Total}
 }
 
 // Compute derives the impact report from a VCS diff against base (empty base uses
@@ -396,7 +397,7 @@ func build(ctx context.Context, ws types.WorkspaceRepository, r *types.AffectedR
 	}
 
 	for _, path := range r.Affected {
-		ap := types.ImpactProject{
+		ap := impacttypes.Project{
 			Path:    path,
 			Targets: projectTargets(ws, path, customByProject),
 		}

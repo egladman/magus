@@ -13,18 +13,18 @@ import (
 )
 
 // checkpointDigestLen is the width of a checkpoint token's digest: the 16 bytes of sha256
-// [types.VCSCheckpoint.Token] keeps, in lowercase hex.
+// a types/vcs Checkpoint's Token keeps, in lowercase hex.
 const checkpointDigestLen = 32
 
 // DeclaredCheckpoint is token as a row declaring it records it: its revision expanded to
 // the full revision this checkout's version control resolves it to, its digest kept, so
 // the row compares with the base `magus job exec` reads.
 //
-// It finds a JobCheckpointUnplaceable problem at field checkpoint for a token whose
-// revision resolves to nothing, which includes every token where no version control answers
-// at the store's root; a revision that is neither this checkout's HEAD nor an ancestor of
-// it, since no work here started from it; and a digest that is not the shape
-// [types.VCSCheckpoint.Token] writes. At HEAD it also finds one for a digest the live tree
+// It finds a JobCheckpointUnplaceable problem at field checkpoint for three
+// tokens. One has a revision that resolves to nothing, as when no version
+// control answers. One names a revision that is not HEAD or an ancestor of
+// it. One has a digest outside the shape a types/vcs Checkpoint's Token
+// writes. At HEAD it also finds one for a digest the live tree
 // does not reproduce. At an older revision the patch behind a digest is gone, so that digest
 // is kept unverified. An empty token, or the checkpoint row id already holds in rows, comes
 // back unchanged: a row may name none, and one it already holds was settled when it was

@@ -80,7 +80,7 @@ func conformanceToProto(o *types.Conformance) *hmv1.Conformance {
 	}
 	return &hmv1.Conformance{
 		Definition: o.Definition,
-		Rows: mapSlice(o.Rows, func(r types.ConformanceRow) *hmv1.ConformanceRow {
+		Rows: mapSlice(o.Distributions, func(r types.ConformanceDistribution) *hmv1.ConformanceRow {
 			return &hmv1.ConformanceRow{
 				Key: &hmv1.ConformanceKey{
 					Metric:     string(r.Key.Metric),
@@ -128,7 +128,7 @@ func modelTiersToProto(o *types.ModelTiers) *hmv1.ModelTiers {
 	}
 	return &hmv1.ModelTiers{
 		Definition: o.Definition,
-		Rows: mapSlice(o.Rows, func(r types.ModelTierRecord) *hmv1.ModelTierRecord {
+		Rows: mapSlice(o.Models, func(r types.ModelTierRecord) *hmv1.ModelTierRecord {
 			return &hmv1.ModelTierRecord{
 				Rank:            int32(r.Rank),
 				ModelTier:       r.ModelTier,

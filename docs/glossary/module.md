@@ -47,7 +47,7 @@ In the code (`magus refs <name>` lists every site):
 - `std.Module` (Go)
 - `gopherbuzz.Module` (Go)
 - `scipbuzz.module` (Go)
-- `debug.Module` (Go)
+- `packages.Module` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

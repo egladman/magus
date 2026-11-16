@@ -409,11 +409,22 @@ func (n *RemoteNamespace) Get(ctx context.Context, key string) (io.ReadCloser, e
 	return io.NopCloser(bytes.NewReader(payload)), nil
 }
 
+// ErrRemoteReadOnly is what Put wraps when this run may not write the
+// remote tier: a store skipped by design, not one that failed.
+var ErrRemoteReadOnly = errors.New("this run may not write the remote tier")
+
+// Active reports whether the backend is usable here. While it is not, Get
+// misses and Put stores nothing.
+func (n *RemoteNamespace) Active(ctx context.Context) bool { return n.t.backend.Active(ctx) }
+
+// Backend names the backend behind n, as the run header does.
+func (n *RemoteNamespace) Backend() string { return n.t.backend.Name() }
+
 // Put signs r and stores it under key. It refuses when this run may not write the
-// remote tier, for the reason the run header shows.
+// remote tier, wrapping [ErrRemoteReadOnly] and the run header's reason.
 func (n *RemoteNamespace) Put(ctx context.Context, key string, r io.Reader) error {
 	if !n.t.writes() {
-		return fmt.Errorf("remote %s/%s: this run may not write the remote tier (%s)", n.ns, key, n.t.off)
+		return fmt.Errorf("remote %s/%s (%s): %w", n.ns, key, n.t.off, ErrRemoteReadOnly)
 	}
 	if !n.t.backend.Active(ctx) {
 		return nil

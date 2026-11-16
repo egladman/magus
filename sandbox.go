@@ -79,7 +79,7 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 		return ctx, err
 	}
 	lease, from := job.RunLease(ctx, loc)
-	if p, err = sandbox.NarrowToLease(ctx, p, loc, lease, from); err != nil {
+	if p, err = sandbox.NarrowToLease(ctx, p, loc, lease, from, m.productPaths()...); err != nil {
 		return ctx, err
 	}
 	// Held back for magus\cmd's nested magus, which runs targets.
@@ -98,6 +98,20 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 		recordRules(ctx, prov, p)
 	}
 	return std.WithEditJudge(sandbox.WithPolicy(ctx, p), m.editJudge()), nil
+}
+
+// productPaths is every product path a target declares, sorted and unique.
+func (m *Magus) productPaths() []string {
+	var out []string
+	for _, p := range m.All() {
+		for _, pol := range p.TargetPolicies {
+			if pol.Product != "" {
+				out = append(out, pol.Product)
+			}
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // TargetSandboxes is each target's own sandbox declaration,

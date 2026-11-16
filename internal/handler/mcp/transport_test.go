@@ -268,10 +268,10 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	m := fixtureMagus(t)
 	jobs := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: m.Root()})
 	for _, row := range []types.Job{
-		{ID: "root/worker", WritePaths: []string{"internal/job"}, State: types.StateRunning},
+		{ID: "root/worker", Paths: types.JobPaths{Write: []string{"internal/job"}}, State: types.StateRunning},
 		// A row that writes must name what grades it, or the store refuses the put before
 		// it reaches the lease check this test is about.
-		{ID: "root/other", WritePaths: []string{"internal/guard", "internal/hint"}, State: types.StateRunning,
+		{ID: "root/other", Paths: types.JobPaths{Write: []string{"internal/guard", "internal/hint"}}, State: types.StateRunning,
 			Check: &types.LeaseCheck{Target: "test", Project: "."}},
 	} {
 		_, err := jobs.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
@@ -311,7 +311,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	hdr, _ := post("", "", initializeFrame)
 	session := hdr.Get("Mcp-Session-Id")
 	require.NotEmpty(t, session)
-	shrink := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"client","arguments":{"script":"import \"magus\";\nfun main(args: [str]) > any !> str {\n  return magus\\workspace().putJob(\"root/other\", opts: {\"write_paths\": [\"internal/guard\"]});\n}\n"}}}`
+	shrink := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"client","arguments":{"script":"import \"magus\";\nfun main(args: [str]) > any !> str {\n  return magus\\workspace().putJob(\"root/other\", opts: {\"paths\": {\"write\": [\"internal/guard\"]}});\n}\n"}}}`
 
 	for name, tc := range map[string]struct {
 		baggage, want string
@@ -331,7 +331,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	var paths []string
 	for _, row := range rows {
 		if row.ID == "root/other" {
-			paths = row.WritePaths
+			paths = row.Paths.Write
 		}
 	}
 	assert.Equal(t, []string{"internal/guard"}, paths, "the row's own holder released a path")

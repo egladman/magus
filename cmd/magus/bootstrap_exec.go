@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/ward"
@@ -57,12 +57,12 @@ func maybeBootstrapExec(argv []string) {
 
 // bootstrapExecRefusal says why a checkout's own ./magus must not hand over
 // to target, or "" when it may. The glue runs it wherever a call lands, so
-// only a checkout of its repository takes over. An installed binary defers
-// anywhere.
+// only a binary a live job row pins takes over, as for the hook's hand-off.
+// An installed binary defers anywhere.
 func bootstrapExecRefusal(target, self string) string {
 	session := binaryCheckout(self)
 	if session == "" {
 		return ""
 	}
-	return foreignCheckout(filepath.Dir(target), session)
+	return unpinnedBinary(context.Background(), target, session)
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/clikit/command"
 )
 
 // spellHandleRe validates a spell handle: a letter followed by letters, digits,
@@ -39,7 +40,7 @@ func initSpellCommand(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Flags:")
 		printOwnDefaults(fs)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {

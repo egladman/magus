@@ -356,8 +356,8 @@ func (s *PreFoldRecordSuite) SetupTest() {
 
 func (s *PreFoldRecordSuite) TestReadsAVersionTwoRecordAsV1alpha1() {
 	s.Require().Len(s.fold.Records, 1)
-	s.Equal(APIVersion, s.fold.Records[0].V)
-	s.Equal("sess1", s.fold.Records[0].Invocation)
+	s.Equal(Record{V: APIVersion, Invocation: "sess1", Seq: 1, Kind: KindInvocationStart, Ts: 10,
+		Payload: []byte(`{"workspace":"/repo"}`)}, s.fold.Records[0])
 	s.Zero(s.fold.Skipped)
 }
 
