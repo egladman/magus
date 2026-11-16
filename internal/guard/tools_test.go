@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -211,7 +212,7 @@ func TestPagedReadIsJudgedTheSameWhicheverToolReadsIt(t *testing.T) {
 	abs := filepath.Join(root, "paged.go")
 	deps := withSetting(string(denyRuleReadPaging), builtin.Deny)
 	tools := testTools(t)
-	judge := func(subagent, input string) types.GuardJudgment {
+	judge := func(subagent, input string) verdict.Judgment {
 		return Judge(ctx, deps, Request{Input: input, Session: "paging-tools", Agent: subagent, Host: "claude-code", Dir: root, Tools: tools})
 	}
 	bash := func(line string) string {
@@ -225,7 +226,7 @@ func TestPagedReadIsJudgedTheSameWhicheverToolReadsIt(t *testing.T) {
 	assert.NotEqual(t, "deny", judge("a1", read(41, 40)).Decision, "a read tool's window counts with the shell's")
 	refused := judge("a1", bash("sed -n 81,121p paged.go"))
 	refusedShape, _ := spoken(refused)
-	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleReadPaging)}, refusedShape)
+	require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleReadPaging)}, refusedShape)
 	again, _ := spoken(judge("a1", read(81, 41)))
 	assert.Equal(t, refusedShape, again, "the same window through the read tool is refused too")
 
@@ -239,20 +240,20 @@ func TestUnjudgedToolAdvisesOnceAndDeniesWhereTheWorkspaceSaysSo(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	root := hookLocation(ctx, Dependencies{}).workspace
 	tools := testTools(t)
-	call := func(deps Dependencies, session, tool string) types.GuardJudgment {
+	call := func(deps Dependencies, session, tool string) verdict.Judgment {
 		return Judge(ctx, deps, Request{Input: toolEnvelope(t, session, root, tool, map[string]any{"ref": "e1"}), Host: "claude-code", Dir: root, Tools: tools})
 	}
 
 	lowered := withSetting(string(denyRuleUnjudgedStep), builtin.Advise)
 	first := call(lowered, "unjudged-advise", "mcp__browser__click")
 	firstShape, firstText := spoken(first)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleUnjudgedStep)}, firstShape, "set to advise, it advises")
+	assert.Equal(t, verdict.Judgment{Decision: decisionAdvise, Rule: string(denyRuleUnjudgedStep)}, firstShape, "set to advise, it advises")
 	assert.Contains(t, firstText, "mcp__browser__click")
 	assert.Equal(t, decisionPass, call(lowered, "unjudged-advise", "mcp__browser__click").Decision, "said once a session")
 
 	denied := call(Dependencies{}, "unjudged-deny", "mcp__browser__click")
 	deniedShape, deniedText := spoken(denied)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleUnjudgedStep)}, deniedShape)
+	assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleUnjudgedStep)}, deniedShape)
 	assert.Contains(t, deniedText, "mcp__browser__click")
 
 	assert.Equal(t, decisionPass, call(withSetting(string(denyRuleUnjudgedStep), builtin.Deny), "unjudged-deny", "TodoWrite").Decision,
@@ -267,9 +268,9 @@ func TestJudgeWithinAnswersAnInertCallWithoutLoadingRules(t *testing.T) {
 	root := hookLocation(ctx, Dependencies{}).workspace
 	tools := testTools(t)
 	judged := 0
-	judge := func(context.Context) types.GuardJudgment {
+	judge := func(context.Context) verdict.Judgment {
 		judged++
-		return types.GuardJudgment{Decision: decisionPass}
+		return verdict.Judgment{Decision: decisionPass}
 	}
 	request := func(tool string, input map[string]any) Request {
 		return Request{Input: toolEnvelope(t, "fast", root, tool, input), Host: "claude-code", Form: "buzz", Session: "fast", Tools: tools}
@@ -339,7 +340,7 @@ func TestEnteringATreeNoJobOwnsIsRefused(t *testing.T) {
 	input := toolEnvelope(t, "enter-other", root, "EnterWorktree", map[string]any{"path": other})
 	v := Judge(ctx, Dependencies{}, Request{Input: input, Host: "claude-code", Dir: root, Tools: testTools(t)})
 	shape, text := spoken(v)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSiblingCheckout)}, shape)
+	assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleSiblingCheckout)}, shape)
 	assert.Contains(t, text, other)
 }
 

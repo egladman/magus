@@ -7,7 +7,7 @@ import (
 
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // guardDenyExitCode is what a denied command exits with.
@@ -28,7 +28,7 @@ const guardDenyExitCode = 2
 // Stderr gets the reason's first line, and only when stdout does not already carry it as
 // prose, i.e. every format but text. A host shows a blocking hook's stderr to the person
 // and the agent alike, so it gets the verdict alone; stdout carries the rest.
-func verdictExit(errOut io.Writer, opts output.Options, verdict types.GuardJudgment) error {
+func verdictExit(errOut io.Writer, opts output.Options, verdict verdict.Judgment) error {
 	if verdict.Decision != "deny" && verdict.Decision != "ask" {
 		return nil
 	}
@@ -40,7 +40,7 @@ func verdictExit(errOut io.Writer, opts output.Options, verdict types.GuardJudgm
 }
 
 // writeVerdict renders a verdict through the standard output arm.
-func (e HookEnv) writeVerdict(out io.Writer, opts output.Options, verdict types.GuardJudgment) error {
+func (e HookEnv) writeVerdict(out io.Writer, opts output.Options, verdict verdict.Judgment) error {
 	if opts.Format == output.Text {
 		switch verdict.Decision {
 		case "deny":

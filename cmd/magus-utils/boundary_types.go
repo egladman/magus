@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -78,7 +79,7 @@ var boundaryRoots = []boundaryRoot{
 	{Type: reflect.TypeFor[types.GuardBinary](), Outbound: true},
 	{Type: reflect.TypeFor[types.ServiceLease](), Outbound: true},
 	// allow, advise and deny build the verdict a guard rule returns.
-	{Type: reflect.TypeFor[types.GuardVerdict](), Outbound: true},
+	{Type: reflect.TypeFor[verdict.Verdict](), Outbound: true},
 	// A script builds these and nothing hands one back. Result is declared
 	// at its placeholder; a method returning Result[X] brings its encoder.
 	{Type: reflect.TypeFor[types.Declaration]()},

@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -20,12 +21,12 @@ import (
 // told.
 type writeRuleProbe struct {
 	asked  []types.WriteRequest
-	answer types.GuardVerdict
+	answer verdict.Verdict
 	err    error
 }
 
 func (p *writeRuleProbe) rule() workspace.WriteRule {
-	return func(_ context.Context, req types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	return func(_ context.Context, req types.WriteRequest, _ hint.Gate) (verdict.Verdict, error) {
 		p.asked = append(p.asked, req)
 		return p.answer, p.err
 	}
@@ -112,7 +113,7 @@ func canonicalDir(dir string) string {
 // Strengthen only, for file writes too: a deny blocks, and a read is never asked.
 func TestWriteRuleStrengthensOnly(t *testing.T) {
 	ctx, root, cacheDir := writeFixture(t)
-	probe := &writeRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "Add a fragment instead."}}
+	probe := &writeRuleProbe{answer: verdict.Verdict{Decision: verdict.Deny, Reason: "Add a fragment instead."}}
 	deps := Dependencies{WriteRule: probe.rule()}
 
 	v := Judge(ctx, deps, Request{Input: filepath.Join(root, "CHANGELOG.md"), IsPath: true, Host: "claude-code"})
@@ -131,7 +132,7 @@ func TestWriteRuleStrengthensOnly(t *testing.T) {
 func TestWriteRulesKeepTheStricterSide(t *testing.T) {
 	ctx, root, _ := writeFixture(t)
 	path := filepath.Join(root, "CHANGELOG.md")
-	approved := (&writeRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no"}}).rule()
+	approved := (&writeRuleProbe{answer: verdict.Verdict{Decision: verdict.Deny, Reason: "no"}}).rule()
 	v := Judge(ctx, Dependencies{
 		WriteRule:         (&writeRuleProbe{}).rule(),
 		ApprovedWriteRule: func(context.Context) (workspace.WriteRule, error) { return approved, nil },
@@ -180,9 +181,9 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 		waitForLapsedWork(t)
 		ctx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
-		loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+		loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (verdict.Verdict, error) {
 			<-ctx.Done()
-			return types.GuardVerdict{}, ctx.Err()
+			return verdict.Verdict{}, ctx.Err()
 		}
 		deps := Dependencies{
 			WriteRule:         loops,
@@ -208,7 +209,7 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 			"slowed":      {LoadFailure: lapsedLoad.LoadFailure, RuleLoad: lapsedLoad.RuleLoad, ApprovedWriteRule: slowed},
 			"none to ask": {LoadFailure: lapsedLoad.LoadFailure, RuleLoad: lapsedLoad.RuleLoad},
 		}
-		judge := func(ctx context.Context, deps Dependencies, root string) types.GuardJudgment {
+		judge := func(ctx context.Context, deps Dependencies, root string) verdict.Judgment {
 			ctx, cancel := context.WithTimeout(ctx, time.Second)
 			defer cancel()
 			return Judge(ctx, deps, Request{Input: filepath.Join(root, "magusfile.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})

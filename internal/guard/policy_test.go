@@ -14,9 +14,10 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -352,7 +353,7 @@ func (s *PolicySnapshotSuite) warm(repo *testkit.Repo) {
 	s.loads = 0
 }
 
-func (s *PolicySnapshotSuite) command(deps Dependencies) types.GuardVerdict {
+func (s *PolicySnapshotSuite) command(deps Dependencies) verdict.Verdict {
 	s.Require().NotNil(deps.CommandRule)
 	got, err := deps.CommandRule(s.T().Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(s.T().TempDir(), "s"))
 	s.Require().NoError(err)
@@ -377,7 +378,7 @@ func (s *PolicySnapshotSuite) TestAHitJudgesWithoutALoad() {
 	s.Nil(approved, "a clean tree's approved rule is the working tree's")
 	s.Zero(s.loads)
 
-	s.Equal(types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed"}, s.command(deps))
+	s.Equal(verdict.Verdict{Decision: verdict.Deny, Reason: "committed"}, s.command(deps))
 	s.command(deps)
 	s.Equal(1, s.loads, "the function rule loads once, on its first call")
 }
@@ -399,9 +400,9 @@ magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict => 
 	s.Require().NotNil(rule)
 	s.Zero(s.loads)
 
-	got, err := rule(s.T().Context(), typesagent.StepRequest{Step: typesagent.Step{Kind: "refund", Name: "card"}}, hint.NewGate(s.T().TempDir(), "s"))
+	got, err := rule(s.T().Context(), step.Request{Step: step.Step{Kind: "refund", Name: "card"}}, hint.NewGate(s.T().TempDir(), "s"))
 	s.Require().NoError(err)
-	s.Equal(types.GuardVerdict{Decision: types.GuardDeny, Reason: "No card refunds."}, got)
+	s.Equal(verdict.Verdict{Decision: verdict.Deny, Reason: "No card refunds."}, got)
 	s.Equal(1, s.loads, "the step rule loads on its first call")
 	approved, err := deps.ApprovedStepRule(s.T().Context(), "refund")
 	s.Require().NoError(err)
@@ -494,6 +495,6 @@ func (s *PolicySnapshotSuite) TestAWarmSnapshotResolvesTheApprovedSideWithoutAVC
 	s.Require().NotNil(approved, "the committed command rule still judges")
 	got, err := approved(s.T().Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(s.T().TempDir(), "s"))
 	s.Require().NoError(err)
-	s.Equal(types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed"}, got)
+	s.Equal(verdict.Verdict{Decision: verdict.Deny, Reason: "committed"}, got)
 	s.Zero(s.loads, "the working tree's load is never needed: it registers no command rule")
 }

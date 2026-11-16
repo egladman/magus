@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types/diff"
 	"io/fs"
 	"os"
@@ -2611,7 +2612,7 @@ func TestRefsRenameIsNotAGraphRead(t *testing.T) {
 // and in a checkout where one lease is held, claiming none is graded under that one.
 func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
-	edit := func(rel string) types.GuardJudgment {
+	edit := func(rel string) verdict.Judgment {
 		return judgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), false)
 	}
 
@@ -2631,13 +2632,13 @@ func TestEditDryRunRecordsNothing(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
-	edit := func(rel string, dryRun bool) types.GuardJudgment {
+	edit := func(rel string, dryRun bool) verdict.Judgment {
 		return judgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), dryRun)
 	}
 	// The two calls may straddle a second, and a lease-write reason says how long ago the
 	// owner was updated.
 	age := regexp.MustCompile(`updated \d+s ago`)
-	withoutAge := func(v types.GuardJudgment) types.GuardJudgment {
+	withoutAge := func(v verdict.Judgment) verdict.Judgment {
 		v.Reason = age.ReplaceAllString(v.Reason, "updated <age> ago")
 		return v
 	}
@@ -2704,7 +2705,7 @@ func (s *GradeEditSuite) TestASourceInsideTheLeasePasses() {
 	s.Empty(rule + reason)
 }
 
-func (s *GradeEditSuite) edit(rel string) types.GuardJudgment {
+func (s *GradeEditSuite) edit(rel string) verdict.Judgment {
 	return judgeEdit(s.testContext(), Dependencies{}, s.root, rel, []byte("package x\n"), []byte("package y\n"), false)
 }
 
@@ -2747,7 +2748,7 @@ func (s *PersonLeaseSuite) holdHere(id string, paths ...string) {
 	s.Require().NoError(err)
 }
 
-func (s *PersonLeaseSuite) edit(rel string) types.GuardJudgment {
+func (s *PersonLeaseSuite) edit(rel string) verdict.Judgment {
 	return judgeEdit(s.testContext(), Dependencies{}, s.root, rel, []byte("package x\n"), []byte("package y\n"), false)
 }
 
@@ -2785,13 +2786,13 @@ const (
 )
 
 // judgeBound judges command from a worker bound to lease-a by session alone.
-func (s *PersonLeaseSuite) judgeBound(command string) types.GuardJudgment {
+func (s *PersonLeaseSuite) judgeBound(command string) verdict.Judgment {
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 	bindCaller(s.T(), s.testContext(), who, "lease-a")
 	return s.judgeAs(who, command)
 }
 
-func (s *PersonLeaseSuite) judgeAs(who hookAttribution, command string) types.GuardJudgment {
+func (s *PersonLeaseSuite) judgeAs(who hookAttribution, command string) verdict.Judgment {
 	input := hookJSON(s.T(), map[string]any{"session_id": who.Session, "agent_id": who.Agent, "agent_type": "general-purpose", "cwd": s.root,
 		"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": command}})
 	return Judge(s.testContext(), Dependencies{}, Request{Input: input, Host: who.Host})
@@ -2805,7 +2806,7 @@ func (s *PersonLeaseSuite) TestASessionBoundRenameDryRunIsRefusedUntilItNamesIts
 	v := s.judgeBound(renameDryRun)
 	s.Contains(v.Reason, "start the line with `export BAGGAGE=magus.lease=lease-a;`")
 	v.Reason = ""
-	s.Equal(types.GuardJudgment{APIVersion: v.APIVersion, Decision: decisionDeny, Rule: string(denyRuleEditUngraded), Lease: "lease-a", LeaseFrom: types.LeaseSourceAgent}, v)
+	s.Equal(verdict.Judgment{APIVersion: v.APIVersion, Decision: decisionDeny, Rule: string(denyRuleEditUngraded), Lease: "lease-a", LeaseFrom: string(types.LeaseSourceAgent)}, v)
 }
 
 func (s *PersonLeaseSuite) TestTheClaimedRenameGradesPathsOutsideTheRow() {

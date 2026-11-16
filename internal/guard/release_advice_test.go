@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -37,7 +38,7 @@ func fileReleaseRequest(t *testing.T, ctx context.Context, holder string) string
 }
 
 func TestReleaseRequestedAdvisesTheHolderOnce(t *testing.T) {
-	call := func(ctx context.Context, session, lease string) types.GuardJudgment {
+	call := func(ctx context.Context, session, lease string) verdict.Judgment {
 		return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, session, "", "ls"), Host: "claude-code", Lease: lease})
 	}
 
@@ -48,9 +49,9 @@ func TestReleaseRequestedAdvisesTheHolderOnce(t *testing.T) {
 		assert.Contains(t, v.Context, fmt.Sprintf("a fork under lease lease-b was refused for internal/ledger/store.go (request %s)", id))
 		assert.Contains(t, v.Context, "lease-a has changed nothing under internal/ledger/**")
 		assert.Contains(t, v.Context, "magus job apply -f <record>")
-		require.Equal(t, types.GuardJudgment{
+		require.Equal(t, verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: v.Context,
-			Rule: string(advisoryReleaseRequested), Lease: "lease-a", LeaseFrom: types.LeaseSourceFlag,
+			Rule: string(advisoryReleaseRequested), Lease: "lease-a", LeaseFrom: string(types.LeaseSourceFlag),
 		}, v, v.Context)
 		assert.NotEqual(t, string(advisoryReleaseRequested), call(ctx, "holder", "lease-a").Rule, "said once a session")
 	})
@@ -116,7 +117,7 @@ func (s *ReleaseAdviceSuite) TestALeasedCallOpensNoSessionFile() {
 	})
 
 	input := bashCall(s.T(), "holder", "", "ls")
-	done := make(chan types.GuardJudgment, 1)
+	done := make(chan verdict.Judgment, 1)
 	go func() {
 		done <- Judge(ctx, Dependencies{}, Request{Input: input, Host: "claude-code", Lease: "lease-a"})
 	}()

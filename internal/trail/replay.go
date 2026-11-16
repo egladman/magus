@@ -335,7 +335,7 @@ func startRun(call SessionCall) *RepeatRun {
 // its zero value, except Thread, which reads as types.AgentThreadUnknown.
 //
 // Decision is the hook verdict's (pass, ask, advise or deny), not a rule's
-// types.GuardDecision, which has no pass or ask.
+// verdict.Decision, which has no pass or ask.
 type SessionCall struct {
 	At       time.Time
 	Decision string

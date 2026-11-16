@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -340,7 +341,7 @@ func TestAgentCostFamilyCollects(t *testing.T) {
 	p.RecordAgentCall(ctx, observability.AgentCall{AgentFacts: types.AgentFacts{
 		Thread: types.AgentThreadMain, ContextModel: "claude-opus-5-5", ContextTokens: 300_000,
 		Billing: types.AgentBillingMetered, DelegableClass: types.DelegableSearch, ResultChars: &large,
-		Shadow: map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny, types.GuardProfileLight: types.GuardAllow},
+		Shadow: map[types.GuardProfile]verdict.Decision{types.GuardProfileStrict: verdict.Deny, types.GuardProfileLight: verdict.Allow},
 	}})
 	p.RecordAgentCall(ctx, observability.AgentCall{AgentFacts: types.AgentFacts{
 		ContextTokens: 5000, DelegableClass: types.DelegableSearch, ResultChars: &small, Billing: types.AgentBillingMetered,

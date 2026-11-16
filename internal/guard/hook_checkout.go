@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // takeDelegation marks ctx with the binary that handed this call on, if one
@@ -200,7 +200,7 @@ func (e HookEnv) delegateToCheckout(ctx context.Context, input string, opts outp
 	switch end {
 	case DelegateExited:
 	case DelegateKilledUnanswered:
-		verdict := types.GuardJudgment{
+		verdict := verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion,
 			Decision:   "deny",
 			Reason:     fmt.Sprintf("%s was killed unanswered at the hook's deadline, so this call is blocked. Retry it.", own),
@@ -241,7 +241,7 @@ func (e HookEnv) unloadableCheckout(ctx context.Context, root string) string {
 
 // judgedBy appends note, which says which binary judged, to the verdict's text. A pass
 // carries no text to append to.
-func judgedBy(verdict types.GuardJudgment, note string) types.GuardJudgment {
+func judgedBy(verdict verdict.Judgment, note string) verdict.Judgment {
 	if note == "" {
 		return verdict
 	}

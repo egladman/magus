@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,9 +32,9 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 `)
 	require.NoError(t, err)
 	facts := hint.NewGate(t.TempDir(), "claude-code/s1")
-	cases := map[string]types.GuardVerdict{
-		"named": {Decision: types.GuardDeny, Reason: "Lead with the outcome.", Rule: "pull-request-text"},
-		"other": {Decision: types.GuardDeny, Reason: "unnamed"},
+	cases := map[string]verdict.Verdict{
+		"named": {Decision: verdict.Deny, Reason: "Lead with the outcome.", Rule: "pull-request-text"},
+		"other": {Decision: verdict.Deny, Reason: "unnamed"},
 	}
 	for command, want := range cases {
 		got, err := rule(t.Context(), types.CommandRequest{Command: command}, facts)
@@ -59,11 +60,11 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 
 	got, err := rule(t.Context(), types.CommandRequest{Command: "git push"}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Ask before pushing."}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "Ask before pushing."}, got)
 
 	got, err = rule(t.Context(), types.CommandRequest{Command: "ls"}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAllow}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Allow}, got)
 }
 
 // A rule that denies on the caller's role denies a worker and passes the root.
@@ -83,11 +84,11 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 
 	got, err := rule(t.Context(), types.CommandRequest{Command: "go build", Role: types.AgentRoleWorker}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "A worker does not build."}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "A worker does not build."}, got)
 
 	got, err = rule(t.Context(), types.CommandRequest{Command: "go build", Role: types.AgentRoleRoot}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAllow}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Allow}, got)
 }
 
 // Comparing a boundary record's enum field to a string literal is always false, so a
@@ -229,7 +230,7 @@ func commandRuleSource(reason string) string {
 	return fmt.Sprintf(commandRuleTemplate, reason)
 }
 
-func (s *FunctionRuleLoadSuite) commandVerdict() types.GuardVerdict {
+func (s *FunctionRuleLoadSuite) commandVerdict() verdict.Verdict {
 	rule := s.reg.CommandRule()
 	s.Require().NotNil(rule, "the registry holds no command rule")
 	got, err := rule(s.T().Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(s.T().TempDir(), "claude-code/s1"))

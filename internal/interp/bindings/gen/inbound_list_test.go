@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
@@ -54,7 +55,7 @@ var inboundTypes = []inboundType{
 	{Name: "Grant", Zero: types.Grant{}, Encode: func(v any) vm.Value { return ObjectGrant(v.(types.Grant)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeGrant(v) }},
 	{Name: "Graph", Zero: types.SymbolIndexDigest{}, Encode: func(v any) vm.Value { return ObjectSymbolIndexDigest(v.(types.SymbolIndexDigest), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSymbolIndexDigest(v) }},
 	{Name: "GreenRun", Zero: types.GreenRun{}, Encode: func(v any) vm.Value { return ObjectGreenRun(v.(types.GreenRun)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeGreenRun(v) }},
-	{Name: "GuardVerdict", Zero: types.GuardVerdict{}, Encode: func(v any) vm.Value { return ObjectGuardVerdict(v.(types.GuardVerdict), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeGuardVerdict(v) }},
+	{Name: "GuardVerdict", Zero: verdict.Verdict{}, Encode: func(v any) vm.Value { return ObjectGuardVerdict(v.(verdict.Verdict), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeGuardVerdict(v) }},
 	{Name: "Harness", Zero: types.Harness{}, Encode: func(v any) vm.Value { return ObjectHarness(v.(types.Harness)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarness(v) }},
 	{Name: "HarnessAsset", Zero: types.HarnessAsset{}, Encode: func(v any) vm.Value { return ObjectHarnessAsset(v.(types.HarnessAsset)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarnessAsset(v) }},
 	{Name: "HarnessConfig", Zero: types.HarnessConfig{}, Encode: func(v any) vm.Value { return ObjectHarnessConfig(v.(types.HarnessConfig)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHarnessConfig(v) }},
@@ -193,7 +194,7 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[spells.External]():            {"", "reads-external", "mutates-external"},
 	reflect.TypeFor[types.GoalExpect]():           {"", "passed", "changed", "present", "absent", "unreferenced", "signature"},
 	reflect.TypeFor[types.GoalKind]():             {"", "check", "paths", "symbol"},
-	reflect.TypeFor[types.GuardDecision]():        {"", "allow", "advise", "deny"},
+	reflect.TypeFor[verdict.Decision]():           {"", "allow", "advise", "deny"},
 	reflect.TypeFor[types.HookPoint]():            {"", "shell", "edit", "stop", "subagent-stop", "spawn", "session-start", "compact", "mcp", "attach"},
 	reflect.TypeFor[types.JobBaseVerdict]():       {"", "match", "revision-match", "diverged", "unknown"},
 	reflect.TypeFor[types.JobState]():             {"", "declared", "running", "exited", "pass", "fail", "no_return"},

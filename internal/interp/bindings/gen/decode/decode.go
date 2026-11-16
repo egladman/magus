@@ -19,6 +19,7 @@ import (
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/diagnostics"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
@@ -2077,13 +2078,13 @@ func decodeGreenRun(v vm.Value, path string) (types.GreenRun, error) {
 	return out, nil
 }
 
-// DecodeGuardVerdict decodes a Buzz GuardVerdict, an object instance or a map, into a types.GuardVerdict.
-func DecodeGuardVerdict(v vm.Value) (types.GuardVerdict, error) {
+// DecodeGuardVerdict decodes a Buzz GuardVerdict, an object instance or a map, into a verdict.Verdict.
+func DecodeGuardVerdict(v vm.Value) (verdict.Verdict, error) {
 	return decodeGuardVerdict(v, "guardVerdict")
 }
 
-func decodeGuardVerdict(v vm.Value, path string) (types.GuardVerdict, error) {
-	var out types.GuardVerdict
+func decodeGuardVerdict(v vm.Value, path string) (verdict.Verdict, error) {
+	var out verdict.Verdict
 	fields, ok := v.MapView()
 	if !ok {
 		return out, mismatch(path, "GuardVerdict", v)
@@ -2096,7 +2097,7 @@ func decodeGuardVerdict(v vm.Value, path string) (types.GuardVerdict, error) {
 			if err != nil {
 				return out, err
 			}
-			out.Decision = types.GuardDecision(sDecision)
+			out.Decision = verdict.Decision(sDecision)
 		case "reason":
 			sReason, err := decodeString(item, path+".reason")
 			if err != nil {

@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -530,7 +531,7 @@ func (d Dependencies) grade(v ShellVerdict) ShellVerdict {
 }
 
 // gradeAdvice grades a hook verdict that advises; any other passes through.
-func (d Dependencies) gradeAdvice(v types.GuardJudgment) types.GuardJudgment {
+func (d Dependencies) gradeAdvice(v verdict.Judgment) verdict.Judgment {
 	if v.Decision != decisionAdvise {
 		return v
 	}
@@ -627,7 +628,7 @@ func (w matchWalk) rest() (ShellVerdict, bool) {
 // speak puts the held advice on verdict when nothing refused or asked, once per session
 // per rule. It replaces any advisory there, which it outranks, and notes the demoted deny's
 // rationale in whys for shapeAdvice.
-func (h heldAdvice) speak(markers hint.Gate, verdict *types.GuardJudgment, whys map[string]string) {
+func (h heldAdvice) speak(markers hint.Gate, verdict *verdict.Judgment, whys map[string]string) {
 	if !h.v.demoted || verdict.Decision == decisionDeny || verdict.Decision == decisionAsk {
 		return
 	}
@@ -735,8 +736,8 @@ type Request struct {
 // hand another host a reply it drops, which on some hosts runs the call unguarded.
 //
 // The reason names no form, so the sh and Buzz forms of one template reply alike.
-func hostUnnamed() types.GuardJudgment {
-	return types.GuardJudgment{
+func hostUnnamed() verdict.Judgment {
+	return verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
 		Decision:   decisionDeny,
 		Reason: types.FormatDiagnostic(types.HookHostUnnamed,
@@ -763,7 +764,7 @@ func hostUnnamed() types.GuardJudgment {
 //
 // A judgment mark BeginJudgment left on ctx is ended here; without one, Judge marks the
 // judgment itself once it has resolved the session.
-func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.GuardJudgment) {
+func Judge(ctx context.Context, deps Dependencies, req Request) (judged verdict.Judgment) {
 	started := begunJudgment(ctx)
 	defer func() { started.end() }()
 	if req.Form != "" && strings.TrimSpace(req.Host) == "" {
@@ -785,7 +786,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	if req.Message {
 		if req.DryRun {
-			return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+			return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 		}
 		at := hookLocation(ctx, deps)
 		recordMessageTopics(hint.NewGate(at.cacheDir, who.factsKey()), input)
@@ -795,7 +796,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		if !req.DryRun {
 			appendToolTime(ctx, hookLocation(ctx, deps), who, input, req)
 		}
-		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	}
 	isPath := req.IsPath
 	// Where the call runs, which the bootstrap rule reads even when no workspace resolves
@@ -841,7 +842,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			who.Agent = env.Who.Agent
 		}
 		if req.DryRun && env.NothingToJudge && env.UnjudgedTool == "" {
-			return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+			return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 		}
 		if env.LoadedSkill != "" && !req.DryRun {
 			// Recorded here, ahead of the arm below that returns. The gate is built here
@@ -860,7 +861,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			at := hookLocation(ctx, deps)
 			refusal, advice := joinStartedChild(withJobStoreRows(ctx, at), at, hint.NewGate(at.cacheDir, who.factsKey()), who, child, time.Now(), env.ChildStarted == "")
 			if refusal != "" {
-				return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: refusal}
+				return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: refusal}
 			}
 			unplaced = advice
 		}
@@ -877,12 +878,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			if env.Schedules {
 				timer := gradeScheduledPrompt(hint.NewGate(at.cacheDir, who.factsKey()), hint.NewGate(at.cacheDir, who.callerKey()), who.Transcript, time.Now())
 				if v := deps.grade(timer); v.Deny != "" {
-					return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
+					return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 				}
 			}
 			v, ok := judgeStop(deps, hint.NewGate(at.cacheDir, who.callerKey()), input, req.HostResumesOnBackgroundFrom, time.Now())
 			if !ok {
-				v = types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+				v = verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 			}
 			lease, _ := resolveLease(who, req.Lease, boundJob(who, at).Job)
 			if v.Decision != decisionDeny {
@@ -931,7 +932,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		}
 		if env.IsSpawn || env.IsContinue {
 			if req.DryRun {
-				return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny,
+				return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny,
 					Reason: "magus workspace: a spawn or continuation cannot be checked, since judging one records it."}
 			}
 			return judgeAgentEvent(ctx, deps, req, env, who)
@@ -1011,7 +1012,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 	case isPath:
 		tool = hookToolWrite
 	}
-	verdict := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass, Lease: actingLease, LeaseFrom: leaseFrom}
+	judgment := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass, Lease: actingLease, LeaseFrom: string(leaseFrom)}
 	// Where the acting lease STANDS, read once and before any rule. An id the job store does
 	// not carry is refused, because every lease-scoped rule below reads that row and
 	// finding nothing is how they all fall silent at once: the call would be graded by
@@ -1040,15 +1041,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 	// refuseWith grades a compiled rule's would-be deny onto the verdict.
 	refuseWith := func(rule denyRuleName, d denial) {
 		if v, refused := pending.hold(deps, ShellVerdict{Deny: d.Say, Why: d.Why, Rule: denyRule{Name: rule}}); refused {
-			verdict.Decision, verdict.Reason, verdict.Context = decisionDeny, v.Deny, ""
-			verdict.Rule = string(rule)
-			verdict.NextSteps = d.Next
+			judgment.Decision, judgment.Reason, judgment.Context = decisionDeny, v.Deny, ""
+			judgment.Rule = string(rule)
+			judgment.NextSteps = remedies(d.Next)
 			whys[v.Deny] = v.Why
 		}
 	}
 	refuse := func(rule denyRuleName, reason string) { refuseWith(rule, denial{Say: reason}) }
 	denyUndeclared := func(command string) {
-		if req.Observe || verdict.Decision == decisionDeny {
+		if req.Observe || judgment.Decision == decisionDeny {
 			return
 		}
 		if d := denyUndeclaredLease(standing, actingLease, command); d.refused() {
@@ -1084,12 +1085,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// advisory about editing a file the agent opened read-only.
 	case unjudged != "":
 		refuseWith(denyRuleUnjudgedStep, denyUnjudgedTool(unjudged, req.Tools))
-		pending.speak(markers, &verdict, whys)
+		pending.speak(markers, &judgment, whys)
 	case env.Enters:
 		if d := denyEnterCheckout(env.Tool, env.Value, env.EntersNew, ownedCheckouts(ctx, deps, location)); d.refused() {
 			refuseWith(denyRuleSiblingCheckout, d)
 		}
-		pending.speak(markers, &verdict, whys)
+		pending.speak(markers, &judgment, whys)
 	case isPath:
 		said := ""
 		// adviceKind is which rung spoke, for the verdict to name.
@@ -1126,7 +1127,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			refuse(denyRuleTokenState, reason)
 		}
 		denyUndeclared("")
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			switch g := gradeLeasedEdit(ctx, deps, actingLease, input, write); g.Decision {
 			case decisionDeny:
 				refuseWith(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), denial{Say: g.Reason, Why: g.Why, Next: g.Next})
@@ -1138,7 +1139,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			}
 		}
 		// Raised to deny it refuses whatever spoke above, as a lease past its deadline does.
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			if a := adviseModelTierContext(ctx, deps, location, who, facts, actingLease); a.Say != "" {
 				if s, _ := deps.setting(string(advisoryModelTierContextCap)); s.Decision == builtin.Deny {
 					refuseWith(denyRuleName(advisoryModelTierContextCap), denial{Say: a.Say, Why: a.Why})
@@ -1148,17 +1149,17 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 				}
 			}
 		}
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			if g := denyVCSOffSwitch(actingLease, input, write); g.Decision == decisionDeny {
 				refuse(denyRuleName(g.Rule), g.Reason)
 			}
 		}
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			if reason := denyDeviationWrite(input, write); reason != "" {
 				refuse(denyRuleDeviationAuthor, reason)
 			}
 		}
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			switch g := gradeHookWiringWrite(location.workspace, actingLease, who.Agent != "", input); g.Decision {
 			case decisionDeny:
 				refuse(denyRuleHookWiringWrite, g.Reason)
@@ -1172,33 +1173,33 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// Last of the denies: a refused write has nothing to learn first.
 		// A write outside the workspace is not briefed.
 		briefable := inSource(location.workspace, input)
-		if verdict.Decision != decisionDeny && briefable {
+		if judgment.Decision != decisionDeny && briefable {
 			if reason := denyBuzzWriteWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input); reason != "" {
 				refuse(denyBuzzUnbriefed, reason)
 			}
 		}
-		if verdict.Decision != decisionDeny && briefable && !removesOnly(write) {
+		if judgment.Decision != decisionDeny && briefable && !removesOnly(write) {
 			if reason := denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, newSourceDir(location.workspace, input)); reason != "" {
 				refuse(denyArchitectureUnbriefed, reason)
 			}
 		}
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			if reason := denyAmbiguousCIWord(facts, writeAssumesCIWord(input)); reason != "" {
 				refuse(denyRuleAmbiguousCIWord, reason)
 			}
 		}
 		// A script is judged by what running it would be judged by, and the write is the
 		// last moment that costs nothing to change. Its verdict is graded already.
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			if v, refused := pending.hold(deps, denyScriptWrite(deps, input, write)); refused {
-				verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, v.Deny, v.RuleName()
+				judgment.Decision, judgment.Reason, judgment.Rule = decisionDeny, v.Deny, v.RuleName()
 				whys[v.Deny] = v.Why
 			}
 		}
 		// The generated-output rule is definitive (it reads declared globs), so it
 		// outranks the heuristics below; the instruction-file nudge is a heuristic on
 		// the filename and only fills the silence it leaves.
-		if verdict.Decision == decisionPass && !spoken {
+		if judgment.Decision == decisionPass && !spoken {
 			if a := adviseGeneratedWrite(ctx, deps, input); a.Say != "" {
 				said, adviceKind, spoken = a.Say, advisoryGeneratedWrite, true
 				whys[a.Say] = a.Why
@@ -1206,12 +1207,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		}
 		// The notes rule DENIES, so it is checked before the advisories: a verdict that
 		// blocks is not something to fall through to.
-		if verdict.Decision == decisionPass && !spoken {
+		if judgment.Decision == decisionPass && !spoken {
 			if reason := denyNotesWrite(deps, input); reason != "" {
 				refuse(denyRuleNotesAuthor, reason)
 			}
 		}
-		if verdict.Decision == decisionPass && !spoken {
+		if judgment.Decision == decisionPass && !spoken {
 			if a := adviseInstalledSkillWrite(input); a.Say != "" {
 				said, adviceKind, spoken = a.Say, advisoryInstalledSkill, true
 				whys[a.Say] = a.Why
@@ -1223,20 +1224,20 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		if deps.scope.outside(input) {
 			spoken = true
 		}
-		if verdict.Decision == decisionPass && !spoken {
+		if judgment.Decision == decisionPass && !spoken {
 			if a := adviseInstructionWrite(input); a.Say != "" {
 				said, adviceKind, spoken = a.Say, advisoryInstruction, true
 				whys[a.Say] = a.Why
 			}
 		}
 		// Both of these are inert outside magus's own checkout; see magusOwnSourceTree.
-		if verdict.Decision == decisionPass && !spoken {
+		if judgment.Decision == decisionPass && !spoken {
 			if a := adviseAgentSourceWrite(location.workspace, input); a.Say != "" {
 				said, adviceKind, spoken = deps.heldBy(markers, string(advisorySkillSource)).Once(advisorySkillSource, a.Say), advisorySkillSource, true
 				whys[a.Say] = a.Why
 			}
 		}
-		if verdict.Decision == decisionPass && !spoken {
+		if judgment.Decision == decisionPass && !spoken {
 			if a := adviseDescriptorWrite(location.workspace, input); a.Say != "" {
 				said, adviceKind, spoken = deps.heldBy(markers, string(advisoryRegenSource)).Once(advisoryRegenSource, a.Say), advisoryRegenSource, true
 				whys[a.Say] = a.Why
@@ -1244,7 +1245,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		}
 		// Above the new-directory rule because it is the wider question: whether this
 		// write belongs in this session at all outranks how its unit is laid out.
-		if verdict.Decision == decisionPass && !spoken && drift.advice.Say != "" {
+		if judgment.Decision == decisionPass && !spoken && drift.advice.Say != "" {
 			// Not held here: gradeScopeDrift already gates its own firing, on the PROJECT
 			// as well as the kind, because a second drift into a different project is a
 			// second fact. Re-holding it on the kind alone would report only the first.
@@ -1255,7 +1256,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// this one a populated one. Held to one firing per session, where the new-directory
 		// rule is not, because creating a file is ordinary work and creating a boundary
 		// is not (internal/guard/file.go).
-		if verdict.Decision == decisionPass && !spoken {
+		if judgment.Decision == decisionPass && !spoken {
 			if a := adviseNewFileName(location.workspace, input); a.Say != "" {
 				said, adviceKind, spoken = deps.heldBy(markers, string(advisoryNewFile)).Once(advisoryNewFile, a.Say), advisoryNewFile, true
 				whys[a.Say] = a.Why
@@ -1268,33 +1269,33 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// kind anyway, because the kind is also the NAME a verdict reports.
 		//
 		// Quiet for an agent whose host reported it loaded the skill this text sends it to.
-		if verdict.Decision == decisionPass && !spoken && (!req.ObservesSkillLoads || !skillLoaded(skills, architectureSkill)) {
+		if judgment.Decision == decisionPass && !spoken && (!req.ObservesSkillLoads || !skillLoaded(skills, architectureSkill)) {
 			if a := adviseNewSourceDir(location.workspace, input); a.Say != "" {
 				said, adviceKind = a.Say, advisoryNewSourceDir
 				whys[a.Say] = a.Why
 			}
 		}
-		if verdict.Decision == decisionPass && said != "" {
-			verdict.Decision = decisionAdvise
-			verdict.Context = said
-			verdict.Rule = string(adviceKind)
+		if judgment.Decision == decisionPass && said != "" {
+			judgment.Decision = decisionAdvise
+			judgment.Context = said
+			judgment.Rule = string(adviceKind)
 		}
-		verdict = deps.gradeAdvice(verdict)
-		pending.speak(markers, &verdict, whys)
+		judgment = deps.gradeAdvice(judgment)
+		pending.speak(markers, &judgment, whys)
 		// The workspace's magus\guard.write rule, last because it may only add.
-		verdict, ruleRecord = gradeWorkspaceWrite(ctx, deps, verdict, input, write, actingLease, who, stateAt)
+		judgment, ruleRecord = gradeWorkspaceWrite(ctx, deps, judgment, input, write, actingLease, who, stateAt)
 		// A patch writes every file it names, and each is held to what a write of it alone
 		// would meet; the call itself was judged by the first.
-		if len(env.Patch) > 1 && verdict.Decision != decisionDeny {
+		if len(env.Patch) > 1 && judgment.Decision != decisionDeny {
 			switch rest := judgePatchRest(ctx, deps, req, who, callDir, actingLease, env.Patch); {
 			case rest.Decision == decisionDeny:
-				verdict.Decision, verdict.Reason, verdict.Context, verdict.Rule = decisionDeny, rest.Reason, "", rest.Rule
-			case rest.Decision == decisionAdvise && verdict.Decision == decisionPass:
-				verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, rest.Context, rest.Rule
+				judgment.Decision, judgment.Reason, judgment.Context, judgment.Rule = decisionDeny, rest.Reason, "", rest.Rule
+			case rest.Decision == decisionAdvise && judgment.Decision == decisionPass:
+				judgment.Decision, judgment.Context, judgment.Rule = decisionAdvise, rest.Context, rest.Rule
 			}
 		}
 		// A denied write never happens, so it never touched anything.
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			drift.record()
 		}
 	default:
@@ -1348,7 +1349,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			// rather than raw-tool's generic target.
 			if v.Rule.Name == denyRuleRawTool && preauth == "" {
 				if d := denyWorkerRawTool(ctx, deps, actingLease, input); d.refused() {
-					if refuseWith(denyRuleWorkerCheckOnly, d); verdict.Decision == decisionDeny {
+					if refuseWith(denyRuleWorkerCheckOnly, d); judgment.Decision == decisionDeny {
 						break
 					}
 				}
@@ -1357,9 +1358,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
 			// language tool, a relocated checkout. A next magus served would not carry one
 			// anyway, and the structural test is what says so before it ships.
-			verdict.Decision = decisionDeny
-			verdict.Reason = v.Deny
-			verdict.Rule = v.RuleName()
+			judgment.Decision = decisionDeny
+			judgment.Reason = v.Deny
+			judgment.Rule = v.RuleName()
 			whys[v.Deny] = v.Why
 			if v.Rule.Name == denyRuleSiblingCheckout {
 				lead, next := siblingCheckoutRemedy(callDir, input, shellD)
@@ -1370,21 +1371,21 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			pending.hold(deps, v)
 		case v.Context != "" && preauth == "":
 			if held := markers.OnceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
-				verdict.Decision = decisionAdvise
-				verdict.Context = held
-				verdict.Rule = v.advisoryName()
+				judgment.Decision = decisionAdvise
+				judgment.Context = held
+				judgment.Rule = v.advisoryName()
 				whys[v.Context] = v.Why
 			}
 		}
 		// The shell half of hook-wiring-write: a redirect, cp or mv reaches the same files a
 		// write tool does. Only the deny arm, so a person's own session keeps its allowance.
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			if reason := denyHookWiringCommand(location, callDir, actingLease, who.Agent != "", input, shellD); reason != "" {
 				refuse(denyRuleHookWiringWrite, reason)
 			}
 		}
 		denyUndeclared(input)
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			if d := denyAgentGrant(input, shellD); d.refused() {
 				refuseWith(denyRuleGrantIsAPersons, d)
 			}
@@ -1395,7 +1396,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// command came from magus, computed for this role, so refusing it here would be
 		// the tool disagreeing with itself.
 		for _, rule := range roleScopedCommandRules() {
-			if verdict.Decision == decisionDeny || preauth != "" {
+			if judgment.Decision == decisionDeny || preauth != "" {
 				break
 			}
 			if d := rule.judge(ctx, deps, actingLease, input); d.refused() {
@@ -1416,7 +1417,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		})
 		// Not stood down by a pre-authorization: a served next is a command line, and
 		// whether the host backgrounds it is the call's, not the line's.
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			if run, ok := worker(); ok {
 				if d := denyWorkerBackgroundRun(run, call); d.refused() {
 					refuseWith(denyRuleWorkerBackgroundRun, d)
@@ -1426,7 +1427,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// A watcher ends at its own expiry, so only a plain backgrounded call needs a bound.
 		// A backgrounded waiter is the waiter rules' to judge: they count it toward the pile
 		// and name what to wait on instead, which a bound would not.
-		if verdict.Decision != decisionDeny && !waits {
+		if judgment.Decision != decisionDeny && !waits {
 			if d := denyUnboundedBackground(input, call.background && !env.IsWatch, shellD, configuredBackgroundLimits(deps).ceiling); d.refused() {
 				refuseWith(denyRuleBackgroundUnbounded, d)
 			}
@@ -1435,22 +1436,22 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// about a boundary an orchestrator declared; its advisory only fills a silence.
 		// Nothing runs once a deny stands: a wrong tree is a bigger mistake than a wrong
 		// project, and the rule that caught it is also the cheaper one to have run.
-		if verdict.Decision != decisionDeny && preauth == "" {
+		if judgment.Decision != decisionDeny && preauth == "" {
 			focus := gradeFocusRead(ctx, deps, actingLease, input)
 			gate := deps.heldBy(markers, string(advisoryFocus))
 			switch {
 			case focus.Decision == decisionDeny:
 				refuse(denyRuleFocusRead, focus.Reason)
-			case verdict.Decision == decisionPass && focus.Decision == decisionAdvise && !gate.MarkFired(advisoryFocusPath(focus.Rel)):
+			case judgment.Decision == decisionPass && focus.Decision == decisionAdvise && !gate.MarkFired(advisoryFocusPath(focus.Rel)):
 				if held := gate.OnceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
-					verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, held, string(advisoryFocus)
+					judgment.Decision, judgment.Context, judgment.Rule = decisionAdvise, held, string(advisoryFocus)
 					whys[focus.Context] = focus.Why
 				}
 			}
 		}
 		// Not stood down by a pre-authorization: the person owns what a human-only run
 		// costs, whoever suggested it. An ask is graded as the deny it stands in for.
-		if verdict.Decision != decisionDeny {
+		if judgment.Decision != decisionDeny {
 			decision, reason, lapsed := gradeHumanOnly(ctx, deps, actingLease, input)
 			if decision != "" && !lapsed {
 				if _, refused := pending.hold(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleHumanOnly}}); !refused {
@@ -1459,24 +1460,24 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			}
 			switch decision {
 			case decisionAsk:
-				verdict.Decision, verdict.Context, verdict.Reason = decisionAsk, "", reason
+				judgment.Decision, judgment.Context, judgment.Reason = decisionAsk, "", reason
 				if !req.RendersAsk {
-					verdict.Decision, verdict.Reason = decisionDeny, askUnrenderedDeny(fmt.Sprintf("running `%s`", elideCommand(input)))
-					whys[verdict.Reason] = fmt.Sprintf("%s\n%s", reason, askUnrendered)
+					judgment.Decision, judgment.Reason = decisionDeny, askUnrenderedDeny(fmt.Sprintf("running `%s`", elideCommand(input)))
+					whys[judgment.Reason] = fmt.Sprintf("%s\n%s", reason, askUnrendered)
 				}
-				verdict.Rule = string(denyRuleHumanOnly)
+				judgment.Rule = string(denyRuleHumanOnly)
 			case decisionDeny:
-				verdict.Decision, verdict.Context, verdict.Reason = decisionDeny, "", reason
-				verdict.Rule = string(denyRuleHumanOnly)
+				judgment.Decision, judgment.Context, judgment.Reason = decisionDeny, "", reason
+				judgment.Rule = string(denyRuleHumanOnly)
 				if lapsed {
 					// A lapse is retried, never a standing refusal.
-					verdict.Rule = string(advisoryUnfinished)
+					judgment.Rule = string(advisoryUnfinished)
 				}
 			}
 		}
 		// Last of the worker rules: one that refuses the run outright
 		// names the bigger fix.
-		if verdict.Decision != decisionDeny && verdict.Decision != decisionAsk && preauth == "" {
+		if judgment.Decision != decisionDeny && judgment.Decision != decisionAsk && preauth == "" {
 			if d := denyWorkerBudgetWait(ctx, deps, actingLease, input); d.refused() {
 				refuseWith(denyRuleLeaseGate, d)
 			}
@@ -1489,7 +1490,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// command and this reads the run log and the revision. The rule is split the same
 		// way the skill gates are: the parser decides WHAT the command is, and the arm
 		// with a location decides what the workspace knows about it.
-		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
+		if judgment.Rule == string(advisoryPushGate) && preauth == "" {
 			ev := pushCoverage(ctx, deps, location, input, shellD, callDir)
 			// The same worker test lease-vcs uses: a root session holding a parentless row
 			// publishes, so its refusal names no orchestrator. A row that cannot be read
@@ -1508,24 +1509,24 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 				}
 			}
 			if decision == decisionDeny {
-				verdict.Decision, verdict.Context, verdict.Reason = decisionDeny, "", reason
-				verdict.Rule = string(denyRulePushUnverified)
+				judgment.Decision, judgment.Context, judgment.Reason = decisionDeny, "", reason
+				judgment.Rule = string(denyRulePushUnverified)
 			} else if note := ev.admitted(); note != "" {
-				verdict.Context = note
+				judgment.Context = note
 			}
 		}
 		if preauth == "" {
-			pending.speak(markers, &verdict, whys)
+			pending.speak(markers, &judgment, whys)
 		}
 		// Gated on the command being the GATE, not on it merely spawning work: the
 		// advisory's answer is to run a narrower target, and firing on one argues with
 		// the caller for doing what it asked.
-		if verdict.Decision == decisionPass && preauth == "" && commandRunsGate(input) {
+		if judgment.Decision == decisionPass && preauth == "" && commandRunsGate(input) {
 			full, brief := adviseRepeatVerify(workspaceRunsDir(location.cacheDir), time.Now())
 			if notice := deps.heldBy(markers, string(advisoryVerifyRepeat)).OnceOrBrief(advisoryVerifyRepeat, full.Say, brief); notice != "" {
-				verdict.Decision = decisionAdvise
-				verdict.Context = notice
-				verdict.Rule = string(advisoryVerifyRepeat)
+				judgment.Decision = decisionAdvise
+				judgment.Context = notice
+				judgment.Rule = string(advisoryVerifyRepeat)
 				whys[full.Say] = full.Why
 			}
 		}
@@ -1533,11 +1534,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// command's own output (stale_index.go). alreadyFired is asked BEFORE the rule, not
 		// after: producing this text costs a directory walk, and once the session has been
 		// told, paying for it again only to discard the answer is the cost nobody sees.
-		if stale := deps.heldBy(markers, string(advisoryGraphStale)); verdict.Decision == decisionPass && preauth == "" && !stale.AlreadyFired(advisoryGraphStale) && commandReadsGraph(input) {
+		if stale := deps.heldBy(markers, string(advisoryGraphStale)); judgment.Decision == decisionPass && preauth == "" && !stale.AlreadyFired(advisoryGraphStale) && commandReadsGraph(input) {
 			if notice := stale.Once(advisoryGraphStale, deps.graphStaleAdvice(ctx)); notice != "" {
-				verdict.Decision = decisionAdvise
-				verdict.Context = notice
-				verdict.Rule = string(advisoryGraphStale)
+				judgment.Decision = decisionAdvise
+				judgment.Context = notice
+				judgment.Rule = string(advisoryGraphStale)
 			}
 		}
 		// The SPLIT-RUN rule's cross-call shape: the same target run again on a different
@@ -1545,49 +1546,49 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// splitRunLineAdvice's, inside Evaluate). gradeSplitRun records this call's
 		// invocation on the SESSION's facts either way, so it must run whenever nothing
 		// louder already spoke, not only when it turns out to have something to say.
-		if verdict.Decision == decisionPass && preauth == "" {
+		if judgment.Decision == decisionPass && preauth == "" {
 			if a, matched := gradeSplitRun(facts, input); matched {
 				if held := deps.heldBy(markers, string(advisorySplitRun)).Once(advisorySplitRun, a.Say); held != "" {
-					verdict.Decision = decisionAdvise
-					verdict.Context = held
-					verdict.Rule = string(advisorySplitRun)
+					judgment.Decision = decisionAdvise
+					judgment.Context = held
+					judgment.Rule = string(advisorySplitRun)
 					whys[a.Say] = a.Why
 				}
 			}
 		}
 		// Added to whatever advice stands rather than waiting for silence: a worker that
 		// misses it parks, which no other advice on the line costs.
-		if run, ok := worker(); ok && (verdict.Decision == decisionPass || verdict.Decision == decisionAdvise) {
+		if run, ok := worker(); ok && (judgment.Decision == decisionPass || judgment.Decision == decisionAdvise) {
 			if a := adviseCheckTimeout(location, run, call); a.Say != "" {
 				if held := deps.heldBy(markers, string(advisoryCheckTimeout)).Once(a.Key, a.Say); held != "" {
 					whys[a.Say] = a.Why
-					if verdict.Decision == decisionAdvise {
-						verdict.Context += "\n\n" + held
+					if judgment.Decision == decisionAdvise {
+						judgment.Context += "\n\n" + held
 					} else {
-						verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, held, string(advisoryCheckTimeout)
+						judgment.Decision, judgment.Context, judgment.Rule = decisionAdvise, held, string(advisoryCheckTimeout)
 					}
 				}
 			}
 		}
 		// The root's half of background-silent; a subagent's stop is background-left's. A read
 		// passes, so the task's output can still be inspected before it is stopped.
-		if setting, ok := deps.setting(string(denyRuleBackgroundSilent)); ok && setting.Decision != builtin.Off && who.Agent == "" && env.Read == "" && !req.DryRun && verdict.Decision != decisionDeny {
+		if setting, ok := deps.setting(string(denyRuleBackgroundSilent)); ok && setting.Decision != builtin.Off && who.Agent == "" && env.Read == "" && !req.DryRun && judgment.Decision != decisionDeny {
 			d, a := judgeBackgroundSilent(who.Transcript, configuredBackgroundLimits(deps), deps.heldBy(markers, string(denyRuleBackgroundSilent)), time.Now())
 			switch {
 			case d.refused():
 				refuseWith(denyRuleBackgroundSilent, d)
-			case a.Say != "" && verdict.Decision == decisionAdvise:
-				verdict.Context += "\n\n" + a.Say
+			case a.Say != "" && judgment.Decision == decisionAdvise:
+				judgment.Context += "\n\n" + a.Say
 				whys[a.Say] = a.Why
 			case a.Say != "":
-				verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, a.Say, string(denyRuleBackgroundSilent)
+				judgment.Decision, judgment.Context, judgment.Rule = decisionAdvise, a.Say, string(denyRuleBackgroundSilent)
 				whys[a.Say] = a.Why
 			}
 		}
-		verdict = deps.gradeAdvice(verdict)
+		judgment = deps.gradeAdvice(judgment)
 		// The workspace's magus\guard.command rule, last because it may only add to what
 		// every rule above said.
-		verdict, ruleRecord = gradeWorkspaceCommand(ctx, deps, verdict, commandRuleInput{
+		judgment, ruleRecord = gradeWorkspaceCommand(ctx, deps, judgment, commandRuleInput{
 			command:     input,
 			description: description,
 			dialect:     shellD,
@@ -1597,7 +1598,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			readOnly:    readOnlyTool,
 		}, who, stateAt)
 		// Last, so a line any rule refused or put to a person binds nobody.
-		if !req.DryRun && (verdict.Decision == decisionPass || verdict.Decision == decisionAdvise) {
+		if !req.DryRun && (judgment.Decision == decisionPass || judgment.Decision == decisionAdvise) {
 			bindOnExec(ctx, location, who, input)
 			releaseOnEnd(location, who, input)
 			if waits {
@@ -1621,12 +1622,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		advisoryReleaseRequested: adviseReleaseRequested(standing.row),
 		advisoryLeaseNarrowed:    adviseLeaseNarrowed(standing.row),
 	} {
-		if notice.Say == "" || req.Observe || verdict.Decision == decisionDeny || verdict.Decision == decisionAsk {
+		if notice.Say == "" || req.Observe || judgment.Decision == decisionDeny || judgment.Decision == decisionAsk {
 			continue
 		}
 		switch g := deps.grade(ShellVerdict{Context: notice.Say, Why: notice.Why, Kind: kind}); {
 		case g.Deny != "":
-			verdict.Decision, verdict.Reason, verdict.Context, verdict.Rule = decisionDeny, g.Deny, "", string(kind)
+			judgment.Decision, judgment.Reason, judgment.Context, judgment.Rule = decisionDeny, g.Deny, "", string(kind)
 			whys[g.Deny] = g.Why
 			continue
 		case g.Context == "":
@@ -1641,21 +1642,21 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			continue
 		}
 		whys[notice.Say] = notice.Why
-		if verdict.Decision == decisionAdvise {
-			verdict.Context += "\n\n" + held
+		if judgment.Decision == decisionAdvise {
+			judgment.Context += "\n\n" + held
 			continue
 		}
-		verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, held, string(kind)
+		judgment.Decision, judgment.Context, judgment.Rule = decisionAdvise, held, string(kind)
 	}
 	// Graded by nothing: the notice is fixed, since it is how a session learns its own
 	// checks were skipped.
 	if n := started.abandoned(); n > 0 {
-		verdict = applyRuleFailureNote(verdict, unfinishedNote(n), advisoryUnfinished)
+		judgment = applyRuleFailureNote(judgment, unfinishedNote(n), advisoryUnfinished)
 	}
 	// Worded after every arm has spoken, so whichever rule refused is the one held to a
 	// full explanation per session. An ask is never shortened: it waits on a person.
 	verdictRef := ""
-	if verdict.Decision == decisionDeny && verdict.Rule != "" && !req.Observe {
+	if judgment.Decision == decisionDeny && judgment.Rule != "" && !req.Observe {
 		note := ""
 		if tool == hookToolCommand {
 			note = nothingRanNote(input, effectiveDialect(deps.ShellDialect))
@@ -1667,37 +1668,39 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// Only while the deny that computed the remedy is still the one standing: a later
 		// rule's refusal is about something else.
 		var next []types.NextStep
-		why := whys[verdict.Reason]
+		why := whys[judgment.Reason]
 		switch {
-		case len(remedy.Next) > 0 && verdict.Reason == remedy.Deny:
+		case len(remedy.Next) > 0 && judgment.Reason == remedy.Deny:
 			next = servableRemedy(ctx, deps, req, who, callDir, location.workspace, standing, actingLease, remedy.Next)
 			if len(next) > 0 {
-				verdict.Reason, why = remedy.Lead, remedy.Why
+				judgment.Reason, why = remedy.Lead, remedy.Why
 			}
-		case len(verdict.NextSteps) > 0:
+		case len(judgment.NextSteps) > 0:
 			// The workspace seam's own deny, which words its reason without the command.
-			next = servableRemedy(ctx, deps, req, who, callDir, location.workspace, standing, actingLease, verdict.NextSteps)
+			next = servableRemedy(ctx, deps, req, who, callDir, location.workspace, standing, actingLease, breadcrumbs(judgment.NextSteps))
 		}
-		verdict.Reason, verdictRef, verdict.NextSteps = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
+		var served []types.NextStep
+		judgment.Reason, verdictRef, served = shapeDeny(ctx, shapeGate, judgment.Rule, judgment.Reason, why, note, next, req.DryRun)
+		judgment.NextSteps = remedies(served)
 	}
-	if verdict.Decision == decisionPass && unplaced != "" && !req.Observe {
-		verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, unplaced, string(advisorySpawnUnplaced)
+	if judgment.Decision == decisionPass && unplaced != "" && !req.Observe {
+		judgment.Decision, judgment.Context, judgment.Rule = decisionAdvise, unplaced, string(advisorySpawnUnplaced)
 	}
-	if verdict.Decision == decisionAdvise && !req.Observe && adviceRepeated(markers, who.Agent, verdict.Rule, verdict.Context) {
-		verdict.Decision, verdict.Context, verdict.Rule = decisionPass, "", ""
+	if judgment.Decision == decisionAdvise && !req.Observe && adviceRepeated(markers, who.Agent, judgment.Rule, judgment.Context) {
+		judgment.Decision, judgment.Context, judgment.Rule = decisionPass, "", ""
 	}
-	if g, ok := granted[verdict.Rule]; ok && verdict.Decision == decisionAdvise {
-		verdict.Context += fmt.Sprintf("\n%s", grantNote(g))
+	if g, ok := granted[judgment.Rule]; ok && judgment.Decision == decisionAdvise {
+		judgment.Context += fmt.Sprintf("\n%s", grantNote(g))
 	}
-	if verdict.Decision == decisionAdvise && !req.Observe {
-		verdict.Context, verdictRef = shapeAdvice(ctx, markers, verdict.Rule, verdict.Context, whys, req.DryRun)
+	if judgment.Decision == decisionAdvise && !req.Observe {
+		judgment.Context, verdictRef = shapeAdvice(ctx, markers, judgment.Rule, judgment.Context, whys, req.DryRun)
 	}
 	// An observation is not a judgment, and the trail already knows the difference: an
 	// AgentCommand with no Decision previews as "observed" rather than "guard: <decision>".
 	// Recording the pass verdict here would have every read claim the guard ran and cleared
 	// it, which is exactly the conflation --observe exists to remove. The WIRE verdict is
 	// unchanged: a host still needs a decision it can parse, and "pass" is the true one.
-	record := verdict
+	record := judgment
 	if req.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
@@ -1706,7 +1709,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord, deps.judging(callDir))
 		clearHolderStopped(ctx, location, who)
 	}
-	return verdict
+	return judgment
 }
 
 // judgeSource is the magus that judged a hook call and the directory it judged the call in,
@@ -2783,12 +2786,12 @@ func WithLocation(ctx context.Context, cacheDir, workspace, dir string) context.
 //
 // rule is how the workspace command or write rule judged, which alone knows whether its answer came
 // from the approved side or the working tree.
-func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict types.GuardJudgment, rule workspaceRuleRecord, by judgeSource) {
+func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, judgment verdict.Judgment, rule workspaceRuleRecord, by judgeSource) {
 	if input == "" || location.cacheDir == "" {
 		return
 	}
 	stampHeartbeat(ctx, location.workspace, heartbeat{Session: who.Session, Lease: lease, Transcript: who.Transcript, At: time.Now()})
-	cost := observeCall(ctx, location, input, who, tool, lease, verdict)
+	cost := observeCall(ctx, location, input, who, tool, lease, judgment)
 	phases := judgmentPhases(ctx).phases()
 	var judged int64
 	if len(phases) > 0 {
@@ -2796,7 +2799,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	}
 	command := trail.AgentCommand{
 		PolicyDigest: policyDigest,
-		DecidedBy:    cmp.Or(rule.decidedBy, decidedBy(verdict)),
+		DecidedBy:    cmp.Or(rule.decidedBy, decidedBy(judgment)),
 		RuleFailures: rule.failures,
 		// A call typed at a terminal entered through the CLI, not a hook.
 		EntryPoint:      trail.EntryPointFromContext(ctx),
@@ -2808,12 +2811,12 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Event:           who.Event,
 		Tool:            tool,
 		Lease:           lease,
-		LeaseFrom:       verdict.LeaseFrom,
+		LeaseFrom:       types.LeaseSource(judgment.LeaseFrom),
 		PreauthorizedBy: preauth,
-		Decision:        verdict.Decision,
-		Reason:          verdict.Reason,
-		Context:         verdict.Context,
-		Rule:            verdict.Rule,
+		Decision:        judgment.Decision,
+		Reason:          judgment.Reason,
+		Context:         judgment.Context,
+		Rule:            judgment.Rule,
 		VerdictRef:      verdictRef,
 		Binary:          by.binary,
 		BinaryVersion:   by.version,
@@ -3027,4 +3030,30 @@ func hookContextAt(ctx context.Context, deps Dependencies, cwd string) context.C
 		return ctx
 	}
 	return context.WithValue(ctx, locationKey{}, location)
+}
+
+// remedies converts a deny's breadcrumbs to the judgment's remedies, which carry the same
+// fields.
+func remedies(next []types.NextStep) []verdict.NextStep {
+	if next == nil {
+		return nil
+	}
+	out := make([]verdict.NextStep, len(next))
+	for i, n := range next {
+		out[i] = verdict.NextStep(n)
+	}
+	return out
+}
+
+// breadcrumbs converts a judgment's remedies back to the breadcrumbs the hint package
+// serves.
+func breadcrumbs(next []verdict.NextStep) []types.NextStep {
+	if next == nil {
+		return nil
+	}
+	out := make([]types.NextStep, len(next))
+	for i, n := range next {
+		out[i] = types.NextStep(n)
+	}
+	return out
 }

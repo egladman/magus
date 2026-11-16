@@ -27,6 +27,8 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
@@ -668,7 +670,7 @@ func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
 
 // shellStep runs `magus shell` over step's record from a host whose rows
 // call TodoWrite inert. It returns the verdict's name and the exit error.
-func shellStep(t *testing.T, step typesagent.Step) (string, error) {
+func shellStep(t *testing.T, step step.Step) (string, error) {
 	t.Helper()
 	t.Setenv(trail.EnvBaggage, "")
 	t.Chdir(t.TempDir())
@@ -682,7 +684,7 @@ func shellStep(t *testing.T, step typesagent.Step) (string, error) {
 }
 
 func TestShellJudgesAToolStepAsTheEnvelopeItStandsFor(t *testing.T) {
-	step := typesagent.Step{APIVersion: typesagent.StepAPIVersion, Kind: "tool", Name: "TodoWrite", Session: "s1",
+	step := step.Step{APIVersion: step.APIVersion, Kind: "tool", Name: "TodoWrite", Session: "s1",
 		Input: map[string]any{"todos": []any{map[string]any{"content": "never use sed -i here"}}}}
 
 	verdict, err := shellStep(t, step)
@@ -692,7 +694,7 @@ func TestShellJudgesAToolStepAsTheEnvelopeItStandsFor(t *testing.T) {
 }
 
 func TestShellDeniesAStepOfAKindNoRowDeclares(t *testing.T) {
-	step := typesagent.Step{APIVersion: typesagent.StepAPIVersion, Kind: "refund", Name: "card", Session: "s1"}
+	step := step.Step{APIVersion: step.APIVersion, Kind: "refund", Name: "card", Session: "s1"}
 
 	verdict, err := shellStep(t, step)
 
@@ -1348,11 +1350,11 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 	ctx := WithLocation(t.Context(), cacheDir, root, "")
-	run := func(flags ...string) types.GuardJudgment {
+	run := func(flags ...string) verdict.Judgment {
 		var out bytes.Buffer
 		args := append([]string{"--lease", row.ID, "-o", "json"}, flags...)
 		_ = hookStdin(ctx, strings.NewReader("magus run test . --budget-wait 0"), &out, args)
-		var v types.GuardJudgment
+		var v verdict.Judgment
 		require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
 		return v
 	}
@@ -1387,7 +1389,7 @@ func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 	var out bytes.Buffer
 	require.NoError(t, hookStdin(ctx, strings.NewReader("Bash"), &out,
 		[]string{"--duration", "420ms", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
-	var v types.GuardJudgment
+	var v verdict.Judgment
 	require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
 	assert.Equal(t, "pass", v.Decision)
 
@@ -1398,7 +1400,6 @@ func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 	event.Ts, event.Origin, event.Workspace, event.RequestRef, event.ResponseRef, event.RequestBytes, event.ResponseBytes = 0, types.Origin{}, "", "", "", 0, 0
 	assert.Equal(t, trail.Event{Kind: trail.KindAgentCommand, Action: "Bash", Outcome: trail.OutcomeOK, DurationMs: 420, Preview: "observed"}, event)
 }
-
 
 // installHostRows writes the tool rows directory install writes for host under the working
 // directory, with the given rows and limits.

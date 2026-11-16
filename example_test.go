@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus"
 	_ "github.com/egladman/magus/buzzengine"
 	"github.com/egladman/magus/libs/diagnostics"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
@@ -388,7 +389,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 	defer m.Close()
 
 	err = m.Run(ctx, []types.Target{{Path: "api", Name: "build"}}, magus.WithSession("guide-session"))
-	var denied *types.GuardDeniedError
+	var denied *verdict.DeniedError
 	if errors.As(err, &denied) {
 		fmt.Println("denied by:", denied.Judgment.Rule)
 	}

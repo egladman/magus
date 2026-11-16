@@ -16,22 +16,23 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
 // lapseNow judges req by a judgment that runs judge's setup and then never answers, past a
 // short deadline.
-func lapseNow(ctx context.Context, t *testing.T, base Dependencies, req Request, setup func(context.Context)) types.GuardJudgment {
+func lapseNow(ctx context.Context, t *testing.T, base Dependencies, req Request, setup func(context.Context)) verdict.Judgment {
 	t.Helper()
 	short, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 	waitForLapsedWork(t)
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
-	return JudgeWithin(short, base, req, func(ctx context.Context) types.GuardJudgment {
+	return JudgeWithin(short, base, req, func(ctx context.Context) verdict.Judgment {
 		setup(ctx)
 		<-release
-		return types.GuardJudgment{Decision: decisionPass}
+		return verdict.Judgment{Decision: decisionPass}
 	})
 }
 
@@ -163,8 +164,8 @@ func (s *LapsePersonOnlySuite) SetupTest() {
 }
 
 // lapses judges line past the degrade, once per stage, returning each verdict.
-func (s *LapsePersonOnlySuite) lapses(req Request, setup func(context.Context)) []types.GuardJudgment {
-	var out []types.GuardJudgment
+func (s *LapsePersonOnlySuite) lapses(req Request, setup func(context.Context)) []verdict.Judgment {
+	var out []verdict.Judgment
 	for range lapsesBeforeDegrade + 2 {
 		out = append(out, lapseNow(s.testContext(), s.T(), Dependencies{}, req, setup))
 	}
@@ -263,7 +264,7 @@ func (s *LapseDegradeSuite) SetupTest() {
 
 // lapsedWrite lapses an editor Write of path by agent, or by the root
 // session when agent is "".
-func (s *LapseDegradeSuite) lapsedWrite(agent, path string) types.GuardJudgment {
+func (s *LapseDegradeSuite) lapsedWrite(agent, path string) verdict.Judgment {
 	env := map[string]any{"session_id": "s1", "cwd": s.session, "hook_event_name": "PreToolUse",
 		"tool_name": "Write", "tool_input": map[string]any{"file_path": path, "content": "package std\n"}}
 	if agent != "" {
@@ -275,7 +276,7 @@ func (s *LapseDegradeSuite) lapsedWrite(agent, path string) types.GuardJudgment 
 
 // lapsedCommand lapses a Bash call running line from cwd, by agent or by the
 // root session when agent is "".
-func (s *LapseDegradeSuite) lapsedCommand(agent, cwd, line string) types.GuardJudgment {
+func (s *LapseDegradeSuite) lapsedCommand(agent, cwd, line string) verdict.Judgment {
 	env := map[string]any{"session_id": "s1", "cwd": cwd, "hook_event_name": "PreToolUse",
 		"tool_name": "Bash", "tool_input": map[string]any{"command": line}}
 	if agent != "" {

@@ -7,17 +7,17 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 type groupSuite struct{ suite.Suite }
 
 func TestGroup(t *testing.T) { suite.Run(t, new(groupSuite)) }
 
-func verdict(reason string) Rule {
-	return func(context.Context, agent.StepRequest, hint.Gate) (types.GuardVerdict, error) {
-		return types.GuardVerdict{Decision: types.GuardDeny, Reason: reason}, nil
+func denyWith(reason string) Rule {
+	return func(context.Context, step.Request, hint.Gate) (verdict.Verdict, error) {
+		return verdict.Verdict{Decision: verdict.Deny, Reason: reason}, nil
 	}
 }
 
@@ -35,17 +35,17 @@ func (s *groupSuite) TestANilGroupHoldsNothing() {
 
 func (s *groupSuite) TestASecondRuleReplacesTheFirst() {
 	var group Group
-	group.Set("refund", verdict("first"))
-	group.Set("refund", verdict("second"))
-	v, err := group.Rule("refund")(s.T().Context(), agent.StepRequest{}, hint.Gate{})
+	group.Set("refund", denyWith("first"))
+	group.Set("refund", denyWith("second"))
+	v, err := group.Rule("refund")(s.T().Context(), step.Request{}, hint.Gate{})
 	s.Require().NoError(err)
 	s.Equal("second", v.Reason)
 }
 
 func (s *groupSuite) TestKindsAreSorted() {
 	var group Group
-	group.Set("refund", verdict("r"))
-	group.Set("egress", verdict("e"))
+	group.Set("refund", denyWith("r"))
+	group.Set("egress", denyWith("e"))
 	s.Equal([]string{"egress", "refund"}, group.Kinds())
 }
 

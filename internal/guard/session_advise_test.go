@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -42,8 +42,8 @@ func (s *SessionAdviseSuite) post(expect string) sessions.Directive {
 	return a
 }
 
-func pass() types.GuardJudgment {
-	return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+func pass() verdict.Judgment {
+	return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 }
 
 func (s *SessionAdviseSuite) TestARootStopIsHeldOnceToShowTheAdvisory() {
@@ -71,7 +71,7 @@ func (s *SessionAdviseSuite) TestAStopNamingAnAgentShowsNothing() {
 
 func (s *SessionAdviseSuite) TestAStopAlreadyHeldShowsItNextTime() {
 	s.post("")
-	held := types.GuardJudgment{Decision: decisionDeny, Reason: "background tasks still run"}
+	held := verdict.Judgment{Decision: decisionDeny, Reason: "background tasks still run"}
 	s.Equal(held, adviseStop(context.Background(), s.at, s.who, rootStopRaw, held))
 	s.Equal(string(denyRulePersonAdvisory), adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Rule)
 }

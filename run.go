@@ -206,7 +206,7 @@ func applyRunOptions(opts []RunOption) run {
 //
 // Before anything runs, the guard judges each target as `magus run <target> <project>`,
 // with ` -- <args>` for WithExtraArgs, the line the CLI would be judged by. A deny returns
-// a *types.GuardDeniedError and runs nothing; a judgment that cannot be made returns its
+// a *verdict.DeniedError and runs nothing; a judgment that cannot be made returns its
 // error. A ctx the CLI marked with guard.WithHostJudged is not judged again.
 func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	o := applyRunOptions(opts)

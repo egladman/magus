@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -75,7 +76,7 @@ const startSessionTool = "mcp__ccd_session__start_session"
 // command would otherwise block the spawn describing it. The built-in rules read session
 // state; the workspace's magus\guard.spawn rule then reads the normalized request and may
 // only add to what they said.
-func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env hookRequest, who hookAttribution) types.GuardJudgment {
+func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env hookRequest, who hookAttribution) verdict.Judgment {
 	at := hookLocation(ctx, deps)
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	// A spawn call that has already run judges nothing, and judging it again would spend
@@ -86,13 +87,13 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			spawner, _ := resolveActingLease(who, at, req.Lease)
 			recordSpawnedAgent(ctx, at, facts, who, env, spawner)
 		}
-		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	}
 	// The main session starting a session of its own is never hindered: it carries no job
 	// row, so no spawn rule has anything to bind it to. A leased caller is judged as usual.
 	if env.IsSpawn && env.Tool == startSessionTool {
 		if lease, _ := resolveActingLease(who, at, req.Lease); lease == "" {
-			return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+			return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 		}
 	}
 	digest := recordPolicy(ctx, deps, at, true)
@@ -102,7 +103,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		return spawnTitleJob(ctx, at, env.Spawn.Description)
 	}))
 
-	verdict := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+	judged := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	decided := ""
 	var failures []trail.RuleFailure
 	// The first built-in deny the workspace demoted, spoken once both built-ins have had
@@ -112,56 +113,56 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	why := ""
 	verdictRef := ""
 	if env.IsSpawn {
-		verdict, verdictRef = spawnBuiltIns(ctx, deps, req, env, who, at)
-		if verdict.Decision == decisionDeny {
-			if _, refused := held.hold(deps, ShellVerdict{Deny: verdict.Reason, Rule: denyRule{Name: denyRuleName(verdict.Rule)}}); !refused {
-				verdict = types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+		judged, verdictRef = spawnBuiltIns(ctx, deps, req, env, who, at)
+		if judged.Decision == decisionDeny {
+			if _, refused := held.hold(deps, ShellVerdict{Deny: judged.Reason, Rule: denyRule{Name: denyRuleName(judged.Rule)}}); !refused {
+				judged = verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 			}
 		}
-		if verdict = deps.gradeAdvice(verdict); verdict.Decision != decisionPass {
+		if judged = deps.gradeAdvice(judged); judged.Decision != decisionPass {
 			decided = decidedByBuiltin
 		}
 	}
 	// A continuation carries a brief as much as a spawn does, so both are graded.
-	if verdict.Decision != decisionDeny {
+	if judged.Decision != decisionDeny {
 		deps.scope = scopeAt(at)
 		_, bound := continuedRow(ctx, at, facts, env)
 		brief := briefInput{text: env.Value, title: env.Spawn.Description, isolated: env.IsSpawn && spawnIsolated(env, titled), bound: bound}
 		if v, refused := held.hold(deps, judgeBriefCommand(deps, brief)); refused {
-			verdict = types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
+			judged = verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 			why, decided = v.Why, decidedByBuiltin
-		} else if v.Context != "" && verdict.Decision == decisionPass {
-			verdict = types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: v.Context, Rule: v.RuleName()}
+		} else if v.Context != "" && judged.Decision == decisionPass {
+			judged = verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: v.Context, Rule: v.RuleName()}
 			decided = decidedByBuiltin
 		}
 	}
 	if held.v.demoted {
 		gate, whys := hint.NewGate(at.cacheDir, who.callerKey()), map[string]string{}
-		held.speak(gate, &verdict, whys)
-		if verdict.Decision == decisionAdvise {
-			verdict.Context, verdictRef = shapeAdvice(ctx, gate, verdict.Rule, verdict.Context, whys, false)
+		held.speak(gate, &judged, whys)
+		if judged.Decision == decisionAdvise {
+			judged.Context, verdictRef = shapeAdvice(ctx, gate, judged.Rule, judged.Context, whys, false)
 		}
-		if verdict.Decision != decisionPass {
+		if judged.Decision != decisionPass {
 			decided = decidedByBuiltin
 		}
 	}
 	actingLease, _ := resolveActingLease(who, at, req.Lease)
-	if verdict.Decision != decisionDeny {
-		verdict = gradeSpawnModel(deps, verdict, env, who, at, actingLease, titled)
-		verdict = gradeSpawnCeiling(deps, verdict, env, who, at, actingLease)
-		if verdict.Decision != decisionPass && decided == "" {
+	if judged.Decision != decisionDeny {
+		judged = gradeSpawnModel(deps, judged, env, who, at, actingLease, titled)
+		judged = gradeSpawnCeiling(deps, judged, env, who, at, actingLease)
+		if judged.Decision != decisionPass && decided == "" {
 			decided = decidedByBuiltin
 		}
 	}
 	// Strengthen only, and so asked only when there is something left to strengthen: a
 	// workspace allow can never lift a built-in deny.
-	if verdict.Decision != decisionDeny {
+	if judged.Decision != decisionDeny {
 		spawnReq := spawnRequest(ctx, env, who, at, facts, req.Lease, titled)
 		bind := func(rule workspace.SpawnRule) ruleCall {
 			if rule == nil {
 				return nil
 			}
-			return func(ctx context.Context) (types.GuardVerdict, error) { return rule(ctx, spawnReq, facts) }
+			return func(ctx context.Context) (verdict.Verdict, error) { return rule(ctx, spawnReq, facts) }
 		}
 		var resolve func(context.Context) (ruleCall, error)
 		if deps.ApprovedSpawnRule != nil {
@@ -179,24 +180,26 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			call.verb, call.changes = call.what, true
 		}
 		denied := asked.denyShort(ctx, func() judgedCall { return call }, at)
-		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
+		judged, decided = applyWorkspaceAnswer(judged, decided, asked, workspaceSpawnRule)
 		if !denied {
 			note := ruleFailureNote(ruleFailureReport{
 				gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamSpawn, failures: failures, answered: asked.answered, toldInFull: asked.lapse != nil,
 				judging: func() string { return judgingBinaryNote(ctx, deps, at, asked.loadFailure, actingLease) },
 				lead:    loadFailureLead(deps.LoadFailure, at.workspace),
 			})
-			verdict = applyRuleFailureNote(verdict, note, advisorySpawnRuleFailed)
+			judged = applyRuleFailureNote(judged, note, advisorySpawnRuleFailed)
 		}
 	}
-	if env.IsContinue && verdict.Decision != decisionDeny {
+	if env.IsContinue && judged.Decision != decisionDeny {
 		note := adviseContinueHandedBack(ctx, at, facts, env.Target).Say
-		verdict = applyRuleFailureNote(verdict, note, hint.MarkerKind(advisoryLeaseState))
+		judged = applyRuleFailureNote(judged, note, hint.MarkerKind(advisoryLeaseState))
 	}
 	// Worded as the command and write seams word theirs: the verdict, at most one next and
 	// the ref holding the rest. A rule the catalog does not list keeps its whole reason.
-	if verdict.Decision == decisionDeny && verdict.Rule != "" {
-		verdict.Reason, verdictRef, verdict.NextSteps = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), verdict.Rule, verdict.Reason, why, "", verdict.NextSteps, false)
+	if judged.Decision == decisionDeny && judged.Rule != "" {
+		var served []types.NextStep
+		judged.Reason, verdictRef, served = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), judged.Rule, judged.Reason, why, "", breadcrumbs(judged.NextSteps), false)
+		judged.NextSteps = remedies(served)
 	}
 	appendHookSpawn(ctx, deps, env, who, spawnVerdictRecord{
 		verdictRef:   verdictRef,
@@ -205,7 +208,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		target:       resolveAgentID(facts, env.Target),
 		ruleFailures: failures,
 	})
-	if verdict.Decision != decisionDeny {
+	if judged.Decision != decisionDeny {
 		if env.IsContinue {
 			recordRework(ctx, at, facts, env.Target)
 		}
@@ -221,13 +224,13 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			recordPendingSpawn(facts, env, actingLease, time.Now())
 		}
 		if note := startNamedAttempt(ctx, at, facts, env, titled, time.Now()); note != "" {
-			verdict.Context = strings.Join(slices.DeleteFunc([]string{verdict.Context, note}, func(s string) bool { return s == "" }), "\n\n")
-			if verdict.Decision == decisionPass {
-				verdict.Decision = decisionAdvise
+			judged.Context = strings.Join(slices.DeleteFunc([]string{judged.Context, note}, func(s string) bool { return s == "" }), "\n\n")
+			if judged.Decision == decisionPass {
+				judged.Decision = decisionAdvise
 			}
 		}
 	}
-	return verdict
+	return judged
 }
 
 // startNamedAttempt records a try of the row a spawn's title or a
@@ -265,9 +268,9 @@ func endHandedBack(ctx context.Context, at location, who hookAttribution, now ti
 
 // spawnBuiltIns is the compiled half of a spawn's verdict, which reads session state and
 // never the prompt.
-func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hookRequest, who hookAttribution, at location) (types.GuardJudgment, string) {
-	refused := func(rule denyRuleName, d denial) types.GuardJudgment {
-		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: d.Say, Rule: string(rule)}
+func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hookRequest, who hookAttribution, at location) (verdict.Judgment, string) {
+	refused := func(rule denyRuleName, d denial) verdict.Judgment {
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: d.Say, Rule: string(rule)}
 	}
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
@@ -291,14 +294,14 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
 	if note := adviseSharedCheckoutSpawn(ctx, gate, at); note.Say != "" {
 		shown, ref := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
-		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySharedCheckout)}, ref
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySharedCheckout)}, ref
 	}
 	// A subagent handing waiting to a helper of its own, said once a session.
 	if who.Agent != "" && spawnNestedWordRe.MatchString(fmt.Sprintf("%s\n%s", env.Spawn.Description, env.Value[:min(len(env.Value), spawnWaiterHead)])) {
 		note := adviseSpawnNestedWaiter()
 		if said := deps.heldBy(gate, string(advisorySpawnNestedWaiter)).Once(advisorySpawnNestedWaiter, note.Say); said != "" {
 			shown, ref := shapeAdvice(ctx, gate, string(advisorySpawnNestedWaiter), said, map[string]string{note.Say: note.Why}, false)
-			return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySpawnNestedWaiter)}, ref
+			return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySpawnNestedWaiter)}, ref
 		}
 	}
 	// The orchestrator waits for the build budget so its workers never do; a subagent
@@ -308,10 +311,10 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	if who.Agent == "" && !seatless {
 		if note := adviseBudgetFull(ctx, time.Now()); note.Say != "" {
 			shown, ref := shapeAdvice(ctx, gate, string(denyRuleSleepPoll), note.Say, map[string]string{note.Say: note.Why}, false)
-			return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: shown, Rule: string(denyRuleSleepPoll)}, ref
+			return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: shown, Rule: string(denyRuleSleepPoll)}, ref
 		}
 	}
-	return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}, ""
+	return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}, ""
 }
 
 const denyRuleSpawnUnisolatedRow denyRuleName = "spawn-unisolated-row"
@@ -908,7 +911,7 @@ func writeAgentMarker(facts hint.Gate, kind hint.MarkerKind, body []byte) {
 
 // decidedBy names which side produced a command verdict. A workspace shell rule is the
 // working tree's: it has no approved twin to be stricter than.
-func decidedBy(v types.GuardJudgment) string {
+func decidedBy(v verdict.Judgment) string {
 	switch {
 	case v.Decision == decisionPass || v.Decision == "":
 		return ""

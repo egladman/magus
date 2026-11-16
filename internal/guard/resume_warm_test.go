@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
 )
@@ -39,7 +40,7 @@ func warmFixture(t *testing.T, follow func(*types.Job)) reworkFixture {
 	return f
 }
 
-func (f reworkFixture) spawn(t *testing.T) types.GuardJudgment {
+func (f reworkFixture) spawn(t *testing.T) verdict.Judgment {
 	t.Helper()
 	return Judge(f.testContext(t), Dependencies{}, Request{Input: hookJSON(t, map[string]any{
 		"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Agent",
@@ -52,7 +53,7 @@ func TestSpawnWarmWorkerCountsAStoppedHolderAsWarm(t *testing.T) {
 	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateRunning, HolderStopped: time.Now().Unix(), Paths: types.JobPaths{Write: []string{"internal/cache/machine.go"}}})
 
 	v := f.spawn(t)
-	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
+	require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
 	assert.Contains(t, v.Reason, "continue agent a1b2c3 with a message")
 	assert.Contains(t, v.Reason, "to end gate-fits with `magus job exit gate-fits --stdin` and then take regress-fix",
 		"a resumed worker whose row is in flight must end it before it may take the next")
@@ -87,7 +88,7 @@ func TestSpawnWarmWorkerRefusesAFreshSpawnWhileTheWriterIsWarm(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			v := warmFixture(t, tc.follow).spawn(t)
 
-			require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
+			require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
 			assert.Contains(t, v.Reason, "job regress-fix "+tc.link)
 			assert.Contains(t, v.Reason, "continue agent a1b2c3 with a message, or set")
 			assert.NotContains(t, v.Reason, "SendMessage", "magus names no host's message tool")

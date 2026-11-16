@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	difftypes "github.com/egladman/magus/types/diff"
 	"io/fs"
 	"log/slog"
@@ -467,7 +469,7 @@ var Magus = Module{
 						"working-tree rule both run and the stricter answer stands. Registering twice, from " +
 						"another project, or with a non-function is MGS1045. magus ships no rule.",
 					Args:   []Arg{{Name: "rule"}},
-					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.SpawnRequest) (types.GuardVerdict, error)) error)(nil),
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.SpawnRequest) (verdict.Verdict, error)) error)(nil),
 				},
 				{
 					Name: "command",
@@ -479,7 +481,7 @@ var Magus = Module{
 						"Registering twice, from another project, or with a non-function is MGS1045. magus " +
 						"ships no rule.",
 					Args:   []Arg{{Name: "rule"}},
-					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.CommandRequest) (types.GuardVerdict, error)) error)(nil),
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.CommandRequest) (verdict.Verdict, error)) error)(nil),
 				},
 				{
 					Name: "write",
@@ -490,7 +492,7 @@ var Magus = Module{
 						"Registering twice, from another project, or with a non-function is MGS1045. magus " +
 						"ships no rule.",
 					Args:   []Arg{{Name: "rule"}},
-					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.WriteRequest) (types.GuardVerdict, error)) error)(nil),
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.WriteRequest) (verdict.Verdict, error)) error)(nil),
 				},
 				{
 					Name: "stop",
@@ -504,7 +506,7 @@ var Magus = Module{
 						"would hold the session open. Registering twice, from another project, or with a " +
 						"non-function is MGS1045. magus ships no rule.",
 					Args:   []Arg{{Name: "rule"}},
-					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.StopRequest) (types.GuardVerdict, error)) error)(nil),
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.StopRequest) (verdict.Verdict, error)) error)(nil),
 				},
 				{
 					Name: "step",
@@ -518,7 +520,7 @@ var Magus = Module{
 						"says so; a row nothing else judges is then denied. Registering a kind twice, from another " +
 						"project, or with a non-function is MGS1045. magus ships no rule.",
 					Args:   []Arg{{Name: "kind"}, {Name: "rule"}},
-					Extern: (func(ctx context.Context, kind string, rule func(ctx context.Context, req agent.StepRequest) (types.GuardVerdict, error)) error)(nil),
+					Extern: (func(ctx context.Context, kind string, rule func(ctx context.Context, req step.Request) (verdict.Verdict, error)) error)(nil),
 				},
 				{
 					Name:    "allow",

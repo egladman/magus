@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
@@ -340,9 +341,9 @@ func TestSkillReadIsRecordedAndJudged(t *testing.T) {
 	read := hookJSON(t, map[string]any{"conversation_id": "c1", "session_id": "c1", "cwd": root, "hook_event_name": "preToolUse",
 		"tool_name": "Read", "tool_input": map[string]any{"file_path": skill}})
 	var judged []types.CommandRequest
-	deps := Dependencies{CommandRule: func(_ context.Context, req types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	deps := Dependencies{CommandRule: func(_ context.Context, req types.CommandRequest, _ hint.Gate) (verdict.Verdict, error) {
 		judged = append(judged, req)
-		return types.GuardVerdict{Decision: types.GuardAllow}, nil
+		return verdict.Verdict{Decision: verdict.Allow}, nil
 	}}
 	v := Judge(ctx, deps, Request{Input: read, Host: "cursor", ObservesSkillLoads: true})
 	assert.Equal(t, "pass", v.Decision)
@@ -416,7 +417,7 @@ func TestAChildsStartJoinsItToTheSpawnBeforeIt(t *testing.T) {
 	target := filepath.Join(root, "internal", "guard", "guard.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
 	require.NoError(t, os.WriteFile(target, []byte("package guard\n"), 0o644))
-	codex := func(env map[string]any) types.GuardJudgment {
+	codex := func(env map[string]any) verdict.Judgment {
 		env["session_id"], env["cwd"] = "codex-s", root
 		return Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "codex"})
 	}
@@ -504,7 +505,7 @@ func TestTheHostsFiledSpawnTitleJoinsAForegroundChild(t *testing.T) {
 		body := fmt.Sprintf(`{"agentType":"general-purpose","description":"%s","toolUseId":"toolu_1"}`, title)
 		require.NoError(t, os.WriteFile(filepath.Join(dir, fmt.Sprintf("agent-%s.meta.json", agentID)), []byte(body), 0o644))
 	}
-	write := func(agentID, job string) types.GuardJudgment {
+	write := func(agentID, job string) verdict.Judgment {
 		return f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": agentID,
 			"agent_type": "general-purpose", "transcript_path": transcript,
 			"tool_input": map[string]any{"file_path": f.target(job), "content": "package x // y\n"}})
@@ -571,7 +572,7 @@ func (f foregroundFleet) target(job string) string {
 	return filepath.Join(f.root, "internal", job, "x.go")
 }
 
-func (f foregroundFleet) call(t *testing.T, env map[string]any) types.GuardJudgment {
+func (f foregroundFleet) call(t *testing.T, env map[string]any) verdict.Judgment {
 	t.Helper()
 	env["session_id"], env["cwd"] = "claude-s", f.root
 	return Judge(f.layers.of(t), Dependencies{}, Request{Input: hookJSON(t, env), Host: "claude-code"})
@@ -585,7 +586,7 @@ func (f foregroundFleet) spawn(t *testing.T, job string) {
 	require.NotEqual(t, "deny", spawn.Decision, spawn.Reason)
 }
 
-func (f foregroundFleet) write(t *testing.T, agentID, job string) types.GuardJudgment {
+func (f foregroundFleet) write(t *testing.T, agentID, job string) verdict.Judgment {
 	t.Helper()
 	return f.call(t, map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Write", "agent_id": agentID, "agent_type": "general-purpose",
 		"tool_input": map[string]any{"file_path": f.target(job), "content": "package x // y\n"}})

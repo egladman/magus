@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
@@ -208,14 +209,14 @@ func TestLoadApprovedSpawnRuleSurvivesABrokenWorkingTree(t *testing.T) {
 			require.NotNil(t, rule)
 			got, err := rule(t.Context(), types.SpawnRequest{Kind: types.SpawnKindSpawn, Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
 			require.NoError(t, err)
-			assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Name a model."}, got)
+			assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "Name a model."}, got)
 
 			command, err := guard.LoadApprovedCommandRule(t.Context(), root)
 			require.NoError(t, err)
 			require.NotNil(t, command)
 			got, err = command(t.Context(), types.CommandRequest{Command: "ls", Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
 			require.NoError(t, err)
-			assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Not in this repository."}, got)
+			assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "Not in this repository."}, got)
 		})
 	}
 }
@@ -270,7 +271,7 @@ const spawnEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PreToolUse","
 
 // judgeSpawnAt runs one spawn through the hook's own dependencies with the process sitting
 // in root, as the shipped hook does.
-func judgeSpawnAt(t *testing.T, root string) types.GuardJudgment {
+func judgeSpawnAt(t *testing.T, root string) verdict.Judgment {
 	t.Helper()
 	testkit.Isolate(t)
 	t.Chdir(root)
@@ -300,7 +301,7 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 	globalCfg.RequiredVersion = ">= 99.0.0"
 
 	v := judgeSpawnAt(t, root)
-	assert.Equal(t, types.GuardJudgment{
+	assert.Equal(t, verdict.Judgment{
 		APIVersion: v.APIVersion,
 		Decision:   "deny",
 		Reason:     "Name a model.",
@@ -329,7 +330,7 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
 	v = guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: "ls -la", Host: "claude-code"})
 	assert.Contains(t, v.Reason, "Not in this repository.")
-	assert.Equal(t, types.GuardJudgment{
+	assert.Equal(t, verdict.Judgment{
 		APIVersion: v.APIVersion,
 		Decision:   "deny",
 		Reason:     v.Reason, // checked above
@@ -380,7 +381,7 @@ magus\guard.command(p\judge);
 	require.NotNil(t, approved)
 	got, err := approved(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardDeny, got.Decision)
+	assert.Equal(t, verdict.Deny, got.Decision)
 }
 
 // A write to the root magusfile whose judgment ran out of time, its rules loaded through the
@@ -393,7 +394,7 @@ func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
 	root := repo.Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
-	judge := func() types.GuardJudgment {
+	judge := func() verdict.Judgment {
 		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 		defer cancel()
 		ctx = guard.WithLocation(ctx, t.TempDir(), root, root)
@@ -437,7 +438,7 @@ func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
 	require.NotNil(t, approved)
 	got, err := approved(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardDeny, got.Decision)
+	assert.Equal(t, verdict.Deny, got.Decision)
 }
 
 // A repeated deny cites a grd ref the reader resolves with `query output` in the checkout
@@ -456,7 +457,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 
 	envelope := fmt.Sprintf(`{"session_id":"worktree-verdict","hook_event_name":"PreToolUse","cwd":%q,`+
 		`"tool_name":"Bash","tool_input":{"command":"magus run build > build.log"}}`, worktree)
-	judge := func() types.GuardJudgment {
+	judge := func() verdict.Judgment {
 		ctx := t.Context()
 		return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: envelope, Host: "claude-code"})
 	}
@@ -563,7 +564,7 @@ func TestApprovedResolveLeavesTheWorkingTreeChunkCacheAlone(t *testing.T) {
 	require.NotNil(t, approved)
 	got, err := approved(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardDeny, got.Decision, "the committed rule answers")
+	assert.Equal(t, verdict.Deny, got.Decision, "the committed rule answers")
 	assert.Equal(t, worktree, chunks(), "compiling the committed sources stores nothing")
 }
 
@@ -594,13 +595,13 @@ func (s *staleConfigSuite) SetupTest() {
 	s.T().Cleanup(func() { guardRoot, global = savedRoot, savedFlags })
 }
 
-func (s *staleConfigSuite) judge(command string) types.GuardJudgment {
+func (s *staleConfigSuite) judge(command string) verdict.Judgment {
 	failure := types.DiagnosticErrorf(types.UnknownConfigKey,
 		"magus.yaml has a key this magus does not know:\n  - checkout  (line 1)")
 	ctx := guard.WithStaleConfig(s.T().Context(), failure)
 	var out bytes.Buffer
 	_ = shellCommandWithErrorWriter(ctx, strings.NewReader(""), &out, io.Discard, []string{"-o", "json", command})
-	var v types.GuardJudgment
+	var v verdict.Judgment
 	s.Require().NoError(json.Unmarshal(out.Bytes(), &v), out.String())
 	return v
 }
@@ -634,7 +635,7 @@ func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
 	}
 	body, err := io.ReadAll(r)
 	s.Require().NoError(err)
-	var v types.GuardJudgment
+	var v verdict.Judgment
 	s.Require().NoError(json.Unmarshal(body, &v), string(body))
 	s.Contains(v.Reason, "magus guard could not judge this call, so it is refused")
 	s.Equal("deny", v.Decision)
@@ -720,7 +721,7 @@ func (s *hookAudienceSuite) TestACodexStopBlockKeepsTheWholeReason() {
 }
 
 func (s *hookAudienceSuite) TestCursorDenyShowsThePersonOneLine() {
-	verdict, err := json.Marshal(types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: "deny", Reason: audienceReason})
+	verdict, err := json.Marshal(verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: "deny", Reason: audienceReason})
 	s.Require().NoError(err)
 	s.T().Setenv("GLUE_VERDICT", string(verdict))
 	body, _ := runGlue(s.T(), "cursor-hook.buzz", glueArrangement{label: "cursor", host: "cursor", stub: glueVerdictEcho,

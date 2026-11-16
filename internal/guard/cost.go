@@ -20,6 +20,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
@@ -688,14 +689,14 @@ func invocationClass(c hint.Invocation) types.DelegableClass {
 //
 // An observation is the same call another hook judges, so it records the thread alone and
 // nothing a metric counts: counting both would count the call twice.
-func observeCall(ctx context.Context, at location, input string, who hookAttribution, tool, lease string, verdict types.GuardJudgment) types.AgentFacts {
+func observeCall(ctx context.Context, at location, input string, who hookAttribution, tool, lease string, judged verdict.Judgment) types.AgentFacts {
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
-	if who.Agent != "" && verdict.Decision != "" {
+	if who.Agent != "" && judged.Decision != "" {
 		hostGate(at.cacheDir, who.Host).MarkFired(hostAgentsKind)
 	}
 	thread, from := callerThread(at.cacheDir, who, lease)
 	out := types.AgentFacts{Thread: thread, ThreadFrom: from}
-	if verdict.Decision == "" {
+	if judged.Decision == "" {
 		return out
 	}
 	out.Billing = accountAt(at.workspace).billing
@@ -704,7 +705,7 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 		out.DelegableClass = delegableClass(input, at)
 		free = costFree(input, at)
 	}
-	ran := verdict.Decision == decisionPass || verdict.Decision == decisionAdvise
+	ran := judged.Decision == decisionPass || judged.Decision == decisionAdvise
 	var results []toolResult
 	if thread == types.AgentThreadMain && lease == "" {
 		var st costState
@@ -713,7 +714,7 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 	}
 	setContext(&out, callerContext(at, who, thread, facts))
 	if lease != "" {
-		observeStall(ctx, at, who, lease, verdict)
+		observeStall(ctx, at, who, lease, judged)
 	}
 	recordAgentCalls(ctx, out, results)
 	return out

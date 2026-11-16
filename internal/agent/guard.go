@@ -1,6 +1,6 @@
 package agent
 
-import "github.com/egladman/magus/types"
+import "github.com/egladman/magus/libs/safetyscissors/verdict"
 
 // The guard's wire contract: the vocabulary every host glue must handle, in
 // the one package that the CLI producing a verdict imports and the parity tests
@@ -16,7 +16,7 @@ import "github.com/egladman/magus/types"
 // not a bump, and neither is adding a rule. A bump is expensive: a glue that
 // meets a schema it does not recognize fails open, so every one of them must be
 // re-downloaded before it guards again.
-const GuardAPIVersion = types.APIVersion("magus.guard/v1alpha1")
+const GuardAPIVersion = verdict.APIVersion
 
 // guardDecisions is every decision a verdict can carry. A new entry here is a
 // promise that all four host glues can express it; the dogfood parity test is

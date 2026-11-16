@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,9 +44,9 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		c := mainCall(sec, 300_000, "claude-opus-5-5")
 		c.Billing = types.AgentBillingMetered
 		c.ResultChars = new(1000)
-		c.Shadow = map[types.GuardProfile]types.GuardDecision{
-			types.GuardProfileStrict: types.GuardDeny,
-			types.GuardProfileLight:  types.GuardAllow,
+		c.Shadow = map[types.GuardProfile]verdict.Decision{
+			types.GuardProfileStrict: verdict.Deny,
+			types.GuardProfileLight:  verdict.Allow,
 		}
 		switch sec {
 		case 1:
@@ -80,8 +81,8 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		Spawns:     &spawnTally{Total: 2, ByModel: []sessions.CountedName{{Name: "", Count: 1}, {Name: "claude-sonnet-5-5", Count: 1}}},
 		Advisories: &advisoryOutcome{Given: 2, Followed: 1, Within: followWithin},
 		Shadow: []shadowTally{
-			{Profile: types.GuardProfileLight, Decisions: map[types.GuardDecision]int{types.GuardAllow: 30}},
-			{Profile: types.GuardProfileStrict, Decisions: map[types.GuardDecision]int{types.GuardDeny: 30}},
+			{Profile: types.GuardProfileLight, Decisions: map[verdict.Decision]int{verdict.Allow: 30}},
+			{Profile: types.GuardProfileStrict, Decisions: map[verdict.Decision]int{verdict.Deny: 30}},
 		},
 		Dollars: got.Dollars, // pinned below
 	}, *got, "every section was measured")
@@ -120,7 +121,7 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 			AgentFacts: types.AgentFacts{
 				Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, ContextTokens: 250_000, ContextModel: "claude-opus-5-5",
 				Billing: types.AgentBillingMetered, DelegableClass: types.DelegableSearch, ResultChars: new(4000),
-				Shadow: map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny},
+				Shadow: map[types.GuardProfile]verdict.Decision{types.GuardProfileStrict: verdict.Deny},
 			},
 		})
 	}
@@ -131,7 +132,7 @@ func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
 	// The other sections have their own tests.
 	want := *got
 	want.RootContext = &rootContext{Peak: 250_000, P50: 250_000, Samples: 2, Models: []string{"claude-opus-5-5"}}
-	want.Shadow = []shadowTally{{Profile: types.GuardProfileStrict, Decisions: map[types.GuardDecision]int{types.GuardDeny: 2}}}
+	want.Shadow = []shadowTally{{Profile: types.GuardProfileStrict, Decisions: map[verdict.Decision]int{verdict.Deny: 2}}}
 	assert.Equal(t, want, *got)
 	assert.Equal(t, chars(8000), got.Delegable.Chars)
 	require.NotNil(t, got.Dollars)
@@ -239,7 +240,7 @@ func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
 // A decision outside allow, advise and deny is counted under its own name, never folded
 // into another.
 func TestShadowTallyPrintsEveryDecision(t *testing.T) {
-	tally := shadowTally{Profile: types.GuardProfileStandard, Decisions: map[types.GuardDecision]int{types.GuardAdvise: 2, "ask": 1}}
+	tally := shadowTally{Profile: types.GuardProfileStandard, Decisions: map[verdict.Decision]int{verdict.Advise: 2, "ask": 1}}
 
 	assert.Equal(t, "standard 0 allow/2 advise/0 deny/1 ask", tally.String())
 }

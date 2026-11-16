@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -35,17 +36,17 @@ func TestGrantedHooksOffAdvisesForThatLeaseAlone(t *testing.T) {
 
 	line := bashCall(t, "s1", "", "git commit --no-verify -m x")
 	v := Judge(ctx, Dependencies{}, Request{Input: line, Host: "claude-code", Lease: granted.ID})
-	require.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleHooksOff)}, judgedAs(v), "the grant lowers hooks-off: %s", v.Reason)
+	require.Equal(t, verdict.Judgment{Decision: decisionAdvise, Rule: string(denyRuleHooksOff)}, judgedAs(v), "the grant lowers hooks-off: %s", v.Reason)
 	assert.Contains(t, v.Context, "grant")
 	assert.Contains(t, v.Context, "until the job ends")
 
 	v = Judge(ctx, Dependencies{}, Request{Input: line, Host: "claude-code", Lease: other.ID})
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleHooksOff)}, judgedAs(v), "another lease's call is still refused")
+	assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleHooksOff)}, judgedAs(v), "another lease's call is still refused")
 
 	_, err = store.Revoke(t.Context(), granted.ID, string(denyRuleHooksOff))
 	require.NoError(t, err)
 	v = Judge(ctx, Dependencies{}, Request{Input: line, Host: "claude-code", Lease: granted.ID})
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleHooksOff)}, judgedAs(v), "a revoked grant lowers nothing")
+	assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleHooksOff)}, judgedAs(v), "a revoked grant lowers nothing")
 }
 
 func TestAgentGrantIsRefused(t *testing.T) {
@@ -62,7 +63,7 @@ func TestAgentGrantIsRefused(t *testing.T) {
 	} {
 		for _, lease := range []string{"", granted.ID} {
 			v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: lease})
-			assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleGrantIsAPersons)}, judgedAs(v), "%q under %q", line, lease)
+			assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleGrantIsAPersons)}, judgedAs(v), "%q under %q", line, lease)
 		}
 	}
 	for _, line := range []string{"magus job ls", "echo magus job grant", "magus describe rules"} {
@@ -80,14 +81,14 @@ func TestAgentWaiveIsRefusedAsAGrant(t *testing.T) {
 		ctx, _ := fleetFixture(t, granted)
 		for _, lease := range []string{"", granted.ID} {
 			v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: lease})
-			assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleGrantIsAPersons)}, judgedAs(v), "%q under %q", line, lease)
+			assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleGrantIsAPersons)}, judgedAs(v), "%q under %q", line, lease)
 		}
 	}
 }
 
 // waivedPush judges `git push` at revision in a workspace whose run log records no gate,
 // after fill writes waivers to its store.
-func waivedPush(t *testing.T, revision string, fill func(context.Context, *job.Store)) types.GuardJudgment {
+func waivedPush(t *testing.T, revision string, fill func(context.Context, *job.Store)) verdict.Judgment {
 	t.Helper()
 	ctx, root := fleetFixture(t)
 	at := ctx.Value(locationKey{}).(location)
@@ -113,14 +114,14 @@ func TestGateWaiverLetsThatCommitAloneThrough(t *testing.T) {
 	assert.Contains(t, v.Context, ": CI gates the release branch")
 
 	v = waivedPush(t, "fed9876", waive)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRulePushUnverified)}, judgedAs(v), "another commit is still refused")
+	assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRulePushUnverified)}, judgedAs(v), "another commit is still refused")
 
 	v = waivedPush(t, "abc1234", func(ctx context.Context, store *job.Store) {
 		waive(ctx, store)
 		_, err := RevokeGateWaiver(ctx, store, waived)
 		require.NoError(t, err)
 	})
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRulePushUnverified)}, judgedAs(v), "a revoked waiver covers nothing")
+	assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRulePushUnverified)}, judgedAs(v), "a revoked waiver covers nothing")
 }
 
 func TestGateWaiverIsAPersonsKeystroke(t *testing.T) {

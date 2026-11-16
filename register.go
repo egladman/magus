@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -25,7 +26,7 @@ type Option = workspace.Option
 type options struct {
 	workspace.Load
 	spawnRule SpawnRule
-	stepSpecs []agent.StepSpec
+	stepSpecs []step.Spec
 	stepRules []StepRule
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -45,19 +46,19 @@ func stallRowKind(rule string) hint.MarkerKind {
 //
 // The exit rides the verdict line rather than a next command: a worker is never served a
 // command that writes outside its write paths, and the job store is outside them.
-func gradeStall(deps Dependencies, verdict types.GuardJudgment, lease string, at location) types.GuardJudgment {
-	if verdict.Decision != decisionDeny || lease == "" || !unclearable[verdict.Rule] {
-		return verdict
+func gradeStall(deps Dependencies, judged verdict.Judgment, lease string, at location) verdict.Judgment {
+	if judged.Decision != decisionDeny || lease == "" || !unclearable[judged.Rule] {
+		return judged
 	}
-	if deps.settingLookup(string(denyRuleStall)).Decision == builtin.Off || stallGate(at.cacheDir, lease).AlreadyFired(stallRowKind(verdict.Rule)) {
-		return verdict
+	if deps.settingLookup(string(denyRuleStall)).Decision == builtin.Off || stallGate(at.cacheDir, lease).AlreadyFired(stallRowKind(judged.Rule)) {
+		return judged
 	}
-	line, rest, more := strings.Cut(verdict.Reason, "\n")
-	verdict.Reason = fmt.Sprintf("%s Only the root can clear this: exit with `%s`, naming it in unresolved_risks.", line, hint.JobExit.With(lease, "--stdin"))
+	line, rest, more := strings.Cut(judged.Reason, "\n")
+	judged.Reason = fmt.Sprintf("%s Only the root can clear this: exit with `%s`, naming it in unresolved_risks.", line, hint.JobExit.With(lease, "--stdin"))
 	if more {
-		verdict.Reason += "\n" + rest
+		judged.Reason += "\n" + rest
 	}
-	return verdict
+	return judged
 }
 
 // stallRecord is the gauge for one lease.
@@ -117,20 +118,20 @@ func stallLevel(rec stallRecord, rule string, s builtin.Setting) int {
 // observeStall moves a lease's gauge by one judged call, and files the lease's attention
 // row the first time a rule refuses it at level 3. The settings are the ones the judgment
 // recorded, since a trail write has none of its own.
-func observeStall(ctx context.Context, at location, who hookAttribution, lease string, verdict types.GuardJudgment) {
+func observeStall(ctx context.Context, at location, who hookAttribution, lease string, judged verdict.Judgment) {
 	gate := stallGate(at.cacheDir, lease)
 	rec := readStall(gate)
 	s := recalledSettings(at.cacheDir)[string(denyRuleStall)]
-	switch verdict.Decision {
+	switch judged.Decision {
 	case decisionDeny:
-		level := stallLevel(rec, verdict.Rule, s)
+		level := stallLevel(rec, judged.Rule, s)
 		rec.Refusals++
 		rec.Run++
-		rec.Last = verdict.Rule
+		rec.Last = judged.Rule
 		rec.Level = max(rec.Level, level)
 		writeStall(gate, rec)
-		if level == 3 && s.Decision > builtin.Off && !gate.MarkFired(stallRowKind(verdict.Rule)) {
-			fileStallRow(ctx, at, who, lease, verdict, rec)
+		if level == 3 && s.Decision > builtin.Off && !gate.MarkFired(stallRowKind(judged.Rule)) {
+			fileStallRow(ctx, at, who, lease, judged, rec)
 		}
 	case decisionPass, decisionAdvise:
 		if rec.Run > 0 {
@@ -143,7 +144,7 @@ func observeStall(ctx context.Context, at location, who hookAttribution, lease s
 // fileStallRow opens the attention row for a lease blocked at level 3. It states the facts
 // a root decides on, the model the job ran on and how often it was refused, and names no
 // remedy.
-func fileStallRow(ctx context.Context, at location, who hookAttribution, lease string, verdict types.GuardJudgment, rec stallRecord) {
+func fileStallRow(ctx context.Context, at location, who hookAttribution, lease string, judged verdict.Judgment, rec stallRecord) {
 	dir, err := sessions.Dir(at.workspace)
 	if err != nil {
 		return
@@ -154,7 +155,7 @@ func fileStallRow(ctx context.Context, at location, who hookAttribution, lease s
 		Source:   sessions.SourceLabel("guard", string(denyRuleStall)),
 		Lease:    lease,
 		Message: fmt.Sprintf("job %s is blocked by %s, which only the root can clear: %s It ran on %s; refusals under this lease: %d.",
-			lease, verdict.Rule, firstLine(verdict.Reason), workerModel(ctx, at, who, lease), rec.Refusals),
+			lease, judged.Rule, firstLine(judged.Reason), workerModel(ctx, at, who, lease), rec.Refusals),
 	}
 	origin := trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: who.Host, Session: who.Session, Agent: who.Agent})
 	// MarkFired already said this block is new, and this runs inside a hook.

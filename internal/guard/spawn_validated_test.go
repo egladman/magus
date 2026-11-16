@@ -8,13 +8,14 @@ import (
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
 func TestSpawnUnvalidatedRefusesARowNothingChecked(t *testing.T) {
 	const title = "orchestrator/impl guard-facts"
 	row := types.Job{ID: "guard-facts", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a/**"}}}
-	spawn := func(t *testing.T, description string, validated int64) types.GuardJudgment {
+	spawn := func(t *testing.T, description string, validated int64) verdict.Judgment {
 		t.Helper()
 		ctx, _ := fleetFixture(t, row)
 		at := hookLocation(ctx, Dependencies{})
@@ -29,7 +30,7 @@ func TestSpawnUnvalidatedRefusesARowNothingChecked(t *testing.T) {
 
 	t.Run("an unstamped row is refused with the fix", func(t *testing.T) {
 		v := spawn(t, title, 0)
-		require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnUnvalidated)}, judgedAs(v), v.Context)
+		require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleSpawnUnvalidated)}, judgedAs(v), v.Context)
 		assert.Contains(t, v.Reason, "job guard-facts carries no `validated` stamp")
 		assert.Contains(t, v.Reason, "magus job fork guard-facts --dry-run")
 		assert.Contains(t, v.Reason, "magus job apply -f <record>")

@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 )
 
 // The phrasings these came from are messages people actually sent, verbatim where quoted.
@@ -85,11 +85,11 @@ func newArchSession(t *testing.T, deps Dependencies, observes bool) archSession 
 	}
 }
 
-func (s archSession) judge(event string) types.GuardJudgment {
+func (s archSession) judge(event string) verdict.Judgment {
 	return Judge(s.testContext(), s.deps, Request{Input: event, Host: "claude-code", Form: "buzz", ObservesSkillLoads: s.observes})
 }
 
-func (s archSession) message(text string) types.GuardJudgment {
+func (s archSession) message(text string) verdict.Judgment {
 	return Judge(s.testContext(), s.deps, Request{Input: text, Message: true, Host: "claude-code", Form: "buzz", Session: s.session})
 }
 
@@ -101,11 +101,11 @@ func (s archSession) head(agentID string) string {
 	return head
 }
 
-func (s archSession) bash(agentID, command string) types.GuardJudgment {
+func (s archSession) bash(agentID, command string) verdict.Judgment {
 	return s.judge(fmt.Sprintf("%s\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"%s\"}}", s.head(agentID), command))
 }
 
-func (s archSession) write(agentID, path string) types.GuardJudgment {
+func (s archSession) write(agentID, path string) verdict.Judgment {
 	return s.judge(fmt.Sprintf("%s\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"%s\",\"content\":\"package x\\n\"}}", s.head(agentID), path))
 }
 
@@ -116,13 +116,13 @@ func (s archSession) load(agentID, skill string) {
 
 // requireArchitectureDeny checks the decision and the rule. A repeat deny in one session is
 // shortened to a line and a ref, so the reason's text is checked once, on the first.
-func requireArchitectureDeny(t *testing.T, v types.GuardJudgment, msgAndArgs ...any) {
+func requireArchitectureDeny(t *testing.T, v verdict.Judgment, msgAndArgs ...any) {
 	t.Helper()
 	require.Equal(t, []string{"deny", string(denyArchitectureUnbriefed)}, []string{v.Decision, v.Rule}, msgAndArgs...)
 }
 
 // requireArchitectureAdvice checks that a read is advised and never refused.
-func requireArchitectureAdvice(t *testing.T, v types.GuardJudgment, msgAndArgs ...any) {
+func requireArchitectureAdvice(t *testing.T, v verdict.Judgment, msgAndArgs ...any) {
 	t.Helper()
 	require.Equal(t, []string{"advise", string(denyArchitectureUnbriefed)}, []string{v.Decision, v.Rule}, msgAndArgs...)
 }
@@ -277,7 +277,7 @@ func TestSkillDemandsSkipWritesNoSkillCouldBrief(t *testing.T) {
 	assert.Equal(t, []string{"pass", ""}, decisionAndRule(s.write("", report)), "a scratchpad report is outside the workspace")
 	requireArchitectureDeny(t, s.write("", "notes.txt"), "a write inside the workspace still waits on the load")
 
-	scout := func(path string) types.GuardJudgment {
+	scout := func(path string) verdict.Judgment {
 		return s.judge(fmt.Sprintf(`{"session_id":%q,"hook_event_name":"PreToolUse","agent_id":"s9","agent_type":"magus-scout","tool_name":"Write","tool_input":{"file_path":%q,"content":"x\n"}}`, s.session, path))
 	}
 	requireArchitectureDeny(t, scout("notes.txt"), "a read-only agent can load the skill, so it is asked")
@@ -296,7 +296,7 @@ func TestDeletingDeclarationsIsNotArchitecture(t *testing.T) {
 	assert.False(t, removesOnly(writeFields{}), "an empty write removes nothing")
 }
 
-func decisionAndRule(v types.GuardJudgment) []string {
+func decisionAndRule(v verdict.Judgment) []string {
 	return []string{v.Decision, v.Rule}
 }
 

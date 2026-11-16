@@ -6,6 +6,8 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
@@ -182,7 +184,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectGroupingRecord(v.(types.GroupingRecord), enums)
 	}},
 	{Name: "GuardBinary", Zero: types.GuardBinary{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGuardBinary(v.(types.GuardBinary)) }},
-	{Name: "GuardVerdict", Zero: types.GuardVerdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGuardVerdict(v.(types.GuardVerdict), enums) }},
+	{Name: "GuardVerdict", Zero: verdict.Verdict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGuardVerdict(v.(verdict.Verdict), enums) }},
 	{Name: "HarnessChange", Zero: types.HarnessChange{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessChange(v.(types.HarnessChange), enums) }},
 	{Name: "HarnessFile", Zero: types.HarnessFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectHarnessFile(v.(types.HarnessFile), enums) }},
 	{Name: "HarnessInstallation", Zero: types.HarnessInstallation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -410,8 +412,8 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "SpellVersion", Zero: types.SpellVersion{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSpellVersion(v.(types.SpellVersion)) }},
 	{Name: "Stage", Zero: releasetypes.Stage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReleaseStage(v.(releasetypes.Stage)) }},
 	{Name: "Status", Zero: types.StatusRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRecord(v.(types.StatusRecord)) }},
-	{Name: "Step", Zero: typesagent.Step{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStep(v.(typesagent.Step)) }},
-	{Name: "StepRequest", Zero: typesagent.StepRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStepRequest(v.(typesagent.StepRequest)) }},
+	{Name: "Step", Zero: step.Step{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStep(v.(step.Step)) }},
+	{Name: "StepRequest", Zero: step.Request{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStepRequest(v.(step.Request)) }},
 	{Name: "StopRequest", Zero: types.StopRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStopRequest(v.(types.StopRequest), enums) }},
 	{Name: "StubSyntax", Zero: spells.StubSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStubSyntax(v.(spells.StubSyntax)) }},
 	{Name: "SymbolDecl", Zero: types.SymbolDecl{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSymbolDecl(v.(types.SymbolDecl)) }},

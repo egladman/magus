@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -138,7 +138,7 @@ func heredocContent(w heredocWrite, written map[string]string) (string, bool) {
 // target, reached without recording anything: a write a call makes some other way than
 // through that tool is held to the same rules. content is "" when the call's text for the
 // file is unknown, which the write rules read as a write they judge by path alone.
-func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, lease, target, content string) types.GuardJudgment {
+func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, lease, target, content string) verdict.Judgment {
 	input := map[string]any{"file_path": target}
 	if content != "" {
 		input["content"] = content
@@ -150,7 +150,7 @@ func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hoo
 		"tool_input": input,
 	})
 	if err != nil {
-		return types.GuardJudgment{Decision: decisionPass}
+		return verdict.Judgment{Decision: decisionPass}
 	}
 	// Judged as its own call, so it must not end the outer call's mark of a judgment in
 	// progress.

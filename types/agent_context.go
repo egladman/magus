@@ -3,6 +3,8 @@ package types
 import (
 	"fmt"
 	"slices"
+
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // AgentThread is which thread of an agent session made a call: the main thread a person
@@ -209,7 +211,7 @@ type AgentFacts struct {
 	Unobserved []string `json:"unobserved,omitempty"`
 	// Shadow is what each guard profile would have decided for the call, whichever one is
 	// in force, so a level can be judged from the calls it would have changed.
-	Shadow map[GuardProfile]GuardDecision `json:"shadow,omitempty"`
+	Shadow map[GuardProfile]verdict.Decision `json:"shadow,omitempty"`
 }
 
 // GuardProfile is how hard the guard's cost rules press on an agent session. Each level

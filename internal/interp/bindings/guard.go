@@ -15,8 +15,9 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // buildGuard assembles magus\guard for a magusfile. shell() declares one
@@ -328,7 +329,7 @@ func registerStepRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectOb
 				`%s: expected a kind and one function, step(kind: str, rule: fun(req: StepRequest) > GuardVerdict)`, name)
 		}
 		kind := args[0].AsString()
-		if err := types.ValidateGuardRuleName(kind); err != nil {
+		if err := verdict.ValidateRuleName(kind); err != nil {
 			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared, `%s: kind: %v`, name, err)
 		}
 		if path, ok := interp.ProjectPathFromContext(ctx); ok && path != "" && path != "." {
@@ -349,7 +350,7 @@ func registerStepRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectOb
 			return vm.Null, nil
 		}
 		if group != nil && reg != nil && sess != nil {
-			group.Set(kind, steps.Rule(buzzRule(sess, args[1], "step", func(req agent.StepRequest, _ ffi.EnumCases) vm.Value {
+			group.Set(kind, steps.Rule(buzzRule(sess, args[1], "step", func(req step.Request, _ ffi.EnumCases) vm.Value {
 				return bindgen.ObjectStepRequest(req)
 			})))
 			// The registry releases the session the rule runs on.
@@ -361,8 +362,8 @@ func registerStepRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectOb
 
 // buzzRule adapts a registered Buzz function to the guard's rule type over requests of
 // type R; object renders one as the value the function takes.
-func buzzRule[R any](sess *buzz.Session, rule vm.Value, member string, object func(R, ffi.EnumCases) vm.Value) func(context.Context, R, hint.Gate) (types.GuardVerdict, error) {
-	return func(ctx context.Context, req R, facts hint.Gate) (types.GuardVerdict, error) {
+func buzzRule[R any](sess *buzz.Session, rule vm.Value, member string, object func(R, ffi.EnumCases) vm.Value) func(context.Context, R, hint.Gate) (verdict.Verdict, error) {
+	return func(ctx context.Context, req R, facts hint.Gate) (verdict.Verdict, error) {
 		return callFunctionRule(ctx, sess, rule, member, object(req, ffi.SessionEnums(ctx, sess, "magus")), facts)
 	}
 }

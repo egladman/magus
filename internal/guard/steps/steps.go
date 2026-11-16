@@ -7,13 +7,13 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // Rule is a workspace's magus\guard.step function for one kind. facts is the
 // calling session's marker gate, where once and count keep their state.
-type Rule func(ctx context.Context, req agent.StepRequest, facts hint.Gate) (types.GuardVerdict, error)
+type Rule func(ctx context.Context, req step.Request, facts hint.Gate) (verdict.Verdict, error)
 
 // Group is the step rules one load of a root magusfile registered, by kind.
 // It lives outside internal/workspace, which does not import types/agent.

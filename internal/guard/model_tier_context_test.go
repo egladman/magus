@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types/agent"
 )
 
@@ -75,6 +75,6 @@ func TestModelTierContextCapRaisedToDenyRefusesWrites(t *testing.T) {
 
 	v := Judge(ctx, deps, Request{Input: filepath.Join(root, "internal/ledger/store.go"), IsPath: true, Session: "s", Host: "test-host", Lease: "lease-a"})
 
-	require.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(advisoryModelTierContextCap)}, judgedAs(v))
+	require.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(advisoryModelTierContextCap)}, judgedAs(v))
 	assert.Contains(t, v.Reason, "lease lease-a runs at model tier economy")
 }

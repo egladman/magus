@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -104,12 +105,12 @@ func TestSpawnWaitsFires(t *testing.T) {
 // sleep-poll to advise.
 func TestBackgroundedSleepIsATimerAndCountsTowardThePile(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	judge := func(deps Dependencies, line string) types.GuardJudgment {
+	judge := func(deps Dependencies, line string) verdict.Judgment {
 		return Judge(ctx, deps, Request{Input: line, Session: "timers", Host: "claude-code", CallBackground: true})
 	}
 
 	v := judge(Dependencies{}, "sleep 540")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSleepPoll)}, judgedAs(v))
+	assert.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleSleepPoll)}, judgedAs(v))
 
 	lowered := withSetting(string(denyRuleSleepPoll), builtin.Advise)
 	piled := Dependencies{Builtins: map[string]builtin.Setting{
@@ -121,13 +122,13 @@ func TestBackgroundedSleepIsATimerAndCountsTowardThePile(t *testing.T) {
 		assert.NotEqual(t, "deny", v.Decision)
 	}
 	v = judge(piled, "sleep 300")
-	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(denyRuleMonitorPile)}, judgedAs(v),
+	assert.Equal(t, verdict.Judgment{Decision: "advise", Rule: string(denyRuleMonitorPile)}, judgedAs(v),
 		"the third live waiter is advised against")
 	for range monitorPileDeny - monitorPileAdvise - 1 {
 		judge(lowered, "sleep 301")
 	}
 	v = judge(piled, "sleep 302")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorPile)}, judgedAs(v), "the fifth is refused")
+	assert.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleMonitorPile)}, judgedAs(v), "the fifth is refused")
 
 	// A settle in the foreground is not a waiter.
 	v = Judge(ctx, Dependencies{}, Request{Input: "sleep 2", Session: "timers", Host: "claude-code"})
@@ -160,7 +161,7 @@ func TestTimerIsRefusedAndWorkPasses(t *testing.T) {
 		}
 		v := Judge(ctx, raised, Request{Input: tt.line, Session: "timers-" + name, Host: "claude-code", CallBackground: tt.background})
 		if tt.deny {
-			assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSleepPoll)}, judgedAs(v), name)
+			assert.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleSleepPoll)}, judgedAs(v), name)
 			assert.Contains(t, v.Reason, "wait for that notice or do other work", name)
 		} else {
 			assert.NotEqual(t, string(denyRuleSleepPoll), v.Rule, name)
@@ -208,7 +209,7 @@ func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {
 				"tool_input": map[string]any{"description": title, "prompt": "Carry the job to its done-when."},
 			}), Host: "claude-code"})
 			if tt.want {
-				require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnDuplicate)}, judgedAs(v), v.Context)
+				require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleSpawnDuplicate)}, judgedAs(v), v.Context)
 				assert.Contains(t, v.Reason, "guard-facts")
 			} else {
 				assert.NotEqual(t, string(denyRuleSpawnDuplicate), v.Rule)
@@ -305,7 +306,7 @@ func TestBudgetFullSaysHowFullAndWhatHoldsIt(t *testing.T) {
 
 func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	spawn := func(agent, description string) types.GuardJudgment {
+	spawn := func(agent, description string) verdict.Judgment {
 		env := map[string]any{
 			"session_id": "nested", "hook_event_name": "PreToolUse", "tool_name": "Agent",
 			"tool_input": map[string]any{"description": description, "prompt": "Carry it out."},
@@ -316,17 +317,17 @@ func TestSpawnWaiterAndNestedWaiter(t *testing.T) {
 		return Judge(ctx, withSetting(string(advisorySpawnNestedWaiter), builtin.Advise), Request{Input: hookJSON(t, env), Host: "claude-code"})
 	}
 	v := spawn("", "wait for the workers to finish")
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnWaiter)}, judgedAs(v))
+	assert.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleSpawnWaiter)}, judgedAs(v))
 
 	nested := hookJSON(t, map[string]any{
 		"session_id": "nested-default", "hook_event_name": "PreToolUse", "tool_name": "Agent", "agent_id": "a1b2c3",
 		"tool_input": map[string]any{"description": "add the watch flag", "prompt": "Carry it out."},
 	})
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(advisorySpawnNestedWaiter)}, judgedAs(Judge(ctx, Dependencies{}, Request{Input: nested, Host: "claude-code"})),
+	assert.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(advisorySpawnNestedWaiter)}, judgedAs(Judge(ctx, Dependencies{}, Request{Input: nested, Host: "claude-code"})),
 		"refused by default")
 
 	v = spawn("a1b2c3", "add the watch flag")
-	assert.Equal(t, types.GuardJudgment{Decision: "advise", Rule: string(advisorySpawnNestedWaiter)}, judgedAs(v),
+	assert.Equal(t, verdict.Judgment{Decision: "advise", Rule: string(advisorySpawnNestedWaiter)}, judgedAs(v),
 		"set to advise, a worker's helper speaking of watching is advised against")
 	assert.Equal(t, "pass", spawn("a1b2c3", "add the watch flag").Decision, "once a session")
 	assert.Equal(t, "pass", spawn("", "add the watch flag").Decision, "the root is not nested")
@@ -483,7 +484,7 @@ func TestJudgeRefusesARetryAfterARefusal(t *testing.T) {
 
 	v := Judge(ctx, Dependencies{}, Request{Input: "./magus run lint ."})
 	assert.Contains(t, v.Reason, "refused with MGS3009")
-	assert.Equal(t, types.GuardJudgment{
+	assert.Equal(t, verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRuleSleepPoll),
 	}, v, v.Reason)
 }
@@ -540,7 +541,7 @@ func TestSleepPollRefusesAProcessWaitOnARunHoldingASeat(t *testing.T) {
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(v), line)
 	}
 	probe := Judge(ctx, Dependencies{}, Request{Input: "kill -0 4242 && ./magus run go-test .", Lease: worker.ID})
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleProcessPoll)}, judgedAs(probe))
+	assert.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleProcessPoll)}, judgedAs(probe))
 	for _, line := range []string{
 		"caffeinate -w 9999",
 		"wait 9999",

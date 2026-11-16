@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -65,7 +66,7 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 		"pattern": "func HandleRequest", "path": "internal/api/handler.go",
 		"output_mode": "content", "-A": 20,
 	})})
-	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleGrepReader)}, judgedAs(body), body.Reason)
+	assert.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleGrepReader)}, judgedAs(body), body.Reason)
 	assert.Contains(t, body.Reason, "refs HandleRequest --source")
 
 	glob := Judge(ctx, deps, Request{Input: envelope("Glob", map[string]any{"pattern": "**/handler.go", "path": "internal/api"})})

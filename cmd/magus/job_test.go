@@ -31,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	guardverdict "github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
@@ -1067,7 +1068,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 			Lease:      row.ID,
 			PendingRow: &row,
 		})
-		assert.Equal(t, string(types.GuardDeny), unplaced.Decision)
+		assert.Equal(t, string(guardverdict.Deny), unplaced.Decision)
 		assert.Contains(t, unplaced.Reason, "judged from the wrong directory")
 	})
 
@@ -1148,7 +1149,7 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 		taken := held
 		taken.State, taken.CheckoutRoot = types.StateRunning, own
 		ran := guard.Judge(t.Context(), deps, guard.Request{Input: "./" + guard.WorkerCheckCommand(*ci), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
-		assert.NotEqual(t, string(types.GuardDeny), ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
+		assert.NotEqual(t, string(guardverdict.Deny), ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
 	})
 
 	t.Run("the forker's checkout", func(t *testing.T) {

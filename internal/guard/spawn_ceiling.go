@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 )
@@ -29,21 +30,21 @@ const denyRuleSpawnAboveParentTier denyRuleName = "spawn-above-parent-tier"
 // transcript once the host has reported the thread, a subagent's from the model its own
 // spawn named. A subagent spawned on no model is taken to run on the session's, inferred,
 // and an inferred ceiling only advises.
-func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookRequest, who hookAttribution, at location, lease string) types.GuardJudgment {
-	if verdict.Decision == decisionDeny || !env.IsSpawn || env.DeclaredModel == "" || at.cacheDir == "" || deps.ModelTiers == nil {
-		return verdict
+func gradeSpawnCeiling(deps Dependencies, judged verdict.Judgment, env hookRequest, who hookAttribution, at location, lease string) verdict.Judgment {
+	if judged.Decision == decisionDeny || !env.IsSpawn || env.DeclaredModel == "" || at.cacheDir == "" || deps.ModelTiers == nil {
+		return judged
 	}
 	s := deps.settingLookup(string(denyRuleSpawnAboveParentTier))
 	if s.Decision == builtin.Off {
-		return verdict
+		return judged
 	}
 	spawner := spawnerModel(at, who, lease)
 	if spawner.model == "" {
-		return verdict
+		return judged
 	}
 	set := deps.ModelTiers()
 	if set == nil {
-		return verdict
+		return judged
 	}
 	host := who.Host
 	from := types.ThreadInferred
@@ -71,7 +72,7 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 		if len(unknown) == 2 {
 			why = "are in no mgs_listModels row and no alias the declaration maps, so their model tiers are unknown"
 		}
-		return applyFindings(gate, verdict, []costFinding{{
+		return applyFindings(gate, judged, []costFinding{{
 			rule: denyRuleSpawnAboveParentTier,
 			key:  hint.MarkerKind(denyRuleSpawnAboveParentTier) + "-unknown",
 			say: fmt.Sprintf("magus workspace: this spawn's tier ceiling is not judged: %s %s (%s): "+
@@ -80,14 +81,14 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 		}}, from)
 	}
 	if deps.TierRule == nil {
-		return applyFindings(gate, verdict, []costFinding{{
+		return applyFindings(gate, judged, []costFinding{{
 			rule: denyRuleSpawnAboveParentTier,
 			key:  hint.MarkerKind(denyRuleSpawnAboveParentTier) + "-unruled",
 			say:  "magus workspace: this spawn's tier ceiling is not judged: the guard was wired with no spawn rule (magus.WithSpawnRule).",
 		}}, from)
 	}
 	if deps.TierRule(parent, child) == nil {
-		return verdict
+		return judged
 	}
 	// A parent resolved through a harness row runs on a host the declaration does not map,
 	// so the way down is named by that row's id.
@@ -102,7 +103,7 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 	} else {
 		say += fmt.Sprintf(". %s stays at the parent's tier, and setting %s off in magus\\guard.builtins stops this advice.", alias, denyRuleSpawnAboveParentTier)
 	}
-	return applyFindings(gate, verdict, []costFinding{{
+	return applyFindings(gate, judged, []costFinding{{
 		rule: denyRuleSpawnAboveParentTier,
 		deny: s.Decision == builtin.Deny,
 		key:  hint.MarkerKind(denyRuleSpawnAboveParentTier),

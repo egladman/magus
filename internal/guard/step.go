@@ -17,8 +17,9 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // denyRuleStepInput is a step whose input its row cannot read.
@@ -29,7 +30,7 @@ const stepRulePrefix = "step:"
 
 // StepRule is a Go program's rule over every step JudgeStep judges. An
 // error means the rule judged nothing, and the judgment fails with it.
-type StepRule func(ctx context.Context, req typesagent.StepRequest) (types.GuardVerdict, error)
+type StepRule func(ctx context.Context, req step.Request) (verdict.Verdict, error)
 
 // StepTable is the step rows and rules a program declared, each row
 // checked once by NewStepTable.
@@ -39,7 +40,7 @@ type StepTable struct {
 }
 
 type stepSpec struct {
-	typesagent.StepSpec
+	step.Spec
 	paths       []jsonPointer
 	command     jsonPointer
 	description jsonPointer
@@ -49,7 +50,7 @@ type stepSpec struct {
 // NewStepTable checks rows against rules. A malformed row is an error. A
 // row nothing would judge is left to CheckJudged, once the workspace's own
 // rules are known.
-func NewStepTable(rows []typesagent.StepSpec, rules []StepRule) (StepTable, error) {
+func NewStepTable(rows []step.Spec, rules []StepRule) (StepTable, error) {
 	for _, r := range rules {
 		if r == nil {
 			return StepTable{}, errors.New("a step rule is nil")
@@ -78,14 +79,14 @@ func NewStepTable(rows []typesagent.StepSpec, rules []StepRule) (StepTable, erro
 	return t, nil
 }
 
-func newStepSpec(row typesagent.StepSpec) (stepSpec, error) {
+func newStepSpec(row step.Spec) (stepSpec, error) {
 	if row.Kind == "" {
 		return stepSpec{}, errors.New("no kind")
 	}
-	if err := types.ValidateGuardRuleName(row.Kind); err != nil {
+	if err := verdict.ValidateRuleName(row.Kind); err != nil {
 		return stepSpec{}, fmt.Errorf("kind: %w", err)
 	}
-	r := stepSpec{StepSpec: row}
+	r := stepSpec{Spec: row}
 	if err := checkCapabilities(row); err != nil {
 		return stepSpec{}, err
 	}
@@ -154,7 +155,7 @@ func (r stepSpec) changes() bool {
 
 // checkCapabilities refuses a row whose capabilities and pointers disagree,
 // since a built-in rule would then have nothing to read.
-func checkCapabilities(row typesagent.StepSpec) error {
+func checkCapabilities(row step.Spec) error {
 	known := types.ToolCapabilities()
 	for _, c := range row.Capabilities {
 		if !slices.Contains(known, types.ToolCapability(c)) {
@@ -216,51 +217,51 @@ func (t StepTable) covering(kind, name string) (stepSpec, bool) {
 // the lease, authority and session. The error is a step that cannot be
 // judged: a wrong api_version, no kind, an empty Dir its row needs, or a
 // failed rule.
-func JudgeStep(ctx context.Context, deps Dependencies, req Request, step typesagent.Step) (types.GuardJudgment, error) {
-	if step.APIVersion != typesagent.StepAPIVersion {
-		return types.GuardJudgment{}, fmt.Errorf("step api_version is %q, want %q", step.APIVersion, typesagent.StepAPIVersion)
+func JudgeStep(ctx context.Context, deps Dependencies, req Request, st step.Step) (verdict.Judgment, error) {
+	if st.APIVersion != step.APIVersion {
+		return verdict.Judgment{}, fmt.Errorf("step api_version is %q, want %q", st.APIVersion, step.APIVersion)
 	}
-	if step.Kind == "" {
-		return types.GuardJudgment{}, errors.New("step has no kind")
+	if st.Kind == "" {
+		return verdict.Judgment{}, errors.New("step has no kind")
 	}
 	// The Judge calls below must not end a mark their caller owns.
 	ctx = context.WithValue(context.WithValue(ctx, judgingStepKey{}, true), judgmentMarkKey{}, judgmentMark{})
-	judged := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass, Lease: req.Lease}
-	row, ok := deps.Steps.covering(step.Kind, step.Name)
+	judged := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass, Lease: req.Lease}
+	row, ok := deps.Steps.covering(st.Kind, st.Name)
 	if !ok {
 		return gradeStepDeny(deps, judged, denyRuleUnjudgedStep, fmt.Sprintf(
-			"magus workspace: no step spec covers kind %q, name %q: declare the kind with magus.WithStepSpecs.", step.Kind, step.Name)), nil
+			"magus workspace: no step spec covers kind %q, name %q: declare the kind with magus.WithStepSpecs.", st.Kind, st.Name)), nil
 	}
-	if row.readsDir() && step.Dir == "" {
-		return types.GuardJudgment{}, fmt.Errorf("step %s %q: dir is empty, and its spec judges paths, a command or a spawn relative to it", step.Kind, step.Name)
+	if row.readsDir() && st.Dir == "" {
+		return verdict.Judgment{}, fmt.Errorf("step %s %q: dir is empty, and its spec judges paths, a command or a spawn relative to it", st.Kind, st.Name)
 	}
-	input := step.Input
+	input := st.Input
 	if input == nil {
 		input = map[string]any{}
 	}
 	if row.schema != nil {
 		if err := row.schema.Validate(input); err != nil {
 			return gradeStepDeny(deps, judged, denyRuleStepInput, fmt.Sprintf(
-				"magus workspace: the %s step's input does not match its row's input_schema: %v.", step.Kind, err)), nil
+				"magus workspace: the %s step's input does not match its row's input_schema: %v.", st.Kind, err)), nil
 		}
 	}
 	read, refusal := row.read(input)
 	if refusal == "" && row.has(types.ToolSpawns) {
-		read.spawn, refusal = row.spawnEnvelope(step, input)
+		read.spawn, refusal = row.spawnEnvelope(st, input)
 	}
 	if refusal != "" {
-		return gradeStepDeny(deps, judged, denyRuleStepInput, fmt.Sprintf("magus workspace: the %s step's input %s.", step.Kind, refusal)), nil
+		return gradeStepDeny(deps, judged, denyRuleStepInput, fmt.Sprintf("magus workspace: the %s step's input %s.", st.Kind, refusal)), nil
 	}
-	judged = judgeStepBuiltins(ctx, deps, req, step, row, read, judged)
-	stepReq := typesagent.StepRequest{Step: step, Capabilities: slices.Clone(row.Capabilities), Paths: read.paths, Command: read.command, Lease: judged.Lease}
+	judged = judgeStepBuiltins(ctx, deps, req, st, row, read, judged)
+	stepReq := step.Request{Step: st, Capabilities: slices.Clone(row.Capabilities), Paths: read.paths, Command: read.command, Lease: judged.Lease}
 	for _, rule := range deps.Steps.rules {
 		v, err := rule(ctx, stepReq)
 		if err != nil {
-			return types.GuardJudgment{}, fmt.Errorf("step rule on %s %q: %w", step.Kind, step.Name, err)
+			return verdict.Judgment{}, fmt.Errorf("step rule on %s %q: %w", st.Kind, st.Name, err)
 		}
-		ruled, err := stepRuleJudgment(step, v)
+		ruled, err := stepRuleJudgment(st, v)
 		if err != nil {
-			return types.GuardJudgment{}, err
+			return verdict.Judgment{}, err
 		}
 		judged = stricterStep(judged, ruled)
 	}
@@ -278,7 +279,7 @@ const workspaceStepRule = workspaceShellPrefix + "step"
 // step's kind on both sides, strengthen only. A rule that fails judges
 // nothing and says so. A row only that rule judges is denied when no side
 // answers.
-func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, stepReq typesagent.StepRequest, row stepSpec, judged types.GuardJudgment) types.GuardJudgment {
+func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, stepReq step.Request, row stepSpec, judged verdict.Judgment) verdict.Judgment {
 	step := stepReq.Step
 	unjudged := deps.Steps.unjudged(row)
 	if judged.Decision == decisionDeny {
@@ -301,7 +302,7 @@ func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, ste
 		if rule == nil {
 			return nil
 		}
-		return func(ctx context.Context) (types.GuardVerdict, error) { return rule(ctx, stepReq, facts) }
+		return func(ctx context.Context) (verdict.Verdict, error) { return rule(ctx, stepReq, facts) }
 	}
 	var resolve func(context.Context) (ruleCall, error)
 	if deps.ApprovedStepRule != nil {
@@ -331,8 +332,8 @@ func gradeWorkspaceStep(ctx context.Context, deps Dependencies, req Request, ste
 
 // noStepRuleReason is the deny for a step only a workspace rule judges when
 // none answered, naming each side that failed.
-func noStepRuleReason(step typesagent.Step, failures []trail.RuleFailure) string {
-	reason := fmt.Sprintf("magus workspace: no rule judged the %s step; only the %s rule for its kind judges it.", step.Kind, seamStep.member())
+func noStepRuleReason(st step.Step, failures []trail.RuleFailure) string {
+	reason := fmt.Sprintf("magus workspace: no rule judged the %s step; only the %s rule for its kind judges it.", st.Kind, seamStep.member())
 	for _, f := range failures {
 		reason += fmt.Sprintf("\n  %s: %s", sideName(seamStep, f.Side), f.Error)
 	}
@@ -350,7 +351,7 @@ type stepInput struct {
 // spawnEnvelope is the hook envelope a spawns step is judged as, so the
 // spawn rules read it as they read a host's spawn. The refusal says
 // which field holds the wrong type.
-func (r stepSpec) spawnEnvelope(step typesagent.Step, input map[string]any) (string, string) {
+func (r stepSpec) spawnEnvelope(st step.Step, input map[string]any) (string, string) {
 	if _, ok := envelopeSpawn(input); !ok {
 		return "", "holds no spawn prompt: a prompt, or a message beside an agent field"
 	}
@@ -363,8 +364,8 @@ func (r stepSpec) spawnEnvelope(step typesagent.Step, input map[string]any) (str
 		input = maps.Clone(input)
 		input["description"] = d
 	}
-	step.Name, step.Input = cmp.Or(step.Name, step.Kind), input
-	raw, err := json.Marshal(stepEnvelope(step))
+	st.Name, st.Input = cmp.Or(st.Name, st.Kind), input
+	raw, err := json.Marshal(stepEnvelope(st))
 	if err != nil {
 		return "", fmt.Sprintf("does not encode as a spawn: %v", err)
 	}
@@ -406,9 +407,9 @@ func (r stepSpec) read(input map[string]any) (stepInput, string) {
 // judgeStepBuiltins runs Judge over the spawn, the command and each path.
 // Each is the request the hook judges for a spawn, a shell line, a read
 // or a write.
-func judgeStepBuiltins(ctx context.Context, deps Dependencies, req Request, step typesagent.Step, row stepSpec, read stepInput, judged types.GuardJudgment) types.GuardJudgment {
+func judgeStepBuiltins(ctx context.Context, deps Dependencies, req Request, st step.Step, row stepSpec, read stepInput, judged verdict.Judgment) verdict.Judgment {
 	base := req
-	base.Dir, base.Session, base.Agent = step.Dir, cmp.Or(step.Session, req.Session), cmp.Or(step.Agent, req.Agent)
+	base.Dir, base.Session, base.Agent = st.Dir, cmp.Or(st.Session, req.Session), cmp.Or(st.Agent, req.Agent)
 	base.IsPath = false
 	var calls []Request
 	if read.spawn != "" {
@@ -445,7 +446,7 @@ func judgeStepBuiltins(ctx context.Context, deps Dependencies, req Request, step
 
 // gradeStepDeny grades a step-level deny through the workspace's builtin
 // settings, as a compiled rule's deny is.
-func gradeStepDeny(deps Dependencies, judged types.GuardJudgment, rule denyRuleName, reason string) types.GuardJudgment {
+func gradeStepDeny(deps Dependencies, judged verdict.Judgment, rule denyRuleName, reason string) verdict.Judgment {
 	switch g := deps.grade(ShellVerdict{Deny: reason, Rule: denyRule{Name: rule}}); {
 	case g.Deny != "":
 		judged.Decision, judged.Reason, judged.Rule = decisionDeny, g.Deny, string(rule)
@@ -457,21 +458,21 @@ func gradeStepDeny(deps Dependencies, judged types.GuardJudgment, rule denyRuleN
 
 // stepRuleJudgment is a Go rule's verdict as a judgment, reported under
 // step:<rule>, or step:<kind> when the rule names none.
-func stepRuleJudgment(step typesagent.Step, v types.GuardVerdict) (types.GuardJudgment, error) {
+func stepRuleJudgment(st step.Step, v verdict.Verdict) (verdict.Judgment, error) {
 	if !v.Decision.Valid() {
-		return types.GuardJudgment{}, fmt.Errorf("step rule on %s returned decision %q (want one of %v)", step.Kind, v.Decision, v.Decision.Values())
+		return verdict.Judgment{}, fmt.Errorf("step rule on %s returned decision %q (want one of %v)", st.Kind, v.Decision, v.Decision.Values())
 	}
 	if v.Rule != "" {
-		if err := types.ValidateGuardRuleName(v.Rule); err != nil {
-			return types.GuardJudgment{}, fmt.Errorf("step rule on %s: %w", step.Kind, err)
+		if err := verdict.ValidateRuleName(v.Rule); err != nil {
+			return verdict.Judgment{}, fmt.Errorf("step rule on %s: %w", st.Kind, err)
 		}
 	}
-	rule := stepRulePrefix + cmp.Or(v.Rule, step.Kind)
-	j := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+	rule := stepRulePrefix + cmp.Or(v.Rule, st.Kind)
+	j := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	switch v.Decision {
-	case types.GuardDeny:
+	case verdict.Deny:
 		j.Decision, j.Reason, j.Rule = decisionDeny, v.Reason, rule
-	case types.GuardAdvise:
+	case verdict.Advise:
 		j.Decision, j.Context, j.Rule = decisionAdvise, v.Reason, rule
 	}
 	return j, nil
@@ -492,7 +493,7 @@ func stepDecisionRank(d string) int {
 
 // stricterStep keeps the stricter of a and b, and a's lease. Two advisories
 // keep both contexts; two denies keep a's.
-func stricterStep(a, b types.GuardJudgment) types.GuardJudgment {
+func stricterStep(a, b verdict.Judgment) verdict.Judgment {
 	ra, rb := stepDecisionRank(a.Decision), stepDecisionRank(b.Decision)
 	switch {
 	case rb > ra:
@@ -512,59 +513,59 @@ const hostToolKind = "tool"
 
 // stepGroup prefixes every Step record's api_version, whatever its
 // version: "magus.step/".
-var stepGroup = typesagent.StepAPIVersion[:strings.IndexByte(typesagent.StepAPIVersion, '/')+1]
+var stepGroup = step.APIVersion[:strings.IndexByte(step.APIVersion, '/')+1]
 
 // judgingStepKey marks a context JudgeStep judges a step's parts under.
 type judgingStepKey struct{}
 
 // stepRecord reads raw as a Step record, reporting whether it is one: a
 // JSON object whose api_version names the Step group.
-func stepRecord(raw string) (typesagent.Step, bool) {
+func stepRecord(raw string) (step.Step, bool) {
 	if !strings.HasPrefix(raw, "{") || !strings.Contains(raw, `"`+stepGroup) {
-		return typesagent.Step{}, false
+		return step.Step{}, false
 	}
-	var step typesagent.Step
-	if json.Unmarshal([]byte(raw), &step) != nil || !strings.HasPrefix(step.APIVersion, stepGroup) {
-		return typesagent.Step{}, false
+	var st step.Step
+	if json.Unmarshal([]byte(raw), &st) != nil || !strings.HasPrefix(st.APIVersion, stepGroup) {
+		return step.Step{}, false
 	}
-	return step, true
+	return st, true
 }
 
 // hostToolStep reports a step that reads as a host's hook envelope.
-func hostToolStep(step typesagent.Step) bool {
-	return step.APIVersion == typesagent.StepAPIVersion && step.Kind == hostToolKind && step.Name != ""
+func hostToolStep(st step.Step) bool {
+	return st.APIVersion == step.APIVersion && st.Kind == hostToolKind && st.Name != ""
 }
 
 // stepEnvelope is the hook envelope a tool step stands for: the name is
 // the tool, and the input its tool_input.
-func stepEnvelope(step typesagent.Step) hookEnvelope {
-	return hookEnvelope{ToolName: step.Name, ToolInput: step.Input, Cwd: step.Dir, SessionID: step.Session, AgentID: step.Agent}
+func stepEnvelope(st step.Step) hookEnvelope {
+	return hookEnvelope{ToolName: st.Name, ToolInput: st.Input, Cwd: st.Dir, SessionID: st.Session, AgentID: st.Agent}
 }
 
 // declaredStep is the Step record input holds when Judge hands it to
 // JudgeStep. That is every record but a host tool step no row of table
 // covers, which decodeHookEnvelope reads as its envelope.
-func declaredStep(ctx context.Context, input string, table StepTable) (typesagent.Step, bool) {
+func declaredStep(ctx context.Context, input string, table StepTable) (step.Step, bool) {
 	if judging, _ := ctx.Value(judgingStepKey{}).(bool); judging {
-		return typesagent.Step{}, false
+		return step.Step{}, false
 	}
-	step, ok := stepRecord(input)
+	st, ok := stepRecord(input)
 	if !ok {
-		return typesagent.Step{}, false
+		return step.Step{}, false
 	}
-	if _, covered := table.covering(step.Kind, step.Name); hostToolStep(step) && !covered {
-		return typesagent.Step{}, false
+	if _, covered := table.covering(st.Kind, st.Name); hostToolStep(st) && !covered {
+		return step.Step{}, false
 	}
-	return step, true
+	return st, true
 }
 
 // judgeStepRecord is JudgeStep for a record a hook or `magus shell` sent.
 // A step it cannot judge is denied rather than cleared, since a hook
 // fails open on an error.
-func judgeStepRecord(ctx context.Context, deps Dependencies, req Request, step typesagent.Step) types.GuardJudgment {
-	j, err := JudgeStep(ctx, deps, req, step)
+func judgeStepRecord(ctx context.Context, deps Dependencies, req Request, st step.Step) verdict.Judgment {
+	j, err := JudgeStep(ctx, deps, req, st)
 	if err != nil {
-		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Rule: string(denyRuleStepInput),
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Rule: string(denyRuleStepInput),
 			Reason: fmt.Sprintf("magus workspace: the step could not be judged: %v. Nothing was judged, so it is blocked rather than cleared.", err)}
 	}
 	return j

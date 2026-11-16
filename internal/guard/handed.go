@@ -6,16 +6,16 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // judgeHandedCommands refuses a stop whose reply hands the person a shell block
 // the guard would deny the agent. A person's command reaches no hook, so
 // passing it to them skips the denial. ok is false when the reply passes.
-func judgeHandedCommands(ctx context.Context, deps Dependencies, req Request, dir, raw string) (types.GuardJudgment, bool) {
+func judgeHandedCommands(ctx context.Context, deps Dependencies, req Request, dir, raw string) (verdict.Judgment, bool) {
 	env, isStop := decodeStop(raw)
 	if !isStop || env.LastAssistantMessage == "" || (env.StopHookActive != nil && *env.StopHookActive) {
-		return types.GuardJudgment{}, false
+		return verdict.Judgment{}, false
 	}
 	for _, block := range shellBlocks(env.LastAssistantMessage) {
 		cmd := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(block), "!"))
@@ -29,7 +29,7 @@ func judgeHandedCommands(ctx context.Context, deps Dependencies, req Request, di
 			continue
 		}
 		first, _, _ := strings.Cut(v.Reason, "\n")
-		return types.GuardJudgment{
+		return verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion,
 			Decision:   decisionDeny,
 			Reason: fmt.Sprintf("this reply hands the person `%s`, a command the guard denies [%s]: %s\nA person's command reaches no hook, so fix the command before handing it over.",
@@ -37,5 +37,5 @@ func judgeHandedCommands(ctx context.Context, deps Dependencies, req Request, di
 			Rule: string(denyRuleBriefCommand),
 		}, true
 	}
-	return types.GuardJudgment{}, false
+	return verdict.Judgment{}, false
 }

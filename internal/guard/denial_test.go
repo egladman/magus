@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -67,7 +68,7 @@ func TestSessionFactsAreSharedAcrossTransports(t *testing.T) {
 		session + `.jsonl","cwd":"/Users/dev/repo","permission_mode":"default","hook_event_name":"PreToolUse",`
 	skill := fmt.Sprintf("%s\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"%s\"},\"tool_use_id\":\"toolu_01\"}", head, multiAgentSkill.String())
 	spawn := fmt.Sprintf("%s\"tool_name\":\"Task\",\"tool_input\":{\"description\":\"Audit the store\",\"prompt\":\"Audit internal/job\",\"subagent_type\":\"general-purpose\"},\"tool_use_id\":\"toolu_02\"}", head)
-	judge := func(transport, event string) types.GuardJudgment {
+	judge := func(transport, event string) verdict.Judgment {
 		return Judge(ctx, strict(testDependencies()), Request{Input: event, Host: "claude-code", Form: transport, ObservesSkillLoads: true})
 	}
 

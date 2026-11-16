@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -261,7 +262,7 @@ func (s *RelinkSuite) SetupTest() {
 	s.layers = ctxLayers{atLayer(location{cacheDir: s.T().TempDir(), workspace: s.built})}
 }
 
-func (s *RelinkSuite) judge(lease, command string) types.GuardJudgment {
+func (s *RelinkSuite) judge(lease, command string) verdict.Judgment {
 	deps := strict(testDependencies())
 	deps.lease = lease
 	envelope := fmt.Sprintf("{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"cwd\":\"%s\",\"tool_input\":{\"command\":\"%s\"}}", s.built, command)

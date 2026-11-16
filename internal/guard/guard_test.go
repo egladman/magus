@@ -37,6 +37,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -49,27 +50,27 @@ import (
 // verdictWithRule is the verdict a rule reaches before any wording or lease attribution:
 // pair it with unworded so a test compares the whole struct and still checks the prose by
 // substring.
-func verdictWithRule(decision, rule string) types.GuardJudgment {
-	return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decision, Rule: rule}
+func verdictWithRule(decision, rule string) verdict.Judgment {
+	return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decision, Rule: rule}
 }
 
 // ruledAs is the decision and rule alone, the shape judgedAs keeps.
-func ruledAs(decision, rule string) types.GuardJudgment {
-	return types.GuardJudgment{Decision: decision, Rule: rule}
+func ruledAs(decision, rule string) verdict.Judgment {
+	return verdict.Judgment{Decision: decision, Rule: rule}
 }
 
 // unworded is v without the fields a rule test leaves to other assertions: the reason and
 // context prose, which the test checks by substring, and the lease attribution, which follows
 // the environment the test ran in.
-func unworded(v types.GuardJudgment) types.GuardJudgment {
+func unworded(v verdict.Judgment) verdict.Judgment {
 	v.Reason, v.Context, v.Lease, v.LeaseFrom = "", "", "", ""
 	return v
 }
 
 // judgedAs is v with only its decision and rule kept, for a test whose other assertions own
-// the wording, the lease and the remedy: compare it with a types.GuardJudgment of both.
-func judgedAs(v types.GuardJudgment) types.GuardJudgment {
-	return types.GuardJudgment{Decision: v.Decision, Rule: v.Rule}
+// the wording, the lease and the remedy: compare it with a verdict.Judgment of both.
+func judgedAs(v verdict.Judgment) verdict.Judgment {
+	return verdict.Judgment{Decision: v.Decision, Rule: v.Rule}
 }
 
 // WorkspaceInspect and WorkspaceCacheDir are the root package's Inspect and ResolveCacheDir.
@@ -228,7 +229,7 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 func TestHostUnnamedRefusesWithTheCodeAndTheRemedy(t *testing.T) {
 	t.Parallel()
 	got := hostUnnamed()
-	assert.Equal(t, types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: got.Reason}, got)
+	assert.Equal(t, verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: got.Reason}, got)
 	assert.Contains(t, got.Reason, string(types.HookHostUnnamed))
 	assert.Contains(t, got.Reason, "--agent-name")
 	assert.Contains(t, got.Reason, "magus describe harness")
@@ -467,7 +468,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	// shellAt judges shell lines in a checkout on branch, whose base ref is origin/main, and
 	// returns the cache dir they are judged against. The workspace is an empty temporary
 	// dir unless one is named.
-	shellAt := func(t *testing.T, branch, workspace string) (func(command string) types.GuardJudgment, string) {
+	shellAt := func(t *testing.T, branch, workspace string) (func(command string) verdict.Judgment, string) {
 		t.Helper()
 		ctx, cacheDir := spawnFixture(t)
 		if workspace != "" {
@@ -479,14 +480,14 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 				return &types.CheckoutState{Branch: branch, Base: "origin/main"}
 			},
 		}
-		return func(command string) types.GuardJudgment {
+		return func(command string) verdict.Judgment {
 			return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Bash",
 				"tool_input": map[string]any{"command": command},
 			})})
 		}, cacheDir
 	}
-	shellIn := func(t *testing.T, branch, workspace string) func(command string) types.GuardJudgment {
+	shellIn := func(t *testing.T, branch, workspace string) func(command string) verdict.Judgment {
 		t.Helper()
 		run, _ := shellAt(t, branch, workspace)
 		return run
@@ -694,7 +695,7 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 	covered["code-comments"] = true
 	t.Run("code-comments", func(t *testing.T) {
 		ctx, ws, _ := writeFixture(t)
-		write := func(name, content string) types.GuardJudgment {
+		write := func(name, content string) verdict.Judgment {
 			return Judge(ctx, Dependencies{WriteRule: m.WriteRule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Write",
 				"tool_input": map[string]any{"file_path": filepath.Join(ws, name), "content": content},
@@ -727,7 +728,7 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 	covered["host-cursor-rules"] = true
 	t.Run("host-cursor-rules", func(t *testing.T) {
 		ctx, ws, _ := writeFixture(t)
-		write := func(name string) types.GuardJudgment {
+		write := func(name string) verdict.Judgment {
 			return Judge(ctx, Dependencies{WriteRule: m.WriteRule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Write",
 				"tool_input": map[string]any{"file_path": filepath.Join(ws, name), "content": "{}\n"},
@@ -740,7 +741,7 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 	})
 
 	// The binary rules read the trees a line names, so each case builds its own.
-	judgeIn := func(t *testing.T, ws, command string) types.GuardJudgment {
+	judgeIn := func(t *testing.T, ws, command string) verdict.Judgment {
 		t.Helper()
 		testkit.Isolate(t)
 		ctx := WithLocation(t.Context(), t.TempDir(), ws, ws)
@@ -821,7 +822,7 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 		repo.Commit("bump the skill stamp format", map[string]string{catalog: "package agent\n\nconst skillStampFormat types.APIVersion = \"magus.skill-stamp/v1alpha2\"\n"})
 		ws := repo.Root()
 		ctx := WithLocation(t.Context(), t.TempDir(), ws, ws)
-		edit := func(newText string) types.GuardJudgment {
+		edit := func(newText string) verdict.Judgment {
 			return Judge(ctx, Dependencies{WriteRule: m.WriteRule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Edit",
 				"tool_input": map[string]any{"file_path": filepath.Join(ws, catalog), "old_string": "const skillStampFormat types.APIVersion = \"magus.skill-stamp/v1alpha2\"", "new_string": newText},
@@ -849,7 +850,7 @@ func TestWriteOutsideTheWorkspaceIsAdvisedNothing(t *testing.T) {
 	testkit.Isolate(t)
 	root, elsewhere := t.TempDir(), t.TempDir()
 	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
-	write := func(path string) types.GuardJudgment {
+	write := func(path string) verdict.Judgment {
 		return Judge(ctx, Dependencies{}, Request{Input: path, IsPath: true, Session: "s1", Host: "test-host"})
 	}
 
@@ -893,7 +894,7 @@ const adviceRefLine = "\ndetails: "
 
 // withoutVerdictRef is v as a dry run renders it: the call stores its verdict or advice
 // and cites the ref, and a dry run stores nothing, so it has no ref to cite.
-func withoutVerdictRef(v types.GuardJudgment) types.GuardJudgment {
+func withoutVerdictRef(v verdict.Judgment) verdict.Judgment {
 	v.Reason = withoutRefLine(v.Reason, verdictRefLine)
 	v.Context = withoutRefLine(v.Context, adviceRefLine)
 	return v
@@ -979,7 +980,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		setup func(t *testing.T) (context.Context, Dependencies, Request)
-		want  types.GuardJudgment
+		want  verdict.Judgment
 	}{
 		{
 			name: "a write drifting into a second project",
@@ -996,7 +997,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				}
 				return WithLocation(t.Context(), cacheDir, "/ws", "/ws"), deps, Request{Input: "/ws/app/main.go", IsPath: true, Session: who.Session}
 			},
-			want: types.GuardJudgment{Decision: decisionAdvise, Rule: string(advisoryScopeDrift)},
+			want: verdict.Judgment{Decision: decisionAdvise, Rule: string(advisoryScopeDrift)},
 		},
 		{
 			name: "a once-per-session notice",
@@ -1004,7 +1005,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
 				return ctx, Dependencies{}, Request{Input: "ls", Lease: "finished", Session: "s1"}
 			},
-			want: types.GuardJudgment{Decision: decisionAdvise, Rule: string(advisoryLeaseTerminal), Lease: "finished", LeaseFrom: types.LeaseSourceFlag},
+			want: verdict.Judgment{Decision: decisionAdvise, Rule: string(advisoryLeaseTerminal), Lease: "finished", LeaseFrom: string(types.LeaseSourceFlag)},
 		},
 		{
 			name: "a denied command",
@@ -1012,7 +1013,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				testkit.Isolate(t)
 				return WithLocation(t.Context(), t.TempDir(), "/ws", "/ws"), strict(Dependencies{}), Request{Input: "magus run ci | tail", Session: "s1"}
 			},
-			want: types.GuardJudgment{Decision: decisionDeny},
+			want: verdict.Judgment{Decision: decisionDeny},
 		},
 		{
 			name: "an unregistered worker's first write",
@@ -1025,7 +1026,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				commitCheckout(t, root)
 				return ctx, Dependencies{}, Request{Input: filepath.Join(root, "app", "main.go"), IsPath: true}
 			},
-			want: types.GuardJudgment{Decision: decisionPass, Lease: "worker", LeaseFrom: types.LeaseSourceMarker},
+			want: verdict.Judgment{Decision: decisionPass, Lease: "worker", LeaseFrom: string(types.LeaseSourceMarker)},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1049,7 +1050,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 					assert.NotContains(t, preview.Context, adviceRefLine, "nor any advice")
 					assert.Equal(t, withoutVerdictRef(real), preview)
 					assert.NotEmpty(t, treeChanges(before, treeState(t, dirs...)), "the call itself records something")
-					got := types.GuardJudgment{Decision: real.Decision, Rule: real.Rule, Lease: real.Lease, LeaseFrom: real.LeaseFrom}
+					got := verdict.Judgment{Decision: real.Decision, Rule: real.Rule, Lease: real.Lease, LeaseFrom: real.LeaseFrom}
 					if tc.want.Rule == "" {
 						got.Rule = ""
 					}
@@ -1133,14 +1134,14 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 	}
 	ref := verdictRef.FindString(v.Reason)
 	require.NotEmpty(t, ref, "the first firing cites its stored verdict")
-	require.Equal(t, types.GuardJudgment{
+	require.Equal(t, verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
 		Decision:   decisionDeny,
 		Reason:     fmt.Sprintf("`ls jobs >f` keeps console text, which is not a format anything should parse.\nnext:\n  magus ls jobs -o json --tee f%smagus query output %s", verdictRefLine, ref),
 		Rule:       string(denyRuleOutputRedirect),
 		Lease:      v.Lease, // follows the environment the test ran in
 		LeaseFrom:  v.LeaseFrom,
-		NextSteps:  []types.NextStep{want},
+		NextSteps:  []verdict.NextStep{verdict.NextStep(want)},
 	}, v, "one line plus the next and the verdict ref")
 
 	assert.Equal(t, "deny-output-redirect", servedNextPreauthorizes(hint.NewGate(cacheDir, ""), want.Run))
@@ -1157,7 +1158,7 @@ func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 
 	// The worker first: its firing is the one worded in full.
 	leased := Judge(ctx, deps, Request{Input: piped, Lease: worker.ID})
-	require.Equal(t, types.GuardJudgment{
+	require.Equal(t, verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
 		Decision:   decisionDeny,
 		Reason:     leased.Reason, // the prose is checked by substring below
@@ -1174,7 +1175,7 @@ func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 }
 
 // TestEveryJudgedDecisionNamesItsRule reads Judge itself: a statement setting a verdict to
-// deny, advise or ask must sit where a verdict.Rule assignment covers it, in its own block
+// deny, advise or ask must sit where a judgment.Rule assignment covers it, in its own block
 // or one around it. Recorded verdicts once carried no rule name by the thousand, and
 // the recent ones all came from a site that set the decision and not the name.
 func TestEveryJudgedDecisionNamesItsRule(t *testing.T) {
@@ -1196,7 +1197,7 @@ func TestEveryJudgedDecisionNamesItsRule(t *testing.T) {
 			return false
 		}
 		id, ok := sel.X.(*ast.Ident)
-		return ok && id.Name == "verdict"
+		return ok && id.Name == "judgment"
 	}
 	assignsRule := func(s ast.Stmt) bool {
 		as, ok := s.(*ast.AssignStmt)
@@ -1222,7 +1223,7 @@ func TestEveryJudgedDecisionNamesItsRule(t *testing.T) {
 		for _, s := range list {
 			if decides(s) {
 				checked++
-				assert.True(t, named, "%s sets a decision no verdict.Rule assignment names", fset.Position(s.Pos()))
+				assert.True(t, named, "%s sets a decision no judgment.Rule assignment names", fset.Position(s.Pos()))
 			}
 			ast.Inspect(s, func(n ast.Node) bool {
 				switch b := n.(type) {
@@ -1263,15 +1264,15 @@ func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/%s", string(notice.rule), tt.decision), func(t *testing.T) {
 				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
 				deps := withSetting(string(notice.rule), tt.decision)
-				judge := func() types.GuardJudgment {
+				judge := func() verdict.Judgment {
 					v := Judge(ctx, deps, Request{Input: "ls", Lease: notice.lease, Session: "s1"})
-					return types.GuardJudgment{Decision: v.Decision, Rule: v.Rule}
+					return verdict.Judgment{Decision: v.Decision, Rule: v.Rule}
 				}
-				want := func(decision string) types.GuardJudgment {
+				want := func(decision string) verdict.Judgment {
 					if decision == decisionPass {
-						return types.GuardJudgment{Decision: decisionPass}
+						return verdict.Judgment{Decision: decisionPass}
 					}
-					return types.GuardJudgment{Decision: decision, Rule: string(notice.rule)}
+					return verdict.Judgment{Decision: decision, Rule: string(notice.rule)}
 				}
 
 				assert.Equal(t, want(tt.first), judge())

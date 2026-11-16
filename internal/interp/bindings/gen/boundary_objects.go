@@ -6,6 +6,8 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
@@ -4075,7 +4077,7 @@ func ObjectGuardBinary(v types.GuardBinary) vm.Value {
 	return out
 }
 
-func ObjectGuardVerdict(v types.GuardVerdict, enums ffi.EnumCases) vm.Value {
+func ObjectGuardVerdict(v verdict.Verdict, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("decision", enums.Case("GuardDecision", string(v.Decision)))
 	out.MapSet("reason", vm.StringValue(v.Reason))
@@ -5361,7 +5363,7 @@ func ObjectWriteRequest(v types.WriteRequest, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectStep(v typesagent.Step) vm.Value {
+func ObjectStep(v step.Step) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("apiVersion", vm.StringValue(v.APIVersion))
 	out.MapSet("id", vm.StringValue(v.ID))
@@ -5383,7 +5385,7 @@ func ObjectStep(v typesagent.Step) vm.Value {
 	return out
 }
 
-func ObjectStepRequest(v typesagent.StepRequest) vm.Value {
+func ObjectStepRequest(v step.Request) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("step", ObjectStep(v.Step))
 	itemsCapabilities := make([]vm.Value, len(v.Capabilities))

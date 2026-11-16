@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -238,7 +239,7 @@ func TestDenyRepeatVerify(t *testing.T) {
 		assert.Contains(t, d.Why, "--plan", "and the command that sizes the risk")
 
 		raised := Judge(ctx, Dependencies{Builtins: map[string]builtin.Setting{string(advisoryVerifyRepeat): {Decision: builtin.Deny}}}, Request{Input: gate})
-		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(advisoryVerifyRepeat)}, judgedAs(raised),
+		assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(advisoryVerifyRepeat)}, judgedAs(raised),
 			"Judge reaches the rule through the role-scoped list")
 	})
 	t.Run("a file written after the verdict", func(t *testing.T) {
@@ -951,7 +952,7 @@ func TestWorkerRawTool(t *testing.T) {
 	// run, so worker-check-only answers first, whatever raw-tool is set to.
 	for _, deps := range []Dependencies{{Spells: spellCatalog}, advising(Dependencies{Spells: spellCatalog}, string(denyRuleRawTool))} {
 		v := Judge(ctx, deps, Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
-		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleWorkerCheckOnly)}, judgedAs(v),
+		assert.Equal(t, verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleWorkerCheckOnly)}, judgedAs(v),
 			"Judge names the check: %s", v.Reason)
 	}
 	lowered := withSetting(string(denyRuleWorkerCheckOnly), builtin.Advise)
@@ -1492,7 +1493,7 @@ func TestIdentityLessCallersShareTheCheckoutRecord(t *testing.T) {
 		"a subagent in the checkout": {Input: "ls", Host: "claude-code", Session: "s1", Agent: "a1b2c3"},
 	} {
 		v := Judge(ctx, Dependencies{}, req)
-		got[name] = graded{v.Lease, v.LeaseFrom}
+		got[name] = graded{v.Lease, types.LeaseSource(v.LeaseFrom)}
 	}
 	assert.Equal(t, map[string]graded{
 		"an identity-less hook":      {narrowLease().ID, types.LeaseSourceMarker},
@@ -1503,7 +1504,7 @@ func TestIdentityLessCallersShareTheCheckoutRecord(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(hookLocation(ctx, Dependencies{}).jobs().MarkerPath(), []byte("not a lease id!\n"), 0o644))
 	v := Judge(ctx, Dependencies{}, Request{Input: "ls"})
-	assert.Equal(t, graded{}, graded{v.Lease, v.LeaseFrom}, "a record that does not read binds nobody")
+	assert.Equal(t, graded{}, graded{v.Lease, types.LeaseSource(v.LeaseFrom)}, "a record that does not read binds nobody")
 	assert.Equal(t, decisionPass, v.Decision)
 }
 
@@ -2995,7 +2996,7 @@ func TestABindingToARemovedRowIsATombstone(t *testing.T) {
 	b := boundJob(who, at)
 	assert.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
 	// sed-in-place lowered, so the line reaches the binding's own refusal.
-	judge := func(command string) types.GuardJudgment {
+	judge := func(command string) verdict.Judgment {
 		return Judge(ctx, advising(Dependencies{}, string(denyRuleSedInPlace)), Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
 	}
 	assert.NotEqual(t, decisionDeny, judge("sed -n 1,5p x").Decision, "a read")

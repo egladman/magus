@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -92,23 +93,23 @@ func registerVerdictMembers(ctx context.Context, sess *buzz.Session, obs buzz.Di
 	// One per session, so a rule called on every hook reads the enum cases once.
 	enums := ffi.SessionEnums(ctx, sess, "magus")
 	guardMap.MapSet("allow", directVal(obs, "magus.guard.allow", func(context.Context, []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectGuardVerdict(types.GuardVerdict{Decision: types.GuardAllow}, enums), nil
+		return bindgen.ObjectGuardVerdict(verdict.Verdict{Decision: verdict.Allow}, enums), nil
 	}))
-	for _, decision := range []types.GuardDecision{types.GuardAdvise, types.GuardDeny} {
+	for _, decision := range []verdict.Decision{verdict.Advise, verdict.Deny} {
 		member := string(decision)
 		guardMap.MapSet(member, directVal(obs, "magus.guard."+member, func(_ context.Context, args []vm.Value) (vm.Value, error) {
 			if len(args) < 1 || len(args) > 2 || !args[0].IsString() || strings.TrimSpace(args[0].AsString()) == "" {
 				return vm.Null, fmt.Errorf(`magus\guard.%s: expected the text the agent is shown, a non-empty string, and an optional {rule: str}`, member)
 			}
-			verdict := types.GuardVerdict{Decision: decision, Reason: args[0].AsString()}
+			answer := verdict.Verdict{Decision: decision, Reason: args[0].AsString()}
 			if len(args) == 2 {
 				rule, err := verdictRuleOpt(member, args[1])
 				if err != nil {
 					return vm.Null, err
 				}
-				verdict.Rule = rule
+				answer.Rule = rule
 			}
-			return bindgen.ObjectGuardVerdict(verdict, enums), nil
+			return bindgen.ObjectGuardVerdict(answer, enums), nil
 		}))
 	}
 	guardMap.MapSet("once", directVal(obs, "magus.guard.once", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
@@ -163,7 +164,7 @@ func verdictRuleOpt(member string, arg vm.Value) (string, error) {
 			return "", fmt.Errorf(`magus\guard.%s: unknown opts field %q`, member, k)
 		}
 	}
-	if err := types.ValidateGuardRuleName(rule); err != nil {
+	if err := verdict.ValidateRuleName(rule); err != nil {
 		return "", types.DiagnosticErrorf(types.GuardRuleMisdeclared, `magus\guard.%s: %v`, member, err)
 	}
 	return rule, nil
@@ -209,62 +210,62 @@ func ruleFactsArg(ctx context.Context, member string, args []vm.Value) (hint.Gat
 // holds because registration kept the session's values for the registry (see
 // registerFunctionRule), and CallValue runs each call on a fresh VM under the
 // caller's context, over the globals the load left behind.
-func callFunctionRule(ctx context.Context, sess *buzz.Session, rule vm.Value, member string, req vm.Value, facts hint.Gate) (verdict types.GuardVerdict, err error) {
+func callFunctionRule(ctx context.Context, sess *buzz.Session, rule vm.Value, member string, req vm.Value, facts hint.Gate) (answer verdict.Verdict, err error) {
 	name := `magus\guard.` + member
 	// Workspace code runs on every call the guard judges; an interpreter fault inside it
 	// must reach the guard as an error, as a raise does, rather than take the hook process
 	// down. The guard denies the gated verbs while a rule raises.
 	defer func() {
 		if r := recover(); r != nil {
-			verdict, err = types.GuardVerdict{}, fmt.Errorf(`%s: the rule faulted the interpreter: %v`, name, r)
+			answer, err = verdict.Verdict{}, fmt.Errorf(`%s: the rule faulted the interpreter: %v`, name, r)
 		}
 	}()
 	ctx = context.WithValue(ctx, ruleFactsKey{}, facts)
 	rv, err := sess.CallValue(ctx, rule, []vm.Value{req})
 	if err != nil {
-		return types.GuardVerdict{}, fmt.Errorf(`%s: the rule raised: %w`, name, err)
+		return verdict.Verdict{}, fmt.Errorf(`%s: the rule raised: %w`, name, err)
 	}
 	return decodeGuardVerdict(name, rv)
 }
 
 // decodeGuardVerdict reads a rule's answer. MapView rather than IsMap, because a
 // GuardVerdict built as an object literal is an instance, not a map.
-func decodeGuardVerdict(name string, v vm.Value) (types.GuardVerdict, error) {
+func decodeGuardVerdict(name string, v vm.Value) (verdict.Verdict, error) {
 	fields, ok := v.MapView()
 	if !ok {
-		return types.GuardVerdict{}, fmt.Errorf(`%s: the rule returned %s, not a GuardVerdict, return magus\guard.allow(), magus\guard.advise(text) or magus\guard.deny(text)`, name, v.Kind())
+		return verdict.Verdict{}, fmt.Errorf(`%s: the rule returned %s, not a GuardVerdict, return magus\guard.allow(), magus\guard.advise(text) or magus\guard.deny(text)`, name, v.Kind())
 	}
-	var out types.GuardVerdict
+	var out verdict.Verdict
 	if d, ok := fields.MapGet("decision"); ok && !d.IsNull() {
 		if backing, isEnum := d.EnumValue(); isEnum {
 			d = backing
 		}
 		if !d.IsString() {
-			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's decision is %s, not a GuardDecision`, name, d.Kind())
+			return verdict.Verdict{}, fmt.Errorf(`%s: the verdict's decision is %s, not a GuardDecision`, name, d.Kind())
 		}
 		if err := out.Decision.UnmarshalText([]byte(d.AsString())); err != nil {
-			return types.GuardVerdict{}, fmt.Errorf(`%s: %w`, name, err)
+			return verdict.Verdict{}, fmt.Errorf(`%s: %w`, name, err)
 		}
 	}
 	if r, ok := fields.MapGet("reason"); ok && !r.IsNull() {
 		if !r.IsString() {
-			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's reason is %s, not a str`, name, r.Kind())
+			return verdict.Verdict{}, fmt.Errorf(`%s: the verdict's reason is %s, not a str`, name, r.Kind())
 		}
 		out.Reason = strings.TrimSpace(r.AsString())
 	}
 	if r, ok := fields.MapGet("rule"); ok && !r.IsNull() {
 		if !r.IsString() {
-			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's rule is %s, not a str`, name, r.Kind())
+			return verdict.Verdict{}, fmt.Errorf(`%s: the verdict's rule is %s, not a str`, name, r.Kind())
 		}
 		// A literal GuardVerdict skips deny's check, and an empty rule is the unnamed default.
 		if out.Rule = r.AsString(); out.Rule != "" {
-			if err := types.ValidateGuardRuleName(out.Rule); err != nil {
-				return types.GuardVerdict{}, types.DiagnosticErrorf(types.GuardRuleMisdeclared, `%s: %v`, name, err)
+			if err := verdict.ValidateRuleName(out.Rule); err != nil {
+				return verdict.Verdict{}, types.DiagnosticErrorf(types.GuardRuleMisdeclared, `%s: %v`, name, err)
 			}
 		}
 	}
-	if (out.Decision == types.GuardDeny || out.Decision == types.GuardAdvise) && out.Reason == "" {
-		return types.GuardVerdict{}, fmt.Errorf(`%s: the rule returned %s with no reason, which tells the agent nothing`, name, out.Decision)
+	if (out.Decision == verdict.Deny || out.Decision == verdict.Advise) && out.Reason == "" {
+		return verdict.Verdict{}, fmt.Errorf(`%s: the rule returned %s with no reason, which tells the agent nothing`, name, out.Decision)
 	}
 	return out, nil
 }

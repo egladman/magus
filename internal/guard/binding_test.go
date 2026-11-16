@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 )
@@ -46,7 +47,7 @@ func (s *ExitedHolderBindingSuite) SetupTest() {
 }
 
 // judge runs command as the holder, or as its root session when byRoot.
-func (s *ExitedHolderBindingSuite) judge(command string, byRoot bool) types.GuardJudgment {
+func (s *ExitedHolderBindingSuite) judge(command string, byRoot bool) verdict.Judgment {
 	by := s.who
 	if byRoot {
 		by.Agent = ""

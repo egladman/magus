@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // denyRulePersonAdvisory names a stop the guard holds to show a person's
@@ -44,8 +44,8 @@ func directiveNote(err error) string {
 
 // adviseMessage answers a person's prompt. The prompt carries an open
 // advisory only where the wiring renders context; elsewhere the stop does.
-func adviseMessage(ctx context.Context, at location, who hookAttribution, rendersContext bool) types.GuardJudgment {
-	v := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+func adviseMessage(ctx context.Context, at location, who hookAttribution, rendersContext bool) verdict.Judgment {
+	v := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	if !rendersContext {
 		return v
 	}
@@ -71,7 +71,7 @@ func endsRootTurn(raw string, who hookAttribution) bool {
 
 // adviseStop holds a root stop that v lets through, to show the session the
 // advisories it has not seen. A stop v already holds shows them next time.
-func adviseStop(ctx context.Context, at location, who hookAttribution, raw string, v types.GuardJudgment) types.GuardJudgment {
+func adviseStop(ctx context.Context, at location, who hookAttribution, raw string, v verdict.Judgment) verdict.Judgment {
 	if v.Decision == decisionDeny || !endsRootTurn(raw, who) {
 		return v
 	}

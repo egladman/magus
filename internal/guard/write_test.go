@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
@@ -1074,7 +1075,7 @@ func TestGradeLeasedWriteNamesHowToReleaseAnOwner(t *testing.T) {
 // second lease is a second fact, and a second session has heard nothing.
 func TestLeasedPathAdvisesOncePerSessionPerLease(t *testing.T) {
 	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
-	write := func(session, rel string) types.GuardJudgment {
+	write := func(session, rel string) verdict.Judgment {
 		return Judge(ctx, Dependencies{}, Request{Input: filepath.Join(root, rel), IsPath: true, Session: session, Host: "test-host"})
 	}
 
@@ -1443,7 +1444,7 @@ func TestJudgeGradesWriteAndEditInTheCheckoutTheLeasesForkMade(t *testing.T) {
 		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1, Authority: "rev-a",
 		CheckoutRoot: session, Worktree: &types.JobWorktree{Root: own, Source: session}}
 	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{row}})
-	judge := func(tool string, input map[string]any) types.GuardJudgment {
+	judge := func(tool string, input map[string]any) verdict.Judgment {
 		return Judge(ctx, Dependencies{}, Request{Host: "claude-code", Lease: "w", Input: hookJSON(t, map[string]any{
 			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": tool, "cwd": session,
 			"tool_input": input,
@@ -1514,7 +1515,7 @@ func TestASoftPathItsHolderWroteIsOwned(t *testing.T) {
 		Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: root})
-	write := func(session string) types.GuardJudgment {
+	write := func(session string) verdict.Judgment {
 		return Judge(ctx, Dependencies{}, Request{Input: filepath.Join(root, rel), IsPath: true, Session: session, Host: "test-host"})
 	}
 
@@ -1590,7 +1591,7 @@ func (s *UnboundWriteInJobCheckoutSuite) pin(state types.JobState) {
 
 // write is an editor Write of path by agent, or by the root session when
 // agent is "".
-func (s *UnboundWriteInJobCheckoutSuite) write(agent, path string) types.GuardJudgment {
+func (s *UnboundWriteInJobCheckoutSuite) write(agent, path string) verdict.Judgment {
 	env := map[string]any{"session_id": "8f2c6a1e", "cwd": s.session, "hook_event_name": "PreToolUse",
 		"tool_name": "Write", "tool_input": map[string]any{"file_path": path, "content": "package std\n"}}
 	if agent != "" {
@@ -1603,7 +1604,7 @@ func (s *UnboundWriteInJobCheckoutSuite) TestUnboundSubagentWriteInAJobMadeCheck
 	v := s.write("a1b2c3", filepath.Join(s.own, "std", "module.go"))
 	got := withoutVolatile(v)
 	got.Lease = ""
-	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite)}, got)
+	s.Equal(verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite)}, got)
 }
 
 func (s *UnboundWriteInJobCheckoutSuite) TestDenyNamesTheJobAndJobExec() {
@@ -1668,7 +1669,7 @@ func (s *UnboundWriteInJobCheckoutSuite) TestDenyOtherCheckoutLeavesTheLeasesOwn
 }
 
 // write is the holder's editor Write of path, from a session rooted at cwd.
-func (s *ExitedHolderBindingSuite) write(cwd, path string) types.GuardJudgment {
+func (s *ExitedHolderBindingSuite) write(cwd, path string) verdict.Judgment {
 	input := hookJSON(s.T(), map[string]any{"session_id": s.who.Session, "cwd": cwd, "hook_event_name": "PreToolUse",
 		"agent_id": s.who.Agent, "agent_type": "general-purpose",
 		"tool_name": "Write", "tool_input": map[string]any{"file_path": path, "content": "package x\n"}})
@@ -1678,7 +1679,7 @@ func (s *ExitedHolderBindingSuite) write(cwd, path string) types.GuardJudgment {
 func (s *ExitedHolderBindingSuite) TestWriteOutsidePathsAfterOwnExitIsDenied() {
 	s.exitOwnJob()
 	v := s.write(s.root, filepath.Join(s.root, "cmd", "magus", "main.go"))
-	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite), Lease: heldJob}, withoutVolatile(v), "the exited row still grades the write")
+	s.Equal(verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleLeaseWrite), Lease: heldJob}, withoutVolatile(v), "the exited row still grades the write")
 }
 
 func (s *ExitedHolderBindingSuite) TestWriteInsidePathsAfterOwnExitPasses() {
@@ -1717,7 +1718,7 @@ func (s *ExitedHolderBindingSuite) TestEditIntoTheJobCheckoutAfterOwnExitIsDenie
 }
 
 // withoutVolatile drops the fields of v that vary between runs.
-func withoutVolatile(v types.GuardJudgment) types.GuardJudgment {
+func withoutVolatile(v verdict.Judgment) verdict.Judgment {
 	v.APIVersion, v.Reason, v.Context, v.LeaseFrom, v.NextSteps = "", "", "", "", nil
 	return v
 }

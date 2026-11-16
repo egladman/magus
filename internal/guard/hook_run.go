@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -32,7 +33,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	// A deadline the handing magus spent is answered as a deny, never as an exit: a host
 	// reads a failed guard as no verdict. --observe and --message carry no verdict to deny.
 	if deadlineErr != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
-		verdict := types.GuardJudgment{
+		verdict := verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion,
 			Decision:   "deny",
 			Reason:     fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. Retry it.", deadlineErr.Error()),
@@ -54,7 +55,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	// exempt because they carry no verdict: there is nothing to fail closed about, and
 	// the documented contract is that they always exit 0.
 	if readError != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
-		verdict := types.GuardJudgment{
+		verdict := verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion,
 			Decision:   "deny",
 			// "from stdin" is accurate whichever way this command is called: an operand
@@ -85,7 +86,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	if cause := cmp.Or(envRefusal, staleConfig); cause != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		root, _ := e.FindRoot(judgeRoot)
 		answer, reason := UnjudgedEvent(root, input, cause)
-		verdict := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: answer.Decision(), Reason: reason, Rule: answer.Rule()}
+		verdict := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: answer.Decision(), Reason: reason, Rule: answer.Rule()}
 		if verdict.Decision == "advise" {
 			verdict.Reason, verdict.Context = "", reason
 		}
@@ -129,7 +130,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	limits, known, refusal := e.applyHostFacts(ctx, &req)
 	if refusal != nil {
 		if !sf.Observe && !sf.Message && sf.Duration == 0 {
-			verdict := types.GuardJudgment{
+			verdict := verdict.Judgment{
 				APIVersion: agent.GuardAPIVersion,
 				Decision:   "deny",
 				Reason: fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared.\nNext: %s",
@@ -155,7 +156,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	ctx, finishSnapshot := WithPolicySnapshotWrite(ctx)
 	// The rules load inside the bound too: a magusfile's imports parse to the end however
 	// long they take.
-	verdict := JudgeWithin(ctx, base, req, func(ctx context.Context) types.GuardJudgment {
+	verdict := JudgeWithin(ctx, base, req, func(ctx context.Context) verdict.Judgment {
 		// The hook ignores --root and loads no workspace up front: the one it judges in is
 		// wherever the host runs it, or a checkout whose own ./magus was passed over and whose
 		// tree this binary cannot load, so its stale-binary rule refuses what changes state.

@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -316,7 +317,7 @@ func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
 		Billing:        types.AgentBillingMetered,
 		DelegableClass: types.DelegableSearch,
 		ResultChars:    &chars,
-		Shadow:         map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny, types.GuardProfileLight: types.GuardAllow},
+		Shadow:         map[types.GuardProfile]verdict.Decision{types.GuardProfileStrict: verdict.Deny, types.GuardProfileLight: verdict.Allow},
 	}
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Command: "grep x", Decision: "pass", AgentFacts: want})
 

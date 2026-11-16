@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -372,16 +373,16 @@ func TestJudgedBySuite(t *testing.T) {
 }
 
 func (s *JudgedBySuite) TestADenyNamesItsJudge() {
-	got := judgedBy(types.GuardJudgment{Decision: "deny", Reason: "no"}, "Judged by /c/magus.")
+	got := judgedBy(verdict.Judgment{Decision: "deny", Reason: "no"}, "Judged by /c/magus.")
 	s.Equal("no\nJudged by /c/magus.", got.Reason)
 }
 
 func (s *JudgedBySuite) TestAnAdviseNamesItsJudge() {
-	got := judgedBy(types.GuardJudgment{Decision: "advise", Context: "see"}, "Judged by /c/magus.")
+	got := judgedBy(verdict.Judgment{Decision: "advise", Context: "see"}, "Judged by /c/magus.")
 	s.Equal("see\nJudged by /c/magus.", got.Context)
 }
 
 func (s *JudgedBySuite) TestAPassCarriesNoText() {
-	got := judgedBy(types.GuardJudgment{Decision: "pass"}, "Judged by /c/magus.")
-	s.Equal(types.GuardJudgment{Decision: "pass"}, got)
+	got := judgedBy(verdict.Judgment{Decision: "pass"}, "Judged by /c/magus.")
+	s.Equal(verdict.Judgment{Decision: "pass"}, got)
 }

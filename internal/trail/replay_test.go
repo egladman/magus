@@ -2,6 +2,7 @@ package trail
 
 import (
 	"context"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types/diff"
 	"testing"
 	"time"
@@ -276,7 +277,7 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 
 func TestForSessionReturnsEachCallsCostFacts(t *testing.T) {
 	base := t.TempDir()
-	shadow := map[types.GuardProfile]types.GuardDecision{types.GuardProfileStandard: types.GuardAdvise}
+	shadow := map[types.GuardProfile]verdict.Decision{types.GuardProfileStandard: verdict.Advise}
 	advised := types.AgentFacts{
 		Thread: types.AgentThreadMain, ThreadFrom: types.ThreadReported, ContextTokens: 300_000, ContextModel: "claude-opus-5-5",
 		Billing: types.AgentBillingMetered, Shadow: shadow,

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -119,64 +120,64 @@ func TestWorkspaceRegistry_SpawnRuleReplaces(t *testing.T) {
 	r := NewWorkspaceRegistry()
 	assert.Nil(t, r.SpawnRule())
 
-	verdict := func(reason string) SpawnRule {
-		return func(context.Context, types.SpawnRequest, hint.Gate) (types.GuardVerdict, error) {
-			return types.GuardVerdict{Decision: types.GuardDeny, Reason: reason}, nil
+	denying := func(reason string) SpawnRule {
+		return func(context.Context, types.SpawnRequest, hint.Gate) (verdict.Verdict, error) {
+			return verdict.Verdict{Decision: verdict.Deny, Reason: reason}, nil
 		}
 	}
-	r.SetSpawnRule(verdict("first"))
-	r.SetSpawnRule(verdict("second"))
+	r.SetSpawnRule(denying("first"))
+	r.SetSpawnRule(denying("second"))
 	got, err := r.SpawnRule()(context.Background(), types.SpawnRequest{}, hint.Gate{})
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "second"}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "second"}, got)
 }
 
 func TestWorkspaceRegistry_WriteRuleReplaces(t *testing.T) {
 	r := NewWorkspaceRegistry()
 	assert.Nil(t, r.WriteRule())
 
-	verdict := func(reason string) WriteRule {
-		return func(context.Context, types.WriteRequest, hint.Gate) (types.GuardVerdict, error) {
-			return types.GuardVerdict{Decision: types.GuardDeny, Reason: reason}, nil
+	denying := func(reason string) WriteRule {
+		return func(context.Context, types.WriteRequest, hint.Gate) (verdict.Verdict, error) {
+			return verdict.Verdict{Decision: verdict.Deny, Reason: reason}, nil
 		}
 	}
-	r.SetWriteRule(verdict("first"))
-	r.SetWriteRule(verdict("second"))
+	r.SetWriteRule(denying("first"))
+	r.SetWriteRule(denying("second"))
 	got, err := r.WriteRule()(context.Background(), types.WriteRequest{}, hint.Gate{})
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "second"}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "second"}, got)
 }
 
 func TestWorkspaceRegistry_StopRuleReplaces(t *testing.T) {
 	r := NewWorkspaceRegistry()
 	assert.Nil(t, r.StopRule())
 
-	verdict := func(reason string) StopRule {
-		return func(context.Context, types.StopRequest, hint.Gate) (types.GuardVerdict, error) {
-			return types.GuardVerdict{Decision: types.GuardDeny, Reason: reason}, nil
+	denying := func(reason string) StopRule {
+		return func(context.Context, types.StopRequest, hint.Gate) (verdict.Verdict, error) {
+			return verdict.Verdict{Decision: verdict.Deny, Reason: reason}, nil
 		}
 	}
-	r.SetStopRule(verdict("first"))
-	r.SetStopRule(verdict("second"))
+	r.SetStopRule(denying("first"))
+	r.SetStopRule(denying("second"))
 	got, err := r.StopRule()(context.Background(), types.StopRequest{}, hint.Gate{})
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "second"}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "second"}, got)
 }
 
 func TestWorkspaceRegistry_CommandRuleReplaces(t *testing.T) {
 	r := NewWorkspaceRegistry()
 	assert.Nil(t, r.CommandRule())
 
-	verdict := func(reason string) CommandRule {
-		return func(context.Context, types.CommandRequest, hint.Gate) (types.GuardVerdict, error) {
-			return types.GuardVerdict{Decision: types.GuardAdvise, Reason: reason}, nil
+	denying := func(reason string) CommandRule {
+		return func(context.Context, types.CommandRequest, hint.Gate) (verdict.Verdict, error) {
+			return verdict.Verdict{Decision: verdict.Advise, Reason: reason}, nil
 		}
 	}
-	r.SetCommandRule(verdict("first"))
-	r.SetCommandRule(verdict("second"))
+	r.SetCommandRule(denying("first"))
+	r.SetCommandRule(denying("second"))
 	got, err := r.CommandRule()(context.Background(), types.CommandRequest{}, hint.Gate{})
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAdvise, Reason: "second"}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Advise, Reason: "second"}, got)
 }
 
 func TestWorkspaceRegistry_RegisterProject_ProjectPaths(t *testing.T) {

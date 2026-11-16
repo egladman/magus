@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -130,7 +131,7 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row types.J
 		}
 		row.CheckoutRoot = dir
 	}
-	judge := func(pending types.Job) (types.GuardJudgment, bool) {
+	judge := func(pending types.Job) (verdict.Judgment, bool) {
 		return JudgeLapsed(ctx, deps, Request{
 			Input:      ownBinaryPrefix + workerCheckLine(*pending.Check),
 			DryRun:     true,
@@ -139,14 +140,14 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row types.J
 			Dir:        dir,
 		})
 	}
-	deferLapse := func(v types.GuardJudgment) job.CheckVerdict {
+	deferLapse := func(v verdict.Judgment) job.CheckVerdict {
 		first, _, _ := strings.Cut(strings.TrimSpace(v.Reason), "\n")
 		why := fmt.Sprintf("the guard ran out of time grading it: %s", first)
 		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it: %s", row.Check, why), attr.Unchecked())
 		return job.CheckVerdict{Deferred: why}
 	}
 	declared, lapsed := judge(row)
-	if declared.Decision != string(types.GuardDeny) {
+	if declared.Decision != string(verdict.Deny) {
 		return job.CheckVerdict{}
 	}
 	if lapsed {
@@ -156,10 +157,10 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row types.J
 	compiling := job.CompilingCheck()
 	baseline.Check = &compiling
 	baselineVerdict, lapsed := judge(baseline)
-	if baselineVerdict.Decision == string(types.GuardDeny) && lapsed {
+	if baselineVerdict.Decision == string(verdict.Deny) && lapsed {
 		return deferLapse(baselineVerdict)
 	}
-	if baselineVerdict.Decision == string(types.GuardDeny) {
+	if baselineVerdict.Decision == string(verdict.Deny) {
 		first, _, _ := strings.Cut(strings.TrimSpace(baselineVerdict.Reason), "\n")
 		return job.CheckVerdict{NotGraded: fmt.Sprintf("the guard denies this worker `%s` as well, so the deny describes the binary or the workspace and not the check: %s", compiling, first)}
 	}

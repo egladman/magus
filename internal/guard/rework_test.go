@@ -7,6 +7,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
@@ -149,7 +150,7 @@ func (s *ContinueToExitedWorkerSuite) SetupTest() {
 	Judge(s.f.testContext(s.T()), Dependencies{}, Request{Input: finishedSpawn(s.T(), reworkTitle, "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
 }
 
-func (s *ContinueToExitedWorkerSuite) continueWorker(state types.JobState) types.GuardJudgment {
+func (s *ContinueToExitedWorkerSuite) continueWorker(state types.JobState) verdict.Judgment {
 	s.f.putJob(s.T(), state)
 	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
 		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Widen with job apply and fix the review comments."},"tool_use_id":"toolu_02"}`

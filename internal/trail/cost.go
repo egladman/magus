@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -123,17 +124,17 @@ func (a advisoryOutcome) Ignored() int { return a.Given - a.Followed }
 // shadowTally is what one profile would have decided across the main thread's calls,
 // whatever profile was in force, counted by decision.
 type shadowTally struct {
-	Profile   types.GuardProfile          `json:"profile"`
-	Decisions map[types.GuardDecision]int `json:"decisions"`
+	Profile   types.GuardProfile       `json:"profile"`
+	Decisions map[verdict.Decision]int `json:"decisions"`
 }
 
 // String renders t as its profile and a count of every decision: allow, advise and deny
 // always, then any other decision recorded.
 func (t shadowTally) String() string {
-	declared := types.GuardDecision("").Values()
+	declared := verdict.Decision("").Values()
 	counts := make([]string, 0, len(declared)+len(t.Decisions))
 	for _, d := range declared {
-		counts = append(counts, fmt.Sprintf("%d %s", t.Decisions[types.GuardDecision(d)], d))
+		counts = append(counts, fmt.Sprintf("%d %s", t.Decisions[verdict.Decision(d)], d))
 	}
 	for _, d := range slices.Sorted(maps.Keys(t.Decisions)) {
 		if !slices.Contains(declared, string(d)) {
@@ -294,7 +295,7 @@ func sumDelegable(main []SessionCall) *delegableShare {
 func tallyAdvisories(main []SessionCall, spawns []costSpawn) *advisoryOutcome {
 	out := &advisoryOutcome{Within: followWithin}
 	for i, call := range main {
-		if call.Decision != string(types.GuardAdvise) || !slices.Contains(costAdviceRules, call.Rule) {
+		if call.Decision != string(verdict.Advise) || !slices.Contains(costAdviceRules, call.Rule) {
 			continue
 		}
 		out.Given++
@@ -314,13 +315,13 @@ func tallyAdvisories(main []SessionCall, spawns []costSpawn) *advisoryOutcome {
 // tallyShadow tallies each profile's decisions across the main thread's calls. An unset
 // decision is an allow, as a rule's zero verdict is.
 func tallyShadow(main []SessionCall) []shadowTally {
-	byProfile := map[types.GuardProfile]map[types.GuardDecision]int{}
+	byProfile := map[types.GuardProfile]map[verdict.Decision]int{}
 	for _, call := range main {
 		for p, d := range call.Shadow {
 			if byProfile[p] == nil {
-				byProfile[p] = map[types.GuardDecision]int{}
+				byProfile[p] = map[verdict.Decision]int{}
 			}
-			byProfile[p][cmp.Or(d, types.GuardAllow)]++
+			byProfile[p][cmp.Or(d, verdict.Allow)]++
 		}
 	}
 	if len(byProfile) == 0 {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -35,11 +36,11 @@ func (s *GradeCheckSuite) TestAWorkspaceThatDidNotLoadDefersTheGrade() {
 }
 
 func (s *GradeCheckSuite) TestARealDenyStillRefuses() {
-	denies := func(_ context.Context, req types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	denies := func(_ context.Context, req types.CommandRequest, _ hint.Gate) (verdict.Verdict, error) {
 		if strings.Contains(req.Command, "go-build") {
-			return types.GuardVerdict{Decision: types.GuardDeny, Reason: "no builds"}, nil
+			return verdict.Verdict{Decision: verdict.Deny, Reason: "no builds"}, nil
 		}
-		return types.GuardVerdict{}, nil
+		return verdict.Verdict{}, nil
 	}
 
 	verdict := gradeCheck(s.T().Context(), Dependencies{CommandRule: denies}, s.T().TempDir(), s.row)

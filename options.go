@@ -4,8 +4,9 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // WithJobReader has the guard's lease rules read jobs from r in place of
@@ -20,7 +21,7 @@ func WithJobReader(r types.JobReader) Option {
 // spec covers is denied. Open fails on a malformed spec, and on a spec that
 // is not inert when no built-in rule, StepRule or magus\guard.step rule
 // for its kind judges it. Repeated options add specs.
-func WithStepSpecs(specs ...agent.StepSpec) Option {
+func WithStepSpecs(specs ...step.Spec) Option {
 	return sdkOption("WithStepSpecs", func(o *options) { o.stepSpecs = append(o.stepSpecs, specs...) })
 }
 
@@ -29,7 +30,7 @@ func WithStepSpecs(specs ...agent.StepSpec) Option {
 // It is called for every step, whatever its kind, and the strictest
 // decision wins. An error means it judged nothing, and Judge returns it.
 // A verdict reports under step:<rule>, or step:<kind> with no rule named.
-type StepRule func(ctx context.Context, req agent.StepRequest) (types.GuardVerdict, error)
+type StepRule func(ctx context.Context, req step.Request) (verdict.Verdict, error)
 
 // WithStepRule adds rule to the ones Judge runs, in the order given. Open
 // fails on a nil rule.

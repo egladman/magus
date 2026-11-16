@@ -6,6 +6,10 @@
 //
 //   - budget: the slot limiter, machine-wide memory and slot claims, and the verdicts
 //     an arbiter answers them with.
+//   - step: one thing a program is about to do, as data, and the spec that declares
+//     each kind of step.
+//   - verdict: what a rule answers about a call, the stricter-of merge, and the
+//     judgment a caller reads.
 //
 // Nothing in the module reads the environment, writes to stdout or stderr, or keeps
 // process-wide state; each store opens on a directory its caller names. The module

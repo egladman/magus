@@ -7,7 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -148,13 +148,13 @@ func TestSplitRunAcrossCallsFiresOncePerSession(t *testing.T) {
 func TestSplitRunRaisedToDenyRefusesEveryFiring(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	deps := withSetting(string(advisorySplitRun), builtin.Deny)
-	judge := func(input string) types.GuardJudgment {
+	judge := func(input string) verdict.Judgment {
 		v := Judge(ctx, deps, Request{Input: input, Host: "test-host", Session: "s1"})
-		return types.GuardJudgment{Decision: v.Decision, Rule: v.Rule}
+		return verdict.Judgment{Decision: v.Decision, Rule: v.Rule}
 	}
-	refused := types.GuardJudgment{Decision: "deny", Rule: string(advisorySplitRun)}
+	refused := verdict.Judgment{Decision: "deny", Rule: string(advisorySplitRun)}
 
-	assert.Equal(t, types.GuardJudgment{Decision: "pass"}, judge("magus run lint ."), "a first call has nothing to compare against")
+	assert.Equal(t, verdict.Judgment{Decision: "pass"}, judge("magus run lint ."), "a first call has nothing to compare against")
 	assert.Equal(t, refused, judge("magus run lint docs"))
 	assert.Equal(t, refused, judge("magus run lint web"), "the second firing refuses too")
 }

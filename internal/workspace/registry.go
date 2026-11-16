@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -83,19 +84,19 @@ type ShellRule struct {
 //
 // An error means the rule itself failed (it raised, returned something that is not a
 // verdict, or ran out of time), never that it denied: a deny is a verdict.
-type SpawnRule func(ctx context.Context, req types.SpawnRequest, facts hint.Gate) (types.GuardVerdict, error)
+type SpawnRule func(ctx context.Context, req types.SpawnRequest, facts hint.Gate) (verdict.Verdict, error)
 
 // CommandRule judges one agent shell command for magus\guard.command, with the same
 // facts and error contract as SpawnRule.
-type CommandRule func(ctx context.Context, req types.CommandRequest, facts hint.Gate) (types.GuardVerdict, error)
+type CommandRule func(ctx context.Context, req types.CommandRequest, facts hint.Gate) (verdict.Verdict, error)
 
 // WriteRule judges one agent file write for magus\guard.write, with the same facts and
 // error contract as SpawnRule.
-type WriteRule func(ctx context.Context, req types.WriteRequest, facts hint.Gate) (types.GuardVerdict, error)
+type WriteRule func(ctx context.Context, req types.WriteRequest, facts hint.Gate) (verdict.Verdict, error)
 
 // StopRule judges one agent stop event for magus\guard.stop, with the same facts and error
 // contract as SpawnRule.
-type StopRule func(ctx context.Context, req types.StopRequest, facts hint.Gate) (types.GuardVerdict, error)
+type StopRule func(ctx context.Context, req types.StopRequest, facts hint.Gate) (verdict.Verdict, error)
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
 func NewWorkspaceRegistry() *WorkspaceRegistry {

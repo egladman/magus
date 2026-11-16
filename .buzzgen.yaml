@@ -40,6 +40,17 @@ packages:
       Code:
         config:
           open: a workspace mints its own codes through magus\raise beside magus's catalog
+  github.com/egladman/magus/libs/safetyscissors/step:
+    # Buzz keeps the names the types had in types/agent.
+    config: {module: magus/agent}
+    types:
+      Request: {config: {name: StepRequest}}
+  github.com/egladman/magus/libs/safetyscissors/verdict:
+    # Buzz keeps the names the types had in types.
+    config: {module: ""}
+    types:
+      Decision: {config: {name: GuardDecision}}
+      Verdict: {config: {name: GuardVerdict}}
   github.com/egladman/magus/spells:
     types:
       CoverageFormat: {config: {cases: {"go-coverprofile": goProfile}}}

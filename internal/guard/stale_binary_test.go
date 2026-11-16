@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -40,14 +41,14 @@ func declareGuardRule(t *testing.T, root string) {
 }
 
 // judgeUnloaded judges line in a session of its own, so each deny is a first firing.
-func judgeUnloaded(ctx context.Context, deps Dependencies, line string) types.GuardJudgment {
+func judgeUnloaded(ctx context.Context, deps Dependencies, line string) verdict.Judgment {
 	return Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: line})
 }
 
 // shortDeny asserts the inline shape of a first firing under rule: the verdict opening
 // with say, nothing but the nothing-ran note between it and the ref, and no served next.
 // It returns the full verdict stored behind the ref.
-func shortDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyRuleName, say string) string {
+func shortDeny(t *testing.T, cacheDir string, v verdict.Judgment, rule denyRuleName, say string) string {
 	t.Helper()
 	assert.Equal(t, verdictWithRule(decisionDeny, string(rule)), unworded(v))
 	ref := verdictRef.FindString(v.Reason)
@@ -65,10 +66,10 @@ func shortDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyRu
 
 // servedDeny is shortDeny for a deny that serves next: the one command sits between the
 // verdict and the ref, and is the verdict's only served next.
-func servedDeny(t *testing.T, cacheDir string, v types.GuardJudgment, rule denyRuleName, say string, next types.NextStep) string {
+func servedDeny(t *testing.T, cacheDir string, v verdict.Judgment, rule denyRuleName, say string, next types.NextStep) string {
 	t.Helper()
 	require.Len(t, v.NextSteps, 1, v.Reason)
-	assert.Equal(t, next, v.NextSteps[0])
+	assert.Equal(t, verdict.NextStep(next), v.NextSteps[0])
 	v.NextSteps = nil
 	assert.Equal(t, verdictWithRule(decisionDeny, string(rule)), unworded(v))
 	shown, cited, ok := strings.Cut(v.Reason, "\ndetails: ")
@@ -269,7 +270,7 @@ func (s *StaleBinaryRemedySuite) SetupTest() {
 	s.deps = unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 }
 
-func (s *StaleBinaryRemedySuite) worker(session, line string) types.GuardJudgment {
+func (s *StaleBinaryRemedySuite) worker(session, line string) verdict.Judgment {
 	return Judge(s.layers.of(s.T()), s.deps, Request{Input: line, Host: "claude-code", Session: session, Lease: "lease-a"})
 }
 
@@ -309,7 +310,7 @@ func TestStaleBinaryLetsAWorkerFastForwardToItsBinary(t *testing.T) {
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
 	deps := unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
-	judge := func(session, line string) types.GuardJudgment {
+	judge := func(session, line string) verdict.Judgment {
 		return Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: session, Lease: "lease-a"})
 	}
 
@@ -811,7 +812,7 @@ func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
 	want := verdictWithRule(decisionDeny, string(denyRuleStaleBinary))
 	next, ok := placementNext(root, denyRuleStaleBinary, "lease-a")
 	require.True(t, ok)
-	want.NextSteps = []types.NextStep{next}
+	want.NextSteps = []verdict.NextStep{verdict.NextStep(next)}
 	assert.Equal(t, want, unworded(worker))
 	assert.Contains(t, worker.Reason, "ask the main session to place a ./magus")
 	assert.NotContains(t, worker.Reason, ward.RelinkAt(root))
@@ -1038,7 +1039,7 @@ func (s *LoadRecoverySuite) pin(checkpoint string) func(context.Context) context
 	return snapshotLayer(job.Snapshot{Rows: []types.Job{row}})
 }
 
-func (s *LoadRecoverySuite) judge(line string) types.GuardJudgment {
+func (s *LoadRecoverySuite) judge(line string) verdict.Judgment {
 	return Judge(s.testContext(), s.deps, Request{Input: line, Host: "claude-code", Session: line})
 }
 

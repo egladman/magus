@@ -13,8 +13,9 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -325,7 +326,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 		Commands: []types.CommandInvocation{{Program: "gh", Args: []string{"run", "watch", "1"}}},
 	}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "claude-code|watch ci|root||||gh(run,watch,1);"}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "claude-code|watch ci|root||||gh(run,watch,1);"}, got)
 
 	got, err = rule(t.Context(), types.CommandRequest{
 		Host: "codex", Command: "while true; do make; done", Role: types.AgentRoleWorker,
@@ -335,8 +336,8 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 		Commands: []types.CommandInvocation{{Program: "true", Repeats: true}, {Program: "make", Repeats: true}},
 	}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{
-		Decision: types.GuardAdvise,
+	assert.Equal(t, verdict.Verdict{
+		Decision: verdict.Advise,
 		Reason:   "codex||worker|guard-command|orchestrator/feat guard-command|a534fcfe|true()@loop;make()@loop;",
 	}, got)
 }
@@ -358,7 +359,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 		Commands: []types.CommandInvocation{{Program: "magus", Path: "/w/a/magus", Args: []string{"ls"}}},
 	}, hint.NewGate(t.TempDir(), "claude-code/s1"))
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAdvise, Reason: "/w/b/sub|/w/b|/w/a/magus|true|" + buildStamp}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Advise, Reason: "/w/b/sub|/w/b|/w/a/magus|true|" + buildStamp}, got)
 }
 
 // once and count are one store for both rules, so a key means one thing to the policy.
@@ -477,7 +478,7 @@ func TestSpawnRuleSeesTheRequestAfterTheLoadCloses(t *testing.T) {
 		Kind: types.SpawnKindSpawn, Host: "claude-code", Role: types.AgentRoleRoot,
 	}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "spawn|claude-code||root|||"}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "spawn|claude-code||root|||"}, got)
 
 	idle := int64(90_000)
 	got, err = rule(t.Context(), types.SpawnRequest{
@@ -487,8 +488,8 @@ func TestSpawnRuleSeesTheRequestAfterTheLoadCloses(t *testing.T) {
 		Parent: "orchestrator/brisk-heron/implement adr 0002",
 	}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{
-		Decision: types.GuardAdvise,
+	assert.Equal(t, verdict.Verdict{
+		Decision: verdict.Advise,
 		Reason:   "continue|claude-code|sonnet|worker|guard-spawn|auditor|orchestrator/brisk-heron/implement adr 0002",
 	}, got)
 }
@@ -562,7 +563,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict { return magus\guard.al
 	require.NoError(t, err)
 	got, err := rule(t.Context(), types.SpawnRequest{}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardAllow}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Allow}, got)
 }
 
 // Each way of registering a rule the guard could not honor stops the load with MGS1045.
@@ -640,14 +641,14 @@ magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
 	cases := []struct {
 		name    string
 		req     types.SpawnRequest
-		want    types.GuardVerdict
+		want    verdict.Verdict
 		wantErr string
 	}{
 		{"a continue sees its target", types.SpawnRequest{Kind: types.SpawnKindContinue, Target: &types.SpawnTarget{Agent: "brisk-heron", Description: "orchestrator/integrator guard-facts", Model: "sonnet", ContextTokens: &tokens}},
-			types.GuardVerdict{Decision: types.GuardAdvise, Reason: "guard-facts;guard-docs;|refused|orchestrator/integrator guard-facts|sonnet|19925"}, ""},
+			verdict.Verdict{Decision: verdict.Advise, Reason: "guard-facts;guard-docs;|refused|orchestrator/integrator guard-facts|sonnet|19925"}, ""},
 		{"a target the host reported no usage for", types.SpawnRequest{Kind: types.SpawnKindContinue, Target: &types.SpawnTarget{Agent: "ghost"}},
-			types.GuardVerdict{Decision: types.GuardAdvise, Reason: "guard-facts;guard-docs;|refused|||none"}, ""},
-		{"a write raises", types.SpawnRequest{Kind: types.SpawnKindSpawn}, types.GuardVerdict{}, "read-only"},
+			verdict.Verdict{Decision: verdict.Advise, Reason: "guard-facts;guard-docs;|refused|||none"}, ""},
+		{"a write raises", types.SpawnRequest{Kind: types.SpawnKindSpawn}, verdict.Verdict{}, "read-only"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -682,7 +683,7 @@ magus\guard.write(fun (req: WriteRequest) > GuardVerdict {
 		Path: "/repo/CHANGELOG.md", Workspace: "/repo", OldText: "a", NewText: "b", Role: types.AgentRoleWorker,
 	}, hint.NewGate(t.TempDir(), "s"))
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "/repo/CHANGELOG.md|/repo|a|b||worker"}, got)
+	assert.Equal(t, verdict.Verdict{Decision: verdict.Deny, Reason: "/repo/CHANGELOG.md|/repo|a|b||worker"}, got)
 }
 
 type StopRuleBindingSuite struct {
@@ -715,7 +716,7 @@ magus\guard.stop(fun (req: StopRequest) > GuardVerdict {
 		Event: "Stop", StopHookActive: true, Transcript: "/t.jsonl", Workspace: "/repo", Role: types.AgentRoleRoot,
 	}, hint.NewGate(s.T().TempDir(), "s"))
 	s.Require().NoError(err)
-	s.Equal(types.GuardVerdict{Decision: types.GuardDeny, Reason: "Stop|true|/t.jsonl|/repo|root"}, got)
+	s.Equal(verdict.Verdict{Decision: verdict.Deny, Reason: "Stop|true|/t.jsonl|/repo|root"}, got)
 }
 
 func (s *StopRuleBindingSuite) TestRegisteringTwiceIsMisdeclared() {
@@ -766,12 +767,12 @@ magus\guard.step("refund", fun (req: magus\agent\StepRequest) > GuardVerdict {
 	rule := s.steps.Rule("refund")
 	s.Require().NotNil(rule)
 
-	got, err := rule(s.T().Context(), agent.StepRequest{
-		Step:         agent.Step{Kind: "refund", Name: "card", Dir: "/repo", Input: map[string]any{"amount": 250.0}},
+	got, err := rule(s.T().Context(), step.Request{
+		Step:         step.Step{Kind: "refund", Name: "card", Dir: "/repo", Input: map[string]any{"amount": 250.0}},
 		Capabilities: []string{"network"}, Lease: "job-1",
 	}, hint.NewGate(s.T().TempDir(), "s"))
 	s.Require().NoError(err)
-	s.Equal(types.GuardVerdict{Decision: types.GuardDeny, Reason: "refund|card|/repo|network|job-1|250"}, got)
+	s.Equal(verdict.Verdict{Decision: verdict.Deny, Reason: "refund|card|/repo|network|job-1|250"}, got)
 }
 
 func (s *StepRuleBindingSuite) TestEachKindKeepsItsOwnRule() {

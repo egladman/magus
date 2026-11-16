@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
@@ -738,7 +739,7 @@ func rewritesThroughGrader(c locatedCall, heredoc, hook, placement string) bool 
 // under the lease its checkout record or claim names. A lease merely held
 // there is never inferred. An unreadable store is a deny.
 // dryRun judges as [Request.DryRun] does.
-func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) types.GuardJudgment {
+func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) verdict.Judgment {
 	envelope, _ := json.Marshal(map[string]any{
 		"cwd": root,
 		"tool_input": map[string]any{
@@ -748,8 +749,8 @@ func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 		},
 	})
 	at := hookLocation(hookContextAt(ctx, deps, root), deps)
-	ungraded := func(say, why string) types.GuardJudgment {
-		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny,
+	ungraded := func(say, why string) verdict.Judgment {
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny,
 			Rule: string(denyRuleEditUngraded), Reason: denial{Say: say, Why: why}.full()}
 	}
 	if _, err := leaseRows(ctx, at); err != nil {
@@ -759,7 +760,7 @@ func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 	lease, from := job.RunLease(ctx, at.jobs())
 	v := Judge(ctx, deps, Request{Input: string(envelope), DryRun: dryRun, Lease: lease})
 	if lease != "" && v.Lease == lease {
-		v.LeaseFrom = from
+		v.LeaseFrom = string(from)
 	}
 	return v
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -44,13 +45,13 @@ type textEdit struct {
 // gradeWorkspaceWrite asks the workspace's magus\guard.write rule about a write the
 // built-in rules did not deny, strengthen only, the way gradeWorkspaceCommand asks about a
 // command.
-func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.GuardJudgment, path string, fields writeFields, lease string, who hookAttribution, at location) (types.GuardJudgment, workspaceRuleRecord) {
-	verdict = gradeStall(deps, gradeMainWrite(deps, verdict, path, lease, who, at), lease, at)
+func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, judged verdict.Judgment, path string, fields writeFields, lease string, who hookAttribution, at location) (verdict.Judgment, workspaceRuleRecord) {
+	judged = gradeStall(deps, gradeMainWrite(deps, judged, path, lease, who, at), lease, at)
 	if deps.WriteRule == nil && deps.ApprovedWriteRule == nil && deps.LoadFailure == nil {
-		return verdict, workspaceRuleRecord{}
+		return judged, workspaceRuleRecord{}
 	}
-	if verdict.Decision == decisionDeny {
-		return verdict, workspaceRuleRecord{}
+	if judged.Decision == decisionDeny {
+		return judged, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	spawned := spawnedAs(facts, who.Agent)
@@ -77,7 +78,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.G
 		if rule == nil {
 			return nil
 		}
-		return func(ctx context.Context) (types.GuardVerdict, error) { return rule(ctx, req, facts) }
+		return func(ctx context.Context) (verdict.Verdict, error) { return rule(ctx, req, facts) }
 	}
 	var resolve func(context.Context) (ruleCall, error)
 	if deps.ApprovedWriteRule != nil {
@@ -98,15 +99,15 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.G
 		return judgedCall{seam: seamWrite, changes: !outsideAnyWorkspace(path, at), what: "this file write", lease: lease, path: path, guardSource: isGuardSource(deps, at, path)}
 	}, at)
 	decided := ""
-	if verdict.Decision != decisionPass {
+	if judged.Decision != decisionPass {
 		decided = decidedByBuiltin
 	}
-	verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceWriteRule)
+	judged, decided = applyWorkspaceAnswer(judged, decided, asked, workspaceWriteRule)
 	if asked.by == "" {
 		decided = ""
 	}
 	if denied {
-		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
+		return judged, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 	}
 	note := ruleFailureNote(ruleFailureReport{
 		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamWrite, failures: asked.failures, answered: asked.answered, toldInFull: asked.lapse != nil,
@@ -116,7 +117,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict types.G
 	if spared {
 		note = fmt.Sprintf("%s\n\n%s", lapseSparedNote(*asked.lapse), note)
 	}
-	return applyRuleFailureNote(verdict, note, advisoryWriteRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
+	return applyRuleFailureNote(judged, note, advisoryWriteRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }
 
 // pendingCheckBound bounds the one status policyPending runs. A lapsed load has spent the

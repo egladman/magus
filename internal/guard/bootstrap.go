@@ -24,7 +24,7 @@ import (
 // ownModule is the module this guard was compiled from, read off a type rather than
 // spelled out so a renamed fork still recognizes its own tree. The types package sits
 // directly under the module root.
-var ownModule = path.Dir(reflect.TypeFor[types.GuardJudgment]().PkgPath())
+var ownModule = path.Dir(reflect.TypeFor[types.CommandRequest]().PkgPath())
 
 // goCall is a go command read the way cmd/go reads it: -C in either position it accepts
 // (`go -C dir build`, `go build -C dir`), and the argv from the subcommand on with that

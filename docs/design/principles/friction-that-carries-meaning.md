@@ -57,7 +57,7 @@ The [Go SDK](../../reference/go-sdk.md) has been read against this page, and
 holds these rules:
 
 - Every verdict comes back with its reason and its rule: a
-  `types.GuardJudgment` names the rule that decided, a `JobStatus` lists its
+  `verdict.Judgment` names the rule that decided, a `JobStatus` lists its
   violations, and a knowledge answer keeps unknown apart from absent.
 - No silent default. A workspace with a magusfile and no linked engine fails
   with [MGS1104](../../reference/codes/capability/MGS1104.md), and a library

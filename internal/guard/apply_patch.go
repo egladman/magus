@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
 // patchOp is what a file section of an apply_patch body does to its path.
@@ -124,8 +124,8 @@ func (f patchFile) addedContent() string {
 // judgePatchRest judges every file of a patch after its first, which the call itself is
 // judged by, as the write a host's write tool would make of each: the first refusal wins,
 // named by its path, then the first advice. A pass when every one passes.
-func judgePatchRest(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, lease string, files []patchFile) types.GuardJudgment {
-	advised := types.GuardJudgment{Decision: decisionPass}
+func judgePatchRest(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, lease string, files []patchFile) verdict.Judgment {
+	advised := verdict.Judgment{Decision: decisionPass}
 	for _, f := range files[min(1, len(files)):] {
 		target := f.Path
 		if !filepath.IsAbs(target) && callDir != "" {

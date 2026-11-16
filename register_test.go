@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -66,7 +67,7 @@ func (s *sdkOptionSuite) TestInspectReturnsRecordedMisuse() {
 
 func (s *sdkOptionSuite) TestOpensOptionsTakeIt() {
 	o := collectOptions([]Option{WithStepSpecs(refundSpec), WithSpawnRule(TierCeiling)})
-	s.Equal([]agent.StepSpec{refundSpec}, o.stepSpecs)
+	s.Equal([]step.Spec{refundSpec}, o.stepSpecs)
 	s.NotNil(o.spawnRule)
 }
 

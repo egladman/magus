@@ -20,6 +20,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -261,7 +262,7 @@ func boundedPhase[T any](ctx context.Context, phase string, call func(context.Co
 
 // JudgeLapsed is [Judge], and whether its deny describes the clock and not the
 // call. A rule's own deny stays a deny when some other phase ran out of time.
-func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (types.GuardJudgment, bool) {
+func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (verdict.Judgment, bool) {
 	log := &phaseLog{start: time.Now()}
 	v := Judge(context.WithValue(ctx, phaseLogKey{}, log), deps, req)
 	return v, v.Decision == decisionDeny && log.lapseDenied()
@@ -283,9 +284,9 @@ func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (types.Gua
 // A call to a tool the host's tool rows call inert, carrying nothing a rule reads, passes
 // without judge running at all: every tool reaches the guard, and loading the workspace's
 // rules for a todo list costs the host a hook's worth of waiting.
-func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) types.GuardJudgment) types.GuardJudgment {
+func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) verdict.Judgment) verdict.Judgment {
 	if inertCall(req) {
-		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+		return verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	}
 	if req.DryRun {
 		return judge(ctx)
@@ -298,7 +299,7 @@ func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func
 	log := &phaseLog{start: time.Now()}
 	ctx = context.WithValue(ctx, phaseLogKey{}, log)
 	deadline, _ := ctx.Deadline()
-	done := make(chan types.GuardJudgment, 1)
+	done := make(chan verdict.Judgment, 1)
 	go func() { done <- judge(ctx) }()
 	timer := time.NewTimer(time.Until(deadline) + judgeReserve)
 	defer timer.Stop()
@@ -447,9 +448,9 @@ func stripOutsideWrites(command string, s *syntax.Stmt, outside func(*syntax.Wor
 //
 // A bound worker's command, and a subagent's write or command reaching a live
 // job's checkout, are never degraded.
-func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) types.GuardJudgment {
+func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) verdict.Judgment {
 	elapsed := time.Since(log.start)
-	pass := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
+	pass := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	input, isPath, callDir := req.Input, req.IsPath, ""
 	if filepath.IsAbs(req.Dir) {
@@ -497,7 +498,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 		writesOutside = call.changes && !pushes && writesOnlyOutside(input, d, callDir, hookLocation(ctx, base).workspace, userHome())
 	}
 	verdict := pass
-	verdict.Lease, verdict.LeaseFrom = lease, leaseFrom
+	verdict.Lease, verdict.LeaseFrom = lease, string(leaseFrom)
 	inARow := mark.recordLapse()
 	builtins := lapsedRules(ctx, base, log, req, env, who, input, isPath, hookLocation(ctx, base).cacheDir, callDir)
 	switch {

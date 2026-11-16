@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 )
@@ -32,7 +33,7 @@ func ceilingFixture(t *testing.T, model string, reported bool) (context.Context,
 
 // judgeSpawnBy judges a Claude Code spawn on model made by subagent agent, "" for the main
 // thread.
-func judgeSpawnBy(ctx context.Context, t *testing.T, deps Dependencies, agent, model string) types.GuardJudgment {
+func judgeSpawnBy(ctx context.Context, t *testing.T, deps Dependencies, agent, model string) verdict.Judgment {
 	t.Helper()
 	env := map[string]any{
 		"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent",
@@ -46,7 +47,7 @@ func judgeSpawnBy(ctx context.Context, t *testing.T, deps Dependencies, agent, m
 
 // spoken splits a judgment into its shape, to compare whole, and the text it said, to
 // assert on: the text is wording a field-by-field comparison would pin to the letter.
-func spoken(v types.GuardJudgment) (shape types.GuardJudgment, text string) {
+func spoken(v verdict.Judgment) (shape verdict.Judgment, text string) {
 	text = v.Reason + v.Context
 	v.Reason, v.Context, v.APIVersion = "", "", ""
 	return v, text
@@ -58,12 +59,12 @@ type SpawnAboveParentTierSuite struct {
 
 func TestSpawnAboveParentTierSuite(t *testing.T) { suite.Run(t, new(SpawnAboveParentTierSuite)) }
 
-func (s *SpawnAboveParentTierSuite) advised() types.GuardJudgment {
-	return types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleSpawnAboveParentTier)}
+func (s *SpawnAboveParentTierSuite) advised() verdict.Judgment {
+	return verdict.Judgment{Decision: decisionAdvise, Rule: string(denyRuleSpawnAboveParentTier)}
 }
 
-func (s *SpawnAboveParentTierSuite) denied() types.GuardJudgment {
-	return types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}
+func (s *SpawnAboveParentTierSuite) denied() verdict.Judgment {
+	return verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}
 }
 
 // pricedRows price sonnet and opus by alias at the tiers the declaration maps.
@@ -259,7 +260,7 @@ func aliasedRows() []types.ModelPricing {
 }
 
 // judgeAliased spawns spawn from a session on claude-sonnet-5-5.
-func (s *SpawnAboveParentTierSuite) judgeAliased(spawn string) types.GuardJudgment {
+func (s *SpawnAboveParentTierSuite) judgeAliased(spawn string) verdict.Judgment {
 	ctx, deps, _ := ceilingFixture(s.T(), "claude-sonnet-5-5", true)
 	deps.ModelRows = aliasedRows
 	return judgeSpawnBy(ctx, s.T(), deps, "", spawn)

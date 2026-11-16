@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/require"
@@ -98,7 +99,7 @@ func (s *StopUnfiledSuite) row() types.Job {
 }
 
 // stop is a subagent's stop for the leased row, judged in a store holding row.
-func (s *StopUnfiledSuite) stop(row types.Job, event string, fields map[string]any) types.GuardJudgment {
+func (s *StopUnfiledSuite) stop(row types.Job, event string, fields map[string]any) verdict.Judgment {
 	ctx, root := fleetFixture(s.T(), row)
 	if len(s.tries) > 0 {
 		storeTries(s.T(), ctx.Value(locationKey{}).(location), s.tries...)
@@ -113,7 +114,7 @@ func (s *StopUnfiledSuite) stop(row types.Job, event string, fields map[string]a
 
 // judge is the stop's judgment with the guard's version cleared, so a
 // case compares the rest whole.
-func (s *StopUnfiledSuite) judge(ctx context.Context, input, lease string) types.GuardJudgment {
+func (s *StopUnfiledSuite) judge(ctx context.Context, input, lease string) verdict.Judgment {
 	v := Judge(ctx, Dependencies{}, Request{Host: "claude-code", Input: input, Lease: lease})
 	v.APIVersion = ""
 	return v

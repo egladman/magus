@@ -40,6 +40,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -2985,7 +2986,7 @@ func ExampleMagus_Run() {
 	obs := &countingObserver{}
 	err = m.Run(context.Background(), []types.Target{{Path: ".", Name: "build"}},
 		WithSession("example"), WithObserver(obs))
-	var denied *types.GuardDeniedError
+	var denied *verdict.DeniedError
 	switch {
 	case errors.As(err, &denied):
 		fmt.Println("denied:", denied.Judgment.Reason)

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/guard/builtin"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +37,7 @@ func TestReadPagingRefusesTheThirdWindow(t *testing.T) {
 	root := hookLocation(ctx, Dependencies{}).workspace
 	pagedFile(t, root)
 	deps := withSetting(string(denyRuleReadPaging), builtin.Deny)
-	read := func(agent, line string) types.GuardJudgment {
+	read := func(agent, line string) verdict.Judgment {
 		return Judge(ctx, deps, Request{Input: line, Session: "paging", Agent: agent, Host: "claude-code", Dir: root})
 	}
 
@@ -46,7 +46,7 @@ func TestReadPagingRefusesTheThirdWindow(t *testing.T) {
 	assert.NotEqual(t, "deny", read("a1", "sed -n 3,20p paged.go").Decision, "a window inside one function is targeted")
 	assert.NotEqual(t, "deny", read("a1", "sed -n 41,80p paged.go").Decision)
 	v := read("a1", "sed -n 81,121p paged.go")
-	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleReadPaging)}, judgedAs(v))
+	require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleReadPaging)}, judgedAs(v))
 	assert.Contains(t, v.Reason, "paged.go")
 	assert.NotEqual(t, "deny", read("a2", "sed -n 81,121p paged.go").Decision, "each caller's windows are its own")
 }
@@ -56,7 +56,7 @@ func TestReadPagingSuggestedSpanIsNotAWindow(t *testing.T) {
 	root := hookLocation(ctx, Dependencies{}).workspace
 	pagedFile(t, root)
 	deps := withSetting(string(denyRuleReadPaging), builtin.Deny)
-	read := func(line string) types.GuardJudgment {
+	read := func(line string) verdict.Judgment {
 		return Judge(ctx, deps, Request{Input: line, Session: "suggested", Agent: "a1", Host: "claude-code", Dir: root})
 	}
 	read("sed -n 1,40p paged.go")
@@ -94,11 +94,11 @@ func TestReadNavigationRefusesACallerOncePerFile(t *testing.T) {
 	root := hookLocation(ctx, Dependencies{}).workspace
 	pagedFile(t, root)
 	deps := withSetting(string(denyRuleReadNavigation), builtin.Deny)
-	read := func(agent string) types.GuardJudgment {
+	read := func(agent string) verdict.Judgment {
 		return Judge(ctx, deps, Request{Input: "cat paged.go", Session: "navigation", Agent: agent, Host: "claude-code", Dir: root})
 	}
 	first := read("a1")
-	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleReadNavigation)}, judgedAs(first))
+	require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleReadNavigation)}, judgedAs(first))
 	assert.NotEqual(t, "deny", read("a1").Decision, "asked again with the map in hand, the whole read passes")
 	assert.Equal(t, "deny", read("a2").Decision, "another caller has not seen the map")
 }

@@ -1,5 +1,7 @@
 package types
 
+import "github.com/egladman/magus/libs/safetyscissors/verdict"
+
 // RuleDoc is one catalogued guard rule: its stable name, which tier it lands on,
 // and what it fires on. `magus describe rule` prints it and magus\describe.rule
 // returns it.
@@ -19,7 +21,7 @@ type RuleDoc struct {
 	Fixed bool `json:"fixed,omitempty"`
 	// Verdicts are the verdicts the rule can give under any setting a workspace may
 	// declare, least refusing first. A rule that never refuses lists advise alone.
-	Verdicts []GuardDecision `json:"verdicts"`
+	Verdicts []verdict.Decision `json:"verdicts"`
 	// Catches says what the rule fires on, in one line, in the reader's terms.
 	Catches string `json:"catches"`
 	// Why is the reasoning behind the rule, for a reader who wants to disagree with it

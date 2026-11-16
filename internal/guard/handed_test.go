@@ -1,6 +1,6 @@
 package guard
 
-import "github.com/egladman/magus/types"
+import "github.com/egladman/magus/libs/safetyscissors/verdict"
 
 // reply is a stop whose last message is text.
 func (s *StopRuleSuite) reply(text string, again bool) string {
@@ -11,7 +11,7 @@ func (s *StopRuleSuite) TestAReplyHandingOverADeniedCommandIsRefused() {
 	v := s.judge(Dependencies{}, s.reply("Run this yourself:\n\n```bash\ngit add -A\n```\n", false))
 	s.Contains(v.Reason, "this reply hands the person `git add -A`")
 	v.Reason = ""
-	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleBriefCommand)}, v)
+	s.Equal(verdict.Judgment{Decision: decisionDeny, Rule: string(denyRuleBriefCommand)}, v)
 }
 
 func (s *StopRuleSuite) TestASecondStopLetsAHandedCommandThrough() {

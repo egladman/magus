@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,19 +58,19 @@ func TestHeredocWriteMeetsTheWriteRules(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	root := hookLocation(ctx, Dependencies{}).workspace
 	var seen []types.WriteRequest
-	deps := Dependencies{WriteRule: func(_ context.Context, req types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	deps := Dependencies{WriteRule: func(_ context.Context, req types.WriteRequest, _ hint.Gate) (verdict.Verdict, error) {
 		seen = append(seen, req)
 		if strings.Contains(req.Content, "forbidden") {
-			return types.GuardVerdict{Decision: types.GuardDeny, Reason: "that word is not allowed here"}, nil
+			return verdict.Verdict{Decision: verdict.Deny, Reason: "that word is not allowed here"}, nil
 		}
-		return types.GuardVerdict{Decision: types.GuardAllow}, nil
+		return verdict.Verdict{Decision: verdict.Allow}, nil
 	}}
-	judge := func(line string) types.GuardJudgment {
+	judge := func(line string) verdict.Judgment {
 		return Judge(ctx, deps, Request{Input: line, Session: "heredoc", Host: "claude-code", Dir: root})
 	}
 
 	v := judge("cat > notes.md <<'EOF'\na forbidden word\nEOF")
-	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleHeredocWrite)}, judgedAs(v), v.Context)
+	require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleHeredocWrite)}, judgedAs(v), v.Context)
 	assert.Contains(t, v.Reason, "that word is not allowed here")
 	require.NotEmpty(t, seen)
 	assert.Equal(t, filepath.Join(root, "notes.md"), seen[0].Path)
@@ -101,9 +102,9 @@ func TestHeredocAppendMeetsTheWriteRulesAsTheWholeFile(t *testing.T) {
 	root := hookLocation(ctx, Dependencies{}).workspace
 	require.NoError(t, os.WriteFile(filepath.Join(root, "notes.md"), []byte("# Notes\n"), 0o600))
 	var seen []string
-	deps := Dependencies{WriteRule: func(_ context.Context, req types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	deps := Dependencies{WriteRule: func(_ context.Context, req types.WriteRequest, _ hint.Gate) (verdict.Verdict, error) {
 		seen = append(seen, req.Content)
-		return types.GuardVerdict{Decision: types.GuardAllow}, nil
+		return verdict.Verdict{Decision: verdict.Allow}, nil
 	}}
 	judge := func(line string) {
 		seen = nil
@@ -122,11 +123,11 @@ func TestHeredocAppendMeetsTheWriteRulesAsTheWholeFile(t *testing.T) {
 func TestEveryPathOfAPatchIsJudged(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	root := hookLocation(ctx, Dependencies{}).workspace
-	deps := Dependencies{WriteRule: func(_ context.Context, req types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+	deps := Dependencies{WriteRule: func(_ context.Context, req types.WriteRequest, _ hint.Gate) (verdict.Verdict, error) {
 		if filepath.Base(req.Path) == "second.go" {
-			return types.GuardVerdict{Decision: types.GuardDeny, Reason: "second.go is off limits"}, nil
+			return verdict.Verdict{Decision: verdict.Deny, Reason: "second.go is off limits"}, nil
 		}
-		return types.GuardVerdict{Decision: types.GuardAllow}, nil
+		return verdict.Verdict{Decision: verdict.Allow}, nil
 	}}
 	patch := "*** Begin Patch\n*** Add File: first.go\n+package a\n*** Update File: second.go\n@@\n-x\n+y\n*** End Patch\n"
 	v := Judge(ctx, deps, Request{Host: "codex", Tools: testTools(t), Input: hookJSON(t, map[string]any{

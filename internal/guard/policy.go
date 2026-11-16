@@ -26,8 +26,9 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/step"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // The lineage actions a guard_policy trail event records.
@@ -590,22 +591,22 @@ func (s snapshotSite) lazyWorktreeRules(deps *Dependencies, has seamRules) {
 		})
 	}
 	if has.Spawn {
-		deps.SpawnRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.SpawnRequest, hint.Gate) (types.GuardVerdict, error) {
+		deps.SpawnRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.SpawnRequest, hint.Gate) (verdict.Verdict, error) {
 			return r.SpawnRule()
 		})
 	}
 	if has.Command {
-		deps.CommandRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.CommandRequest, hint.Gate) (types.GuardVerdict, error) {
+		deps.CommandRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.CommandRequest, hint.Gate) (verdict.Verdict, error) {
 			return r.CommandRule()
 		})
 	}
 	if has.Write {
-		deps.WriteRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.WriteRequest, hint.Gate) (types.GuardVerdict, error) {
+		deps.WriteRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.WriteRequest, hint.Gate) (verdict.Verdict, error) {
 			return r.WriteRule()
 		})
 	}
 	if has.Stop {
-		deps.StopRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.StopRequest, hint.Gate) (types.GuardVerdict, error) {
+		deps.StopRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.StopRequest, hint.Gate) (verdict.Verdict, error) {
 			return r.StopRule()
 		})
 	}
@@ -614,7 +615,7 @@ func (s snapshotSite) lazyWorktreeRules(deps *Dependencies, has seamRules) {
 			if !slices.Contains(has.Steps, kind) {
 				return nil
 			}
-			return steps.Rule(lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, typesagent.StepRequest, hint.Gate) (types.GuardVerdict, error) {
+			return steps.Rule(lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, step.Request, hint.Gate) (verdict.Verdict, error) {
 				return r.StepRule(kind)
 			}))
 		}
@@ -652,15 +653,15 @@ func (s snapshotSite) lazyApprovedRules(deps *Dependencies, body snapshotBody) {
 // lazyRule is the working tree's rule that pick reads, loaded on its first
 // call. A tree whose bytes match the snapshot registers it again, so a load
 // that registers none answers nothing.
-func lazyRule[Req any](load func(context.Context) (*WorkspaceRules, error), pick func(*WorkspaceRules) func(context.Context, Req, hint.Gate) (types.GuardVerdict, error)) func(context.Context, Req, hint.Gate) (types.GuardVerdict, error) {
-	return func(ctx context.Context, req Req, facts hint.Gate) (types.GuardVerdict, error) {
+func lazyRule[Req any](load func(context.Context) (*WorkspaceRules, error), pick func(*WorkspaceRules) func(context.Context, Req, hint.Gate) (verdict.Verdict, error)) func(context.Context, Req, hint.Gate) (verdict.Verdict, error) {
+	return func(ctx context.Context, req Req, facts hint.Gate) (verdict.Verdict, error) {
 		rules, err := load(ctx)
 		if err != nil {
-			return types.GuardVerdict{}, err
+			return verdict.Verdict{}, err
 		}
 		rule := pick(rules)
 		if rule == nil {
-			return types.GuardVerdict{}, nil
+			return verdict.Verdict{}, nil
 		}
 		return rule(ctx, req, facts)
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
@@ -108,10 +109,10 @@ const advisoryBackgroundLeft hint.MarkerKind = "background-left"
 // A subagent's stop that stands is recorded on said, so a later spawn on the job it held is
 // not refused as a second worker (see stoppedAgent). A resumed subagent still holds its
 // job, so its stop is not recorded.
-func judgeStop(deps Dependencies, said hint.Gate, raw, resumesFrom string, now time.Time) (types.GuardJudgment, bool) {
+func judgeStop(deps Dependencies, said hint.Gate, raw, resumesFrom string, now time.Time) (verdict.Judgment, bool) {
 	env, ok := decodeStop(raw)
 	if !ok {
-		return types.GuardJudgment{}, false
+		return verdict.Judgment{}, false
 	}
 	v, judged, resumes := judgeStopTasks(deps, said, env, resumesFrom, now)
 	if env.AgentID != "" && v.Decision != decisionDeny && !resumes {
@@ -120,10 +121,10 @@ func judgeStop(deps Dependencies, said hint.Gate, raw, resumesFrom string, now t
 	return v, judged
 }
 
-func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumesFrom string, now time.Time) (v types.GuardJudgment, judged, resumes bool) {
+func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumesFrom string, now time.Time) (v verdict.Judgment, judged, resumes bool) {
 	setting, ok := deps.setting(string(denyRuleBackgroundLeft))
 	if !ok || setting.Decision == builtin.Off {
-		return types.GuardJudgment{}, false, false
+		return verdict.Judgment{}, false, false
 	}
 	subagent := env.AgentID != ""
 	transcript := env.TranscriptPath
@@ -131,11 +132,11 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 		transcript = env.AgentTranscriptPath
 	}
 	if transcript == "" {
-		return types.GuardJudgment{}, false, false
+		return verdict.Judgment{}, false, false
 	}
 	read, err := readBackgroundTranscript(transcript, said.CacheDir(), now)
 	if err != nil {
-		return types.GuardJudgment{}, false, false
+		return verdict.Judgment{}, false, false
 	}
 	resumes, why := hostResumes(resumesFrom, read.hostVersion)
 	if subagent && resumes && len(read.tasks) > 0 {
@@ -144,7 +145,7 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 	tasks := slices.DeleteFunc(slices.Clone(read.tasks), func(t backgroundTask) bool { return endsOnItsOwn(t.Command) })
 	if subagent && len(tasks) == 0 && len(read.tasks) > 0 {
 		// Stopping is how a subagent waits for these: each notice starts its next turn.
-		return types.GuardJudgment{}, false, true
+		return verdict.Judgment{}, false, true
 	}
 	if !subagent {
 		// Age is checked first, so a young task never spends its one firing.
@@ -153,13 +154,13 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 		})
 	}
 	if len(tasks) == 0 {
-		return types.GuardJudgment{}, false, false
+		return verdict.Judgment{}, false, false
 	}
 	// A subagent's notice arrives only after a stop this refuses, so stopping is its remedy.
 	if subagent && setting.Decision == builtin.Deny {
 		return refuseLeftStop(tasks, why, now), true, false
 	}
-	return types.GuardJudgment{
+	return verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
 		Decision:   decisionAdvise,
 		Rule:       string(denyRuleBackgroundLeft),
@@ -171,8 +172,8 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 // refuseLeftStop refuses a subagent's stop over tasks still running, naming each with the
 // call that stops it and the one wait a subagent has for its own run. The first line is
 // the one a host shows the person.
-func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.GuardJudgment {
-	return types.GuardJudgment{
+func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) verdict.Judgment {
+	return verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
 		Decision:   decisionDeny,
 		Rule:       string(denyRuleBackgroundLeft),
@@ -183,8 +184,8 @@ func refuseLeftStop(tasks []backgroundTask, why string, now time.Time) types.Gua
 
 // adviseResumedStop lets a subagent's stop stand while tasks run, since why says its host
 // resumes it when they complete.
-func adviseResumedStop(tasks []backgroundTask, why string, now time.Time) types.GuardJudgment {
-	return types.GuardJudgment{
+func adviseResumedStop(tasks []backgroundTask, why string, now time.Time) verdict.Judgment {
+	return verdict.Judgment{
 		APIVersion: agent.GuardAPIVersion,
 		Decision:   decisionAdvise,
 		Rule:       string(denyRuleBackgroundLeft),
@@ -330,7 +331,7 @@ func subagentStopped(raw string) bool {
 // endStoppedSession settles c's row when the guard let raw stand. A
 // SessionEnd ends the row and reports true. A subagent's stop stamps it,
 // unless the host resumes the subagent itself (see resumedStop).
-func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw, resumesFrom string, v types.GuardJudgment) (bool, error) {
+func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw, resumesFrom string, v verdict.Judgment) (bool, error) {
 	switch {
 	case v.Decision == decisionDeny:
 		return false, nil

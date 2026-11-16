@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
@@ -18,21 +19,21 @@ const denyRuleStopUnfiled denyRuleName = "stop-unfiled"
 // judgeStopUnfiled refuses a leased subagent's first stop while the row it
 // holds has no result, false when it has nothing to say. A second stop passes
 // with a note, so a child that will not file is never held open.
-func judgeStopUnfiled(ctx context.Context, deps Dependencies, raw string, who hookAttribution, at location, lease string) (types.GuardJudgment, bool) {
+func judgeStopUnfiled(ctx context.Context, deps Dependencies, raw string, who hookAttribution, at location, lease string) (verdict.Judgment, bool) {
 	setting, ok := deps.setting(string(denyRuleStopUnfiled))
 	if !ok || setting.Decision == builtin.Off || lease == "" || !slices.Contains(stopEvents, who.Event) {
-		return types.GuardJudgment{}, false
+		return verdict.Judgment{}, false
 	}
 	env, ok := decodeStop(raw)
 	if !ok || (who.Event != "SubagentStop" && env.AgentID == "") {
-		return types.GuardJudgment{}, false
+		return verdict.Judgment{}, false
 	}
 	row, found := unfiledRow(ctx, at, lease)
 	if !found {
-		return types.GuardJudgment{}, false
+		return verdict.Judgment{}, false
 	}
 	if env.StopHookActive != nil && *env.StopHookActive {
-		return types.GuardJudgment{
+		return verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion,
 			Decision:   decisionAdvise,
 			Rule:       string(denyRuleStopUnfiled),
@@ -44,7 +45,7 @@ func judgeStopUnfiled(ctx context.Context, deps Dependencies, raw string, who ho
 	if setting.Decision == builtin.Advise {
 		decision = decisionAdvise
 	}
-	v := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decision, Rule: string(denyRuleStopUnfiled)}
+	v := verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: decision, Rule: string(denyRuleStopUnfiled)}
 	say := unfiledStopReason(row)
 	if decision == decisionDeny {
 		v.Reason = say

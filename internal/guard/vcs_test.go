@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -402,7 +403,7 @@ type checkpointAdviceSuite struct{ suite.Suite }
 func TestCheckpointAdviceSuite(t *testing.T) { suite.Run(t, new(checkpointAdviceSuite)) }
 
 // judgeRevisionRead judges a revision read under the lease row given.
-func (s *checkpointAdviceSuite) judgeRevisionRead(row types.Job) types.GuardJudgment {
+func (s *checkpointAdviceSuite) judgeRevisionRead(row types.Job) verdict.Judgment {
 	who := hookAttribution{Host: "claude-code", Session: "5d1e7c20", Agent: "b7a4f9"}
 	ctx, _ := fleetFixture(s.T(), row)
 	bindCaller(s.T(), ctx, who, row.ID)

@@ -846,6 +846,8 @@ var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/types/diff", alias: "difftypes", prefix: "Diff"},
 	{path: "github.com/egladman/magus/internal/queue/types", alias: "queuetypes", prefix: "Queue"},
 	{path: "github.com/egladman/magus/libs/diagnostics", alias: "diagnostics"},
+	{path: "github.com/egladman/magus/libs/safetyscissors/step", alias: "step", prefix: "Step"},
+	{path: "github.com/egladman/magus/libs/safetyscissors/verdict", alias: "verdict", prefix: "Guard"},
 }
 
 // typePackage is t's entry in boundaryPackages. A type from any other package panics: the

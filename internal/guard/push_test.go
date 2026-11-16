@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -219,13 +220,13 @@ func TestGateStandsDownOnARevisionItCannotMatch(t *testing.T) {
 // judgePush runs one push through Judge in a workspace whose run log exists, so a gate
 // missing at HEAD is proven absent rather than unknown. gate, when set, records a finished
 // `affected ci` run with that status at HEAD first.
-func judgePush(t *testing.T, gate, lease string, leases ...types.Job) types.GuardJudgment {
+func judgePush(t *testing.T, gate, lease string, leases ...types.Job) verdict.Judgment {
 	t.Helper()
 	return judgePushAs(t, true, gate, lease, leases...)
 }
 
 // judgePushAs is judgePush for a caller that does or does not declare it renders ask.
-func judgePushAs(t *testing.T, rendersAsk bool, gate, lease string, leases ...types.Job) types.GuardJudgment {
+func judgePushAs(t *testing.T, rendersAsk bool, gate, lease string, leases ...types.Job) verdict.Judgment {
 	t.Helper()
 	ctx, _ := fleetFixture(t, leases...)
 	runs := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)
@@ -291,7 +292,7 @@ func TestGhPrCreateMeetsThePushGate(t *testing.T) {
 func TestUngatedPushDenyStillAsksTheCommandRule(t *testing.T) {
 	ctx, _ := fleetFixture(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir), 0o755))
-	probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "queue it"}}
+	probe := &commandRuleProbe{answer: verdict.Verdict{Decision: verdict.Deny, Reason: "queue it"}}
 	deps := Dependencies{
 		Revision:    func(context.Context, string, string) string { return "abc1234" },
 		CommandRule: probe.rule(),
@@ -301,9 +302,9 @@ func TestUngatedPushDenyStillAsksTheCommandRule(t *testing.T) {
 	v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
 	assert.Equal(t, decisionDeny, v.Decision, "the line is refused whichever rule speaks")
 
-	probe.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: "batch it"}
+	probe.answer = verdict.Verdict{Decision: verdict.Advise, Reason: "batch it"}
 	v = Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-	assert.Equal(t, types.GuardJudgment{APIVersion: v.APIVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRulePushUnverified)}, v, "an advise leaves the push deny as it stood")
+	assert.Equal(t, verdict.Judgment{APIVersion: v.APIVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRulePushUnverified)}, v, "an advise leaves the push deny as it stood")
 	assert.NotContains(t, v.Reason, "batch it")
 }
 
@@ -460,7 +461,7 @@ func TestLocateCallsUnrollsALiteralLoop(t *testing.T) {
 // judgeRelocatedPush judges command, built from checkout B's path, in checkout A. A's HEAD
 // is abc1234 and B's is def5678; each holds a run log, with a green gate at its HEAD when
 // gated says so.
-func judgeRelocatedPush(t *testing.T, gatedA, gatedB bool, command func(b string) string) types.GuardJudgment {
+func judgeRelocatedPush(t *testing.T, gatedA, gatedB bool, command func(b string) string) verdict.Judgment {
 	t.Helper()
 	ctx, _ := fleetFixture(t)
 	runsA := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)
