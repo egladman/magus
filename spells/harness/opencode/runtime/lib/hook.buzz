@@ -294,48 +294,56 @@ fun aimedAt(line: str, root: str) > str {
     return line.replace(" go ", with: " go -C {shellWord(at)} ");
 }
 
-// recoveryLine is the one recovery for root, a checkout of magus, as the Go
-// guard spells it: the relink over a ./magus, else the bootstrap. Both are
-// aimed at root. "" outside a checkout of magus.
+// UPDATE is config.ReleaseCommand with no pin: the release a workspace that does not
+// build magus installs. internal/guard's repairLines is the Go reader of the same
+// declarations.
+final UPDATE = "magus self update";
+
+// recoveryLine is the one recovery root declares, as the Go guard spells it. A checkout
+// of magus, by its go.mod, builds from source: the relink over a ./magus, else the
+// bootstrap, both aimed at root. Any other workspace installs a release.
 export fun recoveryLine(root: str) > str {
-    if (root == "" or !buildsMagus(root)) { return ""; }
+    if (root == "" or !buildsMagus(root)) { return UPDATE; }
     if (fs\exists("{root}/magus") catch false) { return aimedAt(RELINK, root: root); }
     return aimedAt(BOOTSTRAP, root: root);
 }
 
-// recovers reports a line that runs while no magus judges: the bootstrap
-// or the relink, bare or aimed at root.
+// recovers reports the one line that runs while no magus judges: in a checkout of
+// magus the bootstrap or the relink, bare or aimed at root; anywhere else the update,
+// bare or pinned to one release.
 export fun recovers(command: str, root: str) > bool {
     final line = command.trim();
+    if (root == "" or !buildsMagus(root)) {
+        return line == UPDATE or pinnedUpdate(line);
+    }
     if (isBootstrap(line) or line == RELINK) { return true; }
-    if (root == "" or !buildsMagus(root)) { return false; }
     return line == aimedAt(BOOTSTRAP, root: root) or line == aimedAt(RELINK, root: root);
 }
 
-// exitsJob is a `magus job exit`, the call a worker files its result through.
-// It writes no tracked file, and refusing it leaves the row with no word on
-// why its holder stopped.
-export fun exitsJob(command: str) > bool {
-    final words = command.trim().split(" ");
-    if (words.len() < 3 or words[1] != "job" or words[2] != "exit") { return false; }
-    return words[0] == "magus" or words[0].endsWith("/magus");
+// pinnedUpdate reports `magus self update --version v<X.Y.Z>`, nothing after it.
+fun pinnedUpdate(line: str) > bool {
+    final head = UPDATE + " --version v";
+    if (!line.startsWith(head)) { return false; }
+    final parts = line.sub(head.len(), len: line.len() - head.len()).split(".");
+    if (parts.len() != 3) { return false; }
+    foreach (part in parts) {
+        if (part == "") { return false; }
+        foreach (i in 0..part.len()) {
+            if ("0123456789".indexOf(part.sub(i, len: 1)) == null) { return false; }
+        }
+    }
+    return true;
 }
 
-test "a worker's job exit runs while no magus judges, and nothing else does" {
-    std\assert(exitsJob("./magus job exit rename-x --stdin"), message: "the checkout's binary");
-    std\assert(exitsJob("magus job exit rename-x"), message: "the binary on PATH");
-    std\assert(exitsJob("/abs/path/magus job exit rename-x --stdin"), message: "an absolute binary");
-    std\assert(!exitsJob("./magus job fork rename-x"), message: "a fork changes the store's plan");
-    std\assert(!exitsJob("./magus run test ."), message: "a run");
-    std\assert(!exitsJob("notmagus job exit x"), message: "another binary");
-}
-
-// recoveryFix names that line, or the install page outside a magus checkout.
+// recoveryFix names that line: until a magus loads this tree it is the one call that runs.
 export fun recoveryFix(root: str) > str {
     final line = recoveryLine(root);
-    if (line == "") { return magusFix(root); }
+    if (line == UPDATE) {
+        return "Install magus ({SETUP_URL}), or update the one on hand, alone on its line: `{line}`, or set __MAGUS_BIN to its path. "
+            + "Until a magus loads this tree, that line is the one call that runs.";
+    }
     return "Build ./magus in {root}, alone on its line: `{line}`. "
-        + "Until a magus loads this tree, that line and reads are all that run.";
+        + "Until a magus loads this tree, that line is the one call that runs.";
 }
 
 // shellWord quotes word for a POSIX shell, and leaves it bare when it can.
@@ -464,7 +472,7 @@ export fun fellToNotice(judged: Judged, what: str, root: str) > str {
     if (judged.trail.len() == 0) { return ""; }
     var rebuild = "";
     final line = recoveryLine(root);
-    if (line != "") { rebuild = " Get ./magus in {root} a binary that reads its tree: `{line}`."; }
+    if (line != UPDATE) { rebuild = " Get ./magus in {root} a binary that reads its tree: `{line}`."; }
     return judged.trail.join("\n") + "\nfell to {judged.by}, which judged this {what}.{rebuild}";
 }
 
@@ -690,7 +698,11 @@ test "the recovery line aims the bootstrap, or the relink over a binary, at the 
     std\assert(recovers(line, root: root), message: "the bootstrap still runs over a binary");
     std\assert(!recovers(relink + " && ls", root: root), message: "a line after the relink is not the recovery");
     fs\writeFile("{root}/go.mod", content: "module example.com/other\n");
-    std\assert(recoveryLine(root) == "", message: "no bootstrap outside a checkout of magus");
+    std\assert(recoveryLine(root) == UPDATE, message: "a workspace that builds no magus installs a release");
+    std\assert(!recovers(BOOTSTRAP, root: root) and !recovers(RELINK, root: root), message: "no source build outside a checkout of magus");
+    std\assert(recovers(UPDATE, root: root) and recovers("magus self update --version v0.4.3", root: root), message: "the update, bare or pinned");
+    std\assert(!recovers("magus self update --version v0.4.3 && ls", root: root), message: "a line after the update is not the recovery");
+    std\assert(recoveryFix(root).indexOf("`{UPDATE}`") != null, message: recoveryFix(root));
     std\assert(shellWord("/a b/it's") == "'/a b/it'\\''s'", message: shellWord("/a b/it's"));
     fs\removeAll(root);
 }

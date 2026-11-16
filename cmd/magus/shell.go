@@ -237,7 +237,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	if cause := cmp.Or(envRefusal, staleConfig); cause != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		root, _ := guardRoot(judgeRoot)
 		answer, reason := guard.UnjudgedEvent(root, input, cause)
-		verdict := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: answer.Decision(), Reason: reason}
+		verdict := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: answer.Decision(), Reason: reason, Rule: answer.Rule()}
 		if verdict.Decision == "advise" {
 			verdict.Reason, verdict.Context = "", reason
 		}

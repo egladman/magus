@@ -57,6 +57,15 @@ func (u Unjudged) Decision() string {
 	return "deny"
 }
 
+// Rule is the rule a refusal names: stale-binary, the one a glue reads as "this magus
+// cannot load the tree" and answers by asking the next binary. "" for any other answer.
+func (u Unjudged) Rule() string {
+	if u == unjudgedRefused {
+		return string(denyRuleStaleBinary)
+	}
+	return ""
+}
+
 // UnjudgedHook is [UnjudgedEvent] for the event on r, read until r closes; an event r
 // has not closed on within two seconds reads as empty.
 func UnjudgedHook(root string, r io.Reader, cause error) (answer Unjudged, reason string) {

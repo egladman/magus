@@ -714,14 +714,23 @@ test "an unjudged call that may change state is refused and told to the person" 
     std\assert(reply["systemMessage"] == "v\nf", message: "the person reads the verdict and the fix");
 }
 
-test "the bootstrap line alone passes an unjudged call" {
+test "the repair the workspace declares alone passes an unjudged call" {
     final line = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
-    final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line, verdict: "v", fix: "f"));
+    final source = fs\tempDir("command-repair-");
+    fs\writeFile("{source}/go.mod", content: "module github.com/egladman/magus\n");
+    final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line, verdict: "v", fix: "f", root: source));
     final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
     std\assert(spec["permissionDecision"] == null and reply["systemMessage"] == "v\nf", message: "{reply}");
-    final chained = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line + " && ls", verdict: "v", fix: "f"));
+    final chained = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line + " && ls", verdict: "v", fix: "f", root: source));
     final chainedSpec: {str: any} = chained["hookSpecificOutput"] ?? {<str: any>};
     std\assert(chainedSpec["permissionDecision"] == "deny", message: "{chained}");
+    fs\removeAll(source);
+    foreach (command in ["magus self update", line]) {
+        final consumer = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f"));
+        final consumerSpec: {str: any} = consumer["hookSpecificOutput"] ?? {<str: any>};
+        final passes = command == "magus self update";
+        std\assert((consumerSpec["permissionDecision"] == null) == passes, message: "a workspace that builds no magus: {command}: {consumer}");
+    }
 }
 
 test "an unjudged read, handback or job exit is refused like any other call" {

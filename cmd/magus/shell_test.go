@@ -2797,20 +2797,25 @@ func (s *unjudgedHookSuite) bootstrapEvent(command string) string {
 	return fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":%s}}`, encoded)
 }
 
-func (s *unjudgedHookSuite) TestTheBootstrapLineAloneIsLetThroughAndTheNoticeStays() {
-	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent(ward.BootstrapCommand))
+func (s *unjudgedHookSuite) TestTheRepairLineAloneIsLetThroughAndTheNoticeStays() {
+	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent("magus self update"))
 	s.NotContains(reply["hookSpecificOutput"], "permissionDecision")
 	s.Contains(reply["systemMessage"], "could not judge this call")
 	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["claude-code"]).Validate(reply))
 }
 
-func (s *unjudgedHookSuite) TestTheBootstrapLineWithAnotherCommandAfterItIsRefused() {
-	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent(ward.BootstrapCommand+" && git stash"))
+func (s *unjudgedHookSuite) TestTheRepairLineWithAnotherCommandAfterItIsRefused() {
+	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent("magus self update && git stash"))
 	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
 }
 
-func (s *unjudgedHookSuite) TestCursorLetsTheBootstrapLineThrough() {
-	encoded, err := json.Marshal(ward.BootstrapCommand)
+func (s *unjudgedHookSuite) TestASourceBuildIsRefusedWhereTheWorkspaceInstallsARelease() {
+	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent(ward.BootstrapCommand))
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
+}
+
+func (s *unjudgedHookSuite) TestCursorLetsTheRepairLineThrough() {
+	encoded, err := json.Marshal("magus self update")
 	s.Require().NoError(err)
 	reply := s.reply("cursor-hook.buzz", "cursor", fmt.Sprintf(`{"hook_event_name":"beforeShellExecution","conversation_id":"c","generation_id":"g","command":%s,"cwd":"/tmp"}`, encoded))
 	s.Equal("allow", reply["permission"])

@@ -47,7 +47,13 @@ failed hooks, every PreToolUse, Stop and UserPromptSubmit hook, while its
 non-blocking error, and no rule held. The wiring is where every failure is
 visible, so the wiring enforces it, in each host's own blocking signal: an
 exit 2 for Claude Code and Codex, `failClosed` for Cursor. magus answers its
-own startup failure the same way, where it can still answer. A stop is the
+own startup failure the same way, where it can still answer, and so does
+`magus shell` when it cannot read its configuration or environment. The hook
+glue, which a running magus interprets, reads the same declarations when the
+magus it asks crashes. A missing binary leaves nothing to name the repair, so
+every host refuses that call outright, the repair with it, and the OpenCode
+plugin, which no magus runs, refuses a crash the same way rather than keep a
+second parser of repair lines in its wasm. A stop is the
 one event a failure lets through, loudly: refusing it would send the agent
 back to work no rule can judge, and ending is the act that leaves nothing
 unjudged behind.
