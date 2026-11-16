@@ -27,7 +27,7 @@ type AttemptStatus struct {
 	Ended int64      `json:"ended,omitzero" yaml:"ended,omitempty"`
 	End   AttemptEnd `json:"end,omitempty"  yaml:"end,omitempty"`
 	// Result is what the holder filed with `magus job exit`.
-	Result *Result `json:"result,omitempty" yaml:"result,omitempty"`
+	Result *Result `json:"result,omitzero" yaml:"result,omitempty"`
 	// The members below are written when a fork of the ended job starts
 	// the next try. State is what the job ended as, "" until then.
 	State              State                `json:"state,omitempty"               yaml:"state,omitempty"`

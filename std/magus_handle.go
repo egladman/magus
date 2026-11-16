@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
@@ -575,7 +575,7 @@ func decodeJobPut(opts map[string]any) (jobtypes.Put, error) {
 // decodeJobResult reads a result map through the strict, versioned decoder
 // a JSON result uses, so an unknown field is refused here too.
 func decodeJobResult(result map[string]any) (jobtypes.Result, error) {
-	raw, err := json.Marshal(result)
+	raw, err := codec.Marshal(result)
 	if err != nil {
 		return jobtypes.Result{}, fmt.Errorf("magus\\Job: encode result: %w", err)
 	}

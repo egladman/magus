@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
@@ -128,7 +128,7 @@ type stepRecordSuite struct {
 func TestStepRecord(t *testing.T) { suite.Run(t, new(stepRecordSuite)) }
 
 func (s *stepRecordSuite) record(st step.Step) string {
-	raw, err := json.Marshal(st)
+	raw, err := codec.Marshal(st)
 	s.Require().NoError(err)
 	return string(raw)
 }

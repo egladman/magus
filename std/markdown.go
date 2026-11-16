@@ -16,7 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -108,7 +108,7 @@ func MarkdownFrontmatter(_ context.Context, source string) (string, error) {
 	if meta == nil {
 		return "{}", nil
 	}
-	b, err := json.Marshal(meta)
+	b, err := codec.Marshal(meta)
 	if err != nil {
 		return "", fmt.Errorf("markdown.frontmatter: %w", err)
 	}

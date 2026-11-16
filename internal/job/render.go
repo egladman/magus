@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
@@ -332,7 +332,7 @@ type describedJob struct {
 // MarshalJSON prints the job member as a describedJob. The shallower job
 // member shadows Terms' own. YAML is no apply input and keeps the stored row.
 func (o DescribeOutput) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
+	return codec.Marshal(struct {
 		Lease describedJob `json:"job"`
 		Terms
 		Goals job.Status `json:"goals"`

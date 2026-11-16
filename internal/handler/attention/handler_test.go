@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/egladman/magus/internal/handler"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 )
@@ -61,7 +61,7 @@ func getQueue(t *testing.T, h *Handler) (int, attentionView) {
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/attention", nil))
 	var out attentionView
 	if w.Code == http.StatusOK {
-		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		if err := codec.Unmarshal(w.Body.Bytes(), &out); err != nil {
 			t.Fatalf("want valid JSON: %v; body %s", err, w.Body.String())
 		}
 	}
@@ -134,7 +134,7 @@ func TestAttentionHandler_DisposeClosesTheRequest(t *testing.T) {
 		t.Fatalf("want 200, got %d; body %s", w.Code, w.Body.String())
 	}
 	var closed sessions.AttentionRequest
-	if err := json.Unmarshal(w.Body.Bytes(), &closed); err != nil {
+	if err := codec.Unmarshal(w.Body.Bytes(), &closed); err != nil {
 		t.Fatalf("want the disposed row back: %v; body %s", err, w.Body.String())
 	}
 	if !closed.Disposed || closed.Note != "handed it over" {

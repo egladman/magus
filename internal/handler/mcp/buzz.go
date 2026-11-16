@@ -12,8 +12,8 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/transform"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -61,9 +61,9 @@ func (t *buzzTool) request(params map[string]any) (transform.Request, error) {
 	if err != nil {
 		return transform.Request{}, err
 	}
-	var input json.RawMessage
+	var input codec.RawMessage
 	if value, found := params["input"]; found {
-		input, err = json.Marshal(value)
+		input, err = codec.Marshal(value)
 		if err != nil {
 			return transform.Request{}, types.DiagnosticErrorf(types.MCPBuzzFailed, "%s: encode input: %v", hint.ToolBuzz, err)
 		}
@@ -98,7 +98,7 @@ var codedStderr = regexp.MustCompile(`^\[[A-Z]{2,8}[0-9]{4}\] `)
 // code and remedy reach the caller once.
 func runWorker[R any](ctx context.Context, w worker, req any) (R, error) {
 	var zero R
-	wire, err := json.Marshal(req)
+	wire, err := codec.Marshal(req)
 	if err != nil {
 		return zero, types.DiagnosticErrorf(w.code, "%s: encode request: %v", w.tool, err)
 	}
@@ -135,7 +135,7 @@ func runWorker[R any](ctx context.Context, w worker, req any) (R, error) {
 		return zero, types.DiagnosticErrorf(w.code, "%s: script failed: %s", w.tool, stderr)
 	}
 	var result R
-	if err := json.UnmarshalStrict([]byte(res.Stdout), &result); err != nil {
+	if err := codec.UnmarshalStrict([]byte(res.Stdout), &result); err != nil {
 		return zero, types.DiagnosticErrorf(w.code, "%s: worker returned an invalid response: %v", w.tool, err)
 	}
 	return result, nil

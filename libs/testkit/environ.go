@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sandbox/env"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // goSettings are the Go toolchain's settings a test inherits beyond the sandbox's
@@ -161,7 +161,7 @@ func goEnv(dir string) (map[string]string, error) {
 		return nil, fmt.Errorf("testkit: go env: %w", err)
 	}
 	var dirs map[string]string
-	if err := json.Unmarshal(out, &dirs); err != nil {
+	if err := codec.Unmarshal(out, &dirs); err != nil {
 		return nil, fmt.Errorf("testkit: go env: %w", err)
 	}
 	return dirs, nil

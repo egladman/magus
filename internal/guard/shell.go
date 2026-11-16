@@ -22,9 +22,9 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
@@ -740,7 +740,7 @@ func rewritesThroughGrader(c locatedCall, heredoc, hook, placement string) bool 
 // there is never inferred. An unreadable store is a deny.
 // dryRun judges as [Request.DryRun] does.
 func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before, after []byte, dryRun bool) verdict.Judgment {
-	envelope, _ := json.Marshal(map[string]any{
+	envelope, _ := codec.Marshal(map[string]any{
 		"cwd": root,
 		"tool_input": map[string]any{
 			"file_path":  filepath.Join(root, filepath.FromSlash(rel)),

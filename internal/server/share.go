@@ -14,11 +14,11 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -64,7 +64,7 @@ func (s *Server) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 		// does not parse is refused rather than read as the default.
 		handler.LimitRequestBody(w, r)
 		var req shareRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		if err := codec.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 			refuseShare(w, r, rpcerr.Error{
 				Code:    connect.CodeInvalidArgument,
 				Reason:  types.ShareRequestMalformed,
@@ -95,7 +95,7 @@ func (s *Server) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 		trail.AppendMint(r.Context(), trailDir, "share.mint", trail.MintRecord{Minted: link.Credential, Expires: link.ExpiresAt, Minter: minter})
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		if err := json.NewEncoder(w).Encode(shareResponse{
+		if err := codec.NewEncoder(w).Encode(shareResponse{
 			URL:        link.URL,
 			ExpiresAt:  link.ExpiresAt.UTC().Format(time.RFC3339),
 			Superseded: link.Superseded,

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
@@ -29,11 +29,11 @@ func TestRecordsSweptKeepsItsLastPass(t *testing.T) {
 	path, err := s.Path()
 	require.NoError(t, err)
 	rows := []job.Job{{ID: "a"}}
-	passes := int64(2 + file.CompactSlack + 1)
+	passes := int64(2 + codec.CompactSlack + 1)
 	for at := range passes {
 		s.writeRecordsSwept(at, rows)
 	}
-	read, err := file.ReadLines(filepath.Join(filepath.Dir(path), recordsSweptFile))
+	read, err := codec.ReadLines(filepath.Join(filepath.Dir(path), recordsSweptFile))
 	require.NoError(t, err)
 	assert.Len(t, read.Lines, 1, "the pass that made the log due rewrote it")
 	assert.True(t, s.recordsSwept(passes-1, rows))

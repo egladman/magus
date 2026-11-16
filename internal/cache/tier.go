@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -99,7 +99,7 @@ func (t *localTier) lookup(ctx context.Context, s *Step, hash string) (*entry, e
 }
 
 func (t *localTier) store(_ context.Context, s *Step, snap *Manifest) error {
-	data, err := json.MarshalIndent(snap, "", "  ")
+	data, err := codec.MarshalIndent(snap, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -403,7 +403,7 @@ func (n *RemoteNamespace) Get(ctx context.Context, key string) (io.ReadCloser, e
 		return nil, fmt.Errorf("remote %s/%s: %w", n.ns, key, err)
 	}
 	var m objectMeta
-	if err := json.Unmarshal(meta, &m); err != nil || m.Namespace != n.ns || m.Key != key {
+	if err := codec.Unmarshal(meta, &m); err != nil || m.Namespace != n.ns || m.Key != key {
 		return nil, fmt.Errorf("remote %s/%s: object is not bound to this key", n.ns, key)
 	}
 	return io.NopCloser(bytes.NewReader(payload)), nil
@@ -433,7 +433,7 @@ func (n *RemoteNamespace) Put(ctx context.Context, key string, r io.Reader) erro
 	if err != nil {
 		return err
 	}
-	meta, err := json.Marshal(objectMeta{Namespace: n.ns, Key: key})
+	meta, err := codec.Marshal(objectMeta{Namespace: n.ns, Key: key})
 	if err != nil {
 		return err
 	}

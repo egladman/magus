@@ -27,9 +27,9 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
@@ -232,7 +232,7 @@ func writeCostState(facts hint.Gate, st costState) {
 	if facts.CacheDir() == "" {
 		return
 	}
-	body, err := json.Marshal(st)
+	body, err := codec.Marshal(st)
 	if err != nil {
 		return
 	}
@@ -312,7 +312,7 @@ func (st *costState) readRecord(line []byte) []toolResult {
 		return nil
 	}
 	var rec transcriptUsage
-	if json.Unmarshal(line, &rec) != nil || rec.IsSidechain {
+	if codec.Unmarshal(line, &rec) != nil || rec.IsSidechain {
 		return nil
 	}
 	if tokens, window, ok := rec.contextSize(); ok {
@@ -327,7 +327,7 @@ func (st *costState) readRecord(line []byte) []toolResult {
 		return results
 	}
 	var blocks []contentBlock
-	if len(rec.Message.Content) > 0 && rec.Message.Content[0] == '[' && json.Unmarshal(rec.Message.Content, &blocks) == nil {
+	if len(rec.Message.Content) > 0 && rec.Message.Content[0] == '[' && codec.Unmarshal(rec.Message.Content, &blocks) == nil {
 		for _, b := range blocks {
 			if b.Type == "tool_result" {
 				st.noteRefs(b.Content)
@@ -339,11 +339,11 @@ func (st *costState) readRecord(line []byte) []toolResult {
 
 // noteRefs adds to Refs every minted output ref, invocation id and guard verdict ref a
 // tool result's text names.
-func (st *costState) noteRefs(raw json.RawMessage) {
+func (st *costState) noteRefs(raw codec.RawMessage) {
 	var text string
-	if json.Unmarshal(raw, &text) != nil {
+	if codec.Unmarshal(raw, &text) != nil {
 		var blocks []contentBlock
-		_ = json.Unmarshal(raw, &blocks)
+		_ = codec.Unmarshal(raw, &blocks)
 		for _, b := range blocks {
 			text += b.Text + "\n"
 		}
@@ -377,13 +377,13 @@ func namesRef(w string) bool {
 // contentBlock is one entry of a message's content: a tool call the model made, or the
 // result handed back for one.
 type contentBlock struct {
-	Type      string          `json:"type"`
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	Input     map[string]any  `json:"input"`
-	ToolUseID string          `json:"tool_use_id"`
-	Content   json.RawMessage `json:"content"`
-	Text      string          `json:"text"`
+	Type      string           `json:"type"`
+	ID        string           `json:"id"`
+	Name      string           `json:"name"`
+	Input     map[string]any   `json:"input"`
+	ToolUseID string           `json:"tool_use_id"`
+	Content   codec.RawMessage `json:"content"`
+	Text      string           `json:"text"`
 }
 
 // toolCalls files the tool calls rec starts in Pending and returns the results it hands
@@ -414,7 +414,7 @@ func (st *costState) toolCalls(rec transcriptUsage) []toolResult {
 		switch rec.Payload.Type {
 		case "function_call":
 			var args map[string]any
-			_ = json.Unmarshal([]byte(rec.Payload.Arguments), &args)
+			_ = codec.Unmarshal([]byte(rec.Payload.Arguments), &args)
 			start(rec.Payload.CallID, rec.Payload.Name, inputClass(args))
 		case "function_call_output":
 			finish(rec.Payload.CallID, resultChars(rec.Payload.Output))
@@ -425,7 +425,7 @@ func (st *costState) toolCalls(rec transcriptUsage) []toolResult {
 		return nil
 	}
 	var blocks []contentBlock
-	if json.Unmarshal(rec.Message.Content, &blocks) != nil {
+	if codec.Unmarshal(rec.Message.Content, &blocks) != nil {
 		return nil
 	}
 	for _, b := range blocks {
@@ -441,16 +441,16 @@ func (st *costState) toolCalls(rec transcriptUsage) []toolResult {
 
 // resultChars is the size of a tool result: a string's length, the text of a list of
 // blocks, or the encoded size of anything else.
-func resultChars(raw json.RawMessage) int {
+func resultChars(raw codec.RawMessage) int {
 	if len(raw) == 0 {
 		return 0
 	}
 	var s string
-	if json.Unmarshal(raw, &s) == nil {
+	if codec.Unmarshal(raw, &s) == nil {
 		return len(s)
 	}
 	var blocks []contentBlock
-	if json.Unmarshal(raw, &blocks) == nil {
+	if codec.Unmarshal(raw, &blocks) == nil {
 		n := 0
 		for _, b := range blocks {
 			n += len(b.Text)

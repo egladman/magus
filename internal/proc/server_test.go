@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/proc/environ"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -162,15 +162,15 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 // struct: a tag typo would leave every assertion above green while the server still saw
 // nothing. A body with no lease decodes to "" rather than failing.
 func TestRunRequestLeaseCrossesTheWire(t *testing.T) {
-	raw, err := json.Marshal(runRequest{Args: []string{"run", "build"}, Cwd: "/w", Lease: "fleet/f3"})
+	raw, err := codec.Marshal(runRequest{Args: []string{"run", "build"}, Cwd: "/w", Lease: "fleet/f3"})
 	require.NoError(t, err)
 	assert.Contains(t, string(raw), `"lease":"fleet/f3"`)
 	var got runRequest
-	require.NoError(t, json.Unmarshal(raw, &got))
+	require.NoError(t, codec.Unmarshal(raw, &got))
 	assert.Equal(t, "fleet/f3", got.Lease)
 
 	var none runRequest
-	require.NoError(t, json.Unmarshal([]byte(`{"args":["run","build"],"cwd":"/w"}`), &none))
+	require.NoError(t, codec.Unmarshal([]byte(`{"args":["run","build"],"cwd":"/w"}`), &none))
 	assert.Empty(t, none.Lease)
 }
 
@@ -362,7 +362,7 @@ func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 	defer resp.Body.Close()
 
 	var refusal errorReply
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&refusal))
+	require.NoError(t, codec.NewDecoder(resp.Body).Decode(&refusal))
 	assert.Equal(t, http.StatusConflict, resp.StatusCode, "a not-adopted refusal is a 409")
 	assert.Equal(t, ErrVersionMismatch.Error(), refusal.Message, "a mismatched dev fingerprint is refused as a version mismatch")
 	assert.False(t, called.Load(), "the refused run must not execute")

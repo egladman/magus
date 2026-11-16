@@ -1,4 +1,4 @@
-package jsonl
+package codec
 
 import (
 	"bytes"
@@ -19,8 +19,8 @@ type mark struct {
 	Gone  bool   `json:"gone,omitzero"`
 }
 
-func marks(path string) Store[mark] {
-	return Store[mark]{Path: path, Key: func(m mark) string { return m.Key }, Live: func(m mark) bool { return !m.Gone },
+func marks(path string) JSONL[mark] {
+	return JSONL[mark]{Path: path, Key: func(m mark) string { return m.Key }, Live: func(m mark) bool { return !m.Gone },
 		Old: filepath.Join(filepath.Dir(path), "marks.json")}
 }
 
@@ -129,6 +129,11 @@ func (s *StoreSuite) TestNamesTheLineThatDoesNotDecode() {
 	_, err := l.Load()
 	require.ErrorContains(s.T(), err, l.Path+":3: ")
 	require.ErrorIs(s.T(), err, ErrLineUndecodable)
+	var line *LineError
+	require.ErrorAs(s.T(), err, &line)
+	assert.Equal(s.T(), 3, line.Line)
+	var syntax *SyntaxError
+	assert.ErrorAs(s.T(), err, &syntax, "the line's own fault stays reachable")
 }
 
 // While the file an older writer kept the store in exists, neither a read nor a write goes
@@ -138,6 +143,9 @@ func (s *StoreSuite) TestRefusesWhileTheOldFileExists() {
 	require.NoError(s.T(), os.WriteFile(l.Old, []byte(`[]`), 0o644))
 	_, err := l.Load()
 	require.ErrorIs(s.T(), err, ErrLegacyStore)
+	var legacy *LegacyStoreError
+	require.ErrorAs(s.T(), err, &legacy)
+	assert.Equal(s.T(), l.Old, legacy.Path)
 	require.ErrorContains(s.T(), err, "preserve it")
 	require.ErrorIs(s.T(), l.Update(s.T().Context(), set(mark{Key: "a"})), ErrLegacyStore)
 	raw, err := os.ReadFile(l.Old)

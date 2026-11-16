@@ -25,10 +25,10 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/secrets"
@@ -687,7 +687,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 				} `json:"details"`
 			}
 			//nolint:testifylint // assertRefused reports every route; require would stop at the first
-			if !assert.NoError(t, json.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
+			if !assert.NoError(t, codec.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
 				return
 			}
 			assert.Contains(t, []string{"unauthenticated", "permission_denied", "not_found"}, got.Code, what)
@@ -708,7 +708,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 			} `json:"error"`
 		}
 		//nolint:testifylint // assertRefused reports every route; require would stop at the first
-		if !assert.NoError(t, json.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
+		if !assert.NoError(t, codec.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
 			return
 		}
 		assert.Equal(t, resp.StatusCode, got.Error.Code, what)
@@ -967,7 +967,7 @@ func TestMCPFailedAuthIsRateLimited(t *testing.T) {
 			} `json:"error"`
 		}
 		body, _ := io.ReadAll(resp.Body)
-		require.NoError(t, json.Unmarshal(body, &got), "%s", body)
+		require.NoError(t, codec.Unmarshal(body, &got), "%s", body)
 		require.NotEmpty(t, got.Error.Details)
 		return got.Error.Details[0].Reason
 	}
@@ -1111,7 +1111,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 			Type string `json:"type"`
 		} `json:"details"`
 	}
-	require.NoError(t, json.Unmarshal(body, &connectErr), "%s", body)
+	require.NoError(t, codec.Unmarshal(body, &connectErr), "%s", body)
 	assert.Equal(t, "failed_precondition", connectErr.Code)
 	assert.Contains(t, connectErr.Message, "[MGS3016] workspace /repo failed to load: magusfile.buzz:3:3 [BZZ1005]")
 	var kinds []string
@@ -1136,7 +1136,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 			} `json:"details"`
 		} `json:"error"`
 	}
-	require.NoError(t, json.Unmarshal(body, &aip), "%s", body)
+	require.NoError(t, codec.Unmarshal(body, &aip), "%s", body)
 	assert.Equal(t, "FAILED_PRECONDITION", aip.Error.Status)
 	require.Len(t, aip.Error.Details, 4)
 	assert.Equal(t, "MGS3016", aip.Error.Details[0].Reason)
@@ -1231,7 +1231,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 			Code    string `json:"code"`
 			Message string `json:"message"`
 		}
-		require.NoError(t, json.Unmarshal(body, &got), "%s: %s", name, body)
+		require.NoError(t, codec.Unmarshal(body, &got), "%s: %s", name, body)
 		assert.Equal(t, "failed_precondition", got.Code, name)
 		assert.Contains(t, got.Message, "[MGS3016]", name)
 	}

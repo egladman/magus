@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 )
@@ -57,7 +57,7 @@ func plantRecord(t *testing.T, name, secret string, grant job.Access) {
 		ID: sum[:8], Name: name, Kind: job.KindStored, SHA256: sum, Grant: grant,
 		Created: time.Now().Add(-time.Minute).UTC(), Expires: time.Now().Add(time.Hour).UTC(),
 	}}
-	b, err := json.Marshal(rec)
+	b, err := codec.Marshal(rec)
 	require.NoError(t, err)
 	dir, err := StateDir()
 	require.NoError(t, err)

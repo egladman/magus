@@ -56,7 +56,7 @@ line.
 - **Encoding lives on the type.** An entry type owns its encoding in
   `MarshalJSON` and `UnmarshalJSON`. A reader hands each line to the type and
   never splits, scans or pattern-matches a line itself. A store a person
-  edits decodes strictly ([`internal/json`](https://github.com/egladman/magus/tree/main/internal/json)'s `StrictDecoder`): an unknown
+  edits decodes strictly ([`libs/codec`](https://github.com/egladman/magus/tree/main/libs/codec)'s `StrictDecoder`): an unknown
   field, a duplicate key, a wrong kind or a bad value is an error naming
   `path:line`. A store only magus writes may skip a field a newer magus added.
 - **An old format is named, never read.** When a store changes shape, the old
@@ -90,10 +90,10 @@ The stores that do not follow the format yet, as found on 2026-10-14:
 
 ## Enforced by
 
-- `file.JSONL` gives a keyed store its append, its last-line read, its
+- `codec.JSONL` gives a keyed store its append, its last-line read, its
   compaction and its lock.
 - `file.WriteFileAtomic` gives every rewrite its rename.
-- [`internal/json`](https://github.com/egladman/magus/tree/main/internal/json) gives every line its strict decoder.
+- [`libs/codec`](https://github.com/egladman/magus/tree/main/libs/codec) gives every line its strict decoder.
 - The `store-path-export` conformance metric fails an exported path of a
   state-writing package that code outside it references; the shared root
   resolvers (`config.CacheDir`, `config.StoreDir`, `vcs.StateDir`) predate it,

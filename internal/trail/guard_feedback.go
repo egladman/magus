@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
@@ -178,11 +178,11 @@ func agentCommands(base string, events []trailtypes.Event) iter.Seq[agentCommand
 			}
 			command := agentCommand{event: event}
 			raw, err := trailtypes.ReadBlob(base, event.RequestRef)
-			if err != nil || json.Unmarshal(raw, &command.request) != nil {
+			if err != nil || codec.Unmarshal(raw, &command.request) != nil {
 				continue
 			}
 			raw, err = trailtypes.ReadBlob(base, event.ResponseRef)
-			if err != nil || json.Unmarshal(raw, &command.response) != nil {
+			if err != nil || codec.Unmarshal(raw, &command.response) != nil {
 				continue
 			}
 			if !yield(command) {

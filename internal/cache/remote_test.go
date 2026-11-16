@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -227,7 +227,7 @@ func buildEntry(t *testing.T, project, hash, outPath, manifestBlob string, casBl
 		Outputs:     []OutputRecord{{Path: outPath, Blob: manifestBlob, Mode: 0o644, Size: 5}},
 		CreatedAt:   time.Now().UTC(),
 	}
-	mb, err := json.Marshal(m)
+	mb, err := codec.Marshal(m)
 	require.NoError(t, err, "marshal manifest")
 
 	var buf bytes.Buffer
@@ -477,7 +477,7 @@ func buildRawEntry(t *testing.T, members []tarMember) []byte {
 func TestRemoteRejectsDuplicateManifest(t *testing.T) {
 	project, hash := learnHash(t)
 	good := sha256Hex([]byte("built"))
-	mb, err := json.Marshal(Manifest{
+	mb, err := codec.Marshal(Manifest{
 		ProjectPath: project, Hash: hash,
 		Outputs:   []OutputRecord{{Path: "test/pkg/out.txt", Blob: good, Mode: 0o644, Size: 5}},
 		CreatedAt: time.Now().UTC(),
@@ -504,7 +504,7 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 	blobA := bytes.Repeat([]byte("A"), 900)
 	blobB := bytes.Repeat([]byte("B"), 900)
 	hashA, hashB := sha256Hex(blobA), sha256Hex(blobB)
-	mb, err := json.Marshal(Manifest{
+	mb, err := codec.Marshal(Manifest{
 		ProjectPath: project, Hash: hash,
 		Outputs: []OutputRecord{
 			{Path: "test/pkg/a", Blob: hashA, Mode: 0o644, Size: 900},
@@ -698,7 +698,7 @@ func logRecord(t *testing.T, buf *bytes.Buffer, msg string) map[string]any {
 	for line := range strings.SplitSeq(buf.String(), "\n") {
 		if strings.Contains(line, fmt.Sprintf("\"msg\":\"%s\"", msg)) {
 			rec = nil
-			require.NoError(t, json.Unmarshal([]byte(line), &rec))
+			require.NoError(t, codec.Unmarshal([]byte(line), &rec))
 		}
 	}
 	require.NotNil(t, rec, "no %s record in: %s", msg, buf.String())

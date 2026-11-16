@@ -17,10 +17,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -635,7 +634,7 @@ func storedLines(t *testing.T, path string) []map[string]any {
 	var out []map[string]any
 	for line := range strings.SplitSeq(strings.TrimSuffix(string(raw), "\n"), "\n") {
 		var m map[string]any
-		require.NoError(t, json.Unmarshal([]byte(line), &m), "line %q", line)
+		require.NoError(t, codec.Unmarshal([]byte(line), &m), "line %q", line)
 		out = append(out, m)
 	}
 	return out
@@ -822,11 +821,11 @@ func TestStoreCompactsPastTheBound(t *testing.T) {
 	seed(t, s, lease("a"))
 	path, err := s.Path()
 	require.NoError(t, err)
-	bound := 2 + file.CompactSlack
+	bound := 2 + codec.CompactSlack
 	for i := range bound {
 		_, err := s.Update(t.Context(), "a", func(u *job.Job) { u.Agent = job.Instructed(fmt.Sprint(i)) })
 		require.NoError(t, err)
-		assert.False(t, file.CompactDue(len(storedLines(t, path)), 1))
+		assert.False(t, codec.CompactDue(len(storedLines(t, path)), 1))
 	}
 	lines := storedLines(t, path)
 	assert.Less(t, len(lines), bound, "the bound was crossed and the file rewritten")
@@ -897,12 +896,12 @@ func TestStoreRefusesTheOneDocumentPlan(t *testing.T) {
 	require.NoError(t, os.WriteFile(old, []byte(`{"jobs":[{"id":"a"}]}`+"\n"), 0o644))
 
 	_, err = s.List()
-	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorIs(t, err, codec.ErrLegacyStore)
 	require.ErrorIs(t, err, types.LegacyStorePresent)
 	require.ErrorContains(t, err, "preserve it")
 	require.ErrorContains(t, err, fmt.Sprintf("set it aside with `mv %s %s.old`", old, old), "the refusal names the move made below")
 	_, err = s.Update(t.Context(), "a", func(*job.Job) {})
-	require.ErrorIs(t, err, file.ErrLegacyStore, "a write is refused too")
+	require.ErrorIs(t, err, codec.ErrLegacyStore, "a write is refused too")
 	raw, err := os.ReadFile(old)
 	require.NoError(t, err)
 	assert.Equal(t, "{\"jobs\":[{\"id\":\"a\"}]}\n", string(raw))
@@ -1422,14 +1421,14 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 				b.Fatal(err)
 			}
 			var superseded [][]byte
-			for len(rows)+1+len(superseded) < 2*len(rows)+file.CompactSlack {
-				line, err := json.Marshal(rows[len(superseded)%len(rows)])
+			for len(rows)+1+len(superseded) < 2*len(rows)+codec.CompactSlack {
+				line, err := codec.Marshal(rows[len(superseded)%len(rows)])
 				if err != nil {
 					b.Fatal(err)
 				}
 				superseded = append(superseded, line)
 			}
-			if err := file.AppendLines(path, superseded, 0o644); err != nil {
+			if err := codec.AppendLines(path, superseded, 0o644); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -1483,8 +1482,8 @@ func (s *jobSuite) migratingStore(body string, migrations ...migrate.Migration) 
 // renamed is a migration that renames one spec member of every row carrying it.
 func renamed(from, to string) migrate.Migration {
 	return migrate.Migration{Name: fmt.Sprintf("%s to %s", from, to), Up: func(e migrate.Entry) (migrate.Entry, error) {
-		var spec map[string]json.RawMessage
-		if err := json.Unmarshal(e["spec"], &spec); err != nil {
+		var spec map[string]codec.RawMessage
+		if err := codec.Unmarshal(e["spec"], &spec); err != nil {
 			return nil, err
 		}
 		if v, ok := spec[from]; ok {
@@ -1492,7 +1491,7 @@ func renamed(from, to string) migrate.Migration {
 			spec[to] = v
 		}
 		var err error
-		e["spec"], err = json.Marshal(spec)
+		e["spec"], err = codec.Marshal(spec)
 		return e, err
 	}}
 }
@@ -1590,13 +1589,13 @@ func checkoutStore(t *testing.T, root, state string, extra map[string]any) (*Sto
 	t.Helper()
 	st := tempStore(t, root)
 	r := recordJob(job.Job{ID: "a", State: job.State(state), Created: 1, Updated: 1}, nil)
-	r.Spec.Unknown = map[string]json.RawMessage{"goal": json.RawMessage(`"ship it"`)}
-	line, err := json.Marshal(r)
+	r.Spec.Unknown = map[string]codec.RawMessage{"goal": codec.RawMessage(`"ship it"`)}
+	line, err := codec.Marshal(r)
 	require.NoError(t, err)
 	var row map[string]any
-	require.NoError(t, json.Unmarshal(line, &row))
+	require.NoError(t, codec.Unmarshal(line, &row))
 	maps.Copy(row["status"].(map[string]any), extra)
-	line, err = json.Marshal(row)
+	line, err = codec.Marshal(row)
 	require.NoError(t, err)
 	notices := &bytes.Buffer{}
 	st.notices, st.migrations = notices, []migrate.Migration{renamed("goal", "parent")}

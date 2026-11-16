@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -21,7 +22,8 @@ import (
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -307,8 +309,8 @@ type recordsPass struct {
 }
 
 // recordsSweptLog keys every pass alike, so the last one is the log's one entry.
-func (s *Store) recordsSweptLog() file.JSONL[recordsPass] {
-	return file.JSONL[recordsPass]{Path: filepath.Join(filepath.Dir(s.path), recordsSweptFile),
+func (s *Store) recordsSweptLog() codec.JSONL[recordsPass] {
+	return codec.JSONL[recordsPass]{Log: slog.With(attr.Component("magus")), Path: filepath.Join(filepath.Dir(s.path), recordsSweptFile),
 		Key: func(recordsPass) string { return "" }}
 }
 
@@ -907,7 +909,7 @@ func ForkFacts(ctx context.Context, root string, rows []job.Job, last FullTest) 
 		facts.FinishedBranches = append(facts.FinishedBranches, fmt.Sprintf("%s (job %s, %d commit(s))", w.Branch, w.Job, w.Commits))
 	}
 	if len(waiting) > 0 {
-		record, _ := json.Marshal(map[string]any{
+		record, _ := codec.Marshal(map[string]any{
 			"api_version": job.APIVersion,
 			"id":          fmt.Sprintf("integrate-%s-branches", strconv.Itoa(len(waiting))),
 			"agent":       map[string]any{"instructions": "merge each finished branch with --no-ff, resolve, regenerate, and pass the check", "worker": map[string]string{"type": "resumed"}},

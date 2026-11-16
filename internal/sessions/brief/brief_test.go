@@ -14,14 +14,13 @@ import (
 	"github.com/egladman/magus"
 	_ "github.com/egladman/magus/buzzengine" // Inspect fails without the engine linked
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -737,16 +736,16 @@ func seedFiled(t *testing.T, store *job.Store, id string, result *jobtypes.Resul
 	t.Helper()
 	path, err := store.Path()
 	require.NoError(t, err)
-	raw, err := json.Marshal(result)
+	raw, err := codec.Marshal(result)
 	require.NoError(t, err)
 	var filed map[string]any
-	require.NoError(t, json.Unmarshal(raw, &filed))
-	line, err := json.Marshal(map[string]any{
+	require.NoError(t, codec.Unmarshal(raw, &filed))
+	line, err := codec.Marshal(map[string]any{
 		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
 		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
 	})
 	require.NoError(t, err)
-	require.NoError(t, file.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
+	require.NoError(t, codec.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
 }
 
 // fixtureCamelKeys is v with every object key camelCased, as the attempts.jsonl record

@@ -24,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/job/evidence"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/review"
 	reviewimpact "github.com/egladman/magus/internal/review/impact"
@@ -32,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
@@ -432,7 +432,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content review.Content, p
 		if rerr != nil {
 			return difftypes.Diff{}, fmt.Errorf("magus diff: read --baseline: %w", rerr)
 		}
-		if uerr := json.Unmarshal(raw, &baseline); uerr != nil {
+		if uerr := codec.Unmarshal(raw, &baseline); uerr != nil {
 			return difftypes.Diff{}, fmt.Errorf("magus diff: decode --baseline %s (expected `%s` output): %w",
 				baselinePath, hint.GraphExport.With("--symbols", "-o", "json"), uerr)
 		}

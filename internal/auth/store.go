@@ -17,8 +17,8 @@ import (
 
 	"github.com/egladman/magus/internal/dropin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/xdg"
@@ -53,12 +53,12 @@ const preFoldVersion = "2"
 
 // recordVersion reads a record's version member, preFoldVersion as
 // storeVersion. Any other integer, or no member, is "".
-func recordVersion(raw json.RawMessage) types.APIVersion {
+func recordVersion(raw codec.RawMessage) types.APIVersion {
 	if string(raw) == preFoldVersion {
 		return storeVersion
 	}
 	var v types.APIVersion
-	if json.Unmarshal(raw, &v) != nil {
+	if codec.Unmarshal(raw, &v) != nil {
 		return ""
 	}
 	return v
@@ -109,12 +109,12 @@ type tokenRecord struct {
 
 func (r *tokenRecord) UnmarshalJSON(b []byte) error {
 	var probe struct {
-		Version json.RawMessage `json:"version"`
+		Version codec.RawMessage `json:"version"`
 	}
-	if err := json.Unmarshal(b, &probe); err != nil {
+	if err := codec.Unmarshal(b, &probe); err != nil {
 		return err
 	}
-	if err := json.Unmarshal(b, &r.Token); err != nil {
+	if err := codec.Unmarshal(b, &r.Token); err != nil {
 		return err
 	}
 	r.Version = recordVersion(probe.Version)
@@ -289,9 +289,9 @@ func parseTokenRecord(name, path string, info fs.FileInfo, now time.Time) (Token
 		return Token{}, fmt.Errorf("auth: read token %s: %w", path, err)
 	}
 	var version struct {
-		Version json.RawMessage `json:"version"`
+		Version codec.RawMessage `json:"version"`
 	}
-	if err := json.Unmarshal(data, &version); err != nil {
+	if err := codec.Unmarshal(data, &version); err != nil {
 		return Token{}, invalidRecord(path, "it is not JSON: %v", err)
 	}
 	switch got := recordVersion(version.Version); {
@@ -301,7 +301,7 @@ func parseTokenRecord(name, path string, info fs.FileInfo, now time.Time) (Token
 		return Token{}, types.DiagnosticErrorf(types.TokenStoreTooNew, "auth: token %s is %s, and this magus reads only %s; upgrade magus", path, got, storeVersion)
 	}
 	var rec tokenRecord
-	if err := json.Unmarshal(data, &rec); err != nil {
+	if err := codec.Unmarshal(data, &rec); err != nil {
 		return Token{}, invalidRecord(path, "it does not parse: %v", err)
 	}
 	t := rec.Token
@@ -412,7 +412,7 @@ func (s *Store) removeExact(t Token) error {
 	}
 	var rec tokenRecord
 	data, err := os.ReadFile(aside)
-	if err == nil && json.Unmarshal(data, &rec) == nil && rec.SHA256 == t.SHA256 {
+	if err == nil && codec.Unmarshal(data, &rec) == nil && rec.SHA256 == t.SHA256 {
 		return os.Remove(aside)
 	}
 	if err := os.Link(aside, path); err != nil {
@@ -543,7 +543,7 @@ func invalidRequest(format string, args ...any) error {
 }
 
 func writeTokenRecord(dir string, t Token) error {
-	data, err := json.MarshalIndent(tokenRecord{Version: storeVersion, Token: t}, "", "  ")
+	data, err := codec.MarshalIndent(tokenRecord{Version: storeVersion, Token: t}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("auth: encode token: %w", err)
 	}

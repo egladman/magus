@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/secrets"
 )
 
@@ -145,7 +145,7 @@ func (p *CacheReadProxy) refuse(w http.ResponseWriter, r *http.Request, status i
 }
 
 func twirpError(w http.ResponseWriter, status int, code, msg string) {
-	b, _ := json.Marshal(map[string]string{"code": code, "msg": msg})
+	b, _ := codec.Marshal(map[string]string{"code": code, "msg": msg})
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(b)

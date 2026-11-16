@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -21,7 +21,7 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 func TestRunReturnsJSON(t *testing.T) {
 	got, err := Run(context.Background(), Request{
 		Script: `fun transform(input: any, args: [str]) > any { return input; }`,
-		Input:  json.RawMessage(`{"name":"magus","count":2}`),
+		Input:  codec.RawMessage(`{"name":"magus","count":2}`),
 	})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"name":"magus","count":2}`, string(got.JSON))
@@ -32,7 +32,7 @@ func TestRunReturnsJSON(t *testing.T) {
 func TestRunDecodesIntegralInputAsInt(t *testing.T) {
 	got, err := Run(context.Background(), Request{
 		Script: `fun transform(input: any, args: [str]) > any { return input is int; }`,
-		Input:  json.RawMessage(`2`),
+		Input:  codec.RawMessage(`2`),
 	})
 	require.NoError(t, err)
 	assert.JSONEq(t, `true`, string(got.JSON))
@@ -67,7 +67,7 @@ func TestRunLimitsInputBeforeExecuting(t *testing.T) {
 	assert.ErrorContains(t, err, "buzz: script must be")
 	_, err = Run(context.Background(), Request{
 		Script: `fun transform(input: any, args: [str]) > any { return input; }`,
-		Input:  json.RawMessage(strings.Repeat("x", MaxInputBytes+1)),
+		Input:  codec.RawMessage(strings.Repeat("x", MaxInputBytes+1)),
 	})
 	assert.ErrorContains(t, err, "buzz: input exceeds")
 	_, err = Run(context.Background(), Request{
@@ -86,9 +86,9 @@ func TestMagusImportHasDiagnostic(t *testing.T) {
 
 func TestServe(t *testing.T) {
 	t.Setenv(WorkerEnv, "1")
-	wire, err := json.Marshal(Request{
+	wire, err := codec.Marshal(Request{
 		Script: `fun transform(input: any, args: [str]) > any { return input; }`,
-		Input:  json.RawMessage(`{"ok":true}`),
+		Input:  codec.RawMessage(`{"ok":true}`),
 	})
 	require.NoError(t, err)
 	var stdout, stderr bytes.Buffer
@@ -96,7 +96,7 @@ func TestServe(t *testing.T) {
 	_, set := os.LookupEnv(WorkerEnv)
 	assert.False(t, set, "a nested magus would start as another worker")
 	var result Result
-	require.NoError(t, json.UnmarshalStrict(stdout.Bytes(), &result))
+	require.NoError(t, codec.UnmarshalStrict(stdout.Bytes(), &result))
 	assert.JSONEq(t, `{"ok":true}`, string(result.JSON))
 }
 

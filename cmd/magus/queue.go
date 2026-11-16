@@ -23,7 +23,6 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/client"
@@ -31,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/xdg"
@@ -566,7 +566,7 @@ func (e *queueEnv) writeDocument(opts output.Options, doc []byte, shape any, nam
 		}
 	}
 	var record map[string]any
-	if err := json.Unmarshal(doc, &record); err != nil {
+	if err := codec.Unmarshal(doc, &record); err != nil {
 		return err
 	}
 	return writeFormatted(e.stdout, opts, record)

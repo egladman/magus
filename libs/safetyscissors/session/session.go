@@ -31,7 +31,6 @@ import (
 	"bytes"
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -44,7 +43,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/apiversion"
-	"github.com/egladman/magus/libs/safetyscissors/internal/jsonl"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
@@ -57,13 +56,13 @@ const APIVersion apiversion.APIVersion = "magus.sessions/v1alpha1"
 // integer from an older writer included, but for preFoldVersion.
 func olderVersion(line []byte) bool {
 	var stamp struct {
-		V json.RawMessage `json:"v"`
+		V codec.RawMessage `json:"v"`
 	}
-	if jsonl.Unmarshal(line, &stamp) != nil || stamp.V == nil || string(stamp.V) == preFoldVersion {
+	if codec.Unmarshal(line, &stamp) != nil || stamp.V == nil || string(stamp.V) == preFoldVersion {
 		return false
 	}
 	var v apiversion.APIVersion
-	return jsonl.Unmarshal(stamp.V, &v) != nil || v.Compare(APIVersion) < 0
+	return codec.Unmarshal(stamp.V, &v) != nil || v.Compare(APIVersion) < 0
 }
 
 // preFoldVersion is the integer an older magus stamped APIVersion's records with.
@@ -107,7 +106,7 @@ type Record struct {
 	Seq        uint64                `json:"seq"` // monotonic within an invocation, from 1
 	Kind       string                `json:"kind"`
 	Ts         int64                 `json:"ts"` // unix milliseconds
-	Payload    json.RawMessage       `json:"payload,omitempty"`
+	Payload    codec.RawMessage      `json:"payload,omitzero"`
 }
 
 // InvocationStart is the payload of the first fact an invocation writes: who is running,
@@ -148,8 +147,8 @@ type TargetResult struct {
 	Target     string `json:"target"`
 	Project    string `json:"project,omitempty"`
 	Outcome    string `json:"outcome"`
-	DurationMs int64  `json:"duration_ms,omitempty"`
-	Replayed   bool   `json:"replayed,omitempty"`
+	DurationMs int64  `json:"duration_ms"`
+	Replayed   bool   `json:"replayed"`
 	// Permitted says a deviation ledger let this pass. Outcome stays pass: a push gate
 	// and a job's owed check compare on it.
 	Permitted bool   `json:"permitted,omitzero"`
@@ -184,7 +183,7 @@ type TargetResult struct {
 func (r *TargetResult) UnmarshalJSON(b []byte) error {
 	type result TargetResult // no method set, so this does not recurse
 	var decoded result
-	if err := jsonl.Unmarshal(b, &decoded); err != nil {
+	if err := codec.Unmarshal(b, &decoded); err != nil {
 		return err
 	}
 	*r = TargetResult(decoded)
@@ -192,7 +191,7 @@ func (r *TargetResult) UnmarshalJSON(b []byte) error {
 		var legacy struct {
 			DurMs int64 `json:"dur_ms"`
 		}
-		if jsonl.Unmarshal(b, &legacy) == nil {
+		if codec.Unmarshal(b, &legacy) == nil {
 			r.DurationMs = legacy.DurMs
 		}
 	}
@@ -328,13 +327,13 @@ func (w *Writer) Append(kind string, payload any) error {
 func (w *Writer) write(kind string, payload any) error {
 	rec := Record{V: APIVersion, Invocation: w.invocation, Seq: w.seq + 1, Kind: kind, Ts: w.now().UnixMilli()}
 	if payload != nil {
-		raw, err := jsonl.Marshal(payload)
+		raw, err := codec.Marshal(payload)
 		if err != nil {
 			return fmt.Errorf("session: encode %s payload: %w", kind, err)
 		}
 		rec.Payload = raw
 	}
-	line, err := jsonl.Marshal(rec)
+	line, err := codec.Marshal(rec)
 	if err != nil {
 		return fmt.Errorf("session: encode %s record: %w", kind, err)
 	}
@@ -342,7 +341,7 @@ func (w *Writer) write(kind string, payload any) error {
 	// Opened and closed per append rather than held: an invocation's facts are
 	// low-frequency, and a long-lived handle would need a close nobody on a CLI path is
 	// positioned to run.
-	if err := jsonl.AppendLines(w.path, [][]byte{line}, 0o600, jsonl.WithoutSync()); err != nil {
+	if err := codec.AppendLines(w.path, [][]byte{line}, 0o600, codec.WithoutSync()); err != nil {
 		return fmt.Errorf("session: append %s record: %w", kind, err)
 	}
 	w.seq++
@@ -472,7 +471,7 @@ func readFile(path string) (records []Record, skipped, legacy int, vanished bool
 			switch {
 			case olderVersion(trimmed):
 				legacy++
-			case jsonl.Unmarshal(trimmed, &rec) != nil || rec.Kind == "":
+			case codec.Unmarshal(trimmed, &rec) != nil || rec.Kind == "":
 				skipped++
 			case rec.Invocation == "":
 				skipped++
@@ -532,7 +531,7 @@ type Summary struct {
 	StartedMs    int64           `json:"started_ms"`
 	LastMs       int64           `json:"last_ms"`
 	Facts        int             `json:"facts"`
-	Events       int             `json:"events,omitempty"` // of Facts, the ones a load put here
+	Events       int             `json:"events"` // of Facts, the ones a load put here
 	Targets      []TargetResult  `json:"targets,omitempty"`
 	// Agent is the pair off the NEWEST loaded [AgentEvent] that named one, so a session
 	// spanning a model or host switch reports what it ended on rather than what it began
@@ -567,19 +566,19 @@ func Summarize(fold Fold) []Summary {
 		switch rec.Kind {
 		case KindInvocationStart:
 			var start InvocationStart
-			if jsonl.Unmarshal(rec.Payload, &start) == nil {
+			if codec.Unmarshal(rec.Payload, &start) == nil {
 				s.Origin, s.Workspace, s.Command, s.Lease, s.LeaseFrom = start.Origin, start.Workspace, start.Command, start.Lease, start.LeaseFrom
 				s.TraceID, s.SpanID, s.ParentSpanID, s.Spawner = start.TraceID, start.SpanID, start.ParentSpanID, start.Spawner
 			}
 		case KindTargetResult:
 			var result TargetResult
-			if jsonl.Unmarshal(rec.Payload, &result) == nil {
+			if codec.Unmarshal(rec.Payload, &result) == nil {
 				s.Targets = append(s.Targets, result)
 			}
 		case KindAgentEvent:
 			s.Events++
 			var ev AgentEvent
-			if jsonl.Unmarshal(rec.Payload, &ev) == nil && ev.Agent != (Agent{}) && ev.AtMs >= s.pairAtMs {
+			if codec.Unmarshal(rec.Payload, &ev) == nil && ev.Agent != (Agent{}) && ev.AtMs >= s.pairAtMs {
 				s.Agent, s.pairAtMs = ev.Agent, ev.AtMs
 			}
 		}
@@ -690,9 +689,9 @@ type AgentEvent struct {
 	// Exit is the command's status where the host records one; hosts that do not report
 	// exit codes leave it zero, which is why Denied and Interrupted are separate fields
 	// rather than inferred from it.
-	Exit        int  `json:"exit,omitempty"`
-	Denied      bool `json:"denied,omitempty"`
-	Interrupted bool `json:"interrupted,omitempty"`
+	Exit        int  `json:"exit"`
+	Denied      bool `json:"denied"`
+	Interrupted bool `json:"interrupted"`
 	// NextServed are the hint ids this call's RESULT served, and NextFollowed the ids this
 	// call's COMMAND took up from a result served before it. The loader joins both;
 	// nothing a host reports fills either.
@@ -735,7 +734,7 @@ func LoadEvents(ctx context.Context, dir string, events []LoadEvent, start Invoc
 	// other's events are new and store them twice, permanently, because the dedup set is
 	// a snapshot.
 	var result LoadResult
-	err := jsonl.WithLock(ctx, filepath.Join(dir, loadLockName), loadLockTimeout, func() error {
+	err := codec.WithLock(ctx, filepath.Join(dir, loadLockName), loadLockTimeout, func() error {
 		var err error
 		result, err = loadEvents(dir, events, start, opts)
 		return err
@@ -828,7 +827,7 @@ func EachAgentEvent(fold Fold) iter.Seq2[string, AgentEvent] {
 				continue
 			}
 			var ev AgentEvent
-			if jsonl.Unmarshal(rec.Payload, &ev) != nil {
+			if codec.Unmarshal(rec.Payload, &ev) != nil {
 				continue
 			}
 			// A load files each host session under its own id, so the invocation IS the session.

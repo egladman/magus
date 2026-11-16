@@ -20,7 +20,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/egladman/magus/libs/safetyscissors/internal/jsonl"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
@@ -108,15 +108,15 @@ type Event struct {
 	Lease string `json:"lease,omitempty"`
 	// LeaseFrom is which source answered Lease, on the events whose producer resolved one.
 	LeaseFrom     job.LeaseSource `json:"lease_from,omitempty"`
-	Outcome       string          `json:"outcome"`                 // one of the Outcome* constants
-	Error         string          `json:"error,omitempty"`         // error text when Outcome is OutcomeError
-	DurationMs    int64           `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions; on an agent command, the host-reported tool time
-	GuardMs       int64           `json:"guard_ms,omitempty"`      // how long the guard took to judge an agent command
-	RequestRef    string          `json:"request_ref,omitempty"`   // blob ref for the request body (mcp<hash>)
-	ResponseRef   string          `json:"response_ref,omitempty"`  // blob ref for the response body
-	Preview       string          `json:"preview,omitempty"`       // opening characters of the response, for list views
-	RequestBytes  int64           `json:"request_bytes,omitempty"` // full request length
-	ResponseBytes int64           `json:"response_bytes,omitempty"`
+	Outcome       string          `json:"outcome"`                // one of the Outcome* constants
+	Error         string          `json:"error,omitempty"`        // error text when Outcome is OutcomeError
+	DurationMs    int64           `json:"duration_ms"`            // wall-clock, on call-shaped actions; on an agent command, the host-reported tool time
+	GuardMs       int64           `json:"guard_ms"`               // how long the guard took to judge an agent command
+	RequestRef    string          `json:"request_ref,omitempty"`  // blob ref for the request body (mcp<hash>)
+	ResponseRef   string          `json:"response_ref,omitempty"` // blob ref for the response body
+	Preview       string          `json:"preview,omitempty"`      // opening characters of the response, for list views
+	RequestBytes  int64           `json:"request_bytes"`          // full request length
+	ResponseBytes int64           `json:"response_bytes"`
 	// VerdictRef is the grd blob holding a guard deny in full, when the reader was shown
 	// the short repeat form instead. Named here so rotation keeps the blob the deny cites.
 	VerdictRef string `json:"verdict_ref,omitempty"`
@@ -145,9 +145,9 @@ type Phase struct {
 	Name      string `json:"name"`
 	ElapsedMs int64  `json:"elapsed_ms"`
 	// BudgetMs is the share of the hook's deadline the step had, 0 when it had none.
-	BudgetMs int64 `json:"budget_ms,omitempty"`
+	BudgetMs int64 `json:"budget_ms"`
 	// Lapsed reports that the step ran out of its budget before it answered.
-	Lapsed bool `json:"lapsed,omitempty"`
+	Lapsed bool `json:"lapsed"`
 }
 
 // UnmarshalJSON decodes an event, reading a duration written under either spelling.
@@ -164,7 +164,7 @@ type Phase struct {
 func (e *Event) UnmarshalJSON(b []byte) error {
 	type event Event // no method set, so this does not recurse
 	var decoded event
-	if err := jsonl.Unmarshal(b, &decoded); err != nil {
+	if err := codec.Unmarshal(b, &decoded); err != nil {
 		return err
 	}
 	*e = Event(decoded)
@@ -172,7 +172,7 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 		var legacy struct {
 			DurMs int64 `json:"dur_ms"`
 		}
-		if jsonl.Unmarshal(b, &legacy) == nil {
+		if codec.Unmarshal(b, &legacy) == nil {
 			e.DurationMs = legacy.DurMs
 		}
 	}
@@ -223,7 +223,7 @@ func ReadRecent(dir string, limit int) ([]Event, error) {
 	out := make([]Event, 0, len(buf))
 	for i := range buf { // oldest -> newest
 		var e Event
-		if jsonl.Unmarshal([]byte(buf[(head+i)%len(buf)]), &e) == nil {
+		if codec.Unmarshal([]byte(buf[(head+i)%len(buf)]), &e) == nil {
 			out = append(out, e)
 		}
 	}

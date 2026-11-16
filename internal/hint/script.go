@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -72,7 +72,7 @@ func ScriptsIndexPath(cacheDir string) string {
 // magus's format.
 func WriteScriptsIndex(cacheDir string, x ScriptsIndex) error {
 	x.Format = scriptsIndexFormat
-	data, err := json.Marshal(x)
+	data, err := codec.Marshal(x)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func readScriptsIndex(cacheDir string) (ScriptsIndex, bool) {
 	if err != nil {
 		return x, false
 	}
-	if err := json.Unmarshal(data, &x); err != nil || x.Format != scriptsIndexFormat || x.Root == "" {
+	if err := codec.Unmarshal(data, &x); err != nil || x.Format != scriptsIndexFormat || x.Root == "" {
 		return x, false
 	}
 	return x, true

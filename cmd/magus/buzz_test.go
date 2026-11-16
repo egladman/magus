@@ -20,9 +20,9 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -489,7 +489,7 @@ func glueLoadSchema(t *testing.T, rel string) *jsonschema.Resolved {
 	raw, err := os.ReadFile(filepath.Join(glueHostSchemaDir, rel))
 	require.NoError(t, err, "read the vendored schema %s", rel)
 	var schema jsonschema.Schema
-	require.NoError(t, json.Unmarshal(raw, &schema), "%s must parse as a JSON Schema", rel)
+	require.NoError(t, codec.Unmarshal(raw, &schema), "%s must parse as a JSON Schema", rel)
 	// nil loader on purpose: a schema that grew a remote $ref would fail here rather
 	// than turn every run of this test into an HTTP request.
 	resolved, err := schema.Resolve(nil)
@@ -500,7 +500,7 @@ func glueLoadSchema(t *testing.T, rel string) *jsonschema.Resolved {
 func glueDecode(t *testing.T, label, body string) any {
 	t.Helper()
 	var doc any
-	require.NoError(t, json.Unmarshal([]byte(body), &doc), "%s must be valid JSON: %s", label, body)
+	require.NoError(t, codec.Unmarshal([]byte(body), &doc), "%s must be valid JSON: %s", label, body)
 	return doc
 }
 
@@ -730,7 +730,7 @@ func glueSchemaPropertyNames(t *testing.T, rel string) map[string]any {
 	var schema struct {
 		Properties map[string]any `json:"properties"`
 	}
-	require.NoError(t, json.Unmarshal(raw, &schema))
+	require.NoError(t, codec.Unmarshal(raw, &schema))
 	require.NotEmpty(t, schema.Properties, "%s must name the fields it grades", rel)
 	return schema.Properties
 }
@@ -743,7 +743,7 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 				"glob": "*.go", "type": "go", "output_mode": "content",
 				"-A": 20, "-B": 2, "-C": 3, "-i": true, "multiline": true,
 			}
-			raw, err := json.Marshal(map[string]any{
+			raw, err := codec.Marshal(map[string]any{
 				"hook_event_name": event, "conversation_id": "grep-session",
 				"tool_name": "Grep", "tool_input": input, "cwd": ".",
 			})
@@ -761,21 +761,21 @@ func TestCursorGrepReachesGuardWithItsOptions(t *testing.T) {
 			judged, err := os.ReadFile(record)
 			require.NoError(t, err)
 			var payload struct {
-				ToolName  string          `json:"tool_name"`
-				Input     json.RawMessage `json:"tool_input"`
-				SessionID string          `json:"session_id"`
-				Cwd       string          `json:"cwd"`
+				ToolName  string           `json:"tool_name"`
+				Input     codec.RawMessage `json:"tool_input"`
+				SessionID string           `json:"session_id"`
+				Cwd       string           `json:"cwd"`
 			}
-			require.NoError(t, json.Unmarshal(judged, &payload), "the native search must reach the shared guard as a tool call")
-			want, err := json.Marshal(input)
+			require.NoError(t, codec.Unmarshal(judged, &payload), "the native search must reach the shared guard as a tool call")
+			want, err := codec.Marshal(input)
 			require.NoError(t, err)
 			gotInput := payload.Input
 			payload.Input = nil
 			assert.Equal(t, struct {
-				ToolName  string          `json:"tool_name"`
-				Input     json.RawMessage `json:"tool_input"`
-				SessionID string          `json:"session_id"`
-				Cwd       string          `json:"cwd"`
+				ToolName  string           `json:"tool_name"`
+				Input     codec.RawMessage `json:"tool_input"`
+				SessionID string           `json:"session_id"`
+				Cwd       string           `json:"cwd"`
 			}{ToolName: "Grep", SessionID: "grep-session", Cwd: "."}, payload)
 			assert.JSONEq(t, string(want), string(gotInput), "context and scope must survive the Cursor adapter")
 			if event == "preToolUse" {
@@ -804,7 +804,7 @@ const cursorReadingListStub = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\n"
 
 // hint is the additional_context the hook returns for a search of terms.
 func (s *cursorReadingListSuite) hint(terms string, env map[string]string) string {
-	event, err := json.Marshal(map[string]any{
+	event, err := codec.Marshal(map[string]any{
 		"hook_event_name": "postToolUse", "conversation_id": "c",
 		"tool_name": "WebSearch", "tool_input": map[string]any{"search_term": terms},
 	})
@@ -816,7 +816,7 @@ func (s *cursorReadingListSuite) hint(terms string, env map[string]string) strin
 	var reply struct {
 		Context string `json:"additional_context"`
 	}
-	s.Require().NoError(json.Unmarshal([]byte(out), &reply), out)
+	s.Require().NoError(codec.Unmarshal([]byte(out), &reply), out)
 	return reply.Context
 }
 
@@ -870,7 +870,7 @@ func TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
 		named := glueSchemaPropertyNames(t, ev.schema)
 		for i, verdict := range glueVerdicts {
 			t.Run(fmt.Sprintf("%s/%d-%s", name, i, verdict["decision"]), func(t *testing.T) {
-				verdictJSON, err := json.Marshal(verdict)
+				verdictJSON, err := codec.Marshal(verdict)
 				require.NoError(t, err)
 				out, _ := runGlue(t, "cursor-hook.buzz", glueArrangement{
 					label: name, host: "cursor", event: ev.event, stub: glueVerdictEcho,

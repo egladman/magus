@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/secrets"
 )
 
@@ -222,7 +222,7 @@ func (c *Client) fetchToken(ctx context.Context, key tokenKey) (secrets.Secret, 
 		Token       issuedToken `json:"token"`
 		AccessToken issuedToken `json:"access_token"`
 	}
-	if err := json.Unmarshal(raw, &body); err != nil {
+	if err := codec.Unmarshal(raw, &body); err != nil {
 		return secrets.Secret{}, err
 	}
 	if !body.Token.IsZero() {

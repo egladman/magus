@@ -21,9 +21,9 @@ import (
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
@@ -388,7 +388,7 @@ func readSpawnBlob(t *testing.T, cacheDir string, e trailtypes.Event) spawnBlob 
 	body, err := trailtypes.ReadBlob(cacheDir, e.RequestRef)
 	require.NoError(t, err)
 	var got spawnBlob
-	require.NoError(t, json.Unmarshal(body, &got))
+	require.NoError(t, codec.Unmarshal(body, &got))
 	return got
 }
 
@@ -638,7 +638,7 @@ func fixtureGit(t *testing.T, dir string, args ...string) string {
 // hookJSON renders an envelope the way a host writes it to the hook's stdin.
 func hookJSON(t *testing.T, env map[string]any) string {
 	t.Helper()
-	body, err := json.Marshal(env)
+	body, err := codec.Marshal(env)
 	require.NoError(t, err)
 	return string(body)
 }

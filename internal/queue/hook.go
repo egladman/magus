@@ -35,10 +35,10 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -803,7 +803,7 @@ func (f commandFacts) ask(ctx context.Context, query, label, stdin string, answe
 	if err != nil {
 		return fmt.Errorf("%s hook: %w", query, err)
 	}
-	if err := json.Unmarshal([]byte(res.Stdout), answer); err != nil {
+	if err := codec.Unmarshal([]byte(res.Stdout), answer); err != nil {
 		return fmt.Errorf("%s hook printed no JSON object: %w", query, err)
 	}
 	return nil
@@ -862,7 +862,7 @@ func (f commandFacts) Classify(ctx context.Context, paths []string) (map[string]
 }
 
 func (f commandFacts) AutoResolvable(ctx context.Context, path string, base, merged []byte) (string, bool, error) {
-	in, err := json.Marshal(map[string]string{"path": path, "base": string(base), "merged": string(merged)})
+	in, err := codec.Marshal(map[string]string{"path": path, "base": string(base), "merged": string(merged)})
 	if err != nil {
 		return "", false, err
 	}
@@ -889,7 +889,7 @@ func (f commandFacts) ClassifyEdit(ctx context.Context, path string, old, cur []
 		s := string(content)
 		return &s
 	}
-	in, err := json.Marshal(map[string]any{"path": path, "old": side(old), "cur": side(cur)})
+	in, err := codec.Marshal(map[string]any{"path": path, "old": side(old), "cur": side(cur)})
 	if err != nil {
 		return types.ClassifiedPath{}, err
 	}
@@ -916,7 +916,7 @@ func (f commandFacts) ClassifyEdit(ctx context.Context, path string, old, cur []
 }
 
 func (f commandFacts) Generation(ctx context.Context, outputs, changed []string) (types.Generation, error) {
-	in, err := json.Marshal(map[string][]string{"outputs": outputs, "changed": changed})
+	in, err := codec.Marshal(map[string][]string{"outputs": outputs, "changed": changed})
 	if err != nil {
 		return types.Generation{}, err
 	}

@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
@@ -50,7 +50,7 @@ func newHeldDiffSession(t *testing.T) *heldDiffSession {
 	s := &heldDiffSession{started: make(chan struct{}), release: make(chan struct{})}
 	s.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var op sessionOp
-		if err := json.NewDecoder(r.Body).Decode(&op); err != nil {
+		if err := codec.NewDecoder(r.Body).Decode(&op); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

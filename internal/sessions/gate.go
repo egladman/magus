@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
@@ -70,7 +70,7 @@ func (s GateScope) Unscoped() bool { return s == "" }
 func (s GateScope) MarshalJSON() ([]byte, error) {
 	switch s {
 	case GateScopeAffected, GateScopeProject:
-		return json.Marshal(string(s))
+		return codec.Marshal(string(s))
 	default:
 		return nil, fmt.Errorf("gate result scope %q: want %q or %q", string(s), GateScopeAffected, GateScopeProject)
 	}
@@ -80,7 +80,7 @@ func (s GateScope) MarshalJSON() ([]byte, error) {
 // it and keeps the zero value.
 func (s *GateScope) UnmarshalJSON(data []byte) error {
 	var v string
-	if err := json.Unmarshal(data, &v); err != nil {
+	if err := codec.Unmarshal(data, &v); err != nil {
 		return err
 	}
 	switch GateScope(v) {
@@ -173,7 +173,7 @@ func LatestGate(fold session.Fold, ref, target string) (GateRecord, bool) {
 			continue
 		}
 		var g GateResult
-		if json.Unmarshal(rec.Payload, &g) != nil {
+		if codec.Unmarshal(rec.Payload, &g) != nil {
 			continue
 		}
 		if g.Ref != ref || g.Target != target || !g.BranchVerdict() {
@@ -195,7 +195,7 @@ func LatestRepair(fold session.Fold, target string) (GateRecord, bool) {
 			continue
 		}
 		var g GateResult
-		if json.Unmarshal(rec.Payload, &g) != nil || g.Target != target || len(g.RepairedFiles) == 0 {
+		if codec.Unmarshal(rec.Payload, &g) != nil || g.Target != target || len(g.RepairedFiles) == 0 {
 			continue
 		}
 		return GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)}, true
@@ -222,7 +222,7 @@ func GateAt(fold session.Fold, commit, target string) (GateRecord, bool) {
 			continue
 		}
 		var g GateResult
-		if json.Unmarshal(rec.Payload, &g) != nil {
+		if codec.Unmarshal(rec.Payload, &g) != nil {
 			continue
 		}
 		if g.Target != target || g.Outcome == OutcomeDeferred || g.Commit == "" {
@@ -259,7 +259,7 @@ func FailuresOwed(gate GateRecord, results session.Fold) []types.TargetRef {
 			continue
 		}
 		var r session.TargetResult
-		if json.Unmarshal(rec.Payload, &r) != nil || baseTarget(r.Target) == baseTarget(gate.Target) {
+		if codec.Unmarshal(rec.Payload, &r) != nil || baseTarget(r.Target) == baseTarget(gate.Target) {
 			continue
 		}
 		// A standalone run files its target with the charm, `lint:rw`.
@@ -313,13 +313,13 @@ func (w HarnessWrite) MarshalJSON() ([]byte, error) {
 	}
 	paths := slices.Clone(w.Paths)
 	slices.Sort(paths)
-	return json.Marshal(harnessWriteWire{Paths: slices.Compact(paths)})
+	return codec.Marshal(harnessWriteWire{Paths: slices.Compact(paths)})
 }
 
 // UnmarshalJSON rejects the empty record MarshalJSON refuses.
 func (w *HarnessWrite) UnmarshalJSON(data []byte) error {
 	var wire harnessWriteWire
-	if err := json.Unmarshal(data, &wire); err != nil {
+	if err := codec.Unmarshal(data, &wire); err != nil {
 		return err
 	}
 	if len(wire.Paths) == 0 {

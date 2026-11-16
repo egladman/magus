@@ -16,11 +16,11 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/commands"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // The -o formats only magus's graph commands accept, passed to output.Parse as extras.
@@ -171,7 +171,7 @@ func emitRecord(opts output.Options, v any, names []string) error {
 // outputWriter renders json, yaml, jsonl and template through magus's one JSON codec,
 // so -o json and a template see the same wire form every other byte magus writes has.
 var outputWriter = output.Writer{
-	Codec: output.Codec{Marshal: json.Marshal, Unmarshal: json.Unmarshal},
+	Codec: output.Codec{Marshal: codec.Marshal, Unmarshal: codec.Unmarshal},
 	Funcs: templateFuncs(),
 }
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types/diff"
 	"github.com/stretchr/testify/assert"
@@ -176,7 +176,7 @@ func TestAnAppendOnlyFileCompactsPastItsBound(t *testing.T) {
 
 	b, err := os.ReadFile(filepath.Join(dir, "review", "viewed.jsonl"))
 	require.NoError(t, err)
-	assert.False(t, file.CompactDue(strings.Count(string(b), "\n"), 1), "the toggles were folded away")
+	assert.False(t, codec.CompactDue(strings.Count(string(b), "\n"), 1), "the toggles were folded away")
 	assert.Equal(t, []string{"d2"}, NewStore(dir).Attach("/w", "working", diff.Diff{}, "").Viewed)
 }
 
@@ -196,7 +196,7 @@ func TestOldJSONStateIsNamedNotRead(t *testing.T) {
 			require.NoError(t, mkdirAllWrite(old, `["x"]`))
 
 			err := load(NewStore(dir))
-			require.ErrorIs(t, err, file.ErrLegacyStore)
+			require.ErrorIs(t, err, codec.ErrLegacyStore)
 			require.ErrorContains(t, err, "preserve it")
 			got := NewStore(dir).Attach("/w", "working", diff.Diff{}, "")
 			assert.Empty(t, got.Viewed)

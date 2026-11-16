@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -37,7 +37,7 @@ func RenderValidation(w io.Writer, v types.JobValidation, dryRun bool) {
 		fmt.Fprintln(w, "no problems")
 	}
 	if dryRun {
-		if stored, err := json.MarshalIndent(v.Job, "", "  "); err == nil {
+		if stored, err := codec.MarshalIndent(v.Job, "", "  "); err == nil {
 			fmt.Fprintf(w, "would store:\n%s\n", stored)
 		}
 	}

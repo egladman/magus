@@ -13,10 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -148,14 +147,14 @@ func (s *Store) readLandingProbes() probeLog {
 	if s.err != nil || s.path == "" {
 		return probeLog{}
 	}
-	read, err := file.ReadLines(filepath.Join(filepath.Dir(s.path), landingProbesFile))
+	read, err := codec.ReadLines(filepath.Join(filepath.Dir(s.path), landingProbesFile))
 	if err != nil {
 		return probeLog{}
 	}
 	log := probeLog{probes: map[string]landingProbe{}, lines: len(read.Lines), partial: read.Partial}
 	for _, line := range read.Lines {
 		var p landingProbeLine
-		if json.Unmarshal(line.Text, &p) == nil && p.ID != "" {
+		if codec.Unmarshal(line.Text, &p) == nil && p.ID != "" {
 			log.probes[p.ID] = landingProbe{At: p.At, Updated: p.Updated}
 		}
 	}
@@ -176,7 +175,7 @@ func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) e
 	var changed, all [][]byte
 	for _, id := range slices.Sorted(maps.Keys(next)) {
 		p := next[id]
-		line, err := json.Marshal(landingProbeLine{ID: id, At: p.At, Updated: p.Updated})
+		line, err := codec.Marshal(landingProbeLine{ID: id, At: p.At, Updated: p.Updated})
 		if err != nil {
 			return err
 		}
@@ -186,10 +185,10 @@ func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) e
 		}
 	}
 	path := filepath.Join(filepath.Dir(s.path), landingProbesFile)
-	if !dropped && !log.partial && !file.CompactDue(log.lines+len(changed), len(next)) {
-		return file.AppendLines(path, changed, 0o644)
+	if !dropped && !log.partial && !codec.CompactDue(log.lines+len(changed), len(next)) {
+		return codec.AppendLines(path, changed, 0o644)
 	}
-	return file.RewriteLines(path, all, 0o644)
+	return codec.RewriteLines(path, all, 0o644)
 }
 
 // landedOnBase reports why row's work is on the base branch, or "" when that is not
@@ -724,14 +723,14 @@ func readUnmergedFacts(path string) storedUnmergedFacts {
 	if path == "" {
 		return stored
 	}
-	read, err := file.ReadLines(path)
+	read, err := codec.ReadLines(path)
 	if err != nil {
 		return stored
 	}
 	stored.lines, stored.partial = len(read.Lines), read.Partial
 	for _, line := range read.Lines {
 		var f unmergedFact
-		if json.Unmarshal(line.Text, &f) == nil && f.ID != "" {
+		if codec.Unmarshal(line.Text, &f) == nil && f.ID != "" {
 			stored.facts[unmergedKey(f.ID, f.Branch)] = f
 		}
 	}
@@ -759,20 +758,20 @@ func writeUnmergedFacts(path string, stored storedUnmergedFacts, next map[string
 	for _, id := range slices.Sorted(maps.Keys(next)) {
 		f := next[id]
 		stored.facts[unmergedKey(f.ID, f.Branch)] = f
-		if line, err := json.Marshal(f); err == nil {
+		if line, err := codec.Marshal(f); err == nil {
 			changed = append(changed, line)
 		}
 	}
-	if !dropped && !stored.partial && !file.CompactDue(stored.lines+len(changed), len(stored.facts)) {
-		return file.AppendLines(path, changed, 0o644)
+	if !dropped && !stored.partial && !codec.CompactDue(stored.lines+len(changed), len(stored.facts)) {
+		return codec.AppendLines(path, changed, 0o644)
 	}
 	var all [][]byte
 	for _, key := range slices.Sorted(maps.Keys(stored.facts)) {
-		if line, err := json.Marshal(stored.facts[key]); err == nil {
+		if line, err := codec.Marshal(stored.facts[key]); err == nil {
 			all = append(all, line)
 		}
 	}
-	return file.RewriteLines(path, all, 0o644)
+	return codec.RewriteLines(path, all, 0o644)
 }
 
 func integratedByPass(rows []job.Job, id string) bool {

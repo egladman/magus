@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // TestNewTargetCacheLastRun covers the verdicts `describe target --cache` can reach about
@@ -138,11 +138,11 @@ func TestLastRunLines(t *testing.T) {
 // has to be a deliberate break rather than a side effect.
 func TestTargetCacheLastRunWireFields(t *testing.T) {
 	t.Parallel()
-	data, err := json.Marshal(TargetCacheLastRun{Recorded: true, KeyMatches: true, WouldReplay: true, ReplaysRef: "mgs_abc123"})
+	data, err := codec.Marshal(TargetCacheLastRun{Recorded: true, KeyMatches: true, WouldReplay: true, ReplaysRef: "mgs_abc123"})
 	require.NoError(t, err)
 
 	var wire map[string]any
-	require.NoError(t, json.Unmarshal(data, &wire))
+	require.NoError(t, codec.Unmarshal(data, &wire))
 	assert.Equal(t, true, wire["key_matches"], "the newest entry's key equals the live key")
 	assert.Equal(t, true, wire["would_replay"], "a run now hits some entry")
 	assert.Equal(t, "mgs_abc123", wire["replays_ref"])

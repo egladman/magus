@@ -25,7 +25,6 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/service/identity"
@@ -33,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -345,7 +345,7 @@ func toSlashRel(root, p string) string {
 }
 
 func (*runner) checkJSONCodec() check.Check {
-	v := json.Version()
+	v := codec.Version()
 	msg := "encoding/json " + v
 	if v == "v2" {
 		msg += " (GOEXPERIMENT=jsonv2; faster marshaling)"

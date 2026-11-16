@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -120,7 +120,7 @@ func manifestMediaType(contentType string, body []byte) (string, error) {
 	var inBody struct {
 		MediaType string `json:"mediaType"`
 	}
-	if err := json.Unmarshal(body, &inBody); err != nil {
+	if err := codec.Unmarshal(body, &inBody); err != nil {
 		return "", fmt.Errorf("decode manifest: %w", err)
 	}
 	switch {

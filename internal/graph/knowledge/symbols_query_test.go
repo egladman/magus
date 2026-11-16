@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,7 +34,7 @@ func symbolQueryFixture(t *testing.T) (string, Inputs) {
 
 func queryJSON(t *testing.T, out types.KnowledgeQueryOutput) string {
 	t.Helper()
-	b, err := json.Marshal(out)
+	b, err := codec.Marshal(out)
 	require.NoError(t, err)
 	return string(b)
 }

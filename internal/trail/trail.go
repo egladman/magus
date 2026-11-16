@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/secrets"
@@ -186,7 +186,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	command.Reason = secrets.RedactString(ctx, command.Reason)
 	command.Context = secrets.RedactString(ctx, command.Context)
 	command.ContextModel = clampRunes(command.ContextModel, MaxSpawnerLen)
-	request, _ := json.Marshal(agentCommandRequest{
+	request, _ := codec.Marshal(agentCommandRequest{
 		APIVersion: agentCommandAPIVersion,
 		Host:       command.Host,
 		Session:    command.Session,
@@ -197,7 +197,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Path:       command.Path,
 		AgentFacts: command.AgentFacts,
 	})
-	response, _ := json.Marshal(agentCommandResponse{
+	response, _ := codec.Marshal(agentCommandResponse{
 		APIVersion:      agentCommandAPIVersion,
 		Decision:        command.Decision,
 		Reason:          command.Reason,
@@ -373,7 +373,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	spawn.ContextModel = clampRunes(spawn.ContextModel, MaxSpawnerLen)
 	lease := leaseFromContext(spawn.Context)
 	failures := redactFailures(ctx, spawn.RuleFailures)
-	request, _ := json.Marshal(agentSpawnRequest{
+	request, _ := codec.Marshal(agentSpawnRequest{
 		APIVersion:    agentSpawnAPIVersion,
 		Host:          spawn.Host,
 		Session:       spawn.Session,
@@ -496,7 +496,7 @@ func Append(ctx context.Context, base string, e trailtypes.Event) {
 	}
 	e = redactEvent(ctx, e)
 	e.Origin = StampOrigin(ctx, e.Origin)
-	line, err := json.Marshal(e)
+	line, err := codec.Marshal(e)
 	if err != nil {
 		return
 	}
@@ -505,7 +505,7 @@ func Append(ctx context.Context, base string, e trailtypes.Event) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return
 	}
-	_ = file.AppendLines(path, [][]byte{line}, 0o600, file.WithoutSync())
+	_ = codec.AppendLines(path, [][]byte{line}, 0o600, codec.WithoutSync())
 }
 
 // WriteBlob stores a payload under a provenance prefix (e.g. "mcp") and returns its ref and byte
@@ -641,7 +641,7 @@ func selectKept(lines []string, max int) []string {
 			continue
 		}
 		var lk lineKind
-		if err := json.Unmarshal([]byte(l), &lk); err != nil {
+		if err := codec.Unmarshal([]byte(l), &lk); err != nil {
 			continue
 		}
 		kindOf[i] = lk.Kind
@@ -744,7 +744,7 @@ func gcBlobs(base string, keptLines []string) {
 	referenced := make(map[string]struct{})
 	for _, l := range keptLines {
 		var e trailtypes.Event
-		if json.Unmarshal([]byte(l), &e) != nil {
+		if codec.Unmarshal([]byte(l), &e) != nil {
 			continue
 		}
 		if e.RequestRef != "" {

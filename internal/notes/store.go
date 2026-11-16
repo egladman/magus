@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"gopkg.in/yaml.v3"
 )
 
@@ -253,7 +253,7 @@ func obsidianTemplateDir(dir string) string {
 	var cfg struct {
 		Folder string `json:"folder"`
 	}
-	if err := json.Unmarshal(b, &cfg); err != nil || strings.TrimSpace(cfg.Folder) == "" {
+	if err := codec.Unmarshal(b, &cfg); err != nil || strings.TrimSpace(cfg.Folder) == "" {
 		return ""
 	}
 	return filepath.Join(dir, filepath.FromSlash(cfg.Folder))

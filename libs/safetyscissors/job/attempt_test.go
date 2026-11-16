@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"encoding/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 type AttemptSuite struct {
@@ -120,7 +120,7 @@ func (s *AttemptSuite) TestResultIsWhatTheLiveTryFiled() {
 }
 
 func (s *AttemptSuite) TestAZeroStatusWritesNoMembers() {
-	out, err := json.Marshal(AttemptStatus{})
+	out, err := codec.Marshal(AttemptStatus{})
 	s.Require().NoError(err)
 	s.JSONEq(`{}`, string(out))
 }

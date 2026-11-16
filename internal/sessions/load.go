@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/vcs"
 )
@@ -140,7 +140,7 @@ func ReadLoadStream(in io.Reader, dir string, rejudge RejudgeFunc) (LoadSummary,
 // repository returns neither an event nor a reason, which is the dropped case.
 func decodeLoadEvent(raw string, sameRepo func(string) bool, rejudge RejudgeFunc) (*session.LoadEvent, string, string) {
 	var ev wireEvent
-	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
+	if err := codec.Unmarshal([]byte(raw), &ev); err != nil {
 		return nil, "", fmt.Sprintf("not a JSON object: %v", err)
 	}
 	if reason := validateLoadEvent(ev); reason != "" {

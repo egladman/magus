@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
@@ -57,7 +57,7 @@ func seedEvents(t *testing.T, base string, n int) []trailtypes.Event {
 	for i := 1; i <= n; i++ {
 		e := trailtypes.Event{Ts: int64(i), Kind: trailtypes.KindMCPToolCall, Action: "t", Outcome: trailtypes.OutcomeOK}
 		events = append(events, e)
-		line, err := json.Marshal(e)
+		line, err := codec.Marshal(e)
 		require.NoError(t, err)
 		buf = append(append(buf, line...), '\n')
 	}
@@ -167,7 +167,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	request, err := trailtypes.ReadBlob(dir, event.RequestRef)
 	require.NoError(t, err)
 	var gotRequest agentCommandRequest
-	require.NoError(t, json.Unmarshal(request, &gotRequest))
+	require.NoError(t, codec.Unmarshal(request, &gotRequest))
 	require.Equal(t, agentCommandRequest{
 		APIVersion: agentCommandAPIVersion,
 		Host:       "codex",
@@ -180,7 +180,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	response, err := trailtypes.ReadBlob(dir, event.ResponseRef)
 	require.NoError(t, err)
 	var gotResponse agentCommandResponse
-	require.NoError(t, json.Unmarshal(response, &gotResponse))
+	require.NoError(t, codec.Unmarshal(response, &gotResponse))
 	require.Equal(t, agentCommandResponse{APIVersion: agentCommandAPIVersion, Decision: "pass"}, gotResponse)
 }
 
@@ -294,13 +294,13 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	request, err := trailtypes.ReadBlob(dir, event.RequestRef)
 	require.NoError(t, err)
 	var gotRequest agentCommandRequest
-	require.NoError(t, json.Unmarshal(request, &gotRequest))
+	require.NoError(t, codec.Unmarshal(request, &gotRequest))
 	require.Equal(t, agentCommandRequest{APIVersion: agentCommandAPIVersion, Path: "AGENTS.md"}, gotRequest)
 
 	response, err := trailtypes.ReadBlob(dir, event.ResponseRef)
 	require.NoError(t, err)
 	var gotResponse agentCommandResponse
-	require.NoError(t, json.Unmarshal(response, &gotResponse))
+	require.NoError(t, codec.Unmarshal(response, &gotResponse))
 	require.Equal(t, agentCommandResponse{
 		APIVersion: agentCommandAPIVersion,
 		Decision:   "advise",
@@ -329,7 +329,7 @@ func TestAppendAgentCommand_RecordsTheCostFacts(t *testing.T) {
 	raw, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
 	require.NoError(t, err)
 	var got agentCommandRequest
-	require.NoError(t, json.Unmarshal(raw, &got))
+	require.NoError(t, codec.Unmarshal(raw, &got))
 	assert.Equal(t, want, got.AgentFacts)
 	for _, key := range []string{"thread", "thread_from", "context_tokens", "context_model", "billing", "delegable_class", "result_chars", "shadow"} {
 		assert.Contains(t, string(raw), fmt.Sprintf(`"%s"`, key), "the facts sit inline in the request blob")
@@ -360,7 +360,7 @@ func TestAppendAgentCommand_KeepsAnObservedEmptyResult(t *testing.T) {
 	raw, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
 	require.NoError(t, err)
 	var got agentCommandRequest
-	require.NoError(t, json.Unmarshal(raw, &got))
+	require.NoError(t, codec.Unmarshal(raw, &got))
 	require.NotNil(t, got.ResultChars)
 	assert.Zero(t, *got.ResultChars)
 }
@@ -380,7 +380,7 @@ func TestAppendAgentSpawn_RecordsTheCostFacts(t *testing.T) {
 	raw, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
 	require.NoError(t, err)
 	var got agentSpawnRequest
-	require.NoError(t, json.Unmarshal(raw, &got))
+	require.NoError(t, codec.Unmarshal(raw, &got))
 	wantRequest := got
 	wantRequest.AgentFacts, wantRequest.DeclaredModel = want, "claude-haiku-5-5"
 	assert.Equal(t, wantRequest, got)
@@ -423,7 +423,7 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 	request, err := trailtypes.ReadBlob(dir, requestRef)
 	require.NoError(t, err)
 	var gotRequest agentSpawnRequest
-	require.NoError(t, json.Unmarshal(request, &gotRequest))
+	require.NoError(t, codec.Unmarshal(request, &gotRequest))
 	require.Equal(t, agentSpawnRequest{
 		APIVersion: agentSpawnAPIVersion,
 		Host:       "claude-code",
@@ -702,7 +702,7 @@ func TestGCBlobs_KeepsTheVerdictARepeatDenyCites(t *testing.T) {
 	dir := t.TempDir()
 	ref, _ := WriteBlob(t.Context(), dir, "grd", []byte("the full verdict"))
 	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
-	line, err := json.Marshal(trailtypes.Event{Kind: trailtypes.KindAgentCommand, Action: "shell.command", VerdictRef: ref})
+	line, err := codec.Marshal(trailtypes.Event{Kind: trailtypes.KindAgentCommand, Action: "shell.command", VerdictRef: ref})
 	require.NoError(t, err)
 
 	gcBlobs(dir, []string{string(line)})
@@ -807,7 +807,7 @@ func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
 	// The floor is not a guess: the smallest event that can reach the file (every
 	// no-omitempty field empty) must still be at least minEventBytes, or the skip could
 	// fire on a trail that genuinely needed trimming.
-	line, err := json.Marshal(trailtypes.Event{})
+	line, err := codec.Marshal(trailtypes.Event{})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(line)+1, minEventBytes, "minEventBytes must not exceed the smallest serializable event line")
 }
@@ -823,7 +823,7 @@ func TestRotate_EmptyBaseIsNoop(t *testing.T) {
 func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 	var lines []string
 	line := func(kind trailtypes.Kind, ts int) string {
-		b, err := json.Marshal(trailtypes.Event{Ts: int64(ts), Kind: kind, Action: "x", Outcome: trailtypes.OutcomeOK})
+		b, err := codec.Marshal(trailtypes.Event{Ts: int64(ts), Kind: kind, Action: "x", Outcome: trailtypes.OutcomeOK})
 		require.NoError(t, err)
 		return string(b)
 	}
@@ -855,7 +855,7 @@ func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 func TestSelectKept_SingleKindIsPlainTruncation(t *testing.T) {
 	var lines []string
 	for i := 1; i <= 100; i++ {
-		b, err := json.Marshal(trailtypes.Event{Ts: int64(i), Kind: trailtypes.KindMCPToolCall, Action: "t", Outcome: trailtypes.OutcomeOK})
+		b, err := codec.Marshal(trailtypes.Event{Ts: int64(i), Kind: trailtypes.KindMCPToolCall, Action: "t", Outcome: trailtypes.OutcomeOK})
 		require.NoError(t, err)
 		lines = append(lines, string(b))
 	}

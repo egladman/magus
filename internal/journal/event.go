@@ -9,7 +9,7 @@
 // The typed [Event] is the schema: it is what the JSONL store persists and what
 // internal/handler maps onto the magus.viewer.v1alpha1 wire contract. This package is a leaf,
 // compiled into the default binary: every run captures. Its only magus dependency is
-// internal/json, the workspace's single codec, which reaches nothing itself.
+// libs/codec, the workspace's single codec, which reaches nothing itself.
 package journal
 
 import (
@@ -19,7 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // Kind classifies an [Event]. Following OpenTelemetry's EventName idea, it names the class
@@ -165,7 +165,7 @@ type Event struct {
 func (e *Event) UnmarshalJSON(b []byte) error {
 	type event Event // no method set, so this does not recurse
 	var decoded event
-	if err := json.Unmarshal(b, &decoded); err != nil {
+	if err := codec.Unmarshal(b, &decoded); err != nil {
 		return err
 	}
 	*e = Event(decoded)
@@ -173,7 +173,7 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 		var legacy struct {
 			DurMs int64 `json:"dur_ms"`
 		}
-		if json.Unmarshal(b, &legacy) == nil {
+		if codec.Unmarshal(b, &legacy) == nil {
 			e.DurationMs = legacy.DurMs
 		}
 	}

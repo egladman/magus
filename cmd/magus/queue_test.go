@@ -28,10 +28,10 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/gen/typestest"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	magustypes "github.com/egladman/magus/types"
@@ -117,7 +117,7 @@ func queueEvents(t *testing.T, out []byte) []queue.Event {
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	for sc.Scan() {
 		var e queue.Event
-		require.NoError(t, json.Unmarshal(sc.Bytes(), &e), "stdout is JSONL only: %q", sc.Text())
+		require.NoError(t, codec.Unmarshal(sc.Bytes(), &e), "stdout is JSONL only: %q", sc.Text())
 		evs = append(evs, e)
 	}
 	return evs
@@ -415,7 +415,7 @@ func TestQueueDescribePassesTheAppFlagThroughUnread(t *testing.T) {
 	var doc struct {
 		Setup types.Setup `json:"setup"`
 	}
-	require.NoError(t, json.Unmarshal(out, &doc))
+	require.NoError(t, codec.Unmarshal(out, &doc))
 	assert.Equal(t, types.Setup{
 		StatusContext: "merge-queue",
 		Credential:    types.Integration{ID: "812", Name: ":a b:c:"},
@@ -442,7 +442,7 @@ func TestQueueDescribeJSONCarriesTheSetup(t *testing.T) {
 		Setup  types.Setup `json:"setup"`
 	}
 	var doc capabilities
-	require.NoError(t, json.Unmarshal(out, &doc))
+	require.NoError(t, codec.Unmarshal(out, &doc))
 	assert.Equal(t, capabilities{Schema: types.SchemaCapabilities, Setup: types.Setup{
 		StatusContext: "gate",
 		Credential:    types.Integration{ID: "812"},

@@ -15,9 +15,9 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -102,7 +102,7 @@ func TestEveryFormatRendersEverySinkEvent(t *testing.T) {
 				var head struct {
 					Type string `json:"type"`
 				}
-				require.NoError(t, json.Unmarshal([]byte(lines[0]), &head))
+				require.NoError(t, codec.Unmarshal([]byte(lines[0]), &head))
 				assert.Equal(t, report.RecordType(e), head.Type)
 				if onStderr {
 					assert.Empty(t, stdout.String())

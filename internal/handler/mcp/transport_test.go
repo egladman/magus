@@ -17,8 +17,8 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
@@ -87,10 +87,10 @@ func TestServerInstructionsToolNamesResolve(t *testing.T) {
 
 // rpcFrame is the part of a JSON-RPC 2.0 message these tests read.
 type rpcFrame struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      *int            `json:"id"`
-	Result  json.RawMessage `json:"result"`
-	Error   json.RawMessage `json:"error"`
+	JSONRPC string           `json:"jsonrpc"`
+	ID      *int             `json:"id"`
+	Result  codec.RawMessage `json:"result"`
+	Error   codec.RawMessage `json:"error"`
 }
 
 // toolResult is the part of a tools/call result these tests read.
@@ -99,7 +99,7 @@ type toolResult struct {
 	Content []struct {
 		Text string `json:"text"`
 	} `json:"content"`
-	StructuredContent json.RawMessage `json:"structuredContent"`
+	StructuredContent codec.RawMessage `json:"structuredContent"`
 }
 
 const (
@@ -131,7 +131,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, lines.Scan(), "no reply to %s: %v", frame, lines.Err())
 		var got rpcFrame
-		require.NoError(t, json.Unmarshal(lines.Bytes(), &got), "stdout carried a line that is not JSON-RPC: %q", lines.Text())
+		require.NoError(t, codec.Unmarshal(lines.Bytes(), &got), "stdout carried a line that is not JSON-RPC: %q", lines.Text())
 		require.Equal(t, "2.0", got.JSONRPC)
 		require.Empty(t, got.Error, "%s", got.Error)
 		require.NotNil(t, got.ID, "a reply with no id: %q", lines.Text())
@@ -141,7 +141,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 	init := exchange(initializeFrame)
 	assert.Equal(t, 1, *init.ID)
 	var initResult mcplib.InitializeResult
-	require.NoError(t, json.Unmarshal(init.Result, &initResult))
+	require.NoError(t, codec.Unmarshal(init.Result, &initResult))
 	assert.Equal(t, "magus", initResult.ServerInfo.Name)
 
 	_, err := io.WriteString(inW, initializedFrame+"\n")
@@ -150,7 +150,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 	listed := exchange(toolsListFrame)
 	assert.Equal(t, 2, *listed.ID)
 	var tools mcplib.ListToolsResult
-	require.NoError(t, json.Unmarshal(listed.Result, &tools))
+	require.NoError(t, codec.Unmarshal(listed.Result, &tools))
 	names := make([]string, 0, len(tools.Tools))
 	for _, tool := range tools.Tools {
 		names = append(names, tool.Name)
@@ -164,7 +164,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 	call := exchange(toolCallFrame)
 	assert.Equal(t, 3, *call.ID)
 	var result toolResult
-	require.NoError(t, json.Unmarshal(call.Result, &result))
+	require.NoError(t, codec.Unmarshal(call.Result, &result))
 	require.Len(t, result.Content, 1)
 	assert.False(t, result.IsError, result.Content[0].Text)
 	assert.Contains(t, result.Content[0].Text, "cache")
@@ -302,10 +302,10 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 		raw, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		var frame rpcFrame
-		require.NoError(t, json.Unmarshal(raw, &frame), string(raw))
+		require.NoError(t, codec.Unmarshal(raw, &frame), string(raw))
 		var result toolResult
 		if session != "" {
-			require.NoError(t, json.Unmarshal(frame.Result, &result), string(raw))
+			require.NoError(t, codec.Unmarshal(frame.Result, &result), string(raw))
 		}
 		return resp.Header, result
 	}
@@ -376,9 +376,9 @@ func TestHTTPToolCallReadsTheRequestCredential(t *testing.T) {
 
 		_, body := post(session, toolCallFrame)
 		var frame rpcFrame
-		require.NoError(t, json.Unmarshal(body, &frame), "%s: %s", name, body)
+		require.NoError(t, codec.Unmarshal(body, &frame), "%s: %s", name, body)
 		var result toolResult
-		require.NoError(t, json.Unmarshal(frame.Result, &result), name)
+		require.NoError(t, codec.Unmarshal(frame.Result, &result), name)
 		assert.Equal(t, tc.wantError, result.IsError, "%s: %s", name, body)
 		srv.Close()
 	}

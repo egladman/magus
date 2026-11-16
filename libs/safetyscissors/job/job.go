@@ -2,7 +2,6 @@ package job
 
 import (
 	"cmp"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
@@ -115,7 +115,7 @@ type Goal struct {
 	// paths and symbol. The common goal names only its kind and its subject.
 	Expect GoalExpect `json:"expect,omitempty" yaml:"expect,omitempty"`
 	// Check is the run a GoalKindCheck goal examines. Zero on every other kind.
-	Check LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
+	Check LeaseCheck `json:"check,omitzero" yaml:"check,omitempty"`
 	// Paths are the globs a GoalKindPaths goal examines. Zero on every other kind.
 	Paths []string `json:"paths,omitempty" yaml:"paths,omitempty"`
 	// Symbols are the names a GoalKindSymbol goal examines, as the knowledge graph
@@ -543,7 +543,7 @@ type Result struct {
 	Schema               `yaml:",inline"`
 	Job                  string                 `json:"job,omitempty" yaml:"job,omitempty"`
 	ChangedPaths         []string               `json:"changed_paths" yaml:"changed_paths"`
-	Validation           ResultValidation       `json:"validation,omitempty" yaml:"validation,omitempty"`
+	Validation           ResultValidation       `json:"validation,omitzero" yaml:"validation,omitempty"`
 	VerificationEvidence []VerificationEvidence `json:"verification_evidence,omitempty" yaml:"verification_evidence,omitempty"`
 	Descendants          []string               `json:"descendants,omitempty" yaml:"descendants,omitempty"`
 	UnresolvedRisks      []string               `json:"unresolved_risks" yaml:"unresolved_risks"`
@@ -657,21 +657,21 @@ type VerificationStatus struct {
 type CapturedRun struct {
 	Found       bool   `json:"found" yaml:"found"`
 	Ref         string `json:"ref,omitempty" yaml:"ref,omitempty"`
-	TimestampMs int64  `json:"timestamp_ms,omitempty" yaml:"timestamp_ms,omitempty"`
+	TimestampMs int64  `json:"timestamp_ms" yaml:"timestamp_ms,omitempty"`
 	Project     string `json:"project,omitempty" yaml:"project,omitempty"`
 	Target      string `json:"target,omitempty" yaml:"target,omitempty"`
 	Spell       string `json:"spell,omitempty" yaml:"spell,omitempty"`
-	Failed      bool   `json:"failed,omitempty" yaml:"failed,omitempty"`
+	Failed      bool   `json:"failed" yaml:"failed,omitempty"`
 	// AttemptID names this execution alone, where Ref may name its step, which a later run
 	// of the same step takes over.
 	AttemptID string `json:"attempt_id,omitempty" yaml:"attempt_id,omitempty"`
 	// DurationMs is how long the run took; TimestampMs is when it ENDED, so the run started
 	// at TimestampMs-DurationMs.
-	DurationMs int64 `json:"duration_ms,omitempty" yaml:"duration_ms,omitempty"`
+	DurationMs int64 `json:"duration_ms" yaml:"duration_ms,omitempty"`
 	// Revision is the VCS revision the run read its inputs at, empty when unknown. Dirty says
 	// the tree also held uncommitted changes then, so Revision alone does not name what it read.
 	Revision string `json:"revision,omitempty" yaml:"revision,omitempty"`
-	Dirty    bool   `json:"dirty,omitempty" yaml:"dirty,omitempty"`
+	Dirty    bool   `json:"dirty" yaml:"dirty,omitempty"`
 	// Lease is the job lease the run acted under, empty for a run under none, such as a
 	// check the orchestrator runs itself.
 	Lease string `json:"lease,omitempty" yaml:"lease,omitempty"`
@@ -736,7 +736,7 @@ type Job struct {
 	Parent string `json:"parent,omitempty" yaml:"parent,omitempty"`
 	// Agent is the agent section: the requested model, the instructions and
 	// the worker. Nil is ordinary work, and nothing graded reads it.
-	Agent *Agent `json:"agent,omitempty" yaml:"agent,omitempty"`
+	Agent *Agent `json:"agent,omitzero" yaml:"agent,omitempty"`
 	// Checkpoint is the working state this lease was handed, in the form
 	// `magus vcs checkpoint -o name` prints: the revision, plus a dirty-patch digest
 	// when the tree was not clean. A string, the form an orchestrator has at
@@ -759,7 +759,7 @@ type Job struct {
 	// ModelTier is the tier the store assigned for the requested model, and
 	// why. Store-computed like Releases. Nil means the workspace declared no
 	// model tiers when the job was written.
-	ModelTier *tier.Assignment `json:"model_tier,omitempty" yaml:"model_tier,omitempty"`
+	ModelTier *tier.Assignment `json:"model_tier,omitzero" yaml:"model_tier,omitempty"`
 	// BriefFormat is the format a brief to this job's worker takes, ahead of
 	// the workspace's agents.brief_format. Empty defers to magus.yaml.
 	BriefFormat BriefFormat `json:"brief_format,omitempty" yaml:"brief_format,omitempty"`
@@ -775,8 +775,8 @@ type Job struct {
 	// ReworkRounds counts work sent to this job's holder after it handed back.
 	// Widenings counts writes that added paths after a holder took the job.
 	// Both are store-computed.
-	ReworkRounds int `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
-	Widenings    int `json:"widenings,omitempty"  yaml:"widenings,omitempty"`
+	ReworkRounds int `json:"rework_rounds" yaml:"rework_rounds,omitempty"`
+	Widenings    int `json:"widenings"  yaml:"widenings,omitempty"`
 	// Claims are the write paths this attempt's holder added with a proof the store
 	// re-proved, oldest first. Store-computed like ModelTier; a fork of the next attempt
 	// starts it over.
@@ -784,14 +784,14 @@ type Job struct {
 	// Generation counts changes to the declared spec, as Kubernetes'
 	// metadata.generation does. Store-computed. A result, attempt or grade
 	// taken against an earlier Generation reads as stale; zero is unknown.
-	Generation int `json:"generation,omitempty" yaml:"generation,omitempty"`
+	Generation int `json:"generation" yaml:"generation,omitempty"`
 	// MaxAttempts caps Attempts, as a Kubernetes Job's backoffLimit does.
 	// Zero is no cap. Checked only when the job is forked again; magus never
 	// retries a job itself.
-	MaxAttempts int `json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	MaxAttempts int `json:"max_attempts" yaml:"max_attempts,omitempty"`
 	// MaxClaims caps how many proved claims one attempt takes, chosen by whoever declares the
 	// job; zero takes the default. A fork raising it past jobs.max_claims is refused.
-	MaxClaims int `json:"max_claims,omitempty" yaml:"max_claims,omitempty"`
+	MaxClaims int `json:"max_claims" yaml:"max_claims,omitempty"`
 	// Deferred answers the items the job's result left for later.
 	Deferred []Deferred `json:"deferred,omitempty" yaml:"deferred,omitempty"`
 	// LeftUnmerged is the stated reason the job's work stays off the merge
@@ -799,7 +799,7 @@ type Job struct {
 	LeftUnmerged string `json:"left_unmerged,omitempty" yaml:"left_unmerged,omitempty"`
 	// Landed says a landing probe ended the job because its work reads the same
 	// on the base or in an integration. EndReason says where, for a person.
-	Landed bool `json:"landed,omitempty" yaml:"landed,omitempty"`
+	Landed bool `json:"landed" yaml:"landed,omitempty"`
 	// Weight is a lean, never a guarantee: a run bound to the job carries it on its
 	// budget.Claim. In (0,1]; zero reads as DefaultWeight.
 	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`
@@ -814,9 +814,9 @@ type Job struct {
 	// Rejection is the last `magus job wait` that refused the live try,
 	// which leaves State where it was. Store-computed. The tries are
 	// [Attempt] records beside the job.
-	Rejection *Rejection `json:"rejection,omitempty" yaml:"rejection,omitempty"`
+	Rejection *Rejection `json:"rejection,omitzero" yaml:"rejection,omitempty"`
 	// Check is the one check this lease runs. See [LeaseCheck].
-	Check *LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
+	Check *LeaseCheck `json:"check,omitzero" yaml:"check,omitempty"`
 	// Validation is Check rendered as the command that runs it.
 	//
 	// compat(until: no reader still reads the rendered line; observe: grep for
@@ -835,7 +835,7 @@ type Job struct {
 	// ReadOnly marks the abbreviated job the skill describes: it gathers
 	// evidence and writes nothing, so empty WritePaths and DenyPaths are
 	// correct rather than missing.
-	ReadOnly bool `json:"read_only,omitempty" yaml:"read_only,omitempty"`
+	ReadOnly bool `json:"read_only" yaml:"read_only,omitempty"`
 	// Releases are the paths this lease gave up, each with the content digest the path
 	// carried at that moment. Store-computed and output-only, like the timestamps: a
 	// worker announces a release by shrinking WritePaths, and the digest is what the
@@ -861,7 +861,7 @@ type Job struct {
 	Deviations []Deviation `json:"deviations,omitempty" yaml:"deviations,omitempty"`
 	// Validated is when the store last validated the whole record, in unix
 	// seconds; zero on a job never validated. Store-stamped like Created.
-	Validated int64 `json:"validated,omitempty" yaml:"validated,omitempty"`
+	Validated int64 `json:"validated" yaml:"validated,omitempty"`
 	// ReportedBase is the checkpoint token the lease's WORKER reported it actually landed
 	// on, in the same `magus vcs checkpoint -o name` form Checkpoint holds. Checkpoint is
 	// what the orchestrator handed out; this is what the worker found. Two fields rather
@@ -876,7 +876,7 @@ type Job struct {
 	// RegisteredBy is where the write that CREATED this job came from.
 	// The store stamps it on the first write. Distinct from Registered, when a
 	// WORKER reported its base.
-	RegisteredBy Origin `json:"registered_by,omitempty" yaml:"registered_by,omitempty"`
+	RegisteredBy Origin `json:"registered_by,omitzero" yaml:"registered_by,omitempty"`
 	// Authority is the revision a leased call is judged from (ADR 0045).
 	// Store-computed at fork from who forked. Empty refuses leased work.
 	Authority string `json:"authority,omitempty" yaml:"authority,omitempty"`
@@ -884,10 +884,10 @@ type Job struct {
 	// ReportedBase, off the same clock read as Updated. No write door accepts it from a
 	// caller, for the reason Created and Updated do not: a client-supplied timestamp is a
 	// fact about the client's clock.
-	Registered int64 `json:"registered,omitempty" yaml:"registered,omitempty"`
+	Registered int64 `json:"registered" yaml:"registered,omitempty"`
 	// HolderStopped is unix seconds, set when the holder's turn ended
 	// with the job open, and cleared by its next hook call. It ends nothing.
-	HolderStopped int64 `json:"holder_stopped,omitempty" yaml:"holder_stopped,omitempty"`
+	HolderStopped int64 `json:"holder_stopped" yaml:"holder_stopped,omitempty"`
 	// CheckoutRoot is the absolute root of the checkout `magus job exec` took this job in,
 	// stamped by the store on that write. Once the directory is gone, nobody can be
 	// holding the job, and the store ends it.
@@ -895,7 +895,7 @@ type Job struct {
 	// Worktree is the checkout a fork made or adopted for this job (see [Declaration.Checkout]), nil
 	// when the job works wherever it is taken. Store-computed like CheckoutRoot: only the
 	// fork that made it and the removal at the job's end write it.
-	Worktree *Worktree `json:"worktree,omitempty" yaml:"worktree,omitempty"`
+	Worktree *Worktree `json:"worktree,omitzero" yaml:"worktree,omitempty"`
 	// EndReason is why the job ended as no_return: the sweep's reason, or which
 	// end a holder's or a person's exit was. Store-computed; see
 	// job.Store.List for the sweep's rules.
@@ -908,22 +908,22 @@ type Job struct {
 	// Deadline is unix seconds past which the guard denies this lease's writes,
 	// zero for no bound. A fork's timeout stamps it. A taken job past it ends
 	// as no_return on the next read; `magus job prune` ends an untaken one.
-	Deadline int64 `json:"deadline,omitempty" yaml:"deadline,omitempty"`
+	Deadline int64 `json:"deadline" yaml:"deadline,omitempty"`
 	// Attempt is the run record behind the live try's result, resolved
 	// in the holder's OWN checkout, so a waiter in another checkout
 	// reopens it. The result is on the [Attempt].
-	Attempt *CapturedRun `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	Attempt *CapturedRun `json:"attempt,omitzero" yaml:"attempt,omitempty"`
 	// GateAttempts are the portable output-store snapshots for every explicit goal.
 	// Attempt remains the snapshot for the primary Check.
 	GateAttempts []GateAttempt `json:"gate_attempts,omitempty" yaml:"gate_attempts,omitempty"`
 	// LastRun is the job's most recent run, nil until one is submitted. The
 	// invocation id lands at submit, the cost and outcome when the run ends.
-	LastRun *Run `json:"last_run,omitempty" yaml:"last_run,omitempty"`
+	LastRun *Run `json:"last_run,omitzero" yaml:"last_run,omitempty"`
 	// Integration is the latest grade of this job's check goals in another tree, nil until
 	// `magus job wait --integration` records one. Store-computed like Result, and kept
 	// beside State rather than moving it: a job that passed where it was written and fails
 	// once merged is two facts, and one field could hold only the later.
-	Integration *Integration `json:"integration,omitempty" yaml:"integration,omitempty"`
+	Integration *Integration `json:"integration,omitzero" yaml:"integration,omitempty"`
 	// WaiterEvidence names the goals whose passing run came from the waiter's checkout
 	// rather than the holder's, nil unless `magus job wait --evidence` took some. It sits
 	// beside GateAttempts, which keep the holder's own attempts untouched: a goal that
@@ -934,7 +934,7 @@ type Job struct {
 	// A Integration because the record is the same one --integration keeps: goals graded
 	// against runs in another checkout. What differs is only that these verdicts moved the
 	// job's state, so the record exists only for a job that passed.
-	WaiterEvidence *Integration `json:"waiter_evidence,omitempty" yaml:"waiter_evidence,omitempty"`
+	WaiterEvidence *Integration `json:"waiter_evidence,omitzero" yaml:"waiter_evidence,omitempty"`
 }
 
 // Worktree is the checkout `magus job fork --checkout` made or adopted for one job: the
@@ -957,14 +957,14 @@ type Worktree struct {
 	// The root's hook runs only a Binary that still hashes to it.
 	BinaryDigest string `json:"binary_digest,omitempty" yaml:"binary_digest,omitempty"`
 	// Removed is unix seconds when magus removed it, zero while it stands.
-	Removed int64 `json:"removed,omitempty" yaml:"removed,omitempty"`
+	Removed int64 `json:"removed" yaml:"removed,omitempty"`
 	// Kept is why magus left it standing after the job ended, "" until then or once it is
 	// removed.
 	Kept string `json:"kept,omitempty" yaml:"kept,omitempty"`
 	// Made is true when the job's fork created the checkout, the one kind magus
 	// removes once the job ends. A checkout the fork adopted, or one recorded
 	// before Made existed, reads false and stands until its maker removes it.
-	Made bool `json:"made,omitempty" yaml:"made,omitempty"`
+	Made bool `json:"made" yaml:"made,omitempty"`
 }
 
 // Standing reports whether the checkout has not been removed: it binds its job's holder,
@@ -1020,7 +1020,7 @@ type Declaration struct {
 	// Parent is the lease this one was spawned under, empty for a lease the root declared.
 	Parent string `json:"parent,omitempty" schema:"leaseid"`
 	// Agent is the agent section; nil is ordinary work. See [Job.Agent].
-	Agent *Agent `json:"agent,omitempty"`
+	Agent *Agent `json:"agent,omitzero"`
 	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
 	// name` prints it.
 	Checkpoint string `json:"checkpoint,omitempty"`
@@ -1035,7 +1035,7 @@ type Declaration struct {
 	Breaks []string `json:"breaks,omitempty"`
 	// Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an
 	// explicit 0 is out of range. See [Job.Weight].
-	Weight *float64 `json:"weight,omitempty"`
+	Weight *float64 `json:"weight,omitzero"`
 	// BriefFormat is the format a brief to this job's worker takes; empty defers to
 	// magus.yaml's agents.brief_format. See [Job.BriefFormat].
 	BriefFormat BriefFormat `json:"brief_format,omitempty"`
@@ -1061,14 +1061,14 @@ type Declaration struct {
 	LegacyReadPaths []string `json:"focus,omitempty"`
 	// Check is the one check this lease runs, and acceptance binds a worker's evidence
 	// to it.
-	Check *LeaseCheck `json:"check,omitempty"`
+	Check *LeaseCheck `json:"check,omitzero"`
 	// State is the job's lifecycle position, empty for a job that has not said
 	// where it stands. no_return is a lease that never reported, which is not
 	// a failure.
 	State State `json:"state,omitempty"`
 	// ReadOnly marks a lease that gathers evidence and writes nothing, so empty write
 	// paths are correct rather than missing.
-	ReadOnly bool `json:"read_only,omitempty"`
+	ReadOnly bool `json:"read_only,omitzero"`
 	// Validation is the check as a rendered `magus run` line.
 	//
 	// compat(until: no client still sends a rendered validation line): it is
@@ -1084,10 +1084,10 @@ type Declaration struct {
 	Timeout string `json:"timeout,omitempty" schema:"duration"`
 	// MaxAttempts caps how many times the job may be forked, its first fork included; zero
 	// is no cap. See [Job.MaxAttempts].
-	MaxAttempts int `json:"max_attempts,omitempty"`
+	MaxAttempts int `json:"max_attempts,omitzero"`
 	// MaxClaims caps how many proved claims one attempt takes; zero takes the default. See
 	// [Job.MaxClaims].
-	MaxClaims int `json:"max_claims,omitempty"`
+	MaxClaims int `json:"max_claims,omitzero"`
 	// Deviations accept permissible problems on the record's own authority.
 	Deviations []Deviation `json:"deviations,omitempty"`
 	// Enter turns the record into an entry rather than a declaration: it acknowledges one
@@ -1895,8 +1895,8 @@ type Run struct {
 	Invocation string `json:"invocation,omitempty" yaml:"invocation,omitempty"`
 	// Ended is unix milliseconds and DurationMs is the measured duration, so the run's
 	// start is their difference.
-	Ended      int64 `json:"ended,omitempty"       yaml:"ended,omitempty"`
-	DurationMs int64 `json:"duration_ms,omitempty" yaml:"duration_ms,omitempty"`
+	Ended      int64 `json:"ended"       yaml:"ended,omitempty"`
+	DurationMs int64 `json:"duration_ms" yaml:"duration_ms,omitempty"`
 	// OK is false when the run errored, and Error is its text. Never omitempty: a run that
 	// failed and a run nobody recorded must not read the same.
 	OK    bool   `json:"ok"              yaml:"ok"`
@@ -1904,8 +1904,8 @@ type Run struct {
 	// ItemsRemoved and BytesReclaimed are the run's own delta, reported only by the jobs
 	// that measure one. Zero also means "this job does not count", so neither is evidence
 	// that a rotate found nothing to drop.
-	ItemsRemoved   int64 `json:"items_removed,omitempty"   yaml:"items_removed,omitempty"`
-	BytesReclaimed int64 `json:"bytes_reclaimed,omitempty" yaml:"bytes_reclaimed,omitempty"`
+	ItemsRemoved   int64 `json:"items_removed"   yaml:"items_removed,omitempty"`
+	BytesReclaimed int64 `json:"bytes_reclaimed" yaml:"bytes_reclaimed,omitempty"`
 }
 
 // Digests that are not a content hash. A digest is `sha256:<hex>` of the file's bytes
@@ -1941,7 +1941,7 @@ type Release struct {
 	ReleasedAt int64 `json:"released_at" yaml:"released_at"`
 	// Revoked is a path taken from a job a holder had taken, by a writer other than that
 	// holder: the orchestrator revoking it rather than the worker giving it up.
-	Revoked bool `json:"revoked,omitempty" yaml:"revoked,omitempty"`
+	Revoked bool `json:"revoked" yaml:"revoked,omitempty"`
 	// TakenBy is the job magus granted the path to because this job's holder
 	// was dead, and DeadBecause why magus judged it dead. Both are empty on any
 	// other release.
@@ -1949,7 +1949,7 @@ type Release struct {
 	DeadBecause string `json:"dead_because,omitempty" yaml:"dead_because,omitempty"`
 	// Narrowed marks a file the store narrowed to the holder's claims.
 	// Its entry stays in paths.write; a re-fork ends the narrowing.
-	Narrowed bool `json:"narrowed,omitempty" yaml:"narrowed,omitempty"`
+	Narrowed bool `json:"narrowed" yaml:"narrowed,omitempty"`
 }
 
 // PausedAt reports whether a person's pause holds the job at now, unix seconds.
@@ -1987,7 +1987,7 @@ type Entry struct {
 	By Origin `json:"by" yaml:"by"`
 	// At and Consumed are unix seconds; Consumed is zero until the write lands.
 	At       int64 `json:"at" yaml:"at"`
-	Consumed int64 `json:"consumed,omitempty" yaml:"consumed,omitempty"`
+	Consumed int64 `json:"consumed" yaml:"consumed,omitempty"`
 }
 
 // ReleaseRequest is a refused fork asking a job's holder to release File.
@@ -2026,7 +2026,7 @@ type Overlap struct {
 	// Footprint compares what the two jobs have actually changed, declaration by
 	// declaration. Nil when no reader computed it: it needs each job's checkout and a VCS,
 	// and deriving an overlap needs neither.
-	Footprint *OverlapFootprint `json:"footprint,omitempty" yaml:"footprint,omitempty"`
+	Footprint *OverlapFootprint `json:"footprint,omitzero" yaml:"footprint,omitempty"`
 }
 
 // The verdicts a Overlap's Claims reaches.
@@ -2085,13 +2085,13 @@ type List struct {
 	// the snapshot `magus queue ls` leaves; a list never fetches them.
 	Changes []InflightChange `json:"changes,omitempty" yaml:"changes,omitempty"`
 	// Fetched is when and where that snapshot was read, nil when none was.
-	Fetched *InflightFetch `json:"fetched,omitempty" yaml:"fetched,omitempty"`
+	Fetched *InflightFetch `json:"fetched,omitzero" yaml:"fetched,omitempty"`
 	// Unproposed are the caller's live jobs whose checkout is on a branch no change
 	// carries: work in flight that has no change yet.
 	Unproposed []string `json:"unproposed,omitempty" yaml:"unproposed,omitempty"`
 	// Unmerged is filled by `magus ls jobs` alone. It reads the version
 	// control per job, and every other door lists on a hot path.
-	Unmerged *UnmergedReport `json:"unmerged,omitempty" yaml:"unmerged,omitempty"`
+	Unmerged *UnmergedReport `json:"unmerged,omitzero" yaml:"unmerged,omitempty"`
 }
 
 // InflightChange is one open change as a person reads it: the provider's record joined to
@@ -2104,7 +2104,7 @@ type InflightChange struct {
 	Head   string `json:"head"             yaml:"head"`
 	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
 	Base   string `json:"base,omitempty"   yaml:"base,omitempty"`
-	Fork   bool   `json:"fork,omitempty"   yaml:"fork,omitempty"`
+	Fork   bool   `json:"fork"   yaml:"fork,omitempty"`
 	// Jobs are the ids of the jobs whose checkout is on Branch, in store order.
 	Jobs []string `json:"jobs,omitempty" yaml:"jobs,omitempty"`
 	// Intent is the merge method the change is queued with, empty when it carries no
@@ -2120,12 +2120,12 @@ type InflightChange struct {
 	Reason   string `json:"reason,omitempty"   yaml:"reason,omitempty"`
 	// Partition and Position place the change in the plan, both counted from 1; zero
 	// when the plan admitted no change at this head. Below is the change it is stacked on.
-	Partition int    `json:"partition,omitempty" yaml:"partition,omitempty"`
-	Position  int    `json:"position,omitempty"  yaml:"position,omitempty"`
+	Partition int    `json:"partition" yaml:"partition,omitempty"`
+	Position  int    `json:"position"  yaml:"position,omitempty"`
 	Below     string `json:"below,omitempty"     yaml:"below,omitempty"`
 	// Mine is whether the caller is on the change: a job of the caller's job tree works
 	// on its branch, or its author is the caller's forge login.
-	Mine bool `json:"mine,omitempty" yaml:"mine,omitempty"`
+	Mine bool `json:"mine" yaml:"mine,omitempty"`
 	// Attention is whose turn the change is. See [InflightAttention].
 	Attention InflightAttention `json:"attention" yaml:"attention"`
 	// Neighbours are the other in-flight changes this one touches, on the caller's
@@ -2768,9 +2768,10 @@ type Schema struct {
 	// added field it can ignore.
 	Requires []string `json:"requires,omitempty" yaml:"requires,omitempty"`
 	// Unknown holds every member this build does not declare, re-emitted unchanged when
-	// the record is written back. The `,unknown` option is encoding/json/v2's, so only a
-	// caller built with GOEXPERIMENT=jsonv2 carries the members through.
-	Unknown map[string]json.RawMessage `json:",unknown" yaml:"-" buzz:"-"`
+	// the record is written back. The `,unknown` option is encoding/json/v2's: built
+	// without GOEXPERIMENT=jsonv2, libs/codec refuses a record holding it rather than
+	// drop the members.
+	Unknown map[string]codec.RawMessage `json:",unknown" yaml:"-" buzz:"-"`
 }
 
 // Unmet returns the entries of Requires that known does not name, in record order, or

@@ -6,13 +6,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	typesvcs "github.com/egladman/magus/types/vcs"
@@ -139,12 +141,13 @@ type Capture struct {
 	At              int64  `json:"at"`
 }
 
-func capturesLedger() (file.JSONL[Capture], error) {
+func capturesLedger() (codec.JSONL[Capture], error) {
 	state, err := xdg.StateDir()
 	if err != nil {
-		return file.JSONL[Capture]{}, fmt.Errorf("vcs preserve: no state directory for the capture ledger: %w", err)
+		return codec.JSONL[Capture]{}, fmt.Errorf("vcs preserve: no state directory for the capture ledger: %w", err)
 	}
-	return file.JSONL[Capture]{
+	return codec.JSONL[Capture]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(state, "magus", "captures.jsonl"),
 		Key:  func(c Capture) string { return c.Dir },
 	}, nil

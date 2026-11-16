@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -49,7 +49,7 @@ func DecodeResult(r io.Reader) (job.Result, error) {
 		return job.Result{}, err
 	}
 	var rep job.Result
-	if err := json.UnmarshalStrict(raw, &rep); err != nil {
+	if err := codec.UnmarshalStrict(raw, &rep); err != nil {
 		return job.Result{}, fmt.Errorf("job: the input is not a %s result: %w", job.ResultAPIVersion, err)
 	}
 	return rep, nil
@@ -63,7 +63,7 @@ func decodeDeclaration(r io.Reader) (job.Declaration, error) {
 	switch {
 	case err != nil:
 		return job.Declaration{}, asRecordInvalid(err)
-	case !json.Valid(raw):
+	case !codec.Valid(raw):
 		return job.Declaration{}, recordInvalid("", errors.New("the job is not JSON")).Error()
 	}
 	if err := checkVersion(raw, "job", types.DeclarationSchema); err != nil {
@@ -75,7 +75,7 @@ func decodeDeclaration(r io.Reader) (job.Declaration, error) {
 		return job.Declaration{}, err
 	}
 	var row job.Declaration
-	if err := json.UnmarshalStrict(raw, &row); err != nil {
+	if err := codec.UnmarshalStrict(raw, &row); err != nil {
 		return job.Declaration{}, memberProblems(raw, err).Error()
 	}
 	return row, errors.Join(types.FoldLegacyNames(&row), types.ValidateDeclaration(row))
@@ -201,7 +201,7 @@ func dropStoreStamped(raw []byte) ([]byte, error) {
 	if !dropped {
 		return raw, nil
 	}
-	return json.Marshal(members)
+	return codec.Marshal(members)
 }
 
 // unwrapDescribed is the row inside a `describe job -o json` record: an object with an
@@ -233,15 +233,15 @@ func unwrapDescribed(raw []byte) ([]byte, error) {
 			quoteAll(unknown))).Error()
 	}
 	if _, named := row["api_version"]; !named {
-		row["api_version"] = json.RawMessage(strconv.Quote(string(job.APIVersion)))
+		row["api_version"] = codec.RawMessage(strconv.Quote(string(job.APIVersion)))
 	}
-	return json.Marshal(row)
+	return codec.Marshal(row)
 }
 
 // objectMembers is raw's top-level members, false for a record that is not a JSON object.
-func objectMembers(raw []byte) (map[string]json.RawMessage, bool) {
-	var members map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &members); err != nil {
+func objectMembers(raw []byte) (map[string]codec.RawMessage, bool) {
+	var members map[string]codec.RawMessage
+	if err := codec.Unmarshal(raw, &members); err != nil {
 		return nil, false
 	}
 	return members, true
@@ -256,19 +256,19 @@ func DecodeDeclarations(r io.Reader) ([]job.Declaration, error) {
 	if err != nil {
 		return nil, asRecordInvalid(err)
 	}
-	var parts []json.RawMessage
+	var parts []codec.RawMessage
 	trimmed := strings.TrimSpace(string(raw))
 	switch {
 	case strings.HasPrefix(trimmed, "["):
-		if err := json.Unmarshal([]byte(trimmed), &parts); err != nil {
+		if err := codec.Unmarshal([]byte(trimmed), &parts); err != nil {
 			return nil, fmt.Errorf("job: the records are not a JSON array of jobs: %w", err)
 		}
-	case json.Valid([]byte(trimmed)):
-		parts = []json.RawMessage{json.RawMessage(trimmed)}
+	case codec.Valid([]byte(trimmed)):
+		parts = []codec.RawMessage{codec.RawMessage(trimmed)}
 	default:
 		for line := range strings.SplitSeq(trimmed, "\n") {
 			if line = strings.TrimSpace(line); line != "" {
-				parts = append(parts, json.RawMessage(line))
+				parts = append(parts, codec.RawMessage(line))
 			}
 		}
 	}
@@ -351,7 +351,7 @@ func (e *missingVersion) Error() string {
 // version exists to prevent.
 func checkVersion(raw []byte, what string, ledger types.FormatLedger) error {
 	var envelope types.Schema
-	if err := json.Unmarshal(raw, &envelope); err != nil {
+	if err := codec.Unmarshal(raw, &envelope); err != nil {
 		return fmt.Errorf("job: the %s is not JSON: %w", what, err)
 	}
 	supported := ledger.Version

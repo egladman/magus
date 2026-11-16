@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
@@ -51,7 +51,7 @@ func postRun(t *testing.T, h *RunHandler, body string) diffRunResponse {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/diff/run", strings.NewReader(body)))
 	require.Equal(t, http.StatusOK, rec.Code)
 	var out diffRunResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &out))
 	return out
 }
 
@@ -137,7 +137,7 @@ func TestDiffRunReadsTheLastVerdictFromTheTrail(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/run?target=test&project=libs/authkit", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 	var out diffRunResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &out))
 
 	assert.Empty(t, submitted, "a GET reports, it never starts work")
 	assert.Equal(t, diffRunResponse{
@@ -160,7 +160,7 @@ func TestDiffRunReportsNoVerdictAsUnknown(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/run?target=lint&project=libs/authkit", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 	var out diffRunResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &out))
 
 	assert.Equal(t, "unknown", out.State)
 	assert.Empty(t, out.Error)

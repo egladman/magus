@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
@@ -29,7 +29,7 @@ func AppendMint(ctx context.Context, base, action string, rec MintRecord) {
 	if base == "" {
 		return
 	}
-	blob, err := json.Marshal(rec)
+	blob, err := codec.Marshal(rec)
 	if err != nil {
 		return
 	}

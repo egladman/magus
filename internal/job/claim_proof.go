@@ -22,8 +22,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -662,7 +662,7 @@ func proposeDeadHolder(row job.Job, rel string, facts claimFacts) (job.ClaimRequ
 // ClaimCommand is the one `magus job apply` line that claims job id by reqs, and false
 // when it would run past [maxClaimCommand].
 func ClaimCommand(id string, reqs []job.ClaimRequest) (string, bool) {
-	record, err := json.Marshal(job.Declaration{Schema: job.Schema{Version: job.APIVersion}, ID: id, Claim: reqs})
+	record, err := codec.Marshal(job.Declaration{Schema: job.Schema{Version: job.APIVersion}, ID: id, Claim: reqs})
 	if err != nil {
 		return "", false
 	}

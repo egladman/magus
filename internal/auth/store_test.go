@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -195,9 +195,9 @@ func editRecord(t *testing.T, path string, edit func(*tokenRecord)) {
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	var rec tokenRecord
-	require.NoError(t, json.Unmarshal(b, &rec))
+	require.NoError(t, codec.Unmarshal(b, &rec))
 	edit(&rec)
-	b, err = json.Marshal(rec)
+	b, err = codec.Marshal(rec)
 	require.NoError(t, err)
 	// A later mtime, so the store's directory signature sees the rewrite.
 	require.NoError(t, os.WriteFile(path, b, 0o600))
@@ -388,7 +388,7 @@ func plant(t *testing.T, dir, file string, edit func(*tokenRecord)) string {
 		Grant: job.AccessViewer, Created: now.Add(-time.Minute), Expires: now.Add(time.Hour),
 	}}
 	edit(&rec)
-	b, err := json.Marshal(rec)
+	b, err := codec.Marshal(rec)
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, file+".json"), b, 0o600))
@@ -678,7 +678,7 @@ func TestStoreNeverHoldsTheSecret(t *testing.T) {
 	store := isolatedStore(t)
 	secret, _, err := store.Mint(job.AccessOperator, MintRequest{Name: "x", Grant: job.AccessConsole, TTL: time.Hour})
 	require.NoError(t, err)
-	listed, err := json.Marshal(list(t, store))
+	listed, err := codec.Marshal(list(t, store))
 	require.NoError(t, err)
 	assert.NotContains(t, string(listed), secret)
 	raw, err := os.ReadFile(filepath.Join(store.dir, "x.json"))

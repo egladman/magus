@@ -11,8 +11,8 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -383,7 +383,7 @@ func (s *scheduledPromptSuite) SetupTest() {
 }
 
 func (s *scheduledPromptSuite) spawnChild(id string) {
-	body, err := json.Marshal(spawnedAgent{ID: id})
+	body, err := codec.Marshal(spawnedAgent{ID: id})
 	s.Require().NoError(err)
 	writeAgentMarker(s.facts, spawnedAgentKind(id), body)
 }

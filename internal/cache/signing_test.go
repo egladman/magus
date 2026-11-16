@@ -14,7 +14,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,7 +73,7 @@ func TestVerifyRejectsTamperedManifest(t *testing.T) {
 func TestVerifyRejectsBadAlg(t *testing.T) {
 	pub, _ := mustKeypair(t)
 	v, _ := newVerifier([][]byte{pub})
-	env, _ := json.Marshal(sigEnvelope{Alg: "rsa", KeyID: keyID(pub)})
+	env, _ := codec.Marshal(sigEnvelope{Alg: "rsa", KeyID: keyID(pub)})
 	assert.Error(t, v.verify(domainArtifact, env, []byte("m"), nil), "verify accepted a non-ed25519 algorithm")
 }
 
@@ -420,7 +420,7 @@ func TestVerifyRefusesPreDomainEnvelope(t *testing.T) {
 
 	manifest := []byte(`{"projectPath":"p","hash":"abc"}`)
 	sum := sha256.Sum256(manifest)
-	env, err := json.Marshal(sigEnvelope{
+	env, err := codec.Marshal(sigEnvelope{
 		Alg:            "ed25519",
 		KeyID:          s.keyid,
 		ManifestSHA256: hex.EncodeToString(sum[:]),

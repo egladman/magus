@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -602,9 +602,9 @@ func TestSplitSymbolShardPartitionsByDefiningDirectory(t *testing.T) {
 	assert.True(t, hasEdgeIn(a, "file:b/b.go", "symbol:x A()."), "the reference into A rides with A")
 	assert.True(t, hasEdgeIn(a, "symbol:x B().", "symbol:x A()."), "so does the call into A")
 
-	want, err := json.Marshal(mergeAll([]Shard{whole}).Output())
+	want, err := codec.Marshal(mergeAll([]Shard{whole}).Output())
 	require.NoError(t, err)
-	got, err := json.Marshal(mergeAll(parts).Output())
+	got, err := codec.Marshal(mergeAll(parts).Output())
 	require.NoError(t, err)
 	assert.Equal(t, string(want), string(got), "the parts merge back into the unsplit shard")
 	assert.True(t, isSymbolsShard(".@symbols:a"))

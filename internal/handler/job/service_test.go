@@ -15,11 +15,10 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/egladman/magus/internal/file"
 	jobstore "github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
@@ -38,16 +37,16 @@ func seedFiled(t *testing.T, store *jobstore.Store, id string, result *job.Resul
 	t.Helper()
 	path, err := store.Path()
 	require.NoError(t, err)
-	raw, err := json.Marshal(result)
+	raw, err := codec.Marshal(result)
 	require.NoError(t, err)
 	var filed map[string]any
-	require.NoError(t, json.Unmarshal(raw, &filed))
-	line, err := json.Marshal(map[string]any{
+	require.NoError(t, codec.Unmarshal(raw, &filed))
+	line, err := codec.Marshal(map[string]any{
 		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
 		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
 	})
 	require.NoError(t, err)
-	require.NoError(t, file.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
+	require.NoError(t, codec.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
 }
 
 // fixtureCamelKeys is v with every object key camelCased, as the

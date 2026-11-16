@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
@@ -26,7 +26,7 @@ type Schema struct {
 	Requires []string `json:"requires,omitempty" yaml:"requires,omitempty"`
 	// Unknown holds every member this build does not declare, re-emitted unchanged when
 	// the record is written back.
-	Unknown map[string]json.RawMessage `json:",unknown" yaml:"-" buzz:"-"`
+	Unknown map[string]codec.RawMessage `json:",unknown" yaml:"-" buzz:"-"`
 }
 
 // Unmet returns the entries of Requires that known does not name, in record order, or

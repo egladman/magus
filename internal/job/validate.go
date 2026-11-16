@@ -16,7 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -507,7 +507,7 @@ func readPlan(rows []job.Job) planRead {
 		if r.State.Terminal() {
 			continue
 		}
-		rest, _ := json.Marshal([]any{r.Parent, r.Integrates, r.Paths.Deny, WorkingCheckout(r.CheckoutRoot, r)})
+		rest, _ := codec.Marshal([]any{r.Parent, r.Integrates, r.Paths.Deny, WorkingCheckout(r.CheckoutRoot, r)})
 		read[r.ID] = planEntry{rest: string(rest), write: r.Paths.Write}
 	}
 	return read
@@ -736,7 +736,7 @@ func unrunGateProblems(gates []UnrunGate, owner gateOwner) types.JobProblems {
 			continue
 		}
 		subject := fmt.Sprintf("%s %s", g.Target, g.Project)
-		goal, _ := json.Marshal(g.Goal)
+		goal, _ := codec.Marshal(g.Goal)
 		p := types.JobProblem{
 			Code: types.GateNotRun, Field: "goals", Subject: subject,
 			Message: fmt.Sprintf("ci runs `%s` over the write paths (it reads %s), and neither the check nor a goal runs it", subject, g.Source),

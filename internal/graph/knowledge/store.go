@@ -22,9 +22,9 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/readlog"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -975,7 +975,7 @@ func (s *Store) readManifestOrNil() *manifest {
 		return nil
 	}
 	var m manifest
-	if err := json.Unmarshal(b, &m); err != nil {
+	if err := codec.Unmarshal(b, &m); err != nil {
 		return nil // a corrupt manifest is treated as absent; a full rebuild follows
 	}
 	if m.APIVersion != types.KnowledgeAPIVersion {
@@ -986,7 +986,7 @@ func (s *Store) readManifestOrNil() *manifest {
 }
 
 func (s *Store) writeManifest(m manifest) error {
-	b, err := json.MarshalIndent(m, "", "  ")
+	b, err := codec.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -1050,7 +1050,7 @@ func (s *Store) writeShard(ctx context.Context, sh Shard, fp string) error {
 	//	          inside the run-to-run spread), 13.5 -> 11.9 MB/op (-12%); p2000 is flat in
 	//	          time (358 vs 363 ms) and -11% in B/op.
 	//	trade-off: a shard is no longer pleasant to read with `cat`; pipe it through jq.
-	b, err := json.Marshal(sf)
+	b, err := codec.Marshal(sf)
 	if err != nil {
 		return err
 	}
@@ -1128,7 +1128,7 @@ func ReadStoreExport(cacheDir string) (StoreExport, error) {
 		kept.Shards[name] = meta
 		out.Shards = append(out.Shards, ShardBlob{Name: name, Key: meta.Fingerprint, Bytes: b})
 	}
-	b, err := json.MarshalIndent(kept, "", "  ")
+	b, err := codec.MarshalIndent(kept, "", "  ")
 	if err != nil {
 		return StoreExport{}, err
 	}
@@ -1144,7 +1144,7 @@ func ReadStoreExport(cacheDir string) (StoreExport, error) {
 // shard files behind it carry that schema's node and edge shapes.
 func ShardKeys(manifestJSON []byte) (map[string]string, error) {
 	var m manifest
-	if err := json.Unmarshal(manifestJSON, &m); err != nil {
+	if err := codec.Unmarshal(manifestJSON, &m); err != nil {
 		return nil, fmt.Errorf("knowledge: decode store manifest: %w", err)
 	}
 	if m.APIVersion != types.KnowledgeAPIVersion {
@@ -1163,7 +1163,7 @@ func ShardKeys(manifestJSON []byte) (map[string]string, error) {
 // sorts by shard name.
 func MergeShardFile(g *Graph, b []byte) error {
 	var sf shardFile
-	if err := json.Unmarshal(b, &sf); err != nil {
+	if err := codec.Unmarshal(b, &sf); err != nil {
 		return fmt.Errorf("knowledge: decode shard: %w", err)
 	}
 	g.Merge(sf.Nodes, sf.Edges)
@@ -1180,7 +1180,7 @@ func (s *Store) readShardKeeping(name string, keep bool) (shardFile, error) {
 	path := s.shardPath(name)
 	sf, info, hit, err := decodeFile(path, func(b []byte) (shardFile, error) {
 		var sf shardFile
-		err := json.Unmarshal(b, &sf)
+		err := codec.Unmarshal(b, &sf)
 		return sf, err
 	})
 	if err != nil {
@@ -1367,7 +1367,7 @@ func LoadRuntimeEvents(cacheDir string) []types.DiagnosticEvent {
 		return nil
 	}
 	var evs []types.DiagnosticEvent
-	if err := json.Unmarshal(b, &evs); err != nil {
+	if err := codec.Unmarshal(b, &evs); err != nil {
 		return nil
 	}
 	return evs
@@ -1395,7 +1395,7 @@ func RecordRuntimeEvents(cacheDir string, fresh []types.DiagnosticEvent) error {
 	if len(merged) > defaultRuntimeCap {
 		merged = merged[len(merged)-defaultRuntimeCap:]
 	}
-	b, err := json.MarshalIndent(merged, "", "  ")
+	b, err := codec.MarshalIndent(merged, "", "  ")
 	if err != nil {
 		return err
 	}

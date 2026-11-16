@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
 )
 
 type configViewSuite struct {
@@ -34,7 +34,7 @@ func (s *configViewSuite) TestJSONCarriesTheReadingList() {
 	var view struct {
 		Sources []map[string]string `json:"sources"`
 	}
-	s.Require().NoError(json.Unmarshal([]byte(out), &view), out)
+	s.Require().NoError(codec.Unmarshal([]byte(out), &view), out)
 	s.Equal([]map[string]string{{"url": "https://go.dev/ref/mod", "topic": "go modules",
 		"verdict": "follow", "why": "the reference", "contradicts": "https://blog.example/go"}}, view.Sources)
 }

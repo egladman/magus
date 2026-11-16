@@ -168,7 +168,7 @@ linters:
         # types/doc.go's contract: no filesystem, VCS, or process execution. What it
         # forbids is REACHING THE WORLD; string work over paths and host:port stays
         # legal, which is why path/filepath and net are not here. Of magus it may
-        # import only the four packages allowed below. internal/json is one because
+        # import only the four packages allowed below. libs/codec is one because
         # every package that encodes JSON must use it.
         #
         # Every deny ends in `$` because depguard matches prefixes, and `os` would
@@ -195,7 +195,7 @@ linters:
             - github.com/egladman/magus/libs/safetyscissors/tier$
             # The job record, its claim grammar and the origin every record stamps.
             - github.com/egladman/magus/libs/safetyscissors/job$
-            - github.com/egladman/magus/internal/json$
+            - github.com/egladman/magus/libs/codec$
             - github.com/egladman/magus/types/enum$
             - github.com/egladman/magus/types/check$
             - github.com/egladman/magus/types/impact$
@@ -215,7 +215,7 @@ linters:
             - pkg: os/user$
               desc: types is the near-leaf domain package and may not reach the world
             - pkg: github.com/egladman/magus/
-              desc: types may depend on spells, libs/diagnostics, libs/apiversion, libs/safetyscissors/budget, verdict, tier and job, internal/json and its own domain packages, nothing else in magus
+              desc: types may depend on spells, libs/diagnostics, libs/apiversion, libs/safetyscissors/budget, verdict, tier and job, libs/codec and its own domain packages, nothing else in magus
 
         # libs/conventions, libs/proofread and libs/testpairing are magus-repo policy, never shipped.
         root-imports-no-repo-policy:
@@ -748,13 +748,13 @@ linters:
         - name: github.com/egladman/magus/cmd/magus.writeFormatted
           tag: json
           arg-pos: 2
-        - name: github.com/egladman/magus/internal/json.Marshal
+        - name: github.com/egladman/magus/libs/codec.Marshal
           tag: json
           arg-pos: 0
-        - name: github.com/egladman/magus/internal/json.MarshalIndent
+        - name: github.com/egladman/magus/libs/codec.MarshalIndent
           tag: json
           arg-pos: 0
-        - name: github.com/egladman/magus/internal/json.Unmarshal
+        - name: github.com/egladman/magus/libs/codec.Unmarshal
           tag: json
           arg-pos: 1
 
@@ -890,7 +890,7 @@ linters:
       - path: ^proto/gen/
         linters: [gochecknoinits]
 
-      # stdversion cannot model GOEXPERIMENT. internal/json/json_v2.go sits behind
+      # stdversion cannot model GOEXPERIMENT. libs/codec/json_v2.go sits behind
       # //go:build goexperiment.jsonv2, where encoding/json/v2 IS available on the
       # go 1.26 this module declares, but the analyzer only reads the go directive
       # and the std API table compiled into the linter, so it calls all 25 symbols
@@ -902,7 +902,7 @@ linters:
       # carries a newer one. Same linter version, same config, opposite verdict -
       # which is the toolchain-mismatch hazard the lint target's comment describes,
       # showing up as findings rather than the panic it caused last time.
-      - path: ^internal/json/
+      - path: ^libs/codec/
         linters: [govet]
         text: stdversion
 

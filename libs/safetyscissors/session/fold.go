@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/apiversion"
-	"github.com/egladman/magus/libs/safetyscissors/internal/jsonl"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // foldCachePath is the file under a store that keeps one kind's records between reads.
@@ -36,9 +36,9 @@ type foldCache struct {
 type foldEntry struct {
 	Size    int64    `json:"size"`
 	ModNs   int64    `json:"mod_ns"`
-	Ino     uint64   `json:"ino,omitempty"`
-	Skipped int      `json:"skipped,omitempty"`
-	Legacy  int      `json:"legacy,omitempty"`
+	Ino     uint64   `json:"ino"`
+	Skipped int      `json:"skipped"`
+	Legacy  int      `json:"legacy"`
 	Records []Record `json:"records,omitempty"`
 }
 
@@ -108,8 +108,8 @@ func ReadKind(dir, kind string) (Fold, error) {
 	}
 	sortRecords(fold.Records)
 	if changed || len(next.Files) != len(prev.Files) {
-		if b, err := jsonl.Marshal(next); err == nil {
-			_ = jsonl.RewriteLines(cachePath, [][]byte{b}, 0o644)
+		if b, err := codec.Marshal(next); err == nil {
+			_ = codec.RewriteLines(cachePath, [][]byte{b}, 0o644)
 		}
 	}
 	return fold, nil
@@ -123,7 +123,7 @@ func readFoldCache(path, kind string) foldCache {
 		return foldCache{}
 	}
 	var c foldCache
-	if jsonl.Unmarshal(b, &c) != nil || c.Format != foldCacheFormat || c.Schema != APIVersion || c.Kind != kind {
+	if codec.Unmarshal(b, &c) != nil || c.Format != foldCacheFormat || c.Schema != APIVersion || c.Kind != kind {
 		return foldCache{}
 	}
 	return c

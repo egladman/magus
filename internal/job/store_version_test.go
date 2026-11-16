@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
@@ -20,7 +20,7 @@ func TestModelTierSourceJobSuite(t *testing.T) { suite.Run(t, new(modelTierSourc
 
 func (s *modelTierSourceJobSuite) entry(text string) migrate.Entry {
 	var e migrate.Entry
-	s.Require().NoError(json.Unmarshal([]byte(text), &e))
+	s.Require().NoError(codec.Unmarshal([]byte(text), &e))
 	return e
 }
 
@@ -30,7 +30,7 @@ func (s *modelTierSourceJobSuite) source(e migrate.Entry) string {
 			Source string `json:"source"`
 		} `json:"modelTier"`
 	}
-	s.Require().NoError(json.Unmarshal(e["status"], &status))
+	s.Require().NoError(codec.Unmarshal(e["status"], &status))
 	return status.ModelTier.Source
 }
 
@@ -69,13 +69,13 @@ type pathsNestedSuite struct {
 func TestPathsNestedSuite(t *testing.T) { suite.Run(t, new(pathsNestedSuite)) }
 
 // spec is the spec pathsNested makes of a stored entry's spec.
-func (s *pathsNestedSuite) spec(spec string) map[string]json.RawMessage {
+func (s *pathsNestedSuite) spec(spec string) map[string]codec.RawMessage {
 	var e migrate.Entry
-	s.Require().NoError(json.Unmarshal(fmt.Appendf(nil, `{"metadata":{"name":"a"},"spec":%s}`, spec), &e))
+	s.Require().NoError(codec.Unmarshal(fmt.Appendf(nil, `{"metadata":{"name":"a"},"spec":%s}`, spec), &e))
 	got, err := pathsNested(e)
 	s.Require().NoError(err)
-	var out map[string]json.RawMessage
-	s.Require().NoError(json.Unmarshal(got["spec"], &out))
+	var out map[string]codec.RawMessage
+	s.Require().NoError(codec.Unmarshal(got["spec"], &out))
 	return out
 }
 
@@ -117,7 +117,7 @@ func (s *pathsNestedSuite) TestARecordWithNoPathsIsKept() {
 
 func (s *pathsNestedSuite) TestTheHeaderLineIsKept() {
 	var e migrate.Entry
-	s.Require().NoError(json.Unmarshal([]byte(`{"apiVersion":"batch.magus/v1alpha1","kind":"JobList"}`), &e))
+	s.Require().NoError(codec.Unmarshal([]byte(`{"apiVersion":"batch.magus/v1alpha1","kind":"JobList"}`), &e))
 
 	got, err := pathsNested(e)
 

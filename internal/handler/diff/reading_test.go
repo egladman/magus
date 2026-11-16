@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit/register"
 )
 
@@ -44,7 +44,7 @@ func TestReadingMarksTheReviewAndPrintsTheForgeCommand(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	var got readingResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &got))
 	mark := loadReading(t, store)
 	assert.Equal(t, changeset.ReadingMark{Review: "482", Repo: "acme/acme", Since: got.Since}, mark)
 	assert.Equal(t, readingResponse{
@@ -85,7 +85,7 @@ func TestReadingOnAnotherForgeMarksWithoutACommand(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var got readingResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &got))
 	assert.True(t, got.Reading)
 	assert.Empty(t, got.Command)
 	assert.True(t, loadReading(t, store).Active())

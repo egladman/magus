@@ -1,10 +1,11 @@
 package job
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/codec"
 )
 
 type specSuite struct {
@@ -37,7 +38,7 @@ func (s *specSuite) TestAResumedWorkerCarriesNoReason() {
 }
 
 func (s *specSuite) TestTheWorkerTypeIsAlwaysWritten() {
-	body, err := json.Marshal(Agent{Worker: Worker{Type: WorkerTypeResumed}})
+	body, err := codec.Marshal(Agent{Worker: Worker{Type: WorkerTypeResumed}})
 	s.Require().NoError(err)
 	s.JSONEq(`{"worker": {"type": "resumed"}}`, string(body), "a zero model and no instructions are left out")
 }

@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -225,7 +225,7 @@ func TestSavedPlanJSONContainsTypedInputsWithoutMarkdown(t *testing.T) {
 		{Target: "ci", Inherit: &PlanInherit{Run: "42", Commit: "abc123"}},
 		{Target: "ci", Risk: &PlanRisk{Tier: check.RiskTrivial, Paths: []check.TierEvidence{{Path: "notes/v1.md", Tier: check.RiskTrivial, Why: "no gate step reads it"}}}},
 	} {
-		body, err := json.Marshal(out)
+		body, err := codec.Marshal(out)
 		require.NoError(t, err)
 		assert.NotContains(t, string(body), "summary")
 		assert.NotContains(t, string(body), "# CI plan")

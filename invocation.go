@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -158,13 +158,13 @@ type eventWire struct {
 
 // MarshalJSON encodes e in journal.Event's wire form.
 func (e Event) MarshalJSON() ([]byte, error) {
-	return json.Marshal(eventWire{eventFields: eventFields(e), DurationMs: e.Duration.Milliseconds()})
+	return codec.Marshal(eventWire{eventFields: eventFields(e), DurationMs: e.Duration.Milliseconds()})
 }
 
 // UnmarshalJSON decodes journal.Event's wire form into e.
 func (e *Event) UnmarshalJSON(data []byte) error {
 	var w eventWire
-	if err := json.Unmarshal(data, &w); err != nil {
+	if err := codec.Unmarshal(data, &w); err != nil {
 		return err
 	}
 	*e = Event(w.eventFields)

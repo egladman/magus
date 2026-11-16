@@ -12,8 +12,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
@@ -58,8 +58,8 @@ type Request struct {
 // Result is main's return value. JSON is that value; Stdout is text printed
 // through the safe std module.
 type Result struct {
-	Stdout string          `json:"stdout"`
-	JSON   json.RawMessage `json:"json"`
+	Stdout string           `json:"stdout"`
+	JSON   codec.RawMessage `json:"json"`
 }
 
 // Serve is the worker's whole protocol: one Request from in, the workspace
@@ -82,7 +82,7 @@ func Serve(ctx context.Context, in io.Reader, out, errOut io.Writer, open func(c
 		return 1
 	}
 	var req Request
-	if err := json.UnmarshalStrict(data, &req); err != nil {
+	if err := codec.UnmarshalStrict(data, &req); err != nil {
 		fmt.Fprintf(errOut, "%s: decode request: %v\n", tool, err)
 		return 1
 	}
@@ -99,7 +99,7 @@ func Serve(ctx context.Context, in io.Reader, out, errOut io.Writer, open func(c
 		fmt.Fprintln(errOut, err)
 		return 1
 	}
-	encoded, err := json.Marshal(result)
+	encoded, err := codec.Marshal(result)
 	if err != nil {
 		fmt.Fprintf(errOut, "%s: encode response: %v\n", tool, err)
 		return 1
@@ -188,7 +188,7 @@ func Run(ctx context.Context, req Request) (Result, error) {
 	if len(encoded) > MaxOutputBytes {
 		return Result{}, fmt.Errorf("%s: result exceeds %d bytes", tool, MaxOutputBytes)
 	}
-	return Result{Stdout: printed.String(), JSON: json.RawMessage(encoded)}, nil
+	return Result{Stdout: printed.String(), JSON: codec.RawMessage(encoded)}, nil
 }
 
 // wrapScriptError returns a coded diagnostic from err's chain as itself and

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/gen/typestest"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -290,13 +290,13 @@ func (s *ledgerSuite) TestAStashIsSurveyedWhenTheBackendListsIt() {
 
 func (s *ledgerSuite) TestAWorkItemRefusesAnUnknownState() {
 	var w types.WorkItem
-	err := json.Unmarshal([]byte(`{"kind":"branch","name":"topic","state":"lost","at":1}`), &w) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
+	err := codec.Unmarshal([]byte(`{"kind":"branch","name":"topic","state":"lost","at":1}`), &w) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
 	s.Require().Error(err)
 	s.Contains(err.Error(), `state "lost"`)
 }
 
 func (s *ledgerSuite) TestAWorkItemRefusesAnUnknownKind() {
-	_, err := json.Marshal(types.WorkItem{Kind: "tag", Name: "v1", State: types.WorkClear}) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
+	_, err := codec.Marshal(types.WorkItem{Kind: "tag", Name: "v1", State: types.WorkClear}) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
 	s.Require().Error(err)
 	s.Contains(err.Error(), `kind "tag"`)
 }
@@ -304,9 +304,9 @@ func (s *ledgerSuite) TestAWorkItemRefusesAnUnknownKind() {
 func (s *ledgerSuite) TestAWorkItemRoundTrips() {
 	in := types.WorkItem{Kind: types.WorkBranch, Name: "topic", Repo: s.repo, State: types.WorkEnded,
 		Head: "h1", Base: "b0", Commits: 2, Reason: "dropped", At: 5}
-	data, err := json.Marshal(in) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
+	data, err := codec.Marshal(in) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
 	s.Require().NoError(err)
 	var out types.WorkItem
-	s.Require().NoError(json.Unmarshal(data, &out)) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
+	s.Require().NoError(codec.Unmarshal(data, &out)) //nolint:musttag // WorkItem encodes through MarshalJSON and its tagged workItemWire
 	s.Equal(in, out)
 }

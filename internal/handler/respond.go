@@ -8,9 +8,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -68,7 +68,7 @@ func Refuse(w http.ResponseWriter, r *http.Request, e rpcerr.Error) {
 // no-store posture: these reads reflect live server state. A value that will not marshal is
 // answered as an internal failure, with the cause logged and not sent.
 func WriteJSON(w http.ResponseWriter, r *http.Request, v any) {
-	body, err := json.Marshal(v)
+	body, err := codec.Marshal(v)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "response marshal failed", slog.String("path", r.URL.Path), attr.Error(err))
 		Refuse(w, r, rpcerr.Internal("response"))

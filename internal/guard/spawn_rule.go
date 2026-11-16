@@ -20,9 +20,9 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -56,7 +56,7 @@ type spawnFields struct {
 func spawnedAgentID(response any) string {
 	if s, ok := response.(string); ok {
 		var decoded any
-		if json.Unmarshal([]byte(s), &decoded) != nil {
+		if codec.Unmarshal([]byte(s), &decoded) != nil {
 			return ""
 		}
 		response = decoded
@@ -700,7 +700,7 @@ const agentBaseRefusals = "guard/agent-base"
 // agentBaseRefusedKind names one refused registration: row as it stood, every field of it,
 // from the checkout at workspace.
 func agentBaseRefusedKind(row jobtypes.Job, workspace string) hint.MarkerKind {
-	body, _ := json.Marshal(row)
+	body, _ := codec.Marshal(row)
 	sum := sha256.Sum256(append(body, "\x00"+workspace...))
 	return hint.MarkerKind("agent-base-refused-" + hex.EncodeToString(sum[:8]))
 }
@@ -790,7 +790,7 @@ type transcriptUsage struct {
 			CacheRead  int64 `json:"cache_read_input_tokens"`
 			CacheWrite int64 `json:"cache_creation_input_tokens"`
 		} `json:"usage"`
-		Content json.RawMessage `json:"content"`
+		Content codec.RawMessage `json:"content"`
 	} `json:"message"`
 	// IsSidechain marks a subagent's line written into its parent's transcript.
 	IsSidechain bool   `json:"isSidechain"`
@@ -804,10 +804,10 @@ type transcriptUsage struct {
 			} `json:"last_token_usage"`
 			Window int64 `json:"model_context_window"`
 		} `json:"info"`
-		Name      string          `json:"name"`
-		Arguments string          `json:"arguments"`
-		CallID    string          `json:"call_id"`
-		Output    json.RawMessage `json:"output"`
+		Name      string           `json:"name"`
+		Arguments string           `json:"arguments"`
+		CallID    string           `json:"call_id"`
+		Output    codec.RawMessage `json:"output"`
 	} `json:"payload"`
 }
 
@@ -861,7 +861,7 @@ func lastContextUsage(path string) (types.ContextWindow, bool) {
 			continue
 		}
 		var rec transcriptUsage
-		if json.Unmarshal(line, &rec) != nil {
+		if codec.Unmarshal(line, &rec) != nil {
 			continue
 		}
 		if tokens, window, ok := rec.contextSize(); ok {
@@ -886,7 +886,7 @@ func readMarker[T any](facts hint.Gate, kind hint.MarkerKind) (T, bool) {
 		return rec, false
 	}
 	body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), kind))
-	if err != nil || json.Unmarshal(body, &rec) != nil {
+	if err != nil || codec.Unmarshal(body, &rec) != nil {
 		var zero T
 		return zero, false
 	}
@@ -894,7 +894,7 @@ func readMarker[T any](facts hint.Gate, kind hint.MarkerKind) (T, bool) {
 }
 
 func writeSpawnedAgent(facts hint.Gate, agentID string, rec spawnedAgent) {
-	body, err := json.Marshal(rec)
+	body, err := codec.Marshal(rec)
 	if err != nil {
 		return
 	}

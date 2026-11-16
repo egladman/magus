@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/libs/safetyscissors/internal/jsonl"
+	"github.com/egladman/magus/libs/codec"
 )
 
 type LoadLockSuite struct{ suite.Suite }
@@ -23,7 +23,7 @@ func (s *LoadLockSuite) TestWaitEndsWithCaller() {
 	release := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- jsonl.WithLock(context.Background(), filepath.Join(dir, loadLockName), time.Second, func() error {
+		done <- codec.WithLock(context.Background(), filepath.Join(dir, loadLockName), time.Second, func() error {
 			close(held)
 			<-release
 			return nil

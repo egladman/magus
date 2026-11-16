@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 )
 
@@ -120,7 +120,7 @@ func (s *server) park(p *parked) {
 // key is the whole frame, so a wake re-sends one whenever anything the
 // client prints from it changed.
 func (r parkedReply) key() string {
-	b, err := json.Marshal(r)
+	b, err := codec.Marshal(r)
 	if err != nil {
 		return fmt.Sprintf("%+v", r)
 	}

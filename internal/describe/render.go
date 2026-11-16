@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -153,56 +153,56 @@ func RenderTargets(w io.Writer, targets []types.TargetEntry) {
 
 // RenderEvaluatedProjects writes the text form of the evaluated project list.
 func RenderEvaluatedProjects(w io.Writer, out types.EvaluatedProjectsOutput) {
-		fmt.Fprintf(w, "definition: %s\n\n", out.Definition)
-		fmt.Fprintf(w, "workspace: %s (%d projects)\n\n", out.Workspace, out.Count)
-		for _, p := range out.Projects {
-			fmt.Fprintf(w, "project: %s\n", types.ProjectLabel(p.Path, p.Dir))
-			fmt.Fprintf(w, "  dir:     %s\n", p.Dir)
-			if len(p.Sources) > 0 {
-				fmt.Fprintf(w, "  sources: %v\n", p.Sources)
+	fmt.Fprintf(w, "definition: %s\n\n", out.Definition)
+	fmt.Fprintf(w, "workspace: %s (%d projects)\n\n", out.Workspace, out.Count)
+	for _, p := range out.Projects {
+		fmt.Fprintf(w, "project: %s\n", types.ProjectLabel(p.Path, p.Dir))
+		fmt.Fprintf(w, "  dir:     %s\n", p.Dir)
+		if len(p.Sources) > 0 {
+			fmt.Fprintf(w, "  sources: %v\n", p.Sources)
+		}
+		if len(p.Outputs) > 0 {
+			fmt.Fprintf(w, "  outputs: %v\n", p.Outputs)
+		}
+		if len(p.DependsOn) > 0 {
+			fmt.Fprintf(w, "  depends_on: %v\n", p.DependsOn)
+		}
+		for _, s := range p.ResolvedSpells {
+			fmt.Fprintf(w, "  spell: %s\n", s.Name)
+		}
+		for targetName, pol := range p.TargetPolicies {
+			fmt.Fprintf(w, "  policy: %s", targetName)
+			if pol.IncludeOS != nil {
+				fmt.Fprintf(w, "  include_os=%t", *pol.IncludeOS)
 			}
-			if len(p.Outputs) > 0 {
-				fmt.Fprintf(w, "  outputs: %v\n", p.Outputs)
+			if pol.IncludeArch != nil {
+				fmt.Fprintf(w, "  include_arch=%t", *pol.IncludeArch)
 			}
-			if len(p.DependsOn) > 0 {
-				fmt.Fprintf(w, "  depends_on: %v\n", p.DependsOn)
+			if pol.Drift != types.DriftDefault {
+				fmt.Fprintf(w, "  drift=%s", pol.Drift)
 			}
-			for _, s := range p.ResolvedSpells {
-				fmt.Fprintf(w, "  spell: %s\n", s.Name)
+			if pol.RetryOnVolatile {
+				fmt.Fprintf(w, "  retry_on_volatile")
 			}
-			for targetName, pol := range p.TargetPolicies {
-				fmt.Fprintf(w, "  policy: %s", targetName)
-				if pol.IncludeOS != nil {
-					fmt.Fprintf(w, "  include_os=%t", *pol.IncludeOS)
-				}
-				if pol.IncludeArch != nil {
-					fmt.Fprintf(w, "  include_arch=%t", *pol.IncludeArch)
-				}
-				if pol.Drift != types.DriftDefault {
-					fmt.Fprintf(w, "  drift=%s", pol.Drift)
-				}
-				if pol.RetryOnVolatile {
-					fmt.Fprintf(w, "  retry_on_volatile")
-				}
-				if pol.Advisory {
-					fmt.Fprintf(w, "  advisory=%q", pol.AdvisoryReason)
-				}
-				if pol.SkipCache {
-					fmt.Fprintf(w, "  skip_cache")
-				}
-				if pol.Slots > 0 {
-					fmt.Fprintf(w, "  slots=%d", pol.Slots)
-				}
-				if pol.MemoryMB > 0 {
-					fmt.Fprintf(w, "  memory_mb=%d", pol.MemoryMB)
-				}
-				if pol.Timeout != "" {
-					fmt.Fprintf(w, "  timeout=%s", pol.Timeout)
-				}
-				fmt.Fprintln(w)
+			if pol.Advisory {
+				fmt.Fprintf(w, "  advisory=%q", pol.AdvisoryReason)
+			}
+			if pol.SkipCache {
+				fmt.Fprintf(w, "  skip_cache")
+			}
+			if pol.Slots > 0 {
+				fmt.Fprintf(w, "  slots=%d", pol.Slots)
+			}
+			if pol.MemoryMB > 0 {
+				fmt.Fprintf(w, "  memory_mb=%d", pol.MemoryMB)
+			}
+			if pol.Timeout != "" {
+				fmt.Fprintf(w, "  timeout=%s", pol.Timeout)
 			}
 			fmt.Fprintln(w)
 		}
+		fmt.Fprintln(w)
+	}
 }
 
 // RenderProjects writes the text form of the project list.
@@ -443,15 +443,15 @@ func RenderFiles(w io.Writer, report types.FileReport, files []types.FileEntry, 
 
 // RenderModules writes the text form of the module list.
 func RenderModules(w io.Writer, out []types.ModuleEntry) {
-		fmt.Fprintf(w, "definition: %s\n\n", types.ModuleDefinition)
-		fmt.Fprintf(w, "modules (%d):\n", len(out))
-		for _, m := range out {
-			fmt.Fprintf(w, "  %s\n", m.Name)
-			if m.Doc != "" {
-				fmt.Fprintf(w, "    %s\n", FirstLine(m.Doc))
-			}
+	fmt.Fprintf(w, "definition: %s\n\n", types.ModuleDefinition)
+	fmt.Fprintf(w, "modules (%d):\n", len(out))
+	for _, m := range out {
+		fmt.Fprintf(w, "  %s\n", m.Name)
+		if m.Doc != "" {
+			fmt.Fprintf(w, "    %s\n", FirstLine(m.Doc))
 		}
-		fmt.Fprintln(w, "\nRun `magus describe module <name>` for a module's methods and signatures.")
+	}
+	fmt.Fprintln(w, "\nRun `magus describe module <name>` for a module's methods and signatures.")
 }
 
 // writeOverlaps renders each set of paths once, then the declarations covering exactly
@@ -479,7 +479,7 @@ func writeOverlaps(w io.Writer, overlaps []types.FileClaim) {
 // names of its top-level properties, the two shapes a --schema flag renders besides the
 // raw text.
 func ParseSchema(raw string) (doc map[string]any, names []string, err error) {
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+	if err := codec.Unmarshal([]byte(raw), &doc); err != nil {
 		return nil, nil, fmt.Errorf("parse embedded schema: %w", err)
 	}
 	props, _ := doc["properties"].(map[string]any)

@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 var amd64 = Platform{OS: "linux", Architecture: "amd64"}
@@ -54,7 +54,7 @@ func readManifest(t *testing.T, m Manifest) ocispec.Manifest {
 	data, err := os.ReadFile(blobPath(m.Path, m.Descriptor.Digest))
 	require.NoError(t, err)
 	var man ocispec.Manifest
-	require.NoError(t, json.Unmarshal(data, &man))
+	require.NoError(t, codec.Unmarshal(data, &man))
 	return man
 }
 
@@ -63,7 +63,7 @@ func readConfig(t *testing.T, m Manifest) ocispec.Image {
 	data, err := os.ReadFile(blobPath(m.Path, m.Config.Digest))
 	require.NoError(t, err)
 	var cfg ocispec.Image
-	require.NoError(t, json.Unmarshal(data, &cfg))
+	require.NoError(t, codec.Unmarshal(data, &cfg))
 	return cfg
 }
 
@@ -264,7 +264,7 @@ func TestAttachReferrersWritesANewLayoutAndKeepsEveryBlob(t *testing.T) {
 	data, err := os.ReadFile(blobPath(out.Path, opened.Referrers[0].Digest))
 	require.NoError(t, err)
 	var ref ocispec.Manifest
-	require.NoError(t, json.Unmarshal(data, &ref))
+	require.NoError(t, codec.Unmarshal(data, &ref))
 	assert.Equal(t, ocispec.MediaTypeEmptyJSON, ref.Config.MediaType)
 	require.NotNil(t, ref.Subject)
 	assert.Equal(t, opened.Descriptor.Digest, ref.Subject.Digest)
@@ -323,7 +323,7 @@ func TestProvenanceNamesTheDigestAndAddsTheBase(t *testing.T) {
 			} `json:"buildDefinition"`
 		} `json:"predicate"`
 	}
-	require.NoError(t, json.Unmarshal(data, &st))
+	require.NoError(t, codec.Unmarshal(data, &st))
 	assert.Equal(t, "https://in-toto.io/Statement/v1", st.Type)
 	assert.Equal(t, over.Descriptor.Digest.String(), st.Subject[0].Name, "a digest, never a host path")
 	baseLayout, err := OpenLayout(t.Context(), base, "")

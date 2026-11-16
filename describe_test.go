@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -168,7 +168,7 @@ func TestListSpells_CarriesTheLanguageRecord(t *testing.T) {
 
 	// The shared encoder `describe spell -o json` prints through, which under jsonv2 keeps a
 	// false that an omitempty tag names.
-	raw, err := json.Marshal(inventory[idx])
+	raw, err := codec.Marshal(inventory[idx])
 	require.NoError(t, err)
 	assert.JSONEq(t, fmt.Sprintf(`{
 		"name": "%s", "buzz_import": "magus/spell/%s", "built_in": false,

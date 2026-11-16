@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/testkit"
@@ -365,10 +365,10 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 	// empties) and pins only the RFC 6902 content.
 	norm := func(v any) spells.Charm {
 		t.Helper()
-		b, err := json.Marshal(v)
+		b, err := codec.Marshal(v)
 		require.NoError(t, err)
 		var c spells.Charm
-		require.NoError(t, json.Unmarshal(b, &c))
+		require.NoError(t, codec.Unmarshal(b, &c))
 		return c
 	}
 

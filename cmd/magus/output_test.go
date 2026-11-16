@@ -26,10 +26,10 @@ import (
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -291,8 +291,8 @@ func TestWriteJSONL(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	require.Len(t, lines, 2)
 	var p0, p1 proj
-	require.NoError(t, json.Unmarshal([]byte(lines[0]), &p0))
-	require.NoError(t, json.Unmarshal([]byte(lines[1]), &p1))
+	require.NoError(t, codec.Unmarshal([]byte(lines[0]), &p0))
+	require.NoError(t, codec.Unmarshal([]byte(lines[1]), &p1))
 	assert.Equal(t, proj{Path: "api", Pack: "go"}, p0)
 	assert.Equal(t, proj{Path: "web", Pack: "typescript"}, p1)
 }
@@ -420,7 +420,7 @@ func TestWriteJSONLTopLevelSlice(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	require.Len(t, lines, 2)
 	var p0 proj
-	require.NoError(t, json.Unmarshal([]byte(lines[0]), &p0))
+	require.NoError(t, codec.Unmarshal([]byte(lines[0]), &p0))
 	assert.Equal(t, proj{Path: "api"}, p0)
 }
 
@@ -482,7 +482,7 @@ func TestWriteFormattedJSON(t *testing.T) {
 	require.NoError(t, writeFormatted(&buf, opts, v))
 
 	var decoded map[string]interface{}
-	require.NoError(t, json.Unmarshal(buf.Bytes(), &decoded), "output was %q", buf.String())
+	require.NoError(t, codec.Unmarshal(buf.Bytes(), &decoded), "output was %q", buf.String())
 	assert.Equal(t, "hello", decoded["name"])
 }
 
@@ -1117,9 +1117,9 @@ func (s *templateJSONSuite) TestConfiguredCodecErrorsArePreserved() {
 			if _, shaped := value.(map[string]any); shaped {
 				return nil, refused
 			}
-			return json.Marshal(value)
+			return codec.Marshal(value)
 		},
-		Unmarshal: json.Unmarshal,
+		Unmarshal: codec.Unmarshal,
 	}}
 	value := struct {
 		Nested struct{} `json:"nested"`
@@ -1132,7 +1132,7 @@ func (s *templateJSONSuite) TestConfiguredCodecErrorsArePreserved() {
 
 func (s *templateJSONSuite) TestCustomFunctionsArePreservedWithoutMutatingTheirMap() {
 	funcs := template.FuncMap{"label": func() string { return "value" }}
-	wr := output.Writer{Codec: output.Codec{Marshal: json.Marshal, Unmarshal: json.Unmarshal}, Funcs: funcs}
+	wr := output.Writer{Codec: output.Codec{Marshal: codec.Marshal, Unmarshal: codec.Unmarshal}, Funcs: funcs}
 	var buf bytes.Buffer
 	err := wr.Write(&buf, output.Options{Format: output.Template, Template: `{{label}}={{json .}}`}, []string{"a"})
 

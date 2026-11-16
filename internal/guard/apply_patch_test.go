@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,7 +72,7 @@ func TestDecodeHookEnvelopeApplyPatch(t *testing.T) {
 	// Codex sends the patch as tool_input.command; OpenCode, on a gpt model, as patchText.
 	for name, field := range map[string]string{"command": "command", "patchText": "patchText"} {
 		t.Run(name, func(t *testing.T) {
-			body, err := json.Marshal(map[string]any{
+			body, err := codec.Marshal(map[string]any{
 				"session_id": "019e4c21", "cwd": "/Users/dev/repo", "hook_event_name": "PreToolUse",
 				"tool_name": "apply_patch", "tool_input": map[string]any{field: multiFilePatch},
 			})
@@ -116,7 +116,7 @@ func TestDecodeHookEnvelopeApplyPatch(t *testing.T) {
 func TestPatchMarkerInBashIsShell(t *testing.T) {
 	t.Parallel()
 	line := "*** Begin Patch\ngit push origin main"
-	body, err := json.Marshal(map[string]any{
+	body, err := codec.Marshal(map[string]any{
 		"session_id": "s", "cwd": "/Users/dev/repo", "hook_event_name": "PreToolUse",
 		"tool_name": "Bash", "tool_input": map[string]any{"command": line},
 	})

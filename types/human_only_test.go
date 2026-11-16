@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // humanOnlyWorkspace answers the two reads IndexTargetPolicies makes: the projects and a lookup
@@ -42,16 +42,16 @@ func TestHumanOnlyIndexRoundTrips(t *testing.T) {
 			ReachedBy: []TargetRef{{Project: ".", Target: "bench-all"}},
 		}},
 	}
-	b, err := json.Marshal(ix)
+	b, err := codec.Marshal(ix)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"projects": [".", "evals"], "targets": [{"project": ".", "target": "agent-bench-run",
 		"human_only": true, "reason": "launches paid sessions", "skip_cache": true, "reached_by": [{"project": ".", "target": "bench-all"}]}]}`, string(b))
 
 	var back TargetPolicyIndex
-	require.NoError(t, json.Unmarshal(b, &back))
+	require.NoError(t, codec.Unmarshal(b, &back))
 	assert.Equal(t, ix, back)
 
-	none, err := json.Marshal(TargetPolicyIndex{})
+	none, err := codec.Marshal(TargetPolicyIndex{})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{}`, string(none))
 }

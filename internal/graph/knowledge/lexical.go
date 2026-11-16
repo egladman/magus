@@ -18,8 +18,8 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/textrank"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
@@ -213,7 +213,7 @@ func (s *Store) lexicalSidecarPath(shardFile string) string {
 func (s *Store) writeLexicalSidecar(name, fp string, nodes []types.KnowledgeNode, text map[string]string) error {
 	var buf bytes.Buffer
 	line := func(v any) error {
-		b, err := json.Marshal(v)
+		b, err := codec.Marshal(v)
 		if err != nil {
 			return err
 		}
@@ -247,7 +247,7 @@ func (s *Store) lexicalSidecarCurrent(name, fp, digest string) bool {
 		return false
 	}
 	var h lexicalSidecarHeader
-	if json.Unmarshal(first, &h) != nil {
+	if codec.Unmarshal(first, &h) != nil {
 		return false
 	}
 	return h.Shard == name && h.Fingerprint == fp && h.TextDigest == digest
@@ -262,7 +262,7 @@ func (s *Store) readLexicalSidecar(name, fp string) (Shard, error) {
 	}
 	lines := bytes.Split(bytes.TrimRight(b, "\n"), []byte{'\n'})
 	var h lexicalSidecarHeader
-	if err := json.Unmarshal(lines[0], &h); err != nil {
+	if err := codec.Unmarshal(lines[0], &h); err != nil {
 		return Shard{}, fmt.Errorf("lexical sidecar of %s: header: %w", name, err)
 	}
 	if h.Shard != name || h.Fingerprint != fp {
@@ -271,7 +271,7 @@ func (s *Store) readLexicalSidecar(name, fp string) (Shard, error) {
 	sh := Shard{Name: name, Nodes: make([]types.KnowledgeNode, 0, len(lines)-1), Text: map[string]string{}}
 	for _, ln := range lines[1:] {
 		var rec lexicalRecord
-		if err := json.Unmarshal(ln, &rec); err != nil {
+		if err := codec.Unmarshal(ln, &rec); err != nil {
 			return Shard{}, fmt.Errorf("lexical sidecar of %s: %w", name, err)
 		}
 		sh.Nodes = append(sh.Nodes, rec.node())
@@ -335,7 +335,7 @@ func (s *Store) writeLexicalIndex(shards []Shard, key string) error {
 		}
 	}
 	var buf bytes.Buffer
-	header, err := json.Marshal(lexicalIndexHeader{ShardsKey: key})
+	header, err := codec.Marshal(lexicalIndexHeader{ShardsKey: key})
 	if err != nil {
 		return err
 	}
@@ -375,7 +375,7 @@ func readLexicalHeader(r *bufio.Reader) (lexicalIndexHeader, error) {
 		return lexicalIndexHeader{}, err
 	}
 	var h lexicalIndexHeader
-	err = json.Unmarshal(first, &h)
+	err = codec.Unmarshal(first, &h)
 	return h, err
 }
 

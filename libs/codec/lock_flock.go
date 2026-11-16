@@ -1,6 +1,6 @@
-//go:build unix
+//go:build unix && !aix && !hurd
 
-package jsonl
+package codec
 
 import (
 	"errors"

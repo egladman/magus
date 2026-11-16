@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/builtin"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -76,7 +76,7 @@ func decodeTestEnvelope(t testing.TB, raw string) (hookRequest, bool) {
 // toolEnvelope is a PreToolUse event for tool, as a catch-all hook entry forwards it whole.
 func toolEnvelope(t *testing.T, session, cwd, tool string, input map[string]any) string {
 	t.Helper()
-	raw, err := json.Marshal(map[string]any{
+	raw, err := codec.Marshal(map[string]any{
 		"hook_event_name": "PreToolUse",
 		"session_id":      session,
 		"cwd":             cwd,

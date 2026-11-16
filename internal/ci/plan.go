@@ -13,8 +13,8 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -180,7 +180,7 @@ func PlanOutputs(out PlanOutput) ([]PlanPublish, error) {
 	for i := range include {
 		include[i].Units = nil
 	}
-	matrix, err := json.Marshal(map[string]any{"include": include})
+	matrix, err := codec.Marshal(map[string]any{"include": include})
 	if err != nil {
 		return nil, fmt.Errorf("magus affected --plan: encode matrix: %w", err)
 	}

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -109,7 +109,7 @@ func readDiskSamples(path string) ([]types.DiskSample, error) {
 	scan := bufio.NewScanner(f)
 	for n := 1; scan.Scan(); n++ {
 		var s types.DiskSample
-		if err := json.Unmarshal(scan.Bytes(), &s); err != nil {
+		if err := codec.Unmarshal(scan.Bytes(), &s); err != nil {
 			return nil, fmt.Errorf("%s line %d: %w", path, n, err)
 		}
 		samples = append(samples, s)

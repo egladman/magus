@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
 )
 
@@ -163,7 +163,7 @@ func (r *registry) put(mediaType string, body []byte, tags ...string) ocispec.De
 }
 
 func (r *registry) putJSON(mediaType string, v any, tags ...string) ocispec.Descriptor {
-	data, err := json.Marshal(v)
+	data, err := codec.Marshal(v)
 	require.NoError(r.t, err)
 	return r.put(mediaType, data, tags...)
 }
@@ -342,11 +342,11 @@ func TestAssembleKeepsTheBaseConfigFieldsItDoesNotModel(t *testing.T) {
 	var cfg struct {
 		DockerVersion string `json:"docker_version"`
 		Config        struct {
-			Cmd         []string        `json:"Cmd"`
-			Healthcheck json.RawMessage `json:"Healthcheck"`
+			Cmd         []string         `json:"Cmd"`
+			Healthcheck codec.RawMessage `json:"Healthcheck"`
 		} `json:"config"`
 	}
-	require.NoError(t, json.Unmarshal(data, &cfg))
+	require.NoError(t, codec.Unmarshal(data, &cfg))
 	assert.Equal(t, "24.0.0", cfg.DockerVersion)
 	assert.JSONEq(t, `{"Test":["CMD","true"]}`, string(cfg.Config.Healthcheck))
 	assert.Equal(t, []string{"/bin/sh"}, cfg.Config.Cmd)
@@ -438,7 +438,7 @@ func TestPushThenPullRoundTripsAnAttachedIndex(t *testing.T) {
 	// This registry answers no OCI-Subject, so distribution-spec requires the fallback tag.
 	require.True(t, hasTag, "the referrer is listed under the sha256-<hex> fallback tag")
 	var listed ocispec.Index
-	require.NoError(t, json.Unmarshal(tagged.body, &listed))
+	require.NoError(t, codec.Unmarshal(tagged.body, &listed))
 	require.Len(t, listed.Manifests, 1)
 	wantReferrer := attached.Referrers[0]
 	wantReferrer.ArtifactType = MediaTypeSPDX

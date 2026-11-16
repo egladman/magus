@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
@@ -119,7 +119,7 @@ func broadClaimFix(ctx context.Context, root string, row job.Job, read SymbolRea
 	return func(wp string) string {
 		var b strings.Builder
 		if len(cover) > 0 {
-			listed, _ := json.Marshal(cover)
+			listed, _ := codec.Marshal(cover)
 			fmt.Fprintf(&b, "replace %q with the files the goals and criteria name: \"paths\": {\"write\": %s}", wp, listed)
 		} else {
 			fmt.Fprintf(&b, "replace %q with the files this job edits, each by name: the criteria and goals name no file the graph resolves", wp)
@@ -127,7 +127,7 @@ func broadClaimFix(ctx context.Context, root string, row job.Job, read SymbolRea
 		if asksGraph && graphless {
 			b.WriteString(" (the knowledge graph did not answer the symbol goals, so only the criteria were read; `magus graph build` and fork again for a fuller list)")
 		}
-		deviation, _ := json.Marshal(job.Deviation{Code: types.WritePathTooBroad, Subject: wp, Reason: "<why this job needs all of it>"})
+		deviation, _ := codec.Marshal(job.Deviation{Code: types.WritePathTooBroad, Subject: wp, Reason: "<why this job needs all of it>"})
 		fmt.Fprintf(&b, "; or keep it with the deviation %s", deviation)
 		return b.String()
 	}

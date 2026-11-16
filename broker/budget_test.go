@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
@@ -349,7 +349,7 @@ func TestLedgerRemembersTheLastRefusalsNewestFirstWithTheirHolders(t *testing.T)
 func TestCapacityJSONCarriesOwnersWaitersAndRefusals(t *testing.T) {
 	at := time.Date(2026, 10, 24, 9, 40, 55, 0, time.UTC)
 	holder := budget.Claimant{Project: ".", Target: "go-test", PID: 1, Slots: 8, Owner: "job-a", Since: at}
-	b, err := json.Marshal(budget.Snapshot{
+	b, err := codec.Marshal(budget.Snapshot{
 		BudgetSlots: 10, HeldSlots: 8,
 		Holders: []budget.Claimant{holder},
 		Waiting: []budget.Waiter{{PID: 2, Project: ".", Target: "lint", Slots: 1, Dir: "/w", Owner: "unleased", Since: at, WaitedMS: 1500}},

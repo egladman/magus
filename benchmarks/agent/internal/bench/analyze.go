@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/embed/rankeval"
 )
 
@@ -273,14 +273,14 @@ func requiredJSONFields(t reflect.Type) []string {
 }
 
 func runFromJSON(line []byte) (RunRecord, error) {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(line, &raw); err != nil {
+	var raw map[string]codec.RawMessage
+	if err := codec.Unmarshal(line, &raw); err != nil {
 		return RunRecord{}, err
 	}
 	required, isControl := scoredFields, false
 	if kind, ok := raw["control"]; ok {
 		var control *string
-		if err := json.Unmarshal(kind, &control); err != nil {
+		if err := codec.Unmarshal(kind, &control); err != nil {
 			return RunRecord{}, err
 		}
 		if control != nil && *control != "" {
@@ -294,7 +294,7 @@ func runFromJSON(line []byte) (RunRecord, error) {
 	}
 	if isControl {
 		var c controlRun
-		if err := json.Unmarshal(line, &c); err != nil {
+		if err := codec.Unmarshal(line, &c); err != nil {
 			return RunRecord{}, err
 		}
 		if c.Control != controlGolden && c.Control != controlNull {
@@ -303,7 +303,7 @@ func runFromJSON(line []byte) (RunRecord, error) {
 		return RunRecord{Control: &c}, nil
 	}
 	var s ScoredRun
-	if err := json.Unmarshal(line, &s); err != nil {
+	if err := codec.Unmarshal(line, &s); err != nil {
 		return RunRecord{}, err
 	}
 	return RunRecord{Scored: &s}, nil
@@ -824,7 +824,7 @@ func Analyze(records []RunRecord, seed uint64) (*Analysis, error) {
 
 // JSON is analysis.json's bytes: two-space indent and a trailing newline.
 func (a *Analysis) JSON() ([]byte, error) {
-	raw, err := json.MarshalIndent(a, "", "  ")
+	raw, err := codec.MarshalIndent(a, "", "  ")
 	if err != nil {
 		return nil, err
 	}
@@ -838,7 +838,7 @@ func LoadAnalysis(file string) (*Analysis, error) {
 		return nil, err
 	}
 	var a Analysis
-	if err := json.Unmarshal(raw, &a); err != nil {
+	if err := codec.Unmarshal(raw, &a); err != nil {
 		return nil, fmt.Errorf("%s: not an analysis.json: %w", file, err)
 	}
 	return &a, nil

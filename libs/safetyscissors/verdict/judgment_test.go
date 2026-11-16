@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/libs/safetyscissors/internal/jsonl"
+	"github.com/egladman/magus/libs/codec"
 )
 
 type JudgmentSuite struct{ suite.Suite }
@@ -32,19 +32,19 @@ func (s *JudgmentSuite) TestWireShapeKeepsEveryKeyInOrder() {
 			Reads: true,
 		}},
 	}
-	got, err := jsonl.Marshal(full)
+	got, err := codec.Marshal(full)
 	s.Require().NoError(err)
 	s.Equal(`{"api_version":"magus.guard/v1alpha3","decision":"deny","reason":"no <b>","context":"fyi","rule":"some-rule",`+
 		`"lease":"job-a","lease_from":"flag","next_steps":[{"id":"deny-remedy-some-rule","run":"magus run test . && echo done",`+
 		`"argv":["magus","run","test","."],"why":"because","reads":true}]}`, string(got))
 
 	var back Judgment
-	s.Require().NoError(jsonl.Unmarshal(got, &back))
+	s.Require().NoError(codec.Unmarshal(got, &back))
 	s.Equal(full, back)
 }
 
 func (s *JudgmentSuite) TestAPassNamesOnlyItsDecision() {
-	pass, err := jsonl.Marshal(Judgment{APIVersion: APIVersion, Decision: "pass"})
+	pass, err := codec.Marshal(Judgment{APIVersion: APIVersion, Decision: "pass"})
 	s.Require().NoError(err)
 	s.Equal(`{"api_version":"magus.guard/v1alpha1","decision":"pass"}`, string(pass))
 }

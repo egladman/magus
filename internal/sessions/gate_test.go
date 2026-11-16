@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -185,7 +185,7 @@ func (s *GateScopeSuite) TestRecordGateRefusesAResultWithNoScope() {
 
 func (s *GateScopeSuite) TestAnUnknownScopeIsAnError() {
 	var g GateResult
-	s.Error(json.Unmarshal([]byte(`{"target":"ci","scope":"branch"}`), &g))
+	s.Error(codec.Unmarshal([]byte(`{"target":"ci","scope":"branch"}`), &g))
 }
 
 // FailuresOwedSuite pins which targets a red gate still owes a pass of its own, the record

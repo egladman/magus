@@ -26,10 +26,10 @@ import (
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
@@ -2045,7 +2045,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 			return hookRequest{}, false
 		}
 		env = stepEnvelope(step)
-	} else if err := json.Unmarshal([]byte(raw), &env); err != nil {
+	} else if err := codec.Unmarshal([]byte(raw), &env); err != nil {
 		return hookRequest{}, false
 	}
 	req := hookRequest{Cwd: env.Cwd, Who: hookAttribution{
@@ -2303,7 +2303,7 @@ func HostAttribution(raw string) (session, transcript string) {
 		return "", ""
 	}
 	var env hookEnvelope
-	if json.Unmarshal([]byte(raw), &env) != nil {
+	if codec.Unmarshal([]byte(raw), &env) != nil {
 		return "", ""
 	}
 	if env.SessionID != "" {

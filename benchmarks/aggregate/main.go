@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // hyperfineOutput is the JSON schema emitted by hyperfine --export-json.
@@ -112,7 +112,7 @@ func loadResult(path string) (*benchResult, error) {
 	defer f.Close()
 
 	var out hyperfineOutput
-	if err := json.NewDecoder(f).Decode(&out); err != nil {
+	if err := codec.NewDecoder(f).Decode(&out); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if len(out.Results) == 0 {

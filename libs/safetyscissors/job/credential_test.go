@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"encoding/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // validGrants is every grant Valid accepts: console none/read/write crossed with tokens and
@@ -59,12 +59,12 @@ func TestGrantLatticeLaws(t *testing.T) {
 		"operator is the top":   func(a Access) bool { return a.Within(AccessOperator) },
 		"nothing is the bottom": func(a Access) bool { return Access{}.Within(a) },
 		"json round-trips": func(a Access) bool {
-			b, err := json.Marshal(a)
+			b, err := codec.Marshal(a)
 			if err != nil {
 				return false
 			}
 			var back Access
-			return json.Unmarshal(b, &back) == nil && back == a
+			return codec.Unmarshal(b, &back) == nil && back == a
 		},
 	}
 	for name, law := range laws {
@@ -136,13 +136,13 @@ func TestGrantPresets(t *testing.T) {
 // decode rather than reading as none.
 func TestGrantJSONUsesLevelNames(t *testing.T) {
 	t.Parallel()
-	b, err := json.Marshal(AccessConnector)
+	b, err := codec.Marshal(AccessConnector)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"mcp":"write"}`, string(b))
 	var g Access
-	require.NoError(t, json.Unmarshal([]byte(`{"console":"read"}`), &g))
+	require.NoError(t, codec.Unmarshal([]byte(`{"console":"read"}`), &g))
 	assert.Equal(t, AccessViewer, g)
-	assert.Error(t, json.Unmarshal([]byte(`{"console":"admin"}`), &g))
+	assert.Error(t, codec.Unmarshal([]byte(`{"console":"admin"}`), &g))
 }
 
 func TestCredentialPhrase(t *testing.T) {

@@ -33,6 +33,7 @@ func (s *DocSuite) TestGoModRequiresOnlyWhatTheDocAllows() {
 	defer func() { _ = f.Close() }()
 
 	var direct []string
+	replaced := map[string]bool{}
 	inRequire := false
 	scan := bufio.NewScanner(f)
 	for scan.Scan() {
@@ -46,6 +47,11 @@ func (s *DocSuite) TestGoModRequiresOnlyWhatTheDocAllows() {
 			continue
 		case strings.HasPrefix(line, "require "):
 			line = strings.TrimPrefix(line, "require ")
+		case strings.HasPrefix(line, "replace "):
+			if mod, target, ok := strings.Cut(strings.TrimPrefix(line, "replace "), " => "); ok && strings.HasPrefix(target, "../") {
+				replaced[strings.Fields(mod)[0]] = true
+			}
+			continue
 		case !inRequire:
 			continue
 		}
@@ -58,6 +64,9 @@ func (s *DocSuite) TestGoModRequiresOnlyWhatTheDocAllows() {
 
 	for _, mod := range direct {
 		if strings.HasPrefix(mod, "github.com/egladman/magus/libs/") {
+			// A sibling resolves through its replace, tagged or not; the release refuses
+			// a libs/ require no tag answers.
+			assert.True(t, replaced[mod], "go.mod requires %s with no replace to its directory beside this module", mod)
 			continue
 		}
 		assert.Contains(t, allowedRequires, mod, "go.mod requires %s, which the package doc does not allow", mod)

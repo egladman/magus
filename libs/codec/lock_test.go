@@ -1,4 +1,4 @@
-package jsonl
+package codec
 
 import (
 	"context"

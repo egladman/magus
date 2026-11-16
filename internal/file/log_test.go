@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -33,21 +34,21 @@ func appendEach(t *testing.T, l Log[event], entries []event) {
 	}
 }
 
-// A log within Keep plus CompactSlack is left as it is; past it, a compaction keeps the
+// A log within Keep plus codec.CompactSlack is left as it is; past it, a compaction keeps the
 // newest Keep entries in file order.
 func TestLogCompactKeepsTheNewest(t *testing.T) {
 	t.Parallel()
 
 	l := Log[event]{Path: filepath.Join(t.TempDir(), "dir", "events.jsonl"), Keep: 3, SkipSync: true}
-	appendEach(t, l, events(0, 0, 3+CompactSlack))
+	appendEach(t, l, events(0, 0, 3+codec.CompactSlack))
 	kept, err := l.Compact(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, events(0, 0, 3+CompactSlack), kept, "not due yet")
+	assert.Equal(t, events(0, 0, 3+codec.CompactSlack), kept, "not due yet")
 
-	require.NoError(t, l.Append(t.Context(), event{N: 3 + CompactSlack}))
+	require.NoError(t, l.Append(t.Context(), event{N: 3 + codec.CompactSlack}))
 	kept, err = l.Compact(t.Context())
 	require.NoError(t, err)
-	want := events(0, 1+CompactSlack, 4+CompactSlack)
+	want := events(0, 1+codec.CompactSlack, 4+codec.CompactSlack)
 	assert.Equal(t, want, kept)
 	got, err := l.Load()
 	require.NoError(t, err)
@@ -68,10 +69,10 @@ func TestLogCompactUsesSelect(t *testing.T) {
 		return out
 	}
 	l := Log[event]{Path: filepath.Join(t.TempDir(), "events.jsonl"), Keep: 1, Select: evens}
-	appendEach(t, l, events(0, 0, 2+CompactSlack))
+	appendEach(t, l, events(0, 0, 2+codec.CompactSlack))
 	kept, err := l.Compact(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, evens(events(0, 0, 2+CompactSlack), 1), kept)
+	assert.Equal(t, evens(events(0, 0, 2+codec.CompactSlack), 1), kept)
 }
 
 // A log that does not say how many entries it keeps refuses to compact rather than pick a

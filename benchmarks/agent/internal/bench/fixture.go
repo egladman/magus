@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 type armSpec struct {
@@ -188,7 +188,7 @@ func trailLines(arm string) []any {
 }
 
 func writeJSON(file string, value any) error {
-	raw, err := json.MarshalIndent(value, "", "  ")
+	raw, err := codec.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -198,7 +198,7 @@ func writeJSON(file string, value any) error {
 func writeJSONL(file string, values []any) error {
 	var out []byte
 	for _, value := range values {
-		raw, err := json.Marshal(value)
+		raw, err := codec.Marshal(value)
 		if err != nil {
 			return err
 		}

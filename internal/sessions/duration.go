@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
@@ -65,7 +65,7 @@ func lastRunDuration(dir, project, target string, ran func(session.InvocationSta
 		records := session.ReadInvocation(dir, strings.TrimSuffix(name, session.FileExt))
 		if !slices.ContainsFunc(records, func(rec session.Record) bool {
 			var s session.InvocationStart
-			return rec.Kind == session.KindInvocationStart && json.Unmarshal(rec.Payload, &s) == nil && ran(s)
+			return rec.Kind == session.KindInvocationStart && codec.Unmarshal(rec.Payload, &s) == nil && ran(s)
 		}) {
 			continue
 		}
@@ -74,7 +74,7 @@ func lastRunDuration(dir, project, target string, ran func(session.InvocationSta
 				continue
 			}
 			var r session.TargetResult
-			if json.Unmarshal(rec.Payload, &r) != nil {
+			if codec.Unmarshal(rec.Payload, &r) != nil {
 				continue
 			}
 			if r.Replayed || r.DiagnosticCode != "" || r.DurationMs <= 0 ||

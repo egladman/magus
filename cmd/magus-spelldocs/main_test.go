@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/docs"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -221,7 +221,7 @@ func TestCharmPatchJSON(t *testing.T) {
 	got := charmPatchJSON(spells.Charm{Ops: ops})
 
 	var round []spells.PatchOp
-	require.NoError(t, json.Unmarshal([]byte(got), &round))
+	require.NoError(t, codec.Unmarshal([]byte(got), &round))
 	assert.Equal(t, ops, round)
 	assert.Contains(t, got, "\n  ", "the patch is indented for a reader")
 }

@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 )
@@ -88,7 +88,7 @@ func TestJudgeRefusesABackgroundedWorkerRun(t *testing.T) {
 	flagged := Judge(ctx, Dependencies{}, Request{Input: command, Lease: row.ID, CallBackground: true})
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleWorkerBackgroundRun)), unworded(flagged))
 
-	envelope, err := json.Marshal(map[string]any{
+	envelope, err := codec.Marshal(map[string]any{
 		"hook_event_name": "PreToolUse",
 		"tool_name":       "Shell",
 		"tool_input":      map[string]any{"command": command, "run_in_background": true, "timeout": 600000},

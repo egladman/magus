@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // Remote cache artifacts are authenticated with Ed25519 signatures. The trust is
@@ -188,7 +188,7 @@ func (s *signer) sign(domain string, manifestBytes []byte, members map[string]st
 		Members:        members,
 		Sig:            base64.StdEncoding.EncodeToString(ed25519.Sign(s.priv, signedPayload(domain, manifestBytes, members))),
 	}
-	return json.Marshal(env)
+	return codec.Marshal(env)
 }
 
 // verifier authenticates artifacts against trusted public keys, indexed by derived
@@ -227,7 +227,7 @@ func newVerifier(pubkeys [][]byte) (*verifier, error) {
 // bundle can never verify as a cache artifact.
 func (v *verifier) verify(domain string, sigBytes, manifestBytes []byte, gotMembers map[string]string) error {
 	var env sigEnvelope
-	if err := json.Unmarshal(sigBytes, &env); err != nil {
+	if err := codec.Unmarshal(sigBytes, &env); err != nil {
 		return fmt.Errorf("signature: parse: %w", err)
 	}
 	if env.Alg != sigAlg {

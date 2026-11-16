@@ -1,13 +1,14 @@
 package budget
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/codec"
 )
 
 type ClaimSuite struct{ suite.Suite }
@@ -29,29 +30,29 @@ func (s *ClaimSuite) TestAdmissionRoundTripKeepsEveryField() {
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `"command":"run ci && echo <done>"`, "the line leaves HTML escaping to the caller's codec")
 	var out Admission
-	require.NoError(t, json.Unmarshal(b, &out))
+	require.NoError(t, codec.Unmarshal(b, &out))
 	assert.Equal(t, in, out)
 }
 
 func (s *ClaimSuite) TestAdmissionOmitsZeroNumbersAndEmptyStrings() {
-	b, err := json.Marshal(Admission{PID: 1, Project: "p", Target: "t"})
+	b, err := codec.Marshal(Admission{PID: 1, Project: "p", Target: "t"})
 	require.NoError(s.T(), err)
 	assert.JSONEq(s.T(), `{"at":"0001-01-01T00:00:00Z","pid":1,"project":"p","target":"t","fits":false}`, string(b))
 }
 
 func (s *ClaimSuite) TestAdmissionUnmarshalNamesTheTypeOnError() {
 	var a Admission
-	err := json.Unmarshal([]byte(`{"pid":"x"}`), &a)
+	err := codec.Unmarshal([]byte(`{"pid":"x"}`), &a)
 	require.Error(s.T(), err)
 	assert.ErrorContains(s.T(), err, "machine admission")
 }
 
 func (s *ClaimSuite) TestClaimRoundTrips() {
 	in := Claim{Project: "p", Target: "t", Under: "p:ci", SlotsFloor: 1, WaitBoundMS: 5, WaitedMS: 4}
-	b, err := json.Marshal(in)
+	b, err := codec.Marshal(in)
 	require.NoError(s.T(), err)
 	var out Claim
-	require.NoError(s.T(), json.Unmarshal(b, &out))
+	require.NoError(s.T(), codec.Unmarshal(b, &out))
 	assert.Equal(s.T(), in, out)
 }
 
@@ -63,13 +64,13 @@ func (s *ClaimSuite) TestClaimRunIsItsOutermostInvocation() {
 
 func (s *ClaimSuite) TestVerdictAddsOnlySlotsAndAheadWhenSeated() {
 	t := s.T()
-	zero, err := json.Marshal(Verdict{Granted: true, Fits: true})
+	zero, err := codec.Marshal(Verdict{Granted: true, Fits: true})
 	require.NoError(t, err)
-	seated, err := json.Marshal(Verdict{Granted: true, Fits: true, Slots: 3, Ahead: 2})
+	seated, err := codec.Marshal(Verdict{Granted: true, Fits: true, Slots: 3, Ahead: 2})
 	require.NoError(t, err)
 	var base, got map[string]any
-	require.NoError(t, json.Unmarshal(zero, &base))
-	require.NoError(t, json.Unmarshal(seated, &got))
+	require.NoError(t, codec.Unmarshal(zero, &base))
+	require.NoError(t, codec.Unmarshal(seated, &got))
 	base["slots"], base["ahead"] = float64(3), float64(2)
 	assert.Equal(t, base, got, "slots and ahead are the only keys a seated verdict adds")
 }

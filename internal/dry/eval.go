@@ -19,8 +19,8 @@ import (
 
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/std"
 )
 
@@ -305,7 +305,7 @@ type DrawResult struct {
 // drift from the module's unnoticed.
 func DrawFigure(ctx context.Context, figJSON, anchorHref string) DrawResult {
 	var fig figure.Figure
-	if err := json.UnmarshalStrict([]byte(figJSON), &fig); err != nil {
+	if err := codec.UnmarshalStrict([]byte(figJSON), &fig); err != nil {
 		return DrawResult{Diag: &Diag{Msg: "figure record: " + err.Error()}}
 	}
 	var out bytes.Buffer

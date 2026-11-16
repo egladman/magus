@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -48,7 +48,7 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 		Token     string `json:"token"`
 		ExpiresAt string `json:"expires_at"`
 	}
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(rr.Body.Bytes(), &got))
 	cred, ok := auth.Verify(got.Token)
 	require.True(t, ok)
 	assert.Equal(t, job.AccessConsole, cred.Grant)
@@ -85,7 +85,7 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 		assert.NotContains(t, events[0].Preview, s)
 	}
 	var rec trail.MintRecord
-	require.NoError(t, json.Unmarshal(blob, &rec))
+	require.NoError(t, codec.Unmarshal(blob, &rec))
 	assert.Equal(t, trail.MintRecord{
 		Minted:  job.Credential{Kind: job.KindStored, ID: cred.ID, Name: cred.Name, Grant: cred.Grant},
 		Expires: rec.Expires, // stamped at mint time

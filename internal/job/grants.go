@@ -3,13 +3,15 @@ package job
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
@@ -17,12 +19,13 @@ import (
 // names.
 const grantsFileName = "grants.jsonl"
 
-func (s *Store) grantsLog() (file.JSONL[job.Grant], error) {
+func (s *Store) grantsLog() (codec.JSONL[job.Grant], error) {
 	path, err := s.Path()
 	if err != nil {
-		return file.JSONL[job.Grant]{}, err
+		return codec.JSONL[job.Grant]{}, err
 	}
-	return file.JSONL[job.Grant]{
+	return codec.JSONL[job.Grant]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(filepath.Dir(path), grantsFileName),
 		Key:  job.Grant.Key,
 	}, nil

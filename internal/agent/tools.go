@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
@@ -318,7 +318,7 @@ func (r ToolRows) Limits() (types.Limits, error) {
 		return types.Limits{}, fmt.Errorf("no host limits at %s, rewrite them with `magus agent harness install`: %w", r.Dir, err)
 	}
 	var limits types.Limits
-	if err := json.Unmarshal(bytes.TrimSpace(body), &limits); err != nil {
+	if err := codec.Unmarshal(bytes.TrimSpace(body), &limits); err != nil {
 		return types.Limits{}, fmt.Errorf("the host limits at %s do not read, rewrite them with `magus agent harness install`: %w", r.Dir, err)
 	}
 	return limits, nil
@@ -374,7 +374,7 @@ func decodeModelRows(body []byte) ([]tier.Pricing, error) {
 	var rows []tier.Pricing
 	for i, raw := range jsonLines(body) {
 		var line modelRowLine
-		if err := json.Unmarshal(raw, &line); err != nil {
+		if err := codec.Unmarshal(raw, &line); err != nil {
 			return nil, fmt.Errorf("line %d: %w", i+1, err)
 		}
 		row := tier.Pricing{
@@ -438,7 +438,7 @@ func decodeTiers(lines [][]byte) (*tier.Set, error) {
 		return nil, fmt.Errorf("%d lines, and a declaration is one", len(lines))
 	}
 	var line tierLine
-	if err := json.Unmarshal(lines[0], &line); err != nil {
+	if err := codec.Unmarshal(lines[0], &line); err != nil {
 		return nil, err
 	}
 	decl := tier.Declaration{Enum: line.Enum, Site: line.Site, Cases: line.Cases, Default: line.Default, Skills: line.Skills}
@@ -454,7 +454,7 @@ func decodeTiers(lines [][]byte) (*tier.Set, error) {
 // writeJSONLine appends v as one line. Each value written holds only strings, numbers and
 // lists and maps of them, which always marshal.
 func writeJSONLine(b *strings.Builder, v any) {
-	raw, _ := json.Marshal(v)
+	raw, _ := codec.Marshal(v)
 	b.Write(raw)
 	b.WriteByte('\n')
 }

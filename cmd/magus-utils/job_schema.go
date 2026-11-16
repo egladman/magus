@@ -31,7 +31,7 @@ import (
 
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/generate/godecl"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -684,7 +684,7 @@ func writeNode(b *strings.Builder, n node, indent string) error {
 }
 
 func writeScalar(b *strings.Builder, v any) error {
-	raw, err := json.Marshal(v)
+	raw, err := codec.Marshal(v)
 	if err != nil {
 		return err
 	}

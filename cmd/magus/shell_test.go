@@ -26,12 +26,12 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
@@ -603,7 +603,7 @@ func (s *staleConfigSuite) judge(command string) verdict.Judgment {
 	var out bytes.Buffer
 	_ = shellCommandWithErrorWriter(ctx, strings.NewReader(""), &out, io.Discard, []string{"-o", "json", command})
 	var v verdict.Judgment
-	s.Require().NoError(json.Unmarshal(out.Bytes(), &v), out.String())
+	s.Require().NoError(codec.Unmarshal(out.Bytes(), &v), out.String())
 	return v
 }
 
@@ -637,7 +637,7 @@ func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
 	body, err := io.ReadAll(r)
 	s.Require().NoError(err)
 	var v verdict.Judgment
-	s.Require().NoError(json.Unmarshal(body, &v), string(body))
+	s.Require().NoError(codec.Unmarshal(body, &v), string(body))
 	s.Contains(v.Reason, "magus guard could not judge this call, so it is refused")
 	s.Equal("deny", v.Decision)
 	s.Equal(2, code, "the guard's deny exit, never startup's 1")
@@ -722,7 +722,7 @@ func (s *hookAudienceSuite) TestACodexStopBlockKeepsTheWholeReason() {
 }
 
 func (s *hookAudienceSuite) TestCursorDenyShowsThePersonOneLine() {
-	verdict, err := json.Marshal(verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: "deny", Reason: audienceReason})
+	verdict, err := codec.Marshal(verdict.Judgment{APIVersion: agent.GuardAPIVersion, Decision: "deny", Reason: audienceReason})
 	s.Require().NoError(err)
 	s.T().Setenv("GLUE_VERDICT", string(verdict))
 	body, _ := runGlue(s.T(), "cursor-hook.buzz", glueArrangement{label: "cursor", host: "cursor", stub: glueVerdictEcho,
@@ -816,7 +816,7 @@ func (s *unjudgedHookSuite) TestCursorRefusesAndShowsThePersonTheFix() {
 const glueBrokenMultiLineMagus = "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\necho 'magus.yaml has keys this magus does not know:' >&2\necho '  - guard.newest  (line 4)' >&2\nexit 3\n"
 
 func (s *unjudgedHookSuite) bootstrapEvent(command string) string {
-	encoded, err := json.Marshal(command)
+	encoded, err := codec.Marshal(command)
 	s.Require().NoError(err)
 	return fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":%s}}`, encoded)
 }
@@ -841,7 +841,7 @@ func (s *unjudgedHookSuite) suppliedRepair() string {
 
 // repairEvent is a shell call from root.
 func (s *unjudgedHookSuite) repairEvent(root, command string) string {
-	encoded, err := json.Marshal(map[string]any{"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Bash",
+	encoded, err := codec.Marshal(map[string]any{"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Bash",
 		"cwd": root, "tool_input": map[string]any{"command": command}})
 	s.Require().NoError(err)
 	return string(encoded)
@@ -873,7 +873,7 @@ func (s *unjudgedHookSuite) TestASourceBuildIsRefusedWhereTheWorkspaceInstallsAR
 
 func (s *unjudgedHookSuite) TestCursorLetsTheRepairLineThrough() {
 	root := s.suppliedRepair()
-	encoded, err := json.Marshal(map[string]any{"hook_event_name": "beforeShellExecution", "conversation_id": "c", "generation_id": "g",
+	encoded, err := codec.Marshal(map[string]any{"hook_event_name": "beforeShellExecution", "conversation_id": "c", "generation_id": "g",
 		"command": "magus self update", "cwd": root})
 	s.Require().NoError(err)
 	reply := s.reply("cursor-hook.buzz", "cursor", string(encoded))

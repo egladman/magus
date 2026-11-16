@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -164,7 +164,7 @@ func readOwed(path string) ([]OwedRegeneration, error) {
 		return nil, fmt.Errorf("vcs: read %s: %w", path, err)
 	}
 	var doc owedDocument
-	if err := json.Unmarshal(data, &doc); err != nil {
+	if err := codec.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("vcs: parse %s: %w", path, err)
 	}
 	if err := types.RefuseVersion(owedAPIVersion, doc.APIVersion, "vcs: "+path, "run the generate targets it names by hand, then delete it"); err != nil {
@@ -185,7 +185,7 @@ func writeOwed(path string, owed []OwedRegeneration) error {
 	slices.SortFunc(owed, func(a, b OwedRegeneration) int {
 		return cmp.Or(cmp.Compare(a.Project, b.Project), cmp.Compare(a.Target, b.Target))
 	})
-	data, err := json.MarshalIndent(owedDocument{APIVersion: owedAPIVersion, Owed: owed}, "", "  ")
+	data, err := codec.MarshalIndent(owedDocument{APIVersion: owedAPIVersion, Owed: owed}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("vcs: encode %s: %w", path, err)
 	}

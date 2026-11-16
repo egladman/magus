@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +20,7 @@ import (
 // the wrong axis to hang a first-dispose-wins test on.
 func attRecord(t *testing.T, invocation string, seq uint64, ts int64, kind string, payload any) session.Record {
 	t.Helper()
-	raw, err := json.Marshal(payload)
+	raw, err := codec.Marshal(payload)
 	require.NoError(t, err)
 	return session.Record{V: session.APIVersion, Invocation: invocation, Seq: seq, Kind: kind, Ts: ts, Payload: raw}
 }

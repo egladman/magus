@@ -21,8 +21,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/secrets"
@@ -678,7 +678,7 @@ func TestSessionGuardBindsFirstDeviceRejectsOthers(t *testing.T) {
 			} `json:"details"`
 		} `json:"error"`
 	}
-	if err := json.Unmarshal([]byte(body), &refused); err != nil {
+	if err := codec.Unmarshal([]byte(body), &refused); err != nil {
 		t.Fatalf("403 body %q is not JSON: %v", body, err)
 	}
 	if got := refused.Error; got.Status != "PERMISSION_DENIED" ||

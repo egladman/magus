@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/bench"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/xdg"
 )
 
@@ -552,7 +552,7 @@ func (m *miner) interrogation(ctx context.Context, c commit, ch change, transiti
 		return t, err
 	}
 	var listed []listedPackage
-	dec := json.NewDecoder(strings.NewReader(out))
+	dec := codec.NewDecoder(strings.NewReader(out))
 	for {
 		var p listedPackage
 		if err := dec.Decode(&p); errors.Is(err, io.EOF) {

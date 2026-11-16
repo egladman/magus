@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/spells"
 )
 
@@ -67,7 +67,7 @@ func (j *Journal) record(key string, stop spells.Command) {
 	if j == nil {
 		return
 	}
-	data, err := json.Marshal(journalEntry{Key: key, Stop: stop})
+	data, err := codec.Marshal(journalEntry{Key: key, Stop: stop})
 	if err == nil {
 		err = file.WriteFileAtomic(j.path(key), data, 0o600)
 	}
@@ -138,7 +138,7 @@ func readEntry(path string) (journalEntry, bool) {
 		return journalEntry{}, false
 	}
 	var e journalEntry
-	if json.Unmarshal(data, &e) != nil {
+	if codec.Unmarshal(data, &e) != nil {
 		return journalEntry{}, false
 	}
 	return e, true

@@ -3,7 +3,7 @@ package types
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,10 +15,10 @@ func TestJobOutcomeOmitsAnUnnumberedAttemptAndARetryableEnding(t *testing.T) {
 	t.Parallel()
 
 	members := func(o JobOutcome) map[string]any {
-		raw, err := json.Marshal(o)
+		raw, err := codec.Marshal(o)
 		require.NoError(t, err)
 		var m map[string]any
-		require.NoError(t, json.Unmarshal(raw, &m))
+		require.NoError(t, codec.Unmarshal(raw, &m))
 		return m
 	}
 	first := members(JobOutcome{Job: "a", Kind: JobKindCheck, State: job.StatePass})

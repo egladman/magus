@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // EventKind names what an [Event] reports.
@@ -63,7 +63,7 @@ func (e *Events) Emit(ev Event) {
 	}
 	ev.Schema = SchemaEvent
 	ev.Time = time.Now().UTC()
-	line, err := json.Marshal(ev)
+	line, err := codec.Marshal(ev)
 	if err != nil {
 		return
 	}

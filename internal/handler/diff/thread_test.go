@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // threadWorkspace answers the three reads the thread route makes: where the review is, the
@@ -70,7 +70,7 @@ func TestThreadRouteServesTheRecordForAThread(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	var got ThreadReply
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &got))
 	reach := 9
 	assert.Equal(t, difftypes.Thread{
 		ID:   "t1",
@@ -110,7 +110,7 @@ func TestThreadRouteAnswersAReplyIdWithTheThreadId(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	var got ThreadReply
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &got))
 	assert.Equal(t, "t1", got.ID)
 }
 
@@ -124,7 +124,7 @@ func TestThreadRouteNamesWhatItCouldNotJoin(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	var got ThreadReply
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &got))
 	assert.Contains(t, got.Unmeasured, "note anchors: this server has no notes store wired, so none was joined")
 	assert.Empty(t, got.Notes)
 	assert.Contains(t, got.Text, "note anchors: this server has no notes store wired, so none was joined")

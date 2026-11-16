@@ -28,12 +28,12 @@ import (
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -495,7 +495,7 @@ func (f graphReadFixture) localAnswer(tb testing.TB, verb string, read knowledge
 		}
 	}
 	require.NoError(tb, err)
-	b, err := json.Marshal(res)
+	b, err := codec.Marshal(res)
 	require.NoError(tb, err)
 	return string(b)
 }
@@ -514,7 +514,7 @@ func (f graphReadFixture) servedAnswer(tb testing.TB, verb string, read knowledg
 		res = &refsResult{}
 	}
 	require.NoError(tb, proc.Read(context.Background(), f.addr, version, f.root, verb, read, res))
-	b, err := json.Marshal(res)
+	b, err := codec.Marshal(res)
 	require.NoError(tb, err)
 	return string(b)
 }
@@ -526,7 +526,7 @@ func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config
 	ctx := context.Background()
 	g, err := graphReads.LoadGraph(ctx, ws, cfg, false, false, true)
 	require.NoError(tb, err)
-	b, err := json.Marshal(workspacegraph.SearchLoaded(ctx, g, read, embedtable.Cached, graphReads.MeasuredCoverage(ctx, ws, cfg)))
+	b, err := codec.Marshal(workspacegraph.SearchLoaded(ctx, g, read, embedtable.Cached, graphReads.MeasuredCoverage(ctx, ws, cfg)))
 	require.NoError(tb, err)
 	return string(b)
 }
@@ -596,7 +596,7 @@ func TestLoadedGraphReadsAnswerAsTheLocalReadDoes(t *testing.T) {
 	gs := f.loadGraphs(t)
 	for _, tc := range graphReadCases {
 		t.Run(tc.name, func(t *testing.T) {
-			b, err := json.Marshal(f.loadedAnswer(t, gs, tc.verb, tc.read))
+			b, err := codec.Marshal(f.loadedAnswer(t, gs, tc.verb, tc.read))
 			require.NoError(t, err)
 			assert.JSONEq(t, f.localAnswer(t, tc.verb, tc.read), string(b))
 		})

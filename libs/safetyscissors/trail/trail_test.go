@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/libs/safetyscissors/internal/jsonl"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
@@ -30,7 +30,7 @@ func (s *ReadSuite) writeLines(lines ...string) {
 }
 
 func (s *ReadSuite) eventLine(e Event) string {
-	b, err := jsonl.Marshal(e)
+	b, err := codec.Marshal(e)
 	s.Require().NoError(err)
 	return string(b)
 }
@@ -98,10 +98,10 @@ func (s *ReadSuite) TestEventReadsTheOriginInline() {
 // A duration written as dur_ms before DurationMs existed still reads.
 func (s *ReadSuite) TestEventReadsTheOlderDurationSpelling() {
 	var e Event
-	s.Require().NoError(jsonl.Unmarshal([]byte(`{"ts":1,"kind":"job","action":"a","outcome":"ok","dur_ms":42}`), &e))
+	s.Require().NoError(codec.Unmarshal([]byte(`{"ts":1,"kind":"job","action":"a","outcome":"ok","dur_ms":42}`), &e))
 	s.Equal(int64(42), e.DurationMs)
 
-	s.Require().NoError(jsonl.Unmarshal([]byte(`{"ts":1,"kind":"job","action":"a","outcome":"ok","duration_ms":7,"dur_ms":42}`), &e))
+	s.Require().NoError(codec.Unmarshal([]byte(`{"ts":1,"kind":"job","action":"a","outcome":"ok","duration_ms":7,"dur_ms":42}`), &e))
 	s.Equal(int64(7), e.DurationMs, "the current spelling wins")
 }
 

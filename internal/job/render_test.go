@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
@@ -231,11 +231,11 @@ func TestForkOutputCarriesReferencedOutsideBesideTheRow(t *testing.T) {
 		Job:               job.Job{ID: "fork-names-refs-outside"},
 		ReferencedOutside: []ReferencedFile{{File: "types/conformance_test.go", Count: 9, Uses: []string{"types/conformance.go"}}},
 	}
-	raw, err := json.Marshal(ForkReport{ForkOutput: out})
+	raw, err := codec.Marshal(ForkReport{ForkOutput: out})
 	require.NoError(t, err)
 
 	var got map[string]any
-	require.NoError(t, json.Unmarshal(raw, &got))
+	require.NoError(t, codec.Unmarshal(raw, &got))
 	assert.Equal(t, "fork-names-refs-outside", got["id"], "the row flattens")
 	assert.Equal(t, []any{map[string]any{"file": "types/conformance_test.go", "count": float64(9), "uses": []any{"types/conformance.go"}}},
 		got["referenced_outside"])
@@ -324,9 +324,9 @@ func TestLsJobsPrintsTheChangesInFlight(t *testing.T) {
 func TestLsJobsRendersTheRecordTheSameTwice(t *testing.T) {
 	t.Parallel()
 	list, in := inflightFixture()
-	first, err := json.Marshal(Inflight(list, in))
+	first, err := codec.Marshal(Inflight(list, in))
 	require.NoError(t, err)
-	second, err := json.Marshal(Inflight(list, in))
+	second, err := codec.Marshal(Inflight(list, in))
 	require.NoError(t, err)
 	assert.Equal(t, string(first), string(second))
 }
@@ -408,17 +408,17 @@ func (s *DescribeJobRecordSuite) SetupTest() {
 	}}}
 }
 
-func (s *DescribeJobRecordSuite) printed() map[string]json.RawMessage {
-	raw, err := json.Marshal(s.out)
+func (s *DescribeJobRecordSuite) printed() map[string]codec.RawMessage {
+	raw, err := codec.Marshal(s.out)
 	s.Require().NoError(err)
-	var members map[string]json.RawMessage
-	s.Require().NoError(json.Unmarshal(raw, &members))
+	var members map[string]codec.RawMessage
+	s.Require().NoError(codec.Unmarshal(raw, &members))
 	return members
 }
 
 func (s *DescribeJobRecordSuite) TestTheJobNamesTheAPIVersionApplyReads() {
-	var row map[string]json.RawMessage
-	s.Require().NoError(json.Unmarshal(s.printed()["job"], &row))
+	var row map[string]codec.RawMessage
+	s.Require().NoError(codec.Unmarshal(s.printed()["job"], &row))
 	s.JSONEq(fmt.Sprintf("%q", job.APIVersion), string(row["api_version"]))
 }
 
@@ -430,7 +430,7 @@ func (s *DescribeJobRecordSuite) TestTheTermsAndGoalsStayBesideTheJob() {
 }
 
 func (s *DescribeJobRecordSuite) TestTheWholeRecordRoundTripsThroughApply() {
-	raw, err := json.Marshal(s.out)
+	raw, err := codec.Marshal(s.out)
 	s.Require().NoError(err)
 	rows, err := DecodeDeclarations(bytes.NewReader(raw))
 	s.Require().NoError(err)

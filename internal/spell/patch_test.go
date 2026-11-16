@@ -3,7 +3,7 @@ package spell
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/spells"
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
@@ -149,11 +149,11 @@ func TestApplyPatchConformance(t *testing.T) {
 // applyWithEvanphx runs ops over argv via the reference RFC 6902 library by
 // marshalling argv to a JSON array document and the ops to a JSON Patch.
 func applyWithEvanphx(argv []string, ops []spells.PatchOp) ([]string, error) {
-	doc, err := json.Marshal(argv)
+	doc, err := codec.Marshal(argv)
 	if err != nil {
 		return nil, err
 	}
-	patchJSON, err := json.Marshal(ops)
+	patchJSON, err := codec.Marshal(ops)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func applyWithEvanphx(argv []string, ops []spells.PatchOp) ([]string, error) {
 		return nil, err
 	}
 	var res []string
-	if err := json.Unmarshal(out, &res); err != nil {
+	if err := codec.Unmarshal(out, &res); err != nil {
 		return nil, err
 	}
 	return res, nil

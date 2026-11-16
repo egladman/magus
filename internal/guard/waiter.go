@@ -21,8 +21,8 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -296,7 +296,7 @@ func readRefusal(rest *bufio.Reader) (time.Time, types.DiagnosticCode, bool) {
 		var ev journal.Event
 		// The byte search before decoding keeps a log full of output cheap.
 		if slices.ContainsFunc(refusalCodes, func(code types.DiagnosticCode) bool { return bytes.Contains(line, fmt.Appendf(nil, `"%s"`, code)) }) &&
-			json.Unmarshal(line, &ev) == nil && ev.Kind == journal.KindResult &&
+			codec.Unmarshal(line, &ev) == nil && ev.Kind == journal.KindResult &&
 			slices.Contains(refusalCodes, types.DiagnosticCode(ev.DiagnosticCode)) {
 			return time.UnixMilli(ev.Ts), types.DiagnosticCode(ev.DiagnosticCode), true
 		}
@@ -341,7 +341,7 @@ func readRunLog(path string, modified time.Time, read func(started journal.Event
 	rd := bufio.NewReader(f)
 	first, _ := rd.ReadBytes('\n')
 	var started journal.Event
-	if json.Unmarshal(first, &started) != nil || started.Kind != journal.KindStarted || started.Command == nil {
+	if codec.Unmarshal(first, &started) != nil || started.Kind != journal.KindStarted || started.Command == nil {
 		return
 	}
 	read(started, modified, rd)

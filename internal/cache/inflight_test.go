@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +28,7 @@ func writeCorpse(t *testing.T, dir, host string, pid int, project, target string
 		{Op: inflightStart, Key: 2, Target: live},
 		{Op: inflightStop, Key: 1},
 	} {
-		b, err := json.Marshal(e)
+		b, err := codec.Marshal(e)
 		require.NoError(t, err)
 		log = append(append(log, b...), '\n')
 	}
@@ -115,7 +115,7 @@ func TestInflightConcurrentEdges(t *testing.T) {
 	if b, err := os.ReadFile(f.path); err == nil {
 		for line := range strings.SplitSeq(strings.TrimSuffix(string(b), "\n"), "\n") {
 			var e inflightEvent
-			require.NoError(t, json.Unmarshal([]byte(line), &e), "no line may be torn")
+			require.NoError(t, codec.Unmarshal([]byte(line), &e), "no line may be torn")
 		}
 		assert.Empty(t, replayInflight(b))
 	}

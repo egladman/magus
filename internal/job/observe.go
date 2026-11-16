@@ -18,7 +18,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -884,7 +884,7 @@ func (c footprintCache) read(key string) ([]job.RegionChange, bool) {
 		return nil, false
 	}
 	var e footprintEntry
-	if err := json.Unmarshal(raw, &e); err != nil || e.Key != key {
+	if err := codec.Unmarshal(raw, &e); err != nil || e.Key != key {
 		return nil, false
 	}
 	return e.Regions, true
@@ -896,7 +896,7 @@ func (c footprintCache) write(key string, regions []job.RegionChange) {
 	if c.readOnly {
 		return
 	}
-	raw, err := json.Marshal(footprintEntry{Key: key, Regions: regions})
+	raw, err := codec.Marshal(footprintEntry{Key: key, Regions: regions})
 	if err != nil {
 		return
 	}

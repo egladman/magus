@@ -12,8 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -175,28 +174,28 @@ func TestHistorySchemaLock(t *testing.T) {
 		"alpha":                 true, // []int64 of fitted α observations
 		"workspace_fallback_ms": true, // int64 workspace-wide p75
 	}
-	type entry = map[string]json.RawMessage
+	type entry = map[string]codec.RawMessage
 	var workspaces []entry
 	projects := map[string]map[string]entry{}
 	for line := range strings.Lines(string(raw)) {
 		var top entry
-		require.NoError(t, json.Unmarshal([]byte(line), &top), "unmarshal a line to a map")
+		require.NoError(t, codec.Unmarshal([]byte(line), &top), "unmarshal a line to a map")
 		for k := range top {
 			assert.Truef(t, allowed[k], "unexpected history line key %q: add to allowed map with a safety justification, or remove the field", k)
 		}
 		if w, ok := top["workspace"]; ok {
 			var keys entry
-			require.NoError(t, json.Unmarshal(w, &keys))
+			require.NoError(t, codec.Unmarshal(w, &keys))
 			workspaces = append(workspaces, keys)
 		}
 		if s, ok := top["stats"]; ok {
 			var keys entry
-			require.NoError(t, json.Unmarshal(s, &keys))
+			require.NoError(t, codec.Unmarshal(s, &keys))
 			var at struct {
 				Project string `json:"project"`
 				Target  string `json:"target"`
 			}
-			require.NoError(t, json.Unmarshal(s, &at))
+			require.NoError(t, codec.Unmarshal(s, &at))
 			delete(keys, "project")
 			delete(keys, "target")
 			if projects[at.Project] == nil {
@@ -266,7 +265,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		// from it; see ArgsHash.
 		"args_hash": true,
 	}
-	type outcomeMap map[string]json.RawMessage
+	type outcomeMap map[string]codec.RawMessage
 	for path, targets := range projects {
 		for target, statsRaw := range targets {
 			rawOutcomes, ok := statsRaw["recent_outcomes"]
@@ -274,7 +273,7 @@ func TestHistorySchemaLock(t *testing.T) {
 				continue
 			}
 			var outcomes []outcomeMap
-			require.NoErrorf(t, json.Unmarshal(rawOutcomes, &outcomes), "unmarshal recent_outcomes (project=%q target=%q)", path, target)
+			require.NoErrorf(t, codec.Unmarshal(rawOutcomes, &outcomes), "unmarshal recent_outcomes (project=%q target=%q)", path, target)
 			for _, o := range outcomes {
 				for k := range o {
 					assert.Truef(t, allowedOutcome[k], "unexpected Outcome JSON key %q (project=%q target=%q): add to allowedOutcome with a safety justification", k, path, target)
@@ -303,7 +302,7 @@ func TestHistoryV1LoadsIntoV2(t *testing.T) {
 	}`
 
 	var h History
-	require.NoError(t, json.Unmarshal([]byte(v1JSON), &h), "unmarshal v1 history")
+	require.NoError(t, codec.Unmarshal([]byte(v1JSON), &h), "unmarshal v1 history")
 
 	// Should fall through to project-wide p75 (no buckets, no hit data → cold start).
 	got := h.PredictDuration("services/api", "ci", []string{"direct", "direct.src"})
@@ -340,7 +339,7 @@ func TestHistoryV2LoadsIntoV3(t *testing.T) {
 	}`
 
 	var h History
-	require.NoError(t, json.Unmarshal([]byte(v2JSON), &h), "unmarshal v2 history")
+	require.NoError(t, codec.Unmarshal([]byte(v2JSON), &h), "unmarshal v2 history")
 
 	// hit_count and miss_count default to zero → cold start → raw p75 returned.
 	got := h.PredictDuration("apps/web", "ci", nil)
@@ -431,7 +430,7 @@ func TestHistoryV3LoadsIntoV4(t *testing.T) {
 	}`
 
 	var h History
-	require.NoError(t, json.Unmarshal([]byte(v3JSON), &h), "unmarshal v3 history")
+	require.NoError(t, codec.Unmarshal([]byte(v3JSON), &h), "unmarshal v3 history")
 
 	st := h.Projects["services/api"]["ci"]
 	assert.Zero(t, st.PassCount, "v3→v4: expected zero pass count")
@@ -953,10 +952,10 @@ func TestOutcomeCostRoundTripsAndIsOmittedWhenUnmeasured(t *testing.T) {
 	require.Len(t, lines, 2, "the workspace line, then the one (project, target)")
 	var keys struct {
 		Stats struct {
-			RecentOutcomes []map[string]json.RawMessage `json:"recent_outcomes"`
+			RecentOutcomes []map[string]codec.RawMessage `json:"recent_outcomes"`
 		} `json:"stats"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(lines[1]), &keys))
+	require.NoError(t, codec.Unmarshal([]byte(lines[1]), &keys))
 	written := keys.Stats.RecentOutcomes
 	require.Len(t, written, 2)
 	assert.Contains(t, written[0], "cpu_ms")
@@ -978,7 +977,7 @@ func TestLoad_versionTooNew(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "future.jsonl")
 	// Hand-crafted, since UpdateHistory stamps the build's own version.
-	future, err := json.Marshal(historyLine{Workspace: &workspaceEntry{Version: HistoryVersion + 1}})
+	future, err := codec.Marshal(historyLine{Workspace: &workspaceEntry{Version: HistoryVersion + 1}})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, append(future, '\n'), 0o644))
 
@@ -1109,7 +1108,7 @@ func TestUpdateHistoryCompactsToTheLiveEntries(t *testing.T) {
 
 	entries := RunWindow + 1 // the runs in the window and the workspace
 	lines := readLines(t, path)
-	assert.LessOrEqual(t, len(lines), 2*entries+file.CompactSlack, "compaction bounds the lines")
+	assert.LessOrEqual(t, len(lines), 2*entries+codec.CompactSlack, "compaction bounds the lines")
 
 	var got History
 	require.NoError(t, got.Load(t.Context(), path))
@@ -1166,7 +1165,7 @@ func TestHistoryRefusesTheOldDocument(t *testing.T) {
 
 	var h History
 	err := h.Load(t.Context(), path)
-	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorIs(t, err, codec.ErrLegacyStore)
 	require.ErrorIs(t, err, types.LegacyStorePresent)
 	require.ErrorContains(t, err, "preserve it")
 	require.ErrorContains(t, err, filepath.Join(dir, "v1.json"))
@@ -1585,10 +1584,10 @@ func TestCurveRoundTripsThroughJSONL(t *testing.T) {
 	require.Len(t, lines, 2)
 	var keys struct {
 		Stats struct {
-			RecentOutcomes []map[string]json.RawMessage `json:"recent_outcomes"`
+			RecentOutcomes []map[string]codec.RawMessage `json:"recent_outcomes"`
 		} `json:"stats"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(lines[1]), &keys))
+	require.NoError(t, codec.Unmarshal([]byte(lines[1]), &keys))
 	written := keys.Stats.RecentOutcomes
 	require.Len(t, written, 2)
 	assert.JSONEq(t, `[100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000]`, string(written[0]["curve"]))

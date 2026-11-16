@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -44,7 +44,7 @@ var lineBreaks = strings.NewReplacer("\n", "<U+000A>", "\t", "<U+0009>")
 
 func decodeOutputRecord(raw []byte) (types.StoredOutput, error) {
 	var rec types.StoredOutput
-	if err := json.Unmarshal(raw, &rec); err != nil {
+	if err := codec.Unmarshal(raw, &rec); err != nil {
 		return types.StoredOutput{}, fmt.Errorf("not an output record: %w", err)
 	}
 	switch {

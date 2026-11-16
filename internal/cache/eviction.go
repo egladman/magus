@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 type manifestEntry struct {
@@ -189,7 +189,7 @@ func (c *Cache) scanManifests() (int64, []manifestEntry) {
 			return nil //nolint:nilerr // skip unreadable entries; abort would leave GC incomplete
 		}
 		var m Manifest
-		if json.Unmarshal(data, &m) != nil {
+		if codec.Unmarshal(data, &m) != nil {
 			return nil //nolint:nilerr // skip corrupt entries; abort would leave GC incomplete
 		}
 		blobs := make([]string, 0, len(m.Outputs))

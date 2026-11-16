@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
@@ -395,7 +395,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 			continue
 		}
 		var payload sessions.GateResult
-		require.NoError(t, json.Unmarshal(r.Payload, &payload))
+		require.NoError(t, codec.Unmarshal(r.Payload, &payload))
 		if payload.Outcome == sessions.OutcomeDeferred {
 			deferred = &payload
 		}

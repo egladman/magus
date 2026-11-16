@@ -14,7 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -674,7 +674,7 @@ func resultShape(row job.Job) string {
 			shape.VerificationEvidence = append(shape.VerificationEvidence, job.VerificationEvidence{GateID: goal.ID, OutputRef: "<ref its run printed>"})
 		}
 	}
-	encoded, err := json.MarshalIndent(shape, "", "  ")
+	encoded, err := codec.MarshalIndent(shape, "", "  ")
 	if err != nil {
 		return fmt.Sprintf("the shape did not encode: %v", err)
 	}

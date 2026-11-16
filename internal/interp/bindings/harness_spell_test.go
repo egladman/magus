@@ -12,7 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/gen/typestest"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -155,7 +155,7 @@ func configJobs(t *testing.T, path string, declared []types.HookCommand) map[str
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err, "read %s", path)
 	var cfg hookSettings
-	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+	require.NoError(t, codec.Unmarshal(raw, &cfg), "parse %s", path)
 	require.NotEmpty(t, cfg.Hooks, "%s wires no events at all", path)
 
 	found := map[string]bool{}
@@ -237,7 +237,7 @@ func TestShippedHookConfigsWireTheSameJobs(t *testing.T) {
 		raw, err := os.ReadFile(path)
 		require.NoError(t, err)
 		var cfg hookSettings
-		require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+		require.NoError(t, codec.Unmarshal(raw, &cfg), "parse %s", path)
 		var judging []string
 		for _, entry := range cfg.Hooks["PreToolUse"] {
 			for _, h := range entry.Hooks {

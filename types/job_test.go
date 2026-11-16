@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -899,7 +899,7 @@ func TestJobListNamesWhyAJobOwnsNothing(t *testing.T) {
 	t.Run("json names the reason", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := json.Marshal(job.NewList([]job.Job{owner("dep", job.StateFail), dependent("waiter", job.StateDeclared, "dep")}))
+		got, err := codec.Marshal(job.NewList([]job.Job{owner("dep", job.StateFail), dependent("waiter", job.StateDeclared, "dep")}))
 		require.NoError(t, err)
 		assert.Contains(t, string(got), `"blocked":[{"job":"waiter","on":"dep","state":"fail"}]`)
 	})
@@ -959,23 +959,23 @@ func TestJobAncestors(t *testing.T) {
 func TestFootprintsCrossJSON(t *testing.T) {
 	t.Parallel()
 
-	status, err := json.Marshal(job.Status{Job: "a", FootprintReason: "git does not report changed regions (RegionReporter)"})
+	status, err := codec.Marshal(job.Status{Job: "a", FootprintReason: "git does not report changed regions (RegionReporter)"})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":false,"footprint_reason":"git does not report changed regions (RegionReporter)","lines_added":0,"lines_deleted":0,"symbol_delta_known":false}`, string(status))
 
-	status, err = json.Marshal(job.Status{Job: "a", FootprintKnown: true, Footprint: []job.RegionChange{
+	status, err = codec.Marshal(job.Status{Job: "a", FootprintKnown: true, Footprint: []job.RegionChange{
 		{File: job.FileChange{Path: "a.go"}, Side: job.RegionNew, Lines: [2]int{1, 4}, Declaration: "func X() {", Driver: "golang"},
 	}})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":true,"footprint":[`+
 		`{"file":{"path":"a.go"},"side":"new","lines":[1,4],"declaration":"func X() {","driver":"golang"}],"lines_added":0,"lines_deleted":0,"symbol_delta_known":false}`, string(status))
 
-	status, err = json.Marshal(job.Status{Job: "a", ObservedGeneration: 2, PriorGeneration: 1})
+	status, err = codec.Marshal(job.Status{Job: "a", ObservedGeneration: 2, PriorGeneration: 1})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"job":"a","verified":false,"footprint_known":false,"lines_added":0,"lines_deleted":0,"symbol_delta_known":false,`+
 		`"observed_generation":2,"prior_generation":1}`, string(status))
 
-	overlap, err := json.Marshal(job.Overlap{JobA: "a", JobB: "b", PathsA: []string{"x"}, PathsB: []string{"x"},
+	overlap, err := codec.Marshal(job.Overlap{JobA: "a", JobB: "b", PathsA: []string{"x"}, PathsB: []string{"x"},
 		Footprint: &job.OverlapFootprint{Verdict: job.FootprintShared, Shared: []string{"x/a.go#func X() {"}}})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"job_a":"a","job_b":"b","paths_a":["x"],"paths_b":["x"],`+

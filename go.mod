@@ -89,6 +89,7 @@ require (
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/egladman/magus/libs/apiversion v0.1.0
 	github.com/egladman/magus/libs/clikit v0.1.0
+	github.com/egladman/magus/libs/codec v0.1.0
 	github.com/egladman/magus/libs/diagnostics v0.2.0
 	github.com/egladman/magus/libs/embed v0.1.0
 	github.com/egladman/magus/libs/gopherbuzz v0.2.0
@@ -145,6 +146,8 @@ tool (
 replace github.com/egladman/magus/libs/apiversion => ./libs/apiversion
 
 replace github.com/egladman/magus/libs/clikit => ./libs/clikit
+
+replace github.com/egladman/magus/libs/codec => ./libs/codec
 
 replace github.com/egladman/magus/libs/diagnostics => ./libs/diagnostics
 

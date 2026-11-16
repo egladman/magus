@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/libs/safetyscissors/internal/jsonl"
+	"github.com/egladman/magus/libs/codec"
 )
 
 const retention = 30 * 24 * time.Hour
@@ -37,7 +37,7 @@ func testTie() Tie {
 			return ""
 		}
 		var g grouped
-		if jsonl.Unmarshal(rec.Payload, &g) != nil {
+		if codec.Unmarshal(rec.Payload, &g) != nil {
 			return ""
 		}
 		return g.Group
@@ -69,7 +69,7 @@ func TestPrune(t *testing.T) { suite.Run(t, new(PruneSuite)) }
 func (s *PruneSuite) SetupTest() { s.dir = s.T().TempDir() }
 
 func (s *PruneSuite) record(invocation string, seq uint64, ts int64, kind string, payload any) Record {
-	raw, err := jsonl.Marshal(payload)
+	raw, err := codec.Marshal(payload)
 	s.Require().NoError(err)
 	return Record{V: APIVersion, Invocation: invocation, Seq: seq, Kind: kind, Ts: ts, Payload: raw}
 }
@@ -416,7 +416,7 @@ func (s *PruneSuite) TestClaimStalePruneStampSkipsWhenAlreadyContended() {
 
 	held, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	go func() {
-		done <- jsonl.WithLock(context.Background(), stamp+".lock", time.Second, func() error {
+		done <- codec.WithLock(context.Background(), stamp+".lock", time.Second, func() error {
 			close(held)
 			<-release
 			return nil

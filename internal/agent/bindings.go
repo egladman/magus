@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -136,7 +136,7 @@ func InstalledHosts(root string) map[string]types.Limits {
 		}
 		var limits types.Limits
 		if raw, err := os.ReadFile(filepath.Join(filepath.Dir(m), types.ToolLimitsFile)); err == nil {
-			_ = json.Unmarshal(bytes.TrimSpace(raw), &limits)
+			_ = codec.Unmarshal(bytes.TrimSpace(raw), &limits)
 		}
 		hosts[host] = limits
 	}
@@ -185,8 +185,8 @@ func payloadFields(payload string) map[string]bool {
 	if !strings.HasPrefix(trimmed, "{") {
 		return nil
 	}
-	var members map[string]json.RawMessage
-	if json.Unmarshal([]byte(trimmed), &members) != nil {
+	var members map[string]codec.RawMessage
+	if codec.Unmarshal([]byte(trimmed), &members) != nil {
 		return nil
 	}
 	fields := make(map[string]bool, len(members))

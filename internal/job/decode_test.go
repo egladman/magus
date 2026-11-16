@@ -8,7 +8,7 @@ import (
 	"testing"
 	"testing/iotest"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -337,9 +337,9 @@ func TestDeclarationSchemaMatchesTheStruct(t *testing.T) {
 	t.Parallel()
 
 	var schema struct {
-		Properties map[string]json.RawMessage `json:"properties"`
+		Properties map[string]codec.RawMessage `json:"properties"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(DeclarationSchema), &schema))
+	require.NoError(t, codec.Unmarshal([]byte(DeclarationSchema), &schema))
 
 	assert.ElementsMatch(t, jsonFields(job.Declaration{}), keys(schema.Properties))
 }
@@ -363,7 +363,7 @@ func TestGoalExpectIsOptionalInSchemaAndDecoder(t *testing.T) {
 			} `json:"goals"`
 		} `json:"properties"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(DeclarationSchema), &schema))
+	require.NoError(t, codec.Unmarshal([]byte(DeclarationSchema), &schema))
 	goal := schema.Properties.Goals.Items
 	assert.NotContains(t, goal.Required, "expect")
 	assert.Contains(t, goal.Properties.Expect.Description, "passed for check")

@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -249,8 +249,8 @@ func TestQueryNeighborhoodRespectsBudget(t *testing.T) {
 }
 
 func TestQueryDeterministic(t *testing.T) {
-	a, _ := json.Marshal(sampleGraph().Query("kind:target", 50))
-	b, _ := json.Marshal(sampleGraph().Query("kind:target", 50))
+	a, _ := codec.Marshal(sampleGraph().Query("kind:target", 50))
+	b, _ := codec.Marshal(sampleGraph().Query("kind:target", 50))
 	assert.Equal(t, string(a), string(b))
 }
 

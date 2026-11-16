@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
@@ -63,7 +63,7 @@ func endsRootTurn(raw string, who hookAttribution) bool {
 		Event string `json:"hook_event_name"`
 		Agent string `json:"agent_id"`
 	}
-	if _, ok := decodeStop(raw); !ok || json.Unmarshal([]byte(raw), &env) != nil {
+	if _, ok := decodeStop(raw); !ok || codec.Unmarshal([]byte(raw), &env) != nil {
 		return false
 	}
 	return env.Event == "Stop" && env.Agent == "" && who.Agent == ""

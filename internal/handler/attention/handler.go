@@ -8,10 +8,10 @@ import (
 
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
@@ -125,7 +125,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 	handler.LimitRequestBody(w, r)
 	var body disposeRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := codec.NewDecoder(r.Body).Decode(&body); err != nil {
 		handler.Refuse(w, r, rpcerr.Invalid("the request body is not JSON of the form {\"id\": ..., \"reason\": ...}: "+err.Error()))
 		return
 	}

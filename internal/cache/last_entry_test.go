@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -126,7 +126,7 @@ func TestLastRecordedRun_KeyComesFromTheFilename(t *testing.T) {
 	const key = "abc123abc123abc123abc123"
 	dir := filepath.Join(cdir, "manifests", flattenPath("svc"))
 	require.NoError(t, os.MkdirAll(dir, 0o755))
-	body, err := json.Marshal(Manifest{ProjectPath: "svc", Target: "build", CreatedAt: time.Now()})
+	body, err := codec.Marshal(Manifest{ProjectPath: "svc", Target: "build", CreatedAt: time.Now()})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, key+".json"), body, 0o644))
 

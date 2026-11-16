@@ -12,8 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // TaskKind says what a task asks for and so how it is graded.
@@ -127,7 +126,7 @@ type SWEBenchGrading struct {
 // Digest returns "sha256:<hex>" over t encoded with SHA empty, whatever SHA holds.
 func (t Task) Digest() (string, error) {
 	t.SHA = ""
-	b, err := json.Marshal(t)
+	b, err := codec.Marshal(t)
 	if err != nil {
 		return "", fmt.Errorf("task %s: %w", t.ID, err)
 	}
@@ -199,7 +198,7 @@ func (t Task) Validate() error {
 // [Task.Validate], carries a SHA that is not its digest, or repeats an ID, and when the file
 // ends in a line no newline closes; a suite with a bad task is not a smaller suite.
 func LoadTasks(path string) ([]Task, error) {
-	read, err := file.ReadLines(path)
+	read, err := codec.ReadLines(path)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +212,7 @@ func LoadTasks(path string) ([]Task, error) {
 	tasks := make([]Task, 0, len(read.Lines))
 	for _, line := range read.Lines {
 		var t Task
-		if err := json.Unmarshal(line.Text, &t); err != nil {
+		if err := codec.Unmarshal(line.Text, &t); err != nil {
 			return nil, fmt.Errorf("%s:%d: %w", path, line.N, err)
 		}
 		if err := t.Validate(); err != nil {
@@ -248,13 +247,13 @@ func WriteTasks(path string, tasks []Task) error {
 		if i > 0 && sorted[i].ID == sorted[i-1].ID {
 			return fmt.Errorf("task %q appears twice", sorted[i].ID)
 		}
-		b, err := json.Marshal(sorted[i])
+		b, err := codec.Marshal(sorted[i])
 		if err != nil {
 			return err
 		}
 		lines = append(lines, b)
 	}
-	return file.RewriteLines(path, lines, 0o644)
+	return codec.RewriteLines(path, lines, 0o644)
 }
 
 // CutClone makes dest a repository holding BaseCommit and its ancestors and nothing else:

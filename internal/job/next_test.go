@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -93,7 +93,7 @@ func TestServedJournalsEveryEntry(t *testing.T) {
 	require.Len(t, lines, 2)
 
 	var entry hint.ServedNextEntry
-	require.NoError(t, json.Unmarshal([]byte(lines[0]), &entry))
+	require.NoError(t, codec.Unmarshal([]byte(lines[0]), &entry))
 	assert.Equal(t, hint.ServedNextEntry{
 		AtMs: entry.AtMs,
 		ID:   "query-explain",
@@ -131,7 +131,7 @@ func TestServedFiltersWritesByRole(t *testing.T) {
 // The wrappers add one key beside the result they carry, and drop it entirely when
 // there is nothing to suggest, so absence stays measurable.
 func TestQueryAndExplainResultsCarryTheNextField(t *testing.T) {
-	q, err := json.Marshal(QueryWithNext{
+	q, err := codec.Marshal(QueryWithNext{
 		KnowledgeQueryOutput: types.KnowledgeQueryOutput{Query: "kind=spell go", MatchCount: 1},
 		Next:                 nextFixture,
 	})
@@ -139,14 +139,14 @@ func TestQueryAndExplainResultsCarryTheNextField(t *testing.T) {
 	assert.Contains(t, string(q), `"query":"kind=spell go"`, "the result is flattened, not nested under the embedded type")
 	assert.Contains(t, string(q), `"next":[{"id":"query-explain","run":"magus explain spell:go"`)
 
-	x, err := json.Marshal(ExplainWithNext{
+	x, err := codec.Marshal(ExplainWithNext{
 		KnowledgeExplainOutput: types.KnowledgeExplainOutput{Node: types.KnowledgeNode{ID: "spell:go"}},
 	})
 	require.NoError(t, err)
 	assert.Contains(t, string(x), `"id":"spell:go"`)
 	assert.NotContains(t, string(x), "next", "an empty set carries no field, never an empty list")
 
-	f, err := json.Marshal(FilesWithNext{
+	f, err := codec.Marshal(FilesWithNext{
 		FileReport: types.NewFileReport([]types.FileEntry{{Path: "MAGUS.md", Role: "output"}}),
 		Next:       nextFixture[:1],
 	})
@@ -170,7 +170,7 @@ func TestJSONLStaysAmbiguousForAQueryCarryingNext(t *testing.T) {
 }
 
 func renderNextJSONL(w io.Writer, v any) error {
-	wr := output.Writer{Codec: output.Codec{Marshal: json.Marshal, Unmarshal: json.Unmarshal}}
+	wr := output.Writer{Codec: output.Codec{Marshal: codec.Marshal, Unmarshal: codec.Unmarshal}}
 	return wr.Write(w, output.Options{Format: output.JSONL}, v)
 }
 

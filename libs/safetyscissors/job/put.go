@@ -8,48 +8,48 @@ package job
 //
 // The json tags are the keys magus\workspace().putJob takes in its opts map.
 type Put struct {
-	Parent *string `json:"parent,omitempty"`
+	Parent *string `json:"parent,omitzero"`
 	// Agent replaces the row's whole agent section; the zero Spec clears it.
-	Agent      *Agent  `json:"agent,omitempty"`
-	Checkpoint *string `json:"checkpoint,omitempty"`
+	Agent      *Agent  `json:"agent,omitzero"`
+	Checkpoint *string `json:"checkpoint,omitzero"`
 	// BriefFormat sets the row's brief format; empty clears it back to magus.yaml's.
-	BriefFormat *BriefFormat `json:"brief_format,omitempty"`
+	BriefFormat *BriefFormat `json:"brief_format,omitzero"`
 	// Delivery and ParentHead: see [Job.Delivery].
-	Delivery   *string `json:"delivery,omitempty"`
-	ParentHead *string `json:"parent_head,omitempty"`
+	Delivery   *string `json:"delivery,omitzero"`
+	ParentHead *string `json:"parent_head,omitzero"`
 	// Follows sets the row's link to the job it continues; see [Job.Follows].
-	Follows *string `json:"follows,omitempty"`
+	Follows *string `json:"follows,omitzero"`
 	// Timeout is a length such as "45m", never an instant: the deadline is stamped when
 	// the store applies the put. "0" or "" clears it.
-	Timeout *string `json:"timeout,omitempty"`
+	Timeout *string `json:"timeout,omitzero"`
 	// Enter enters the job at a path and declares nothing, so a put carrying it carries no
 	// other field.
-	Enter *string `json:"enter,omitempty"`
-	State *State  `json:"state,omitempty"`
+	Enter *string `json:"enter,omitzero"`
+	State *State  `json:"state,omitzero"`
 	// Check is the declared check; one with neither a target nor a script clears it.
-	Check     *LeaseCheck `json:"check,omitempty"`
+	Check     *LeaseCheck `json:"check,omitzero"`
 	Paths     PathsPut    `json:"paths,omitzero"`
-	DependsOn *[]string   `json:"depends_on,omitempty"`
-	Breaks    *[]string   `json:"breaks,omitempty"`
-	Goals     *[]Goal     `json:"goals,omitempty"`
+	DependsOn *[]string   `json:"depends_on,omitzero"`
+	Breaks    *[]string   `json:"breaks,omitzero"`
+	Goals     *[]Goal     `json:"goals,omitzero"`
 	// Deviations replaces the row's deviations; each is validated as a declaration's would be.
-	Deviations *[]Deviation `json:"deviations,omitempty"`
-	ReadOnly   *bool        `json:"read_only,omitempty"`
+	Deviations *[]Deviation `json:"deviations,omitzero"`
+	ReadOnly   *bool        `json:"read_only,omitzero"`
 	// MaxAttempts is how many times the job may be forked, its first fork included; 0
 	// clears the cap.
-	MaxAttempts *int `json:"max_attempts,omitempty"`
+	MaxAttempts *int `json:"max_attempts,omitzero"`
 	// MaxClaims is how many proved claims one attempt takes; 0 clears it to the default.
-	MaxClaims *int `json:"max_claims,omitempty"`
+	MaxClaims *int `json:"max_claims,omitzero"`
 	// Weight is the job's lean on the machine budget, in (0,1]. See [Job.Weight].
-	Weight *float64 `json:"weight,omitempty"`
+	Weight *float64 `json:"weight,omitzero"`
 }
 
 // PathsPut is the paths a put changes, each left, written or cleared as a
 // [Put] field is. A put never sets soft paths: only the store narrows them.
 type PathsPut struct {
-	Write *[]string `json:"write,omitempty"`
-	Read  *[]string `json:"read,omitempty"`
-	Deny  *[]string `json:"deny,omitempty"`
+	Write *[]string `json:"write,omitzero"`
+	Read  *[]string `json:"read,omitzero"`
+	Deny  *[]string `json:"deny,omitzero"`
 }
 
 // BriefFormat is the shape a spawn or continuation brief takes. markdown is prose and runs

@@ -10,8 +10,8 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
@@ -513,7 +513,7 @@ func respellMember(e migrate.Entry, key string, renamed map[string]string, path 
 		return nil
 	}
 	var root any
-	if err := json.Unmarshal(raw, &root); err != nil {
+	if err := codec.Unmarshal(raw, &root); err != nil {
 		return fmt.Errorf("reading %s: %w", key, err)
 	}
 	obj, ok := root.(map[string]any)
@@ -533,7 +533,7 @@ func respellMember(e migrate.Entry, key string, renamed map[string]string, path 
 		return nil
 	}
 	obj[last] = to
-	body, err := json.Marshal(root)
+	body, err := codec.Marshal(root)
 	if err != nil {
 		return fmt.Errorf("writing %s: %w", key, err)
 	}

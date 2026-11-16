@@ -5,8 +5,8 @@ import (
 	"io"
 	"unicode/utf8"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // ReadChanges decodes and checks a [types.Changes] document.
@@ -51,7 +51,7 @@ func WriteChanges(w io.Writer, c types.Changes) error {
 		return fmt.Errorf("%s: %w", types.SchemaChanges, err)
 	}
 	c.Schema = types.SchemaChanges
-	return json.NewEncoder(w).Encode(c)
+	return codec.NewEncoder(w).Encode(c)
 }
 
 // CapabilitiesDoc is a provider's capabilities on one base, as a document.
@@ -95,7 +95,7 @@ func WriteCapabilities(w io.Writer, base string, c types.Capabilities) error {
 	if c.Committer.Name != "" {
 		doc.Committer = &personDoc{Name: c.Committer.Name, Email: c.Committer.Email}
 	}
-	return json.NewEncoder(w).Encode(doc)
+	return codec.NewEncoder(w).Encode(doc)
 }
 
 // WriteReviews encodes r on one line, stamping its schema.
@@ -104,7 +104,7 @@ func WriteReviews(w io.Writer, r types.ReviewReport) error {
 	if r.Reviews == nil {
 		r.Reviews = []types.ReviewVerdict{}
 	}
-	return json.NewEncoder(w).Encode(r)
+	return codec.NewEncoder(w).Encode(r)
 }
 
 // WritePlan checks p and encodes it, stamping its schema.
@@ -129,7 +129,7 @@ func writeVerdict(w io.Writer, v types.Verdict) error {
 }
 
 func encodeIndented(w io.Writer, v any) error {
-	b, err := json.MarshalIndent(v, "", "  ")
+	b, err := codec.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func encodeIndented(w io.Writer, v any) error {
 }
 
 func decode(r io.Reader, schema string, v any, got *string) error {
-	if err := json.NewDecoder(r).Decode(v); err != nil {
+	if err := codec.NewDecoder(r).Decode(v); err != nil {
 		return fmt.Errorf("decode %s: %w", schema, err)
 	}
 	if *got != schema {

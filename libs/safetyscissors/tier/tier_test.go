@@ -1,11 +1,12 @@
 package tier
 
 import (
-	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/codec"
 )
 
 const testHost = "test-host"
@@ -188,7 +189,7 @@ func (s *modelTierSuite) TestTheZeroValueIsUnassigned() {
 }
 
 func (s *modelTierSuite) TestATierMarshalsItsName() {
-	out, err := json.Marshal(map[string]Tier{"tier": s.tiers(fourTiers()).Default()})
+	out, err := codec.Marshal(map[string]Tier{"tier": s.tiers(fourTiers()).Default()})
 	s.Require().NoError(err)
 	s.JSONEq(`{"tier":"bounded"}`, string(out))
 }

@@ -29,9 +29,9 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
 	"github.com/egladman/magus/internal/docs"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/spells"
 )
 
@@ -549,7 +549,7 @@ func argAt(args []string, path string) string {
 // charmPatchJSON renders a charm's ops as indented JSON (RFC 6902), the exact
 // notation the docs expose behind a details dropdown.
 func charmPatchJSON(c spells.Charm) string {
-	data, err := json.MarshalIndent(c.Ops, "", "  ")
+	data, err := codec.MarshalIndent(c.Ops, "", "  ")
 	if err != nil {
 		return "[]"
 	}

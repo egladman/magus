@@ -19,8 +19,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/risk"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // TestOp is the go spell op whose package arguments a scoped gate narrows.
@@ -310,7 +310,7 @@ func GoList(ctx context.Context, dir string) ([]byte, error) {
 }
 
 func decodeGoList(out []byte) ([]goPackage, error) {
-	dec := json.NewDecoder(bytes.NewReader(out))
+	dec := codec.NewDecoder(bytes.NewReader(out))
 	var pkgs []goPackage
 	for {
 		var p goPackage

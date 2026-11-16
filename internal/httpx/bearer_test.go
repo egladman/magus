@@ -15,9 +15,9 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -367,7 +367,7 @@ type wireLink struct {
 func decodeStatus(t *testing.T, body []byte) wireStatus {
 	t.Helper()
 	var s wireStatus
-	require.NoError(t, json.Unmarshal(body, &s), "body %s", body)
+	require.NoError(t, codec.Unmarshal(body, &s), "body %s", body)
 	return s
 }
 

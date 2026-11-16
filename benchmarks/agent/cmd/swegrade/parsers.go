@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // The parsers below are ports of swebench/harness/log_parsers/python.py from
@@ -299,7 +299,7 @@ func parseGoTest(log string) statusMap {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "{") {
 			var ev goTestEvent
-			if json.Unmarshal([]byte(line), &ev) == nil && ev.Test != "" {
+			if codec.Unmarshal([]byte(line), &ev) == nil && ev.Test != "" {
 				if status, ok := goTestStatuses[ev.Action]; ok {
 					m[ev.Test] = status
 				}

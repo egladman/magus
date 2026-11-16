@@ -10,7 +10,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // Line is one record as another magus stage wrote it.
@@ -22,7 +22,7 @@ type Line struct {
 }
 
 // Decode unmarshals the record's fields into v.
-func (l Line) Decode(v any) error { return json.Unmarshal(l.Raw, v) }
+func (l Line) Decode(v any) error { return codec.Unmarshal(l.Raw, v) }
 
 // recordPrefix opens every line a magus writes as a record (see envelope.appendJSONL).
 // Requiring it keeps a JSON line some other program printed from reading as a record.
@@ -39,7 +39,7 @@ func ParseLine(b []byte) (Line, error) {
 		Schema int    `json:"schema"`
 		Type   string `json:"type"`
 	}
-	if err := json.Unmarshal(b, &head); err != nil {
+	if err := codec.Unmarshal(b, &head); err != nil {
 		return Line{}, fmt.Errorf("report: not a record: %w", err)
 	}
 	if head.Type == "" {

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/vcs"
@@ -190,7 +190,7 @@ func decodeCheckpoint(rec session.Record) (Checkpoint, bool) {
 		return Checkpoint{}, false
 	}
 	var c Checkpoint
-	if json.Unmarshal(rec.Payload, &c) != nil {
+	if codec.Unmarshal(rec.Payload, &c) != nil {
 		return Checkpoint{}, false
 	}
 	return c, true

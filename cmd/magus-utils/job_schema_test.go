@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -353,7 +353,7 @@ func renderMarkerFixture(t *testing.T, src string) (map[string]any, error) {
 		return nil, err
 	}
 	var doc map[string]any
-	require.NoError(t, json.Unmarshal(body, &doc))
+	require.NoError(t, codec.Unmarshal(body, &doc))
 	return doc, nil
 }
 

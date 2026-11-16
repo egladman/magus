@@ -16,10 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/handler/mcp"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -63,7 +63,7 @@ func TestShareHandlerRefusesInTheAIPShape(t *testing.T) {
 					Details []detail `json:"details"`
 				} `json:"error"`
 			}
-			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body), rr.Body.String())
+			require.NoError(t, codec.Unmarshal(rr.Body.Bytes(), &body), rr.Body.String())
 			assert.Equal(t, tc.status, body.Error.Code)
 			assert.Contains(t, body.Error.Message, tc.reason)
 			require.NotEmpty(t, body.Error.Details)
@@ -91,7 +91,7 @@ func TestShareMintIsAudited(t *testing.T) {
 	h.ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	var resp shareResponse
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	require.NoError(t, codec.Unmarshal(rr.Body.Bytes(), &resp))
 	_, secret, ok := strings.Cut(resp.URL, "#token=")
 	require.True(t, ok)
 
@@ -116,7 +116,7 @@ func TestShareMintIsAudited(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(blob), secret)
 	var rec trail.MintRecord
-	require.NoError(t, json.Unmarshal(blob, &rec))
+	require.NoError(t, codec.Unmarshal(blob, &rec))
 	assert.Len(t, rec.Minted.ID, 8)
 	assert.Equal(t, trail.MintRecord{
 		Minted:  job.Credential{Kind: job.KindShare, ID: rec.Minted.ID, Name: rec.Minted.Name, Grant: job.AccessViewer},

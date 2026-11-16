@@ -17,8 +17,8 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 )
@@ -744,7 +744,7 @@ func TestConformanceMeasure(t *testing.T) {
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
 	var export types.KnowledgeGraphOutput
-	require.NoError(t, json.Unmarshal(raw, &export), path)
+	require.NoError(t, codec.Unmarshal(raw, &export), path)
 	g := NewGraph()
 	g.Merge(export.Nodes, export.Links)
 

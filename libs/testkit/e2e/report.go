@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // Outcome is how one case ended.
@@ -94,7 +94,7 @@ func (r *Report) Write(path string) error {
 	r.mu.Unlock()
 	doc["generated_at"] = time.Now().UTC().Format(time.RFC3339)
 	doc["cases"] = cases
-	body, err := json.MarshalIndent(doc, "", "  ")
+	body, err := codec.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return fmt.Errorf("e2e: encode report: %w", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"strconv"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // envelope is the wire-format wrapper; drain goroutine marshals body and splices
@@ -43,7 +43,7 @@ func (e envelope) appendJSONL(dst []byte) []byte {
 
 // body is e.Body marshaled, refusing anything but a JSON object.
 func (e envelope) body() ([]byte, error) {
-	body, err := json.Marshal(e.Body)
+	body, err := codec.Marshal(e.Body)
 	if err != nil {
 		return nil, fmt.Errorf("report: cannot encode %s event: %w", e.Type, err)
 	}

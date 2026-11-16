@@ -12,7 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 )
@@ -199,7 +199,7 @@ func TestProjectionFullMatchesTheOriginalStateResponse(t *testing.T) {
 	// Built the same way op=state has always built its answer, independent of
 	// projectDiffState, the reference every case below is pinned against.
 	sess := tool.sessions.Get(tool.workspaceRoot)
-	want, err := json.Marshal(diffState{Review: sess, Patch: agentPatch, Hunks: changeset.ParseHunks(agentPatch)})
+	want, err := codec.Marshal(diffState{Review: sess, Patch: agentPatch, Hunks: changeset.ParseHunks(agentPatch)})
 	require.NoError(t, err)
 
 	cases := []struct {
@@ -214,7 +214,7 @@ func TestProjectionFullMatchesTheOriginalStateResponse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := invoke(t, tool, tc.params)
 			require.NoError(t, err)
-			got, err := json.Marshal(resp.Data)
+			got, err := codec.Marshal(resp.Data)
 			require.NoError(t, err)
 			assert.JSONEq(t, string(want), string(got))
 		})
@@ -265,7 +265,7 @@ func TestProjectionsIncludeAndExcludeFields(t *testing.T) {
 		t.Run(tc.projection, func(t *testing.T) {
 			resp, err := invoke(t, tool, map[string]any{"op": "state", "projection": tc.projection})
 			require.NoError(t, err)
-			got, err := json.Marshal(resp.Data)
+			got, err := codec.Marshal(resp.Data)
 			require.NoError(t, err)
 			for _, want := range tc.present {
 				assert.Contains(t, string(got), want)

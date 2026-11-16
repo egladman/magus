@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types/daemon"
 
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
@@ -369,7 +369,7 @@ func TestReadinessHTTPHandler(t *testing.T) {
 		require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 		var report daemon.ReadinessReport
-		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
+		require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &report))
 		require.Equal(t, daemon.ReadinessReport{
 			Ready: true,
 			Components: []daemon.ReadinessComponent{
@@ -389,7 +389,7 @@ func TestReadinessHTTPHandler(t *testing.T) {
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 
 		var report daemon.ReadinessReport
-		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
+		require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &report))
 		require.False(t, report.Ready)
 	})
 
@@ -398,7 +398,7 @@ func TestReadinessHTTPHandler(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 
 		var report daemon.ReadinessReport
-		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
+		require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &report))
 		require.Equal(t, daemon.ReadinessReport{
 			Ready: true,
 			Components: []daemon.ReadinessComponent{

@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // EnvDigests maps each variable in this process's environment to EnvDigest of its value.
@@ -47,7 +47,7 @@ func ReadDigest(cfg Config) string {
 	cfg.StallTimeout = 0
 	cfg.DryRun = false
 	cfg.DefaultCharms = nil
-	raw, err := json.Marshal(cfg)
+	raw, err := codec.Marshal(cfg)
 	if err != nil {
 		return ""
 	}

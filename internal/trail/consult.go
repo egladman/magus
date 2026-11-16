@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
@@ -140,7 +140,7 @@ func Consulted(root, base string, paths []string, limit int) ([]Consultation, Co
 			continue
 		}
 		var req agentCommandRequest
-		if json.Unmarshal(raw, &req) != nil {
+		if codec.Unmarshal(raw, &req) != nil {
 			continue
 		}
 		switch req.Tool {

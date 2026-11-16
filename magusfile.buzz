@@ -63,6 +63,7 @@ import "project/libs/proofread" as proofreadlib;
 import "project/libs/testpairing";
 import "project/libs/scipbuzz";
 import "project/libs/xdg";
+import "project/libs/codec";
 import "project/libs/safetyscissors";
 import "project/libs/secrets";
 import "project/libs/text" as textlib;
@@ -136,7 +137,7 @@ magus\project({
     // libs/result is not a project: result.buzz lives under this tree (go-build embeds it).
     // The rest are the libs whose targets these targets ctx.needs (MGS1062).
     "depends_on": ["proto", "libs/figure", "libs/embed", "libs/clikit", "libs/conventions",
-                   "libs/diagnostics", "libs/gopherbuzz", "libs/proofread", "libs/scipbuzz",
+                   "libs/codec", "libs/diagnostics", "libs/gopherbuzz", "libs/proofread", "libs/scipbuzz",
                    "libs/safetyscissors", "libs/secrets", "libs/termkit", "libs/testpairing", "libs/textsearch", "libs/xdg",
                    "libs/text"],
     "layers": {
@@ -380,7 +381,7 @@ fun ld_flags() > str !> any {
 // Builds the OpenCode wasm runtime and its wasm_exec.js via go generate.
 export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["internal/interp/bindings/opencode/**/*.go", "internal/interp/bindings/opencode/plugin.buzz",
-        "internal/json/**/*.go",
+        "libs/codec/**/*.go", "libs/codec/go.mod",
         "libs/gopherbuzz/**/*.go", "libs/gopherbuzz/go.mod", "libs/diagnostics/**/*.go",
         "libs/diagnostics/go.mod", "go.mod", "go.sum", "go.work", "go.work.sum", "mise.toml"]);
     ctx.writesFiles(["spells/harness/opencode/gen/magus-opencode.wasm", "spells/harness/opencode/gen/wasm_exec.js"]);
@@ -2411,7 +2412,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final go_profiles = [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
         "libs/conventions/coverage.out", "libs/testpairing/coverage.out",
         "libs/scipbuzz/coverage.out", "libs/xdg/coverage.out", "libs/text/coverage.out", "libs/clikit/coverage.out", "libs/termkit/coverage.out",
-        "libs/safetyscissors/coverage.out", "libs/secrets/coverage.out"];
+        "libs/safetyscissors/coverage.out", "libs/secrets/coverage.out", "libs/codec/coverage.out"];
     final buzz = "coverage/buzz/coverage.txt";
     final typescript = "console/coverage.txt";
     final missing = mut [<str>];
@@ -2445,7 +2446,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 export fun coverage_measure(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test,
         conventionslib\test, testpairing\test, scipbuzz\test, xdg\test, textlib\test, clikit\test, termkit\test,
-        safetyscissors\test, secrets\test, buzz_test);
+        safetyscissors\test, secrets\test, codec\test, buzz_test);
 }
 
 // Runs the in-file `test "..." {}` blocks in this repo's Buzz modules through magus's
@@ -2520,7 +2521,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
     // the scheduler can order those writes before its reads (MGS4008).
     ctx.needs(format, gopherbuzz\format, diagnostics\format, conventionslib\format,
         testpairing\format, scipbuzz\format, xdg\format, textlib\format, clikit\format, termkit\format,
-        safetyscissors\format, secrets\format, proofreadlib\proofread_build, conformance_base, textsearch\install);
+        safetyscissors\format, secrets\format, codec\format, proofreadlib\proofread_build, conformance_base, textsearch\install);
     ctx.readsFiles(["hack/lint/*.buzz",
                     "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
                     "hack/README.md",
@@ -2544,7 +2545,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/testpairing/magusfile.buzz", "libs/textsearch/magusfile.buzz",
                     "libs/scipbuzz/magusfile.buzz", "libs/ssg/magusfile.buzz", "libs/ssg/*.buzz", "libs/xdg/magusfile.buzz", "libs/text/magusfile.buzz", "libs/termkit/magusfile.buzz",
                     "testdata/latex/onepage/magusfile.buzz",
-                    "libs/clikit/magusfile.buzz", "libs/kustomize/*.buzz", "libs/safetyscissors/magusfile.buzz", "libs/secrets/magusfile.buzz",
+                    "libs/clikit/magusfile.buzz", "libs/kustomize/*.buzz", "libs/safetyscissors/magusfile.buzz", "libs/secrets/magusfile.buzz", "libs/codec/magusfile.buzz",
                     "libs/kustomize/testdata/*.yaml",
                     "proto/magusfile.buzz", "docs/tour/*.buzz",
                     ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".markdownlint.json",
@@ -2563,19 +2564,19 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/diagnostics/**/*.md", "libs/figure/**/*.md",
                     "libs/gopherbuzz/**/*.md", "libs/testpairing/**/*.md",
                     "libs/textsearch/**/*.md", "libs/scipbuzz/**/*.md", "libs/xdg/**/*.md", "libs/text/**/*.md", "libs/termkit/**/*.md",
-                    "libs/clikit/**/*.md", "libs/kustomize/**/*.md", "libs/safetyscissors/**/*.md", "libs/secrets/**/*.md",
+                    "libs/clikit/**/*.md", "libs/kustomize/**/*.md", "libs/safetyscissors/**/*.md", "libs/secrets/**/*.md", "libs/codec/**/*.md",
                     "proto/**/*.md",
                     "**/*_test.go", "libs/conventions/**/*_test.go", "libs/proofread/**/*_test.go",
                     "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
                     "libs/gopherbuzz/**/*_test.go", "libs/testpairing/**/*_test.go",
                     "libs/scipbuzz/**/*_test.go", "libs/xdg/**/*_test.go", "libs/text/**/*_test.go", "libs/termkit/**/*_test.go",
-                    "libs/clikit/**/*_test.go", "libs/safetyscissors/**/*_test.go", "libs/secrets/**/*_test.go",
+                    "libs/clikit/**/*_test.go", "libs/safetyscissors/**/*_test.go", "libs/secrets/**/*_test.go", "libs/codec/**/*_test.go",
                     "**/*.go",
                     "libs/conventions/**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
                     "libs/proofread/**/*.go", "libs/proofread/train/**/*.go",
                     "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
                     "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/xdg/**/*.go", "libs/text/**/*.go", "libs/termkit/**/*.go",
-                    "libs/clikit/**/*.go", "libs/embed/**/*.go", "libs/train/**/*.go", "libs/safetyscissors/**/*.go", "libs/secrets/**/*.go",
+                    "libs/clikit/**/*.go", "libs/embed/**/*.go", "libs/train/**/*.go", "libs/safetyscissors/**/*.go", "libs/secrets/**/*.go", "libs/codec/**/*.go",
                     "**/*.ts", "console/**/*.ts", "docs/**/*.ts",
                     "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
                     "docs/guides/integrations/agents/**/*.tsx",
@@ -2585,7 +2586,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
                     "libs/scipbuzz/**/*.buzz", "libs/testpairing/**/*.buzz", "libs/textsearch/**/*.buzz",
                     "libs/xdg/**/*.buzz", "libs/text/**/*.buzz", "libs/clikit/**/*.buzz", "libs/termkit/**/*.buzz", "libs/embed/**/*.buzz",
-                    "libs/train/**/*.buzz", "libs/proofread/train/**/*.buzz", "libs/safetyscissors/**/*.buzz", "libs/secrets/**/*.buzz",
+                    "libs/train/**/*.buzz", "libs/proofread/train/**/*.buzz", "libs/safetyscissors/**/*.buzz", "libs/secrets/**/*.buzz", "libs/codec/**/*.buzz",
                     "proto/**/*.buzz",
                     "**/*.css", "console/**/*.css", "docs/**/*.css",
                     "**/*.html", "console/**/*.html", "docs/**/*.html",
@@ -2787,7 +2788,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     // format rewrites (MGS4008).
     ctx.needs(format, gopherbuzz\format, diagnostics\format, conventionslib\format,
         testpairing\format, scipbuzz\format, xdg\format, textlib\format, clikit\format, termkit\format,
-        safetyscissors\format, secrets\format);
+        safetyscissors\format, secrets\format, codec\format);
     if (!advisories\inheritedFatal(args)) {
         ctx.needs(lint, build, test, security);
         return;
@@ -2916,7 +2917,7 @@ fun publish_report(agent: str, results: str, provider: str) > void !> any {
 // Builds swegrade, the grader a SWE-bench trial's eval log is piped through, into
 // benchmarks/agent/bin. Undeclared like ./magus.
 export fun swegrade_build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["benchmarks/agent/cmd/swegrade/*.go", "internal/json/*.go", "go.mod", "go.sum"]);
+    ctx.readsFiles(["benchmarks/agent/cmd/swegrade/*.go", "libs/codec/*.go", "libs/codec/go.mod", "go.mod", "go.sum"]);
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-o", "benchmarks/agent/bin/swegrade", "./benchmarks/agent/cmd/swegrade"],
     });

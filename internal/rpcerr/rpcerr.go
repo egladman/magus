@@ -24,8 +24,8 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -216,10 +216,10 @@ func writeConnect(w http.ResponseWriter, r *http.Request, e Error) {
 // status, status the google.rpc.Code name, details proto3-JSON Any values.
 type statusBody struct {
 	Error struct {
-		Code    int               `json:"code"`
-		Message string            `json:"message"`
-		Status  string            `json:"status"`
-		Details []json.RawMessage `json:"details"`
+		Code    int                `json:"code"`
+		Message string             `json:"message"`
+		Status  string             `json:"status"`
+		Details []codec.RawMessage `json:"details"`
 	} `json:"error"`
 }
 
@@ -244,7 +244,7 @@ func writeJSON(w http.ResponseWriter, r *http.Request, e Error) {
 		}
 		b.Error.Details = append(b.Error.Details, raw)
 	}
-	body, err := json.Marshal(b)
+	body, err := codec.Marshal(b)
 	if err != nil {
 		http.Error(w, st.GetMessage(), httpCode)
 		return

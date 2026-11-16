@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/spells"
@@ -421,7 +421,7 @@ func TestBuildOfOneCommitHasOneDigest(t *testing.T) {
 	assert.Equal(t, dA, dB)
 
 	var m ocispec.Manifest
-	require.NoError(t, json.Unmarshal(rawA, &m))
+	require.NoError(t, codec.Unmarshal(rawA, &m))
 	assert.Equal(t, map[string]string{
 		ocispec.AnnotationTitle:    "cursor",
 		ocispec.AnnotationSource:   "https://github.com/owner/repo",

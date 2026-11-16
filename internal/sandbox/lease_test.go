@@ -12,8 +12,8 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
@@ -40,7 +40,7 @@ func leaseWorkspace(t *testing.T, row jobtypes.Job) (root, cacheDir string) {
 		// magus left is planted as the line it wrote.
 		path, err := store.Path()
 		require.NoError(t, err)
-		line, err := json.Marshal(row)
+		line, err := codec.Marshal(row)
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, append(line, '\n'), 0o644))

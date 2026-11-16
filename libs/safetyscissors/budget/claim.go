@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/libs/safetyscissors/internal/jsonl"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // Claim is one step's request on the machine-wide budget.
@@ -76,7 +76,7 @@ type Claimant struct {
 	Slots   int       `json:"slots,omitzero" yaml:"slots,omitempty"`
 	Dir     string    `json:"dir,omitempty" yaml:"dir,omitempty"`
 	Command string    `json:"command,omitempty" yaml:"command,omitempty"`
-	Since   time.Time `json:"since,omitempty" yaml:"since,omitempty"`
+	Since   time.Time `json:"since,omitzero" yaml:"since,omitempty"`
 	// Owner is who answers for the holder: its job lease, else `spawned by <job>`, else
 	// "unleased". Empty when nothing names the holder's pid.
 	Owner string `json:"owner,omitempty" yaml:"owner,omitempty"`
@@ -148,13 +148,13 @@ type admissionWire Admission
 
 // MarshalJSON encodes the admission through its wire shape.
 func (a Admission) MarshalJSON() ([]byte, error) {
-	return jsonl.Marshal(admissionWire(a))
+	return codec.Marshal(admissionWire(a))
 }
 
 // UnmarshalJSON decodes an admission from its wire shape.
 func (a *Admission) UnmarshalJSON(b []byte) error {
 	var w admissionWire
-	if err := jsonl.Unmarshal(b, &w); err != nil {
+	if err := codec.Unmarshal(b, &w); err != nil {
 		return fmt.Errorf("decode machine admission: %w", err)
 	}
 	*a = Admission(w)
@@ -175,7 +175,7 @@ type Verdict struct {
 	OwnRun bool `json:"own_run,omitzero" yaml:"own_run,omitempty"`
 	// Packed is true when the verdict judged memory by curve, and false when every
 	// claim it weighed was a peak held flat, or the arbiter predates curves.
-	Packed      bool       `json:"packed,omitempty" yaml:"packed,omitempty"`
+	Packed      bool       `json:"packed" yaml:"packed,omitempty"`
 	Holders     []Claimant `json:"holders,omitempty" yaml:"holders,omitempty"`
 	BudgetMB    int        `json:"budget_mb,omitzero" yaml:"budget_mb,omitempty"`
 	HeldMB      int        `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`

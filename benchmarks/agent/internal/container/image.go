@@ -10,7 +10,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/image"
 	"github.com/egladman/magus/libs/oci"
 )
@@ -90,7 +90,7 @@ func platforms(ctx context.Context, reg *oci.Client, ref oci.Reference, m oci.Ra
 	switch m.MediaType {
 	case ocispec.MediaTypeImageIndex, "application/vnd.docker.distribution.manifest.list.v2+json":
 		var idx ocispec.Index
-		if err := json.Unmarshal(m.Body, &idx); err != nil {
+		if err := codec.Unmarshal(m.Body, &idx); err != nil {
 			return nil, fmt.Errorf("container: decode %s index: %w", ref, err)
 		}
 		var out []image.Platform
@@ -104,7 +104,7 @@ func platforms(ctx context.Context, reg *oci.Client, ref oci.Reference, m oci.Ra
 		return out, nil
 	default:
 		var man ocispec.Manifest
-		if err := json.Unmarshal(m.Body, &man); err != nil {
+		if err := codec.Unmarshal(m.Body, &man); err != nil {
 			return nil, fmt.Errorf("container: decode %s manifest: %w", ref, err)
 		}
 		var buf bytes.Buffer
@@ -112,7 +112,7 @@ func platforms(ctx context.Context, reg *oci.Client, ref oci.Reference, m oci.Ra
 			return nil, err
 		}
 		var cfg ocispec.Image
-		if err := json.Unmarshal(buf.Bytes(), &cfg); err != nil {
+		if err := codec.Unmarshal(buf.Bytes(), &cfg); err != nil {
 			return nil, fmt.Errorf("container: decode %s config: %w", ref, err)
 		}
 		return []image.Platform{{OS: cfg.OS, Architecture: cfg.Architecture, Variant: cfg.Variant}}, nil

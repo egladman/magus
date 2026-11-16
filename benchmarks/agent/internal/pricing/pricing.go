@@ -42,7 +42,7 @@ import (
 
 	_ "embed"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // tokensPerPriceUnit is the denominator every rate is quoted against.
@@ -135,7 +135,7 @@ func parse(raw []byte, file string) (Table, error) {
 		WebSearchPerThousand *float64              `json:"web_search_usd_per_thousand"`
 		Models               map[string]modelEntry `json:"models"`
 	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
+	if err := codec.Unmarshal(raw, &doc); err != nil {
 		return Table{}, fmt.Errorf("pricing: table %s: %w", file, err)
 	}
 	if len(doc.Models) == 0 {

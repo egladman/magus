@@ -41,8 +41,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/retry"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"golang.org/x/mod/semver"
@@ -233,7 +233,7 @@ func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, erro
 	}
 
 	var idx ReleaseIndex
-	if err := json.Unmarshal(indexBytes, &idx); err != nil {
+	if err := codec.Unmarshal(indexBytes, &idx); err != nil {
 		return nil, fmt.Errorf("parse release index: %w", err)
 	}
 	if idx.SchemaVersion != 1 {

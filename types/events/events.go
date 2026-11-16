@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // Event is one fact about a workspace, addressed to a PROGRAM: the record
@@ -211,7 +211,7 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	if e.Body == nil {
 		return nil, fmt.Errorf("marshal event: no body")
 	}
-	head, err := json.Marshal(streamHead{
+	head, err := codec.Marshal(streamHead{
 		Schema:    Schema,
 		Type:      e.Body.StreamType(),
 		Ts:        e.Ts,
@@ -221,7 +221,7 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := json.Marshal(e.Body)
+	body, err := codec.Marshal(e.Body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal event body %T: %w", e.Body, err)
 	}
@@ -265,26 +265,26 @@ func (e *Event) UnmarshalJSON(line []byte) error {
 // knows.
 func DecodeStreamEvent(line []byte) (Event, error) {
 	var head streamHead
-	if err := json.Unmarshal(line, &head); err != nil {
+	if err := codec.Unmarshal(line, &head); err != nil {
 		return Event{}, fmt.Errorf("decode stream event: %w", err)
 	}
 	var body Body
 	switch head.Type {
 	case RunStarted, RunFinished:
 		var b Run
-		if err := json.Unmarshal(line, &b); err != nil {
+		if err := codec.Unmarshal(line, &b); err != nil {
 			return Event{}, err
 		}
 		body = b
 	case TargetResult:
 		var b Target
-		if err := json.Unmarshal(line, &b); err != nil {
+		if err := codec.Unmarshal(line, &b); err != nil {
 			return Event{}, err
 		}
 		body = b
 	case TargetOutput:
 		var b Output
-		if err := json.Unmarshal(line, &b); err != nil {
+		if err := codec.Unmarshal(line, &b); err != nil {
 			return Event{}, err
 		}
 		body = b

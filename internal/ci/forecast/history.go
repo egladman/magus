@@ -65,6 +65,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math"
 	"path/filepath"
@@ -73,7 +74,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
@@ -888,7 +890,7 @@ func (r Run) matches(ref, target string) bool {
 }
 
 // oldHistoryFile is the JSON document an older magus kept the history in, beside the
-// store. It is named when found, never read; see [file.RefuseOld].
+// store. It is named when found, never read; see [codec.RefuseOld].
 const oldHistoryFile = "v1.json"
 
 // historyLine is one line of the history store: one entry, or, with Removed set, the
@@ -923,7 +925,7 @@ type statsEntry struct {
 func (l *historyLine) UnmarshalJSON(b []byte) error {
 	type plain historyLine
 	var p plain
-	if err := json.Unmarshal(b, &p); err != nil {
+	if err := codec.Unmarshal(b, &p); err != nil {
 		return err
 	}
 	set := 0
@@ -955,12 +957,13 @@ func (l historyLine) key() string {
 	return ""
 }
 
-func historyLog(path string) file.JSONL[historyLine] {
+func historyLog(path string) codec.JSONL[historyLine] {
 	old := filepath.Join(filepath.Dir(path), oldHistoryFile)
 	if old == filepath.Clean(path) {
 		old = ""
 	}
-	return file.JSONL[historyLine]{
+	return codec.JSONL[historyLine]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: path,
 		Key:  historyLine.key,
 		Live: func(l historyLine) bool { return !l.Removed },
@@ -994,7 +997,7 @@ func (h *History) Load(ctx context.Context, path string) error {
 	}
 	lines, err := historyLog(path).Load()
 	if err != nil {
-		return fmt.Errorf("forecast: read history: %w", err)
+		return fmt.Errorf("forecast: read history: %w", file.StoreDiagnostic(err))
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -1070,7 +1073,7 @@ func UpdateHistory(ctx context.Context, path string, fn func(*History) error) er
 		add, failed = changedLines(path, entries, fn)
 		return add
 	})
-	if err = cmp.Or(failed, err); err != nil {
+	if err = cmp.Or(failed, file.StoreDiagnostic(err)); err != nil {
 		return fmt.Errorf("forecast: update history: %w", err)
 	}
 	return nil
@@ -1082,7 +1085,7 @@ func UpdateHistory(ctx context.Context, path string, fn func(*History) error) er
 func changedLines(path string, entries []historyLine, fn func(*History) error) ([]historyLine, error) {
 	before := make(map[string][]byte, len(entries))
 	for _, e := range entries {
-		b, err := json.Marshal(e)
+		b, err := codec.Marshal(e)
 		if err != nil {
 			return nil, err
 		}
@@ -1101,7 +1104,7 @@ func changedLines(path string, entries []historyLine, fn func(*History) error) (
 	for _, l := range h.lines() {
 		k := l.key()
 		kept[k] = true
-		b, err := json.Marshal(l)
+		b, err := codec.Marshal(l)
 		if err != nil {
 			return nil, err
 		}

@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -135,7 +135,7 @@ func TestWriteJSONRendersAIP193(t *testing.T) {
 	var body struct {
 		Error jsonError `json:"error"`
 	}
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
+	require.NoError(t, codec.Unmarshal(rr.Body.Bytes(), &body))
 	require.Len(t, body.Error.Details, 4)
 	assert.Equal(t, jsonDetail{Type: "type.googleapis.com/google.rpc.ErrorInfo", Reason: "MGS3017"}, body.Error.Details[0])
 	assert.Equal(t, jsonDetail{Type: "type.googleapis.com/google.rpc.RetryInfo", RetryDelay: "2s"}, body.Error.Details[1])
@@ -179,7 +179,7 @@ func TestWriteJSONHonorsTheHTTPStatusOverride(t *testing.T) {
 	var body struct {
 		Error status `json:"error"`
 	}
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
+	require.NoError(t, codec.Unmarshal(rr.Body.Bytes(), &body))
 	assert.Equal(t, status{Code: http.StatusMethodNotAllowed, Status: "UNIMPLEMENTED"}, body.Error)
 }
 
@@ -212,7 +212,7 @@ func TestConstructorsKeepTheLegacyStatus(t *testing.T) {
 			var body struct {
 				Error jsonError `json:"error"`
 			}
-			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
+			require.NoError(t, codec.Unmarshal(rr.Body.Bytes(), &body))
 			assert.Equal(t, tc.wantStatus, rr.Code)
 			require.NotEmpty(t, body.Error.Details)
 			assert.Equal(t, jsonDetail{Type: "type.googleapis.com/google.rpc.ErrorInfo", Reason: string(tc.wantReason)},

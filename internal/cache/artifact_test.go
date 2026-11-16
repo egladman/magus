@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,7 @@ func writeEntry(t *testing.T, c *Cache, project, target, path, body string, at t
 		CreatedAt: at,
 		Outputs:   []OutputRecord{{Path: path, Blob: blob, Mode: 0o644, Size: int64(len(body))}},
 	}
-	data, err := json.Marshal(man)
+	data, err := codec.Marshal(man)
 	require.NoError(t, err)
 	mp := c.manifestPath(project, man.Hash)
 	require.NoError(t, os.MkdirAll(filepath.Dir(mp), 0o755))

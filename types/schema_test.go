@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,7 +53,7 @@ func loadGoldens(t *testing.T, l FormatLedger) map[APIVersion]schemaGolden {
 		raw, err := os.ReadFile(p)
 		require.NoError(t, err)
 		var g schemaGolden
-		require.NoError(t, json.UnmarshalStrict(raw, &g), p)
+		require.NoError(t, codec.UnmarshalStrict(raw, &g), p)
 		out[v] = g
 	}
 	return out
@@ -80,7 +80,7 @@ func ledgerViolations(l FormatLedger, goldens map[APIVersion]schemaGolden) []str
 	}
 	versions := slices.SortedFunc(maps.Keys(goldens), APIVersion.Compare)
 	if len(versions) == 0 || versions[len(versions)-1] != l.Version {
-		body, _ := json.MarshalIndent(schemaGolden{Fields: current, Reserved: l.Reserved}, "", "  ")
+		body, _ := codec.MarshalIndent(schemaGolden{Fields: current, Reserved: l.Reserved}, "", "  ")
 		add("no frozen field set for %s; commit testdata/schema/%s.%s.json as\n%s", l.Version, l.Name, l.Version.Version(), body)
 		return out
 	}
@@ -302,15 +302,15 @@ func TestSchemaUnknownRoundTrips(t *testing.T) {
 
 	in := `{"api_version":"magus.job-result/v1alpha99","requires":["x"],"job":"a","future_field":{"x":1}}`
 	var result job.Result
-	require.NoError(t, json.Unmarshal([]byte(in), &result))
+	require.NoError(t, codec.Unmarshal([]byte(in), &result))
 	// The bag's raw values are the decoder's own; its keys are checked below.
 	assert.Equal(t, job.Result{Schema: job.Schema{Version: "magus.job-result/v1alpha99", Requires: []string{"x"}, Unknown: result.Unknown}, Job: "a"}, result)
 	assert.Equal(t, []string{"future_field"}, slices.Collect(maps.Keys(result.Unknown)))
 
-	out, err := json.Marshal(result)
+	out, err := codec.Marshal(result)
 	require.NoError(t, err)
 	var back map[string]any
-	require.NoError(t, json.Unmarshal(out, &back))
+	require.NoError(t, codec.Unmarshal(out, &back))
 	assert.Equal(t, map[string]any{"x": float64(1)}, back["future_field"])
 	assert.Equal(t, "magus.job-result/v1alpha99", back["api_version"])
 }

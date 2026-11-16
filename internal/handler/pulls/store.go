@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	pullsv1 "github.com/egladman/magus/proto/gen/go/magus/pulls/v1alpha1"
 )
 
@@ -55,7 +57,7 @@ func (f authorFilter) proto(viewer string) *pullsv1.AuthorFilter {
 // Store keeps the author filter in a JSON Lines file under the state dir.
 type Store struct {
 	path  string
-	lines file.JSONL[authorEntry]
+	lines codec.JSONL[authorEntry]
 	now   func() time.Time
 }
 
@@ -65,7 +67,8 @@ func OpenStore(path string) Store {
 	return Store{
 		path: path,
 		now:  time.Now,
-		lines: file.JSONL[authorEntry]{
+		lines: codec.JSONL[authorEntry]{
+			Log:  slog.With(attr.Component("magus")),
 			Path: path,
 			Key:  func(e authorEntry) string { return e.Login },
 			Live: func(e authorEntry) bool { return e.Tracked },

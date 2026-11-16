@@ -12,8 +12,8 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 )
@@ -50,13 +50,13 @@ type heartbeatJSON struct {
 
 // MarshalJSON writes At as unix seconds, which is all the throttle and the report resolve.
 func (h heartbeat) MarshalJSON() ([]byte, error) {
-	return json.Marshal(heartbeatJSON{Session: h.Session, Lease: h.Lease, Transcript: h.Transcript, At: h.At.Unix()})
+	return codec.Marshal(heartbeatJSON{Session: h.Session, Lease: h.Lease, Transcript: h.Transcript, At: h.At.Unix()})
 }
 
 // UnmarshalJSON reads a stamp written by MarshalJSON.
 func (h *heartbeat) UnmarshalJSON(b []byte) error {
 	var raw heartbeatJSON
-	if err := json.Unmarshal(b, &raw); err != nil {
+	if err := codec.Unmarshal(b, &raw); err != nil {
 		return err
 	}
 	*h = heartbeat{Session: raw.Session, Lease: raw.Lease, Transcript: raw.Transcript, At: time.Unix(raw.At, 0)}
@@ -68,13 +68,14 @@ func (h heartbeat) key() string { return fmt.Sprintf("%s\x00%s", h.Session, h.Le
 // heartbeatStore is the stamps of the workspace at root, one file per workspace under the
 // user state dir: a stamp is a fact about a live session, which no cache wipe should
 // invent or erase, and a lease id is unique only within its workspace.
-func heartbeatStore(root string) (file.JSONL[heartbeat], error) {
+func heartbeatStore(root string) (codec.JSONL[heartbeat], error) {
 	stateBase, err := xdg.StateDir()
 	if err != nil {
-		return file.JSONL[heartbeat]{}, fmt.Errorf("resolve the user state dir for the session heartbeat: %w", err)
+		return codec.JSONL[heartbeat]{}, fmt.Errorf("resolve the user state dir for the session heartbeat: %w", err)
 	}
 	sum := sha256.Sum256([]byte(root))
-	return file.JSONL[heartbeat]{
+	return codec.JSONL[heartbeat]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(stateBase, "magus", "heartbeat", fmt.Sprintf("%s.jsonl", hex.EncodeToString(sum[:8]))),
 		Perm: 0o600,
 		Key:  heartbeat.key,
@@ -137,7 +138,7 @@ const heartbeatRetain = 7 * 24 * time.Hour
 // compactHeartbeats rewrites the store by rename to its last line per pair, dropping each
 // stamp older than [heartbeatRetain] before now and then the oldest past
 // [heartbeatMaxEntries].
-func compactHeartbeats(ctx context.Context, store file.JSONL[heartbeat], now time.Time) error {
+func compactHeartbeats(ctx context.Context, store codec.JSONL[heartbeat], now time.Time) error {
 	return file.WithLock(ctx, fmt.Sprintf("%s.lock", store.Path), file.LockWait, func() error {
 		entries, err := store.Load()
 		if err != nil {
@@ -154,7 +155,7 @@ func compactHeartbeats(ctx context.Context, store file.JSONL[heartbeat], now tim
 			}
 			lines = append(lines, line)
 		}
-		return file.RewriteLines(store.Path, lines, store.Perm)
+		return codec.RewriteLines(store.Path, lines, store.Perm)
 	})
 }
 

@@ -20,12 +20,12 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
@@ -571,7 +571,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	handler.LimitRequestBody(w, r)
 	var req reviewSessionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := codec.NewDecoder(r.Body).Decode(&req); err != nil {
 		handler.Refuse(w, r, rpcerr.Invalid("the request body is not the JSON a review op takes: "+err.Error()))
 		return
 	}

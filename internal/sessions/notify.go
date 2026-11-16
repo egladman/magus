@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -25,7 +25,7 @@ func EventFromStdin(ctx context.Context, body []byte) types.Event {
 	trimmed := strings.TrimSpace(string(body))
 	if len(trimmed) > 0 && trimmed[0] == '{' {
 		var ev types.Event
-		err := json.Unmarshal([]byte(trimmed), &ev)
+		err := codec.Unmarshal([]byte(trimmed), &ev)
 		if err == nil && ev.Message != "" && ev.Outcome != "" && ev.Source.Kind != "" {
 			return ev
 		}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // Merge is the "merge" host module: combine two values.
@@ -78,13 +78,13 @@ func MergeDeep(_ context.Context, base, overlay any) (any, error) {
 // from the text, so an integer past 2^53 is still that integer in the result.
 func MergeJSON(_ context.Context, base, overlay string) (string, error) {
 	var baseVal, overlayVal any
-	if err := json.UnmarshalLossless([]byte(base), &baseVal); err != nil {
+	if err := codec.UnmarshalLossless([]byte(base), &baseVal); err != nil {
 		return "", fmt.Errorf("merge.json: base: %w", err)
 	}
-	if err := json.UnmarshalLossless([]byte(overlay), &overlayVal); err != nil {
+	if err := codec.UnmarshalLossless([]byte(overlay), &overlayVal); err != nil {
 		return "", fmt.Errorf("merge.json: overlay: %w", err)
 	}
-	encoded, err := json.MarshalIndent(mergeValues(baseVal, overlayVal, true), "", "  ")
+	encoded, err := codec.MarshalIndent(mergeValues(baseVal, overlayVal, true), "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("merge.json: %w", err)
 	}

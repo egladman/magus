@@ -10,7 +10,7 @@ import (
 	"runtime"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -56,7 +56,7 @@ func readPlaceStamp(ctx context.Context, source string) (types.BuildStamp, error
 	if err := cmd.Run(); err != nil {
 		return stamp, fmt.Errorf("magus self place: %s did not report its version: %w", source, err)
 	}
-	if err := json.Unmarshal(out.Bytes(), &stamp); err != nil {
+	if err := codec.Unmarshal(out.Bytes(), &stamp); err != nil {
 		return stamp, fmt.Errorf("magus self place: %s reported a version this magus cannot read: %w", source, err)
 	}
 	return stamp, nil

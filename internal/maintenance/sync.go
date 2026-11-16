@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -39,7 +39,7 @@ const syncRequestFile = "sync-request.json"
 // RecordSyncRequest writes r into dir, replacing the previous record. It is called from a
 // checkout hook, so it does one small write and nothing else.
 func RecordSyncRequest(dir string, r SyncRequest) error {
-	data, err := json.Marshal(r)
+	data, err := codec.Marshal(r)
 	if err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func ReadSyncRequest(dir string) (r SyncRequest, ok bool, err error) {
 	if err != nil {
 		return SyncRequest{}, false, err
 	}
-	if err := json.Unmarshal(data, &r); err != nil {
+	if err := codec.Unmarshal(data, &r); err != nil {
 		return SyncRequest{}, false, fmt.Errorf("maintenance: %s: %w", syncRequestFile, err)
 	}
 	return r, true, nil

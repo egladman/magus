@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +31,7 @@ func TestFileHandlerAppendsJSONL(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	require.Len(t, lines, 2)
 	var first Event
-	require.NoError(t, json.Unmarshal([]byte(lines[0]), &first))
+	require.NoError(t, codec.Unmarshal([]byte(lines[0]), &first))
 	assert.Greater(t, first.Ts, int64(0), "Emit stamps a timestamp")
 	assert.Equal(t, Event{
 		Ts:      first.Ts,

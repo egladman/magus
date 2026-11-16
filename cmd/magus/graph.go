@@ -24,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/render"
@@ -33,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/termkit"
@@ -785,7 +785,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	if !globalScope {
 		out.SourceBaseURL = deriveSourceBase(ctx, root) // link node sources to the right repo
 	}
-	raw, err := json.Marshal(out)
+	raw, err := codec.Marshal(out)
 	if err != nil {
 		return fmt.Errorf("encode graph: %w", err)
 	}
@@ -853,7 +853,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 		out.Projects = filtered
 	}
 
-	raw, err := json.Marshal(out)
+	raw, err := codec.Marshal(out)
 	if err != nil {
 		return fmt.Errorf("encode target graph: %w", err)
 	}
@@ -1080,7 +1080,7 @@ func diffBaseline(ctx context.Context, root, rev string, pos []string) (types.Kn
 		return types.KnowledgeGraphOutput{}, "", fmt.Errorf("graph diff: read baseline %q: %w", baselinePath, err)
 	}
 	var baseline types.KnowledgeGraphOutput
-	if err := json.Unmarshal(raw, &baseline); err != nil {
+	if err := codec.Unmarshal(raw, &baseline); err != nil {
 		return types.KnowledgeGraphOutput{}, "", fmt.Errorf("graph diff: decode baseline %q (expected `%s` output): %w", baselinePath, hint.GraphExport.With("-o", "json"), err)
 	}
 	return baseline, baselinePath, nil

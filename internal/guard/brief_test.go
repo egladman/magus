@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/gen/typestest"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -118,7 +118,7 @@ func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
 	})
 	deps.CacheDir = func(string) (string, error) { return cacheDir, nil }
 	message := func(to string) string {
-		raw, err := json.Marshal(map[string]any{
+		raw, err := codec.Marshal(map[string]any{
 			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "SendMessage",
 			"tool_input": map[string]any{"to": to, "message": "JOB ID: guard/slice\nNow run `./magus run lint .`."},
 		})
@@ -141,7 +141,7 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 		if key == "message" {
 			input["to"] = "brisk-heron"
 		}
-		raw, err := json.Marshal(map[string]any{
+		raw, err := codec.Marshal(map[string]any{
 			"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": input,
 		})
 		require.NoError(t, err)
@@ -287,7 +287,7 @@ func TestBriefAndWorkerShareOneVerdict(t *testing.T) {
 // agentEnvelope is a spawn in a session of its own, since a repeated deny is shortened.
 func agentEnvelope(t *testing.T, description, prompt string) string {
 	t.Helper()
-	raw, err := json.Marshal(map[string]any{
+	raw, err := codec.Marshal(map[string]any{
 		"session_id": strings.ReplaceAll(t.Name(), "/", "-"), "hook_event_name": "PreToolUse", "tool_name": "Agent",
 		"tool_input": map[string]any{"description": description, "prompt": prompt, "name": "brisk-heron"},
 	})

@@ -10,7 +10,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
 )
 
@@ -62,7 +62,7 @@ func resolveManifest(ctx context.Context, c *oci.Client, ref oci.Reference, p Pl
 	}
 	if isImageIndex(raw.MediaType) {
 		var idx ocispec.Index
-		if err := json.Unmarshal(raw.Body, &idx); err != nil {
+		if err := codec.Unmarshal(raw.Body, &idx); err != nil {
 			return ref, raw, man, fmt.Errorf("%s: index: %w", ref, err)
 		}
 		chosen, err := pickPlatform(idx.Manifests, p)
@@ -80,7 +80,7 @@ func resolveManifest(ctx context.Context, c *oci.Client, ref oci.Reference, p Pl
 	if !isImageManifest(raw.MediaType) {
 		return pinned, raw, man, fmt.Errorf("%s is %q, want an image manifest or index", pinned, raw.MediaType)
 	}
-	if err := json.Unmarshal(raw.Body, &man); err != nil {
+	if err := codec.Unmarshal(raw.Body, &man); err != nil {
 		return pinned, raw, man, fmt.Errorf("%s: manifest: %w", pinned, err)
 	}
 	return pinned, raw, man, nil
@@ -111,7 +111,7 @@ func pullInto(ctx context.Context, st *staging, c *oci.Client, ref oci.Reference
 		return ocispec.Descriptor{}, err
 	}
 	var cfg ocispec.Image
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	if err := codec.Unmarshal(data, &cfg); err != nil {
 		return ocispec.Descriptor{}, fmt.Errorf("config %s: %w", man.Config.Digest, err)
 	}
 	got := platformFromConfig(cfg)
@@ -183,7 +183,7 @@ func mountSources(ctx context.Context, l Layout, repo oci.Reference) (map[digest
 			return nil, err
 		}
 		var man ocispec.Manifest
-		if err := json.Unmarshal(data, &man); err != nil {
+		if err := codec.Unmarshal(data, &man); err != nil {
 			return nil, fmt.Errorf("manifest %s: %w", d.Digest, err)
 		}
 		base, err := oci.ParseReference(man.Annotations[ocispec.AnnotationBaseImageName])

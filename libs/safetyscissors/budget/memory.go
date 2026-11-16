@@ -1,9 +1,10 @@
 package budget
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/egladman/magus/libs/codec"
 )
 
 // CurveBuckets is how many equal slices of a run's duration a [Curve] holds, 5% each.
@@ -26,7 +27,7 @@ func (c Curve) PeakMB() int {
 
 // MarshalJSON encodes the curve as a JSON array of exactly CurveBuckets numbers.
 func (c *Curve) MarshalJSON() ([]byte, error) {
-	return json.Marshal([CurveBuckets]uint32(*c))
+	return codec.Marshal([CurveBuckets]uint32(*c))
 }
 
 // UnmarshalJSON decodes a JSON array of exactly CurveBuckets numbers. Any other length is
@@ -34,7 +35,7 @@ func (c *Curve) MarshalJSON() ([]byte, error) {
 // nothing for its last slices.
 func (c *Curve) UnmarshalJSON(b []byte) error {
 	var buckets []uint32
-	if err := json.Unmarshal(b, &buckets); err != nil {
+	if err := codec.Unmarshal(b, &buckets); err != nil {
 		return fmt.Errorf("decode memory curve: %w", err)
 	}
 	if len(buckets) != CurveBuckets {

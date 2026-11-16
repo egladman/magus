@@ -44,7 +44,7 @@ export fun reads() > [str] {
     return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
         "libs/figure/**/*.go","libs/gopherbuzz/**/*.go", "libs/proofread/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go",
         "libs/text/**/*.go", "libs/xdg/**/*.go", "libs/clikit/**/*.go", "libs/safetyscissors/**/*.go", "libs/secrets/**/*.go",
-        "**/magusfile.buzz"];
+        "libs/codec/**/*.go", "**/magusfile.buzz"];
 }
 
 // languages are the scopes family's rows are judged in: "" alone for a

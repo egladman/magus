@@ -9,9 +9,9 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
@@ -90,7 +90,7 @@ func writeStall(gate hint.Gate, rec stallRecord) {
 	if gate.CacheDir() == "" {
 		return
 	}
-	if body, err := json.Marshal(rec); err == nil {
+	if body, err := codec.Marshal(rec); err == nil {
 		_ = file.ReplaceFile(hint.MarkerPath(gate.CacheDir(), gate.Session(), stallRecordKind), body, 0o644)
 	}
 }

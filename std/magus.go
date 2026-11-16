@@ -20,12 +20,12 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/diagnostics"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
@@ -1797,7 +1797,7 @@ func MagusClearJob(ctx context.Context) (int, error) {
 // needs no workspace.
 func MagusJobSchema(_ context.Context) (map[string]any, error) {
 	var schema map[string]any
-	if err := json.Unmarshal([]byte(job.DeclarationSchema), &schema); err != nil {
+	if err := codec.Unmarshal([]byte(job.DeclarationSchema), &schema); err != nil {
 		return nil, fmt.Errorf("decode the job record schema: %w", err)
 	}
 	return schema, nil
@@ -1899,7 +1899,7 @@ func MagusDiff(ctx context.Context, opts types.MagusDiffOptions) (difftypes.Diff
 		if err != nil {
 			return difftypes.Diff{}, fmt.Errorf(`magus\change().diff: read opts.from: %w`, err)
 		}
-		if err := json.Unmarshal(raw, &saved); err != nil {
+		if err := codec.Unmarshal(raw, &saved); err != nil {
 			return difftypes.Diff{}, fmt.Errorf("magus\\change().diff: decode opts.from %s (expected `magus diff -o json` output): %w", opts.From, err)
 		}
 		return saved, nil
@@ -1944,7 +1944,7 @@ func runMagusJSON[T any](ctx context.Context, sub string, args []string, opts ty
 	// there would throw away the very payload the caller asked for. A report that parsed
 	// IS the answer; the caller branches on it (summary.fail), which is strictly more
 	// than an exit code carries. Only an unparsable answer is a failure to answer.
-	if derr := json.Unmarshal([]byte(res.Stdout), &out); derr == nil {
+	if derr := codec.Unmarshal([]byte(res.Stdout), &out); derr == nil {
 		return out, nil
 	}
 	if runErr != nil {

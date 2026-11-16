@@ -21,15 +21,14 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/contract"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
@@ -92,16 +91,16 @@ func seedFiled(t *testing.T, store *job.Store, id string, result *jobtypes.Resul
 	t.Helper()
 	path, err := store.Path()
 	require.NoError(t, err)
-	raw, err := json.Marshal(result)
+	raw, err := codec.Marshal(result)
 	require.NoError(t, err)
 	var filed map[string]any
-	require.NoError(t, json.Unmarshal(raw, &filed))
-	line, err := json.Marshal(map[string]any{
+	require.NoError(t, codec.Unmarshal(raw, &filed))
+	line, err := codec.Marshal(map[string]any{
 		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
 		"spec": map[string]any{"job": id, "n": 1}, "status": map[string]any{"result": fixtureCamelKeys(filed)},
 	})
 	require.NoError(t, err)
-	require.NoError(t, file.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
+	require.NoError(t, codec.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), [][]byte{line}, 0o600))
 }
 
 // fixtureCamelKeys is v with every object key camelCased, as the
@@ -712,7 +711,7 @@ func TestJobForkSaysReferencedOutsideIsUnknownWithoutASymbolIndex(t *testing.T) 
 		require.NoError(t, jobFork(t.Context(), root, []string{"unindexed-json", "--check", "test .", "--write-paths", "a.go"}))
 	})
 	var got map[string]any
-	require.NoError(t, json.Unmarshal([]byte(raw), &got))
+	require.NoError(t, codec.Unmarshal([]byte(raw), &got))
 	assert.Equal(t, job.NoSymbolIndex(), got["referenced_outside_gap"], "-o json carries the gap beside the empty list")
 }
 
@@ -1352,7 +1351,7 @@ func TestJobApplyContract(t *testing.T) { suite.Run(t, new(jobApplyContractSuite
 
 func (s *jobApplyContractSuite) apply(root string, record jobtypes.Declaration) (string, error) {
 	s.T().Helper()
-	data, err := json.Marshal(record)
+	data, err := codec.Marshal(record)
 	s.Require().NoError(err)
 	path := filepath.Join(s.T().TempDir(), "job.jsonl")
 	s.Require().NoError(os.WriteFile(path, append(data, '\n'), 0o600))

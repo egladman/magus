@@ -12,7 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -68,7 +68,7 @@ func nodeManifest(manifest string) []nodeDependency {
 		DevDependencies      map[string]string `json:"devDependencies"`
 		OptionalDependencies map[string]string `json:"optionalDependencies"`
 	}
-	if json.Unmarshal(data, &pkg) != nil {
+	if codec.Unmarshal(data, &pkg) != nil {
 		return nil
 	}
 	seen := map[string]bool{}
@@ -167,7 +167,7 @@ func npmLock(manifest, lockfile string) func(name, spec string) string {
 		Packages     map[string]entry `json:"packages"`
 		Dependencies map[string]entry `json:"dependencies"`
 	}
-	if json.Unmarshal(data, &lock) != nil {
+	if codec.Unmarshal(data, &lock) != nil {
 		return nil
 	}
 	dir, ok := lockRelDir(manifest, lockfile)

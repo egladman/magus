@@ -38,11 +38,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/egladman/magus/types/diff"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types/vcs"
 )
 
@@ -62,8 +64,9 @@ const receiptFile = "review/receipts.jsonl"
 // neither read nor skipped: a skipped one would report every file it covered as unread.
 const oldReceiptFile = "review/receipts.json"
 
-func receiptLog(cacheDir string) file.JSONL[Receipt] {
-	return file.JSONL[Receipt]{
+func receiptLog(cacheDir string) codec.JSONL[Receipt] {
+	return codec.JSONL[Receipt]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(cacheDir, filepath.FromSlash(receiptFile)),
 		Perm: 0o600,
 		Key:  func(r Receipt) string { return r.Path },

@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/parsecache"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -80,7 +80,7 @@ func ShippedDir(name string) (string, bool) {
 // keys). Hashing the resolved registry rather than the source keeps it tied to spell
 // semantics, not to a comment edit.
 var BuiltinsHash = sync.OnceValue(func() string {
-	b, err := json.Marshal(Builtins())
+	b, err := codec.Marshal(Builtins())
 	if err != nil {
 		panic("magus/spell: marshal builtin spells: " + err.Error())
 	}

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/libs/safetyscissors/internal/jsonl"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // DefaultRetention is how long an invocation file outlives its newest fact. [Open]
@@ -60,7 +60,7 @@ type Tie struct {
 // that does contend skips pruning this round rather than waiting to prune again a
 // moment later, which "at most once per interval" already tolerates.
 func claimStalePruneStamp(dir, stamp, keep string, o options) {
-	_ = jsonl.WithLock(context.Background(), stamp+".lock", 0, func() error {
+	_ = codec.WithLock(context.Background(), stamp+".lock", 0, func() error {
 		if fi, err := os.Stat(stamp); err == nil && o.now().Sub(fi.ModTime()) < pruneInterval {
 			return nil // another caller already pruned and refreshed the stamp while this one waited
 		}
@@ -306,7 +306,7 @@ func newestLegacyTs(path string) int64 {
 			var dated struct {
 				Ts int64 `json:"ts"`
 			}
-			if olderVersion(bytes.TrimSpace(line)) && jsonl.Unmarshal(bytes.TrimSpace(line), &dated) == nil {
+			if olderVersion(bytes.TrimSpace(line)) && codec.Unmarshal(bytes.TrimSpace(line), &dated) == nil {
 				newest = max(newest, dated.Ts)
 			}
 		}

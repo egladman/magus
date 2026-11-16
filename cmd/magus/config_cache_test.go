@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/cache/remotetest"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -54,7 +54,7 @@ func (s *ConfigCacheImportRecordSuite) importRecord() cache.SpellImportRecord {
 	})
 	s.Require().NoError(err)
 	var rec cache.SpellImportRecord
-	s.Require().NoError(json.Unmarshal([]byte(stdout), &rec), stdout)
+	s.Require().NoError(codec.Unmarshal([]byte(stdout), &rec), stdout)
 	return rec
 }
 
@@ -82,7 +82,7 @@ func (s *ConfigCacheImportRecordSuite) TestAFailedImportStillPrintsItsRows() {
 	})
 	s.Require().ErrorContains(err, "no remote backend configured")
 	var rec cache.SpellImportRecord
-	s.Require().NoError(json.Unmarshal([]byte(stdout), &rec), stdout)
+	s.Require().NoError(codec.Unmarshal([]byte(stdout), &rec), stdout)
 	s.False(rec.Restored)
 	s.Len(rec.Spells, 1)
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -57,7 +57,7 @@ func gradeKey(root string, rules gradingRules, row jobtypes.Job) string {
 	if len(rules.sources) == 0 {
 		return ""
 	}
-	encoded, err := json.Marshal(row)
+	encoded, err := codec.Marshal(row)
 	if err != nil {
 		return ""
 	}

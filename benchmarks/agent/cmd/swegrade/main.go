@@ -23,7 +23,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 const (
@@ -60,11 +60,11 @@ type testList []string
 
 func (t *testList) UnmarshalJSON(b []byte) error {
 	var s string
-	if err := json.Unmarshal(b, &s); err == nil {
+	if err := codec.Unmarshal(b, &s); err == nil {
 		b = []byte(s)
 	}
 	var names []string
-	if err := json.Unmarshal(b, &names); err != nil {
+	if err := codec.Unmarshal(b, &names); err != nil {
 		return err
 	}
 	*t = names
@@ -104,7 +104,7 @@ func run() (resolved bool, err error) {
 		return false, err
 	}
 	var row instance
-	if err := json.Unmarshal(rowBytes, &row); err != nil {
+	if err := codec.Unmarshal(rowBytes, &row); err != nil {
 		return false, fmt.Errorf("%s: %w", *rowPath, err)
 	}
 	if _, ok := parsers[row.LogParser]; !ok {
@@ -115,7 +115,7 @@ func run() (resolved bool, err error) {
 		return false, fmt.Errorf("reading stdin: %w", err)
 	}
 	v := grade(row, string(log))
-	out, err := json.MarshalIndent(v, "", "  ")
+	out, err := codec.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return false, err
 	}

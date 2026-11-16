@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"path"
 	"path/filepath"
@@ -10,11 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -106,12 +108,13 @@ func denyPersonsVerb(command string, d Dialect, noun, verb, why string) denial {
 // one set of waivers.
 const gateWaiversFileName = "gate-waivers.jsonl"
 
-func gateWaivers(store *job.Store) (file.JSONL[types.GateWaiver], error) {
+func gateWaivers(store *job.Store) (codec.JSONL[types.GateWaiver], error) {
 	jobs, err := store.Path()
 	if err != nil {
-		return file.JSONL[types.GateWaiver]{}, err
+		return codec.JSONL[types.GateWaiver]{}, err
 	}
-	return file.JSONL[types.GateWaiver]{
+	return codec.JSONL[types.GateWaiver]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(filepath.Dir(jobs), gateWaiversFileName),
 		Key:  types.GateWaiver.Key,
 	}, nil

@@ -12,8 +12,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
@@ -1191,7 +1190,7 @@ func (s *ReviewCheckoutRefusalSuite) TestRemoveRefusesTheBaseItself() {
 
 func TestReviewCheckoutRecordKeepsTheFieldNamesTheConsoleReads(t *testing.T) {
 	t.Parallel()
-	data, err := json.Marshal(ReviewCheckoutRecord{Bootstrap: ReviewBootstrap{Install: []string{}}})
+	data, err := codec.Marshal(ReviewCheckoutRecord{Bootstrap: ReviewBootstrap{Install: []string{}}})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"path":"","revision":"","vcs":"","bootstrap":{"ran":false,"install":[],"harnesses":false,"hook":"","hook_note":""},"remove":""}`, string(data))
 }
@@ -1367,7 +1366,7 @@ func (s *BinaryPinSuite) TestABoundWorkerPinsNothing() {
 
 func (s *BinaryPinSuite) TestTheCacheCompactsToOneEntryPerPath() {
 	cache := digestCache(filepath.Join(s.T().TempDir(), digestCacheName))
-	for i := range 2 + file.CompactSlack {
+	for i := range 2 + codec.CompactSlack {
 		s.Require().NoError(cache.Update(s.T().Context(), func([]binaryDigest) []binaryDigest {
 			return []binaryDigest{{Path: "/a", Size: int64(i), Digest: "sha256:old"}}
 		}))
@@ -1378,7 +1377,7 @@ func (s *BinaryPinSuite) TestTheCacheCompactsToOneEntryPerPath() {
 	got, err := cache.Load()
 	s.Require().NoError(err)
 	s.Equal([]binaryDigest{{Path: "/a", Digest: "sha256:new"}}, got)
-	read, err := file.ReadLines(cache.Path)
+	read, err := codec.ReadLines(cache.Path)
 	s.Require().NoError(err)
 	s.Len(read.Lines, 1)
 }

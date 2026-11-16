@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // FeedbackWindow selects one session's observations: the events inside [Since, Until]
@@ -111,7 +111,7 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
 			sp := trailtypes.Spawn{At: e.Ts, Agent: e.Agent, Child: e.Action, Lease: e.Lease}
 			if raw, err := trailtypes.ReadBlob(s.base, e.RequestRef); err == nil {
 				var req agentSpawnRequest
-				if json.Unmarshal(raw, &req) == nil {
+				if codec.Unmarshal(raw, &req) == nil {
 					sp.Model = req.DeclaredModel
 				}
 			}
@@ -126,13 +126,13 @@ func feedbackObservation(base string, e trailtypes.Event) (trailtypes.Observatio
 	var req agentCommandRequest
 	var resp agentCommandResponse
 	raw, err := trailtypes.ReadBlob(base, e.RequestRef)
-	if err != nil || json.Unmarshal(raw, &req) != nil {
+	if err != nil || codec.Unmarshal(raw, &req) != nil {
 		return trailtypes.Observation{}, false
 	}
 	// A read carries no response blob: no rule judges it.
 	if e.ResponseRef != "" {
 		if raw, err := trailtypes.ReadBlob(base, e.ResponseRef); err == nil {
-			_ = json.Unmarshal(raw, &resp)
+			_ = codec.Unmarshal(raw, &resp)
 		}
 	}
 	obs := trailtypes.Observation{
@@ -168,7 +168,7 @@ func eventsInWindow(base string, since, until int64) ([]trailtypes.Event, error)
 			continue
 		}
 		var e trailtypes.Event
-		if json.Unmarshal(line, &e) != nil || e.Ts < since || e.Ts > until {
+		if codec.Unmarshal(line, &e) != nil || e.Ts < since || e.Ts > until {
 			continue
 		}
 		out = append(out, e)

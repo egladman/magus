@@ -26,8 +26,8 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/text/plural"
@@ -81,7 +81,7 @@ func decodeStop(raw string) (stopEnvelope, bool) {
 		return stopEnvelope{}, false
 	}
 	var env stopEnvelope
-	if json.Unmarshal([]byte(raw), &env) != nil || env.StopHookActive == nil || env.ToolName != "" {
+	if codec.Unmarshal([]byte(raw), &env) != nil || env.StopHookActive == nil || env.ToolName != "" {
 		return stopEnvelope{}, false
 	}
 	return env, true
@@ -318,7 +318,7 @@ func sessionEnded(raw string) bool {
 	var env struct {
 		HookEventName string `json:"hook_event_name"`
 	}
-	return json.Unmarshal([]byte(raw), &env) == nil && env.HookEventName == "SessionEnd"
+	return codec.Unmarshal([]byte(raw), &env) == nil && env.HookEventName == "SessionEnd"
 }
 
 // subagentStopped reports a subagent's stop. Cursor's stop names no
@@ -556,18 +556,18 @@ type transcriptRecord struct {
 		Prompt string `json:"prompt"`
 	} `json:"attachment"`
 	Message struct {
-		Content json.RawMessage `json:"content"`
+		Content codec.RawMessage `json:"content"`
 	} `json:"message"`
 }
 
 type transcriptBlock struct {
-	Type      string          `json:"type"`
-	ID        string          `json:"id"`
-	Input     map[string]any  `json:"input"`
-	ToolUseID string          `json:"tool_use_id"`
-	Content   json.RawMessage `json:"content"`
-	IsError   bool            `json:"is_error"`
-	Text      string          `json:"text"`
+	Type      string           `json:"type"`
+	ID        string           `json:"id"`
+	Input     map[string]any   `json:"input"`
+	ToolUseID string           `json:"tool_use_id"`
+	Content   codec.RawMessage `json:"content"`
+	IsError   bool             `json:"is_error"`
+	Text      string           `json:"text"`
 }
 
 // liveBackgroundTasks reads a JSONL transcript for the shell commands its agent ran in the
@@ -845,7 +845,7 @@ func (r *taskReader) fold(line []byte) {
 
 func (r *taskReader) read(line []byte) {
 	var rec transcriptRecord
-	if json.Unmarshal(line, &rec) != nil {
+	if codec.Unmarshal(line, &rec) != nil {
 		return
 	}
 	at, _ := time.Parse(time.RFC3339Nano, rec.Timestamp)
@@ -858,14 +858,14 @@ func (r *taskReader) read(line []byte) {
 		r.notices(s, at)
 	}
 	var text string
-	if json.Unmarshal(rec.Message.Content, &text) == nil {
+	if codec.Unmarshal(rec.Message.Content, &text) == nil {
 		if rec.Type != "assistant" {
 			r.notices(text, at)
 		}
 		return
 	}
 	var blocks []transcriptBlock
-	if json.Unmarshal(rec.Message.Content, &blocks) != nil {
+	if codec.Unmarshal(rec.Message.Content, &blocks) != nil {
 		return
 	}
 	for _, b := range blocks {
@@ -953,13 +953,13 @@ func (r *taskReader) callResult(b transcriptBlock) {
 }
 
 // blockText is a result's text, whether the host wrote it as a string or as text blocks.
-func blockText(raw json.RawMessage) string {
+func blockText(raw codec.RawMessage) string {
 	var s string
-	if json.Unmarshal(raw, &s) == nil {
+	if codec.Unmarshal(raw, &s) == nil {
 		return s
 	}
 	var parts []transcriptBlock
-	if json.Unmarshal(raw, &parts) != nil {
+	if codec.Unmarshal(raw, &parts) != nil {
 		return ""
 	}
 	var b strings.Builder

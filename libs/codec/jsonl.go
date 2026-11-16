@@ -1,24 +1,19 @@
-package file
+package codec
 
 import (
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
-
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/types"
 )
 
-// A store is JSON Lines: one object per line, appended when an entry changes, the last line
-// for a key being the entry. See docs/design/principles/everything-is-a-file.md.
-// libs/safetyscissors/internal/jsonl copies this and lock.go, because that module may not
-// import magus.
+// A store is JSON Lines: one object per line, appended when an entry changes, the last
+// line for a key being the entry. See magus's docs/design/principles/everything-is-a-file.md.
 
 // Lines is what [ReadLines] found in a JSON Lines file.
 type Lines struct {
@@ -91,7 +86,7 @@ func WithoutSync() AppendOption { return func(o *appendOptions) { o.skipSync = t
 // RewriteLines replaces the file at path with lines through a rename, so a reader sees the
 // old file or the new one. It creates the directory.
 func RewriteLines(path string, lines [][]byte, perm os.FileMode) error {
-	return WriteFileAtomic(path, joinLines(lines), perm)
+	return writeAtomic(path, joinLines(lines), perm)
 }
 
 func joinLines(lines [][]byte) []byte {
@@ -103,6 +98,39 @@ func joinLines(lines [][]byte) []byte {
 	return b.Bytes()
 }
 
+// writeAtomic writes data to a temp file beside path, syncs it and renames it over path.
+func writeAtomic(path string, data []byte, perm os.FileMode) (err error) {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	// Same directory, because rename is atomic only within one filesystem and
+	// os.TempDir is routinely another mount.
+	tmp, err := os.CreateTemp(dir, fmt.Sprintf(".%s.tmp.*", filepath.Base(path)))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
+		}
+	}()
+	if _, err := io.Copy(tmp, bytes.NewReader(data)); err != nil {
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
+}
+
 // CompactDue reports whether a file of lines lines saying keys entries is due a rewrite to
 // one line per entry. Every read decodes every line, so the bound keeps a read within twice
 // the entries plus [CompactSlack], while one entry changing alone rewrites the file at most
@@ -112,12 +140,39 @@ func CompactDue(lines, keys int) bool { return lines > 2*keys+CompactSlack }
 // CompactSlack is the lines a store may hold past twice its entries.
 const CompactSlack = 64
 
-// ErrLegacyStore identifies state whose older writers may still be active.
-var ErrLegacyStore = errors.New("store version conflict")
+var (
+	// ErrLegacyStore matches a [*LegacyStoreError].
+	ErrLegacyStore = errors.New("store version conflict")
+	// ErrLineUndecodable matches a [*LineError].
+	ErrLineUndecodable = errors.New("store line does not decode")
+)
 
-// RefuseOld preserves a store this build cannot read. Moving it aside while an older
-// checkout still writes it would create two independent accounts of the same state.
-// The error is MGS3049 and matches [ErrLegacyStore].
+// LegacyStoreError is the file an older writer kept a store in, still present beside the
+// file that replaced it.
+type LegacyStoreError struct{ Path string }
+
+func (e *LegacyStoreError) Error() string {
+	return fmt.Sprintf("%v: %s was written by an older writer: preserve it and use a compatible build until its active writers stop,"+
+		" then reconcile its records before switching stores", ErrLegacyStore, e.Path)
+}
+
+func (e *LegacyStoreError) Unwrap() error { return ErrLegacyStore }
+
+// LineError is a complete line of a store at Path that does not decode as its entry.
+type LineError struct {
+	Path string
+	// Line is the 1-based line number.
+	Line int
+	Err  error
+}
+
+func (e *LineError) Error() string { return fmt.Sprintf("%s:%d: %v", e.Path, e.Line, e.Err) }
+
+func (e *LineError) Unwrap() []error { return []error{ErrLineUndecodable, e.Err} }
+
+// RefuseOld preserves a store this build cannot read: it fails with a [*LegacyStoreError]
+// while old exists. Moving it aside while an older writer still writes it would create two
+// independent accounts of the same state.
 func RefuseOld(old string) error {
 	_, err := os.Lstat(old)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -126,7 +181,7 @@ func RefuseOld(old string) error {
 	if err != nil {
 		return err
 	}
-	return types.WrapDiagnostic(types.LegacyStorePresent, ErrLegacyStore, "%s: %s was written by an older magus: preserve it and use a compatible binary until its active writers stop, then reconcile its records before switching stores", ErrLegacyStore, old)
+	return &LegacyStoreError{Path: old}
 }
 
 // JSONL is an append-only JSON Lines file of T. Key names an entry, and the last line for a
@@ -139,13 +194,17 @@ type JSONL[T any] struct {
 	Key  func(T) string
 	// Live is nil when every line is an entry.
 	Live func(T) bool
-	// Old is the file an older magus kept this store in, or "". While it exists, Load and
+	// Old is the file an older writer kept this store in, or "". While it exists, Load and
 	// Update fail with [RefuseOld]'s error.
 	Old string
+	// Log receives the warning an Update logs when it drops a line no writer finished.
+	// Nil drops the warning with the line.
+	Log *slog.Logger
 }
 
 // Load returns the entries, in the order their last lines appear. An absent file has none.
-// A last line with no newline is an append in flight and is left unread.
+// A last line with no newline is an append in flight and is left unread. A complete line
+// that does not decode fails the load with a [*LineError].
 func (l JSONL[T]) Load() ([]T, error) {
 	all, _, err := l.read()
 	if err != nil {
@@ -158,8 +217,8 @@ func (l JSONL[T]) Load() ([]T, error) {
 // It runs under the lock at Path+".lock", waiting up to [LockWait]: the appends do not need
 // it and the compaction does, since a rewrite from an earlier read would drop a line
 // appended after it. The file is rewritten to its entries when [CompactDue] says so, and
-// when it ends in a line no writer finished, which the rewrite drops and the log names.
-// ctx bounds only the wait for the lock.
+// when it ends in a line no writer finished, which the rewrite drops and Log names. ctx
+// bounds only the wait for the lock.
 func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
 	return WithLock(ctx, l.Path+".lock", LockWait, func() error {
 		all, partial, err := l.read()
@@ -177,9 +236,9 @@ func (l JSONL[T]) Update(ctx context.Context, fn func(entries []T) []T) error {
 				return AppendLines(path, lines, perm)
 			}, add)
 		}
-		if partial {
-			slog.With(attr.Component("magus")).WarnContext(ctx, "store rewritten",
-				attr.Error(fmt.Errorf("%s ended in a line no writer finished, so the rewrite dropped it", l.Path)))
+		if partial && l.Log != nil {
+			l.Log.WarnContext(ctx, "store rewritten",
+				slog.String("path", l.Path), slog.String("why", "it ended in a line no writer finished, so the rewrite dropped it"))
 		}
 		return l.write(RewriteLines, live)
 	})
@@ -191,21 +250,15 @@ func (l JSONL[T]) read() ([]T, bool, error) {
 			return nil, false, err
 		}
 	}
-	return readEntries[T](l.Path)
-}
-
-// readEntries decodes each complete line at path as a T and reports whether the file ends in
-// a line no writer finished.
-func readEntries[T any](path string) ([]T, bool, error) {
-	read, err := ReadLines(path)
+	read, err := ReadLines(l.Path)
 	if err != nil {
 		return nil, false, err
 	}
 	all := make([]T, 0, len(read.Lines))
 	for _, line := range read.Lines {
 		var v T
-		if err := json.Unmarshal(line.Text, &v); err != nil {
-			return nil, false, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", path, line.N, err)
+		if err := Unmarshal(line.Text, &v); err != nil {
+			return nil, false, &LineError{Path: l.Path, Line: line.N, Err: err}
 		}
 		all = append(all, v)
 	}
@@ -229,20 +282,17 @@ func (l JSONL[T]) fold(all []T) []T {
 }
 
 func (l JSONL[T]) write(to func(string, [][]byte, os.FileMode) error, entries []T) error {
-	return writeEntries(to, l.Path, l.Perm, entries)
-}
-
-func writeEntries[T any](to func(string, [][]byte, os.FileMode) error, path string, perm os.FileMode, entries []T) error {
 	lines := make([][]byte, 0, len(entries))
 	for _, v := range entries {
-		b, err := json.Marshal(v)
+		b, err := Marshal(v)
 		if err != nil {
 			return err
 		}
 		lines = append(lines, b)
 	}
+	perm := l.Perm
 	if perm == 0 {
 		perm = 0o644
 	}
-	return to(path, lines, perm)
+	return to(l.Path, lines, perm)
 }

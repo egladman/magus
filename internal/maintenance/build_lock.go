@@ -14,10 +14,10 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sys/pid"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -193,7 +193,7 @@ func recordGraphBuild(fl *flock.Flock, holderPath string, me GraphBuildHolder, w
 	} else if ok {
 		fmt.Fprintf(w, "magus graph build: took over the build lock from %s, which ended without releasing it\n", prev)
 	}
-	data, err := json.Marshal(me)
+	data, err := codec.Marshal(me)
 	if err == nil {
 		err = file.ReplaceFile(holderPath, data, 0o600)
 	}
@@ -240,7 +240,7 @@ func readGraphBuildHolder(path string) (h GraphBuildHolder, ok bool, err error) 
 	if len(data) == 0 {
 		return GraphBuildHolder{}, true, nil
 	}
-	if err := json.Unmarshal(data, &h); err != nil {
+	if err := codec.Unmarshal(data, &h); err != nil {
 		return GraphBuildHolder{}, false, fmt.Errorf("maintenance: %s: %w", path, err)
 	}
 	return h, true, nil

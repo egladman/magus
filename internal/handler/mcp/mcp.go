@@ -23,11 +23,11 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/spells"
@@ -40,14 +40,14 @@ import (
 // payload that is not a JSON object goes out as text alone, since the spec
 // requires structured content to be an object.
 func jsonResult(v any) (*mcplib.CallToolResult, error) {
-	b, err := json.Marshal(v)
+	b, err := codec.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("mcp: marshal result: %w", err)
 	}
 	if t := bytes.TrimSpace(b); len(t) == 0 || t[0] != '{' {
 		return mcplib.NewToolResultText(string(b)), nil
 	}
-	return mcplib.NewToolResultStructured(json.RawMessage(b), string(b)), nil
+	return mcplib.NewToolResultStructured(codec.RawMessage(b), string(b)), nil
 }
 
 // paramString reads a string parameter from a InvokeRequest.Params map.
@@ -492,7 +492,7 @@ func argsJSON(args map[string]any) []byte {
 	if len(args) == 0 {
 		return nil
 	}
-	raw, err := json.Marshal(args)
+	raw, err := codec.Marshal(args)
 	if err != nil {
 		return nil
 	}
@@ -524,7 +524,7 @@ func structuredBytes(result *mcplib.CallToolResult) int64 {
 	if result == nil || result.StructuredContent == nil {
 		return 0
 	}
-	b, err := json.Marshal(result.StructuredContent)
+	b, err := codec.Marshal(result.StructuredContent)
 	if err != nil {
 		return 0
 	}

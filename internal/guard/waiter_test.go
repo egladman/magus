@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
@@ -359,7 +359,7 @@ func writeCodedLog(t *testing.T, runsDir, inv string, at time.Time, code types.D
 		result,
 		{Ts: at.UnixMilli(), Inv: inv, Kind: journal.KindFinished, Status: result.Status},
 	} {
-		line, err := json.Marshal(ev)
+		line, err := codec.Marshal(ev)
 		require.NoError(t, err)
 		body = append(append(body, line...), '\n')
 	}

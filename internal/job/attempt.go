@@ -3,14 +3,16 @@ package job
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -176,11 +178,12 @@ func (r *resultRecord) result() *job.Result {
 	return out
 }
 
-func (s *Store) attemptsLog() (file.JSONL[attemptRecord], error) {
+func (s *Store) attemptsLog() (codec.JSONL[attemptRecord], error) {
 	if s.err != nil {
-		return file.JSONL[attemptRecord]{}, s.err
+		return codec.JSONL[attemptRecord]{}, s.err
 	}
-	return file.JSONL[attemptRecord]{
+	return codec.JSONL[attemptRecord]{
+		Log:  slog.With(attr.Component("magus")),
 		Path: filepath.Join(filepath.Dir(s.path), attemptsFileName),
 		Perm: 0o600,
 		Key:  attemptRecord.key,
@@ -207,7 +210,7 @@ func (s *Store) envelopeAttempts() error {
 		return err
 	}
 	return file.WithLock(context.Background(), log.Path+".lock", file.LockWait, func() error {
-		read, err := file.ReadLines(log.Path)
+		read, err := codec.ReadLines(log.Path)
 		if err != nil || len(read.Lines) == 0 {
 			return err
 		}
@@ -220,7 +223,7 @@ func (s *Store) envelopeAttempts() error {
 				Status     job.AttemptStatus `json:"status"`
 				Dropped    bool              `json:"dropped"`
 			}
-			if err := json.Unmarshal(line.Text, &old); err != nil {
+			if err := codec.Unmarshal(line.Text, &old); err != nil {
 				return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", log.Path, line.N, err)
 			}
 			if old.APIVersion == "" {
@@ -229,13 +232,13 @@ func (s *Store) envelopeAttempts() error {
 			}
 			r := recordAttempt(job.Attempt{Job: old.Job, N: old.N, Status: old.Status})
 			r.Status.Dropped = old.Dropped
-			text, err := json.Marshal(r)
+			text, err := codec.Marshal(r)
 			if err != nil {
 				return err
 			}
 			lines = append(lines, text)
 		}
-		return file.RewriteLines(log.Path, lines, log.Perm)
+		return codec.RewriteLines(log.Path, lines, log.Perm)
 	})
 }
 
@@ -434,7 +437,7 @@ func (s *Store) archiveAttempts(path string, rows []job.Job) error {
 		if !named[a.Job] {
 			continue
 		}
-		line, err := json.Marshal(recordAttempt(a))
+		line, err := codec.Marshal(recordAttempt(a))
 		if err != nil {
 			return err
 		}
@@ -443,7 +446,7 @@ func (s *Store) archiveAttempts(path string, rows []job.Job) error {
 	if len(lines) == 0 {
 		return nil
 	}
-	return file.RewriteLines(path, lines, 0o600)
+	return codec.RewriteLines(path, lines, 0o600)
 }
 
 // storedTries is what an older jobs.jsonl row kept of its tries before
@@ -483,7 +486,7 @@ func (t storedTries) attempts() []job.Attempt {
 // attempts.jsonl, read from each row's last line. A run cut short runs
 // again and appends the same lines, which the log reads once.
 func (s *Store) moveTries(ctx context.Context) error {
-	read, err := file.ReadLines(s.path)
+	read, err := codec.ReadLines(s.path)
 	if err != nil {
 		return err
 	}
@@ -491,7 +494,7 @@ func (s *Store) moveTries(ctx context.Context) error {
 	var order []string
 	for _, line := range read.Lines {
 		var t storedTries
-		if err := json.Unmarshal(line.Text, &t); err != nil {
+		if err := codec.Unmarshal(line.Text, &t); err != nil {
 			return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 		}
 		if t.ID == "" {

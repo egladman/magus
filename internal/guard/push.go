@@ -18,8 +18,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -183,7 +183,7 @@ func (h gateHistory) passedBranchGates() []sessions.GateRecord {
 	for i := len(h.fold.Records) - 1; i >= 0 && len(out) < gateReplayScanLimit; i-- {
 		rec := h.fold.Records[i]
 		var g sessions.GateResult
-		if rec.Kind != sessions.KindGateResult || json.Unmarshal(rec.Payload, &g) != nil {
+		if rec.Kind != sessions.KindGateResult || codec.Unmarshal(rec.Payload, &g) != nil {
 			continue
 		}
 		if g.Target != string(types.TargetCI) || g.Outcome != session.OutcomePass || !g.Scope.CoversBranch() || !matchableRevision(g.Commit) || seen[g.Commit] {
@@ -245,7 +245,7 @@ func readGateOutcome(path, commit string) gateCoverage {
 	var events []journal.Event
 	for sc.Scan() {
 		var ev journal.Event
-		if json.Unmarshal(sc.Bytes(), &ev) != nil {
+		if codec.Unmarshal(sc.Bytes(), &ev) != nil {
 			continue
 		}
 		// The started event is the first line, so a log that is not this commit's gate

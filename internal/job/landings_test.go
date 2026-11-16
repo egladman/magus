@@ -14,8 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -553,11 +552,11 @@ func (s *unmergedSuite) TestARowOverItsRowBudgetAnswersOnTheReadAfterItWasCut() 
 func (s *unmergedSuite) TestARowARepeatedReadCutsIsNamedAsCutBefore() {
 	head := s.repo.Git("rev-parse", s.branch("w"))
 	row := job.Job{ID: "w", State: job.StateExited}
-	line, err := json.Marshal(unmergedFact{ID: "w", Branch: s.main, Head: head, CutAt: 1})
+	line, err := codec.Marshal(unmergedFact{ID: "w", Branch: s.main, Head: head, CutAt: 1})
 	s.Require().NoError(err)
 	path := unmergedFactsPath(s.repo.Root())
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
-	s.Require().NoError(file.AppendLines(path, [][]byte{line}, 0o644))
+	s.Require().NoError(codec.AppendLines(path, [][]byte{line}, 0o644))
 	spent, cancel := context.WithTimeout(s.T().Context(), time.Second)
 	defer cancel()
 
@@ -568,11 +567,11 @@ func (s *unmergedSuite) TestARowARepeatedReadCutsIsNamedAsCutBefore() {
 
 func (s *unmergedSuite) TestAStoredMergeIsReadInsteadOfAskingAgain() {
 	head := s.repo.Git("rev-parse", s.branch("w"))
-	line, err := json.Marshal(unmergedFact{ID: "w", Branch: s.main, Head: head, Tip: s.repo.Git("rev-parse", "HEAD"), Merged: true, MergedAt: time.Now().Unix()})
+	line, err := codec.Marshal(unmergedFact{ID: "w", Branch: s.main, Head: head, Tip: s.repo.Git("rev-parse", "HEAD"), Merged: true, MergedAt: time.Now().Unix()})
 	s.Require().NoError(err)
 	path := unmergedFactsPath(s.repo.Root())
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
-	s.Require().NoError(file.AppendLines(path, [][]byte{line}, 0o644))
+	s.Require().NoError(codec.AppendLines(path, [][]byte{line}, 0o644))
 
 	s.Empty(s.unmerged(job.Job{ID: "w", State: job.StatePass}).Jobs)
 }
@@ -580,11 +579,11 @@ func (s *unmergedSuite) TestAStoredMergeIsReadInsteadOfAskingAgain() {
 func (s *unmergedSuite) TestAStoredMergeOfAnOlderHeadStandsForNothing() {
 	head := s.repo.Git("rev-parse", s.branch("w"))
 	s.Empty(s.unmerged(job.Job{ID: "other", State: job.StatePass}).Jobs)
-	line, err := json.Marshal(unmergedFact{ID: "w", Branch: s.main, Head: head + "0", Tip: s.repo.Git("rev-parse", "HEAD"), Merged: true})
+	line, err := codec.Marshal(unmergedFact{ID: "w", Branch: s.main, Head: head + "0", Tip: s.repo.Git("rev-parse", "HEAD"), Merged: true})
 	s.Require().NoError(err)
 	path := unmergedFactsPath(s.repo.Root())
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
-	s.Require().NoError(file.AppendLines(path, [][]byte{line}, 0o644))
+	s.Require().NoError(codec.AppendLines(path, [][]byte{line}, 0o644))
 
 	s.Len(s.unmerged(job.Job{ID: "w", State: job.StatePass}).Jobs, 1)
 }

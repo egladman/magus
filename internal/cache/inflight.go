@@ -10,9 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sys/pid"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // inflight records which targets are RUNNING, on disk, so the answer survives a death
@@ -180,12 +179,12 @@ func (i *inflight) start(project, target string) func() {
 // lines land in edge order. Errors are dropped: a run must not fail because
 // its breadcrumb could not be written.
 func (i *inflight) appendLocked(e inflightEvent) {
-	b, err := json.Marshal(e)
+	b, err := codec.Marshal(e)
 	if err != nil {
 		return
 	}
 	// Unsynced: the kernel keeps a killed process's writes.
-	_ = file.AppendLines(i.path, [][]byte{b}, 0o600, file.WithoutSync())
+	_ = codec.AppendLines(i.path, [][]byte{b}, 0o600, codec.WithoutSync())
 }
 
 // replayInflight returns the targets with a start line and no stop line.
@@ -194,7 +193,7 @@ func replayInflight(b []byte) []inflightTarget {
 	live := map[uint64]inflightTarget{}
 	for line := range strings.SplitSeq(string(b), "\n") {
 		var e inflightEvent
-		if line == "" || json.Unmarshal([]byte(line), &e) != nil {
+		if line == "" || codec.Unmarshal([]byte(line), &e) != nil {
 			continue
 		}
 		switch {

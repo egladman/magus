@@ -1,7 +1,7 @@
 package sessions
 
 import (
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
@@ -45,7 +45,7 @@ func attentionID(rec session.Record) string {
 	var named struct {
 		Request string `json:"request"`
 	}
-	if json.Unmarshal(rec.Payload, &named) != nil {
+	if codec.Unmarshal(rec.Payload, &named) != nil {
 		return ""
 	}
 	return named.Request

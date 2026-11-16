@@ -17,11 +17,11 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/fixture"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
@@ -43,7 +43,7 @@ func writeJournal(t *testing.T, root string, records []map[string]any) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	var b strings.Builder
 	for _, rec := range records {
-		line, err := json.Marshal(rec)
+		line, err := codec.Marshal(rec)
 		require.NoError(t, err)
 		b.Write(line)
 		b.WriteByte('\n')
@@ -370,7 +370,7 @@ func TestCheckGuardWiring(t *testing.T) {
 func writeModHarness(t *testing.T, w *testkit.Workspace, enable bool, installed string) {
 	t.Helper()
 	var descriptor agent.HarnessDescriptor
-	require.NoError(t, json.Unmarshal([]byte(`{
+	require.NoError(t, codec.Unmarshal([]byte(`{
   "api_version": "magus.harness/v1alpha1",
   "id": "mod-host",
   "display": {"name": "Mod Host"},

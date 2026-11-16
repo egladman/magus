@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache/reflink"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"time"
 )
 
@@ -194,7 +194,7 @@ func (c *Cache) projectManifests(ctx context.Context, projectPath string) ([]sto
 			continue
 		}
 		var m Manifest
-		if json.Unmarshal(data, &m) != nil {
+		if codec.Unmarshal(data, &m) != nil {
 			continue
 		}
 		hash := strings.TrimSuffix(e.Name(), ".json")

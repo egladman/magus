@@ -6,7 +6,7 @@ package proc
 import (
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
@@ -58,15 +58,15 @@ var routeNeeds = map[string]job.Need{
 // parameters, both opaque here: proc moves the bytes and the [Options.Read] handler
 // interprets them.
 type readRequest struct {
-	Verb    string          `json:"verb"`
-	Request json.RawMessage `json:"request"`
-	Version string          `json:"version,omitempty"`
-	Root    string          `json:"root"`
+	Verb    string           `json:"verb"`
+	Request codec.RawMessage `json:"request"`
+	Version string           `json:"version,omitempty"`
+	Root    string           `json:"root"`
 }
 
 // readReply carries the handler's answer, as opaque as the request.
 type readReply struct {
-	Record json.RawMessage `json:"record"`
+	Record codec.RawMessage `json:"record"`
 }
 
 // jobRequest submits a background job: the server runs `magus <Args>` asynchronously and

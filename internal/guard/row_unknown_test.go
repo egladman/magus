@@ -15,8 +15,8 @@ import (
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
@@ -34,24 +34,24 @@ func plantUnknownMember(t *testing.T, ctx context.Context, id, member string) {
 	require.NoError(t, err)
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
-	var record map[string]json.RawMessage
+	var record map[string]codec.RawMessage
 	for text := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
 		var line struct {
 			Metadata struct {
 				Name string `json:"name"`
 			} `json:"metadata"`
 		}
-		require.NoError(t, json.Unmarshal([]byte(text), &line))
+		require.NoError(t, codec.Unmarshal([]byte(text), &line))
 		if line.Metadata.Name == id {
-			require.NoError(t, json.Unmarshal([]byte(text), &record))
+			require.NoError(t, codec.Unmarshal([]byte(text), &record))
 		}
 	}
-	var spec map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(record["spec"], &spec))
-	spec[member] = json.RawMessage(`["**"]`)
-	record["spec"], err = json.Marshal(spec)
+	var spec map[string]codec.RawMessage
+	require.NoError(t, codec.Unmarshal(record["spec"], &spec))
+	spec[member] = codec.RawMessage(`["**"]`)
+	record["spec"], err = codec.Marshal(spec)
 	require.NoError(t, err)
-	line, err := json.Marshal(record)
+	line, err := codec.Marshal(record)
 	require.NoError(t, err)
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 	require.NoError(t, err)

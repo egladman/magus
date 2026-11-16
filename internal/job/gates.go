@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -383,7 +383,7 @@ func unrunLines(gates []UnrunGate) []string {
 	if len(goals) == 0 {
 		return lines
 	}
-	if data, err := json.Marshal(goals); err == nil {
+	if data, err := codec.Marshal(goals); err == nil {
 		lines = append(lines, "goals to add: "+string(data))
 	}
 	return lines

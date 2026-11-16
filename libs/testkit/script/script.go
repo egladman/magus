@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/rogpeppe/go-internal/testscript"
 )
@@ -244,7 +244,7 @@ func (r *Recorder) record(e *Env) {
 var recordsMu sync.Mutex
 
 func appendRecord(path string, rec *Record) (err error) {
-	line, err := json.Marshal(rec)
+	line, err := codec.Marshal(rec)
 	if err != nil {
 		return err
 	}
@@ -302,7 +302,7 @@ func runAgent(s *State, neg bool, args []string) {
 	}, args[1:]...)
 	runErr := s.Exec(cmp.Or(s.Getenv(execPathEnv), agentCLI), agentArgs...)
 	var out agentResult
-	if err := json.Unmarshal([]byte(s.ReadFile("stdout")), &out); err != nil {
+	if err := codec.Unmarshal([]byte(s.ReadFile("stdout")), &out); err != nil {
 		s.Fatalf("agent: no JSON result: %v", errors.Join(runErr, err))
 	}
 	rec.InputTokens += out.Usage.InputTokens

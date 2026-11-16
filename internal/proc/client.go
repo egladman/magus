@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
@@ -72,7 +72,7 @@ var readExchange = exchange{op: "read", method: http.MethodPost, path: pathRead,
 // the caller answers locally, quietly. Any other error is a transport failure, after which
 // the caller also answers locally.
 func Read(ctx context.Context, addr, version, root, verb string, request, reply any) error {
-	raw, err := json.Marshal(request)
+	raw, err := codec.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("proc: read: encode request: %w", err)
 	}
@@ -81,7 +81,7 @@ func Read(ctx context.Context, addr, version, root, verb string, request, reply 
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(got.Record, reply); err != nil {
+	if err := codec.Unmarshal(got.Record, reply); err != nil {
 		return fmt.Errorf("proc: read: decode record: %w", err)
 	}
 	return nil

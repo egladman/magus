@@ -33,7 +33,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/proc/spawn"
@@ -42,6 +41,7 @@ import (
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
@@ -738,7 +738,7 @@ func knowledgeStamps(ctx context.Context, src knowledgeSources, store *knowledge
 	if wants(knowledge.ClassDomain) {
 		ignoreSources, ignoreKnown = vcsIgnoreSources(ctx, src.root)
 	}
-	targetPolicies, humanOnlyErr := json.Marshal(src.targetPolicies)
+	targetPolicies, humanOnlyErr := codec.Marshal(src.targetPolicies)
 	if wants(knowledge.ClassDomain) && historyKnown && ignoreKnown && humanOnlyErr == nil {
 		h := knowledge.NewInputHash(string(knowledge.ClassDomain))
 		h.String(base)
@@ -862,7 +862,7 @@ func baseKnowledgeStamp(src knowledgeSources) (string, bool) {
 		return "", false
 	}
 	for _, v := range []any{src.graph, src.projects, src.spells} {
-		b, err := json.Marshal(v)
+		b, err := codec.Marshal(v)
 		if err != nil {
 			return "", false
 		}
@@ -882,7 +882,7 @@ func foldKnowledgeSite(h *knowledge.InputHash, cfg config.Config, root, cacheDir
 	h.String(root)
 	h.String(cacheDir)
 	h.String(cfg.HistoryPath)
-	b, err := json.Marshal(cfg.Knowledge)
+	b, err := codec.Marshal(cfg.Knowledge)
 	if err != nil {
 		return false
 	}
@@ -1218,7 +1218,7 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 	var out []knowledge.AgentContact
 	for _, rec := range fold.Records {
 		var ev session.AgentEvent
-		if json.Unmarshal(rec.Payload, &ev) != nil {
+		if codec.Unmarshal(rec.Payload, &ev) != nil {
 			continue
 		}
 		// A file event carries its path in Text; a shell command's Text is never
@@ -2153,7 +2153,7 @@ func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheD
 	if fp != "" && !refresh {
 		if b, err := os.ReadFile(path); err == nil {
 			var f vcsHistoryFile
-			if err := json.Unmarshal(b, &f); err == nil && f.Fingerprint == fp {
+			if err := codec.Unmarshal(b, &f); err == nil && f.Fingerprint == fp {
 				log.DebugContext(ctx, "reusing cached vcs history", slog.Int("files", len(f.Entries)))
 				return f.Entries, f.Couplings
 			}
@@ -2165,7 +2165,7 @@ func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheD
 	if fp == "" || len(entries) == 0 || cacheImmutable(cfg) {
 		return entries, couplings
 	}
-	b, err := json.Marshal(vcsHistoryFile{Fingerprint: fp, Entries: entries, Couplings: couplings})
+	b, err := codec.Marshal(vcsHistoryFile{Fingerprint: fp, Entries: entries, Couplings: couplings})
 	if err == nil {
 		err = file.WriteFileAtomic(path, b, 0o644)
 	}

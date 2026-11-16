@@ -44,7 +44,7 @@ type NextStep struct {
 	Why  string   `json:"why,omitempty" yaml:"why,omitempty"`
 	// Reads marks a script that declares it changes nothing. It clears only that one
 	// invocation, never any other command.
-	Reads bool `json:"reads,omitempty" yaml:"reads,omitempty"`
+	Reads bool `json:"reads" yaml:"reads,omitempty"`
 }
 
 // DeniedError is a call refused because the judge denied it. Judgment is the whole

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,11 +52,11 @@ func TestAnswerStatedReasonWinsOverMissingIndex(t *testing.T) {
 // The wire keys are a contract with agents and external consumers, so pin them. Verdict
 // must survive even on the absent path, where reason and uncovered drop out.
 func TestKnowledgeAnswerJSONKeys(t *testing.T) {
-	b, err := json.Marshal(ClassifyAnswer(false, "", nil))
+	b, err := codec.Marshal(ClassifyAnswer(false, "", nil))
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"verdict":"absent"}`, string(b))
 
-	b, err = json.Marshal(ClassifyAnswer(false, "", []KnowledgeSymbolGap{
+	b, err = codec.Marshal(ClassifyAnswer(false, "", []KnowledgeSymbolGap{
 		{Project: NewProjectRef("libs/api", ""), State: SymbolIndexNotBuilt, Detail: "unreadable"},
 	}))
 	require.NoError(t, err)
@@ -81,17 +81,17 @@ func TestKnowledgeAnswerIndexCauseJSON(t *testing.T) {
 		Fix: "`magus server start` keeps it current from now on",
 	}
 	out := KnowledgeOccurrencesOutput{Symbol: "symbol:x", Answer: ans}
-	b, err := json.Marshal(out)
+	b, err := codec.Marshal(out)
 	require.NoError(t, err)
 	var got struct {
 		Answer struct {
 			IndexCause map[string]string `json:"index_cause"`
 		} `json:"answer"`
 	}
-	require.NoError(t, json.Unmarshal(b, &got))
+	require.NoError(t, codec.Unmarshal(b, &got))
 	assert.Equal(t, map[string]string{"why": ans.IndexCause.Why, "fix": ans.IndexCause.Fix}, got.Answer.IndexCause)
 
-	b, err = json.Marshal(KnowledgeAnswer{Verdict: VerdictFound})
+	b, err = codec.Marshal(KnowledgeAnswer{Verdict: VerdictFound})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"verdict":"found"}`, string(b), "no cause, no key")
 	assert.False(t, KnowledgeAnswer{Verdict: VerdictFound}.IndexBehind())
@@ -103,7 +103,7 @@ func TestKnowledgeAnswerIndexCauseJSON(t *testing.T) {
 func TestKnowledgeAnswerStaleIndexDetailsJSON(t *testing.T) {
 	stale := []KnowledgeStaleIndex{{Project: ".", Language: "buzz", Op: "scip-buzz"}, {Project: "libs/api"}}
 	ans := KnowledgeAnswer{Verdict: VerdictFound, StaleIndexes: StaleIndexProjects(stale), StaleIndexDetails: stale}
-	b, err := json.Marshal(ans)
+	b, err := codec.Marshal(ans)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{
 		"verdict": "found",
@@ -484,12 +484,12 @@ func TestKnowledgeRelationImplements(t *testing.T) {
 // Edge attrs are additive: an edge without any marshals exactly as it did before them.
 func TestKnowledgeEdgeAttrsJSONKeys(t *testing.T) {
 	e := KnowledgeEdge{Source: "dir:a", Target: "dir:b", Relation: RelationCalls, Confidence: ConfidenceDeclared, Score: 1}
-	b, err := json.Marshal(e)
+	b, err := codec.Marshal(e)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"source":"dir:a","target":"dir:b","relation":"calls","confidence":"declared","score":1}`, string(b))
 
 	e.Attrs = map[string]string{AttrTransport: "http"}
-	b, err = json.Marshal(e)
+	b, err = codec.Marshal(e)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"source":"dir:a","target":"dir:b","relation":"calls","confidence":"declared","score":1,"attrs":{"transport":"http"}}`, string(b))
 }
@@ -503,7 +503,7 @@ func TestKnowledgeDirJSONKeys(t *testing.T) {
 		Calls:    []DirCall{{Dir: "internal/httpx", Transport: "http", Marker: "marker:internal/handler/a.go:3", Source: "internal/handler/a.go:3"}},
 		CalledBy: []DirCall{}, Children: []string{"internal/handler/mcp"}, Files: 4,
 	}
-	b, err := json.Marshal(d)
+	b, err := codec.Marshal(d)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{
 		"path": "internal/handler", "id": "dir:internal/handler", "layer": "handler", "language": "go",
@@ -522,7 +522,7 @@ func TestKnowledgeNeighborhoodJSONKeys(t *testing.T) {
 		Folds:  []KnowledgeFold{{Prefix: "internal/graph", Node: "dir:internal/graph", Folded: 3}},
 		Answer: ClassifyAnswer(true, "", nil),
 	}
-	b, err := json.Marshal(out)
+	b, err := codec.Marshal(out)
 	require.NoError(t, err)
 	assert.JSONEq(t, fmt.Sprintf(`{
 		"definition": %q, "api_version": %q, "focus": "dir:internal", "resolution": "path",

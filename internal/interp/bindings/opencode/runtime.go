@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
@@ -227,7 +227,7 @@ func field(value vm.Value, key string) string {
 	return ""
 }
 func eventValue(e hookEvent) vm.Value {
-	key, _ := json.Marshal([]string{e.SessionID, e.CallID})
+	key, _ := codec.Marshal([]string{e.SessionID, e.CallID})
 	fields := map[string]string{"kind": e.Kind, "tool": e.Tool, "key": string(key), "session": e.RootSessionID,
 		"agent": e.AgentID, "cwd": e.Cwd, "command": e.Command, "path": e.Path, "args": e.ArgsJSON,
 		"patch": e.PatchText, "context": e.Context, "promptable": fmt.Sprint(e.Promptable), "mcp": fmt.Sprint(e.MCP)}
@@ -266,7 +266,7 @@ func judge(ctx context.Context, invoke invoker, event vm.Value, mode, payload st
 		args = append([]string{"shell", "--path"}, args[1:]...)
 	case "envelope":
 		var input any
-		if err := json.Unmarshal([]byte(payload), &input); err != nil {
+		if err := codec.Unmarshal([]byte(payload), &input); err != nil {
 			return unjudged("invalid tool arguments JSON")
 		}
 		envelope := map[string]any{"hook_event_name": "PreToolUse", "tool_name": field(event, "tool"), "tool_input": input, "cwd": field(event, "cwd")}
@@ -276,7 +276,7 @@ func judge(ctx context.Context, invoke invoker, event vm.Value, mode, payload st
 		if agent := field(event, "agent"); agent != "" {
 			envelope["agent_id"] = agent
 		}
-		body, err := json.Marshal(envelope)
+		body, err := codec.Marshal(envelope)
 		if err != nil {
 			return unjudged("cannot encode tool envelope")
 		}
@@ -342,10 +342,10 @@ func legacyArgs(args []string) []string {
 }
 
 // verdictEnvelope decodes stdout, or says why it is not a verdict.
-func verdictEnvelope(stdout string) (map[string]json.RawMessage, string) {
-	var envelope map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(stdout), &envelope); err != nil {
-		if json.Valid([]byte(stdout)) {
+func verdictEnvelope(stdout string) (map[string]codec.RawMessage, string) {
+	var envelope map[string]codec.RawMessage
+	if err := codec.Unmarshal([]byte(stdout), &envelope); err != nil {
+		if codec.Valid([]byte(stdout)) {
 			return nil, "magus answered an unrecognized verdict shape"
 		}
 		return nil, "magus answered something that is not JSON"
@@ -357,10 +357,10 @@ func verdictEnvelope(stdout string) (map[string]json.RawMessage, string) {
 // neither package, so a test in each pins the same literal.
 const guardAPIVersion = "magus.guard/v1alpha1"
 
-func schemaMismatch(envelope map[string]json.RawMessage) string {
+func schemaMismatch(envelope map[string]codec.RawMessage) string {
 	var version string
 	raw := envelope["api_version"]
-	if envelope == nil || json.Unmarshal(raw, &version) != nil || version == "" {
+	if envelope == nil || codec.Unmarshal(raw, &version) != nil || version == "" {
 		return "magus answered an unrecognized verdict shape"
 	}
 	if version != guardAPIVersion {
@@ -369,9 +369,9 @@ func schemaMismatch(envelope map[string]json.RawMessage) string {
 	return ""
 }
 
-func decideVerdict(envelope map[string]json.RawMessage) guardVerdict {
+func decideVerdict(envelope map[string]codec.RawMessage) guardVerdict {
 	var decision string
-	_ = json.Unmarshal(envelope["decision"], &decision)
+	_ = codec.Unmarshal(envelope["decision"], &decision)
 	verdict := guardVerdict{APIVersion: guardAPIVersion, Decision: decision}
 	ok := false
 	switch decision {
@@ -388,12 +388,12 @@ func decideVerdict(envelope map[string]json.RawMessage) guardVerdict {
 	return unknownDecision(envelope)
 }
 
-func unknownDecision(envelope map[string]json.RawMessage) guardVerdict {
+func unknownDecision(envelope map[string]codec.RawMessage) guardVerdict {
 	label := "undefined"
 	if raw, ok := envelope["decision"]; ok {
 		var decoded any
-		if json.Unmarshal(raw, &decoded) == nil {
-			encoded, _ := json.Marshal(decoded)
+		if codec.Unmarshal(raw, &decoded) == nil {
+			encoded, _ := codec.Marshal(decoded)
 			label = string(encoded)
 		}
 	}
@@ -403,13 +403,13 @@ func unknownDecision(envelope map[string]json.RawMessage) guardVerdict {
 
 // stringMember is false unless key holds a JSON string, so a verdict
 // missing its reason or context is refused rather than read as empty.
-func stringMember(envelope map[string]json.RawMessage, key string) (string, bool) {
+func stringMember(envelope map[string]codec.RawMessage, key string) (string, bool) {
 	raw, ok := envelope[key]
 	if !ok || string(raw) == "null" {
 		return "", false
 	}
 	var value string
-	if json.Unmarshal(raw, &value) != nil {
+	if codec.Unmarshal(raw, &value) != nil {
 		return "", false
 	}
 	return value, true

@@ -5,9 +5,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
@@ -77,11 +77,11 @@ func pathsNested(e migrate.Entry) (migrate.Entry, error) {
 	if !ok {
 		return e, nil
 	}
-	var spec map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &spec); err != nil {
+	var spec map[string]codec.RawMessage
+	if err := codec.Unmarshal(raw, &spec); err != nil {
 		return nil, fmt.Errorf("reading spec: %w", err)
 	}
-	paths := map[string]json.RawMessage{}
+	paths := map[string]codec.RawMessage{}
 	for _, m := range specPathsMoved {
 		if v, ok := spec[m.flat]; ok {
 			paths[m.nested] = v
@@ -92,8 +92,8 @@ func pathsNested(e migrate.Entry) (migrate.Entry, error) {
 		return e, nil
 	}
 	var err error
-	if spec["paths"], err = json.Marshal(paths); err == nil {
-		e["spec"], err = json.Marshal(spec)
+	if spec["paths"], err = codec.Marshal(paths); err == nil {
+		e["spec"], err = codec.Marshal(spec)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("writing spec.paths: %w", err)
@@ -108,19 +108,19 @@ func modelTierSourceJob(e migrate.Entry) (migrate.Entry, error) {
 	if !ok {
 		return e, nil
 	}
-	var status map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &status); err != nil {
+	var status map[string]codec.RawMessage
+	if err := codec.Unmarshal(raw, &status); err != nil {
 		return nil, fmt.Errorf("reading status: %w", err)
 	}
-	var record map[string]json.RawMessage
+	var record map[string]codec.RawMessage
 	if body, ok := status["modelTier"]; ok {
-		if err := json.Unmarshal(body, &record); err != nil {
+		if err := codec.Unmarshal(body, &record); err != nil {
 			return nil, fmt.Errorf("reading status.modelTier: %w", err)
 		}
 	}
 	var source string
 	if body, ok := record["source"]; ok {
-		if err := json.Unmarshal(body, &source); err != nil {
+		if err := codec.Unmarshal(body, &source); err != nil {
 			return nil, fmt.Errorf("reading status.modelTier.source: %w", err)
 		}
 	}
@@ -130,9 +130,9 @@ func modelTierSourceJob(e migrate.Entry) (migrate.Entry, error) {
 		return e, nil
 	}
 	var err error
-	if record["source"], err = json.Marshal(wireTierSource.wire[tier.SourceJob]); err == nil {
-		if status["modelTier"], err = json.Marshal(record); err == nil {
-			e["status"], err = json.Marshal(status)
+	if record["source"], err = codec.Marshal(wireTierSource.wire[tier.SourceJob]); err == nil {
+		if status["modelTier"], err = codec.Marshal(record); err == nil {
+			e["status"], err = codec.Marshal(status)
 		}
 	}
 	if err != nil {
@@ -158,7 +158,7 @@ func headerEntry(e migrate.Entry) bool {
 // declare is kept on the record as it was. The flat row spelled its paths
 // before they nested, so flat reads them.
 func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
-	text, err := json.Marshal(e)
+	text, err := codec.Marshal(e)
 	if err != nil {
 		return nil, err
 	}
@@ -171,10 +171,10 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 		DenyPaths  []string         `json:"deny_paths"`
 		SoftPaths  []string         `json:"soft_paths"`
 	}
-	if err := json.Unmarshal(text, &row); err != nil {
+	if err := codec.Unmarshal(text, &row); err != nil {
 		return nil, fmt.Errorf("reading the row: %w", err)
 	}
-	if err := json.Unmarshal(text, &flat); err != nil {
+	if err := codec.Unmarshal(text, &flat); err != nil {
 		return nil, fmt.Errorf("reading holder: %w", err)
 	}
 	if _, old := e["schema_version"]; old || (flat.APIVersion != "" && flat.APIVersion.Compare(job.APIVersion) < 0) {
@@ -190,7 +190,7 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 	for k, v := range e {
 		if !declared[k] && !read[k] {
 			if r.Unknown == nil {
-				r.Unknown = map[string]json.RawMessage{}
+				r.Unknown = map[string]codec.RawMessage{}
 			}
 			r.Unknown[k] = v
 		}
@@ -203,7 +203,7 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 func envelopeHeader(e migrate.Entry) (migrate.Entry, error) {
 	var requires []string
 	if raw, ok := e["requires"]; ok {
-		if err := json.Unmarshal(raw, &requires); err != nil {
+		if err := codec.Unmarshal(raw, &requires); err != nil {
 			return nil, fmt.Errorf("reading requires: %w", err)
 		}
 	}
@@ -225,12 +225,12 @@ func envelopeHeader(e migrate.Entry) (migrate.Entry, error) {
 
 // remarshal is v as an entry.
 func remarshal(v any) (migrate.Entry, error) {
-	text, err := json.Marshal(v)
+	text, err := codec.Marshal(v)
 	if err != nil {
 		return nil, err
 	}
 	var e migrate.Entry
-	if err := json.Unmarshal(text, &e); err != nil {
+	if err := codec.Unmarshal(text, &e); err != nil {
 		return nil, err
 	}
 	return e, nil
@@ -264,19 +264,19 @@ func workerResumed(e migrate.Entry) (migrate.Entry, error) {
 	if !ok {
 		return e, nil
 	}
-	var section map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &section); err != nil {
+	var section map[string]codec.RawMessage
+	if err := codec.Unmarshal(raw, &section); err != nil {
 		return nil, fmt.Errorf("reading the agent section: %w", err)
 	}
-	var worker map[string]json.RawMessage
+	var worker map[string]codec.RawMessage
 	if body, ok := section["worker"]; ok {
-		if err := json.Unmarshal(body, &worker); err != nil {
+		if err := codec.Unmarshal(body, &worker); err != nil {
 			return nil, fmt.Errorf("reading agent.worker: %w", err)
 		}
 	}
 	var typ string
 	if body, ok := worker["type"]; ok {
-		if err := json.Unmarshal(body, &typ); err != nil {
+		if err := codec.Unmarshal(body, &typ); err != nil {
 			return nil, fmt.Errorf("reading agent.worker.type: %w", err)
 		}
 	}
@@ -284,9 +284,9 @@ func workerResumed(e migrate.Entry) (migrate.Entry, error) {
 		return e, nil
 	}
 	var err error
-	if worker["type"], err = json.Marshal(job.WorkerTypeResumed); err == nil {
-		if section["worker"], err = json.Marshal(worker); err == nil {
-			e["agent"], err = json.Marshal(section)
+	if worker["type"], err = codec.Marshal(job.WorkerTypeResumed); err == nil {
+		if section["worker"], err = codec.Marshal(worker); err == nil {
+			e["agent"], err = codec.Marshal(section)
 		}
 	}
 	if err != nil {
@@ -309,15 +309,15 @@ func agentSection(e migrate.Entry) (migrate.Entry, error) {
 			Model  string `json:"model"`
 		} `json:"model_tier"`
 	}
-	flat := map[string]json.RawMessage{}
+	flat := map[string]codec.RawMessage{}
 	for _, key := range []string{"criteria", "model", "fresh_reason", "holder", "model_tier"} {
 		if v, ok := e[key]; ok {
 			flat[key] = v
 		}
 	}
-	body, err := json.Marshal(flat)
+	body, err := codec.Marshal(flat)
 	if err == nil {
-		err = json.Unmarshal(body, &old)
+		err = codec.Unmarshal(body, &old)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading the flat agent members: %w", err)
@@ -340,7 +340,7 @@ func agentSection(e migrate.Entry) (migrate.Entry, error) {
 	if old.FreshReason != "" {
 		spec.Worker = job.Worker{Type: job.WorkerTypeNew, Reason: old.FreshReason}
 	}
-	if e["agent"], err = json.Marshal(spec); err != nil {
+	if e["agent"], err = codec.Marshal(spec); err != nil {
 		return nil, fmt.Errorf("writing the agent section: %w", err)
 	}
 	return e, nil

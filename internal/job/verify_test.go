@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -830,10 +830,10 @@ func TestResultSchemaMatchesTheStruct(t *testing.T) {
 	t.Parallel()
 
 	var schema, validation struct {
-		Properties map[string]json.RawMessage `json:"properties"`
+		Properties map[string]codec.RawMessage `json:"properties"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(ResultSchema), &schema))
-	require.NoError(t, json.Unmarshal(schema.Properties["validation"], &validation))
+	require.NoError(t, codec.Unmarshal([]byte(ResultSchema), &schema))
+	require.NoError(t, codec.Unmarshal(schema.Properties["validation"], &validation))
 
 	assert.ElementsMatch(t, jsonFields(job.Result{}), keys(schema.Properties))
 	assert.ElementsMatch(t, jsonFields(job.ResultValidation{}), keys(validation.Properties))
@@ -853,7 +853,7 @@ func jsonFields(v any) []string {
 	return out
 }
 
-func keys(m map[string]json.RawMessage) []string {
+func keys(m map[string]codec.RawMessage) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

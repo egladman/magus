@@ -9,11 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
@@ -71,7 +70,7 @@ func TestPolicyMarkerPreservesLegacyState(t *testing.T) {
 	const held = "{\"digest\":\"older\"}\n"
 	require.NoError(t, os.WriteFile(old, []byte(held), 0o600))
 	_, err := policyMarkerLog(path).Load()
-	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorIs(t, err, codec.ErrLegacyStore)
 	_, ok := readPolicyMarker(path)
 	assert.False(t, ok)
 	writePolicyMarker(path, policyMarker{Digest: "new"})
@@ -174,7 +173,7 @@ func TestRecordPolicyEventCarriesRefsNotBodies(t *testing.T) {
 	body, err := trailtypes.ReadBlob(base, tightened.RequestRef)
 	require.NoError(t, err)
 	var got policyEvent
-	require.NoError(t, json.Unmarshal(body, &got))
+	require.NoError(t, codec.Unmarshal(body, &got))
 	assert.Equal(t, policyEvent{APIVersion: policyAPIVersion, Action: PolicyTightened, Digest: "d2", Previous: "d1", Sources: []PolicySource{src}}, got)
 }
 

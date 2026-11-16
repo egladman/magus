@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 //go:embed release-keys.json
@@ -90,7 +90,7 @@ func mustParseEmbeddedKeyring() Keyring {
 // verification decision ambiguous later.
 func parseKeyring(data []byte) (Keyring, error) {
 	var f keyringFile
-	if err := json.Unmarshal(data, &f); err != nil {
+	if err := codec.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parse: %w", err)
 	}
 	if len(f.Keys) == 0 {

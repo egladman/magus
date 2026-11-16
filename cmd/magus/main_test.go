@@ -29,12 +29,12 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
@@ -904,7 +904,7 @@ func jsonlRecords(ts *testscript.TestScript, neg bool, args []string) {
 				Schema *int   `json:"schema"`
 				Type   string `json:"type"`
 			}
-			if err := json.Unmarshal([]byte(line), &head); err != nil || head.Schema == nil || head.Type == "" {
+			if err := codec.Unmarshal([]byte(line), &head); err != nil || head.Schema == nil || head.Type == "" {
 				ts.Fatalf("%s line %d is not a record: %q", stream, i+1, line)
 			}
 			seen[head.Type] = true

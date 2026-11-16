@@ -13,7 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -149,13 +149,13 @@ func TestRecordedHumanOnlyIgnoresAManifestThatNeverRecordedIt(t *testing.T) {
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	var man map[string]any
-	require.NoError(t, json.Unmarshal(b, &man))
+	require.NoError(t, codec.Unmarshal(b, &man))
 	require.Equal(t, true, man["target_policies_known"], "the sync recorded it")
 	// What a magus from before the target-policy record wrote: the human_only keys alone.
 	man["human_only"], man["human_only_known"] = man["target_policies"], true
 	delete(man, "target_policies")
 	delete(man, "target_policies_known")
-	b, err = json.Marshal(man)
+	b, err = codec.Marshal(man)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, b, 0o644))
 

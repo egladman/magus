@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/egladman/magus/types/diff"
+	"log/slog"
 	"path/filepath"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // ReadingTTL is how long a [ReadingMark] counts. Twelve hours is a long working day: a mark
@@ -64,9 +66,9 @@ func (s *Store) readingPath() string {
 
 // readingLog is the mark's file: each line is a mark, the last one is the mark, and a line
 // without a review (what clearing appends) is no mark.
-func (s *Store) readingLog() file.JSONL[ReadingMark] {
+func (s *Store) readingLog() codec.JSONL[ReadingMark] {
 	path := s.readingPath()
-	return file.JSONL[ReadingMark]{Path: path, Old: oldFile(path, "reading.json"),
+	return codec.JSONL[ReadingMark]{Log: slog.With(attr.Component("magus")), Path: path, Old: oldFile(path, "reading.json"),
 		Key: func(ReadingMark) string { return "" }, Live: ReadingMark.Active}
 }
 

@@ -18,10 +18,10 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/diagnostics"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -1001,7 +1001,7 @@ func TestMagusJobSchemaIsTheDeclarationSchema(t *testing.T) {
 	require.NoError(t, err)
 
 	var want map[string]any
-	require.NoError(t, json.Unmarshal([]byte(job.DeclarationSchema), &want))
+	require.NoError(t, codec.Unmarshal([]byte(job.DeclarationSchema), &want))
 	assert.Equal(t, want, got)
 	assert.Contains(t, got, "properties")
 }

@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -166,7 +166,7 @@ func (s *refsWindowSuite) TestABlankLineIsALineAndNotAnEmptyRange() {
 
 func (s *refsWindowSuite) TestAnEmptyRangeReachesJSON() {
 	RefsWindow{SourceWindow: SourceWindow{Show: true, From: 9, To: 12}}.fillSources(s.root, s.files)
-	got, err := json.Marshal(s.files[0].Occurrences[0])
+	got, err := codec.Marshal(s.files[0].Occurrences[0])
 	s.Require().NoError(err)
 	s.Contains(string(got), `"source_note":"no lines: 9:12 falls outside the file"`)
 }

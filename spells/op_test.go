@@ -3,7 +3,7 @@ package spells
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -44,12 +44,12 @@ func TestCommandSecretsJSONRoundTrip(t *testing.T) {
 		Args:    []string{"publish"},
 		Secrets: map[string]string{"NPM_TOKEN": "NPM_TOKEN"},
 	}
-	b, err := json.Marshal(c)
+	b, err := codec.Marshal(c)
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `"secrets":{"NPM_TOKEN":"NPM_TOKEN"}`)
 
 	var got Command
-	require.NoError(t, json.Unmarshal(b, &got))
+	require.NoError(t, codec.Unmarshal(b, &got))
 	assert.Equal(t, c, got)
 }
 
@@ -57,7 +57,7 @@ func TestCommandSecretsJSONRoundTrip(t *testing.T) {
 // contract: an op declaring no secrets must not move the hash at all, which requires
 // the field to actually omit (omitempty), not merely round-trip as an empty map.
 func TestCommandSecretsOmittedWhenEmpty(t *testing.T) {
-	b, err := json.Marshal(Command{Bin: "go", Args: []string{"build"}})
+	b, err := codec.Marshal(Command{Bin: "go", Args: []string{"build"}})
 	require.NoError(t, err)
 	assert.NotContains(t, string(b), "secrets", "an op with no declared secrets must not carry the key at all")
 }
@@ -121,11 +121,11 @@ func (s *commandSelectionSuite) TestUnknownDialectIsRejected() {
 }
 func (s *commandSelectionSuite) TestDialectSurvivesJSON() {
 	original := Command{Bin: "go", Args: []string{"test"}, TestSelection: "go"}
-	data, err := json.Marshal(original)
+	data, err := codec.Marshal(original)
 	s.Require().NoError(err)
 	s.Contains(string(data), `"test_selection":"go"`)
 	var decoded Command
-	s.Require().NoError(json.Unmarshal(data, &decoded))
+	s.Require().NoError(codec.Unmarshal(data, &decoded))
 	s.Equal(original, decoded)
 }
 
@@ -221,20 +221,20 @@ func (s *commandPathScopeSuite) TestRefusesAnInvalidGlob() {
 
 func (s *commandPathScopeSuite) TestSurvivesJSON() {
 	original := goPackageScope()
-	data, err := json.Marshal(original)
+	data, err := codec.Marshal(original)
 	s.Require().NoError(err)
 	s.Contains(string(data), `"path_scope":["./{dir}"],"path_scope_files":["**/*.go","!**/testdata/**"]`)
 	var decoded Command
-	s.Require().NoError(json.Unmarshal(data, &decoded))
+	s.Require().NoError(codec.Unmarshal(data, &decoded))
 	s.Equal(original, decoded)
 }
 
 func (s *commandTestScopeSuite) TestSurvivesJSON() {
 	original := Command{Bin: "go", TestScope: []string{"./{dir}"}}
-	data, err := json.Marshal(original)
+	data, err := codec.Marshal(original)
 	s.Require().NoError(err)
 	s.Contains(string(data), `"test_scope":["./{dir}"]`)
 	var decoded Command
-	s.Require().NoError(json.Unmarshal(data, &decoded))
+	s.Require().NoError(codec.Unmarshal(data, &decoded))
 	s.Equal(original, decoded)
 }

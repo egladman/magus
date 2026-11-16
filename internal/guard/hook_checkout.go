@@ -13,11 +13,11 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
@@ -68,7 +68,7 @@ func hookCallDir(input string) string {
 		return ""
 	}
 	var ev hookEvent
-	if json.Unmarshal([]byte(input), &ev) != nil {
+	if codec.Unmarshal([]byte(input), &ev) != nil {
 		return ""
 	}
 	at := func(p string) string {

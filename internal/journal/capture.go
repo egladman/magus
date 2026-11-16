@@ -9,7 +9,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
@@ -187,7 +187,7 @@ func (h *FileHandler) Handle(_ context.Context, r slog.Record) error {
 	if !ok {
 		return nil
 	}
-	line, err := json.Marshal(e)
+	line, err := codec.Marshal(e)
 	if err != nil {
 		return nil
 	}

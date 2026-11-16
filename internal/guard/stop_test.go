@@ -6,9 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/stretchr/testify/require"
@@ -36,7 +35,7 @@ func storeTries(t *testing.T, at location, tries ...jobtypes.Attempt) {
 	for _, a := range tries {
 		lines = append(lines, fixtureAttemptLine(t, a))
 	}
-	require.NoError(t, file.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), lines, 0o600))
+	require.NoError(t, codec.AppendLines(filepath.Join(filepath.Dir(path), "attempts.jsonl"), lines, 0o600))
 }
 
 // fixtureAttemptLine is a as an attempts.jsonl record, its keys
@@ -44,15 +43,15 @@ func storeTries(t *testing.T, at location, tries ...jobtypes.Attempt) {
 // spells them, which the store reads unchanged.
 func fixtureAttemptLine(t *testing.T, a jobtypes.Attempt) []byte {
 	t.Helper()
-	raw, err := json.Marshal(a.Status)
+	raw, err := codec.Marshal(a.Status)
 	require.NoError(t, err)
 	var status map[string]any
-	require.NoError(t, json.Unmarshal(raw, &status))
+	require.NoError(t, codec.Unmarshal(raw, &status))
 	if state, ok := status["state"]; ok {
 		delete(status, "state")
 		status["job_state"] = state
 	}
-	line, err := json.Marshal(map[string]any{
+	line, err := codec.Marshal(map[string]any{
 		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
 		"spec": map[string]any{"job": a.Job, "n": a.N}, "status": fixtureCamelKeys(status),
 	})

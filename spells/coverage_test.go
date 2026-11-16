@@ -3,7 +3,7 @@ package spells
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -25,6 +25,6 @@ func (s *coverageSuite) TestLCOVIsAValidCase() {
 
 func (s *coverageSuite) TestDecodesFromItsJSON() {
 	var c Coverage
-	s.Require().NoError(json.Unmarshal([]byte(`{"format":"go-coverprofile","profile":".magus/coverage.out"}`), &c))
+	s.Require().NoError(codec.Unmarshal([]byte(`{"format":"go-coverprofile","profile":".magus/coverage.out"}`), &c))
 	s.Equal(Coverage{Format: CoverageFormatGoProfile, Profile: ".magus/coverage.out"}, c)
 }

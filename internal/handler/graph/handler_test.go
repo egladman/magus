@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,7 +66,7 @@ func TestGraph_Flavors_Return200(t *testing.T) {
 		w := get(t, h, target)
 		require.Equalf(t, http.StatusOK, w.Code, "target %s body %s", target, w.Body.String())
 		var out map[string]any
-		require.NoErrorf(t, json.Unmarshal(w.Body.Bytes(), &out), "target %s", target)
+		require.NoErrorf(t, codec.Unmarshal(w.Body.Bytes(), &out), "target %s", target)
 	}
 }
 
@@ -77,8 +77,8 @@ func TestGraph_SnakeCaseFieldNames(t *testing.T) {
 	w := get(t, newHandler(), "/api/v1/graph")
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var out map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	var out map[string]codec.RawMessage
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &out))
 	for _, key := range []string{"definition", "api_version", "directed", "node_count", "edge_count", "source_base", "nodes", "links"} {
 		assert.Containsf(t, out, key, "want snake_case key %q in %v", key, keys(out))
 	}
@@ -88,14 +88,14 @@ func TestGraph_SnakeCaseFieldNames(t *testing.T) {
 	}
 
 	var nodes []map[string]any
-	require.NoError(t, json.Unmarshal(out["nodes"], &nodes))
+	require.NoError(t, codec.Unmarshal(out["nodes"], &nodes))
 	require.NotEmpty(t, nodes)
 	for _, k := range []string{"id", "kind", "label"} {
 		assert.Contains(t, nodes[0], k)
 	}
 
 	var links []map[string]any
-	require.NoError(t, json.Unmarshal(out["links"], &links))
+	require.NoError(t, codec.Unmarshal(out["links"], &links))
 	require.NotEmpty(t, links)
 	for _, k := range []string{"source", "target", "relation"} {
 		assert.Contains(t, links[0], k)
@@ -127,7 +127,7 @@ func TestGraph_EdgeAttrsCrossTheWire(t *testing.T) {
 	var out struct {
 		Links []map[string]any `json:"links"`
 	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &out))
 	assert.Equal(t, []map[string]any{{
 		"source":     "dir:cmd/magus",
 		"target":     "dir:internal/server",
@@ -139,7 +139,7 @@ func TestGraph_EdgeAttrsCrossTheWire(t *testing.T) {
 	}}, out.Links)
 }
 
-func keys(m map[string]json.RawMessage) []string {
+func keys(m map[string]codec.RawMessage) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)
@@ -153,7 +153,7 @@ func TestGraph_TargetsFlavorShape(t *testing.T) {
 	w := get(t, newHandler(), "/api/v1/graph?flavor=targets")
 	require.Equal(t, http.StatusOK, w.Code)
 	var out map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &out))
 	assert.Contains(t, out, "projects")
 	assert.Contains(t, out, "definition")
 }
@@ -254,7 +254,7 @@ func TestGraph_Gzip(t *testing.T) {
 	raw, err := io.ReadAll(gr)
 	require.NoError(t, err)
 	var out map[string]any
-	require.NoError(t, json.Unmarshal(raw, &out))
+	require.NoError(t, codec.Unmarshal(raw, &out))
 }
 
 // TestGraph_SelectDoesNotIncludeAmbiguousMatch is a smoke check that ?select= routes to the

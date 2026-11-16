@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -166,7 +166,7 @@ func (s *SpawnAboveParentTierSuite) TestOffSilencesTheRule() {
 func (s *SpawnAboveParentTierSuite) TestASubagentsCeilingIsTheModelItsSpawnNamed() {
 	ctx, deps, at := ceilingFixture(s.T(), "opus", true)
 	facts := hint.NewGate(at.cacheDir, hookAttribution{Host: "claude-code", Session: "s"}.factsKey())
-	body, err := json.Marshal(spawnedAgent{Model: "haiku"})
+	body, err := codec.Marshal(spawnedAgent{Model: "haiku"})
 	s.Require().NoError(err)
 	writeAgentMarker(facts, spawnedAgentKind("a1"), body)
 

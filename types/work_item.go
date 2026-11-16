@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // WorkKind is what holds a piece of work a person could lose.
@@ -109,13 +109,13 @@ func (w WorkItem) MarshalJSON() ([]byte, error) {
 	if err := w.valid(); err != nil {
 		return nil, err
 	}
-	return json.Marshal(workItemWire(w))
+	return codec.Marshal(workItemWire(w))
 }
 
 // UnmarshalJSON refuses an unknown kind or state rather than guess one.
 func (w *WorkItem) UnmarshalJSON(b []byte) error {
 	var wire workItemWire
-	if err := json.Unmarshal(b, &wire); err != nil {
+	if err := codec.Unmarshal(b, &wire); err != nil {
 		return fmt.Errorf("decode work item: %w", err)
 	}
 	item := WorkItem(wire)

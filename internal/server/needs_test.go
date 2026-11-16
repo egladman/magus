@@ -22,8 +22,8 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/handler/mcp"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
@@ -198,7 +198,7 @@ func plant(t *testing.T, name, secret string, grant job.Access, expires time.Tim
 		"version": 2, "id": id, "name": name, "class": "stored", "sha256": full,
 		"grant": grant, "created": time.Now().Add(-2 * time.Minute).UTC(), "expires": expires.UTC(),
 	}
-	b, err := json.Marshal(rec)
+	b, err := codec.Marshal(rec)
 	require.NoError(t, err)
 	path := filepath.Join(dir, name+".json")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
@@ -513,12 +513,12 @@ func TestSecretsNeverRestInTheTrailLogsOrLists(t *testing.T) {
 	var minted struct {
 		Secret string `json:"secret"`
 	}
-	require.NoError(t, json.Unmarshal(call("CreateToken", fmt.Sprintf(`{"name":"from-console","grant":{"console":"LEVEL_WRITE"},"expireTime":"%s"}`, exp)), &minted))
+	require.NoError(t, codec.Unmarshal(call("CreateToken", fmt.Sprintf(`{"name":"from-console","grant":{"console":"LEVEL_WRITE"},"expireTime":"%s"}`, exp)), &minted))
 	require.NotEmpty(t, minted.Secret)
 	var doomed struct {
 		Secret string `json:"secret"`
 	}
-	require.NoError(t, json.Unmarshal(call("CreateToken", fmt.Sprintf(`{"name":"doomed","grant":{"console":"LEVEL_READ"},"expireTime":"%s"}`, exp)), &doomed))
+	require.NoError(t, codec.Unmarshal(call("CreateToken", fmt.Sprintf(`{"name":"doomed","grant":{"console":"LEVEL_READ"},"expireTime":"%s"}`, exp)), &doomed))
 	call("RevokeToken", `{"name":"doomed"}`)
 	list := call("ListTokens", `{}`)
 

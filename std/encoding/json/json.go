@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/std"
 )
 
@@ -44,7 +44,7 @@ var Module = std.Module{
 // JSONParse decodes a JSON string into a value (map, list, string, number, or boolean).
 func JSONParse(_ context.Context, s string) (any, error) {
 	var v any
-	if err := json.Unmarshal([]byte(s), &v); err != nil {
+	if err := codec.Unmarshal([]byte(s), &v); err != nil {
 		return nil, fmt.Errorf("json.parse: %w", err)
 	}
 	return v, nil
@@ -58,9 +58,9 @@ func JSONParse(_ context.Context, s string) (any, error) {
 func JSONStringify(_ context.Context, value any, indent string) (string, error) {
 	marshal := func() ([]byte, error) {
 		if indent == "" {
-			return json.Marshal(value)
+			return codec.Marshal(value)
 		}
-		return json.MarshalIndent(value, "", indent)
+		return codec.MarshalIndent(value, "", indent)
 	}
 	b, err := marshal()
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -34,7 +34,7 @@ func WriteHarnessPlan(w io.Writer, plan types.HarnessInstallation) error {
 					printf("    write the whole file\n")
 					continue
 				}
-				value, encErr := json.Marshal(change.Value)
+				value, encErr := codec.Marshal(change.Value)
 				if encErr != nil && err == nil {
 					err = encErr
 				}

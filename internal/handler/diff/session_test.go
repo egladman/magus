@@ -16,8 +16,8 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -46,7 +46,7 @@ func TestDiffHandler_ReturnsPatch(t *testing.T) {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
 	var out diffResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+	if err := codec.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatalf("want valid JSON: %v; body %s", err, w.Body.String())
 	}
 	if out.Patch != patch {
@@ -69,7 +69,7 @@ func TestDiffHandler_CleanTreeIsFlaggedNotGuessed(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 		var out diffResponse
-		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		if err := codec.Unmarshal(w.Body.Bytes(), &out); err != nil {
 			t.Fatalf("want valid JSON for %q: %v", patch, err)
 		}
 		if !out.Clean {
@@ -163,7 +163,7 @@ func TestContextHandler_ReturnsBoundedWorkingTreeLines(t *testing.T) {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var out contextResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+	if err := codec.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
 	want := contextResponse{Path: "source.go", AsOf: changeset.PatchDigest(patch), Start: 2, Lines: []string{"two", "three", "four"}}
@@ -278,7 +278,7 @@ func TestReviewHandler_GetReadsAttachedReviewWithoutMutatingIt(t *testing.T) {
 	}
 	// Compared as the wire form, so a field the review gains is covered without a decode
 	// turning an empty slice into a nil one.
-	wire, err := json.Marshal(want)
+	wire, err := codec.Marshal(want)
 	require.NoError(t, err)
 	assert.JSONEq(t, string(wire), w.Body.String())
 	assert.Equal(t, "snapshot-a main", fmt.Sprintf("%s %s", want.AsOf, want.Base), "the served review is the one attached")
@@ -393,7 +393,7 @@ func TestReviewLookupWithNoProviderIsNotAnError(t *testing.T) {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var got diffReviewResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+	if err := codec.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
 	if got.ID != "" || got.Reason == "" {
@@ -417,7 +417,7 @@ func TestReviewLookupWithoutAWorkspace(t *testing.T) {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var got diffReviewResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+	if err := codec.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
 	if got.Reason != "no workspace" {
@@ -477,7 +477,7 @@ func TestAReviewReadCarriesThreadsAndItsReasonTogether(t *testing.T) {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var got diffReviewResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+	if err := codec.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
 	if got.Comments == nil {
@@ -733,7 +733,7 @@ func TestReviewRouteServesPlacedThreads(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	var got diffReviewResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &got))
 	// The verdict set, the state and the threads are the provider's answer and are checked
 	// below or by their own tests, so they are copied across; no workspace is wired, so no host.
 	assert.Equal(t, diffReviewResponse{
@@ -767,7 +767,7 @@ export fun review_threads(target: Target, req: ReviewRef) > any {
 	require.Equal(t, http.StatusOK, w.Code)
 
 	var got diffReviewResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &got))
 	// Strict: one bad row fails the read, never a review with a remark silently missing.
 	assert.Empty(t, got.Comments)
 	assert.Contains(t, got.Reason, "want int", "what could not be read is stated")
@@ -843,7 +843,7 @@ func TestDiffBranchesServesTheOverlapAndPassesTheCap(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	var got diffBranchesResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &got))
 	assert.Equal(t, []types.BranchChange{{Ref: "theirs", Paths: []string{"a.go"}}}, got.Branches)
 	// The cap reaches the backend rather than being applied after the forks were already paid.
 	assert.Equal(t, branchLimit, src.limit)
@@ -879,7 +879,7 @@ func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
 		var got diffReviewResponse
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+		require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &got))
 		require.Len(t, got.Comments, 1)
 		assert.True(t, got.Comments[0].New, "attempt %d: serving must not consume the mark", attempt)
 	}
@@ -889,7 +889,7 @@ func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
 	var after diffReviewResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &after))
+	require.NoError(t, codec.Unmarshal(w.Body.Bytes(), &after))
 	require.Len(t, after.Comments, 1)
 	assert.False(t, after.Comments[0].New, "once the reader has seen it, it is not new again")
 }
@@ -907,7 +907,7 @@ func TestDiffBranchesNamesTheBackendThatCannotAnswer(t *testing.T) {
 	// 200, not an error status: the reader did nothing wrong and their diff must still open.
 	assert.Equal(t, http.StatusOK, rec.Code)
 	var got diffBranchesResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &got))
 	assert.Empty(t, got.Branches)
 	assert.Contains(t, got.Unsupported, "hg", "the gap names the backend that fell short")
 }
@@ -920,6 +920,6 @@ func TestDiffBranchesLeavesUnsupportedEmptyWhenTheBackendAnswered(t *testing.T) 
 		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/branches", nil))
 
 	var got diffBranchesResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.NoError(t, codec.Unmarshal(rec.Body.Bytes(), &got))
 	assert.Empty(t, got.Unsupported)
 }

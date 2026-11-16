@@ -12,8 +12,8 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	magustypes "github.com/egladman/magus/types"
@@ -55,7 +55,7 @@ func WriteSnapshot(root string, s Snapshot) error {
 		return err
 	}
 	s.Schema = SchemaSnapshot
-	b, err := json.MarshalIndent(s, "", "  ")
+	b, err := codec.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}

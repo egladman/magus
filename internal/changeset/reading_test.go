@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // loadReading is the store's mark, failing the test when it cannot be read.
@@ -196,7 +196,7 @@ func TestReadingMarkOfAnOlderMagusIsNamedNotRead(t *testing.T) {
 
 	m, err := NewStore(dir).LoadReading()
 
-	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorIs(t, err, codec.ErrLegacyStore)
 	require.ErrorContains(t, err, "preserve it")
 	assert.False(t, m.Active(), "the JSON is not read as a second format")
 }

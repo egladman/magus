@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -86,13 +86,13 @@ func assetPath(root, relative string) (string, error) {
 // readAssetReceipts maps each asset path to the digest magus last wrote there.
 func readAssetReceipts(path string) (map[string]string, error) {
 	known := map[string]string{}
-	lines, err := file.ReadLines(path)
+	lines, err := codec.ReadLines(path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 	for _, line := range lines.Lines {
 		var entry harnessAssetReceipt
-		if err := json.Unmarshal(line.Text, &entry); err != nil {
+		if err := codec.Unmarshal(line.Text, &entry); err != nil {
 			return nil, fmt.Errorf("read harness asset ownership: %w", err)
 		}
 		known[entry.Path] = entry.Digest
@@ -132,7 +132,7 @@ func planHarnessAssets(root string, d HarnessDescriptor, plan *types.HarnessInst
 				return err
 			}
 		}
-		encoded, err := json.Marshal(harnessAssetReceipt{Path: a.Path, Digest: assetDigest(a.Content)})
+		encoded, err := codec.Marshal(harnessAssetReceipt{Path: a.Path, Digest: assetDigest(a.Content)})
 		if err != nil {
 			return err
 		}
@@ -196,7 +196,7 @@ func harnessFileBody(path string, change types.HarnessFile) ([]byte, error) {
 		return nil, err
 	}
 	mergeHarnessFragment(doc, change.Fragment)
-	body, err := json.MarshalIndent(doc, "", "  ")
+	body, err := codec.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return nil, err
 	}

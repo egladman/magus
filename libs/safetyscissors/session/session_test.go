@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/libs/safetyscissors/internal/jsonl"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // writeRaw lays down an invocation file directly, so a test can pin timestamps and
@@ -18,7 +18,7 @@ import (
 func writeRaw(s *suite.Suite, dir, invocation string, records []Record) {
 	var b strings.Builder
 	for _, rec := range records {
-		line, err := jsonl.Marshal(rec)
+		line, err := codec.Marshal(rec)
 		s.Require().NoError(err)
 		b.Write(line)
 		b.WriteByte('\n')
@@ -65,7 +65,7 @@ func (s *WriterSuite) TestAppendReadRoundTrip() {
 	s.Equal(uint64(2), fold.Records[1].Seq)
 
 	var got TargetResult
-	s.Require().NoError(jsonl.Unmarshal(fold.Records[1].Payload, &got))
+	s.Require().NoError(codec.Unmarshal(fold.Records[1].Payload, &got))
 	s.Equal(TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 12}, got)
 }
 
@@ -109,14 +109,14 @@ func (s *WriterSuite) TestTargetResultEncodesTheClaimAndCost() {
 		Slots: 4, MemoryMB: 3800, Sizing: "measured", WaitedMs: 1500,
 		MaxRSSBytes: 2 << 30, CPUMs: 90_000,
 	}
-	b, err := jsonl.Marshal(ran)
+	b, err := codec.Marshal(ran)
 	s.Require().NoError(err)
 	s.JSONEq(`{"target":"go-test","outcome":"pass","started_ms":1700000000000,"slots":4,"memory_mb":3800,"sizing":"measured","waited_ms":1500,"max_rss_bytes":2147483648,"cpu_ms":90000}`, string(b))
 	var got TargetResult
-	s.Require().NoError(jsonl.Unmarshal(b, &got))
+	s.Require().NoError(codec.Unmarshal(b, &got))
 	s.Equal(ran, got)
 
-	b, err = jsonl.Marshal(TargetResult{Target: "go-test", Outcome: OutcomePass, Replayed: true, Sizing: "none"})
+	b, err = codec.Marshal(TargetResult{Target: "go-test", Outcome: OutcomePass, Replayed: true, Sizing: "none"})
 	s.Require().NoError(err)
 	s.JSONEq(`{"target":"go-test","outcome":"pass","replayed":true,"sizing":"none"}`, string(b))
 }
@@ -124,7 +124,7 @@ func (s *WriterSuite) TestTargetResultEncodesTheClaimAndCost() {
 // A duration written as dur_ms before DurationMs existed still reads.
 func (s *WriterSuite) TestTargetResultReadsTheOlderDurationSpelling() {
 	var got TargetResult
-	s.Require().NoError(jsonl.Unmarshal([]byte(`{"target":"build","outcome":"pass","dur_ms":42}`), &got))
+	s.Require().NoError(codec.Unmarshal([]byte(`{"target":"build","outcome":"pass","dur_ms":42}`), &got))
 	s.Equal(int64(42), got.DurationMs)
 }
 
@@ -409,11 +409,11 @@ func (s *ReadSuite) TestLeaseSurvivesTheStoreOnBothPayloads() {
 	s.Require().Len(fold.Records, 2)
 
 	var start InvocationStart
-	s.Require().NoError(jsonl.Unmarshal(fold.Records[0].Payload, &start))
+	s.Require().NoError(codec.Unmarshal(fold.Records[0].Payload, &start))
 	s.Equal("fleet/f3", start.Lease)
 
 	var result TargetResult
-	s.Require().NoError(jsonl.Unmarshal(fold.Records[1].Payload, &result))
+	s.Require().NoError(codec.Unmarshal(fold.Records[1].Payload, &result))
 	s.Equal("fleet/f3", result.Lease)
 
 	summaries := Summarize(fold)

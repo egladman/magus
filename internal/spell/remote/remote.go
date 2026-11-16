@@ -37,7 +37,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
@@ -239,7 +239,7 @@ func verifySlot(slot string, pin digest.Digest) error {
 		return fmt.Errorf("manifest hashes to %s", got)
 	}
 	var m ocispec.Manifest
-	if err := json.Unmarshal(raw, &m); err != nil {
+	if err := codec.Unmarshal(raw, &m); err != nil {
 		return err
 	}
 	// First match, as oci.Artifact.Layer picks when pulling.

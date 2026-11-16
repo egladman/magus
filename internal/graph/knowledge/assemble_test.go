@@ -9,7 +9,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -261,9 +261,9 @@ func TestOutputMetadata(t *testing.T) {
 // TestDeterministicSerialization guards the byte-identical-output invariant that
 // cache fingerprinting and golden diffs depend on.
 func TestDeterministicSerialization(t *testing.T) {
-	a, err := json.Marshal(mergeAll(AssembleShards(sampleInputs())).Output())
+	a, err := codec.Marshal(mergeAll(AssembleShards(sampleInputs())).Output())
 	require.NoError(t, err)
-	b, err := json.Marshal(mergeAll(AssembleShards(sampleInputs())).Output())
+	b, err := codec.Marshal(mergeAll(AssembleShards(sampleInputs())).Output())
 	require.NoError(t, err)
 	assert.Equal(t, string(a), string(b))
 }
@@ -279,8 +279,8 @@ func TestMergeOrderIndependence(t *testing.T) {
 	}
 	backward := mergeAll(reversed).Output()
 
-	fwd, _ := json.Marshal(forward)
-	bwd, _ := json.Marshal(backward)
+	fwd, _ := codec.Marshal(forward)
+	bwd, _ := codec.Marshal(backward)
 	assert.Equal(t, string(fwd), string(bwd))
 }
 

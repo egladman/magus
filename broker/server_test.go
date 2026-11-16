@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 )
@@ -181,7 +181,7 @@ func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
 	require.Len(t, r.Holders, 1)
 	assert.Equal(t, "plan/a", r.Holders[0].Owner, "a refusal keeps the holders as they were")
 
-	b, err := json.Marshal(st)
+	b, err := codec.Marshal(st)
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `"waiting":[{"project":".","target":"lint","pid":102`)
 	assert.Contains(t, string(b), `"refused":[{"at":`)

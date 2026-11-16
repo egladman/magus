@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -135,7 +135,7 @@ func (s *runtimeSuite) TestEnvelopesAndSessionScopedAdvisories() {
 	s.Require().NoError(err)
 	s.Equal(dispatchResult{Context: "first advice"}, result)
 	var body map[string]any
-	s.Require().NoError(json.Unmarshal([]byte(captured.Input), &body))
+	s.Require().NoError(codec.Unmarshal([]byte(captured.Input), &body))
 	s.Equal(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "mcp__magus__magus_query", "session_id": "root", "agent_id": "child", "cwd": "/workspace", "tool_input": map[string]any{"query": "hello"}}, body)
 	_, err = runtime.Dispatch(context.Background(), hookEvent{Kind: "remember", SessionID: "b", CallID: "same", Context: "other advice"})
 	s.Require().NoError(err)
@@ -166,7 +166,7 @@ func (s *runtimeSuite) TestOverlappingCallsAreSerialized() {
 				return processOutput{}, ctx.Err()
 			}
 		}
-		encoded, _ := json.Marshal(map[string]any{"api_version": "magus.guard/v1alpha1", "decision": "advise", "context": inv.Input})
+		encoded, _ := codec.Marshal(map[string]any{"api_version": "magus.guard/v1alpha1", "decision": "advise", "context": inv.Input})
 		return processOutput{Stdout: string(encoded)}, nil
 	})
 	var wg sync.WaitGroup

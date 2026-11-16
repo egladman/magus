@@ -22,9 +22,9 @@
 //
 // Nothing in the module reads the environment, writes to stdout or stderr, or keeps
 // process-wide state; each store opens on a directory its caller names. The module
-// imports the standard library, golang.org/x/sync, golang.org/x/sys,
-// github.com/bmatcuk/doublestar/v4 and the repository's own libs/* modules, and never
-// magus. It ships no agent loop, no model client and no router.
+// imports the standard library, golang.org/x/sync, github.com/bmatcuk/doublestar/v4,
+// libs/codec for every JSON value and JSON Lines store, and the repository's other libs/*
+// modules, and never magus. It ships no agent loop, no model client and no router.
 //
 // The design is ADR 0050 in magus's docs/decisions.
 package safetyscissors

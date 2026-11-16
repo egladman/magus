@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -49,7 +49,7 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 	deps.GraphIDs = kindLookup(map[string][]string{types.KindFile: {"file:internal/api/handler.go", "file:internal/api/gen/handler.go"}})
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: root})
 	envelope := func(tool string, input map[string]any) string {
-		raw, err := json.Marshal(map[string]any{
+		raw, err := codec.Marshal(map[string]any{
 			"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": tool, "cwd": root, "tool_input": input,
 		})
 		require.NoError(t, err)

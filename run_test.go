@@ -32,12 +32,12 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -256,12 +256,12 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 		var head struct {
 			Type string `json:"type"`
 		}
-		require.NoError(t, json.Unmarshal(line, &head))
+		require.NoError(t, codec.Unmarshal(line, &head))
 		switch head.Type {
 		case report.TypeTargetResult:
-			require.NoError(t, json.Unmarshal(line, &result))
+			require.NoError(t, codec.Unmarshal(line, &result))
 		case report.TypeDiagnosticEmitted:
-			require.NoError(t, json.Unmarshal(line, &diag))
+			require.NoError(t, codec.Unmarshal(line, &diag))
 		}
 	}
 	assert.Equal(t, "failed", result.Status, "stream:\n%s", stream.String())
@@ -1597,7 +1597,7 @@ func recordOutputOverlapEvents(t *testing.T, steps []cache.Step) []recordedOutpu
 	require.NoError(t, sink.Close())
 
 	var out []recordedOutputOverlap
-	dec := json.NewDecoder(&buf)
+	dec := codec.NewDecoder(&buf)
 	for {
 		var ev recordedOutputOverlap
 		err := dec.Decode(&ev)
@@ -1682,7 +1682,7 @@ func TestCheckMissingDependencies_ReportsScopeLabelAsTarget(t *testing.T) {
 	require.NoError(t, sink.Close())
 
 	var evs []recordedMissingDependency
-	dec := json.NewDecoder(&buf)
+	dec := codec.NewDecoder(&buf)
 	for {
 		var ev recordedMissingDependency
 		err := dec.Decode(&ev)
@@ -2241,10 +2241,10 @@ func TestRun_NonRetryableFailureRecordsNotRetried(t *testing.T) {
 		var head struct {
 			Type string `json:"type"`
 		}
-		require.NoError(t, json.Unmarshal(line, &head))
+		require.NoError(t, codec.Unmarshal(line, &head))
 		if head.Type == report.TypeVolatility {
 			var v report.VolatilityCall
-			require.NoError(t, json.Unmarshal(line, &v))
+			require.NoError(t, codec.Unmarshal(line, &v))
 			got = append(got, v)
 		}
 	}
@@ -3900,7 +3900,7 @@ func runSummaries(t *testing.T, stream string) []map[string]any {
 	var out []map[string]any
 	for line := range strings.Lines(stream) {
 		var rec map[string]any
-		require.NoError(t, json.Unmarshal([]byte(line), &rec), "line %q", line)
+		require.NoError(t, codec.Unmarshal([]byte(line), &rec), "line %q", line)
 		if rec["type"] == "run.summary" {
 			out = append(out, rec)
 		}

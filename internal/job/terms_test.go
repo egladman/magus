@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
@@ -354,7 +354,7 @@ func (s *termsTestScopeSuite) TestNoScopeDropsTheSection() {
 }
 
 func (s *termsTestScopeSuite) TestJSONCarriesTestScope() {
-	b, err := json.Marshal(NewTerms(briefRow(), s.facts()))
+	b, err := codec.Marshal(NewTerms(briefRow(), s.facts()))
 	s.Require().NoError(err)
 	s.Contains(string(b), `"test_scope":[{"project":".","spell":"go","op":"go::go-test","files":["pkg/a/x.go"],"operands":["./pkg/a"]}`)
 }

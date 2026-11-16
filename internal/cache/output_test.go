@@ -18,10 +18,10 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -661,7 +661,7 @@ func TestInvocationByID(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	f, err := os.Create(filepath.Join(runs, "inv123.jsonl"))
 	require.NoError(t, err)
-	enc := json.NewEncoder(f)
+	enc := codec.NewEncoder(f)
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindStarted, Command: &journal.Command{Arguments: []string{"run", "build"}, Trigger: "agent"}}))
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindFinished, Status: journal.StatusPass}))
 	require.NoError(t, f.Close())
@@ -684,7 +684,7 @@ func TestInvocationEventsByID(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	f, err := os.Create(filepath.Join(runs, "invaudit1.jsonl"))
 	require.NoError(t, err)
-	enc := json.NewEncoder(f)
+	enc := codec.NewEncoder(f)
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindStarted, Command: &journal.Command{Arguments: []string{"run", "image-login"}}}))
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindSecret, Project: ".", Target: "image-login", Text: `read secret "GHCR_TOKEN" via onepassword`}))
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindFinished, Status: journal.StatusPass}))
@@ -726,7 +726,7 @@ func TestInvocationReadsRefuseTraversal(t *testing.T) {
 	require.NoError(t, os.MkdirAll(outside, 0o755))
 	f, err := os.Create(filepath.Join(outside, "hosts.jsonl"))
 	require.NoError(t, err)
-	require.NoError(t, json.NewEncoder(f).Encode(journal.Event{Kind: journal.KindStarted, Text: "not yours"}))
+	require.NoError(t, codec.NewEncoder(f).Encode(journal.Event{Kind: journal.KindStarted, Text: "not yours"}))
 	require.NoError(t, f.Close())
 
 	// Relative to <runs>/inv, because the id's own leading segment is one of the levels the
@@ -760,7 +760,7 @@ func TestInvocationEventsFromTailsCompleteLines(t *testing.T) {
 	path := filepath.Join(runs, "invtail1.jsonl")
 	f, err := os.Create(path)
 	require.NoError(t, err)
-	enc := json.NewEncoder(f)
+	enc := codec.NewEncoder(f)
 	require.NoError(t, enc.Encode(journal.Event{Ts: 1, Kind: journal.KindOutput, Text: "compiling"}))
 	require.NoError(t, f.Close())
 
@@ -771,9 +771,9 @@ func TestInvocationEventsFromTailsCompleteLines(t *testing.T) {
 	assert.Equal(t, "compiling", events[0].Text)
 
 	// The writer appends a whole line plus the first half of the next one.
-	line, err := json.Marshal(journal.Event{Ts: 2, Kind: journal.KindOutput, Text: "linking"})
+	line, err := codec.Marshal(journal.Event{Ts: 2, Kind: journal.KindOutput, Text: "linking"})
 	require.NoError(t, err)
-	torn, err := json.Marshal(journal.Event{Ts: 3, Kind: journal.KindFinished, Status: journal.StatusPass})
+	torn, err := codec.Marshal(journal.Event{Ts: 3, Kind: journal.KindFinished, Status: journal.StatusPass})
 	require.NoError(t, err)
 	f, err = os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
@@ -817,7 +817,7 @@ func TestListRunLogsReadsHeadAndTailOnly(t *testing.T) {
 		p := filepath.Join(runs, name+".jsonl")
 		f, err := os.Create(p)
 		require.NoError(t, err)
-		enc := json.NewEncoder(f)
+		enc := codec.NewEncoder(f)
 		for _, e := range evs {
 			require.NoError(t, enc.Encode(e))
 		}

@@ -1,7 +1,7 @@
 package broker
 
 import (
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
@@ -60,9 +60,9 @@ const maxFrameBytes = 4 << 20
 // frame is one line on the wire: a type, the request it belongs to, and a body whose
 // shape the type decides.
 type frame struct {
-	Type string          `json:"type"`
-	ID   uint64          `json:"id,omitzero"`
-	Body json.RawMessage `json:"body,omitempty"`
+	Type string           `json:"type"`
+	ID   uint64           `json:"id,omitzero"`
+	Body codec.RawMessage `json:"body,omitempty"`
 }
 
 // hello is the first frame a client sends: who is on the other end. The broker copies

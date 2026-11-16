@@ -15,8 +15,8 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -113,7 +113,7 @@ func newStepSpec(row step.Spec) (stepSpec, error) {
 	}
 	if len(row.InputSchema) > 0 {
 		var s jsonschema.Schema
-		if err := json.Unmarshal(row.InputSchema, &s); err != nil {
+		if err := codec.Unmarshal(row.InputSchema, &s); err != nil {
 			return stepSpec{}, fmt.Errorf("input_schema does not parse: %w", err)
 		}
 		resolved, err := s.Resolve(nil)
@@ -365,7 +365,7 @@ func (r stepSpec) spawnEnvelope(st step.Step, input map[string]any) (string, str
 		input["description"] = d
 	}
 	st.Name, st.Input = cmp.Or(st.Name, st.Kind), input
-	raw, err := json.Marshal(stepEnvelope(st))
+	raw, err := codec.Marshal(stepEnvelope(st))
 	if err != nil {
 		return "", fmt.Sprintf("does not encode as a spawn: %v", err)
 	}
@@ -525,7 +525,7 @@ func stepRecord(raw string) (step.Step, bool) {
 		return step.Step{}, false
 	}
 	var st step.Step
-	if json.Unmarshal([]byte(raw), &st) != nil || !strings.HasPrefix(st.APIVersion, stepGroup) {
+	if codec.Unmarshal([]byte(raw), &st) != nil || !strings.HasPrefix(st.APIVersion, stepGroup) {
 		return step.Step{}, false
 	}
 	return st, true

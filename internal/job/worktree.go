@@ -22,8 +22,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -318,7 +318,7 @@ func askVersion(ctx context.Context, bin string) (builtVersion, bool) {
 	if err != nil {
 		return v, false
 	}
-	return v, json.Unmarshal(out, &v) == nil
+	return v, codec.Unmarshal(out, &v) == nil
 }
 
 // builtAt reports whether the magus at bin says it was built at base, clean.
@@ -929,8 +929,8 @@ func (s *Store) cachedDigest(bin string) (string, error) {
 }
 
 // digestCache is the JSON Lines store at path, keyed by binary path.
-func digestCache(path string) file.JSONL[binaryDigest] {
-	return file.JSONL[binaryDigest]{Path: path, Key: func(d binaryDigest) string { return d.Path }}
+func digestCache(path string) codec.JSONL[binaryDigest] {
+	return codec.JSONL[binaryDigest]{Log: slog.With(attr.Component("magus")), Path: path, Key: func(d binaryDigest) string { return d.Path }}
 }
 
 // PinRefusal says why the root's hook may not hand a call to bin, "" when it

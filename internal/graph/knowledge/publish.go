@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/embedtable"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/secrets"
 )
@@ -277,7 +277,7 @@ func PullMergedGraph(ctx context.Context, client *oci.Client, src oci.Reference,
 	}
 	out := g.Output()
 	out.SourceBaseURL = sourceBase
-	body, err := json.Marshal(out)
+	body, err := codec.Marshal(out)
 	if err != nil {
 		return nil, fmt.Errorf("encode graph: %w", err)
 	}

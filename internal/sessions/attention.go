@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
@@ -200,7 +200,7 @@ func Attention(fold session.Fold) []AttentionRequest {
 		switch rec.Kind {
 		case KindAttentionOpen:
 			var open AttentionOpen
-			if json.Unmarshal(rec.Payload, &open) != nil || open.Request == "" {
+			if codec.Unmarshal(rec.Payload, &open) != nil || open.Request == "" {
 				continue
 			}
 			req := byID[open.Request]
@@ -227,7 +227,7 @@ func Attention(fold session.Fold) []AttentionRequest {
 			}
 		case KindAttentionDispose:
 			var dispose AttentionDispose
-			if json.Unmarshal(rec.Payload, &dispose) != nil || dispose.Request == "" {
+			if codec.Unmarshal(rec.Payload, &dispose) != nil || dispose.Request == "" {
 				continue
 			}
 			req := byID[dispose.Request]

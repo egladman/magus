@@ -8,7 +8,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/require"
@@ -21,7 +21,7 @@ func writeRaw(t *testing.T, dir, invocation string, records []session.Record) {
 	t.Helper()
 	var b strings.Builder
 	for _, rec := range records {
-		line, err := json.Marshal(rec)
+		line, err := codec.Marshal(rec)
 		require.NoError(t, err)
 		b.Write(line)
 		b.WriteByte('\n')
@@ -52,7 +52,7 @@ func (s *MessageBoundSuite) TestAppendBoundsAnOversizedAttentionMessage() {
 	s.Require().Len(fold.Records, 2)
 
 	var got AttentionOpen
-	s.Require().NoError(json.Unmarshal(fold.Records[1].Payload, &got))
+	s.Require().NoError(codec.Unmarshal(fold.Records[1].Payload, &got))
 	// The marker is what lets a reader tell a short message from a long one nobody kept.
 	s.Equal(strings.Repeat("x", MaxMessageBytes)+messageTruncated, got.Message)
 }

@@ -16,9 +16,9 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
@@ -178,7 +178,7 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 		leases[0].State, leases[1].State = "", ""
 		var body []byte
 		for _, row := range leases {
-			line, err := json.Marshal(row)
+			line, err := codec.Marshal(row)
 			require.NoError(t, err)
 			body = append(append(body, line...), '\n')
 		}

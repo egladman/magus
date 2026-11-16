@@ -18,10 +18,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -70,7 +70,7 @@ type echoed struct {
 
 // credentialEcho answers with the credential and entry point the guard left on the context.
 var credentialEcho = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	err := json.NewEncoder(w).Encode(echoed{
+	err := codec.NewEncoder(w).Encode(echoed{
 		Credential: trail.CredentialFromContext(r.Context()),
 		EntryPoint: trail.EntryPointFromContext(r.Context()),
 	})
@@ -85,7 +85,7 @@ func TestPeerGuardAdmitsTheServersOwnUID(t *testing.T) {
 	status, body := post(t, client)
 	require.Equal(t, http.StatusOK, status, "%s", body)
 	var got echoed
-	require.NoError(t, json.Unmarshal(body, &got))
+	require.NoError(t, codec.Unmarshal(body, &got))
 	assert.Equal(t, echoed{Credential: job.CredentialSocketPeer, EntryPoint: job.EntryPointRPC}, got)
 }
 

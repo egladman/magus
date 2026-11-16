@@ -24,12 +24,12 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/libs/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -1335,12 +1335,12 @@ func loadMagusfileFacts(store buzz.BytecodeStore, code string) magusfileFacts {
 	key := "facts-" + hex.EncodeToString(sum[:])
 	if blob, err := store.Load(key); err == nil {
 		var f magusfileFacts
-		if json.Unmarshal(blob, &f) == nil {
+		if codec.Unmarshal(blob, &f) == nil {
 			return f
 		}
 	}
 	f := computeMagusfileFacts(code)
-	if blob, err := json.Marshal(f); err == nil {
+	if blob, err := codec.Marshal(f); err == nil {
 		_ = store.Store(key, blob)
 	}
 	return f

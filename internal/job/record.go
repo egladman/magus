@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
@@ -20,76 +20,76 @@ import (
 // magus wrote, carried back out unchanged.
 type jobRecord struct {
 	apiversion.TypeMeta
-	Metadata apiversion.Metadata        `json:"metadata"`
-	Spec     jobSpec                    `json:"spec"`
-	Status   jobStatus                  `json:"status"`
-	Unknown  map[string]json.RawMessage `json:",unknown"`
+	Metadata apiversion.Metadata         `json:"metadata"`
+	Spec     jobSpec                     `json:"spec"`
+	Status   jobStatus                   `json:"status"`
+	Unknown  map[string]codec.RawMessage `json:",unknown"`
 }
 
 // jobSpec is what a declaration writes.
 type jobSpec struct {
-	Parent       string                     `json:"parent,omitempty"`
-	Agent        *agentRecord               `json:"agent,omitempty"`
-	Checkpoint   string                     `json:"checkpoint,omitempty"`
-	Paths        job.Paths                  `json:"paths,omitzero"`
-	DependsOn    []string                   `json:"dependsOn,omitempty"`
-	Integrates   []string                   `json:"integrates,omitempty"`
-	Breaks       []string                   `json:"breaks,omitempty"`
-	BriefFormat  string                     `json:"briefFormat,omitempty"`
-	Delivery     string                     `json:"delivery,omitempty"`
-	ParentHead   string                     `json:"parentHead,omitempty"`
-	Follows      string                     `json:"follows,omitempty"`
-	MaxAttempts  int                        `json:"maxAttempts,omitzero"`
-	MaxClaims    int                        `json:"maxClaims,omitzero"`
-	Deferred     []job.Deferred             `json:"deferred,omitempty"`
-	LeftUnmerged string                     `json:"leftUnmerged,omitempty"`
-	Weight       float64                    `json:"weight,omitzero"`
-	Check        *leaseCheckRecord          `json:"check,omitempty"`
-	Validation   string                     `json:"validation,omitempty"`
-	Goals        []goalRecord               `json:"goals,omitempty"`
-	ReadOnly     bool                       `json:"readOnly,omitzero"`
-	Deviations   []job.Deviation            `json:"deviations,omitempty"`
-	Unknown      map[string]json.RawMessage `json:",unknown"`
+	Parent       string                      `json:"parent,omitempty"`
+	Agent        *agentRecord                `json:"agent,omitempty"`
+	Checkpoint   string                      `json:"checkpoint,omitempty"`
+	Paths        job.Paths                   `json:"paths,omitzero"`
+	DependsOn    []string                    `json:"dependsOn,omitempty"`
+	Integrates   []string                    `json:"integrates,omitempty"`
+	Breaks       []string                    `json:"breaks,omitempty"`
+	BriefFormat  string                      `json:"briefFormat,omitempty"`
+	Delivery     string                      `json:"delivery,omitempty"`
+	ParentHead   string                      `json:"parentHead,omitempty"`
+	Follows      string                      `json:"follows,omitempty"`
+	MaxAttempts  int                         `json:"maxAttempts,omitzero"`
+	MaxClaims    int                         `json:"maxClaims,omitzero"`
+	Deferred     []job.Deferred              `json:"deferred,omitempty"`
+	LeftUnmerged string                      `json:"leftUnmerged,omitempty"`
+	Weight       float64                     `json:"weight,omitzero"`
+	Check        *leaseCheckRecord           `json:"check,omitempty"`
+	Validation   string                      `json:"validation,omitempty"`
+	Goals        []goalRecord                `json:"goals,omitempty"`
+	ReadOnly     bool                        `json:"readOnly,omitzero"`
+	Deviations   []job.Deviation             `json:"deviations,omitempty"`
+	Unknown      map[string]codec.RawMessage `json:",unknown"`
 }
 
 // jobStatus is what the store computes. Its conditions are the row's
 // lifecycle; see [lifecycleConditions].
 type jobStatus struct {
-	Conditions      []apiversion.Condition     `json:"conditions,omitempty"`
-	ModelTier       *modelTierRecord           `json:"modelTier,omitempty"`
-	ReworkRounds    int                        `json:"reworkRounds,omitzero"`
-	Widenings       int                        `json:"widenings,omitzero"`
-	Claims          []claimRecord              `json:"claims,omitempty"`
-	Landed          bool                       `json:"landed,omitzero"`
-	Paused          int64                      `json:"paused,omitzero"`
-	PausedBy        originRecord               `json:"pausedBy,omitzero"`
-	PauseReason     string                     `json:"pauseReason,omitempty"`
-	PausedUntil     int64                      `json:"pausedUntil,omitzero"`
-	Rejection       *rejectionRecord           `json:"rejection,omitempty"`
-	Releases        []releaseRecord            `json:"releases,omitempty"`
-	Unattributed    []job.UnattributedWrite    `json:"unattributed,omitempty"`
-	Entries         []entryRecord              `json:"entries,omitempty"`
-	ReleaseRequests []job.ReleaseRequest       `json:"releaseRequests,omitempty"`
-	WriteProof      string                     `json:"writeProof,omitempty"`
-	Validated       int64                      `json:"validated,omitzero"`
-	ReportedBase    string                     `json:"reportedBase,omitempty"`
-	BaseVerdict     string                     `json:"baseVerdict,omitempty"`
-	RegisteredBy    originRecord               `json:"registeredBy,omitzero"`
-	Authority       string                     `json:"authority,omitempty"`
-	Registered      int64                      `json:"registered,omitzero"`
-	HolderStopped   int64                      `json:"holderStopped,omitzero"`
-	CheckoutRoot    string                     `json:"checkoutRoot,omitempty"`
-	Worktree        *worktreeRecord            `json:"worktree,omitempty"`
-	EndReason       string                     `json:"endReason,omitempty"`
-	Created         int64                      `json:"created"`
-	Updated         int64                      `json:"updated"`
-	Deadline        int64                      `json:"deadline,omitzero"`
-	Attempt         *runAttemptRecord          `json:"attempt,omitempty"`
-	GateAttempts    []gateAttemptRecord        `json:"gateAttempts,omitempty"`
-	LastRun         *runRecord                 `json:"lastRun,omitempty"`
-	Integration     *integrationRecord         `json:"integration,omitempty"`
-	WaiterEvidence  *integrationRecord         `json:"waiterEvidence,omitempty"`
-	Unknown         map[string]json.RawMessage `json:",unknown"`
+	Conditions      []apiversion.Condition      `json:"conditions,omitempty"`
+	ModelTier       *modelTierRecord            `json:"modelTier,omitempty"`
+	ReworkRounds    int                         `json:"reworkRounds,omitzero"`
+	Widenings       int                         `json:"widenings,omitzero"`
+	Claims          []claimRecord               `json:"claims,omitempty"`
+	Landed          bool                        `json:"landed,omitzero"`
+	Paused          int64                       `json:"paused,omitzero"`
+	PausedBy        originRecord                `json:"pausedBy,omitzero"`
+	PauseReason     string                      `json:"pauseReason,omitempty"`
+	PausedUntil     int64                       `json:"pausedUntil,omitzero"`
+	Rejection       *rejectionRecord            `json:"rejection,omitempty"`
+	Releases        []releaseRecord             `json:"releases,omitempty"`
+	Unattributed    []job.UnattributedWrite     `json:"unattributed,omitempty"`
+	Entries         []entryRecord               `json:"entries,omitempty"`
+	ReleaseRequests []job.ReleaseRequest        `json:"releaseRequests,omitempty"`
+	WriteProof      string                      `json:"writeProof,omitempty"`
+	Validated       int64                       `json:"validated,omitzero"`
+	ReportedBase    string                      `json:"reportedBase,omitempty"`
+	BaseVerdict     string                      `json:"baseVerdict,omitempty"`
+	RegisteredBy    originRecord                `json:"registeredBy,omitzero"`
+	Authority       string                      `json:"authority,omitempty"`
+	Registered      int64                       `json:"registered,omitzero"`
+	HolderStopped   int64                       `json:"holderStopped,omitzero"`
+	CheckoutRoot    string                      `json:"checkoutRoot,omitempty"`
+	Worktree        *worktreeRecord             `json:"worktree,omitempty"`
+	EndReason       string                      `json:"endReason,omitempty"`
+	Created         int64                       `json:"created"`
+	Updated         int64                       `json:"updated"`
+	Deadline        int64                       `json:"deadline,omitzero"`
+	Attempt         *runAttemptRecord           `json:"attempt,omitempty"`
+	GateAttempts    []gateAttemptRecord         `json:"gateAttempts,omitempty"`
+	LastRun         *runRecord                  `json:"lastRun,omitempty"`
+	Integration     *integrationRecord          `json:"integration,omitempty"`
+	WaiterEvidence  *integrationRecord          `json:"waiterEvidence,omitempty"`
+	Unknown         map[string]codec.RawMessage `json:",unknown"`
 }
 
 // recordJob is row as the line jobs.jsonl stores. stored is the row's
@@ -111,7 +111,7 @@ func recordJob(row job.Job, stored *jobRecord) jobRecord {
 }
 
 // recordSpec is the declared half of row's record.
-func recordSpec(row job.Job, unknown map[string]json.RawMessage) jobSpec {
+func recordSpec(row job.Job, unknown map[string]codec.RawMessage) jobSpec {
 	spec := jobSpec{
 		Parent: row.Parent, Agent: recordAgent(row.Agent), Checkpoint: row.Checkpoint,
 		Paths:     row.Paths,
@@ -274,7 +274,7 @@ func (st jobStatus) populate(row *job.Job, bad *wireReads) {
 
 // unknownMembers names the members of top, spec and status, as
 // [job.Job.Unknown] spells them.
-func unknownMembers(top, spec, status map[string]json.RawMessage) []string {
+func unknownMembers(top, spec, status map[string]codec.RawMessage) []string {
 	if len(top)+len(spec)+len(status) == 0 {
 		return nil
 	}

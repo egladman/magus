@@ -13,8 +13,8 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -317,13 +317,13 @@ type noticeWire struct {
 
 // MarshalJSON writes Level by name.
 func (n Notice) MarshalJSON() ([]byte, error) {
-	return json.Marshal(noticeWire{Level: levelName(n.Level), Code: n.Code, Message: n.Message, Attrs: n.Attrs})
+	return codec.Marshal(noticeWire{Level: levelName(n.Level), Code: n.Code, Message: n.Message, Attrs: n.Attrs})
 }
 
 // UnmarshalJSON reads a line [Notice.MarshalJSON] wrote.
 func (n *Notice) UnmarshalJSON(b []byte) error {
 	var w noticeWire
-	if err := json.Unmarshal(b, &w); err != nil {
+	if err := codec.Unmarshal(b, &w); err != nil {
 		return err
 	}
 	var l slog.Level

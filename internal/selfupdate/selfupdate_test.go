@@ -23,7 +23,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +46,7 @@ const testExpiry = "2999-01-01T00:00:00Z"
 func buildIndex(t *testing.T, priv ed25519.PrivateKey, releases []IndexRelease) ([]byte, []byte) {
 	t.Helper()
 	idx := ReleaseIndex{SchemaVersion: 1, ExpiresAt: testExpiry, Releases: releases}
-	data, err := json.Marshal(idx)
+	data, err := codec.Marshal(idx)
 	require.NoError(t, err)
 	sig := ed25519.Sign(priv, data)
 	return data, sig
@@ -164,7 +164,7 @@ func TestFetchAndVerifyIndex_WrongSchemaVersion(t *testing.T) {
 	t.Parallel()
 	pub, priv := makeTestKey(t)
 
-	data, _ := json.Marshal(map[string]any{"schema_version": 99, "releases": []any{}})
+	data, _ := codec.Marshal(map[string]any{"schema_version": 99, "releases": []any{}})
 	sig := ed25519.Sign(priv, data)
 	srv := startIndexServer(t, data, sig)
 
@@ -178,7 +178,7 @@ func TestFetchAndVerifyIndex_RefusesAnIndexWithoutExpiry(t *testing.T) {
 	t.Parallel()
 	pub, priv := makeTestKey(t)
 
-	data, err := json.Marshal(ReleaseIndex{SchemaVersion: 1, Releases: []IndexRelease{{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "f.tar.gz"}}}}})
+	data, err := codec.Marshal(ReleaseIndex{SchemaVersion: 1, Releases: []IndexRelease{{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "f.tar.gz"}}}}})
 	require.NoError(t, err)
 	srv := startIndexServer(t, data, ed25519.Sign(priv, data))
 
@@ -368,7 +368,7 @@ func TestReleaseIndex_PrereleasesDecodeApart(t *testing.T) {
 	data := []byte(`{"schema_version":1,"key_id":"k","releases":[{"version":"v0.4.3","artifacts":[]}],` +
 		`"prereleases":[{"version":"v0.5.0-rc.1","artifacts":[{"name":"rc.tar.gz"}]}]}`)
 	var idx ReleaseIndex
-	require.NoError(t, json.Unmarshal(data, &idx))
+	require.NoError(t, codec.Unmarshal(data, &idx))
 	require.Equal(t, ReleaseIndex{
 		SchemaVersion: 1,
 		KeyID:         "k",
@@ -379,7 +379,7 @@ func TestReleaseIndex_PrereleasesDecodeApart(t *testing.T) {
 	var shipped struct {
 		Releases []IndexRelease `json:"releases"`
 	}
-	require.NoError(t, json.Unmarshal(data, &shipped))
+	require.NoError(t, codec.Unmarshal(data, &shipped))
 	require.Equal(t, []IndexRelease{{Version: "v0.4.3", Artifacts: []IndexArtifact{}}}, shipped.Releases)
 }
 

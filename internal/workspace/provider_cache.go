@@ -16,9 +16,9 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 )
@@ -125,7 +125,7 @@ func providedProjects(ctx context.Context, cache ProviderCache, root, spellName 
 // writeProviderCache stores one provider's entry at path. A failure is logged and
 // dropped: the provider is the source of truth, so a lost entry costs a re-run.
 func writeProviderCache(ctx context.Context, path string, entry any) {
-	if data, err := json.Marshal(entry); err != nil {
+	if data, err := codec.Marshal(entry); err != nil {
 		slog.With(attr.Component("magus")).DebugContext(ctx, "provider cache not encodable", slog.String("path", path), attr.Error(err))
 	} else if err := file.WriteFileAtomic(path, data, 0o644); err != nil {
 		slog.With(attr.Component("magus")).DebugContext(ctx, "provider cache not writable", slog.String("path", path), attr.Error(err))
@@ -139,7 +139,7 @@ func readProviderCache(path string, entry any) bool {
 	if err != nil {
 		return false
 	}
-	return json.Unmarshal(data, entry) == nil
+	return codec.Unmarshal(data, entry) == nil
 }
 
 // providerDigest is the fingerprint every provider cache shares: the entry format, the

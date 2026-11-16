@@ -24,7 +24,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	// Blank-imported so its init installs the spell registry's ensure hook, exactly as
 	// cmd/magus/packs_interp.go does for the real binary: without it,
 	// project.DefaultSpellRegistry().All() in testDependencies below runs against a registry
@@ -1423,7 +1423,7 @@ const sedInPlace = `sed -i 's/a/b/' f.go`
 // its wire name, so the test never names the decision type the rules package keeps to itself.
 func withSetting(rule string, d fmt.Stringer) Dependencies {
 	var s builtin.Setting
-	if err := json.Unmarshal(fmt.Appendf(nil, `{"decision":%q}`, d.String()), &s); err != nil {
+	if err := codec.Unmarshal(fmt.Appendf(nil, `{"decision":%q}`, d.String()), &s); err != nil {
 		panic(err)
 	}
 	return Dependencies{Builtins: map[string]builtin.Setting{rule: s}}

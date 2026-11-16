@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/selfupdate"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 	"golang.org/x/mod/semver"
@@ -468,7 +468,7 @@ func runReleaseIndex(args []string) error {
 	} else if _, err := time.Parse(time.RFC3339, expiresAt); err != nil {
 		return fmt.Errorf("-expires %q is not RFC3339: %w", expiresAt, err)
 	}
-	data, err := json.Marshal(buildIndex(manifests, active.ID, expiresAt, selfupdate.ReleaseKeys().RevokedIDs()))
+	data, err := codec.Marshal(buildIndex(manifests, active.ID, expiresAt, selfupdate.ReleaseKeys().RevokedIDs()))
 	if err != nil {
 		return fmt.Errorf("marshal index: %w", err)
 	}

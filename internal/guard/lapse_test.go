@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -143,7 +143,7 @@ func TestOldSettingsJSONIsNotRead(t *testing.T) {
 	require.NoError(t, os.WriteFile(old, []byte(`{"busy-wait":{"decision":"deny"}}`), 0o644))
 
 	settings, err := recallSettings(dir)
-	require.ErrorIs(t, err, file.ErrLegacyStore)
+	require.ErrorIs(t, err, codec.ErrLegacyStore)
 	require.ErrorContains(t, err, "preserve it")
 	assert.Nil(t, settings)
 	assert.Nil(t, recalledSettings(dir))

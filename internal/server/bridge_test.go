@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -78,16 +78,16 @@ func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 			`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"config","arguments":{}}}`,
 		}
 		type reply struct {
-			JSONRPC string          `json:"jsonrpc"`
-			ID      int             `json:"id"`
-			Result  json.RawMessage `json:"result"`
+			JSONRPC string           `json:"jsonrpc"`
+			ID      int              `json:"id"`
+			Result  codec.RawMessage `json:"result"`
 		}
 		for i, frame := range frames {
 			_, err := io.WriteString(inW, frame+"\n")
 			require.NoError(t, err)
 			require.True(t, wire.Scan(), "no reply to %s", frame)
 			var got reply
-			require.NoError(t, json.Unmarshal(wire.Bytes(), &got), "the wire carried a line that is not JSON-RPC: %q", wire.Text())
+			require.NoError(t, codec.Unmarshal(wire.Bytes(), &got), "the wire carried a line that is not JSON-RPC: %q", wire.Text())
 			assert.NotEmpty(t, got.Result)
 			assert.Equal(t, reply{JSONRPC: "2.0", ID: i + 1, Result: got.Result}, got)
 			if i == 0 {

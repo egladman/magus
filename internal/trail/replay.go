@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
@@ -120,7 +120,7 @@ func replayTrail(root, base string, paths []string, limit int) map[string][]diff
 			continue
 		}
 		var req agentCommandRequest
-		if json.Unmarshal(raw, &req) != nil {
+		if codec.Unmarshal(raw, &req) != nil {
 			continue
 		}
 		// A hook records the path exactly as its host supplied it, which is an ABSOLUTE path
@@ -387,7 +387,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 			call := SessionCall{At: time.UnixMilli(e.Ts), Action: e.Action, Worker: e.Agent, ToolMs: e.DurationMs, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
 			if raw, err := trailtypes.ReadBlob(base, e.ResponseRef); err == nil {
 				var resp agentCommandResponse
-				if json.Unmarshal(raw, &resp) == nil {
+				if codec.Unmarshal(raw, &resp) == nil {
 					call.Decision, call.Rule = resp.Decision, resp.Rule
 					if resp.Decision == "deny" {
 						out.Denied++
@@ -396,7 +396,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 			}
 			if raw, err := trailtypes.ReadBlob(base, e.RequestRef); err == nil {
 				var req agentCommandRequest
-				if json.Unmarshal(raw, &req) == nil {
+				if codec.Unmarshal(raw, &req) == nil {
 					call.AgentFacts = req.AgentFacts
 					call.Thread = cmp.Or(call.Thread, types.AgentThreadUnknown)
 				}
@@ -409,7 +409,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 			sp := SessionSpawn{Child: e.Action, Lease: e.Lease, At: time.UnixMilli(e.Ts)}
 			if raw, err := trailtypes.ReadBlob(base, e.RequestRef); err == nil {
 				var req agentSpawnRequest
-				if json.Unmarshal(raw, &req) == nil {
+				if codec.Unmarshal(raw, &req) == nil {
 					sp.DeclaredModel = req.DeclaredModel
 				}
 			}
@@ -472,7 +472,7 @@ func LastAgentActivity(base string) (AgentActivity, bool) {
 		return AgentActivity{}, false
 	}
 	var e trailtypes.Event
-	if json.Unmarshal([]byte(newest), &e) != nil {
+	if codec.Unmarshal([]byte(newest), &e) != nil {
 		return AgentActivity{}, false
 	}
 	if e.Kind != trailtypes.KindAgentCommand && e.Kind != trailtypes.KindAgentSpawn || e.Ts <= 0 {
@@ -524,7 +524,7 @@ func ObservedCounts(base string, limit int) (reads, writes, shell int) {
 			continue
 		}
 		var req agentCommandRequest
-		if json.Unmarshal(raw, &req) != nil {
+		if codec.Unmarshal(raw, &req) != nil {
 			continue
 		}
 		switch req.Tool {

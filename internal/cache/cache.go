@@ -34,9 +34,9 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -2123,7 +2123,7 @@ func (c *Cache) manifestBlobs(ctx context.Context, dir string) (map[string]struc
 			return nil
 		}
 		var m Manifest
-		if jErr := json.Unmarshal(data, &m); jErr != nil {
+		if jErr := codec.Unmarshal(data, &m); jErr != nil {
 			c.log.WarnContext(ctx, "cache.warn", slog.String("msg", fmt.Sprintf("gc: corrupt manifest %s: %v", p, jErr)))
 			return nil
 		}

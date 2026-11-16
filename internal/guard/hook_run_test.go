@@ -24,9 +24,9 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
@@ -47,9 +47,9 @@ type reportedExit interface {
 func testHookEnv() HookEnv {
 	self := func() (string, error) { return os.Executable() }
 	writer := output.Writer{
-		Codec: output.Codec{Marshal: json.Marshal, Unmarshal: json.Unmarshal},
+		Codec: output.Codec{Marshal: codec.Marshal, Unmarshal: codec.Unmarshal},
 		Funcs: template.FuncMap{"toJson": func(v any) string {
-			b, _ := json.Marshal(v)
+			b, _ := codec.Marshal(v)
 			return string(b)
 		}},
 	}
@@ -676,7 +676,7 @@ func shellStep(t *testing.T, step step.Step) (string, error) {
 	t.Setenv(trail.EnvBaggage, "")
 	t.Chdir(t.TempDir())
 	installHostRows(t, "claude-code", types.Limits{}, types.HarnessTool{Name: "TodoWrite", Capability: types.ToolInert})
-	raw, err := json.Marshal(step)
+	raw, err := codec.Marshal(step)
 	require.NoError(t, err)
 	var out bytes.Buffer
 	ctx := WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
@@ -1356,7 +1356,7 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 		args := append([]string{"--lease", row.ID, "-o", "json"}, flags...)
 		_ = hookStdin(ctx, strings.NewReader("magus run test . --budget-wait 0"), &out, args)
 		var v verdict.Judgment
-		require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
+		require.NoError(t, codec.Unmarshal(out.Bytes(), &v), out.String())
 		return v
 	}
 	refused := run("--call-background")
@@ -1391,7 +1391,7 @@ func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("Bash"), &out,
 		[]string{"--duration", "420ms", "--event", "PostToolUse", "--session", "s1", "-o", "json"}))
 	var v verdict.Judgment
-	require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
+	require.NoError(t, codec.Unmarshal(out.Bytes(), &v), out.String())
 	assert.Equal(t, "pass", v.Decision)
 
 	events, err := trailtypes.ReadRecent(cacheDir, 1)
@@ -1407,7 +1407,7 @@ func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 func installHostRows(t *testing.T, host string, limits types.Limits, rows ...types.HarnessTool) {
 	t.Helper()
 	dir := filepath.Join("."+host, "magus", "tools")
-	raw, err := json.Marshal(limits)
+	raw, err := codec.Marshal(limits)
 	require.NoError(t, err)
 	files := append(agent.ToolFiles(types.HarnessTools{Dir: dir, Tools: rows}, nil),
 		types.AgentFile{Path: filepath.Join(dir, types.ToolHostFile), Content: host + "\n"},

@@ -10,10 +10,10 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
@@ -31,7 +31,7 @@ type exchangeResponse struct {
 }
 
 func (r exchangeResponse) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]string{
+	return codec.Marshal(map[string]string{
 		"token":      r.token.Reveal(),
 		"expires_at": r.expires.UTC().Format(time.RFC3339),
 	})
@@ -49,7 +49,7 @@ func newExchangeHandler(trailDir string, log *slog.Logger) http.Handler {
 		}
 		handler.LimitRequestBody(w, r)
 		var req exchangeRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Code == "" {
+		if err := codec.NewDecoder(r.Body).Decode(&req); err != nil || req.Code == "" {
 			rpcerr.FormatJSON.Write(w, r, rpcerr.Error{
 				Code:    connect.CodeInvalidArgument,
 				Reason:  types.TokenRequestInvalid,
@@ -71,7 +71,7 @@ func newExchangeHandler(trailDir string, log *slog.Logger) http.Handler {
 		trail.AppendMint(r.Context(), trailDir, "link.redeem", trail.MintRecord{Minted: tok.Credential(), Expires: tok.Expires, Minter: code})
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		if err := json.NewEncoder(w).Encode(exchangeResponse{token: secret, expires: tok.Expires}); err != nil {
+		if err := codec.NewEncoder(w).Encode(exchangeResponse{token: secret, expires: tok.Expires}); err != nil {
 			log.With(attr.Component("token")).WarnContext(r.Context(), "encode exchange response", attr.Error(err))
 		}
 	})

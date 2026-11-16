@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
@@ -184,7 +184,7 @@ func (s *attemptStoreSuite) TestATryIsStoredAsAnAttemptRecord() {
 	raw, err := os.ReadFile(filepath.Join(filepath.Dir(s.storePath()), attemptsFileName))
 	s.Require().NoError(err)
 	var line map[string]any
-	s.Require().NoError(json.Unmarshal([]byte(strings.TrimSpace(string(raw))), &line))
+	s.Require().NoError(codec.Unmarshal([]byte(strings.TrimSpace(string(raw))), &line))
 	s.Equal(map[string]any{
 		"apiVersion": "batch.magus/v1alpha1", "kind": "Attempt",
 		"spec": map[string]any{"job": "a", "n": float64(1)},
@@ -199,7 +199,7 @@ func (s *attemptStoreSuite) TestATryIsStoredAsAnAttemptRecord() {
 func (s *attemptStoreSuite) TestEnvelopingAttemptsRewritesTheOlderLines() {
 	path := filepath.Join(filepath.Dir(s.storePath()), attemptsFileName)
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
-	current, err := json.Marshal(recordAttempt(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}))
+	current, err := codec.Marshal(recordAttempt(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}))
 	s.Require().NoError(err)
 	s.Require().NoError(os.WriteFile(path, []byte(fmt.Sprintf("%s\n%s\n",
 		`{"api_version":"magus.job/v1alpha1","job":"a","n":2,"status":{"state":"no_return","ended":5,"end":"job"},"dropped":true}`, current)), 0o600))

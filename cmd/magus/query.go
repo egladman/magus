@@ -27,7 +27,6 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/observability"
@@ -39,6 +38,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/codec"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
@@ -766,7 +766,7 @@ func createRefreshLog(dir string) (*os.File, error) {
 // under cfg, the configuration the server resolves for m's root now.
 func serveGraphRead(ctx context.Context, m *magus.Magus, cfg config.Config, verb string, request []byte) ([]byte, error) {
 	var read knowledge.GraphRead
-	if err := json.Unmarshal(request, &read); err != nil {
+	if err := codec.Unmarshal(request, &read); err != nil {
 		return nil, fmt.Errorf("magus server: decode the %s read: %w", verb, err)
 	}
 	if digest := config.ReadDigest(cfg); digest == "" || read.Config != digest {
@@ -803,7 +803,7 @@ func serveGraphRead(ctx context.Context, m *magus.Magus, cfg config.Config, verb
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(res)
+	return codec.Marshal(res)
 }
 
 // splitCSV splits a comma-separated flag value, trimming blanks.

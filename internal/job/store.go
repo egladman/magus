@@ -33,10 +33,10 @@ import (
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
@@ -284,8 +284,8 @@ const (
 // sets the document aside once no older magus writes it; nothing reads it after that.
 func (s *Store) refuseDocument() error {
 	old := filepath.Join(filepath.Dir(s.path), documentFileName)
-	if err := file.RefuseOld(old); err != nil {
-		err = fmt.Errorf("cannot open job plan %s: %w", s.path, err)
+	if err := codec.RefuseOld(old); err != nil {
+		err = fmt.Errorf("cannot open job plan %s: %w", s.path, file.StoreDiagnostic(err))
 		return fmt.Errorf("%w: once no older magus writes it, set it aside with `mv %s %s.old`",
 			err, shellQuote(old), shellQuote(old))
 	}
@@ -321,9 +321,9 @@ type jobsFile struct {
 	// see [Store.migrate]. A file past this build's is refused.
 	Migration int `json:"migration,omitzero"`
 	// Retained is when the last retention pass ran, in unix seconds; see [Store.retainDue].
-	Retained int64                      `json:"retained,omitempty"`
-	Unknown  map[string]json.RawMessage `json:",unknown"`
-	Jobs     []job.Job                  `json:"-"`
+	Retained int64                       `json:"retained,omitempty"`
+	Unknown  map[string]codec.RawMessage `json:",unknown"`
+	Jobs     []job.Job                   `json:"-"`
 	// stored are the rows' records as read, by id, so a rewrite keeps
 	// what this build does not declare.
 	stored map[string]jobRecord
@@ -827,7 +827,7 @@ func (s *Store) archive(f jobsFile) error {
 	if err := s.archiveAttempts(filepath.Join(dir, fmt.Sprintf("jobs-%s.attempts.jsonl", stamp)), f.Jobs); err != nil {
 		return err
 	}
-	return file.RewriteLines(filepath.Join(dir, fmt.Sprintf("jobs-%s.jsonl", stamp)), lines, 0o600)
+	return codec.RewriteLines(filepath.Join(dir, fmt.Sprintf("jobs-%s.jsonl", stamp)), lines, 0o600)
 }
 
 // update runs fn over the ledger as it stands under the file lock beside jobs.jsonl, so a
@@ -882,7 +882,7 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 // write records f against log, the file it was read from: the lines of the rows that
 // changed are appended, and the file is rewritten to one line per row instead when a row
 // was dropped, the header changed, the file ended in a line no writer finished, or the
-// appended lines would make it [file.CompactDue].
+// appended lines would make it [codec.CompactDue].
 func (s *Store) write(f jobsFile, log jobsLog) error {
 	f.Migration = len(s.migrations)
 	lines, err := encodeJobs(f)
@@ -906,8 +906,8 @@ func (s *Store) write(f jobsFile, log jobsLog) error {
 		return nil
 	}
 	sameHeader := bytes.Equal(header, log.header)
-	if !dropped && sameHeader && !log.partial && !file.CompactDue(log.lines+len(changed), len(f.Jobs)) {
-		return file.AppendLines(s.path, changed, 0o600)
+	if !dropped && sameHeader && !log.partial && !codec.CompactDue(log.lines+len(changed), len(f.Jobs)) {
+		return codec.AppendLines(s.path, changed, 0o600)
 	}
 	if log.partial {
 		out := s.notices
@@ -916,7 +916,7 @@ func (s *Store) write(f jobsFile, log jobsLog) error {
 		}
 		fmt.Fprintf(out, "job: %s ended in a line no writer finished; the rewrite dropped it\n", s.path)
 	}
-	return file.RewriteLines(s.path, lines, 0o600)
+	return codec.RewriteLines(s.path, lines, 0o600)
 }
 
 // pruneFootprints removes the footprint cache of every checkpoint revision no live row in
@@ -988,7 +988,7 @@ func (s *Store) readFile(wait bool) (jobsFile, jobsLog, error) {
 // refuseCheckoutMigration refuses migrating a file at migration found from
 // a live job's own checkout. Every checkout shares the file. A row only
 // taken here does not count: the root's own checkout is one.
-func (s *Store) refuseCheckoutMigration(found int, lines []file.Line) error {
+func (s *Store) refuseCheckoutMigration(found int, lines []codec.Line) error {
 	if found >= len(s.migrations) {
 		return nil
 	}
@@ -1020,19 +1020,19 @@ func (s *Store) refuseCheckoutMigration(found int, lines []file.Line) error {
 // unmigratedRows reads the rows of a file at migration found as far as a
 // refusal needs them. Before [recordsEnveloped] a row's line was a
 // job.Job.
-func (s *Store) unmigratedRows(found int, lines []file.Line) ([]job.Job, error) {
+func (s *Store) unmigratedRows(found int, lines []codec.Line) ([]job.Job, error) {
 	flat := found <= slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == recordsEnveloped })
 	var rows []job.Job
 	at := map[string]int{}
 	for _, line := range lines {
 		var row job.Job
 		if flat {
-			if err := json.Unmarshal(line.Text, &row); err != nil {
+			if err := codec.Unmarshal(line.Text, &row); err != nil {
 				return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 			}
 		} else {
 			var r jobRecord
-			err := json.Unmarshal(line.Text, &r)
+			err := codec.Unmarshal(line.Text, &r)
 			if err == nil && r.Kind == jobType.Kind {
 				row, err = r.job()
 			}
@@ -1103,7 +1103,7 @@ func (s *Store) migrate(found int, held bool) error {
 // parse reads the file as it stands; see [Store.readFile]. A file at
 // another migration than this build's has no rows decoded: they are
 // returned as lines.
-func (s *Store) parse(wait bool) (jobsFile, jobsLog, []file.Line, error) {
+func (s *Store) parse(wait bool) (jobsFile, jobsLog, []codec.Line, error) {
 	if s.err != nil {
 		return jobsFile{}, jobsLog{}, nil, s.err
 	}
@@ -1137,18 +1137,18 @@ func (s *Store) parse(wait bool) (jobsFile, jobsLog, []file.Line, error) {
 
 // readLines reads the file's lines. With wait it reads again for up to
 // [tailWait] while the file ends in a line no writer finished.
-func (s *Store) readLines(wait bool) (file.Lines, error) {
+func (s *Store) readLines(wait bool) (codec.Lines, error) {
 	deadline := time.Now().Add(tailWait)
 	for {
-		read, err := file.ReadLines(s.path)
+		read, err := codec.ReadLines(s.path)
 		if err != nil {
-			return file.Lines{}, fmt.Errorf("job: %w", err)
+			return codec.Lines{}, fmt.Errorf("job: %w", err)
 		}
 		if !read.Partial || !wait {
 			return read, nil
 		}
 		if time.Now().After(deadline) {
-			return file.Lines{}, fmt.Errorf("job: %s ends in a line no writer finished, so the next write to the plan drops it", s.path)
+			return codec.Lines{}, fmt.Errorf("job: %s ends in a line no writer finished, so the next write to the plan drops it", s.path)
 		}
 		time.Sleep(time.Millisecond)
 	}
@@ -1156,15 +1156,15 @@ func (s *Store) readLines(wait bool) (file.Lines, error) {
 
 // takeHeader sets the header line into f and log, and returns the lines of
 // the rows.
-func (s *Store) takeHeader(lines []file.Line, f *jobsFile, log *jobsLog) ([]file.Line, error) {
-	var texts []file.Line
+func (s *Store) takeHeader(lines []codec.Line, f *jobsFile, log *jobsLog) ([]codec.Line, error) {
+	var texts []codec.Line
 	for _, line := range lines {
 		var probe struct {
 			apiversion.TypeMeta
-			ID   json.RawMessage `json:"id"`
-			Spec json.RawMessage `json:"spec"`
+			ID   codec.RawMessage `json:"id"`
+			Spec codec.RawMessage `json:"spec"`
 		}
-		if err := json.Unmarshal(line.Text, &probe); err != nil {
+		if err := codec.Unmarshal(line.Text, &probe); err != nil {
 			return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 		}
 		if probe.ID != nil || probe.Spec != nil {
@@ -1172,7 +1172,7 @@ func (s *Store) takeHeader(lines []file.Line, f *jobsFile, log *jobsLog) ([]file
 			continue
 		}
 		header := jobsFile{}
-		if err := json.Unmarshal(line.Text, &header); err != nil {
+		if err := codec.Unmarshal(line.Text, &header); err != nil {
 			return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 		}
 		header.stored, log.header = f.stored, line.Text
@@ -1183,11 +1183,11 @@ func (s *Store) takeHeader(lines []file.Line, f *jobsFile, log *jobsLog) ([]file
 
 // decodeRows decodes the row lines into f and log, a later line of a row
 // replacing the earlier one in place.
-func (s *Store) decodeRows(texts []file.Line, f *jobsFile, log *jobsLog) error {
+func (s *Store) decodeRows(texts []codec.Line, f *jobsFile, log *jobsLog) error {
 	at := map[string]int{}
 	for _, line := range texts {
 		var r jobRecord
-		if err := json.Unmarshal(line.Text, &r); err != nil {
+		if err := codec.Unmarshal(line.Text, &r); err != nil {
 			return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 		}
 		row, err := r.job()
@@ -1231,7 +1231,7 @@ func (s *Store) refuseUnmetFeatures(f jobsFile) error {
 // Every row, touched this call or not, keeps what its stored record carries.
 func encodeJobs(f jobsFile) ([][]byte, error) {
 	f.TypeMeta = jobListType
-	header, err := json.Marshal(f)
+	header, err := codec.Marshal(f)
 	if err != nil {
 		return nil, err
 	}
@@ -1242,7 +1242,7 @@ func encodeJobs(f jobsFile) ([][]byte, error) {
 		if r, ok := f.stored[row.ID]; ok {
 			stored = &r
 		}
-		line, err := json.Marshal(recordJob(row, stored))
+		line, err := codec.Marshal(recordJob(row, stored))
 		if err != nil {
 			return nil, fmt.Errorf("job: %s: %w", row.ID, err)
 		}

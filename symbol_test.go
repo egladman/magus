@@ -20,10 +20,10 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -1552,10 +1552,10 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 	reasoned := toDiagnostic(fmt.Errorf("diff: %w",
 		types.DiagnosticErrorf(types.SymbolIndexNotCurrent, "stale").WithWhy(conformanceSkippedWhy)))
 	assert.Equal(t, conformanceSkippedWhy, reasoned.Why, "-o json carries the reason beside the verdict")
-	encoded, err := json.Marshal(reasoned)
+	encoded, err := codec.Marshal(reasoned)
 	require.NoError(t, err)
 	assert.Contains(t, string(encoded), fmt.Sprintf(`"why":"%s"`, conformanceSkippedWhy))
-	encoded, err = json.Marshal(d)
+	encoded, err = codec.Marshal(d)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), `"why"`, "a diagnostic with no reason omits the field")
 

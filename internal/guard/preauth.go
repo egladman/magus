@@ -8,7 +8,7 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // Pre-authorization: a command magus itself served as the next step.
@@ -85,7 +85,7 @@ func readServedNextFile(journal string) []hint.ServedNextEntry {
 	entries := make([]hint.ServedNextEntry, 0, len(lines))
 	for _, line := range lines {
 		var entry hint.ServedNextEntry
-		if json.Unmarshal([]byte(line), &entry) != nil || len(entry.Argv) == 0 || entry.ID == "" {
+		if codec.Unmarshal([]byte(line), &entry) != nil || len(entry.Argv) == 0 || entry.ID == "" {
 			continue
 		}
 		entries = append(entries, entry)

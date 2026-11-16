@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
@@ -481,7 +481,7 @@ func decodePutPaths(params map[string]any) (job.PathsPut, error) {
 	}
 	if s, ok := v.(string); ok {
 		var m map[string]any
-		if err := json.Unmarshal([]byte(s), &m); err != nil {
+		if err := codec.Unmarshal([]byte(s), &m); err != nil {
 			return put, fmt.Errorf("job: paths must be an object of %s: %w", strings.Join(putPathKeys, ", "), err)
 		}
 		v = m
@@ -524,13 +524,13 @@ func decodeAgent(params map[string]any) (job.Agent, bool, error) {
 	if v == nil {
 		return job.Agent{}, true, nil
 	}
-	body, err := json.Marshal(v)
+	body, err := codec.Marshal(v)
 	if s, ok := v.(string); ok {
 		body, err = []byte(s), nil
 	}
 	var spec job.Agent
 	if err == nil {
-		err = json.UnmarshalStrict(body, &spec)
+		err = codec.UnmarshalStrict(body, &spec)
 	}
 	if err != nil {
 		return job.Agent{}, false, fmt.Errorf("job: agent must be an object of model {id, tier}, instructions and worker {type, reason}: %w", err)
@@ -546,7 +546,7 @@ func decodeObjects[T any](params map[string]any, key, what string) ([]T, bool, e
 	if !present {
 		return nil, false, nil
 	}
-	body, err := json.Marshal(v)
+	body, err := codec.Marshal(v)
 	if s, ok := v.(string); ok {
 		body, err = []byte(s), nil
 	}
@@ -554,7 +554,7 @@ func decodeObjects[T any](params map[string]any, key, what string) ([]T, bool, e
 		return nil, false, fmt.Errorf("job: %s must be an array of %s: %w", key, what, err)
 	}
 	var objects []T
-	if err := json.Unmarshal(body, &objects); err != nil {
+	if err := codec.Unmarshal(body, &objects); err != nil {
 		return nil, false, fmt.Errorf("job: %s must be an array of %s: %w", key, what, err)
 	}
 	return objects, true, nil

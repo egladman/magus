@@ -6,14 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/codec"
 )
 
 // The entries of a [VerdictDir].
@@ -224,19 +225,19 @@ type faultWaitLine struct {
 	Count  int    `json:"count"`
 }
 
-func (w faultWait) MarshalJSON() ([]byte, error) { return json.Marshal(faultWaitLine(w)) }
+func (w faultWait) MarshalJSON() ([]byte, error) { return codec.Marshal(faultWaitLine(w)) }
 
 func (w *faultWait) UnmarshalJSON(b []byte) error {
 	var l faultWaitLine
-	if err := json.Unmarshal(b, &l); err != nil {
+	if err := codec.Unmarshal(b, &l); err != nil {
 		return err
 	}
 	*w = faultWait(l)
 	return nil
 }
 
-func (d *VerdictDir) faultWaits() file.JSONL[faultWait] {
-	return file.JSONL[faultWait]{Path: filepath.Join(d.Path, faultWaitsFile), Key: func(w faultWait) string { return w.Change }}
+func (d *VerdictDir) faultWaits() codec.JSONL[faultWait] {
+	return codec.JSONL[faultWait]{Log: slog.With(attr.Component("magus")), Path: filepath.Join(d.Path, faultWaitsFile), Key: func(w faultWait) string { return w.Change }}
 }
 
 // FaultWaits is how many runs in a row waited on a machine fault for c at its

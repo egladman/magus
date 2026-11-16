@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -1092,7 +1092,7 @@ func containsExactEntry(entries []any, wanted map[string]any) (bool, error) {
 // exactEntryIndex is the index of the first entry in entries equal to wanted and not in
 // skip, or -1.
 func exactEntryIndex(entries []any, wanted map[string]any, skip map[int]int) (int, error) {
-	want, err := json.Marshal(wanted)
+	want, err := codec.Marshal(wanted)
 	if err != nil {
 		return -1, fmt.Errorf("agent: marshal managed entry: %w", err)
 	}
@@ -1101,7 +1101,7 @@ func exactEntryIndex(entries []any, wanted map[string]any, skip map[int]int) (in
 		if _, skipped := skip[j]; !ok || skipped {
 			continue
 		}
-		got, err := json.Marshal(entry)
+		got, err := codec.Marshal(entry)
 		if err != nil {
 			return -1, fmt.Errorf("agent: marshal existing harness entry: %w", err)
 		}
@@ -1282,7 +1282,7 @@ func firstSymlinkComponent(dir, rel string) (string, error) {
 // decodeHarnessJSON keeps large numeric values exact and rejects duplicate keys
 // before a merge could collapse an ambiguous user document on re-encode.
 func decodeHarnessJSON(body []byte, dst any) error {
-	return json.UnmarshalLossless(body, dst)
+	return codec.UnmarshalLossless(body, dst)
 }
 
 // KnownHarnesses is useful to generic UIs and tests without leaking a fixed

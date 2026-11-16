@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -75,7 +75,7 @@ func readPathContact(dir, path string) PathContact {
 			continue
 		}
 		var ev session.AgentEvent
-		if json.Unmarshal(rec.Payload, &ev) != nil {
+		if codec.Unmarshal(rec.Payload, &ev) != nil {
 			continue
 		}
 		// compat: see knowledge.go's loadKnowledgeAgentContacts. Loads store the

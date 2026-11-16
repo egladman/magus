@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -143,7 +143,7 @@ func judgeFileWrite(ctx context.Context, deps Dependencies, req Request, who hoo
 	if content != "" {
 		input["content"] = content
 	}
-	envelope, err := json.Marshal(map[string]any{
+	envelope, err := codec.Marshal(map[string]any{
 		"session_id": who.Session,
 		"agent_id":   who.Agent,
 		"cwd":        callDir,

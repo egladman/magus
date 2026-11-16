@@ -12,10 +12,10 @@ import (
 
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
@@ -114,7 +114,7 @@ func (h *RunHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		handler.LimitRequestBody(w, r)
 		var req diffRunRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := codec.NewDecoder(r.Body).Decode(&req); err != nil {
 			handler.Refuse(w, r, rpcerr.Invalid("the request body is not JSON of the form {\"target\": ..., \"project\": ...}"))
 			return
 		}

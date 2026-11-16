@@ -14,10 +14,10 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/codec"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
@@ -304,7 +304,7 @@ func readCommandBlob(t *testing.T, cacheDir string, e trailtypes.Event) commandB
 	body, err := trailtypes.ReadBlob(cacheDir, e.ResponseRef)
 	require.NoError(t, err)
 	var got commandBlob
-	require.NoError(t, json.Unmarshal(body, &got))
+	require.NoError(t, codec.Unmarshal(body, &got))
 	return got
 }
 

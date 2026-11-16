@@ -4,8 +4,8 @@ import (
 	"math"
 	"slices"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/codec"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
@@ -96,7 +96,7 @@ func callFacts(base string, e trailtypes.Event) (types.AgentFacts, bool) {
 		return types.AgentFacts{}, false
 	}
 	var facts types.AgentFacts
-	if json.Unmarshal(raw, &facts) != nil || facts.ContextTokens <= 0 {
+	if codec.Unmarshal(raw, &facts) != nil || facts.ContextTokens <= 0 {
 		return types.AgentFacts{}, false
 	}
 	return facts, true
