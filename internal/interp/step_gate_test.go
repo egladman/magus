@@ -1,4 +1,4 @@
-package main
+package interp
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 // as stepping has existed. Installing them together is what makes that
 // impossible; this checks they stay together.
 func TestStepGateAlwaysBringsItsRepl(t *testing.T) {
-	ctx := withStepGate(context.Background())
+	ctx := WithStepGate(context.Background(), nil)
 	require.NotNil(t, spawn.StepReplFromContext(ctx),
 		"the gate offers [r]epl, so the ctx it installs must carry one")
 }

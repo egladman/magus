@@ -1,4 +1,4 @@
-package main
+package cache
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/libs/termkit"
 )
 
@@ -21,7 +20,7 @@ import (
 // reintroduce exactly the accident the confirmation exists to prevent.
 const confirmWindow = 3 * time.Second
 
-// watchInterrupts returns a context cancelled on shutdown signals, a stop
+// WatchInterrupts returns a context cancelled on shutdown signals, a stop
 // function the caller must invoke to release the signal handler, and a query
 // reporting which signal stopped the run. The third return is what
 // [withInterrupt] turns into an exit code; cancellation alone is invisible to
@@ -45,7 +44,7 @@ const confirmWindow = 3 * time.Second
 //     fingertip and must be honored at once; or
 //   - stderr is not a terminal, so nobody is there to read the prompt and
 //     a CI system sending SIGINT would otherwise have to send two.
-func watchInterrupts(parent context.Context) (context.Context, func(), func() (syscall.Signal, bool)) {
+func WatchInterrupts(parent context.Context) (context.Context, func(), func() (syscall.Signal, bool)) {
 	ctx, cancel := context.WithCancel(parent)
 	sigs := make(chan os.Signal, 4)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -60,7 +59,7 @@ func watchInterrupts(parent context.Context) (context.Context, func(), func() (s
 		// The warning answers a keypress, so it is written to the terminal itself: a
 		// quiet display would drop it and the run would look hung.
 		confirmInterrupts(ctx, sigs, cancel, os.Stderr,
-			termkit.IsTerminalWriter(os.Stderr, termkit.SystemProbe), confirmWindow, cache.InFlight,
+			termkit.IsTerminalWriter(os.Stderr, termkit.SystemProbe), confirmWindow, InFlight,
 			func(sig syscall.Signal) { stopped.Store(int32(sig)) },
 			func() { signal.Stop(sigs) })
 	}()
@@ -79,7 +78,7 @@ func watchInterrupts(parent context.Context) (context.Context, func(), func() (s
 	}, interrupted
 }
 
-// confirmInterrupts implements the policy described on watchInterrupts.
+// confirmInterrupts implements the policy described on WatchInterrupts.
 // It is separated from signal registration so a test can drive it with a
 // plain channel, a buffer and a fixed running set instead of real signals,
 // a real terminal and real targets. A nil inFlight reports nothing running.
@@ -93,7 +92,7 @@ func confirmInterrupts(
 	out io.Writer,
 	interactive bool,
 	window time.Duration,
-	inFlight func() []cache.RunningTarget,
+	inFlight func() []RunningTarget,
 	record func(syscall.Signal),
 	release func(),
 ) {
@@ -119,7 +118,7 @@ func confirmInterrupts(
 			// so the next Ctrl+C warns rather than stopping the run.
 			timer, armed = nil, nil
 		case sig := <-sigs:
-			var running []cache.RunningTarget
+			var running []RunningTarget
 			if sig != syscall.SIGTERM && interactive && armed == nil && inFlight != nil {
 				running = inFlight()
 			}
@@ -152,7 +151,7 @@ func confirmInterrupts(
 // press would stop and how long the oldest has run, so the choice is made
 // against what it costs. It names the key rather than the signal because that
 // is what the user pressed.
-func discardWarning(running []cache.RunningTarget, now time.Time) string {
+func discardWarning(running []RunningTarget, now time.Time) string {
 	const show = 3
 	names := make([]string, 0, min(len(running), show))
 	oldest := now

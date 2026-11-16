@@ -26,7 +26,7 @@ type lifecycle struct {
 }
 
 // ownsItsSignals reports whether this process answers signals through a
-// lifecycle rather than watchInterrupts. A serving broker does, and so
+// lifecycle rather than cache.WatchInterrupts. A serving broker does, and so
 // does a server run here.
 func ownsItsSignals(args []string) bool {
 	sub, subArgs := peekSub(args)

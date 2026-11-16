@@ -55,7 +55,7 @@ func attentionTestRoot(t *testing.T) string {
 	return t.TempDir()
 }
 
-// withInteractiveTTY makes isInteractiveTTY() report true for the duration of t.
+// withInteractiveTTY makes interactive.IsInteractiveTTY() report true for the duration of t.
 // FixedProbe answers every descriptor as a terminal, so it stands in for both stdin and
 // stderr's checks at once.
 func withInteractiveTTY(t *testing.T) {

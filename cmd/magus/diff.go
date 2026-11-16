@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
@@ -156,7 +157,7 @@ func diffCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	term := review.TUITerm{
-		Reads:  isInteractiveTTY(),
+		Reads:  interactive.IsInteractiveTTY(),
 		Paints: termkit.IsTerminalWriter(os.Stdout, termkit.SystemProbe),
 	}
 
@@ -185,7 +186,7 @@ func diffCommand(ctx context.Context, root string, args []string) error {
 // interactive terminal. The guard denies it to an agent but fails open where
 // unwired. Exit 2: the flags are fine, the caller is not a person.
 func requirePerson(ctx context.Context, records string) error {
-	if isInteractiveTTY() {
+	if interactive.IsInteractiveTTY() {
 		return nil
 	}
 	slog.ErrorContext(ctx, records+", so it needs an interactive terminal",

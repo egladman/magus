@@ -1,4 +1,4 @@
-package main
+package proc
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// withTimeout wraps ctx with a deadline and starts a background ticker that
+// WithTimeout wraps ctx with a deadline and starts a background ticker that
 // prints elapsed-time heartbeats to stderr. The tick interval scales with the
 // timeout so short timeouts get frequent updates and long ones stay quiet:
 //
@@ -15,7 +15,7 @@ import (
 //	timeout > 5 min  → tick every 1 min
 //
 // The caller must defer the returned cancel to release resources.
-func withTimeout(ctx context.Context, d time.Duration, label string) (context.Context, context.CancelFunc) {
+func WithTimeout(ctx context.Context, d time.Duration, label string) (context.Context, context.CancelFunc) {
 	tctx, cancel := context.WithTimeout(ctx, d)
 
 	interval := tickInterval(d)
