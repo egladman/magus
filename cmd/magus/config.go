@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/scaffold"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/vcs"
@@ -183,7 +184,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 		cfgPath = config.Filename
 	}
 
-	if err := config.Save(vcs.WriteJudge(ctx, judgeDir("")), cfgPath, key, value); err != nil {
+	if err := config.Save(vcs.WriteJudge(ctx, scaffold.JudgeDir("")), cfgPath, key, value); err != nil {
 		return err
 	}
 	if opts.Format != outputText {
