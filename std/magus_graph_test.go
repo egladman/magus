@@ -242,6 +242,52 @@ func TestRefsMemoizesPerSymbolScope(t *testing.T) {
 	assert.Equal(t, 2, ws.builds, "a second symbol is a second scope")
 }
 
+// definedSymbols is a workspace whose graph holds one symbol per id, each labeled name and
+// defined by its own file.
+func definedSymbols(t *testing.T, name string, ids ...string) context.Context {
+	g := knowledge.NewGraph()
+	for i, id := range ids {
+		file := fmt.Sprintf("file:pkg/%d.go", i)
+		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: name})
+		g.AddEdge(types.KnowledgeEdge{Source: file, Target: id, Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1})
+	}
+	return types.WithWorkspace(t.Context(), &builtGraphWorkspace{g: g, cacheDir: t.TempDir()})
+}
+
+const (
+	decideRuntime = "symbol:example.com/x `example.com/x/volatility`/Runtime#Decide()."
+	decideVerdict = "symbol:example.com/x `example.com/x/queue`/CarryVerdict#Decide()."
+)
+
+func TestRefsRefusesANameSharedByTwoSymbols(t *testing.T) {
+	t.Parallel()
+	ctx := definedSymbols(t, "Decide", decideRuntime, decideVerdict)
+
+	_, err := MagusRefs(ctx, "Decide", types.KnowledgeRefsOptions{})
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `magus\graph().refs: "Decide" names 2 symbols defined in this workspace`)
+	assert.ErrorContains(t, err, decideRuntime)
+	assert.ErrorContains(t, err, decideVerdict)
+}
+
+func TestRefsResolvesAnExactIDOfASharedName(t *testing.T) {
+	t.Parallel()
+	ctx := definedSymbols(t, "Decide", decideRuntime, decideVerdict)
+
+	got, err := MagusRefs(ctx, decideVerdict, types.KnowledgeRefsOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, decideVerdict, got.Symbol)
+}
+
+func TestRefsResolvesANameWithOneMatch(t *testing.T) {
+	t.Parallel()
+	ctx := definedSymbols(t, "Open", decideRuntime)
+
+	got, err := MagusRefs(ctx, "Open", types.KnowledgeRefsOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, decideRuntime, got.Symbol)
+}
+
 // precedentGraphs is a workspace whose indexes have the given freshness and whose declared
 // outputs are the given paths. Its freshen fails with freshenErr and records whether it ran
 // before the freshness was read. Its knowledge.conformance is the shipped one unless conformance
