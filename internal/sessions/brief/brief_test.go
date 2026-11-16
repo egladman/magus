@@ -30,6 +30,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMain isolates the environment the workspaces and stores these tests open read.
+func TestMain(m *testing.M) { testkit.Main(m) }
+
 // A brief lands in a model's context window through a hook. Two properties make it
 // usable there and neither is visible by reading the code: no escape sequences (a
 // hook's stdout is never a terminal, so a control byte is cost with no reader), and
