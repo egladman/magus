@@ -41,6 +41,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/queue"
+	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
@@ -2255,7 +2256,7 @@ func jobWorkspace(ctx context.Context, root string) job.Workspace {
 		loaded = m
 	}
 	return job.WorkspaceOf(ctx, root, loaded, err, func(err error) string {
-		running, pathErr := runningBinaryPath()
+		running, pathErr := selfupdate.RunningBinaryPath()
 		if pathErr != nil {
 			return err.Error()
 		}

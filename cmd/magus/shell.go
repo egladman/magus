@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
@@ -178,16 +179,16 @@ func guardCacheDir(rootOverride string) func(root string) (string, error) {
 // rules alone rather than by the policy of whichever checkout they happen to run in.
 var guardRoot = workspace.FindRoot
 
-// hookBinaryPath is runningBinaryPath, a variable so tests can place the
+// hookBinaryPath is selfupdate.RunningBinaryPath, a variable so tests can place the
 // running binary in a checkout.
-var hookBinaryPath = runningBinaryPath
+var hookBinaryPath = selfupdate.RunningBinaryPath
 
 // hookEnv binds the hook's guard to this binary: its version, its workspace openers and
 // its output arms, read from the process globals at the call.
 func hookEnv() guard.HookEnv {
 	return guard.HookEnv{
 		Version:        version,
-		BinaryPath:     runningBinaryPath,
+		BinaryPath:     selfupdate.RunningBinaryPath,
 		HookBinaryPath: hookBinaryPath,
 		Config:         globalCfg,
 		FindRoot:       guardRoot,

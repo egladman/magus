@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 )
@@ -36,7 +37,7 @@ func maybeBootstrapExec(argv []string) {
 	if testing.Testing() {
 		return
 	}
-	self, err := runningBinaryPath()
+	self, err := selfupdate.RunningBinaryPath()
 	// The bootstrap builds ./magus with `go run`, so that build is the fresh
 	// one and the placed ./magus the stale one.
 	if err != nil || ward.GoRunBinary(self) {

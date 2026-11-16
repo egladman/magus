@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/selfupdate"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/diagnostics"
@@ -572,7 +573,7 @@ func TestUsagePrintersNameTheirCommands(t *testing.T) {
 		{
 			name:  "install-shorthand",
 			print: installShorthandUsage,
-			want:  []string{"Usage: magus self install-shorthand", "--dir", "--force", shorthandName},
+			want:  []string{"Usage: magus self install-shorthand", "--dir", "--force", selfupdate.ShorthandName},
 		},
 		{
 			name:  "server",
