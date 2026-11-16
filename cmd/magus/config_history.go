@@ -1,21 +1,18 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"time"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/libs/clikit/exit"
 )
@@ -101,22 +98,19 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 	// for honoring its own configuration.
 	if !cfg.CI.RecordRuns {
 		if opts.Format != outputText {
-			return emitRecord(opts, configHistoryPassedOutput{Ref: hf.Ref, Commit: hf.Commit, Target: hf.Target, Status: string(st), HistoryPath: hf.History}, []string{hf.Ref})
+			return emitRecord(opts, report.PassedRecord{Ref: hf.Ref, Commit: hf.Commit, Target: hf.Target, Status: string(st), HistoryPath: hf.History}, []string{hf.Ref})
 		}
 		slog.InfoContext(ctx, "config history passed: run log disabled by ci.record_runs; recording nothing",
 			slog.String("ref", hf.Ref), slog.String("commit", hf.Commit))
 		return nil
 	}
 
-	err = forecast.UpdateHistory(ctx, hf.History, func(h *forecast.History) error {
-		h.RecordRun(forecast.Run{Commit: hf.Commit, Ref: hf.Ref, Target: hf.Target, Status: st}, time.Now())
-		return nil
-	})
+	err = report.RecordPassed(ctx, hf.History, forecast.Run{Commit: hf.Commit, Ref: hf.Ref, Target: hf.Target, Status: st}, time.Now())
 	if err != nil {
 		return err
 	}
 	if opts.Format != outputText {
-		return emitRecord(opts, configHistoryPassedOutput{Recorded: true, Ref: hf.Ref, Commit: hf.Commit, Target: hf.Target, Status: string(st), HistoryPath: hf.History}, []string{hf.Ref})
+		return emitRecord(opts, report.PassedRecord{Recorded: true, Ref: hf.Ref, Commit: hf.Commit, Target: hf.Target, Status: string(st), HistoryPath: hf.History}, []string{hf.Ref})
 	}
 	slog.InfoContext(ctx, "config history run recorded",
 		slog.String("ref", hf.Ref),
@@ -125,39 +119,6 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 		slog.String("status", string(st)),
 		slog.String("history_path", hf.History))
 	return nil
-}
-
-type configHistoryPassedOutput struct {
-	Recorded    bool   `json:"recorded"`
-	Ref         string `json:"ref"`
-	Commit      string `json:"commit"`
-	Target      string `json:"target"`
-	Status      string `json:"status"`
-	HistoryPath string `json:"history_path"`
-}
-
-type configHistoryImportOutput struct {
-	Files       int    `json:"files"`
-	Projects    int    `json:"projects"`
-	HistoryPath string `json:"history_path"`
-}
-
-type configHistoryDedupOutput struct {
-	ReportFiles     int                      `json:"report_files"`
-	TotalMisses     int                      `json:"total_misses"`
-	UniqueKeys      int                      `json:"unique_keys"`
-	RedundantBuilds int                      `json:"redundant_builds"`
-	RedundantMs     int64                    `json:"redundant_ms"`
-	Approximate     bool                     `json:"approximate"`
-	Top             []configHistoryDedupItem `json:"top"`
-}
-
-type configHistoryDedupItem struct {
-	Project     string `json:"project"`
-	Target      string `json:"target"`
-	Hash        string `json:"hash"`
-	ExtraBuilds int    `json:"extra_builds"`
-	ExtraMs     int64  `json:"extra_ms"`
 }
 
 // runHistoryImport folds one or more runtime-history JSON files into --history
@@ -194,52 +155,18 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 		return errors.New("magus config history import: pass at least one history file")
 	}
 
-	// The inputs are read before the lock is taken, so decoding megabytes of shard
-	// history never holds up another writer of the shared file.
-	var loaded []forecast.History
-	for _, p := range inputs {
-		matches, err := filepath.Glob(p)
-		if err != nil {
-			return fmt.Errorf("config history import: bad glob %q: %w", p, err)
-		}
-		if len(matches) == 0 {
-			matches = []string{p}
-		}
-		for _, m := range matches {
-			var in forecast.History
-			if err := in.Load(ctx, m); err != nil {
-				return fmt.Errorf("config history import: load %q: %w", m, err)
-			}
-			loaded = append(loaded, in)
-		}
-	}
-	var projects int
-	err = forecast.UpdateHistory(ctx, imf.History, func(h *forecast.History) error {
-		for i := range loaded {
-			h.Merge(&loaded[i])
-		}
-		projects = len(h.Projects)
-		return nil
-	})
+	files, projects, err := report.ImportHistories(ctx, imf.History, inputs)
 	if err != nil {
-		return err
+		return fmt.Errorf("config history import: %w", err)
 	}
 	if opts.Format != outputText {
-		return emitRecord(opts, configHistoryImportOutput{Files: len(loaded), Projects: projects, HistoryPath: imf.History}, []string{imf.History})
+		return emitRecord(opts, report.HistoryImportRecord{Files: files, Projects: projects, HistoryPath: imf.History}, []string{imf.History})
 	}
 	slog.InfoContext(ctx, "config history import complete",
-		slog.Int("files", len(loaded)),
+		slog.Int("files", files),
 		slog.Int("projects", projects),
 		slog.String("history_path", imf.History))
 	return nil
-}
-
-// missBuild is one cache-miss event parsed from a shard JSONL report.
-type missBuild struct {
-	project    string
-	target     string
-	hash       string
-	durationMs int64
 }
 
 // runHistoryDedup reads per-shard JSONL report files and measures cross-shard
@@ -272,31 +199,14 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 		return errors.New("magus config history dedup: pass at least one report path")
 	}
 
-	// Read every shard report into a flat miss list (tagged with its file), then
-	// hand the pure cross-shard aggregation to ci.Dedup.
-	var misses []ci.MissBuild
-	for _, p := range reportPaths {
-		matches, err := filepath.Glob(p)
-		if err != nil {
-			return fmt.Errorf("config history dedup: bad glob %q: %w", p, err)
-		}
-		if len(matches) == 0 {
-			matches = []string{p}
-		}
-		for _, m := range matches {
-			ms, err := readMisses(ctx, m)
-			if err != nil {
-				return fmt.Errorf("config history dedup: read %q: %w", m, err)
-			}
-			for _, miss := range ms {
-				misses = append(misses, ci.MissBuild{
-					Project: miss.project, Target: miss.target, Hash: miss.hash,
-					DurationMs: miss.durationMs, File: m,
-				})
-			}
-		}
+	events, err := report.ReadMissFiles(ctx, reportPaths)
+	if err != nil {
+		return fmt.Errorf("config history dedup: %w", err)
 	}
-
+	misses := make([]ci.MissBuild, 0, len(events))
+	for _, e := range events {
+		misses = append(misses, ci.MissBuild{Project: e.Project, Target: e.Target, Hash: e.Hash, DurationMs: e.DurationMs, File: e.File})
+	}
 	res := ci.Dedup(misses)
 
 	approxNote := ""
@@ -305,14 +215,14 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 	}
 
 	if opts.Format != outputText {
-		rec := configHistoryDedupOutput{
+		rec := report.DedupRecord{
 			ReportFiles: len(reportPaths), TotalMisses: res.TotalMisses, UniqueKeys: res.UniqueKeys,
 			RedundantBuilds: res.RedundantBuilds, RedundantMs: res.RedundantMs, Approximate: res.Approx,
-			Top: []configHistoryDedupItem{},
+			Top: []report.DedupItem{},
 		}
 		names := []string{}
 		for _, e := range res.Top {
-			rec.Top = append(rec.Top, configHistoryDedupItem{Project: e.Project, Target: e.Target, Hash: e.Hash, ExtraBuilds: e.ExtraBuilds, ExtraMs: e.ExtraMs})
+			rec.Top = append(rec.Top, report.DedupItem{Project: e.Project, Target: e.Target, Hash: e.Hash, ExtraBuilds: e.ExtraBuilds, ExtraMs: e.ExtraMs})
 			names = append(names, fmt.Sprintf("%s:%s", e.Project, e.Target))
 		}
 		return emitRecord(opts, rec, names)
@@ -341,54 +251,4 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 	}
 
 	return nil
-}
-
-// readMisses parses cache-miss events from one JSONL report file.
-func readMisses(ctx context.Context, path string) ([]missBuild, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	defer f.Close()
-
-	var out []missBuild
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
-	for sc.Scan() {
-		line := sc.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var head struct {
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal(line, &head); err != nil {
-			continue
-		}
-		if head.Type != report.TypeTargetResult {
-			continue
-		}
-		var ev report.TargetResult
-		if err := json.Unmarshal(line, &ev); err != nil {
-			continue
-		}
-		// A "miss" is a fresh, successful run (not a cache replay) with a real duration.
-		ran := ev.Status == "ok" || ev.Status == report.StatusPermitted
-		if ev.CacheHit || !ran || ev.DurationMs <= 0 {
-			continue
-		}
-		out = append(out, missBuild{
-			project:    ev.Project,
-			target:     ev.Target,
-			hash:       ev.Hash,
-			durationMs: ev.DurationMs,
-		})
-	}
-	return out, sc.Err()
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
@@ -135,9 +136,9 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 		return emitRecord(opts, configCachePruneOutput{DryRun: pf.DryRun, Entries: n, FreedBytes: freed}, []string{"local"})
 	}
 	if pf.DryRun {
-		cacheNotice(ctx, "prune", fmt.Sprintf("would remove %d entries (%s)", n, fmtBytes(freed)))
+		cacheNotice(ctx, "prune", fmt.Sprintf("would remove %d entries (%s)", n, cache.FormatBytes(int(freed))))
 	} else {
-		cacheNotice(ctx, "prune", fmt.Sprintf("removed %d entries (%s freed)", n, fmtBytes(freed)))
+		cacheNotice(ctx, "prune", fmt.Sprintf("removed %d entries (%s freed)", n, cache.FormatBytes(int(freed))))
 	}
 	return nil
 }
@@ -149,44 +150,9 @@ type configCachePruneOutput struct {
 	FreedBytes int64 `json:"freed_bytes"`
 }
 
-type configCacheImportOutput struct {
-	Remote   bool                  `json:"remote"`
-	Restored bool                  `json:"restored"`
-	Spells   []configCacheSpellRow `json:"spells"`
-}
-
-type configCacheSpellRow struct {
-	Spell       string            `json:"spell,omitempty"`
-	Outcome     spellCacheOutcome `json:"outcome"`
-	Key         string            `json:"key"`
-	Exact       bool              `json:"exact"`
-	Files       int               `json:"files"`
-	Bytes       int64             `json:"bytes"`
-	Transferred int64             `json:"transferred"`
-	Skipped     int               `json:"skipped"`
-	Refused     []string          `json:"refused,omitempty"`
-	Dirs        []string          `json:"dirs,omitempty"`
-}
-
-// spellCacheOutcome is what a remote import did for one spell.
-type spellCacheOutcome string
-
-const (
-	spellCacheRestored spellCacheOutcome = "restored"
-	spellCacheCold     spellCacheOutcome = "cold"
-	spellCacheInactive spellCacheOutcome = "inactive"
-)
-
-func newSpellCacheRow(s magus.SpellCache) configCacheSpellRow {
-	outcome := spellCacheRestored
-	switch {
-	case s.Inactive:
-		outcome = spellCacheInactive
-	case s.Key == "":
-		outcome = spellCacheCold
-	}
-	return configCacheSpellRow{
-		Spell: s.Spell, Outcome: outcome, Key: s.Key, Exact: s.Exact, Files: s.Files, Bytes: s.Bytes,
+func newSpellCacheRow(s magus.SpellCache) cache.SpellRow {
+	return cache.SpellRow{
+		Spell: s.Spell, Outcome: cache.OutcomeOf(s.Inactive, s.Key), Key: s.Key, Exact: s.Exact, Files: s.Files, Bytes: s.Bytes,
 		Transferred: s.Transferred, Skipped: s.Skipped, Refused: s.Refused, Dirs: s.Dirs,
 	}
 }
@@ -306,7 +272,7 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("config cache import: %w", err)
 	}
 	if opts.Format != outputText {
-		return emitRecord(opts, configCacheImportOutput{Restored: true, Spells: []configCacheSpellRow{}}, []string{"local"})
+		return emitRecord(opts, cache.SpellImportRecord{Restored: true, Spells: []cache.SpellRow{}}, []string{"local"})
 	}
 	cacheNotice(ctx, "import", "restored cache")
 	return nil
@@ -317,13 +283,11 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 func configCacheImportRemote(ctx context.Context, m *magus.Magus, opts output.Options) error {
 	restored, err := m.RestoreSpellCaches(ctx)
 	if opts.Format != outputText {
-		rec := configCacheImportOutput{Remote: true, Spells: []configCacheSpellRow{}}
+		rec := cache.SpellImportRecord{Remote: true, Spells: []cache.SpellRow{}}
 		names := make([]string, 0, len(restored))
 		for _, s := range restored {
-			row := newSpellCacheRow(s)
-			rec.Spells = append(rec.Spells, row)
+			rec.Add(newSpellCacheRow(s))
 			names = append(names, s.Spell)
-			rec.Restored = rec.Restored || row.Outcome == spellCacheRestored
 		}
 		if emitErr := emitRecord(opts, rec, names); emitErr != nil {
 			return errors.Join(emitErr, err)
@@ -345,7 +309,7 @@ func configCacheImportRemote(ctx context.Context, m *magus.Magus, opts output.Op
 				match = "other lockfiles, same tools"
 			}
 			cacheNotice(ctx, "import", fmt.Sprintf("restored %s (%s): %d files, %s, %s downloaded, %d already present; %s",
-				s.Key, match, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " ")))
+				s.Key, match, s.Files, cache.FormatBytes(int(s.Bytes)), cache.FormatBytes(int(s.Transferred)), s.Skipped, strings.Join(s.Dirs, " ")))
 		}
 	}
 	if err != nil {
@@ -366,7 +330,7 @@ func configCacheExportRemote(ctx context.Context, m *magus.Magus) error {
 			cacheNotice(ctx, "export", fmt.Sprintf("%s is already stored; nothing to do", s.Key))
 		case s.Key != "":
 			cacheNotice(ctx, "export", fmt.Sprintf("stored %s: %d files, %s, %s uploaded, %d unused entries left out; %s",
-				s.Key, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " ")))
+				s.Key, s.Files, cache.FormatBytes(int(s.Bytes)), cache.FormatBytes(int(s.Transferred)), s.Skipped, strings.Join(s.Dirs, " ")))
 		}
 	}
 	if err != nil {
@@ -376,17 +340,4 @@ func configCacheExportRemote(ctx context.Context, m *magus.Magus) error {
 		cacheNotice(ctx, "export", "no spell this workspace resolves declares a cache; nothing to store")
 	}
 	return nil
-}
-
-func fmtBytes(b int64) string {
-	switch {
-	case b >= 1<<30:
-		return fmt.Sprintf("%.1f GiB", float64(b)/(1<<30))
-	case b >= 1<<20:
-		return fmt.Sprintf("%.1f MiB", float64(b)/(1<<20))
-	case b >= 1<<10:
-		return fmt.Sprintf("%.1f KiB", float64(b)/(1<<10))
-	default:
-		return fmt.Sprintf("%d B", b)
-	}
 }

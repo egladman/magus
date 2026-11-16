@@ -24,6 +24,7 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/clikit/command"
@@ -933,7 +934,7 @@ func (s *outputFormatsSuite) TestAVerbThatReportsAnOutcomeIsNotRefused() {
 
 func (s *outputFormatsSuite) TestEveryOutcomeRecordRendersEveryFormat() {
 	records := map[string]any{
-		"config set":  configSetOutput{Path: "magus.yaml", Key: "cache.mode", Value: "write"},
+		"config set":  config.SetOutput{Path: "magus.yaml", Key: "cache.mode", Value: "write"},
 		"server stop": serverStopOutput{Stopped: true, PID: 7, Address: "unix:///s"},
 		"job run":     jobRunOutput{Job: "sync-graph", Outcome: "no-server"},
 		"self place":  selfPlaceOutput{Commit: "abc", BuildDate: "d", Path: "/bin/magus"},

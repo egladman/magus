@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -11,8 +12,6 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/clikit/exit"
 )
-
-const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
 
 func configCacheKey(ctx context.Context, _ string, args []string) error {
 	fs := flag.NewFlagSet("config cache key", flag.ContinueOnError)
@@ -47,17 +46,6 @@ func configCacheKey(ctx context.Context, _ string, args []string) error {
 		fs.Usage()
 		return exit.Usagef("magus config cache key: unknown subcommand %q", sub)
 	}
-}
-
-// signingKeyOutput is the generated keypair as a record, so `-o template` can hand
-// the seed to a secret store over a pipe. The JSON TAGS are the template fields
-// (`-o template` projects the -o json names, so it is `{{.seed}}`, not
-// `{{.Seed}}`), and renaming one breaks a documented command line. Treat the
-// tags as API.
-type signingKeyOutput struct {
-	KeyID  string `json:"keyid" yaml:"keyid"`
-	Seed   string `json:"seed" yaml:"seed"`
-	PubKey string `json:"pubkey" yaml:"pubkey"`
 }
 
 // configCacheKeyGenerate mints a keypair and prints it once. The secret seed is
@@ -123,7 +111,7 @@ func configCacheKeyGenerate(ctx context.Context, args []string) error {
 		slog.WarnContext(ctx, km.KeyID, attr.Notice("keyid"))
 		slog.WarnContext(ctx, "public key (not secret; add to cache.remote.trusted_keys in magus.yaml):\n  "+km.PubB64, attr.Notice(""))
 		slog.WarnContext(ctx, "the seed is on stdout and is shown ONCE; it is not written to disk.", attr.Notice(""))
-		return emitFormatted(opts, signingKeyOutput{KeyID: km.KeyID, Seed: km.SeedB64, PubKey: km.PubB64})
+		return emitFormatted(opts, cache.NewSigningKeyRecord(km))
 	}
 
 	// Same rule the run output follows: a value you must copy goes LAST on its own
@@ -177,18 +165,9 @@ func configCacheKeyID(args []string) error {
 		return err
 	}
 
-	var info cache.KeyInfo
-	var err error
-	switch rest := fs.Args(); {
-	case len(rest) >= 1:
-		info, err = cache.TrustedKeyInfo(rest[0])
-	default:
-		seed := os.Getenv(signingKeyEnv)
-		if seed == "" {
-			fs.Usage()
-			return fmt.Errorf("magus config cache key id: provide a public key argument or set %s", signingKeyEnv)
-		}
-		info, err = cache.SigningKeyInfo(seed)
+	info, err := cache.ResolveKeyInfo(fs.Args(), os.Getenv)
+	if errors.Is(err, cache.ErrNoKeyGiven) {
+		fs.Usage()
 	}
 	if err != nil {
 		return fmt.Errorf("magus config cache key id: %w", err)
