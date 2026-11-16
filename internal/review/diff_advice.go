@@ -157,10 +157,10 @@ func setAdviceEnv(base string) (func(), error) {
 	return func() {
 		for name, was := range saved {
 			if was == nil {
-				_ = os.Unsetenv(name)
+				_ = os.Unsetenv(name) // a restore has no caller to report to
 				continue
 			}
-			_ = os.Setenv(name, *was)
+			_ = os.Setenv(name, *was) // a restore has no caller to report to
 		}
 	}, nil
 }
@@ -182,21 +182,21 @@ func shareReview(rev diff.Diff) (func(), error) {
 		werr = cerr
 	}
 	if werr != nil {
-		_ = os.Remove(f.Name())
+		_ = os.Remove(f.Name()) // the write error is the one worth returning
 		return func() {}, fmt.Errorf("magus diff: save the review for the advisors: %w", werr)
 	}
 	had, set := os.LookupEnv(adviceReviewEnv)
 	if err := os.Setenv(adviceReviewEnv, f.Name()); err != nil {
-		_ = os.Remove(f.Name())
+		_ = os.Remove(f.Name()) // the setenv error is the one worth returning
 		return func() {}, fmt.Errorf("magus diff: set %s: %w", adviceReviewEnv, err)
 	}
 	return func() {
 		if set {
-			_ = os.Setenv(adviceReviewEnv, had)
+			_ = os.Setenv(adviceReviewEnv, had) // a restore has no caller to report to
 		} else {
-			_ = os.Unsetenv(adviceReviewEnv)
+			_ = os.Unsetenv(adviceReviewEnv) // a restore has no caller to report to
 		}
-		_ = os.Remove(f.Name())
+		_ = os.Remove(f.Name()) // a leftover temp file is the only cost
 	}, nil
 }
 

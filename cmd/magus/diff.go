@@ -66,8 +66,6 @@ func revokeReviewToken(ctx context.Context, tokenID string) {
 
 func setBearer(req *http.Request, token types.Secret) { difftui.SetBearer(req, token) }
 
-func short(rev string) string { return review.Short(rev) }
-
 // diffCommand implements `magus diff`: the working tree's changes, annotated and ordered by
 // what they can break.
 //
@@ -725,7 +723,8 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content review.Content, req
 func attachDiffReview(ctx context.Context, m *magus.Magus, content review.Content, patch, base, riskBase string, paths []string) (difftypes.Diff, *difftypes.Review, difftui.ClosingSync, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	asOf := changeset.PatchDigest(patch)
 	if b := difftui.DialBridge(ctx, cliTokens{}, mcpAddrString(), paths, asOf); b != nil {
-		return b.Session().Diff, b.Session(), b, nil
+		sess := b.Session()
+		return sess.Diff, sess, b, nil
 	}
 	rev, err := annotateDiff(ctx, m, content, paths, base, "", difftypes.Options{Patch: patch, RiskBase: riskBase})
 	if err != nil {

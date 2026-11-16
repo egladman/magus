@@ -394,11 +394,11 @@ func HintSinceLastReview(ctx context.Context, rev diff.Diff, src Source) {
 	}
 	interactive.Hint(ctx, fmt.Sprintf(
 		"you last reviewed %d of these %d files at %s: `%s` shows only what changed since",
-		covered, len(rev.Files), Short(at.Revision), hint.Diff.With("--rev", fmt.Sprintf("%s...%s", at.Revision, src.Head))))
+		covered, len(rev.Files), short(at.Revision), hint.Diff.With("--rev", fmt.Sprintf("%s...%s", at.Revision, src.Head))))
 }
 
-// Short abbreviates a revision for a message a person reads, keeping the full one for the command.
-func Short(rev string) string {
+// short abbreviates a revision for a message a person reads, keeping the full one for the command.
+func short(rev string) string {
 	if len(rev) <= 12 {
 		return rev
 	}

@@ -51,7 +51,7 @@ func testEnv(stdout, notices io.Writer) RefsEnv {
 			if len(ans.StaleIndexes) == 0 {
 				return ""
 			}
-			return "stale index: " + ans.DescribeStale() + "\n"
+			return fmt.Sprintf("stale index: %s\n", ans.DescribeStale())
 		},
 		Unverified: func(out types.KnowledgeOccurrencesOutput) string {
 			return fmt.Sprintf("%d site(s) did not verify\n", out.OccurrenceCount-out.VerifiedCount)
