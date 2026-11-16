@@ -87,6 +87,10 @@ saying it, delete it here.
   `.gitignore` negation. Bootstrap links it into every declared host's skill root;
   tool-specific directories are ignored local installations. Keep shared loop
   instructions in `.agents/loops/`.
+- Before a push, run `magus run ci <project>` for each project the diff edits, and
+  one passing run over each changed file. GitHub Actions runs the whole gate
+  (`ci.remote_gate`). Run `magus affected ci` locally only when a change moves
+  packages, renames, or edits a magusfile.
 
 ## Binary
 
