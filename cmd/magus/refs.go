@@ -226,10 +226,15 @@ func workspaceClassifier(ctx context.Context, root string) textindex.ClassifyFun
 	return nil
 }
 
+// refsWriters is the part of the refs renderers' environment that needs no request: the
+// structured writers. It is a value rather than a call because the renderers it serves
+// decide -o name themselves.
+var refsWriters = knowledge.RefsEnv{Stdout: os.Stdout, Format: emitFormatted, Names: emitNames}
+
 // refsEnv is what the refs renderers borrow from this command: stdout and --tee, the
 // index-cause diagnosis, and the workspace's classifier.
 func refsEnv(ctx context.Context, root string) knowledge.RefsEnv {
-	env := knowledge.RefsEnv{Stdout: os.Stdout, Format: emitFormatted, Names: emitNames}
+	env := refsWriters
 	env.Root = resolveRootOrEmpty(root)
 	env.Notices = noticeLines{ctx: ctx, level: slog.LevelError}
 	env.Classify = func() textindex.ClassifyFunc { return workspaceClassifier(ctx, root) }

@@ -976,7 +976,7 @@ var appendAllowed = map[string]string{
 	"cmd/magus/log_other.go:redirectStdio":                  "a log: the process's stderr, held open as an fd",
 	"cmd/magus/log_windows.go:redirectStdio":                "a log: the process's stderr, held open as an fd",
 	"cmd/magus/output.go:openTeeFile":                       "--tee mirrors a stream into a file held open for the command",
-	"cmd/magus/server.go:spawnDetached":                     "a log: the daemon's stdio, handed to the child",
+	"internal/proc/detach.go:SpawnDetached":                 "a log: the daemon's stdio, handed to the child",
 	"internal/guard/unfinished.go:judgmentMark.recordLapse": "a one-byte tally read back by its size after the write",
 	"internal/hint/marker.go:Gate.Count":                    "a one-byte tally read back by its offset after the write",
 	"internal/guard/drift.go:scopeDrift.record":             "plain lines of project paths, not JSON Lines",
