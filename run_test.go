@@ -31,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
@@ -3829,4 +3830,78 @@ func (s *ciRepairSuite) TestWriteDeclaredByAMemberIsNotTheTargetsOwn() {
 	}
 	s.False(declaresOwnWrite(p, "format"))
 	s.True(declaresOutput(p, "format"), "the chain-walking neighbour still sees it")
+}
+
+// resolveCounter is a telemetry provider that counts the spell compiles a run makes,
+// by spell name; every other method is observability.Nop's.
+type resolveCounter struct {
+	observability.Nop
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+func (c *resolveCounter) Enabled() bool { return true }
+
+func (c *resolveCounter) RecordBuzzSpellResolve(_ context.Context, r observability.BuzzSpellResolve) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.counts == nil {
+		c.counts = map[string]int{}
+	}
+	c.counts[r.Spell]++
+}
+
+func (c *resolveCounter) compiles(spell string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.counts[spell]
+}
+
+var _ observability.Provider = (*resolveCounter)(nil)
+
+func TestSpellCompiledOncePerRunSuite(t *testing.T) { suite.Run(t, new(spellCompiledOncePerRunSuite)) }
+
+// spellCompiledOncePerRunSuite pins how often a run compiles a spell its magusfiles import.
+type spellCompiledOncePerRunSuite struct{ suite.Suite }
+
+func importedSpell(name string) string {
+	return fmt.Sprintf("export fun mgs_getName() > str { return %q; }\n", name)
+}
+
+func (s *spellCompiledOncePerRunSuite) open(tree map[string]string) (*Magus, *resolveCounter) {
+	tree[".gitignore"] = ".magus/\n"
+	repo := testkit.NewRepository(s.T(), tree)
+	counter := &resolveCounter{}
+	m, err := Open(context.Background(), repo.Root(), workspace.WithTelemetryProvider(counter), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err, "Open")
+	s.T().Cleanup(func() { _ = m.Close() })
+	return m, counter
+}
+
+func (s *spellCompiledOncePerRunSuite) TestRunCompilesAnImportedSpellOnce() {
+	m, counter := s.open(map[string]string{
+		"spells/compiledonce.buzz": importedSpell("compiledonce"),
+		"magusfile.buzz": `import "magus";
+import "spells/compiledonce";
+export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(one, two); }
+export fun one(ctx: magus\Context, args: [str]) > void {}
+export fun two(ctx: magus\Context, args: [str]) > void {}
+`,
+	})
+
+	s.Require().NoError(m.Run(context.Background(), []types.Target{{Path: ".", Name: "ci"}}))
+	s.Equal(1, counter.compiles("compiledonce"))
+}
+
+func (s *spellCompiledOncePerRunSuite) TestRepairPassCompilesTheSpellAgain() {
+	m, counter := s.open(map[string]string{
+		"spells/repaircompiled.buzz": importedSpell("repaircompiled"),
+		"a.txt":                      "messy\n",
+		"magusfile.buzz": `import "spells/repaircompiled";
+` + ciRepairMagusfile + ciNeedsTidy,
+	})
+
+	err := m.RunCI(context.Background(), []types.Target{{Path: ".", Name: "ci"}}, WithWrite())
+	s.Require().True(errors.Is(err, types.UncommittedRepair), "got %v", err)
+	s.Equal(3, counter.compiles("repaircompiled"), "verify, repair and verify again are three runs, each compiling the spell once")
 }

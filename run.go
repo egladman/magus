@@ -2444,6 +2444,11 @@ func observationsForTarget(p *types.Project, target string, probed map[string]st
 // paths below, and a deferred swap is the only way to make every one of them report the
 // abort rather than the cancellation it surfaced as.
 func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) (err error) {
+	// One set of probes per run. A ci under rw is three runs (verify, repair,
+	// verify), so the verify after a repair compiles its imported spells again. A
+	// nested in-process run attaches its own, which shadows this one for its loads.
+	ctx, sealProbes := interp.WithImportProbes(ctx)
+	defer sealProbes()
 	out := opts.out(m)
 	// `--` args reach only the named stages' handlers, never this ctx: the skip_cache
 	// gates run ahead of a replay and the derived-order settle both dispatch other
