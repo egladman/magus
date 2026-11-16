@@ -425,37 +425,32 @@ fun scissors(svg: mut [str], at: Placement) > void {
     svg.append("</g>");
 }
 
-// art is one design's elements for one variant, without the root svg
-// element:
-//   grid   the macOS grid, with its shadow
-//   bleed  the art filling the canvas, for favicons
-//   touch  the art on a square ground, for apple-touch-icon, which iOS rounds
+// art is the mark's elements for one variant, without the root svg element:
+//   square  the scissors on a square ground with square corners, no shadow
+//   app     the macOS grid: a superellipse body with its shadow
 export fun art(at: Placement, variant: str) > result\Result::<[str]> {
     final d = at.design;
-    if (variant != "grid" and variant != "bleed" and variant != "touch") {
-        return result\fail::<[str]>("unknown variant {variant}: want grid, bleed or touch");
+    if (variant != "square" and variant != "app") {
+        return result\fail::<[str]>("unknown variant {variant}: want square or app");
     }
     final svg = mut [<str>];
-    final outline = superellipse(CENTER, cy: CENTER, ax: HALF, ay: HALF, n: EXPONENT);
-    if (variant == "grid") {
+    if (variant == "app") {
         for (var k = 10; k >= 1; k = k - 1) {
             final dk = std\toDouble(k);
             final spread = superellipse(CENTER, cy: CENTER + 3.0 + 1.6 * dk, ax: HALF + 1.4 * dk, ay: HALF + 1.4 * dk, n: EXPONENT);
             shape(svg, d: spread, fill: "#000000", alpha: 0.028);
         }
+        shape(svg, d: superellipse(CENTER, cy: CENTER, ax: HALF, ay: HALF, n: EXPONENT), fill: d.ground, alpha: 1.0);
+        scissors(svg, at: at);
+        return result\ok::<[str]>(svg);
     }
-    if (variant == "touch") {
-        svg.append("<rect x=\"0\" y=\"0\" width=\"1024\" height=\"1024\" fill=\"{d.ground}\"/>");
-    }
+    // The square fills the canvas, so the scissors grow with it, as they
+    // would on the body scaled to the canvas edge.
     final s = 512.0 / HALF;
-    if (variant != "grid") {
-        svg.append("<g transform=\"matrix({num(s)} 0 0 {num(s)} {num(CENTER - CENTER * s)} {num(CENTER - CENTER * s)})\">");
-    }
-    shape(svg, d: outline, fill: d.ground, alpha: 1.0);
+    svg.append("<rect x=\"0\" y=\"0\" width=\"1024\" height=\"1024\" fill=\"{d.ground}\"/>");
+    svg.append("<g transform=\"matrix({num(s)} 0 0 {num(s)} {num(CENTER - CENTER * s)} {num(CENTER - CENTER * s)})\">");
     scissors(svg, at: at);
-    if (variant != "grid") {
-        svg.append("</g>");
-    }
+    svg.append("</g>");
     return result\ok::<[str]>(svg);
 }
 
@@ -473,35 +468,29 @@ export fun draw(at: Placement, variant: str) > result\Result::<str> {
     return result\ok::<str>(parts.join("\n") + "\n");
 }
 
-// DESIGNS are the mark in caution yellow and in blue: the pair half open
-// and leaning.
-export final DESIGNS = [
-    Design{ name = "yellow", ground = "#f2a91c", ink = "#36322b", open = 34.0, tilt = 30.0 },
-    Design{ name = "blue", ground = "#2f6fe0", ink = "#f4eee2", open = 34.0, tilt = 30.0 },
-];
+// MARK is the scissors half open and leaning, in charcoal on caution
+// yellow.
+export final MARK = Design{ name = "safetyscissors", ground = "#f2a91c", ink = "#36322b", open = 34.0, tilt = 30.0 };
 
-// VARIANTS names the file each variant is written to, after the design.
-export final VARIANTS = {"grid": "", "bleed": "-favicon", "touch": "-touch"};
+// OUTPUTS maps each SVG writeAll writes to the variant it draws.
+export final OUTPUTS = {"safetyscissors.svg": "square", "safetyscissors-app-icon.svg": "app"};
 
-// writeAll writes every design in every variant into dir, which it creates.
+// writeAll writes every OUTPUTS SVG into dir, which it creates.
 export fun writeAll(dir: str) > result\Result::<[str]> {
     final written = mut [<str>];
+    final at = place(MARK);
     try {
         fs\mkdirAll(dir);
-        foreach (d in DESIGNS) {
-            final at = place(d);
-            foreach (variant, suffix in VARIANTS) {
-                final svg = draw(at, variant: variant);
-                if (svg.error -> e) {
-                    return result\Result::<[str]>{ error = e };
-                }
-                final target = "{dir}/safetyscissors-{d.name}{suffix}.svg";
-                fs\writeFile(target, content: svg.value!);
-                written.append(target);
+        foreach (name, variant in OUTPUTS) {
+            final svg = draw(at, variant: variant);
+            if (svg.error -> e) {
+                return result\Result::<[str]>{ error = e };
             }
+            fs\writeFile("{dir}/{name}", content: svg.value!);
+            written.append("{dir}/{name}");
         }
     } catch (err: any) {
-        return result\caught::<[str]>(err, doing: "write the safetyscissors marks");
+        return result\caught::<[str]>(err, doing: "write the safetyscissors mark");
     }
     return result\ok::<[str]>(written);
 }
@@ -517,14 +506,14 @@ fun main(args: [str]) > void !> any {
     }
 }
 
-test "a design draws the same bytes twice" {
-    final at = place(DESIGNS[0]);
-    std\assert(draw(at, variant: "bleed").value! == draw(at, variant: "bleed").value!, message: DESIGNS[0].name);
+test "the mark draws the same bytes twice" {
+    final at = place(MARK);
+    std\assert(draw(at, variant: "square").value! == draw(at, variant: "square").value!, message: "square");
     std\assert(draw(at, variant: "poster").error != null, message: "an unknown variant is refused");
 }
 
 test "the balanced scissors' weight lands nudged off the optical center" {
-    final at = place(DESIGNS[0]);
+    final at = place(MARK);
     final w = weight(at.pl);
     std\assert(num(w.x + at.shift.x) == num(CENTER + 18.0), message: "right of center");
     std\assert(num(w.y + at.shift.y) == num(CENTER - 20.6 + 22.0), message: "the optical lift, less the nudge");
