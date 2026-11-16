@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"github.com/egladman/magus/types/diff"
+	"io"
 	"slices"
 	"strings"
 
@@ -183,4 +184,23 @@ func hunkRanges(rev diff.Diff) map[string]string {
 		}
 	}
 	return out
+}
+
+// printOrder writes the reading order under the file summary.
+func printOrder(w io.Writer, rev diff.Diff, showGenerated bool) {
+	for _, line := range OrderLines(rev, showGenerated) {
+		fmt.Fprintln(w, line)
+	}
+}
+
+// OrderSteps is the order's step count: its highest step number, since steps are numbered from
+// 1 across the whole order and the unread filter drops steps without renumbering the rest.
+func OrderSteps(o *diff.Order) int {
+	n := 0
+	for _, g := range o.Groups {
+		for _, s := range g.Steps {
+			n = max(n, s.Number)
+		}
+	}
+	return n
 }

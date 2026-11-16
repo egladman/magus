@@ -1,6 +1,7 @@
 package review
 
 import (
+	"bytes"
 	"github.com/egladman/magus/types/diff"
 	"strings"
 	"testing"
@@ -178,4 +179,17 @@ func TestOrderSaysWhenTheIndexerGaveNoSignature(t *testing.T) {
 
 	assert.Contains(t, got, "    signature: F (no signature from the indexer)\n")
 	assert.Contains(t, got, "    signature: func G()\n    signature: M (no signature from the indexer)\n")
+}
+
+func TestPrintOrderWritesTheRenderedOrderToTheWriter(t *testing.T) {
+	var buf bytes.Buffer
+	printOrder(&buf, orderTestDiff(), false)
+
+	assert.Contains(t, buf.String(), "\nreading order\n\ngroup 1 of 2: connected around F (3 hunks)\n  step 1\n    core.go:3  F\n")
+	assert.Contains(t, buf.String(), "group 2 of 2: generated (1 hunk)\n  folded:")
+	assert.True(t, bytes.HasSuffix(buf.Bytes(), []byte("4 hunks, 4 placed\n")))
+}
+
+func TestOrderStepsIsTheHighestStepNumber(t *testing.T) {
+	assert.Equal(t, 4, OrderSteps(orderTestDiff().Order))
 }
