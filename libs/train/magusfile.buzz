@@ -9,6 +9,7 @@ import "embed/sources";
 import "embed/holdout";
 import "embed/pairs";
 import "embed/runlog";
+import "split" as splitter;
 
 import "magus/spell/go";
 
@@ -17,7 +18,7 @@ import "magus/spell/go";
 // (XDG_CACHE_HOME/magus-embed, else ~/.cache/magus-embed), which no cache entry records.
 magus\project({
     "spells": [go],
-    "sources": ["embed/inputs.jsonl", "inputs.jsonl", "config/*.yaml"],
+    "sources": ["embed/inputs.jsonl", "inputs.jsonl", "config/*.yaml", "split.buzz", "gen/split.digest"],
     "targets": {
         "install": {"skip_cache": "downloads into the shared module cache, which no cache entry records"},
         "security": {"skip_cache": "reads the Go vulnerability database, which changes independently of this tree"},
@@ -34,6 +35,10 @@ magus\project({
         "models": {"skip_cache": "downloads the pinned models into the cache root, outside the tree", "timeout": "4h"},
         "fertility": {"skip_cache": "reads tokenizers from the cache root, outside the tree, and appends to runs.jsonl"},
         "pilot": {"skip_cache": "trains from weights in the cache root, outside the tree, and appends a measurement of this machine to runs.jsonl", "timeout": "2h"},
+        "split": {"skip_cache": "reads the committed tree through git and writes the split into the cache root, outside the tree"},
+        "eval-sets": {"skip_cache": "reads the split from the cache root and writes the evaluation sets there, outside the tree"},
+        "fim": {"skip_cache": "reads the split and the eval sets from the cache root and writes the training samples there, outside the tree"},
+        "g1": {"skip_cache": "recounts the datasets under the cache root, outside the tree"},
         "gguf-bench": {"skip_cache": "reads GGUFs from the cache root, outside the tree, and appends a measurement of this machine to runs.jsonl", "timeout": "1h"},
     },
 });
@@ -296,4 +301,58 @@ export fun pilot(ctx: magus\Context, args: [str]) > void !> any {
 export fun gguf_bench(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["runs.jsonl"], editsExistingSource: true);
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "gguf-bench"] + args});
+}
+
+// The datasets of stage S1 live under <XDG cache>/magus/train/s1, outside git; gen/split.digest
+// pins their sha256 and the commit they were read at. Args after -- go to `train`, e.g.
+// `-- -rev <commit>` to read a commit other than HEAD.
+fun s1Dir() > str !> any {
+    return fs\join(env\getOr("XDG_CACHE_HOME", def: fs\join(env\home(), name: ".cache")), "magus", "train", "s1");
+}
+
+fun revOf(args: [str]) > str {
+    foreach (i, arg in args) {
+        if (arg == "-rev" and i + 1 < args.len()) {
+            return args[i + 1];
+        }
+    }
+    return "HEAD";
+}
+
+// Deals the provenance groups of the hand-written Buzz, Go and TypeScript at a commit:
+// exact and near-duplicate files become links, so both land on one side, and groups are
+// held out by sha256 order until each language has about 10% of its bytes.
+export fun split(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["gen/split.digest"], editsExistingSource: true);
+    final dir = s1Dir();
+    final listed = splitter\candidates(revOf(args), dir: dir);
+    if (listed.error -> e) {
+        throw e.message;
+    }
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "dedup"] + args});
+    final placed = splitter\place(dir);
+    if (placed.error -> e) {
+        throw e.message;
+    }
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "pin-split"] + args});
+    std\print("candidates {listed.value!}; placed {placed.value!}");
+}
+
+// Writes the FIM dev and test sets of each language, the Buzz pass@k tasks, and the commits
+// after the cutoff, then pins each. Needs the split.
+export fun eval_sets(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["gen/split.digest"], editsExistingSource: true);
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "eval-sets"] + args});
+}
+
+// Writes the FIM training samples of every train-side file at the cutoff commit, leaving
+// out the files whose text repeats an evaluation text. Needs the eval sets.
+export fun fim(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["gen/split.digest"], editsExistingSource: true);
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "fim"] + args});
+}
+
+// Recounts every G1 bullet of plan 2.3 from the datasets and fails when one does not hold.
+export fun g1(ctx: magus\Context, args: [str]) > void !> any {
+    go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "g1"] + args});
 }

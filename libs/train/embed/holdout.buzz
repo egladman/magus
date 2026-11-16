@@ -11,7 +11,7 @@ final salt = "embed-holdout/v2:";
 // Result is what a fallible call here and in sources, pairs and runlog returns.
 final hexDigits = "0123456789abcdef";
 
-fun prefixValue(digest: str) > int {
+export fun prefixValue(digest: str) > int {
     var v = 0;
     for (var i = 0; i < 8; i = i + 1) {
         v = v * 16 + (hexDigits.indexOf(digest.sub(i, len: 1)) ?? 0);
