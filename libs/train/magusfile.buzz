@@ -277,7 +277,7 @@ export fun models(ctx: magus\Context, args: [str]) > void !> any {
 // Appends, per tokenizer, the tokens per byte of held-in hand-written Buzz, Go and TS
 // (gen/sources.jsonl's train split) to runs.jsonl. Args after -- go to `train fertility`.
 export fun fertility(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles(["runs.jsonl"]);
+    ctx.writesFiles(["runs.jsonl"], editsExistingSource: true);
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "fertility"] + args});
 }
 
@@ -286,7 +286,7 @@ export fun fertility(ctx: magus\Context, args: [str]) > void !> any {
 // <input prefix>`. Heavy: run one pilot at a time, with tests idle. Manual, never part of
 // ci.
 export fun pilot(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles(["runs.jsonl"]);
+    ctx.writesFiles(["runs.jsonl"], editsExistingSource: true);
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "pilot"] + args});
 }
 
@@ -294,6 +294,6 @@ export fun pilot(ctx: magus\Context, args: [str]) > void !> any {
 // runs.jsonl. Args after -- go to `train gguf-bench`, e.g. `-- -prefix gguf/qwen`. Manual,
 // never part of ci.
 export fun gguf_bench(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles(["runs.jsonl"]);
+    ctx.writesFiles(["runs.jsonl"], editsExistingSource: true);
     go["go-run"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./cmd/train", "gguf-bench"] + args});
 }
