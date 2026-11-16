@@ -121,6 +121,7 @@ func TestScopeDriftFiresOncePerProject(t *testing.T) {
 // generatedOutput, which has no ctx, no longer than hookBudget: both go silent.
 func TestDriftAndGeneratedOutputBoundAStalledOpen(t *testing.T) {
 	ctx, _ := spawnFixture(t)
+	waitForLapsedWork(t)
 	release := make(chan struct{})
 	defer close(release)
 	deps := Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {

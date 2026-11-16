@@ -175,9 +175,9 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	magus.MapSet("lifecycle", lifecycle)
 	magus.MapSet("workspaceProvider", buildWorkspaceProvider(ctx, obs))
 	registerModelTiers(ctx, sess, obs, magus)
-	registerModelTierMatrix(ctx, sess, obs, magus)
+	registerModelTierMatrix(ctx, sess, obs, magus, parseMode)
 	magus.MapSet("service", buildService(obs))
-	guard := buildGuard(ctx, sess, obs)
+	guard := buildGuard(ctx, sess, obs, parseMode)
 	guard.MapSet("shape", directVal(obs, "magus.guard.shape", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		return ffi.StringVal(trail.CommandShape(ffi.String(args, 0))), nil
 	}))
@@ -251,6 +251,8 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 		guard.MapSet("spawn", magusfileOnly(obs, `magus\guard.spawn`))
 		guard.MapSet("command", magusfileOnly(obs, `magus\guard.command`))
 		guard.MapSet("write", magusfileOnly(obs, `magus\guard.write`))
+		guard.MapSet("stop", magusfileOnly(obs, `magus\guard.stop`))
+		guard.MapSet("step", magusfileOnly(obs, `magus\guard.step`))
 		harness.MapSet("provider", magusfileOnly(obs, `magus\harness.provider`))
 		magus.MapSet("modelTiers", magusfileOnly(obs, `magus\modelTiers`))
 		magus.MapSet("modelTier", magusfileOnly(obs, `magus\modelTier`))

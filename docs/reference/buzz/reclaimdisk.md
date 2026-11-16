@@ -268,9 +268,22 @@ apply removes the removable rows and returns the plan with each row's result. A 
 
 **Returns:** [Item]
 
+### fenceHeld
+
+fenceHeld says whether fence alone held t past its budget.
+
+**Signature:** `reclaimdisk\fenceHeld(t, fence) -> bool`
+
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `t`       | `CacheTrim` |          |             |
+| `fence`   | `double`    |          |             |
+
+**Returns:** bool
+
 ### trimCache
 
-trimCache trims one cache to its budget, keeping files inside fence.
+trimCache trims one cache to its budget, tightening fence to MIN_FENCE_MS if needed.
 
 **Signature:** `reclaimdisk\trimCache(name, dir, trimMb, fence, deadline) -> CacheTrim`
 

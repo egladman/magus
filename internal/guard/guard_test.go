@@ -80,18 +80,11 @@ var (
 	WorkspaceCacheDir func(root string) (string, error)
 )
 
-// unfinishedOpens holds each open testDependencies started that has not returned. A
-// judgment past its budget answers without waiting for its open, which goes on loading
-// Buzz under the XDG dirs of whichever test runs next.
-var unfinishedOpens sync.WaitGroup
-
 // testDependencies resolves the workspace the way the CLI's hookDeps does, so a rule graded
 // here reads the same tree the hook would.
 func testDependencies() Dependencies {
 	return Dependencies{
 		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
-			unfinishedOpens.Add(1)
-			defer unfinishedOpens.Done()
 			if root == "" {
 				found, err := workspace.FindRoot("")
 				if err != nil {
@@ -980,8 +973,9 @@ func treeChanges(before, after map[string]pathState) []string {
 // what the first call wrote: a held advisory stays held, a recorded drift stays quiet.
 // Only a repeated deny is worded differently.
 func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
-	// An earlier test's open would make the bytecode sealing key in a state dir set here.
-	unfinishedOpens.Wait()
+	// An open an earlier test left running without waiting for it, as one a loaded machine
+	// lapses, would make the bytecode sealing key in a state dir set here.
+	drainLapsedWork(t)
 	for _, tc := range []struct {
 		name  string
 		setup func(t *testing.T) (context.Context, Dependencies, Request)
@@ -2119,6 +2113,7 @@ func TestJobRowsReadIsBoundedByTheDeadline(t *testing.T) {
 		t.Skip("no mkfifo to stand in for a stalled store")
 	}
 	ctx, cacheDir := spawnFixture(t)
+	waitForLapsedWork(t)
 	at := hookLocation(ctx, Dependencies{})
 	path, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: at.workspace}).Path()
 	require.NoError(t, err)
@@ -2386,6 +2381,7 @@ const shardChildEnv = "MAGUS_GUARD_TEST_SHARD"
 // Most tests here take testkit.Isolate or t.Setenv, which forbid t.Parallel.
 // So the top-level tests run as several processes at once, each serial inside.
 func TestMain(m *testing.M) {
+	leftRunning = lapsedWork.hold
 	if os.Getenv(shardChildEnv) == "" && shardable(os.Args[1:]) {
 		os.Exit(runShards(os.Args[1:]))
 	}

@@ -221,10 +221,19 @@ func awaitDeadline[T any](ctx context.Context, work func() (T, error)) (T, error
 	case a := <-done:
 		return a.value, a.err
 	default:
+		if leftRunning != nil {
+			leftRunning(func() { <-done })
+		}
 		var zero T
 		return zero, ctx.Err()
 	}
 }
+
+// leftRunning, when set, is handed a wait for each piece of work awaitDeadline or
+// JudgeWithin stopped waiting for; the wait returns once that work has. Production leaves
+// it nil. Tests set it, because lapsed work reads the XDG dirs when it runs and so writes
+// under whichever test sets them next.
+var leftRunning func(wait func())
 
 // boundedPhase runs call as phase of the judgment on ctx, waiting until
 // judgeReserve before ctx's deadline. A lapsed phase answers
@@ -298,6 +307,9 @@ func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func
 		begunJudgment(ctx).answeredInTime()
 		return v
 	case <-timer.C:
+		if leftRunning != nil {
+			leftRunning(func() { <-done })
+		}
 		return unjudged(context.WithoutCancel(ctx), base, req, log)
 	}
 }
