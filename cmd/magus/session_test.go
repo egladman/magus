@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,12 +13,14 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// The helpers below are shared by test files that other groups still own: session_brief_test,
-// session_cost_test, agent_harness_test, graph_test, diff_test and verbosity_test. The tests
-// that once sat beside them moved to the packages that own the behavior.
+// The helpers below are shared by test files that other groups still own:
+// agent_harness_test, graph_test, diff_test and verbosity_test. The tests that once sat
+// beside them moved to the packages that own the behavior.
 
 // emitJournalEvent pushes one event through h along the real capture path, rather than
 // hand-building the slog.Record. The attribute key that carries an Event is private
@@ -94,3 +97,44 @@ func (s *journalRecordSink) Handle(_ context.Context, r slog.Record) error {
 
 func (s *journalRecordSink) WithAttrs([]slog.Attr) slog.Handler { return s }
 func (s *journalRecordSink) WithGroup(string) slog.Handler      { return s }
+
+// TestBriefRefusalHelperProcess is the process TestTheCLIPrintsTheBriefRefusal
+// starts. A fresh process builds its own stderr display handler, which an
+// earlier in-process runCLI would otherwise have bound to another stderr.
+func TestBriefRefusalHelperProcess(t *testing.T) {
+	root := os.Getenv(briefRefusalRootVar)
+	if root == "" {
+		t.Skip("not invoked as the brief refusal helper process")
+	}
+	t.Setenv("MAGUS_BROKER", "required")
+	os.Args = []string{"magus", "--root", root, "session", "--brief"}
+	os.Exit(runCLI())
+}
+
+func TestSessionShowNamesTheCostSectionsItCouldNotMeasure(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := t.TempDir()
+	_, err := loadStream(t, root, `{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls"}`)
+	require.NoError(t, err)
+
+	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })
+
+	assert.Contains(t, out, "Cost, with the root as the main thread:")
+	assert.Contains(t, out, "root context     not measured: this checkout's trail holds nothing for the session")
+	assert.NotContains(t, out, "$0.00")
+}
+
+func TestHarnessModelRowsOpenTheWorkspaceOnceAndOnlyWhenAsked(t *testing.T) {
+	opened := 0
+	rows := harnessModelRows(t.Context(), t.TempDir(), func(context.Context) (types.WorkspaceRepository, error) {
+		opened++
+		return nil, errors.New("magusfile.buzz does not load")
+	})
+
+	assert.Zero(t, opened, "building the reader reads nothing")
+	assert.Empty(t, rows(), "a workspace that will not load has no rows")
+	assert.Empty(t, rows())
+	assert.Equal(t, 1, opened)
+}
