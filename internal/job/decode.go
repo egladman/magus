@@ -85,20 +85,18 @@ func decodeDeclaration(r io.Reader) (types.Declaration, error) {
 // what tells a declaration from a record of another shape, and a guess at it re-declared a
 // live job as an empty row. A claim or a settlement is refused too, since fork would
 // declare it, and `magus job apply` is the door that takes them.
-//
-// The second result is always false: it is the caller's old "defaulted" flag, kept so
-// the callers in cmd/magus/job.go, outside this job's paths, still build.
-func DecodeStdinDeclaration(r io.Reader) (row types.Declaration, defaulted bool, err error) {
-	if row, err = decodeDeclaration(r); err != nil {
-		return types.Declaration{}, false, err
+func DecodeStdinDeclaration(r io.Reader) (types.Declaration, error) {
+	row, err := decodeDeclaration(r)
+	if err != nil {
+		return types.Declaration{}, err
 	}
 	switch {
 	case len(row.Claim) > 0:
-		return types.Declaration{}, false, notDeclaration(row.ID, "claim", "a claim")
+		return types.Declaration{}, notDeclaration(row.ID, "claim", "a claim")
 	case row.Settles():
-		return types.Declaration{}, false, notDeclaration(row.ID, "deferred", "a settlement")
+		return types.Declaration{}, notDeclaration(row.ID, "deferred", "a settlement")
 	}
-	return row, false, nil
+	return row, nil
 }
 
 // notDeclaration is the refusal of a record that is not a declaration but reached the

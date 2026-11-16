@@ -1385,12 +1385,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			return exit.Usagef("magus job fork: --stdin takes the job from the record, so %s would be ignored: put it in the record (`%s` prints its fields)",
 				strings.Join(dropped, ", "), hint.JobFork.With("--schema"))
 		}
-		var defaulted bool
-		if row, defaulted, err = job.DecodeStdinDeclaration(os.Stdin); err != nil {
+		if row, err = job.DecodeStdinDeclaration(os.Stdin); err != nil {
 			return exit.Usagef("magus job fork: %s (`%s` prints the schema it must satisfy)", err, hint.JobFork.With("--schema"))
-		}
-		if defaulted {
-			slog.InfoContext(ctx, fmt.Sprintf("the record names no api_version, so it was read as %s", types.JobAPIVersion), attr.Notice("note"))
 		}
 		if row.Checkout, err = recordCheckout(row.Checkout, spec.Checkout); err != nil {
 			return err

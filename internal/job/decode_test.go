@@ -472,26 +472,26 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 func TestDecodeStdinDeclarationRefusesARecordNamingNoVersion(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := DecodeStdinDeclaration(strings.NewReader(`{"id":"a","read_only":true}`))
+	_, err := DecodeStdinDeclaration(strings.NewReader(`{"id":"a","read_only":true}`))
 	require.ErrorIs(t, err, types.JobRecordInvalid)
 	assert.Contains(t, err.Error(), "carries no api_version")
 	assert.Contains(t, err.Error(), `add "api_version": "`+string(types.JobAPIVersion)+`" to the record`, "the refusal names the field to add")
 
-	row, _, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"read_only":true`))
+	row, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"read_only":true`))
 	require.NoError(t, err)
 	assert.Equal(t, "a", row.ID)
 
-	_, _, err = DecodeStdinDeclaration(strings.NewReader(`{"api_version":"","id":"a","read_only":true}`))
+	_, err = DecodeStdinDeclaration(strings.NewReader(`{"api_version":"","id":"a","read_only":true}`))
 	require.ErrorIs(t, err, types.JobRecordInvalid, "a version named 0 is no version")
 
-	_, _, err = DecodeStdinDeclaration(strings.NewReader(`[]`))
+	_, err = DecodeStdinDeclaration(strings.NewReader(`[]`))
 	require.Error(t, err, "a record that is not an object is refused")
 }
 
 func TestDecodeStdinDeclarationRefusesTheRecordThatWipedARow(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := DecodeStdinDeclaration(strings.NewReader(
+	_, err := DecodeStdinDeclaration(strings.NewReader(
 		`{"id":"hook-fails-closed","claim":[{"path":"cmd/magus/shell.go","because":"refs:withStaleConfig"}]}`))
 	require.ErrorIs(t, err, types.JobRecordInvalid)
 	assert.Contains(t, err.Error(), "api_version")
@@ -500,16 +500,16 @@ func TestDecodeStdinDeclarationRefusesTheRecordThatWipedARow(t *testing.T) {
 func TestDecodeStdinDeclarationRefusesAClaimOrASettlementThatNamesItsVersion(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"claim":[{"path":"x.go","because":"refs:f"}]`))
+	_, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"claim":[{"path":"x.go","because":"refs:f"}]`))
 	require.ErrorIs(t, err, types.JobRecordInvalid)
 	assert.Contains(t, err.Error(), "a claim, not a declaration")
 	assert.Contains(t, err.Error(), "job apply --stdin")
 
-	_, _, err = DecodeStdinDeclaration(declaration(`"id":"a"`, `"left_unmerged":"scrapped"`))
+	_, err = DecodeStdinDeclaration(declaration(`"id":"a"`, `"left_unmerged":"scrapped"`))
 	require.ErrorIs(t, err, types.JobRecordInvalid)
 	assert.Contains(t, err.Error(), "a settlement, not a declaration")
 
-	row, _, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"enter":"x.go"`))
+	row, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"enter":"x.go"`))
 	require.NoError(t, err, "an entry is the one non-declaration fork takes")
 	assert.Equal(t, "x.go", row.Enter)
 }
