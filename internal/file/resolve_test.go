@@ -155,3 +155,41 @@ func TestResolveImport(t *testing.T) {
 		assert.NotContains(t, err.Error(), "./foo")
 	})
 }
+
+func TestResolveProjectArg(t *testing.T) {
+	t.Run("all projects empty sentinel", func(t *testing.T) {
+		got, err := ResolveProject(t.Context(), "", "web/studio")
+		require.NoError(t, err)
+		assert.Equal(t, "", got)
+	})
+	t.Run("all projects slash sentinel", func(t *testing.T) {
+		got, err := ResolveProject(t.Context(), "/", "web/studio")
+		require.NoError(t, err)
+		assert.Equal(t, "/", got)
+	})
+	t.Run("bare stays workspace-relative", func(t *testing.T) {
+		got, err := ResolveProject(t.Context(), "api", "web/studio")
+		require.NoError(t, err)
+		assert.Equal(t, "api", got)
+	})
+	t.Run("dot up resolves against cwd", func(t *testing.T) {
+		got, err := ResolveProject(t.Context(), "../api", "web/studio")
+		require.NoError(t, err)
+		assert.Equal(t, "web/api", got)
+	})
+	t.Run("dot sibling resolves against cwd", func(t *testing.T) {
+		got, err := ResolveProject(t.Context(), "./peer", "extensions/drape")
+		require.NoError(t, err)
+		assert.Equal(t, "extensions/drape/peer", got)
+	})
+	t.Run("escape rejected", func(t *testing.T) {
+		_, err := ResolveProject(t.Context(), "../../../foo", "a/b")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "escapes workspace root")
+	})
+	t.Run("absolute rejected", func(t *testing.T) {
+		_, err := ResolveProject(t.Context(), "/etc", "web/studio")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be repo-relative")
+	})
+}
