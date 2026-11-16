@@ -2,7 +2,7 @@ package std
 
 import (
 	"context"
-	trailtypes "github.com/egladman/magus/types/trail"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"testing"
 	"time"
 

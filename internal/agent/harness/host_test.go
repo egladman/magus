@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit/e2e"
 )
 

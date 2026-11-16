@@ -1,7 +1,7 @@
 package trail
 
 import (
-	trailtypes "github.com/egladman/magus/types/trail"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"os"
 	"path/filepath"
 	"testing"

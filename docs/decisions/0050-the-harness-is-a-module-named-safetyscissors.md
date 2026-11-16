@@ -1,7 +1,7 @@
 ---
 title: "ADR 0050: the harness is a module named safetyscissors"
 order: 50
-description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. Steps 1 to 4, 6 and 7, the budget, the verdict and step types, the tier set, the JSON Lines helpers, the session store and the secrets module, are built, and so are step 8's job types."
+description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. Steps 1 to 4, 6 and 7, the budget, the verdict and step types, the tier set, the JSON Lines helpers, the session store and the secrets module, are built, and so are step 5's trail event and readers and step 8's job types."
 tags: [adr, decision, sdk, harness, guard, jobs, module]
 status: proposed
 date: 2026-11-15
@@ -130,8 +130,9 @@ and the module's trail both import; decided by Eli on 2026-11-16.
 The root package holds only the package doc. Call sites read `verdict.Deny` or
 `job.Covers`, never a themed name.
 
-The trail's writer lives in `libs/safetyscissors/internal`, so only the module's own
-packages append to it, and the public `trail` package exports reading only. magus keeps
+The trail's writer will live in `libs/safetyscissors/internal`, so only the module's own
+packages append to it, and the public `trail` package exports reading only. The writer
+moves with the guard, which is the first of the module's packages to record anything. magus keeps
 its own events in its own trail. This is part 7's refusal of a caller writing the trail,
 made a package boundary; decided 2026-11-16 by the build, Eli to confirm.
 
@@ -275,7 +276,7 @@ Each step merges on its own and leaves magus green. Eli approved building every 
 | 2    | `verdict` and `step` types out of `types/guard.go`, `types/guard_judgment.go`, `types/agent/step.go`                                            | ~700 lines                    | yes: breaks the Go API lock                                                                                                            | done                     |
 | 3    | `tier`: `types/agent/model.go`, `internal/agent/model`, `TierCeiling` (`register.go:111-117`)                                                   | ~650 lines                    | no                                                                                                                                     | done                     |
 | 4    | the JSON Lines store helpers the module's stores need, copied into `internal/jsonl` with `types/enum` into `internal/enum`; magus keeps its own | ~500 lines                    | no                                                                                                                                     | done                     |
-| 5    | `trail` core; feedback marks, replay and env propagation stay in magus                                                                          | ~1,500 lines                  | no                                                                                                                                     | planned                  |
+| 5    | `trail` core; feedback marks, replay and env propagation stay in magus                                                                          | ~1,500 lines                  | no                                                                                                                                     | reads done; writer owed  |
 | 6    | `session`, with the directory supplied by the caller                                                                                            | ~2,000 lines                  | no                                                                                                                                     | done                     |
 | 7    | secrets into their own module, `libs/secrets`, from `internal/secret` and `types/secret.go`                                                     | ~1,300 lines                  | no                                                                                                                                     | done                     |
 | 8    | the job types out of `types`, with no alias, and the generated Buzz mirrors regenerated                                                         | ~5,000 lines                  | yes: 16+ importers                                                                                                                     | types done; mirrors owed |
@@ -314,6 +315,21 @@ call facts and billing. `TierCeiling` is `tier.Ceiling`, which refuses with
 `*tier.AboveParentError` or `*tier.IncomparableError`; the job store gives those MGS3055
 and MGS3056, since the module cannot name magus's codes. Each name lost its `ModelTier`
 prefix, with no alias. The Buzz names stay through `.buzzgen.yaml`.
+
+Step 5 moved the trail's event and its readers, and no writer. `trail.Event`, `Phase`,
+`Kind`, `ReadRecent`, `ReadBlob` and `ValidRef` left `internal/trail`, and the guard
+trail's `Section`, `Verdict`, `Trail`, `Observation`, `Spawn` and `Mark` left
+`types/trail`, which is gone. Every reader takes the directory the caller names and reads
+`activity/` beneath it, the layout magus's writer keeps. Every magus producer writes the
+trail today, and none of them is a module package yet, so `Append`, `WriteBlob`,
+`Rotate`, `StampOrigin` and the agent-hook helpers stay in `internal/trail` over the
+module's `trail.Event`. The writer moves into `libs/safetyscissors/internal` with the
+guard, and until then the module exports no door to write. Reading redacts nothing, so
+the module does not import `libs/secrets` yet. `KindCredentialGrant` is `KindGrantIssued`,
+so the name no longer reads as a credential to gosec, and the value on disk is unchanged.
+A refused ref is a `*trail.InvalidRefError`. The `dur_ms` reader moved with its
+`compat(until:)`. Feedback marks, replay, propagation, consult, mint and origin stay in
+magus. The Buzz names stay through `.buzzgen.yaml`, and no alias remains.
 
 Step 6 moved the session store's ids, record writer and reader, fold and pruning into
 `session`, opened on a directory the caller names. `vcs.StateDir` and `xdg.StateDir` stay

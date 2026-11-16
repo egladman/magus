@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/step"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
@@ -159,12 +160,12 @@ func RecordPolicy(ctx context.Context, cacheDir, workspace string, now PolicySta
 	if action != "" {
 		body, _ := json.Marshal(policyEvent{APIVersion: policyAPIVersion, Action: action, Digest: now.Digest, Previous: prev.Digest, Sources: sources})
 		ref, size := trail.WriteBlob(ctx, cacheDir, "policy", body)
-		trail.Append(ctx, cacheDir, trail.Event{
+		trail.Append(ctx, cacheDir, trailtypes.Event{
 			Ts:           time.Now().UnixMilli(),
-			Kind:         trail.KindGuardPolicy,
+			Kind:         trailtypes.KindGuardPolicy,
 			Workspace:    workspace,
 			Action:       action,
-			Outcome:      trail.OutcomeOK,
+			Outcome:      trailtypes.OutcomeOK,
 			RequestRef:   ref,
 			RequestBytes: size,
 			PolicyDigest: now.Digest,

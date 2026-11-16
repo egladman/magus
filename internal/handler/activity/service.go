@@ -21,8 +21,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	jobstore "github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 )
@@ -340,7 +340,7 @@ func encodeKind(k trail.Kind) activityv1.Kind {
 		return activityv1.Kind_KIND_AGENT_SPAWN
 	case trail.KindNotes:
 		return activityv1.Kind_KIND_NOTES
-	case trail.KindCredentialGrant:
+	case trail.KindGrantIssued:
 		return activityv1.Kind_KIND_CREDENTIAL_GRANT
 	case trail.KindGuardPolicy:
 		return activityv1.Kind_KIND_GUARD_POLICY

@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // PayloadByRef returns the payload the activity trail stored under ref: a guard verdict

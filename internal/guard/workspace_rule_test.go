@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -91,7 +92,7 @@ func TestLoadFailureDeniesGatedVerbs(t *testing.T) {
 			stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleElsewhereSay)
 			assert.Contains(t, stored, fmt.Sprintf("\n%s changes state, and the guard policy that would judge it is not running:", tc.verb))
 
-			commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+			commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 			require.Len(t, commands, 1)
 			assert.Equal(t, decidedByBuiltin, commands[0].DecidedBy)
 		})
@@ -407,7 +408,7 @@ func (s *JudgedShortSuite) stored(cacheDir string, v verdict.Judgment) string {
 	s.Require().Equal(verdictWithRule(decisionDeny, string(denyRulePolicyUnloaded)), unworded(v), v.Context)
 	ref := verdictRef.FindString(v.Reason)
 	s.Require().NotEmpty(ref, v.Reason)
-	blob, err := trail.ReadBlob(cacheDir, ref)
+	blob, err := trailtypes.ReadBlob(cacheDir, ref)
 	s.Require().NoError(err)
 	return string(blob)
 }
@@ -467,7 +468,7 @@ func TestLoadFailureDeniesASpawn(t *testing.T) {
 	d := staleBinaryDenial(judgedCall{seam: seamSpawn, verb: "a subagent spawn", what: "a subagent spawn", changes: true},
 		unloadStale, failureLines(staleFailures), false, hookLocation(ctx, Dependencies{}).workspace)
 	assert.Equal(t, fmt.Sprintf("%s\nsee: %sstale-binary/", d.full(), ruleDocsBase), stored)
-	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, decidedByBuiltin, spawns[0].DecidedBy)
 	assert.Equal(t, staleFailures, readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
@@ -584,7 +585,7 @@ func TestNamedWorkspaceDenyIsShortenedOnRepeat(t *testing.T) {
 	assert.Equal(t, "workspace:pull-request-text", first.Rule)
 	assert.True(t, strings.HasPrefix(first.Reason, probe.answer.Reason), first.Reason)
 	assert.NotContains(t, first.Reason, "see: ")
-	stored, err := trail.ReadBlob(cacheDir, ref(first.Reason))
+	stored, err := trailtypes.ReadBlob(cacheDir, ref(first.Reason))
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(string(stored), probe.answer.Reason), string(stored))
 
@@ -593,7 +594,7 @@ func TestNamedWorkspaceDenyIsShortenedOnRepeat(t *testing.T) {
 	assert.True(t, strings.HasPrefix(again.Reason, "denied again [workspace:pull-request-text]: Lead the description with the outcome.\n"), again.Reason)
 	assert.NotContains(t, again.Reason, "The first line says")
 	assert.NotContains(t, again.Reason, "see: ")
-	_, err = trail.ReadBlob(cacheDir, ref(again.Reason))
+	_, err = trailtypes.ReadBlob(cacheDir, ref(again.Reason))
 	require.NoError(t, err)
 }
 

@@ -5,7 +5,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	trailtypes "github.com/egladman/magus/types/trail"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"os"
 	"path/filepath"
 	"slices"
@@ -64,7 +64,7 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
 	out := trailtypes.Trail{Start: since, End: until, Session: w.Session}
 	type sourced struct {
 		base string
-		e    Event
+		e    trailtypes.Event
 	}
 	var events []sourced
 	var newest int64
@@ -74,7 +74,7 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
 			return out, err
 		}
 		for _, e := range read {
-			if e.Kind != KindAgentCommand && e.Kind != KindAgentSpawn {
+			if e.Kind != trailtypes.KindAgentCommand && e.Kind != trailtypes.KindAgentSpawn {
 				continue
 			}
 			events = append(events, sourced{base, e})
@@ -100,16 +100,16 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
 			out.Checkouts = append(out.Checkouts, filepath.Dir(s.base))
 		}
 		switch e.Kind {
-		case KindAgentCommand:
+		case trailtypes.KindAgentCommand:
 			if obs, ok := feedbackObservation(s.base, e); ok {
 				out.Observations = append(out.Observations, obs)
 			}
-		case KindAgentSpawn:
+		case trailtypes.KindAgentSpawn:
 			if e.Action == ActionAgentContinue {
 				continue
 			}
 			sp := trailtypes.Spawn{At: e.Ts, Agent: e.Agent, Child: e.Action, Lease: e.Lease}
-			if raw, err := ReadBlob(s.base, e.RequestRef); err == nil {
+			if raw, err := trailtypes.ReadBlob(s.base, e.RequestRef); err == nil {
 				var req agentSpawnRequest
 				if json.Unmarshal(raw, &req) == nil {
 					sp.Model = req.DeclaredModel
@@ -122,16 +122,16 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
 	return out, nil
 }
 
-func feedbackObservation(base string, e Event) (trailtypes.Observation, bool) {
+func feedbackObservation(base string, e trailtypes.Event) (trailtypes.Observation, bool) {
 	var req agentCommandRequest
 	var resp agentCommandResponse
-	raw, err := ReadBlob(base, e.RequestRef)
+	raw, err := trailtypes.ReadBlob(base, e.RequestRef)
 	if err != nil || json.Unmarshal(raw, &req) != nil {
 		return trailtypes.Observation{}, false
 	}
 	// A read carries no response blob: no rule judges it.
 	if e.ResponseRef != "" {
-		if raw, err := ReadBlob(base, e.ResponseRef); err == nil {
+		if raw, err := trailtypes.ReadBlob(base, e.ResponseRef); err == nil {
 			_ = json.Unmarshal(raw, &resp)
 		}
 	}
@@ -150,7 +150,7 @@ func feedbackObservation(base string, e Event) (trailtypes.Observation, bool) {
 
 // eventsInWindow decodes the events of the trail at base whose Ts falls in [since, until],
 // oldest first. A missing trail is no events.
-func eventsInWindow(base string, since, until int64) ([]Event, error) {
+func eventsInWindow(base string, since, until int64) ([]trailtypes.Event, error) {
 	f, err := os.Open(eventsPath(base))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -159,7 +159,7 @@ func eventsInWindow(base string, since, until int64) ([]Event, error) {
 		return nil, err
 	}
 	defer f.Close()
-	var out []Event
+	var out []trailtypes.Event
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
@@ -167,7 +167,7 @@ func eventsInWindow(base string, since, until int64) ([]Event, error) {
 		if len(line) == 0 {
 			continue
 		}
-		var e Event
+		var e trailtypes.Event
 		if json.Unmarshal(line, &e) != nil || e.Ts < since || e.Ts > until {
 			continue
 		}

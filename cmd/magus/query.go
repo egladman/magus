@@ -36,10 +36,10 @@ import (
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/textindex"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -850,7 +850,7 @@ func queryOutputCommand(ctx context.Context, root string, qf *flaggen.QueryFlags
 	}
 	ref := pos[1]
 	if !cache.LooksLikeRef(ref) {
-		if !trail.ValidRef(ref) {
+		if !trailtypes.ValidRef(ref) {
 			msg := fmt.Sprintf("%q is not an output ref (expected out<hex> for a run, or a stored payload such as grd<hex> or mcp<hex>)", ref)
 			slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg)))
 			return exit.Reported(exit.Usage)

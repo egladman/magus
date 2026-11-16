@@ -9,8 +9,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	jobstore "github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 )
 

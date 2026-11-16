@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -251,7 +252,7 @@ func TestCommandRuleStrengthensOnly(t *testing.T) {
 		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v))
 		assert.Contains(t, v.Reason, "Ask for the board once.")
 
-		commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+		commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 		require.Len(t, commands, 1)
 		assert.Equal(t, decidedByWorktree, commands[0].DecidedBy)
 	})
@@ -287,7 +288,7 @@ func TestCommandRuleFailureFailsOpen(t *testing.T) {
 	again := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 	assert.Equal(t, first, again)
 
-	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 	require.NotEmpty(t, commands)
 	assert.Equal(t, []trail.RuleFailure{{Side: decidedByWorktree, Error: "the rule failed: magus\\guard.command: the rule raised: boom"}},
 		readCommandBlob(t, cacheDir, commands[0]).RuleFailures)
@@ -298,9 +299,9 @@ type commandBlob struct {
 	RuleFailures []trail.RuleFailure `json:"rule_failures"`
 }
 
-func readCommandBlob(t *testing.T, cacheDir string, e trail.Event) commandBlob {
+func readCommandBlob(t *testing.T, cacheDir string, e trailtypes.Event) commandBlob {
 	t.Helper()
-	body, err := trail.ReadBlob(cacheDir, e.ResponseRef)
+	body, err := trailtypes.ReadBlob(cacheDir, e.ResponseRef)
 	require.NoError(t, err)
 	var got commandBlob
 	require.NoError(t, json.Unmarshal(body, &got))
@@ -337,7 +338,7 @@ func TestCommandRulesKeepTheStricterSide(t *testing.T) {
 			v := Judge(ctx, deps, Request{Input: "gh run watch 1", Host: "claude-code"})
 			assert.Equal(t, tc.want, v.Decision)
 
-			commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+			commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 			require.Len(t, commands, 1)
 			assert.Equal(t, tc.decidedBy, commands[0].DecidedBy)
 		})
@@ -370,7 +371,7 @@ func TestApprovedCommandRuleTimeoutDeniesAChangeAndAdvisesARead(t *testing.T) {
 		ctx, cancel := context.WithTimeout(ctx, judgeReserve+600*time.Millisecond)
 		defer cancel()
 		v := Judge(ctx, slow, Request{Input: command, Host: "claude-code", Session: "s1"})
-		commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+		commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 		require.Len(t, commands, 1)
 		return v, readCommandBlob(t, cacheDir, commands[0]).RuleFailures
 	}

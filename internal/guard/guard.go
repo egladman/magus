@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
@@ -135,7 +136,7 @@ type Dependencies struct {
 	// RuleLoad is how loading the working tree's rules went against the hook's deadline,
 	// as TimeRuleLoad reports it; zero when the caller did not time it. A lapsed load is
 	// judged as a phase that ran out of time, not as a broken magusfile.
-	RuleLoad trail.Phase
+	RuleLoad trailtypes.Phase
 	// Policy describes the effective workspace rules for the lineage the trail keeps,
 	// nil when the caller cannot say. See RecordPolicy.
 	Policy func() PolicyState

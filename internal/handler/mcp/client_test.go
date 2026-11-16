@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -195,10 +196,10 @@ func TestClientTaskIsCancellable(t *testing.T) {
 	send(fmt.Sprintf("{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"%s\"}}", id))
 
 	require.Eventually(t, func() bool {
-		events, err := trail.ReadRecent(m.CacheDir(), 10)
+		events, err := trailtypes.ReadRecent(m.CacheDir(), 10)
 		return err == nil && len(events) == 1
 	}, 20*time.Second, 50*time.Millisecond, "the cancelled call never returned")
-	events, err := trail.ReadRecent(m.CacheDir(), 10)
+	events, err := trailtypes.ReadRecent(m.CacheDir(), 10)
 	require.NoError(t, err)
 	assert.Contains(t, events[0].Preview, "client: script cancelled")
 }

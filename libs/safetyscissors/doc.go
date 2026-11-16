@@ -15,6 +15,8 @@
 //     each kind of step.
 //   - tier: the model tier set a caller declares, the assignment a job records, the
 //     reference spawn ceiling, and a price table built from rows the caller supplies.
+//   - trail: the append-only activity events and the guard trail's records, opened on a
+//     directory the caller names. It exports reading only.
 //   - verdict: what a rule answers about a call, the stricter-of merge, and the
 //     judgment a caller reads.
 //

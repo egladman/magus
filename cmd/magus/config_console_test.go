@@ -12,9 +12,9 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 )
 

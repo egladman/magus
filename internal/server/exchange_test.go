@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -73,11 +74,11 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 
 	// The redeem is audited, naming the code it spent and the token it minted, never either
 	// secret.
-	events, err := trail.ReadRecent(trailDir, 10)
+	events, err := trailtypes.ReadRecent(trailDir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, "link.redeem", events[0].Action)
-	blob, err := trail.ReadBlob(trailDir, events[0].RequestRef)
+	blob, err := trailtypes.ReadBlob(trailDir, events[0].RequestRef)
 	require.NoError(t, err)
 	for _, s := range []string{code, got.Token} {
 		assert.NotContains(t, string(blob), s)

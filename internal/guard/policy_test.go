@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -92,7 +93,7 @@ func sourcesAt(calls *int, pairs ...PolicySource) func(context.Context) []Policy
 func policyActions(t *testing.T, base string) []string {
 	t.Helper()
 	var out []string
-	for _, e := range trailEvents(t, base, trail.KindGuardPolicy) {
+	for _, e := range trailEvents(t, base, trailtypes.KindGuardPolicy) {
 		out = append(out, e.Action)
 	}
 	return out
@@ -160,9 +161,9 @@ func TestRecordPolicyEventCarriesRefsNotBodies(t *testing.T) {
 	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d1", SpawnRule: true, Sources: sourcesAt(&calls)}, false)
 	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d2", SpawnRule: true, Sources: sourcesAt(&calls, src)}, false)
 
-	events := trailEvents(t, base, trail.KindGuardPolicy)
+	events := trailEvents(t, base, trailtypes.KindGuardPolicy)
 	require.Len(t, events, 2)
-	var tightened trail.Event
+	var tightened trailtypes.Event
 	for _, e := range events {
 		if e.Action == PolicyTightened {
 			tightened = e
@@ -170,7 +171,7 @@ func TestRecordPolicyEventCarriesRefsNotBodies(t *testing.T) {
 	}
 	require.NotEmpty(t, tightened.RequestRef)
 	assert.Equal(t, "d2", tightened.PolicyDigest)
-	body, err := trail.ReadBlob(base, tightened.RequestRef)
+	body, err := trailtypes.ReadBlob(base, tightened.RequestRef)
 	require.NoError(t, err)
 	var got policyEvent
 	require.NoError(t, json.Unmarshal(body, &got))
@@ -184,17 +185,17 @@ func TestAToolTimeRecordsTheToolsRunTimeAndJudgesNothing(t *testing.T) {
 	v := Judge(ctx, Dependencies{}, Request{Input: "Bash", ToolMs: 420, Host: "claude-code", Session: "s1", Event: "PostToolUse"})
 
 	assert.Equal(t, decisionPass, v.Decision)
-	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 	require.Len(t, commands, 1)
 	got := commands[0]
 	got.Ts, got.Workspace, got.Binary, got.BinaryVersion, got.Cwd = 0, "", "", "", ""
 	got.User, got.UID, got.RequestRef, got.ResponseRef = "", "", "", ""
 	got.RequestBytes, got.ResponseBytes = 0, 0
-	assert.Equal(t, trail.Event{
-		Kind:       trail.KindAgentCommand,
+	assert.Equal(t, trailtypes.Event{
+		Kind:       trailtypes.KindAgentCommand,
 		Origin:     job.Origin{EntryPoint: job.EntryPointHook, Host: "claude-code", Session: "s1"},
 		Action:     "Bash",
-		Outcome:    trail.OutcomeOK,
+		Outcome:    trailtypes.OutcomeOK,
 		DurationMs: 420,
 		Preview:    "observed",
 	}, got)
@@ -231,7 +232,7 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	deps := Dependencies{Policy: func() PolicyState { return PolicyState{Digest: "d9", ShellRules: 1} }}
 
 	Judge(ctx, deps, Request{Input: "git stash", Host: "claude-code", Session: "s1"})
-	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	commands := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 	require.Len(t, commands, 1)
 	// The clock, the stamped account, the workspace and the content-addressed fields are
 	// cleared first, so a field added to the event cannot be dropped here unseen.
@@ -242,17 +243,17 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	assert.NotEmpty(t, e.Cwd, "a bare command records the directory the judge ran in")
 	assert.NotEmpty(t, e.Phases)
 	e.Cwd, e.Phases = "", nil
-	assert.Equal(t, trail.Event{
-		Kind:         trail.KindAgentCommand,
+	assert.Equal(t, trailtypes.Event{
+		Kind:         trailtypes.KindAgentCommand,
 		Action:       "shell.command",
-		Outcome:      trail.OutcomeOK,
+		Outcome:      trailtypes.OutcomeOK,
 		PolicyDigest: "d9",
 		DecidedBy:    decidedByBuiltin,
 	}, e)
 
 	deps.ShellRules = []WorkspaceShellRule{{Name: "no-curl", Decision: "deny", Program: "curl", Reason: "not here"}}
 	Judge(ctx, deps, Request{Input: "curl https://example.com", Host: "claude-code", Session: "s1"})
-	commands = trailEvents(t, cacheDir, trail.KindAgentCommand)
+	commands = trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 	require.Len(t, commands, 2)
 	var byWorkspace int
 	for _, e := range commands {

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // Every event carries the OS account that wrote it, whatever the producer said, so a row
@@ -21,10 +22,10 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	dir := t.TempDir()
 	ctx := ContextWithEntryPoint(t.Context(), job.EntryPointCLI)
 
-	Append(ctx, dir, Event{Kind: KindJob, Action: "a", Origin: job.Origin{User: "forged", UID: "4242"}})
-	Append(ctx, dir, Event{Kind: KindJob, Action: "b", Origin: job.Origin{EntryPoint: job.EntryPointServer}})
+	Append(ctx, dir, trailtypes.Event{Kind: trailtypes.KindJob, Action: "a", Origin: job.Origin{User: "forged", UID: "4242"}})
+	Append(ctx, dir, trailtypes.Event{Kind: trailtypes.KindJob, Action: "b", Origin: job.Origin{EntryPoint: job.EntryPointServer}})
 
-	events, err := ReadRecent(dir, 2)
+	events, err := trailtypes.ReadRecent(dir, 2)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
 	local := LocalOrigin(ctx)

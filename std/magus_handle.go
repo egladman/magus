@@ -18,9 +18,9 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
-	"github.com/egladman/magus/types/trail"
 	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
 )

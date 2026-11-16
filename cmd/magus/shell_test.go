@@ -33,6 +33,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -169,7 +170,7 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	require.ErrorAs(t, err, &silent, "the worker lease bound in the envelope's checkout must deny the commit")
 	assert.Equal(t, "deny\n", out.String())
 
-	events, err := trail.ReadRecent(cacheDir, 1)
+	events, err := trailtypes.ReadRecent(cacheDir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1, "the observation lands in the worker's trail, not the hook's cwd")
 	assert.Equal(t, worker.ID, events[0].Lease)
@@ -474,7 +475,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 
 	primaryCache, err := magus.ResolveCacheDir(primary)
 	require.NoError(t, err)
-	_, err = trail.ReadBlob(primaryCache, ref)
+	_, err = trailtypes.ReadBlob(primaryCache, ref)
 	assert.NoError(t, err, "the primary checkout holds a copy, which every checkout's query output searches")
 }
 

@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types/daemon"
 )
@@ -94,24 +95,24 @@ func TestShareMintIsAudited(t *testing.T) {
 	_, secret, ok := strings.Cut(resp.URL, "#token=")
 	require.True(t, ok)
 
-	events, err := trail.ReadRecent(trailDir, 10)
+	events, err := trailtypes.ReadRecent(trailDir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	e := events[0]
 	assert.Contains(t, e.Preview, "share link ")
 	assert.Contains(t, e.Preview, "console=read")
 	assert.NotContains(t, e.Preview, secret)
-	assert.Equal(t, trail.Event{
+	assert.Equal(t, trailtypes.Event{
 		Ts:           e.Ts,
-		Kind:         trail.KindTokenLifecycle,
+		Kind:         trailtypes.KindTokenLifecycle,
 		Origin:       e.Origin,
 		Action:       "share.mint",
-		Outcome:      trail.OutcomeOK,
+		Outcome:      trailtypes.OutcomeOK,
 		RequestRef:   e.RequestRef,
 		RequestBytes: e.RequestBytes,
 		Preview:      e.Preview,
 	}, e)
-	blob, err := trail.ReadBlob(trailDir, e.RequestRef)
+	blob, err := trailtypes.ReadBlob(trailDir, e.RequestRef)
 	require.NoError(t, err)
 	assert.NotContains(t, string(blob), secret)
 	var rec trail.MintRecord

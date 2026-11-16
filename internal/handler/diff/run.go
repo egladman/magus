@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // runSource is the workspace half a run needs: which targets the magusfile declares for a
@@ -169,7 +170,7 @@ func (h *RunHandler) answer(w http.ResponseWriter, r *http.Request, req diffRunR
 	// view moving on after the verdict, which as_of covers.
 	if ev, ok := trail.LastRun(h.cacheDir, job.ActionString(argv)); ok {
 		out.State = "passed"
-		if ev.Outcome != trail.OutcomeOK {
+		if ev.Outcome != trailtypes.OutcomeOK {
 			out.State = "failed"
 			out.Error = ev.Error
 		}

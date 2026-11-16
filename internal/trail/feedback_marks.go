@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	trailtypes "github.com/egladman/magus/types/trail"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"os"
 	"path/filepath"
 	"regexp"

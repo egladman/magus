@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/egladman/magus/internal/json"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // Consultation is one question an agent asked magus while producing a change: a read verb, what
@@ -113,7 +114,7 @@ func Consulted(root, base string, paths []string, limit int) ([]Consultation, Co
 	for _, p := range paths {
 		want[p] = true
 	}
-	events, err := ReadRecent(base, limit)
+	events, err := trailtypes.ReadRecent(base, limit)
 	if err != nil {
 		return nil, ConsultGapUnobserved
 	}
@@ -124,7 +125,7 @@ func Consulted(root, base string, paths []string, limit int) ([]Consultation, Co
 	var observed, leased int
 
 	for _, e := range events {
-		if e.Kind != KindAgentCommand || e.RequestRef == "" {
+		if e.Kind != trailtypes.KindAgentCommand || e.RequestRef == "" {
 			continue
 		}
 		observed++
@@ -134,7 +135,7 @@ func Consulted(root, base string, paths []string, limit int) ([]Consultation, Co
 			continue
 		}
 		leased++
-		raw, rerr := ReadBlob(base, e.RequestRef)
+		raw, rerr := trailtypes.ReadBlob(base, e.RequestRef)
 		if rerr != nil {
 			continue
 		}

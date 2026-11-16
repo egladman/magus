@@ -27,6 +27,7 @@ import (
 	_ "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 
 	"github.com/egladman/magus/internal/trail"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 )
@@ -114,7 +115,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	dir := t.TempDir()
 	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
 		alwaysOKTokenService{},
-		connect.WithInterceptors(Interceptor(dir, trail.KindTokenLifecycle)),
+		connect.WithInterceptors(Interceptor(dir, trailtypes.KindTokenLifecycle)),
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
@@ -133,7 +134,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 		t.Fatalf("RevokeToken: %v", err)
 	}
 
-	events, err := trail.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(dir, 10)
 	if err != nil {
 		t.Fatalf("ReadRecent: %v", err)
 	}
@@ -143,12 +144,12 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	got := events[0]
 	// The clock and the OS account are stamped, so they are copied across. Without WithSubject
 	// nothing but the method is recorded: no request ref, no preview.
-	want := trail.Event{
+	want := trailtypes.Event{
 		Ts:         got.Ts,
-		Kind:       trail.KindTokenLifecycle,
+		Kind:       trailtypes.KindTokenLifecycle,
 		Origin:     job.Origin{User: got.User, UID: got.UID, EntryPoint: job.EntryPointRPC, Credential: console1},
 		Action:     "RevokeToken",
-		Outcome:    trail.OutcomeOK,
+		Outcome:    trailtypes.OutcomeOK,
 		DurationMs: got.DurationMs,
 	}
 	assert.Equal(t, want, got, "want RevokeToken/console-1/rpc/token_lifecycle/ok and no request ref")
@@ -179,7 +180,7 @@ func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
 		return nil, ""
 	}
 	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(subjectService{},
-		connect.WithInterceptors(Interceptor(dir, trail.KindTokenLifecycle, WithSubject(subject))))
+		connect.WithInterceptors(Interceptor(dir, trailtypes.KindTokenLifecycle, WithSubject(subject))))
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(verifiedAs(operator, mux))
@@ -188,14 +189,14 @@ func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
 	if _, err := client.RevokeToken(context.Background(), connect.NewRequest(&tokenv1.RevokeTokenRequest{Name: "laptop"})); err != nil {
 		t.Fatalf("RevokeToken: %v", err)
 	}
-	events, err := trail.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(dir, 10)
 	if err != nil || len(events) != 1 {
 		t.Fatalf("ReadRecent = %d events, %v", len(events), err)
 	}
 	if events[0].Preview != "token 3fa9c1d2" || events[0].RequestRef == "" {
 		t.Fatalf("the subject was not recorded: %+v", events[0])
 	}
-	blob, err := trail.ReadBlob(dir, events[0].RequestRef)
+	blob, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
 	if err != nil || !strings.Contains(string(blob), "3fa9c1d2") {
 		t.Fatalf("subject blob = %q, %v", blob, err)
 	}
@@ -217,7 +218,7 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	dir := t.TempDir()
 	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
 		alwaysOKTokenService{},
-		connect.WithInterceptors(Interceptor(dir, trail.KindNotes, WithAuditReads())),
+		connect.WithInterceptors(Interceptor(dir, trailtypes.KindNotes, WithAuditReads())),
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
@@ -235,7 +236,7 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 		t.Fatalf("RevokeToken: %v", err)
 	}
 
-	events, err := trail.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(dir, 10)
 	if err != nil {
 		t.Fatalf("ReadRecent: %v", err)
 	}
@@ -252,8 +253,8 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	if got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("recorded events = %+v, want RevokeToken then ListTokens (both the operator credential)", got)
 	}
-	if events[0].Kind != trail.KindNotes || events[1].Kind != trail.KindNotes {
-		t.Errorf("recorded kinds = %v,%v, want both %v", events[0].Kind, events[1].Kind, trail.KindNotes)
+	if events[0].Kind != trailtypes.KindNotes || events[1].Kind != trailtypes.KindNotes {
+		t.Errorf("recorded kinds = %v,%v, want both %v", events[0].Kind, events[1].Kind, trailtypes.KindNotes)
 	}
 }
 
@@ -269,7 +270,7 @@ func TestInterceptorRecordsFailedMutation(t *testing.T) {
 	dir := t.TempDir()
 	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
 		erroringTokenService{},
-		connect.WithInterceptors(Interceptor(dir, trail.KindTokenLifecycle)),
+		connect.WithInterceptors(Interceptor(dir, trailtypes.KindTokenLifecycle)),
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
@@ -281,14 +282,14 @@ func TestInterceptorRecordsFailedMutation(t *testing.T) {
 		t.Fatal("expected RevokeToken to fail")
 	}
 
-	events, err := trail.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(dir, 10)
 	if err != nil {
 		t.Fatalf("ReadRecent: %v", err)
 	}
 	if len(events) != 1 {
 		t.Fatalf("recorded %d events, want 1 (the failed mutation is still audited)", len(events))
 	}
-	if events[0].Outcome != trail.OutcomeError || events[0].Error == "" {
+	if events[0].Outcome != trailtypes.OutcomeError || events[0].Error == "" {
 		t.Errorf("recorded event = %+v, want OutcomeError with a non-empty error", events[0])
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -408,7 +409,7 @@ func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
 	base := t.TempDir()
 	record(t, base, AgentCommand{Session: "s1", Host: "opencode", Tool: toolShell, Command: "ls"})
 	for range 200 {
-		Append(t.Context(), base, Event{Kind: KindJob, Ts: time.Now().UnixMilli()})
+		Append(t.Context(), base, trailtypes.Event{Kind: trailtypes.KindJob, Ts: time.Now().UnixMilli()})
 	}
 
 	got, ok := LastAgentActivity(base)
@@ -416,7 +417,7 @@ func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
 	assert.Equal(t, "s1", got.Session)
 
 	stamped := t.TempDir()
-	Append(t.Context(), stamped, Event{Kind: KindAgentCommand, Origin: job.Origin{Session: "s1"}})
+	Append(t.Context(), stamped, trailtypes.Event{Kind: trailtypes.KindAgentCommand, Origin: job.Origin{Session: "s1"}})
 	_, ok = LastAgentActivity(stamped)
 	assert.False(t, ok, "an observation with no timestamp has no age to report")
 }

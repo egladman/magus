@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/json"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
@@ -141,7 +142,7 @@ func TestLeaseDenialsSaysUnknownOnceTheTrailRotatedPastSince(t *testing.T) {
 
 	base := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(base, dir), 0o755))
-	line, err := json.Marshal(Event{Ts: 5_000_000, Kind: KindJob, Action: "graph build", Outcome: OutcomeOK})
+	line, err := json.Marshal(trailtypes.Event{Ts: 5_000_000, Kind: trailtypes.KindJob, Action: "graph build", Outcome: trailtypes.OutcomeOK})
 	require.NoError(t, err)
 	body := strings.Repeat(string(line)+"\n", maxEvents)
 	require.NoError(t, os.WriteFile(eventsPath(base), []byte(body), 0o644))

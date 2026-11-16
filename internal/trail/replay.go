@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/session"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -93,7 +94,7 @@ func AttachTouches(rev *diff.Diff, root, base string) {
 // replayTrail reconstructs, for each of paths, which agent sessions the trail at base saw
 // write it and what they had read first, reading at most limit recent events.
 func replayTrail(root, base string, paths []string, limit int) map[string][]diff.Touch {
-	events, err := ReadRecent(base, limit)
+	events, err := trailtypes.ReadRecent(base, limit)
 	if err != nil || len(events) == 0 {
 		return map[string][]diff.Touch{}
 	}
@@ -111,10 +112,10 @@ func replayTrail(root, base string, paths []string, limit int) map[string][]diff
 
 	obs := make([]observation, 0, len(events))
 	for _, e := range events {
-		if e.Kind != KindAgentCommand || e.RequestRef == "" {
+		if e.Kind != trailtypes.KindAgentCommand || e.RequestRef == "" {
 			continue
 		}
-		raw, rerr := ReadBlob(base, e.RequestRef)
+		raw, rerr := trailtypes.ReadBlob(base, e.RequestRef)
 		if rerr != nil {
 			continue
 		}
@@ -371,7 +372,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 	if session == "" {
 		return out
 	}
-	events, err := ReadRecent(base, limit)
+	events, err := trailtypes.ReadRecent(base, limit)
 	if err != nil {
 		return out
 	}
@@ -381,10 +382,10 @@ func ForSession(base, session string, limit int) SessionTrail {
 			continue
 		}
 		switch e.Kind {
-		case KindAgentCommand:
+		case trailtypes.KindAgentCommand:
 			out.Commands++
 			call := SessionCall{At: time.UnixMilli(e.Ts), Action: e.Action, Worker: e.Agent, ToolMs: e.DurationMs, AgentFacts: types.AgentFacts{Thread: types.AgentThreadUnknown}}
-			if raw, err := ReadBlob(base, e.ResponseRef); err == nil {
+			if raw, err := trailtypes.ReadBlob(base, e.ResponseRef); err == nil {
 				var resp agentCommandResponse
 				if json.Unmarshal(raw, &resp) == nil {
 					call.Decision, call.Rule = resp.Decision, resp.Rule
@@ -393,7 +394,7 @@ func ForSession(base, session string, limit int) SessionTrail {
 					}
 				}
 			}
-			if raw, err := ReadBlob(base, e.RequestRef); err == nil {
+			if raw, err := trailtypes.ReadBlob(base, e.RequestRef); err == nil {
 				var req agentCommandRequest
 				if json.Unmarshal(raw, &req) == nil {
 					call.AgentFacts = req.AgentFacts
@@ -401,12 +402,12 @@ func ForSession(base, session string, limit int) SessionTrail {
 				}
 			}
 			out.Calls = append(out.Calls, call)
-		case KindAgentSpawn:
+		case trailtypes.KindAgentSpawn:
 			if e.Action == ActionAgentContinue {
 				continue
 			}
 			sp := SessionSpawn{Child: e.Action, Lease: e.Lease, At: time.UnixMilli(e.Ts)}
-			if raw, err := ReadBlob(base, e.RequestRef); err == nil {
+			if raw, err := trailtypes.ReadBlob(base, e.RequestRef); err == nil {
 				var req agentSpawnRequest
 				if json.Unmarshal(raw, &req) == nil {
 					sp.DeclaredModel = req.DeclaredModel
@@ -470,11 +471,11 @@ func LastAgentActivity(base string) (AgentActivity, bool) {
 	if sc.Err() != nil || newest == "" {
 		return AgentActivity{}, false
 	}
-	var e Event
+	var e trailtypes.Event
 	if json.Unmarshal([]byte(newest), &e) != nil {
 		return AgentActivity{}, false
 	}
-	if e.Kind != KindAgentCommand && e.Kind != KindAgentSpawn || e.Ts <= 0 {
+	if e.Kind != trailtypes.KindAgentCommand && e.Kind != trailtypes.KindAgentSpawn || e.Ts <= 0 {
 		// A missing timestamp would clock to 1970, which is not time.Time's zero, so
 		// the prompt-cache clock would print an age of half a century with every
 		// window closed instead of taking its documented empty branch.
@@ -510,15 +511,15 @@ func relativize(root, p string) string {
 // Counts rather than a verdict: what a healthy ratio looks like depends on the host, so the
 // caller decides. Reporting reads==0 beside commands>0 is the fact that matters.
 func ObservedCounts(base string, limit int) (reads, writes, shell int) {
-	events, err := ReadRecent(base, limit)
+	events, err := trailtypes.ReadRecent(base, limit)
 	if err != nil {
 		return 0, 0, 0
 	}
 	for _, e := range events {
-		if e.Kind != KindAgentCommand || e.RequestRef == "" {
+		if e.Kind != trailtypes.KindAgentCommand || e.RequestRef == "" {
 			continue
 		}
-		raw, rerr := ReadBlob(base, e.RequestRef)
+		raw, rerr := trailtypes.ReadBlob(base, e.RequestRef)
 		if rerr != nil {
 			continue
 		}

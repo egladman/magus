@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
@@ -416,7 +417,7 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	dir := t.TempDir()
 	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s,
-		connect.WithInterceptors(trailrpc.Interceptor(dir, trail.KindTokenLifecycle, trailrpc.WithSubject(AuditSubject))))
+		connect.WithInterceptors(trailrpc.Interceptor(dir, trailtypes.KindTokenLifecycle, trailrpc.WithSubject(AuditSubject))))
 	op := job.Credential{Kind: job.KindOperator, ID: "0badf00d", Grant: job.AccessOperator}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, r.WithContext(trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), op), job.EntryPointRPC)))
@@ -436,11 +437,11 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	secondSecret, secondID := create()
 	require.NotEqual(t, firstID, secondID)
 
-	events, err := trail.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(dir, 10)
 	require.NoError(t, err)
 	var subjects []string
 	for _, e := range events {
-		blob, err := trail.ReadBlob(dir, e.RequestRef)
+		blob, err := trailtypes.ReadBlob(dir, e.RequestRef)
 		require.NoError(t, err)
 		assert.NotContains(t, string(blob), firstSecret)
 		assert.NotContains(t, string(blob), secondSecret)

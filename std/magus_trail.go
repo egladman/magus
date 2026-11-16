@@ -5,7 +5,7 @@ package std
 import (
 	"context"
 	"fmt"
-	trailtypes "github.com/egladman/magus/types/trail"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"path/filepath"
 	"strings"
 	"time"

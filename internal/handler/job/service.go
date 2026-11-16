@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
@@ -458,10 +459,10 @@ func storedRun(r *job.Run) *jobv1.JobRun {
 // lastRun maps a trail job Event to the wire JobRun. The trail records the run's start (Ts) and
 // duration, so end_time is Ts+duration. The trail carries no invocation id or per-run delta,
 // so those fields stay zero, additive to fill in later.
-func lastRun(e trail.Event) *jobv1.JobRun {
+func lastRun(e trailtypes.Event) *jobv1.JobRun {
 	run := &jobv1.JobRun{
 		EndTime: timestamppb.New(time.UnixMilli(e.Ts + e.DurationMs)),
-		Ok:      e.Outcome == trail.OutcomeOK,
+		Ok:      e.Outcome == trailtypes.OutcomeOK,
 		Error:   e.Error,
 	}
 	if e.DurationMs > 0 {

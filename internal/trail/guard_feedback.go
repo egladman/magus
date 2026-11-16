@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // GuardFeedback is a deduplicated pattern in pre-tool observations. It is not
@@ -39,7 +40,7 @@ func (f GuardFeedback) NeedsReview() bool {
 // and a derived view avoids divergence between what the guard saw and what a
 // later report reads.
 func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, error) {
-	events, err := ReadRecent(base, limit)
+	events, err := trailtypes.ReadRecent(base, limit)
 	if err != nil || len(events) == 0 {
 		return nil, err
 	}
@@ -129,7 +130,7 @@ func LeaseDenials(base, lease string, since int64, limit int) ([]job.Denial, boo
 	if base == "" || lease == "" || limit <= 0 {
 		return nil, false, nil
 	}
-	events, err := ReadRecent(base, maxEvents)
+	events, err := trailtypes.ReadRecent(base, maxEvents)
 	if err != nil {
 		return nil, false, err
 	}
@@ -137,10 +138,10 @@ func LeaseDenials(base, lease string, since int64, limit int) ([]job.Denial, boo
 	from := since * 1000
 	// Rotation keeps a floor of every kind, so only an agent command dates how far back the
 	// agent commands reach.
-	known := len(events) < maxEvents || slices.ContainsFunc(events, func(e Event) bool {
-		return e.Kind == KindAgentCommand && e.Ts <= from
+	known := len(events) < maxEvents || slices.ContainsFunc(events, func(e trailtypes.Event) bool {
+		return e.Kind == trailtypes.KindAgentCommand && e.Ts <= from
 	})
-	held := slices.DeleteFunc(events, func(e Event) bool { return e.Lease != lease || e.Ts < from })
+	held := slices.DeleteFunc(events, func(e trailtypes.Event) bool { return e.Lease != lease || e.Ts < from })
 	var out []job.Denial
 	for command := range agentCommands(base, held) {
 		if command.response.Decision != "deny" {
@@ -162,25 +163,25 @@ func LeaseDenials(base, lease string, since int64, limit int) ([]job.Denial, boo
 
 // agentCommand is one agent-command event with its request and response blobs decoded.
 type agentCommand struct {
-	event    Event
+	event    trailtypes.Event
 	request  agentCommandRequest
 	response agentCommandResponse
 }
 
 // agentCommands yields the agent-command events among events, in their order, whose request
 // and response blobs both read and decode. An event whose blobs rotated away is skipped.
-func agentCommands(base string, events []Event) iter.Seq[agentCommand] {
+func agentCommands(base string, events []trailtypes.Event) iter.Seq[agentCommand] {
 	return func(yield func(agentCommand) bool) {
 		for _, event := range events {
-			if event.Kind != KindAgentCommand || event.RequestRef == "" || event.ResponseRef == "" {
+			if event.Kind != trailtypes.KindAgentCommand || event.RequestRef == "" || event.ResponseRef == "" {
 				continue
 			}
 			command := agentCommand{event: event}
-			raw, err := ReadBlob(base, event.RequestRef)
+			raw, err := trailtypes.ReadBlob(base, event.RequestRef)
 			if err != nil || json.Unmarshal(raw, &command.request) != nil {
 				continue
 			}
-			raw, err = ReadBlob(base, event.ResponseRef)
+			raw, err = trailtypes.ReadBlob(base, event.ResponseRef)
 			if err != nil || json.Unmarshal(raw, &command.response) != nil {
 				continue
 			}

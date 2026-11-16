@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -193,13 +194,13 @@ func TestSpawnDenyTrailRowCarriesTheVerdictRef(t *testing.T) {
 	first := Judge(ctx, deps, req)
 	repeat := Judge(ctx, deps, req)
 
-	rows := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	rows := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
 	require.Len(t, rows, 2)
 	for i, shown := range []verdict.Judgment{first, repeat} {
 		ref := verdictRef.FindString(shown.Reason)
 		require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", shown.Reason)
 		assert.Equal(t, ref, rows[i].VerdictRef, "row %d", i)
-		stored, err := trail.ReadBlob(cacheDir, rows[i].VerdictRef)
+		stored, err := trailtypes.ReadBlob(cacheDir, rows[i].VerdictRef)
 		require.NoError(t, err)
 		assert.Contains(t, string(stored), "\nsee: "+ruleDocsBase+string(denySpawnUnbriefed)+"/")
 	}
@@ -279,7 +280,7 @@ func TestSpawnRulesKeepTheStricterSide(t *testing.T) {
 			v := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 			assert.Equal(t, tc.want, v.Decision)
 
-			spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+			spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
 			require.Len(t, spawns, 1)
 			assert.Equal(t, tc.decidedBy, spawns[0].DecidedBy, "the trail names which side decided")
 		})
@@ -298,7 +299,7 @@ func TestApprovedResolveFailureIsReported(t *testing.T) {
 	assert.Contains(t, v.Context, "The approved magus\\guard.spawn rule judged nothing: the rule could not be resolved")
 	assert.Contains(t, v.Context, "Only the built-in rules applied to this spawn.")
 
-	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, []trail.RuleFailure{{
 		Side:  decidedByApproved,
@@ -316,7 +317,7 @@ func TestDecidedByNamesBothAdvisingSides(t *testing.T) {
 	probe := &spawnRuleProbe{answer: verdict.Verdict{Decision: verdict.Advise, Reason: "Add a Done when section."}}
 	Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 
-	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, decidedByBuiltin+decidedByJoin+decidedByWorktree, spawns[0].DecidedBy)
 }
@@ -382,9 +383,9 @@ type spawnBlob struct {
 	RuleFailures []trail.RuleFailure `json:"rule_failures"`
 }
 
-func readSpawnBlob(t *testing.T, cacheDir string, e trail.Event) spawnBlob {
+func readSpawnBlob(t *testing.T, cacheDir string, e trailtypes.Event) spawnBlob {
 	t.Helper()
-	body, err := trail.ReadBlob(cacheDir, e.RequestRef)
+	body, err := trailtypes.ReadBlob(cacheDir, e.RequestRef)
 	require.NoError(t, err)
 	var got spawnBlob
 	require.NoError(t, json.Unmarshal(body, &got))
@@ -421,7 +422,7 @@ func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
 				assert.Contains(t, v.Context, "Only the built-in rules and the approved magus\\guard.spawn rule applied to this spawn.")
 			}
 
-			spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+			spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
 			require.Len(t, spawns, 1)
 			assert.Equal(t, tc.by, spawns[0].DecidedBy)
 			assert.Equal(t, []trail.RuleFailure{{Side: decidedByWorktree, Error: "the magusfile failed to load: " + loadErr.Error()}},
@@ -449,7 +450,7 @@ func TestContinueIsRecordedOnTheTrail(t *testing.T) {
 	Judge(ctx, deps, Request{Input: finishedSpawnEnvelope, Host: "claude-code"})
 	Judge(ctx, deps, Request{Input: claudeContinueEnvelope, Host: "claude-code"})
 
-	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, trail.ActionAgentContinue, spawns[0].Action)
 	assert.Equal(t, spawnBlob{Target: "a1b2c3"}, readSpawnBlob(t, cacheDir, spawns[0]))
@@ -566,11 +567,11 @@ func TestSpawnRuleSeesTheCheckoutItWasJudgedIn(t *testing.T) {
 
 // trailEvents returns matching events oldest-first: ReadRecent reports newest-first, and a
 // lineage assertion reads left-to-right as it happened.
-func trailEvents(t *testing.T, base string, kind trail.Kind) []trail.Event {
+func trailEvents(t *testing.T, base string, kind trailtypes.Kind) []trailtypes.Event {
 	t.Helper()
-	all, err := trail.ReadRecent(base, 1000)
+	all, err := trailtypes.ReadRecent(base, 1000)
 	require.NoError(t, err)
-	var out []trail.Event
+	var out []trailtypes.Event
 	for i := len(all) - 1; i >= 0; i-- {
 		if all[i].Kind == kind {
 			out = append(out, all[i])
@@ -974,7 +975,7 @@ func TestAWorkerInItsOwnWorktreeIsGradedUnderItsJob(t *testing.T) {
 	rev, _ := types.ParseCheckpointToken(rows[0].ReportedBase)
 	assert.Equal(t, workerHead, rev, "the base is read from the worker's checkout, not the spawner's")
 
-	events := trailEvents(t, workerCache, trail.KindAgentCommand)
+	events := trailEvents(t, workerCache, trailtypes.KindAgentCommand)
 	require.Len(t, events, 2)
 	for _, e := range events {
 		assert.Equal(t, graded{Lease: "guard-facts", From: jobtypes.LeaseSourceAgent}, graded{Lease: e.Lease, From: e.LeaseFrom})
@@ -1294,7 +1295,7 @@ func TestARecordOutranksTheBaggageClaim(t *testing.T) {
 			v := Judge(ctx, Dependencies{}, tc.req)
 			assert.Equal(t, tc.want, answer{v.Lease, jobtypes.LeaseSource(v.LeaseFrom)})
 
-			events := trailEvents(t, cacheDir, trail.KindAgentCommand)
+			events := trailEvents(t, cacheDir, trailtypes.KindAgentCommand)
 			require.NotEmpty(t, events)
 			last := events[len(events)-1]
 			assert.Equal(t, tc.want, answer{last.Lease, last.LeaseFrom}, "the trail records the same answer")
@@ -1543,7 +1544,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 	assert.Equal(t, verdictWithRule("deny", workspaceSpawnRule), unworded(v))
 	assert.Regexp(t, `magus ran out of time judging a subagent spawn: resolving the approved magus\\guard\.spawn rule did not finish within \d+ms`, v.Reason)
 
-	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	spawns := trailEvents(t, cacheDir, trailtypes.KindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, decidedByApproved, spawns[0].DecidedBy)
 	failures := readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures

@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/spells"
 )
 
@@ -259,16 +260,16 @@ func TestDenialLandsOnTheTrail(t *testing.T) {
 	require.Error(t, policy.CheckWrite(ctx, "/definitely/not/allowed/f"))
 	require.NoError(t, policy.CheckRead(ctx, filepath.Join(allowed, "f")), "an allow leaves no event")
 
-	events, err := trail.ReadRecent(base, 10)
+	events, err := trailtypes.ReadRecent(base, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.NotEmpty(t, events[0].Error)
-	assert.Equal(t, trail.Event{
+	assert.Equal(t, trailtypes.Event{
 		Ts:      events[0].Ts,
-		Kind:    trail.KindSandboxDenial,
+		Kind:    trailtypes.KindSandboxDenial,
 		Origin:  events[0].Origin,
 		Action:  "write of /definitely/not/allowed/f",
-		Outcome: trail.OutcomeError,
+		Outcome: trailtypes.OutcomeError,
 		Error:   events[0].Error,
 	}, events[0], "a workspace-default denial claims no lease")
 }
@@ -282,17 +283,17 @@ func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 
 	require.Error(t, policy.CheckExec(ctx, "/definitely/not/allowed/f"))
 
-	events, err := trail.ReadRecent(base, 10)
+	events, err := trailtypes.ReadRecent(base, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, trail.Event{
+	assert.Equal(t, trailtypes.Event{
 		Ts:        events[0].Ts,
-		Kind:      trail.KindSandboxDenial,
+		Kind:      trailtypes.KindSandboxDenial,
 		Origin:    events[0].Origin,
 		Lease:     "fleet/worker-3",
 		LeaseFrom: job.LeaseSourceMarker,
 		Action:    "exec of /definitely/not/allowed/f",
-		Outcome:   trail.OutcomeError,
+		Outcome:   trailtypes.OutcomeError,
 		Error:     events[0].Error,
 	}, events[0])
 }

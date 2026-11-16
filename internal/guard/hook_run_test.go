@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -226,14 +227,14 @@ func TestHookCmd_UnreadableStdinFailsClosed(t *testing.T) {
 // hookCommandEvent is the trail event a shell hook is expected to append for one command or
 // path: everything the hook sets, with the clock, the content-addressed blobs and the verdict's
 // provenance, which other tests pin, taken from got so a new field still has to match.
-func hookCommandEvent(ctx context.Context, got trail.Event, origin jobtypes.Origin, action, preview string) trail.Event {
-	return trail.Event{
+func hookCommandEvent(ctx context.Context, got trailtypes.Event, origin jobtypes.Origin, action, preview string) trailtypes.Event {
+	return trailtypes.Event{
 		Ts:            got.Ts,
-		Kind:          trail.KindAgentCommand,
+		Kind:          trailtypes.KindAgentCommand,
 		Origin:        trail.StampOrigin(ctx, origin),
 		Workspace:     "/repo/magus",
 		Action:        action,
-		Outcome:       trail.OutcomeOK,
+		Outcome:       trailtypes.OutcomeOK,
 		RequestRef:    got.RequestRef,
 		ResponseRef:   got.ResponseRef,
 		RequestBytes:  got.RequestBytes,
@@ -257,7 +258,7 @@ func TestHookCmd_RecordsEachPhase(t *testing.T) {
 	ctx := WithLocation(context.Background(), dir, "/repo/magus", "")
 	require.NoError(t, hookStdin(ctx, strings.NewReader("ls"), io.Discard, []string{"-o", "name"}))
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	phases := events[0].Phases
@@ -274,7 +275,7 @@ func TestHookCmd_RecordsEachPhase(t *testing.T) {
 // assertJudgedBy pins the judging magus a hook row records, the running binary and its
 // version, and the phases it timed, and clears them from got so the rest of the row can be
 // compared whole.
-func assertJudgedBy(t *testing.T, got *trail.Event) {
+func assertJudgedBy(t *testing.T, got *trailtypes.Event) {
 	t.Helper()
 	assert.NotEmpty(t, got.Binary, "a hook row names the magus that judged it")
 	assert.Equal(t, testHookEnv().Version, got.BinaryVersion)
@@ -283,7 +284,7 @@ func assertJudgedBy(t *testing.T, got *trail.Event) {
 		names[i] = p.Name
 	}
 	// A spawn is judged apart from the shell rules.
-	if got.Kind == trail.KindAgentSpawn {
+	if got.Kind == trailtypes.KindAgentSpawn {
 		assert.Equal(t, []string{"load_rules", "judge"}, names)
 	} else {
 		assert.Equal(t, []string{"load_rules", "builtin_rules", "notices", "judge"}, names)
@@ -303,17 +304,17 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	require.Equal(t, guardDenyExitCode, silent.ExitCode())
 	assert.Equal(t, "deny\n", out.String())
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
 	// A piped call is the hook's.
 	assert.Equal(t, hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}, "shell.command", "guard: deny"), got)
 
-	body, err := trail.ReadBlob(dir, got.RequestRef)
+	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","tool":"shell.command","command":"git stash","thread":"unknown","thread_from":"inferred"}`, string(body))
-	body, err = trail.ReadBlob(dir, got.ResponseRef)
+	body, err = trailtypes.ReadBlob(dir, got.ResponseRef)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"api_version":"magus.agent-command/v1alpha1"`)
 	assert.Contains(t, string(body), `"decision":"deny"`)
@@ -328,12 +329,12 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "-o", "name"}))
 	assert.Equal(t, "advise\n", out.String())
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
 	assert.Equal(t, hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}, "file.write", "guard: advise"), got)
-	body, err := trail.ReadBlob(dir, got.RequestRef)
+	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","path":"AGENTS.md","tool":"file.write","thread":"unknown","thread_from":"inferred"}`, string(body))
 
@@ -342,7 +343,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	out.Reset()
 	require.NoError(t, hookStdin(emptyCtx, strings.NewReader(""), &out, nil))
 	assert.Equal(t, "pass\n", out.String())
-	events, err = trail.ReadRecent(emptyDir, 1)
+	events, err = trailtypes.ReadRecent(emptyDir, 1)
 	require.NoError(t, err)
 	assert.Empty(t, events, "a hook with no command/path has no observable invocation to record")
 }
@@ -361,7 +362,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 		[]string{"--agent-name", "claude-code", "--session", "abc123", "--event", "PreToolUse", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -375,21 +376,21 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	// A bare command names no directory, so the row records the one the judge ran in.
 	wd, err := os.Getwd()
 	require.NoError(t, err)
-	assert.Equal(t, trail.Event{
-		Kind:      trail.KindAgentCommand,
+	assert.Equal(t, trailtypes.Event{
+		Kind:      trailtypes.KindAgentCommand,
 		Origin:    trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "shell.command",
-		Outcome:   trail.OutcomeOK,
+		Outcome:   trailtypes.OutcomeOK,
 		Preview:   "guard: pass",
 		Cwd:       wd,
 	}, got)
 
-	body, err := trail.ReadBlob(dir, requestRef)
+	body, err := trailtypes.ReadBlob(dir, requestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","host":"claude-code","session":"abc123","event":"PreToolUse","tool":"shell.command","command":"ls",`+
 		`"thread":"main","thread_from":"inferred","shadow":{"off":"allow","light":"allow","standard":"allow","strict":"allow"}}`, string(body))
-	body, err = trail.ReadBlob(dir, responseRef)
+	body, err = trailtypes.ReadBlob(dir, responseRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`, string(body))
 }
@@ -404,7 +405,7 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("ls"), &out, []string{"-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -412,7 +413,7 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 	assert.Empty(t, got.Session)
 
 	// Omitted rather than recorded empty: the blob says nothing was known, not that the host is "".
-	body, err := trail.ReadBlob(dir, got.RequestRef)
+	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","tool":"shell.command","command":"ls","thread":"unknown","thread_from":"inferred"}`, string(body))
 }
@@ -430,7 +431,7 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--observe", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -440,10 +441,10 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 	// exists to remove. The wire verdict the host reads is still pass.
 	assert.Equal(t, hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}, "file.read", "observed"), got)
 
-	body, err := trail.ReadBlob(dir, got.RequestRef)
+	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","tool":"file.read","path":"AGENTS.md","thread":"unknown","thread_from":"inferred"}`, string(body))
-	body, err = trail.ReadBlob(dir, got.ResponseRef)
+	body, err = trailtypes.ReadBlob(dir, got.ResponseRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","decision":""}`, string(body))
 }
@@ -459,7 +460,7 @@ func TestHookCmd_ObserveOutranksPath(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "--observe", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, "file.read", events[0].Action)
@@ -477,13 +478,13 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader(envelope), &out, []string{"-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
 	assert.Equal(t, "s1", got.Session)
 
-	body, err := trail.ReadBlob(dir, got.RequestRef)
+	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","session":"s1","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"shell.command","command":"ls","thread":"unknown","thread_from":"inferred"}`, string(body))
 }
@@ -502,7 +503,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 		[]string{"--observe", "--agent-name", "claude-code", "--session", "s9", "--transcript", "/tmp/t.jsonl", "--event", "PreToolUse", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -510,7 +511,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 		hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "claude-code", Session: "s9"}, "file.read", "observed"),
 		got)
 
-	body, err := trail.ReadBlob(dir, got.RequestRef)
+	body, err := trailtypes.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","host":"claude-code","session":"s9","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"file.read","path":"internal/trail/trail.go","thread":"main","thread_from":"inferred"}`, string(body))
 }
@@ -526,7 +527,7 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 	require.NoError(t, hookStdin(ctx, strings.NewReader(""), &out, []string{"--observe", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	assert.Empty(t, events)
 }
@@ -557,7 +558,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 		[]string{"--agent-name", "claude-code", "-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
@@ -565,16 +566,16 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	requestRef := got.RequestRef
 	got.Ts, got.RequestRef, got.RequestBytes = 0, "", 0
 	assertJudgedBy(t, &got)
-	assert.Equal(t, trail.Event{
-		Kind:      trail.KindAgentSpawn,
+	assert.Equal(t, trailtypes.Event{
+		Kind:      trailtypes.KindAgentSpawn,
 		Origin:    trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "Explore",
 		Lease:     "notes-store-6b",
-		Outcome:   trail.OutcomeOK,
+		Outcome:   trailtypes.OutcomeOK,
 	}, got)
 
-	body, err := trail.ReadBlob(dir, requestRef)
+	body, err := trailtypes.ReadBlob(dir, requestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-spawn/v1alpha1","host":"claude-code","session":"abc123","event":"PreToolUse",`+
 		`"tool":"Task","child":"Explore","lease":"notes-store-6b","declared_model":"opus",`+
@@ -597,24 +598,24 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 		&out, []string{"-o", "name"}))
 	assert.Equal(t, "pass\n", out.String())
 
-	events, err := trail.ReadRecent(dir, 1)
+	events, err := trailtypes.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	// No marker, so the spawn is uncorrelated: no lease.
 	uncorrelated := events[0]
 	assertJudgedBy(t, &uncorrelated)
-	assert.Equal(t, trail.Event{
+	assert.Equal(t, trailtypes.Event{
 		Ts:           events[0].Ts,
-		Kind:         trail.KindAgentSpawn,
+		Kind:         trailtypes.KindAgentSpawn,
 		Origin:       trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}),
 		Workspace:    "/repo/magus",
 		Action:       "agent.spawn",
-		Outcome:      trail.OutcomeOK,
+		Outcome:      trailtypes.OutcomeOK,
 		RequestRef:   events[0].RequestRef,
 		RequestBytes: events[0].RequestBytes,
 	}, uncorrelated)
 
-	body, err := trail.ReadBlob(dir, events[0].RequestRef)
+	body, err := trailtypes.ReadBlob(dir, events[0].RequestRef)
 	require.NoError(t, err)
 	assert.NotContains(t, string(body), "declared_model")
 }
@@ -725,7 +726,7 @@ func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 	assert.NotContains(t, first, "SCIP symbol indexes", "the rationale is behind the ref")
 	ref := regexp.MustCompile(`^details: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[1])
 	require.Len(t, ref, 2, "line %q must cite a grd ref", lines[1])
-	stored, err := trail.ReadBlob(base, ref[1])
+	stored, err := trailtypes.ReadBlob(base, ref[1])
 	require.NoError(t, err)
 	assert.Contains(t, string(stored), "SCIP symbol indexes", "the ref holds the rationale")
 	assert.True(t, strings.HasSuffix(string(stored), "\nsee: https://eli.gladman.cc/magus/reference/rules/source-read/"), "with the rule's page, got %q", stored)
@@ -775,7 +776,7 @@ func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 	ref := regexp.MustCompile(`^details: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[2])
 	require.Len(t, ref, 2, "line %q must cite a grd ref", lines[2])
 
-	stored, err := trail.ReadBlob(base, ref[1])
+	stored, err := trailtypes.ReadBlob(base, ref[1])
 	require.NoError(t, err)
 	assert.Contains(t, string(stored), "\nnothing ran (2 commands)\n", "the stored verdict is the full form of THIS command, got %q", stored)
 	assert.True(t, strings.HasSuffix(string(stored), see), "with the rule's page, got %q", stored)
@@ -1393,12 +1394,12 @@ func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 	require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
 	assert.Equal(t, "pass", v.Decision)
 
-	events, err := trail.ReadRecent(cacheDir, 1)
+	events, err := trailtypes.ReadRecent(cacheDir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
 	event.Ts, event.Origin, event.Workspace, event.RequestRef, event.ResponseRef, event.RequestBytes, event.ResponseBytes = 0, jobtypes.Origin{}, "", "", "", 0, 0
-	assert.Equal(t, trail.Event{Kind: trail.KindAgentCommand, Action: "Bash", Outcome: trail.OutcomeOK, DurationMs: 420, Preview: "observed"}, event)
+	assert.Equal(t, trailtypes.Event{Kind: trailtypes.KindAgentCommand, Action: "Bash", Outcome: trailtypes.OutcomeOK, DurationMs: 420, Preview: "observed"}, event)
 }
 
 // installHostRows writes the tool rows directory install writes for host under the working

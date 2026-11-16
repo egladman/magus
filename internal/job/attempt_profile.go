@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -31,7 +32,7 @@ func attemptWork(base, lease string, since int64) (*types.JobWork, []types.Agent
 	if err != nil || !known {
 		return nil, nil
 	}
-	events, err := trail.ReadRecent(base, workReadWindow)
+	events, err := trailtypes.ReadRecent(base, workReadWindow)
 	if err != nil {
 		return nil, nil
 	}
@@ -46,7 +47,7 @@ func attemptWork(base, lease string, since int64) (*types.JobWork, []types.Agent
 	var facts []types.AgentFacts
 	everyReported := true
 	for _, e := range events {
-		if e.Kind != trail.KindAgentCommand || e.Lease != lease || e.Ts < from {
+		if e.Kind != trailtypes.KindAgentCommand || e.Lease != lease || e.Ts < from {
 			continue
 		}
 		f, reported := callFacts(base, e)
@@ -86,11 +87,11 @@ func attemptWork(base, lease string, since int64) (*types.JobWork, []types.Agent
 
 // callFacts is the cost facts the host reported beside one call, from the call's request
 // record; false when it reported no context size or the record rotated away.
-func callFacts(base string, e trail.Event) (types.AgentFacts, bool) {
+func callFacts(base string, e trailtypes.Event) (types.AgentFacts, bool) {
 	if e.RequestRef == "" {
 		return types.AgentFacts{}, false
 	}
-	raw, err := trail.ReadBlob(base, e.RequestRef)
+	raw, err := trailtypes.ReadBlob(base, e.RequestRef)
 	if err != nil {
 		return types.AgentFacts{}, false
 	}

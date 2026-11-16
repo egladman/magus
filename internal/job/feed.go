@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // Attribution is which job a changed path belongs to, and the declaration that decided it.

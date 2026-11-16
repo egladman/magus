@@ -1,15 +1,12 @@
-// Package trail is the magus activity trail: a durable, append-only record of consequential
+// Package trail writes the magus activity trail: a durable, append-only record of consequential
 // actions taken against the server (who did what, and did it succeed) kept next to the
-// execution journal under a base directory. It is the store behind the magus.activity.v1alpha1
-// "activity view"; producers (the MCP handler, agent hooks, and background jobs today; config
-// and token lifecycle later) append events and store payload blobs, and the console's
-// ActivityService reads them for the log viewer.
+// execution journal under a base directory. The event and its readers are
+// libs/safetyscissors/trail, which exports no writer; this package is the writer magus's
+// producers (the MCP handler, agent hooks, background jobs) call until the writer moves into
+// the module with the guard. The console's ActivityService reads through the module.
 //
-// It is the governance sibling of internal/journal (which records what a build executed) and
-// mirrors its Event/JSONL shape: a hand-rolled Event struct, snake_case json, one json.Marshal
-// line per event, plus a content-addressed blob store for large payloads. The magus.activity.v1alpha1
-// proto is the WIRE format only; the handler maps Event to it; this package never depends on
-// the proto or the handler stack.
+// The magus.activity.v1alpha1 proto is the WIRE format only; the handler maps Event to it;
+// this package never depends on the proto or the handler stack.
 //
 // Every operation is a stateless free function taking the trail's base directory. Writes are
 // low-frequency (agent tool calls, background jobs), so a per-call open/append/close is cheap
@@ -23,8 +20,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
@@ -45,6 +41,9 @@ const (
 	blobsSubDir = "blobs"        // content-addressed request/response payloads
 )
 
+// refHexLen and validPrefix copy libs/safetyscissors/trail's, which keeps its own unexported
+// until the writer moves into the module; the layout under activity/ must match it.
+//
 // refHexLen is how many hex chars of a payload's SHA-256 name its blob. 16 (64 bits) is ample
 // against content collisions among one machine's payloads while staying short in a ref.
 const refHexLen = 16
@@ -59,170 +58,6 @@ const refHexLen = 16
 // That is the honest shape: a counter can only ever bound the one producer that owns it, and the
 // producers that most need bounding (short-lived agent hooks) have nowhere to keep one.
 const maxEvents = 10000
-
-// Kind names an action's source; the values map to the magus.activity.v1alpha1 Kind enum at the wire.
-// Readable strings on disk, like the journal's status strings. It is a NAMED string (not a bare string)
-// so a producer or the audit interceptor cannot pass an arbitrary label where a Kind is wanted; the
-// param is type-checked against these consts. MCP tool calls, agent hooks, and jobs have producers today;
-// the rest name the governance sources the envelope is built to hold, so a reader can switch on kind and a
-// producer adds one without a schema change.
-type Kind string
-
-const (
-	KindMCPToolCall    Kind = "mcp_tool_call"
-	KindJob            Kind = "job"             // a server background job (SCIP reindex, graph build, VCS refresh)
-	KindConfigChange   Kind = "config_change"   // magus.yaml changed on reload, or a config-set mutation
-	KindTokenLifecycle Kind = "token_lifecycle" // a connector token minted or revoked
-	KindSandboxDenial  Kind = "sandbox_denial"  // magus's own read/write/exec policy check refused an access (see sandbox.Policy); a kernel-landlock denial reports nothing back and cannot appear here
-	// KindAgentCommand records an agent-host tool invocation observed by a configured hook. It is
-	// an observation, not a process result: a PreToolUse hook runs before the host executes the
-	// command, so its payload records the requested command or path and the guard's decision, never
-	// an invented exit status. MCP calls remain KindMCPToolCall because their wrapper sees completion.
-	KindAgentCommand Kind = "agent_command"
-	// KindAgentSpawn records that an orchestrating agent handed work to a subagent, and WHAT
-	// CONTEXT it handed over. It is the lease sibling of KindAgentCommand: same producer (a
-	// pre-tool hook), same "observed, not executed" contract, but the thing observed is a context
-	// transfer rather than a command. The handed context lands in the request blob and only its
-	// REF rides the event, because a lease prompt is routinely kilobytes. A continuation, a
-	// message to a subagent that already exists, records here too as ActionAgentContinue.
-	//
-	// Correlation to a lease is COOPERATIVE, not enforced. Nothing in the host event
-	// names a magus lease, and magus cannot infer one from prose, so the event's Lease is stamped
-	// only when the handed context carries the documented marker (see leaseFromContext): its
-	// FIRST non-blank line reading "lease: <id>". An orchestrator that wants the join writes the
-	// marker; one that does not gets an event with an empty Lease, which is a missing join rather
-	// than a wrong one, and a "lease:" line quoted deeper in a prompt stamps nothing, because a
-	// wrong join is worse than none.
-	KindAgentSpawn Kind = "agent_spawn"
-	// KindNotes is the console NotesService door onto the workspace's human-authored notes.
-	// Every event under it is a READ, because that service has no write path: a note's whole
-	// value is the guarantee that a person wrote it, so the browser never becomes an author.
-	// Reads are audited for one reason the shared store does not supply on its own: this is
-	// the only service that can serve the PRIVATE store, which is not in any repository and
-	// which nothing else attributes.
-	KindNotes Kind = "notes"
-
-	// KindCredentialGrant records that a run made a credential reachable: a magusfile
-	// granted one to a destination host, or opened a loopback endpoint carrying one.
-	//
-	// It is the governance half of a fact the execution journal already records. The
-	// journal answers "what did this build do" and is queried per invocation; the trail
-	// answers "who did what against this server", so when an AGENT triggers a run that
-	// makes a credential spendable, this is the event that connects the two. Without it
-	// the activity log shows the tool call and not its consequence.
-	//
-	// It carries the REFERENCE, the host and the header, never the value, which is not
-	// resolved at declaration time and must not be resolved to log it.
-	KindCredentialGrant Kind = "credential_grant" //nolint:gosec // G101: an event-kind discriminator whose name contains "credential", not a credential
-
-	// KindGuardPolicy records that the effective workspace guard rules changed: first
-	// loaded, tightened by an edit that is live, loosened by one waiting on approval,
-	// settled by approval, or removed. Written only on a change, so the lineage of a
-	// workspace's policy reads as one row per step. The request blob carries each source
-	// path with its working-tree and approved content ids, never a source body.
-	KindGuardPolicy Kind = "guard_policy"
-)
-
-// Outcome values; map to the wire Outcome enum.
-const (
-	OutcomeOK    = "ok"
-	OutcomeError = "error"
-)
-
-// Event is one recorded action, the on-disk atom of the trail. The envelope (Ts/Kind/Origin/
-// Action/Outcome) is common to every kind; the payload refs point into the blob store so a large
-// body never bloats the line. Field names are snake_case and match the journal's Event where
-// they overlap (Ts, DurationMs).
-//
-// Who acted is the [job.Origin], one field per channel, rather than one string a reader must
-// guess the kind of. Its Host and Session duplicate what an agent-hook event also records in its
-// request blob, and that duplication is deliberate: a reader grouping a page of 200 rows by
-// agent host must not have to fetch 200 blobs to do it. They stay short, so the "lines stay
-// small" invariant holds. [Append] stamps the OS account on every event.
-type Event struct {
-	Ts         int64  `json:"ts"`                   // unix milliseconds at the action's start
-	Kind       Kind   `json:"kind"`                 // one of the Kind* constants
-	UserAgent  string `json:"user_agent,omitempty"` // caller's HTTP User-Agent, when known (MCP over HTTP)
-	job.Origin `json:",inline"`
-	Workspace  string `json:"workspace,omitempty"` // repo-relative or absolute root the action pertained to; "" for server-wide (an MCP call is not bound to one workspace)
-	Action     string `json:"action"`              // the specific action: a tool name, a job command, "connector.create"
-	// Lease is the lease this action belongs to, when the producer could
-	// correlate one (a marker line, or the BAGGAGE channel); ""
-	// when uncorrelated.
-	Lease string `json:"lease,omitempty"`
-	// LeaseFrom is which source answered Lease, on the events whose producer resolved one.
-	LeaseFrom     job.LeaseSource `json:"lease_from,omitempty"`
-	Outcome       string          `json:"outcome"`                 // one of the Outcome* constants
-	Error         string          `json:"error,omitempty"`         // error text when Outcome is OutcomeError
-	DurationMs    int64           `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions; on an agent command, the host-reported tool time
-	GuardMs       int64           `json:"guard_ms,omitempty"`      // how long the guard took to judge an agent command
-	RequestRef    string          `json:"request_ref,omitempty"`   // blob ref for the request body (mcp<hash>)
-	ResponseRef   string          `json:"response_ref,omitempty"`  // blob ref for the response body
-	Preview       string          `json:"preview,omitempty"`       // opening characters of the response, for list views
-	RequestBytes  int64           `json:"request_bytes,omitempty"` // full request length
-	ResponseBytes int64           `json:"response_bytes,omitempty"`
-	// VerdictRef is the grd blob holding a guard deny in full, when the reader was shown
-	// the short repeat form instead. Named here so rotation keeps the blob the deny cites.
-	VerdictRef string `json:"verdict_ref,omitempty"`
-	// PolicyDigest names the workspace guard rule set in force when a verdict was reached,
-	// the join from a verdict to the guard_policy event that introduced its rules.
-	PolicyDigest string `json:"policy_digest,omitempty"`
-	// DecidedBy is which side reached a verdict: builtin, worktree, or approved, joined
-	// with "+" when a workspace rule added its advice to a built-in one. Empty on a pass,
-	// which nothing decided.
-	DecidedBy string `json:"decided_by,omitempty"`
-	// Binary and BinaryVersion name the magus that judged a hook call, and Cwd the
-	// directory it judged the call in: the one the host reported, else the hook process's
-	// own. Without them a verdict cannot be tied to the build that reached it, which is the
-	// first question when a guard rule that should have fired did not: the hook may have
-	// run a different checkout's binary than the session's.
-	Binary        string `json:"binary,omitempty"`
-	BinaryVersion string `json:"binary_version,omitempty"`
-	Cwd           string `json:"cwd,omitempty"`
-	// Phases are the timed steps of a hook judgment, in the order they ran. A host kills a
-	// hook that outlives its own timeout and no row is written, so these are what show
-	// where a slow judgment that did finish spent its time.
-	Phases []Phase `json:"phases,omitempty"`
-}
-
-// Phase is one timed step of a hook judgment.
-type Phase struct {
-	Name      string `json:"name"`
-	ElapsedMs int64  `json:"elapsed_ms"`
-	// BudgetMs is the share of the hook's deadline the step had, 0 when it had none.
-	BudgetMs int64 `json:"budget_ms,omitempty"`
-	// Lapsed reports that the step ran out of its budget before it answered.
-	Lapsed bool `json:"lapsed,omitempty"`
-}
-
-// UnmarshalJSON decodes an event, reading a duration written under either spelling.
-//
-// compat(until: no trail under <base>/activity still carries "dur_ms"): the duration was
-// spelled `dur_ms` before [Event.DurationMs] was. The trail is append-only and rotates, so
-// observing that dropping this is safe means finding none left:
-//
-//	grep -l '"dur_ms"' <base>/activity/events.jsonl
-//
-// Dropping it early is silent rather than loud: the server's scheduler reads a job's last
-// finish as start plus duration, so every pre-rename row reads as having finished the instant
-// it started, and a job whose interval has not elapsed is rerun anyway.
-func (e *Event) UnmarshalJSON(b []byte) error {
-	type event Event // no method set, so this does not recurse
-	var decoded event
-	if err := json.Unmarshal(b, &decoded); err != nil {
-		return err
-	}
-	*e = Event(decoded)
-	if e.DurationMs == 0 {
-		var legacy struct {
-			DurMs int64 `json:"dur_ms"`
-		}
-		if json.Unmarshal(b, &legacy) == nil {
-			e.DurationMs = legacy.DurMs
-		}
-	}
-	return nil
-}
 
 // AgentCommand is the normalized, host-independent observation an agent hook contributes to the
 // trail. Command and Path are mutually exclusive in the supplied hooks: the former is a shell-tool
@@ -278,7 +113,7 @@ type AgentCommand struct {
 	Binary        string
 	BinaryVersion string
 	Cwd           string
-	Phases        []Phase
+	Phases        []trailtypes.Phase
 	// GuardMs is how long the guard took to judge the call. A pre-call
 	// hook never sees the run time, so this is not tool time.
 	GuardMs int64
@@ -394,15 +229,15 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	if command.Decision != "" {
 		preview = "guard: " + command.Decision
 	}
-	Append(ctx, base, Event{
+	Append(ctx, base, trailtypes.Event{
 		Ts:            time.Now().UnixMilli(),
-		Kind:          KindAgentCommand,
+		Kind:          trailtypes.KindAgentCommand,
 		Origin:        hookOrigin(job.Origin{EntryPoint: command.EntryPoint, Host: command.Host, Session: command.Session, Agent: command.Agent}),
 		Workspace:     command.Workspace,
 		Action:        action,
 		Lease:         lease,
 		LeaseFrom:     leaseFrom,
-		Outcome:       OutcomeOK,
+		Outcome:       trailtypes.OutcomeOK,
 		DurationMs:    command.ToolMs,
 		GuardMs:       command.GuardMs,
 		RequestRef:    reqRef,
@@ -468,7 +303,7 @@ type AgentSpawn struct {
 	Binary        string
 	BinaryVersion string
 	Cwd           string
-	Phases        []Phase
+	Phases        []trailtypes.Phase
 	// AgentFacts are the CALLER's, as on AgentCommand. Its ContextModel is the model the
 	// caller runs as, never the child's: that one is DeclaredModel.
 	types.AgentFacts
@@ -565,14 +400,14 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	case action == "":
 		action = ActionAgentSpawn
 	}
-	Append(ctx, base, Event{
+	Append(ctx, base, trailtypes.Event{
 		Ts:            time.Now().UnixMilli(),
-		Kind:          KindAgentSpawn,
+		Kind:          trailtypes.KindAgentSpawn,
 		Origin:        hookOrigin(job.Origin{EntryPoint: spawn.EntryPoint, Host: spawn.Host, Session: spawn.Session, Agent: spawn.Agent}),
 		Workspace:     spawn.Workspace,
 		Action:        action,
 		Lease:         lease,
-		Outcome:       OutcomeOK,
+		Outcome:       trailtypes.OutcomeOK,
 		RequestRef:    reqRef,
 		RequestBytes:  reqBytes,
 		VerdictRef:    spawn.VerdictRef,
@@ -655,7 +490,7 @@ func blobsPath(base string) string  { return filepath.Join(base, dir, blobsSubDi
 // trail is DURABLE and append-only, so a credential that lands here is on disk until someone
 // deletes the file, strictly worse than the same value reaching a terminal. It took a ctx
 // parameter for no other reason.
-func Append(ctx context.Context, base string, e Event) {
+func Append(ctx context.Context, base string, e trailtypes.Event) {
 	if base == "" {
 		return
 	}
@@ -707,28 +542,18 @@ func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref strin
 	return ref, size
 }
 
-// ReadBlob returns a stored payload by ref, for the ActivityService to serve. The ref is
-// validated as a bare provenance-prefixed hash before it touches the filesystem, and the read
-// creates nothing.
-func ReadBlob(base, ref string) ([]byte, error) {
-	if !ValidRef(ref) {
-		return nil, fmt.Errorf("trail: invalid ref %q: expected a 2-8 letter provenance prefix (e.g. %q) followed by %d hex chars", ref, "mcp", refHexLen)
-	}
-	return os.ReadFile(filepath.Join(blobsPath(base), ref))
-}
-
 // LastRun returns the most recent KIND_JOB event whose Action equals action (the space-joined
 // worker argv recorded for a background job, e.g. "graph build") and whether one was found.
 // It is how a caller shows a job's last outcome. Scans the retained trail newest-first; a job
 // that has not run within it is (zero, false).
-func LastRun(base, action string) (Event, bool) {
-	events, _ := ReadRecent(base, maxEvents)
+func LastRun(base, action string) (trailtypes.Event, bool) {
+	events, _ := trailtypes.ReadRecent(base, maxEvents)
 	for _, e := range events { // newest-first
-		if e.Kind == KindJob && e.Action == action {
+		if e.Kind == trailtypes.KindJob && e.Action == action {
 			return e, true
 		}
 	}
-	return Event{}, false
+	return trailtypes.Event{}, false
 }
 
 // Stat reports the trail's current on-disk footprint under base: total bytes (the events file
@@ -761,57 +586,6 @@ func Stat(base string) (size int64, count int64) {
 		}
 	}
 	return size, count
-}
-
-// ReadRecent returns up to limit events from the tail of the trail, newest first. A missing or
-// empty trail yields no events and no error. The file is opened read-only, so it is safe to call
-// while a producer appends. A corrupt line is skipped, not fatal.
-func ReadRecent(base string, limit int) ([]Event, error) {
-	if base == "" || limit <= 0 {
-		return nil, nil
-	}
-	f, err := os.Open(eventsPath(base))
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	defer f.Close()
-
-	// A fixed-size window over the tail: keep the last `limit` lines in a circular buffer (head
-	// marks the oldest slot) so a long file costs O(N) scan and O(limit) memory, no per-line shift.
-	buf := make([]string, 0, limit)
-	head := 0
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024) // ref lines stay small; allow headroom
-	for sc.Scan() {
-		line := sc.Text()
-		if line == "" {
-			continue
-		}
-		if len(buf) < limit {
-			buf = append(buf, line)
-		} else {
-			buf[head] = line
-			head = (head + 1) % limit
-		}
-	}
-	if err := sc.Err(); err != nil {
-		return nil, err
-	}
-
-	out := make([]Event, 0, len(buf))
-	for i := 0; i < len(buf); i++ { // oldest -> newest
-		var e Event
-		if json.Unmarshal([]byte(buf[(head+i)%len(buf)]), &e) == nil {
-			out = append(out, e)
-		}
-	}
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 { // reverse to newest-first
-		out[i], out[j] = out[j], out[i]
-	}
-	return out, nil
 }
 
 // Rotate keeps the last maxEvents events and deletes blobs that no kept event references.
@@ -964,12 +738,12 @@ func rotate(base string, max int) {
 const blobGraceWindow = 30 * time.Second
 
 // gcBlobs removes blob files that none of the kept event lines reference AND that are
-// older than blobGraceWindow. Temp files (from an in-flight WriteBlob) fail ValidRef and
+// older than blobGraceWindow. Temp files (from an in-flight WriteBlob) fail trailtypes.ValidRef and
 // are left alone regardless of age.
 func gcBlobs(base string, keptLines []string) {
 	referenced := make(map[string]struct{})
 	for _, l := range keptLines {
-		var e Event
+		var e trailtypes.Event
 		if json.Unmarshal([]byte(l), &e) != nil {
 			continue
 		}
@@ -990,7 +764,7 @@ func gcBlobs(base string, keptLines []string) {
 	cutoff := time.Now().Add(-blobGraceWindow)
 	for _, ent := range entries {
 		name := ent.Name()
-		if ent.IsDir() || !ValidRef(name) {
+		if ent.IsDir() || !trailtypes.ValidRef(name) {
 			continue
 		}
 		if _, ok := referenced[name]; ok {
@@ -1024,27 +798,6 @@ func validPrefix(prefix string) bool {
 	return true
 }
 
-// ValidRef reports whether ref names a trail blob (mcp, grd, agent and the rest), so a
-// caller can route it to [ReadBlob] without touching the filesystem. It matches the
-// GetPayload wire pattern: a valid prefix followed by exactly refHexLen hex chars. The hash is a FIXED-length suffix, so the split is len-refHexLen; a greedy letter-scan
-// would misfire because hex digits a-f are also lowercase letters. It rejects any separator or
-// dot, so ReadBlob cannot escape the blob dir.
-func ValidRef(ref string) bool {
-	if len(ref) < 2+refHexLen || len(ref) > 8+refHexLen {
-		return false
-	}
-	split := len(ref) - refHexLen
-	if !validPrefix(ref[:split]) {
-		return false
-	}
-	for _, c := range ref[split:] {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return false
-		}
-	}
-	return true
-}
-
 // redactEvent masks every free-text field on an event.
 //
 // The structural fields are deliberately left alone: Kind, Outcome, the Origin, Workspace,
@@ -1055,7 +808,7 @@ func ValidRef(ref string) bool {
 // lease prompt, or the BAGGAGE environment channel) rather than supplied by a caller,
 // which is why every channel that can stamp one runs it through [job.ValidID]'s bare-identifier
 // rule before it can reach this exemption.
-func redactEvent(ctx context.Context, e Event) Event {
+func redactEvent(ctx context.Context, e trailtypes.Event) trailtypes.Event {
 	e.Action = secrets.RedactString(ctx, e.Action)
 	e.Error = secrets.RedactString(ctx, e.Error)
 	e.Preview = secrets.RedactString(ctx, e.Preview)

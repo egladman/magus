@@ -20,6 +20,7 @@ import (
 
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
 
@@ -1719,8 +1720,8 @@ func jobWatchFiles(ctx context.Context, out io.Writer, root string, plan func() 
 // recentTrail is what this checkout's activity trail still holds, newest first. An
 // unreadable trail reads as empty: a watcher that refused to start because nothing had been
 // recorded yet would refuse exactly when a job has only just begun.
-func recentTrail(cacheDir string) []trail.Event {
-	events, err := trail.ReadRecent(cacheDir, jobWatchWindow)
+func recentTrail(cacheDir string) []trailtypes.Event {
+	events, err := trailtypes.ReadRecent(cacheDir, jobWatchWindow)
 	if err != nil {
 		return nil
 	}

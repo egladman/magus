@@ -23,11 +23,11 @@ const (
 )
 
 // Sections lists every section in label order: A, B, C, D.
-var Sections = []Section{Refused, Advised, Unguarded, NextNotTaken}
+func Sections() []Section { return []Section{Refused, Advised, Unguarded, NextNotTaken} }
 
 // Letter is the section's label prefix, "" for a value outside the set.
 func (s Section) Letter() string {
-	for i, known := range Sections {
+	for i, known := range Sections() {
 		if s == known {
 			return string(rune('A' + i))
 		}
@@ -38,7 +38,7 @@ func (s Section) Letter() string {
 // Validate reports a section outside the set, naming the ones that exist.
 func (s Section) Validate() error {
 	if s.Letter() == "" {
-		return fmt.Errorf("trail section %q is not one of %s", s, joinTrail(Sections))
+		return fmt.Errorf("trail section %q is not one of %s", s, joinValues(Sections()))
 	}
 	return nil
 }
@@ -58,19 +58,19 @@ const (
 )
 
 // Verdicts lists every verdict a mark may carry.
-var Verdicts = []Verdict{ShouldDeny, ShouldAdvise, WrongDeny, Fine}
+func Verdicts() []Verdict { return []Verdict{ShouldDeny, ShouldAdvise, WrongDeny, Fine} }
 
 // Validate reports a verdict outside the set, naming the ones that exist.
 func (v Verdict) Validate() error {
-	for _, known := range Verdicts {
+	for _, known := range Verdicts() {
 		if v == known {
 			return nil
 		}
 	}
-	return fmt.Errorf("trail verdict %q is not one of %s", v, joinTrail(Verdicts))
+	return fmt.Errorf("trail verdict %q is not one of %s", v, joinValues(Verdicts()))
 }
 
-func joinTrail[T ~string](values []T) string {
+func joinValues[T ~string](values []T) string {
 	parts := make([]string, len(values))
 	for i, v := range values {
 		parts[i] = string(v)

@@ -12,8 +12,8 @@ import (
 
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/trail"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // A change under a job's declared write paths is attributed to that job with nothing asked

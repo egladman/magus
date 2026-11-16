@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -365,7 +366,7 @@ func relUnder(abs, root string) (string, bool) {
 }
 
 // recordDenial records a refused access on the run's trail, the producer
-// trail.KindSandboxDenial was declared for.
+// trailtypes.KindSandboxDenial was declared for.
 //
 // It sits in check rather than at each deny site because this is where the decision is
 // MADE: fs, archive, crypto, the http bindings and the exec pre-check all reach the
@@ -386,16 +387,16 @@ func recordDenial(ctx context.Context, p *Policy, access filesystem.Access, path
 	if base == "" {
 		return
 	}
-	trail.Append(ctx, base, trail.Event{
+	trail.Append(ctx, base, trailtypes.Event{
 		Ts:   time.Now().UnixMilli(),
-		Kind: trail.KindSandboxDenial,
+		Kind: trailtypes.KindSandboxDenial,
 		// Set only on a lease-narrowed policy, so a reader can tell a boundary a lease
 		// declared for itself from the workspace default every run already has.
 		Lease:     p.Lease,
 		LeaseFrom: p.LeaseFrom,
 		// Reads as a sentence where the console renders it: "Sandbox denied read of <path>."
 		Action:  fmt.Sprintf("%s of %s", access.String(), path),
-		Outcome: trail.OutcomeError,
+		Outcome: trailtypes.OutcomeError,
 		Error:   err.Error(),
 	})
 }

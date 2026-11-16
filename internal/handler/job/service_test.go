@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
@@ -161,9 +162,9 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 	dir := t.TempDir()
 	// A completed rotate-activities job in the trail, plus two more events so Stat has a count of 3.
 	start := time.UnixMilli(1_000_000).UnixMilli()
-	trail.Append(t.Context(), dir, trail.Event{Ts: start, Kind: trail.KindJob, Action: "server rotate-activities", Outcome: trail.OutcomeOK, DurationMs: 250})
-	trail.Append(t.Context(), dir, trail.Event{Ts: start + 1, Kind: trail.KindMCPToolCall, Action: "query", Outcome: trail.OutcomeOK})
-	trail.Append(t.Context(), dir, trail.Event{Ts: start + 2, Kind: trail.KindMCPToolCall, Action: "explain", Outcome: trail.OutcomeOK})
+	trail.Append(t.Context(), dir, trailtypes.Event{Ts: start, Kind: trailtypes.KindJob, Action: "server rotate-activities", Outcome: trailtypes.OutcomeOK, DurationMs: 250})
+	trail.Append(t.Context(), dir, trailtypes.Event{Ts: start + 1, Kind: trailtypes.KindMCPToolCall, Action: "query", Outcome: trailtypes.OutcomeOK})
+	trail.Append(t.Context(), dir, trailtypes.Event{Ts: start + 2, Kind: trailtypes.KindMCPToolCall, Action: "explain", Outcome: trailtypes.OutcomeOK})
 
 	s := newTestService(trailWorkspace{dir: dir}, nil, nil)
 	running := map[string]string{argvKey([]string{"server", "rotate-activities"}): "inv-live"}

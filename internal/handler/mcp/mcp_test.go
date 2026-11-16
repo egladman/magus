@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
@@ -161,7 +162,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 	_, err := h(context.Background(), req)
 	require.NoError(t, err)
 
-	events, err := trail.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	ev := events[0]
@@ -170,14 +171,14 @@ func TestWrapCapturesExchange(t *testing.T) {
 	// across; the refs are required and resolved below.
 	require.NotEmpty(t, ev.ResponseRef)
 	require.NotEmpty(t, ev.RequestRef) // the request arguments were captured too
-	assert.Equal(t, trail.Event{
+	assert.Equal(t, trailtypes.Event{
 		Ts:   ev.Ts,
-		Kind: trail.KindMCPToolCall,
+		Kind: trailtypes.KindMCPToolCall,
 		// The MCP client's own name is its host label.
 		Origin:        job.Origin{User: ev.User, UID: ev.UID, EntryPoint: job.EntryPointMCP, Host: "test-agent"},
 		UserAgent:     "claude-code/1.2.3", // the session User-Agent is recorded on the event
 		Action:        "client",
-		Outcome:       trail.OutcomeOK,
+		Outcome:       trailtypes.OutcomeOK,
 		DurationMs:    ev.DurationMs,
 		RequestRef:    ev.RequestRef,
 		ResponseRef:   ev.ResponseRef,
@@ -187,10 +188,10 @@ func TestWrapCapturesExchange(t *testing.T) {
 	}, ev)
 
 	// Each ref resolves back to the exact bytes the agent exchanged.
-	resp, err := trail.ReadBlob(dir, ev.ResponseRef)
+	resp, err := trailtypes.ReadBlob(dir, ev.ResponseRef)
 	require.NoError(t, err)
 	assert.Equal(t, out, string(resp))
-	reqBody, err := trail.ReadBlob(dir, ev.RequestRef)
+	reqBody, err := trailtypes.ReadBlob(dir, ev.RequestRef)
 	require.NoError(t, err)
 	assert.Contains(t, string(reqBody), "query")
 }
@@ -210,10 +211,10 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	_, err := h(context.Background(), callRequest("client", map[string]any{"q": "x"}))
 	require.NoError(t, err) // the handler itself does not error
 
-	events, err := trail.ReadRecent(dir, 10)
+	events, err := trailtypes.ReadRecent(dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, trail.OutcomeError, events[0].Outcome, "a soft IsError result must record as error")
+	assert.Equal(t, trailtypes.OutcomeError, events[0].Outcome, "a soft IsError result must record as error")
 	require.Len(t, *calls, 1)
 	assert.Equal(t, observability.OutcomeError, (*calls)[0].Outcome, "the metric must also see error")
 }

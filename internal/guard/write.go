@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -828,13 +829,13 @@ func holderLastCall(deps Dependencies, at location, owner jobtypes.Job) (time.Ti
 	if realPath(owner.CheckoutRoot) != realPath(at.workspace) {
 		cacheDir = hookLocationAt(deps, owner.CheckoutRoot).cacheDir
 	}
-	events, err := trail.ReadRecent(cacheDir, holderTrailWindow)
+	events, err := trailtypes.ReadRecent(cacheDir, holderTrailWindow)
 	if err != nil {
 		return time.Time{}, false
 	}
 	var last int64
 	for _, e := range events {
-		if e.Kind == trail.KindAgentCommand && e.Lease == owner.ID {
+		if e.Kind == trailtypes.KindAgentCommand && e.Lease == owner.ID {
 			last = max(last, e.Ts)
 		}
 	}

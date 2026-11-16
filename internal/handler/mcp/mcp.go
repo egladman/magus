@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -434,14 +435,14 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		respRef, respBytes := trail.WriteBlob(ctx, trailDir, "mcp", []byte(respText))
 
 		dur := time.Since(start)
-		ev := trail.Event{
+		ev := trailtypes.Event{
 			Ts:   start.UnixMilli(),
-			Kind: trail.KindMCPToolCall,
+			Kind: trailtypes.KindMCPToolCall,
 			// Append stamps the origin from ctx: the entry point, the client's name as Host,
 			// and the credential authorize checks.
 			UserAgent:     o.UserAgent,
 			Action:        toolName,
-			Outcome:       trail.OutcomeOK,
+			Outcome:       trailtypes.OutcomeOK,
 			DurationMs:    dur.Milliseconds(),
 			RequestRef:    reqRef,
 			RequestBytes:  reqBytes,
@@ -455,11 +456,11 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		// the metric (which takes ev.Outcome), or the view shows green for calls that failed.
 		switch {
 		case err != nil:
-			ev.Outcome = trail.OutcomeError
+			ev.Outcome = trailtypes.OutcomeError
 			ev.Error = err.Error()
 			reqLog.ErrorContext(ctx, "toolerror", slog.Duration("duration", dur), attr.Error(err))
 		case result != nil && result.IsError:
-			ev.Outcome = trail.OutcomeError // the error text is the response body, captured above
+			ev.Outcome = trailtypes.OutcomeError // the error text is the response body, captured above
 			reqLog.WarnContext(ctx, "toolfailed", slog.Duration("duration", dur))
 		default:
 			reqLog.InfoContext(ctx, "tooldone", slog.Duration("duration", dur))
@@ -470,7 +471,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 			// sent, the structured copy of the payload included. Attribute by tool +
 			// outcome only to keep metric cardinality bounded.
 			outcome := observability.OutcomeOK
-			if ev.Outcome == trail.OutcomeError {
+			if ev.Outcome == trailtypes.OutcomeError {
 				outcome = observability.OutcomeError
 			}
 			tel.RecordMCPCall(ctx, observability.MCPCall{

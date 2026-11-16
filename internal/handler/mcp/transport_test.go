@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
 // wantServerInstructions is the exact block every MCP client reads at session
@@ -175,22 +176,22 @@ func TestServeStdioRoundTrip(t *testing.T) {
 		t.Errorf("stdout carried a line nobody asked for: %q", lines.Text())
 	}
 
-	events, err := trail.ReadRecent(m.CacheDir(), 10)
+	events, err := trailtypes.ReadRecent(m.CacheDir(), 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	ev := events[0]
 	// The clock, the OS account, the response preview, the content-addressed refs and the sizes
 	// are copied across; this test pins who called and what.
-	assert.Equal(t, trail.Event{
+	assert.Equal(t, trailtypes.Event{
 		Ts:   ev.Ts,
-		Kind: trail.KindMCPToolCall,
+		Kind: trailtypes.KindMCPToolCall,
 		Origin: jobtypes.Origin{
 			User: ev.User, UID: ev.UID, EntryPoint: jobtypes.EntryPointMCP, Host: "stdio-test/1.0", Credential: jobtypes.CredentialStdio,
 		},
 		Workspace:     ev.Workspace,
 		UserAgent:     ev.UserAgent,
 		Action:        hint.ToolConfig.String(),
-		Outcome:       trail.OutcomeOK,
+		Outcome:       trailtypes.OutcomeOK,
 		DurationMs:    ev.DurationMs,
 		RequestRef:    ev.RequestRef,
 		ResponseRef:   ev.ResponseRef,

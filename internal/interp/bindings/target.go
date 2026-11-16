@@ -23,6 +23,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -334,12 +335,12 @@ func recordCredentialGrant(ctx context.Context, g secrets.Grant, action string) 
 	if o, ok := origin.FromContext(ctx); ok {
 		userAgent = o.UserAgent
 	}
-	trail.Append(ctx, base, trail.Event{
+	trail.Append(ctx, base, trailtypes.Event{
 		Ts:        time.Now().UnixMilli(),
-		Kind:      trail.KindCredentialGrant,
+		Kind:      trailtypes.KindGrantIssued,
 		UserAgent: userAgent,
 		Action:    action,
-		Outcome:   trail.OutcomeOK,
+		Outcome:   trailtypes.OutcomeOK,
 		Preview:   fmt.Sprintf("%s -> %s (%s)", g.Ref, g.Host, g.Header),
 	})
 }
