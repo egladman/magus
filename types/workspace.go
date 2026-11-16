@@ -278,8 +278,10 @@ func (m *EvalMemo) Do(key string, compute func() (any, error)) (any, error) {
 	return v, nil
 }
 
-// End closes the evaluation: the memo drops what it holds and computes every time after,
-// as a nil memo does. The first request after End says so once, naming its key.
+// End closes the evaluation. The holder keeps no computed value afterwards, and every
+// later Do computes, as on a nil holder. A Do already computing finishes and returns its
+// value, which is not kept. The first Do after End logs one warning naming its key. End
+// is safe to call more than once, on a nil holder, and concurrently with Do.
 func (m *EvalMemo) End() {
 	if m == nil {
 		return
@@ -288,6 +290,16 @@ func (m *EvalMemo) End() {
 	m.ended = true
 	m.cells = nil
 	m.mu.Unlock()
+}
+
+// Ended reports whether End has run. A nil holder has not ended: it never held anything.
+func (m *EvalMemo) Ended() bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.ended
 }
 
 type evalMemoKey struct{}

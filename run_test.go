@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/diff"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
@@ -2780,32 +2782,169 @@ func TestInvokeSpellHandsItsCostToTheStep(t *testing.T) {
 	assert.Equal(t, int64(700), types.CPUMs(step))
 }
 
-// An attempt's evaluation is read by every body it needs, which run under the caller's
-// context, and holds nothing once the attempt returns.
-func TestAttemptEvaluationEndsWithTheAttempt(t *testing.T) {
-	var seen *types.EvalMemo
-	builds := 0
-	build := func() (any, error) { builds++; return builds, nil }
-	s := spells.NewSpell("zzz-evaluation-end", spells.WithTargets("work"),
+func TestAttemptEvaluationSuite(t *testing.T) { suite.Run(t, new(attemptEvaluationSuite)) }
+
+// attemptEvaluationSuite pins what an attempt's evaluation holds while it runs and that
+// each of the three Invoke sites ends it.
+type attemptEvaluationSuite struct {
+	suite.Suite
+	mu      sync.Mutex
+	holders []*types.EvalMemo
+}
+
+func (s *attemptEvaluationSuite) SetupTest() { s.holders = nil }
+
+const graphReadingMagusfile = `import "magus";
+export fun alone(ctx: magus\Context, args: [str]) > void !> any { magus\graph().stats(); }
+export fun composed(ctx: magus\Context, args: [str]) > void !> any { magus\graph().stats(); ctx.needs(member); }
+export fun member(ctx: magus\Context, args: [str]) > void !> any { magus\graph().stats(); }
+`
+
+// recordHolder notes the evaluation the context carries. A build outside any evaluation,
+// which the run makes for its own planning, carries none and is not an attempt's.
+func (s *attemptEvaluationSuite) recordHolder(ctx context.Context) {
+	h := types.EvalMemoFromContext(ctx)
+	if h == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.holders = append(s.holders, h)
+}
+
+func (s *attemptEvaluationSuite) distinctHolders() []*types.EvalMemo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []*types.EvalMemo
+	for _, h := range s.holders {
+		if !slices.Contains(out, h) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// openGraphReader opens a workspace of graphReadingMagusfile whose warm graph builder
+// records the evaluation of every build it is asked for.
+func (s *attemptEvaluationSuite) openGraphReader() *Magus {
+	repo := testkit.NewRepository(s.T(), map[string]string{
+		".gitignore":     ".magus/\n",
+		"magusfile.buzz": graphReadingMagusfile,
+	})
+	m, err := Open(context.Background(), repo.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err, "Open")
+	s.T().Cleanup(func() { _ = m.Close() })
+	warm := m.warmKnowledgeGraph()
+	build := warm.rebuild
+	warm.rebuild = func(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
+		s.recordHolder(ctx)
+		return build(ctx, refresh)
+	}
+	return m
+}
+
+func (s *attemptEvaluationSuite) run(m *Magus, target string) {
+	s.T().Helper()
+	s.Require().NoError(m.Run(context.Background(), []types.Target{{Path: ".", Name: target}}))
+}
+
+func (s *attemptEvaluationSuite) builds() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.holders)
+}
+
+func (s *attemptEvaluationSuite) TestNeedsChildReadsItsCallersGraph() {
+	m := s.openGraphReader()
+	s.run(m, "alone")
+	alone := s.builds()
+	s.Positive(alone, "the body read the graph")
+
+	s.run(m, "composed")
+	s.Equal(2*alone, s.builds(), "a ctx.needs child reads its caller's graph, so composed builds as often as alone")
+}
+
+func (s *attemptEvaluationSuite) TestAttemptKeepsNoGraphOnceItReturns() {
+	m := s.openGraphReader()
+	s.run(m, "composed")
+
+	// The attempt's own evaluation, and the one opening magus\graph() builds its symbol
+	// index digest on.
+	holders := s.distinctHolders()
+	s.Require().Len(holders, 2)
+	for _, h := range holders {
+		v, err := h.Do("magus:knowledge-graph", func() (any, error) { return "sentinel", nil })
+		s.Require().NoError(err)
+		s.Equal("sentinel", v, "the ended evaluation computes instead of returning a graph")
+	}
+}
+
+func (s *attemptEvaluationSuite) TestHealthyRunSaysNothingAboutAnEndedEvaluation() {
+	m := s.openGraphReader()
+	logged := testkit.CaptureLog(s.T(), slog.LevelDebug, func() { s.run(m, "composed") })
+	s.NotContains(logged, "evaluation already ended")
+}
+
+func (s *attemptEvaluationSuite) TestARetryGetsItsOwnEvaluation() {
+	var calls atomic.Int32
+	spellName := register.Spell(s.T(), "zzz-attempt-evaluation-retry",
+		spells.WithTargets("flaky"),
 		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
-			seen = types.EvalMemoFromContext(ctx)
-			// A ctx.needs child runs under the caller's context.
-			child := func(ctx context.Context) (any, error) { return types.EvalMemoFromContext(ctx).Do("graph", build) }
-			for range 2 {
-				if _, err := child(ctx); err != nil {
-					return nil, err
-				}
+			s.recordHolder(ctx)
+			if calls.Add(1) == 1 {
+				return nil, errors.New("boom")
 			}
 			return nil, nil
+		}),
+	)
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile("")
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".",
+		WithSpell(spellName),
+		WithTarget("flaky", RetryOnVolatile("a fixture that fails its first call")),
+	)
+	cfg := config.Defaults()
+	cfg.HistoryPath = filepath.Join(w.Root(), "history.json")
+	m, err := Open(context.Background(), w.Root(), WithWorkspaceRegistry(reg), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err, "Open")
+	s.T().Cleanup(func() { _ = m.Close() })
+
+	s.run(m, "flaky")
+
+	s.Equal(int32(2), calls.Load(), "the first call fails and is retried")
+	holders := s.distinctHolders()
+	s.Require().Len(holders, 2, "each attempt has its own evaluation")
+	for _, h := range holders {
+		s.True(h.Ended())
+	}
+}
+
+func (s *attemptEvaluationSuite) invokeOnce(ctx context.Context) {
+	s.T().Helper()
+	sp := spells.NewSpell("zzz-attempt-evaluation-site", spells.WithTargets("work"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			s.recordHolder(ctx)
+			return nil, nil
 		}))
+	s.Require().NoError(invokeSpell(ctx, &types.Project{Path: ".", Dir: s.T().TempDir()}, "work", sp))
+}
 
-	require.NoError(t, invokeSpell(t.Context(), &types.Project{Path: ".", Dir: t.TempDir()}, "work", s))
+func (s *attemptEvaluationSuite) TestTheRuntimeSiteEndsItsEvaluation() {
+	rt := volatility.NewRuntime(nil, "", volatility.Config{}, nil, false)
+	s.invokeOnce(volatility.WithRuntime(s.T().Context(), rt))
 
-	require.NotNil(t, seen)
-	assert.Equal(t, 1, builds, "the caller and its child share one build")
-	_, err := seen.Do("graph", build)
-	require.NoError(t, err)
-	assert.Equal(t, 2, builds, "after the attempt the evaluation holds no graph")
+	holders := s.distinctHolders()
+	s.Require().Len(holders, 1)
+	s.True(holders[0].Ended())
+}
+
+func (s *attemptEvaluationSuite) TestTheSiteWithoutARuntimeEndsItsEvaluation() {
+	s.invokeOnce(s.T().Context())
+
+	holders := s.distinctHolders()
+	s.Require().Len(holders, 1)
+	s.True(holders[0].Ended())
 }
 
 type countingObserver struct {

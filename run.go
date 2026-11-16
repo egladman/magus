@@ -3498,9 +3498,9 @@ func invokeEvaluation(ctx context.Context, s *spells.Spell, req spells.InvokeReq
 }
 
 // invokeSpell executes one spell; when a volatility.Runtime is present, failures are eligible for auto-retry.
-// Each attempt is one evaluation with its own types.EvalMemo, shared by every body the
-// attempt needs, so they read one knowledge graph snapshot however many graph members
-// they call. The memo ends with the attempt, and a retry rebuilds it.
+// Each attempt is one evaluation with its own types.EvalMemo, so every body it runs reads
+// one knowledge graph snapshot however many graph members it calls. The evaluation ends
+// with the attempt, and a retry builds a new one.
 func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.Spell) error {
 	req := spells.InvokeRequest{Target: name, Dir: p.Dir}
 	rt := volatility.RuntimeFromContext(ctx)

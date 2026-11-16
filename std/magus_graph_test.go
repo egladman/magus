@@ -247,6 +247,18 @@ func TestRefsWithoutAnEvaluationKeepsTheReferenceScope(t *testing.T) {
 	assert.Equal(t, []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}}, ws.reqs)
 }
 
+// An evaluation that has ended behaves as a nil holder does: refs builds the by-reference
+// scope instead of paying a full merge.
+func TestRefsAfterTheEvaluationEndedKeepsTheReferenceScope(t *testing.T) {
+	t.Parallel()
+	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
+	eval := types.WithEvalMemo(types.WithWorkspace(t.Context(), ws))
+	types.EvalMemoFromContext(eval).End()
+	_, err := MagusRefs(eval, graphSymbol, types.KnowledgeRefsOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, []types.GraphRequest{{Symbols: types.SymbolsMentioning(graphSymbol)}}, ws.reqs)
+}
+
 // definedSymbols is a workspace whose graph holds one symbol per id, each labeled name and
 // defined by its own file.
 func definedSymbols(t *testing.T, name string, ids ...string) context.Context {

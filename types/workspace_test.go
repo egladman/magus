@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log"
 	"log/slog"
 	"slices"
 	"sync"
@@ -214,9 +215,13 @@ func TestEndedEvaluationComputesEveryTime(t *testing.T) {
 // Not parallel: it swaps the default logger to read what is said.
 func TestEndedEvaluationSaysSoOnce(t *testing.T) {
 	var out bytes.Buffer
-	prev := slog.Default()
+	prev, prevOut, prevFlags := slog.Default(), log.Writer(), log.Flags()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&out, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	t.Cleanup(func() {
+		slog.SetDefault(prev)
+		log.SetOutput(prevOut)
+		log.SetFlags(prevFlags)
+	})
 
 	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
 	m.End()
@@ -226,4 +231,43 @@ func TestEndedEvaluationSaysSoOnce(t *testing.T) {
 	}
 	assert.Equal(t, 1, bytes.Count(out.Bytes(), []byte("already ended")), "said once: %s", out.String())
 	assert.Contains(t, out.String(), "key=graph+symbols:", "it names the key")
+}
+
+func TestEndedEvaluationKeepsNothingFromAComputeInFlight(t *testing.T) {
+	t.Parallel()
+	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	started, release := make(chan struct{}), make(chan struct{})
+	type result struct {
+		v   any
+		err error
+	}
+	done := make(chan result)
+	go func() {
+		v, err := m.Do("graph", func() (any, error) {
+			close(started)
+			<-release
+			return "late", nil
+		})
+		done <- result{v, err}
+	}()
+	<-started
+	m.End()
+	close(release)
+	got := <-done
+	require.NoError(t, got.err)
+	assert.Equal(t, "late", got.v, "a compute already running returns its value")
+
+	again, err := m.Do("graph", func() (any, error) { return "again", nil })
+	require.NoError(t, err)
+	assert.Equal(t, "again", again, "the value it computed was not kept")
+}
+
+func TestEndedReportsWhetherTheEvaluationEnded(t *testing.T) {
+	t.Parallel()
+	var nilMemo *EvalMemo
+	assert.False(t, nilMemo.Ended(), "a nil holder never ended")
+	m := EvalMemoFromContext(WithEvalMemo(context.Background()))
+	assert.False(t, m.Ended())
+	m.End()
+	assert.True(t, m.Ended())
 }

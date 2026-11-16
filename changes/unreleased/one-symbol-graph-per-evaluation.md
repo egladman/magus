@@ -1,3 +1,3 @@
 ### Changed
 
-- **A script evaluation builds one symbol graph.** Inside a scheduled attempt, `magus\graph().refs` reads the all-symbols graph instead of merging shards per symbol, and the attempt's compute-once holder ends with it, so nothing it built outlives the attempt. A request after the end computes again and says so once.
+- **A target or script builds one symbol graph for `refs`.** `magus\graph().refs` reads the all-symbols graph its evaluation shares instead of merging shards per symbol, so one lone `refs` call pays a full merge. A scheduled target drops its graphs when its attempt ends; a read after that rebuilds and warns once.

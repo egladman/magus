@@ -63,7 +63,9 @@ func symbolIndexDigest(ctx context.Context, languages []string) (types.SymbolInd
 	// The build writes the shards the digest reads. It runs on a fresh
 	// memo, since a graph this evaluation built before the freshen
 	// predates the shards the freshen moved.
-	if _, err := w.KnowledgeGraph(types.WithEvalMemo(ctx), types.GraphRequest{}); err != nil {
+	build := types.WithEvalMemo(ctx)
+	defer types.EvalMemoFromContext(build).End()
+	if _, err := w.KnowledgeGraph(build, types.GraphRequest{}); err != nil {
 		return types.SymbolIndexDigest{}, err
 	}
 	d, err := knowledge.NewStore(w.CacheDir(), true, 0, nil, nil).SymbolIndexDigest()
