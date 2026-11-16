@@ -213,9 +213,10 @@ func declaredFileKinds(p *types.Project, target string) (kinds []string, unbound
 		globs = append(globs, ref.Glob)
 	}
 	for _, g := range globs {
-		// A footprint that takes everything under a tree drops nothing, and it carries no
-		// extension to compare, so it would otherwise read as naming no kind at all.
-		if base := path.Base(g); base == "*" || base == "**" {
+		// A footprint that takes everything drops nothing, and it carries no extension to
+		// compare, so it would otherwise read as naming no kind at all. Only a glob with no
+		// literal directory before the wildcard does: testdata/* is a narrowing like any other.
+		if base := path.Base(g); (base == "*" || base == "**") && strings.ContainsAny(strings.SplitN(g, "/", 2)[0], "*?[{") {
 			return nil, true
 		}
 	}
