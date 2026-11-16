@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // validateMerge holds a merge into job id, against the plan rows, to every rule a stored
@@ -187,23 +188,75 @@ func permitBut(ps types.JobProblems, deviations []types.Deviation) (kept, permit
 // lintGoals is a lint goal per project whose lint reads a file the row writes
 // and nothing runs. It only reports, and over the written files alone: a
 // finding elsewhere is not the worker's. See [ranOver] for a soft path.
-func lintGoals(root string, row types.Job, ws Workspace, grader CheckGrader) []types.Goal {
+//
+// A file the VCS ignores is left out: a write glob also matches installed files nobody
+// wrote. A file not yet tracked stays, since the args are fixed at fork time and a path the
+// worker will create is untracked then. The notes say how many files were left out, or that
+// the VCS could not be asked and every file was kept.
+func lintGoals(ctx context.Context, root string, row types.Job, ws Workspace, grader CheckGrader) (goals []types.Goal, notes []string) {
 	if row.ReadOnly || len(row.Paths.Write) == 0 || ws.Unavailable != "" {
-		return nil
+		return nil, nil
 	}
 	written := slices.DeleteFunc(writtenFiles(root, row), func(f string) bool { return slices.Contains(row.Paths.Soft, f) })
 	slices.Sort(written)
-	var goals []types.Goal
 	gates, _ := unrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored), gradeWith(grader, root, row))
+	var lint []UnrunGate
 	for _, g := range gates {
 		if g.Target == lintTarget && !g.IntegratorGates {
-			goal := g.Goal
-			goal.Check.NoDefaultCharms = true
-			goal.Check.Args = filesIn(g.Project, written)
-			goals = append(goals, goal)
+			lint = append(lint, g)
 		}
 	}
-	return goals
+	if len(lint) == 0 {
+		return nil, nil
+	}
+	written, note := withoutIgnored(ctx, root, ws, written)
+	if note != "" {
+		notes = append(notes, note)
+	}
+	for _, g := range lint {
+		goal := g.Goal
+		goal.Check.NoDefaultCharms = true
+		goal.Check.Args = filesIn(g.Project, written)
+		goals = append(goals, goal)
+	}
+	return goals, notes
+}
+
+// withoutIgnored is files less those the VCS ignores, and a note when it left some out or
+// could not be asked. A tracked file stays even when an ignore rule covers it: IgnoredFiles
+// answers from the rules alone, so a force-added file is asked of TrackedFiles too.
+func withoutIgnored(ctx context.Context, root string, ws Workspace, files []string) ([]string, string) {
+	if len(files) == 0 {
+		return files, ""
+	}
+	if ws.Ignored == nil {
+		return files, "no version control could be asked which written files it ignores, so the lint goal keeps every one"
+	}
+	ignored, err := ws.Ignored(files)
+	if err != nil {
+		return files, fmt.Sprintf("the lint goal keeps every written file: %v", err)
+	}
+	if len(ignored) == 0 {
+		return files, ""
+	}
+	drop := make(map[string]bool, len(ignored))
+	for _, f := range ignored {
+		drop[f] = true
+	}
+	if res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{}); err == nil && res.VCS != nil {
+		tracked, err := res.VCS.TrackedFiles(ctx, root, ignored)
+		if err != nil {
+			return files, fmt.Sprintf("%s could not say which ignored files it tracks (%v), so the lint goal keeps every written file", res.Name, err)
+		}
+		for _, f := range tracked {
+			delete(drop, f)
+		}
+	}
+	kept := slices.DeleteFunc(slices.Clone(files), func(f string) bool { return drop[f] })
+	if left := len(files) - len(kept); left > 0 {
+		return kept, fmt.Sprintf("left %d ignored file(s) out of the lint goal", left)
+	}
+	return kept, ""
 }
 
 // filesIn is the files under project, relative to it. The root project holds every file.
@@ -334,7 +387,7 @@ func declaredGateOwner(root string, rows []types.Job, row types.Job) gateOwner {
 // IntegratorDeviations is one deviation per output a target regenerates from row's write paths
 // that sits outside them: the integrator regenerates it after the job. An output a deny
 // path touches stays its owner's, and one a deviation of row accepts already needs no new one.
-func IntegratorDeviations(root string, row types.Job, projects []*types.Project, ignored func([]string) []string) []types.Deviation {
+func IntegratorDeviations(root string, row types.Job, projects []*types.Project, ignored func([]string) ([]string, error)) []types.Deviation {
 	var deviations []types.Deviation
 	for _, o := range RegeneratedOutside(root, row, projects, ignored) {
 		glob, _, _ := strings.Cut(o.Output, " !")
