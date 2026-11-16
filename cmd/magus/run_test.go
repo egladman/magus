@@ -251,11 +251,11 @@ func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
 	found := render.FindAllStringSubmatch(workflow, -1)
 	require.Len(t, found, 2, "ci.yaml's plan step no longer renders the saved plan twice; repoint this test at what does")
 
-	out := planOutput{Target: "ci", Count: 1, MaxParallel: 1,
-		Matrix: []planShard{{Shard: "1", Projects: ". docs", JobName: ". docs", Digest: "d", Duties: "notes-verify"}}}
+	out := internalci.PlanOutput{Target: "ci", Count: 1, MaxParallel: 1,
+		Matrix: []internalci.PlanShard{{Shard: "1", Projects: ". docs", JobName: ". docs", Digest: "d", Duties: "notes-verify"}}}
 	out.Outputs, err = internalci.PlanOutputs(out)
 	require.NoError(t, err)
-	out.Summary = planSummaryMarkdown(out)
+	out.Summary = internalci.PlanSummaryMarkdown(out)
 
 	want := map[string]string{
 		"GITHUB_OUTPUT": `matrix={"include":[{"shard":"1","projects":". docs","job_name":". docs","digest":"d","duties":"notes-verify"}]}` + "\n" +

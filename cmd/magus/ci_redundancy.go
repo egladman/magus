@@ -52,13 +52,6 @@ func prepareGateRedundancy(ctx context.Context, m *magus.Magus, target string, t
 	return (*gateRedundancy)(internalci.PrepareGateRedundancy(ctx, m, gateEnv(), target, targets, charms, partial))
 }
 
-func planInheritance(ctx context.Context, m *magus.Magus) *internalci.InheritFinding {
-	return internalci.PlanInheritance(ctx, m)
-}
-
-func renderSizing(target string, rep types.TierReport) string {
-	return internalci.RenderSizing(target, rep)
-}
 
 // gatePoolSaturated asks the broker whether a new run would be refused, and always says
 // what it saw, so the finding can print the capacity behind either answer. Every

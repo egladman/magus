@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/egladman/magus/internal/edit"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/job/evidence"
 	"github.com/egladman/magus/types"
@@ -27,8 +29,8 @@ func jobCallersEnv() evidence.CallersEnv {
 		Config:           globalCfg,
 		OpenWorkspace:    openWorkspaceForRead,
 		RefsGraph:        loadRefsGraph,
-		PickSymbol:       pickSymbol,
-		RenameBlindSpots: renameBlindSpots,
+		PickSymbol:       knowledge.PickSymbol,
+		RenameBlindSpots: edit.RenameBlindSpots,
 		SymbolCoverage:   symbolCoverage,
 	}
 }

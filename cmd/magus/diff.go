@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"path"
@@ -24,10 +23,12 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/difftui"
+	"github.com/egladman/magus/internal/job/evidence"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/review"
 	reviewimpact "github.com/egladman/magus/internal/review/impact"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
@@ -49,23 +50,6 @@ func (cliTokens) Revoke(id string) error {
 	_, err = store.Revoke(types.GrantOperator, id)
 	return err
 }
-
-// compat(until: notes.go, drift.go and attention.go call difftui and review themselves): these
-// wrappers keep the moved names those files use.
-const (
-	reviewCallTokenTTL = difftui.CallTokenTTL
-	diffBridgeAttach   = difftui.AttachTimeout
-)
-
-func mintReviewToken(ctx context.Context, addr string, ttl time.Duration) (types.Secret, string, bool) {
-	return difftui.MintToken(ctx, cliTokens{}, addr, ttl)
-}
-
-func revokeReviewToken(ctx context.Context, tokenID string) {
-	difftui.RevokeToken(ctx, cliTokens{}, tokenID)
-}
-
-func setBearer(req *http.Request, token types.Secret) { difftui.SetBearer(req, token) }
 
 // diffCommand implements `magus diff`: the working tree's changes, annotated and ordered by
 // what they can break.
@@ -281,7 +265,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src review.Source, opts out
 	// somebody handed over belongs to no review this branch has open. Only a running server's
 	// session names them: a plain report never reaches the network.
 	if src.Addressable() && opts.Format != outputName {
-		if comments, _, served := serverReviewComments(ctx); served {
+		if comments, _, served := review.ServerReviewComments(ctx, reviewServerGet); served {
 			review.AttachThreads(&rev, changeset.ParseHunks(patch), comments)
 		} else {
 			slog.InfoContext(ctx, "review threads are listed only while the server runs",
@@ -364,7 +348,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src review.Source, opts out
 			if u == "" {
 				return "", ""
 			}
-			return u, authHint(u)
+			return u, console.AuthHint(u)
 		},
 	})
 }
@@ -393,7 +377,7 @@ type threadPrint struct {
 // An empty patch is not a refusal: a review outlives the tree it was written on, and the record
 // then carries the thread and the host's own copy of the hunk.
 func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
-	comments, reason := reviewComments(ctx, m)
+	comments, reason := review.Remarks(ctx, reviewServerGet, m.ReviewOrigin(ctx), m.CacheDir())
 	in, err := review.NewThreadInput(ctx, review.ThreadParts{
 		Patch:    t.patch,
 		Comments: comments,
@@ -665,7 +649,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content review.Content, req
 	// placed at all, and neither is what the viewer is showing when the patch came from a file;
 	// and a remark drawn against hunk 3 of the wrong patch is worse than one drawn against its
 	// file, because the viewer presents it with no hedge.
-	comments, reason := reviewComments(ctx, m)
+	comments, reason := review.Remarks(ctx, reviewServerGet, m.ReviewOrigin(ctx), m.CacheDir())
 	comments = changeset.PlaceThreads(changeset.ParseHunks(patch), comments)
 	start := difftypes.Cursor{Hunk: -1}
 	if req.thread != "" {
@@ -860,7 +844,7 @@ func impactSources(m *magus.Magus, rootOverride string) reviewimpact.Sources {
 			return loadKnowledgeGraph(ctx, rootOverride, false, false, true)
 		},
 		UnusedSymbols: func(ctx context.Context, g *knowledge.Graph, driver types.RevisionReader, head string, changed []string) ([]string, bool) {
-			delta, ok := readSymbolDelta(ctx, m.Root(), g, driver, head, changed)
+			delta, ok := evidence.ReadSymbolDelta(ctx, m.Root(), g, driver, head, changed)
 			return delta.Left, ok
 		},
 		RequiredIn: func(ctx context.Context) func(string) bool {

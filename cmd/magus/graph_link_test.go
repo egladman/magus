@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/service/console"
 )
 
 // The printed link must never carry the bearer token. liveExplorerLink used to load it
@@ -12,12 +14,12 @@ import (
 // asserts the omission at the seam that actually prints, not just at buildGraphLink,
 // because the regression would be a one-line reintroduction of the auth.Load() call.
 func TestLiveExplorerLinkCarriesNoToken(t *testing.T) {
-	got := liveExplorerLink(graphLinkOpts{View: "blast", Node: "spell:go"})
+	got := liveExplorerLink(console.GraphLinkOpts{View: "blast", Node: "spell:go"})
 	if got == "" {
 		t.Skip("no server address configured here, so there is no link to assert on")
 	}
 	require.NotContains(t, got, "token=",
-		"the deep-link must stay unauthenticated; the token is composed in by authHint")
+		"the deep-link must stay unauthenticated; the token is composed in by console.AuthHint")
 }
 
 // TestConsoleLinksCarryNoToken extends TestLiveExplorerLinkCarriesNoToken to the other two
@@ -37,6 +39,6 @@ func TestConsoleLinksCarryNoToken(t *testing.T) {
 			continue // console disabled in this environment
 		}
 		require.NotContains(t, got, "token=",
-			"the %s link must stay unauthenticated; the token is composed in by authHint", name)
+			"the %s link must stay unauthenticated; the token is composed in by console.AuthHint", name)
 	}
 }

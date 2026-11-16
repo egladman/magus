@@ -7,6 +7,7 @@ import (
 	"fmt"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"io/fs"
 	"log/slog"
@@ -930,7 +931,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, filesWithNext{FileReport: report, Next: next})
+		return emitFormatted(opts, job.FilesWithNext{FileReport: report, Next: next})
 	case outputName:
 		// One bare path per line. This used to print "<path>\t<role>", which is two
 		// columns in the one format that promises a single token, so `xargs` and

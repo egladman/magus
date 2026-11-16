@@ -149,7 +149,7 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 	// A non-terminal stdin (pipe, redirect, heredoc) falls through to script mode.
 	// --embedded is a no-op on this path: a REPL is top-level statements by nature,
 	// so the session is always embedded regardless of the flag.
-	if isRepl && stdinIsTerminal() {
+	if isRepl && termkit.StdinIsTerminal() {
 		return buzzRepl(ctx, !bf.Autoload)
 	}
 
@@ -283,14 +283,6 @@ func resolvedDir(dir string) (string, error) {
 		return "", err
 	}
 	return filepath.EvalSymlinks(abs)
-}
-
-// stdinIsTerminal reports whether stdin is an interactive terminal rather than
-// a pipe, file, or /dev/null. It gates the no-argument REPL so a piped script,
-// or one run with stdin redirected from /dev/null, still runs as a whole
-// instead of blocking on a REPL prompt no one can answer.
-func stdinIsTerminal() bool {
-	return termkit.StdinIsTerminal()
 }
 
 // cutBuzzWorkDir takes a -C that leads args, in any spelling the flag package accepts.

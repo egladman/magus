@@ -432,7 +432,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 	}
 	argv := entry.Argv
 	if name == job.NameCheckDrift {
-		argv = checkDriftJobArgv(args[1:], hookStdin())
+		argv = changeset.CheckDriftJobArgv(args[1:], hookStdin())
 	}
 	inv, err := proc.SubmitJob(ctx, addr, argv, version)
 	if err != nil {

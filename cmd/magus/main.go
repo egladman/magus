@@ -105,7 +105,7 @@ func runCLI() int {
 	job.SetCheckGrader(guard.NewCheckGrader(loadGuardDependencies))
 	// A worker's stderr is the pipe its parent reads, not a terminal a display draws on.
 	if os.Getenv(transform.WorkerEnv) == "1" {
-		return runBuzzWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)
+		return transform.Serve(context.Background(), os.Stdin, os.Stdout, os.Stderr)
 	}
 	if os.Getenv(mcpclient.WorkerEnv) == "1" {
 		return runClientWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)

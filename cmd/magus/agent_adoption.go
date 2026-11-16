@@ -9,6 +9,7 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/termkit"
 )
 
 // agentAdoptionCommand implements `magus agent adoption`: read shell commands (stdin or --commands),
@@ -34,7 +35,7 @@ func agentAdoptionCommand(args []string) error {
 		}
 		defer f.Close()
 		src = f
-	} else if stdinIsTerminal() {
+	} else if termkit.StdinIsTerminal() {
 		guard.WriteAdoptionUsage(os.Stderr)
 		return exit.Usagef("magus agent adoption: reads commands from stdin or --commands <file>")
 	}

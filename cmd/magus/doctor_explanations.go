@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/internal/review"
 )
 
 // doctorExplanations reads every declared notes store and reports which files it explains,
@@ -16,14 +17,14 @@ import (
 // keeps no notes" from "magus could not tell". The check renders the second as unknown
 // rather than as a gap.
 func doctorExplanations(root string) (doctor.Explanations, bool) {
-	stores, err := notesStores(root, "")
+	stores, err := review.ResolveNoteStores(root, noteDirs(), "")
 	if err != nil {
 		return doctor.Explanations{}, false
 	}
 	var out doctor.Explanations
 	read := false
 	for _, st := range stores {
-		list, lerr := notes.List(st.dir)
+		list, lerr := notes.List(st.Dir)
 		if lerr != nil {
 			continue
 		}

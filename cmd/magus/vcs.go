@@ -451,7 +451,7 @@ func vcsLsFilesUsage(w io.Writer) {
 // vcsLsFilesCommand lists the dirty paths a commit of this change wants.
 func vcsLsFilesCommand(ctx context.Context, root string, args []string) error {
 	var lf *flaggen.VCSLsFilesFlags
-	var exclude, projects listFlag
+	var exclude, projects job.ListFlag
 	pos, err := commandParse("vcs ls-files", args, func(fs *flag.FlagSet) {
 		lf = flaggen.BindVCSLsFiles(fs)
 		fs.Var(&exclude, flaggen.FlagVCSLsFilesExclude, "Leave out paths this write-path `pattern` covers; repeatable or comma-separated")

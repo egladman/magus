@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
@@ -34,6 +35,7 @@ import (
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -270,7 +272,7 @@ func emitQueryMatches(opts output.Options, out types.KnowledgeQueryOutput, next 
 	if opts.Format == outputName {
 		return emitItemNames(os.Stdout, out.Matches, func(m types.KnowledgeMatch) string { return m.ID })
 	}
-	return emitFormatted(opts, queryWithNext{KnowledgeQueryOutput: out, Next: next})
+	return emitFormatted(opts, job.QueryWithNext{KnowledgeQueryOutput: out, Next: next})
 }
 
 func explainCommand(ctx context.Context, root string, args []string) error {
@@ -288,7 +290,7 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 		slog.ErrorContext(ctx, "requires a node ID or name", attr.Notice("magus explain"))
 		return exit.Reported(exit.Usage)
 	}
-	if err := checkSourcePage("explain", xf.MaxLines, xf.SkipLines); err != nil {
+	if err := knowledge.CheckSourcePage("explain", xf.MaxLines, xf.SkipLines); err != nil {
 		return err
 	}
 	source := explainSourceWindow(xf, flags, pos[0])
@@ -338,19 +340,19 @@ func emitExplainCard(ctx context.Context, root, input string, opts output.Option
 
 	var section *types.KnowledgeDefinitionSite
 	if source.Show {
-		site, err := docSectionSource(resolveRootOrEmpty(root), out.Node, source)
+		site, err := knowledge.DocSectionSource(resolveRootOrEmpty(root), out.Node, source.refs())
 		if err != nil {
 			return err
 		}
 		section = &site
 		if opts.Format == outputText {
-			return emitDocSectionSource(os.Stdout, site)
+			return knowledge.EmitDocSectionSource(os.Stdout, site)
 		}
 	}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		record := explainWithNext{KnowledgeExplainOutput: out, Next: next, AgentSessions: sessionContact(root, out.Node), Source: section}
+		record := job.ExplainWithNext{KnowledgeExplainOutput: out, Next: next, AgentSessions: sessionContact(root, out.Node), Source: section}
 		return emitExplainRecord(opts, record, section)
 	case outputName:
 		return emitNames(os.Stdout, []string{out.Node.ID})
@@ -374,14 +376,24 @@ func reportExplainMiss(ctx context.Context, input string, res knowledge.ExplainR
 	return knowledge.ExitForVerdict(res.Answer.Verdict)
 }
 
-func emitExplainRecord(opts output.Options, record explainWithNext, section *types.KnowledgeDefinitionSite) error {
+func emitExplainRecord(opts output.Options, record job.ExplainWithNext, section *types.KnowledgeDefinitionSite) error {
 	if err := emitFormatted(opts, record); err != nil {
 		return err
 	}
 	if section != nil {
-		return docSectionExit(*section)
+		return knowledge.DocSectionExit(*section)
 	}
 	return nil
+}
+
+// sourceWindow is the window explain builds: knowledge's window and the command that asked.
+type sourceWindow struct {
+	knowledge.SourceWindow
+	again string
+}
+
+func (w sourceWindow) refs() knowledge.RefsWindow {
+	return knowledge.RefsWindow{SourceWindow: w.SourceWindow, Again: w.again}
 }
 
 func explainSourceWindow(xf *flaggen.ExplainFlags, flags *flag.FlagSet, subject string) sourceWindow {
@@ -427,11 +439,11 @@ func explainMissAnswer(ctx context.Context, root, input string, ans types.Knowle
 	if _, rest, kinded := strings.Cut(input, ":"); kinded {
 		name = rest
 	}
-	matches, _, _, _, _, err := textScan(ctx, searchRoot, name, nil, false, nil)
+	matches, _, _, _, _, err := textindex.Search(ctx, searchRoot, name, nil, false, nil)
 	if err != nil {
 		return ans
 	}
-	return knowledge.WithoutUnheldGaps(ans, searchRoot, textHits(matches))
+	return knowledge.WithoutUnheldGaps(ans, searchRoot, knowledge.TextHits(matches))
 }
 
 // writeExplainText writes res, the node asked resolved to, as `magus explain` prints it
@@ -449,9 +461,9 @@ func writeExplainText(w io.Writer, root, asked string, nx nextGate, next []types
 	// open to an empty focus; omit it. The link is always printed for other kinds;
 	// the server may not be up when the browser opens it, hence the hint.
 	if out.Node.Kind != types.KindSymbol {
-		link := liveExplorerLink(graphLinkOpts{View: "blast", Node: out.Node.ID})
+		link := liveExplorerLink(console.GraphLinkOpts{View: "blast", Node: out.Node.ID})
 		fmt.Fprintf(w, "\nView in Graph Explorer: %s\n", link)
-		fmt.Fprintf(w, "%s\n", authHint(link))
+		fmt.Fprintf(w, "%s\n", console.AuthHint(link))
 		fmt.Fprintf(w, "(start the magus server if the graph does not load)\n")
 	}
 	printNext(w, nx, next)
