@@ -215,28 +215,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	// once; the shipped probe deadline would measure only how loaded the machine is.
 	ctx := agent.ContextWithProbeTimeout(context.Background(), time.Hour)
 
-	// The root magusfile wires "brief-host" with magus\harness.provider, and the fixture
-	// loader answers for it the way the spell's harness contract functions would.
-	w.Magusfile("import \"magus\";\nimport \"spells/brief-host\" as host;\nmagus\\harness.provider(host);\n")
-	w.Write("spells/brief-host/spell.buzz", "import \"magus/spell\";\n"+
-		"export fun mgs_getName() > str { return \"brief-host\"; }\n"+
-		"export fun mgs_getHarness() > Harness { return Harness{config = HarnessConfig{path = \"host/hooks.json\"}, guard = \"\"}; }\n"+
-		"export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }\n")
-	w.Write("AGENTS.md", "# rules\n")
-	fixture.WireHarness(t, agent.HarnessDescriptor{
-		APIVersion: agent.HarnessAPIVersion,
-		ID:         "brief-host",
-		Display:    agent.HarnessDisplay{Name: "Brief Host"},
-		Config:     types.HarnessConfig{Path: "host/hooks.json"},
-		Skills:     types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormBoth},
-		ManagedEntries: []types.ManagedEntries{{
-			Path: []string{"hooks", "before"},
-			Entries: []map[string]any{{
-				"match":    "run",
-				"commands": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}},
-			}},
-		}},
-	})
+	wireBriefHost(t, w)
 	ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
 	require.NoError(t, err)
 	w.Write("host/hooks.json",
@@ -247,26 +226,9 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	// for magus running the command glue, answering as a working guard would.
 	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n")
 
-	store, err := testReaders(t, root).OpenJobs(t.Context(), root)
-	require.NoError(t, err)
-	guardRow := types.Job{
-		ID:           "f2-guard",
-		State:        types.StateRunning,
-		Agent:        typesagent.Instructed("hold the boundary\nsecond line nobody reads here"),
-		Validation:   "magus run test internal/ledger",
-		Paths:        types.JobPaths{Write: []string{"internal/ledger"}},
-		CheckoutRoot: root,
-	}
-	_, err = store.Update(ctx, guardRow.ID, func(cur *types.Job) { *cur = guardRow })
-	require.NoError(t, err)
-
+	seedBriefLease(t, root)
 	// One session, one failing target: the run history the brief reads back.
-	handler := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: root, Command: "run test"})
-	require.NotNil(t, handler)
-	emitJournalEvent(t, handler, journal.Event{
-		Kind: journal.KindResult, Inv: "invBrief", Target: "test",
-		Project: "internal/ledger", Status: journal.StatusFail, Ref: "ref-1",
-	})
+	seedFailingRun(t, root, "ref-1")
 
 	brief := Gather(ctx, root, ws, testReaders(t, root))
 
@@ -309,6 +271,61 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	assert.Contains(t, text, "magus query output ref-1")
 	assert.Contains(t, text, hint.JobExec.With("f2-guard"))
 	assertBriefIsContextSafe(t, text)
+}
+
+// wireBriefHost wires the "brief-host" harness into w: the root magusfile names it with
+// magus\harness.provider, and the fixture loader answers for it the way the spell's
+// harness contract functions would.
+func wireBriefHost(t *testing.T, w *testkit.Workspace) {
+	t.Helper()
+	w.Magusfile("import \"magus\";\nimport \"spells/brief-host\" as host;\nmagus\\harness.provider(host);\n")
+	w.Write("spells/brief-host/spell.buzz", "import \"magus/spell\";\n"+
+		"export fun mgs_getName() > str { return \"brief-host\"; }\n"+
+		"export fun mgs_getHarness() > Harness { return Harness{config = HarnessConfig{path = \"host/hooks.json\"}, guard = \"\"}; }\n"+
+		"export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }\n")
+	w.Write("AGENTS.md", "# rules\n")
+	fixture.WireHarness(t, agent.HarnessDescriptor{
+		APIVersion: agent.HarnessAPIVersion,
+		ID:         "brief-host",
+		Display:    agent.HarnessDisplay{Name: "Brief Host"},
+		Config:     types.HarnessConfig{Path: "host/hooks.json"},
+		Skills:     types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormBoth},
+		ManagedEntries: []types.ManagedEntries{{
+			Path: []string{"hooks", "before"},
+			Entries: []map[string]any{{
+				"match":    "run",
+				"commands": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}},
+			}},
+		}},
+	})
+}
+
+// seedBriefLease records one running lease on root's checkout, its goal two lines long.
+func seedBriefLease(t *testing.T, root string) {
+	t.Helper()
+	store, err := testReaders(t, root).OpenJobs(t.Context(), root)
+	require.NoError(t, err)
+	guardRow := types.Job{
+		ID:           "f2-guard",
+		State:        types.StateRunning,
+		Agent:        typesagent.Instructed("hold the boundary\nsecond line nobody reads here"),
+		Validation:   "magus run test internal/ledger",
+		Paths:        types.JobPaths{Write: []string{"internal/ledger"}},
+		CheckoutRoot: root,
+	}
+	_, err = store.Update(t.Context(), guardRow.ID, func(cur *types.Job) { *cur = guardRow })
+	require.NoError(t, err)
+}
+
+// seedFailingRun journals one session in root whose one target failed with ref.
+func seedFailingRun(t *testing.T, root, ref string) {
+	t.Helper()
+	handler := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: root, Command: "run test"})
+	require.NotNil(t, handler)
+	emitJournalEvent(t, handler, journal.Event{
+		Kind: journal.KindResult, Inv: "invBrief", Target: "test",
+		Project: "internal/ledger", Status: journal.StatusFail, Ref: ref,
+	})
 }
 
 // A refusal ran nothing, so it has no output ref; the code is the whole of what the brief
