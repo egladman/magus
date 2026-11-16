@@ -651,6 +651,7 @@ func TestApplyAndForkMergePlaceDerivedClaims(t *testing.T) {
 
 	unclaimed, err := ForkMerge(t.Context(), s, "wave/job", func(u *types.Job) {
 		u.Paths.Write, u.Goals = []string{"other.go"}, nil
+		u.Deviations = []types.Deviation{{Code: types.JobRecordInvalid, Subject: types.DropsSubject + "goals", Reason: "the claim goal is dropped"}}
 	}, config.Jobs{}, read)
 	require.NoError(t, err)
 	assert.Nil(t, unclaimed.Requires, "a row that drops its last claim is writable by an older magus again")

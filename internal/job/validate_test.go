@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // integratedDirectorySuite pins MGS3018 against a branch replacing a directory.
@@ -329,6 +331,51 @@ func TestValidateMergeJudgesAnUpdateByWhatItAdds(t *testing.T) {
 	assert.Equal(t, "paths.write[2]", problemAt(t, widened.Problems, types.WritePathIsDirectory).Field,
 		"a problem found on what the update adds names the field in the whole row")
 	assert.NotContains(t, codes(widened.Problems), types.JobRecordInvalid, "a shape the row already had is not the update's")
+}
+
+func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
+	t.Parallel()
+
+	s, _ := validateWorkspace(t)
+	seed(t, s, types.Job{
+		ID: "w", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"cli/registry.go"}}, Check: forkCheck(),
+		Agent: &agent.Spec{Instructions: "do the thing"},
+		Goals: []types.Goal{{ID: "g", Kind: types.GoalKindCheck, Check: *forkCheck()}},
+	})
+	rows, err := s.List()
+	require.NoError(t, err)
+
+	wiped := func(u *types.Job) {
+		u.Agent, u.Paths.Write, u.Check, u.Goals = nil, nil, nil, nil
+	}
+	v := validateMerge(t.Context(), s, rows, "w", wiped, config.Jobs{}, nil)
+	var subjects []string
+	for _, p := range v.Problems {
+		if p.Code == types.JobRecordInvalid && strings.HasPrefix(p.Subject, types.DropsSubject) {
+			subjects = append(subjects, p.Subject)
+		}
+	}
+	assert.ElementsMatch(t, []string{"drops agent.instructions", "drops paths.write", "drops check", "drops goals"}, subjects)
+
+	said := func(u *types.Job) {
+		wiped(u)
+		u.Deviations = []types.Deviation{
+			{Code: types.JobRecordInvalid, Subject: "drops agent.instructions", Reason: "the job is reset"},
+			{Code: types.JobRecordInvalid, Subject: "drops paths.write", Reason: "the job is reset"},
+			{Code: types.JobRecordInvalid, Subject: "drops check", Reason: "the job is reset"},
+			{Code: types.JobRecordInvalid, Subject: "drops goals", Reason: "the job is reset"},
+		}
+	}
+	v = validateMerge(t.Context(), s, rows, "w", said, config.Jobs{}, nil)
+	for _, p := range v.Problems {
+		assert.False(t, strings.HasPrefix(p.Subject, types.DropsSubject), "a deviation naming the erasure permits it: %s", p.Subject)
+	}
+	assert.Len(t, v.Permitted, 4)
+
+	kept := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.Paths.Write = []string{"cli/registry.go"} }, config.Jobs{}, nil)
+	for _, p := range kept.Problems {
+		assert.False(t, strings.HasPrefix(p.Subject, types.DropsSubject), "an update that keeps the fields drops none")
+	}
 }
 
 func TestApplyCollectsEveryRecordsProblems(t *testing.T) {

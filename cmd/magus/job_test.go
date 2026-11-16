@@ -693,8 +693,8 @@ func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	assert.Equal(t, []any{"accepted", []string{"run.go#A"}}, []any{rows[0].ID, rows[0].Paths.Deny})
 }
 
-// A retry names the id alone and forks the job again as it was declared; a spec flag
-// declares the job anew.
+// A retry names the id alone and forks the job again as it was declared. A spec flag
+// declares an ended job anew, but may not erase a live job's write paths or check.
 func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 	resetWorkspaceMemo(t)
 	repo, cacheDir := execRepositoryFixture(t)
@@ -720,6 +720,12 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, spec(first[0]), spec(rows[0]), "the retry keeps the declared spec")
 	assert.Equal(t, types.StateDeclared, rows[0].State, "the retry is a new attempt")
+
+	err = jobFork(t.Context(), root, []string{"w", "--read-only", "--instructions", "anew"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "this record would erase w's paths.write")
+	_, err = job.Exit(t.Context(), store, "w", nil, nil)
+	require.NoError(t, err)
 
 	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--read-only", "--instructions", "anew"}))
 	rows, err = store.List()
