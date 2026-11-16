@@ -101,9 +101,9 @@ func TestCaptureRestoresWhenFnDoesNotReturn(t *testing.T) {
 
 func TestCaptureLogReturnsRecordsAtOrAboveTheLevel(t *testing.T) {
 	got := CaptureLog(t, slog.LevelWarn, func() {
-		slog.Info("quiet")
-		slog.Warn("loud", "key", "v")
-		slog.Error("louder")
+		slog.InfoContext(t.Context(), "quiet")
+		slog.WarnContext(t.Context(), "loud", "key", "v")
+		slog.ErrorContext(t.Context(), "louder")
 		log.Print("plain")
 	})
 
