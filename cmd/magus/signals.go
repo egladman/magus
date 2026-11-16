@@ -1,32 +1,15 @@
 package main
 
 import (
-	"context"
-	"os"
-	"os/signal"
-	"syscall"
-
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/server"
 )
 
-// lifecycle is how a long-lived magus process, the broker or a foreground server, answers
-// the signals it owns. Neither exits on SIGHUP: both run with no controlling terminal, so
-// a hangup is only ever sent on purpose. The server reloads its configuration and the
-// broker reopens its log.
-//
-// A first SIGTERM (and a first SIGINT, unless interruptIsNow) starts a graceful stop; a
-// second stopping signal, or a SIGINT when interruptIsNow, asks for one now. Past that
-// the process has stopped listening, and a third signal meets the default disposition,
-// so a teardown that wedges can still be killed without reaching for SIGKILL.
-type lifecycle struct {
-	hangup         func()
-	stop           func()
-	stopNow        func()
-	interruptIsNow bool
-}
+// main.go, which this move does not hold, still names captureSignals.
+var captureSignals = proc.CaptureSignals
 
 // ownsItsSignals reports whether this process answers signals through a
-// lifecycle rather than watchInterrupts. A serving broker does, and so
+// proc.Lifecycle rather than watchInterrupts. A serving broker does, and so
 // does a server run here.
 func ownsItsSignals(args []string) bool {
 	sub, subArgs := peekSub(args)
@@ -34,69 +17,7 @@ func ownsItsSignals(args []string) bool {
 		return false
 	}
 	if len(subArgs) > 0 && subArgs[0] == "broker" {
-		return brokerServes(subArgs[1:])
+		return server.BrokerServes(subArgs[1:])
 	}
 	return server.IsServerRun(subArgs) && server.WantsForeground(subArgs)
-}
-
-// early queues the signals a process ownsItsSignals names receives before its lifecycle
-// watches. The broker's and the server's sockets bind during startup, which is what a
-// supervisor reads as ready, and the lifecycle is installed only after; a SIGHUP in that
-// window met the default disposition and ended the process.
-var early chan os.Signal
-
-// captureSignals starts queueing SIGHUP, SIGINT and SIGTERM for the next lifecycle to
-// watch. Call it before anything binds a socket.
-func captureSignals() {
-	early = make(chan os.Signal, 4)
-	signal.Notify(early, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
-}
-
-// watch answers SIGHUP, SIGINT and SIGTERM for l until ctx ends or stopNow ran, and
-// returns the function that stops answering. It first answers what captureSignals
-// queued. Windows delivers no SIGHUP, and its console close and shutdown events arrive
-// as SIGTERM.
-func (l lifecycle) watch(ctx context.Context) (release func()) {
-	sigs := early
-	early = nil
-	if sigs == nil {
-		sigs = make(chan os.Signal, 4)
-		signal.Notify(sigs, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
-	}
-	ctx, cancel := context.WithCancel(ctx)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		l.handle(ctx, sigs)
-		signal.Stop(sigs)
-	}()
-	return func() {
-		cancel()
-		<-done
-	}
-}
-
-// handle is the policy watch applies, apart from signal registration so a test can drive
-// it with a plain channel.
-func (l lifecycle) handle(ctx context.Context, sigs <-chan os.Signal) {
-	stopping := false
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case sig := <-sigs:
-			switch {
-			case sig == syscall.SIGHUP:
-				if l.hangup != nil {
-					l.hangup()
-				}
-			case stopping || (sig == os.Interrupt && l.interruptIsNow):
-				l.stopNow()
-				return
-			default:
-				stopping = true
-				l.stop()
-			}
-		}
-	}
 }

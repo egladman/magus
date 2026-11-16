@@ -4,15 +4,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/libs/termkit"
-	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/broker"
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
@@ -26,7 +25,11 @@ import (
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -117,11 +120,11 @@ func serverStart(ctx context.Context, args []string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	now := make(chan struct{})
-	release := lifecycle{
-		hangup:  func() { reloadOnHangup(ctx) },
-		stop:    cancel,
-		stopNow: func() { close(now) },
-	}.watch(ctx)
+	release := proc.Lifecycle{
+		Hangup:  func() { reloadOnHangup(ctx) },
+		Stop:    cancel,
+		StopNow: func() { close(now) },
+	}.Watch(ctx)
 	defer release()
 	startServerServices(ctx, cancel)
 
@@ -130,8 +133,8 @@ func serverStart(ctx context.Context, args []string) error {
 	// own context (a sibling of this ctx), so without observing srv.Done() the server would
 	// keep running after its socket was already torn down.
 	var serverDone <-chan struct{}
-	if procServer != nil {
-		serverDone = procServer.Done()
+	if serverHost != nil {
+		serverDone = serverHost.Done()
 	}
 	select {
 	case <-ctx.Done():
@@ -146,14 +149,18 @@ func serverStart(ctx context.Context, args []string) error {
 // at most grace or until now closes. Past either the process exits with them still
 // unwinding, which ends them anyway: they are goroutines in this process.
 func awaitServerStop(ctx context.Context, grace time.Duration, now <-chan struct{}) error {
-	go stopServer()
-	if serverStopped == nil {
+	if serverHost == nil {
+		return nil
+	}
+	serverHost.Stop()
+	stopped := serverHost.Stopped()
+	if stopped == nil {
 		return nil
 	}
 	timer := time.NewTimer(grace)
 	defer timer.Stop()
 	select {
-	case <-serverStopped:
+	case <-stopped:
 	case <-now:
 	case <-timer.C:
 		slog.With(attr.Component("server")).WarnContext(ctx, "the runs it adopted did not unwind within shutdown_grace; exiting anyway",
@@ -165,10 +172,10 @@ func awaitServerStop(ctx context.Context, grace time.Duration, now <-chan struct
 // reloadOnHangup answers SIGHUP the way `magus server reload` is answered: drop the open
 // workspaces so the next command against each reads magus.yaml as it now stands.
 func reloadOnHangup(ctx context.Context) {
-	if serverRegistry == nil {
+	if serverHost == nil {
 		return
 	}
-	dropped, busy := serverRegistry.evictAll()
+	dropped, busy := serverHost.Reload()
 	slog.With(attr.Component("server")).InfoContext(ctx, "reloaded configuration on SIGHUP; a busy workspace keeps the config it started with",
 		slog.Int("dropped", dropped), slog.Int("busy", busy))
 }
@@ -189,10 +196,10 @@ var startServerServices = func(ctx context.Context, cancel context.CancelFunc) {
 
 	server.RefreshVCSHooks(ctx)
 
-	// serverProvider was built by startServer (which runs before this command handler)
+	// The host's provider was built by startServer (which runs before this command handler)
 	// so the bridge Magus shares the same OTel instruments the per-workspace builds record
 	// into.
-	startBridge(ctx, cancel, serverProvider)
+	serverHost.StartBridge(ctx, cancel)
 
 	// Background maintenance: rotate the trail/run-logs and reconcile the graph on their
 	// configured intervals, idle-gated. Socket and trail base are late-bound (set during
@@ -200,14 +207,14 @@ var startServerServices = func(ctx context.Context, cancel context.CancelFunc) {
 	maintenance.Start(ctx, maintenance.Options{
 		Schedule: globalCfg.Server.Maintenance,
 		Socket:   func() string { return os.Getenv(proc.SocketEnv) },
-		Trail:    func() string { return serverTrailBase },
+		Trail:    serverHost.TrailBase,
 		Version:  version,
 	})
 }
 
 // startServerBackground hands `server start` to the detached-server logic in internal/server.
 func startServerBackground(ctx context.Context, cfg config.Config, subArgs []string) (exitCode int, done bool) {
-	return server.StartBackground(ctx, cfg, subArgs, serverLogPath(), os.Args[1:])
+	return server.StartBackground(ctx, cfg, subArgs, server.ServerLogPath(), os.Args[1:])
 }
 
 // consoleReadyTimeout bounds the wait for a freshly spawned server to serve the console.
@@ -244,7 +251,7 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 	}
 
 	slog.InfoContext(ctx, fmt.Sprintf("starting the server to serve the console, from %s.", root), attr.Notice(""), attr.Component("magus"))
-	logPath := serverLogPath()
+	logPath := server.ServerLogPath()
 	pid, err := proc.SpawnDetached([]string{"server", "--foreground"}, logPath)
 	if err != nil {
 		return fmt.Errorf("could not start the server: %w", err)
@@ -929,3 +936,94 @@ func shutdownOneShotTelemetry(ctx context.Context, tel observability.Exporter) {
 		slog.With(attr.Component("server")).WarnContext(ctx, "could not flush telemetry before exit", attr.Error(err))
 	}
 }
+
+// serverHost is the running server's state, built by startServer.
+var serverHost *server.Host
+
+// startServer builds the server's host for `magus server` and starts it.
+func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
+	serverHost = server.NewHost(server.HostDeps{
+		Config:       cfg,
+		Version:      version,
+		Build:        selfBuild,
+		StatusBase:   buildStatusBase,
+		Load:         loadMagus,
+		Place:        jobPlace,
+		BrokerClient: newBrokerClient,
+		ServeRead:    serveGraphRead,
+		Registry: server.RegistryDeps{
+			Open:         openWorkspace,
+			LeaseOf:      boundLease,
+			LeasedBroker: leasedBrokerClient,
+			Dispatch: server.Dispatch{
+				WithMagus: withMagus,
+				Adopted: func(ctx context.Context, root string, args []string) error {
+					return dispatchAdopted(ctx, root, rc, args)
+				},
+				Job: func(ctx context.Context, root string, args []string) error {
+					return dispatchJob(ctx, root, rc, args)
+				},
+			},
+		},
+	})
+	serverHost.Start(ctx)
+}
+
+// openWorkspace opens root the way every registry workspace is opened.
+func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
+	cfg, err := server.LoadWorkspaceConfig(root)
+	if err != nil {
+		return nil, fmt.Errorf("load config %s: %w", root, err)
+	}
+	// Warm server workspaces record OTel metrics so the /dashboard can read live
+	// cache/pool/target numbers as OTLP. Every workspace shares the server's single
+	// provider (workspace.WithTelemetryProvider), so counts survive eviction and the bridge Magus reads
+	// them; only if none was supplied do we build a per-workspace collector.
+	metricsOpt := magus.WithMetricsCollection()
+	if tel != nil {
+		metricsOpt = workspace.WithTelemetryProvider(tel)
+	}
+	opts := append(cliOptions(),
+		workspace.WithLoadedConfig(cfg),
+		// The version lets a load failure that looks like a stale server say so.
+		magus.WithVersion(version),
+		workspace.WithLimiter(lim),
+		metricsOpt,
+	)
+	// b carries root's lease (the registry's leaseBroker). A workspace whose broker setting is
+	// off gets none, since Open refuses a client it would not use; a registry built
+	// without one (every test that does) leaves Open to its own.
+	if b != nil && cfg.Broker.Resolved() != types.BrokerOff {
+		opts = append(opts, magus.WithBroker(b))
+	}
+	// context.Background(): workspace goroutines must outlive individual RPC contexts.
+	m, err := magus.Open(context.Background(), root, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("open workspace %s: %w", root, err)
+	}
+	return m, nil
+}
+
+// boundLease is the lease root's checkout record binds, "" for none. Unlike checkoutLease,
+// no claim counts: one workspace serves every run against root, whatever it names.
+func boundLease(root string) string {
+	loc, err := jobPlace(root)
+	if err != nil {
+		slog.With(attr.Component("server")).Warn("the daemon charges this workspace's runs to no lease: its job store cannot be placed",
+			slog.String("root", root), attr.Error(err))
+		return ""
+	}
+	lease, _ := job.ActingLease(loc, "")
+	return lease
+}
+
+// leasedBrokerClient is a broker client of the daemon's own for one lease's runs.
+func leasedBrokerClient(lease string) *broker.Client {
+	return newBrokerClient(false, broker.WithLease(lease))
+}
+
+// describe.go, which this move does not hold, still names these two.
+var (
+	loadWorkspaceConfig       = server.LoadWorkspaceConfig
+	resolveDeclaredWorkspaces = server.ResolveDeclaredWorkspaces
+)

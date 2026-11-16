@@ -41,10 +41,10 @@ func ReapSpawned(ctx context.Context, pid int, sock string) {
 	_ = p.Kill()
 }
 
-// WaitServerReady polls the server socket until it answers a status query or the timeout
+// waitServerReady polls the server socket until it answers a status query or the timeout
 // elapses. A successful status round-trip is the readiness signal: the socket is bound and
 // the server is accepting, so a script that chained on `server start` can proceed.
-func WaitServerReady(ctx context.Context, addr string, timeout time.Duration) error {
+func waitServerReady(ctx context.Context, addr string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		if _, err := proc.QueryStatus(ctx, addr); err == nil {
@@ -69,17 +69,17 @@ func IsServerRun(subArgs []string) bool {
 	}
 	switch subArgs[0] {
 	case hint.ServerStart.Leaf():
-		return !IsServerStartHelp(subArgs)
+		return !isServerStartHelp(subArgs)
 	case "-foreground", "--foreground":
 		return true
 	}
 	return false
 }
 
-// IsServerStartHelp reports whether `server start` was invoked only to print usage. subArgs
+// isServerStartHelp reports whether `server start` was invoked only to print usage. subArgs
 // starts with "start"; a help token after it means the caller wants the flag list, not a
 // server, so startup skips the auto-background handoff and lets the normal dispatch print it.
-func IsServerStartHelp(subArgs []string) bool {
+func isServerStartHelp(subArgs []string) bool {
 	for _, a := range subArgs[1:] {
 		if a == "-h" || a == "--help" || a == "help" {
 			return true

@@ -1,40 +1,28 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"runtime"
-	"slices"
 	"strconv"
-	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/service"
-	"github.com/egladman/magus/internal/sys/mem"
-	"github.com/egladman/magus/internal/sys/pid"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -43,12 +31,12 @@ import (
 const brokerReadyTimeout = 10 * time.Second
 
 func brokerCommand(ctx context.Context, args []string) error {
-	if brokerServes(args) {
+	if server.BrokerServes(args) {
 		return brokerServe(ctx, args)
 	}
 	switch args[0] {
 	case "-h", "-help", "--help", "help":
-		brokerUsage()
+		server.BrokerUsage()
 		return nil
 	case hint.BrokerStatus.Leaf():
 		return brokerStatus(ctx, args[1:])
@@ -57,58 +45,17 @@ func brokerCommand(ctx context.Context, args []string) error {
 	case hint.BrokerUnits.Leaf():
 		return brokerUnits(ctx, args[1:])
 	default:
-		brokerUsage()
+		server.BrokerUsage()
 		return exit.Usagef("magus server broker: unknown target %q (want status, stop or units, or nothing to run one)", args[0])
 	}
 }
 
-// brokerServes reports whether a `broker` argv runs a broker in this process: no target,
-// only flags, and no request for help.
-func brokerServes(args []string) bool {
-	if len(args) == 0 {
-		return true
-	}
-	switch args[0] {
-	case "-h", "-help", "--help":
-		return false
-	}
-	return strings.HasPrefix(args[0], "-")
-}
-
-func brokerUsage() {
-	fmt.Fprintln(os.Stderr, "usage: magus server broker [status|stop|units] [flags]")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "The broker holds this host's capacity (slots and declared memory) and the")
-	fmt.Fprintln(os.Stderr, "services every magus on it shares. A run or session brief starts one when none answers; it")
-	fmt.Fprintln(os.Stderr, "listens on a unix socket only and exits once it has held nothing for ten minutes.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Targets:")
-	fmt.Fprintln(os.Stderr, "  (none)  run a broker in this process, logging to stderr or to --log; under")
-	fmt.Fprintln(os.Stderr, "          systemd it serves the socket the supervisor hands over")
-	fmt.Fprintln(os.Stderr, "  status  is one up, what it holds; exits non-zero when none is")
-	fmt.Fprintln(os.Stderr, "  stop    stop it, or with --services stop only the services it hosts")
-	fmt.Fprintln(os.Stderr, "  units   print the systemd or launchd units that supervise it")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Flags, with no target:")
-	fmt.Fprintln(os.Stderr, "  --idle-exit DURATION  exit after holding nothing this long; 0 never exits")
-	fmt.Fprintln(os.Stderr, "  --log FILE            write its log to FILE instead of stderr")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Signals: SIGHUP reopens the --log file. A first SIGTERM drains: nothing new is")
-	fmt.Fprintln(os.Stderr, "seated, and it exits once the runs holding it finish or shutdown_grace passes.")
-	fmt.Fprintln(os.Stderr, "A second SIGTERM, or a SIGINT, stops its services and exits now.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Socket: "+broker.DefaultAddr())
-	fmt.Fprintln(os.Stderr, "Log, when a run started it: "+brokerLogPath())
-}
-
-// brokerServe is `magus server broker`. It serves this host's capacity until
-// idle, stopped or signalled. Losing the bind to a live broker ends a start
-// race, so it exits 0. A supervisor's socket is served, not bound.
+// brokerServe is `magus server broker`.
 func brokerServe(ctx context.Context, args []string) error {
 	var f *flaggen.ServerBrokerFlags
 	rest, err := commandParse("server broker", args, func(fs *flag.FlagSet) {
 		f = flaggen.BindServerBroker(fs)
-		fs.Usage = brokerUsage
+		fs.Usage = server.BrokerUsage
 	})
 	if err != nil {
 		return err
@@ -119,104 +66,13 @@ func brokerServe(ctx context.Context, args []string) error {
 	if f.IdleExit < 0 {
 		return exit.Usagef("magus server broker: --idle-exit %s is negative; 0 never exits", f.IdleExit)
 	}
-	if f.Log != "" {
-		if err := redirectStdio(f.Log); err != nil {
-			return fmt.Errorf("magus server broker: %w", err)
-		}
-	}
-
-	addr := broker.DefaultAddr()
-	ln, err := broker.Activated(addr)
-	if err != nil {
-		return fmt.Errorf("magus server broker: %w", err)
-	}
-	from := "serving"
-	if ln != nil {
-		from = "serving the supervisor's socket"
-	} else {
-		ln, err = broker.Listen(ctx, addr)
-		if errors.Is(err, broker.ErrRunning) {
-			slog.InfoContext(ctx, "a broker is already serving "+addr, attr.Notice(""), attr.Component("magus"))
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("magus server broker: %w", err)
-		}
-	}
-	if warn := broker.OtherBrokersWarning(broker.OtherBrokers(ctx, proc.SockDir())); warn != "" {
-		slog.WarnContext(ctx, warn, attr.Component("magus"))
-	}
-
-	// Services outlive the runs that asked for them, so a journal records each one's
-	// stop command; a broker that crashed left orphans, and they are swept before
-	// anything new is hosted.
-	journal, jerr := service.NewJournal(filepath.Join(proc.SockDir(), "services"))
-	if jerr != nil {
-		slog.With(attr.Component("broker")).Warn("service journal unavailable; crash reaping disabled", attr.Error(jerr))
-	} else if res := journal.Sweep(ctx); res.Reaped > 0 || res.Unreapable > 0 {
-		slog.With(attr.Component("broker")).Info("reaped orphaned services a previous broker left",
-			slog.Int("reaped", res.Reaped), slog.Int("left_running", res.Unreapable))
-	}
-	reg := service.New(service.ExecRunner{}, defaultServiceIdle, service.WithJournal(journal))
-
-	// Sized from HOST facts, never from the workspace that happened to start it: the
-	// broker is started by whichever run got there first. Memory comes from what this
-	// process may commit, so a broker inside a memory-limited container budgets the
-	// container; slots come from the cores, the ceiling ClampConcurrency holds every run
-	// to. The profile decides memory's reservation.
-	usable := mem.UsableBytes(ctx)
-	memMB := mem.BudgetMB(usable, globalCfg.ConcurrencyProfile)
-	reserve := mem.Reserve(usable, globalCfg.ConcurrencyProfile)
-	slots := cache.MachineCeiling()
-	exits := "never exits for idleness"
-	if f.IdleExit > 0 {
-		exits = fmt.Sprintf("exits after %s holding nothing", idleText(f.IdleExit))
-	}
-	slog.InfoContext(ctx, fmt.Sprintf("broker (pid %d) %s %s: %d slots, %s; %s",
-		os.Getpid(), from, addr, slots, types.FormatMB(memMB), exits), attr.Notice(""), attr.Component("magus"))
-
-	ctx, stopNow := context.WithCancel(ctx)
-	defer stopNow()
-	drain := make(chan struct{})
-	release := lifecycle{
-		hangup:         func() { reopenBrokerLog(ctx, f.Log) },
-		stop:           func() { close(drain) },
-		stopNow:        stopNow,
-		interruptIsNow: true,
-	}.watch(ctx)
-	defer release()
-
-	err = broker.Serve(ctx, ln,
-		broker.WithCapacity(memMB, slots),
-		broker.WithMemoryReserve(reserve),
-		broker.WithServices(serviceHost{reg}),
-		broker.WithIdleExit(f.IdleExit),
-		broker.WithLogger(slog.Default()),
-		broker.WithVersion(version),
-		broker.WithDrain(drain, globalCfg.ShutdownGrace),
-		broker.WithCrashDir(crashReportDir()),
-		broker.WithAdmissionLog(file.Log[types.MachineAdmission]{Path: admissionLogPath(), Keep: admissionsKeep}),
-	)
-	// The broker's own context may be done (a signal), and Shutdown's wait for a service
-	// still starting returns at once on a done context, so teardown gets a fresh bound.
-	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), service.DefaultShutdownTimeout)
-	defer cancel()
-	reg.Shutdown(stopCtx)
-	return err
-}
-
-// reopenBrokerLog answers SIGHUP. A broker logging to stderr under a supervisor has no
-// file to reopen, and says so rather than exiting.
-func reopenBrokerLog(ctx context.Context, path string) {
-	if path == "" {
-		slog.With(attr.Component("broker")).InfoContext(ctx, "SIGHUP reopens the --log file, and this broker logs to stderr")
-		return
-	}
-	if err := redirectStdio(path); err != nil {
-		slog.With(attr.Component("broker")).ErrorContext(ctx, "could not reopen its log; still writing to the old one", attr.Error(err))
-		return
-	}
-	slog.With(attr.Component("broker")).InfoContext(ctx, "reopened its log", slog.String("log", path))
+	return server.ServeBroker(ctx, server.BrokerRun{
+		IdleExit:      f.IdleExit,
+		Log:           f.Log,
+		Config:        globalCfg,
+		Version:       version,
+		RedirectStdio: redirectStdio,
+	})
 }
 
 func brokerStatus(ctx context.Context, args []string) error {
@@ -237,7 +93,7 @@ func brokerStatus(ctx context.Context, args []string) error {
 	if warn := broker.OtherBrokersWarning(broker.OtherBrokers(ctx, proc.SockDir())); warn != "" {
 		slog.WarnContext(ctx, warn, attr.Notice(""))
 	}
-	st, qerr := queryBroker(ctx)
+	st, qerr := server.QueryBroker(ctx)
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -285,7 +141,7 @@ func brokerStop(ctx context.Context, args []string) error {
 	}
 	c, err := broker.Dial(ctx, broker.DefaultAddr())
 	if err != nil {
-		pid, err := stopUnanswering(ctx, f.Services, err)
+		pid, err := server.StopUnanswering(ctx, f.Services, err, brokerDrainWait)
 		if err == nil && opts.Format != outputText {
 			return emitRecord(opts, brokerStopOutput{Stopped: true, PID: pid}, []string{strconv.Itoa(pid)})
 		}
@@ -323,136 +179,21 @@ func brokerStop(ctx context.Context, args []string) error {
 	return nil
 }
 
+// brokerDrainWait is how long a signalled broker gets per SIGTERM. A var so a
+// test can shorten it.
+var brokerDrainWait = stopTimeout
+
 type brokerStopOutput struct {
 	Stopped  bool `json:"stopped"`
 	PID      int  `json:"pid"`
 	Services int  `json:"services"`
 }
 
-// brokerDrainWait is how long a signalled broker gets per SIGTERM. A var so a
-// test can shorten it.
-var brokerDrainWait = stopTimeout
-
-// stopUnanswering stops whatever holds the broker socket when this build
-// cannot talk to it, as another build's broker refuses to. The kernel names
-// the holder.
-func stopUnanswering(ctx context.Context, services bool, dialErr error) (int, error) {
-	addr := broker.DefaultAddr()
-	sock := strings.TrimPrefix(addr, "unix://")
-	pid, err := broker.SocketPeer(ctx, addr)
-	if errors.Is(err, broker.ErrUnavailable) {
-		slog.ErrorContext(ctx, "no broker is running", attr.Notice(""), attr.Component("magus"))
-		return 0, exit.Reported(exit.Failure)
-	}
-	if err != nil {
-		return 0, unknownBrokerError(sock, err, dialErr)
-	}
-	if services {
-		return 0, fmt.Errorf("broker stop --services: broker (pid %d) does not answer this build, which cannot ask it to stop only its services, so `magus server broker stop` stops it whole: %w", pid, dialErr)
-	}
-	command := processCommand(ctx, pid)
-	if !slices.Contains(strings.Fields(command), "broker") {
-		return 0, fmt.Errorf("broker stop: pid %d (%s) holds %s and is no broker, so magus signalled nothing, and under systemd it is the socket unit, so run `systemctl --user stop magus-broker.socket magus-broker.service`: %w",
-			pid, cmp.Or(command, "command unreadable"), sock, dialErr)
-	}
-	return pid, signalBrokerStop(ctx, pid, dialErr)
-}
-
-// unknownBrokerError says what to run when the kernel will not name the holder.
-func unknownBrokerError(sock string, err, dialErr error) error {
-	return fmt.Errorf("broker stop: something holds %s and does not answer this build, and its pid is unreadable here, so run `lsof -U`, take the pid on the line naming that socket, then `kill -TERM <pid>`: %w",
-		sock, fmt.Errorf("%w: %w", err, dialErr))
-}
-
-// signalBrokerStop sends pid SIGTERM, which every build's broker handles: the
-// first drains it and a second stops it now. It returns once pid is gone.
-func signalBrokerStop(ctx context.Context, pid int, dialErr error) error {
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return fmt.Errorf("broker stop: find broker (pid %d): %w", pid, err)
-	}
-	slog.InfoContext(ctx, fmt.Sprintf("broker (pid %d) does not answer this build; sending it SIGTERM and waiting up to %s for it to drain",
-		pid, brokerDrainWait), attr.Error(dialErr), attr.Notice(""), attr.Component("magus"))
-	for range 2 {
-		if err := p.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			return fmt.Errorf("broker stop: signal broker (pid %d): %w", pid, err)
-		}
-		if waitProcessGone(ctx, pid, brokerDrainWait) {
-			slog.InfoContext(ctx, fmt.Sprintf("stopped broker (pid %d)", pid), attr.Notice(""), attr.Component("magus"))
-			return nil
-		}
-	}
-	return fmt.Errorf("broker stop: broker (pid %d) outlived two SIGTERMs, %s apart, so run `kill -KILL %d`", pid, brokerDrainWait, pid)
-}
-
-func waitProcessGone(ctx context.Context, procID int, bound time.Duration) bool {
-	deadline := time.Now().Add(bound)
-	for pid.Alive(procID) {
-		if time.Now().After(deadline) || ctx.Err() != nil {
-			return false
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	return true
-}
-
-// processCommand is pid's command line, "" when it cannot be read.
-func processCommand(ctx context.Context, pid int) string {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "ps", "-o", "command=", "-p", strconv.Itoa(pid)).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
-
-// queryBroker reads the broker's status, bounded so a wedged broker cannot hang a
-// status command.
-func queryBroker(ctx context.Context) (daemon.Broker, error) {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	return broker.QueryStatus(ctx, broker.DefaultAddr())
-}
-
-// idleText is an idle window as a person reads it.
-func idleText(d time.Duration) string {
-	if d%time.Minute == 0 {
-		return fmt.Sprintf("%d minutes", int(d/time.Minute))
-	}
-	return d.String()
-}
-
-// brokerLogPath is where a broker a run started writes: the XDG state directory, which
-// survives logout, where the runtime directory holding its socket does not.
-func brokerLogPath() string { return stateLogPath("broker.log") }
-
-// admissionLogPath is the store of the admissions the broker recorded, one
-// types.MachineAdmission per line.
-func admissionLogPath() string { return stateLogPath("admissions.jsonl") }
-
-// admissionsKeep is the admissions a compaction of the store leaves.
-const admissionsKeep = 5000
-
-// serverLogPath is brokerLogPath's counterpart for a server `server start` detached.
-func serverLogPath() string { return stateLogPath("server.log") }
-
-// crashReportDir is where the broker saves the crash report of a process it watched.
-func crashReportDir() string { return stateLogPath("crashes") }
-
-func stateLogPath(name string) string {
-	dir, err := xdg.StateDir()
-	if err != nil {
-		dir = os.TempDir()
-	}
-	return filepath.Join(dir, "magus", name)
-}
-
 // spawnBroker is the seam a test replaces to observe that a broker WOULD be started
 // without one being started.
 var spawnBroker = func() (pid int, logPath string, err error) {
-	logPath = brokerLogPath()
-	pid, err = spawnDetached([]string{"server", "broker", "--" + flaggen.FlagServerBrokerLog, logPath}, logPath)
+	logPath = server.BrokerLogPath()
+	pid, err = proc.SpawnDetached([]string{"server", "broker", "--" + flaggen.FlagServerBrokerLog, logPath}, logPath)
 	return pid, logPath, err
 }
 
@@ -486,7 +227,7 @@ func ensureBroker(ctx context.Context) int {
 
 func startedBrokerMessage(pid int) string {
 	return fmt.Sprintf("started a broker (pid %d) to hold this host's capacity; it opens no network listener and exits after %s holding nothing (`%s` lists it)",
-		pid, idleText(broker.DefaultIdleExit), hint.BrokerStatus)
+		pid, server.IdleText(broker.DefaultIdleExit), hint.BrokerStatus)
 }
 
 // noticeBroker tells the person that their run left a process behind, and that it listens
@@ -501,7 +242,7 @@ func noticeBroker(ctx context.Context, pid int) {
 	if global.output == string(outputJSONL) {
 		attrs = append(attrs,
 			slog.Int("pid", pid),
-			slog.String("log", brokerLogPath()),
+			slog.String("log", server.BrokerLogPath()),
 			slog.Int("idle_exit_s", int(broker.DefaultIdleExit/time.Second)))
 	}
 	slog.LogAttrs(ctx, slog.LevelInfo, startedBrokerMessage(pid), attrs...)
@@ -624,7 +365,7 @@ func brokerUnits(ctx context.Context, args []string) error {
 	default:
 		return exit.Usagef("magus server broker units: takes at most one supervisor (got %q)", rest)
 	}
-	facts, err := gatherUnitFacts()
+	facts, err := server.GatherUnitFacts(globalCfg.ShutdownGrace)
 	if err != nil {
 		return fmt.Errorf("magus server broker units: %w", err)
 	}
@@ -661,34 +402,8 @@ func brokerUnits(ctx context.Context, args []string) error {
 	return nil
 }
 
-func gatherUnitFacts() (broker.UnitFacts, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return broker.UnitFacts{}, err
-	}
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = resolved
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return broker.UnitFacts{}, err
-	}
-	configDir, err := xdg.ConfigDir()
-	if err != nil {
-		return broker.UnitFacts{}, err
-	}
-	f := broker.UnitFacts{
-		Exe:       exe,
-		Socket:    strings.TrimPrefix(broker.DefaultAddr(), "unix://"),
-		Log:       brokerLogPath(),
-		Grace:     globalCfg.ShutdownGrace,
-		Home:      home,
-		ConfigDir: configDir,
-	}
-	for _, k := range []string{"XDG_RUNTIME_DIR", "TMPDIR"} {
-		if v, ok := os.LookupEnv(k); ok {
-			f.Env = append(f.Env, [2]string{k, v})
-		}
-	}
-	return f, nil
-}
+// doctor.go and status.go, which this move does not hold, still name these.
+var (
+	admissionLogPath = server.AdmissionLogPath
+	queryBroker      = server.QueryBroker
+)

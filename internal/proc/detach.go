@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/proc/spawn"
 )
 
-// DetachedChildEnv returns this process's environment with the variables a detached broker
+// detachedChildEnv returns this process's environment with the variables a detached broker
 // or server must not inherit removed.
 //
 // MAGUS_PROC_SOCKET: a child inheriting it believes it is already adopted, binds no
@@ -26,7 +27,7 @@ import (
 // read those refs as its own. Claims belonging to an invocation that ended hours ago
 // would be excused from the budget, and a run with no ancestry of its own would be judged
 // a nested magus that had lost it.
-func DetachedChildEnv() []string {
+func detachedChildEnv() []string {
 	drop := []string{SocketEnv + "=", TokenEnv + "=", spawn.AncestorsEnvVar + "=", "MAGUS_LEVEL=", spawn.TreeMarkEnv + "="}
 	env := os.Environ()
 	out := make([]string, 0, len(env))
@@ -73,7 +74,7 @@ func SpawnDetached(args []string, logPath string) (pid int, err error) {
 	defer func() { _ = logf.Close() }()
 
 	cmd := DetachedCommand(exe, args)
-	cmd.Env = DetachedChildEnv()
+	cmd.Env = detachedChildEnv()
 	cmd.Stdin = nil
 	cmd.Stdout = logf
 	cmd.Stderr = logf
@@ -100,4 +101,23 @@ func NewDetachedLog(dir string, now time.Time) (string, error) {
 		return "", fmt.Errorf("create %s: %w", f.Name(), err)
 	}
 	return filepath.Clean(f.Name()), nil
+}
+
+// WithoutDetachFlag drops --detach from an argv, in every spelling the flag package
+// accepts: -detach, --detach, and either with an inline =value. The detached child runs
+// the rest, and a --detach left in would have it detach again, forever.
+func WithoutDetachFlag(args []string) []string {
+	out := make([]string, 0, len(args))
+	for i, a := range args {
+		if a == "--" {
+			// Past the separator the tokens belong to the forwarded tool.
+			out = append(out, args[i:]...)
+			break
+		}
+		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); strings.HasPrefix(a, "-") && key == flaggen.FlagRunDetach {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }

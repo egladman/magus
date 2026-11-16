@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
@@ -403,14 +404,18 @@ func TestPrintIdentifyRefSuggestion_SkipsOnIdentifyRefError(t *testing.T) {
 	assert.Empty(t, out, "an IdentifyRef error must skip the suggestion entirely, including the trailing --publish hint")
 }
 
+// readCacheBytes is the knowledge read cache the server keeps, as the tests that compare a
+// cached answer with an uncached one size it.
+const readCacheBytes = 512 << 20
+
 // graphReadFixture is a workspace holding a magusfile, a doc and a Go source, the
 // configuration a CLI run in it reads under, a locally opened handle on it, and an
-// in-process server answering reads through the graphReads handler `magus server` mounts.
+// server answering reads through the handler `magus server` mounts.
 type graphReadFixture struct {
 	root  string
 	cfg   config.Config
 	local *magus.Magus
-	reg   *wsRegistry
+	host  *server.Host
 	addr  string
 }
 
@@ -447,17 +452,29 @@ func openGraphReadFixture(tb testing.TB, root string) graphReadFixture {
 	require.NoError(tb, err)
 	tb.Cleanup(func() { _ = local.Close() })
 
-	reg := newWSRegistry(ctx, cache.NewLimiter(2), nil, time.Hour, nil)
-	tb.Cleanup(reg.close)
-	srv, err := proc.New(tb.Context(), proc.Options{
-		Handler: func(context.Context, []string) error { return nil },
-		Read:    graphReads(reg),
-		Version: version,
+	tb.Setenv("MAGUS_BROKER", "off")
+	tb.Setenv(proc.SocketEnv, "")
+	tb.Setenv(proc.TokenEnv, "")
+	host := server.NewHost(server.HostDeps{
+		Config:       cfg,
+		Version:      version,
+		Build:        selfBuild,
+		StatusBase:   buildStatusBase,
+		Load:         loadMagus,
+		Place:        jobPlace,
+		BrokerClient: newBrokerClient,
+		ServeRead:    serveGraphRead,
+		Registry:     server.RegistryDeps{Open: openWorkspace, LeaseOf: boundLease, LeasedBroker: leasedBrokerClient},
 	})
-	require.NoError(tb, err)
-	tb.Cleanup(srv.Close)
-	require.NoError(tb, srv.Start(tb.Context()))
-	return graphReadFixture{root: root, cfg: cfg, local: local, reg: reg, addr: srv.Addr()}
+	host.Start(tb.Context())
+	tb.Cleanup(func() {
+		host.Stop()
+		<-host.Stopped()
+		knowledge.SetReadCacheLimit(0)
+	})
+	addr := os.Getenv(proc.SocketEnv)
+	require.NotEmpty(tb, addr, "the server did not bind its socket")
+	return graphReadFixture{root: root, cfg: cfg, local: local, host: host, addr: addr}
 }
 
 // answers returns the local answer to read and the server's, each as the JSON the CLI's
@@ -653,7 +670,7 @@ func TestServerGraphReadsAnswerFromTheReadCacheAsWithout(t *testing.T) {
 	for i, tc := range graphReadCases {
 		want[i] = f.localAnswer(t, tc.verb, tc.read)
 	}
-	knowledge.SetReadCacheLimit(serverReadCacheBytes)
+	knowledge.SetReadCacheLimit(readCacheBytes)
 	t.Cleanup(func() { knowledge.SetReadCacheLimit(0) })
 	for range 2 {
 		for i, tc := range graphReadCases {
@@ -694,14 +711,14 @@ func TestServerGraphReadsAnswerAsTheLocalReadDoes(t *testing.T) {
 func TestServerGraphReadsSeeAnEditTheWatcherIgnores(t *testing.T) {
 	f := newGraphReadFixture(t)
 	ctx := context.Background()
-	e, err := f.reg.acquire(f.root)
+	held, release, err := f.host.Hold(f.root)
 	require.NoError(t, err)
-	stopWatch, err := e.m.WatchKnowledgeGraph(ctx)
+	stopWatch, err := held.WatchKnowledgeGraph(ctx)
 	require.NoError(t, err)
 	t.Cleanup(stopWatch)
-	_, err = viewInternals(e.m).KnowledgeGraph(ctx, types.GraphRequest{})
+	_, err = viewInternals(held).KnowledgeGraph(ctx, types.GraphRequest{})
 	require.NoError(t, err, "warm the watched graph before the edit")
-	f.reg.release(e)
+	release()
 
 	read := graphRead{Input: "kind=dir", Budget: knowledge.DefaultBudget, Nearest: true}
 	_, before := f.answers(t, readQuery, read)
@@ -790,7 +807,7 @@ func BenchmarkServerGraphReads(b *testing.B) {
 	for _, mode := range []struct {
 		name  string
 		limit int64
-	}{{"kept", serverReadCacheBytes}, {"not kept", 0}} {
+	}{{"kept", readCacheBytes}, {"not kept", 0}} {
 		b.Run(mode.name, func(b *testing.B) {
 			knowledge.SetReadCacheLimit(mode.limit)
 			b.Cleanup(func() { knowledge.SetReadCacheLimit(0) })

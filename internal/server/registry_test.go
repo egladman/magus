@@ -1,11 +1,10 @@
-package main
+package server
 
 import (
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -13,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/types/daemon"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
@@ -22,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -36,7 +38,7 @@ func newTestRegistry() *wsRegistry {
 		entries: make(map[string]*wsEntry),
 		ttl:     defaultIdleTTL,
 		now:     time.Now,
-		open:    openWorkspace,
+		open:    testOpen,
 		leaseOf: func(string) string { return "" },
 		changed: make(chan struct{}),
 		stopCh:  make(chan struct{}),
@@ -335,19 +337,18 @@ func TestEvictAllOnEmptyRegistry(t *testing.T) {
 // naming the log the run produced.
 func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	dir := t.TempDir()
-	serverJobStore = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: dir, Root: dir})
-	t.Cleanup(func() { serverJobStore = nil })
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: dir, Root: dir})
 
 	ctx := trail.ContextWithEntryPoint(t.Context(), types.EntryPointServer)
-	_, err := serverJobStore.Update(ctx, "sync-graph", func(row *types.Job) {
+	_, err := store.Update(ctx, "sync-graph", func(row *types.Job) {
 		row.State = types.StateRunning
 		row.LastRun = &types.JobRun{Invocation: "inv-1"}
 	})
 	require.NoError(t, err)
 
-	completeJobRow(t.Context(), []string{"graph", "build"}, 250*time.Millisecond, nil)
+	completeJobRow(t.Context(), store, []string{"graph", "build"}, 250*time.Millisecond, nil)
 
-	rows, err := serverJobStore.List()
+	rows, err := store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	got := rows[0]
@@ -360,9 +361,9 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	assert.True(t, got.LastRun.OK)
 	assert.Positive(t, got.LastRun.Ended)
 
-	completeJobRow(t.Context(), []string{"graph", "build"}, time.Second, errors.New("graph build failed"))
+	completeJobRow(t.Context(), store, []string{"graph", "build"}, time.Second, errors.New("graph build failed"))
 
-	rows, err = serverJobStore.List()
+	rows, err = store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, types.StateFail, rows[0].State)
@@ -376,12 +377,11 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 // has no row of its own to complete.
 func TestCompleteJobRowIgnoresAnAdoptedRun(t *testing.T) {
 	dir := t.TempDir()
-	serverJobStore = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: dir, Root: dir})
-	t.Cleanup(func() { serverJobStore = nil })
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: dir, Root: dir})
 
-	completeJobRow(t.Context(), []string{"run", "test", "."}, time.Second, nil)
+	completeJobRow(t.Context(), store, []string{"run", "test", "."}, time.Second, nil)
 
-	rows, err := serverJobStore.List()
+	rows, err := store.List()
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }
@@ -519,7 +519,7 @@ func TestResolveDeclaredWorkspacesMergesAndDedupes(t *testing.T) {
 	// Non-existent path should be dropped silently.
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 
-	got := resolveDeclaredWorkspaces(
+	got := ResolveDeclaredWorkspaces(
 		[]string{a, b}, // cfg
 		fmt.Sprintf("%s%s%s%s%s", b, string(filepath.ListSeparator), c, string(filepath.ListSeparator), missing), // env (b is duplicate)
 	)
@@ -530,7 +530,7 @@ func TestResolveDeclaredWorkspacesMergesAndDedupes(t *testing.T) {
 	}
 }
 func TestResolveDeclaredWorkspacesEmpty(t *testing.T) {
-	assert.Nil(t, resolveDeclaredWorkspaces(nil, ""), "expected nil for empty inputs")
+	assert.Nil(t, ResolveDeclaredWorkspaces(nil, ""), "expected nil for empty inputs")
 }
 
 // TestAcquireRejectsNonDeclared confirms that once setDeclared has been
@@ -543,7 +543,7 @@ func TestAcquireRejectsNonDeclared(t *testing.T) {
 	defer cancel()
 
 	lim := cache.NewLimiter(1)
-	reg := newWSRegistry(ctx, lim, nil, 0, nil)
+	reg := newTestRegistryAt(ctx, lim, nil, 0, nil)
 	defer reg.close()
 
 	reg.setDeclared([]string{allowed})
@@ -565,7 +565,7 @@ func TestAcquireAdmitsDeclaredEvenWithoutMagusYaml(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	lim := cache.NewLimiter(1)
-	reg := newWSRegistry(ctx, lim, nil, 0, nil)
+	reg := newTestRegistryAt(ctx, lim, nil, 0, nil)
 	defer reg.close()
 	reg.setDeclared([]string{allowed})
 
@@ -583,7 +583,7 @@ func TestWarmRespectsContextCancellation(t *testing.T) {
 	cancel() // cancel before warm is called
 
 	lim := cache.NewLimiter(2)
-	reg := newWSRegistry(context.Background(), lim, nil, 0, nil)
+	reg := newTestRegistryAt(context.Background(), lim, nil, 0, nil)
 	defer reg.close()
 
 	// Supply several roots; warm should bail after the first ctx.Err() check.
@@ -612,7 +612,7 @@ func TestWarmCompletesAndPopulatesStatus(t *testing.T) {
 	defer cancel()
 
 	lim := cache.NewLimiter(2)
-	reg := newWSRegistry(ctx, lim, nil, 0, nil)
+	reg := newTestRegistryAt(ctx, lim, nil, 0, nil)
 	defer reg.close()
 	reg.setDeclared([]string{root1, root2})
 
@@ -640,7 +640,7 @@ func TestWarmInBackgroundTrackedByClose(t *testing.T) {
 	defer cancel()
 
 	lim := cache.NewLimiter(2)
-	reg := newWSRegistry(ctx, lim, nil, 0, nil)
+	reg := newTestRegistryAt(ctx, lim, nil, 0, nil)
 	reg.setDeclared([]string{root})
 	reg.warmInBackground(ctx, []string{root})
 
@@ -656,4 +656,19 @@ func TestWarmInBackgroundTrackedByClose(t *testing.T) {
 	case <-time.After(30 * time.Second):
 		t.Fatal("close did not return; warm goroutine not tracked by the waitgroup?")
 	}
+}
+
+// testOpen opens root as a library caller would.
+func testOpen(root string, lim *cache.Limiter, _ *broker.Client, _ observability.Provider) (*magus.Magus, error) {
+	cfg, err := LoadWorkspaceConfig(root)
+	if err != nil {
+		return nil, fmt.Errorf("load config %s: %w", root, err)
+	}
+	return magus.Open(context.Background(), root, workspace.WithLoadedConfig(cfg), workspace.WithLimiter(lim), magus.WithSpawnRule(magus.TierCeiling))
+}
+
+// newTestRegistryAt is newRegistry opening workspaces as a library caller would, with the
+// janitor running.
+func newTestRegistryAt(ctx context.Context, lim *cache.Limiter, b *broker.Client, ttl time.Duration, tel observability.Provider) *wsRegistry {
+	return newRegistry(ctx, lim, b, ttl, tel, RegistryDeps{Open: testOpen, LeaseOf: func(string) string { return "" }})
 }

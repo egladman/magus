@@ -1,10 +1,9 @@
-package main
+package server
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/egladman/magus/types/daemon"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
@@ -21,13 +22,11 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -61,41 +60,6 @@ func newEntry(root string, now time.Time) *wsEntry {
 	return e
 }
 
-// openWorkspace opens root the way every registry workspace is opened.
-func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
-	cfg, err := loadWorkspaceConfig(root)
-	if err != nil {
-		return nil, fmt.Errorf("load config %s: %w", root, err)
-	}
-	// Warm server workspaces record OTel metrics so the /dashboard can read live
-	// cache/pool/target numbers as OTLP. Every workspace shares the server's single
-	// provider (workspace.WithTelemetryProvider), so counts survive eviction and the bridge Magus reads
-	// them; only if none was supplied do we build a per-workspace collector.
-	metricsOpt := magus.WithMetricsCollection()
-	if tel != nil {
-		metricsOpt = workspace.WithTelemetryProvider(tel)
-	}
-	opts := append(cliOptions(),
-		workspace.WithLoadedConfig(cfg),
-		// The version lets a load failure that looks like a stale server say so.
-		magus.WithVersion(version),
-		workspace.WithLimiter(lim),
-		metricsOpt,
-	)
-	// b carries root's lease (wsRegistry.leaseBroker). A workspace whose broker setting is
-	// off gets none, since Open refuses a client it would not use; a registry built
-	// without one (every test that does) leaves Open to its own.
-	if b != nil && cfg.Broker.Resolved() != types.BrokerOff {
-		opts = append(opts, magus.WithBroker(b))
-	}
-	// context.Background(): workspace goroutines must outlive individual RPC contexts.
-	m, err := magus.Open(context.Background(), root, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("open workspace %s: %w", root, err)
-	}
-	return m, nil
-}
-
 // load opens e once and publishes the outcome. A failure starts the watcher that retries it.
 func (r *wsRegistry) load(e *wsEntry) {
 	e.once.Do(func() {
@@ -120,7 +84,9 @@ func (r *wsRegistry) load(e *wsEntry) {
 	})
 }
 
-func loadWorkspaceConfig(root string) (config.Config, error) {
+// LoadWorkspaceConfig is the configuration root's magus.yaml and the environment give a
+// workspace opened under it.
+func LoadWorkspaceConfig(root string) (config.Config, error) {
 	path := filepath.Join(root, "magus.yaml")
 	cfg, err := config.LoadFile(path, false)
 	if err != nil {
@@ -158,6 +124,7 @@ type wsRegistry struct {
 	awaitChange  func(e *wsEntry) bool
 	leaseOf      func(root string) string
 	leasedBroker func(lease string) *broker.Client
+	run          Dispatch
 	// changed is closed and replaced whenever an entry's state moves; guarded by mu.
 	changed    chan struct{}
 	serverDone <-chan struct{}
@@ -165,7 +132,26 @@ type wsRegistry struct {
 	wg         sync.WaitGroup
 }
 
-func newWSRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, ttl time.Duration, tel observability.Provider) *wsRegistry {
+// RegistryDeps is what the server's workspace registry takes from the process that hosts it: how a workspace
+// is opened, which lease a checkout binds and the broker client that names it, and how an
+// adopted run or a background job executes once its workspace is held.
+type RegistryDeps struct {
+	Open         func(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error)
+	LeaseOf      func(root string) string
+	LeasedBroker func(lease string) *broker.Client
+	Dispatch     Dispatch
+}
+
+// Dispatch runs the work a wsRegistry forwards. WithMagus injects the held workspace into
+// the context both entry points run under.
+type Dispatch struct {
+	WithMagus func(ctx context.Context, m *magus.Magus) context.Context
+	Adopted   func(ctx context.Context, root string, args []string) error
+	Job       func(ctx context.Context, root string, args []string) error
+}
+
+// newRegistry builds a wsRegistry that evicts a workspace idle for ttl, and starts its janitor.
+func newRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, ttl time.Duration, tel observability.Provider, deps RegistryDeps) *wsRegistry {
 	if ttl <= 0 {
 		ttl = defaultIdleTTL
 	}
@@ -176,9 +162,10 @@ func newWSRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, tt
 		tel:          tel,
 		ttl:          ttl,
 		now:          time.Now,
-		open:         openWorkspace,
-		leaseOf:      boundLease,
-		leasedBroker: leasedBrokerClient,
+		open:         deps.Open,
+		leaseOf:      deps.LeaseOf,
+		leasedBroker: deps.LeasedBroker,
+		run:          deps.Dispatch,
 		changed:      make(chan struct{}),
 		serverDone:   ctx.Done(),
 		stopCh:       make(chan struct{}),
@@ -189,8 +176,8 @@ func newWSRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, tt
 	return r
 }
 
-// resolveDeclaredWorkspaces merges cfg.Server.Workspaces and MAGUS_SERVER_WORKSPACES into absolute paths.
-func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
+// ResolveDeclaredWorkspaces merges cfg.Server.Workspaces and MAGUS_SERVER_WORKSPACES into absolute paths.
+func ResolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 	var raw []string
 	raw = append(raw, cfgList...)
 	for _, p := range filepath.SplitList(envVal) {
@@ -274,6 +261,15 @@ func (r *wsRegistry) acquire(root string) (*wsEntry, error) {
 	e.lastAccess.Store(r.now().UnixNano())
 	e.inflight++
 	return e, nil
+}
+
+// hold loads the workspace for root and holds it against eviction until release is called.
+func (r *wsRegistry) hold(root string) (m *magus.Magus, release func(), err error) {
+	e, err := r.acquire(root)
+	if err != nil {
+		return nil, nil, err
+	}
+	return e.m, func() { r.release(e) }, nil
 }
 
 // bump wakes everyone waiting on a state change. Callers hold mu.
@@ -467,7 +463,7 @@ func (r *wsRegistry) warm(ctx context.Context, roots []string) {
 // adopted run (run/affected) goes to dispatchAdopted; a background job (proc.SubmitJob, marked
 // on ctx) goes to dispatchJob, which admits the wider maintenance command set. Both reuse the
 // warm workspace via withMagus.
-func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, args []string) error {
+func (r *wsRegistry) dispatch(ctx context.Context, root string, args []string) error {
 	if !proc.IsJob(ctx) {
 		r.rebind(root, r.leaseOf(root))
 	}
@@ -476,13 +472,13 @@ func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, ar
 		return err
 	}
 	defer r.release(e) // hold the lease for the whole build
-	ctx = interactive.WithHints(withMagus(ctx, e.m))
+	ctx = interactive.WithHints(r.run.WithMagus(ctx, e.m))
 	if proc.IsJob(ctx) {
-		return dispatchJob(trail.ContextWithEntryPoint(ctx, types.EntryPointServer), root, rc, args)
+		return r.run.Job(trail.ContextWithEntryPoint(ctx, types.EntryPointServer), root, args)
 	}
 	noticeRunLease(ctx, e.lease, types.JobLeaseFromContext(ctx))
 	// An adopted run is a CLI invocation the server executes on the client's behalf.
-	return dispatchAdopted(trail.ContextWithEntryPoint(ctx, types.EntryPointCLI), root, rc, args)
+	return r.run.Adopted(trail.ContextWithEntryPoint(ctx, types.EntryPointCLI), root, args)
 }
 
 // rebind drops root's idle workspace when the lease its checkout binds moved since it
@@ -510,24 +506,6 @@ func (r *wsRegistry) leaseBroker(lease string) (b *broker.Client, owned bool) {
 	return r.leasedBroker(lease), true
 }
 
-// boundLease is the lease root's checkout record binds, "" for none. Unlike checkoutLease,
-// no claim counts: one workspace serves every run against root, whatever it names.
-func boundLease(root string) string {
-	loc, err := jobPlace(root)
-	if err != nil {
-		slog.With(attr.Component("server")).Warn("the daemon charges this workspace's runs to no lease: its job store cannot be placed",
-			slog.String("root", root), attr.Error(err))
-		return ""
-	}
-	lease, _ := job.ActingLease(loc, "")
-	return lease
-}
-
-// leasedBrokerClient is a broker client of the daemon's own for one lease's runs.
-func leasedBrokerClient(lease string) *broker.Client {
-	return newBrokerClient(false, broker.WithLease(lease))
-}
-
 // noticeRunLease says when the daemon charges an adopted run to no lease: its checkout
 // binds none, so no job's weight, validation cap or ci priority applies. claim is the
 // lease the client was launched under, which a CLI run would have been charged to.
@@ -541,84 +519,6 @@ func noticeRunLease(ctx context.Context, charged, claim string) {
 		return
 	}
 	slog.InfoContext(ctx, "this run is unleased: its checkout binds no lease, so the broker counts it against no job", attr.Notice("broker"))
-}
-
-// recordJobActivity appends a KIND_JOB event to the server-wide activity trail after a background
-// job (reindex, graph build, VCS refresh) completes. It is the proc OnJobDone callback. The event
-// carries the job's workspace root (resolved from the context the same way the run handler does,
-// since the context holds the caller's cwd, not necessarily the root) so the single trail stays
-// disambiguated. Best-effort: an unresolvable root or an unset trail base (bridge not up) drops
-// the record. Ts is the job's start, completion minus its measured duration.
-func recordJobActivity(ctx context.Context, args []string, dur time.Duration, err error) {
-	base := serverTrailBase
-	if base == "" {
-		return
-	}
-	root := proc.RootFromContext(ctx)
-	if root == "" {
-		resolved, ferr := workspace.FindRoot(proc.CurrentWorkingDirectoryFromContext(ctx))
-		if ferr != nil {
-			return
-		}
-		root = resolved
-	}
-	ev := trail.Event{
-		Ts:         time.Now().Add(-dur).UnixMilli(),
-		Kind:       trail.KindJob,
-		Origin:     types.Origin{EntryPoint: types.EntryPointServer},
-		Workspace:  root,
-		Action:     job.ActionString(args),
-		Outcome:    trail.OutcomeOK,
-		DurationMs: dur.Milliseconds(),
-	}
-	if err != nil {
-		ev.Outcome = trail.OutcomeError
-		ev.Error = err.Error()
-	}
-	trail.Append(ctx, base, ev)
-	completeJobRow(ctx, args, dur, err)
-}
-
-// serverJobStore is the server's ONE job store, published beside serverTrailBase and for
-// the same reason: this callback needs it, and a second Store over one file would hold its
-// own mutex and serialize against nothing.
-var serverJobStore *job.Store
-
-// completeJobRow finishes a catalog job's row: where it now stands, what the run cost, and
-// whether it worked. The invocation id is not here to record (this callback is handed argv,
-// duration and error only), so it merges into the row the submit left.
-//
-// Best-effort, like the trail append above it. The store refuses a write from a checkout
-// bound to a lease, and background maintenance must not fail because a worker holds this one.
-func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobErr error) {
-	if serverJobStore == nil {
-		return
-	}
-	i := slices.IndexFunc(job.All(), func(j job.CatalogEntry) bool { return slices.Equal(j.Argv, args) })
-	if i < 0 {
-		return // an adopted run rather than one of the server's own, so there is no row
-	}
-	catalog := job.All()[i]
-	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
-	if _, err := serverJobStore.Update(ctx, catalog.Name, func(row *types.Job) {
-		row.State = types.StatePass
-		if jobErr != nil {
-			row.State = types.StateFail
-		}
-		if row.LastRun == nil {
-			row.LastRun = &types.JobRun{}
-		}
-		row.LastRun.Ended = time.Now().UnixMilli()
-		row.LastRun.DurationMs = dur.Milliseconds()
-		row.LastRun.OK = jobErr == nil
-		row.LastRun.Error = ""
-		if jobErr != nil {
-			row.LastRun.Error = jobErr.Error()
-		}
-	}); err != nil {
-		slog.DebugContext(ctx, "completing the job's row failed",
-			slog.String("job", catalog.Name), attr.Error(err))
-	}
 }
 
 // adoptBridge registers an already-open Magus (the server's bridge workspace, loaded by
