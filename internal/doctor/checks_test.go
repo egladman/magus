@@ -1349,6 +1349,7 @@ func TestCheckStaleSockets(t *testing.T) {
 		t.Cleanup(func() { _ = os.RemoveAll(dir) })
 		addr := "unix://" + filepath.Join(dir, "magus-424242-deadbeef.sock")
 		srv, err := proc.New(t.Context(), proc.Options{
+			Limiter: cache.NewLimiter(4),
 			Address: addr,
 			Version: "stale-build",
 			Handler: func(context.Context, []string) error { return nil },

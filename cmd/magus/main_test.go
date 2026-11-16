@@ -1209,6 +1209,7 @@ func TestPoolDeclinesAnotherWorkspace(t *testing.T) {
 		return slices.Clone(ran)
 	}
 	srv, err := proc.New(t.Context(), proc.Options{
+		Limiter: cache.NewLimiter(4),
 		Handler: poolHandler(pool, func(_ context.Context, args []string) error {
 			mu.Lock()
 			defer mu.Unlock()

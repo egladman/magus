@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 )
 
 func TestIsPoolSocketName(t *testing.T) {
@@ -37,6 +39,7 @@ func TestStalePoolsIn(t *testing.T) {
 
 	addr := "unix://" + filepath.Join(dir, "magus-424242-deadbeef.sock")
 	srv, err := New(t.Context(), Options{
+		Limiter: budget.NewLimiter(4),
 		Address: addr,
 		Version: "stale-build",
 		Handler: func(context.Context, []string) error { return nil },

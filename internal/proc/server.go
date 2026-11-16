@@ -20,7 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
@@ -109,8 +108,7 @@ func IsJob(ctx context.Context) bool {
 // Options configures the proc server created by New.
 type Options struct {
 	Handler         func(ctx context.Context, args []string) error // required; ctx carries Root/Cwd
-	Limiter         *budget.Limiter                                // shared budget; nil → private limiter
-	Concurrency     int                                            // ignored when Limiter is set; 0 → default
+	Limiter         *budget.Limiter                                // required; the slots every run and job here draws from
 	Version         string                                         // "" disables version-mismatch check
 	Address         string                                         // "" → auto-generate in SockDir()
 	WorkspaceLister func() []Workspace                             // optional; used by the server's Status RPC
@@ -233,6 +231,9 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 	if sock := os.Getenv(SocketEnv); sock != "" {
 		return nil, fmt.Errorf("%w: %s=%s", ErrAlreadyAdopted, SocketEnv, sock)
 	}
+	if opts.Limiter == nil {
+		return nil, errors.New("proc: Options.Limiter is nil: pass the limiter whose slots this server's runs share")
+	}
 
 	var ep endpoint.Endpoint
 	if opts.Address != "" {
@@ -256,13 +257,6 @@ func New(ctx context.Context, opts Options) (*Server, error) {
 	}
 
 	lim := opts.Limiter
-	if lim == nil {
-		par := opts.Concurrency
-		if par <= 0 {
-			par = cache.DefaultConcurrency()
-		}
-		lim = cache.NewLimiter(par)
-	}
 
 	serverCtx, cancel := context.WithCancel(ctx)
 

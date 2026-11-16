@@ -101,7 +101,7 @@ func TestEvaluateHealth(t *testing.T) {
 // a reply that carries the server's own report is the server, so a per-process pool
 // answering the probed socket reads as no server rather than as one with nothing loaded.
 func TestServerSnapshotRefusesAPerProcessPool(t *testing.T) {
-	srv, err := proc.New(t.Context(), proc.Options{Handler: func(context.Context, []string) error { return nil }})
+	srv, err := proc.New(t.Context(), proc.Options{Limiter: cache.NewLimiter(4), Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
 	defer srv.Close()
 	require.NoError(t, srv.Start(t.Context()))
@@ -110,6 +110,7 @@ func TestServerSnapshotRefusesAPerProcessPool(t *testing.T) {
 	require.ErrorIs(t, err, errNotServer)
 
 	server, err := proc.New(t.Context(), proc.Options{
+		Limiter: cache.NewLimiter(4),
 		Handler: func(context.Context, []string) error { return nil },
 		Server:  func() *daemon.Server { return &daemon.Server{PID: 1} },
 	})
@@ -127,12 +128,13 @@ func TestServerSnapshotRefusesAPerProcessPool(t *testing.T) {
 // reached the pool and reported the server down while it was up. The probe asks
 // server.address, whatever the environment says.
 func TestServerSnapshotAsksTheServerNotTheRunsPool(t *testing.T) {
-	pool, err := proc.New(t.Context(), proc.Options{Handler: func(context.Context, []string) error { return nil }})
+	pool, err := proc.New(t.Context(), proc.Options{Limiter: cache.NewLimiter(4), Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
 	defer pool.Close()
 	require.NoError(t, pool.Start(t.Context()))
 
 	server, err := proc.New(t.Context(), proc.Options{
+		Limiter: cache.NewLimiter(4),
 		Handler: func(context.Context, []string) error { return nil },
 		Server:  func() *daemon.Server { return &daemon.Server{PID: 7} },
 	})

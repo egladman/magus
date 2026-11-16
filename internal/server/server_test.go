@@ -24,6 +24,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
@@ -1258,6 +1259,7 @@ func serverSocket(t *testing.T) (*proc.Server, string, *http.Client) {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	path := filepath.Join(dir, "server.sock")
 	srv, err := proc.New(t.Context(), proc.Options{
+		Limiter: cache.NewLimiter(4),
 		Handler: func(context.Context, []string) error { return nil },
 		Address: "unix://" + path,
 	})
