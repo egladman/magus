@@ -1,8 +1,10 @@
 package guard
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -94,6 +96,21 @@ func UnjudgedEvent(root, event string, cause error) (answer Unjudged, reason str
 		return unjudgedStop, fmt.Sprintf("magus guard could not judge this stop, so it ends unjudged: %v\n%s", cause, repair)
 	}
 	return unjudgedRefused, fmt.Sprintf("magus guard could not judge this call, so it is refused: %v\n%s", cause, repair)
+}
+
+// repairLinesEnv carries root's repair lines, one per line, to the Buzz hook glue a started
+// magus runs, which imports no magus module and so cannot ask. It sits outside MAGUS_*,
+// magus's own settings.
+const repairLinesEnv = "__MAGUS_REPAIR_LINES"
+
+// repairRootEnv names the workspace root the lines in [repairLinesEnv] belong to, so a glue
+// judging a call from another checkout knows they are not its repair.
+const repairRootEnv = "__MAGUS_REPAIR_ROOT"
+
+// ExportRepairLines hands root's repair lines and root itself to the glue this process
+// runs, through __MAGUS_REPAIR_LINES and __MAGUS_REPAIR_ROOT.
+func ExportRepairLines(root string) error {
+	return errors.Join(os.Setenv(repairRootEnv, root), os.Setenv(repairLinesEnv, strings.Join(repairLines(root), "\n")))
 }
 
 // repairLines are the shell lines that get root a magus able to judge it again, each to

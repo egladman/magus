@@ -443,7 +443,7 @@ fun binDir(bin: str) > str {
 // systemMessage. A PreToolUse call is refused, a read or a handback as much
 // as a write: no policy loaded to say which reads it guards. A
 // PermissionRequest leaves the decision to the person's own prompt. The
-// bootstrap line passes, bare or aimed at root: it is the fix the notice names.
+// repair the running magus supplied for root passes: it is the fix the notice names.
 fun unjudgedReply(eventName: str, toolName: str, command: str, verdict: str, fix: str, root: str = "") > str {
     final text = "{verdict}\n{fix}";
     if (eventName == "Stop" or eventName == "SubagentStop") {
@@ -599,7 +599,7 @@ fun main(args: [str]) > void {
     final note = hook\fallbackNote(cwd);
     var root = hook\workspaceRootAt(cwd);
     if (root == "") { root = hook\binRoot(""); }
-    // Absolute, so the recovery line builds one checkout from anywhere.
+    // Absolute, so a fallback notice names one checkout from anywhere.
     if (root != "") { root = path\abs(root) catch root; }
     var fix = hook\recoveryFix(root);
     if (note != "") { fix = note + ". " + fix; }
@@ -714,23 +714,31 @@ test "an unjudged call that may change state is refused and told to the person" 
     std\assert(reply["systemMessage"] == "v\nf", message: "the person reads the verdict and the fix");
 }
 
-test "the repair the workspace declares alone passes an unjudged call" {
+test "the repair magus supplied alone passes an unjudged call" {
+    final saved = env\get("__MAGUS_REPAIR_LINES") catch "";
+    final savedRoot = env\get("__MAGUS_REPAIR_ROOT") catch "";
     final line = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
-    final source = fs\tempDir("command-repair-");
-    fs\writeFile("{source}/go.mod", content: "module github.com/egladman/magus\n");
-    final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line, verdict: "v", fix: "f", root: source));
-    final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
-    std\assert(spec["permissionDecision"] == null and reply["systemMessage"] == "v\nf", message: "{reply}");
-    final chained = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line + " && ls", verdict: "v", fix: "f", root: source));
-    final chainedSpec: {str: any} = chained["hookSpecificOutput"] ?? {<str: any>};
-    std\assert(chainedSpec["permissionDecision"] == "deny", message: "{chained}");
-    fs\removeAll(source);
-    foreach (command in ["magus self update", line]) {
-        final consumer = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f"));
-        final consumerSpec: {str: any} = consumer["hookSpecificOutput"] ?? {<str: any>};
-        final passes = command == "magus self update";
-        std\assert((consumerSpec["permissionDecision"] == null) == passes, message: "a workspace that builds no magus: {command}: {consumer}");
+    env\set("__MAGUS_REPAIR_LINES", value: line) catch void;
+    env\set("__MAGUS_REPAIR_ROOT", value: "/w") catch void;
+    foreach (command in [line, " {line} "]) {
+        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: "/w"));
+        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+        std\assert(spec["permissionDecision"] == null and reply["systemMessage"] == "v\nf", message: "{command}: {reply}");
     }
+    foreach (command in [line + " && git stash", "git stash", "magus self update"]) {
+        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: "/w"));
+        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
+        std\assert(spec["permissionDecision"] == "deny", message: "{command}: {reply}");
+    }
+    env\set("__MAGUS_REPAIR_LINES", value: "") catch void;
+    final none = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line, verdict: "v", fix: "f", root: "/w"));
+    final noneSpec: {str: any} = none["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(noneSpec["permissionDecision"] == "deny", message: "no repair supplied, so nothing runs: {none}");
+    final elsewhere = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: line, verdict: "v", fix: "f", root: "/other"));
+    final elsewhereSpec: {str: any} = elsewhere["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(elsewhereSpec["permissionDecision"] == "deny", message: "another workspace's repair: {elsewhere}");
+    env\set("__MAGUS_REPAIR_LINES", value: saved) catch void;
+    env\set("__MAGUS_REPAIR_ROOT", value: savedRoot) catch void;
 }
 
 test "an unjudged read, handback or job exit is refused like any other call" {
@@ -769,19 +777,3 @@ test "a message with no magus to record it says so once per session" {
     std\assert(recordMessage("", message: "m", dir: "", session: session, host: "claude-code", attribution: [<str>]) == "", message: "second");
 }
 
-test "while no magus judges, the recovery line alone runs" {
-    final root = fs\tempDir("command-recovery-");
-    fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
-    final line = hook\recoveryLine(root);
-    foreach (command in [line, " {line} "]) {
-        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: root));
-        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
-        std\assert(spec["permissionDecision"] == null, message: "{command}: {reply}");
-    }
-    foreach (command in [line + " && git stash", "git stash"]) {
-        final reply = replyOf(unjudgedReply("PreToolUse", toolName: "Bash", command: command, verdict: "v", fix: "f", root: root));
-        final spec: {str: any} = reply["hookSpecificOutput"] ?? {<str: any>};
-        std\assert(spec["permissionDecision"] == "deny", message: "{command}: {reply}");
-    }
-    fs\removeAll(root);
-}

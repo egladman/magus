@@ -256,105 +256,56 @@ export fun fallbackNote(cwd: str = "", session: str = "") > str {
     return "";
 }
 
-// buildsMagus reports whether root is a checkout of magus, which judges with the ./magus it
-// builds.
-fun buildsMagus(root: str) > bool {
-    final mod = fs\readFile("{root}/go.mod") catch "";
-    return mod.startsWith("module github.com/egladman/magus\n");
-}
-
-// BOOTSTRAP is ward.BootstrapCommand: a hook with no magus cannot ask for it.
-// cmd/magus/shell_test.go pins the copy.
-final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
-// isBootstrap is a string comparison, so no second shell classifier exists
-// beside the Go judge.
-export fun isBootstrap(command: str) > bool {
-    return command.trim() == BOOTSTRAP;
-}
+// REPAIR_ENV is guard.RepairLinesEnv. The magus running this glue puts there, one per
+// line, the repair its workspace declares: the line that gets it a magus able to judge
+// again. Go reads the declarations once, so no copy of the rules lives here.
+final REPAIR_ENV = "__MAGUS_REPAIR_LINES";
+// REPAIR_ROOT_ENV is guard.RepairRootEnv: the workspace root those lines belong to.
+final REPAIR_ROOT_ENV = "__MAGUS_REPAIR_ROOT";
 
 final SETUP_URL = "https://eli.gladman.cc/magus/guides/setup/";
 
-// magusFix says how to get a runnable magus for root. A checkout of
-// magus gets the bootstrap, anywhere else the install page.
-export fun magusFix(root: str) > str {
-    if (root != "" and buildsMagus(root)) {
-        return "Build ./magus in {root}: `{BOOTSTRAP}`.";
+// repairLines is the repair the running magus supplied for root, empty when it supplied
+// none or supplied another workspace's.
+export fun repairLines(root: str) > [str] {
+    final lines = mut [<str>];
+    final supplied = envOr(REPAIR_ROOT_ENV, fallback: "");
+    if (supplied == "" or (path\abs(supplied) catch supplied) != (path\abs(root) catch root)) { return lines; }
+    foreach (line in envOr(REPAIR_ENV, fallback: "").split("\n")) {
+        if (line.trim() != "") { lines.append(line.trim()); }
     }
-    return "Install magus ({SETUP_URL}), or set __MAGUS_BIN to its path.";
+    return lines;
 }
 
-// RELINK is ward.RelinkCommand: it links ./magus from the tree and loads no
-// magusfile, so it runs while nothing loads the tree.
-// cmd/magus/shell_test.go pins the copy.
-final RELINK = "GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus";
-
-// aimedAt is line with -C root after its go, runnable from any directory.
-fun aimedAt(line: str, root: str) > str {
-    final at = path\abs(root) catch root;
-    return line.replace(" go ", with: " go -C {shellWord(at)} ");
-}
-
-// UPDATE is config.ReleaseCommand with no pin: the release a workspace that does not
-// build magus installs. internal/guard's repairLines is the Go reader of the same
-// declarations.
-final UPDATE = "magus self update";
-
-// recoveryLine is the one recovery root declares, as the Go guard spells it. A checkout
-// of magus, by its go.mod, builds from source: the relink over a ./magus, else the
-// bootstrap, both aimed at root. Any other workspace installs a release.
-export fun recoveryLine(root: str) > str {
-    if (root == "" or !buildsMagus(root)) { return UPDATE; }
-    if (fs\exists("{root}/magus") catch false) { return aimedAt(RELINK, root: root); }
-    return aimedAt(BOOTSTRAP, root: root);
-}
-
-// recovers reports the one line that runs while no magus judges: in a checkout of
-// magus the bootstrap or the relink, bare or aimed at root; anywhere else the update,
-// bare or pinned to one release.
+// recovers reports a line that runs while no magus judges: one of root's repairLines,
+// alone on its line. With no repair supplied, nothing runs.
 export fun recovers(command: str, root: str) > bool {
-    final line = command.trim();
-    if (root == "" or !buildsMagus(root)) {
-        return line == UPDATE or pinnedUpdate(line);
-    }
-    if (isBootstrap(line) or line == RELINK) { return true; }
-    return line == aimedAt(BOOTSTRAP, root: root) or line == aimedAt(RELINK, root: root);
+    return repairLines(root).indexOf(command.trim()) != null;
 }
 
-// pinnedUpdate reports `magus self update --version v<X.Y.Z>`, nothing after it.
-fun pinnedUpdate(line: str) > bool {
-    final head = UPDATE + " --version v";
-    if (!line.startsWith(head)) { return false; }
-    final parts = line.sub(head.len(), len: line.len() - head.len()).split(".");
-    if (parts.len() != 3) { return false; }
-    foreach (part in parts) {
-        if (part == "") { return false; }
-        foreach (i in 0..part.len()) {
-            if ("0123456789".indexOf(part.sub(i, len: 1)) == null) { return false; }
-        }
-    }
-    return true;
+// quoted is each line in backticks, joined with "or".
+fun quoted(lines: [str]) > str {
+    return lines.map(fun (index: int, line: str) > str => "`{line}`").join(" or ");
 }
 
-// recoveryFix names that line: until a magus loads this tree it is the one call that runs.
+// magusFix says how to get a runnable magus for root: the repair the running magus
+// supplied, else the install page.
+export fun magusFix(root: str) > str {
+    final lines = repairLines(root);
+    if (lines.len() == 0) { return "Install magus ({SETUP_URL}), or set __MAGUS_BIN to its path."; }
+    return "Get a magus that loads this workspace, alone on its line: {quoted(lines)}.";
+}
+
+// recoveryFix names root's repair: until a magus loads the tree it is the one call that
+// runs. With none supplied it says so, and nothing runs.
 export fun recoveryFix(root: str) > str {
-    final line = recoveryLine(root);
-    if (line == UPDATE) {
-        return "Install magus ({SETUP_URL}), or update the one on hand, alone on its line: `{line}`, or set __MAGUS_BIN to its path. "
-            + "Until a magus loads this tree, that line is the one call that runs.";
+    final lines = repairLines(root);
+    if (lines.len() == 0) {
+        return "magus did not supply the repair lines of {root}, so no call runs until a magus loads this tree. "
+            + "Install magus ({SETUP_URL}), or set __MAGUS_BIN to its path.";
     }
-    return "Build ./magus in {root}, alone on its line: `{line}`. "
-        + "Until a magus loads this tree, that line is the one call that runs.";
-}
-
-// shellWord quotes word for a POSIX shell, and leaves it bare when it can.
-fun shellWord(word: str) > str {
-    final safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@%+=:,./-_";
-    var bare = word != "";
-    foreach (i in 0..word.len()) {
-        if (safe.indexOf(word.sub(i, len: 1)) == null) { bare = false; }
-    }
-    if (bare) { return word; }
-    return "'" + word.replace("'", with: "'\\''") + "'";
+    return "Until a magus loads this tree, its repair is the one call that runs, alone on its line: {quoted(lines)}. "
+        + "Install magus ({SETUP_URL}), or set __MAGUS_BIN to its path, where none is on hand.";
 }
 
 // errorLines is what a failed magus said, WARN lines dropped: a config the
@@ -471,8 +422,8 @@ export fun unloadedVerdict(judged: Judged, what: str) > str {
 export fun fellToNotice(judged: Judged, what: str, root: str) > str {
     if (judged.trail.len() == 0) { return ""; }
     var rebuild = "";
-    final line = recoveryLine(root);
-    if (line != UPDATE) { rebuild = " Get ./magus in {root} a binary that reads its tree: `{line}`."; }
+    final lines = repairLines(root);
+    if (lines.len() > 0) { rebuild = " Get {root} a magus that reads its tree: {quoted(lines)}."; }
     return judged.trail.join("\n") + "\nfell to {judged.by}, which judged this {what}.{rebuild}";
 }
 
@@ -630,14 +581,19 @@ test "a fallback from the session's ./magus is named, and only then" {
     fs\removeAll(bare);
 }
 
-test "the fix for a missing magus is the bootstrap in a checkout of magus, else the install page" {
-    final root = fs\tempDir("hook-fix-");
-    fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
-    std\assert(magusFix(root).indexOf(BOOTSTRAP) != null, message: magusFix(root));
-    fs\writeFile("{root}/go.mod", content: "module example.com/other\n");
-    std\assert(magusFix(root).indexOf(SETUP_URL) != null, message: magusFix(root));
-    std\assert(magusFix("").indexOf(SETUP_URL) != null, message: "no root");
-    fs\removeAll(root);
+test "the fix for a missing magus is the repair magus supplied, else the install page" {
+    final saved = envOr(REPAIR_ENV, fallback: "");
+    final savedRoot = envOr(REPAIR_ROOT_ENV, fallback: "");
+    env\set(REPAIR_ROOT_ENV, value: "/w") catch void;
+    env\set(REPAIR_ENV, value: "") catch void;
+    std\assert(magusFix("/w").indexOf(SETUP_URL) != null, message: magusFix("/w"));
+    std\assert(recoveryFix("/w").indexOf("magus did not supply the repair lines of /w") != null, message: recoveryFix("/w"));
+    std\assert(!recovers("magus self update", root: "/w"), message: "no repair supplied, so nothing runs");
+    env\set(REPAIR_ENV, value: "magus self update --version v0.4.3") catch void;
+    std\assert(magusFix("/w").indexOf("`magus self update --version v0.4.3`") != null, message: magusFix("/w"));
+    std\assert(!recovers("magus self update --version v0.4.3", root: "/other"), message: "another workspace's repair is not this one's");
+    env\set(REPAIR_ENV, value: saved) catch void;
+    env\set(REPAIR_ROOT_ENV, value: savedRoot) catch void;
 }
 
 test "a notice joins the reply the person reads" {
@@ -683,28 +639,18 @@ test "the whole envelope goes to magus unless a host names a field to select" {
     std\assert(wholeEvent(todo, dotPath: "tool_input.command", toolPath: "tool_name"), message: "an absent field sends the envelope");
 }
 
-test "the recovery line aims the bootstrap, or the relink over a binary, at the checkout of magus" {
-    final root = fs\tempDir("hook-recovery-");
-    fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
-    final line = recoveryLine(root);
-    std\assert(line == "GOEXPERIMENT=jsonv2 go -C {root} run -trimpath ./cmd/magus run go-build --no-cache .", message: line);
-    std\assert(recoveryFix(root).indexOf(line) != null, message: "the fix names the line that passes");
-    std\assert(recovers(" {line} ", root: root) and recovers(BOOTSTRAP, root: root), message: "both spellings run");
-    std\assert(!recovers(line + " && ls", root: root), message: "a line after it is not the recovery");
-    plantBinary(root);
-    final relink = recoveryLine(root);
-    std\assert(relink == "GOEXPERIMENT=jsonv2 go -C {root} build -trimpath -o magus ./cmd/magus", message: relink);
-    std\assert(recovers(relink, root: root) and recovers(RELINK, root: root), message: "the relink runs, bare or aimed");
-    std\assert(recovers(line, root: root), message: "the bootstrap still runs over a binary");
-    std\assert(!recovers(relink + " && ls", root: root), message: "a line after the relink is not the recovery");
-    fs\writeFile("{root}/go.mod", content: "module example.com/other\n");
-    std\assert(recoveryLine(root) == UPDATE, message: "a workspace that builds no magus installs a release");
-    std\assert(!recovers(BOOTSTRAP, root: root) and !recovers(RELINK, root: root), message: "no source build outside a checkout of magus");
-    std\assert(recovers(UPDATE, root: root) and recovers("magus self update --version v0.4.3", root: root), message: "the update, bare or pinned");
-    std\assert(!recovers("magus self update --version v0.4.3 && ls", root: root), message: "a line after the update is not the recovery");
-    std\assert(recoveryFix(root).indexOf("`{UPDATE}`") != null, message: recoveryFix(root));
-    std\assert(shellWord("/a b/it's") == "'/a b/it'\\''s'", message: shellWord("/a b/it's"));
-    fs\removeAll(root);
+test "only a line magus supplied as the repair runs, alone on its line" {
+    final saved = envOr(REPAIR_ENV, fallback: "");
+    final savedRoot = envOr(REPAIR_ROOT_ENV, fallback: "");
+    env\set(REPAIR_ROOT_ENV, value: "/w") catch void;
+    env\set(REPAIR_ENV, value: "GOEXPERIMENT=jsonv2 go -C /w run -trimpath ./cmd/magus run go-build --no-cache .\n./magus buzz hack/boot.buzz -- --here --verify-ready\n") catch void;
+    std\assert(repairLines("/w").len() == 2, message: "{repairLines("/w")}");
+    std\assert(recovers(" ./magus buzz hack/boot.buzz -- --here --verify-ready ", root: "/w"), message: "trimmed");
+    std\assert(!recovers("./magus buzz hack/boot.buzz -- --here --verify-ready && ls", root: "/w"), message: "a line after it is not the repair");
+    std\assert(!recovers("magus self update", root: "/w"), message: "a repair this workspace does not declare");
+    std\assert(recoveryFix("/w").indexOf("`./magus buzz hack/boot.buzz -- --here --verify-ready`") != null, message: recoveryFix("/w"));
+    env\set(REPAIR_ENV, value: saved) catch void;
+    env\set(REPAIR_ROOT_ENV, value: savedRoot) catch void;
 }
 
 fun stub(dir: str, name: str, body: str) > str !> any {

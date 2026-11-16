@@ -123,7 +123,7 @@ object Verdict {
     reason: str,
     context: str,
     rule: str = "",
-    // root is the checkout an unjudged call's recovery line rebuilds.
+    // root is the checkout an unjudged call came from.
     root: str = "",
 }
 
@@ -1068,14 +1068,17 @@ test "a call no magus could judge is refused, and the person reads why" {
     std\assert(reply["user_message"] == v.reason, message: "the person reads the whole fix");
 }
 
-test "while no magus judges, Cursor lets the recovery line alone run" {
-    final root = fs\tempDir("cursor-recovery-");
-    fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
-    final v = unjudged("v", fix: "f", root: root);
-    final line = hook\recoveryLine(root);
+test "while no magus judges, Cursor lets the repair magus supplied alone run" {
+    final saved = env\get("__MAGUS_REPAIR_LINES") catch "";
+    final savedRoot = env\get("__MAGUS_REPAIR_ROOT") catch "";
+    final line = "magus self update";
+    env\set("__MAGUS_REPAIR_LINES", value: line) catch void;
+    env\set("__MAGUS_REPAIR_ROOT", value: "/w") catch void;
+    final v = unjudged("v", fix: "f", root: "/w");
     final allowed: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: line)) catch {<str: any>};
     std\assert(allowed["permission"] == "allow", message: "{allowed}");
     final refused: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: line + " && ls")) catch {<str: any>};
     std\assert(refused["permission"] == "deny", message: "{refused}");
-    fs\removeAll(root);
+    env\set("__MAGUS_REPAIR_LINES", value: saved) catch void;
+    env\set("__MAGUS_REPAIR_ROOT", value: savedRoot) catch void;
 }

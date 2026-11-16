@@ -2797,27 +2797,62 @@ func (s *unjudgedHookSuite) bootstrapEvent(command string) string {
 	return fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":%s}}`, encoded)
 }
 
+// repairRootEnv and repairLinesEnv are the variables guard.ExportRepairLines fills for the
+// hook glue, spelled out because the glue reads them by these names.
+const (
+	repairRootEnv  = "__MAGUS_REPAIR_ROOT"
+	repairLinesEnv = "__MAGUS_REPAIR_LINES"
+)
+
+// suppliedRepair is a workspace whose repair lines magus handed the glue, as startup does.
+func (s *unjudgedHookSuite) suppliedRepair() string {
+	root := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
+	// Setenv first so the test restores both after ExportRepairLines overwrites them.
+	s.T().Setenv(repairRootEnv, "")
+	s.T().Setenv(repairLinesEnv, "")
+	s.Require().NoError(guard.ExportRepairLines(root))
+	return root
+}
+
+// repairEvent is a shell call from root.
+func (s *unjudgedHookSuite) repairEvent(root, command string) string {
+	encoded, err := json.Marshal(map[string]any{"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Bash",
+		"cwd": root, "tool_input": map[string]any{"command": command}})
+	s.Require().NoError(err)
+	return string(encoded)
+}
+
 func (s *unjudgedHookSuite) TestTheRepairLineAloneIsLetThroughAndTheNoticeStays() {
-	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent("magus self update"))
+	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.suppliedRepair(), "magus self update"))
 	s.NotContains(reply["hookSpecificOutput"], "permissionDecision")
 	s.Contains(reply["systemMessage"], "could not judge this call")
 	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["claude-code"]).Validate(reply))
 }
 
+func (s *unjudgedHookSuite) TestAnotherWorkspacesRepairIsRefused() {
+	s.suppliedRepair()
+	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.T().TempDir(), "magus self update"))
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
+	s.Contains(reply["systemMessage"], "magus did not supply the repair lines of")
+}
+
 func (s *unjudgedHookSuite) TestTheRepairLineWithAnotherCommandAfterItIsRefused() {
-	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent("magus self update && git stash"))
+	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.suppliedRepair(), "magus self update && git stash"))
 	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
 }
 
 func (s *unjudgedHookSuite) TestASourceBuildIsRefusedWhereTheWorkspaceInstallsARelease() {
-	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent(ward.BootstrapCommand))
+	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.suppliedRepair(), ward.BootstrapCommand))
 	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
 }
 
 func (s *unjudgedHookSuite) TestCursorLetsTheRepairLineThrough() {
-	encoded, err := json.Marshal("magus self update")
+	root := s.suppliedRepair()
+	encoded, err := json.Marshal(map[string]any{"hook_event_name": "beforeShellExecution", "conversation_id": "c", "generation_id": "g",
+		"command": "magus self update", "cwd": root})
 	s.Require().NoError(err)
-	reply := s.reply("cursor-hook.buzz", "cursor", fmt.Sprintf(`{"hook_event_name":"beforeShellExecution","conversation_id":"c","generation_id":"g","command":%s,"cwd":"/tmp"}`, encoded))
+	reply := s.reply("cursor-hook.buzz", "cursor", string(encoded))
 	s.Equal("allow", reply["permission"])
 	s.Contains(reply["user_message"], "could not judge this call")
 }
@@ -2836,18 +2871,12 @@ func (s *unjudgedHookSuite) TestTheSessionStartTextPromisesNoGitStatus() {
 	s.NotContains(string(body), "`git status` and the fix still run")
 }
 
-// The hook carries a copy of the bootstrap, since with no magus it cannot ask.
-func (s *unjudgedHookSuite) TestTheHookBootstrapIsWardsCommand() {
+// The hook reads its repair from the variable magus fills, never from a copy of the rules.
+func (s *unjudgedHookSuite) TestTheHookReadsTheRepairMagusSupplies() {
 	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "lib", "hook.buzz"))
 	s.Require().NoError(err)
-	s.Contains(string(body), fmt.Sprintf("final BOOTSTRAP = %q;", ward.BootstrapCommand))
-}
-
-// The hook carries a copy of the relink, which it passes with no judge.
-func (s *unjudgedHookSuite) TestTheHookRelinkIsWardsCommand() {
-	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "lib", "hook.buzz"))
-	s.Require().NoError(err)
-	s.Contains(string(body), fmt.Sprintf("final RELINK = %q;", ward.RelinkAt("")))
+	s.Contains(string(body), fmt.Sprintf("final REPAIR_ENV = %q;", repairLinesEnv))
+	s.NotContains(string(body), ward.BootstrapCommand)
 }
 
 // staleConfigSuite pins the guard over a magus.yaml key this build predates

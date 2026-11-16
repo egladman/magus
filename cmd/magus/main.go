@@ -720,10 +720,8 @@ func peekSub(args []string) (sub string, subArgs []string) {
 	return "", nil
 }
 
-// refuseUnjudgedHook answers a guard hook whose magus cannot start for root, reporting
-// whether it answered: a host runs a failed hook's call. `magus shell` judges cause under
-// the stale-binary rule, and an installed glue, `magus buzz -s <glue>` with an event piped
-// in, gets guard.UnjudgedHook's answer. Any other command is not answered.
+// refuseUnjudgedHook answers `magus shell` or a glue, `magus buzz -s` with an event piped
+// in, whose magus cannot start for root, since a host runs a failed hook's call.
 func refuseUnjudgedHook(ctx context.Context, root, sub string, subArgs []string, cause error) (int, bool) {
 	if sub == "shell" {
 		return mapExitCode(shellCommand(withStaleConfig(ctx, cause), subArgs)), true
@@ -780,7 +778,6 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	stopCfgLoad()
 	if err != nil {
 		err = config.WithRunningVersion(err, version)
-		// A hook whose magus exits 1 here is a host's non-blocking error, so it answers.
 		if code, answered := refuseUnjudgedHook(rootCtx, earlyRoot, peekedSub, peekedSubArgs, err); answered {
 			return rootCtx, startupResult{cleanup: cleanup}, code
 		}
@@ -810,6 +807,10 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		}
 		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return rootCtx, startupResult{cleanup: cleanup}, 1
+	}
+	// A hook glue names and passes the repair from these lines alone, never a copy of the rules.
+	if err := guard.ExportRepairLines(earlyRoot); err != nil {
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 	}
 	// Pass config to the workspace singletons via package-level state.
 	globalCfg = cfg
