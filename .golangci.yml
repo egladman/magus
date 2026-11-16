@@ -642,14 +642,12 @@ linters:
             - file: cmd/magus/diff.go
               reason: talks to magus's own local diff-bridge server over loopback
             - file: cmd/magus/graph.go
-              reason: probes magus's own local graph bridge over loopback
+              reason: probes magus's own local graph bridge over loopback, and reaches the OCI registry the graph publishes to and pulls from
             - file: cmd/magus/notes.go
               reason: talks to magus's own local diff-bridge server over loopback
             - file: cmd/magus/probe.go
               reason: probes magus's own local MCP server's /readyz over loopback
             # magus's own remote services, reached from cmd/magus's CLI wiring.
-            - file: cmd/magus/graph_registry.go
-              reason: the OCI registry the graph publishes to and pulls from
             - file: cmd/magus/spell.go
               reason: the OCI registry a spell pulls from
             - file: cmd/magus/self_update.go

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
@@ -29,10 +32,14 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/oci"
 	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // `magus graph` is the graph meta-home: the workspace's graphs as objects.
@@ -240,9 +247,6 @@ func writeGuardIndexes(ctx context.Context, root string) error {
 	return nil
 }
 
-// graphBuildPoll is how often a waiting graph build retries.
-const graphBuildPoll = maintenance.GraphBuildPoll
-
 // acquireGraphBuild takes the machine's build lock, then the store's, waiting
 // on each and saying so. waitedOn is the build whose work this one can load.
 func acquireGraphBuild(ctx context.Context, root string) (release func() error, waitedOn *maintenance.GraphBuildHolder, err error) {
@@ -393,7 +397,7 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 func graphExport(ctx context.Context, root string, args []string) error {
 	var ef *flaggen.GraphExportFlags
 	pos, err := commandParse("graph export", args, func(fs *flag.FlagSet) {
-		ef = flaggen.BindGraphExport(fs, flaggen.GraphExportDefaults{URL: defaultExploreURL, Budget: knowledge.DefaultBudget})
+		ef = flaggen.BindGraphExport(fs, flaggen.GraphExportDefaults{URL: console.HostedExplorerURL, Budget: knowledge.DefaultBudget})
 		fs.Usage = func() { graphExportUsage(fs) }
 	})
 	if err != nil {
@@ -740,11 +744,10 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 
 // ---- graph export --open: delivering the graph to the Graph Explorer ----
 
-// defaultExploreURL is the hosted, data-agnostic Graph Explorer. `open` points a
-// browser at this page with the workspace's graph delivered PRIVATELY: either in a
-// URL fragment (default) or fetched from an ephemeral loopback server (--serve).
-// Either way the graph stays on the machine: the site only serves static assets.
-const defaultExploreURL = console.HostedExplorerURL
+// `open` points a browser at console.HostedExplorerURL with the workspace's graph
+// delivered PRIVATELY: either in a URL fragment (default) or fetched from an ephemeral
+// loopback server (--serve). Either way the graph stays on the machine: the site only
+// serves static assets.
 
 // fragmentWarnBytes is a conservative ceiling on the encoded fragment. The whole
 // URL rides on the command line to the browser and into the address bar; Chrome
@@ -1053,7 +1056,7 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 }
 
 // checkHostedPageOrigin, openBrowser, probeLiveBridge and probeLiveBridgeTimeout stay named
-// here for callers in files this move does not own (live.go, server.go, query_output.go).
+// here for callers in files this move does not own (live.go, server.go).
 func checkHostedPageOrigin(base string, allowed []string) error {
 	return httpx.CheckHostedPageOrigin(base, allowed)
 }
@@ -1065,3 +1068,366 @@ func probeLiveBridge(ctx context.Context, addr string) error {
 }
 
 const probeLiveBridgeTimeout = httpx.ProbeLiveBridgeTimeout
+
+// graphDiff reports how the knowledge graph changed relative to a baseline: the nodes
+// and edges added, removed, or changed. It is the PR-review blast-radius artifact: emit
+// it as json or markdown for a CI comment. The baseline is either an export file
+// (`magus graph export -o json`, e.g. from the base branch) or, with --rev, a git
+// revision whose tracked files are built into a base graph on the fly.
+func graphDiff(ctx context.Context, root string, args []string) error {
+	var refresh, globalScope bool
+	var rev string
+	pos, err := commandParse("graph diff", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild of the current graph before diffing")
+		fs.BoolVar(&globalScope, "global", false, "diff the global (all-workspaces) graph; match this to how the baseline was exported")
+		command.NegatedBoolVar(fs, &refresh, "refresh")
+		command.NegatedBoolVar(fs, &globalScope, "global")
+		fs.StringVar(&rev, "rev", "", "diff against a git revision (e.g. HEAD~1, main) instead of an export file")
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus graph diff <baseline.json> [flags]")
+			fmt.Fprintln(os.Stderr, "       magus graph diff --rev <revision> [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, types.KnowledgeGraphDiffDefinition)
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "The positional argument is a whole-graph export produced earlier with")
+			fmt.Fprintf(os.Stderr, "`%s`; the current working-tree graph is diffed against it.\n", hint.GraphExport.With("-o", "json"))
+			fmt.Fprintln(os.Stderr, "Symbol shards in the baseline are matched automatically; pass --global if it was global.")
+			fmt.Fprintln(os.Stderr, "With --rev, the base graph is built from that revision's tracked files (domain-only,")
+			fmt.Fprintln(os.Stderr, "using the current config); no export file is needed. --rev and the positional are exclusive.")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			printOwnDefaults(fs)
+		}
+	})
+	if err != nil {
+		return err
+	}
+	gotRev, gotFile := rev != "", len(pos) > 0
+	if gotRev == gotFile { // neither or both
+		slog.ErrorContext(ctx, "give exactly one of a baseline export file or --rev <revision>", attr.Notice("magus graph diff"))
+		return exit.Reported(exit.Usage)
+	}
+	if gotFile && len(pos) > 1 {
+		slog.ErrorContext(ctx, "takes a single baseline export file", attr.Notice("magus graph diff"))
+		return exit.Reported(exit.Usage)
+	}
+	if gotRev && globalScope {
+		// A --rev base is always a single-workspace domain-only build, while --global
+		// qualifies the current side's node IDs by workspace; diffing the two would
+		// report every node added/removed. Reject rather than emit a garbage diff.
+		slog.ErrorContext(ctx, "--rev cannot be combined with --global (the base is built single-workspace)", attr.Notice("magus graph diff"))
+		return exit.Reported(exit.Usage)
+	}
+
+	outOpts, err := output.Parse(global.output, outputMarkdown)
+	if err != nil {
+		return err
+	}
+
+	baseline, baseLabel, err := diffBaseline(ctx, root, rev, pos)
+	if err != nil {
+		return err
+	}
+
+	// Build the current graph to match the baseline's shape: if the baseline carries
+	// symbol nodes (a symbol-seeded export), include symbols here too, else every
+	// baseline symbol would surface as a spurious removal. A --rev baseline is always
+	// domain-only (an archive has no built .scip indexes), so the current side is too.
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, knowledge.BaselineHasSymbols(baseline))
+	if err != nil {
+		return err
+	}
+	current := g.Output()
+	// @vcs enrichment (opt-in) stamps commit-varying attrs on file nodes. They are not
+	// domain shape, and the base side never has them (a --rev export tree has no history,
+	// and an exported baseline predates the current commit), so keeping them would report
+	// nearly every file node as changed. Strip them from both sides for a structural diff.
+	knowledge.StripVCSAttrs(&baseline)
+	knowledge.StripVCSAttrs(&current)
+	diff := knowledge.DiffGraphs(baseLabel, baseline, current)
+
+	switch outOpts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(outOpts, diff)
+	case outputMarkdown:
+		_, err := os.Stdout.Write(knowledge.RenderDiffMarkdown(diff))
+		return err
+	case outputName:
+		return emitNames(os.Stdout, knowledge.DiffNames(diff))
+	}
+	return knowledge.DiffText(os.Stdout, diff)
+}
+
+// diffBaseline resolves the base graph to diff against: either a git revision (--rev,
+// built from that revision's tracked files) or a positional export file. It returns the
+// base graph and a human label for it (the revision or the file path).
+func diffBaseline(ctx context.Context, root, rev string, pos []string) (types.KnowledgeGraphOutput, string, error) {
+	if rev != "" {
+		g, err := baseGraphFromRev(ctx, root, rev)
+		if err != nil {
+			return types.KnowledgeGraphOutput{}, "", err
+		}
+		return g, rev, nil
+	}
+	baselinePath := pos[0]
+	raw, err := os.ReadFile(baselinePath)
+	if err != nil {
+		return types.KnowledgeGraphOutput{}, "", fmt.Errorf("graph diff: read baseline %q: %w", baselinePath, err)
+	}
+	var baseline types.KnowledgeGraphOutput
+	if err := json.Unmarshal(raw, &baseline); err != nil {
+		return types.KnowledgeGraphOutput{}, "", fmt.Errorf("graph diff: decode baseline %q (expected `%s` output): %w", baselinePath, hint.GraphExport.With("-o", "json"), err)
+	}
+	return baseline, baselinePath, nil
+}
+
+// baseGraphFromRev builds a base knowledge graph from a revision's tracked files. It
+// materializes the revision into a throwaway temp tree via the VCS abstraction (any
+// backend implementing RevisionExporter; git does, and one that does not gives a clear
+// error), then runs the ordinary extraction pipeline there via a direct Inspect (NOT the
+// memoized inspectWorkspace, which panics on a second root). The result is domain-only
+// and reflects the CURRENT config applied to the revision's files; a historical-config
+// diff would need the rev's own config threaded through, deliberately out of scope here.
+//
+// The base build is pinned to an isolated, immutable cache under the temp tree: without
+// this, an absolute cache.dir / MAGUS_CACHE_DIR would make resolveCacheDir ignore the
+// temp root, and the base build would read the CURRENT workspace's shards as its starting
+// point (corrupting the base) and prune live shards on write. Isolated + immutable means
+// it assembles in memory and touches nothing outside the temp tree.
+func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGraphOutput, error) {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
+		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: --rev needs version control, but none resolved for this workspace")
+	}
+	tmp, err := xdg.ScratchCheckoutDir("graph-diff")
+	if err != nil {
+		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: create temp tree: %w", err)
+	}
+	defer os.RemoveAll(tmp)
+
+	if err := res.VCS.ExportRevision(ctx, root, rev, tmp); err != nil {
+		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: export revision %q: %w", rev, err)
+	}
+
+	cfg := globalCfg
+	cfg.Cache.Dir = filepath.Join(tmp, ".magus-base-cache") // absolute -> wins over any env cache dir
+	writeOff := false
+	cfg.Cache.Write.Enabled = &writeOff // a throwaway base tree must publish nothing
+	// The exported tree has no VCS metadata, so history enrichment can't run against it;
+	// disable it so the base is not asymmetrically missing @vcs attrs the current side has.
+	cfg.Knowledge.VCS.Enabled = false
+
+	// No workspace providers on the base side: the export is a bare tree (no
+	// node_modules, no toolchain, no VCS metadata), so a provider shelling out to nx
+	// or gradle there would fail and take the whole diff with it. A project only a
+	// provider knows about therefore reads as added rather than unchanged, which is
+	// the honest answer for a base magus cannot resolve.
+	ws, err := magus.Inspect(ctx, tmp, append(cliOptions(), workspace.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders())...)
+	if err != nil {
+		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: inspect revision %q tree: %w", rev, err)
+	}
+	g, err := workspacegraph.Build(ctx, ws, ws.Root(), cfg, false, slog.Default())
+	if err != nil {
+		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: build graph for revision %q: %w", rev, err)
+	}
+	return g.Output(), nil
+}
+
+// graph push and graph pull below are flags and wiring; the registry artifact, its
+// media types and its transport live in internal/graph/knowledge (publish.go).
+
+// graphRegistryTimeout bounds the whole exchange for every registry verb in this binary.
+const graphRegistryTimeout = knowledge.RegistryTimeout
+
+// readToken takes the registry token from STDIN; spell.go's verbs read theirs the same way.
+func readToken(ctx context.Context) (types.Secret, error) { return knowledge.ReadToken(ctx) }
+
+func graphPush(ctx context.Context, root string, args []string) error {
+	var ref, user string
+	var refresh, table bool
+	_, err := commandParse("graph push", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&ref, "ref", "", "the artifact to push to, as <registry>/<repository>:<tag> (required); with -table, a <registry>/<repository> that defaults to "+embedtable.Repository)
+		fs.StringVar(&user, "username", "", "the registry username; the token is read from stdin")
+		fs.BoolVar(&refresh, "refresh", false, "rebuild the graph before pushing instead of exporting what is cached")
+		fs.BoolVar(&table, "table", false, "publish the embedding table from the cache instead of the graph, tagged with its pin, write-once")
+		command.NegatedBoolVar(fs, &refresh, "refresh")
+		command.NegatedBoolVar(fs, &table, "table")
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus graph push [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Publish this workspace's knowledge graph to a container registry as an OCI")
+			fmt.Fprintln(os.Stderr, "artifact, so collaborators can `magus graph pull` it instead of rebuilding.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "The destination is never derived: --ref names it, tag included, and the")
+			fmt.Fprintln(os.Stderr, "magusfile is where a workspace declares one, beside the registries its")
+			fmt.Fprintln(os.Stderr, "images use. One invocation writes one tag; a caller that wants several")
+			fmt.Fprintln(os.Stderr, "calls this once per tag, where its own naming vocabulary lives.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "The token is read from STDIN, the way `docker login --password-stdin` takes")
+			fmt.Fprintln(os.Stderr, "one, so it never lands in a process listing or a run log. Whatever resolves")
+			fmt.Fprintln(os.Stderr, "it (magus\\secret.read, a CI secret, a password manager) stays the caller's")
+			fmt.Fprintln(os.Stderr, "choice; this never learns which.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A newly created package is PRIVATE until someone makes it public; until then")
+			fmt.Fprintln(os.Stderr, "`magus graph pull` cannot read it anonymously.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			printOwnDefaults(fs)
+		}
+	})
+	if err != nil {
+		return err
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+
+	var rec knowledge.RegistryOutput
+	if table {
+		if refresh {
+			return errors.New("graph push: -refresh rebuilds the graph, and -table publishes no graph")
+		}
+		rec, err = knowledge.TablePush(ctx, ref, user, registryHTTP())
+	} else {
+		rec, err = pushGraph(ctx, root, ref, user, refresh)
+	}
+	if err != nil || opts.Format == outputText {
+		return err
+	}
+	return emitRecord(opts, rec, []string{rec.Ref})
+}
+
+// pushGraph publishes the knowledge graph to ref, rebuilding it first under refresh.
+func pushGraph(ctx context.Context, root, ref, user string, refresh bool) (knowledge.RegistryOutput, error) {
+	return knowledge.PushGraph(ctx, ref, user, func() ([]oci.Blob, error) {
+		if _, err := loadKnowledgeGraph(ctx, root, refresh, false, true /* includeSymbols */); err != nil {
+			return nil, err
+		}
+		// Off the workspace's own root, not the caller's --root argument, which may be empty
+		// or name a directory inside the workspace; the store the build just wrote is the one
+		// that root resolves to.
+		ws, err := inspectWorkspace(ctx, root)
+		if err != nil {
+			return nil, err
+		}
+		cacheDir, err := magus.ResolveCacheDir(ws.Root(), workspace.WithLoadedConfig(globalCfg))
+		if err != nil {
+			return nil, fmt.Errorf("graph push: %w", err)
+		}
+		return knowledge.StoreLayers(cacheDir)
+	})
+}
+
+// seedFromPublishedGraph points the workspace's knowledge store at the published artifact,
+// so the rebuild that follows fetches a missing shard instead of recomputing it. It fetches
+// nothing itself: the store asks, shard by shard and by fingerprint, for only what it lacks.
+//
+// It ANNOUNCES ITSELF BEFORE any request, naming the host the build is about to reach. This
+// is the only place magus talks to a network the user did not ask it to talk to: it fires
+// from a branch switch, through the VCS refresh hook, and an unexplained pause there is
+// indistinguishable from a hang. Saying so afterwards is too late to be the explanation,
+// and saying it at debug level says it to nobody.
+//
+// The OUTCOME is best-effort and quiet. No published graph, no network, a private package,
+// a tag nobody pushed: each means the graph is built locally, which is what would have
+// happened anyway. Only the attempt is loud, because only the attempt costs the user
+// something they did not ask for.
+//
+// Does nothing unless knowledge.published_ref names an artifact. Opt-in per repository,
+// because reading a graph decides what magus answers about this tree.
+func seedFromPublishedGraph(ctx context.Context, ws types.Inspector) {
+	ref := globalCfg.Knowledge.PublishedRef
+	if ref == "" {
+		return
+	}
+	src, err := knowledge.GraphReference(ref, knowledge.GraphFloatingTag)
+	if err != nil {
+		// A ref nobody can parse is a misconfiguration, not a quiet miss: the user asked
+		// for this pull by writing the key, so the key being wrong is worth their
+		// attention even though the build carries on without it.
+		interactive.Hint(ctx, fmt.Sprintf("knowledge.published_ref %q does not parse, so no graph was pulled: %v", ref, err))
+		return
+	}
+
+	slog.InfoContext(ctx, fmt.Sprintf("fetching the published knowledge graph from %s (knowledge.published_ref; unset it to build locally)", src.Registry),
+		attr.Notice(""), attr.Component("magus"))
+	// The timeout rides on the HTTP client rather than a ctx bounded here, because the
+	// requests happen later, inside the build, and a deadline started now would expire
+	// against whatever else that build has to do first.
+	client := &oci.Client{HTTP: &http.Client{Timeout: graphRegistryTimeout}}
+	workspacegraph.UsePublishedShards(ws, workspacegraph.PublishedShards(client, src, knowledge.GraphArtifactType, slog.Default()))
+}
+
+func graphPull(ctx context.Context, root string, args []string) error {
+	var ref, out string
+	var table bool
+	_, err := commandParse("graph pull", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&ref, "ref", "", "the artifact to pull, as <registry>/<repository>:<tag> (required); with -table, a <registry>/<repository> that defaults to "+embedtable.Repository)
+		fs.StringVar(&out, "out", "", "write the graph here instead of stdout")
+		fs.BoolVar(&table, "table", false, "fetch the embedding table the binary pins into the cache instead of the graph")
+		command.NegatedBoolVar(fs, &table, "table")
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus graph pull [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Fetch a knowledge graph someone published with `magus graph push`.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A PUBLIC artifact needs no credentials at all. The graph is written to")
+			fmt.Fprintln(os.Stderr, "stdout unless --out names a file, so it composes with anything that reads")
+			fmt.Fprintln(os.Stderr, "the node-link JSON `magus graph export -o json` emits.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			printOwnDefaults(fs)
+		}
+	})
+	if err != nil {
+		return err
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+
+	if table {
+		if out != "" {
+			return errors.New("graph pull: -table writes the table to the cache, so --out names nothing")
+		}
+		rec, err := knowledge.TablePull(ctx, ref, registryHTTP())
+		if err != nil || opts.Format == outputText {
+			return err
+		}
+		return emitRecord(opts, rec, []string{rec.Ref})
+	}
+	if ref == "" {
+		return knowledge.NoGraphDestinationError("pull")
+	}
+	if out == "" && opts.Format != outputText {
+		return exit.Usagef("magus graph pull: -o needs --out, since stdout is the graph")
+	}
+	src, err := knowledge.GraphReference(ref, knowledge.GraphFloatingTag)
+	if err != nil {
+		return err
+	}
+	// No credentials on purpose: a public artifact is the case this exists for, and a
+	// client that quietly used an ambient token would work for whoever built it and fail
+	// for everyone they handed it to.
+	client := &oci.Client{HTTP: &http.Client{Timeout: graphRegistryTimeout}}
+	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
+	defer cancel()
+
+	raw, err := knowledge.PullMergedGraph(ctx, client, src, deriveSourceBase(ctx, root))
+	if err != nil {
+		return fmt.Errorf("graph pull: %w", err)
+	}
+	if out == "" {
+		_, err := os.Stdout.Write(raw)
+		return err
+	}
+	if err := os.WriteFile(out, raw, 0o644); err != nil {
+		return fmt.Errorf("graph pull: %w", err)
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("pulled %s into %s (%d bytes)", src, out, len(raw)), attr.Notice(""))
+	if opts.Format != outputText {
+		return emitRecord(opts, knowledge.RegistryOutput{Ref: src.String(), Bytes: len(raw), Path: out}, []string{src.String()})
+	}
+	return nil
+}
