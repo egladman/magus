@@ -14,6 +14,8 @@ import "proc";
 import "vcs";
 import "magus";
 import "diskwatch";
+import "result";
+import "time";
 
 import "assert";
 
@@ -601,7 +603,13 @@ export fun apply(items: [Item], root: str, deadline: double) > [Item] {
     return done;
 }
 
+/// MIN_FENCE_MS is the shortest fence fs.trimOldest takes: Go re-dates a used
+/// cache entry only hourly, so a younger file may still be in use.
+export final MIN_FENCE_MS = 3600000.0;
+
 /// CacheTrim is what one cache trim really did. error is why it did not finish.
+/// tightened is true when the fence it was given held the cache past its budget
+/// and it trimmed again at MIN_FENCE_MS.
 export object CacheTrim {
     name: str,
     trimMb: int,
@@ -610,10 +618,10 @@ export object CacheTrim {
     afterBytes: int = 0,
     stopped: str = "",
     error: str = "",
+    tightened: bool = false,
 }
 
-/// trimCache trims one cache to its budget, keeping files inside fence.
-export fun trimCache(name: str, dir: str, trimMb: int, fence: double, deadline: double) > CacheTrim {
+fun trimAt(name: str, dir: str, trimMb: int, fence: double, deadline: double) > CacheTrim {
     try {
         final r = fs\trimOldest(dir, maxBytes: trimMb * 1048576, keepWithinMs: std\toInt(fence), timeoutMs: std\toInt(bound(deadline)));
         return CacheTrim{ name = name, trimMb = trimMb, removedFiles = r.removedFiles, removedBytes = r.removedBytes, afterBytes = r.afterBytes, stopped = r.stopped };
@@ -622,19 +630,60 @@ export fun trimCache(name: str, dir: str, trimMb: int, fence: double, deadline: 
     }
 }
 
+/// fenceHeld says whether fence alone held t past its budget.
+/// It is false for a failure, a stop at the timeout, or a fence of MIN_FENCE_MS.
+export fun fenceHeld(t: CacheTrim, fence: double) > bool {
+    if (t.error != "" or fence <= MIN_FENCE_MS) { return false; }
+    if (t.afterBytes <= t.trimMb * 1048576) { return false; }
+    return t.stopped != "" and t.stopped.indexOf("timeout") == null;
+}
+
+/// trimCache trims one cache to its budget, tightening fence to MIN_FENCE_MS if needed.
+/// It keeps files inside fence, and when they alone pass the budget it trims once
+/// more at MIN_FENCE_MS; fs.trimOldest takes the oldest hours first, so that pass
+/// takes only what the budget needs. The result adds both passes and is tightened.
+export fun trimCache(name: str, dir: str, trimMb: int, fence: double, deadline: double) > CacheTrim {
+    final first = trimAt(name, dir: dir, trimMb: trimMb, fence: fence, deadline: deadline);
+    if (!fenceHeld(first, fence: fence)) { return first; }
+    final second = trimAt(name, dir: dir, trimMb: trimMb, fence: MIN_FENCE_MS, deadline: deadline);
+    return CacheTrim{
+        name = name,
+        trimMb = trimMb,
+        removedFiles = first.removedFiles + second.removedFiles,
+        removedBytes = first.removedBytes + second.removedBytes,
+        afterBytes = if (second.error == "") second.afterBytes else first.afterBytes,
+        stopped = second.stopped,
+        error = second.error,
+        tightened = true,
+    };
+}
+
 fun fenceLabel(fence: double) > str {
     return "{std\toInt(fence / 3600000.0)}h";
 }
 
 /// trimLine says what one trim really did, null when it did nothing to say.
+/// fence is the fence the trim was given; a tightened trim names it and MIN_FENCE_MS.
 export fun trimLine(t: CacheTrim, fence: double) > str? {
+    final removed = size(std\toInt(t.removedBytes / 1024));
     final left = size(std\toInt(t.afterBytes / 1024));
+    final given = fenceLabel(fence);
+    final least = fenceLabel(MIN_FENCE_MS);
+    if (t.error != "" and t.tightened) { return "trimmed {removed} of {t.name} outside the {given} fence, then could not trim it at {least}: {t.error}"; }
     if (t.error != "") { return "could not trim {t.name}: {t.error}"; }
     if (t.removedFiles == 0 and t.stopped == "") { return null; }
     var tail = "{left} left";
-    if (t.afterBytes > t.trimMb * 1048576) { tail = "{left} left, past its {t.trimMb} MiB budget and all newer than the {fenceLabel(fence)} fence"; }
-    if (t.stopped.indexOf("timeout") != null) { tail = "{left} left, {t.stopped}"; }
-    return "trimmed {size(std\toInt(t.removedBytes / 1024))} of {t.name}; {tail}";
+    if (t.stopped.indexOf("timeout") != null) {
+        tail = "{left} left, {t.stopped}";
+        if (t.tightened) { tail = "{tail} after the fence tightened from {given} to {least}"; }
+    } else if (t.afterBytes > t.trimMb * 1048576 and t.tightened) {
+        tail = "{left} left, past its {t.trimMb} MiB budget and all newer than the {least} fence, tightened from {given}";
+    } else if (t.afterBytes > t.trimMb * 1048576) {
+        tail = "{left} left, past its {t.trimMb} MiB budget and all newer than the {given} fence";
+    } else if (t.tightened) {
+        tail = "{left} left, within its {t.trimMb} MiB budget once the fence tightened from {given} to {least}";
+    }
+    return "trimmed {removed} of {t.name}; {tail}";
 }
 
 /// trimDeclared trims every cache a spell gives a budget and returns each
@@ -859,14 +908,69 @@ test "the guard judges the same words git receives, or nothing" {
     assert\equal(guardLine("/work/repo", path: "/work/my repo/wt"), want: null, message: "a space");
 }
 
+// agedFile writes kib KiB to dir/name, last modified hours ago.
+fun agedFile(dir: str, name: str, kib: int, hours: double) > result\Result::<str> {
+    final path = fs\join(dir, name: name);
+    try {
+        fs\writeFile(path, content: "x".repeat(kib * 1024));
+        final at = time\format("2006-01-02T15:04:05Z", unixMillis: os\time() - hours * 3600000.0);
+        _ = proc\exec("touch", args: ["-d", at, path], opts: proc\ExecOptions{ quiet = true });
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "reclaimdisk: age {path}");
+    }
+    return result\ok::<str>(path);
+}
+
 test "a cache within its budget stays, and a trim says nothing it did not do" {
     final dir = fs\tempDir("trimcache");
     fs\writeFile(fs\join(dir, name: "entry"), content: "x");
     final within = trimCache("a cache", dir: dir, trimMb: 1, fence: 21600000.0, deadline: 0.0);
-    assert\equal(within.removedFiles, want: 0, message: "nothing removed");
+    assert\equal(within, want: CacheTrim{ name = "a cache", trimMb = 1, afterBytes = 1 }, message: "nothing removed, the fence kept");
     assert\equal(trimLine(within, fence: 21600000.0), want: null, message: "nothing said");
     assert\isTrue(fs\exists(fs\join(dir, name: "entry")), message: "kept");
     fs\removeAll(dir);
+}
+
+test "a cache the fence holds past its budget trims again at 1h, only down to the budget, and says so" {
+    final dir = fs\tempDir("trimcache");
+    final old = agedFile(dir, name: "old", kib: 1024, hours: 10.5).value!;
+    final mid = agedFile(dir, name: "mid", kib: 1024, hours: 3.5).value!;
+    final recent = agedFile(dir, name: "recent", kib: 1, hours: 2.5).value!;
+    final fresh = agedFile(dir, name: "fresh", kib: 1, hours: 0.0).value!;
+    final fence = 21600000.0;
+    final got = trimCache("a cache", dir: dir, trimMb: 1, fence: fence, deadline: 0.0);
+    assert\equal(got, want: CacheTrim{ name = "a cache", trimMb = 1, removedFiles = 2, removedBytes = 2097152, afterBytes = 2048, tightened = true }, message: "both passes");
+    assert\equal(trimLine(got, fence: fence), want: "trimmed 2 MiB of a cache; 2 KiB left, within its 1 MiB budget once the fence tightened from 6h to 1h", message: "says so");
+    assert\isFalse(fs\exists(old), message: "outside the 6h fence");
+    assert\isFalse(fs\exists(mid), message: "outside 1h, and the budget needed it");
+    assert\isTrue(fs\exists(recent), message: "outside 1h, and the budget did not need it");
+    assert\isTrue(fs\exists(fresh), message: "inside 1h");
+    fs\removeAll(dir);
+}
+
+test "a cache past its budget even at 1h keeps the past-budget line and names both fences" {
+    final dir = fs\tempDir("trimcache");
+    final fresh = agedFile(dir, name: "fresh", kib: 2048, hours: 0.0).value!;
+    final fence = 21600000.0;
+    final got = trimCache("a cache", dir: dir, trimMb: 1, fence: fence, deadline: 0.0);
+    assert\equal(got.removedFiles, want: 0, message: "nothing outside 1h");
+    assert\isTrue(got.tightened, message: "it tried 1h");
+    assert\equal(trimLine(got, fence: fence), want: "trimmed 0 KiB of a cache; 2 MiB left, past its 1 MiB budget and all newer than the 1h fence, tightened from 6h", message: "past budget");
+    assert\isTrue(fs\exists(fresh), message: "kept");
+    fs\removeAll(dir);
+}
+
+test "only a fence longer than 1h that alone held the budget is tightened" {
+    final g = 1073741824;
+    final held = CacheTrim{ name = "c", trimMb = 1, afterBytes = 2 * 1048576, stopped = "files modified within 6h hold them" };
+    assert\isTrue(fenceHeld(held, fence: 21600000.0), message: "a 6h fence");
+    assert\isFalse(fenceHeld(held, fence: MIN_FENCE_MS), message: "already 1h");
+    final timedOut = CacheTrim{ name = "c", trimMb = 1, afterBytes = 2 * 1048576, stopped = "stopped at its timeout" };
+    assert\isFalse(fenceHeld(timedOut, fence: 21600000.0), message: "a timeout");
+    final failed = CacheTrim{ name = "c", trimMb = 1, error = "denied" };
+    assert\isFalse(fenceHeld(failed, fence: 21600000.0), message: "a failure");
+    final fits = CacheTrim{ name = "c", trimMb = 20480, removedFiles = 1, removedBytes = g, afterBytes = g };
+    assert\isFalse(fenceHeld(fits, fence: 21600000.0), message: "within budget");
 }
 
 test "a trim line reports the real numbers, the fence and a failure" {
@@ -878,6 +982,10 @@ test "a trim line reports the real numbers, the fence and a failure" {
     assert\equal(trimLine(fits, fence: fence), want: "trimmed 1.0 GiB of c; 2.0 GiB left", message: "within budget");
     final failed = CacheTrim{ name = "c", trimMb = 1, error = "denied" };
     assert\equal(trimLine(failed, fence: fence), want: "could not trim c: denied", message: "a failure");
+    final late = CacheTrim{ name = "c", trimMb = 20480, removedFiles = 9, removedBytes = g, afterBytes = 30 * g, stopped = "stopped at its timeout", tightened = true };
+    assert\equal(trimLine(late, fence: fence), want: "trimmed 1.0 GiB of c; 30.0 GiB left, stopped at its timeout after the fence tightened from 6h to 1h", message: "a tightened trim that timed out");
+    final retryFailed = CacheTrim{ name = "c", trimMb = 20480, removedFiles = 9, removedBytes = g, afterBytes = 30 * g, error = "denied", tightened = true };
+    assert\equal(trimLine(retryFailed, fence: fence), want: "trimmed 1.0 GiB of c outside the 6h fence, then could not trim it at 1h: denied", message: "the 1h pass failed");
 }
 
 test "what a person reads counts kept worktrees by reason" {
