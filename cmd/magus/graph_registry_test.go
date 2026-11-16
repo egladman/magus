@@ -71,6 +71,6 @@ func TestGraphTablePushWithoutATableNamesTheCommand(t *testing.T) {
 		err = graphPush(t.Context(), t.TempDir(), []string{"-table", "--ref", reg.host() + "/egladman/magus-embed", "--username", "u"})
 	})
 	require.ErrorContains(t, err, "no embedding table in the cache")
-	assert.Contains(t, err.Error(), "magus run table libs/embed/train")
+	assert.Contains(t, err.Error(), "magus run table libs/train")
 	assert.Zero(t, reg.uploads)
 }

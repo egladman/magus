@@ -243,10 +243,10 @@ test "a scope names at most three projects, then an ellipsis" {
 }
 
 test "a project is named by its last segment, or its path when that is shared" {
-    final projects = [".", "docs", "libs/proofread", "libs/proofread/train", "libs/embed/train"];
+    final projects = [".", "docs", "libs/proofread", "libs/proofread/train", "libs/train"];
     std\assert(projectName(".", projects: projects) == "magus", message: "root");
     std\assert(projectName("libs/proofread", projects: projects) == "proofread", message: "unique");
-    std\assert(projectName("libs/embed/train", projects: projects) == "libs/embed/train", message: "shared");
+    std\assert(projectName("libs/train", projects: projects) == "libs/train", message: "shared");
 }
 
 test "a scope names projects the change affects, and kitchen-sink every one" {
