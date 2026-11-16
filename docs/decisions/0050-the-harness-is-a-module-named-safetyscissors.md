@@ -405,6 +405,20 @@ decided.
   script. An answer means only that something the caller chose said yes, never that a
   person approved. The record keeps the answerer's label as given and calls it
   unverified, and nothing in the module's names or messages implies a human.
+
+  An answer carries a basis, as a grade does, so the record can say a person approved
+  only when that is proven. Eli added this on 2026-11-15:
+  - reported: the answer and its answerer's label, as given. This is the default.
+  - signed: the answer is signed by a key held by an approval tool outside the worker's
+    reach, such as a phone prompt, a chat approval or a hardware key. The caller passes
+    the verifier when it builds the table, and the record names the signer the verifier
+    returns. A signed answer is bound to the question's id and the step's digest, so it
+    cannot be replayed onto another step.
+
+  A rule may require a signed answer. A reported answer to that rule's ask is refused
+  and recorded, so a model's yes never clears it. A rule that requires one, built into a
+  table with no verifier, is a construction error. Signed answers have not been
+  prototyped; the grading prototype's `Attest` path is the shape to reuse.
 - Grading a goal from a caller's own check. A result the caller hands over is evidence
   the worker could author, so the lean is three bases, each named on the grade:
   - witnessed: the caller passes its unstarted `exec.Cmd`, and the library checks the
