@@ -198,6 +198,7 @@ decisions/0045-a-worker-is-judged-by-its-checkpoint/
 decisions/0046-the-judge-takes-any-agent-step/
 decisions/0047-the-magus-module-has-namespaces/
 decisions/0048-a-local-ci-repairs-a-declared-writer/
+decisions/0049-retrieval-is-a-static-table-and-a-ranker/
 dependencies/
 design/
 design/judgment/
@@ -293,6 +294,7 @@ development/libs-testpairing/
 development/libs-testsprawl/
 development/libs-text/
 development/libs-textsearch/
+development/libs-train/
 development/libs-xdg/
 development/magus/
 development/projects/
@@ -1553,6 +1555,7 @@ tags/replay/
 tags/reproduce/
 tags/required/
 tags/restart/
+tags/retrieval/
 tags/retry/
 tags/review/
 tags/rfc-6902/
@@ -1613,6 +1616,7 @@ tags/status/
 tags/stdin/
 tags/stdio/
 tags/stdlib/
+tags/step/
 tags/store/
 tags/stores/
 tags/strengthen-only/
