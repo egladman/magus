@@ -17,7 +17,7 @@ A **target** is a named unit of work (build, test, lint, ...) declared as an `ex
 - Project: magus
 - Project: libs/embed
 - Project: libs/figure
-- Project: libs/gopherart
+- Project: libs/marks
 - Project: libs/proofread/train
 - Project: libs/ssg
 - Project: libs/train
@@ -91,9 +91,9 @@ magus graph export -o json  # the whole graph
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       8 | `magus query project=libs/diagnostics`                | `format`, `ci`, `test`                            |
 | libs/embed                                                                  |       8 | `magus query project=libs/embed`                      | `build`, `ci`, `lint`                             |
 | libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `ci`, `lint`, `test`                              |
-| libs/gopherart                                                              |       4 | `magus query project=libs/gopherart`                  | `generate`, `lint`, `test`                        |
 | [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      12 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `buzzbench-test`               |
 | [libs/kustomize](libs/kustomize/MAGUS.md)                                   |       5 | `magus query project=libs/kustomize`                  | `lint`, `ci`, `test`                              |
+| libs/marks                                                                  |       4 | `magus query project=libs/marks`                      | `generate`, `lint`, `test`                        |
 | [libs/proofread](libs/proofread/MAGUS.md)                                   |      12 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `wordclass-generate` |
 | libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `ci`, `format`                            |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `test`                            |
@@ -206,14 +206,14 @@ magus graph export -o json  # the whole graph
 | `test` | test runs the in-file test blocks upstream-strict.                           |
 | `lint` | lint type-checks the module upstream-strict and fails on any BZZ diagnostic. |
 
-## Project: libs/gopherart
+## Project: libs/marks
 
-| Target     | What it does                                                   |
-| ---------- | -------------------------------------------------------------- |
-| `generate` | generate draws every mark into gen/.                           |
-| `ci`       | ci runs lint, then test.                                       |
-| `test`     | test runs the in-file test blocks.                             |
-| `lint`     | lint type-checks every module and fails on any BZZ diagnostic. |
+| Target     | What it does                                                 |
+| ---------- | ------------------------------------------------------------ |
+| `generate` | generate draws every mark into gen/.                         |
+| `ci`       | ci runs lint, then test.                                     |
+| `test`     | test runs the in-file test blocks.                           |
+| `lint`     | lint type-checks the script and fails on any BZZ diagnostic. |
 
 ## Project: libs/proofread/train
 

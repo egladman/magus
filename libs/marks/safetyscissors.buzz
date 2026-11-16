@@ -1,0 +1,534 @@
+// safetyscissors.buzz draws the libs/safetyscissors mark, a pair of kids'
+// safety scissors, as SVG from geometry and a little trigonometry, the way
+// buzzed draws its pull tab: flat, two colors, on Apple's macOS grid (an
+// 824 body centered on a 1024 canvas, its outline a superellipse of
+// exponent 5), with a shadow drawn as stacked translucent copies.
+//
+//     magus buzz safetyscissors.buzz [dir]
+//
+// The math helpers and the grid are copied from buzzed's tools/icon/icon.buzz
+// rather than shared: that is another repository, and this file must run
+// with nothing but magus.
+import "std";
+import "fs";
+
+import "result";
+
+final PI = 3.141592653589793;
+final TAU = 6.283185307179586;
+final LN2 = 0.6931471805599453;
+
+final CENTER = 512.0;
+final HALF = 412.0;
+final EXPONENT = 5.0;
+
+// The math module carries no trigonometry, so these are series.
+
+fun floor(x: double) > double {
+    final t = std\toDouble(std\toInt(x));
+    return if (t > x) t - 1.0 else t;
+}
+
+fun abs(x: double) > double {
+    return if (x < 0.0) -x else x;
+}
+
+fun sgn(x: double) > double {
+    return if (x < 0.0) -1.0 else 1.0;
+}
+
+fun sin(x: double) > double {
+    var r = x - TAU * floor((x + PI) / TAU);
+    if (r > PI / 2.0) {
+        r = PI - r;
+    } else if (r < -PI / 2.0) {
+        r = -PI - r;
+    }
+    final r2 = r * r;
+    var term = r;
+    var sum = r;
+    for (var k = 1; k <= 8; k = k + 1) {
+        term = -term * r2 / std\toDouble((2 * k) * (2 * k + 1));
+        sum = sum + term;
+    }
+    return sum;
+}
+
+fun cos(x: double) > double {
+    return sin(x + PI / 2.0);
+}
+
+fun sqrt(x: double) > double {
+    if (x <= 0.0) {
+        return 0.0;
+    }
+    var g = if (x > 1.0) x else 1.0;
+    for (var i = 0; i < 60; i = i + 1) {
+        g = 0.5 * (g + x / g);
+    }
+    return g;
+}
+
+fun ln(x: double) > double {
+    var m = x;
+    var k = 0.0;
+    while (m > 2.0) {
+        m = m / 2.0;
+        k = k + 1.0;
+    }
+    while (m < 1.0) {
+        m = m * 2.0;
+        k = k - 1.0;
+    }
+    final y = (m - 1.0) / (m + 1.0);
+    final y2 = y * y;
+    var term = y;
+    var sum = 0.0;
+    for (var i = 0; i < 24; i = i + 1) {
+        sum = sum + term / std\toDouble(2 * i + 1);
+        term = term * y2;
+    }
+    return 2.0 * sum + k * LN2;
+}
+
+fun exp(x: double) > double {
+    final n = floor(x / LN2 + 0.5);
+    final r = x - n * LN2;
+    var term = 1.0;
+    var sum = 1.0;
+    for (var i = 1; i < 20; i = i + 1) {
+        term = term * r / std\toDouble(i);
+        sum = sum + term;
+    }
+    var scale = 1.0;
+    final steps = std\toInt(abs(n));
+    for (var i = 0; i < steps; i = i + 1) {
+        scale = if (n > 0.0) scale * 2.0 else scale / 2.0;
+    }
+    return sum * scale;
+}
+
+fun pow(x: double, p: double) > double {
+    return if (x <= 0.0) 0.0 else exp(p * ln(x));
+}
+
+// asin inverts sin over [-PI/2, PI/2] by bisection.
+fun asin(x: double) > double {
+    var lo = -PI / 2.0;
+    var hi = PI / 2.0;
+    for (var i = 0; i < 48; i = i + 1) {
+        final mid = (lo + hi) / 2.0;
+        if (sin(mid) < x) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    return (lo + hi) / 2.0;
+}
+
+object Pt {
+    x: double,
+    y: double,
+}
+
+// num prints x to two decimals, so the SVG bytes do not depend on how the
+// host formats a double.
+fun num(x: double) > str {
+    final hundredths = std\toInt(if (x < 0.0) x * 100.0 - 0.5 else x * 100.0 + 0.5);
+    final m = if (hundredths < 0) -hundredths else hundredths;
+    final sign = if (hundredths < 0) "-" else "";
+    final whole = m / 100;
+    final frac = m % 100;
+    if (frac == 0) {
+        return "{sign}{whole}";
+    }
+    if (frac % 10 == 0) {
+        return "{sign}{whole}.{frac / 10}";
+    }
+    if (frac < 10) {
+        return "{sign}{whole}.0{frac}";
+    }
+    return "{sign}{whole}.{frac}";
+}
+
+fun opacity(alpha: double) > str {
+    return if (alpha >= 1.0) "" else " fill-opacity=\"{num(alpha)}\"";
+}
+
+fun shape(svg: mut [str], d: str, fill: str, alpha: double) > void {
+    svg.append("<path d=\"{d}\" fill=\"{fill}\"{opacity(alpha)}/>");
+}
+
+// smooth closes a Catmull-Rom spline through pts as cubic Béziers.
+fun smooth(pts: [Pt]) > str {
+    final n = pts.len();
+    final d = mut ["M {num(pts[0].x)} {num(pts[0].y)}"];
+    for (var i = 0; i < n; i = i + 1) {
+        final p0 = pts[(i + n - 1) % n];
+        final p1 = pts[i];
+        final p2 = pts[(i + 1) % n];
+        final p3 = pts[(i + 2) % n];
+        d.append(" C {num(p1.x + (p2.x - p0.x) / 6.0)} {num(p1.y + (p2.y - p0.y) / 6.0)}"
+            + " {num(p2.x - (p3.x - p1.x) / 6.0)} {num(p2.y - (p3.y - p1.y) / 6.0)}"
+            + " {num(p2.x)} {num(p2.y)}");
+    }
+    d.append(" Z");
+    return d.join("");
+}
+
+fun polygon(pts: [Pt]) > str {
+    final d = mut [<str>];
+    foreach (i, p in pts) {
+        final verb = if (i == 0) "M" else " L";
+        d.append("{verb} {num(p.x)} {num(p.y)}");
+    }
+    d.append(" Z");
+    return d.join("");
+}
+
+// superellipsePoints samples |x/ax|^n + |y/ay|^n = 1 about (cx, cy). Sampling
+// by angle crowds the points into the corners, where the curve turns.
+fun superellipsePoints(cx: double, cy: double, ax: double, ay: double, n: double) > [Pt] {
+    final pts = mut [<Pt>];
+    final e = 2.0 / n;
+    final steps = 160;
+    for (var i = 0; i < steps; i = i + 1) {
+        final t = TAU * std\toDouble(i) / std\toDouble(steps);
+        final c = cos(t);
+        final s = sin(t);
+        pts.append(Pt{ x = cx + ax * sgn(c) * pow(abs(c), p: e), y = cy + ay * sgn(s) * pow(abs(s), p: e) });
+    }
+    return pts;
+}
+
+fun superellipse(cx: double, cy: double, ax: double, ay: double, n: double) > str {
+    return smooth(superellipsePoints(cx, cy: cy, ax: ax, ay: ay, n: n));
+}
+
+// capsule is the outline of the hull of two circles: the round nose of a
+// blade at top and its broad heel at bottom, joined by their outer
+// tangents.
+fun capsule(top: Pt, topR: double, heel: Pt, heelR: double) > [Pt] {
+    final dx = heel.x - top.x;
+    final dy = heel.y - top.y;
+    final gap = sqrt(dx * dx + dy * dy);
+    final ux = dx / gap;
+    final uy = dy / gap;
+    final vx = uy;
+    final vy = -ux;
+    final touch = PI / 2.0 - asin((heelR - topR) / gap);
+    final pts = mut [<Pt>];
+    final steps = 48;
+    for (var i = 0; i <= steps; i = i + 1) {
+        final psi = -touch + 2.0 * touch * std\toDouble(i) / std\toDouble(steps);
+        pts.append(Pt{ x = top.x + topR * (sin(psi) * vx - cos(psi) * ux), y = top.y + topR * (sin(psi) * vy - cos(psi) * uy) });
+    }
+    for (var i = 0; i <= steps; i = i + 1) {
+        final psi = touch + (TAU - 2.0 * touch) * std\toDouble(i) / std\toDouble(steps);
+        pts.append(Pt{ x = heel.x + heelR * (sin(psi) * vx - cos(psi) * ux), y = heel.y + heelR * (sin(psi) * vy - cos(psi) * uy) });
+    }
+    return pts;
+}
+
+// turned is p rotated deg degrees clockwise about c.
+fun turned(p: Pt, c: Pt, deg: double) > Pt {
+    final a = deg * PI / 180.0;
+    return Pt{
+        x = c.x + (p.x - c.x) * cos(a) - (p.y - c.y) * sin(a),
+        y = c.y + (p.x - c.x) * sin(a) + (p.y - c.y) * cos(a),
+    };
+}
+
+fun turnedAll(pts: [Pt], c: Pt, deg: double) > [Pt] {
+    return pts.map(fun (i: int, p: Pt) > Pt => turned(p, c: c, deg: deg));
+}
+
+// Design is one take on the mark. open spreads the blades, in degrees
+// between them; nose is the radius of each blade's round tip, the safety in
+// safety scissors; tilt leans the pair clockwise.
+export object Design {
+    name: str,
+    ground: str,
+    ink: str,
+    open: double = 0.0,
+    nose: double = 46.0,
+    tilt: double = 35.0,
+}
+
+// RIVET is where the blades cross, upright; everything turns about it.
+final RIVET = Pt{ x = CENTER, y = 540.0 };
+
+// Lever is one half of the scissors, upright and closed: a blade on side s
+// of the rivet and the finger loop on the far side, which cross there.
+object Lever {
+    blade: [Pt],
+    shank: [Pt],
+    loop: [Pt],
+    hole: [Pt],
+}
+
+fun lever(d: Design, s: double) > Lever {
+    final heel = Pt{ x = CENTER + s * 22.0, y = 560.0 };
+    final top = Pt{ x = CENTER + s * 4.0, y = 262.0 + d.nose };
+    final loopC = Pt{ x = CENTER - s * 108.0, y = 700.0 };
+    return Lever{
+        blade = capsule(top, topR: d.nose, heel: heel, heelR: 50.0),
+        shank = capsule(Pt{ x = CENTER - s * 6.0, y = 570.0 }, topR: 34.0, heel: loopC, heelR: 62.0),
+        loop = superellipsePoints(loopC.x, cy: loopC.y, ax: 104.0, ay: 96.0, n: 2.0),
+        hole = superellipsePoints(loopC.x, cy: loopC.y + 4.0, ax: 58.0, ay: 50.0, n: 2.0),
+    };
+}
+
+// Placed is the scissors as drawn: each lever turned open about the rivet,
+// then the pair tilted, then shifted to balance.
+object Placed {
+    levers: [Lever],
+}
+
+// SCALE grows the pair about the rivet to fill the body once tilted.
+final SCALE = 1.16;
+
+fun scaledAll(pts: [Pt]) > [Pt] {
+    return pts.map(fun (i: int, p: Pt) > Pt => Pt{ x = RIVET.x + (p.x - RIVET.x) * SCALE, y = RIVET.y + (p.y - RIVET.y) * SCALE });
+}
+
+fun placed(d: Design) > Placed {
+    final levers = mut [<Lever>];
+    foreach (s in [-1.0, 1.0]) {
+        final l = lever(d, s: s);
+        final deg = s * d.open / 2.0 + d.tilt;
+        levers.append(Lever{
+            blade = scaledAll(turnedAll(l.blade, c: RIVET, deg: deg)),
+            shank = scaledAll(turnedAll(l.shank, c: RIVET, deg: deg)),
+            loop = scaledAll(turnedAll(l.loop, c: RIVET, deg: deg)),
+            hole = scaledAll(turnedAll(l.hole, c: RIVET, deg: deg)),
+        });
+    }
+    return Placed{ levers = levers };
+}
+
+fun inside(p: Pt, poly: [Pt]) > bool {
+    var hit = false;
+    final n = poly.len();
+    for (var i = 0; i < n; i = i + 1) {
+        final a = poly[i];
+        final b = poly[(i + n - 1) % n];
+        if ((a.y > p.y) != (b.y > p.y) and p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) {
+            hit = !hit;
+        }
+    }
+    return hit;
+}
+
+fun filled(p: Pt, pl: Placed) > bool {
+    foreach (l in pl.levers) {
+        if (inside(p, poly: l.hole)) {
+            return false;
+        }
+    }
+    if (inside(p, poly: rivetPoints(pl))) {
+        return false;
+    }
+    foreach (l in pl.levers) {
+        if (inside(p, poly: l.blade) or inside(p, poly: l.shank) or inside(p, poly: l.loop)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fun rivetPoints(pl: Placed) > [Pt] {
+    return superellipsePoints(RIVET.x, cy: RIVET.y, ax: 22.0, ay: 22.0, n: 2.0);
+}
+
+// OPTICAL_LIFT is how far above the body's center a mark's weight should
+// sit, as a fraction of the body's side: an eye judges the true center low.
+final OPTICAL_LIFT = 0.025;
+
+fun thinned(pts: [Pt]) > [Pt] {
+    return pts.filter(fun (i: int, p: Pt) > bool => i % 4 == 0);
+}
+
+// weight is the centroid of the scissors' filled area, sampled every twelve
+// pixels over their bounds, against outlines thinned to every fourth point:
+// the loops' holes and the overlaps make a closed form long.
+fun weight(pl: Placed) > Pt {
+    final coarse = Placed{ levers = pl.levers.map(fun (i: int, l: Lever) > Lever => Lever{ blade = thinned(l.blade), shank = thinned(l.shank), loop = thinned(l.loop), hole = thinned(l.hole) }) };
+    var lo = Pt{ x = 1024.0, y = 1024.0 };
+    var hi = Pt{ x = 0.0, y = 0.0 };
+    foreach (l in coarse.levers) {
+        foreach (p in l.blade + l.loop) {
+            lo = Pt{ x = if (p.x < lo.x) p.x else lo.x, y = if (p.y < lo.y) p.y else lo.y };
+            hi = Pt{ x = if (p.x > hi.x) p.x else hi.x, y = if (p.y > hi.y) p.y else hi.y };
+        }
+    }
+    var n = 0.0;
+    var sx = 0.0;
+    var sy = 0.0;
+    for (var y = floor(lo.y); y < hi.y; y = y + 12.0) {
+        for (var x = floor(lo.x); x < hi.x; x = x + 12.0) {
+            if (filled(Pt{ x = x, y = y }, pl: coarse)) {
+                n = n + 1.0;
+                sx = sx + x;
+                sy = sy + y;
+            }
+        }
+    }
+    return Pt{ x = sx / n, y = sy / n };
+}
+
+// NUDGE moves the balanced pair down and right. The open blades fan up and
+// to the right, and the eye reads the pair's weight out there, past its
+// centroid; this settles it back.
+final NUDGE = Pt{ x = 18.0, y = 22.0 };
+
+// balance is the shift that carries the scissors' weight onto the optical
+// center, then nudges it: the loops outweigh the blades, so the box's
+// center is the wrong thing to center.
+fun balance(pl: Placed) > Pt {
+    final w = weight(pl);
+    return Pt{ x = CENTER - w.x + NUDGE.x, y = CENTER - OPTICAL_LIFT * 2.0 * HALF - w.y + NUDGE.y };
+}
+
+// Placement is a design's scissors placed and balanced once, for every
+// variant to draw: balancing samples the whole shape and is slow.
+export object Placement {
+    design: Design,
+    pl: Placed,
+    shift: Pt,
+}
+
+export fun place(d: Design) > Placement {
+    final pl = placed(d);
+    return Placement{ design = d, pl = pl, shift = balance(pl) };
+}
+
+fun scissors(svg: mut [str], at: Placement) > void {
+    final d = at.design;
+    final pl = at.pl;
+    final shift = at.shift;
+    svg.append("<g transform=\"translate({num(shift.x)} {num(shift.y)})\">");
+    foreach (l in pl.levers) {
+        shape(svg, d: polygon(l.blade), fill: d.ink, alpha: 1.0);
+        shape(svg, d: polygon(l.shank), fill: d.ink, alpha: 1.0);
+        shape(svg, d: smooth(l.loop), fill: d.ink, alpha: 1.0);
+    }
+    foreach (l in pl.levers) {
+        shape(svg, d: smooth(l.hole), fill: d.ground, alpha: 1.0);
+    }
+    shape(svg, d: smooth(rivetPoints(pl)), fill: d.ground, alpha: 1.0);
+    svg.append("</g>");
+}
+
+// art is one design's elements for one variant, without the root svg
+// element:
+//   grid   the macOS grid, with its shadow
+//   bleed  the art filling the canvas, for favicons
+//   touch  the art on a square ground, for apple-touch-icon, which iOS rounds
+export fun art(at: Placement, variant: str) > result\Result::<[str]> {
+    final d = at.design;
+    if (variant != "grid" and variant != "bleed" and variant != "touch") {
+        return result\fail::<[str]>("unknown variant {variant}: want grid, bleed or touch");
+    }
+    final svg = mut [<str>];
+    final outline = superellipse(CENTER, cy: CENTER, ax: HALF, ay: HALF, n: EXPONENT);
+    if (variant == "grid") {
+        for (var k = 10; k >= 1; k = k - 1) {
+            final dk = std\toDouble(k);
+            final spread = superellipse(CENTER, cy: CENTER + 3.0 + 1.6 * dk, ax: HALF + 1.4 * dk, ay: HALF + 1.4 * dk, n: EXPONENT);
+            shape(svg, d: spread, fill: "#000000", alpha: 0.028);
+        }
+    }
+    if (variant == "touch") {
+        svg.append("<rect x=\"0\" y=\"0\" width=\"1024\" height=\"1024\" fill=\"{d.ground}\"/>");
+    }
+    final s = 512.0 / HALF;
+    if (variant != "grid") {
+        svg.append("<g transform=\"matrix({num(s)} 0 0 {num(s)} {num(CENTER - CENTER * s)} {num(CENTER - CENTER * s)})\">");
+    }
+    shape(svg, d: outline, fill: d.ground, alpha: 1.0);
+    scissors(svg, at: at);
+    if (variant != "grid") {
+        svg.append("</g>");
+    }
+    return result\ok::<[str]>(svg);
+}
+
+// draw is art as a standalone 1024 SVG document.
+export fun draw(at: Placement, variant: str) > result\Result::<str> {
+    final drawn = art(at, variant: variant);
+    if (drawn.error -> e) {
+        return result\Result::<str>{ error = e };
+    }
+    final parts = mut ["<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1024\" height=\"1024\" viewBox=\"0 0 1024 1024\">"];
+    foreach (p in drawn.value!) {
+        parts.append(p);
+    }
+    parts.append("</svg>");
+    return result\ok::<str>(parts.join("\n") + "\n");
+}
+
+// DESIGNS are the mark in caution yellow and in blue: the pair half open
+// and leaning.
+export final DESIGNS = [
+    Design{ name = "yellow", ground = "#f2a91c", ink = "#1f2333", open = 34.0, tilt = 30.0 },
+    Design{ name = "blue", ground = "#2f6fe0", ink = "#f4eee2", open = 34.0, tilt = 30.0 },
+];
+
+// VARIANTS names the file each variant is written to, after the design.
+export final VARIANTS = {"grid": "", "bleed": "-favicon", "touch": "-touch"};
+
+// writeAll writes every design in every variant into dir, which it creates.
+export fun writeAll(dir: str) > result\Result::<[str]> {
+    final written = mut [<str>];
+    try {
+        fs\mkdirAll(dir);
+        foreach (d in DESIGNS) {
+            final at = place(d);
+            foreach (variant, suffix in VARIANTS) {
+                final svg = draw(at, variant: variant);
+                if (svg.error -> e) {
+                    return result\Result::<[str]>{ error = e };
+                }
+                final target = "{dir}/safetyscissors-{d.name}{suffix}.svg";
+                fs\writeFile(target, content: svg.value!);
+                written.append(target);
+            }
+        }
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "write the safetyscissors marks");
+    }
+    return result\ok::<[str]>(written);
+}
+
+fun main(args: [str]) > void !> any {
+    final dir = if (args.len() > 0) args[0] else "gen";
+    final res = writeAll(dir);
+    if (res.error -> e) {
+        throw e.message;
+    }
+    foreach (target in res.value!) {
+        std\print(target);
+    }
+}
+
+test "a design draws the same bytes twice" {
+    final at = place(DESIGNS[0]);
+    std\assert(draw(at, variant: "bleed").value! == draw(at, variant: "bleed").value!, message: DESIGNS[0].name);
+    std\assert(draw(at, variant: "poster").error != null, message: "an unknown variant is refused");
+}
+
+test "the balanced scissors' weight lands nudged off the optical center" {
+    final at = place(DESIGNS[0]);
+    final w = weight(at.pl);
+    std\assert(num(w.x + at.shift.x) == num(CENTER + 18.0), message: "right of center");
+    std\assert(num(w.y + at.shift.y) == num(CENTER - 20.6 + 22.0), message: "the optical lift, less the nudge");
+}
+
+test "the series agree with known values" {
+    std\assert(num(sin(PI / 6.0) * 100.0) == "50", message: "sin");
+    std\assert(num(cos(PI) * 100.0) == "-100", message: "cos");
+    std\assert(num(sqrt(2.0) * 100.0) == "141.42", message: "sqrt");
+    std\assert(num(asin(0.5) * 180.0 / PI) == "30", message: "asin");
+}
