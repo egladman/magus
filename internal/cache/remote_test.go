@@ -759,3 +759,77 @@ func TestImportTurnedAwayByItsManifestWritesNothing(t *testing.T) {
 	_, err = cB.readManifest("test/pkg", rA.Hash)
 	require.ErrorIs(t, err, os.ErrNotExist, "the manifest is not committed")
 }
+
+// makeTar writes a gzip-compressed tar containing one file of size n bytes.
+func makeTar(t *testing.T, name string, size int64) io.Reader {
+	t.Helper()
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	require.NoError(t, tw.WriteHeader(&tar.Header{
+		Name:     name,
+		Typeflag: tar.TypeReg,
+		Size:     size,
+	}), "tar header")
+	_, err := io.Copy(tw, io.LimitReader(zeroReader{}, size))
+	require.NoError(t, err, "tar body")
+	require.NoError(t, tw.Close(), "tar close")
+	require.NoError(t, gw.Close(), "gzip close")
+	return &buf
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 0
+	}
+	return len(p), nil
+}
+
+// TestImportMaxBytesCapsTarBomb verifies that a tar entry larger than
+// WithMaxImportBytes is rejected rather than silently truncated. Import
+// accepts arbitrary input from CI/S3; a truncated write that still returns
+// success would commit a corrupt blob that Replay never re-verifies (see
+// snapshot.go's replayBlob, which just reflinks/copies by name).
+func TestImportMaxBytesCapsTarBomb(t *testing.T) {
+	t.Parallel()
+
+	cdir := t.TempDir()
+	c, err := Open(t.Context(), cdir, WithMaxImportBytes(1024))
+	require.NoError(t, err, "Open")
+
+	// Create a "bomb": a single entry that would be 1 MiB without the cap.
+	const entrySize = 1 << 20
+	archive := makeTar(t, "manifests/test/entry", entrySize)
+
+	err = c.Import(context.Background(), archive)
+	require.Error(t, err, "Import must reject an oversized entry rather than truncating it")
+	assert.ErrorIs(t, err, errImportTooLarge)
+
+	// No truncated (corrupt) file must be left behind at the destination.
+	dest := filepath.Join(cdir, "manifests", "test", "entry")
+	_, statErr := os.Stat(dest)
+	assert.True(t, os.IsNotExist(statErr), "oversized entry must not leave a truncated file on disk")
+}
+
+// TestImportDefaultCapApplied ensures Import works normally when no cap
+// option is set — the default cap must be large enough for real archives.
+func TestImportDefaultCapApplied(t *testing.T) {
+	t.Parallel()
+
+	cdir := t.TempDir()
+	c, err := Open(t.Context(), cdir)
+	require.NoError(t, err, "Open")
+
+	// A small legitimate entry — must pass through untruncated.
+	const entrySize = 4096
+	archive := makeTar(t, "manifests/test/small", entrySize)
+
+	require.NoError(t, c.Import(context.Background(), archive), "Import")
+
+	dest := filepath.Join(cdir, "manifests", "test", "small")
+	fi, err := os.Stat(dest)
+	require.NoError(t, err, "stat")
+	assert.Equal(t, int64(entrySize), fi.Size())
+}
