@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,6 +87,26 @@ func (s *ForkGraderSuite) TestRulesThatNameNoFilesAreJudgedEveryTime() {
 
 	g.Grade(s.T().Context(), s.root, row)
 	g.Grade(s.T().Context(), s.root, row)
+
+	s.Equal(2, g.verdicts.Judged())
+}
+
+// A deferral is not kept: rules that did not load may load at the next grade, so it judges
+// again even though the rules' files, and so the key, are unchanged.
+func (s *ForkGraderSuite) TestADeferredGradeIsJudgedAgain() {
+	files := []string{filepath.Join(s.root, "magusfile.buzz")}
+	load := func(context.Context, string) (Dependencies, *WorkspaceRules) {
+		return Dependencies{
+			LoadFailure: errors.New("magusfile.buzz:1: expected ';'"),
+			Policy:      func() PolicyState { return PolicyState{Files: files} },
+		}, nil
+	}
+	g := NewForkGrader(nil, load)
+	row := s.row("go-build", false)
+	s.Require().NotEmpty(gradeKey(s.root, g.rules.current(s.T().Context(), s.root), row), "the grade has a key, so only the deferral keeps it out of the memo")
+
+	s.NotEmpty(g.Grade(s.T().Context(), s.root, row).Deferred)
+	s.NotEmpty(g.Grade(s.T().Context(), s.root, row).Deferred)
 
 	s.Equal(2, g.verdicts.Judged())
 }

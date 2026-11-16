@@ -10,7 +10,6 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -108,41 +107,6 @@ func (s *ForkGraderSuite) TestEveryVerdictMatchesTheUnsharedGrader() {
 		}
 	}
 	s.True(denied["go-build"], "the rule denies go-build, so a deny is compared too")
-}
-
-// A judgment that lapses reads the workspace again: whichever of the policy read and the
-// open it reaches first stalls it, so counting both shows each grade judged afresh.
-func (s *ForkGraderSuite) TestADeferredGradeIsJudgedAgain() {
-	release := make(chan struct{})
-	defer close(release)
-	var reads atomic.Int64
-	stalled := func(ctx context.Context, root string) (guard.Dependencies, *guard.WorkspaceRules) {
-		deps, rules := loadGuardDependencies(ctx, root)
-		deps.TargetPolicies = func(ctx context.Context, _ string) (types.TargetPolicyIndex, bool) {
-			reads.Add(1)
-			<-ctx.Done()
-			return types.TargetPolicyIndex{}, false
-		}
-		deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
-			reads.Add(1)
-			<-release
-			return nil, context.Canceled
-		}
-		return deps, rules
-	}
-	g := guard.NewForkGrader(nil, stalled)
-	row := s.rows()[0]
-	grade := func() job.CheckVerdict {
-		ctx, cancel := context.WithTimeout(s.T().Context(), 500*time.Millisecond)
-		defer cancel()
-		return g.Grade(ctx, s.root, row)
-	}
-
-	s.Require().NotEmpty(grade().Deferred, "the guard ran out of time")
-	judged := reads.Load()
-	s.Require().Positive(judged)
-	s.NotEmpty(grade().Deferred)
-	s.Greater(reads.Load(), judged, "a lapse is the clock's, so the next grade judges again")
 }
 
 // ForkSeatSuite pins that a fork's validation waits for a seat as a graph build does, and
