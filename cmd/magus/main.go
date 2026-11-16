@@ -720,6 +720,23 @@ func peekSub(args []string) (sub string, subArgs []string) {
 	return "", nil
 }
 
+// refuseUnjudgedHook answers `magus shell` or a glue, `magus buzz -s` with an event piped
+// in, whose magus cannot start for root, since a host runs a failed hook's call.
+func refuseUnjudgedHook(ctx context.Context, root, sub string, subArgs []string, cause error) (int, bool) {
+	if sub == "shell" {
+		return mapExitCode(shellCommand(withStaleConfig(ctx, cause), subArgs)), true
+	}
+	own, _, _ := strings.Cut(strings.Join(subArgs, "\x00"), "\x00--\x00")
+	if sub != "buzz" || stdinIsTerminal() || !slices.Contains(strings.Split(own, "\x00"), "-s") {
+		return 0, false
+	}
+	answer, reason := guard.UnjudgedHook(root, os.Stdin, cause)
+	if reason != "" {
+		fmt.Fprintln(os.Stderr, reason)
+	}
+	return answer.ExitCode(), true
+}
+
 // startup runs all pre-dispatch steps (config, server forward, flag parse, workspace init, proc server).
 // exitCode >= 0 means exit without dispatching; -1 means proceed.
 func startup(rootCtx context.Context, args []string) (context.Context, startupResult, int) {
@@ -761,10 +778,8 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	stopCfgLoad()
 	if err != nil {
 		err = config.WithRunningVersion(err, version)
-		// A hook reads a guard that exits as no verdict and refuses the
-		// call, the rebuild included. The guard judges the failure instead.
-		if peekedSub == "shell" {
-			return rootCtx, startupResult{cleanup: cleanup}, mapExitCode(shellCommand(withStaleConfig(rootCtx, err), peekedSubArgs))
+		if code, answered := refuseUnjudgedHook(rootCtx, earlyRoot, peekedSub, peekedSubArgs, err); answered {
+			return rootCtx, startupResult{cleanup: cleanup}, code
 		}
 		// Printed rather than logged: the unknown-key error names a file, a line and a
 		// suggestion per line, and slog's text handler escapes every quote and newline
@@ -786,8 +801,16 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		return os.Getenv(name)
 	}
 	if err := errors.Join(configgen.ApplyEnv(&cfg, knownEnv), config.Validate(cfg)); err != nil {
-		fmt.Fprintf(os.Stderr, "magus: invalid configuration from the environment: %v\n", err)
+		err = fmt.Errorf("invalid configuration from the environment: %w", err)
+		if code, answered := refuseUnjudgedHook(rootCtx, earlyRoot, peekedSub, peekedSubArgs, err); answered {
+			return rootCtx, startupResult{cleanup: cleanup}, code
+		}
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return rootCtx, startupResult{cleanup: cleanup}, 1
+	}
+	// A hook glue names and passes the repair from these lines alone, never a copy of the rules.
+	if err := guard.ExportRepairLines(earlyRoot); err != nil {
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 	}
 	// Pass config to the workspace singletons via package-level state.
 	globalCfg = cfg
@@ -912,6 +935,9 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	}
 	if err := errors.Join(finalizeConfig(), refuseInheritedSandboxWeakened(globalCfg.Sandbox.Mode)); err != nil {
 		stopFlags()
+		if code, answered := refuseUnjudgedHook(rootCtx, earlyRoot, peekedSub, peekedSubArgs, fmt.Errorf("invalid configuration from flags: %w", err)); answered {
+			return rootCtx, startupResult{cleanup: cleanup}, code
+		}
 		slog.ErrorContext(rootCtx, "invalid configuration from flags", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		return rootCtx, startupResult{cleanup: cleanup}, 1
 	}

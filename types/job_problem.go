@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
 )
@@ -123,7 +124,7 @@ func (ps JobProblems) Fixable() int {
 // [Declaration.Problems] reports it as JobRecordInvalid.
 func (ps JobProblems) Permit(ds []Deviation) (kept, permitted JobProblems) {
 	for _, p := range ps {
-		if Permissible(p.Code) && slices.ContainsFunc(ds, func(d Deviation) bool { return d.Permits(p) }) {
+		if p.Permissible() && slices.ContainsFunc(ds, func(d Deviation) bool { return d.Permits(p) }) {
 			permitted = append(permitted, p)
 			continue
 		}
@@ -156,6 +157,17 @@ func (d Deviation) Permits(p JobProblem) bool {
 	}
 	matched, _ := doublestar.Match(d.Subject, p.Subject)
 	return matched
+}
+
+// DropsSubject opens the subject of a problem that a re-declaration of a live job would
+// erase a declared field: "drops paths.write". A deviation naming it is the record saying so.
+const DropsSubject = "drops "
+
+// Permissible reports whether p may be permitted: its code is [Permissible], or it is a
+// record refused for dropping a declared field of a live job, which the record may accept
+// by naming that field.
+func (p JobProblem) Permissible() bool {
+	return Permissible(p.Code) || p.Code == JobRecordInvalid && strings.HasPrefix(p.Subject, DropsSubject)
 }
 
 // Permissible reports whether a problem of code c may be permitted: only a judgment about how

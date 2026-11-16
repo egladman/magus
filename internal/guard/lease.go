@@ -2128,7 +2128,7 @@ var forkFlagsUnbounded = map[string]bool{
 func cliFork(args []string, stdin string) childFork {
 	operands, flags := verbArgv(args, hint.JobFork)
 	if flags["stdin"] != "" && flags["stdin"] != "false" {
-		row, _, err := job.DecodeStdinDeclaration(strings.NewReader(stdin))
+		row, err := job.DecodeStdinDeclaration(strings.NewReader(stdin))
 		if err != nil {
 			return childFork{}
 		}

@@ -165,6 +165,14 @@ type hookEntry struct {
 // when it is executable and PATH's magus otherwise.
 const checkoutMagusPrefix = `m="$CLAUDE_PROJECT_DIR"/magus; [ -x "$m" ] || m=magus; "$m" `
 
+// failClosedOpen and failClosedRun bracket the wrapper the claude-code spell puts around
+// the checkout's magus so a hook that cannot judge refuses the call. The spell's own tests
+// pin the wrapper's body; this test checks only what it runs.
+const (
+	failClosedOpen = `m="$CLAUDE_PROJECT_DIR"/magus; [ -x "$m" ] || m=magus; fail_closed() { `
+	failClosedRun  = `; fail_closed "$m" `
+)
+
 // hookSettings is a host hook config keyed by event name.
 type hookSettings struct {
 	Hooks map[string][]hookEntry `json:"hooks"`
@@ -198,11 +206,16 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 			for _, h := range entry.Hooks {
 				// One magus command per hook: a shell around it is logic no template
 				// carries and no reader downloads. The claude-code spell's checkout-first
-				// prefix is the one exception, and only verbatim. The harness marker on a
+				// prefix and its fail-closed wrapper are the one exception. The harness marker on a
 				// hook a spell owns is the other.
 				command := strings.TrimSuffix(h.Command, " # magus:harness")
 				if rest, ok := strings.CutPrefix(command, checkoutMagusPrefix); ok {
 					command = "magus " + rest
+				}
+				if strings.HasPrefix(command, failClosedOpen) {
+					if _, rest, ok := strings.Cut(command, failClosedRun); ok {
+						command = "magus " + rest
+					}
 				}
 				// A harness-owned entry trails " # magus:harness"; that comment is the
 				// ownership marker, not a second command.

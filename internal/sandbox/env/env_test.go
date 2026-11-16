@@ -52,6 +52,8 @@ func TestScrubKeepsAPrefixMatch(t *testing.T) {
 func TestDefaultAllowWithholdsTheMagusSockets(t *testing.T) {
 	a := Allowlist{Names: DefaultAllow()}
 	assert.True(t, a.Allows("PATH"))
+	assert.True(t, a.Allows("__MAGUS_REPAIR_LINES"), "the hook glue reads its repair under a sandbox")
+	assert.True(t, a.Allows("__MAGUS_REPAIR_ROOT"), "the hook glue reads its repair under a sandbox")
 	for _, name := range []string{"MAGUS_RUN_ID", "MAGUS_PROC_SOCKET", "MAGUS_SERVER_ADDRESS", "GITHUB_TOKEN", "AWS_ACCESS_KEY_ID"} {
 		assert.False(t, a.Allows(name), name)
 	}

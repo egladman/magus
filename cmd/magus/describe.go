@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/spells"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -1694,9 +1696,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	}
 	if len(report.Overlaps) > 0 {
 		fmt.Println("declarations covering more than one of these paths:")
-		for _, c := range report.Overlaps {
-			fmt.Printf("  %-6s %-24s %-24s %s\n", c.Role, claimLabel(c), c.Glob, strings.Join(c.Paths, ", "))
-		}
+		printOverlaps(os.Stdout, report.Overlaps)
 	}
 	printNext(os.Stdout, nx, next)
 	return nil
@@ -1739,4 +1739,47 @@ func claimLabel(c types.FileClaim) string {
 		return c.Project
 	}
 	return fmt.Sprintf("%s:%s", c.Project, c.Target)
+}
+
+// emitSchema prints a --schema document. Text is the raw document; any other -o
+// renders the parsed schema, so a template can ask for the few fields it needs
+// instead of paying for all of it. -o name lists the top-level property names.
+func emitSchema(raw string) error {
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	if opts.Format == outputText {
+		fmt.Print(raw)
+		return nil
+	}
+	doc, names, err := describe.ParseSchema(raw)
+	if err != nil {
+		return err
+	}
+	if opts.Format == outputName {
+		return emitNames(os.Stdout, names)
+	}
+	return emitFormatted(opts, doc)
+}
+
+// printOverlaps renders each set of paths once, then the declarations covering exactly
+// that set. Declarations that cover the same paths are the common case, and printing the
+// paths per declaration grew the text with paths times declarations.
+func printOverlaps(out io.Writer, overlaps []types.FileClaim) {
+	var order []string
+	groups := map[string][]types.FileClaim{}
+	for _, c := range overlaps {
+		k := strings.Join(c.Paths, ", ")
+		if _, ok := groups[k]; !ok {
+			order = append(order, k)
+		}
+		groups[k] = append(groups[k], c)
+	}
+	for _, k := range order {
+		fmt.Fprintf(out, "  %s\n", k)
+		for _, c := range groups[k] {
+			fmt.Fprintf(out, "    %-6s %-24s %s\n", c.Role, claimLabel(c), c.Glob)
+		}
+	}
 }

@@ -469,21 +469,47 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 		"a JobPut field is named by the key its map spells it with")
 }
 
-func TestDecodeStdinDeclarationTakesTheCurrentVersionWhenTheRecordNamesNone(t *testing.T) {
+func TestDecodeStdinDeclarationRefusesARecordNamingNoVersion(t *testing.T) {
 	t.Parallel()
 
-	row, defaulted, err := DecodeStdinDeclaration(strings.NewReader(`{"id":"a","read_only":true}`))
+	_, err := DecodeStdinDeclaration(strings.NewReader(`{"id":"a","read_only":true}`))
+	require.ErrorIs(t, err, types.JobRecordInvalid)
+	assert.Contains(t, err.Error(), "carries no api_version")
+	assert.Contains(t, err.Error(), `add "api_version": "`+string(types.JobAPIVersion)+`" to the record`, "the refusal names the field to add")
+
+	row, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"read_only":true`))
 	require.NoError(t, err)
-	assert.True(t, defaulted, "the caller says it defaulted")
-	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "a", ReadOnly: true}, row)
+	assert.Equal(t, "a", row.ID)
 
-	_, defaulted, err = DecodeStdinDeclaration(declaration(`"id":"a"`, `"read_only":true`))
-	require.NoError(t, err)
-	assert.False(t, defaulted, "a named version is read as named")
+	_, err = DecodeStdinDeclaration(strings.NewReader(`{"api_version":"","id":"a","read_only":true}`))
+	require.ErrorIs(t, err, types.JobRecordInvalid, "a version named 0 is no version")
 
-	_, _, err = DecodeStdinDeclaration(strings.NewReader(`{"api_version":"","id":"a","read_only":true}`))
-	require.ErrorIs(t, err, types.JobRecordInvalid, "a version named 0 is no version, and is refused as before")
+	_, err = DecodeStdinDeclaration(strings.NewReader(`[]`))
+	require.Error(t, err, "a record that is not an object is refused")
+}
 
-	_, _, err = DecodeStdinDeclaration(strings.NewReader(`[]`))
-	require.Error(t, err, "a record that is not an object is refused, not defaulted")
+func TestDecodeStdinDeclarationRefusesTheRecordThatWipedARow(t *testing.T) {
+	t.Parallel()
+
+	_, err := DecodeStdinDeclaration(strings.NewReader(
+		`{"id":"hook-fails-closed","claim":[{"path":"cmd/magus/shell.go","because":"refs:withStaleConfig"}]}`))
+	require.ErrorIs(t, err, types.JobRecordInvalid)
+	assert.Contains(t, err.Error(), "api_version")
+}
+
+func TestDecodeStdinDeclarationRefusesAClaimOrASettlementThatNamesItsVersion(t *testing.T) {
+	t.Parallel()
+
+	_, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"claim":[{"path":"x.go","because":"refs:f"}]`))
+	require.ErrorIs(t, err, types.JobRecordInvalid)
+	assert.Contains(t, err.Error(), "a claim, not a declaration")
+	assert.Contains(t, err.Error(), "job apply --stdin")
+
+	_, err = DecodeStdinDeclaration(declaration(`"id":"a"`, `"left_unmerged":"scrapped"`))
+	require.ErrorIs(t, err, types.JobRecordInvalid)
+	assert.Contains(t, err.Error(), "a settlement, not a declaration")
+
+	row, err := DecodeStdinDeclaration(declaration(`"id":"a"`, `"enter":"x.go"`))
+	require.NoError(t, err, "an entry is the one non-declaration fork takes")
+	assert.Equal(t, "x.go", row.Enter)
 }

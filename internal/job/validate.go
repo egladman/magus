@@ -82,6 +82,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	if updates {
 		ps = append(ps, newProblems(rowDeclaration(prev).Problems(), rowDeclaration(merged).Problems())...)
 		ps = append(ps, ungradedProblems(merged)...)
+		ps = append(ps, droppedProblems(prev, merged)...)
 		var goals []types.Goal
 		for _, gate := range merged.Goals {
 			if !slices.ContainsFunc(prev.Goals, func(g types.Goal) bool { return g.ID == gate.ID }) {
@@ -137,6 +138,32 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	v.Unchecked = unchecked
 	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)
 	return v
+}
+
+// droppedProblems is each declared field of the live row prev that merged leaves empty:
+// the instructions, the write paths, the check and the goals. A record that re-declares a
+// live job without them erases what its holder was given, so it is refused unless a
+// deviation on the field's "drops <field>" subject says the erasure is meant.
+func droppedProblems(prev, merged types.Job) types.JobProblems {
+	var ps types.JobProblems
+	dropped := func(field string, held, kept bool) {
+		if !held || kept {
+			return
+		}
+		subject := types.DropsSubject + field
+		reason := fmt.Sprintf("the record leaves %s empty and %s declared it", field, prev.ID)
+		ps = append(ps, types.JobProblem{
+			Code: types.JobRecordInvalid, Field: field, Subject: subject,
+			Message: fmt.Sprintf("this record would erase %s's %s", prev.ID, field),
+			Fix: fmt.Sprintf("send the %s the job holds, or name the erasure: {\"code\":%q,\"subject\":%q,\"reason\":%q}",
+				field, types.JobRecordInvalid, subject, reason),
+		})
+	}
+	dropped("agent.instructions", prev.Instructions() != "", merged.Instructions() != "")
+	dropped("paths.write", len(prev.Paths.Write) > 0, len(merged.Paths.Write) > 0)
+	dropped("check", prev.Check != nil, merged.Check != nil)
+	dropped("goals", len(prev.Goals) > 0, len(merged.Goals) > 0)
+	return ps
 }
 
 // cheapRefusalSkip is the Unchecked entry of a new row contendedFork refuses.

@@ -1013,10 +1013,10 @@ stdout '"permissionDecision":"deny"'
 stdout '"systemMessage":"magus guard could not judge this call: no magus binary was found'
 stdout 'Install magus'
 
-# A read changes nothing, so it passes, and the person is still told.
+# A read is refused too: no policy loaded to say which reads the workspace guards.
 stdin observe-read.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
-! stdout 'permissionDecision'
+stdout '"permissionDecision":"deny"'
 stdout '"systemMessage":"magus guard could not judge this call'
 
 # Every call the path template sees is a write, so it is refused.
@@ -1112,7 +1112,9 @@ stderr 'which judged this call'
 
 # A binary that loads the config but not the policy denies under stale-binary. That deny
 # is a guess too. When no binary left can load the tree, none judges: the refusal names
-# each one tried, and only the rebuild it names runs.
+# each one tried. The magus running the glue started in another workspace, so it supplied
+# the glue no repair for this one; the rebuild still runs, since `magus shell` there
+# passes the repair that workspace declares.
 env __MAGUS_BIN=
 env TMPDIR=$WORK/n-none-loads
 stdin unloaded-write.json
@@ -1121,7 +1123,7 @@ stdout '"permissionDecision":"deny"'
 stdout 'no magus it tried can load this tree'
 stdout 'tried \S*magus, which could not load this tree: \S'
 stdout 'no other magus is left to fall to'
-stdout 'go -C \S*/unloaded-ws run -trimpath ./cmd/magus run go-build --no-cache \.'
+stdout 'magus did not supply the repair lines of \S*/unloaded-ws'
 # The line names the checkout by absolute path, which only the script knows.
 exec sh -c 'printf "{\"session_id\": \"u1\", \"hook_event_name\": \"PreToolUse\", \"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"GOEXPERIMENT=jsonv2 go -C %s/unloaded-ws run -trimpath ./cmd/magus run go-build --no-cache .\"}, \"cwd\": \"unloaded-ws\"}" "$WORK" > unloaded-recovery.json'
 stdin unloaded-recovery.json

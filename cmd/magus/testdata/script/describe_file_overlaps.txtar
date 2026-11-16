@@ -1,0 +1,22 @@
+# describe file names each overlapping set of paths once with the declarations covering it,
+# not once per declaration.
+exec magus describe file notes/a.md notes/b.md notes/c.md
+stdout -count=1 'notes/a\.md, notes/b\.md, notes/c\.md'
+stdout 'declarations covering more than one of these paths:'
+stdout '^    source +\. +notes/\*\.md$'
+stdout '^    source +\.:docs +notes/\*\.md$'
+
+-- magus.yaml --
+concurrency: 1
+-- magusfile.buzz --
+import "magus";
+magus\project({"sources": ["notes/*.md"]});
+export fun docs(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(["notes/*.md"]);
+}
+-- notes/a.md --
+a
+-- notes/b.md --
+b
+-- notes/c.md --
+c

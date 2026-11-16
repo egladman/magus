@@ -1,7 +1,6 @@
 package job
 
 import (
-	"bytes"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -68,7 +67,9 @@ func decodeDeclaration(r io.Reader) (types.Declaration, error) {
 	}
 	if err := checkVersion(raw, "job", types.DeclarationSchema); err != nil {
 		if missing := (*missingVersion)(nil); errors.As(err, &missing) {
-			return types.Declaration{}, recordInvalid("api_version", err).Error()
+			ps := recordInvalid("api_version", err)
+			ps[0].Fix = fmt.Sprintf("add \"api_version\": %q to the record", types.JobAPIVersion)
+			return types.Declaration{}, ps.Error()
 		}
 		return types.Declaration{}, err
 	}
@@ -80,24 +81,33 @@ func decodeDeclaration(r io.Reader) (types.Declaration, error) {
 }
 
 // DecodeStdinDeclaration is [decodeDeclaration] for `magus job fork --stdin`.
-// An object naming no api_version takes this magus's, and defaulted says
-// so for the caller to report. A named api_version follows the usual rules.
-func DecodeStdinDeclaration(r io.Reader) (row types.Declaration, defaulted bool, err error) {
-	raw, err := readInput(r, "job")
+// A record naming no api_version is refused, never read as this magus's: the version is
+// what tells a declaration from a record of another shape, and a guess at it re-declared a
+// live job as an empty row. A claim or a settlement is refused too, since fork would
+// declare it, and `magus job apply` is the door that takes them.
+func DecodeStdinDeclaration(r io.Reader) (types.Declaration, error) {
+	row, err := decodeDeclaration(r)
 	if err != nil {
-		return types.Declaration{}, false, asRecordInvalid(err)
+		return types.Declaration{}, err
 	}
-	if members, isObject := objectMembers(raw); isObject {
-		if _, named := members["api_version"]; !named {
-			members["api_version"] = json.RawMessage(strconv.Quote(string(types.JobAPIVersion)))
-			if raw, err = json.Marshal(members); err != nil {
-				return types.Declaration{}, false, err
-			}
-			defaulted = true
-		}
+	switch {
+	case len(row.Claim) > 0:
+		return types.Declaration{}, notDeclaration(row.ID, "claim", "a claim")
+	case row.Settles():
+		return types.Declaration{}, notDeclaration(row.ID, "deferred", "a settlement")
 	}
-	row, err = decodeDeclaration(bytes.NewReader(raw))
-	return row, defaulted, err
+	return row, nil
+}
+
+// notDeclaration is the refusal of a record that is not a declaration but reached the
+// door that declares: it names what the record is and the door that takes it.
+func notDeclaration(id, field, what string) error {
+	return types.JobProblems{{
+		Code:    types.JobRecordInvalid,
+		Field:   field,
+		Message: fmt.Sprintf("the record for %s is %s, not a declaration, and fork would declare %s over the live job", id, what, id),
+		Fix:     fmt.Sprintf("send it to `%s`, or drop %s to declare", hint.JobApply.With("--stdin"), field),
+	}}.Error()
 }
 
 // recordInvalid is err, the reason a record could not be read as a job, as its one problem.

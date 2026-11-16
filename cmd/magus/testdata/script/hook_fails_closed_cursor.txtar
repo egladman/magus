@@ -1,0 +1,74 @@
+# A Cursor hook that cannot judge refuses its call. Cursor runs the call of a hook that
+# crashed, timed out or printed no verdict unless the entry sets failClosed, so every entry
+# the harness renders sets it but a stop's, whose block would resume the agent on work no
+# rule can judge. The glue's magus answers its own startup failure with exit 2 and the
+# reason on stderr, passing only the repair the workspace declares.
+
+[windows] skip 'the cases run the rendered command through POSIX sh'
+
+env SAVED_PATH=$PATH
+
+# The workspace imports the shipped spell from its own tree, as a workspace does.
+mkdir $WORK/release/spells/harness/cursor
+cp $__MAGUS_TEMPLATES/../../../../spells/harness/cursor/spell.buzz $WORK/release/spells/harness/cursor/spell.buzz
+
+cd $WORK/release
+exec magus describe harness cursor -o 'template={{range .wired}}{{.key}} {{index (index .entries 0) "failClosed"}}{{"\n"}}{{end}}'
+stdout '^hooks.beforeShellExecution true$'
+stdout '^hooks.preToolUse true$'
+stdout '^hooks.beforeSubmitPrompt true$'
+stdout '^hooks.postToolUse true$'
+stdout '^hooks.stop <no value>$'
+stdout '^hooks.subagentStop <no value>$'
+exec magus describe harness cursor -o 'template={{range .wired}}{{if eq .key "hooks.beforeShellExecution"}}{{(index .entries 0).command}}{{end}}{{end}}'
+cp stdout $WORK/shell.sh
+mkdir docs/guides/integrations
+symlink docs/guides/integrations/agents -> $__MAGUS_TEMPLATES
+
+# A magus.yaml this magus cannot read refuses an ordinary command and names the update.
+cp $WORK/unreadable.yaml magus.yaml
+stdin $WORK/touch.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/shell.sh
+stdout '^exit 2$'
+stderr 'magus guard could not judge this call, so it is refused'
+stderr '`magus self update`'
+
+# The update it names passes.
+stdin $WORK/self-update.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/shell.sh
+stdout '^exit 0$'
+
+# A bad MAGUS_* value refuses the same way.
+cp $WORK/readable.yaml magus.yaml
+env MAGUS_CONCURRENCY=many
+stdin $WORK/touch.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/shell.sh
+stdout '^exit 2$'
+stderr 'MAGUS_CONCURRENCY'
+env MAGUS_CONCURRENCY=
+
+# No magus anywhere: the command cannot run, and failClosed is what blocks it.
+env PATH=/usr/bin:/bin
+stdin $WORK/touch.json
+exec sh -c 'sh "$0"; echo "exit $?"' $WORK/shell.sh
+stdout '^exit 127$'
+env PATH=$SAVED_PATH
+
+-- release/magusfile.buzz --
+import "magus";
+import "spells/harness/cursor";
+magus\harness.provider(cursor);
+-- release/magus.yaml --
+{}
+-- unreadable.yaml --
+knowledge:
+  conformance:
+    checks:
+      dep-fanout:
+        max: 3
+-- readable.yaml --
+{}
+-- touch.json --
+{"hook_event_name":"beforeShellExecution","conversation_id":"c1","generation_id":"g1","command":"touch x","cwd":"","workspace_roots":[]}
+-- self-update.json --
+{"hook_event_name":"beforeShellExecution","conversation_id":"c1","generation_id":"g1","command":"magus self update","cwd":"","workspace_roots":[]}
