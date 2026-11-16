@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 )
@@ -164,7 +165,7 @@ func printPipeWaitStatus(w io.Writer, waits []daemon.PipeWait) {
 	for _, pw := range waits {
 		line := fmt.Sprintf("  pid %d", pw.PID)
 		if !pw.WaitTime.IsZero() {
-			line += "  " + FormatDur(time.Since(pw.WaitTime))
+			line += "  " + sessions.FormatDur(time.Since(pw.WaitTime))
 		}
 		if pw.Command != "" {
 			line += "  " + pw.Command
@@ -210,7 +211,7 @@ func PrintBrokerRows(w io.Writer, st daemon.Broker, policy types.BrokerPolicy, n
 	}
 	for _, r := range c.Refused {
 		fmt.Fprintf(tw, "refused\t%d\t%s\n", r.PID, strings.Join(nonEmpty(
-			fmt.Sprintf("%s ago", cmp.Or(FormatDur(now.Sub(r.At).Round(time.Second)), "0s")),
+			fmt.Sprintf("%s ago", cmp.Or(sessions.FormatDur(now.Sub(r.At).Round(time.Second)), "0s")),
 			fmt.Sprintf("slots %d", max(r.Slots, 1)), mbText("mem ", r.MemoryMB),
 			fmt.Sprintf("%s %s", holderProject(r.Project), r.Target),
 			r.Owner, r.Dir, r.Command, refusedHoldersText(r.Holders)), "  "))
@@ -229,7 +230,7 @@ func PrintBrokerRows(w io.Writer, st daemon.Broker, policy types.BrokerPolicy, n
 	case st.Draining:
 		fmt.Fprintf(tw, "draining\t-\tseats nothing new; exits once what it holds is released\n")
 	case st.IdleExitSeconds > 0:
-		fmt.Fprintf(tw, "idle\t-\texits after %s holding nothing\n", FormatDur(time.Duration(st.IdleExitSeconds)*time.Second))
+		fmt.Fprintf(tw, "idle\t-\texits after %s holding nothing\n", sessions.FormatDur(time.Duration(st.IdleExitSeconds)*time.Second))
 	}
 	_ = tw.Flush()
 }
@@ -261,12 +262,12 @@ func PrintWorkByOwner(w io.Writer, r broker.WorkReport, now time.Time) {
 				switch left := work.Deadline.Sub(now).Round(time.Second); {
 				case work.Deadline.IsZero():
 				case left > 0:
-					deadline = "deadline in " + FormatDur(left)
+					deadline = "deadline in " + sessions.FormatDur(left)
 				default:
 					deadline = "past its deadline"
 				}
 				fmt.Fprintf(tw, "    %s\tpid %d\tup %s\tslots %d\t%s\t%s\t%s\n", work.Kind, work.PID,
-					cmp.Or(FormatDur(now.Sub(work.Since).Round(time.Second)), "0s"), max(work.Slots, 1), deadline,
+					cmp.Or(sessions.FormatDur(now.Sub(work.Since).Round(time.Second)), "0s"), max(work.Slots, 1), deadline,
 					Truncate(work.Command, 60), work.Dir)
 			}
 		}
@@ -275,7 +276,7 @@ func PrintWorkByOwner(w io.Writer, r broker.WorkReport, now time.Time) {
 		fmt.Fprintln(tw, "\nstopped by the broker")
 		for _, e := range r.Ended {
 			fmt.Fprintf(tw, "  %s\t%s\t%s ago\t%s\t%s\n", e.Owner(), e.Kind,
-				cmp.Or(FormatDur(now.Sub(e.At).Round(time.Second)), "0s"), Truncate(e.Command, 60), e.Reason)
+				cmp.Or(sessions.FormatDur(now.Sub(e.At).Round(time.Second)), "0s"), Truncate(e.Command, 60), e.Reason)
 		}
 	}
 	_ = tw.Flush()
@@ -376,7 +377,7 @@ func upText(start, now time.Time) string {
 	if start.IsZero() {
 		return ""
 	}
-	return "up " + FormatDur(now.Sub(start))
+	return "up " + sessions.FormatDur(now.Sub(start))
 }
 
 func sinceText(t time.Time) string {
@@ -540,7 +541,7 @@ func printLockStatus(w io.Writer, locks []daemon.Lock) {
 			line += fmt.Sprintf("  pid %d", l.PID)
 		}
 		if !l.AcquireTime.IsZero() {
-			line += "  " + FormatDur(time.Since(l.AcquireTime))
+			line += "  " + sessions.FormatDur(time.Since(l.AcquireTime))
 		}
 		if l.Command != "" {
 			line += "  " + l.Command

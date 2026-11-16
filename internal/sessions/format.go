@@ -41,9 +41,11 @@ func HumanAge(t time.Time) string {
 	}
 }
 
-// formatDur renders an elapsed time in the two coarsest units that hold it, or "" for
-// none. status.go's formatDur is the same function.
-func formatDur(d time.Duration) string {
+// FormatDur renders a wall-clock duration in the two coarsest units that hold it, below
+// ten seconds to a tenth. A reader watches it tick, so finer precision is noise. Zero or
+// negative (unset upstream, clock skew) renders as "", so an unset value shows as
+// nothing rather than as zero.
+func FormatDur(d time.Duration) string {
 	if d <= 0 {
 		return ""
 	}

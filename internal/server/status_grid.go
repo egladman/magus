@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/layout"
 	"github.com/egladman/magus/types"
@@ -207,7 +208,7 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 			vLast := j == len(leaves)-1
 			vPrefix, actIndent := branchPrefix(vIndent, vLast)
 			line := Truncate(lf.target, runningLineWidth)
-			if d := FormatDur(lf.duration); d != "" {
+			if d := sessions.FormatDur(lf.duration); d != "" {
 				line += " " + termkit.Colorize(fmt.Sprintf("(%s)", d), sgrPoolIdle)
 			}
 			fmt.Fprintf(w, "%s%s\n", vPrefix, line)
@@ -216,35 +217,6 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 				fmt.Fprintf(w, "%s%s\n", actPrefix, termkit.Colorize(Truncate(lf.step, runningLineWidth), sgrPoolIdle))
 			}
 		}
-	}
-}
-
-// FormatDur renders a wall-clock running duration. Returns "" for zero
-// or negative durations (unset upstream / clock skew).
-//
-// Deliberately NOT internal/cache.fmtDur, which they otherwise resemble enough
-// to invite a merge. That one measures how long a target TOOK and resolves to
-// nanoseconds, because the difference between 2ms and 200ms is the answer
-// somebody is looking for. This one is a clock a reader watches tick, so
-// sub-second precision would be unreadable noise, and an unset value has to
-// render as nothing rather than as zero.
-func FormatDur(d time.Duration) string {
-	if d <= 0 {
-		return ""
-	}
-	switch {
-	case d < 10*time.Second:
-		return fmt.Sprintf("%.1fs", d.Seconds())
-	case d < time.Minute:
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	case d < time.Hour:
-		m := int(d / time.Minute)
-		s := int((d % time.Minute) / time.Second)
-		return fmt.Sprintf("%dm%ds", m, s)
-	default:
-		h := int(d / time.Hour)
-		m := int((d % time.Hour) / time.Minute)
-		return fmt.Sprintf("%dh%dm", h, m)
 	}
 }
 

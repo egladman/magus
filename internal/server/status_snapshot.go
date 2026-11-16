@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/types/daemon"
 )
@@ -51,7 +52,7 @@ func PrintSilentLeases(w io.Writer, silent []guard.SilentLease, err error) {
 	}
 	fmt.Fprintf(w, "\nsilent leases (no judged call for over %s, no background command running; nothing was ended):\n", guard.SilentLeaseAfter)
 	for _, s := range silent {
-		line := fmt.Sprintf("  %s  session %s  silent %s", s.Lease, s.Session, FormatDur(time.Duration(s.SilentSeconds)*time.Second))
+		line := fmt.Sprintf("  %s  session %s  silent %s", s.Lease, s.Session, sessions.FormatDur(time.Duration(s.SilentSeconds)*time.Second))
 		if s.BackgroundNote != "" {
 			line = fmt.Sprintf("%s  (%s)", line, s.BackgroundNote)
 		}

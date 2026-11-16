@@ -480,7 +480,7 @@ func RenderAttentionText(w io.Writer, requests []AttentionRequest, dir string) e
 	for _, req := range requests {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			req.ID,
-			OrDash(formatDur(now.Sub(time.UnixMilli(req.OpenedMs)))),
+			OrDash(FormatDur(now.Sub(time.UnixMilli(req.OpenedMs)))),
 			OrDash(req.Outcome),
 			OrDash(req.Source),
 			OrDash(req.Lease),

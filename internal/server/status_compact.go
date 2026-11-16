@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
@@ -165,7 +166,7 @@ func formatCompactRunningTarget(c daemon.RunningTarget, showWS bool, now time.Ti
 	if showWS {
 		label = fmt.Sprintf("%s/%s", workspaceLabel(c.Workspace), label)
 	}
-	if d := FormatDur(runningDuration(c, now)); d != "" {
+	if d := sessions.FormatDur(runningDuration(c, now)); d != "" {
 		label += fmt.Sprintf("(%s)", d)
 	}
 	return Truncate(label, compactRunningBudget)

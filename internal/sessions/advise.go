@@ -389,7 +389,7 @@ func RenderAdvisoriesText(w io.Writer, shown []Directive, dir string) {
 			state = "retracted"
 		}
 		fmt.Fprintf(w, "%s  %s  posted %s ago by %s  shown to %d  %s\n", a.ID, state,
-			OrDash(formatDur(time.Since(time.UnixMilli(a.PostedMs)))), OrDash(a.By), len(a.Delivered), actedLine(a))
+			OrDash(FormatDur(time.Since(time.UnixMilli(a.PostedMs)))), OrDash(a.By), len(a.Delivered), actedLine(a))
 		fmt.Fprintf(w, "  %s\n", OneLine(a.Text))
 	}
 }
