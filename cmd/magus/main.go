@@ -60,6 +60,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
@@ -153,7 +154,7 @@ func runCLI() int {
 	// A broker or a foreground server answers its own signals (see lifecycle); a run's
 	// Ctrl+C policy would cancel it on the first SIGTERM it means to drain on.
 	if ownsItsSignals(args) {
-		captureSignals()
+		proc.CaptureSignals()
 		rootCtx, stopSignals = context.WithCancel(context.Background())
 		interrupted = func() (syscall.Signal, bool) { return 0, false }
 	} else {
@@ -199,7 +200,7 @@ func runCLI() int {
 		cleanup()
 		code := withInterrupt(exitCode, nil, interrupted)
 		pipe.StageFromContext(rootCtx).Linger()
-		recordPipeExit(args, code, interrupted)
+		pipe.RecordProcessExit(extractRootFlag(args), globalCfg, code, interrupted)
 		return code
 	}
 
@@ -230,14 +231,14 @@ func runCLI() int {
 	// Only a stage that succeeded settles: one that failed reports its own failure,
 	// never an upstream's.
 	if code == 0 {
-		if err := settlePipeline(dispatchCtx, args); err != nil {
+		if err := pipe.SettleProcess(dispatchCtx, extractRootFlag(args), globalCfg); err != nil {
 			dispatchErr, code = err, mapExitCode(err)
 		}
 	}
 	cleanup()
 	code = withInterrupt(code, dispatchErr, interrupted)
 	pipe.StageFromContext(rootCtx).Linger()
-	recordPipeExit(args, code, interrupted)
+	pipe.RecordProcessExit(extractRootFlag(args), globalCfg, code, interrupted)
 	return code
 }
 
@@ -963,7 +964,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		noticeBroker(rootCtx, pid)
 	}
 
-	runsServer := sub == "server" && isServerRun(subArgs)
+	runsServer := sub == "server" && server.IsServerRun(subArgs)
 	if runsServer && cfg.Server.Address == "" {
 		cfg.Server.Address = proc.ServerDefaultAddr()
 	}
@@ -975,7 +976,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		// `server --foreground` and returns once it is accepting. done==true means we are
 		// that parent (or a server was already running, or spawning failed); only a
 		// foreground server falls through to build and run it in this process.
-		if code, done := startServerBackground(rootCtx, cfg, subArgs); done {
+		if code, done := server.StartBackground(rootCtx, cfg, subArgs, server.ServerLogPath(), os.Args[1:]); done {
 			return rootCtx, startupResult{cleanup: cleanup}, code
 		}
 		startServer(rootCtx, cfg, rc)

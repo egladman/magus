@@ -1017,19 +1017,8 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 	return nil
 }
 
-// checkHostedPageOrigin, openBrowser, probeLiveBridge and probeLiveBridgeTimeout stay named
-// here for callers in files this move does not own (live.go, server.go).
-func checkHostedPageOrigin(base string, allowed []string) error {
-	return httpx.CheckHostedPageOrigin(base, allowed)
-}
-
+// query.go, which a pending move holds, still names openBrowser.
 func openBrowser(raw string) error { return interactive.OpenBrowser(raw) }
-
-func probeLiveBridge(ctx context.Context, addr string) error {
-	return httpx.ProbeLiveBridge(ctx, addr)
-}
-
-const probeLiveBridgeTimeout = httpx.ProbeLiveBridgeTimeout
 
 // graphDiff reports how the knowledge graph changed relative to a baseline: the nodes
 // and edges added, removed, or changed. It is the PR-review blast-radius artifact: emit

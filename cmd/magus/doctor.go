@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/output"
@@ -92,7 +93,7 @@ func doctorCommand(ctx context.Context, root string, rc runConfig, args []string
 		return m.MachineClaims(ctx, targets, nil, nil), nil
 	}, mem.BudgetMB(mem.UsableBytes(ctx), globalCfg.ConcurrencyProfile), cache.MachineCeiling())
 	ctx = doctor.WithAdmissions(ctx, func(context.Context) ([]types.MachineAdmission, error) {
-		return file.Log[types.MachineAdmission]{Path: admissionLogPath()}.Load()
+		return file.Log[types.MachineAdmission]{Path: server.AdmissionLogPath()}.Load()
 	})
 	out := doctor.Run(ctx, root, ws, wsErr, dopts...)
 

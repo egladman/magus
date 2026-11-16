@@ -403,8 +403,3 @@ func brokerUnits(ctx context.Context, args []string) error {
 	return nil
 }
 
-// doctor.go and status.go, which this move does not hold, still name these.
-var (
-	admissionLogPath = server.AdmissionLogPath
-	queryBroker      = server.QueryBroker
-)

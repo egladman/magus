@@ -112,7 +112,7 @@ func TestBrokerStatusPrintsItsRows(t *testing.T) {
 	_, err = c.Request(t.Context(), types.MachineClaim{Project: "api", Target: "test", MemoryMB: 1024, Slots: 2, Dir: "/src/a"})
 	require.NoError(t, err)
 
-	st, err := queryBroker(t.Context())
+	st, err := server.QueryBroker(t.Context())
 	require.NoError(t, err)
 	var buf bytes.Buffer
 	server.PrintBrokerRows(&buf, st, types.BrokerBestEffort, time.Now())

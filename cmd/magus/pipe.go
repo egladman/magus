@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"syscall"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/pipe"
@@ -122,11 +121,6 @@ func outputFlagGiven(args []string) bool {
 	return false
 }
 
-// settlePipeline is the pipefail every magus pipeline gets. See pipe.SettleProcess.
-func settlePipeline(ctx context.Context, args []string) error {
-	return pipe.SettleProcess(ctx, extractRootFlag(args), globalCfg)
-}
-
 // processStdioContext hands the runs on ctx this process's standard streams unless the
 // run is adopted. See pipe.ProcessStdioContext.
 func processStdioContext(ctx context.Context) context.Context {
@@ -151,12 +145,6 @@ func handlesPlan(sub string, subArgs []string) bool {
 func awaitPipeline(ctx context.Context, root string) error {
 	_, adopted := magusFromContext(ctx)
 	return pipe.AwaitProcess(ctx, root, adopted, globalCfg)
-}
-
-// recordPipeExit leaves code for the magus stage reading this process's stdout. See
-// pipe.RecordProcessExit.
-func recordPipeExit(args []string, code int, interrupted func() (syscall.Signal, bool)) {
-	pipe.RecordProcessExit(extractRootFlag(args), globalCfg, code, interrupted)
 }
 
 // takesProjectLocks reports whether a magus invoked with argv may take project locks,

@@ -42,7 +42,7 @@ func bindStatus(f **flaggen.ServerStatusFlags) func(*flag.FlagSet) {
 
 // queryCapacity is the broker's build budget as status reads it.
 func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
-	st, err := queryBroker(ctx)
+	st, err := server.QueryBroker(ctx)
 	return st.Capacity, err
 }
 
@@ -56,11 +56,11 @@ func status(ctx context.Context, args []string) error {
 	// Ignores --watch, --compact, and -o formatting flags. The value is
 	// comma-combinable (e.g. --probe=liveness,mcp), failing if any listed probe does.
 	if f.Probe != "" {
-		kinds, err := parseProbeKinds(f.Probe)
+		kinds, err := server.ParseProbeKinds(f.Probe)
 		if err != nil {
 			return err
 		}
-		return runProbes(ctx, f.Socket, globalCfg.MCP, kinds, f.Workspace)
+		return server.RunProbes(ctx, resolveServerAddr(f.Socket), globalCfg.MCP, kinds, f.Workspace)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -239,10 +239,10 @@ func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) daemo
 		// MCP endpoint health is probed independently of the proc socket below: the
 		// endpoint an agent host connects to can be down while the proc server is up, or
 		// vice versa, so it is set before any early return on a proc-socket error.
-		MCPEndpoint: buildMCPEndpointStatus(ctx, globalCfg.MCP),
+		MCPEndpoint: server.BuildMCPEndpointStatus(ctx, globalCfg.MCP),
 	}
 	// After the literal, because it reads the MCP probe above rather than making its own.
-	snapshot.Console = buildConsoleStatus(globalCfg.Console, snapshot.MCPEndpoint)
+	snapshot.Console = server.BuildConsoleStatus(globalCfg.Console, snapshot.MCPEndpoint)
 	if symbols {
 		// Symbol-index freshness hashes every symbol-capable project. Keep it opt-in so
 		// status remains a cheap operational snapshot rather than a second workspace scan.
@@ -251,7 +251,7 @@ func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) daemo
 	// The broker is read whatever the policy: this reports the host, and a broker other
 	// runs started is a fact about it even when this workspace never asks one.
 	snapshot.BrokerPolicy = globalCfg.Broker.Resolved()
-	if st, err := queryBroker(ctx); err == nil {
+	if st, err := server.QueryBroker(ctx); err == nil {
 		snapshot.Broker = &st
 	}
 	addrs, err := server.ResolveStatusSockets(ctx, socket)

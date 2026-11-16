@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
@@ -109,7 +110,7 @@ func serverStart(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	_ = sf.Foreground // the parent/child split is decided in startServerBackground; here we always run the server
+	_ = sf.Foreground // the parent/child split is decided in server.StartBackground; here we always run the server
 
 	addr := os.Getenv(proc.SocketEnv)
 	if addr == "" {
@@ -212,11 +213,6 @@ var startServerServices = func(ctx context.Context, cancel context.CancelFunc) {
 	})
 }
 
-// startServerBackground hands `server start` to the detached-server logic in internal/server.
-func startServerBackground(ctx context.Context, cfg config.Config, subArgs []string) (exitCode int, done bool) {
-	return server.StartBackground(ctx, cfg, subArgs, server.ServerLogPath(), os.Args[1:])
-}
-
 // consoleReadyTimeout bounds the wait for a freshly spawned server to serve the console.
 // It covers process start, socket bind, and bridge mount together, so it is longer than
 // the socket alone would need.
@@ -239,9 +235,9 @@ const consoleReadyTimeout = 20 * time.Second
 // reason servingSuffix exists on the `server start` path.
 func ensureConsoleServer(ctx context.Context, addr, root string) error {
 	probe := func() error {
-		pctx, cancel := context.WithTimeout(ctx, probeLiveBridgeTimeout)
+		pctx, cancel := context.WithTimeout(ctx, httpx.ProbeLiveBridgeTimeout)
 		defer cancel()
-		return probeLiveBridge(pctx, addr)
+		return httpx.ProbeLiveBridge(pctx, addr)
 	}
 	if err := probe(); err == nil {
 		return nil
@@ -277,13 +273,10 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 	}
 }
 
-// serverStop shuts down the persistent server, or with --pools the live
-// per-process pool parents whose build differs from this binary.
 const stopTimeout = proc.StopTimeout
 
-// isServerRun is the name main.go reads; the argv logic lives in internal/server.
-var isServerRun = server.IsServerRun
-
+// serverStop shuts down the persistent server, or with --pools the live
+// per-process pool parents whose build differs from this binary.
 func serverStop(ctx context.Context, args []string) error {
 	var tf *flaggen.ServerStopFlags
 	_, err := commandParse("server stop", args, func(fs *flag.FlagSet) {
