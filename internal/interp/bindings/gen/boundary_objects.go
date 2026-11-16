@@ -1221,6 +1221,62 @@ func ObjectJobForkFacts(v types.JobForkFacts) vm.Value {
 	return out
 }
 
+func ObjectUnverifiedFile(v types.UnverifiedFile) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	itemsCommands := make([]vm.Value, len(v.Commands))
+	for indexCommands := range v.Commands {
+		itemsCommands[indexCommands] = vm.StringValue(v.Commands[indexCommands])
+	}
+	out.MapSet("commands", vm.ListValue(itemsCommands))
+	return out
+}
+
+func ObjectRunEvidence(v types.RunEvidence) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("ref", vm.StringValue(v.Ref))
+	out.MapSet("project", vm.StringValue(v.Project))
+	out.MapSet("target", vm.StringValue(v.Target))
+	out.MapSet("revision", vm.StringValue(v.Revision))
+	out.MapSet("dirty", vm.BoolValue(v.Dirty))
+	out.MapSet("failed", vm.BoolValue(v.Failed))
+	out.MapSet("cached", vm.BoolValue(v.Cached))
+	itemsClaims := make([]vm.Value, len(v.Claims))
+	for indexClaims := range v.Claims {
+		itemsClaims[indexClaims] = vm.StringValue(v.Claims[indexClaims])
+	}
+	out.MapSet("claims", vm.ListValue(itemsClaims))
+	itemsReads := make([]vm.Value, len(v.Reads))
+	for indexReads := range v.Reads {
+		itemsReads[indexReads] = vm.StringValue(v.Reads[indexReads])
+	}
+	out.MapSet("reads", vm.ListValue(itemsReads))
+	return out
+}
+
+func ObjectUnverifiedReport(v types.UnverifiedReport) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("revision", vm.StringValue(v.Revision))
+	out.MapSet("base", vm.StringValue(v.Base))
+	itemsChanged := make([]vm.Value, len(v.Changed))
+	for indexChanged := range v.Changed {
+		itemsChanged[indexChanged] = vm.StringValue(v.Changed[indexChanged])
+	}
+	out.MapSet("changed", vm.ListValue(itemsChanged))
+	itemsUnverified := make([]vm.Value, len(v.Unverified))
+	for indexUnverified := range v.Unverified {
+		itemsUnverified[indexUnverified] = ObjectUnverifiedFile(v.Unverified[indexUnverified])
+	}
+	out.MapSet("unverified", vm.ListValue(itemsUnverified))
+	itemsRuns := make([]vm.Value, len(v.Runs))
+	for indexRuns := range v.Runs {
+		itemsRuns[indexRuns] = ObjectRunEvidence(v.Runs[indexRuns])
+	}
+	out.MapSet("runs", vm.ListValue(itemsRuns))
+	out.MapSet("unknown", vm.StringValue(v.Unknown))
+	return out
+}
+
 func ObjectModelTierRecord(v types.ModelTierRecord, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("rank", vm.IntValue(int64(v.Rank)))

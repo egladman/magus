@@ -591,6 +591,9 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("magus__Workspace__unmerged", function("magus.Workspace.unmerged", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectJobUnmergedReport(types.JobUnmergedReport{}), nil
 	}))
+	m.MapSet("magus__Workspace__unverified", function("magus.Workspace.unverified", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindgen.ObjectUnverifiedReport(types.UnverifiedReport{Unknown: "a dry run reads no recorded runs"}), nil
+	}))
 	m.MapSet("magus__Workspace__tierOutcomes", function("magus.Workspace.tierOutcomes", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return historyMetric("models"), nil
 	}))

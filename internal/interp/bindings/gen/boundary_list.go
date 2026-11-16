@@ -388,6 +388,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ReviewRef", Zero: types.ReviewRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewRef(v.(types.ReviewRef)) }},
 	{Name: "Rule", Zero: types.RuleDoc{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRuleDoc(v.(types.RuleDoc), enums) }},
 	{Name: "Run", Zero: daemon.Run{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRun(v.(daemon.Run), enums) }},
+	{Name: "RunEvidence", Zero: types.RunEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRunEvidence(v.(types.RunEvidence)) }},
 	{Name: "Sandbox", Zero: spells.Sandbox{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandbox(v.(spells.Sandbox), enums) }},
 	{Name: "SandboxAllow", Zero: spells.SandboxAllow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandboxAllow(v.(spells.SandboxAllow), enums) }},
 	{Name: "SandboxCache", Zero: spells.SandboxCache{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandboxCache(v.(spells.SandboxCache)) }},
@@ -449,6 +450,8 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "UncompressResult", Zero: types.UncompressResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUncompressResult(v.(types.UncompressResult)) }},
 	{Name: "Unreferenced", Zero: types.Unreferenced{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUnreferenced(v.(types.Unreferenced), enums) }},
 	{Name: "UnreferencedEntry", Zero: types.UnreferencedEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUnreferencedEntry(v.(types.UnreferencedEntry)) }},
+	{Name: "UnverifiedFile", Zero: types.UnverifiedFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUnverifiedFile(v.(types.UnverifiedFile)) }},
+	{Name: "UnverifiedReport", Zero: types.UnverifiedReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUnverifiedReport(v.(types.UnverifiedReport)) }},
 	{Name: "UpdateRef", Zero: types.UpdateRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUpdateRef(v.(types.UpdateRef)) }},
 	{Name: "VCSInvocation", Zero: types.VCSInvocation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSInvocation(v.(types.VCSInvocation)) }},
 	{Name: "VerificationEvidence", Zero: types.VerificationEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {

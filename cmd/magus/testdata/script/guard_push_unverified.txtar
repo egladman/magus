@@ -1,0 +1,94 @@
+# A command rule reads req.push and magus\workspace(dir).unverified(revision) through the real
+# `magus shell` a hook invokes: a push of a commit that changed a file no clean passing run read
+# is refused naming the file, a clean run of the target that reads it lets the push through, and
+# a run over uncommitted edits does not count.
+
+env MAGUS_VCS_BASE_REF=main
+exec git init -q -b main
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git add .gitignore magus.yaml magusfile.buzz policy.buzz src/a.txt
+exec git commit -q -m baseline
+exec git checkout -q -b topic
+
+# (a) A commit changing a.txt, with no run recorded: refused naming the file.
+cp edit-a.txt src/a.txt
+exec git commit -q -am 'change a'
+stdin push.json
+! exec magus shell
+stdout 'deny \[workspace:push-unverified\]: unread src/a.txt'
+
+# (b) A clean passing run of the target that reads it: allowed.
+exec magus run check .
+stdin push.json
+exec magus shell
+! stdout 'deny'
+
+# (c) A run over uncommitted edits to b.txt does not count once they are committed.
+cp edit-b.txt src/b.txt
+exec magus run check .
+exec git add src/b.txt
+exec git commit -q -m 'add b'
+stdin push.json
+! exec magus shell
+stdout 'deny \[workspace:push-unverified\]: unread src/b.txt'
+
+# (d) Run again on the clean tree: allowed.
+exec magus run check .
+stdin push.json
+exec magus shell
+! stdout 'deny'
+
+# A line that pushes nothing is never read.
+stdin ls.json
+exec magus shell
+! stdout 'deny'
+
+-- .gitignore --
+.magus/
+push.json
+ls.json
+edit-*.txt
+-- magus.yaml --
+concurrency: 1
+-- magusfile.buzz --
+import "magus";
+import "./policy";
+
+export fun check(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["src/*.txt"]);
+}
+
+magus\guard.command(policy\judge);
+-- policy.buzz --
+namespace policy;
+
+import "magus";
+
+export fun judge(req: CommandRequest) > GuardVerdict !> any {
+    if (req.push == null) {
+        return magus\guard.allow();
+    }
+    final p = req.push!;
+    if (p.revision == "") {
+        return magus\guard.deny("unjudged: {p.unknown}", opts: {"rule": "push-unverified"});
+    }
+    final r = magus\workspace(p.dir).unverified(p.revision);
+    if (r.unknown != "") {
+        return magus\guard.deny("unjudged: {r.unknown}", opts: {"rule": "push-unverified"});
+    }
+    if (r.unverified.len() > 0) {
+        return magus\guard.deny("unread {r.unverified[0].path}", opts: {"rule": "push-unverified"});
+    }
+    return magus\guard.allow();
+}
+-- src/a.txt --
+a
+-- edit-a.txt --
+a, changed
+-- edit-b.txt --
+b
+-- push.json --
+{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"git push origin HEAD:topic","description":"push"}}
+-- ls.json --
+{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"ls","description":"list"}}
