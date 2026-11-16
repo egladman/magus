@@ -63,7 +63,7 @@ func TestOpenSpellSecretProviderRejectsAnUnregisteredSpell(t *testing.T) {
 // by construction.
 func TestSpellSecretProviderFailsFastWithoutATerminal(t *testing.T) {
 	r := secrets.NewResolver(secrets.WithTimeouts(secrets.Timeouts{Interactive: 2 * time.Second, Unattended: 50 * time.Millisecond}))
-	ctx := secrets.ContextWithResolver(context.Background(), r)
+	ctx := secrets.WithResolver(context.Background(), r)
 	// Spins until the deadline cancels the VM, standing in for a provider waiting on an
 	// unlock nobody is there to complete.
 	drv := buzzProvider(t, `

@@ -14,7 +14,7 @@ import (
 
 type HandlerSuite struct {
 	suite.Suite
-	ctx  context.Context //nolint:containedctx // the suite's per-test context
+	r    *Resolver
 	sink bytes.Buffer
 }
 
@@ -22,16 +22,18 @@ func TestHandler(t *testing.T) { suite.Run(t, new(HandlerSuite)) }
 
 func (s *HandlerSuite) SetupTest() {
 	s.sink.Reset()
-	r := NewResolver()
-	s.ctx = ContextWithResolver(s.T().Context(), r)
+	s.r = NewResolver()
 }
+
+// ctx is the test's context carrying the suite's resolver.
+func (s *HandlerSuite) ctx() context.Context { return WithResolver(s.T().Context(), s.r) }
 
 // readEnv sets an environment variable to tok and reads it through the suite's resolver,
 // so tok is registered for redaction.
 func (s *HandlerSuite) readEnv(tok string) {
 	s.T().Helper()
 	s.T().Setenv("SECRETS_TEST_LOG_TOKEN", tok)
-	_, err := ResolverFromContext(s.ctx).Read(s.ctx, "SECRETS_TEST_LOG_TOKEN")
+	_, err := s.r.Read(s.ctx(), "SECRETS_TEST_LOG_TOKEN")
 	s.Require().NoError(err)
 }
 
@@ -43,7 +45,7 @@ func (s *HandlerSuite) jsonLogger() *slog.Logger {
 // argv attr untouched, and argv arrives as a []string, not a string.
 func (s *HandlerSuite) TestCoversTheMessageAndAStringSliceAttr() {
 	s.readEnv("ghp_never_json_me")
-	s.jsonLogger().DebugContext(s.ctx, "run.exec tok=ghp_never_json_me",
+	s.jsonLogger().DebugContext(s.ctx(), "run.exec tok=ghp_never_json_me",
 		"cmd", "sh", "args", []string{"-p", "ghp_never_json_me"}, "dir", ".")
 
 	s.NotContains(s.sink.String(), "ghp_never_json_me", "neither message nor attrs may carry it")
@@ -56,7 +58,7 @@ func (s *HandlerSuite) TestCoversTheMessageAndAStringSliceAttr() {
 func (s *HandlerSuite) TestCoversGroupErrorAndByteAttrs() {
 	const tok = "ghp_never_nested_me"
 	s.readEnv(tok)
-	s.jsonLogger().DebugContext(s.ctx, "wrapped",
+	s.jsonLogger().DebugContext(s.ctx(), "wrapped",
 		slog.Group("cmd", slog.String("argv", "-p "+tok)),
 		slog.Any("err", errors.New("login failed: "+tok)),
 		slog.Any("raw", []byte(tok)))
@@ -81,7 +83,7 @@ func (s *HandlerSuite) TestWithAttrsStaysWrapped() {
 
 	withAttrs := base.WithAttrs([]slog.Attr{slog.String("preset", "group-token-value")})
 	s.Require().IsType(redactingHandler{}, withAttrs)
-	slog.New(withAttrs).DebugContext(s.ctx, "m")
+	slog.New(withAttrs).DebugContext(s.ctx(), "m")
 	s.NotContains(s.sink.String(), "group-token-value")
 }
 
@@ -91,9 +93,9 @@ func (s *HandlerSuite) TestWithGroupStaysWrapped() {
 
 	grouped := base.WithGroup("g")
 	s.Require().IsType(redactingHandler{}, grouped)
-	slog.New(grouped).DebugContext(s.ctx, "m", "tok", "group-token-value")
+	slog.New(grouped).DebugContext(s.ctx(), "m", "tok", "group-token-value")
 	s.NotContains(s.sink.String(), "group-token-value")
-	s.True(base.Enabled(s.ctx, slog.LevelDebug))
+	s.True(base.Enabled(s.ctx(), slog.LevelDebug))
 	s.Equal(base, base.WithGroup(""), "an empty group returns the receiver, as slog.Handler requires")
 }
 
@@ -110,7 +112,7 @@ const carrierToken = "ghp_every_carrier_token"
 func (s *HandlerSuite) logCarrier(val any) {
 	s.T().Helper()
 	s.readEnv(carrierToken)
-	s.jsonLogger().DebugContext(s.ctx, "carrier", "v", val)
+	s.jsonLogger().DebugContext(s.ctx(), "carrier", "v", val)
 
 	out := s.sink.String()
 	s.NotContains(out, carrierToken)

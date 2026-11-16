@@ -903,7 +903,7 @@ func TestTrailRedactsThroughContext(t *testing.T) {
 
 	res := secrets.NewResolver()
 	t.Setenv("TRAIL_TEST_TOKEN", credential)
-	ctx := secrets.ContextWithResolver(t.Context(), res)
+	ctx := secrets.WithResolver(t.Context(), res)
 	// Reading is what marks the value as a secret: provenance, not shape.
 	got, err := res.Read(ctx, "TRAIL_TEST_TOKEN")
 	require.NoError(t, err)
@@ -953,7 +953,7 @@ func TestTrailKeepsStructuralFields(t *testing.T) {
 	base := t.TempDir()
 	res := secrets.NewResolver()
 	t.Setenv("TRAIL_TEST_TOKEN", "sk-live-must-not-be-persisted")
-	ctx := secrets.ContextWithResolver(t.Context(), res)
+	ctx := secrets.WithResolver(t.Context(), res)
 	_, err := res.Read(ctx, "TRAIL_TEST_TOKEN")
 	require.NoError(t, err)
 

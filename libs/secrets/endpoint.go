@@ -53,6 +53,10 @@ const endpointShutdownGrace = 2 * time.Second
 // forwarder's whole life just by connecting.
 const endpointIdleTimeout = 90 * time.Second
 
+// endpointReadHeaderTimeout bounds how long a local client may take to send its request
+// headers, so a connection that never finishes a request cannot hold a server goroutine.
+const endpointReadHeaderTimeout = 10 * time.Second
+
 // endpointTokenLen is the byte length of an endpoint's path token. 16 bytes is 128 bits of
 // crypto/rand, which is the margin that lets the loopback bind be defensible at all.
 const endpointTokenLen = 16
@@ -110,7 +114,8 @@ func (f *forwarder) alive() bool {
 
 // endpointKey identifies a forwarder: the WHOLE grant, so two grants differing only by
 // header or prefix get their own endpoint rather than silently sharing one, plus the
-// SCOPE that opened it.
+// SCOPE that opened it and the provider that resolves its credential, since Resolvers
+// derived with [Resolver.WithProvider] share one endpoint map.
 //
 // The scope is part of the key so a token cannot outlive the scope that was handed it.
 // Two concurrent scopes wanting the same grant get two sockets and two tokens, which costs
@@ -118,19 +123,33 @@ func (f *forwarder) alive() bool {
 // log, a child's argv, a crash dump) authorizes nothing in the other. It also needs no
 // refcount, and so has no question of whose context owns a shared listener.
 type endpointKey struct {
-	scope  string
-	ref    string
-	host   string
-	header string
-	prefix string
+	scope    string
+	provider string
+	ref      string
+	host     string
+	header   string
+	prefix   string
 }
 
-func newEndpointKey(scope string, g Grant) endpointKey {
-	return endpointKey{scope: scope, ref: g.Ref, host: g.Host, header: g.Header, prefix: g.Prefix}
+func (r *Resolver) endpointKey(scope string, g Grant) endpointKey {
+	return endpointKey{scope: scope, provider: r.provider, ref: g.Ref, host: g.Host, header: g.Header, prefix: g.Prefix}
 }
 
-// ErrNoScope is the error [Resolver.OpenEndpoint] gives when it is handed no scope.
-var ErrNoScope = errors.New("secret endpoint: no scope, so nothing would close it or confine its token")
+// ErrNoScope is why [Resolver.OpenEndpoint] refuses an empty scope. It arrives wrapped
+// in an *[EndpointError].
+var ErrNoScope = errors.New("no scope, so nothing would close the endpoint or confine its token")
+
+// EndpointError is why [Resolver.OpenEndpoint] opened no endpoint for the grant of Ref.
+type EndpointError struct {
+	Ref string
+	Err error
+}
+
+func (e *EndpointError) Error() string {
+	return fmt.Sprintf("secrets: endpoint for %q: %v", e.Ref, e.Err)
+}
+
+func (e *EndpointError) Unwrap() error { return e.Err }
 
 // OpenEndpoint returns the loopback base URL a child should be pointed at so its requests
 // to g.Host carry g's credential, starting the forwarder on first use. The credential is
@@ -144,19 +163,20 @@ var ErrNoScope = errors.New("secret endpoint: no scope, so nothing would close i
 // process could then bind.
 //
 // It binds a TCP listener, starts goroutines and mints a token; it is not an accessor.
-// g is normalized first, so a malformed grant is a *[GrantError].
+// g is normalized first, so a malformed grant is a *[GrantError]; any other failure is
+// an *[EndpointError], or a *[NoResolverError] for a nil Resolver.
 func (r *Resolver) OpenEndpoint(ctx context.Context, scope string, g Grant) (string, error) {
 	if r == nil {
-		return "", errNoResolver
+		return "", &NoResolverError{}
 	}
 	g, err := g.Normalize()
 	if err != nil {
 		return "", err
 	}
 	if scope == "" {
-		return "", fmt.Errorf("secret grant %q: %w", g.Ref, ErrNoScope)
+		return "", &EndpointError{Ref: g.Ref, Err: ErrNoScope}
 	}
-	key := newEndpointKey(scope, g)
+	key := r.endpointKey(scope, g)
 
 	r.endpointMu.Lock()
 	defer r.endpointMu.Unlock()
@@ -170,7 +190,7 @@ func (r *Resolver) OpenEndpoint(ctx context.Context, scope string, g Grant) (str
 	}
 	f, err := r.startForwarder(ctx, key, g)
 	if err != nil {
-		return "", err
+		return "", &EndpointError{Ref: g.Ref, Err: err}
 	}
 	if r.endpoints == nil {
 		r.endpoints = make(map[endpointKey]*forwarder)
@@ -198,12 +218,12 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g Gra
 	}
 	ln, err := net.Listen("tcp", endpointListenAddr)
 	if err != nil {
-		return nil, fmt.Errorf("secret grant %q: bind loopback endpoint: %w", g.Ref, err)
+		return nil, fmt.Errorf("bind loopback endpoint: %w", err)
 	}
 	addr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		_ = ln.Close()
-		return nil, fmt.Errorf("secret grant %q: unexpected listener address type %T", g.Ref, ln.Addr())
+		return nil, fmt.Errorf("unexpected listener address type %T", ln.Addr())
 	}
 
 	// The token is registered SEPARATELY from the base URL, not only as part of it.
@@ -235,7 +255,7 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g Gra
 		// The risky wait is bounded on the OUTBOUND leg instead (see endpointTransport),
 		// which caps how long an upstream may stall before answering without capping how
 		// long it may take to finish answering.
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadHeaderTimeout: endpointReadHeaderTimeout,
 		IdleTimeout:       endpointIdleTimeout,
 		ErrorLog:          r.errorLog(runCtx, "secret.endpoint.server"),
 	}
@@ -415,28 +435,26 @@ func loopbackHost(host string) bool {
 func endpointToken() (string, error) {
 	b := make([]byte, endpointTokenLen)
 	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("secret endpoint: generate token: %w", err)
+		return "", fmt.Errorf("generate token: %w", err)
 	}
 	return hex.EncodeToString(b), nil
 }
 
 // errorLog adapts net/http's *log.Logger error sink onto the resolver's logger, so a
 // proxy or server error reaches the same handler (and its redaction) instead of being
-// written raw to stderr.
-func (r *Resolver) errorLog(ctx context.Context, msg string) *log.Logger {
-	return log.New(logWriter{ctx: ctx, log: r.log, msg: msg}, "", 0)
+// written raw to stderr. Records carry runCtx, the forwarder's own lifetime, the same
+// context its handler resolves against.
+func (r *Resolver) errorLog(runCtx context.Context, msg string) *log.Logger {
+	return log.New(writerFunc(func(p []byte) (int, error) {
+		r.log.WarnContext(runCtx, msg, slog.String("detail", strings.TrimRight(string(p), "\n")))
+		return len(p), nil
+	}), "", 0)
 }
 
-type logWriter struct {
-	ctx context.Context //nolint:containedctx // io.Writer has no ctx parameter
-	log *slog.Logger
-	msg string
-}
+// writerFunc adapts a function to io.Writer.
+type writerFunc func(p []byte) (int, error)
 
-func (w logWriter) Write(p []byte) (int, error) {
-	w.log.WarnContext(w.ctx, w.msg, slog.String("detail", strings.TrimRight(string(p), "\n")))
-	return len(p), nil
-}
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
 
 // forgetEndpoint drops a shut-down forwarder's map entry and reclaims its redaction
 // strings. Idempotent, and safe to call for an entry another OpenEndpoint has already

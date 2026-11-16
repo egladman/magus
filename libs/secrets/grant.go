@@ -64,9 +64,9 @@ type GrantError struct {
 
 func (e *GrantError) Error() string {
 	if e.Ref == "" {
-		return "secret grant: " + e.Reason
+		return "secrets: grant: " + e.Reason
 	}
-	return fmt.Sprintf("secret grant %q: %s", e.Ref, e.Reason)
+	return fmt.Sprintf("secrets: grant %q: %s", e.Ref, e.Reason)
 }
 
 // Normalize validates g and returns it in canonical form. Every refusal is a *GrantError.
@@ -121,21 +121,33 @@ func (g Grant) Normalize() (Grant, error) {
 // pinned to "api.example.com:80" into one for a destination the author did not name.
 //
 // net.SplitHostPort rather than a cut at the first colon, which would turn "[::1]:443"
-// into name "[" and port ":1]:443".
+// into name "[" and port ":1]:443". An IPv6 literal keeps its brackets with or without a
+// port, because the forwarder writes Host into a URL, where "::1" alone does not parse
+// as a host.
 func canonicalHost(host string) string {
 	h := asciiLower(strings.TrimSpace(host))
 	name, port, err := net.SplitHostPort(h)
 	if err != nil {
-		// No port (or unparsable). Strip IPv6 brackets so the bare form agrees with what
-		// the ported branch produces: SplitHostPort removes them, so leaving them here
-		// would make "[::1]" and "[::1]:443" two different destinations.
-		return strings.TrimSuffix(strings.Trim(h, "[]"), ".")
+		// No port (or unparsable): a bare name, "[::1]", or an unbracketed "::1".
+		h = strings.TrimSuffix(h, ".")
+		if strings.HasPrefix(h, "[") && strings.HasSuffix(h, "]") {
+			h = h[1 : len(h)-1]
+		}
+		return bracketIPv6(h)
 	}
 	name = strings.TrimSuffix(name, ".")
 	if port == "443" {
-		return name
+		return bracketIPv6(name)
 	}
 	return net.JoinHostPort(name, port)
+}
+
+// bracketIPv6 brackets name when it is an IPv6 literal, the one host form with a colon.
+func bracketIPv6(name string) string {
+	if strings.Contains(name, ":") {
+		return "[" + name + "]"
+	}
+	return name
 }
 
 // asciiLower lowercases A-Z and leaves every other byte alone. Deliberately NOT

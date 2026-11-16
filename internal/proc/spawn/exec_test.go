@@ -33,7 +33,7 @@ import (
 //
 // Both variants run here because Quiet is the one that leaves zero other coverage.
 func TestExecRedactsSecretsFromEveryCapturedPath(t *testing.T) {
-	ctx := secrets.ContextWithResolver(t.Context(), secrets.NewResolver())
+	ctx := secrets.WithResolver(t.Context(), secrets.NewResolver())
 	t.Setenv("MAGUS_TEST_LEAK_TOKEN", "ghp_never_capture_me")
 	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LEAK_TOKEN")
 	require.NoError(t, err)
@@ -70,7 +70,7 @@ func TestExecCapturesOutputWithNoTrailingNewline(t *testing.T) {
 	for _, withResolver := range []bool{false, true} {
 		ctx := t.Context()
 		if withResolver {
-			ctx = secrets.ContextWithResolver(ctx, secrets.NewResolver())
+			ctx = secrets.WithResolver(ctx, secrets.NewResolver())
 		}
 		res, err := Exec(ctx, "printf", []string{"v1.2.3"},
 			ExecOptions{Dir: ".", Capture: true, Quiet: true})

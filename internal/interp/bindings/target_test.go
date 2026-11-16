@@ -566,18 +566,27 @@ func callSecret(t *testing.T, secretObj vm.Value, name string, args ...vm.Value)
 }
 
 func TestSecretProviderRecordsSpellHandle(t *testing.T) {
-	r := secrets.NewResolver()
-	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), r), nil)
+	p := testkit.NewSecretProvider(map[string]string{"op://vault/token": "op-token-value"})
+	r := secrets.NewResolver(secrets.WithOpener(p.Opener()))
+	reg := workspace.NewWorkspaceRegistry()
+	secretObj := buildSecret(workspace.ContextWithRegistry(secrets.WithResolver(context.Background(), r), reg), nil)
 
 	handle := vm.NewMap()
 	handle.MapSet("name", vm.StringValue("onepassword"))
 	require.NoError(t, callSecret(t, secretObj, "provider", handle))
-	assert.Equal(t, "onepassword", r.ProviderName())
+	assert.Equal(t, "onepassword", reg.SecretProvider(), "the selection is declared for the workspace's later runs")
+	assert.Empty(t, r.ProviderName(), "the run's resolver is derived from, never changed")
+
+	// The same evaluation's reads go through the selected provider.
+	require.NoError(t, callSecret(t, secretObj, "read", vm.StringValue("op://vault/token")))
+	assert.Equal(t, 1, p.Fetches("op://vault/token"))
+	assert.Equal(t, "tok=***", string(r.Redact([]byte("tok=op-token-value"))))
 }
 
 func TestSecretProviderRejectsNonHandles(t *testing.T) {
 	r := secrets.NewResolver()
-	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), r), nil)
+	reg := workspace.NewWorkspaceRegistry()
+	secretObj := buildSecret(workspace.ContextWithRegistry(secrets.WithResolver(context.Background(), r), reg), nil)
 
 	err := callSecret(t, secretObj, "provider")
 	require.Error(t, err)
@@ -588,13 +597,13 @@ func TestSecretProviderRejectsNonHandles(t *testing.T) {
 	err = callSecret(t, secretObj, "provider", vm.NewMap())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a spell handle")
-	assert.Empty(t, r.ProviderName(), "a rejected handle must not be recorded")
+	assert.Empty(t, reg.SecretProvider(), "a rejected handle must not be recorded")
 }
 
 func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
 	r := secrets.NewResolver()
 	t.Setenv("MAGUS_TEST_NS_TOKEN", "ns-token-value")
-	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), r), nil)
+	secretObj := buildSecret(secrets.WithResolver(context.Background(), r), nil)
 
 	require.NoError(t, callSecret(t, secretObj, "read", vm.StringValue("MAGUS_TEST_NS_TOKEN")))
 
@@ -604,14 +613,14 @@ func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
 }
 
 func TestSecretReadRejectsEmptyReference(t *testing.T) {
-	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), secrets.NewResolver()), nil)
+	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
 
 	require.ErrorContains(t, callSecret(t, secretObj, "read"), "non-empty reference string")
 	require.ErrorContains(t, callSecret(t, secretObj, "read", vm.StringValue("")), "non-empty reference string")
 }
 
 func TestSecretReadSurfacesAnUnsetVariableByName(t *testing.T) {
-	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), secrets.NewResolver()), nil)
+	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
 
 	err := callSecret(t, secretObj, "read", vm.StringValue("MAGUS_TEST_NS_ABSENT"))
 	require.Error(t, err)
@@ -650,7 +659,7 @@ func TestSecretReadIsAudited(t *testing.T) {
 	rec := &eventRecorder{}
 	t.Setenv("MAGUS_TEST_AUDIT_TOKEN", "ghp_audit_me_never")
 
-	ctx := secrets.ContextWithResolver(context.Background(), secrets.NewResolver())
+	ctx := secrets.WithResolver(context.Background(), secrets.NewResolver())
 	ctx = journal.WithLogger(ctx, slog.New(rec))
 	ctx = journal.WithStep(ctx, "demo", "publish")
 
@@ -724,7 +733,7 @@ func (s *SecretGrantSuite) TestAnEndpointOutsideARunIsRefusedByName() {
 	grant.MapSet("ref", vm.StringValue("TOKEN"))
 	grant.MapSet("host", vm.StringValue("api.example.com"))
 	grant.MapSet("header", vm.StringValue("Authorization"))
-	secretObj := buildSecret(secrets.ContextWithResolver(context.Background(), secrets.NewResolver()), nil)
+	secretObj := buildSecret(secrets.WithResolver(context.Background(), secrets.NewResolver()), nil)
 
 	err := callVoidDirect(s.T(), requireDirect(s.T(), secretObj, "endpoint"), grant)
 	s.Require().ErrorContains(err, "belongs to a run")

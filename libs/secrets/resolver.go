@@ -63,14 +63,22 @@ type memoKey struct {
 	ref      string
 }
 
-// Resolver holds one scope's secret state: which provider is selected, the values read so
-// far, the memo of what each reference resolved to, and the endpoints opened for grants.
-// It is safe for concurrent use. A nil *Resolver is usable: every method degrades to
-// "nothing resolved, nothing to redact", or errors where a value was asked for.
+// Resolver holds one scope's secret state: the values read so far, the memo of what each
+// reference resolved to, and the endpoints opened for grants. A Resolver reads through
+// one provider, fixed for the value; [Resolver.WithProvider] derives a Resolver that
+// reads through another and shares this one's state. It is safe for concurrent use. A
+// nil *Resolver is usable: every method degrades to "nothing resolved, nothing to
+// redact", or errors where a value was asked for.
 type Resolver struct {
+	// provider is the provider this Resolver reads through; empty means the built-in.
+	provider string
+	*state
+}
+
+// state is what every Resolver derived from one [NewResolver] shares, so a value read
+// through any of them is masked by all of them.
+type state struct {
 	mu sync.RWMutex
-	// providerName is the provider selected; empty means the built-in.
-	providerName string
 	// memo avoids re-invoking a provider that shells out (`op read`, `vault kv get`).
 	memo map[memoKey]Secret
 	// redactable holds every distinct value read, longest first so [Resolver.Redact]
@@ -101,14 +109,15 @@ type Resolver struct {
 	// across Register, which takes mu.
 	endpointMu sync.Mutex
 	// endpoints are the loopback forwarders opened through this resolver, one per
-	// distinct grant and scope. Liveness-checked on lookup rather than assumed: the
-	// resolver outlives a single scope. See endpoint.go.
+	// distinct grant, scope and provider. Liveness-checked on lookup rather than assumed:
+	// the resolver outlives a single scope. See endpoint.go.
 	endpoints map[endpointKey]*forwarder
 }
 
-// NewResolver returns an empty Resolver.
+// NewResolver returns an empty Resolver that reads through the built-in environment
+// provider.
 func NewResolver(opts ...Option) *Resolver {
-	r := &Resolver{timeouts: DefaultTimeouts, log: slog.New(slog.DiscardHandler)}
+	r := &Resolver{state: &state{timeouts: DefaultTimeouts(), log: slog.New(slog.DiscardHandler)}}
 	for _, o := range opts {
 		o(r)
 	}
@@ -119,15 +128,15 @@ func NewResolver(opts ...Option) *Resolver {
 // [DefaultTimeouts].
 func (r *Resolver) Timeouts() Timeouts {
 	if r == nil {
-		return DefaultTimeouts
+		return DefaultTimeouts()
 	}
 	return r.timeouts
 }
 
 type resolverKey struct{}
 
-// ContextWithResolver installs r as the context's resolver.
-func ContextWithResolver(ctx context.Context, r *Resolver) context.Context {
+// WithResolver installs r as the context's resolver.
+func WithResolver(ctx context.Context, r *Resolver) context.Context {
 	return context.WithValue(ctx, resolverKey{}, r)
 }
 
@@ -143,111 +152,158 @@ func ResolverFromContext(ctx context.Context) *Resolver {
 	return r
 }
 
-// SetProviderName selects the provider later reads go through, built by the [Opener].
-// Selecting a second one replaces the first. A nil Resolver ignores it.
-func (r *Resolver) SetProviderName(name string) {
+// WithProvider returns a Resolver that reads through the provider named name, built by
+// the [Opener]; an empty name selects the built-in environment provider. It shares r's
+// memo, redaction set and endpoints, so a value either reads is masked by both. r is
+// unchanged. A nil Resolver returns nil.
+func (r *Resolver) WithProvider(name string) *Resolver {
 	if r == nil {
-		return
+		return nil
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.providerName = name
+	derived := *r
+	derived.provider = name
+	return &derived
 }
 
-// ProviderName returns the selected provider's name, empty when the built-in applies.
+// ProviderName returns the name of the provider r reads through, empty when the
+// built-in applies.
 func (r *Resolver) ProviderName() string {
 	if r == nil {
 		return ""
 	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.providerName
+	return r.provider
 }
 
-// errNoResolver is the one message for "this call needs a resolver and there is none".
-var errNoResolver = errors.New("secret: no resolver on this context")
+// NoResolverError is what a call that needs a [Resolver] returns when it has none,
+// usually because the context carried none.
+type NoResolverError struct{}
 
-// Read resolves ref through the selected provider and registers the result for redaction
-// before returning it. The registration is the point: every later write the caller passes
-// through [Resolver.Redact] masks the value.
+func (*NoResolverError) Error() string { return "secrets: no resolver on this context" }
+
+// ReadError is why [Resolver.Read] returned no value. Provider is empty under the
+// built-in environment provider; Err is the cause, a canceled or expired context
+// included.
+type ReadError struct {
+	Ref      string
+	Provider string
+	Err      error
+}
+
+func (e *ReadError) Error() string {
+	if e.Ref == "" {
+		return "secrets: read: " + e.Err.Error()
+	}
+	via := "the built-in environment provider"
+	if e.Provider != "" {
+		via = fmt.Sprintf("provider %q", e.Provider)
+	}
+	return fmt.Sprintf("secrets: read %q via %s: %v", e.Ref, via, e.Err)
+}
+
+func (e *ReadError) Unwrap() error { return e.Err }
+
+var (
+	errEmptyRef   = errors.New("empty reference")
+	errNoOpener   = errors.New("a provider is selected and this resolver has no opener")
+	errEmptyValue = errors.New("provider resolved it to an empty value")
+)
+
+// Read resolves ref through r's provider and registers the result for redaction before
+// returning it. The registration is the point: every later write the caller passes
+// through [Resolver.Redact] masks the value. Every failure is a *[ReadError], or a
+// *[NoResolverError] for a nil Resolver.
 //
 // A value shorter than [MinMaskLen] is returned but NOT registered; the [WithShortSecret]
 // notice is told about it.
 //
 // Concurrent reads of one reference share a single provider invocation, and a reference
-// is fetched once per provider for the Resolver's life.
+// is fetched once per provider for the Resolver's life. The shared fetch runs under the
+// first caller's context values but none of its cancellation, bounded by the longer of
+// the [Timeouts]; a caller whose own context ends stops waiting and the fetch carries on
+// for the rest.
 func (r *Resolver) Read(ctx context.Context, ref string) (Secret, error) {
 	if r == nil {
-		return Secret{}, errNoResolver
+		return Secret{}, &NoResolverError{}
 	}
 	if ref == "" {
-		return Secret{}, errors.New("secret: empty reference")
+		return Secret{}, &ReadError{Provider: r.provider, Err: errEmptyRef}
 	}
 
-	name := r.ProviderName()
-	key := memoKey{provider: name, ref: ref}
-
-	r.mu.RLock()
-	v, hit := r.memo[key]
-	r.mu.RUnlock()
-	if hit {
+	key := memoKey{provider: r.provider, ref: ref}
+	if v, hit := r.memoized(key); hit {
 		return v, nil
 	}
 
-	got, err, _ := r.group.Do(fmt.Sprintf("%s\x00%s", name, ref), func() (any, error) {
-		// Re-checked INSIDE the flight. A caller that missed the memo just as a previous
-		// flight was completing would otherwise start a second one and invoke the
-		// provider again, the exact duplicate unlock prompt this exists to prevent.
-		r.mu.RLock()
-		v, hit := r.memo[key]
-		r.mu.RUnlock()
-		if hit {
-			return v, nil
-		}
-		p, err := r.provider(ctx, name)
-		if err != nil {
-			return nil, err
-		}
-		val, err := p.Fetch(ctx, ref)
-		if err != nil {
-			return nil, fmt.Errorf("secret %q: %w", ref, err)
-		}
-		if val.IsZero() {
-			return nil, fmt.Errorf("secret %q: provider resolved it to an empty value", ref)
-		}
-		if val.Len() < MinMaskLen && r.short != nil {
-			r.short(ctx, ref)
-		}
-		r.record(key, val)
-		return val, nil
+	flight := r.group.DoChan(key.provider+"\x00"+key.ref, func() (any, error) {
+		return r.fetch(ctx, key)
 	})
-	if err != nil {
-		return Secret{}, err
+	select {
+	case <-ctx.Done():
+		return Secret{}, &ReadError{Ref: ref, Provider: r.provider, Err: ctx.Err()}
+	case res := <-flight:
+		if res.Err != nil {
+			return Secret{}, res.Err
+		}
+		v, ok := res.Val.(Secret)
+		if !ok {
+			// Unreachable: the flight returns only a Secret or an error. Checked rather
+			// than asserted, so a future edit that returns another type fails here
+			// instead of panicking inside a credential path.
+			return Secret{}, &ReadError{Ref: ref, Provider: r.provider, Err: fmt.Errorf("provider returned %T, not a secret", res.Val)}
+		}
+		return v, nil
 	}
-	v, ok := got.(Secret)
-	if !ok {
-		// Unreachable: the flight returns only a Secret or an error. Checked rather than
-		// asserted, so a future edit that returns another type fails here instead of
-		// panicking inside a credential path.
-		return Secret{}, fmt.Errorf("secret %q: provider returned %T, not a secret", ref, got)
-	}
-	return v, nil
 }
 
-// provider returns the backend for name, falling back to the built-in when none is
-// selected, which keeps an unconfigured caller working off its environment.
-func (r *Resolver) provider(ctx context.Context, name string) (Provider, error) { //nolint:ireturn // Provider: envProvider or the opened one
-	if name == "" {
-		return envProvider{}, nil
+// memoized returns the value key already resolved to.
+func (r *Resolver) memoized(key memoKey) (Secret, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	v, hit := r.memo[key]
+	return v, hit
+}
+
+// fetch is one flight of [Resolver.Read]. Detached from the caller's cancellation
+// because the flight is shared: the caller that happened to start it giving up must not
+// fail every other waiter.
+func (r *Resolver) fetch(callerCtx context.Context, key memoKey) (Secret, error) {
+	// Re-checked INSIDE the flight. A caller that missed the memo just as a previous
+	// flight was completing would otherwise start a second one and invoke the provider
+	// again, the exact duplicate unlock prompt this exists to prevent.
+	if v, hit := r.memoized(key); hit {
+		return v, nil
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(callerCtx), r.timeouts.longest())
+	defer cancel()
+
+	val, err := r.fetchFrom(ctx, key)
+	if err != nil {
+		return Secret{}, &ReadError{Ref: key.ref, Provider: key.provider, Err: err}
+	}
+	if val.IsZero() {
+		return Secret{}, &ReadError{Ref: key.ref, Provider: key.provider, Err: errEmptyValue}
+	}
+	if val.Len() < MinMaskLen && r.short != nil {
+		r.short(ctx, key.ref)
+	}
+	r.record(key, val)
+	return val, nil
+}
+
+// fetchFrom asks key's provider for its reference, falling back to the built-in when
+// none is selected, which keeps an unconfigured caller working off its environment.
+func (r *Resolver) fetchFrom(ctx context.Context, key memoKey) (Secret, error) {
+	if key.provider == "" {
+		return envProvider{}.Fetch(ctx, key.ref)
 	}
 	if r.open == nil {
-		return nil, fmt.Errorf("secret: provider %q is selected and this resolver has no opener", name)
+		return Secret{}, errNoOpener
 	}
-	p, err := r.open(ctx, name)
+	p, err := r.open(ctx, key.provider)
 	if err != nil {
-		return nil, fmt.Errorf("secret: open provider %q: %w", name, err)
+		return Secret{}, fmt.Errorf("open provider: %w", err)
 	}
-	return p, nil
+	return p.Fetch(ctx, key.ref)
 }
 
 // record memoizes a resolved value and, when long enough to mask safely, adds it to the

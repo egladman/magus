@@ -20,8 +20,8 @@ func (s *GrantSuite) refused(g Grant, want string) {
 }
 
 func (s *GrantSuite) TestNormalizeRequiresEveryField() {
-	s.refused(Grant{Host: "h", Header: "A"}, "secret grant: ref is required")
-	s.refused(Grant{Ref: "R", Header: "A"}, `secret grant "R": host is required`)
+	s.refused(Grant{Host: "h", Header: "A"}, "secrets: grant: ref is required")
+	s.refused(Grant{Ref: "R", Header: "A"}, `secrets: grant "R": host is required`)
 	s.refused(Grant{Ref: "R", Host: "h"}, "header is required")
 }
 
@@ -63,7 +63,17 @@ func (s *GrantSuite) TestNormalizeFoldsOneDestinationsSpellings() {
 
 	v6, err := Grant{Ref: "R", Host: "[::1]:443", Header: "Authorization"}.Normalize()
 	s.Require().NoError(err)
-	s.Equal("::1", v6.Host, "a first-colon split would mangle IPv6")
+	s.Equal("[::1]", v6.Host, "a first-colon split would mangle IPv6")
+}
+
+// The forwarder writes Host into the upstream URL, where an unbracketed IPv6 literal
+// does not parse as a host.
+func (s *GrantSuite) TestNormalizeKeepsIPv6Brackets() {
+	for _, in := range []string{"[::1]", "::1", "[::1]:443", "[::1]."} {
+		g, err := Grant{Ref: "R", Host: in, Header: "Authorization"}.Normalize()
+		s.Require().NoError(err)
+		s.Equal("[::1]", g.Host, "host %q", in)
+	}
 }
 
 func (s *GrantSuite) TestNormalizeKeepsANonDefaultPort() {

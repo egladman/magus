@@ -39,6 +39,9 @@ type WorkspaceRegistry struct {
 	// lifecycleProvider is the spell a magusfile wired via magus\lifecycle.provider;
 	// empty when none was.
 	lifecycleProvider string
+	// secretProvider is the spell a magusfile declared via magus\secret.provider; empty
+	// when none was, and the built-in environment provider applies.
+	secretProvider string
 	// shellRules are additive agent-guard rules a magusfile declared via
 	// magus\guard.shell, in declaration order. They strengthen only: the guard
 	// merges them after compiled built-ins.
@@ -199,6 +202,25 @@ func (r *WorkspaceRegistry) LifecycleProvider() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.lifecycleProvider
+}
+
+// DeclareSecretProvider records the spell a magusfile declared as its secret provider.
+// Declaring a second one replaces the first. Safe to call concurrently.
+func (r *WorkspaceRegistry) DeclareSecretProvider(spellName string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.secretProvider = spellName
+}
+
+// SecretProvider returns the secret-provider spell name, or "" when none was declared.
+// A nil registry declares none.
+func (r *WorkspaceRegistry) SecretProvider() string {
+	if r == nil {
+		return ""
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.secretProvider
 }
 
 // AddShellRule appends an additive shell-guard rule. Safe to call concurrently.

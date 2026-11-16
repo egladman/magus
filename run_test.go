@@ -1524,7 +1524,7 @@ func TestOutputWatchDirsSpansOwnerRoots(t *testing.T) {
 // is the one seam where a run error stops being magus's and becomes the caller's text.
 func TestRedactError(t *testing.T) {
 	m := &Magus{resolver: secrets.NewResolver()}
-	ctx := secrets.ContextWithResolver(t.Context(), m.resolver)
+	ctx := secrets.WithResolver(t.Context(), m.resolver)
 	t.Setenv("MAGUS_TEST_RUNERR_TOKEN", "ghp_thrown_from_a_magusfile")
 	_, err := m.resolver.Read(ctx, "MAGUS_TEST_RUNERR_TOKEN")
 	require.NoError(t, err)

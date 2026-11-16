@@ -24,12 +24,20 @@ type Timeouts struct {
 	Unattended time.Duration
 }
 
-// DefaultTimeouts are the budgets a Resolver reports when no option sets them.
-var DefaultTimeouts = Timeouts{Interactive: 60 * time.Second, Unattended: 10 * time.Second}
+// DefaultTimeouts returns the budgets a Resolver reports when no option sets them.
+func DefaultTimeouts() Timeouts {
+	return Timeouts{Interactive: 60 * time.Second, Unattended: 10 * time.Second}
+}
+
+// longest is the budget a shared read runs under. The resolver cannot tell whether a
+// provider will prompt, so it bounds a flight by the longer budget and leaves the
+// tighter one to the provider, which knows.
+func (t Timeouts) longest() time.Duration { return max(t.Interactive, t.Unattended) }
 
 // WithTimeouts sets the provider-read budgets. A zero field keeps [DefaultTimeouts], so
-// a partly specified configuration still works. The resolver only reports them through
-// [Resolver.Timeouts]; a provider applies them.
+// a partly specified configuration still works. A provider applies them, reading them
+// through [Resolver.Timeouts]; the resolver bounds a read shared by concurrent callers
+// by the longer of the two.
 func WithTimeouts(t Timeouts) Option {
 	return func(r *Resolver) {
 		if t.Interactive > 0 {
@@ -41,7 +49,7 @@ func WithTimeouts(t Timeouts) Option {
 	}
 }
 
-// Opener builds the provider a caller selected by name with [Resolver.SetProviderName].
+// Opener builds the provider a caller selected by name with [Resolver.WithProvider].
 type Opener func(ctx context.Context, name string) (Provider, error)
 
 // WithOpener sets the opener a named provider is built through. Without one, a read under

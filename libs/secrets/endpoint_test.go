@@ -155,6 +155,20 @@ func (s *EndpointSuite) TestMemoizesPerGrant() {
 	assert.NotEqual(t, first, third, "two different grants shared one endpoint")
 }
 
+// Resolvers derived with WithProvider share one endpoint map, and a forwarder resolves
+// through the Resolver that opened it, so one provider's endpoint must not answer for
+// another's.
+func (s *EndpointSuite) TestProvidersGetTheirOwnEndpoint() {
+	t := s.T()
+	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	builtin, err := res.OpenEndpoint(t.Context(), scope(t), g)
+	require.NoError(t, err)
+	vault, err := res.WithProvider("vault").OpenEndpoint(t.Context(), scope(t), g)
+	require.NoError(t, err)
+	assert.NotEqual(t, builtin, vault, "two providers shared one endpoint")
+}
+
 // The listener belongs to its context, not to the machine: nothing survives it to be
 // stopped later.
 func (s *EndpointSuite) TestClosesWithRun() {
@@ -511,7 +525,27 @@ func (s *EndpointSuite) TestRefusesAnEmptyScope() {
 	defer cancel()
 	_, err := res.OpenEndpoint(ctx, "", g)
 	require.ErrorIs(t, err, ErrNoScope)
+	var ee *EndpointError
+	require.ErrorAs(t, err, &ee)
+	assert.Equal(t, g.Ref, ee.Ref)
 	assert.Zero(t, res.endpointCount())
+}
+
+func (s *EndpointSuite) TestLoopbackHostAcceptsEveryLoopbackSpelling() {
+	for _, h := range []string{"127.0.0.1:8080", "127.0.0.1", "localhost:8080", "localhost", "[::1]:8080", "[::1]"} {
+		s.True(loopbackHost(h), "host %q", h)
+	}
+	for _, h := range []string{"evil.example.com:8080", "evil.example.com", "[2001:db8::1]:8080", "10.0.0.1"} {
+		s.False(loopbackHost(h), "host %q", h)
+	}
+}
+
+func (s *EndpointSuite) TestNilResolverOpensNothing() {
+	var r *Resolver
+	_, err := r.OpenEndpoint(s.T().Context(), "inv", Grant{Ref: "R", Host: "h", Header: "A"})
+	var nr *NoResolverError
+	s.Require().ErrorAs(err, &nr)
+	s.Equal("secrets: no resolver on this context", err.Error())
 }
 
 // TestDoesNotForwardTokenUpstream: Referer and Origin routinely carry the full

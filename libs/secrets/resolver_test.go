@@ -16,8 +16,7 @@ import (
 
 type ResolverSuite struct {
 	suite.Suite
-	ctx context.Context //nolint:containedctx // the suite's per-test context
-	r   *Resolver
+	r *Resolver
 }
 
 func TestResolver(t *testing.T) { suite.Run(t, new(ResolverSuite)) }
@@ -26,13 +25,16 @@ func TestResolver(t *testing.T) { suite.Run(t, new(ResolverSuite)) }
 // tests, as nothing leaks between scopes of a long-lived caller.
 func (s *ResolverSuite) SetupTest() {
 	s.r = NewResolver()
-	s.ctx = ContextWithResolver(s.T().Context(), s.r)
 }
+
+// ctx is the test's context carrying the suite's resolver.
+func (s *ResolverSuite) ctx() context.Context { return WithResolver(s.T().Context(), s.r) }
 
 // read reads ref through the context's resolver, failing the test on an error.
 func (s *ResolverSuite) read(ref string) Secret {
 	s.T().Helper()
-	v, err := ResolverFromContext(s.ctx).Read(s.ctx, ref)
+	ctx := s.ctx()
+	v, err := ResolverFromContext(ctx).Read(ctx, ref)
 	s.Require().NoError(err)
 	return v
 }
@@ -43,27 +45,25 @@ type providerFunc func(context.Context, string) (Secret, error)
 func (f providerFunc) Fetch(ctx context.Context, ref string) (Secret, error) { return f(ctx, ref) }
 
 // withProvider replaces the suite's resolver with one whose opener returns p for every
-// name, and selects name.
+// name, reading through name.
 func (s *ResolverSuite) withProvider(name string, p Provider, opts ...Option) {
 	opener := func(context.Context, string) (Provider, error) { return p, nil }
-	s.r = NewResolver(append([]Option{WithOpener(opener)}, opts...)...)
-	s.r.SetProviderName(name)
-	s.ctx = ContextWithResolver(s.T().Context(), s.r)
+	s.r = NewResolver(append([]Option{WithOpener(opener)}, opts...)...).WithProvider(name)
 }
 
 func (s *ResolverSuite) TestEnvProviderReadsTheNamedVariable() {
 	s.T().Setenv("SECRETS_TEST_TOKEN", "s3cret-value")
-	v, err := envProvider{}.Fetch(s.ctx, "SECRETS_TEST_TOKEN")
+	v, err := envProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_TOKEN")
 	s.Require().NoError(err)
 	s.Equal("s3cret-value", v.Reveal())
 }
 
 func (s *ResolverSuite) TestEnvProviderTellsUnsetFromEmpty() {
-	_, err := envProvider{}.Fetch(s.ctx, "SECRETS_TEST_ABSENT")
+	_, err := envProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_ABSENT")
 	s.Require().ErrorContains(err, "$SECRETS_TEST_ABSENT is not set")
 
 	s.T().Setenv("SECRETS_TEST_BLANK", "")
-	_, err = envProvider{}.Fetch(s.ctx, "SECRETS_TEST_BLANK")
+	_, err = envProvider{}.Fetch(s.T().Context(), "SECRETS_TEST_BLANK")
 	s.Require().ErrorContains(err, "is set but empty")
 }
 
@@ -87,12 +87,14 @@ func (s *ResolverSuite) TestNilResolverDegradesSafely() {
 	s.Equal("untouched", string(r.Redact([]byte("untouched"))))
 	s.Equal("untouched", r.RedactString("untouched"))
 	s.Empty(r.ProviderName())
-	s.NotPanics(func() { r.SetProviderName("x") })
+	s.Nil(r.WithProvider("x"))
 	s.NotPanics(func() { r.Register(New("ignored-by-nil")) })
-	s.Equal(DefaultTimeouts, r.Timeouts())
+	s.Equal(DefaultTimeouts(), r.Timeouts())
 
 	_, err := ResolverFromContext(context.Background()).Read(context.Background(), "ANY")
-	s.Require().ErrorContains(err, "no resolver")
+	var nr *NoResolverError
+	s.Require().ErrorAs(err, &nr)
+	s.Equal("secrets: no resolver on this context", err.Error())
 }
 
 func (s *ResolverSuite) TestRedactMasksLongestValueFirst() {
@@ -141,11 +143,10 @@ func (s *ResolverSuite) TestReadReReadsWhenTheProviderChanges() {
 		return providerFunc(func(context.Context, string) (Secret, error) { return New("from-vault"), nil }), nil
 	}
 	s.r = NewResolver(WithOpener(opener))
-	s.ctx = ContextWithResolver(s.T().Context(), s.r)
 	s.T().Setenv("SOME_REF", "from-env")
 	s.Equal("from-env", s.read("SOME_REF").Reveal())
 
-	s.r.SetProviderName("vault")
+	s.r = s.r.WithProvider("vault")
 	s.Equal("from-vault", s.read("SOME_REF").Reveal(), "the declared provider must win over a memoized fallback")
 }
 
@@ -168,7 +169,7 @@ func (s *ResolverSuite) TestReadCollapsesConcurrentReadsOfOneReference() {
 	errs := make([]error, 8)
 	for i := range 8 {
 		wg.Go(func() {
-			v, err := s.r.Read(s.ctx, "SHARED_REF")
+			v, err := s.r.Read(s.ctx(), "SHARED_REF")
 			got[i], errs[i] = v.Reveal(), err
 		})
 	}
@@ -182,35 +183,80 @@ func (s *ResolverSuite) TestReadCollapsesConcurrentReadsOfOneReference() {
 	s.Equal(1, calls)
 }
 
-func (s *ResolverSuite) TestReadRejectsEmptyReference() {
-	_, err := s.r.Read(s.ctx, "")
-	s.Require().ErrorContains(err, "empty reference")
+// The fetch is shared, so the caller that happened to start it giving up must not fail
+// the callers still waiting on it.
+func (s *ResolverSuite) TestReadOutlivesTheFirstCallersCancellation() {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	s.withProvider("slow", providerFunc(func(ctx context.Context, _ string) (Secret, error) {
+		close(started)
+		select {
+		case <-release:
+			return New("shared-value"), nil
+		case <-ctx.Done():
+			return Secret{}, ctx.Err()
+		}
+	}))
+
+	first, cancelFirst := context.WithCancel(s.ctx())
+	firstErr := make(chan error, 1)
+	go func() {
+		_, err := s.r.Read(first, "SHARED_REF")
+		firstErr <- err
+	}()
+	<-started
+
+	second := make(chan Secret, 1)
+	go func() {
+		v, err := s.r.Read(s.ctx(), "SHARED_REF")
+		s.NoError(err)
+		second <- v
+	}()
+
+	cancelFirst()
+	err := <-firstErr
+	s.Require().ErrorIs(err, context.Canceled, "the canceled caller stops waiting")
+	var re *ReadError
+	s.Require().ErrorAs(err, &re)
+
+	close(release)
+	s.Equal("shared-value", (<-second).Reveal(), "a waiter must not inherit another caller's cancellation")
 }
 
-func (s *ResolverSuite) TestProviderNameReportsSelection() {
+func (s *ResolverSuite) TestReadRejectsEmptyReference() {
+	_, err := s.r.Read(s.ctx(), "")
+	var re *ReadError
+	s.Require().ErrorAs(err, &re)
+	s.Equal("secrets: read: empty reference", err.Error())
+}
+
+func (s *ResolverSuite) TestWithProviderDerivesWithoutChangingTheOriginal() {
+	vault := s.r.WithProvider("onepassword")
 	s.Empty(s.r.ProviderName(), "no selection means the built-in env provider applies")
-	s.r.SetProviderName("onepassword")
-	s.Equal("onepassword", s.r.ProviderName())
+	s.Equal("onepassword", vault.ProviderName())
+
+	// The derived resolver shares the redaction set: a value one registers, both mask.
+	vault.Register(New("shared-redaction-token"))
+	s.Equal(mask, s.r.RedactString("shared-redaction-token"))
 }
 
 func (s *ResolverSuite) TestReadUnderANamedProviderNeedsAnOpener() {
-	s.r.SetProviderName("vault")
-	_, err := s.r.Read(s.ctx, "REF")
+	_, err := s.r.WithProvider("vault").Read(s.ctx(), "REF")
 	s.Require().ErrorContains(err, "has no opener")
+	s.Require().ErrorContains(err, `secrets: read "REF" via provider "vault"`)
 }
 
 func (s *ResolverSuite) TestReadSurfacesProviderOpenFailures() {
 	s.r = NewResolver(WithOpener(func(context.Context, string) (Provider, error) {
 		return nil, errors.New("spell not registered")
-	}))
-	s.r.SetProviderName("missing-spell")
-	_, err := s.r.Read(s.ctx, "ANY")
+	})).WithProvider("missing-spell")
+	_, err := s.r.Read(s.ctx(), "ANY")
 	s.Require().ErrorContains(err, "missing-spell", "the error names the provider that failed to open")
 }
 
 func (s *ResolverSuite) TestReadRejectsAnEmptyValueFromAProvider() {
 	s.withProvider("blank", providerFunc(func(context.Context, string) (Secret, error) { return Secret{}, nil }))
-	_, err := s.r.Read(s.ctx, "REF")
+	_, err := s.r.Read(s.ctx(), "REF")
 	s.Require().ErrorContains(err, "empty value", "a blank credential must fail here, not at whatever consumes it")
 }
 
@@ -249,8 +295,8 @@ func (s *ResolverSuite) TestPackageLevelRedactorsFollowTheContext() {
 	s.T().Setenv("SECRETS_TEST_PKG", "pkg-level-token")
 	s.read("SECRETS_TEST_PKG")
 
-	s.Equal("a=***", string(Redact(s.ctx, []byte("a=pkg-level-token"))))
-	s.Equal("a=***", RedactString(s.ctx, "a=pkg-level-token"))
+	s.Equal("a=***", string(Redact(s.ctx(), []byte("a=pkg-level-token"))))
+	s.Equal("a=***", RedactString(s.ctx(), "a=pkg-level-token"))
 	s.Equal("a=pkg-level-token", RedactString(context.Background(), "a=pkg-level-token"))
 
 	// A nil context reaches these from log handlers that have none to hand them, and

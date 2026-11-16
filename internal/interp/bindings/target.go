@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -191,10 +192,17 @@ func buildLifecycle(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 // with os\env gets a plain string magus has no reason to protect: the documented seam,
 // not a gap.
 func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
+	// selected is the resolver provider() derived for this evaluation's own later reads.
+	// Nil until provider() runs; read() then uses the run's resolver as given.
+	var selected atomic.Pointer[secrets.Resolver]
+	resolver := func() *secrets.Resolver {
+		if r := selected.Load(); r != nil {
+			return r
+		}
+		return secrets.ResolverFromContext(runCtx)
+	}
 	secretObj := vm.NewMap()
 	secretObj.MapSet("provider", directVal(obs, "magus.secret.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		// Records onto the resolver captured at construction, the same way
-		// buildCache records onto the registry it captured.
 		if len(args) == 0 || !args[0].IsMap() {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: expected an imported spell handle`)
 		}
@@ -202,8 +210,11 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		if !ok || !nv.IsString() || nv.AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: argument is not a spell handle (no name)`)
 		}
-		// Records onto the resolver captured at construction, the same way buildCache
-		// records onto the registry it captured.
+		// The workspace's resolver is built at Open, before any magusfile runs, so the
+		// selection cannot be a construction option. It is declared on the registry,
+		// the same way buildCache declares its backend, and Magus.ContextWithSecrets
+		// derives the selected resolver from it for every later run. This evaluation's
+		// own reads go through the resolver derived here.
 		//
 		// ERRORS when there is no resolver rather than no-opping. A silently dropped
 		// selection means the run falls back to the built-in environment provider: the
@@ -214,7 +225,10 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		if r == nil {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: no secret resolver on this run`)
 		}
-		r.SetProviderName(nv.AsString())
+		selected.Store(r.WithProvider(nv.AsString()))
+		if reg := workspace.WorkspaceRegistryFromContext(runCtx); reg != nil {
+			reg.DeclareSecretProvider(nv.AsString())
+		}
 		return vm.Null, nil
 	}))
 	secretObj.MapSet("read", directVal(obs, "magus.secret.read", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
@@ -230,7 +244,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		// default. Reaching for it to find the resolver fails loudly rather than
 		// resolving against nothing.
 		ref := args[0].AsString()
-		r := secrets.ResolverFromContext(runCtx)
+		r := resolver()
 		if r == nil {
 			return vm.Null, fmt.Errorf(`magus\secret.read: no secret resolver on this run`)
 		}

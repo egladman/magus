@@ -485,7 +485,7 @@ func TestToolCallBlobsAreRedacted(t *testing.T) {
 	res := secrets.NewResolver()
 	t.Setenv("MCP_TEST_TOKEN", credential)
 	// Provenance is what marks a value as a credential, so resolve it once.
-	got, err := res.Read(secrets.ContextWithResolver(t.Context(), res), "MCP_TEST_TOKEN")
+	got, err := res.Read(secrets.WithResolver(t.Context(), res), "MCP_TEST_TOKEN")
 	require.NoError(t, err)
 	require.Equal(t, credential, got.Reveal())
 
@@ -521,7 +521,7 @@ func noSecrets(ctx context.Context) context.Context { return ctx }
 func wrapWithResolver(t *testing.T, trailDir string, res *secrets.Resolver, fn handlerFn) server.ToolHandlerFunc {
 	t.Helper()
 	return wrap(quietLogger(), func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} },
-		trailDir, func(ctx context.Context) context.Context { return secrets.ContextWithResolver(ctx, res) },
+		trailDir, func(ctx context.Context) context.Context { return secrets.WithResolver(ctx, res) },
 		nil, fn)
 }
 

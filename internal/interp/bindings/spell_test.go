@@ -741,7 +741,7 @@ func TestDispatchOpInjectsDeclaredSecrets(t *testing.T) {
 	t.Setenv("NPM_TOKEN", "s3cr3t-token")
 
 	r := secrets.NewResolver()
-	ctx := secrets.ContextWithResolver(context.Background(), r)
+	ctx := secrets.WithResolver(context.Background(), r)
 
 	ops := map[string]spells.Op{
 		"publish": {Command: spells.Command{
@@ -780,7 +780,7 @@ func TestDispatchOpSecretsRequireAResolver(t *testing.T) {
 // running the command with a missing value.
 func TestDispatchOpSecretsPropagateResolverError(t *testing.T) {
 	r := secrets.NewResolver() // built-in env provider; NOT_SET_ANYWHERE is deliberately unset
-	ctx := secrets.ContextWithResolver(context.Background(), r)
+	ctx := secrets.WithResolver(context.Background(), r)
 
 	ops := map[string]spells.Op{
 		"publish": {Command: spells.Command{
@@ -801,7 +801,7 @@ func TestDispatchOpSecretsPropagateResolverError(t *testing.T) {
 func TestResolveSecretEnvMergesWithoutClobberingReservedEnv(t *testing.T) {
 	t.Setenv("NPM_TOKEN", "s3cr3t-token")
 	r := secrets.NewResolver()
-	ctx := secrets.ContextWithResolver(context.Background(), r)
+	ctx := secrets.WithResolver(context.Background(), r)
 
 	base := map[string]string{"MAGUS_SYMBOL_INDEX": "/cache/index.scip"}
 	env, err := resolveSecretEnv(ctx, "scip", map[string]string{"NPM_TOKEN": "NPM_TOKEN"}, base)
@@ -816,7 +816,7 @@ func TestResolveSecretEnvMergesWithoutClobberingReservedEnv(t *testing.T) {
 // security-sensitive path.
 func TestResolveSecretEnvCollisionErrors(t *testing.T) {
 	r := secrets.NewResolver()
-	ctx := secrets.ContextWithResolver(context.Background(), r)
+	ctx := secrets.WithResolver(context.Background(), r)
 
 	base := map[string]string{"MAGUS_SYMBOL_INDEX": "/cache/index.scip"}
 	_, err := resolveSecretEnv(ctx, "scip", map[string]string{"MAGUS_SYMBOL_INDEX": "MAGUS_SYMBOL_INDEX"}, base)

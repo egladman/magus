@@ -54,7 +54,7 @@ func (s *emitMagusLogSuite) inTarget(format string, body func(context.Context)) 
 		cache.WithLog(format, slog.LevelInfo), cache.WithLogger(slog.New(slog.DiscardHandler)),
 		cache.WithCollapse(true))
 	s.Require().NoError(err)
-	ctx := secrets.ContextWithResolver(s.T().Context(), s.resolver)
+	ctx := secrets.WithResolver(s.T().Context(), s.resolver)
 	var logPath string
 	var stepCtx context.Context
 	_, err = c.Run(ctx, cache.Step{ProjectPath: "p", Target: "t", WorkspaceRoot: root, NoCache: true},
@@ -114,7 +114,7 @@ func (s *emitMagusLogSuite) TestASecretInAFieldKeyIsRedactedOnTheConsoleAndInThe
 }
 
 func (s *emitMagusLogSuite) TestASecretInAFieldKeyIsRedactedOutsideATarget() {
-	ctx := secrets.ContextWithResolver(s.T().Context(), s.resolver)
+	ctx := secrets.WithResolver(s.T().Context(), s.resolver)
 
 	emitMagusLog(ctx, slog.LevelWarn, "leak", map[string]string{testSecret: "v"})
 

@@ -804,7 +804,7 @@ func TestRemoteSuffix(t *testing.T) {
 // the output tap nor journal.Emit's redaction covered it. Redacting in printf covers
 // every record kind this handler will ever render rather than just run.exec.
 func TestPrettyHandlerRedactsSecrets(t *testing.T) {
-	ctx := secrets.ContextWithResolver(t.Context(), secrets.NewResolver())
+	ctx := secrets.WithResolver(t.Context(), secrets.NewResolver())
 	t.Setenv("MAGUS_TEST_LOG_TOKEN", "ghp_never_echo_me")
 	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LOG_TOKEN")
 	require.NoError(t, err)

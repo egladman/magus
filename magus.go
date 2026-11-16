@@ -2528,9 +2528,12 @@ func forSpellNamed(ctx context.Context, p *types.Project, target, name string, f
 // The resolver is per workspace Open, so this is only meaningful for a caller already
 // bound to one workspace. A server-wide action has no workspace and therefore nothing to
 // redact against, which is the honest answer rather than a gap.
+//
+// It reads through the provider the magusfile declared, derived from the workspace's
+// resolver at each call: the resolver is built at Open, before any magusfile runs.
 func (m *Magus) ContextWithSecrets(ctx context.Context) context.Context {
 	if m == nil || m.resolver == nil {
 		return ctx
 	}
-	return secrets.ContextWithResolver(ctx, m.resolver)
+	return secrets.WithResolver(ctx, m.resolver.WithProvider(m.wsReg.SecretProvider()))
 }

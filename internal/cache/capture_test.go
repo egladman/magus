@@ -112,7 +112,7 @@ func TestLineTapSplitsLinesAcrossWrites(t *testing.T) {
 //
 // The resolver rides on the emitter ctx, so this needs no global cleanup.
 func TestLineTapRedactsSecrets(t *testing.T) {
-	ctx := secrets.ContextWithResolver(t.Context(), secrets.NewResolver())
+	ctx := secrets.WithResolver(t.Context(), secrets.NewResolver())
 	t.Setenv("MAGUS_TEST_CAPTURE_TOKEN", "ghp_do_not_log_me")
 	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_CAPTURE_TOKEN")
 	require.NoError(t, err)

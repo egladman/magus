@@ -491,7 +491,7 @@ func TestKeyInputsRedactBothSidesOfAComparison(t *testing.T) {
 	writeMain(t, root, "package main")
 
 	const token = "sk-live-w5a-probe-token"
-	ctx := secrets.ContextWithResolver(t.Context(), secrets.NewResolver())
+	ctx := secrets.WithResolver(t.Context(), secrets.NewResolver())
 	t.Setenv("MAGUS_TEST_KEYINPUT_TOKEN", token)
 	// Reading through the built-in env provider is what registers a value for redaction.
 	_, err := secrets.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_KEYINPUT_TOKEN")

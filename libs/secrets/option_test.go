@@ -15,7 +15,7 @@ type OptionSuite struct{ suite.Suite }
 func TestOption(t *testing.T) { suite.Run(t, new(OptionSuite)) }
 
 func (s *OptionSuite) TestNoOptionsMeansTheDefaultTimeouts() {
-	s.Equal(DefaultTimeouts, NewResolver().Timeouts())
+	s.Equal(DefaultTimeouts(), NewResolver().Timeouts())
 }
 
 // A partly specified configuration must not zero the other budget: a zero timeout would
@@ -23,7 +23,7 @@ func (s *OptionSuite) TestNoOptionsMeansTheDefaultTimeouts() {
 func (s *OptionSuite) TestWithTimeoutsKeepsDefaultsForZeroFields() {
 	only := NewResolver(WithTimeouts(Timeouts{Interactive: 5 * time.Second}))
 	s.Equal(5*time.Second, only.Timeouts().Interactive)
-	s.Equal(DefaultTimeouts.Unattended, only.Timeouts().Unattended)
+	s.Equal(DefaultTimeouts().Unattended, only.Timeouts().Unattended)
 
 	both := NewResolver(WithTimeouts(Timeouts{Interactive: time.Second, Unattended: 2 * time.Second}))
 	s.Equal(Timeouts{Interactive: time.Second, Unattended: 2 * time.Second}, both.Timeouts())
@@ -34,8 +34,7 @@ func (s *OptionSuite) TestWithOpenerBuildsTheSelectedProvider() {
 	r := NewResolver(WithOpener(func(_ context.Context, name string) (Provider, error) {
 		opened = name
 		return providerFunc(func(context.Context, string) (Secret, error) { return New("from-opener"), nil }), nil
-	}))
-	r.SetProviderName("vault")
+	})).WithProvider("vault")
 	v, err := r.Read(s.T().Context(), "REF")
 	s.Require().NoError(err)
 	s.Equal("from-opener", v.Reveal())

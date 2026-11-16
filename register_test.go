@@ -59,14 +59,14 @@ func (s *sdkOptionSuite) TestWithSpawnRuleRecordsMisuseOnABareLoad() {
 
 func (s *sdkOptionSuite) TestWithSecretsRecordsMisuseOnABareLoad() {
 	l := &workspace.Load{}
-	WithSecrets(secrets.WithTimeouts(secrets.DefaultTimeouts))(l)
+	WithSecrets(secrets.WithTimeouts(secrets.DefaultTimeouts()))(l)
 	s.Require().Len(l.Misuse, 1)
 	s.EqualError(l.Misuse[0], "magus.WithSecrets sets what only magus.Open and magus.Inspect read, and was applied to a *workspace.Load, which reads none of it")
 }
 
 func (s *sdkOptionSuite) TestWithSecretsAccumulates() {
 	o := collectOptions([]Option{
-		WithSecrets(secrets.WithTimeouts(secrets.DefaultTimeouts)),
+		WithSecrets(secrets.WithTimeouts(secrets.DefaultTimeouts())),
 		WithSecrets(secrets.WithShortSecret(func(context.Context, string) {})),
 	})
 	s.Len(o.secretsOpts, 2)

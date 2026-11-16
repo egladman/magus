@@ -785,7 +785,7 @@ func approvedRegistry(ctx context.Context, root string, approved headPolicy, pen
 	}
 	reg := newRuleLoad()
 	lctx := interp.WithGuardRules(reg.within(ctx))
-	lctx = secrets.ContextWithResolver(lctx, journal.NewSecretResolver())
+	lctx = secrets.WithResolver(lctx, journal.NewSecretResolver())
 	lctx = interp.WithProjectPath(lctx, ".")
 	lctx = interp.WithApprovedSourceReader(lctx, read)
 	for _, src := range interp.Sources(root, files) {
@@ -949,7 +949,7 @@ func LoadWorkspaceRules(ctx context.Context, root string, opts types.VCSOptions)
 	// target imports) is not a guard rule, and compiling it is most of a hook's
 	// cost. See guardRulesFilter in internal/interp.
 	lctx := interp.WithGuardRules(load.within(ctx))
-	lctx = secrets.ContextWithResolver(lctx, journal.NewSecretResolver())
+	lctx = secrets.WithResolver(lctx, journal.NewSecretResolver())
 	lctx = interp.WithProjectPath(lctx, ".")
 	lctx = interp.WithSourceLog(lctx, log)
 	for _, src := range srcs {
