@@ -41,7 +41,7 @@ func jobEvidenceEnv() evidence.Env {
 			return loadRefsGraph(ctx, m, globalCfg, false, "")
 		},
 		DomainGraph: func(ctx context.Context, m *magus.Magus) (*knowledge.Graph, error) {
-			return loadWorkspaceGraph(ctx, m, globalCfg, false, false, false)
+			return graphReads.LoadGraph(ctx, m, globalCfg, false, false, false)
 		},
 		Notes: func(ctx context.Context, m *magus.Magus, row types.Job) ([]job.RegeneratedOutput, []job.UnrunGate) {
 			notes := collectNotes(ctx, m, row)

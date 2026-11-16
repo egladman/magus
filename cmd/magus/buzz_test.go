@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -536,16 +537,16 @@ func TestBuzzCmd_TopLevelRaiseNamesTheMainForm(t *testing.T) {
 // with the trace's profile on ctx.
 func buzzTrace(t *testing.T, args []string) (stdout, trace string) {
 	t.Helper()
-	tr := newStartupTracer(true)
-	ctx := buzz.WithProfile(withTrace(context.Background(), tr), tr.profile)
+	tr := observability.NewStartupTracer(true)
+	ctx := buzz.WithProfile(observability.WithTrace(context.Background(), tr), tr.Profile())
 	var runErr error
 	stdout = captureStdout(t, func() {
 		runErr = buzzCommand(ctx, "", args)
 	})
 	require.NoError(t, runErr)
 	var buf bytes.Buffer
-	tr.w = &buf
-	tr.done()
+	tr.SetWriter(&buf)
+	tr.Done()
 	return stdout, buf.String()
 }
 

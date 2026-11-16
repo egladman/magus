@@ -44,7 +44,7 @@ func staleIndexes(ctx context.Context, root string) []types.KnowledgeStaleIndex 
 	return findStaleIndexes(ctx, ws)
 }
 
-func findStaleIndexes(ctx context.Context, ws graphWorkspace) []types.KnowledgeStaleIndex {
+func findStaleIndexes(ctx context.Context, ws workspacegraph.ReadWorkspace) []types.KnowledgeStaleIndex {
 	var m *magus.Magus
 	switch w := ws.(type) {
 	case *magus.Magus:

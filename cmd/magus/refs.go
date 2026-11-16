@@ -494,9 +494,9 @@ func loadRefsAnswerGraph(ctx context.Context, ws types.WorkspaceRepository, cfg 
 	return g, nil
 }
 
-// knownStaleCoverage is measuredCoverage over a staleness verdict the caller
+// knownStaleCoverage is workspacegraph.Reads.MeasuredCoverage over a staleness verdict the caller
 // already holds, since the sweep behind it forks the tool probes.
-func knownStaleCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config, stale []types.KnowledgeStaleIndex) coverageFunc {
+func knownStaleCoverage(ctx context.Context, ws workspacegraph.ReadWorkspace, cfg config.Config, stale []types.KnowledgeStaleIndex) workspacegraph.CoverageFunc {
 	return func(input string, seeded bool) knowledge.Coverage {
 		cov := knowledge.Coverage{Seeded: seeded}
 		if !knowledge.CouldMatchLazyLayer(input) {
@@ -521,7 +521,7 @@ func (r *refsResult) noteRefresh(cause *types.KnowledgeIndexCause) {
 
 // lookupRefs looks ref up in g, a graph with ref's symbol shards merged, under cfg,
 // judging the answer by coverage.
-func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, g *knowledge.Graph, read knowledge.GraphRead, coverage coverageFunc) refsResult {
+func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, g *knowledge.Graph, read knowledge.GraphRead, coverage workspacegraph.CoverageFunc) refsResult {
 	symbol, ambiguous := knowledge.PickSymbol(g, read.Input)
 	if len(ambiguous) > 0 {
 		return refsResult{Ambiguous: ambiguous}

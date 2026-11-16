@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -321,7 +322,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		// A leased call is judged by its row's checkout and authority, so
 		// the lease resolves before the policy loads.
 		deps, _ := loadGuardDependenciesAt(ctx, judgeRoot, guard.ResolveAuthority(ctx, base, req))
-		stopJudge := traceFromContext(ctx).phase("guard.judge")
+		stopJudge := observability.TraceFromContext(ctx).Phase("guard.judge")
 		defer stopJudge()
 		return guard.Judge(ctx, deps, req)
 	})
@@ -453,7 +454,7 @@ func loadGuardDependenciesAt(ctx context.Context, rootOverride string, authority
 		RecordTargetPolicies: guardRecordTargetPolicies(rootOverride),
 		CacheDir:             guardCacheDir(rootOverride),
 		Trace: func(ctx context.Context, phase string) func() {
-			return traceFromContext(ctx).phase(phase)
+			return observability.TraceFromContext(ctx).Phase(phase)
 		},
 	})
 	deps = checkoutJudgeDeps(ctx, deps, root, binary)

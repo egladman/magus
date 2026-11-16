@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/server"
@@ -37,7 +38,6 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
-	"github.com/egladman/magus/libs/embed"
 	"github.com/egladman/magus/types"
 )
 
@@ -158,7 +158,7 @@ func queryCommand(ctx context.Context, root string, args []string) error {
 	}
 	noteShardErrors(ctx, root, "magus query")
 
-	stop := traceFromContext(ctx).phase("query.next")
+	stop := observability.TraceFromContext(ctx).Phase("query.next")
 	nx := newNextGate(root)
 	next := nx.served(hint.NextForQuery(out))
 	stop()
@@ -263,7 +263,7 @@ func readQueryLocally(ctx context.Context, root string, qf *flaggen.QueryFlags, 
 			return stored, nil
 		}
 	}
-	return searchGraph(ctx, ws, globalCfg, read, qf.Refresh, qf.Global)
+	return graphReads.SearchGraph(ctx, ws, globalCfg, read, qf.Refresh, qf.Global)
 }
 
 func emitQueryMatches(opts output.Options, out types.KnowledgeQueryOutput, next []types.NextStep) error {
@@ -331,7 +331,7 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 // A source window asks for the doc section's lines instead.
 func emitExplainCard(ctx context.Context, root, input string, opts output.Options, source sourceWindow, res knowledge.ExplainResult) error {
 	out := res.Out
-	stop := traceFromContext(ctx).phase("explain.next")
+	stop := observability.TraceFromContext(ctx).Phase("explain.next")
 	nx := newNextGate(root)
 	next := nx.served(hint.NextForExplain(out))
 	stop()
@@ -403,7 +403,7 @@ func readExplainResult(ctx context.Context, root string, xf *flaggen.ExplainFlag
 	if err != nil {
 		return knowledge.ExplainResult{}, err
 	}
-	return explainNode(ctx, ws, globalCfg, read, xf.Refresh, xf.Global)
+	return graphReads.ExplainNode(ctx, ws, globalCfg, read, xf.Refresh, xf.Global)
 }
 
 func printExplainUsage(fs *flag.FlagSet) {
@@ -470,7 +470,7 @@ func explainChain(ctx context.Context, root string, xf *flaggen.ExplainFlags, fr
 	if err != nil {
 		return err
 	}
-	g, err := loadWorkspaceGraph(ctx, ws, globalCfg, xf.Refresh, xf.Global, knowledge.SeedsLazyLayer(from) || knowledge.SeedsLazyLayer(to))
+	g, err := graphReads.LoadGraph(ctx, ws, globalCfg, xf.Refresh, xf.Global, knowledge.SeedsLazyLayer(from) || knowledge.SeedsLazyLayer(to))
 	if err != nil {
 		return err
 	}
@@ -512,132 +512,9 @@ const (
 	readRefs    = "refs"
 )
 
-func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read knowledge.GraphRead, refresh, global bool) (knowledge.QueryResult, error) {
-	tr := traceFromContext(ctx)
-	seeded := knowledge.SeedsLazyLayer(read.Input)
-	// A reader context the VCS cannot give ranks without it, and the ranking record says so:
-	// a shallow clone with no merge base still answers the query.
-	stop := tr.phase("query.reader_context")
-	reader, readerErr := workspacegraph.ReaderContext(ctx, ws, ws.Root())
-	stop()
-	ctx = knowledge.WithTable(knowledge.WithReader(ctx, reader), embedtable.Cached)
-	var g *knowledge.Graph
-	var out types.KnowledgeQueryOutput
-	var err error
-	if seeded && !global {
-		// The answer loadWorkspaceGraph then Query give, ranked from the symbol names index so only
-		// the shards the answer touches are decoded.
-		stop := tr.phase("query.load_and_search")
-		if refresh {
-			seedFromPublishedGraph(ctx, ws)
-		}
-		out, g, err = workspacegraph.Query(ctx, ws, ws.Root(), cfg, refresh, read.Input, read.Budget, slog.Default())
-		stop()
-		if err != nil {
-			return knowledge.QueryResult{}, err
-		}
-	} else {
-		stop := tr.phase("query.load_graph")
-		g, err = loadWorkspaceGraph(ctx, ws, cfg, refresh, global, seeded)
-		stop()
-		if err != nil {
-			return knowledge.QueryResult{}, err
-		}
-		stop = tr.phase("query.search")
-		out, err = g.QueryRanked(read.Input, read.Budget, 0, 0, knowledge.RetrieveOptions{Reader: reader, Weights: knowledge.ShippedWeights(), Table: embedtable.Cached})
-		stop()
-		if err != nil {
-			return knowledge.QueryResult{}, err
-		}
-	}
-	if readerErr != nil && out.Ranking != nil {
-		out.Ranking.Skipped = append(out.Ranking.Skipped, "reader: "+readerErr.Error())
-	}
-	return answerQuery(ctx, g, read, out, seeded, measuredCoverage(ctx, ws, cfg)), nil
-}
-
-// coverageFunc says what the symbol layer covers for a read of input, as
-// measureSymbolCoverage does.
-type coverageFunc func(input string, seeded bool) knowledge.Coverage
-
-// measuredCoverage measures ws under cfg afresh on every call, as a single read does.
-func measuredCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config) coverageFunc {
-	return func(input string, seeded bool) knowledge.Coverage {
-		return measureSymbolCoverage(ctx, ws, cfg, input, seeded)
-	}
-}
-
-// searchLoaded is searchGraph over g, a graph loaded once for many reads: it must hold
-// every symbol shard when read seeds the symbol layer, and only the default graph
-// otherwise. table loads the embed table, nil to rank without it; searchGraph passes
-// embedtable.Cached.
-func searchLoaded(ctx context.Context, g *knowledge.Graph, read knowledge.GraphRead, table func() (*embed.Table, error), coverage coverageFunc) knowledge.QueryResult {
-	stop := traceFromContext(ctx).phase("query.search")
-	out := g.QueryPage(read.Input, read.Budget, 0, 0, table)
-	stop()
-	return answerQuery(ctx, g, read, out, knowledge.SeedsLazyLayer(read.Input), coverage)
-}
-
-// answerQuery judges out, what g matched for read, and names the nearest node when
-// nothing matched.
-func answerQuery(ctx context.Context, g *knowledge.Graph, read knowledge.GraphRead, out types.KnowledgeQueryOutput, seeded bool, coverage coverageFunc) knowledge.QueryResult {
-	stop := traceFromContext(ctx).phase("query.coverage")
-	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, coverage(read.Input, seeded))
-	stop()
-	res := knowledge.QueryResult{Out: out}
-	if out.MatchCount == 0 && read.Nearest {
-		res.Nearest = g.NearestNode(read.Input)
-	}
-	return res
-}
-
-func explainNode(ctx context.Context, ws graphWorkspace, cfg config.Config, read knowledge.GraphRead, refresh, global bool) (knowledge.ExplainResult, error) {
-	tr := traceFromContext(ctx)
-	seeded := knowledge.SeedsLazyLayer(read.Input)
-	stop := tr.phase("explain.load_graph")
-	g, err := loadWorkspaceGraph(ctx, ws, cfg, refresh, global, seeded)
-	stop()
-	if err != nil {
-		return knowledge.ExplainResult{}, err
-	}
-	return explainLoaded(ctx, g, read, measuredCoverage(ctx, ws, cfg)), nil
-}
-
-// explainLoaded is explainNode over g, a graph loaded once for many reads: it must hold
-// every symbol shard when read seeds the symbol layer, and only the default graph
-// otherwise.
-func explainLoaded(ctx context.Context, g *knowledge.Graph, read knowledge.GraphRead, coverage coverageFunc) knowledge.ExplainResult {
-	tr := traceFromContext(ctx)
-	seeded := knowledge.SeedsLazyLayer(read.Input)
-	stop := tr.phase("explain.search")
-	out, found := g.Explain(read.Input)
-	stop()
-	// A bare name does not seed symbols, so a miss was resolved against a graph that held
-	// no code symbols. Reporting that as "no node matches" is how a real symbol comes to
-	// look nonexistent, so the answer says so when the input could have named one, and a
-	// typo'd `kind:target` still gets the absent verdict it deserves.
-	stop = tr.phase("explain.coverage")
-	cov := coverage(read.Input, seeded)
-	if found {
-		// One symbol: only its own language's indexes could have missed a site of it.
-		cov = cov.Narrow(g.SymbolLanguage(read.Input))
-	}
-	res := knowledge.ExplainResult{Out: out, Found: found, Answer: knowledge.Answer(read.Input, found, cov)}
-	stop()
-	if !found {
-		res.Nearest = g.NearestNode(read.Input)
-	}
-	return res
-}
-
-// graphWorkspace is what a graph read needs of its workspace: the root, and the Inspector
-// facts a rebuild reads. The *magus.Magus a server holds satisfies it, and so does the
-// *magus.LazyWorkspace a CLI read opens, which evaluates the workspace only if the stored
-// graph turns out stale.
-type graphWorkspace interface {
-	types.Inspector
-	Root() string
-}
+// graphReads runs the graph reads on what only this package can hand them: the symbol
+// coverage probe, and the open of a lazy workspace into a whole one.
+var graphReads = workspacegraph.Reads{Measure: measureSymbolCoverage, Full: fullWorkspace}
 
 // openForRead opens the workspace for a graph read no server answered, lazily: the read
 // gets a handle that evaluates the workspace on the first call that needs the model, and
@@ -647,8 +524,8 @@ type graphWorkspace interface {
 //
 // The open, when it comes, is the one openWorkspaceForRead makes: the cache-backed handle
 // whose remote shard backing a rebuild pushes to.
-func openForRead(ctx context.Context, root string) (graphWorkspace, error) { //nolint:ireturn // the workspace backing is chosen at runtime
-	stop := traceFromContext(ctx).phase("read.open")
+func openForRead(ctx context.Context, root string) (workspacegraph.ReadWorkspace, error) { //nolint:ireturn // the workspace backing is chosen at runtime
+	stop := observability.TraceFromContext(ctx).Phase("read.open")
 	defer stop()
 	if m, ok := loadedMagus(); ok {
 		return m, nil
@@ -690,7 +567,7 @@ func asMagus(ws types.WorkspaceRepository) (*magus.Magus, error) {
 // fullWorkspace is the whole set of workspace operations behind a graph workspace, opening a lazy
 // one: for the reads that need more than the Inspector (the global graph unions
 // WorkspaceRepository handles).
-func fullWorkspace(ctx context.Context, ws graphWorkspace) (types.WorkspaceRepository, error) { //nolint:ireturn // the workspace backing is chosen at runtime
+func fullWorkspace(ctx context.Context, ws workspacegraph.ReadWorkspace) (types.WorkspaceRepository, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	switch w := ws.(type) {
 	case types.WorkspaceRepository:
 		return w, nil
@@ -703,7 +580,7 @@ func fullWorkspace(ctx context.Context, ws graphWorkspace) (types.WorkspaceRepos
 // searchStoredIfStale answers read from the stored graph when an index is
 // behind the tree, false otherwise. An edit moves the graph's stamps too, and
 // reassembling it costs a read 10-30 s the background refresh pays.
-func searchStoredIfStale(ctx context.Context, ws graphWorkspace, cfg config.Config, read knowledge.GraphRead) (knowledge.QueryResult, bool) {
+func searchStoredIfStale(ctx context.Context, ws workspacegraph.ReadWorkspace, cfg config.Config, read knowledge.GraphRead) (knowledge.QueryResult, bool) {
 	if !knowledge.CouldMatchLazyLayer(read.Input) {
 		return knowledge.QueryResult{}, false
 	}
@@ -726,7 +603,7 @@ func searchStoredIfStale(ctx context.Context, ws graphWorkspace, cfg config.Conf
 			return knowledge.QueryResult{}, false
 		}
 	}
-	return searchLoaded(ctx, g, read, embedtable.Cached, knownStaleCoverage(ctx, ws, cfg, stale)), true
+	return workspacegraph.SearchLoaded(ctx, g, read, embedtable.Cached, knownStaleCoverage(ctx, ws, cfg, stale)), true
 }
 
 // detachedRefreshEnv marks the process startRefresh detached.
@@ -900,13 +777,13 @@ func serveGraphRead(ctx context.Context, m *magus.Magus, cfg config.Config, verb
 	var err error
 	switch verb {
 	case readQuery:
-		res, err = searchGraph(ctx, m, cfg, read, false, false)
+		res, err = graphReads.SearchGraph(ctx, m, cfg, read, false, false)
 	case readExplain:
-		res, err = explainNode(ctx, m, cfg, read, false, false)
+		res, err = graphReads.ExplainNode(ctx, m, cfg, read, false, false)
 	case readRefs:
 		var g *knowledge.Graph
 		if g, err = loadRefsGraph(ctx, m, cfg, false, read.Input); err == nil {
-			res = lookupRefs(ctx, m, cfg, g, read, measuredCoverage(ctx, m, cfg))
+			res = lookupRefs(ctx, m, cfg, g, read, graphReads.MeasuredCoverage(ctx, m, cfg))
 		}
 	default:
 		return nil, fmt.Errorf("%w: no %q read", proc.ErrNotAdoptable, verb)
@@ -930,7 +807,7 @@ func splitCSV(s string) []string {
 
 // askServer has a running server answer verb into reply and reports whether it did.
 func askServer(ctx context.Context, root, verb string, read *knowledge.GraphRead, reply any) bool {
-	defer traceFromContext(ctx).phase("read.server")()
+	defer observability.TraceFromContext(ctx).Phase("read.server")()
 	return server.AskGraphRead(ctx, globalCfg, version, resolveRootOrEmpty(root), verb, read, reply)
 }
 

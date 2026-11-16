@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
@@ -363,14 +364,14 @@ func buzzScriptWriters(ctx context.Context) (prose, records io.Writer) {
 func buzzExecScript(ctx context.Context, bf *flaggen.BuzzFlags, src coverage.BuzzScript, scriptOut io.Writer, cov *buzz.LineCoverage) error {
 	sess := newBuzzScriptSession(ctx, bf, src.Name)
 	defer func() { _ = sess.Close() }()
-	tr := traceFromContext(ctx)
+	tr := observability.TraceFromContext(ctx)
 	addProfileObserver(ctx, sess)
 	lateErr, err := installBuzzHost(ctx, sess, src.Code, scriptOut, tr)
 	if err != nil {
 		return fmt.Errorf("%s: %w", src.Name, err)
 	}
 	buzzEnableCoverage(sess, src.Name, cov)
-	stopExec := tr.phase("buzz.exec")
+	stopExec := tr.Phase("buzz.exec")
 	err = sess.Exec(ctx, src.Code)
 	stopExec()
 	if err != nil {
@@ -440,12 +441,12 @@ func printBuzzWarnings(ctx context.Context, sess *buzz.Session, name string) {
 // buzzCallMain runs an entry script's `main` once its top level has, as upstream
 // does, with the args after the script path as its argv. Strict mode cannot wrap
 // a script's own call to main: a top-level `try` is rejected.
-func buzzCallMain(ctx context.Context, sess *buzz.Session, name string, args []string, tr *startupTracer) error {
+func buzzCallMain(ctx context.Context, sess *buzz.Session, name string, args []string, tr *observability.StartupTracer) error {
 	mainFn := sess.GetGlobal("main")
 	if !mainFn.IsFun() {
 		return nil
 	}
-	stopMain := tr.phase("buzz.main")
+	stopMain := tr.Phase("buzz.main")
 	ret, err := sess.CallValue(ctx, mainFn, []vm.Value{buzzStringList(args)})
 	stopMain()
 	if err != nil {
@@ -792,15 +793,15 @@ func buzzFindImport(p, dir string, includeDirs []string) string {
 //
 // The eager path returns a declaration failure at once. The lazy resolver
 // cannot return one, so lateErr reports it once the script has run.
-func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scriptOut io.Writer, tr *startupTracer) (lateErr func() error, err error) {
-	stop := tr.phase("buzz.register_modules")
+func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scriptOut io.Writer, tr *observability.StartupTracer) (lateErr func() error, err error) {
+	stop := tr.Phase("buzz.register_modules")
 	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(scriptOut))
 	stop()
-	stop = tr.phase("buzz.register_decls")
+	stop = tr.Phase("buzz.register_decls")
 	bindings.RegisterSpellDecls(sess)
 	stop()
 	if buzzReachesMagus(sess, code) {
-		stop = tr.phase("buzz.register_namespace")
+		stop = tr.Phase("buzz.register_namespace")
 		defer stop()
 		bindings.RegisterMagusNamespace(ctx, sess)
 		if err := bindings.DeclareMagusTypes(sess); err != nil {
@@ -816,7 +817,7 @@ func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scrip
 			return zero, false
 		}
 		once.Do(func() {
-			stop := tr.phase("buzz.register_namespace")
+			stop := tr.Phase("buzz.register_namespace")
 			bindings.RegisterMagusNamespace(ctx, sess)
 			declErr = bindings.DeclareMagusTypes(sess)
 			stop()
@@ -1087,7 +1088,7 @@ func buzzCheckFile(ctx context.Context, path string, embedded bool) ([]buzz.Diag
 	// imported module's top level, which Diagnostics executes; that is incidental to
 	// the answer and must not be mixed into stdout with it.
 	addProfileObserver(ctx, sess)
-	lateErr, err := installBuzzHost(ctx, sess, string(data), os.Stderr, traceFromContext(ctx))
+	lateErr, err := installBuzzHost(ctx, sess, string(data), os.Stderr, observability.TraceFromContext(ctx))
 	if err != nil {
 		return nil, err
 	}
