@@ -1,13 +1,13 @@
 ---
-title: "ADR 0049: the harness is a module named safetyscissors"
-order: 49
+title: "ADR 0050: the harness is a module named safetyscissors"
+order: 50
 description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. This record is written before any code; nothing is extracted until the open pull requests on magus merge."
 tags: [adr, decision, sdk, harness, guard, jobs, module]
 status: proposed
 date: 2026-11-15
 ---
 
-# ADR 0049: the harness is a module named safetyscissors
+# ADR 0050: the harness is a module named safetyscissors
 
 ## Context
 
@@ -389,18 +389,22 @@ decided.
 - The rule groups in part 3 are proposed from each rule's catalog text. Nobody has
   traced what each rule reads, and the four delegation rules that carry magus content
   have no seam yet.
-- What an `ask` verdict does for a caller that can prompt a person. Today an ask
-  becomes a deny unless the host renders it (`internal/guard/guard.go:1461-1466`), and
-  the person's answer is never recorded. The prototype compared three shapes:
+- What an `ask` verdict does for a caller that can route the question somewhere. Today
+  an ask becomes a deny unless the host renders it (`internal/guard/guard.go:1461-1466`),
+  and the answer is never recorded. The prototype compared three shapes:
   - a question token answered by a second call, which ties the approval to no step;
-  - an asker passed at construction, which blocks judging on a person and cannot span
+  - an asker passed at construction, which blocks judging until an answer comes and cannot span
     the hook's two processes;
   - judging the same step again with the answer attached. The answer counts only for
     the step it was asked about, under the same policy, before a required time-to-live
     runs out, and it is used up by the judgment it clears. This is the lean, because the
     answer reaches the trail only through judging.
 
-  Who answered is a claim the library cannot verify, in every shape.
+  The answerer is whoever the caller routes the question to, and the library cannot
+  tell which. Most often it will be another model, sometimes a person, sometimes a
+  script. An answer means only that something the caller chose said yes, never that a
+  person approved. The record keeps the answerer's label as given and calls it
+  unverified, and nothing in the module's names or messages implies a human.
 - Grading a goal from a caller's own check. A result the caller hands over is evidence
   the worker could author, so the lean is three bases, each named on the grade:
   - witnessed: the caller passes its unstarted `exec.Cmd`, and the library checks the
