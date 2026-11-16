@@ -95,3 +95,17 @@ func TestDetachedChildEnvDropsTheInheritedSocket(t *testing.T) {
 	}
 	assert.Contains(t, env, "MAGUS_KEEP_ME=1", "the scrub must drop one variable, not the environment")
 }
+
+// TestWithoutDetachFlagStripsEverySpelling pins the loop guard on --detach. The detached
+// child runs the rest of the argv, so a --detach left in it would detach again, forever.
+func TestWithoutDetachFlagStripsEverySpelling(t *testing.T) {
+	got := WithoutDetachFlag([]string{"ci", "-detach", "docs", "--detach", "--detach=true", "--detach-me"})
+	assert.Equal(t, []string{"ci", "docs", "--detach-me"}, got,
+		"every spelling the flag package accepts is dropped; a different flag that merely starts the same is not")
+
+	assert.Equal(t, []string{"ci", "."}, WithoutDetachFlag([]string{"ci", "."}),
+		"an argv without the flag is unchanged")
+
+	assert.Equal(t, []string{"ci", "--", "--detach"}, WithoutDetachFlag([]string{"ci", "--", "--detach"}),
+		"a --detach past the -- separator belongs to the forwarded tool and must survive verbatim")
+}

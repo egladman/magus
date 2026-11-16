@@ -378,13 +378,6 @@ func (s *BrokerStopSuite) TestStoppingOnlyTheServicesOfAnotherBuildSaysWhatItCan
 	s.Empty(exited, "nothing was signalled")
 }
 
-func (s *BrokerStopSuite) TestAnUnreadablePeerSaysWhatToRun() {
-	err := unknownBrokerError("/run/broker.sock", errors.ErrUnsupported, types.PeerFromAnotherBuild)
-	s.ErrorContains(err, "`lsof -U`")
-	s.ErrorContains(err, "/run/broker.sock")
-	s.ErrorContains(err, "`kill -TERM <pid>`")
-}
-
 func (s *BrokerStopSuite) TestStatusNamesABrokerOfAnotherBuild() {
 	s.otherBuild(1, "refuse")
 	err := brokerStatus(s.T().Context(), nil)
@@ -394,8 +387,4 @@ func (s *BrokerStopSuite) TestStatusNamesABrokerOfAnotherBuild() {
 func (s *BrokerStopSuite) TestNoBrokerIsStillNoBroker() {
 	privateSockDir(s.T())
 	s.Equal(exit.Reported(exit.Failure), brokerStop(s.T().Context(), nil))
-}
-
-func (s *BrokerStopSuite) TestAdmissionsLiveBesideTheBrokerLog() {
-	s.Equal(filepath.Join(filepath.Dir(brokerLogPath()), "admissions.jsonl"), admissionLogPath())
 }

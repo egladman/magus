@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/proc/spawn"
 )
 
@@ -100,4 +101,23 @@ func NewDetachedLog(dir string, now time.Time) (string, error) {
 		return "", fmt.Errorf("create %s: %w", f.Name(), err)
 	}
 	return filepath.Clean(f.Name()), nil
+}
+
+// WithoutDetachFlag drops --detach from an argv, in every spelling the flag package
+// accepts: -detach, --detach, and either with an inline =value. The detached child runs
+// the rest, and a --detach left in would have it detach again, forever.
+func WithoutDetachFlag(args []string) []string {
+	out := make([]string, 0, len(args))
+	for i, a := range args {
+		if a == "--" {
+			// Past the separator the tokens belong to the forwarded tool.
+			out = append(out, args[i:]...)
+			break
+		}
+		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); strings.HasPrefix(a, "-") && key == flaggen.FlagRunDetach {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }

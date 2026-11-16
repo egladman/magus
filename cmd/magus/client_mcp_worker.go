@@ -3,16 +3,12 @@ package main
 import (
 	"context"
 	"io"
-	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
-	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/interp/mcpclient"
-	"github.com/egladman/magus/internal/proc/spawn"
-	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
@@ -24,47 +20,21 @@ func runClientWorker(ctx context.Context, in io.Reader, out, errOut io.Writer) i
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM)
 	defer stop()
 	return mcpclient.Serve(ctx, in, out, errOut, func(ctx context.Context) (context.Context, error) {
-		return clientWorkspace(ctx, errOut)
+		return mcpclient.OpenWorkspace(ctx, errOut, openClientWorkspace)
 	})
 }
 
-// clientWorkspace opens the workspace at the worker's cwd and stamps the caller.
-// globalCfg has to be set first: loadMagus reads it, and a zero config would
-// drop the workspace's sandbox mode. Output of the magus runs a script starts
-// goes to errOut: out carries the one response line.
-func clientWorkspace(ctx context.Context, errOut io.Writer) (context.Context, error) {
-	root, err := workspace.FindRoot(".")
-	if err != nil {
-		return ctx, err
-	}
-	cfg, err := config.LoadWithRoot("", root)
-	if err != nil {
-		return ctx, err
-	}
-	knownEnv := func(name string) string {
-		if !config.KnownEnvVar(name) {
-			return ""
-		}
-		return os.Getenv(name)
-	}
-	if err := configgen.ApplyEnv(&cfg, knownEnv); err != nil {
-		return ctx, err
-	}
-	if err := config.Validate(cfg); err != nil {
-		return ctx, err
-	}
+// clientWorkspace is a *magus.Magus as the client worker holds it.
+type clientWorkspace struct{ *magus.Magus }
+
+func (w clientWorkspace) Repository() types.WorkspaceRepository { return viewInternals(w.Magus) }
+
+// openClientWorkspace publishes cfg, which loadMagus reads, and loads root.
+func openClientWorkspace(ctx context.Context, cfg config.Config, root string) (mcpclient.Held, error) {
 	globalCfg = cfg
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		return ctx, err
+		return nil, err
 	}
-	ctx = types.WithWorkspace(ctx, viewInternals(m))
-	sandboxed, err := m.ApplySandbox(ctx)
-	if err != nil {
-		return ctx, err
-	}
-	ctx = spawn.WithOutputWriters(sandboxed, errOut, errOut)
-	ctx = trail.ContextWithBase(ctx, m.CacheDir())
-	ctx = types.WithJobLease(ctx, trail.LeaseFromEnv())
-	return trail.ContextWithEntryPoint(ctx, types.EntryPointMCP), nil
+	return clientWorkspace{m}, nil
 }

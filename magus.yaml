@@ -160,9 +160,11 @@ knowledge:
             # the env and config digests moved out of cmd/magus: the config digest
             # encodes the loaded config through internal/json.
             internal/config: 15
-            # detach moved out of cmd/magus: the detached child's environment drops
-            # the variables internal/proc/spawn names.
-            internal/proc: 15
+            # detach and the signal lifecycle moved out of cmd/magus: the detached
+            # child's environment drops the variables internal/proc/spawn names, the
+            # detached-run argv reads the generated --detach flag name, and the
+            # lifecycle reads the process-wide signal policy beside its own.
+            internal/proc: 16
             # job evidence moved out of cmd/magus: *magus.Magus runs through every
             # signature, the shared boundary names the config.Filename constant, and the
             # callers claim reads occurrences through workspacegraph. It holds the symbol

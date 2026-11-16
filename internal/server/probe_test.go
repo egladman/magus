@@ -1,19 +1,23 @@
-package main
+package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/types/daemon"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/json"
@@ -27,7 +31,7 @@ import (
 func TestMCPEndpointStatusWithHTTPOff(t *testing.T) {
 	cfg := mcpServing(t, http.StatusOK)
 	cfg.HTTP = new(false)
-	got := buildMCPEndpointStatus(context.Background(), cfg)
+	got := BuildMCPEndpointStatus(context.Background(), cfg)
 	require.NotNil(t, got)
 	assert.Equal(t, mcpHTTPOff, got.State)
 	assert.Empty(t, got.URL, "no /mcp URL to connect to")
@@ -41,7 +45,7 @@ func TestMCPEndpointStatusWithHTTPOff(t *testing.T) {
 	assert.False(t, ok, "the mcp probe fails: nothing serves MCP over HTTP")
 	assert.Equal(t, got.Note, reason)
 
-	console := buildConsoleStatus(config.Console{}, got)
+	console := BuildConsoleStatus(config.Console{}, got)
 	assert.Equal(t, "serving", console.State)
 	assert.Equal(t, cfg.Address, console.Address)
 }
@@ -62,7 +66,7 @@ func makeReply(pid int, roots ...string) *proc.StatusReply {
 func TestEvaluateHealth(t *testing.T) {
 	// assertHealth evaluates one health scenario and checks the ok flag plus a
 	// substring of the reason.
-	assertHealth := func(name string, reply *proc.StatusReply, err error, kind probeKind, root string, wantOK bool, wantSub string) {
+	assertHealth := func(name string, reply *proc.StatusReply, err error, kind ProbeKind, root string, wantOK bool, wantSub string) {
 		t.Run(name, func(t *testing.T) {
 			ok, reason := evaluateHealth(reply.StatusOutput(), err, kind, root)
 			assert.Equal(t, wantOK, ok, "reason: %q", reason)
@@ -123,7 +127,6 @@ func TestServerSnapshotRefusesAPerProcessPool(t *testing.T) {
 // reached the pool and reported the server down while it was up. The probe asks
 // server.address, whatever the environment says.
 func TestServerSnapshotAsksTheServerNotTheRunsPool(t *testing.T) {
-	defer snapshotGlobals()()
 	pool, err := proc.New(t.Context(), proc.Options{Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
 	defer pool.Close()
@@ -136,11 +139,10 @@ func TestServerSnapshotAsksTheServerNotTheRunsPool(t *testing.T) {
 	require.NoError(t, err)
 	defer server.Close()
 	require.NoError(t, server.Start(t.Context()))
-	globalCfg.Server.Address = server.Addr()
 	// Set only now: proc.New refuses to host a pool while the variable names a parent.
 	t.Setenv(proc.SocketEnv, pool.Addr())
 
-	out, err := serverSnapshot("")(t.Context())
+	out, err := serverSnapshot(server.Addr())(t.Context())
 	require.NoError(t, err, "the probe must reach the server, not the run's pool")
 	ok, reason := evaluateHealth(out, err, probeLiveness, "")
 	assert.True(t, ok, reason)
@@ -149,7 +151,7 @@ func TestServerSnapshotAsksTheServerNotTheRunsPool(t *testing.T) {
 func TestHealthHTTPHandler(t *testing.T) {
 	// assertHandler stands up a handler with a fake querier and checks the HTTP
 	// status code for a given probe kind and ?workspace= filter.
-	assertHandler := func(name string, kind probeKind, workspaces []string, queryWS string, wantStatus int) {
+	assertHandler := func(name string, kind ProbeKind, workspaces []string, queryWS string, wantStatus int) {
 		t.Run(name, func(t *testing.T) {
 			reply := makeReply(1, workspaces...)
 			// Build a handler with a fake querier instead of dialing a real socket.
@@ -455,20 +457,20 @@ func TestProbeMCPReadiness(t *testing.T) {
 	})
 }
 func TestMCPAddress(t *testing.T) {
-	assert.Equal(t, "127.0.0.1:9000", mcpAddress(config.MCP{Address: "127.0.0.1:9000"}))
-	assert.Equal(t, internalmcp.DefaultAddress, mcpAddress(config.MCP{}), "empty address falls back to the default")
+	assert.Equal(t, "127.0.0.1:9000", MCPAddress(config.MCP{Address: "127.0.0.1:9000"}))
+	assert.Equal(t, internalmcp.DefaultAddress, MCPAddress(config.MCP{}), "empty address falls back to the default")
 }
 func TestBuildMCPEndpointStatus(t *testing.T) {
 	ctx := context.Background()
 	t.Run("disabled", func(t *testing.T) {
-		got := buildMCPEndpointStatus(ctx, mcpDisabled())
+		got := BuildMCPEndpointStatus(ctx, mcpDisabled())
 		require.NotNil(t, got)
 		assert.False(t, got.Enabled)
 		assert.Equal(t, "disabled", got.State)
 		assert.False(t, got.Reachable)
 	})
 	t.Run("serving", func(t *testing.T) {
-		got := buildMCPEndpointStatus(ctx, mcpServing(t, http.StatusOK))
+		got := BuildMCPEndpointStatus(ctx, mcpServing(t, http.StatusOK))
 		require.NotNil(t, got)
 		assert.True(t, got.Enabled)
 		assert.True(t, got.Reachable)
@@ -476,13 +478,13 @@ func TestBuildMCPEndpointStatus(t *testing.T) {
 		assert.Contains(t, got.URL, "/mcp")
 	})
 	t.Run("not-ready", func(t *testing.T) {
-		got := buildMCPEndpointStatus(ctx, mcpServing(t, http.StatusServiceUnavailable))
+		got := BuildMCPEndpointStatus(ctx, mcpServing(t, http.StatusServiceUnavailable))
 		require.NotNil(t, got)
 		assert.True(t, got.Reachable)
 		assert.Equal(t, "not-ready", got.State)
 	})
 	t.Run("unreachable-points-at-server-start", func(t *testing.T) {
-		got := buildMCPEndpointStatus(ctx, mcpUnreachable())
+		got := BuildMCPEndpointStatus(ctx, mcpUnreachable())
 		require.NotNil(t, got)
 		assert.False(t, got.Reachable)
 		assert.Equal(t, "unreachable", got.State)
@@ -492,7 +494,7 @@ func TestBuildMCPEndpointStatus(t *testing.T) {
 func TestParseProbeKind(t *testing.T) {
 	for _, tc := range []struct {
 		in   string
-		want probeKind
+		want ProbeKind
 	}{
 		{"liveness", probeLiveness},
 		{"readiness", probeReadiness},
@@ -510,35 +512,35 @@ func TestProbeName(t *testing.T) {
 	assert.Equal(t, "liveness", probeName(probeLiveness))
 	assert.Equal(t, "readiness", probeName(probeReadiness))
 	assert.Equal(t, "mcp", probeName(probeMCP))
-	assert.Equal(t, "unknown", probeName(probeKind(99)))
+	assert.Equal(t, "unknown", probeName(ProbeKind(99)))
 }
 func TestParseProbeKinds(t *testing.T) {
 	t.Run("single", func(t *testing.T) {
-		kinds, err := parseProbeKinds("liveness")
+		kinds, err := ParseProbeKinds("liveness")
 		require.NoError(t, err)
-		assert.Equal(t, []probeKind{probeLiveness}, kinds)
+		assert.Equal(t, []ProbeKind{probeLiveness}, kinds)
 	})
 	t.Run("comma-combined-in-order", func(t *testing.T) {
-		kinds, err := parseProbeKinds("liveness,mcp")
+		kinds, err := ParseProbeKinds("liveness,mcp")
 		require.NoError(t, err)
-		assert.Equal(t, []probeKind{probeLiveness, probeMCP}, kinds)
+		assert.Equal(t, []ProbeKind{probeLiveness, probeMCP}, kinds)
 	})
 	t.Run("trims-and-tolerates-empty-segments", func(t *testing.T) {
-		kinds, err := parseProbeKinds(" mcp , ,liveness,")
+		kinds, err := ParseProbeKinds(" mcp , ,liveness,")
 		require.NoError(t, err)
-		assert.Equal(t, []probeKind{probeMCP, probeLiveness}, kinds)
+		assert.Equal(t, []ProbeKind{probeMCP, probeLiveness}, kinds)
 	})
 	t.Run("dedupes", func(t *testing.T) {
-		kinds, err := parseProbeKinds("mcp,mcp")
+		kinds, err := ParseProbeKinds("mcp,mcp")
 		require.NoError(t, err)
-		assert.Equal(t, []probeKind{probeMCP}, kinds)
+		assert.Equal(t, []ProbeKind{probeMCP}, kinds)
 	})
 	t.Run("unknown-errors", func(t *testing.T) {
-		_, err := parseProbeKinds("liveness,bogus")
+		_, err := ParseProbeKinds("liveness,bogus")
 		require.Error(t, err)
 	})
 	t.Run("all-empty-errors", func(t *testing.T) {
-		_, err := parseProbeKinds(" , ,")
+		_, err := ParseProbeKinds(" , ,")
 		require.Error(t, err)
 	})
 }
@@ -579,14 +581,14 @@ func TestEvaluateProbes(t *testing.T) {
 
 	t.Run("liveness-alone-passes-and-dials-once", func(t *testing.T) {
 		calls := 0
-		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), config.MCP{}, []probeKind{probeLiveness}, "")
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), config.MCP{}, []ProbeKind{probeLiveness}, "")
 		require.Len(t, res, 1)
 		assert.True(t, res[0].ok)
 		assert.Equal(t, 1, calls)
 	})
 	t.Run("two-socket-probes-dial-once", func(t *testing.T) {
 		calls := 0
-		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), config.MCP{}, []probeKind{probeLiveness, probeReadiness}, "")
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), config.MCP{}, []ProbeKind{probeLiveness, probeReadiness}, "")
 		require.Len(t, res, 2)
 		assert.True(t, res[0].ok)
 		assert.True(t, res[1].ok)
@@ -594,14 +596,14 @@ func TestEvaluateProbes(t *testing.T) {
 	})
 	t.Run("mcp-only-never-dials-the-server", func(t *testing.T) {
 		calls := 0
-		res := evaluateProbes(ctx, recordingStatus(&calls, nil, errors.New("must not be called")), mcpServing(t, http.StatusOK), []probeKind{probeMCP}, "")
+		res := evaluateProbes(ctx, recordingStatus(&calls, nil, errors.New("must not be called")), mcpServing(t, http.StatusOK), []ProbeKind{probeMCP}, "")
 		require.Len(t, res, 1)
 		assert.True(t, res[0].ok)
 		assert.Equal(t, 0, calls, "an mcp-only probe makes no proc RPC")
 	})
 	t.Run("combined-liveness-and-mcp-both-evaluated", func(t *testing.T) {
 		calls := 0
-		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), mcpUnreachable(), []probeKind{probeLiveness, probeMCP}, "")
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), mcpUnreachable(), []ProbeKind{probeLiveness, probeMCP}, "")
 		require.Len(t, res, 2)
 		assert.True(t, res[0].ok, "server is alive")
 		assert.False(t, res[1].ok, "mcp endpoint is down")
@@ -612,12 +614,12 @@ func TestRunProbesMCPOnly(t *testing.T) {
 	ctx := context.Background()
 	t.Run("serving-returns-nil", func(t *testing.T) {
 		// socket "" is never dialed for an mcp-only probe, so this makes no proc RPC.
-		require.NoError(t, runProbes(ctx, "", mcpServing(t, http.StatusOK), []probeKind{probeMCP}, ""))
+		require.NoError(t, RunProbes(ctx, "", mcpServing(t, http.StatusOK), []ProbeKind{probeMCP}, ""))
 	})
 	t.Run("unreachable-exits-1", func(t *testing.T) {
-		err := runProbes(ctx, "", mcpUnreachable(), []probeKind{probeMCP}, "")
+		err := RunProbes(ctx, "", mcpUnreachable(), []ProbeKind{probeMCP}, "")
 		require.Error(t, err)
-		var silent reportedExit
+		var silent interface{ ExitCode() int }
 		require.ErrorAs(t, err, &silent)
 		assert.Equal(t, 1, silent.ExitCode())
 	})
@@ -677,4 +679,39 @@ func recordingStatus(calls *int, out *daemon.Output, err error) statusFunc {
 		*calls++
 		return out, err
 	}
+}
+
+// notices returns what the pretty display prints for the records fn logs through the
+// default logger, the way a notice reaches a person now that it is a record.
+func notices(t *testing.T, fn func()) string {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(cache.NewLogHandler(&buf, "pretty", &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer slog.SetDefault(prev)
+	fn()
+	return buf.String()
+}
+
+// readyzServer stands up an httptest server whose /readyz returns code, and returns
+// its host:port (the form mcp.address takes). Other paths 404, proving the probe keys
+// on /readyz specifically.
+func readyzServer(t *testing.T, code int) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/readyz" {
+			w.WriteHeader(code)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	return strings.TrimPrefix(srv.URL, "http://")
+}
+
+// mcpServing returns an MCP config enabled and pointing at a live endpoint whose /readyz
+// returns code (200 serving, 503 not-ready). mcpUnreachable and mcpDisabled are the other
+// two states. They build an explicit config to pass in, so no test mutates package state.
+func mcpServing(t *testing.T, code int) config.MCP {
+	return config.MCP{Address: readyzServer(t, code), Enabled: new(true)}
 }

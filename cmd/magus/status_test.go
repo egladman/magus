@@ -3,43 +3,16 @@ package main
 import (
 	"bytes"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/types/daemon"
 )
-
-// readyzServer stands up an httptest server whose /readyz returns code, and returns
-// its host:port (the form mcp.address takes). Other paths 404, proving the probe keys
-// on /readyz specifically.
-func readyzServer(t *testing.T, code int) string {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/readyz" {
-			w.WriteHeader(code)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	t.Cleanup(srv.Close)
-	return strings.TrimPrefix(srv.URL, "http://")
-}
-
-// mcpServing returns an MCP config enabled and pointing at a live endpoint whose /readyz
-// returns code (200 serving, 503 not-ready). mcpUnreachable and mcpDisabled are the other
-// two states. They build an explicit config to pass in, so no test mutates package state.
-func mcpServing(t *testing.T, code int) config.MCP {
-	return config.MCP{Address: readyzServer(t, code), Enabled: new(true)}
-}
 
 // TestPrintStatusTextRendersMCPEndpoint proves the mcp endpoint block appears in the full
 // text render (not just the isolated helper). server.PrintStatusText writes to an *os.File, so a
