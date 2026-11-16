@@ -283,13 +283,29 @@ fun trimEnd(text: str) > str {
 // breaking, AND a changed path ships. The title is the author's claim about what a user
 // notices; the paths keep a feat that only moved tests from owing one. There is no waiver:
 // a change no user notices is retitled rather than excused.
-export fun problem(title: str, changed: [str], added: [str]) > str {
+//
+// The title's `!` and a fragment's `Breaking:` headline are one claim made twice, so each
+// refuses without the other: marked says an added fragment carries such an entry (see
+// marksBreaking). A `!` title owes the entry only when it owes a fragment at all.
+export fun problem(title: str, changed: [str], added: [str], marked: bool) > str {
     final titleProblem = commits\problem(title);
     if (titleProblem != "") {
         return "title \"{title}\" does not say whether an entry is owed: {titleProblem}";
     }
+    if (marked and !commits\isBreaking(title)) {
+        return "\"{title}\" adds a fragment whose entry opens \"Breaking:\" but its title has no `!`. "
+            + "Add `!` after the type (`feat!: ...`).";
+    }
     final shipped = owed(title, changed: changed);
-    if (shipped.len() == 0 or added.len() > 0) {
+    if (shipped.len() == 0) {
+        return "";
+    }
+    if (added.len() > 0) {
+        if (commits\isBreaking(title) and !marked) {
+            return "\"{title}\" is marked breaking with `!` but no added fragment has an entry opening "
+                + "\"Breaking:\" or \"Breaking for SDK callers:\". Mark the entry that way in "
+                + "{FRAGMENT_DIR}<branch>.md (changes/README.md has the format).";
+        }
         return "";
     }
     var listed = shipped.join("\n  ");
@@ -299,6 +315,28 @@ export fun problem(title: str, changed: [str], added: [str]) > str {
     return "\"{title}\" changes {shipped.len()} shipped path(s) and adds no changelog fragment. "
         + "Add {FRAGMENT_DIR}<branch>.md (changes/README.md has the format); if no user can "
         + "notice the change, its type is not feat, fix or perf, so retitle it.\n  " + listed;
+}
+
+// hasBreakingEntry reports whether text holds an entry opening "Breaking:" or "Breaking for SDK
+// callers:".
+// marksBreaking reports whether any fragment in paths holds an entry whose headline opens
+// "Breaking:" or "Breaking for SDK callers:". A path that cannot be read holds none; lint
+// names it.
+export fun marksBreaking(paths: [str]) > bool {
+    foreach (path in paths) {
+        final text = fs\readFile(path) catch "";
+        if (hasBreakingEntry(text)) { return true; }
+    }
+    return false;
+}
+
+export fun hasBreakingEntry(text: str) > bool {
+    foreach (line in text.replace("\r\n", with: "\n").split("\n")) {
+        if (line.startsWith("- **Breaking:") or line.startsWith("- **Breaking for SDK callers:")) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // owed returns the paths in changed that make a pull request titled title owe an entry:
@@ -385,38 +423,68 @@ test "engine code ships and the exempt paths do not" {
 }
 
 test "a feat touching shipped paths without an entry fails" {
-    final got = problem("feat(cache): add a key", changed: ["internal/cache/key.go"], added: [<str>]);
+    final got = problem("feat(cache): add a key", changed: ["internal/cache/key.go"], added: [<str>], marked: false);
     std\assert(got.startsWith("\"feat(cache): add a key\" changes 1 shipped path(s)"), message: got);
     std\assert(got.endsWith("\n  internal/cache/key.go"), message: "names the shipped path");
-    std\assert(problem("feat(cache): add a key", changed: ["internal/cache/key.go"], added: ["changes/unreleased/key.md"]) == "",
+    std\assert(problem("feat(cache): add a key", changed: ["internal/cache/key.go"], added: ["changes/unreleased/key.md"], marked: false) == "",
         message: "a fragment covers it");
 }
 
 test "a refactor touching shipped paths passes" {
-    std\assert(problem("refactor(cache): split the key", changed: ["internal/cache/key.go"], added: [<str>]) == "",
+    std\assert(problem("refactor(cache): split the key", changed: ["internal/cache/key.go"], added: [<str>], marked: false) == "",
         message: "refactor");
     foreach (kind in ["build", "chore", "ci", "docs", "revert", "test"]) {
-        std\assert(problem("{kind}: tidy", changed: ["internal/cache/key.go"], added: [<str>]) == "", message: kind);
+        std\assert(problem("{kind}: tidy", changed: ["internal/cache/key.go"], added: [<str>], marked: false) == "", message: kind);
     }
 }
 
 test "a feat touching only tests passes" {
     std\assert(problem("feat: cover the key", changed: ["internal/cache/key_test.go", "cmd/magus/testdata/run.txtar"],
-        added: [<str>]) == "", message: "nothing shipped");
+        added: [<str>], marked: false) == "", message: "nothing shipped");
 }
 
 test "a breaking chore touching shipped paths fails" {
-    final got = problem("chore!: drop go 1.24", changed: ["go.mod", "docs/install.md"], added: [<str>]);
+    final got = problem("chore!: drop go 1.24", changed: ["go.mod", "docs/install.md"], added: [<str>], marked: false);
     std\assert(got.endsWith("retitle it.\n  go.mod"), message: got);
-    std\assert(problem("perf: skip a probe", changed: ["internal/cache/key.go"], added: [<str>]) != "", message: "perf owes one");
-    std\assert(problem("fix: keep the key", changed: ["internal/cache/key.go"], added: [<str>]) != "", message: "fix owes one");
+    std\assert(problem("perf: skip a probe", changed: ["internal/cache/key.go"], added: [<str>], marked: false) != "", message: "perf owes one");
+    std\assert(problem("fix: keep the key", changed: ["internal/cache/key.go"], added: [<str>], marked: false) != "", message: "fix owes one");
+}
+
+test "a Breaking entry under a title with no bang fails, with the fix named" {
+    final got = problem("feat(cache): drop the v1 key", changed: ["internal/cache/key.go"],
+        added: ["changes/unreleased/key.md"], marked: true);
+    std\assert(got.endsWith("Add `!` after the type (`feat!: ...`)."), message: got);
+    std\assert(problem("docs: reword", changed: ["docs/a.md"], added: ["changes/unreleased/a.md"], marked: true) != "",
+        message: "owing nothing does not excuse a Breaking entry");
+}
+
+test "a bang title whose fragments mark nothing breaking fails, with the fix named" {
+    final got = problem("feat(cache)!: drop the v1 key", changed: ["internal/cache/key.go"],
+        added: ["changes/unreleased/key.md"], marked: false);
+    std\assert(got.indexOf("Mark the entry that way") != null, message: got);
+    std\assert(problem("feat(cache)!: drop the v1 key", changed: ["internal/cache/key_test.go"], added: [<str>], marked: false) == "",
+        message: "a bang that owes no fragment owes no entry");
+}
+
+test "a bang title with a Breaking entry passes" {
+    std\assert(problem("feat(cache)!: drop the v1 key", changed: ["internal/cache/key.go"],
+        added: ["changes/unreleased/key.md"], marked: true) == "", message: "both markers present");
+    std\assert(problem("fix: keep the key", changed: ["internal/cache/key.go"],
+        added: ["changes/unreleased/key.md"], marked: false) == "", message: "neither marker present");
+}
+
+test "a fragment marks breaking by either headline spelling" {
+    std\assert(hasBreakingEntry("### Removed\n\n- **Breaking: the key.** Gone.\n"), message: "Breaking:");
+    std\assert(hasBreakingEntry("### Changed\n\n- **Breaking for SDK callers: Open.** Renamed.\n"), message: "SDK form");
+    std\assert(!hasBreakingEntry("### Fixed\n\n- **The key.** Not breaking, though it says Breaking: in prose.\n"), message: "plain");
+    std\assert(!marksBreaking(["changes/testdata/absent.md"]), message: "an unreadable path holds none");
 }
 
 test "a title that is not a conventional subject is a failure, not a pass" {
-    final got = problem("Refactor the cache", changed: ["internal/cache/key.go"], added: [<str>]);
+    final got = problem("Refactor the cache", changed: ["internal/cache/key.go"], added: [<str>], marked: false);
     std\assert(got.startsWith("title \"Refactor the cache\" does not say whether an entry is owed: no `<type>: ` prefix"),
         message: got);
-    std\assert(problem("", changed: [<str>], added: [<str>]) != "", message: "an empty title");
+    std\assert(problem("", changed: [<str>], added: [<str>], marked: false) != "", message: "an empty title");
 }
 
 test "only markdown files under the fragment directory are fragments" {

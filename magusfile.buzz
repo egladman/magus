@@ -914,7 +914,7 @@ export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
         throw "pr-changelog: malformed changelog fragment(s); changes/README.md has the format:\n  "
             + malformed.join("\n  ");
     }
-    final problem = changelog\problem(title, changed: changed, added: added);
+    final problem = changelog\problem(title, changed: changed, added: added, marked: changelog\marksBreaking(added));
     if (problem != "") {
         throw "pr-changelog: against {base}: {problem}";
     }
