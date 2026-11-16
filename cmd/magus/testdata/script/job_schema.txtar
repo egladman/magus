@@ -1,0 +1,22 @@
+# --schema honors -o: text prints the whole document, -o name and -o template print only
+# what they ask for, so an agent that wants the field names does not pay for 15 KB.
+exec magus job fork --schema
+stdout '"\$schema"'
+stdout '"properties"'
+
+exec magus job fork --schema -o template='{{range $k, $v := .properties}}{{$k}} {{end}}'
+stdout ' paths '
+! stdout '"description"'
+! stdout '"\$schema"'
+
+exec magus job fork --schema -o name
+stdout '^id$'
+! stdout '"type"'
+
+exec magus job exit --schema -o template='{{range $k, $v := .properties}}{{$k}} {{end}}'
+stdout 'changed_paths'
+! stdout '"description"'
+
+exec magus job exit --schema -o name
+stdout '^changed_paths$'
+! stdout '"type"'

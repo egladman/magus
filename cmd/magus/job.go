@@ -1362,8 +1362,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if spec.Schema {
-		fmt.Print(job.DeclarationSchema)
-		return nil
+		return emitSchema(job.DeclarationSchema)
 	}
 
 	if spec.Checkout != "" {
@@ -2194,8 +2193,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if schema {
-		fmt.Print(job.ResultSchema)
-		return nil
+		return emitSchema(job.ResultSchema)
 	}
 	switch {
 	case len(pos) == 0:
