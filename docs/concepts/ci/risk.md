@@ -88,9 +88,8 @@ if (!ctx.narrowed() and coverage < 70) {
 
 A dry run and every run that is not a sized gate report `false`.
 
-A member of `ci`'s chain that declares its inputs with `ctx.readsFiles` runs only
-when the change touches one of them, which is when its cache key would move anyway,
-and the report names each one it skipped.
+Every member of `ci`'s chain that is not narrowed runs through the cache, which
+replays it when its key did not move.
 
 ## Where the tier is read
 
