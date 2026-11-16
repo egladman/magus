@@ -19,7 +19,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
@@ -32,7 +31,6 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/oci"
@@ -1075,14 +1073,9 @@ const probeLiveBridgeTimeout = httpx.ProbeLiveBridgeTimeout
 // (`magus graph export -o json`, e.g. from the base branch) or, with --rev, a git
 // revision whose tracked files are built into a base graph on the fly.
 func graphDiff(ctx context.Context, root string, args []string) error {
-	var refresh, globalScope bool
-	var rev string
+	var df *flaggen.GraphDiffFlags
 	pos, err := commandParse("graph diff", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild of the current graph before diffing")
-		fs.BoolVar(&globalScope, "global", false, "diff the global (all-workspaces) graph; match this to how the baseline was exported")
-		command.NegatedBoolVar(fs, &refresh, "refresh")
-		command.NegatedBoolVar(fs, &globalScope, "global")
-		fs.StringVar(&rev, "rev", "", "diff against a git revision (e.g. HEAD~1, main) instead of an export file")
+		df = flaggen.BindGraphDiff(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph diff <baseline.json> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus graph diff --rev <revision> [flags]")
@@ -1101,7 +1094,7 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	gotRev, gotFile := rev != "", len(pos) > 0
+	gotRev, gotFile := df.Rev != "", len(pos) > 0
 	if gotRev == gotFile { // neither or both
 		slog.ErrorContext(ctx, "give exactly one of a baseline export file or --rev <revision>", attr.Notice("magus graph diff"))
 		return exit.Reported(exit.Usage)
@@ -1110,7 +1103,7 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 		slog.ErrorContext(ctx, "takes a single baseline export file", attr.Notice("magus graph diff"))
 		return exit.Reported(exit.Usage)
 	}
-	if gotRev && globalScope {
+	if gotRev && df.Global {
 		// A --rev base is always a single-workspace domain-only build, while --global
 		// qualifies the current side's node IDs by workspace; diffing the two would
 		// report every node added/removed. Reject rather than emit a garbage diff.
@@ -1123,7 +1116,7 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	baseline, baseLabel, err := diffBaseline(ctx, root, rev, pos)
+	baseline, baseLabel, err := diffBaseline(ctx, root, df.Rev, pos)
 	if err != nil {
 		return err
 	}
@@ -1132,7 +1125,7 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 	// symbol nodes (a symbol-seeded export), include symbols here too, else every
 	// baseline symbol would surface as a spurious removal. A --rev baseline is always
 	// domain-only (an archive has no built .scip indexes), so the current side is too.
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, knowledge.BaselineHasSymbols(baseline))
+	g, err := loadKnowledgeGraph(ctx, root, df.Refresh, df.Global, knowledge.BaselineHasSymbols(baseline))
 	if err != nil {
 		return err
 	}
@@ -1242,15 +1235,9 @@ const graphRegistryTimeout = knowledge.RegistryTimeout
 func readToken(ctx context.Context) (types.Secret, error) { return knowledge.ReadToken(ctx) }
 
 func graphPush(ctx context.Context, root string, args []string) error {
-	var ref, user string
-	var refresh, table bool
+	var pf *flaggen.GraphPushFlags
 	_, err := commandParse("graph push", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&ref, "ref", "", "the artifact to push to, as <registry>/<repository>:<tag> (required); with -table, a <registry>/<repository> that defaults to "+embedtable.Repository)
-		fs.StringVar(&user, "username", "", "the registry username; the token is read from stdin")
-		fs.BoolVar(&refresh, "refresh", false, "rebuild the graph before pushing instead of exporting what is cached")
-		fs.BoolVar(&table, "table", false, "publish the embedding table from the cache instead of the graph, tagged with its pin, write-once")
-		command.NegatedBoolVar(fs, &refresh, "refresh")
-		command.NegatedBoolVar(fs, &table, "table")
+		pf = flaggen.BindGraphPush(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph push [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -1283,13 +1270,13 @@ func graphPush(ctx context.Context, root string, args []string) error {
 	}
 
 	var rec knowledge.RegistryOutput
-	if table {
-		if refresh {
+	if pf.Table {
+		if pf.Refresh {
 			return errors.New("graph push: -refresh rebuilds the graph, and -table publishes no graph")
 		}
-		rec, err = knowledge.TablePush(ctx, ref, user, registryHTTP())
+		rec, err = knowledge.TablePush(ctx, pf.Ref, pf.Username, registryHTTP())
 	} else {
-		rec, err = pushGraph(ctx, root, ref, user, refresh)
+		rec, err = pushGraph(ctx, root, pf.Ref, pf.Username, pf.Refresh)
 	}
 	if err != nil || opts.Format == outputText {
 		return err
@@ -1359,13 +1346,9 @@ func seedFromPublishedGraph(ctx context.Context, ws types.Inspector) {
 }
 
 func graphPull(ctx context.Context, root string, args []string) error {
-	var ref, out string
-	var table bool
+	var pf *flaggen.GraphPullFlags
 	_, err := commandParse("graph pull", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&ref, "ref", "", "the artifact to pull, as <registry>/<repository>:<tag> (required); with -table, a <registry>/<repository> that defaults to "+embedtable.Repository)
-		fs.StringVar(&out, "out", "", "write the graph here instead of stdout")
-		fs.BoolVar(&table, "table", false, "fetch the embedding table the binary pins into the cache instead of the graph")
-		command.NegatedBoolVar(fs, &table, "table")
+		pf = flaggen.BindGraphPull(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph pull [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -1386,8 +1369,9 @@ func graphPull(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	ref, out := pf.Ref, pf.Out
 
-	if table {
+	if pf.Table {
 		if out != "" {
 			return errors.New("graph pull: -table writes the table to the cache, so --out names nothing")
 		}
