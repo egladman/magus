@@ -127,7 +127,9 @@ knowledge:
   # restated here. Which checks hold a change to its base's counts is the lint target's
   # policy (hack/magusfile/conformance-ceiling.buzz).
   conformance:
-    exclude: ["libs/gopherbuzz/**"]
+    # libs/safetyscissors/internal/jsonl copies internal/file's JSON Lines store on
+    # purpose: that module may not import magus.
+    exclude: ["libs/gopherbuzz/**", "libs/safetyscissors/internal/jsonl/**"]
     checks:
       # pairs with file-split: change both together
       file-lines:
