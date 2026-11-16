@@ -167,6 +167,10 @@ knowledge:
             # calls release.Stage.Known. The advisors run through
             # bindings.RunScriptMain, so gopherbuzz stays out.
             internal/review: 16
+            # the spell version probe and the tool table moved out of cmd/magus: they read
+            # the project spell registry and share sessions.OrDash with the other tables,
+            # which takes internal/spell from 14 to 16.
+            internal/spell: 16
       export-scope:
         source: { percentile: 0, anchor: 0 }
         main: { percentile: 0, anchor: 0 }
