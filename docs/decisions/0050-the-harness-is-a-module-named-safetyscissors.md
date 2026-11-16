@@ -365,9 +365,9 @@ the wrapper id stays magus's. Each name lost its `Machine` or `Memory` prefix
 - Evidence: the survey in Context.
 - What would reopen it: users asking to share one policy across Go and another language.
 
-### An agent framework, like Mastra
+### An agent framework
 
-- Why it lost: it is refused, and it would compete where the field is crowded while
+- Why it lost: an agent framework like Mastra is refused, and it would compete where the field is crowded while
   dropping the leases and grades no one else has.
 - Evidence: the refusal of an agent loop in the SDK; the survey in Context.
 - What would reopen it: nothing; this is the line the project exists to hold.
