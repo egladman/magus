@@ -186,8 +186,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		verdict := types.GuardJudgment{
 			APIVersion: agent.GuardAPIVersion,
 			Decision:   "deny",
-			Reason: fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. "+
-				"Retry it; the magus that handed it on sets a fresh deadline.", deadlineErr.Error()),
+			Reason:     fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. Retry it.", deadlineErr.Error()),
 		}
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
