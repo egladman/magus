@@ -768,7 +768,7 @@ func (b Payload) writeRecent(s *strings.Builder) {
 			host = "unknown host"
 		}
 		briefLine(s, "  %s  %s, %s, last active %s",
-			r.Session, host, countNoun(r.Events, "event"), humanAge(time.UnixMilli(r.LastMs)))
+			r.Session, host, sessions.CountNoun(r.Events, "event"), sessions.HumanAge(time.UnixMilli(r.LastMs)))
 	}
 }
 
@@ -978,19 +978,19 @@ func (b Payload) writeAttention(s *strings.Builder) {
 	}
 	briefLine(s, "attention: %d open; `%s` lists them, `%s` closes one", a.Open, hint.SessionAttention, hint.SessionDispose.With("<id>"))
 	if o := a.Oldest; o != nil {
-		briefLine(s, "  oldest: %s %s, raised %s", o.ID, attentionRule(*o), humanAge(time.UnixMilli(o.OpenedMs)))
+		briefLine(s, "  oldest: %s %s, raised %s", o.ID, attentionRule(*o), sessions.HumanAge(time.UnixMilli(o.OpenedMs)))
 	}
 	if a.SinceMs == 0 {
 		briefLine(s, "  no earlier session recorded in this checkout, so nothing is marked as new")
 		return
 	}
 	if len(a.Since) == 0 {
-		briefLine(s, "  none raised since the previous session here, last active %s", humanAge(time.UnixMilli(a.SinceMs)))
+		briefLine(s, "  none raised since the previous session here, last active %s", sessions.HumanAge(time.UnixMilli(a.SinceMs)))
 		return
 	}
-	briefLine(s, "  raised since the previous session here, last active %s:", humanAge(time.UnixMilli(a.SinceMs)))
+	briefLine(s, "  raised since the previous session here, last active %s:", sessions.HumanAge(time.UnixMilli(a.SinceMs)))
 	for _, r := range a.Since {
-		briefLine(s, "    %s %s, %s", r.ID, attentionRule(r), humanAge(time.UnixMilli(r.OpenedMs)))
+		briefLine(s, "    %s %s, %s", r.ID, attentionRule(r), sessions.HumanAge(time.UnixMilli(r.OpenedMs)))
 	}
 	if a.SinceMore > 0 {
 		briefLine(s, "    and %d more", a.SinceMore)
@@ -1076,27 +1076,4 @@ func orDash(s string) string {
 		return "-"
 	}
 	return s
-}
-
-func countNoun(n int, noun string) string {
-	if n == 1 {
-		return fmt.Sprintf("%d %s", n, noun)
-	}
-	return fmt.Sprintf("%d %ss", n, noun)
-}
-
-// humanAge renders how long ago something happened, coarsely: the reader's question is
-// "is this current work or history", which days answer and minutes do not.
-func humanAge(t time.Time) string {
-	if t.IsZero() {
-		return "at an unrecorded time"
-	}
-	switch d := time.Since(t); {
-	case d < time.Hour:
-		return "within the hour"
-	case d < 24*time.Hour:
-		return countNoun(int(d/time.Hour), "hour") + " ago"
-	default:
-		return countNoun(int(d/(24*time.Hour)), "day") + " ago"
-	}
 }
