@@ -58,6 +58,7 @@ import (
 	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
@@ -156,7 +157,7 @@ func runCLI() int {
 		rootCtx, stopSignals = context.WithCancel(context.Background())
 		interrupted = func() (syscall.Signal, bool) { return 0, false }
 	} else {
-		rootCtx, stopSignals, interrupted = watchInterrupts(context.Background())
+		rootCtx, stopSignals, interrupted = cache.WatchInterrupts(context.Background())
 	}
 	// Freeze the caller's lease at the trust boundary. A Buzz script may change its
 	// process environment later, but it must not shed the job identity it was handed
@@ -197,7 +198,7 @@ func runCLI() int {
 	if exitCode >= 0 {
 		cleanup()
 		code := withInterrupt(exitCode, nil, interrupted)
-		pipeStageFromContext(rootCtx).linger()
+		pipe.StageFromContext(rootCtx).Linger()
 		recordPipeExit(args, code, interrupted)
 		return code
 	}
@@ -235,7 +236,7 @@ func runCLI() int {
 	}
 	cleanup()
 	code = withInterrupt(code, dispatchErr, interrupted)
-	pipeStageFromContext(rootCtx).linger()
+	pipe.StageFromContext(rootCtx).Linger()
 	recordPipeExit(args, code, interrupted)
 	return code
 }

@@ -3,43 +3,22 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
-	"os"
-	"slices"
 	"syscall"
-	"time"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/pipe"
-	"github.com/egladman/magus/internal/report"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
 
-type (
-	processStdioKey struct{}
-	pipeStageKey    struct{}
-)
-
 // proveStdio starts proving the magus stages on either side of this process in a shell
-// pipe, and carries the results on ctx. It runs at process start because a stage that
-// fails fast is gone from the kernel before the run reaches its locks.
-//
-// The verbs that run targets prove every stage upstream, for their locks and for the
-// pipeline's exit status, and so does a stage that prints or reads a shard plan (see
-// awaitPipeline). A stage that trades records (see pipeRecordStage) proves the stage it
-// writes to and the one writing to it.
+// pipe. See pipe.ProveStdio.
 func proveStdio(ctx context.Context, args []string) context.Context {
-	ctx = context.WithValue(ctx, pipeStageKey{}, startPipeStage(ctx, args))
-	if !provesUpstream(append([]string{os.Args[0]}, args...)) {
-		return ctx
-	}
-	s := &pipe.Stdio{Stdin: os.Stdin, Stdout: os.Stdout, TakesLocks: takesProjectLocks}
-	if readsPipeRecords(args) {
-		s.WritesRecords = writesPipeRecords
-	}
-	s.ProveUpstream(ctx)
-	return context.WithValue(ctx, processStdioKey{}, s)
+	return pipe.ProveStdio(ctx, args, pipe.Rules{
+		RecordStage:    pipeRecordStage,
+		ReadsRecords:   readsPipeRecords,
+		ProvesUpstream: provesUpstream,
+		TakesLocks:     takesProjectLocks,
+	})
 }
 
 // provesUpstream reports whether a magus invoked with argv (argv[0] first) proves the
@@ -60,73 +39,6 @@ func provesUpstream(argv []string) bool {
 func readsPipeRecords(args []string) bool {
 	sub, _ := peekSub(args)
 	return (sub == "run" || sub == "buzz") && tradesRecords(args)
-}
-
-// writesPipeRecords is pipeRecordStage over a full argv, as the kernel reports one.
-func writesPipeRecords(argv []string) bool { return len(argv) > 0 && pipeRecordStage(argv[1:]) }
-
-// pipeStage is what this process proved about the magus stage reading its stdout. The
-// proof starts at process start and is awaited only where it is needed.
-type pipeStage struct {
-	done chan struct{}
-	// records is set when stdout carries records: this process is a record stage and a
-	// magus reads its stdout.
-	records bool
-}
-
-// startPipeStage starts proving who reads stdout. A process that is no record stage
-// writes prose whoever reads it.
-func startPipeStage(ctx context.Context, args []string) *pipeStage {
-	s := &pipeStage{done: make(chan struct{})}
-	if !pipeRecordStage(args) || !isPipeFile(os.Stdout) {
-		close(s.done)
-		return s
-	}
-	go func() {
-		defer close(s.done)
-		if pipe.ReadByMagus(ctx, os.Stdout) {
-			s.records = true
-		}
-	}()
-	return s
-}
-
-func pipeStageFromContext(ctx context.Context) *pipeStage {
-	s, _ := ctx.Value(pipeStageKey{}).(*pipeStage)
-	return s
-}
-
-// writesRecords reports whether this process writes its records to stdout, and its
-// prose to stderr.
-func (s *pipeStage) writesRecords() bool {
-	if s == nil {
-		return false
-	}
-	<-s.done
-	return s.records
-}
-
-// pipeRecordsIn returns the record stream of the record stage writing stdin, and its
-// pid; nil when none does.
-func pipeRecordsIn(ctx context.Context) (*report.Reader, int) {
-	s, _ := ctx.Value(processStdioKey{}).(*pipe.Stdio)
-	return s.Records()
-}
-
-// pipeReaderProofWait bounds how long a record stage waits for the magus reading its
-// stdout to prove it. A reader proves its upstream as soon as it starts, however long
-// that takes on a loaded machine; the bound only frees a writer whose reader failed its
-// proof and still holds the pipe, waiting for the end of a stream it never reads.
-const pipeReaderProofWait = 10 * time.Second
-
-// linger holds a record stage back from exiting until every magus reading its stdout
-// has proven it, which none can do once this stage has exited: a reader slowed by load
-// past any fixed grace would otherwise find no upstream at all.
-func (s *pipeStage) linger() {
-	if !s.writesRecords() {
-		return
-	}
-	pipe.AwaitReaderProof(os.Stdout, provesUpstream, pipeReaderProofWait)
 }
 
 // pipeRecordStage reports whether a magus invoked with args (argv without argv[0])
@@ -210,100 +122,16 @@ func outputFlagGiven(args []string) bool {
 	return false
 }
 
-func isPipeFile(f *os.File) bool {
-	fi, err := f.Stat()
-	return err == nil && fi.Mode()&os.ModeNamedPipe != 0
-}
-
-// inheritedProjects is the selection a run naming no projects takes from the record
-// stage writing its stdin: every project that stage's run.scope records named, in
-// order. ok is false when no record stage writes stdin. It waits for that stage to
-// close the stream, since its last record may name another project.
-func inheritedProjects(ctx context.Context) (projects []string, upstream int, ok bool, err error) {
-	in, pid := pipeRecordsIn(ctx)
-	if in == nil {
-		return nil, 0, false, nil
-	}
-	lines, err := in.All(ctx)
-	if err != nil {
-		return nil, pid, true, fmt.Errorf("read the records of pid %d upstream of this run: %w", pid, err)
-	}
-	projects, err = scopeProjects(lines)
-	if err != nil {
-		return nil, pid, true, fmt.Errorf("read the records of pid %d upstream of this run: %w", pid, err)
-	}
-	return projects, pid, true, nil
-}
-
-// scopePaths is the run.scope projects field for a selection: each project once, the
-// root as ".".
-func scopePaths(targets []types.Target) []string {
-	var out []string
-	for _, t := range targets {
-		p := t.Path
-		if p == "" {
-			p = "."
-		}
-		if !slices.Contains(out, p) {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-// scopeProjects collects the projects lines' run.scope records name, first mention
-// first.
-func scopeProjects(lines []report.Line) ([]string, error) {
-	var out []string
-	for _, l := range lines {
-		if l.Type != report.TypeRunScope {
-			continue
-		}
-		var scope report.RunScope
-		if err := l.Decode(&scope); err != nil {
-			return nil, fmt.Errorf("%s record: %w", l.Type, err)
-		}
-		for _, p := range scope.Projects {
-			if p == "" {
-				p = "."
-			}
-			if !slices.Contains(out, p) {
-				out = append(out, p)
-			}
-		}
-	}
-	return out, nil
-}
-
-// processStdioContext hands the runs on ctx this process's standard streams, so they can
-// defer to a magus upstream of them in a shell pipe (see pipe.Stdio). An adopted run gets
-// none: it executes inside the server, whose stdin belongs to nobody's pipe.
-func processStdioContext(ctx context.Context) context.Context {
-	if _, adopted := magusFromContext(ctx); adopted {
-		return ctx
-	}
-	if s, ok := ctx.Value(processStdioKey{}).(*pipe.Stdio); ok {
-		return pipe.WithStdio(ctx, *s)
-	}
-	return pipe.WithStdio(ctx, pipe.Stdio{
-		Stdin:      os.Stdin,
-		Stdout:     os.Stdout,
-		TakesLocks: takesProjectLocks,
-	})
-}
-
-// settlePipeline is the pipefail every magus pipeline gets: a stage that succeeded
-// reports the first proven upstream magus stage that failed (MGS3030).
+// settlePipeline is the pipefail every magus pipeline gets. See pipe.SettleProcess.
 func settlePipeline(ctx context.Context, args []string) error {
-	s, ok := ctx.Value(processStdioKey{}).(*pipe.Stdio)
-	if !ok {
-		return nil
-	}
-	root, err := workspace.FindRoot(extractRootFlag(args))
-	if err != nil {
-		return nil //nolint:nilerr // no workspace, so no stage left a record to read
-	}
-	return s.SettlePipeline(ctx, root, globalCfg)
+	return pipe.SettleProcess(ctx, extractRootFlag(args), globalCfg)
+}
+
+// processStdioContext hands the runs on ctx this process's standard streams unless the
+// run is adopted. See pipe.ProcessStdioContext.
+func processStdioContext(ctx context.Context) context.Context {
+	_, adopted := magusFromContext(ctx)
+	return pipe.ProcessStdioContext(ctx, adopted, takesProjectLocks)
 }
 
 // handlesPlan reports whether a magus invoked with sub and subArgs prints a shard plan
@@ -319,37 +147,16 @@ func handlesPlan(sub string, subArgs []string) bool {
 }
 
 // awaitPipeline holds a stage that prints or reads a shard plan until every magus stage
-// proven upstream of it has ended, and refuses with MGS3030 when one failed. A plan
-// stage takes no project lock, so nothing else would hold it back, and a plan printed
-// behind a red stage fans shards out from a tree that stage rejected. Call it once stdin
-// holds nothing more the stage reads.
+// proven upstream of it has ended. See pipe.AwaitProcess.
 func awaitPipeline(ctx context.Context, root string) error {
-	s, ok := ctx.Value(processStdioKey{}).(*pipe.Stdio)
-	if !ok {
-		return nil
-	}
-	if _, adopted := magusFromContext(ctx); adopted {
-		return nil
-	}
-	ws, err := workspace.FindRoot(root)
-	if err != nil {
-		return nil //nolint:nilerr // no workspace, so no stage left a record to read
-	}
-	return s.AwaitUpstream(ctx, ws, globalCfg)
+	_, adopted := magusFromContext(ctx)
+	return pipe.AwaitProcess(ctx, root, adopted, globalCfg)
 }
 
 // recordPipeExit leaves code for the magus stage reading this process's stdout. See
-// pipe.RecordExit.
+// pipe.RecordProcessExit.
 func recordPipeExit(args []string, code int, interrupted func() (syscall.Signal, bool)) {
-	root, err := workspace.FindRoot(extractRootFlag(args))
-	if err != nil {
-		return
-	}
-	signal := ""
-	if sig, ok := interrupted(); ok {
-		signal = sig.String()
-	}
-	pipe.RecordExit(root, globalCfg, code, signal)
+	pipe.RecordProcessExit(extractRootFlag(args), globalCfg, code, interrupted)
 }
 
 // takesProjectLocks reports whether a magus invoked with argv may take project locks,

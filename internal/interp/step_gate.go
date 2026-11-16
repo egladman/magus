@@ -1,4 +1,4 @@
-package main
+package interp
 
 import (
 	"context"
@@ -8,14 +8,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/engine"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/libs/termkit"
 )
 
-// withStepGate installs the TTY step gate on ctx, together with the REPL it
+// WithStepGate installs the TTY step gate on ctx, together with the REPL it
 // offers.
 //
 // BOTH, always, and that is the point of one function rather than two calls.
@@ -24,8 +23,10 @@ import (
 // wired the gate, none wired the REPL, and pressing r printed "(no REPL
 // available outside a magusfile run)" every time. Installing them together is
 // what makes the advertised key impossible to leave dead.
-func withStepGate(ctx context.Context) context.Context {
-	ctx = spawn.WithStepRepl(ctx, stepRepl)
+func WithStepGate(ctx context.Context, candidates func(ctx context.Context, dir string) func() []string) context.Context {
+	ctx = spawn.WithStepRepl(ctx, func(ctx context.Context, name string, args []string, dir string) error {
+		return stepRepl(ctx, name, args, dir, candidates)
+	})
 	return spawn.WithStepGate(ctx, newStepGate())
 }
 
@@ -39,15 +40,15 @@ func withStepGate(ctx context.Context) context.Context {
 // are a different question, and `magus buzz` already answers it.
 //
 // Closing the REPL resumes the run, so this is a pause rather than an exit.
-func stepRepl(ctx context.Context, name string, args []string, dir string) error {
-	sess, err := interp.NewBuzzReplSession(ctx, dir, true)
+func stepRepl(ctx context.Context, name string, args []string, dir string, candidates func(ctx context.Context, dir string) func() []string) error {
+	sess, err := NewBuzzReplSession(ctx, dir, true)
 	if err != nil {
 		return fmt.Errorf("step repl: %w", err)
 	}
 	defer func() { _ = sess.Close() }()
 
 	argv := strings.Join(append([]string{name}, args...), " ")
-	return interp.Repl(ctx, sess, interp.ReplOptions{
+	return Repl(ctx, sess, ReplOptions{
 		WorkDir: dir,
 		Stdin:   os.Stdin,
 		Stdout:  os.Stdout,
@@ -59,7 +60,7 @@ func stepRepl(ctx context.Context, name string, args []string, dir string) error
 			"args": engine.StringValue(strings.Join(args, " ")),
 			"dir":  engine.StringValue(dir),
 		},
-		Candidates: workspaceReplCandidates(ctx, dir),
+		Candidates: candidates(ctx, dir),
 	})
 }
 

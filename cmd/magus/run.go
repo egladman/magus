@@ -17,10 +17,13 @@ import (
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -180,7 +183,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	if rf.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = withTimeout(ctx, rf.Timeout, "run:"+targetName)
+		ctx, cancel = proc.WithTimeout(ctx, rf.Timeout, "run:"+targetName)
 		defer cancel()
 	}
 	// -s deliberately suppresses the usual target progress. That is useful to an
@@ -193,7 +196,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// measured 48KB across four agent sessions that could not act on any of it.
 	// A structured invocation never gets this: -o jsonl on a TTY is rare, and the
 	// one free-text line it would add is not worth a special-cased typed event.
-	if global.silent && isInteractiveTTY() && global.output != string(outputJSONL) {
+	if global.silent && interactive.IsInteractiveTTY() && global.output != string(outputJSONL) {
 		// Says what arrives and when, rather than sending the reader to poll a
 		// dashboard in another terminal. This run BLOCKS: waiting for it is the
 		// normal thing to do, and every target that runs prints an output ref
@@ -204,13 +207,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			hint.QueryOutput.With("<ref>")))
 	}
 
-	if rf.Step && !isInteractiveTTY() {
+	if rf.Step && !interactive.IsInteractiveTTY() {
 		slog.ErrorContext(ctx, "--step requires an interactive terminal", attr.Notice(""), attr.Component("magus"))
 		return exit.Reported(exit.Usage)
 	}
 
 	if rf.Step {
-		ctx = withStepGate(ctx)
+		ctx = interp.WithStepGate(ctx, workspaceReplCandidates)
 	}
 
 	if spellFilter != "" && targetName == "ci" {
@@ -280,7 +283,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// Projects flow forward: named projects win, and a run naming none takes what the
 	// record stage upstream of it ran on, the way xargs takes its arguments.
 	if len(projectArgs) == 0 && parsedTarget.Path == "" {
-		projects, upstream, ok, err := inheritedProjects(ctx)
+		projects, upstream, ok, err := pipe.InheritedProjects(ctx)
 		if err != nil {
 			return err
 		}
@@ -320,7 +323,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		scopeLabel = fmt.Sprintf("%d projects", len(targets))
 	}
-	sink.EmitScope(ctx, scopeLabel, source, scopePaths(targets))
+	sink.EmitScope(ctx, scopeLabel, source, pipe.ScopePaths(targets))
 	// Surface the active charms up front, next to the projects header, so the run's
 	// state ("here's what's in effect") is visible before any work, and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
@@ -365,14 +368,14 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		runOpts = append(runOpts, magus.WithCharms(carried...))
 	}
 	runOpts = append(runOpts, magus.WithVolatilityRetry(rf.VolatilityRetry))
-	race, err := resolveRace(rf.Race)
+	raceOpts, err := race.Resolve(rf.Race)
 	if err != nil {
 		return err
 	}
 	switch {
-	case race.Replay:
+	case raceOpts.Replay:
 		runOpts = append(runOpts, magus.WithRaceReplay())
-	case race.Enabled:
+	case raceOpts.Enabled:
 		runOpts = append(runOpts, magus.WithRace())
 	}
 	if rf.Step {

@@ -486,7 +486,7 @@ func (r *Resolver) setEndpointTransport(rt http.RoundTripper) {
 // TestEndpointRefusedOutsideARun is the lifetime gate, and it replaces a test that
 // checked the wrong thing. The first version refused a context with no Done channel,
 // which no production path produces: cmd/magus/main.go builds the root context from
-// watchInterrupts(context.Background()), so PRELOAD (where a magusfile's top level runs,
+// cache.WatchInterrupts(context.Background()), so PRELOAD (where a magusfile's top level runs,
 // and which `magus ls`, `describe` and `graph` all reach) sailed straight through and
 // would have bound a credential forwarder with a stable token for the whole process life.
 //

@@ -18,8 +18,12 @@ import (
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/pipe"
+	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
@@ -121,17 +125,17 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if af.Step && af.Stdin {
 		return fmt.Errorf("magus affected: --step and --stdin are mutually exclusive")
 	}
-	if af.Step && !isInteractiveTTY() {
+	if af.Step && !interactive.IsInteractiveTTY() {
 		slog.ErrorContext(ctx, "--step requires an interactive terminal", attr.Notice(""), attr.Component("magus"))
 		return exit.Reported(exit.Usage)
 	}
 	if af.Step {
-		ctx = withStepGate(ctx)
+		ctx = interp.WithStepGate(ctx, workspaceReplCandidates)
 	}
 
 	if af.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = withTimeout(ctx, af.Timeout, "affected:"+target)
+		ctx, cancel = proc.WithTimeout(ctx, af.Timeout, "affected:"+target)
 		defer cancel()
 	}
 
@@ -266,7 +270,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// different build), and burying it in parentheses after a project list made it the
 	// one header fact nobody read. source already names the VCS that produced it
 	// ("git diff vs origin/main"), which is what distinguishes a git base from a jj one.
-	sink.EmitScope(ctx, scopeLabel, "", scopePaths(targets))
+	sink.EmitScope(ctx, scopeLabel, "", pipe.ScopePaths(targets))
 	sink.EmitBase(ctx, source)
 	// Merge magus.yaml default_charms with any explicit charm on the target, the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
@@ -314,14 +318,14 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if isGateInvocation(target, false) {
 		runOpts = append(runOpts, magus.WithGate())
 	}
-	race, err := resolveRace(af.Race)
+	raceOpts, err := race.Resolve(af.Race)
 	if err != nil {
 		return err
 	}
 	switch {
-	case race.Replay:
+	case raceOpts.Replay:
 		runOpts = append(runOpts, magus.WithRaceReplay())
-	case race.Enabled:
+	case raceOpts.Enabled:
 		runOpts = append(runOpts, magus.WithRace())
 	}
 	if globalCfg.DryRun {

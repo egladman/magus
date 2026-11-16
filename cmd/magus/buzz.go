@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/trail"
@@ -337,7 +338,7 @@ func buzzRunScript(ctx context.Context, root string, bf *flaggen.BuzzFlags, src 
 			}
 		}()
 	}
-	in, _ := pipeRecordsIn(ctx)
+	in, _ := pipe.RecordsIn(ctx)
 	ctx = report.WithStage(ctx, report.Stage{In: in, Out: records, Prose: scriptOut})
 	return buzzExecScript(ctx, bf, src, scriptOut, cov)
 }
@@ -353,7 +354,7 @@ func releaseBuzzServices(ctx context.Context, services *service.Scope) {
 // buzzScriptWriters returns where the script's prose and records go. While a
 // magus reads its stdout, stdout carries records alone and prose goes to stderr.
 func buzzScriptWriters(ctx context.Context) (prose, records io.Writer) {
-	if pipeStageFromContext(ctx).writesRecords() {
+	if pipe.StageFromContext(ctx).WritesRecords() {
 		return os.Stderr, os.Stdout
 	}
 	return os.Stdout, os.Stdout

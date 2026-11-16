@@ -1,4 +1,4 @@
-package main
+package race
 
 import (
 	"github.com/egladman/magus/internal/commands"
@@ -12,9 +12,9 @@ func TestResolveRace(t *testing.T) {
 	// assertRace resolves input and asserts the resulting enabled/replay state.
 	assertRace := func(t *testing.T, input string, wantEnabled, wantReplay bool) {
 		t.Helper()
-		opts, err := resolveRace(input)
+		opts, err := Resolve(input)
 		require.NoError(t, err)
-		assert.Equal(t, raceOptions{Enabled: wantEnabled, Replay: wantReplay}, opts)
+		assert.Equal(t, Options{Enabled: wantEnabled, Replay: wantReplay}, opts)
 	}
 
 	t.Run("flag absent = disabled", func(t *testing.T) { assertRace(t, "", false, false) })
@@ -31,14 +31,14 @@ func TestResolveRace(t *testing.T) {
 	// Unknown or non-mode tokens must error.
 	for _, input := range []string{"off", "on", "true", "bogus", "watch,bogus"} {
 		t.Run("error/"+input, func(t *testing.T) {
-			_, err := resolveRace(input)
+			_, err := Resolve(input)
 			assert.Error(t, err)
 		})
 	}
 }
 
 // TestRaceDocNamesEveryMode keeps the registry's --race help honest about the
-// modes resolveRace accepts. The help used to be COMPUTED from raceModes; moving
+// modes Resolve accepts. The help used to be COMPUTED from modes; moving
 // the flag into the command registry made it a static string, so this is what
 // stops a new mode from being accepted and undocumented.
 func TestRaceDocNamesEveryMode(t *testing.T) {
@@ -47,7 +47,7 @@ func TestRaceDocNamesEveryMode(t *testing.T) {
 			if f.Name != "race" {
 				continue
 			}
-			for _, mode := range raceModes {
+			for _, mode := range modes {
 				assert.Contains(t, f.Doc, mode,
 					"magus %s --race help does not name the %q mode", c.Name, mode)
 			}
