@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -9,9 +10,140 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
+
+// ForkGraderSuite pins that the fork's grader over the CLI's rules opens its workspace
+// once however many checks it grades, and that its verdicts are the ones the installed
+// grader reaches judging each afresh. The guard's own suite covers the memo with a
+// synthetic loader; only the CLI's loader opens a real workspace to count.
+type ForkGraderSuite struct {
+	suite.Suite
+	root  string
+	opens atomic.Int64
+}
+
+func TestForkGraderSuite(t *testing.T) {
+	suite.Run(t, new(ForkGraderSuite))
+}
+
+func (s *ForkGraderSuite) SetupTest() {
+	s.T().Cleanup(snapshotGlobals())
+	testkit.Isolate(s.T())
+	global = globalFlags{}
+	s.root = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "go.mod": goModule, "run.go": "package run\n"}).Root()
+	resetWorkspaceMemo(s.T())
+	s.T().Chdir(s.root)
+	s.opens.Store(0)
+}
+
+// counted is loadGuardDependencies with an Inspect that counts each open it makes.
+func (s *ForkGraderSuite) counted(ctx context.Context, root string) (guard.Dependencies, *guard.WorkspaceRules) {
+	deps, rules := loadGuardDependencies(ctx, root)
+	s.Require().NoError(deps.LoadFailure)
+	inspect := deps.Inspect
+	deps.Inspect = func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
+		s.opens.Add(1)
+		return inspect(ctx, root)
+	}
+	return deps, rules
+}
+
+// rows are checks a fork's validation grades, the denied go-build among them.
+func (s *ForkGraderSuite) rows() []types.Job {
+	var rows []types.Job
+	for _, c := range []types.LeaseCheck{
+		{Target: "go-build", Project: "."},
+		{Target: "go::go-vet", Project: "."},
+		{Target: "go-test", Project: "."},
+		{Target: "lint", Project: ".", NoDefaultCharms: true, Args: []string{"run.go"}},
+		{Target: types.TargetCI, Project: "."},
+	} {
+		rows = append(rows, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &c})
+	}
+	return rows
+}
+
+func (s *ForkGraderSuite) TestTheUnsharedGraderOpensTheWorkspacePerJudgment() {
+	grade := guard.NewCheckGrader(s.counted)
+	for _, row := range s.rows() {
+		grade(s.T().Context(), s.root, row)
+	}
+	s.Greater(s.opens.Load(), int64(len(s.rows())), "the control: every judgment opens the workspace, so the count below proves the sharing")
+}
+
+func (s *ForkGraderSuite) TestOneForkOpensTheWorkspaceOnceAcrossEveryGrade() {
+	g := guard.NewForkGrader(nil, s.counted)
+	for range 3 {
+		for _, row := range s.rows() {
+			g.Grade(s.T().Context(), s.root, row)
+		}
+	}
+	s.Equal(int64(1), s.opens.Load())
+}
+
+func (s *ForkGraderSuite) TestAHeldWorkspaceIsNeverOpenedAgain() {
+	held, err := loadMagus(s.T().Context(), s.root)
+	s.Require().NoError(err)
+	g := guard.NewForkGrader(held, s.counted)
+	for _, row := range s.rows() {
+		g.Grade(s.T().Context(), s.root, row)
+	}
+	s.Zero(s.opens.Load())
+}
+
+func (s *ForkGraderSuite) TestEveryVerdictMatchesTheUnsharedGrader() {
+	g := guard.NewForkGrader(nil, s.counted)
+	grade := guard.NewCheckGrader(s.counted)
+	denied := map[string]bool{}
+	for range 2 {
+		for _, row := range s.rows() {
+			want := grade(s.T().Context(), s.root, row)
+			s.Equal(want, g.Grade(s.T().Context(), s.root, row), row.Check.String())
+			if want.Denied {
+				denied[row.Check.Target] = true
+			}
+		}
+	}
+	s.True(denied["go-build"], "the rule denies go-build, so a deny is compared too")
+}
+
+// A judgment that lapses reads the workspace again: whichever of the policy read and the
+// open it reaches first stalls it, so counting both shows each grade judged afresh.
+func (s *ForkGraderSuite) TestADeferredGradeIsJudgedAgain() {
+	release := make(chan struct{})
+	defer close(release)
+	var reads atomic.Int64
+	stalled := func(ctx context.Context, root string) (guard.Dependencies, *guard.WorkspaceRules) {
+		deps, rules := loadGuardDependencies(ctx, root)
+		deps.TargetPolicies = func(ctx context.Context, _ string) (types.TargetPolicyIndex, bool) {
+			reads.Add(1)
+			<-ctx.Done()
+			return types.TargetPolicyIndex{}, false
+		}
+		deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
+			reads.Add(1)
+			<-release
+			return nil, context.Canceled
+		}
+		return deps, rules
+	}
+	g := guard.NewForkGrader(nil, stalled)
+	row := s.rows()[0]
+	grade := func() job.CheckVerdict {
+		ctx, cancel := context.WithTimeout(s.T().Context(), 500*time.Millisecond)
+		defer cancel()
+		return g.Grade(ctx, s.root, row)
+	}
+
+	s.Require().NotEmpty(grade().Deferred, "the guard ran out of time")
+	judged := reads.Load()
+	s.Require().Positive(judged)
+	s.NotEmpty(grade().Deferred)
+	s.Greater(reads.Load(), judged, "a lapse is the clock's, so the next grade judges again")
+}
 
 // ForkSeatSuite pins that a fork's validation waits for a seat as a graph build does, and
 // is refused at budget_wait with the budget's exit status.

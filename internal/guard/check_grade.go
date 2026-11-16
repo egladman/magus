@@ -20,7 +20,7 @@ import (
 // changes: a grader lives as long as the Store, or the daemon, it was made for, and
 // grading against rules an edit has since replaced would admit or refuse the wrong check.
 // runCLI installs one with job.SetCheckGrader for every door that opens a Store naming
-// none, such as magus\workspace().putJob. `magus job fork` grades with a [forkGrader]
+// none, such as magus\workspace().putJob. `magus job fork` grades with a [ForkGrader]
 // instead, which judges alike and keeps what it opened for the rest of the fork.
 func NewCheckGrader(load RulesLoader) job.CheckGrader {
 	return newRulesByRoot(load, nil).grade
@@ -166,8 +166,6 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row types.J
 	return job.CheckVerdict{Denied: true, Rule: declared.Rule, Reason: declared.Reason}
 }
 
-// reportForkFacts prints what a top-level fork leaves waiting. It never stops
-
 // sourcesOnDisk names each file by the id of the bytes it holds now.
 // It is nil when a file cannot be read, so the next grade loads again.
 func sourcesOnDisk(paths []string) []interp.SourceFile {
@@ -194,5 +192,3 @@ func workerCheckLine(c types.LeaseCheck) string {
 	}
 	return WorkerCheckCommand(c)
 }
-
-// outputsIn resolves a ref against the output store of the checkout at root. That

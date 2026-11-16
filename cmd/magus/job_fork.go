@@ -9,19 +9,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// forkGrader is a fork's grader, a [guard.ForkGrader] over the rules the CLI loads.
-type forkGrader struct{ *guard.ForkGrader }
-
-// newForkGrader is a forkGrader whose memo starts with held, the workspace the fork has
-// open. A nil held starts it empty.
-func newForkGrader(held types.WorkspaceRepository) forkGrader {
-	return forkGrader{guard.NewForkGrader(held, loadGuardDependencies)}
-}
-
-func (f forkGrader) grade(ctx context.Context, root string, row types.Job) job.CheckVerdict {
-	return f.Grade(ctx, root, row)
-}
-
 // forkHeldWorkspace is the workspace jobWorkspace loaded for ws, nil when it did not.
 func forkHeldWorkspace(ctx context.Context, root string, ws job.Workspace) types.WorkspaceRepository { //nolint:ireturn // nil is the answer for no workspace
 	if ws.Unavailable != "" {

@@ -707,7 +707,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	jobWS := jobWorkspace(ctx, root)
-	store = store.InWorkspace(jobWS).WithGrader(newForkGrader(forkHeldWorkspace(ctx, root, jobWS)).grade)
+	store = store.InWorkspace(jobWS).WithGrader(guard.NewForkGrader(forkHeldWorkspace(ctx, root, jobWS), loadGuardDependencies).Grade)
 	if fromFlags {
 		if row, err = job.FlagDeclaration(pos[0], *spec, store.ModelRequest); err != nil {
 			return err
