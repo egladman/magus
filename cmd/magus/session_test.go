@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -10,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -21,14 +19,6 @@ import (
 // The helpers below are shared by test files that other groups still own:
 // agent_harness_test, graph_test, diff_test and verbosity_test. The tests that once sat
 // beside them moved to the packages that own the behavior.
-
-// emitJournalEvent pushes one event through h along the real capture path, rather than
-// hand-building the slog.Record. The attribute key that carries an Event is private
-// to internal/journal, so a hand-built record would be testing a copy of it.
-func emitJournalEvent(t *testing.T, h slog.Handler, e journal.Event) {
-	t.Helper()
-	journal.Emit(journal.WithLogger(context.Background(), journal.NewLogger(h)), e)
-}
 
 func loadStream(t *testing.T, root string, lines ...string) (string, error) {
 	t.Helper()
@@ -69,18 +59,6 @@ type neverTerminalProbe struct{}
 
 func (neverTerminalProbe) IsTerminal(uintptr) bool        { return false }
 func (neverTerminalProbe) Size(uintptr) (int, int, error) { return 0, 0, nil }
-
-// captureWarnings installs a slog handler for the duration of fn and returns what it
-// logged.
-func captureWarnings(t *testing.T, fn func()) string {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	fn()
-	return buf.String()
-}
 
 // journalRecordSink keeps the slog.Record journal.Emit builds, so a test can replay the
 // real encoding into another handler and see what that handler RETURNS. Going through

@@ -122,7 +122,7 @@ func projectForNode(m types.KnowledgeMatch, byPath map[string]*types.Project) (s
 	return best, true
 }
 
-// pickProject filters all projects by the AND-substring rule, ranks the
+// PickProject filters all projects by the AND-substring rule, ranks the
 // survivors, and either returns the unique top scorer or prompts the picker.
 func PickProject(ctx context.Context, load GraphLoader, all []*types.Project, filters []string) (*types.Project, error) {
 	scored := ScoreProjects(all, filters)

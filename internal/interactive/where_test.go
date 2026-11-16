@@ -1,6 +1,7 @@
 package interactive
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,5 +116,5 @@ func TestWhereMatchesJoinTheWorkspaceRoot(t *testing.T) {
 
 	var b strings.Builder
 	PrintWherePaths(&b, append(files, projects...))
-	assert.Equal(t, filepath.Join(root, "cmd/x.go")+"\n"+filepath.Join(root, "api")+"\n", b.String())
+	assert.Equal(t, fmt.Sprintf("%s\n%s\n", filepath.Join(root, "cmd/x.go"), filepath.Join(root, "api")), b.String())
 }

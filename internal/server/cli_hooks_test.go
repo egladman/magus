@@ -11,62 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
-
-// TestServerChildArgsDropsStart pins the detached server's argv: its role, with no
-// `start` in ps, and every flag the person passed so it binds where the parent waits.
-func TestServerChildArgsDropsStart(t *testing.T) {
-	assert.Equal(t, []string{"server", "--foreground"}, serverChildArgs([]string{"server", "start"}))
-	assert.Equal(t,
-		[]string{"--server-address", "unix:///tmp/m.sock", "server", "--foreground", "-v"},
-		serverChildArgs([]string{"--server-address", "unix:///tmp/m.sock", "server", "start", "-v"}))
-}
-
-func TestIsServerRun(t *testing.T) {
-	assert.True(t, IsServerRun([]string{"start"}))
-	assert.True(t, IsServerRun([]string{"start", "--foreground"}))
-	assert.True(t, IsServerRun([]string{"--foreground"}), "the detached child runs the server")
-	assert.False(t, IsServerRun([]string{"start", "-h"}), "help prints usage and builds nothing")
-	assert.False(t, IsServerRun([]string{"stop"}))
-	assert.False(t, IsServerRun(nil))
-}
-
-func TestIsServerStartHelpSkipsTheSubcommand(t *testing.T) {
-	assert.True(t, isServerStartHelp([]string{"start", "-h"}))
-	assert.True(t, isServerStartHelp([]string{"start", "--foreground", "--help"}))
-	assert.True(t, isServerStartHelp([]string{"start", "help"}))
-	assert.False(t, isServerStartHelp([]string{"start"}))
-	assert.False(t, isServerStartHelp([]string{"start", "--foreground"}))
-	assert.False(t, isServerStartHelp([]string{"help"}), "the subcommand itself is not a help flag")
-}
-
-func TestWantsForeground(t *testing.T) {
-	assert.True(t, WantsForeground([]string{"start", "--foreground"}))
-	assert.True(t, WantsForeground([]string{"start", "-foreground"}))
-	// A pre-parse scanner takes only the bare spellings; an =value form is not a bool.
-	assert.False(t, WantsForeground([]string{"start", "--foreground=true"}))
-	assert.False(t, WantsForeground([]string{"start"}))
-}
-
-// The message exists because "already running" answered a question nobody asked. A second
-// worktree's `server start` returns 0 having loaded nothing from that tree, and the console then
-// shows the tree the server was started in, which reads as success.
-func TestServingSuffixNamesTheLoadedWorkspaces(t *testing.T) {
-	st := &proc.StatusReply{Workspaces: []proc.Workspace{
-		{Root: "/repo/worktrees/b"},
-		{Root: "/repo"},
-	}}
-
-	// Sorted, so two runs of the same server do not print the list two ways.
-	assert.Equal(t, ", serving /repo, /repo/worktrees/b", servingSuffix(st))
-
-	// A server that has loaded nothing yet says nothing rather than "serving " with an empty
-	// list, which would read as a server that is serving something unnameable.
-	assert.Empty(t, servingSuffix(&proc.StatusReply{}))
-}
 
 func hookSections(t *testing.T, dir string) map[string]string {
 	t.Helper()

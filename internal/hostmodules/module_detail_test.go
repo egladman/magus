@@ -7,7 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/testkit"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // TestBuildModulesOutput_List covers the no-name list view: every module is
 // present with a doc, and methods are NOT expanded (that's the detail view).

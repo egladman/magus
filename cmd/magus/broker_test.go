@@ -149,7 +149,7 @@ func TestCrashHint(t *testing.T) {
 	repo := buildinfo.NewVersionOutput(types.MagusBuild{}, "").Repository
 	pushed := crashHint(buildinfo.VersionOutput{Version: "v0.5.0", Commit: sha, Repository: repo})
 	assert.Contains(t, pushed, "not in your workspace")
-	assert.Contains(t, pushed, repo+"/tree/"+sha)
+	assert.Contains(t, pushed, fmt.Sprintf("%s/tree/%s", repo, sha))
 	assert.Contains(t, pushed, "magus-upstream-source")
 
 	for _, v := range []buildinfo.VersionOutput{

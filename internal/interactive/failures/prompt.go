@@ -92,7 +92,7 @@ func loadPreview(f cache.Failure, width int) []string {
 	if err != nil {
 		return unreadable(err)
 	}
-	defer func() { _ = fh.Close() }()
+	defer func() { _ = fh.Close() }() // read only: a failed close loses nothing
 	info, err := fh.Stat()
 	if err != nil {
 		return unreadable(err)
@@ -203,7 +203,7 @@ func Prompt(ctx context.Context, h *cache.PrettyHandler, act Actions) error {
 	}
 	// The band was held past the summary so these failures would still be on
 	// screen to act on; handing the rows back is this function's job now.
-	defer func() { _ = h.ReleaseBand() }()
+	defer func() { _ = h.ReleaseBand() }() // the prompt is over: a band that fails to release has nothing left to draw
 
 	selected := 0
 	for {
@@ -242,8 +242,8 @@ func runFailurePrompt(ctx context.Context, h failureBand, selected *int) (failur
 	hint := termkit.StderrZone().Acquire(hintRows)
 	defer func() {
 		h.SetSelection(-1)
-		_ = hint.Release()
-		_ = in.Close()
+		_ = hint.Release() // teardown of the hint rows; the prompt has already answered
+		_ = in.Close()     // teardown of the hint rows; the prompt has already answered
 	}()
 
 	// The prompt draws on the terminal itself, as the band does.
@@ -420,7 +420,7 @@ func copyFailure(f cache.Failure) {
 	if err != nil || n == 0 {
 		msg = "could not reach the clipboard; press o to print the output instead"
 	}
-	_ = notify.Stderr().Notify(msg, termkit.SGRGreen, 4*time.Second)
+	_ = notify.Stderr().Notify(msg, termkit.SGRGreen, 4*time.Second) // the toast only reports the copy, which has already happened or failed
 }
 
 // showPreview puts the selected failure's output in the band's second column.
