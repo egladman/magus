@@ -321,7 +321,11 @@ jobs:
           fi
           mapfile -t projects < "$RUNNER_TEMP/pregate"
           if [ "${#projects[@]}" -gt 0 ]; then
-            magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}"
+            if ! magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}"; then
+              echo "::error::generated output is stale. Run \`magus run generate:rw .\` and commit the result."
+              echo "::error::Or queue this PR with \`gh pr merge --auto --squash\`: the merge queue regenerates stale generated files in its own candidate."
+              exit 1
+            fi
           fi
 
       # The local tier the drift gate built, for the stages to replay generate from instead
