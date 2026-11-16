@@ -135,11 +135,12 @@ knowledge:
         main: { percentile: 95, anchor: 1500 }
         test: { percentile: 99, anchor: 1900 }
       func-lines:
-        # 101 covers functions moved unsplit out of cmd/magus: a moved function keeps
-        # its size. It stands until the derived-bar ADR replaces the anchors.
-        source: { percentile: 95, anchor: 101 }
+        # source 167 and test 119 cover functions moved unsplit out of cmd/magus: a
+        # moved function keeps its size. They stand until the derived-bar ADR replaces
+        # the anchors.
+        source: { percentile: 95, anchor: 167 }
         main: { percentile: 95, anchor: 75 }
-        test: { percentile: 99, anchor: 73 }
+        test: { percentile: 99, anchor: 119 }
       type-methods:
         source: { percentile: 95, anchor: 49 }
         main: { percentile: 95, anchor: 22 }
@@ -161,6 +162,11 @@ knowledge:
             # callers claim reads occurrences through workspacegraph. It holds the symbol
             # reads internal/job cannot: the knowledge and deps tests import job.
             internal/job/evidence: 19
+            # the diff input and text moved out of cmd/magus: types is in the
+            # RequiredMatcher and diagnosticLine signatures, and the API floor text
+            # calls release.Stage.Known. The advisors run through
+            # bindings.RunScriptMain, so gopherbuzz stays out.
+            internal/review: 16
       export-scope:
         source: { percentile: 0, anchor: 0 }
         main: { percentile: 0, anchor: 0 }
