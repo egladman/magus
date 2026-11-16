@@ -22,12 +22,14 @@ import (
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/internal/sys/pid"
@@ -259,7 +261,7 @@ func brokerStatus(ctx context.Context, args []string) error {
 		slog.ErrorContext(ctx, fmt.Sprintf("no broker is running (broker: %s); %s", globalCfg.Broker, why), attr.Notice(""))
 		return exit.Reported(exit.Failure)
 	}
-	printBrokerRows(os.Stdout, st, globalCfg.Broker, time.Now())
+	server.PrintBrokerRows(os.Stdout, st, globalCfg.Broker, time.Now())
 	return nil
 }
 
@@ -511,9 +513,9 @@ var upstreamSourceSkill = agent.MustSkill("magus-upstream-source")
 
 // crashHint is what the broker writes after Go's trace when this process crashes: that
 // the defect is magus's, and where this build's source can be read.
-func crashHint(v versionOutput) string {
+func crashHint(v buildinfo.VersionOutput) string {
 	head := fmt.Sprintf("magus %s crashed. This is a defect in magus, not in your workspace.\n", v.Version)
-	if v.Dirty || v.Commit == unknownVersion {
+	if v.Dirty || v.Commit == buildinfo.UnknownVersion {
 		return head + "This build's source is not published: it was built from a modified or unstamped tree.\n"
 	}
 	return head + fmt.Sprintf("Its source is %s/tree/%s; the %s skill reads it.\n", v.Repository, v.Commit, upstreamSourceSkill)
@@ -526,7 +528,7 @@ func crashHint(v versionOutput) string {
 func newBrokerClient(announce bool, opts ...broker.ClientOption) *broker.Client {
 	return broker.NewClient(broker.DefaultAddr(), append([]broker.ClientOption{
 		broker.WithIdentity(os.Args, version),
-		broker.WithCrashHint(crashHint(newVersionOutput())),
+		broker.WithCrashHint(crashHint(buildinfo.NewVersionOutput(selfBuild(), builtBy))),
 		broker.WithStart(func(ctx context.Context) bool {
 			pid := ensureBroker(ctx)
 			if announce {

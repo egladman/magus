@@ -47,7 +47,7 @@ func mcpAddrPort() (netip.AddrPort, error) {
 }
 
 // mcpAddrString returns the configured MCP address as a host:port string, falling back
-// to the default. Used by buildServerInfo so the bridge doctor check knows which
+// to the default. Used by doctor.BuildServerInfo so the bridge doctor check knows which
 // address to probe.
 func mcpAddrString() string {
 	return mcpAddress(globalCfg.MCP)

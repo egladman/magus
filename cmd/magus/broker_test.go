@@ -25,8 +25,10 @@ import (
 
 	"github.com/egladman/magus/broker"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -114,7 +116,7 @@ func TestBrokerStatusPrintsItsRows(t *testing.T) {
 	st, err := queryBroker(t.Context())
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	printBrokerRows(&buf, st, types.BrokerBestEffort, time.Now())
+	server.PrintBrokerRows(&buf, st, types.BrokerBestEffort, time.Now())
 	got := buf.String()
 	assert.Contains(t, got, "broker  ")
 	assert.Contains(t, got, "capacity  -")
@@ -129,17 +131,17 @@ func TestBrokerStatusPrintsItsRows(t *testing.T) {
 
 func TestBrokerDownRowNamesThePolicy(t *testing.T) {
 	var buf bytes.Buffer
-	printBrokerDown(&buf, types.BrokerOff)
+	server.PrintBrokerDown(&buf, types.BrokerOff)
 	assert.Contains(t, buf.String(), "not running (runs here never ask one; broker: off)")
 
 	buf.Reset()
-	printBrokerDown(&buf, "")
+	server.PrintBrokerDown(&buf, "")
 	assert.Contains(t, buf.String(), "a run starts one; broker: best-effort", "unset reads as the default it behaves as")
 }
 
 func TestServerRowsNameEveryListener(t *testing.T) {
 	var buf bytes.Buffer
-	printServerRows(&buf, &daemon.Server{
+	server.PrintServerRows(&buf, &daemon.Server{
 		PID: 47001, Socket: "unix:///run/magus/server.sock", StartTime: time.Now().Add(-time.Hour),
 		Listeners: []daemon.Listener{
 			{Kind: daemon.ListenerSocket, Address: "unix:///run/magus/server.sock"},
@@ -171,14 +173,14 @@ func TestBrokerIdleExitDefaultsToTheBrokers(t *testing.T) {
 // The hint names the code only when that code exists at a fetchable commit.
 func TestCrashHint(t *testing.T) {
 	const sha = "d32c55d6700000000000000000000000000000ab"
-	pushed := crashHint(versionOutput{Version: "v0.5.0", Commit: sha, Repository: sourceRepository})
+	pushed := crashHint(buildinfo.VersionOutput{Version: "v0.5.0", Commit: sha, Repository: buildinfo.SourceRepository})
 	assert.Contains(t, pushed, "not in your workspace")
-	assert.Contains(t, pushed, sourceRepository+"/tree/"+sha)
+	assert.Contains(t, pushed, buildinfo.SourceRepository+"/tree/"+sha)
 	assert.Contains(t, pushed, "magus-upstream-source")
 
-	for _, v := range []versionOutput{
-		{Version: "v0.5.0-dirty", Commit: sha, Dirty: true, Repository: sourceRepository},
-		{Version: unknownVersion, Commit: unknownVersion, Repository: sourceRepository},
+	for _, v := range []buildinfo.VersionOutput{
+		{Version: "v0.5.0-dirty", Commit: sha, Dirty: true, Repository: buildinfo.SourceRepository},
+		{Version: buildinfo.UnknownVersion, Commit: buildinfo.UnknownVersion, Repository: buildinfo.SourceRepository},
 	} {
 		hint := crashHint(v)
 		assert.Contains(t, hint, "not published")

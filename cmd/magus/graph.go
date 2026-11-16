@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
@@ -667,7 +668,7 @@ func statsText(out types.KnowledgeStats) error {
 			fmt.Printf("\norphans (%d):\n", len(out.Orphans))
 		}
 		for _, o := range out.Orphans {
-			fmt.Printf("  %-11s  %-26s  %s\n", o.Kind, truncate(o.Label, 26), o.Reason)
+			fmt.Printf("  %-11s  %-26s  %s\n", o.Kind, server.Truncate(o.Label, 26), o.Reason)
 		}
 	}
 	if len(out.Coverage) > 0 {

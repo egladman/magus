@@ -23,6 +23,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
@@ -2437,7 +2438,7 @@ func (s *DelegateToCheckoutSuite) TestABuildBehindHeadJudges() {
 }
 
 func (s *DelegateToCheckoutSuite) TestAnUnstampedBuildJudges() {
-	s.placePinned(unknownVersion, `{"decision":"deny"}`, 2)
+	s.placePinned(buildinfo.UnknownVersion, `{"decision":"deny"}`, 2)
 	handled, declined, _, _ := s.delegate(s.line())
 	s.True(handled)
 	s.Empty(declined)

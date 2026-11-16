@@ -2,67 +2,17 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/ward"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/buildinfo"
+	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/types/daemon"
 )
-
-// unknownVersion's doc says to keep it in sync with proc.devVersionSentinel (see
-// TestDevVersionSentinelMatchesWard in internal/proc). This package can see proc's package
-// but not its unexported sentinel, so it proves its half through the same shared anchor,
-// ward.DevVersion, rather than comparing the two directly.
-func TestUnknownVersionMatchesWardDevVersion(t *testing.T) {
-	assert.Equal(t, ward.DevVersion, unknownVersion)
-}
-
-// The digest is what diagrams-generate keys on, so it must name the figure.buzz this
-// binary was built from.
-func TestVersionOutputDigestsTheEmbeddedFigureSource(t *testing.T) {
-	disk, err := os.ReadFile(filepath.Join("..", "..", "libs", "figure", "figure.buzz"))
-	require.NoError(t, err)
-	sum := sha256.Sum256(disk)
-	assert.Equal(t, hex.EncodeToString(sum[:]), newVersionOutput().Embedded.FigureSHA256)
-}
-
-func TestServerLine(t *testing.T) {
-	cases := []struct {
-		name   string
-		probe  serverProbe
-		client string
-		want   string
-	}{
-		{"no server answered", serverProbe{}, "v1.2.3", "server: not running"},
-		{"same build on both ends", serverProbe{version: "v1.2.3"}, "v1.2.3", "server: v1.2.3"},
-		{
-			"a server left running across an upgrade",
-			serverProbe{version: "v1.2.0"}, "v1.2.3",
-			"server: v1.2.0 (differs from this client)",
-		},
-		{
-			// The case a plain comparison got wrong: an unstamped client reports the same
-			// sentinel, so "server: unknown" read as two matching builds.
-			"a server that did not report a version, against an unstamped client",
-			serverProbe{version: unknownVersion}, unknownVersion,
-			"server: running, version not reported",
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.want, serverLine(c.probe, c.client))
-		})
-	}
-}
 
 // TestProbeServerVersionWithNoServer pins the graceful half of the feature: an address
 // nothing listens on yields an empty version and no error, fast enough that `magus
@@ -72,7 +22,7 @@ func TestProbeServerVersionWithNoServer(t *testing.T) {
 	globalCfg.Server.Address = fmt.Sprintf("unix://%s/magus-version-absent-test.sock", proc.SockDir())
 
 	start := time.Now()
-	assert.Equal(t, serverProbe{}, probeServerVersion(context.Background()))
+	assert.Equal(t, buildinfo.ServerProbe{}, probeServerVersion(context.Background()))
 	assert.Less(t, time.Since(start), 2*serverProbeTimeout, "a dead socket must fail fast, not wait out the status deadline")
 }
 
@@ -92,14 +42,5 @@ func TestProbeServerVersionReportsALiveServer(t *testing.T) {
 	require.NoError(t, srv.Start(t.Context()))
 	globalCfg.Server.Address = srv.Addr()
 
-	assert.Equal(t, serverProbe{version: "v9.9.9"}, probeServerVersion(context.Background()))
-}
-
-// A source lookup fetches by commit, so a build whose tree was modified must say so:
-// that commit is not the code it runs.
-func TestBuiltDirty(t *testing.T) {
-	assert.True(t, builtDirty(types.MagusBuild{Version: "v0.5.0-rc.2-2-gd32c55d67-dirty"}))
-	assert.True(t, builtDirty(types.MagusBuild{Version: "v0.5.0-dirty"}))
-	assert.False(t, builtDirty(types.MagusBuild{Version: "v0.5.0"}))
-	assert.False(t, builtDirty(types.MagusBuild{Version: "v0.5.0-rc.2-2-gd32c55d67"}))
+	assert.Equal(t, buildinfo.ServerProbe{Version: "v9.9.9"}, probeServerVersion(context.Background()))
 }

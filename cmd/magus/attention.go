@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -175,7 +176,7 @@ func attentionDispose(root string, args []string) error {
 	}
 	fmt.Fprintf(os.Stdout, "disposed %s, open %s, raised by %s from invocation %s\n",
 		req.ID,
-		orDash(formatDur(time.Since(time.UnixMilli(req.OpenedMs)))),
+		orDash(server.FormatDur(time.Since(time.UnixMilli(req.OpenedMs)))),
 		orDash(req.Source),
 		req.Invocation)
 	fmt.Fprintf(os.Stdout, "  %s\n", sessions.OneLine(req.Message))
