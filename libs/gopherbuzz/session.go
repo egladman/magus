@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/egladman/magus/libs/diagnostics"
@@ -29,8 +30,11 @@ type Session struct {
 	// a caller that took the release (Keep).
 	owner          *vmpackage.Owner
 	releaseOnClose bool
-	targets        map[string]vmpackage.Callable
-	tests          []TestEntry
+	// released is set by the one release. Its slots may be reused afterwards, so a second
+	// pass would free another holder's values and a call would run on dangling ones.
+	released atomic.Bool
+	targets  map[string]vmpackage.Callable
+	tests    []TestEntry
 	// exportedNames is every name any chunk exported, imports included. It answers
 	// VISIBILITY: a name a flat import made private stays visible if another module
 	// exported it.
@@ -3005,10 +3009,14 @@ func (s *Session) GetGlobal(name string) vmpackage.Value {
 	return v
 }
 
+// errReleasedSession is what a call on a session whose slots were freed answers instead of
+// running on values that now dangle or belong to another holder.
+var errReleasedSession = errors.New("buzz: the session was released; a function it defined can no longer be called")
+
 // Close cancels the session's context and releases every heap slot its values
 // occupy. Any Value obtained from the session dangles after Close, so a caller
 // that keeps one (a record every later session reads, say) keeps the session
-// open instead. Closing twice is harmless.
+// open instead. Closing twice releases nothing the second time.
 func (s *Session) Close() error {
 	s.cancel()
 	if s.releaseOnClose {
@@ -3020,7 +3028,9 @@ func (s *Session) Close() error {
 // Keep hands the session's values to the caller: Close then cancels the context
 // only, and the returned func releases them. For a holder of a Value that must
 // outlive the load, such as a guard rule the registry calls after the magusfile
-// that registered it has finished. Releasing twice is harmless.
+// that registered it has finished. The session has one holder: Keep twice, or Keep and a
+// parent's owner, leaves two to release the same values, and only the first release
+// frees them.
 func (s *Session) Keep() (release func()) {
 	s.releaseOnClose = false
 	return s.release
@@ -3031,6 +3041,9 @@ func (s *Session) Keep() (release func()) {
 // merged module table, an enum set on the magus namespace), and those belong to
 // whichever session reaches them: this one, unless another claimed them first.
 func (s *Session) release() {
+	if !s.released.CompareAndSwap(false, true) {
+		return
+	}
 	globals := s.env.Slots()
 	roots := make([]vmpackage.Value, 0, len(globals)+len(s.nativeModules))
 	roots = append(roots, globals...)
@@ -3045,6 +3058,9 @@ func (s *Session) release() {
 // args become the session's: a host-built argument is released with the session,
 // so pass a fresh one per call rather than one kept across sessions.
 func (s *Session) CallValue(ctx context.Context, fn vmpackage.Value, args []vmpackage.Value) (vmpackage.Value, error) {
+	if s.released.Load() {
+		return vmpackage.Null, errReleasedSession
+	}
 	vm := vmpackage.NewVM(s.within(ctx))
 	defer s.enter(vm)()
 	s.owner.Claim(fn)
@@ -3063,6 +3079,9 @@ func (s *Session) CallValue(ctx context.Context, fn vmpackage.Value, args []vmpa
 // wrong argument count is an error, never Null. recv and args become the session's,
 // as in CallValue.
 func (s *Session) CallMethod(ctx context.Context, recv vmpackage.Value, name string, args []vmpackage.Value) (vmpackage.Value, error) {
+	if s.released.Load() {
+		return vmpackage.Null, errReleasedSession
+	}
 	vm := vmpackage.NewVM(s.within(ctx))
 	defer s.enter(vm)()
 	s.owner.Claim(recv)

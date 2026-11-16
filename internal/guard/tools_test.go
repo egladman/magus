@@ -342,3 +342,20 @@ func TestEnteringATreeNoJobOwnsIsRefused(t *testing.T) {
 	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSiblingCheckout)}, shape)
 	assert.Contains(t, text, other)
 }
+
+// A repeat denial keeps only the rule's first Next, so the install command must be there
+// for the retry to still name it.
+func TestUnjudgedToolDenialNamesTheInstallAsItsNext(t *testing.T) {
+	t.Parallel()
+	rows := agent.FindToolRows(t.TempDir(), "claude-code")
+	d := denyUnjudgedTool("SubagentHandback", rows)
+	require.Len(t, d.Next, 1)
+	assert.Equal(t, "magus agent harness install --id claude-code", d.Next[0].Run)
+}
+
+func TestUnjudgedToolDenialSaysWhenItReadTheFallbackRows(t *testing.T) {
+	t.Parallel()
+	rows := testTools(t)
+	rows.FellBackTo = "/primary"
+	assert.Contains(t, denyUnjudgedTool("SubagentHandback", rows).Say, "primary checkout's at /primary")
+}

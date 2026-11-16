@@ -54,7 +54,8 @@ func judgeStopUnfiled(ctx context.Context, deps Dependencies, raw string, who ho
 	return v, true
 }
 
-// unfiledRow is the live row lease names when its live attempt filed no result.
+// unfiledRow is the live row lease names when its live attempt filed no result
+// and did not end by handback: a delivered SubagentHandback call is its report.
 func unfiledRow(ctx context.Context, at location, lease string) (types.Job, bool) {
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
@@ -65,7 +66,8 @@ func unfiledRow(ctx context.Context, at location, lease string) (types.Job, bool
 		return types.Job{}, false
 	}
 	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == lease })
-	if i < 0 || tries.Result(lease) != nil || !rows[i].State.Live() {
+	live := tries.Live(lease)
+	if i < 0 || live.Status.Result != nil || live.Status.End == types.AttemptEndHandback || !rows[i].State.Live() {
 		return types.Job{}, false
 	}
 	return rows[i], true

@@ -387,6 +387,11 @@ var strIntern sync.Map // string → *strObj
 // total length for HeapStats. No entry is ever removed.
 var internedStrings, internedBytes atomic.Int64
 
+// bufferedStrings and bufferedBytes count the strings appendString built on a
+// shared buffer and the capacity of every array those buffers allocated, for
+// HeapStats. Neither falls: an outgrown array stays with the strings over it.
+var bufferedStrings, bufferedBytes atomic.Int64
+
 func internString(s string) *strObj {
 	if v, ok := strIntern.Load(s); ok {
 		return v.(*strObj)
@@ -425,9 +430,14 @@ func appendString(left Value, rest []byte) Value {
 	if l.buf != nil {
 		l.buf.mu.Lock()
 		if len(l.V) == l.buf.b.Len() {
+			before := l.buf.b.Cap()
 			l.buf.b.Write(rest)
-			s := l.buf.b.String()
+			s, after := l.buf.b.String(), l.buf.b.Cap()
 			l.buf.mu.Unlock()
+			if after != before {
+				bufferedBytes.Add(int64(after))
+			}
+			bufferedStrings.Add(1)
 			return heapValue(tagStr, &strObj{V: s, buf: l.buf})
 		}
 		l.buf.mu.Unlock()
@@ -438,6 +448,8 @@ func appendString(left Value, rest []byte) Value {
 	buf.b.Grow(len(l.V) + len(rest))
 	buf.b.WriteString(l.V)
 	buf.b.Write(rest)
+	bufferedStrings.Add(1)
+	bufferedBytes.Add(int64(buf.b.Cap()))
 	return heapValue(tagStr, &strObj{V: buf.b.String(), buf: buf})
 }
 

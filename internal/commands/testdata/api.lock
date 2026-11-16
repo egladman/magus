@@ -431,6 +431,7 @@ guard-rule output-redirect
 guard-rule person-advisory
 guard-rule policy-unloaded
 guard-rule precedent-search
+guard-rule process-lookup
 guard-rule process-poll
 guard-rule process-signal
 guard-rule push-gate

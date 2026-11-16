@@ -62,6 +62,7 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/diagnostics"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -886,7 +887,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	// below can tell "the user asked for help" (exit 0) from "the user asked for
 	// nothing" (exit 2).
 	helpRequested := false
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		if !errors.Is(err, flag.ErrHelp) {
 			stopFlags()
 			slog.Error("flag parse failed", attr.Error(err))
@@ -1356,7 +1357,7 @@ func applyPreSubDisplayFlags(args, subArgs []string, sub string) error {
 	fs.StringVar(&discardRoot, "C", "", "")
 	fs.StringVar(&discardConfig, "config", "", "")
 	fs.StringVar(&discardConfig, "c", "", "")
-	if err := fs.Parse(pre); err != nil {
+	if err := command.Parse(fs, pre); err != nil {
 		return exit.Usagef("magus: %v", err)
 	}
 	return nil

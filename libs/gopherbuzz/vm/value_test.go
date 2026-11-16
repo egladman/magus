@@ -450,6 +450,45 @@ func (s *heapCountersSuite) TestBufferedStringIsNotInterned() {
 	s.Equal(before.InternedStrings, ReadHeapStats().InternedStrings)
 }
 
+func (s *heapCountersSuite) TestBufferedStringsCountEachBufferedString() {
+	long := StringValue(s.unique() + strings.Repeat("a", strBufThreshold))
+	before := ReadHeapStats().BufferedStrings
+	appendString(appendString(long, []byte("b")), []byte("c"))
+	s.Equal(2, ReadHeapStats().BufferedStrings-before)
+}
+
+func (s *heapCountersSuite) TestShortStringIsNotBuffered() {
+	before := ReadHeapStats()
+	appendString(StringValue(s.unique()), []byte("b"))
+	after := ReadHeapStats()
+	s.Equal(before.BufferedStrings, after.BufferedStrings)
+	s.Equal(before.BufferedBytes, after.BufferedBytes)
+}
+
+func (s *heapCountersSuite) TestBufferedBytesCountsANewBuffersArray() {
+	long := StringValue(s.unique() + strings.Repeat("a", strBufThreshold))
+	before := ReadHeapStats().BufferedBytes
+	v := appendString(long, []byte("b"))
+	s.Equal(v.asString().buf.b.Cap(), ReadHeapStats().BufferedBytes-before)
+}
+
+func (s *heapCountersSuite) TestBufferedBytesCountsEachOutgrownArray() {
+	v := appendString(StringValue(s.unique()+strings.Repeat("a", strBufThreshold)), []byte("b"))
+	buf := v.asString().buf
+	before := ReadHeapStats().BufferedBytes
+	want, grows := 0, 0
+	for range 64 {
+		old := buf.b.Cap()
+		v = appendString(v, []byte(strings.Repeat("c", 512)))
+		if buf.b.Cap() != old {
+			want += buf.b.Cap()
+			grows++
+		}
+	}
+	s.Positive(grows)
+	s.Equal(want, ReadHeapStats().BufferedBytes-before)
+}
+
 func (s *heapCountersSuite) TestUnownedObjectsFollowsTheTable() {
 	before := ReadHeapStats().UnownedObjects
 	ListValue(nil)

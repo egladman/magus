@@ -527,7 +527,10 @@ func recordLease(ctx context.Context, root, script string) (string, error) {
 	}
 	rows, err := readJobRows(ctx, here)
 	if err != nil {
-		return "", err
+		// The rows only bind the run to a lease. A store this magus cannot read
+		// is no reason to lose the run's record.
+		fmt.Fprintf(os.Stderr, "magus buzz: --record: the job store cannot be read (%v); the run is recorded without a lease\n", err)
+		return "", nil
 	}
 	return scriptCheckHolder(rows, here, script), nil
 }

@@ -340,6 +340,7 @@ var defaults = map[string]decision{
 	"notes-author":          Deny,
 	"deviation-author":      Deny,
 	"policy-unloaded":       Deny,
+	"process-lookup":        Deny,
 	"process-poll":          Deny,
 	"process-signal":        Deny,
 	"push-unverified":       Deny,

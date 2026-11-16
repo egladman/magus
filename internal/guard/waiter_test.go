@@ -516,7 +516,7 @@ func TestProcessPollOnALineWithARunServesThatRunInTheBackground(t *testing.T) {
 }
 
 func TestProcessPollWithNoRunOnTheLineReadsStatus(t *testing.T) {
-	v := Evaluate(strict(testDependencies()), "pgrep -fl magus")
+	v := Evaluate(strict(testDependencies()), "ps -p 4242")
 	assert.Equal(t, denyRuleProcessPoll, v.Rule.Name)
 	require.Len(t, v.Next, 1)
 	assert.Equal(t, hint.ServerStatus.String(), v.Next[0].Run)

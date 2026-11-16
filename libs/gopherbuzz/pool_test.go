@@ -421,3 +421,51 @@ func TestTargetRunsMarkDoneSkipsANameAndKeepsARunningOne(t *testing.T) {
 	isNew, _ = runs.TryRun("", "format")
 	assert.False(t, isNew)
 }
+
+// BenchmarkPooledWorkerChurn dispatches build to one pooled worker that is
+// never closed, as a ctx.needs member's worker is not. Its metrics are what each
+// dispatch adds to the process after a forced GC. Repeated passes the same run
+// every time; Distinct passes a new one, so no string repeats.
+func BenchmarkPooledWorkerChurn(b *testing.B) {
+	b.Run("Repeated", func(b *testing.B) { benchPooledWorkerChurn(b, false) })
+	b.Run("Distinct", func(b *testing.B) { benchPooledWorkerChurn(b, true) })
+}
+
+func benchPooledWorkerChurn(b *testing.B, distinct bool) {
+	var run int64
+	p := newPool(func(ctx context.Context) (*WorkerSession, error) {
+		s := NewSession(ctx, WithEmbedded())
+		if err := s.Exec(ctx, churnSource); err != nil {
+			return nil, err
+		}
+		build := s.Globals()["build"]
+		targets := map[string]vmpackage.Callable{
+			"build": func(ctx context.Context, _ []vmpackage.Value) (vmpackage.Value, error) {
+				return s.CallValue(ctx, build, []vmpackage.Value{vmpackage.IntValue(run)})
+			},
+		}
+		return &WorkerSession{Session: s, Targets: targets}, nil
+	}, nil, 1)
+	defer func() { _ = p.Close() }()
+
+	dispatch := func() {
+		ctx := WithTargetRuns(b.Context(), NewTargetRuns())
+		if err := p.Dispatch(ctx, []string{"build"}, nil); err != nil {
+			b.Fatal(err)
+		}
+	}
+	// One dispatch outside the samples: it loads the worker and interns run 0's
+	// strings.
+	dispatch()
+	b.ReportAllocs()
+	before := sampleChurn()
+	n := 0
+	for b.Loop() {
+		if distinct {
+			run = churnRun.Add(1)
+		}
+		dispatch()
+		n++
+	}
+	reportChurn(b, before, sampleChurn(), n)
+}
