@@ -23,6 +23,7 @@ import (
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/client"
@@ -31,7 +32,6 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
@@ -419,7 +419,7 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	fetch := job.InflightFetch{
+	fetch := jobstore.InflightFetch{
 		Provider: f.Provider, Host: remoteHost(remote), Base: f.Base,
 		At: started.Unix(), ElapsedMS: time.Since(started).Milliseconds(),
 	}

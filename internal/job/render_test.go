@@ -265,7 +265,7 @@ func inflightFixture() (job.List, InflightInput) {
 	c457 := change("457", "theirs", "their change", "priya")
 	c459 := change("459", "status-wait", "status wait pipe", "egladman")
 	in := InflightInput{
-		Fetch: &job.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 1790514000, ElapsedMS: 812},
+		Fetch: &InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 1790514000, ElapsedMS: 812},
 		Changes: qtypes.Changes{
 			Base:    "main",
 			Changes: []qtypes.Change{c443, c438, c450, c445, c456, c457, c459},
@@ -478,7 +478,7 @@ func (s *applyStateSuite) TestADryRunNamesTheMoveItWouldMake() {
 func TestPrintInflightSaysWhenTheQueueWasNeverFetched(t *testing.T) {
 	t.Parallel()
 	var out strings.Builder
-	PrintInflight(&out, job.List{}, false)
+	PrintInflight(&out, InflightList{}, false)
 	assert.Contains(t, out.String(), "in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes\n")
 }
 

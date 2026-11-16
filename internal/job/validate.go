@@ -422,7 +422,7 @@ func IntegratorDeviations(root string, row job.Job, projects []*types.Project, i
 		if accepted || slices.ContainsFunc(row.Paths.Deny, func(d string) bool { return job.PathsIntersect(d, glob) }) {
 			continue
 		}
-		deviations = append(deviations, job.Deviation{Code: types.OutputOutsideWritePaths, Subject: o.Output, Reason: integratorRegenerates})
+		deviations = append(deviations, job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: o.Output, Reason: integratorRegenerates})
 	}
 	return deviations
 }
@@ -647,7 +647,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 			slices.Sort(paths)
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".project",
-				Message: fmt.Sprintf("`%s` names project %q, which this workspace does not have", g.Check.String(), project),
+				Message: fmt.Sprintf("`%s` names project %q, which this workspace does not have", CheckCommand(g.Check), project),
 				Fix:     "name one of its projects: " + listNames(paths),
 			})
 			continue
@@ -663,7 +663,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 			continue
 		}
 		if spellsUnresolved(p) {
-			unchecked = append(unchecked, fmt.Sprintf("the target of `%s`: project %q binds spells it carries unresolved, so their ops cannot be listed", g.Check.String(), project))
+			unchecked = append(unchecked, fmt.Sprintf("the target of `%s`: project %q binds spells it carries unresolved, so their ops cannot be listed", CheckCommand(g.Check), project))
 			continue
 		}
 		var targets []string
@@ -683,7 +683,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 		if spell != "" && !bound {
 			ps = append(ps, types.JobProblem{
 				Code: types.JobCheckUnrunnable, Field: field + ".target",
-				Message: fmt.Sprintf("`%s` names spell %q, which project %q does not bind", g.Check.String(), spell, project),
+				Message: fmt.Sprintf("`%s` names spell %q, which project %q does not bind", CheckCommand(g.Check), spell, project),
 				Fix:     "name a spell it binds: " + listNames(p.Spells),
 			})
 			continue
@@ -694,7 +694,7 @@ func checkTargetProblems(ws Workspace, row job.Job) (types.JobProblems, []string
 		slices.Sort(targets)
 		ps = append(ps, types.JobProblem{
 			Code: types.JobCheckUnrunnable, Field: field + ".target",
-			Message: fmt.Sprintf("`%s` names target %q, which project %q does not run", g.Check.String(), name, project),
+			Message: fmt.Sprintf("`%s` names target %q, which project %q does not run", CheckCommand(g.Check), name, project),
 			Fix:     "name one of its targets: " + listNames(slices.Compact(targets)),
 		})
 	}
@@ -761,11 +761,13 @@ func rowDeclaration(row job.Job) job.Declaration {
 		MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims, Deviations: row.Deviations,
 		Delivery: row.Delivery, ParentHead: row.ParentHead,
 	}
-	// A stored row renders its check into Validation too, and a record carries one spelling.
-	if row.Check != nil {
-		rec.Check = row.Check
-	} else {
-		rec.Validation = row.Validation
+	// A row stored before the check record carries only the rendered line; one it could not
+	// parse was refused at the door, so a line that fails here declares no check.
+	rec.Check = row.Check
+	if row.Check == nil && strings.TrimSpace(row.Validation) != "" {
+		if c, err := ParseCheckCommand(row.Validation); err == nil {
+			rec.Check = &c
+		}
 	}
 	return rec
 }

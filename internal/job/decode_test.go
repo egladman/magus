@@ -31,7 +31,7 @@ func declaration(members ...string) *strings.Reader {
 	return strings.NewReader(body + "}")
 }
 
-// compat: see the legacy fields on job.Declaration. A client one release behind still registers, and
+// compat: see types.LegacySpellings. A client one release behind still registers, and
 // one that names a field twice is refused rather than silently taking either spelling.
 func TestDecodeDeclarationReadsAFieldUnderItsOldName(t *testing.T) {
 	t.Parallel()
@@ -273,12 +273,12 @@ func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.NotNil(t, rows[0].Check)
 	assert.Equal(t, "go-test", rows[0].Check.Target)
-	assert.Empty(t, rows[0].Validation)
 
 	line := fmt.Sprintf(`{"api_version":%q,"id":"a","paths":{"write":["internal/job/store.go"]},"validation":"magus run go-test ."}`, job.APIVersion)
 	rows, err = DecodeDeclarations(strings.NewReader(line))
 	require.NoError(t, err)
-	assert.Equal(t, "magus run go-test .", rows[0].Validation, "a line alone is the declaration's own check")
+	require.NotNil(t, rows[0].Check, "a line alone is the declaration's own check")
+	assert.Equal(t, job.LeaseCheck{Target: "go-test", Project: "."}, *rows[0].Check)
 
 	_, err = decodeDeclaration(strings.NewReader(stored))
 	require.ErrorContains(t, err, "not both", "fork's decoder stays strict")
@@ -397,7 +397,7 @@ func TestDecodeDeclarationCarriesBreaksAndRefusesABlankEntry(t *testing.T) {
 // row the other would have recorded.
 // DecodePut decodes magus\workspace().putJob, and job.Declaration the CLI's.
 // job.Declaration alone still carries the pre-rename
-// spellings (owned_paths/forbidden_paths/focus/tier; see job.Declaration.FoldLegacyNames):
+// spellings (owned_paths/forbidden_paths/focus/tier; see types.LegacySpellings):
 // that compat is its own and was never mirrored into DecodePut, so it is excluded from
 // this comparison rather than asserted as shared vocabulary.
 func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {

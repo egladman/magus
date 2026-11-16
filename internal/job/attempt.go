@@ -117,7 +117,7 @@ func recordAttempt(a job.Attempt) attemptRecord {
 		ModelTier: s.ModelTier, Checkpoint: s.Checkpoint, ReportedBase: s.ReportedBase,
 		ReworkRounds: s.ReworkRounds, Widenings: s.Widenings, Unmet: recordVerifications(s.Unmet),
 		Violations: slices.Clone(s.Violations), FailingRefs: slices.Clone(s.FailingRefs), DenialsKnown: s.DenialsKnown,
-		Retry: retryRecord{Retryable: s.Retry.Retryable, Change: wireRetryChange.spell(s.Retry.Change), Reason: s.Retry.Reason, Code: s.Retry.Code},
+		Retry: retryRecord{Retryable: s.Retry.Retryable, Change: wireRetryChange.spell(s.Retry.Change), Reason: s.Retry.Reason, Code: types.DiagnosticCode(s.Retry.Code)},
 	}
 	for _, d := range s.Denials {
 		st.Denials = append(st.Denials, denialRecord(d))
@@ -135,7 +135,7 @@ func (r attemptRecord) attempt() (job.Attempt, error) {
 		ModelTier: st.ModelTier, Checkpoint: st.Checkpoint, ReportedBase: st.ReportedBase,
 		ReworkRounds: st.ReworkRounds, Widenings: st.Widenings, Unmet: verifications(st.Unmet),
 		Violations: st.Violations, FailingRefs: st.FailingRefs, DenialsKnown: st.DenialsKnown,
-		Retry: job.RetryVerdict{Retryable: st.Retry.Retryable, Change: wireRetryChange.read(st.Retry.Change, &bad), Reason: st.Retry.Reason, Code: st.Retry.Code},
+		Retry: job.RetryVerdict{Retryable: st.Retry.Retryable, Change: wireRetryChange.read(st.Retry.Change, &bad), Reason: st.Retry.Reason, Code: job.Code(st.Retry.Code)},
 	}
 	if err := bad.refusal(); err != nil {
 		return job.Attempt{}, fmt.Errorf("attempt %d of job %s: %w", r.Spec.N, r.Spec.Job, err)

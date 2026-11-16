@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -414,7 +415,7 @@ var (
 	wireGoalExpect  = newWireEnum(job.GoalExpects()...)
 	wireClaimKind   = newWireEnum(job.ClaimRefs, job.ClaimTest, job.ClaimOutput, job.ClaimReleased, job.ClaimDeadHolder)
 	wireEntryPoint  = newWireEnum(job.EntryPointCLI, job.EntryPointHook, job.EntryPointMCP, job.EntryPointRPC, job.EntryPointServer)
-	wireCredential  = newWireEnum(job.KindOperator, job.KindStored, job.KindShare, job.KindExchange, job.KindStdio, job.KindSocketPeer)
+	wireCredential  = newWireEnum(auth.KindOperator, auth.KindStored, auth.KindShare, auth.KindExchange, auth.KindStdio, auth.KindSocketPeer)
 	wireWorkerType  = newWireEnum(job.WorkerTypeResumed, job.WorkerTypeNew)
 	wireTierSource  = newWireEnum(tier.SourceJob, tier.SourceMatrix, tier.SourceUserMatrix, tier.SourceDefault)
 	wireSkills      = newWireEnum(tier.SkillVariantShort, tier.SkillVariantFull)
@@ -521,23 +522,22 @@ type originRecord struct {
 }
 
 type credentialRecord struct {
-	Kind  string     `json:"class,omitempty"`
-	ID    string     `json:"id,omitempty"`
-	Name  string     `json:"name,omitempty"`
-	Grant job.Access `json:"grant,omitzero"`
+	Kind string `json:"class,omitempty"`
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
 }
 
 func recordOrigin(o job.Origin) originRecord {
 	return originRecord{User: o.User, UID: o.UID, EntryPoint: wireEntryPoint.spell(o.EntryPoint), Host: o.Host,
 		Session: o.Session, Agent: o.Agent, Credential: credentialRecord{
-			Kind: wireCredential.spell(o.Credential.Kind), ID: o.Credential.ID, Name: o.Credential.Name, Grant: o.Credential.Grant,
+			Kind: wireCredential.spell(o.Credential.Kind), ID: o.Credential.ID, Name: o.Credential.Name,
 		}}
 }
 
 func (r originRecord) origin(bad *wireReads) job.Origin {
 	return job.Origin{User: r.User, UID: r.UID, EntryPoint: wireEntryPoint.read(r.EntryPoint, bad), Host: r.Host,
 		Session: r.Session, Agent: r.Agent, Credential: job.Credential{
-			Kind: wireCredential.read(r.Credential.Kind, bad), ID: r.Credential.ID, Name: r.Credential.Name, Grant: r.Credential.Grant,
+			Kind: wireCredential.read(r.Credential.Kind, bad), ID: r.Credential.ID, Name: r.Credential.Name,
 		}}
 }
 

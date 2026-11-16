@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -64,7 +65,7 @@ func unixPeerUID(c *net.UnixConn) (int, error) {
 // peer of another uid, or one the kernel would not name, is refused 403 MGS9022.
 //
 // No DNS-rebind check applies: a browser cannot open a unix socket.
-func PeerGuard(format rpcerr.Format, uid int, cred job.Credential, next http.Handler) http.Handler {
+func PeerGuard(format rpcerr.Format, uid int, cred auth.Credential, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p, ok := r.Context().Value(peerKey{}).(peer)
 		switch {
@@ -90,7 +91,7 @@ func peerRefused(msg string) rpcerr.Error {
 // [ProcedureGuard] does. A credential below the Need is refused 403 MGS9015, and a request
 // that reaches it with no credential holds nothing. It refuses to build with an empty table or
 // an invalid Need.
-func GrantGuard(format rpcerr.Format, needs map[string]job.Need, next http.Handler) (http.Handler, error) {
+func GrantGuard(format rpcerr.Format, needs map[string]auth.Need, next http.Handler) (http.Handler, error) {
 	needOf, err := needTable(needs)
 	if err != nil {
 		return nil, err
@@ -107,20 +108,20 @@ func GrantGuard(format rpcerr.Format, needs map[string]job.Need, next http.Handl
 
 // needTable validates needs and returns the lookup [ProcedureGuard] and [GrantGuard] share: a
 // path's own Need, else the strictest in the table.
-func needTable(needs map[string]job.Need) (func(*http.Request) job.Need, error) {
+func needTable(needs map[string]auth.Need) (func(*http.Request) auth.Need, error) {
 	if len(needs) == 0 {
 		return nil, errors.New("httpx: a procedure guard needs at least one procedure")
 	}
-	var strictest job.Need
+	var strictest auth.Need
 	for proc, n := range needs {
 		if err := n.Validate(); err != nil {
 			return nil, fmt.Errorf("httpx: %s: %w", proc, err)
 		}
-		if strictest == (job.Need{}) || stricter(n, strictest) {
+		if strictest == (auth.Need{}) || stricter(n, strictest) {
 			strictest = n
 		}
 	}
-	return func(r *http.Request) job.Need {
+	return func(r *http.Request) auth.Need {
 		if n, ok := needs[r.URL.Path]; ok {
 			return n
 		}

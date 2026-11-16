@@ -178,7 +178,7 @@ type ancestorDeviationSuite struct {
 func TestAncestorDeviation(t *testing.T) { suite.Run(t, new(ancestorDeviationSuite)) }
 
 func (s *ancestorDeviationSuite) deviation() []job.Deviation {
-	return []job.Deviation{{Code: types.GateNotRun, Subject: "test .", Reason: "the root runs it"}}
+	return []job.Deviation{{Code: job.Code(types.GateNotRun), Subject: "test .", Reason: "the root runs it"}}
 }
 
 func (s *ancestorDeviationSuite) store() *Store {
@@ -651,7 +651,7 @@ func TestApplyAndForkMergePlaceDerivedClaims(t *testing.T) {
 
 	unclaimed, err := ForkMerge(t.Context(), s, "wave/job", func(u *job.Job) {
 		u.Paths.Write, u.Goals = []string{"other.go"}, nil
-		u.Deviations = []job.Deviation{{Code: types.JobRecordInvalid, Subject: types.DropsSubject + "goals", Reason: "the claim goal is dropped"}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.JobRecordInvalid), Subject: types.DropsSubject + "goals", Reason: "the claim goal is dropped"}}
 	}, config.Jobs{}, read)
 	require.NoError(t, err)
 	assert.Nil(t, unclaimed.Requires, "a row that drops its last claim is writable by an older magus again")
@@ -1020,7 +1020,7 @@ func TestApplyClaimsALiveJobAndKeepsItsState(t *testing.T) {
 func TestApplyKeepsDerivedFieldsTheRecordOmits(t *testing.T) {
 	t.Parallel()
 
-	deviation := job.Deviation{Code: types.OutputOutsideWritePaths, Subject: "gen/a.go", Reason: integratorRegenerates}
+	deviation := job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: "gen/a.go", Reason: integratorRegenerates}
 	derived := func(t *testing.T) *Store {
 		t.Helper()
 		root := loadableRepository(t)
@@ -1204,7 +1204,7 @@ func TestApplyCreatesANewJob(t *testing.T) {
 		Checkpoint: "rev-1",
 		Paths:      job.Paths{Write: []string{"internal/job/store.go"}},
 		Check:      forkCheck(),
-		Validation: forkCheck().String(),
+		Validation: CheckCommand(*forkCheck()),
 		State:      job.StateDeclared,
 		WriteProof: got[0].Next.WriteProof, // what the fork could prove is the plan's, not this record's
 		Validated:  got[0].Next.Validated,

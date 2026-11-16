@@ -713,6 +713,14 @@ func (s *Store) holderTrail(checkoutRoot string) (string, error) {
 	return s.trailBase(checkoutRoot)
 }
 
+// Reader is s as a [job.Reader], the seam the guard's lease rules read rows through. A
+// store reads its own files, so the reader's ctx bounds nothing.
+func (s *Store) Reader() job.Reader { return storeReader{s} }
+
+type storeReader struct{ s *Store }
+
+func (r storeReader) List(context.Context) ([]job.Job, error) { return r.s.List() }
+
 // List returns every row in the order it was first recorded. The rows are copies, so a
 // caller may keep or mutate them without reaching back into the file's next read.
 //

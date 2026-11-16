@@ -13,7 +13,6 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 )
@@ -42,7 +41,7 @@ func TestConsoleLinkCarriesAOneTimeCode(t *testing.T) {
 	require.NoError(t, err)
 	cred, ok := auth.Verify(secret.Reveal())
 	require.True(t, ok)
-	assert.Equal(t, job.Credential{Kind: job.KindStored, ID: tok.ID, Name: tok.Name, Grant: job.AccessConsole}, cred)
+	assert.Equal(t, auth.Credential{Kind: auth.KindStored, ID: tok.ID, Name: tok.Name, Grant: auth.AccessConsole()}, cred)
 	assert.WithinDuration(t, time.Now().Add(console.LinkTokenLifetime), tok.Expires, time.Minute)
 	_, _, err = store.Redeem(code)
 	assert.ErrorIs(t, err, auth.ErrTokenNotFound, "spent on first use")
@@ -57,9 +56,9 @@ func TestCLIMintsAreAudited(t *testing.T) {
 	root := w.Root()
 	t.Chdir(root)
 
-	secret, rec, err := mintToken(auth.MintRequest{Name: "laptop", Grant: job.AccessConsole, TTL: time.Hour}, false)
+	secret, rec, err := mintToken(auth.MintRequest{Name: "laptop", Grant: auth.AccessConsole(), TTL: time.Hour}, false)
 	require.NoError(t, err)
-	code, codeRec, err := mintToken(auth.MintRequest{Grant: job.AccessViewer, TTL: time.Hour}, true)
+	code, codeRec, err := mintToken(auth.MintRequest{Grant: auth.AccessViewer(), TTL: time.Hour}, true)
 	require.NoError(t, err)
 
 	base, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
@@ -89,9 +88,9 @@ func TestCLIMintsAreAudited(t *testing.T) {
 // revoke by an exact id or an exact name only.
 func TestTokenCommandsShareOneStore(t *testing.T) {
 	outsideAnyWorkspace(t)
-	_, conn, err := mintToken(auth.MintRequest{Grant: job.AccessConnector, TTL: time.Hour}, false)
+	_, conn, err := mintToken(auth.MintRequest{Grant: auth.AccessConnector(), TTL: time.Hour}, false)
 	require.NoError(t, err)
-	_, _, err = mintToken(auth.MintRequest{Name: "laptop", Grant: job.AccessConsole, TTL: time.Hour}, false)
+	_, _, err = mintToken(auth.MintRequest{Name: "laptop", Grant: auth.AccessConsole(), TTL: time.Hour}, false)
 	require.NoError(t, err)
 
 	require.Error(t, tokenRevoke("config console token revoke", []string{conn.ID[:4]}), "no prefix")

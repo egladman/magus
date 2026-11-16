@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types/daemon"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
@@ -145,7 +145,7 @@ func TestServedHasNoRootSkewOverStdio(t *testing.T) {
 		roots: []mcplib.Root{{URI: "file://" + other}},
 	}
 
-	res := callStamped(t, s, trail.ContextWithCredential(context.Background(), job.CredentialStdio), session)
+	res := callStamped(t, s, trail.ContextWithCredential(context.Background(), auth.CredentialStdio()), session)
 	assert.Zero(t, session.asked.Load())
 	assert.Equal(t, servedInfo{Root: root, Version: "v0.4.3-234", Commit: "00fd71e20", Transport: "stdio"}, servedMeta(t, res))
 }

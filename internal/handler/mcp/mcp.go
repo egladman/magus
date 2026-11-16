@@ -20,6 +20,7 @@ import (
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -115,12 +116,12 @@ func declaredParams(d ToolDescriptor, fn handlerFn) handlerFn {
 // ToolNeed is what every MCP tool requires of the caller's credential, over either transport.
 // The server holds its /mcp route to the same Need, so a credential the route admits is never
 // refused by a tool behind it.
-var ToolNeed = job.Need{Scope: job.ScopeMCP, Level: job.LevelWrite}
+var ToolNeed = auth.Need{Scope: auth.ScopeMCP, Level: auth.LevelWrite}
 
 // authorize refuses a call whose credential falls short of ToolNeed, as an MGS9015 tool error.
 // The credential is the one on ctx: the server's bearer guard stamps the bearer it verified,
-// ServeStdio stamps job.CredentialStdio, and the socket peer guard stamps
-// job.CredentialSocketPeer. A ctx carrying none of them holds the zero credential, which
+// ServeStdio stamps auth.CredentialStdio(), and the socket peer guard stamps
+// auth.CredentialSocketPeer(). A ctx carrying none of them holds the zero credential, which
 // grants nothing.
 func authorize(fn handlerFn) handlerFn {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {

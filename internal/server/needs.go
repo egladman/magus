@@ -7,21 +7,21 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 var (
 	needMCP          = mcp.ToolNeed
-	needTokens       = job.Need{Scope: job.ScopeTokens, Level: job.LevelWrite}
-	needConsoleRead  = job.Need{Scope: job.ScopeConsole, Level: job.LevelRead}
-	needConsoleWrite = job.Need{Scope: job.ScopeConsole, Level: job.LevelWrite}
+	needTokens       = auth.Need{Scope: auth.ScopeTokens, Level: auth.LevelWrite}
+	needConsoleRead  = auth.Need{Scope: auth.ScopeConsole, Level: auth.LevelRead}
+	needConsoleWrite = auth.Need{Scope: auth.ScopeConsole, Level: auth.LevelWrite}
 )
 
 // procedureNeeds is the Need of every Connect procedure the server serves, keyed by service
 // then method. serviceNeeds refuses a service whose methods and entries here disagree, so a
 // procedure added to a proto without a Need stops the server from starting.
-var procedureNeeds = map[protoreflect.FullName]map[protoreflect.Name]job.Need{
+var procedureNeeds = map[protoreflect.FullName]map[protoreflect.Name]auth.Need{
 	"magus.activity.v1alpha1.ActivityService": {
 		"ListActivityEvents":  needConsoleRead,
 		"GetPayload":          needConsoleRead,
@@ -86,7 +86,7 @@ var procedureNeeds = map[protoreflect.FullName]map[protoreflect.Name]job.Need{
 // from that graph are console=read.
 // The rest serve unreviewed source, every target's name, or an action, so they need
 // console=write.
-var apiNeeds = map[string]job.Need{
+var apiNeeds = map[string]auth.Need{
 	"/api/v1/events":          needConsoleRead,
 	"/api/v1/history-metrics": needConsoleRead,
 	"/api/v1/graph":           needConsoleRead,
@@ -107,17 +107,17 @@ var apiNeeds = map[string]job.Need{
 }
 
 // lookupAPINeeds is the one-entry needs map a guard over the JSON route at path takes.
-func lookupAPINeeds(path string) (map[string]job.Need, error) {
+func lookupAPINeeds(path string) (map[string]auth.Need, error) {
 	need, ok := apiNeeds[path]
 	if !ok {
 		return nil, fmt.Errorf("server: route %s has no Need", path)
 	}
-	return map[string]job.Need{path: need}, nil
+	return map[string]auth.Need{path: need}, nil
 }
 
 // requireAPINeeds is lookupAPINeeds for the share listener, which refuses to guard a route whose
 // Needs are empty, so an unlisted route cannot be served there.
-func requireAPINeeds(path string) map[string]job.Need {
+func requireAPINeeds(path string) map[string]auth.Need {
 	needs, _ := lookupAPINeeds(path)
 	return needs
 }
@@ -125,7 +125,7 @@ func requireAPINeeds(path string) map[string]job.Need {
 // serviceNeeds maps each procedure path of the Connect service mounted at path
 // ("/<package>.<Service>/") to its Need. It fails when the service is not registered, has no
 // entry in procedureNeeds, or when a method and an entry do not match one to one.
-func serviceNeeds(path string) (map[string]job.Need, error) {
+func serviceNeeds(path string) (map[string]auth.Need, error) {
 	name := protoreflect.FullName(strings.Trim(path, "/"))
 	d, err := protoregistry.GlobalFiles.FindDescriptorByName(name)
 	if err != nil {
@@ -143,7 +143,7 @@ func serviceNeeds(path string) (map[string]job.Need, error) {
 	if methods.Len() != len(table) {
 		return nil, fmt.Errorf("server: service %s has %d methods and %d Needs", name, methods.Len(), len(table))
 	}
-	needs := make(map[string]job.Need, len(table))
+	needs := make(map[string]auth.Need, len(table))
 	for i := range methods.Len() {
 		m := methods.Get(i).Name()
 		need, ok := table[m]

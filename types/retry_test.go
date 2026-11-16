@@ -46,11 +46,11 @@ func TestClassifyRetry(t *testing.T) {
 		},
 		"a code in the table": {
 			fmt.Errorf("probe: %w", tooOld),
-			job.RetryVerdict{Change: job.RetryAfterUpgrade, Reason: "go 1.20 is below the declared 1.26", Code: ToolTooOld},
+			job.RetryVerdict{Change: job.RetryAfterUpgrade, Reason: "go 1.20 is below the declared 1.26", Code: job.Code(ToolTooOld)},
 		},
 		"a code in the table under one that is not": {
 			WrapDiagnostic(WorkspaceLoadFailed, DiagnosticErrorf(UnknownConfigKey, "jobs.retries"), "load"),
-			job.RetryVerdict{Change: job.RetryAfterConfig, Reason: "jobs.retries", Code: UnknownConfigKey},
+			job.RetryVerdict{Change: job.RetryAfterConfig, Reason: "jobs.retries", Code: job.Code(UnknownConfigKey)},
 		},
 		"a code that clears on its own": {
 			DiagnosticErrorf(MachineBudgetExhausted, "held by another run"),

@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -22,7 +23,7 @@ import (
 // Verifier authenticates a presented bearer token: it names the credential the token is, or
 // reports false. It must fail closed on any error. It decides nothing about routes; that is
 // the guard's Need against the credential's Grant.
-type Verifier func(presented string) (job.Credential, bool)
+type Verifier func(presented string) (auth.Credential, bool)
 
 // reverifyEvery is how often an admitted request's token is checked again while its handler
 // runs. It is what reaches a stream a token opened: revoke or expire the token and the
@@ -31,7 +32,7 @@ var reverifyEvery = 5 * time.Second
 
 // BearerGuard admits a request when verify names a credential AND that credential's Grant
 // allows need. It is the one place magus decides whether a credential may use a route. It
-// refuses to build with a need that is zero or invalid (see job.Need.Validate).
+// refuses to build with a need that is zero or invalid (see auth.Need.Validate).
 //
 // The token is read ONLY from the `Authorization: Bearer <token>` header: a bearer token must
 // not travel in a URL, where it lands in access logs, proxy logs and history (RFC 6750
@@ -45,28 +46,28 @@ var reverifyEvery = 5 * time.Second
 // next with the credential and the rpc entry point on its context, and a context the guard
 // cancels as soon as the token stops verifying or stops allowing need (checked every
 // reverifyEvery), so a long-lived stream ends when its token is revoked or expires.
-func BearerGuard(format rpcerr.Format, verify Verifier, need job.Need, next http.Handler) (http.Handler, error) {
+func BearerGuard(format rpcerr.Format, verify Verifier, need auth.Need, next http.Handler) (http.Handler, error) {
 	if err := need.Validate(); err != nil {
 		return nil, fmt.Errorf("httpx: %w", err)
 	}
-	return guard(format, verify, func(*http.Request) job.Need { return need }, headerToken, guardOptions{}, next), nil
+	return guard(format, verify, func(*http.Request) auth.Need { return need }, headerToken, guardOptions{}, next), nil
 }
 
 // BearerGuardWithQueryToken is [BearerGuard] that also accepts the token from a `?token=`
 // query parameter, preferring the header. Use it ONLY for a route a browser EventSource
 // connects to, which cannot set a header; keep it off /mcp.
-func BearerGuardWithQueryToken(format rpcerr.Format, verify Verifier, need job.Need, next http.Handler) (http.Handler, error) {
+func BearerGuardWithQueryToken(format rpcerr.Format, verify Verifier, need auth.Need, next http.Handler) (http.Handler, error) {
 	if err := need.Validate(); err != nil {
 		return nil, fmt.Errorf("httpx: %w", err)
 	}
-	return guard(format, verify, func(*http.Request) job.Need { return need }, presentedToken, guardOptions{}, next), nil
+	return guard(format, verify, func(*http.Request) auth.Need { return need }, presentedToken, guardOptions{}, next), nil
 }
 
 // ProcedureGuard is [BearerGuard] for a Connect service, holding each procedure to its own
 // need: needs maps a procedure path ("/magus.job.v1alpha1.JobService/RunJob") to it. A path it
 // does not name is held to the strictest need in it, and reaches a handler that answers it
 // not found. It refuses to build with an empty table or an invalid need.
-func ProcedureGuard(format rpcerr.Format, verify Verifier, needs map[string]job.Need, next http.Handler, opts ...GuardOption) (http.Handler, error) {
+func ProcedureGuard(format rpcerr.Format, verify Verifier, needs map[string]auth.Need, next http.Handler, opts ...GuardOption) (http.Handler, error) {
 	needOf, err := needTable(needs)
 	if err != nil {
 		return nil, err
@@ -101,9 +102,9 @@ func WithFailureLimit(l *FailureLimiter) GuardOption {
 
 // stricter orders needs so the fallback for an unknown procedure is the one fewest grants
 // meet: token management, then any write, then a read.
-func stricter(a, b job.Need) bool {
-	rank := func(n job.Need) int {
-		if n.Scope == job.ScopeTokens {
+func stricter(a, b auth.Need) bool {
+	rank := func(n auth.Need) int {
+		if n.Scope == auth.ScopeTokens {
 			return 10
 		}
 		return int(n.Level)
@@ -116,7 +117,7 @@ func stricter(a, b job.Need) bool {
 // refusals spend no more. A presented token is still verified then, so a valid one is never
 // limited; that stays cheap only with a verifier that answers from memory, as auth.Verify
 // does.
-func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) job.Need, extract func(*http.Request) (string, bool), o guardOptions, next http.Handler) http.Handler {
+func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) auth.Need, extract func(*http.Request) (string, bool), o guardOptions, next http.Handler) http.Handler {
 	limit := o.limit
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key, wait, exhausted := "", time.Duration(0), false
@@ -149,7 +150,7 @@ func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) job
 			format.Write(w, r, grantBelow(need, cred.Grant))
 			return
 		}
-		if o.refuseOperator && cred.Kind == job.KindOperator && need.Scope != job.ScopeTokens {
+		if o.refuseOperator && cred.Kind == auth.KindOperator && need.Scope != auth.ScopeTokens {
 			format.Write(w, r, operatorRefused)
 			return
 		}
@@ -163,20 +164,20 @@ func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) job
 // admit verifies presented, and refuses the operator token from a peer that is not loopback,
 // judged by the TCP peer address and never a header. A server bound beyond loopback
 // (mcp.insecure_bind) serves stored tokens to the network; the operator token stays local.
-func admit(verify Verifier, presented string, r *http.Request) (job.Credential, bool) {
+func admit(verify Verifier, presented string, r *http.Request) (auth.Credential, bool) {
 	cred, ok := verify(presented)
 	if !ok {
-		return job.Credential{}, false
+		return auth.Credential{}, false
 	}
-	if cred.Kind == job.KindOperator && !isLoopbackAddr(r.RemoteAddr) {
-		return job.Credential{}, false
+	if cred.Kind == auth.KindOperator && !isLoopbackAddr(r.RemoteAddr) {
+		return auth.Credential{}, false
 	}
 	return cred, true
 }
 
 // reverify cancels the request when its token stops verifying or stops allowing need. It
 // returns when ctx ends, which the guard ensures by cancelling ctx when the handler returns.
-func reverify(ctx context.Context, cancel context.CancelFunc, verify Verifier, presented string, need job.Need, r *http.Request) {
+func reverify(ctx context.Context, cancel context.CancelFunc, verify Verifier, presented string, need auth.Need, r *http.Request) {
 	tick := time.NewTicker(reverifyEvery)
 	defer tick.Stop()
 	for {
@@ -197,18 +198,18 @@ var operatorRefused = rpcerr.Error{Code: connect.CodePermissionDenied, Reason: t
 
 // grantBelow is the 403 for a valid credential below the need. It names the need, and names a
 // mint only where a mint can reach it: nothing a person can mint reaches token management.
-func grantBelow(need job.Need, held job.Access) rpcerr.Error {
+func grantBelow(need auth.Need, held auth.Access) rpcerr.Error {
 	heldText := held.String()
 	if heldText == "" {
 		heldText = "nothing"
 	}
 	msg := fmt.Sprintf("this route needs %s and the token presented holds %s", need.String(), heldText)
 	switch {
-	case need.Scope == job.ScopeTokens:
+	case need.Scope == auth.ScopeTokens:
 		msg += "; only the operator token reaches it, used from the user's own shell"
-	case need.Scope == job.ScopeMCP:
+	case need.Scope == auth.ScopeMCP:
 		msg += "; a connector token reaches it: magus config mcp connector create"
-	case need.Level == job.LevelWrite:
+	case need.Level == auth.LevelWrite:
 		msg += "; a console token reaches it: magus config console token create"
 	default:
 		msg += "; a viewer token reaches it: magus config console token create --viewer"
@@ -239,18 +240,18 @@ var (
 // The per-run page servers use it, and their token stays unprefixed and outside auth's
 // classes: it is minted, held and checked inside one process for one page, is never stored,
 // and no other listener could accept it, so there is no store for a prefix to route to.
-func SingleTokenVerifier(expected func() (string, error), grant job.Access) Verifier {
-	return func(presented string) (job.Credential, bool) {
+func SingleTokenVerifier(expected func() (string, error), grant auth.Access) Verifier {
+	return func(presented string) (auth.Credential, bool) {
 		want, err := expected()
 		if err != nil {
-			return job.Credential{}, false
+			return auth.Credential{}, false
 		}
 		got := sha256.Sum256([]byte(presented))
 		wantSum := sha256.Sum256([]byte(want))
 		if subtle.ConstantTimeCompare(got[:], wantSum[:]) != 1 {
-			return job.Credential{}, false
+			return auth.Credential{}, false
 		}
-		return job.Credential{Grant: grant}, true
+		return auth.Credential{Grant: grant}, true
 	}
 }
 

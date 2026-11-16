@@ -11,7 +11,6 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
@@ -33,7 +32,7 @@ func OperatorPath() (string, error) {
 // GenerateOperator returns a fresh mgo_ operator token without persisting it; pass it to
 // SaveOperator or SaveNewOperator.
 func GenerateOperator() (secrets.Secret, error) {
-	tok, err := mintSecret(job.KindOperator)
+	tok, err := mintSecret(KindOperator)
 	return secrets.New(tok), err
 }
 
@@ -109,7 +108,7 @@ func LoadOperator() (secrets.Secret, error) {
 		return secrets.Secret{}, fmt.Errorf("auth: read token: %w", err)
 	}
 	tok := strings.TrimSpace(string(raw))
-	if kind, ok := credentialKind(tok); !ok || kind != job.KindOperator {
+	if kind, ok := credentialKind(tok); !ok || kind != KindOperator {
 		return secrets.Secret{}, types.DiagnosticErrorf(types.OperatorTokenFormat,
 			"auth: the operator token at %s is not an mgo_ token (it predates the kind prefix); re-issue it with `%s`", path, hint.MCPTokenGenerate.With("--force"))
 	}
@@ -128,8 +127,8 @@ func RevokeOperator() error {
 	return nil
 }
 
-func operatorCredential(token secrets.Secret) job.Credential {
-	return job.Credential{Kind: job.KindOperator, ID: SecretID(token), Grant: job.AccessOperator}
+func operatorCredential(token secrets.Secret) Credential {
+	return Credential{Kind: KindOperator, ID: SecretID(token), Grant: AccessOperator()}
 }
 
 // SecretID is [TokenID] of a token magus holds, so a caller can name it without revealing it.

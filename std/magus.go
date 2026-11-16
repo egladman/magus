@@ -22,7 +22,6 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
-	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
@@ -1651,10 +1650,9 @@ func MagusListJob(ctx context.Context) (jobtypes.List, error) {
 	if err != nil {
 		return jobtypes.List{}, err
 	}
-	// The same join `magus ls jobs` makes, from the snapshot `magus queue ls` keeps; it
-	// never fetches.
-	root := ws.Root()
-	return queue.JoinInflight(ctx, root, list, job.Identity{Lease: store.Actor().Lease})
+	// The in-flight changes `magus ls jobs` joins are magus's merge queue, not the job
+	// list's, so a script reads them from the queue.
+	return list, nil
 }
 
 // MagusUnmergedJob backs magus\workspace().unmerged().

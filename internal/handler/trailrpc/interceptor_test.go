@@ -17,6 +17,7 @@ import (
 	// Blank-imported so every magus.*.v1 service descriptor is registered in protoregistry.GlobalFiles
 	// for TestKnownVerbs to enumerate. This is the whole point of the arch test: a new service/method
 	// linked into the server is visible here, so an unclassified verb cannot ship unnoticed.
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	_ "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
@@ -147,7 +148,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	want := trailtypes.Event{
 		Ts:         got.Ts,
 		Kind:       trailtypes.KindTokenLifecycle,
-		Origin:     job.Origin{User: got.User, UID: got.UID, EntryPoint: job.EntryPointRPC, Credential: console1},
+		Origin:     job.Origin{User: got.User, UID: got.UID, EntryPoint: job.EntryPointRPC, Credential: console1.Recorded()},
 		Action:     "RevokeToken",
 		Outcome:    trailtypes.OutcomeOK,
 		DurationMs: got.DurationMs,
@@ -156,8 +157,8 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 }
 
 var (
-	console1 = job.Credential{Kind: job.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: job.AccessConsole}
-	operator = job.Credential{Kind: job.KindOperator, ID: "0badf00d", Grant: job.AccessOperator}
+	console1 = auth.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: auth.AccessConsole()}
+	operator = auth.Credential{Kind: auth.KindOperator, ID: "0badf00d", Grant: auth.AccessOperator()}
 )
 
 // subjectService answers a revoke with a named token, so the WithSubject test can show the
@@ -204,7 +205,7 @@ func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
 
 // verifiedAs stands in for the bearer guard, which puts the verified credential and the rpc
 // entry point on the request context before any service sees it.
-func verifiedAs(credential job.Credential, next http.Handler) http.Handler {
+func verifiedAs(credential auth.Credential, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), credential), job.EntryPointRPC)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -249,7 +250,7 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 		credential job.Credential
 	}
 	got := []row{{events[0].Action, events[0].Credential}, {events[1].Action, events[1].Credential}}
-	want := []row{{"RevokeToken", operator}, {"ListTokens", operator}}
+	want := []row{{"RevokeToken", operator.Recorded()}, {"ListTokens", operator.Recorded()}}
 	if got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("recorded events = %+v, want RevokeToken then ListTokens (both the operator credential)", got)
 	}

@@ -60,9 +60,9 @@ func TestPermitMatchesOnCodeAndSubject(t *testing.T) {
 	ps := JobProblems{broad, output, gate}
 
 	kept, permitted := ps.Permit([]job.Deviation{
-		{Code: OutputOutsideWritePaths, Subject: "manpage/magus.1", Reason: "the root regenerates it"},
-		{Code: GateNotRun, Subject: "test .", Reason: "a different gate"},
-		{Code: WritePathTooBroad, Subject: "manpage/magus.1", Reason: "a different code's subject"},
+		{Code: job.Code(OutputOutsideWritePaths), Subject: "manpage/magus.1", Reason: "the root regenerates it"},
+		{Code: job.Code(GateNotRun), Subject: "test .", Reason: "a different gate"},
+		{Code: job.Code(WritePathTooBroad), Subject: "manpage/magus.1", Reason: "a different code's subject"},
 	})
 
 	assert.Equal(t, JobProblems{broad, gate}, kept)
@@ -72,7 +72,7 @@ func TestPermitMatchesOnCodeAndSubject(t *testing.T) {
 func TestPermitNeverPermitsAnUnpermissibleCode(t *testing.T) {
 	ps := JobProblems{{Code: JobRecordInvalid, Field: "id", Subject: "x"}}
 
-	kept, permitted := ps.Permit([]job.Deviation{{Code: JobRecordInvalid, Subject: "x", Reason: "no"}})
+	kept, permitted := ps.Permit([]job.Deviation{{Code: job.Code(JobRecordInvalid), Subject: "x", Reason: "no"}})
 
 	assert.Equal(t, ps, kept)
 	assert.Empty(t, permitted)
@@ -87,7 +87,7 @@ func TestJobProblemsErrKeepsEachProblem(t *testing.T) {
 }
 
 func TestDoubleStarPermitsEveryRegeneratedOutputSubject(t *testing.T) {
-	w := job.Deviation{Code: OutputOutsideWritePaths, Subject: "**", Reason: "r"}
+	w := job.Deviation{Code: job.Code(OutputOutsideWritePaths), Subject: "**", Reason: "r"}
 	for _, subject := range []string{
 		"**/gen/*test/*.go",
 		"internal/interp/bindings/gen/*.go !internal/interp/bindings/gen/*_test.go !internal/interp/bindings/gen/boundary_*.go",

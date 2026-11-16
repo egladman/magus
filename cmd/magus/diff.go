@@ -32,7 +32,6 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	difftypes "github.com/egladman/magus/types/diff"
@@ -48,7 +47,7 @@ func (cliTokens) Revoke(id string) error {
 	if err != nil {
 		return err
 	}
-	_, err = store.Revoke(job.AccessOperator, id)
+	_, err = store.Revoke(auth.AccessOperator(), id)
 	return err
 }
 

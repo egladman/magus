@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -19,40 +18,40 @@ func TestDefaultShareLifetimeIsFifteenMinutes(t *testing.T) {
 
 func TestMintShareVerifiesOnlyItsOwnSecret(t *testing.T) {
 	t.Parallel()
-	secret, tok, err := MintShare(job.AccessConsole, 10*time.Minute)
+	secret, tok, err := MintShare(AccessConsole(), 10*time.Minute)
 	require.NoError(t, err)
 	kind, ok := credentialKind(secret.Reveal())
 	require.True(t, ok)
-	assert.Equal(t, job.KindShare, kind)
+	assert.Equal(t, KindShare, kind)
 
 	now := time.Now()
 	assert.True(t, tok.Verify(secret.Reveal(), now))
-	other, _, err := MintShare(job.AccessConsole, 10*time.Minute)
+	other, _, err := MintShare(AccessConsole(), 10*time.Minute)
 	require.NoError(t, err)
 	assert.False(t, tok.Verify(other.Reveal(), now), "another link's secret")
 	assert.False(t, tok.Verify(secret.Reveal(), tok.Expires.Add(time.Second)), "after expiry")
 	assert.False(t, ShareToken{}.Verify(secret.Reveal(), now), "the zero token verifies nothing")
-	assert.Equal(t, job.Credential{Kind: job.KindShare, ID: tok.ID(), Grant: job.AccessViewer}, tok.Credential())
+	assert.Equal(t, Credential{Kind: KindShare, ID: tok.ID(), Grant: AccessViewer()}, tok.Credential())
 }
 
 // The share door follows the minting rule: a minter below the share's grant is refused, and
 // the lifetime is bounded to a day with no clamp at either end.
 func TestMintShareFollowsTheMintingRule(t *testing.T) {
 	t.Parallel()
-	for _, minter := range []job.Access{{}, job.AccessConnector, {Tokens: job.LevelWrite}} {
+	for _, minter := range []Access{{}, AccessConnector(), {Tokens: LevelWrite}} {
 		_, _, err := MintShare(minter, time.Hour)
 		assert.ErrorIs(t, err, ErrExceedsGrant, minter.String())
 	}
-	for _, minter := range []job.Access{job.AccessViewer, job.AccessConsole, job.AccessOperator} {
+	for _, minter := range []Access{AccessViewer(), AccessConsole(), AccessOperator()} {
 		_, _, err := MintShare(minter, time.Hour)
 		require.NoError(t, err, minter.String())
 	}
 	for _, ttl := range []time.Duration{0, -time.Minute, 59 * time.Second, MaxShareTTL + time.Second, 90 * 24 * time.Hour} {
-		_, _, err := MintShare(job.AccessOperator, ttl)
+		_, _, err := MintShare(AccessOperator(), ttl)
 		assert.ErrorIs(t, err, ErrShareLifetime, ttl.String())
 		assert.ErrorIs(t, err, types.TokenLifetimeOutOfRange, "one code for a token or a link outside its bound: %s", ttl)
 	}
-	_, tok, err := MintShare(job.AccessOperator, MaxShareTTL)
+	_, tok, err := MintShare(AccessOperator(), MaxShareTTL)
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now().Add(MaxShareTTL), tok.Expires, time.Second)
 	assert.Equal(t, 24*time.Hour, MaxShareTTL, "the owner's decision: a share link lives a day at most")

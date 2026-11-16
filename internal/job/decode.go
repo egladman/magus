@@ -74,11 +74,66 @@ func decodeDeclaration(r io.Reader) (job.Declaration, error) {
 		}
 		return job.Declaration{}, err
 	}
+	raw, legacy, err := splitLegacy(raw)
+	if err != nil {
+		return job.Declaration{}, err
+	}
 	var row job.Declaration
 	if err := codec.UnmarshalStrict(raw, &row); err != nil {
 		return job.Declaration{}, memberProblems(raw, err).Error()
 	}
-	return row, errors.Join(types.FoldLegacyNames(&row), types.ValidateDeclaration(row))
+	return row, errors.Join(types.FoldLegacyNames(&row, legacy), foldValidation(&row, legacy.Validation), types.ValidateDeclaration(row))
+}
+
+// splitLegacy is raw without the members [types.LegacySpellings] reads, and those members.
+// A record naming none comes back as it was, so an error's byte offset still points into
+// what the caller sent.
+func splitLegacy(raw []byte) ([]byte, types.LegacySpellings, error) {
+	var legacy types.LegacySpellings
+	members, isObject := objectMembers(raw)
+	if !isObject {
+		return raw, legacy, nil
+	}
+	old := map[string]codec.RawMessage{}
+	for _, name := range jsonMembers(reflect.TypeFor[types.LegacySpellings]()) {
+		if v, ok := members[name]; ok {
+			old[name] = v
+			delete(members, name)
+		}
+	}
+	if len(old) == 0 {
+		return raw, legacy, nil
+	}
+	spelled, err := codec.Marshal(old)
+	if err != nil {
+		return nil, legacy, err
+	}
+	if err := codec.UnmarshalStrict(spelled, &legacy); err != nil {
+		return nil, legacy, recordInvalid("", fmt.Errorf("a renamed member is not the shape it was: %w", err)).Error()
+	}
+	rest, err := codec.Marshal(members)
+	return rest, legacy, err
+}
+
+// foldValidation parses line, a rendered check, into row's Check. A record carrying both
+// spellings is refused, as is a line that is not one run.
+func foldValidation(row *job.Declaration, line string) error {
+	line = strings.TrimSpace(line)
+	invalid := func(message, fix string) error {
+		return types.JobProblems{{Code: types.JobRecordInvalid, Field: "validation", Message: message, Fix: fix}}.Error()
+	}
+	switch {
+	case line == "":
+		return nil
+	case row.Check != nil:
+		return invalid("a job carries `check` or a rendered `validation` line, not both", "send `check` alone")
+	}
+	c, err := ParseCheckCommand(line)
+	if err != nil {
+		return invalid(err.Error(), "send `check` with the target and project instead")
+	}
+	row.Check = &c
+	return nil
 }
 
 // DecodeStdinDeclaration is [decodeDeclaration] for `magus job fork --stdin`.
@@ -153,10 +208,10 @@ func memberProblems(raw []byte, err error) types.JobProblems {
 // re-applying a record it read back is not. Any other unknown member is an error in both.
 var storeStamped = jobOnlyMembers()
 
-// jobOnlyMembers are the JSON members [job.Job] serializes that [job.Declaration]
-// does not: a field added to Job alone is the store's by construction.
+// jobOnlyMembers are the JSON members [job.Job] serializes that neither [job.Declaration]
+// nor its legacy spellings do: a field added to Job alone is the store's by construction.
 func jobOnlyMembers() []string {
-	declared := jsonMembers(reflect.TypeFor[job.Declaration]())
+	declared := append(jsonMembers(reflect.TypeFor[job.Declaration]()), jsonMembers(reflect.TypeFor[types.LegacySpellings]())...)
 	return slices.DeleteFunc(jsonMembers(reflect.TypeFor[job.Job]()), func(name string) bool {
 		return slices.Contains(declared, name)
 	})

@@ -18,25 +18,25 @@ type inflightDetailSuite struct {
 func TestInflightDetail(t *testing.T) { suite.Run(t, new(inflightDetailSuite)) }
 
 func (s *inflightDetailSuite) TestOnePartitionNamesOnlyThePosition() {
-	s.Equal("pos 2", InflightDetail(job.InflightChange{Partition: 1, Position: 2}, 1))
+	s.Equal("pos 2", InflightDetail(InflightChange{Partition: 1, Position: 2}, 1))
 }
 
 func (s *inflightDetailSuite) TestSeveralPartitionsNameThePartition() {
-	s.Equal("partition 1 pos 2", InflightDetail(job.InflightChange{Partition: 1, Position: 2}, 3))
+	s.Equal("partition 1 pos 2", InflightDetail(InflightChange{Partition: 1, Position: 2}, 3))
 }
 
 func (s *inflightDetailSuite) TestACodeWithAReasonOutranksTheMark() {
-	c := job.InflightChange{Position: 1, Code: "MGS1", Reason: "why", Mark: "needs_work"}
+	c := InflightChange{Position: 1, Code: "MGS1", Reason: "why", Mark: "needs_work"}
 
 	s.Equal("pos 1  MGS1: why", InflightDetail(c, 1))
 }
 
 func (s *inflightDetailSuite) TestAMarkReadsAsWords() {
-	s.Equal("needs work", InflightDetail(job.InflightChange{Mark: "needs_work"}, 0))
+	s.Equal("needs work", InflightDetail(InflightChange{Mark: "needs_work"}, 0))
 }
 
 func (s *inflightDetailSuite) TestNothingToSayIsEmpty() {
-	s.Empty(InflightDetail(job.InflightChange{}, 0))
+	s.Empty(InflightDetail(InflightChange{}, 0))
 }
 
 func inflightRows() []job.Job {
@@ -55,7 +55,7 @@ func inflightInput(me Identity) InflightInput {
 	theirs := qtypes.Change{ID: "3", Head: "h3", Branch: "theirs", Base: "main", Author: "ann", Method: qtypes.MethodRebase}
 	unapproved := qtypes.Change{ID: "4", Head: "h4", Base: "main", Author: "eli", Method: qtypes.MethodSquash}
 	return InflightInput{
-		Fetch: &job.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 100, ElapsedMS: 7},
+		Fetch: &InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 100, ElapsedMS: 7},
 		Changes: qtypes.Changes{
 			Base:    "main",
 			Changes: []qtypes.Change{theirs, queued, unapproved},
@@ -79,19 +79,19 @@ func TestInflightJoinsChangesToJobsAndThePlan(t *testing.T) {
 	t.Parallel()
 	list := Inflight(job.List{Jobs: inflightRows()}, inflightInput(Identity{Lease: "fleet/queued", Login: "eli"}))
 
-	assert.Equal(t, job.List{
-		Jobs:    inflightRows(),
-		Fetched: &job.InflightFetch{Provider: "github", Host: "github.com", Base: "main", Tip: "tip", At: 100, ElapsedMS: 7},
+	assert.Equal(t, InflightList{
+		List:    job.List{Jobs: inflightRows()},
+		Fetched: &InflightFetch{Provider: "github", Host: "github.com", Base: "main", Tip: "tip", At: 100, ElapsedMS: 7},
 		// Provider order, another base's change left out, each joined by branch and placed by the plan.
-		Changes: []job.InflightChange{
+		Changes: []InflightChange{
 			{ID: "3", Head: "h3", Branch: "theirs", Base: "main", Author: "ann", Jobs: []string{"other/work"}, Intent: "rebase",
-				Partition: 1, Position: 2, Attention: job.AttentionQueue},
+				Partition: 1, Position: 2, Attention: AttentionQueue},
 			{ID: "2", Title: "queued", Head: "h2", Branch: "queued", Base: "main", Author: "eli", Jobs: []string{"fleet/queued"}, Intent: "squash",
-				Partition: 1, Position: 1, Mine: true, Attention: job.AttentionQueue},
+				Partition: 1, Position: 1, Mine: true, Attention: AttentionQueue},
 			{ID: "4", Head: "h4", Base: "main", Author: "eli", Intent: "squash",
-				Decision: "wait", Code: "WAIT_NOT_APPROVED", Reason: "no approval", Mine: true, Attention: job.AttentionReview},
-			{ID: "1", Head: "h1", Branch: "kick", Base: "main", Jobs: []string{"fleet/kick"}, Mark: "kicked_back", Mine: true, Attention: job.AttentionAuthor},
-			{ID: "6", Head: "h6", Base: "main", Author: "eli", Mine: true, Attention: job.AttentionNone},
+				Decision: "wait", Code: "WAIT_NOT_APPROVED", Reason: "no approval", Mine: true, Attention: AttentionReview},
+			{ID: "1", Head: "h1", Branch: "kick", Base: "main", Jobs: []string{"fleet/kick"}, Mark: "kicked_back", Mine: true, Attention: AttentionAuthor},
+			{ID: "6", Head: "h6", Base: "main", Author: "eli", Mine: true, Attention: AttentionNone},
 		},
 		// A live job of the tree on a branch no change carries.
 		Unproposed: []string{"fleet/nopr"},
@@ -119,15 +119,15 @@ func TestInflightMineIsTheJobTreeThenTheLogin(t *testing.T) {
 
 func TestInflightAttention(t *testing.T) {
 	t.Parallel()
-	for want, ch := range map[job.InflightAttention]job.InflightChange{
-		job.AttentionAuthor: {Intent: "squash", Decision: "kick", Code: "KICK_RED"},
-		job.AttentionReview: {Intent: "squash", Decision: "wait", Code: "WAIT_NOT_APPROVED"},
-		job.AttentionQueue:  {Intent: "squash", Decision: "wait", Code: "WAIT_CHECKS"},
-		job.AttentionNone:   {Mark: "queued"},
+	for want, ch := range map[InflightAttention]InflightChange{
+		AttentionAuthor: {Intent: "squash", Decision: "kick", Code: "KICK_RED"},
+		AttentionReview: {Intent: "squash", Decision: "wait", Code: "WAIT_NOT_APPROVED"},
+		AttentionQueue:  {Intent: "squash", Decision: "wait", Code: "WAIT_CHECKS"},
+		AttentionNone:   {Mark: "queued"},
 	} {
 		assert.Equal(t, want, changeAttention(ch), "%+v", ch)
 	}
-	assert.Equal(t, job.AttentionAuthor, changeAttention(job.InflightChange{Mark: "needs_regeneration"}))
+	assert.Equal(t, AttentionAuthor, changeAttention(InflightChange{Mark: "needs_regeneration"}))
 }
 
 // A plan for another base, or for a head that has moved, places nothing.
@@ -150,9 +150,8 @@ func TestInflightIgnoresAPlanThatIsNotForTheseHeads(t *testing.T) {
 	}
 }
 
-func TestInflightNeverFetchedLeavesTheListAlone(t *testing.T) {
+func TestInflightNeverFetchedJoinsNothing(t *testing.T) {
 	t.Parallel()
-	list := job.List{Jobs: inflightRows(), Changes: []job.InflightChange{{ID: "stale"}}, Unproposed: []string{"x"}}
-	got := Inflight(list, InflightInput{Me: Identity{Lease: "fleet"}})
-	assert.Equal(t, job.List{Jobs: inflightRows()}, got)
+	got := Inflight(job.List{Jobs: inflightRows()}, InflightInput{Me: Identity{Lease: "fleet"}})
+	assert.Equal(t, InflightList{List: job.List{Jobs: inflightRows()}}, got)
 }

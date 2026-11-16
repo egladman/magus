@@ -71,7 +71,7 @@ func (ps JobProblems) Permit(ds []job.Deviation) (kept, permitted JobProblems) {
 // output outside the write paths or an unrun gate, a glob matching it, so `**` accepts
 // every regenerated output the integrator owns in one deviation.
 func DeviationPermits(d job.Deviation, p JobProblem) bool {
-	if d.Code != p.Code {
+	if d.Code != job.Code(p.Code) {
 		return false
 	}
 	if d.Subject == p.Subject {
@@ -131,15 +131,20 @@ func FaultProblems(fs []job.Fault) JobProblems {
 // DeclarationProblems is every problem d shows on its own, without a workspace: its
 // faults under magus's codes, with a deviation allowed only a [Permissible] code.
 func DeclarationProblems(d job.Declaration) JobProblems {
+	codes := PermissibleCodes()
+	permissible := make([]job.Code, len(codes))
+	for i, c := range codes {
+		permissible[i] = job.Code(c)
+	}
 	// The module allows a deviation only a listed code, and a dropped field is permitted
 	// by its subject under JobRecordInvalid, so its fault is taken back here.
 	drops := map[string]bool{}
 	for i, w := range d.Deviations {
-		if !Permissible(w.Code) && (JobProblem{Code: w.Code, Subject: w.Subject}).Permissible() {
+		if !Permissible(DiagnosticCode(w.Code)) && (JobProblem{Code: DiagnosticCode(w.Code), Subject: w.Subject}).Permissible() {
 			drops[fmt.Sprintf("deviations[%d].code", i)] = true
 		}
 	}
-	fs := slices.DeleteFunc(d.Faults(PermissibleCodes()...), func(f job.Fault) bool { return drops[f.Field] })
+	fs := slices.DeleteFunc(d.Faults(permissible...), func(f job.Fault) bool { return drops[f.Field] })
 	return FaultProblems(fs)
 }
 
@@ -151,34 +156,38 @@ func ValidateDeclaration(d job.Declaration) error { return DeclarationProblems(d
 // a shell command: every problem it shows on its own, joined.
 func ValidateGoal(g job.Goal) error { return FaultProblems(g.Faults()).Error() }
 
-// FoldLegacyNames folds each field d declares under its old name onto the one that
-// carries it, refusing a field named twice as JobRecordInvalid.
-func FoldLegacyNames(d *job.Declaration) error {
-	return faultsError(d.FoldLegacyNames())
+// LegacySpellings are the members a declaration may still carry under a name the job
+// record no longer declares. A decoder reads them beside the record and folds them onto it.
+//
+// compat(until: no client or stored ledger still sends owned_paths, focus,
+// forbidden_paths or a rendered validation line): observe it by grepping the
+// leases-*.json archives and the trail for the old keys.
+type LegacySpellings struct {
+	WritePaths []string `json:"owned_paths,omitempty"`
+	DenyPaths  []string `json:"forbidden_paths,omitempty"`
+	ReadPaths  []string `json:"focus,omitempty"`
+	// Validation is the check as a rendered `magus run` line, which the job decoder parses
+	// into Check.
+	Validation string `json:"validation,omitempty"`
 }
 
-// faultsError re-codes each [job.Fault] err joins under magus's code for its kind, and
-// passes any other error through.
-func faultsError(err error) error {
-	if err == nil {
-		return nil
-	}
+// FoldLegacyNames moves each path field legacy names onto the one d carries it in,
+// refusing a field named under both spellings as JobRecordInvalid.
+func FoldLegacyNames(d *job.Declaration, legacy LegacySpellings) error {
 	var errs []error
-	if joined, ok := err.(interface{ Unwrap() []error }); ok {
-		errs = joined.Unwrap()
-	} else {
-		errs = []error{err}
-	}
-	out := make([]error, len(errs))
-	for i, e := range errs {
-		var f job.Fault
-		if errors.As(e, &f) {
-			out[i] = DiagnosticErrorf(faultCode(f.Kind), "%s", f.Error())
-			continue
+	fold := func(name string, into *[]string, from []string) {
+		switch {
+		case len(from) == 0:
+		case len(*into) > 0:
+			errs = append(errs, DiagnosticErrorf(JobRecordInvalid, "a declaration names %s or its renamed spelling, not both", name))
+		default:
+			*into = from
 		}
-		out[i] = e
 	}
-	return errors.Join(out...)
+	fold("owned_paths", &d.Paths.Write, legacy.WritePaths)
+	fold("forbidden_paths", &d.Paths.Deny, legacy.DenyPaths)
+	fold("focus", &d.Paths.Read, legacy.ReadPaths)
+	return errors.Join(errs...)
 }
 
 // ParseJobTimeout reads a declared timeout as [job.ParseTimeout] does, refusing one that is

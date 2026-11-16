@@ -480,24 +480,13 @@ func TestDeclarationApplyLeavesStoreComputedFieldsAlone(t *testing.T) {
 	assert.Equal(t, want, row)
 }
 
-func TestJobStaleAtReadsAZeroStampAsUnknown(t *testing.T) {
+func TestJobSpecChangedSinceReadsAZeroStampAsUnknown(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name              string
-		generation, stamp int
-		want              bool
-	}{
-		{"same generation", 2, 2, false},
-		{"an earlier spec", 2, 1, true},
-		{"an unstamped record", 2, 0, false},
-		{"a row with no generation", 0, 1, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, job.Job{Generation: tc.generation}.StaleAt(tc.stamp))
-		})
-	}
+	assert.False(t, job.Job{Generation: 2}.SpecChangedSince(2), "same generation")
+	assert.True(t, job.Job{Generation: 2}.SpecChangedSince(1), "an earlier spec")
+	assert.False(t, job.Job{Generation: 2}.SpecChangedSince(0), "an unstamped record")
+	assert.False(t, job.Job{}.SpecChangedSince(1), "a row with no generation")
 }
 
 // slices.Clone preserves nil, which is what keeps a row that stored null from coming back
@@ -740,31 +729,8 @@ func TestParseLeaseCheck(t *testing.T) {
 	}
 }
 
-// The rendered line is what the guard and the console still read, so it has to survive a
-// round trip through the record the store keeps.
-func TestLeaseCheckRoundTripsThroughItsRenderedLine(t *testing.T) {
+func TestScriptCheckNamesOneSubject(t *testing.T) {
 	t.Parallel()
-
-	want := job.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
-	assert.Equal(t, "magus run go::go-test . -- -run Ledger", want.String())
-
-	got, err := job.ParseLeaseRunLine(want.String())
-	require.NoError(t, err)
-	assert.Equal(t, want, got)
-
-	_, err = job.ParseLeaseRunLine("magus affected ci --no-default-charms")
-	require.Error(t, err, "a set of runs is not one run, so no ref can be bound to it")
-	assert.Contains(t, err.Error(), "is not one")
-}
-
-func TestScriptCheckRendersAsARecordedRunAndNamesOneSubject(t *testing.T) {
-	t.Parallel()
-
-	want := job.LeaseCheck{Script: "probes/key.buzz", Args: []string{"--deep"}}
-	assert.Equal(t, "magus buzz --record probes/key.buzz -- --deep", want.String())
-	got, err := job.ParseLeaseRunLine(want.String())
-	require.NoError(t, err)
-	assert.Equal(t, want, got)
 
 	gate := job.Goal{ID: "probe", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Script: "probes/key.buzz"}}.Resolve()
 	require.NoError(t, ValidateGoal(gate))
@@ -780,7 +746,6 @@ func TestScriptCheckRendersAsARecordedRunAndNamesOneSubject(t *testing.T) {
 	tested := gate
 	tested.Check.Test = true
 	require.NoError(t, ValidateGoal(tested))
-	assert.Equal(t, "magus buzz -t probes/key.buzz", tested.Check.String())
 }
 
 func TestTestCheckIsAScriptChecksAlone(t *testing.T) {
@@ -995,10 +960,9 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		Paths:       job.Paths{Write: []string{"a.go", "../b.go"}},
 		Breaks:      []string{" "},
 		Check:       &job.LeaseCheck{Target: "test", Project: "."},
-		Validation:  "magus run test .",
 		Deviations: []job.Deviation{
-			{Code: JobRecordInvalid, Subject: "x", Reason: "r"},
-			{Code: GateNotRun},
+			{Code: job.Code(JobRecordInvalid), Subject: "x", Reason: "r"},
+			{Code: job.Code(GateNotRun)},
 		},
 		Goals: []job.Goal{
 			{ID: "a", Kind: job.GoalKindPaths},
@@ -1023,7 +987,6 @@ func TestDeclarationProblemsCollectsEveryProblem(t *testing.T) {
 		"MGS3037 max_attempts",
 		"MGS3037 checkout",
 		"MGS3037 paths.write[1]",
-		"MGS3037 validation",
 		"MGS3037 breaks[0]",
 		"MGS3037 deviations[0].code",
 		"MGS3037 deviations[1].subject",
@@ -1043,7 +1006,7 @@ func TestDeclarationProblemsOfAValidRecordIsEmpty(t *testing.T) {
 		ID:         "wave/a",
 		Paths:      job.Paths{Write: []string{"types/job.go"}},
 		Check:      &job.LeaseCheck{Target: "go-test", Project: "."},
-		Deviations: []job.Deviation{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}},
+		Deviations: []job.Deviation{{Code: job.Code(GateNotRun), Subject: "lint .", Reason: "the root runs it"}},
 		Goals:      []job.Goal{{ID: "names", Kind: job.GoalKindSymbol, Symbols: []string{"X"}, DependsOn: []string{job.PrimaryGoalID}}},
 	}
 
@@ -1070,7 +1033,7 @@ func TestDeclarationProblemsReportsEachGoalCycleOnce(t *testing.T) {
 
 func TestDeclarationApplyCopiesDeviations(t *testing.T) {
 	t.Parallel()
-	deviations := []job.Deviation{{Code: GateNotRun, Subject: "lint .", Reason: "the root runs it"}}
+	deviations := []job.Deviation{{Code: job.Code(GateNotRun), Subject: "lint .", Reason: "the root runs it"}}
 	var row job.Job
 
 	job.Declaration{ID: "a", Deviations: deviations}.Apply(&row)

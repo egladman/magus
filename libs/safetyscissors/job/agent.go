@@ -1,12 +1,11 @@
 package job
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 )
 
-// Spec is a job's agent section: what the agent taking the job is asked for.
+// Agent is a job's agent section: what the agent taking the job is asked for.
 // A job with none is ordinary work, such as a server's maintenance run.
 type Agent struct {
 	// Model is the requested model. Zero leaves the choice to the
@@ -25,19 +24,19 @@ func Instructed(instructions string) *Agent {
 	return &Agent{Instructions: instructions, Worker: Worker{Type: WorkerTypeResumed}}
 }
 
-// Clone is a copy of s that shares nothing with it, nil for nil.
-func (s *Agent) Clone() *Agent {
-	if s == nil {
+// Clone is a copy of a that shares nothing with it, nil for nil.
+func (a *Agent) Clone() *Agent {
+	if a == nil {
 		return nil
 	}
-	c := *s
+	c := *a
 	return &c
 }
 
-// Trimmed is a clone of s with its model and worker reason trimmed of
+// Trimmed is a clone of a with its model and worker reason trimmed of
 // space, nil for nil.
-func (s *Agent) Trimmed() *Agent {
-	c := s.Clone()
+func (a *Agent) Trimmed() *Agent {
+	c := a.Clone()
 	if c != nil {
 		c.Model.ID = strings.TrimSpace(c.Model.ID)
 		c.Model.Tier = strings.TrimSpace(c.Model.Tier)
@@ -46,12 +45,12 @@ func (s *Agent) Trimmed() *Agent {
 	return c
 }
 
-// RequestedModel is s's model, the zero Model for nil.
-func (s *Agent) RequestedModel() Model {
-	if s == nil {
+// RequestedModel is a's model, the zero Model for nil.
+func (a *Agent) RequestedModel() Model {
+	if a == nil {
 		return Model{}
 	}
-	return s.Model
+	return a.Model
 }
 
 // Model is a requested model: a host model id, a workspace tier name, or
@@ -94,20 +93,24 @@ const (
 	WorkerTypeNew WorkerType = "new"
 )
 
-// Validate refuses a section no door stores: a worker type outside the
-// set, a new worker with no reason, or a reason on a resumed worker.
-func (s Agent) Validate() error {
+// Validate refuses a section no door stores, as an [*AgentError]: a worker type outside
+// the set, a new worker with no reason, or a reason on a resumed worker.
+func (a Agent) Validate() error {
+	refuse := func(reason string) error { return &AgentError{Reason: reason} }
 	switch {
-	case s.Worker.Type == "":
-		return fmt.Errorf("agent: the section names no worker.type, one of %s",
-			strings.Join(s.Worker.Type.Values(), ", "))
-	case !s.Worker.Type.Valid():
-		return fmt.Errorf("agent: worker.type %q is not one of %s",
-			string(s.Worker.Type), strings.Join(s.Worker.Type.Values(), ", "))
-	case s.Worker.Type == WorkerTypeNew && strings.TrimSpace(s.Worker.Reason) == "":
-		return errors.New("agent: a new worker says why it starts instead of the warm one, in worker.reason")
-	case s.Worker.Type == WorkerTypeResumed && s.Worker.Reason != "":
-		return errors.New("agent: worker.reason says why a new worker starts, so a resumed worker carries none")
+	case a.Worker.Type == "":
+		return refuse("the section names no worker.type, one of " + strings.Join(a.Worker.Type.Values(), ", "))
+	case !a.Worker.Type.Valid():
+		return refuse(fmt.Sprintf("worker.type %q is not one of %s", string(a.Worker.Type), strings.Join(a.Worker.Type.Values(), ", ")))
+	case a.Worker.Type == WorkerTypeNew && strings.TrimSpace(a.Worker.Reason) == "":
+		return refuse("a new worker says why it starts instead of the warm one, in worker.reason")
+	case a.Worker.Type == WorkerTypeResumed && a.Worker.Reason != "":
+		return refuse("worker.reason says why a new worker starts, so a resumed worker carries none")
 	}
 	return nil
 }
+
+// AgentError is an agent section [Agent.Validate] refuses, and why.
+type AgentError struct{ Reason string }
+
+func (e *AgentError) Error() string { return "agent: " + e.Reason }

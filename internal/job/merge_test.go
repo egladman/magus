@@ -160,7 +160,7 @@ func TestMergeSetsOrClearsTheCheck(t *testing.T) {
 	set := applyMerge(t, map[string]any{"check": "test ."}, base)
 	require.NotNil(t, set.Check)
 	assert.Equal(t, "test", set.Check.Target)
-	assert.Equal(t, set.Check.String(), set.Validation, "the row stores both halves")
+	assert.Equal(t, CheckCommand(*set.Check), set.Validation, "the row stores both halves")
 
 	cleared := applyPut(t, job.Put{Check: &job.LeaseCheck{}}, set)
 	assert.Nil(t, cleared.Check, "a check naming neither a target nor a script clears it")

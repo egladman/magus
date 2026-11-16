@@ -12,13 +12,16 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -40,7 +43,7 @@ func TestBearerGuard(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		built(BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load, job.AccessViewer), anyNeed, okHandler)).ServeHTTP(rr, req)
+		built(BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load, auth.AccessViewer()), anyNeed, okHandler)).ServeHTTP(rr, req)
 		return rr
 	}
 
@@ -102,7 +105,7 @@ func TestBearerGuardWithQueryToken(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		built(BearerGuardWithQueryToken(rpcerr.FormatJSON, SingleTokenVerifier(load, job.AccessViewer), anyNeed, okHandler)).ServeHTTP(rr, req)
+		built(BearerGuardWithQueryToken(rpcerr.FormatJSON, SingleTokenVerifier(load, auth.AccessViewer()), anyNeed, okHandler)).ServeHTTP(rr, req)
 		return rr
 	}
 	code := func(authHeader, rawQuery string) int { return serve(authHeader, rawQuery).Code }
@@ -124,7 +127,7 @@ func TestSingleTokenVerifierLoadErrorFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
-	built(BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load, job.AccessOperator), anyNeed, okHandler)).ServeHTTP(rr, req)
+	built(BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load, auth.AccessOperator()), anyNeed, okHandler)).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
@@ -144,18 +147,18 @@ func TestBearerGuardVerifierRejectionFailsClosed(t *testing.T) {
 // need, never a 401 (the token is valid) and never a pass.
 func TestBearerGuardAdmitsExactlyTheGrantsThatAllowTheNeed(t *testing.T) {
 	t.Parallel()
-	scopes := []job.Scope{job.ScopeTokens, job.ScopeMCP, job.ScopeConsole}
-	levels := []job.Level{job.LevelNone, job.LevelRead, job.LevelWrite}
-	for _, tok := range []job.Level{job.LevelNone, job.LevelWrite} {
-		for _, mcp := range []job.Level{job.LevelNone, job.LevelWrite} {
+	scopes := []auth.Scope{auth.ScopeTokens, auth.ScopeMCP, auth.ScopeConsole}
+	levels := []auth.Level{auth.LevelNone, auth.LevelRead, auth.LevelWrite}
+	for _, tok := range []auth.Level{auth.LevelNone, auth.LevelWrite} {
+		for _, mcp := range []auth.Level{auth.LevelNone, auth.LevelWrite} {
 			for _, con := range levels {
-				grant := job.Access{Tokens: tok, MCP: mcp, Console: con}
-				verify := func(string) (job.Credential, bool) {
-					return job.Credential{Kind: job.KindStored, Grant: grant}, true
+				grant := auth.Access{Tokens: tok, MCP: mcp, Console: con}
+				verify := func(string) (auth.Credential, bool) {
+					return auth.Credential{Kind: auth.KindStored, Grant: grant}, true
 				}
 				for _, s := range scopes {
 					for _, l := range levels[1:] {
-						need := job.Need{Scope: s, Level: l}
+						need := auth.Need{Scope: s, Level: l}
 						if need.Validate() != nil {
 							continue // tokens=read and mcp=read are no need; a guard refuses to build on one
 						}
@@ -184,8 +187,8 @@ func TestBearerGuardAdmitsExactlyTheGrantsThatAllowTheNeed(t *testing.T) {
 // every record made under the request is stamped from there and no handler copies either.
 func TestBearerGuardPutsTheVerifiedCredentialOnTheContext(t *testing.T) {
 	t.Parallel()
-	cred := job.Credential{Kind: job.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: job.AccessConsole}
-	named := func(presented string) (job.Credential, bool) { return cred, presented == "good" }
+	cred := auth.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: auth.AccessConsole()}
+	named := func(presented string) (auth.Credential, bool) { return cred, presented == "good" }
 	var seen job.Origin
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = trail.StampOrigin(r.Context(), job.Origin{})
@@ -202,12 +205,12 @@ func TestBearerGuardPutsTheVerifiedCredentialOnTheContext(t *testing.T) {
 // constructor refuses one rather than admitting every credential.
 func TestGuardsRefuseToBuildOnAZeroOrInvalidNeed(t *testing.T) {
 	t.Parallel()
-	for _, n := range []job.Need{{}, {Scope: job.ScopeConsole}, {Scope: "files", Level: job.LevelWrite}, {Scope: job.ScopeMCP, Level: job.LevelRead}} {
+	for _, n := range []auth.Need{{}, {Scope: auth.ScopeConsole}, {Scope: "files", Level: auth.LevelWrite}, {Scope: auth.ScopeMCP, Level: auth.LevelRead}} {
 		_, err := BearerGuard(rpcerr.FormatJSON, rejectAll, n, okHandler)
 		assert.Error(t, err, "BearerGuard %+v", n)
 		_, err = BearerGuardWithQueryToken(rpcerr.FormatJSON, rejectAll, n, okHandler)
 		assert.Error(t, err, "BearerGuardWithQueryToken %+v", n)
-		_, err = ProcedureGuard(rpcerr.FormatConnect, rejectAll, map[string]job.Need{"/s/A": anyNeed, "/s/B": n}, okHandler)
+		_, err = ProcedureGuard(rpcerr.FormatConnect, rejectAll, map[string]auth.Need{"/s/A": anyNeed, "/s/B": n}, okHandler)
 		assert.Error(t, err, "ProcedureGuard %+v", n)
 	}
 	_, err := ProcedureGuard(rpcerr.FormatConnect, rejectAll, nil, okHandler)
@@ -218,11 +221,11 @@ func TestGuardsRefuseToBuildOnAZeroOrInvalidNeed(t *testing.T) {
 // strictest one in it, so an unlisted procedure is never the weakest door.
 func TestProcedureGuardHoldsEachProcedureToItsNeed(t *testing.T) {
 	t.Parallel()
-	read := job.Need{Scope: job.ScopeConsole, Level: job.LevelRead}
-	write := job.Need{Scope: job.ScopeConsole, Level: job.LevelWrite}
-	h := built(ProcedureGuard(rpcerr.FormatConnect, func(string) (job.Credential, bool) {
-		return job.Credential{Kind: job.KindStored, Grant: job.AccessViewer}, true
-	}, map[string]job.Need{"/s.S/List": read, "/s.S/Run": write}, okHandler))
+	read := auth.Need{Scope: auth.ScopeConsole, Level: auth.LevelRead}
+	write := auth.Need{Scope: auth.ScopeConsole, Level: auth.LevelWrite}
+	h := built(ProcedureGuard(rpcerr.FormatConnect, func(string) (auth.Credential, bool) {
+		return auth.Credential{Kind: auth.KindStored, Grant: auth.AccessViewer()}, true
+	}, map[string]auth.Need{"/s.S/List": read, "/s.S/Run": write}, okHandler))
 	for path, want := range map[string]int{"/s.S/List": http.StatusOK, "/s.S/Run": http.StatusForbidden, "/s.S/Unlisted": http.StatusForbidden} {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		req.Header.Set("Authorization", "Bearer viewer")
@@ -237,11 +240,11 @@ func TestProcedureGuardHoldsEachProcedureToItsNeed(t *testing.T) {
 // a stored token from the same peer is admitted. Judged by RemoteAddr, never a header.
 func TestOperatorTokenIsRefusedFromANonLoopbackPeer(t *testing.T) {
 	t.Parallel()
-	verify := func(presented string) (job.Credential, bool) {
+	verify := func(presented string) (auth.Credential, bool) {
 		if presented == "op" {
-			return job.Credential{Kind: job.KindOperator, Grant: job.AccessOperator}, true
+			return auth.Credential{Kind: auth.KindOperator, Grant: auth.AccessOperator()}, true
 		}
-		return job.Credential{Kind: job.KindStored, Grant: job.AccessConsole}, true
+		return auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConsole()}, true
 	}
 	h := built(BearerGuard(rpcerr.FormatJSON, verify, anyNeed, okHandler))
 	serve := func(token, peer string, header map[string]string) int {
@@ -271,8 +274,8 @@ func TestRevokedTokenCutsAnOpenStream(t *testing.T) {
 	t.Cleanup(func() { reverifyEvery = old })
 
 	var revoked atomic.Bool
-	verify := func(string) (job.Credential, bool) {
-		return job.Credential{Kind: job.KindStored, Grant: job.AccessConsole}, !revoked.Load()
+	verify := func(string) (auth.Credential, bool) {
+		return auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConsole()}, !revoked.Load()
 	}
 	started, ended := make(chan struct{}), make(chan struct{})
 	stream := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -324,10 +327,10 @@ func TestBearerToken(t *testing.T) {
 	t.Run("no scheme", func(t *testing.T) { fails(t, "abc") })
 }
 
-var rejectAll Verifier = func(string) (job.Credential, bool) { return job.Credential{}, false }
+var rejectAll Verifier = func(string) (auth.Credential, bool) { return auth.Credential{}, false }
 
 // anyNeed is a need every test credential below meets; the refusals here are about the token.
-var anyNeed = job.Need{Scope: job.ScopeConsole, Level: job.LevelRead}
+var anyNeed = auth.Need{Scope: auth.ScopeConsole, Level: auth.LevelRead}
 
 // built unwraps a guard constructor for a test. A build error answers every request 500 with
 // the error text, so the status assertion that follows names it.
@@ -470,4 +473,44 @@ func TestJSONMountIgnoresConnectLookingRequests(t *testing.T) {
 	built(BearerGuard(rpcerr.FormatJSON, rejectAll, anyNeed, okHandler)).ServeHTTP(rr, req)
 
 	assert.Equal(t, "UNAUTHENTICATED", decodeStatus(t, rr.Body.Bytes()).Error.Status)
+}
+
+// OperatorGuardSuite isolates XDG_STATE_HOME per test, so the operator file it rotates is
+// its own.
+type OperatorGuardSuite struct{ suite.Suite }
+
+func TestOperatorGuard(t *testing.T) { suite.Run(t, new(OperatorGuardSuite)) }
+
+func (s *OperatorGuardSuite) SetupTest() { testkit.Isolate(s.T()) }
+
+// status drives one request from a loopback peer through h with the given Authorization
+// header (empty = none).
+func (s *OperatorGuardSuite) status(h http.Handler, authHeader string) int {
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.RemoteAddr = "127.0.0.1:40000"
+	if authHeader != "" {
+		req.Header.Set("Authorization", authHeader)
+	}
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	return rr.Code
+}
+
+// The guard re-reads the operator file per request: a rotate or revoke takes effect without
+// rebuilding the handler.
+func (s *OperatorGuardSuite) TestARotateOrRevokeTakesEffectWithoutARebuild() {
+	a, _ := auth.GenerateOperator()
+	_, err := auth.SaveNewOperator(a)
+	s.Require().NoError(err)
+	h, err := BearerGuard(rpcerr.FormatJSON, auth.Verify, auth.Need{Scope: auth.ScopeMCP, Level: auth.LevelWrite}, okHandler)
+	s.Require().NoError(err)
+
+	s.Equal(http.StatusOK, s.status(h, "Bearer "+a.Reveal()))
+	b, _ := auth.GenerateOperator()
+	_, err = auth.SaveOperator(b)
+	s.Require().NoError(err)
+	s.Equal(http.StatusUnauthorized, s.status(h, "Bearer "+a.Reveal()), "old token after rotate")
+	s.Equal(http.StatusOK, s.status(h, "Bearer "+b.Reveal()))
+	s.Require().NoError(auth.RevokeOperator())
+	s.Equal(http.StatusUnauthorized, s.status(h, "Bearer "+b.Reveal()), "after revoke")
 }

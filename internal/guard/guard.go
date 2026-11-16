@@ -2544,9 +2544,9 @@ func rereadJobStoreRows(ctx context.Context, at location) context.Context {
 	reader, store := at.rows, (*job.Store)(nil)
 	if reader == nil {
 		store = at.store(isDryRun(ctx))
-		reader = store
+		reader = store.Reader()
 	}
-	rows, err := awaitDeadline(wait, reader.List)
+	rows, err := awaitDeadline(wait, func() ([]jobtypes.Job, error) { return reader.List(wait) })
 	if err != nil && wait.Err() != nil {
 		log.record(timedPhase(phaseJobRows, time.Since(start), budget, true))
 	} else {
@@ -2614,7 +2614,7 @@ func leaseRows(ctx context.Context, at location) ([]jobtypes.Job, error) {
 		return pinned.Rows, pinned.Err
 	}
 	if at.rows != nil {
-		return at.rows.List()
+		return at.rows.List(ctx)
 	}
 	return job.NewStore(at.jobs()).List()
 }

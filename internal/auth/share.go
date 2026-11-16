@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
 )
@@ -35,19 +34,19 @@ type ShareToken struct {
 }
 
 // MintShare mints a share token that expires ttl from now and returns its secret once, for
-// the link. A share link holds [job.AccessViewer]. It refuses a minter whose grant does not
+// the link. A share link holds [AccessViewer()]. It refuses a minter whose grant does not
 // include that (ErrExceedsGrant, coded GrantInsufficient) and a ttl outside [MinShareTTL,
 // MaxShareTTL] (ErrShareLifetime, coded TokenLifetimeOutOfRange).
-func MintShare(minter job.Access, ttl time.Duration) (secret secrets.Secret, tok ShareToken, err error) {
-	if !job.AccessViewer.Within(minter) {
+func MintShare(minter Access, ttl time.Duration) (secret secrets.Secret, tok ShareToken, err error) {
+	if !AccessViewer().Within(minter) {
 		return secrets.Secret{}, ShareToken{}, types.WrapDiagnostic(types.GrantInsufficient, ErrExceedsGrant,
-			"auth: a share link needs %s, the minter holds %s", job.AccessViewer, grantOrNothing(minter))
+			"auth: a share link needs %s, the minter holds %s", AccessViewer(), grantOrNothing(minter))
 	}
 	if ttl < MinShareTTL || ttl > MaxShareTTL {
 		return secrets.Secret{}, ShareToken{}, types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrShareLifetime,
 			"auth: a share link lives between 1 minute and 24 hours; asked for %s", ttl)
 	}
-	plain, err := mintSecret(job.KindShare)
+	plain, err := mintSecret(KindShare)
 	if err != nil {
 		return secrets.Secret{}, ShareToken{}, err
 	}
@@ -66,8 +65,8 @@ func (t ShareToken) ID() string {
 }
 
 // Credential is the credential this token verifies as.
-func (t ShareToken) Credential() job.Credential {
-	return job.Credential{Kind: job.KindShare, ID: t.ID(), Grant: job.AccessViewer}
+func (t ShareToken) Credential() Credential {
+	return Credential{Kind: KindShare, ID: t.ID(), Grant: AccessViewer()}
 }
 
 // Verify reports whether presented is exactly this token and unexpired at now. Anything that
@@ -77,7 +76,7 @@ func (t ShareToken) Verify(presented string, now time.Time) bool {
 	if t.SHA256 == "" || t.Expired(now) {
 		return false
 	}
-	if kind, ok := credentialKind(presented); !ok || kind != job.KindShare {
+	if kind, ok := credentialKind(presented); !ok || kind != KindShare {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(t.SHA256), []byte(digest(presented))) == 1

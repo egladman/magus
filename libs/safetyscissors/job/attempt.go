@@ -1,10 +1,6 @@
 package job
 
-import (
-	"slices"
-
-	"github.com/egladman/magus/libs/diagnostics"
-)
+import "slices"
 
 // Attempt is one try of a Job: what the guard saw start it, how its
 // end was observed, and what it left. A fork of the ended job starts
@@ -122,9 +118,9 @@ func NewAttempts(all []Attempt) Attempts {
 
 // LiveN numbers job's try in progress: its newest try no fork
 // superseded, else one past the newest that was, else 1.
-func (j Attempts) LiveN(job string) int {
+func (as Attempts) LiveN(job string) int {
 	n := 1
-	for _, a := range j[job] {
+	for _, a := range as[job] {
 		if a.Superseded() {
 			n = max(n, a.N+1)
 		} else {
@@ -136,9 +132,9 @@ func (j Attempts) LiveN(job string) int {
 
 // Live is job's try in progress, with only Job and N set when the
 // store holds nothing of it yet.
-func (j Attempts) Live(job string) Attempt {
-	n := j.LiveN(job)
-	for _, a := range j[job] {
+func (as Attempts) Live(job string) Attempt {
+	n := as.LiveN(job)
+	for _, a := range as[job] {
 		if a.N == n {
 			return a
 		}
@@ -147,9 +143,9 @@ func (j Attempts) Live(job string) Attempt {
 }
 
 // Prior are job's tries a fork superseded, oldest first.
-func (j Attempts) Prior(job string) []Attempt {
+func (as Attempts) Prior(job string) []Attempt {
 	var out []Attempt
-	for _, a := range j[job] {
+	for _, a := range as[job] {
 		if a.Superseded() {
 			out = append(out, a)
 		}
@@ -158,8 +154,8 @@ func (j Attempts) Prior(job string) []Attempt {
 }
 
 // Result is what job's try in progress filed, nil for nothing.
-func (j Attempts) Result(job string) *Result {
-	return j.Live(job).Status.Result
+func (as Attempts) Result(job string) *Result {
+	return as.Live(job).Status.Result
 }
 
 // RetryChange names what must change before repeating a failed action can help.
@@ -182,8 +178,8 @@ const (
 // and Reason are set only when Retryable is false; Code names the diagnostic whose entry
 // in the caller's non-retryable table decided it.
 type RetryVerdict struct {
-	Retryable bool             `json:"retryable"        yaml:"retryable"`
-	Change    RetryChange      `json:"change,omitempty" yaml:"change,omitempty"`
-	Reason    string           `json:"reason,omitempty" yaml:"reason,omitempty"`
-	Code      diagnostics.Code `json:"code,omitempty"   yaml:"code,omitempty"`
+	Retryable bool        `json:"retryable"        yaml:"retryable"`
+	Change    RetryChange `json:"change,omitempty" yaml:"change,omitempty"`
+	Reason    string      `json:"reason,omitempty" yaml:"reason,omitempty"`
+	Code      Code        `json:"code,omitempty"   yaml:"code,omitempty"`
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
@@ -26,7 +27,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-var needMCP = job.Need{Scope: job.ScopeMCP, Level: job.LevelWrite}
+var needMCP = auth.Need{Scope: auth.ScopeMCP, Level: auth.LevelWrite}
 
 // serveSocket serves h on a real unix socket, with each connection's peer read by
 // PeerConnContext, until the test ends, and returns a client that dials it.
@@ -64,8 +65,8 @@ func post(t *testing.T, c *http.Client) (int, []byte) {
 }
 
 type echoed struct {
-	Credential job.Credential `json:"credential"`
-	EntryPoint job.EntryPoint `json:"entry_point"`
+	Credential auth.Credential `json:"credential"`
+	EntryPoint job.EntryPoint  `json:"entry_point"`
 }
 
 // credentialEcho answers with the credential and entry point the guard left on the context.
@@ -80,20 +81,20 @@ var credentialEcho = http.HandlerFunc(func(w http.ResponseWriter, r *http.Reques
 })
 
 func TestPeerGuardAdmitsTheServersOwnUID(t *testing.T) {
-	client := serveSocket(t, PeerGuard(rpcerr.FormatJSON, os.Getuid(), job.CredentialSocketPeer, credentialEcho))
+	client := serveSocket(t, PeerGuard(rpcerr.FormatJSON, os.Getuid(), auth.CredentialSocketPeer(), credentialEcho))
 
 	status, body := post(t, client)
 	require.Equal(t, http.StatusOK, status, "%s", body)
 	var got echoed
 	require.NoError(t, codec.Unmarshal(body, &got))
-	assert.Equal(t, echoed{Credential: job.CredentialSocketPeer, EntryPoint: job.EntryPointRPC}, got)
+	assert.Equal(t, echoed{Credential: auth.CredentialSocketPeer(), EntryPoint: job.EntryPointRPC}, got)
 }
 
 // The kernel reports this test's own uid for the connection, so a guard expecting any other
 // uid is exactly the server's view of a peer running as someone else.
 func TestPeerGuardRefusesAnotherUID(t *testing.T) {
 	var reached atomic.Bool
-	client := serveSocket(t, PeerGuard(rpcerr.FormatJSON, os.Getuid()+1, job.CredentialSocketPeer,
+	client := serveSocket(t, PeerGuard(rpcerr.FormatJSON, os.Getuid()+1, auth.CredentialSocketPeer(),
 		http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached.Store(true) })))
 
 	status, body := post(t, client)
@@ -104,7 +105,7 @@ func TestPeerGuardRefusesAnotherUID(t *testing.T) {
 
 func TestPeerGuardRefusesAConnectionWithNoPeer(t *testing.T) {
 	rec := httptest.NewRecorder()
-	PeerGuard(rpcerr.FormatJSON, os.Getuid(), job.CredentialSocketPeer, credentialEcho).
+	PeerGuard(rpcerr.FormatJSON, os.Getuid(), auth.CredentialSocketPeer(), credentialEcho).
 		ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp", nil))
 	assert.Equal(t, http.StatusForbidden, rec.Code, "a request that did not arrive on a unix socket has no peer to admit")
 	assert.Contains(t, rec.Body.String(), string(types.SocketPeerNotOwner))
@@ -158,31 +159,31 @@ func unixPair() (*net.UnixConn, *net.UnixConn, error) {
 }
 
 func TestGrantGuardHoldsTheCredentialOnTheContextToThePathsNeed(t *testing.T) {
-	needs := map[string]job.Need{
+	needs := map[string]auth.Need{
 		"/mcp":    needMCP,
-		"/status": {Scope: job.ScopeConsole, Level: job.LevelRead},
+		"/status": {Scope: auth.ScopeConsole, Level: auth.LevelRead},
 	}
 	g, err := GrantGuard(rpcerr.FormatJSON, needs, credentialEcho)
 	require.NoError(t, err)
 
-	serve := func(path string, cred job.Credential) *httptest.ResponseRecorder {
+	serve := func(path string, cred auth.Credential) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		g.ServeHTTP(rec, req.WithContext(trail.ContextWithCredential(req.Context(), cred)))
 		return rec
 	}
-	viewer := job.Credential{Kind: job.KindStored, Grant: job.AccessViewer}
+	viewer := auth.Credential{Kind: auth.KindStored, Grant: auth.AccessViewer()}
 
-	assert.Equal(t, http.StatusOK, serve("/mcp", job.CredentialSocketPeer).Code)
+	assert.Equal(t, http.StatusOK, serve("/mcp", auth.CredentialSocketPeer()).Code)
 	assert.Equal(t, http.StatusOK, serve("/status", viewer).Code)
 	rec := serve("/mcp", viewer)
 	assert.Equal(t, http.StatusForbidden, rec.Code)
 	assert.Contains(t, rec.Body.String(), string(types.GrantInsufficient))
 	assert.Equal(t, http.StatusForbidden, serve("/unnamed", viewer).Code, "an unnamed path takes the strictest need")
-	assert.Equal(t, http.StatusForbidden, serve("/status", job.Credential{}).Code, "no credential holds nothing")
+	assert.Equal(t, http.StatusForbidden, serve("/status", auth.Credential{}).Code, "no credential holds nothing")
 
 	_, err = GrantGuard(rpcerr.FormatJSON, nil, credentialEcho)
 	assert.Error(t, err)
-	_, err = GrantGuard(rpcerr.FormatJSON, map[string]job.Need{"/x": {Scope: job.ScopeMCP}}, credentialEcho)
+	_, err = GrantGuard(rpcerr.FormatJSON, map[string]auth.Need{"/x": {Scope: auth.ScopeMCP}}, credentialEcho)
 	assert.Error(t, err)
 }

@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
@@ -669,7 +670,7 @@ func TestSocketRoutes(t *testing.T) {
 		return
 	}
 	unmount, err := srv.Mount(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if trail.CredentialFromContext(r.Context()) != job.CredentialSocketPeer {
+		if trail.CredentialFromContext(r.Context()) != auth.CredentialSocketPeer() {
 			w.WriteHeader(http.StatusTeapot)
 		}
 	}))

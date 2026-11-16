@@ -387,7 +387,7 @@ func wireOrigin(o job.Origin) *jobv1.JobOrigin {
 		Host: o.Host, Session: o.Session, Agent: o.Agent,
 	}
 	if c := o.Credential; c != (job.Credential{}) {
-		w.Credential = &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name, Grant: c.Grant.String()}
+		w.Credential = &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name}
 	}
 	return w
 }
@@ -491,7 +491,7 @@ func wireGoals(gates []job.Goal) []*jobv1.CompletionGate {
 			Signature:   g.Signature,
 		}
 		if g.Kind == job.GoalKindCheck && g.Check.Target != "" {
-			wire.Check = g.Check.String()
+			wire.Check = jobstore.CheckCommand(g.Check)
 		}
 		out = append(out, wire)
 	}

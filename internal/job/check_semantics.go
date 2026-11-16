@@ -251,7 +251,7 @@ func uncheckedTestSelection(ws Workspace, row job.Job, refused types.JobProblems
 		if _, known := resolvedTestSelection(ws, goal.Check); known {
 			continue
 		}
-		unchecked = append(unchecked, fmt.Sprintf("test selection for `%s`: the workspace does not prove that forwarded arguments reach a declared selector; selector-specific narrowing was not judged and recorded evidence arguments must match exactly (use a qualified spell op or a target that only forwards its own context)", goal.Check.String()))
+		unchecked = append(unchecked, fmt.Sprintf("test selection for `%s`: the workspace does not prove that forwarded arguments reach a declared selector; selector-specific narrowing was not judged and recorded evidence arguments must match exactly (use a qualified spell op or a target that only forwards its own context)", CheckCommand(goal.Check)))
 	}
 	return unchecked
 }

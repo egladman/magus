@@ -348,7 +348,7 @@ func lsJobs(root string, args []string) error {
 		ws := jobWorkspace(ctx, root)
 		return ws.Projects, ws.Unavailable
 	}))
-	list, me, err := joinInflight(ctx, root, store, list)
+	joined, me, err := joinInflight(ctx, root, store, list)
 	if err != nil {
 		return err
 	}
@@ -357,10 +357,10 @@ func lsJobs(root string, args []string) error {
 		return err
 	}
 	// Before ended rows drop out: their work is what most often goes missing.
-	list.Unmerged = unmergedReport(ctx, resolveRootOrEmpty(root), list.Jobs, jobtypes.NewAttempts(list.Attempts), opts.Format)
+	joined.Unmerged = unmergedReport(ctx, resolveRootOrEmpty(root), joined.Jobs, jobtypes.NewAttempts(joined.Attempts), opts.Format)
 	if !all {
 		var ended int
-		list, ended = job.WithoutEnded(list)
+		joined.List, ended = job.WithoutEnded(joined.List)
 		if ended > 0 {
 			slog.InfoContext(ctx, fmt.Sprintf("%d ended %s left out; `%s` lists them", ended, plural.Word(ended, "job", "jobs"), hint.LsJobs.With("--all")),
 				attr.Notice("jobs-ended"))
@@ -372,29 +372,29 @@ func lsJobs(root string, args []string) error {
 
 	switch opts.Format {
 	case outputName:
-		ids := make([]string, len(list.Jobs))
-		for i, one := range list.Jobs {
+		ids := make([]string, len(joined.Jobs))
+		for i, one := range joined.Jobs {
 			ids[i] = one.ID
 		}
 		return emitNames(os.Stdout, ids)
 	case outputText:
-		job.PrintTree(os.Stdout, list)
+		job.PrintTree(os.Stdout, joined.List)
 		fmt.Fprintln(os.Stdout)
-		for _, line := range list.Unmerged.Lines() {
+		for _, line := range joined.Unmerged.Lines() {
 			fmt.Fprintln(os.Stdout, line)
 		}
-		if len(list.Unmerged.Risks) > 0 {
-			fmt.Fprintf(os.Stdout, "unresolved risks, which stop nothing: %d\n", len(list.Unmerged.Risks))
+		if len(joined.Unmerged.Risks) > 0 {
+			fmt.Fprintf(os.Stdout, "unresolved risks, which stop nothing: %d\n", len(joined.Unmerged.Risks))
 		}
-		for _, risk := range list.Unmerged.Risks {
+		for _, risk := range joined.Unmerged.Risks {
 			fmt.Fprintf(os.Stdout, "  %s: %q\n", risk.Job, risk.Item)
 		}
-		job.PrintInflight(os.Stdout, list, all)
+		job.PrintInflight(os.Stdout, joined, all)
 		pointAtConsole(context.Background(), "", false)
 		return nil
 	default:
-		list.Changes = job.InflightScope(list.Changes, all)
-		return emitFormatted(opts, list)
+		joined.Changes = job.InflightScope(joined.Changes, all)
+		return emitFormatted(opts, joined)
 	}
 }
 
@@ -2165,10 +2165,10 @@ func attemptIn(cacheDir, ref string) (jobtypes.CapturedRun, error) {
 
 // joinInflight joins list to the queue snapshot as the caller sees it: the job it acts
 // under, and the forge login this process has already learned.
-func joinInflight(ctx context.Context, root string, store *job.Store, list jobtypes.List) (jobtypes.List, job.Identity, error) {
+func joinInflight(ctx context.Context, root string, store *job.Store, list jobtypes.List) (job.InflightList, job.Identity, error) {
 	me := job.Identity{Lease: store.Actor().Lease, Login: bindings.ReviewViewer()}
 	if root == "" {
-		return list, me, nil
+		return job.InflightList{List: list}, me, nil
 	}
 	joined, err := queue.JoinInflight(ctx, root, list, me)
 	return joined, me, err

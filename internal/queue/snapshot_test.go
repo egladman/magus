@@ -16,7 +16,7 @@ import (
 
 func fetchedSnapshot(base string, at int64) Snapshot {
 	return Snapshot{
-		Fetched: jobtypes.InflightFetch{Provider: "github", Host: "github.com", Base: base, At: at, ElapsedMS: 3},
+		Fetched: job.InflightFetch{Provider: "github", Host: "github.com", Base: base, At: at, ElapsedMS: 3},
 		Changes: types.Changes{Schema: types.SchemaChanges, Base: base, Changes: []types.Change{
 			{ID: "7", Head: head("7"), Base: base, Branch: "feat", Author: "ann", Method: types.MethodSquash},
 		}},
@@ -123,16 +123,16 @@ func TestSnapshotJoinInflight(t *testing.T) {
 
 	got, err := JoinInflight(t.Context(), root, list, job.Identity{Login: "ann"})
 	require.NoError(t, err)
-	assert.Equal(t, list, got, "never fetched joins nothing")
+	assert.Equal(t, job.InflightList{List: list}, got, "never fetched joins nothing")
 
 	require.NoError(t, WriteSnapshot(root, fetchedSnapshot("main", 200)))
 	got, err = JoinInflight(t.Context(), root, list, job.Identity{Login: "ann"})
 	require.NoError(t, err)
-	assert.Equal(t, jobtypes.List{
-		Jobs:    list.Jobs,
-		Fetched: &jobtypes.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 200, ElapsedMS: 3},
-		Changes: []jobtypes.InflightChange{{
-			ID: "7", Head: head("7"), Base: "main", Branch: "feat", Author: "ann", Intent: "squash", Mine: true, Attention: jobtypes.AttentionQueue,
+	assert.Equal(t, job.InflightList{
+		List:    list,
+		Fetched: &job.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 200, ElapsedMS: 3},
+		Changes: []job.InflightChange{{
+			ID: "7", Head: head("7"), Base: "main", Branch: "feat", Author: "ann", Intent: "squash", Mine: true, Attention: job.AttentionQueue,
 		}},
 	}, got)
 }

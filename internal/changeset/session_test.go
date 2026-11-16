@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types/diff"
@@ -243,7 +244,7 @@ func TestADraftRoundTripsThroughItsFile(t *testing.T) {
 		ID: "c7", Path: "internal/a.go", Hunk: 2, Author: diff.AuthorUnattributed, AgentName: "claude",
 		Body: "why not `x`?\n\nand\ttabs", Resolved: true, Line: 41,
 		Origin: job.Origin{User: "eli", UID: "501", EntryPoint: "console", Host: "h", Session: "s", Agent: "a",
-			Credential: job.CredentialStdio},
+			Credential: auth.CredentialStdio().Recorded()},
 		Anchor: diff.CommentAnchor{Digest: "d", Quote: "return nil", Declaration: "func f()",
 			Before: []string{"", "x := 1"}, After: []string{"}", ""}},
 	}

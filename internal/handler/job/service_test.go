@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/egladman/magus/internal/auth"
 	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
@@ -389,7 +390,7 @@ func TestListJobs_EmptyStoreServesEmptyList(t *testing.T) {
 func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	by := job.Origin{
 		User: "eli", UID: "501", EntryPoint: job.EntryPointHook, Host: "mac", Session: "s1", Agent: "a1",
-		Credential: job.Credential{Kind: job.KindOperator, ID: "deadbeef", Grant: job.AccessOperator},
+		Credential: job.Credential{Kind: auth.KindOperator, ID: "deadbeef"},
 	}
 	row := job.Job{
 		ID:           "api/store",
@@ -452,7 +453,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 
 	wantBy := &jobv1.JobOrigin{
 		User: "eli", Uid: "501", EntryPoint: "hook", Host: "mac", Session: "s1", Agent: "a1",
-		Credential: &activityv1.Credential{Class: "operator", Id: "deadbeef", Grant: job.AccessOperator.String()},
+		Credential: &activityv1.Credential{Class: "operator", Id: "deadbeef"},
 	}
 	require.True(t, proto.Equal(wantBy, got.RegisteredBy), "registered_by: %v", got.RegisteredBy)
 

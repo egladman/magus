@@ -105,9 +105,8 @@ func DecodePut(params map[string]any) (job.Put, error) {
 	case hasCheck:
 		check("check", job.ParseLeaseCheck)
 	case hasLine:
-		// compat(until: no client still sends a rendered line; observe: the grep
-		// job.Job.Validation names).
-		check("validation", job.ParseLeaseRunLine)
+		// compat: see ParseCheckCommand.
+		check("validation", ParseCheckCommand)
 	}
 
 	if v, ok, e := mergeString(params, "state"); e != nil {
@@ -238,7 +237,7 @@ func PutMerge(p job.Put) (func(*job.Job), error) {
 		} else {
 			c := *p.Check
 			c.Args = slices.Clone(c.Args)
-			set = append(set, func(u *job.Job) { u.Check, u.Validation = &c, c.String() })
+			set = append(set, func(u *job.Job) { u.Check, u.Validation = &c, CheckCommand(c) })
 		}
 	}
 	if p.State != nil {

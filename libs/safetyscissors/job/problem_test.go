@@ -3,7 +3,6 @@ package job
 import (
 	"testing"
 
-	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -42,19 +41,11 @@ func (s *FaultSuite) TestAFaultReadsAsItsMessageThenItsFix() {
 	s.Equal("broken: mend it", Fault{Message: "broken", Fix: "mend it"}.Error())
 }
 
-func (s *FaultSuite) TestFoldingAFieldNamedTwiceIsARecordFault() {
-	d := Declaration{Paths: Paths{Write: []string{"a"}}, LegacyWritePaths: []string{"b"}}
-	err := d.FoldLegacyNames()
-	var f Fault
-	s.Require().ErrorAs(err, &f)
-	s.Equal(FaultRecord, f.Kind)
-}
-
 func (s *FaultSuite) TestOrListJoinsForASentence() {
 	s.Empty(orList(nil))
-	s.Equal("a", orList([]diagnostics.Code{"a"}))
-	s.Equal("a or b", orList([]diagnostics.Code{"a", "b"}))
-	s.Equal("a, b or c", orList([]diagnostics.Code{"a", "b", "c"}))
+	s.Equal("a", orList([]Code{"a"}))
+	s.Equal("a or b", orList([]Code{"a", "b"}))
+	s.Equal("a, b or c", orList([]Code{"a", "b", "c"}))
 }
 
 func (s *FaultSuite) TestARowRequiringAFeatureThisBuildLacksIsUnmet() {

@@ -127,7 +127,7 @@ func broadClaimFix(ctx context.Context, root string, row job.Job, read SymbolRea
 		if asksGraph && graphless {
 			b.WriteString(" (the knowledge graph did not answer the symbol goals, so only the criteria were read; `magus graph build` and fork again for a fuller list)")
 		}
-		deviation, _ := codec.Marshal(job.Deviation{Code: types.WritePathTooBroad, Subject: wp, Reason: "<why this job needs all of it>"})
+		deviation, _ := codec.Marshal(job.Deviation{Code: job.Code(types.WritePathTooBroad), Subject: wp, Reason: "<why this job needs all of it>"})
 		fmt.Fprintf(&b, "; or keep it with the deviation %s", deviation)
 		return b.String()
 	}

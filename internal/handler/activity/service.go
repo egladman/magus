@@ -163,12 +163,13 @@ func wireEvent(e trail.Event) *activityv1.ActivityEvent {
 	return pe
 }
 
-// wireCredential maps a verified credential onto the wire, nil for none.
+// wireCredential maps a recorded credential onto the wire, nil for none. An origin keeps no
+// grant, so the wire's grant stays empty.
 func wireCredential(c job.Credential) *activityv1.Credential {
 	if c == (job.Credential{}) {
 		return nil
 	}
-	return &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name, Grant: c.Grant.String()}
+	return &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name}
 }
 
 // pageOffset reads a page token as an offset into the filtered stream. An unparseable token errors

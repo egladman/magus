@@ -50,7 +50,7 @@ func TestRenderValidationSummarizesDeviationsAndKeepsUnchecked(t *testing.T) {
 	v := types.JobValidation{
 		Job: job.Job{
 			ID:         "j",
-			Deviations: []job.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "docs/x.md", Reason: "the root regenerates it"}},
+			Deviations: []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "docs/x.md", Reason: "the root regenerates it"}},
 		},
 		Permitted: types.JobProblems{{Code: types.OutputOutsideWritePaths, Field: "paths.write", Subject: "docs/x.md", Message: "x regenerates docs/x.md"}},
 		Unchecked: []string{"write path breadth: the workspace did not load"},

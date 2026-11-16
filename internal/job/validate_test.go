@@ -167,7 +167,7 @@ func TestValidateMergePermitsOnlyWhatTheRecordNames(t *testing.T) {
 	var deviations []job.Deviation
 	for _, p := range v.Problems {
 		require.True(t, types.Permissible(p.Code), "only permissible problems are left: %v", p)
-		deviations = append(deviations, job.Deviation{Code: p.Code, Subject: p.Subject, Reason: "the root regenerates and runs it"})
+		deviations = append(deviations, job.Deviation{Code: job.Code(p.Code), Subject: p.Subject, Reason: "the root regenerates and runs it"})
 	}
 
 	permitted := validateMerge(t.Context(), s, nil, "w", declare(deviations...), config.Jobs{}, nil)
@@ -181,7 +181,7 @@ func TestValidateMergePermitsOnlyWhatTheRecordNames(t *testing.T) {
 
 	wrong := validateMerge(t.Context(), s, nil, "w2", func(u *job.Job) {
 		u.Paths.Write, u.Check = []string{"cli"}, forkCheck()
-		u.Deviations = []job.Deviation{{Code: types.WritePathIsDirectory, Subject: "cli", Reason: "it is mine"}, {Code: types.GateNotRun, Subject: "lint ."}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.WritePathIsDirectory), Subject: "cli", Reason: "it is mine"}, {Code: job.Code(types.GateNotRun), Subject: "lint ."}}
 	}, config.Jobs{}, nil)
 	fields := map[string]types.DiagnosticCode{}
 	for _, p := range wrong.Problems {
@@ -276,7 +276,7 @@ func (s *forkPlanSuite) TestForkWritesThePlanItValidated() {
 	merge := func(u *job.Job) { u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck() }
 	permit := func(u *job.Job) {
 		merge(u)
-		u.Deviations = []job.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: integratorRegenerates}}
 	}
 	plan := s.plan(permit, false)
 	s.Require().Empty(plan.Validation.Problems)
@@ -292,7 +292,7 @@ func (s *forkPlanSuite) TestForkWritesThePlanItValidated() {
 func (s *forkPlanSuite) TestForkRefusesWhenALiveRowAppeared() {
 	plan := s.plan(func(u *job.Job) {
 		u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck()
-		u.Deviations = []job.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: integratorRegenerates}}
 	}, false)
 	s.Require().Empty(plan.Validation.Problems)
 	seed(s.T(), s.store, job.Job{ID: "other", State: job.StateRunning, Paths: job.Paths{Write: []string{"cli/registry.go"}}, Check: forkCheck()})
@@ -307,7 +307,7 @@ func (s *forkPlanSuite) TestForkWritesWhenALiveRowOnlyNarrowed() {
 	seed(s.T(), s.store, job.Job{ID: "other", State: job.StateRunning, Paths: job.Paths{Write: []string{"docs/**"}}, Check: forkCheck()})
 	plan := s.plan(func(u *job.Job) {
 		u.Paths.Write, u.Check = []string{"cli/registry.go"}, forkCheck()
-		u.Deviations = []job.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: integratorRegenerates}}
+		u.Deviations = []job.Deviation{{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: integratorRegenerates}}
 	}, false)
 	s.Require().Empty(plan.Validation.Problems)
 	seed(s.T(), s.store, job.Job{ID: "other", State: job.StateRunning, Paths: job.Paths{Write: []string{"docs/rules/guard.md"}}, Check: forkCheck()})
@@ -361,10 +361,10 @@ func TestValidateMergeRefusesAnUpdateThatDropsWhatTheRowDeclared(t *testing.T) {
 	said := func(u *job.Job) {
 		wiped(u)
 		u.Deviations = []job.Deviation{
-			{Code: types.JobRecordInvalid, Subject: "drops agent.instructions", Reason: "the job is reset"},
-			{Code: types.JobRecordInvalid, Subject: "drops paths.write", Reason: "the job is reset"},
-			{Code: types.JobRecordInvalid, Subject: "drops check", Reason: "the job is reset"},
-			{Code: types.JobRecordInvalid, Subject: "drops goals", Reason: "the job is reset"},
+			{Code: job.Code(types.JobRecordInvalid), Subject: "drops agent.instructions", Reason: "the job is reset"},
+			{Code: job.Code(types.JobRecordInvalid), Subject: "drops paths.write", Reason: "the job is reset"},
+			{Code: job.Code(types.JobRecordInvalid), Subject: "drops check", Reason: "the job is reset"},
+			{Code: job.Code(types.JobRecordInvalid), Subject: "drops goals", Reason: "the job is reset"},
 		}
 	}
 	v = validateMerge(t.Context(), s, rows, "w", said, config.Jobs{}, nil)
@@ -409,17 +409,17 @@ func TestValidateMergePermitsEveryRegeneratedOutputByGlob(t *testing.T) {
 	bare := validateMerge(t.Context(), s, nil, "w", declare(), config.Jobs{}, nil)
 	require.Greater(t, len(bare.Problems), 2, "several outputs and a gate stand unpermitted")
 
-	outputs := validateMerge(t.Context(), s, nil, "w", declare(job.Deviation{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
+	outputs := validateMerge(t.Context(), s, nil, "w", declare(job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
 	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, slices.Compact(codes(outputs.Problems)), "a glob permits its own code alone")
 
 	both := validateMerge(t.Context(), s, nil, "w", declare(
-		job.Deviation{Code: types.OutputOutsideWritePaths, Subject: "**", Reason: "the integrator regenerates it"},
-		job.Deviation{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"},
+		job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: "**", Reason: "the integrator regenerates it"},
+		job.Deviation{Code: job.Code(types.GateNotRun), Subject: "**", Reason: "the integrator runs it"},
 	), config.Jobs{}, nil)
 	assert.Equal(t, []types.DiagnosticCode{types.GateNotRun}, codes(both.Problems), "lint is the one gate a glob cannot permit")
 	assert.Len(t, both.Permitted, len(bare.Problems)-1)
 
-	narrow := validateMerge(t.Context(), s, nil, "w", declare(job.Deviation{Code: types.OutputOutsideWritePaths, Subject: "docs/**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
+	narrow := validateMerge(t.Context(), s, nil, "w", declare(job.Deviation{Code: job.Code(types.OutputOutsideWritePaths), Subject: "docs/**", Reason: "the integrator regenerates it"}), config.Jobs{}, nil)
 	assert.Contains(t, codes(narrow.Problems), types.OutputOutsideWritePaths, "a glob permits only the subjects it matches")
 	assert.Less(t, len(narrow.Problems), len(bare.Problems))
 }
@@ -476,12 +476,12 @@ func TestValidateMergePermitsLintOnlyByItsExactSubject(t *testing.T) {
 			u.Paths.Write, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
-	glob := job.Deviation{Code: types.GateNotRun, Subject: "**", Reason: "the integrator runs it"}
+	glob := job.Deviation{Code: job.Code(types.GateNotRun), Subject: "**", Reason: "the integrator runs it"}
 	got := validateMerge(t.Context(), s, nil, "w", declare(glob), config.Jobs{}, nil)
 	lint := problemAt(t, got.Problems, types.GateNotRun)
 	assert.Equal(t, "lint .", lint.Subject, "a glob leaves the lint gate standing")
 
-	exact := job.Deviation{Code: types.GateNotRun, Subject: "lint .", Reason: "the root lints this one"}
+	exact := job.Deviation{Code: job.Code(types.GateNotRun), Subject: "lint .", Reason: "the root lints this one"}
 	got = validateMerge(t.Context(), s, nil, "w", declare(glob, exact), config.Jobs{}, nil)
 	assert.NotContains(t, codes(got.Problems), types.GateNotRun)
 	assert.Contains(t, codes(got.Permitted), types.GateNotRun)

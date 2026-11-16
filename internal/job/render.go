@@ -36,7 +36,7 @@ func WithoutEnded(list job.List) (job.List, int) {
 // PrintInflight renders the in-flight changes grouped by whose turn each is, the ones
 // waiting on the reader first. Unless all is set it lists the reader's changes and
 // counts the rest on one line.
-func PrintInflight(out io.Writer, list job.List, all bool) {
+func PrintInflight(out io.Writer, list InflightList, all bool) {
 	f := list.Fetched
 	if f == nil {
 		fmt.Fprintf(out, "in flight: never fetched; `%s queue ls --provider <provider> --base <branch>` reads the open changes\n", hint.BinaryName())
@@ -60,15 +60,15 @@ func PrintInflight(out io.Writer, list job.List, all bool) {
 	}
 	groups := []struct {
 		title     string
-		attention job.InflightAttention
+		attention InflightAttention
 	}{
-		{needs, job.AttentionAuthor},
-		{"waiting on review", job.AttentionReview},
-		{"queued, in plan order", job.AttentionQueue},
-		{"not queued", job.AttentionNone},
+		{needs, AttentionAuthor},
+		{"waiting on review", AttentionReview},
+		{"queued, in plan order", AttentionQueue},
+		{"not queued", AttentionNone},
 	}
 	for _, g := range groups {
-		var rows []job.InflightChange
+		var rows []InflightChange
 		for _, c := range shown {
 			if c.Attention == g.attention {
 				rows = append(rows, c)
@@ -77,7 +77,7 @@ func PrintInflight(out io.Writer, list job.List, all bool) {
 		if len(rows) == 0 {
 			continue
 		}
-		if g.attention == job.AttentionQueue {
+		if g.attention == AttentionQueue {
 			slices.SortStableFunc(rows, queueOrder)
 		}
 		fmt.Fprintf(out, "%s (%d)\n", g.title, len(rows))
@@ -112,8 +112,8 @@ func PrintInflight(out io.Writer, list job.List, all bool) {
 }
 
 // printInflightOthers counts the changes that are not the reader's on one line.
-func printInflightOthers(out io.Writer, changes []job.InflightChange) {
-	counts := map[job.InflightAttention]int{}
+func printInflightOthers(out io.Writer, changes []InflightChange) {
+	counts := map[InflightAttention]int{}
 	for _, c := range changes {
 		if !c.Mine {
 			counts[c.Attention]++
@@ -121,13 +121,13 @@ func printInflightOthers(out io.Writer, changes []job.InflightChange) {
 	}
 	var parts []string
 	for _, a := range []struct {
-		attention job.InflightAttention
+		attention InflightAttention
 		word      string
 	}{
-		{job.AttentionQueue, "queued"},
-		{job.AttentionAuthor, "kicked back"},
-		{job.AttentionReview, "waiting on review"},
-		{job.AttentionNone, "not queued"},
+		{AttentionQueue, "queued"},
+		{AttentionAuthor, "kicked back"},
+		{AttentionReview, "waiting on review"},
+		{AttentionNone, "not queued"},
 	} {
 		if n := counts[a.attention]; n > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", n, a.word))
@@ -140,7 +140,7 @@ func printInflightOthers(out io.Writer, changes []job.InflightChange) {
 
 // queueOrder puts planned changes first, by partition then position, and keeps the
 // provider's order among the rest.
-func queueOrder(a, b job.InflightChange) int {
+func queueOrder(a, b InflightChange) int {
 	switch {
 	case a.Position == 0 && b.Position == 0:
 		return 0
@@ -156,12 +156,12 @@ func queueOrder(a, b job.InflightChange) int {
 
 // PrintChange names the change job id's checkout carries, whose turn it is, and the
 // changes it touches.
-func PrintChange(out io.Writer, changes []job.InflightChange, id string) {
-	turns := map[job.InflightAttention]string{
-		job.AttentionAuthor: "its author's turn",
-		job.AttentionReview: "waiting on review",
-		job.AttentionQueue:  "the queue's turn",
-		job.AttentionNone:   "not queued",
+func PrintChange(out io.Writer, changes []InflightChange, id string) {
+	turns := map[InflightAttention]string{
+		AttentionAuthor: "its author's turn",
+		AttentionReview: "waiting on review",
+		AttentionQueue:  "the queue's turn",
+		AttentionNone:   "not queued",
 	}
 	for _, c := range changes {
 		if !slices.Contains(c.Jobs, id) {

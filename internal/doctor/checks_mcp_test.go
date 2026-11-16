@@ -13,7 +13,6 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,12 +51,12 @@ func TestCheckTokens(t *testing.T) {
 		require.NoError(t, err)
 		store, err := auth.LoadStore(dir)
 		require.NoError(t, err)
-		for name, g := range map[string]job.Access{"soon": job.AccessConnector, "later": job.AccessConsole} {
+		for name, g := range map[string]auth.Access{"soon": auth.AccessConnector(), "later": auth.AccessConsole()} {
 			ttl := 48 * time.Hour
 			if name == "later" {
 				ttl = 60 * 24 * time.Hour
 			}
-			_, _, err = store.Mint(job.AccessOperator, auth.MintRequest{Name: name, Grant: g, TTL: ttl})
+			_, _, err = store.Mint(auth.AccessOperator(), auth.MintRequest{Name: name, Grant: g, TTL: ttl})
 			require.NoError(t, err)
 		}
 		got := (&runner{}).checkTokens()
@@ -90,7 +89,7 @@ func TestCheckTokens(t *testing.T) {
 		require.NoError(t, err)
 		store, err := auth.LoadStore(dir)
 		require.NoError(t, err)
-		_, _, err = store.Mint(job.AccessOperator, auth.MintRequest{Name: "good", Grant: job.AccessConsole, TTL: time.Hour})
+		_, _, err = store.Mint(auth.AccessOperator(), auth.MintRequest{Name: "good", Grant: auth.AccessConsole(), TTL: time.Hour})
 		require.NoError(t, err)
 		planted := filepath.Join(dir, "planted.json")
 		body := fmt.Sprintf(`{"version":"magus.token/v1alpha1","id":"aaaaaaaa","name":"planted","class":"stored","sha256":"%s","grant":{"tokens":"write","mcp":"write","console":"write"},"created":"2026-01-01T00:00:00Z","expires":"9999-01-01T00:00:00Z"}`, strings.Repeat("a", 64))

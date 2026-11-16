@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
@@ -47,15 +48,15 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 // made under it, so no handler copies it by hand.
 func TestStampOriginReadsTheCredentialFromTheContext(t *testing.T) {
 	t.Parallel()
-	cred := job.Credential{Kind: job.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: job.AccessConsole}
+	cred := auth.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: auth.AccessConsole()}
 	ctx := ContextWithCredential(ContextWithEntryPoint(t.Context(), job.EntryPointRPC), cred)
 
 	got := StampOrigin(ctx, job.Origin{Host: "console"})
 	local := LocalOrigin(ctx)
 	assert.Equal(t, job.Origin{
-		User: local.User, UID: local.UID, EntryPoint: job.EntryPointRPC, Host: "console", Credential: cred,
-	}, got)
-	share := job.Credential{Kind: job.KindShare, ID: "9b2e04aa", Grant: job.AccessViewer}
+		User: local.User, UID: local.UID, EntryPoint: job.EntryPointRPC, Host: "console", Credential: cred.Recorded(),
+	}, got, "the origin records the credential without its grant")
+	share := job.Credential{Kind: auth.KindShare, ID: "9b2e04aa"}
 	assert.Equal(t, share, StampOrigin(ctx, job.Origin{Credential: share}).Credential, "a named credential is kept")
 	assert.Zero(t, StampOrigin(t.Context(), job.Origin{}).Credential, "no guard, no credential")
 }

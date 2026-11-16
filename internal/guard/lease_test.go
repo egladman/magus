@@ -5010,7 +5010,7 @@ func (s *leaseAuthoritySuite) standing(state jobtypes.State, authority string) l
 // rowReader answers a fixed set of rows, as an embedder's reader would.
 type rowReader []jobtypes.Job
 
-func (r rowReader) List() ([]jobtypes.Job, error) { return slices.Clone(r), nil }
+func (r rowReader) List(context.Context) ([]jobtypes.Job, error) { return slices.Clone(r), nil }
 
 // unauthorized is the held row as an older magus forked it, with no authority.
 func (s *leaseAuthoritySuite) unauthorized() (context.Context, hookAttribution, jobtypes.Job) {

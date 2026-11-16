@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/mcpclient"
@@ -233,7 +234,7 @@ func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	for _, d := range Registry {
 		st, ok := tools[d.Name]
 		require.True(t, ok, d.Name)
-		res, err := st.Handler(trail.ContextWithCredential(context.Background(), job.CredentialStdio), callRequest(d.Name, nil))
+		res, err := st.Handler(trail.ContextWithCredential(context.Background(), auth.CredentialStdio()), callRequest(d.Name, nil))
 		require.NoError(t, err, d.Name)
 		assert.True(t, res.IsError, d.Name)
 		assert.True(t, strings.HasPrefix(allText(res), failure.Error()), "%s: %s", d.Name, allText(res))
@@ -532,15 +533,15 @@ func TestAuthorizeHoldsEveryCallerToToolNeed(t *testing.T) {
 	req.Params.Name = "status"
 
 	cases := map[string]struct {
-		cred    job.Credential
+		cred    auth.Credential
 		allowed bool
 	}{
-		"socket peer":   {job.CredentialSocketPeer, true},
-		"connector":     {job.Credential{Kind: job.KindStored, Grant: job.AccessConnector}, true},
-		"operator":      {job.Credential{Kind: job.KindOperator, Grant: job.AccessOperator}, true},
-		"console token": {job.Credential{Kind: job.KindStored, Grant: job.AccessConsole}, false},
-		"no credential": {job.Credential{}, false},
-		"viewer grant":  {job.Credential{Kind: job.KindSocketPeer, Grant: job.AccessViewer}, false},
+		"socket peer":   {auth.CredentialSocketPeer(), true},
+		"connector":     {auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConnector()}, true},
+		"operator":      {auth.Credential{Kind: auth.KindOperator, Grant: auth.AccessOperator()}, true},
+		"console token": {auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConsole()}, false},
+		"no credential": {auth.Credential{}, false},
+		"viewer grant":  {auth.Credential{Kind: auth.KindSocketPeer, Grant: auth.AccessViewer()}, false},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

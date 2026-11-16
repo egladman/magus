@@ -50,11 +50,11 @@ func TestEveryKindHasOneFormat(t *testing.T) {
 
 // plantRecord writes a stored-token record whose hash is that of secret, whatever its kind:
 // what an attacker able to write tokens.d, or a bug, could produce.
-func plantRecord(t *testing.T, name, secret string, grant job.Access) {
+func plantRecord(t *testing.T, name, secret string, grant Access) {
 	t.Helper()
 	sum := digest(secret)
 	rec := tokenRecord{Version: storeVersion, Token: Token{
-		ID: sum[:8], Name: name, Kind: job.KindStored, SHA256: sum, Grant: grant,
+		ID: sum[:8], Name: name, Kind: KindStored, SHA256: sum, Grant: grant,
 		Created: time.Now().Add(-time.Minute).UTC(), Expires: time.Now().Add(time.Hour).UTC(),
 	}}
 	b, err := codec.Marshal(rec)
@@ -77,38 +77,38 @@ func TestVerifyRoutesByKind(t *testing.T) {
 	opCred, ok := Verify(op.Reveal())
 	require.True(t, ok)
 	assert.Equal(t, operatorCredential(op), opCred)
-	assert.Equal(t, job.AccessOperator, opCred.Grant)
+	assert.Equal(t, AccessOperator(), opCred.Grant)
 
 	// A record carrying the operator secret's hash, as a viewer.
-	plantRecord(t, "shadow", op.Reveal(), job.AccessViewer)
+	plantRecord(t, "shadow", op.Reveal(), AccessViewer())
 	opCred, ok = Verify(op.Reveal())
 	require.True(t, ok)
-	assert.Equal(t, job.KindOperator, opCred.Kind, "an mgo_ string is never matched against the store")
+	assert.Equal(t, KindOperator, opCred.Kind, "an mgo_ string is never matched against the store")
 
 	// An mgs_ secret placed in the operator file cannot be read as the operator at all.
-	stored, err := mintSecret(job.KindStored)
+	stored, err := mintSecret(KindStored)
 	require.NoError(t, err)
-	plantRecord(t, "real", stored, job.AccessViewer)
+	plantRecord(t, "real", stored, AccessViewer())
 	cred, ok := Verify(stored)
 	require.True(t, ok)
-	assert.Equal(t, job.Credential{
-		Kind:  job.KindStored,
+	assert.Equal(t, Credential{
+		Kind:  KindStored,
 		ID:    digest(stored)[:8],
 		Name:  "real",
-		Grant: job.AccessViewer, // an mgs_ string is never matched against the operator file
+		Grant: AccessViewer(), // an mgs_ string is never matched against the operator file
 	}, cred)
 
 	// A share secret with a planted record still fails on loopback.
-	share, _, err := MintShare(job.AccessOperator, time.Hour)
+	share, _, err := MintShare(AccessOperator(), time.Hour)
 	require.NoError(t, err)
-	plantRecord(t, "planted-share", share.Reveal(), job.AccessConsole)
+	plantRecord(t, "planted-share", share.Reveal(), AccessConsole())
 	_, ok = Verify(share.Reveal())
 	assert.False(t, ok, "mgl_ never verifies on loopback")
 
 	// Nor does a console link's code, even with a stored record carrying its hash.
-	code, err := mintSecret(job.KindExchange)
+	code, err := mintSecret(KindExchange)
 	require.NoError(t, err)
-	plantRecord(t, "planted-code", code, job.AccessConsole)
+	plantRecord(t, "planted-code", code, AccessConsole())
 	_, ok = Verify(code)
 	assert.False(t, ok, "mgx_ is never a bearer")
 
@@ -133,7 +133,7 @@ func TestVerifyAnswersBadTokensFromMemory(t *testing.T) {
 	require.NoError(t, err)
 	store, err := LoadStore(dir)
 	require.NoError(t, err)
-	good, _, err := store.Mint(job.AccessOperator, MintRequest{Name: "good", Grant: job.AccessConnector, TTL: time.Hour})
+	good, _, err := store.Mint(AccessOperator(), MintRequest{Name: "good", Grant: AccessConnector(), TTL: time.Hour})
 	require.NoError(t, err)
 	_, ok := Verify(good.Reveal())
 	require.True(t, ok)
@@ -145,9 +145,9 @@ func TestVerifyAnswersBadTokensFromMemory(t *testing.T) {
 	}
 	before := loads()
 	for i := range 1000 {
-		kind := job.KindStored
+		kind := KindStored
 		if i%2 == 1 {
-			kind = job.KindOperator
+			kind = KindOperator
 		}
 		bad, err := mintSecret(kind)
 		require.NoError(t, err)
@@ -162,11 +162,11 @@ func TestVerifyAnswersBadTokensFromMemory(t *testing.T) {
 	}
 	assert.LessOrEqual(t, loads()-before, 1, "the flood loads the stores at most once")
 
-	fresh, _, err := store.Mint(job.AccessOperator, MintRequest{Name: "fresh", Grant: job.AccessConnector, TTL: time.Hour})
+	fresh, _, err := store.Mint(AccessOperator(), MintRequest{Name: "fresh", Grant: AccessConnector(), TTL: time.Hour})
 	require.NoError(t, err)
 	_, ok = Verify(fresh.Reveal())
 	assert.True(t, ok, "a mint is seen at once")
-	_, err = store.Revoke(job.AccessOperator, "good")
+	_, err = store.Revoke(AccessOperator(), "good")
 	require.NoError(t, err)
 	_, ok = Verify(good.Reveal())
 	assert.False(t, ok, "a revoke is seen at once")
@@ -179,7 +179,7 @@ func TestVerifyAnswersBadTokensFromMemory(t *testing.T) {
 // whose hash it somehow held still fails, because the kind is wrong.
 func TestShareVerifierNeverAcceptsAnotherKind(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []job.CredentialKind{job.KindOperator, job.KindStored, job.KindExchange} {
+	for _, kind := range []job.CredentialKind{KindOperator, KindStored, KindExchange} {
 		secret, err := mintSecret(kind)
 		require.NoError(t, err)
 		tok := ShareToken{SHA256: digest(secret), Expires: time.Now().Add(time.Hour)}

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
@@ -55,14 +56,14 @@ type credentialKey struct{}
 // presented. httpx's bearer guard is the one door that verifies a credential, and so the
 // one caller that sets it; [StampOrigin] reads it onto every record made under ctx, and a
 // handler that mints reads its Grant as the minter's.
-func ContextWithCredential(ctx context.Context, c job.Credential) context.Context {
+func ContextWithCredential(ctx context.Context, c auth.Credential) context.Context {
 	return context.WithValue(ctx, credentialKey{}, c)
 }
 
 // CredentialFromContext returns the credential [ContextWithCredential] recorded on ctx, or
 // the zero credential, which grants nothing, when the request passed no bearer guard.
-func CredentialFromContext(ctx context.Context) job.Credential {
-	c, _ := ctx.Value(credentialKey{}).(job.Credential)
+func CredentialFromContext(ctx context.Context) auth.Credential {
+	c, _ := ctx.Value(credentialKey{}).(auth.Credential)
 	return c
 }
 
@@ -88,7 +89,7 @@ func LocalOrigin(ctx context.Context) job.Origin {
 	name, uid := osAccount()
 	return job.Origin{
 		User: name, UID: uid,
-		EntryPoint: EntryPointFromContext(ctx), Credential: CredentialFromContext(ctx), Host: HostFromContext(ctx),
+		EntryPoint: EntryPointFromContext(ctx), Credential: CredentialFromContext(ctx).Recorded(), Host: HostFromContext(ctx),
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // config_console.go is the console's own token commands, deliberately NOT under `config mcp`:
@@ -25,7 +24,7 @@ import (
 // trades it for a console=write token living console.LinkTokenLifetime, so neither the
 // operator secret nor a token ever reaches a browser's argv.
 func mintConsoleLinkCode() (string, error) {
-	code, _, err := mintToken(auth.MintRequest{Grant: job.AccessConsole, TTL: console.LinkTokenLifetime}, true)
+	code, _, err := mintToken(auth.MintRequest{Grant: auth.AccessConsole(), TTL: console.LinkTokenLifetime}, true)
 	return code, err
 }
 
@@ -126,9 +125,9 @@ func configConsoleTokenCreate(args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus config console token create: %w", err)
 	}
-	grant := job.AccessConsole
+	grant := auth.AccessConsole()
 	if cf.Viewer {
-		grant = job.AccessViewer
+		grant = auth.AccessViewer()
 	}
 	secret, rec, err := mintToken(auth.MintRequest{Name: cf.Name, Grant: grant, TTL: ttl}, cf.Code)
 	if err != nil {
@@ -142,7 +141,7 @@ func configConsoleTokenCreate(args []string) error {
 		return nil
 	}
 	printMinted("magus config console token create", secret, rec)
-	if grant == job.AccessViewer {
+	if grant == auth.AccessViewer() {
 		slog.Info("Grant console=read: it can READ the console and cannot submit jobs, edit memory,\nor open a share. It is refused at /mcp.", attr.Notice(""))
 	} else {
 		slog.Info("Grant console=write: it reaches every console app and is refused at /mcp.", attr.Notice(""))

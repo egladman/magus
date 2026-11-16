@@ -1294,7 +1294,7 @@ func (s *jobApplyAddWritePathSuite) SetupTest() {
 	row := leaseRow("w", "")
 	row.State, row.Paths.Write = jobtypes.StateRunning, []string{"a.go"}
 	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = row.Check.String()
+	row.Validation = job.CheckCommand(*row.Check)
 	root, cacheDir := execFixture(s.T(), row)
 	s.root = root
 	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
@@ -1368,7 +1368,7 @@ func (s *jobApplyContractSuite) integration(integrates ...string) (string, *job.
 	row := leaseRow("integration", "")
 	row.Paths.Write = []string{"magus.yaml"}
 	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = row.Check.String()
+	row.Validation = job.CheckCommand(*row.Check)
 	root, cacheDir := execFixture(s.T(), row)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
 	return root, store, jobtypes.Declaration{
@@ -1575,7 +1575,7 @@ func (s *jobApplyReleaseWritePathSuite) SetupTest() {
 	row := leaseRow("w", "")
 	row.State, row.Paths.Write = jobtypes.StateRunning, []string{"a.go", "b.go", "c.go#Run"}
 	row.Check = &jobtypes.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = row.Check.String()
+	row.Validation = job.CheckCommand(*row.Check)
 	row.Goals = []jobtypes.Goal{{ID: "g", Kind: jobtypes.GoalKindPaths, Paths: []string{"a.go"}}}
 	root, cacheDir := execFixture(s.T(), row)
 	s.root = root

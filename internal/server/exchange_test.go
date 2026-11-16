@@ -15,7 +15,6 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/testkit"
 )
@@ -31,7 +30,7 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 	require.NoError(t, err)
 	store, err := auth.LoadStore(dir)
 	require.NoError(t, err)
-	minted, _, err := store.MintCode(job.AccessOperator, auth.MintRequest{Grant: job.AccessConsole, TTL: 12 * time.Hour})
+	minted, _, err := store.MintCode(auth.AccessOperator(), auth.MintRequest{Grant: auth.AccessConsole(), TTL: 12 * time.Hour})
 	require.NoError(t, err)
 	code := minted.Reveal()
 	h := newExchangeHandler(trailDir, slog.New(slog.DiscardHandler))
@@ -51,7 +50,7 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 	require.NoError(t, codec.Unmarshal(rr.Body.Bytes(), &got))
 	cred, ok := auth.Verify(got.Token)
 	require.True(t, ok)
-	assert.Equal(t, job.AccessConsole, cred.Grant)
+	assert.Equal(t, auth.AccessConsole(), cred.Grant)
 	expires, err := time.Parse(time.RFC3339, got.ExpiresAt)
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now().Add(12*time.Hour), expires, time.Minute)
@@ -87,8 +86,8 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 	var rec trail.MintRecord
 	require.NoError(t, codec.Unmarshal(blob, &rec))
 	assert.Equal(t, trail.MintRecord{
-		Minted:  job.Credential{Kind: job.KindStored, ID: cred.ID, Name: cred.Name, Grant: cred.Grant},
+		Minted:  auth.Credential{Kind: auth.KindStored, ID: cred.ID, Name: cred.Name, Grant: cred.Grant},
 		Expires: rec.Expires, // stamped at mint time
-		Minter:  job.Credential{Kind: job.KindExchange, ID: auth.TokenID(code), Name: cred.Name, Grant: cred.Grant},
+		Minter:  auth.Credential{Kind: auth.KindExchange, ID: auth.TokenID(code), Name: cred.Name, Grant: cred.Grant},
 	}, rec)
 }

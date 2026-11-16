@@ -1430,8 +1430,8 @@ func rowChecks(row jobtypes.Job) []jobtypes.LeaseCheck {
 	if len(out) > 0 || row.Validation == "" {
 		return out
 	}
-	// compat: see jobtypes.ParseLeaseRunLine
-	if c, err := jobtypes.ParseLeaseRunLine(row.Validation); err == nil {
+	// compat: see job.ParseCheckCommand
+	if c, err := job.ParseCheckCommand(row.Validation); err == nil {
 		out = append(out, c)
 	}
 	return out
@@ -2138,7 +2138,7 @@ func cliFork(args []string, stdin string) childFork {
 		return childFork{
 			id: row.ID, parent: row.Parent, readOnly: row.ReadOnly, writePaths: len(row.Paths.Write) > 0,
 			bounded: len(row.Paths.Write)+len(row.Paths.Read)+len(row.Paths.Deny)+len(row.Goals) > 0 ||
-				(row.Check != nil && !scriptOnly) || row.Validation != "" || (row.State != "" && row.State != jobtypes.StateDeclared),
+				(row.Check != nil && !scriptOnly) || (row.State != "" && row.State != jobtypes.StateDeclared),
 		}
 	}
 	f := childFork{parent: flags["parent"], writePaths: flags["write-paths"] != ""}
@@ -2550,9 +2550,9 @@ func LeaseGateSource(row jobtypes.Job) (string, bool) {
 		t, err := types.ParseTarget(gate.Check.Target)
 		if err == nil && t.Name == types.TargetCI {
 			if gate.ID == jobtypes.PrimaryGoalID {
-				return gate.Check.String(), true
+				return job.CheckCommand(gate.Check), true
 			}
-			return fmt.Sprintf("goal %q (%s)", gate.ID, gate.Check.String()), true
+			return fmt.Sprintf("goal %q (%s)", gate.ID, job.CheckCommand(gate.Check)), true
 		}
 	}
 	if validationNamesGate(row.Validation) {

@@ -75,7 +75,7 @@ func ClassifyRetry(err error) job.RetryVerdict {
 			break
 		}
 		if change, ok := retryTable[d.Code]; ok {
-			return job.RetryVerdict{Change: change, Reason: d.Msg, Code: d.Code}
+			return job.RetryVerdict{Change: change, Reason: d.Msg, Code: job.Code(d.Code)}
 		}
 		if next = d.Unwrap(); next == nil {
 			break

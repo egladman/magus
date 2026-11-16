@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"reflect"
 	"slices"
 	"strconv"
@@ -188,6 +189,98 @@ func UnmarshalLossless(data []byte, v any) error {
 // Valid reports whether data is one JSON value Unmarshal reads: well formed, valid
 // UTF-8, and no key repeated within an object.
 func Valid(data []byte) bool { return validate(data) == nil }
+
+// MarshalWithUnknown writes v, a struct or a pointer to one, as [Marshal] does, then each
+// member of unknown after v's own, sorted by name: the members a record kept from a decode
+// by [UnmarshalWithUnknown]. A name v declares is an [*EncodeError] matching
+// [ErrDuplicateKey], since writing both would make the document ambiguous.
+//
+// It is the body of a MarshalJSON for a type that keeps the members it does not declare.
+// Pass v as a defined type without that method (`type plain T`), or the call recurses.
+func MarshalWithUnknown(v any, unknown map[string]RawMessage) ([]byte, error) {
+	b, err := Marshal(v)
+	if err != nil || len(unknown) == 0 {
+		return b, err
+	}
+	t := reflect.TypeOf(v)
+	for t != nil && t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t == nil || t.Kind() != reflect.Struct || len(b) < 2 || b[0] != '{' {
+		return nil, &EncodeError{Err: fmt.Errorf("unknown members need a struct written as an object, and %T is not one", v)}
+	}
+	declared := structFields(t).byName
+	out := slices.Clone(b[:len(b)-1])
+	for _, name := range slices.Sorted(maps.Keys(unknown)) {
+		if _, ok := declared[name]; ok {
+			return nil, &EncodeError{Err: fmt.Errorf("%w %q: the type declares it and the unknown members carry it too", ErrDuplicateKey, name)}
+		}
+		key, err := Marshal(name)
+		if err != nil {
+			return nil, err
+		}
+		value, err := Marshal(unknown[name])
+		if err != nil {
+			return nil, err
+		}
+		if len(out) > 1 {
+			out = append(out, ',')
+		}
+		out = append(append(append(out, key...), ':'), value...)
+	}
+	return append(out, '}'), nil
+}
+
+// UnmarshalWithUnknown decodes data into v, a non-nil pointer to a struct, as [Unmarshal]
+// does, and returns the members v's type does not declare, nil when there are none. It is
+// the body of an UnmarshalJSON for a type that keeps them; see [MarshalWithUnknown].
+//
+// [UnmarshalStrict] still refuses those members for a type whose bag field is tagged
+// `codec:"unknown"`: the strict walk reads such a type's own fields rather than leaving the
+// type to its UnmarshalJSON, so an authored record keeps no member it does not declare.
+func UnmarshalWithUnknown(data []byte, v any) (map[string]RawMessage, error) {
+	t, _ := targetOf(v)
+	if t == nil || t.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("codec: unknown members are kept by a struct, and %T does not point to one", v)
+	}
+	if err := Unmarshal(data, v); err != nil {
+		return nil, err
+	}
+	var members map[string]RawMessage
+	if err := Unmarshal(data, &members); err != nil {
+		return nil, err
+	}
+	declared := structFields(t).byName
+	var unknown map[string]RawMessage
+	for name, raw := range members {
+		if _, ok := declared[name]; ok {
+			continue
+		}
+		if unknown == nil {
+			unknown = map[string]RawMessage{}
+		}
+		unknown[name] = raw
+	}
+	return unknown, nil
+}
+
+// keepsUnknown reports whether t is a struct that keeps its undeclared members in a field
+// tagged `codec:"unknown"`, its own or one an embedded struct promotes.
+func keepsUnknown(t reflect.Type) bool {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return false
+	}
+	for i := range t.NumField() {
+		sf := t.Field(i)
+		if sf.Tag.Get("codec") == "unknown" || (sf.Anonymous && keepsUnknown(sf.Type)) {
+			return true
+		}
+	}
+	return false
+}
 
 // Version names the library this build runs on: "v2" for encoding/json/v2, "v1" for
 // encoding/json.
@@ -488,10 +581,12 @@ func (s *scanner) null(t reflect.Type, v reflect.Value) {
 }
 
 // target is where a value goes once pointers are followed. A type that decodes itself,
-// and an interface, take any value, so the walk reads the value with no target.
+// and an interface, take any value, so the walk reads the value with no target. A strict
+// walk still reads a type that keeps its undeclared members (see [keepsUnknown]): its
+// UnmarshalJSON would keep the very member strict exists to refuse.
 func (s *scanner) target(t reflect.Type, v reflect.Value) (reflect.Type, reflect.Value) {
 	for t != nil {
-		if decodesItself(t) {
+		if decodesItself(t) && (!s.strict || !keepsUnknown(t)) {
 			return nil, reflect.Value{}
 		}
 		switch t.Kind() {

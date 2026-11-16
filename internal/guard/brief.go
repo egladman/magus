@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
@@ -364,7 +365,7 @@ func briefOffCheckDeny(row job.Job, off briefRun, v runVerdict) string {
 	checks := rowChecks(row)
 	names := make([]string, len(checks))
 	for i, c := range checks {
-		names[i] = fmt.Sprintf("`%s`", c.String())
+		names[i] = fmt.Sprintf("`%s`", jobstore.CheckCommand(c))
 	}
 	return fmt.Sprintf("this brief tells job %s's worker to run `%s`, not its check %s [%s]; fix the brief.\nThe line: %q\n"+
 		"A worker runs only its row's check and the targets that regenerate its write paths; the checkout's integrator, a subagent spawned `<parent>/integrate <job>`, runs the rest serially, in its own tree, after it integrates the units. A line that names it to forbid it (\"never run ...\") is not graded.",

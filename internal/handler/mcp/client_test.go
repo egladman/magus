@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/mcpclient"
@@ -146,7 +147,7 @@ func taskServer(t *testing.T) (*mcpserver.MCPServer, *magus.Magus, func(string) 
 	useClientStandIn(t)
 	m := fixtureMagus(t)
 	srv := buildServer(Options{Magus: m, Logger: quietLogger(), Version: "test"}, quietLogger(), &mcpserver.Hooks{}, func(context.Context) origin.Client { return origin.Client{Name: "task-test"} })
-	ctx := trail.ContextWithCredential(context.Background(), job.CredentialStdio)
+	ctx := trail.ContextWithCredential(context.Background(), auth.CredentialStdio())
 	send := func(frame string) codec.RawMessage {
 		t.Helper()
 		raw, err := codec.Marshal(srv.HandleMessage(ctx, []byte(frame)))

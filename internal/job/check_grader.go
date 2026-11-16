@@ -195,7 +195,7 @@ func ungradedCheckProblem(id, which string, check job.LeaseCheck, why string) ty
 	return types.JobProblem{
 		Code: types.JobUngraded,
 		Message: fmt.Sprintf("%s's %s `%s` could not be graded against the guard: %s,"+
-			" so nothing says its worker may run it", id, which, check.String(), strings.Join(strings.Fields(why), " ")),
+			" so nothing says its worker may run it", id, which, CheckCommand(check), strings.Join(strings.Fields(why), " ")),
 		Fix: fmt.Sprintf("a magus older than this tree cannot judge it, so fork with one built at this checkout's HEAD or later; if that one refuses too, `%s` names what it cannot load", hint.Doctor),
 	}
 }
@@ -235,7 +235,7 @@ func deniedCheckProblem(row job.Job, which string, check job.LeaseCheck, verdict
 			Code: types.JobCheckUnrunnable,
 			Message: fmt.Sprintf("%s's %s `%s` is a target a person runs (%s): %s,"+
 				" and a worker is refused it whoever asks, so it can never verify the job",
-				id, which, check.String(), humanOnlyRule, reason),
+				id, which, CheckCommand(check), humanOnlyRule, reason),
 			Fix: fmt.Sprintf("declare a check its worker may run in its place, with `magus job fork %s --check '<target> <project>'`", id),
 		}
 	}
@@ -247,7 +247,7 @@ func deniedCheckProblem(row job.Job, which string, check job.LeaseCheck, verdict
 		Code: types.JobCheckUnrunnable,
 		Message: fmt.Sprintf("%s's %s `%s` would be denied to its worker by the guard%s: %s,"+
 			" and the holder runs the check under its lease, so a denied one can never verify the job",
-			id, which, check.String(), rule, reason),
+			id, which, CheckCommand(check), rule, reason),
 		Fix: replacementCheckFix(row),
 	}
 }

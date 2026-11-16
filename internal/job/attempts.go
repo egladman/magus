@@ -153,7 +153,7 @@ func classifyAttempt(p job.Attempt, earlier []job.Attempt) job.RetryVerdict {
 // result is what row's live attempt filed.
 func evidenceAt(row job.Job, result *job.Result) (ev graded, prior int) {
 	older := func(observed int) bool {
-		if !row.StaleAt(observed) {
+		if !row.SpecChangedSince(observed) {
 			return false
 		}
 		if prior == 0 || observed < prior {

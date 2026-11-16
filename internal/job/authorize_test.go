@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
@@ -389,13 +390,13 @@ func TestRowRecordsTheDoorThatDeclaredIt(t *testing.T) {
 	t.Parallel()
 
 	loc := tempLocation(t, t.TempDir())
-	cred := job.Credential{Kind: job.KindStored, ID: "3fa9c1d2", Name: "connector-1", Grant: job.AccessConnector}
+	cred := auth.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "connector-1", Grant: auth.AccessConnector()}
 	ctx := trail.ContextWithHost(trail.ContextWithCredential(trail.ContextWithEntryPoint(t.Context(), job.EntryPointMCP), cred), "claude-code")
 	row := workerRow()
 	stored, err := NewStore(loc).Update(ctx, row.ID, func(cur *job.Job) { *cur = row })
 	require.NoError(t, err)
 	want := trail.LocalOrigin(t.Context())
-	want.EntryPoint, want.Credential, want.Host = job.EntryPointMCP, cred, "claude-code"
+	want.EntryPoint, want.Credential, want.Host = job.EntryPointMCP, cred.Recorded(), "claude-code"
 	require.NotEmpty(t, want.UID, "the OS always answers with a uid")
 	assert.Equal(t, want, stored.RegisteredBy, "the door's facts, plus the OS account the store read itself")
 

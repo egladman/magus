@@ -321,3 +321,67 @@ func (s *ConformanceSuite) TestATypeWithItsOwnMethodsPassesBothBuilds() {
 	s.Require().NoError(Unmarshal([]byte(b), &out))
 	s.Equal(in, out)
 }
+
+// keeper keeps the members it does not declare the way a record envelope does: a bag
+// field tagged `codec:"unknown"` and methods built on the two helpers.
+type keeper struct {
+	keeperEnvelope
+	Name string `json:"name"`
+	Pair pair   `json:"pair,omitzero"`
+}
+
+type keeperEnvelope struct {
+	Version string                `json:"version"`
+	Unknown map[string]RawMessage `json:"-" codec:"unknown"`
+}
+
+func (k keeper) MarshalJSON() ([]byte, error) {
+	type plain keeper
+	return MarshalWithUnknown(plain(k), k.Unknown)
+}
+
+func (k *keeper) UnmarshalJSON(data []byte) error {
+	type plain keeper
+	var p plain
+	unknown, err := UnmarshalWithUnknown(data, &p)
+	if err != nil {
+		return err
+	}
+	*k = keeper(p)
+	k.Unknown = unknown
+	return nil
+}
+
+func (s *ConformanceSuite) TestUnknownMembersRoundTripThroughBothLibraries() {
+	in := `{"version":"v1","name":"x","later":{"b":[1,2]},"added":true}`
+	var got keeper
+	s.Require().NoError(Unmarshal([]byte(in), &got))
+	s.Equal("x", got.Name)
+	s.Equal(map[string]RawMessage{"added": RawMessage(`true`), "later": RawMessage(`{"b":[1,2]}`)}, got.Unknown)
+	s.Equal(`{"version":"v1","name":"x","added":true,"later":{"b":[1,2]}}`, s.marshal(got))
+
+	var plain keeper
+	s.Require().NoError(json.Unmarshal([]byte(in), &plain), "a caller on encoding/json alone reads the bag")
+	s.Equal(got, plain)
+	out, err := json.Marshal(plain)
+	s.Require().NoError(err)
+	s.JSONEq(in, string(out), "and writes it back")
+}
+
+func (s *ConformanceSuite) TestUnmarshalStrictRefusesWhatAKeeperWouldKeep() {
+	var got keeper
+	var strict *StrictError
+	s.Require().ErrorAs(UnmarshalStrict([]byte(`{"version":"v1","later":1}`), &got), &strict)
+	s.ErrorIs(strict, ErrUnknownField)
+	s.Equal(`unknown field "later" at byte offset 16`, strict.Error())
+	s.Require().ErrorIs(UnmarshalStrict([]byte(`{"version":"v1","pair":{"k":"a","z":1}}`), &got), ErrUnknownField,
+		"the walk refuses a nested member too")
+	s.Require().NoError(UnmarshalStrict([]byte(`{"version":"v1","name":"x"}`), &got))
+	s.Equal("x", got.Name)
+	s.Nil(got.Unknown)
+}
+
+func (s *ConformanceSuite) TestMarshalWithUnknownRefusesADeclaredName() {
+	_, err := Marshal(keeper{Name: "x", keeperEnvelope: keeperEnvelope{Unknown: map[string]RawMessage{"name": RawMessage(`"y"`)}}})
+	s.ErrorIs(err, ErrDuplicateKey)
+}

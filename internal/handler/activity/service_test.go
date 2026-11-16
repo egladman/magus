@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
@@ -50,8 +51,8 @@ func list(t *testing.T, dir string, q *activityv1.ActivityQuery) []*activityv1.A
 	return resp.Msg.GetEvents()
 }
 
-// consoleCred is the verified credential the seeded token event was made under.
-var consoleCred = jobtypes.Credential{Kind: jobtypes.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: jobtypes.AccessConsole}
+// consoleCred is the credential the seeded token event records it was made under.
+var consoleCred = jobtypes.Credential{Kind: auth.KindStored, ID: "3fa9c1d2", Name: "console-1"}
 
 func seedTrail(t *testing.T) (dir, respRef string) {
 	t.Helper()

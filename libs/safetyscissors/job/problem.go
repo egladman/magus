@@ -2,17 +2,20 @@ package job
 
 import (
 	"fmt"
-
-	"github.com/egladman/magus/libs/diagnostics"
 )
+
+// Code names a class of problem in the caller's own vocabulary, such as magus's
+// diagnostic codes. This module defines none: it carries a code a caller gave it and
+// compares it with the ones the caller permits.
+type Code string
 
 // Deviation permits one permissible problem on a record's own authority, with the reason a
 // reviewer reads: "the root regenerates it", "the root runs it". The name is MISRA C's: a
 // deviation record sanctions a violation with its rationale.
 type Deviation struct {
-	Code    diagnostics.Code `json:"code"`
-	Subject string           `json:"subject"`
-	Reason  string           `json:"reason" schema:"nonblank"`
+	Code    Code   `json:"code"`
+	Subject string `json:"subject"`
+	Reason  string `json:"reason" schema:"nonblank"`
 }
 
 // FaultKind is which rule a fault breaks. The caller maps each to its own code.

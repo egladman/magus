@@ -31,7 +31,7 @@ func TestOverrunsForegroundNamesACheckLongerThanTheForeground(t *testing.T) {
 
 	o, ok := OverrunsForeground(row, asked, foregroundLimit(10*time.Minute))
 	require.True(t, ok)
-	assert.Equal(t, ForegroundOverrun{Check: row.Check.String(), LastRunMs: 840000, ForegroundMaxMs: 600000}, o)
+	assert.Equal(t, ForegroundOverrun{Check: CheckCommand(*row.Check), LastRunMs: 840000, ForegroundMaxMs: 600000}, o)
 	assert.Contains(t, o.Check, "run go-test .")
 
 	var out bytes.Buffer

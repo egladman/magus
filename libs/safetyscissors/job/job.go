@@ -2,7 +2,6 @@ package job
 
 import (
 	"cmp"
-	"errors"
 	"fmt"
 	"maps"
 	"path"
@@ -16,7 +15,6 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/libs/apiversion"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
@@ -65,9 +63,9 @@ func ValidState(s State) bool { return slices.Contains(States(), s) }
 // is forwarded past `--`. The target carries a `spell::` filter when the job
 // named one.
 //
-// A RECORD rather than the command line it renders to. A line has to be parsed before it
-// can be compared with a stored run, and a parser that reads positions binds
-// `magus run -o json test .` to a target named json.
+// A RECORD rather than a command line. A line has to be parsed before it can be compared
+// with a stored run, and a parser that reads positions binds `run -o json test .` to a
+// target named json. Rendering one as a command is the runner's business.
 type LeaseCheck struct {
 	// Target is the magus target the check runs, without the `magus run` in front of it.
 	// Empty when Script names the check instead.
@@ -138,7 +136,7 @@ func (g Goal) Resolve() Goal {
 		g.Kind = GoalKindCheck
 	}
 	if g.Expect == "" {
-		g.Expect = g.Kind.DefaultExpect()
+		g.Expect = g.Kind.defaultExpect()
 	}
 	return g
 }
@@ -210,10 +208,10 @@ func GoalExpects() []GoalExpect {
 	return []GoalExpect{ExpectPassed, ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced, ExpectSignature}
 }
 
-// DefaultExpect is what a kind means when a goal names no condition, so the common goal of
+// defaultExpect is what a kind means when a goal names no condition, so the common goal of
 // each kind declares only its subject. A check is asked whether it passed; files and
 // symbols are asked whether this job changed them, which is the question a job is for.
-func (k GoalKind) DefaultExpect() GoalExpect {
+func (k GoalKind) defaultExpect() GoalExpect {
 	if k == GoalKindCheck {
 		return ExpectPassed
 	}
@@ -227,7 +225,7 @@ func (g Goal) Subject() []string {
 		if g.Check.Target == "" && g.Check.Script == "" {
 			return nil
 		}
-		return []string{g.Check.String()}
+		return []string{g.Check.words()}
 	case GoalKindPaths:
 		return g.Paths
 	default:
@@ -248,36 +246,21 @@ var goalAccepts = map[GoalKind][]GoalExpect{
 // EffectiveGoals returns the declared goals plus the primary Check as a goal. Keeping the
 // projection at the model boundary means guards that still read Check retain their
 // capability semantics while every verifier has one complete collection to grade.
-func (u Job) EffectiveGoals() []Goal {
-	goals := cloneGoals(u.Goals)
-	if u.Check != nil {
-		primary := Goal{ID: PrimaryGoalID, Check: *u.Check}.Resolve()
+func (j Job) EffectiveGoals() []Goal {
+	goals := cloneGoals(j.Goals)
+	if j.Check != nil {
+		primary := Goal{ID: PrimaryGoalID, Check: *j.Check}.Resolve()
 		goals = append([]Goal{primary}, goals...)
 	}
 	return goals
 }
 
-// String renders the check as the command a person types and a job stores.
-// Running it satisfies the check. The charms it executes under, default_charms
-// included, are the charms the check is resolved to (internal/job.ranCheck).
-func (c LeaseCheck) String() string {
-	if c.Script != "" {
-		line := "magus buzz --record " + c.Script
-		if c.Test {
-			line = "magus buzz -t " + c.Script
-		}
-		if len(c.Args) > 0 {
-			line += " -- " + strings.Join(c.Args, " ")
-		}
-		return line
-	}
-	project := c.Project
-	if project == "" {
-		project = "."
-	}
-	line := fmt.Sprintf("magus run %s %s", c.Target, project)
-	if c.NoDefaultCharms {
-		line += " --no-default-charms"
+// words is the check in the form [ParseLeaseCheck] reads, `<target> <project> [-- args]`,
+// or its script in place of the target and project.
+func (c LeaseCheck) words() string {
+	line := c.Script
+	if line == "" {
+		line = c.Target + " " + cmp.Or(c.Project, ".")
 	}
 	if len(c.Args) > 0 {
 		line += " -- " + strings.Join(c.Args, " ")
@@ -320,16 +303,16 @@ func ParseLeaseCheck(s string) (LeaseCheck, error) {
 		}
 		positional = append(positional, w)
 		if strings.HasPrefix(w, "-") {
-			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries the flag %s,"+
-				" flags belong after `--`, where they reach the tool rather than magus", s, w)
+			return LeaseCheck{}, &CheckError{Line: s, Reason: fmt.Sprintf("%q carries the flag %s,"+
+				" flags belong after `--`, where they reach the tool rather than magus", s, w)}
 		}
 	}
 	words = positional
 	switch {
 	case len(words) == 0:
-		return LeaseCheck{}, errors.New("a check is `<target> <project> [-- args]` and this one names no target")
+		return LeaseCheck{}, &CheckError{Line: s, Reason: "this one names no target"}
 	case len(words) > 2:
-		return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries %d words before any `--`", s, len(words))
+		return LeaseCheck{}, &CheckError{Line: s, Reason: fmt.Sprintf("%q carries %d words before any `--`", s, len(words))}
 	}
 	c := LeaseCheck{Target: words[0], Project: ".", Args: args, NoDefaultCharms: noDefaultCharms}
 	if len(words) == 2 {
@@ -339,32 +322,14 @@ func ParseLeaseCheck(s string) (LeaseCheck, error) {
 	return c, nil
 }
 
-// ParseLeaseRunLine reads a rendered `[magus] run <target> <project> [-- args]` back into a
-// record.
-//
-// compat(until: no client still sends a rendered validation line): jobs
-// declared it before the check record existed. Observe it by grepping the
-// ledger archives under the per-repository state dir for a record with
-// `validation` and no `check`.
-func ParseLeaseRunLine(s string) (LeaseCheck, error) {
-	words := strings.Fields(s)
-	if len(words) > 0 && words[0] != "run" && words[0] != "buzz" {
-		words = words[1:]
-	}
-	if len(words) >= 3 && words[0] == "buzz" && words[1] == "--record" {
-		c := LeaseCheck{Script: words[2]}
-		if rest := words[3:]; len(rest) > 0 {
-			if rest[0] != "--" {
-				return LeaseCheck{}, fmt.Errorf("a script check line is `magus buzz --record <script> [-- args]` and %q is not one", s)
-			}
-			c.Args = rest[1:]
-		}
-		return c, nil
-	}
-	if len(words) == 0 || words[0] != "run" {
-		return LeaseCheck{}, fmt.Errorf("a check line is `magus run <target> <project> [-- args]` and %q is not one", s)
-	}
-	return ParseLeaseCheck(strings.Join(words[1:], " "))
+// CheckError is a check [ParseLeaseCheck] refuses: the line it was given, and why.
+type CheckError struct {
+	Line   string
+	Reason string
+}
+
+func (e *CheckError) Error() string {
+	return "a check is `<target> <project> [-- args]` and " + e.Reason
 }
 
 // BaseVerdict says how the base a worker reported at registration compares
@@ -439,19 +404,36 @@ func ValidWeight(w float64) bool { return w > 0 && w <= 1 }
 const MaxIDLen = 128
 
 // ValidID reports whether id may be stamped as a lease and checked out as a branch:
-// see [IDRule].
+// see [ValidateID].
 //
 // The narrowness is a security property: a lease id is EXEMPT from the redaction
 // internal/trail applies to every other event field, so every channel that stamps one
 // passes its candidate through here first. It lives beside [Job] because the ledger and
 // the trail both read the id.
-func ValidID(id string) bool { return IDRule(id) == "" }
+func ValidID(id string) bool { return idRule(id) == "" }
 
-// IDRule names the rule id breaks, or returns "" for a valid id. The id is also the
-// branch ForkWorktree creates, so it is held to what every driver accepts as one:
-// lowercase letters, digits, '-' and '.', with '/' only between segments, no segment
-// empty or starting with '.' or '-', never ':' or '..', at most [MaxIDLen] characters.
-func IDRule(id string) string {
+// ValidateID refuses an id that may not name a job, as an [*IDError] naming the rule it
+// breaks. The id is also the branch a checkout of the job is made on, so it is held to
+// what every VCS accepts as one: lowercase letters, digits, '-' and '.', with '/' only
+// between segments, no segment empty or starting with '.' or '-', never ':' or '..', at
+// most [MaxIDLen] characters.
+func ValidateID(id string) error {
+	if rule := idRule(id); rule != "" {
+		return &IDError{ID: id, Rule: rule}
+	}
+	return nil
+}
+
+// IDError is an id [ValidateID] refuses, and the rule it breaks.
+type IDError struct {
+	ID   string
+	Rule string
+}
+
+func (e *IDError) Error() string { return fmt.Sprintf("%q is not a job id: %s", e.ID, e.Rule) }
+
+// idRule names the rule id breaks, or returns "" for a valid id.
+func idRule(id string) string {
 	switch {
 	case id == "":
 		return "an id is not empty"
@@ -579,8 +561,8 @@ type ResultValidation struct {
 }
 
 // OwedNoSeat is the one reason a worker files a check as owed: the machine
-// would not seat it. Its budget was full (MGS3009) or its memory short
-// (MGS3053), and a worker waits on neither.
+// would not seat it, its build budget full or its memory short, and a worker
+// waits on neither.
 const OwedNoSeat = "no seat"
 
 // OwedRemoteCI is the reason a check is owed when the workspace declares a
@@ -686,15 +668,6 @@ type CapturedRun struct {
 type GateAttempt struct {
 	GateID  string      `json:"gate_id" yaml:"gate_id"`
 	Attempt CapturedRun `json:"attempt" yaml:"attempt"`
-}
-
-// String renders the recorded command.
-func (a CapturedRun) String() string {
-	target := a.Target
-	if a.Spell != "" {
-		target = fmt.Sprintf("%s::%s", a.Spell, target)
-	}
-	return LeaseCheck{Target: target, Project: a.Project, Args: a.ExtraArgs}.String()
 }
 
 // Paths is a job's declared boundary. Write and Deny bound what its lease
@@ -817,13 +790,9 @@ type Job struct {
 	Rejection *Rejection `json:"rejection,omitzero" yaml:"rejection,omitempty"`
 	// Check is the one check this lease runs. See [LeaseCheck].
 	Check *LeaseCheck `json:"check,omitzero" yaml:"check,omitempty"`
-	// Validation is Check rendered as the command that runs it.
-	//
-	// compat(until: no reader still reads the rendered line; observe: grep for
-	// `.Validation` outside internal/ledger, which is cmd/magus/guard_gate.go's gate
-	// ownership rule and the console's plan view today): the store writes it from Check
-	// on every put so the two cannot disagree, and a client that sends it instead of
-	// Check is still understood.
+	// Validation is Check rendered as the command that runs it, by the store that keeps
+	// the row. Nothing in this module writes or reads it: [Declaration.Apply] leaves it as
+	// it was, so a store that keeps it renders it from Check on every write.
 	Validation string `json:"validation,omitempty" yaml:"validation,omitempty"`
 	// Goals are the job's definition of done that magus grades: a check that passed, paths
 	// or symbols this job changed, added or removed. Check is graded as one more goal. Named
@@ -950,11 +919,11 @@ type Worktree struct {
 	Base string `json:"base" yaml:"base"`
 	// Created is unix seconds.
 	Created int64 `json:"created" yaml:"created"`
-	// Binary is the magus the fork placed in it, the same file the forking checkout runs,
-	// "" when the forking checkout ran magus from PATH and so the job's runs it too.
+	// Binary is the runner executable the fork placed in the checkout, the same file the
+	// forking checkout runs, "" when the job runs whatever its PATH finds.
 	Binary string `json:"binary,omitempty" yaml:"binary,omitempty"`
-	// BinaryDigest pins Binary's bytes ("sha256:<hex>"), "" for none.
-	// The root's hook runs only a Binary that still hashes to it.
+	// BinaryDigest pins Binary's bytes ("sha256:<hex>"), "" for none, so a reader can
+	// refuse a Binary that no longer hashes to it.
 	BinaryDigest string `json:"binary_digest,omitempty" yaml:"binary_digest,omitempty"`
 	// Removed is unix seconds when magus removed it, zero while it stands.
 	Removed int64 `json:"removed" yaml:"removed,omitempty"`
@@ -1006,13 +975,12 @@ type Denial struct {
 // It is a DECLARATION and not a merge: an omitted field is cleared rather than
 // kept. magus\workspace().putJob does the opposite (see job.PutMerge).
 //
-// JSON only: decoded from stdin and never emitted, so no yaml tags. The strict
-// decoder would refuse an old client's job as an unknown member, so the legacy
-// spellings of the path fields are read.
+// JSON only, so no yaml tags. The members it does not declare are kept in
+// Schema.Unknown by its own MarshalJSON and UnmarshalJSON, which plain encoding/json
+// calls; libs/codec's UnmarshalStrict refuses them instead.
 type Declaration struct {
 	// Schema is the job shape this record is written in. The version is
-	// required, and one newer than this magus is rejected by name. See
-	// JobSchemaVersion.
+	// required, and a reader refuses one it does not know.
 	Schema
 	// ID is the lease's identity within the plan, the key a second register replaces on,
 	// and the only required field besides the version.
@@ -1049,16 +1017,6 @@ type Declaration struct {
 	// checkout's revision when it names none.
 	// The job owns it: see [Worktree]. Empty works wherever the job is taken.
 	Checkout string `json:"checkout,omitempty" schema:"abspath"`
-	// compat(until: no client or stored ledger still sends owned_paths, focus
-	// or forbidden_paths): see Declaration. Observe it by grepping the
-	// leases-*.json archives and the trail for the old keys.
-	LegacyWritePaths []string `json:"owned_paths,omitempty"`
-	// LegacyDenyPaths is the pre-rename spelling of paths.deny.
-	// compat: see LegacyWritePaths.
-	LegacyDenyPaths []string `json:"forbidden_paths,omitempty"`
-	// LegacyReadPaths is the pre-rename spelling of paths.read.
-	// compat: see LegacyWritePaths.
-	LegacyReadPaths []string `json:"focus,omitempty"`
 	// Check is the one check this lease runs, and acceptance binds a worker's evidence
 	// to it.
 	Check *LeaseCheck `json:"check,omitzero"`
@@ -1069,12 +1027,6 @@ type Declaration struct {
 	// ReadOnly marks a lease that gathers evidence and writes nothing, so empty write
 	// paths are correct rather than missing.
 	ReadOnly bool `json:"read_only,omitzero"`
-	// Validation is the check as a rendered `magus run` line.
-	//
-	// compat(until: no client still sends a rendered validation line): it is
-	// parsed into Check. Observe it by grepping the ledger archives for a
-	// record with `validation` and no `check`.
-	Validation string `json:"validation,omitempty"`
 	// Goals are what done means, graded by `magus job wait`. See [Job.Goals].
 	Goals []Goal `json:"goals,omitempty"`
 	// Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when
@@ -1225,18 +1177,29 @@ func (e ClaimEvidence) String() string {
 func ParseClaimEvidence(because string) (ClaimEvidence, error) {
 	kind, subject, _ := strings.Cut(strings.TrimSpace(because), ":")
 	e := ClaimEvidence{Kind: ClaimKind(kind), Subject: strings.TrimSpace(subject)}
+	refuse := func(reason string) (ClaimEvidence, error) {
+		return e, &ClaimEvidenceError{Because: because, Reason: reason}
+	}
 	switch {
 	case !e.Kind.Valid():
-		return e, fmt.Errorf("%q names no proof, so use one of refs:<symbol>, test:<file>, output:<project>:<target>, dead:<job> or released", because)
+		return refuse("names no proof, so use one of refs:<symbol>, test:<file>, output:<project>:<target>, dead:<job> or released")
 	case e.Kind == ClaimReleased && e.Subject != "":
-		return e, fmt.Errorf("%q: released names nothing after it", because)
+		return refuse("names a subject, and released names nothing after it")
 	case e.Kind != ClaimReleased && e.Subject == "":
-		return e, fmt.Errorf("%q names no %s subject", because, e.Kind)
+		return refuse(fmt.Sprintf("names no %s subject", e.Kind))
 	case e.Kind == ClaimOutput && !strings.Contains(e.Subject, ":"):
-		return e, fmt.Errorf("%q names no target, so spell it output:<project>:<target>", because)
+		return refuse("names no target, so spell it output:<project>:<target>")
 	}
 	return e, nil
 }
+
+// ClaimEvidenceError is a `because` [ParseClaimEvidence] refuses, and why.
+type ClaimEvidenceError struct {
+	Because string
+	Reason  string
+}
+
+func (e *ClaimEvidenceError) Error() string { return strconv.Quote(e.Because) + " " + e.Reason }
 
 // Claim is one write path a holder added with a proof. Proof is the sentence the
 // store found it true by, At unix seconds and By who wrote it.
@@ -1246,30 +1209,6 @@ type Claim struct {
 	Proof    string        `json:"proof"    yaml:"proof"`
 	At       int64         `json:"at"       yaml:"at"`
 	By       Origin        `json:"by"       yaml:"by"`
-}
-
-// FoldLegacyNames moves a field declared under its old name onto the one that
-// carries it, refusing a declaration that names the same field twice. Exported
-// for the job package's decodeDeclaration, the one caller outside this package.
-// It runs between the JSON decode and Validate.
-//
-// compat: see the legacy fields on [Declaration].
-func (r *Declaration) FoldLegacyNames() error {
-	var err error
-	fold := func(name string, into *[]string, from []string) {
-		switch {
-		case len(from) == 0:
-		case len(*into) > 0:
-			err = errors.Join(err, Fault{Kind: FaultRecord, Field: name, Message: fmt.Sprintf("a declaration names %s or its renamed spelling, not both", name)})
-		default:
-			*into = from
-		}
-	}
-	fold("owned_paths", &r.Paths.Write, r.LegacyWritePaths)
-	fold("forbidden_paths", &r.Paths.Deny, r.LegacyDenyPaths)
-	fold("focus", &r.Paths.Read, r.LegacyReadPaths)
-	r.LegacyWritePaths, r.LegacyDenyPaths, r.LegacyReadPaths = nil, nil, nil
-	return err
 }
 
 // pathOutsideWorkspace says why a declared path can name no workspace-relative path, or
@@ -1291,16 +1230,16 @@ func pathOutsideWorkspace(p string) string {
 // Faults is every fault the record shows on its own, without a workspace: each field's
 // shape, the check, the deviations and the goals. It never stops at the first. A
 // deviation may permit only a code in permissible, the caller's own.
-func (r Declaration) Faults(permissible ...diagnostics.Code) []Fault {
+func (d Declaration) Faults(permissible ...Code) []Fault {
 	var ps []Fault
 	invalid := func(field, message, fix string) {
 		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Fix: fix})
 	}
-	if rule := IDRule(strings.TrimSpace(r.ID)); rule != "" {
-		invalid("id", fmt.Sprintf("%q is not a lease id: %s", r.ID, rule), "name a branch-shaped id such as fix-parser or area/fix-parser")
+	if rule := idRule(strings.TrimSpace(d.ID)); rule != "" {
+		invalid("id", fmt.Sprintf("%q is not a lease id: %s", d.ID, rule), "name a branch-shaped id such as fix-parser or area/fix-parser")
 	}
-	if r.Enter != "" {
-		rest := r
+	if d.Enter != "" {
+		rest := d
 		rest.Schema, rest.ID, rest.Enter = Schema{}, "", ""
 		if !reflect.ValueOf(rest).IsZero() {
 			invalid("enter", "a record carrying enter enters a job and declares nothing, so it carries only api_version, id and enter",
@@ -1308,75 +1247,75 @@ func (r Declaration) Faults(permissible ...diagnostics.Code) []Fault {
 		}
 		return ps
 	}
-	if len(r.Claim) > 0 {
-		return append(ps, r.claimFaults()...)
+	if len(d.Claim) > 0 {
+		return append(ps, d.claimFaults()...)
 	}
-	if r.Settles() {
-		return append(ps, r.settlementFaults()...)
+	if d.Settles() {
+		return append(ps, d.settlementFaults()...)
 	}
-	if p := strings.TrimSpace(r.Parent); p != "" && !ValidID(p) {
-		invalid("parent", fmt.Sprintf("parent %q is not a lease id", r.Parent), "name the id of the job this one was forked under")
+	if p := strings.TrimSpace(d.Parent); p != "" && !ValidID(p) {
+		invalid("parent", fmt.Sprintf("parent %q is not a lease id", d.Parent), "name the id of the job this one was forked under")
 	}
-	if r.Agent != nil {
-		if err := r.Agent.Validate(); err != nil {
+	if d.Agent != nil {
+		if err := d.Agent.Validate(); err != nil {
 			invalid("agent", err.Error(), `write worker {"type": "resumed"}, or {"type": "new", "reason": "<why>"}`)
 		}
 	}
-	for i, dep := range r.DependsOn {
+	for i, dep := range d.DependsOn {
 		if d := strings.TrimSpace(dep); d != "" && !ValidID(d) {
 			invalid(fmt.Sprintf("depends_on[%d]", i), fmt.Sprintf("depends_on[%d] %q is not a lease id", i, dep),
 				"name the id of a job that must land first")
 		}
 	}
-	for i, branch := range r.Integrates {
+	for i, branch := range d.Integrates {
 		at := fmt.Sprintf("integrates[%d]", i)
 		switch b := strings.TrimSpace(branch); {
-		case !ValidIntegratedBranch(b):
+		case !validIntegratedBranch(b):
 			invalid(at, fmt.Sprintf("%s %q is not a branch name a merge can take", at, branch),
 				"name a local branch, such as the one a finished job committed on")
-		case slices.Contains(r.Integrates[:i], branch):
+		case slices.Contains(d.Integrates[:i], branch):
 			invalid(at, fmt.Sprintf("%s %q is named twice", at, branch), "drop the repeat")
 		}
 	}
-	if len(r.Integrates) > 0 && r.ReadOnly {
+	if len(d.Integrates) > 0 && d.ReadOnly {
 		invalid("read_only", "an integration job merges branches, so it writes", "drop read_only, or drop integrates")
 	}
-	if r.State != "" && !ValidState(r.State) {
-		invalid("state", fmt.Sprintf("state %q is not a job state", r.State), "use one of "+StateVocabulary())
+	if d.State != "" && !ValidState(d.State) {
+		invalid("state", fmt.Sprintf("state %q is not a job state", d.State), "use one of "+StateVocabulary())
 	}
-	if _, err := ParseTimeout(r.Timeout); err != nil {
-		invalid("timeout", fmt.Sprintf("timeout %q is not a positive duration", r.Timeout), "name one such as 30m or 2h, or leave it out")
+	if _, err := ParseTimeout(d.Timeout); err != nil {
+		invalid("timeout", fmt.Sprintf("timeout %q is not a positive duration", d.Timeout), "name one such as 30m or 2h, or leave it out")
 	}
-	if r.BriefFormat != "" && !r.BriefFormat.Valid() {
-		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", r.BriefFormat),
-			fmt.Sprintf("use one of %s, or leave it out for magus.yaml's agents.brief_format", strings.Join(r.BriefFormat.Values(), ", ")))
+	if d.BriefFormat != "" && !d.BriefFormat.Valid() {
+		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", d.BriefFormat),
+			fmt.Sprintf("use one of %s, or leave it out for magus.yaml's agents.brief_format", strings.Join(d.BriefFormat.Values(), ", ")))
 	}
-	if r.Delivery != "" && !slices.Contains(Deliveries(), r.Delivery) {
-		invalid("delivery", fmt.Sprintf("delivery %q is not a delivery", r.Delivery),
+	if d.Delivery != "" && !slices.Contains(Deliveries(), d.Delivery) {
+		invalid("delivery", fmt.Sprintf("delivery %q is not a delivery", d.Delivery),
 			"use one of "+strings.Join(Deliveries(), ", "))
 	}
-	if r.ParentHead != "" && r.Delivery != DeliveryStacked {
+	if d.ParentHead != "" && d.Delivery != DeliveryStacked {
 		invalid("parent_head", "parent_head is the base of a stacked job's pull request, and this job is not stacked",
 			"drop parent_head, or set delivery to "+DeliveryStacked)
 	}
-	if r.Weight != nil && !ValidWeight(*r.Weight) {
-		invalid("weight", fmt.Sprintf("weight %v is outside (0,1]", *r.Weight),
+	if d.Weight != nil && !ValidWeight(*d.Weight) {
+		invalid("weight", fmt.Sprintf("weight %v is outside (0,1]", *d.Weight),
 			fmt.Sprintf("use a weight above 0 and at most 1, or leave it out for %v", DefaultWeight))
 	}
-	if r.MaxAttempts < 0 {
-		invalid("max_attempts", fmt.Sprintf("max_attempts is %d, and it is a count of forks", r.MaxAttempts), "use a positive count, or 0 for no cap")
+	if d.MaxAttempts < 0 {
+		invalid("max_attempts", fmt.Sprintf("max_attempts is %d, and it is a count of forks", d.MaxAttempts), "use a positive count, or 0 for no cap")
 	}
-	if r.MaxClaims < 0 {
-		invalid("max_claims", fmt.Sprintf("max_claims is %d, and it is a count of claims", r.MaxClaims), "use a positive count, or 0 for the default")
+	if d.MaxClaims < 0 {
+		invalid("max_claims", fmt.Sprintf("max_claims is %d, and it is a count of claims", d.MaxClaims), "use a positive count, or 0 for the default")
 	}
-	if r.Checkout != "" && !filepath.IsAbs(r.Checkout) {
-		invalid("checkout", fmt.Sprintf("checkout %q is relative, and a fork names the checkout it makes by an absolute path", r.Checkout),
+	if d.Checkout != "" && !filepath.IsAbs(d.Checkout) {
+		invalid("checkout", fmt.Sprintf("checkout %q is relative, and a fork names the checkout it makes by an absolute path", d.Checkout),
 			"name an absolute directory outside the workspace")
 	}
 	for _, field := range []struct {
 		name  string
 		paths []string
-	}{{"paths.write", r.Paths.Write}, {"paths.deny", r.Paths.Deny}, {"paths.read", r.Paths.Read}} {
+	}{{"paths.write", d.Paths.Write}, {"paths.deny", d.Paths.Deny}, {"paths.read", d.Paths.Read}} {
 		for i, p := range field.paths {
 			if why := pathOutsideWorkspace(p); why != "" {
 				at := fmt.Sprintf("%s[%d]", field.name, i)
@@ -1385,22 +1324,22 @@ func (r Declaration) Faults(permissible ...diagnostics.Code) []Fault {
 			}
 		}
 	}
-	for i, p := range r.Paths.Soft {
-		if !slices.Contains(r.Paths.Write, p) {
+	for i, p := range d.Paths.Soft {
+		if !slices.Contains(d.Paths.Write, p) {
 			at := fmt.Sprintf("paths.soft[%d]", i)
 			invalid(at, fmt.Sprintf("%s %q is not in paths.write, and a soft path is a write path that overlaps nothing", at, p),
 				"name an entry of paths.write, or drop it")
 		}
 	}
-	_, declared, checkFaults := r.check()
+	_, declared, checkFaults := d.check()
 	ps = append(ps, checkFaults...)
-	for i, b := range r.Breaks {
+	for i, b := range d.Breaks {
 		if strings.TrimSpace(b) == "" {
 			at := fmt.Sprintf("breaks[%d]", i)
 			invalid(at, at+" is blank", "name the flag, key, symbol or format the job may break, or drop the entry")
 		}
 	}
-	for i, w := range r.Deviations {
+	for i, w := range d.Deviations {
 		at := fmt.Sprintf("deviations[%d]", i)
 		if !slices.Contains(permissible, w.Code) {
 			invalid(at+".code", fmt.Sprintf("%s permits %q, which is not a permissible code", at, w.Code),
@@ -1413,23 +1352,23 @@ func (r Declaration) Faults(permissible ...diagnostics.Code) []Fault {
 			invalid(at+".reason", at+" gives no reason", "say why the problem is accepted, such as \"the root regenerates it\"")
 		}
 	}
-	return append(ps, goalFaults(r.Goals, declared)...)
+	return append(ps, goalFaults(d.Goals, declared)...)
 }
 
 // claimFaults is every fault of a claim record: it carries only schema_version, id
 // and claim, and each entry names one literal workspace path and a proof that parses.
-func (r Declaration) claimFaults() []Fault {
+func (d Declaration) claimFaults() []Fault {
 	var ps []Fault
 	invalid := func(field, message, fix string) {
 		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Fix: fix})
 	}
-	rest := r
+	rest := d
 	rest.Schema, rest.ID, rest.Claim = Schema{}, "", nil
 	if !reflect.ValueOf(rest).IsZero() {
 		invalid("claim", "a record carrying claim claims a job and declares nothing, so it carries only api_version, id and claim",
 			"drop every other field, or drop claim")
 	}
-	for i, w := range r.Claim {
+	for i, w := range d.Claim {
 		at := fmt.Sprintf("claim[%d]", i)
 		if strings.TrimSpace(w.Callers) != "" {
 			if w.Path != "" || w.Because != "" {
@@ -1455,25 +1394,25 @@ func (r Declaration) claimFaults() []Fault {
 
 // Settles reports whether the record answers a job's deferred items or states
 // why its work stays unmerged, rather than declaring a spec.
-func (r Declaration) Settles() bool {
-	return len(r.Deferred) > 0 || r.LeftUnmerged != ""
+func (d Declaration) Settles() bool {
+	return len(d.Deferred) > 0 || d.LeftUnmerged != ""
 }
 
-func (r Declaration) settlementFaults() []Fault {
+func (d Declaration) settlementFaults() []Fault {
 	var ps []Fault
 	invalid := func(field, message, fix string) {
 		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Fix: fix})
 	}
-	rest := r
+	rest := d
 	rest.Schema, rest.ID, rest.Deferred, rest.LeftUnmerged = Schema{}, "", nil, ""
 	if !reflect.ValueOf(rest).IsZero() {
 		invalid("deferred", "a record carrying deferred or left_unmerged settles a job and declares nothing, so it carries only api_version, id, deferred and left_unmerged",
 			"drop every other field, or drop deferred and left_unmerged")
 	}
-	if r.LeftUnmerged != "" && strings.TrimSpace(r.LeftUnmerged) == "" {
+	if d.LeftUnmerged != "" && strings.TrimSpace(d.LeftUnmerged) == "" {
 		invalid("left_unmerged", "left_unmerged is blank", "state why the work stays off the merge branch")
 	}
-	for i, d := range r.Deferred {
+	for i, d := range d.Deferred {
 		at := fmt.Sprintf("deferred[%d]", i)
 		row, reason := strings.TrimSpace(d.Job), strings.TrimSpace(d.Reason)
 		switch {
@@ -1593,7 +1532,7 @@ func (g Goal) faults(field string) []Fault {
 		}
 		ps = append(ps, Fault{Kind: FaultGoal, Field: at, Message: message, Fix: fix})
 	}
-	if rule := IDRule(strings.TrimSpace(g.ID)); rule != "" {
+	if rule := idRule(strings.TrimSpace(g.ID)); rule != "" {
 		bad("id", fmt.Sprintf("id %q is not a goal id: %s", g.ID, rule), "use a lowercase, branch-shaped id")
 	}
 	// Validates what the job WILL BE, not what arrived. A declaration off the
@@ -1673,15 +1612,22 @@ func ParseTimeout(s string) (time.Duration, error) {
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil || d <= 0 {
-		return 0, fmt.Errorf("timeout %q is not a positive duration such as 30m or 2h", s)
+		return 0, &TimeoutError{Timeout: s}
 	}
 	return d, nil
 }
 
+// TimeoutError is a declared timeout [ParseTimeout] refuses.
+type TimeoutError struct{ Timeout string }
+
+func (e *TimeoutError) Error() string {
+	return fmt.Sprintf("timeout %q is not a positive duration such as 30m or 2h", e.Timeout)
+}
+
 // Overdue reports whether a live job has passed its deadline at now, in unix
 // seconds. A terminal job has no writes left to bound, so it is never overdue.
-func (u Job) Overdue(now int64) bool {
-	return u.Deadline > 0 && u.State.Live() && now >= u.Deadline
+func (j Job) Overdue(now int64) bool {
+	return j.Deadline > 0 && j.State.Live() && now >= j.Deadline
 }
 
 // EndReasonSessionEnded opens the end_reason of a job the store ended because
@@ -1692,15 +1638,15 @@ const EndReasonSessionEnded = "its holder's session ended"
 
 // EndedWithSession reports whether the job is no_return only because its
 // holder's session ended (see [EndReasonSessionEnded]).
-func (u Job) EndedWithSession() bool {
-	return u.State == StateNoReturn && strings.HasPrefix(u.EndReason, EndReasonSessionEnded)
+func (j Job) EndedWithSession() bool {
+	return j.State == StateNoReturn && strings.HasPrefix(j.EndReason, EndReasonSessionEnded)
 }
 
-// StaleAt reports whether a record stamped with observed was taken against an
-// earlier declared spec than the job's. A zero on either side is unknown, never
-// stale.
-func (u Job) StaleAt(observed int) bool {
-	return observed != 0 && u.Generation != 0 && observed != u.Generation
+// SpecChangedSince reports whether a record stamped with generation observed was taken
+// against an earlier declared spec than the job's. A zero on either side is unknown,
+// never a change.
+func (j Job) SpecChangedSince(observed int) bool {
+	return observed != 0 && j.Generation != 0 && observed != j.Generation
 }
 
 // IdleSince is when job's jobs.stale_after clock started, in unix seconds.
@@ -1742,40 +1688,28 @@ func quoteJoin[T ~string](items []T, sep string) string {
 	return strings.Join(out, sep)
 }
 
-// check is the job's declared check, from either spelling, and whether it
-// declares one. A line that does not parse is refused HERE, at the door.
-func (r Declaration) check() (LeaseCheck, bool, []Fault) {
+// check is the job's declared check and whether it declares one. A check that does not
+// parse is refused HERE, at the door.
+func (d Declaration) check() (LeaseCheck, bool, []Fault) {
 	invalid := func(field string, err error, fix string) []Fault {
 		return []Fault{{Kind: FaultRecord, Field: field, Message: err.Error(), Fix: fix}}
 	}
-	line := strings.TrimSpace(r.Validation)
 	switch {
-	case r.Check != nil && line != "":
-		return LeaseCheck{}, false, []Fault{{
-			Kind: FaultRecord, Field: "validation",
-			Message: "a job carries `check` or a rendered `validation` line, not both", Fix: "send `check` alone",
-		}}
-	case r.Check != nil && r.Check.Script != "":
-		if err := r.Check.validScript(); err != nil {
+	case d.Check != nil && d.Check.Script != "":
+		if err := d.Check.validScript(); err != nil {
 			return LeaseCheck{}, false, invalid("check.script", err, "name a target or a script, and give a script no project or charms")
 		}
-		return LeaseCheck{Script: r.Check.Script, Args: r.Check.Args, Test: r.Check.Test}, true, nil
-	case r.Check != nil:
-		if err := r.Check.validScript(); err != nil {
+		return LeaseCheck{Script: d.Check.Script, Args: d.Check.Args, Test: d.Check.Test}, true, nil
+	case d.Check != nil:
+		if err := d.Check.validScript(); err != nil {
 			return LeaseCheck{}, false, invalid("check.test", err, "drop test, or name a script")
 		}
-		parsed, err := ParseLeaseCheck(fmt.Sprintf("%s %s", r.Check.Target, r.Check.Project))
+		parsed, err := ParseLeaseCheck(fmt.Sprintf("%s %s", d.Check.Target, d.Check.Project))
 		if err != nil {
 			return LeaseCheck{}, false, invalid("check.target", err, "name one target and the project it runs in")
 		}
-		parsed.Args = r.Check.Args
-		parsed.NoDefaultCharms = r.Check.NoDefaultCharms
-		return parsed, true, nil
-	case line != "":
-		parsed, err := ParseLeaseRunLine(line)
-		if err != nil {
-			return LeaseCheck{}, false, invalid("validation", err, "send `check` with the target and project instead")
-		}
+		parsed.Args = d.Check.Args
+		parsed.NoDefaultCharms = d.Check.NoDefaultCharms
 		return parsed, true, nil
 	}
 	return LeaseCheck{}, false, nil
@@ -1808,52 +1742,50 @@ func StateVocabulary() string {
 	return strings.Join(names, ", ")
 }
 
-// Apply writes this declaration onto a job, for job.Store.Update.
-// Store-computed fields are untouched. A job that already carries releases or
-// a registration keeps them.
-func (r Declaration) Apply(u *Job) {
-	u.Parent = strings.TrimSpace(r.Parent)
-	u.Checkpoint = strings.TrimSpace(r.Checkpoint)
-	u.Paths.Write = trimmedNonEmpty(r.Paths.Write)
-	u.Paths.Deny = trimmedNonEmpty(r.Paths.Deny)
-	u.Paths.Soft = trimmedNonEmpty(r.Paths.Soft)
-	u.Paths.Read = trimmedNonEmpty(r.Paths.Read)
-	u.DependsOn = trimmedNonEmpty(r.DependsOn)
-	u.Integrates = trimmedNonEmpty(r.Integrates)
-	u.Breaks = trimmedNonEmpty(r.Breaks)
-	u.Agent = r.Agent.Trimmed()
-	u.Weight = 0
-	if r.Weight != nil {
-		u.Weight = *r.Weight
+// Apply writes this declaration onto a job. Store-computed fields are untouched, and so
+// is Validation: a job that already carries releases or a registration keeps them.
+func (d Declaration) Apply(j *Job) {
+	j.Parent = strings.TrimSpace(d.Parent)
+	j.Checkpoint = strings.TrimSpace(d.Checkpoint)
+	j.Paths.Write = trimmedNonEmpty(d.Paths.Write)
+	j.Paths.Deny = trimmedNonEmpty(d.Paths.Deny)
+	j.Paths.Soft = trimmedNonEmpty(d.Paths.Soft)
+	j.Paths.Read = trimmedNonEmpty(d.Paths.Read)
+	j.DependsOn = trimmedNonEmpty(d.DependsOn)
+	j.Integrates = trimmedNonEmpty(d.Integrates)
+	j.Breaks = trimmedNonEmpty(d.Breaks)
+	j.Agent = d.Agent.Trimmed()
+	j.Weight = 0
+	if d.Weight != nil {
+		j.Weight = *d.Weight
 	}
-	u.BriefFormat = r.BriefFormat
-	u.Delivery = r.Delivery
-	u.ParentHead = strings.TrimSpace(r.ParentHead)
-	u.Follows = strings.TrimSpace(r.Follows)
-	// Validate refused an unparsable check before the job reached a store.
-	// The rendered line is written from the record so the two agree.
-	check, declared, _ := r.check()
-	u.Check, u.Validation = nil, ""
+	j.BriefFormat = d.BriefFormat
+	j.Delivery = d.Delivery
+	j.ParentHead = strings.TrimSpace(d.ParentHead)
+	j.Follows = strings.TrimSpace(d.Follows)
+	// Faults refused an unparsable check before the job reached a store.
+	check, declared, _ := d.check()
+	j.Check = nil
 	if declared {
-		u.Check, u.Validation = &check, check.String()
+		j.Check = &check
 	}
-	u.Goals = cloneGoals(r.Goals)
-	u.State = r.State
-	u.ReadOnly = r.ReadOnly
-	u.MaxAttempts = r.MaxAttempts
-	u.MaxClaims = r.MaxClaims
-	u.Deviations = slices.Clone(r.Deviations)
+	j.Goals = cloneGoals(d.Goals)
+	j.State = d.State
+	j.ReadOnly = d.ReadOnly
+	j.MaxAttempts = d.MaxAttempts
+	j.MaxClaims = d.MaxClaims
+	j.Deviations = slices.Clone(d.Deviations)
 }
 
-// ApplySpec writes this declaration's spec onto a job, for `magus job apply`.
-// It is Apply, but the job's state is kept, since apply never moves a job.
-// So is its checkpoint when the declaration names none.
-func (r Declaration) ApplySpec(u *Job) {
-	state, checkpoint := u.State, u.Checkpoint
-	r.Apply(u)
-	u.State = state
-	if u.Checkpoint == "" {
-		u.Checkpoint = checkpoint
+// ApplySpec writes this declaration's spec onto a job, re-applying a declaration to a
+// row that exists. It is Apply, but the job's state is kept, and so is its checkpoint
+// when the declaration names none.
+func (d Declaration) ApplySpec(j *Job) {
+	state, checkpoint := j.State, j.Checkpoint
+	d.Apply(j)
+	j.State = state
+	if j.Checkpoint == "" {
+		j.Checkpoint = checkpoint
 	}
 }
 
@@ -1955,8 +1887,8 @@ type Release struct {
 // PausedAt reports whether a person's pause holds the job at now, unix seconds.
 // Past PausedUntil it has lapsed: the holder runs again, and the sweep and
 // `magus job prune` may end the job.
-func (u Job) PausedAt(now int64) bool {
-	return u.Paused != 0 && (u.PausedUntil == 0 || now < u.PausedUntil)
+func (j Job) PausedAt(now int64) bool {
+	return j.Paused != 0 && (j.PausedUntil == 0 || now < j.PausedUntil)
 }
 
 // UnattributedWrite is one path a lease owns that somebody outside it wrote, and
@@ -2080,98 +2012,9 @@ type List struct {
 	// ReadOnly are the jobs requiring a feature this magus lacks. It lists and
 	// honors them and refuses every write to them.
 	ReadOnly []ReadOnly `json:"read_only,omitempty" yaml:"read_only,omitempty"`
-	// Changes are the open changes against the queue's base, joined to the jobs whose
-	// checkouts are on their branches, in the order the provider listed them. Read from
-	// the snapshot `magus queue ls` leaves; a list never fetches them.
-	Changes []InflightChange `json:"changes,omitempty" yaml:"changes,omitempty"`
-	// Fetched is when and where that snapshot was read, nil when none was.
-	Fetched *InflightFetch `json:"fetched,omitzero" yaml:"fetched,omitempty"`
-	// Unproposed are the caller's live jobs whose checkout is on a branch no change
-	// carries: work in flight that has no change yet.
-	Unproposed []string `json:"unproposed,omitempty" yaml:"unproposed,omitempty"`
 	// Unmerged is filled by `magus ls jobs` alone. It reads the version
 	// control per job, and every other door lists on a hot path.
 	Unmerged *UnmergedReport `json:"unmerged,omitzero" yaml:"unmerged,omitempty"`
-}
-
-// InflightChange is one open change as a person reads it: the provider's record joined to
-// the jobs working on its branch and to the queue's newest plan for it. The queue's own
-// Change is the record it acts on; this one is what it is waiting on and whose turn it is.
-type InflightChange struct {
-	ID     string `json:"id"               yaml:"id"`
-	Title  string `json:"title,omitempty"  yaml:"title,omitempty"`
-	Author string `json:"author,omitempty" yaml:"author,omitempty"`
-	Head   string `json:"head"             yaml:"head"`
-	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
-	Base   string `json:"base,omitempty"   yaml:"base,omitempty"`
-	Fork   bool   `json:"fork"   yaml:"fork,omitempty"`
-	// Jobs are the ids of the jobs whose checkout is on Branch, in store order.
-	Jobs []string `json:"jobs,omitempty" yaml:"jobs,omitempty"`
-	// Intent is the merge method the change is queued with, empty when it carries no
-	// merge intent.
-	Intent string `json:"intent,omitempty" yaml:"intent,omitempty"`
-	// Mark is the queue's mark the provider shows on a change carrying no intent:
-	// queued, kicked_back or needs_regeneration.
-	Mark string `json:"mark,omitempty" yaml:"mark,omitempty"`
-	// Decision, Code and Reason are the plan's verdict on this head, empty when it
-	// settled none.
-	Decision string `json:"decision,omitempty" yaml:"decision,omitempty"`
-	Code     string `json:"code,omitempty"     yaml:"code,omitempty"`
-	Reason   string `json:"reason,omitempty"   yaml:"reason,omitempty"`
-	// Partition and Position place the change in the plan, both counted from 1; zero
-	// when the plan admitted no change at this head. Below is the change it is stacked on.
-	Partition int    `json:"partition" yaml:"partition,omitempty"`
-	Position  int    `json:"position"  yaml:"position,omitempty"`
-	Below     string `json:"below,omitempty"     yaml:"below,omitempty"`
-	// Mine is whether the caller is on the change: a job of the caller's job tree works
-	// on its branch, or its author is the caller's forge login.
-	Mine bool `json:"mine" yaml:"mine,omitempty"`
-	// Attention is whose turn the change is. See [InflightAttention].
-	Attention InflightAttention `json:"attention" yaml:"attention"`
-	// Neighbours are the other in-flight changes this one touches, on the caller's
-	// changes only, strongest evidence first.
-	Neighbours []InflightNeighbour `json:"neighbours,omitempty" yaml:"neighbours,omitempty"`
-}
-
-// InflightAttention is whose turn an in-flight change is, derived from its facts and
-// never written by hand.
-type InflightAttention string
-
-const (
-	// AttentionAuthor: the queue kicked it back, so its author acts next.
-	AttentionAuthor InflightAttention = "author"
-	// AttentionReview: it waits for an approval at its head.
-	AttentionReview InflightAttention = "review"
-	// AttentionQueue: it carries merge intent and the queue acts next.
-	AttentionQueue InflightAttention = "queue"
-	// AttentionNone: it carries no merge intent and nothing waits on anyone.
-	AttentionNone InflightAttention = "none"
-)
-
-// InflightNeighbour is another in-flight change a change touches, by the strongest
-// evidence that holds: merge_conflict, then declaration, file, affected.
-type InflightNeighbour struct {
-	// ID is the other change, or a job id when that work has no change yet.
-	ID           string   `json:"id"                     yaml:"id"`
-	Evidence     string   `json:"evidence"               yaml:"evidence"`
-	Paths        []string `json:"paths,omitempty"        yaml:"paths,omitempty"`
-	Declarations []string `json:"declarations,omitempty" yaml:"declarations,omitempty"`
-	Units        []string `json:"units,omitempty"        yaml:"units,omitempty"`
-	// Base is the merge base the comparison ran on.
-	Base string `json:"base,omitempty" yaml:"base,omitempty"`
-}
-
-// InflightFetch is the network read an in-flight list rests on.
-type InflightFetch struct {
-	// Provider is the queue provider that answered, as `magus queue ls --provider` named it.
-	Provider string `json:"provider"         yaml:"provider"`
-	Host     string `json:"host,omitempty"   yaml:"host,omitempty"`
-	Base     string `json:"base"             yaml:"base"`
-	// Tip is the base commit the plan was built on, empty when no plan was recorded.
-	Tip string `json:"tip,omitempty" yaml:"tip,omitempty"`
-	// At is unix seconds, and ElapsedMS how long the provider took to answer.
-	At        int64 `json:"at"         yaml:"at"`
-	ElapsedMS int64 `json:"elapsed_ms" yaml:"elapsed_ms"`
 }
 
 // ReadOnly names a job this magus will not write and the features it lacks.
@@ -2593,11 +2436,11 @@ func starStarShape(glob string) (prefix, last string, ok bool) {
 }
 
 // Integrating reports whether the job names branches to merge.
-func (u Job) Integrating() bool { return len(u.Integrates) > 0 }
+func (j Job) Integrating() bool { return len(j.Integrates) > 0 }
 
-// ValidIntegratedBranch reports whether b can name a branch an integration job merges: no
+// validIntegratedBranch reports whether b can name a branch an integration job merges: no
 // leading dash, which git would read as an option, and nothing git refuses in a ref name.
-func ValidIntegratedBranch(b string) bool {
+func validIntegratedBranch(b string) bool {
 	return b != "" && !strings.HasPrefix(b, "-") && !strings.HasSuffix(b, ".lock") && !strings.HasSuffix(b, "/") &&
 		!strings.Contains(b, "..") && !strings.Contains(b, "@{") &&
 		!strings.ContainsFunc(b, func(r rune) bool { return r <= ' ' || r == 0x7f || strings.ContainsRune(`~^:?*[\`, r) })
@@ -2606,11 +2449,11 @@ func ValidIntegratedBranch(b string) bool {
 // HardPaths is WritePaths without the soft entries: the paths the job owns
 // against other jobs. A reader asking who owns a path reads this. A reader
 // asking what this job may write reads WritePaths.
-func (u Job) HardPaths() []string {
-	if len(u.Paths.Soft) == 0 {
-		return u.Paths.Write
+func (j Job) HardPaths() []string {
+	if len(j.Paths.Soft) == 0 {
+		return j.Paths.Write
 	}
-	return slices.DeleteFunc(slices.Clone(u.Paths.Write), func(p string) bool { return slices.Contains(u.Paths.Soft, p) })
+	return slices.DeleteFunc(slices.Clone(j.Paths.Write), func(p string) bool { return slices.Contains(j.Paths.Soft, p) })
 }
 
 // Features are the Requires entries this build implements, sorted. A
@@ -2622,9 +2465,9 @@ func Features() []string {
 
 // Unmet returns the entries of Requires that [Features] does not name,
 // in job order, or nil when this build can write the job.
-func (u Job) Unmet() []string {
+func (j Job) Unmet() []string {
 	var out []string
-	for _, r := range u.Requires {
+	for _, r := range j.Requires {
 		if !slices.Contains(Features(), r) {
 			out = append(out, r)
 		}
@@ -2634,71 +2477,77 @@ func (u Job) Unmet() []string {
 
 // ServerRun reports a job the server declared and runs itself, from its
 // maintenance catalog: no agent section, registered by the server.
-func (u Job) ServerRun() bool {
-	return u.Agent == nil && u.RegisteredBy.EntryPoint == EntryPointServer
+func (j Job) ServerRun() bool {
+	return j.Agent == nil && j.RegisteredBy.EntryPoint == EntryPointServer
 }
 
 // Instructions is the agent section's prose, empty for ordinary work.
-func (u Job) Instructions() string {
-	if u.Agent == nil {
+func (j Job) Instructions() string {
+	if j.Agent == nil {
 		return ""
 	}
-	return u.Agent.Instructions
+	return j.Agent.Instructions
 }
 
-// Clone returns a deep copy. The slice fields are the only shared state, so
-// copying them makes a value handed out of a store safe to keep. slices.Clone
-// preserves nil, so a job that stored null does not come back as [].
-func (u Job) Clone() Job {
-	c := u
-	c.Requires = slices.Clone(u.Requires)
-	c.Unknown = slices.Clone(u.Unknown)
-	c.Paths.Write = slices.Clone(u.Paths.Write)
-	c.Paths.Deny = slices.Clone(u.Paths.Deny)
-	c.Paths.Soft = slices.Clone(u.Paths.Soft)
-	c.Paths.Read = slices.Clone(u.Paths.Read)
-	c.DependsOn = slices.Clone(u.DependsOn)
-	c.Integrates = slices.Clone(u.Integrates)
-	c.Breaks = slices.Clone(u.Breaks)
-	c.Goals = cloneGoals(u.Goals)
-	c.Releases = slices.Clone(u.Releases)
-	c.Claims = slices.Clone(u.Claims)
-	c.Unattributed = slices.Clone(u.Unattributed)
-	c.Entries = slices.Clone(u.Entries)
-	c.ReleaseRequests = slices.Clone(u.ReleaseRequests)
+// Clone returns a deep copy: no slice, map or pointer it holds is shared with u, so a
+// value handed out of a store is safe to keep. Nil stays nil, so a job that stored null
+// does not come back as []. Its goals come back resolved (see [Goal.Resolve]).
+func (j Job) Clone() Job {
+	c := j
+	c.Requires = slices.Clone(j.Requires)
+	c.Unknown = slices.Clone(j.Unknown)
+	c.Paths.Write = slices.Clone(j.Paths.Write)
+	c.Paths.Deny = slices.Clone(j.Paths.Deny)
+	c.Paths.Soft = slices.Clone(j.Paths.Soft)
+	c.Paths.Read = slices.Clone(j.Paths.Read)
+	c.DependsOn = slices.Clone(j.DependsOn)
+	c.Integrates = slices.Clone(j.Integrates)
+	c.Breaks = slices.Clone(j.Breaks)
+	c.Goals = cloneGoals(j.Goals)
+	c.Releases = slices.Clone(j.Releases)
+	c.Claims = slices.Clone(j.Claims)
+	c.Unattributed = slices.Clone(j.Unattributed)
+	c.Entries = slices.Clone(j.Entries)
+	c.ReleaseRequests = slices.Clone(j.ReleaseRequests)
 	for i, r := range c.ReleaseRequests {
 		c.ReleaseRequests[i].Wanted = slices.Clone(r.Wanted)
 	}
-	c.Deviations = slices.Clone(u.Deviations)
-	c.Deferred = slices.Clone(u.Deferred)
-	c.Agent = u.Agent.Clone()
-	if u.ModelTier != nil {
-		assigned := *u.ModelTier
+	c.Deviations = slices.Clone(j.Deviations)
+	c.Deferred = slices.Clone(j.Deferred)
+	c.Agent = j.Agent.Clone()
+	if j.ModelTier != nil {
+		assigned := *j.ModelTier
+		assigned.Shared = slices.Clone(j.ModelTier.Shared)
 		c.ModelTier = &assigned
 	}
-	if u.Attempt != nil {
-		attempt := *u.Attempt
-		attempt.ExtraArgs = slices.Clone(u.Attempt.ExtraArgs)
+	if j.Check != nil {
+		check := *j.Check
+		check.Args = slices.Clone(j.Check.Args)
+		c.Check = &check
+	}
+	if j.Attempt != nil {
+		attempt := *j.Attempt
+		attempt.ExtraArgs = slices.Clone(j.Attempt.ExtraArgs)
 		c.Attempt = &attempt
 	}
-	c.GateAttempts = slices.Clone(u.GateAttempts)
+	c.GateAttempts = slices.Clone(j.GateAttempts)
 	for i := range c.GateAttempts {
 		c.GateAttempts[i].Attempt.ExtraArgs = slices.Clone(c.GateAttempts[i].Attempt.ExtraArgs)
 	}
-	if u.LastRun != nil {
-		run := *u.LastRun
+	if j.LastRun != nil {
+		run := *j.LastRun
 		c.LastRun = &run
 	}
-	c.Integration = cloneIntegration(u.Integration)
-	c.WaiterEvidence = cloneIntegration(u.WaiterEvidence)
-	if u.Worktree != nil {
-		wt := *u.Worktree
+	c.Integration = cloneIntegration(j.Integration)
+	c.WaiterEvidence = cloneIntegration(j.WaiterEvidence)
+	if j.Worktree != nil {
+		wt := *j.Worktree
 		c.Worktree = &wt
 	}
-	if u.Rejection != nil {
-		r := *u.Rejection
-		r.Unmet = cloneVerificationStatuses(u.Rejection.Unmet)
-		r.Violations = slices.Clone(u.Rejection.Violations)
+	if j.Rejection != nil {
+		r := *j.Rejection
+		r.Unmet = cloneVerificationStatuses(j.Rejection.Unmet)
+		r.Violations = slices.Clone(j.Rejection.Violations)
 		c.Rejection = &r
 	}
 	return c
@@ -2732,32 +2581,39 @@ func ParsePauseUntil(raw string, now time.Time) (int64, error) {
 	}
 	if d, err := time.ParseDuration(raw); err == nil {
 		if d <= 0 {
-			return 0, fmt.Errorf("--until %q is not ahead of now, as a positive duration (2h) or a later instant is", raw)
+			return 0, &PauseUntilError{Until: raw, Reason: "is not ahead of now, as a positive duration (2h) or a later instant is"}
 		}
 		return now.Add(d).Unix(), nil
 	}
 	if at, err := time.Parse(time.RFC3339, raw); err == nil {
 		return at.Unix(), nil
 	}
-	return 0, fmt.Errorf("--until %q is neither a duration such as 2h nor an RFC3339 instant such as 2006-01-02T15:04:05Z", raw)
+	return 0, &PauseUntilError{Until: raw, Reason: "is neither a duration such as 2h nor an RFC3339 instant such as 2006-01-02T15:04:05Z"}
 }
+
+// PauseUntilError is a pause bound [ParsePauseUntil] refuses, and why.
+type PauseUntilError struct {
+	Until  string
+	Reason string
+}
+
+func (e *PauseUntilError) Error() string { return fmt.Sprintf("--until %q %s", e.Until, e.Reason) }
 
 // HoldsNoBuildSeat reports whether the worker for u can never take a build
 // seat. It writes nothing and declares no check, so it runs no target.
-func (u Job) HoldsNoBuildSeat() bool {
-	if !u.ReadOnly || len(u.Paths.Write) > 0 {
+func (j Job) HoldsNoBuildSeat() bool {
+	if !j.ReadOnly || len(j.Paths.Write) > 0 {
 		return false
 	}
-	return !slices.ContainsFunc(u.EffectiveGoals(), func(g Goal) bool { return g.Resolve().Kind == GoalKindCheck })
+	return !slices.ContainsFunc(j.EffectiveGoals(), func(g Goal) bool { return g.Resolve().Kind == GoalKindCheck })
 }
 
 // Schema is the envelope a job record embeds. A reader ignores the members it does not
 // know and refuses only what it cannot act on; a writer carries those members back out.
-// It copies magus's types.Schema, which the module may not import, and versions with
-// apiversion.
 //
-// Embedded, never named: json inlines it, so api_version stays a
-// top-level member, and the Buzz mirrors inline it the same way.
+// Embedded, never named: json inlines it, so api_version stays a top-level member. It
+// has no JSON methods of its own, since an embedded method would be promoted to the
+// record and decode the envelope alone; [Result] and [Declaration] carry them instead.
 type Schema struct {
 	// Version is the format this record is written in. A reader refuses
 	// any other, so no reader acts on a record it cannot read.
@@ -2767,11 +2623,10 @@ type Schema struct {
 	// usable. Set only for content an older reader would act on wrongly, never for an
 	// added field it can ignore.
 	Requires []string `json:"requires,omitempty" yaml:"requires,omitempty"`
-	// Unknown holds every member this build does not declare, re-emitted unchanged when
-	// the record is written back. The `,unknown` option is encoding/json/v2's: built
-	// without GOEXPERIMENT=jsonv2, libs/codec refuses a record holding it rather than
-	// drop the members.
-	Unknown map[string]codec.RawMessage `json:",unknown" yaml:"-" buzz:"-"`
+	// Unknown holds every member the record's type does not declare, re-emitted unchanged
+	// when the record is written back. The record's MarshalJSON and UnmarshalJSON keep it,
+	// under encoding/json and encoding/json/v2 alike.
+	Unknown map[string]codec.RawMessage `json:"-" yaml:"-" buzz:"-" codec:"unknown"`
 }
 
 // Unmet returns the entries of Requires that known does not name, in record order, or
@@ -2792,12 +2647,51 @@ func (s Schema) clone() Schema {
 	return s
 }
 
+// MarshalJSON writes the result with the members it kept in Unknown.
+func (r Result) MarshalJSON() ([]byte, error) {
+	type plain Result
+	return codec.MarshalWithUnknown(plain(r), r.Unknown)
+}
+
+// UnmarshalJSON reads the result, keeping the members it does not declare in Unknown.
+func (r *Result) UnmarshalJSON(data []byte) error {
+	type plain Result
+	var p plain
+	unknown, err := codec.UnmarshalWithUnknown(data, &p)
+	if err != nil {
+		return err
+	}
+	*r = Result(p)
+	r.Unknown = unknown
+	return nil
+}
+
+// MarshalJSON writes the declaration with the members it kept in Unknown.
+func (d Declaration) MarshalJSON() ([]byte, error) {
+	type plain Declaration
+	return codec.MarshalWithUnknown(plain(d), d.Unknown)
+}
+
+// UnmarshalJSON reads the declaration, keeping the members it does not declare in
+// Unknown. libs/codec's UnmarshalStrict refuses them instead.
+func (d *Declaration) UnmarshalJSON(data []byte) error {
+	type plain Declaration
+	var p plain
+	unknown, err := codec.UnmarshalWithUnknown(data, &p)
+	if err != nil {
+		return err
+	}
+	*d = Declaration(p)
+	d.Unknown = unknown
+	return nil
+}
+
 // isGlobMeta reports whether s holds a glob metacharacter. It copies magus's
 // types.IsGlobMeta, which the module may not import.
 func isGlobMeta(s string) bool { return strings.ContainsAny(s, "*?[{") }
 
 // orList joins codes for a sentence: "a", "a or b", "a, b or c".
-func orList(codes []diagnostics.Code) string {
+func orList(codes []Code) string {
 	names := make([]string, len(codes))
 	for i, c := range codes {
 		names[i] = string(c)

@@ -2329,7 +2329,7 @@ func TestResolveAuthority(t *testing.T) { suite.Run(t, new(resolveAuthoritySuite
 
 type rowsReader []jobtypes.Job
 
-func (r rowsReader) List() ([]jobtypes.Job, error) { return r, nil }
+func (r rowsReader) List(context.Context) ([]jobtypes.Job, error) { return r, nil }
 
 func (s *resolveAuthoritySuite) SetupTest() {
 	s.ws = s.T().TempDir()

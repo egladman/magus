@@ -34,7 +34,6 @@ import (
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/types"
@@ -116,7 +115,7 @@ type Link struct {
 	// one, so the UI can tell the user the old QR just died.
 	Superseded bool
 	// Credential is the minted link's credential, for the trail. Never its secret.
-	Credential job.Credential
+	Credential auth.Credential
 }
 
 // active holds the runtime state of one live share: the closer that tears the
@@ -151,7 +150,7 @@ type Manager struct {
 	selectAddr func() (netip.Addr, error)
 	// mint is auth.MintShare; a test swaps in one whose token expires sooner than the
 	// minimum, to exercise the timeout teardown without waiting a minute.
-	mint func(minter job.Access, ttl time.Duration) (secrets.Secret, auth.ShareToken, error)
+	mint func(minter auth.Access, ttl time.Duration) (secrets.Secret, auth.ShareToken, error)
 
 	// grace is shutdownGrace; a test shortens it.
 	grace time.Duration
@@ -205,7 +204,7 @@ func NewManager(parent context.Context, log *slog.Logger, opts ...option) *Manag
 type Route struct {
 	Handler http.Handler
 	Format  rpcerr.Format
-	Needs   map[string]job.Need
+	Needs   map[string]auth.Need
 }
 
 // Start mints a fresh read-only token and opens a new LAN listener serving the
@@ -220,14 +219,14 @@ type Route struct {
 // contain the built console.
 //
 // minter is the grant of the credential that asked. The link is minted by the same rule as
-// every stored token (auth.MintShare), so a minter below [job.AccessViewer] gets
+// every stored token (auth.MintShare), so a minter below [auth.AccessViewer()] gets
 // auth.ErrExceedsGrant and a ttl outside [auth.MinShareTTL, auth.MaxShareTTL] gets
 // auth.ErrShareLifetime; neither opens a listener.
 //
 // No ctx parameter on purpose: a share OUTLIVES the request that opened it, so accepting
 // the caller's context invites the wrong wiring: the HTTP handler passes r.Context(),
 // which would tear the share down the instant that POST returned.
-func (m *Manager) Start(callCtx context.Context, minter job.Access, consoleDir string, guarded map[string]Route, ttl time.Duration) (Link, error) {
+func (m *Manager) Start(callCtx context.Context, minter auth.Access, consoleDir string, guarded map[string]Route, ttl time.Duration) (Link, error) {
 	if ttl <= 0 {
 		ttl = auth.DefaultShareTTL
 	}
@@ -257,9 +256,9 @@ func (m *Manager) Start(callCtx context.Context, minter job.Access, consoleDir s
 	// The verifier is bound to THIS link's token only. A new link builds a
 	// new closure over a new token, so an old link cannot authenticate here, and it
 	// accepts only the mgl_ class, so the operator token never authenticates on the LAN.
-	verify := func(presented string) (job.Credential, bool) {
+	verify := func(presented string) (auth.Credential, bool) {
 		if !tok.Verify(presented, time.Now()) {
-			return job.Credential{}, false
+			return auth.Credential{}, false
 		}
 		return tok.Credential(), true
 	}

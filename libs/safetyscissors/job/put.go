@@ -6,13 +6,13 @@ package job
 // lifecycle (state running) advances the state without erasing what an earlier put
 // declared.
 //
-// The json tags are the keys magus\workspace().putJob takes in its opts map.
+// The json tags are the keys a put is written under.
 type Put struct {
 	Parent *string `json:"parent,omitzero"`
-	// Agent replaces the row's whole agent section; the zero Spec clears it.
+	// Agent replaces the row's whole agent section; the zero Agent clears it.
 	Agent      *Agent  `json:"agent,omitzero"`
 	Checkpoint *string `json:"checkpoint,omitzero"`
-	// BriefFormat sets the row's brief format; empty clears it back to magus.yaml's.
+	// BriefFormat sets the row's brief format; empty clears it back to the workspace's.
 	BriefFormat *BriefFormat `json:"brief_format,omitzero"`
 	// Delivery and ParentHead: see [Job.Delivery].
 	Delivery   *string `json:"delivery,omitzero"`

@@ -6,7 +6,6 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/egladman/magus/libs/apiversion v0.1.0
 	github.com/egladman/magus/libs/codec v0.1.0
-	github.com/egladman/magus/libs/diagnostics v0.2.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.23.0
 )
@@ -22,4 +21,3 @@ replace github.com/egladman/magus/libs/apiversion => ../apiversion
 
 replace github.com/egladman/magus/libs/codec => ../codec
 
-replace github.com/egladman/magus/libs/diagnostics => ../diagnostics

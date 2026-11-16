@@ -73,7 +73,7 @@ func (s *ContractSkewSuite) TestAnUnreadableContractRefusesAChange() {
 // authorityRows is a job store holding the given rows.
 type authorityRows []job.Job
 
-func (r authorityRows) List() ([]job.Job, error) { return r, nil }
+func (r authorityRows) List(context.Context) ([]job.Job, error) { return r, nil }
 
 // AuthorityContractSuite reproduces the incident of 2026-11-12. The root
 // relinked while a worker was live, and the worker's binary, built from its

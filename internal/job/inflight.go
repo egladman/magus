@@ -25,7 +25,7 @@ func (me Identity) Known() bool { return me.Lease != "" || me.Login != "" }
 // InflightInput is what [Inflight] joins a job list to.
 type InflightInput struct {
 	// Fetch is the read the changes came from, nil when the queue was never read.
-	Fetch   *job.InflightFetch
+	Fetch   *InflightFetch
 	Changes qtypes.Changes
 	// Plan is the queue's newest plan for the base, nil when none was recorded.
 	Plan *qtypes.Plan
@@ -35,10 +35,105 @@ type InflightInput struct {
 	Me       Identity
 }
 
-// Inflight fills list's Changes, Fetched and Unproposed from in. It reads nothing and
+// InflightList is a job list joined to the open changes against the queue's base: what
+// `magus ls jobs` serves. The changes are magus's merge queue and so not the job list's own.
+type InflightList struct {
+	job.List `yaml:",inline"`
+	// Changes are the open changes against the queue's base, joined to the jobs whose
+	// checkouts are on their branches, in the order the provider listed them. Read from
+	// the snapshot `magus queue ls` leaves; a list never fetches them.
+	Changes []InflightChange `json:"changes,omitempty" yaml:"changes,omitempty"`
+	// Fetched is when and where that snapshot was read, nil when none was.
+	Fetched *InflightFetch `json:"fetched,omitzero" yaml:"fetched,omitempty"`
+	// Unproposed are the caller's live jobs whose checkout is on a branch no change
+	// carries: work in flight that has no change yet.
+	Unproposed []string `json:"unproposed,omitempty" yaml:"unproposed,omitempty"`
+}
+
+// InflightChange is one open change as a person reads it: the provider's record joined to
+// the jobs working on its branch and to the queue's newest plan for it. The queue's own
+// Change is the record it acts on; this one is what it is waiting on and whose turn it is.
+type InflightChange struct {
+	ID     string `json:"id"               yaml:"id"`
+	Title  string `json:"title,omitempty"  yaml:"title,omitempty"`
+	Author string `json:"author,omitempty" yaml:"author,omitempty"`
+	Head   string `json:"head"             yaml:"head"`
+	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
+	Base   string `json:"base,omitempty"   yaml:"base,omitempty"`
+	Fork   bool   `json:"fork"   yaml:"fork,omitempty"`
+	// Jobs are the ids of the jobs whose checkout is on Branch, in store order.
+	Jobs []string `json:"jobs,omitempty" yaml:"jobs,omitempty"`
+	// Intent is the merge method the change is queued with, empty when it carries no
+	// merge intent.
+	Intent string `json:"intent,omitempty" yaml:"intent,omitempty"`
+	// Mark is the queue's mark the provider shows on a change carrying no intent:
+	// queued, kicked_back or needs_regeneration.
+	Mark string `json:"mark,omitempty" yaml:"mark,omitempty"`
+	// Decision, Code and Reason are the plan's verdict on this head, empty when it
+	// settled none.
+	Decision string `json:"decision,omitempty" yaml:"decision,omitempty"`
+	Code     string `json:"code,omitempty"     yaml:"code,omitempty"`
+	Reason   string `json:"reason,omitempty"   yaml:"reason,omitempty"`
+	// Partition and Position place the change in the plan, both counted from 1; zero
+	// when the plan admitted no change at this head. Below is the change it is stacked on.
+	Partition int    `json:"partition" yaml:"partition,omitempty"`
+	Position  int    `json:"position"  yaml:"position,omitempty"`
+	Below     string `json:"below,omitempty"     yaml:"below,omitempty"`
+	// Mine is whether the caller is on the change: a job of the caller's job tree works
+	// on its branch, or its author is the caller's forge login.
+	Mine bool `json:"mine" yaml:"mine,omitempty"`
+	// Attention is whose turn the change is. See [InflightAttention].
+	Attention InflightAttention `json:"attention" yaml:"attention"`
+	// Neighbours are the other in-flight changes this one touches, on the caller's
+	// changes only, strongest evidence first.
+	Neighbours []InflightNeighbour `json:"neighbours,omitempty" yaml:"neighbours,omitempty"`
+}
+
+// InflightAttention is whose turn an in-flight change is, derived from its facts and
+// never written by hand.
+type InflightAttention string
+
+const (
+	// AttentionAuthor: the queue kicked it back, so its author acts next.
+	AttentionAuthor InflightAttention = "author"
+	// AttentionReview: it waits for an approval at its head.
+	AttentionReview InflightAttention = "review"
+	// AttentionQueue: it carries merge intent and the queue acts next.
+	AttentionQueue InflightAttention = "queue"
+	// AttentionNone: it carries no merge intent and nothing waits on anyone.
+	AttentionNone InflightAttention = "none"
+)
+
+// InflightNeighbour is another in-flight change a change touches, by the strongest
+// evidence that holds: merge_conflict, then declaration, file, affected.
+type InflightNeighbour struct {
+	// ID is the other change, or a job id when that work has no change yet.
+	ID           string   `json:"id"                     yaml:"id"`
+	Evidence     string   `json:"evidence"               yaml:"evidence"`
+	Paths        []string `json:"paths,omitempty"        yaml:"paths,omitempty"`
+	Declarations []string `json:"declarations,omitempty" yaml:"declarations,omitempty"`
+	Units        []string `json:"units,omitempty"        yaml:"units,omitempty"`
+	// Base is the merge base the comparison ran on.
+	Base string `json:"base,omitempty" yaml:"base,omitempty"`
+}
+
+// InflightFetch is the network read an in-flight list rests on.
+type InflightFetch struct {
+	// Provider is the queue provider that answered, as `magus queue ls --provider` named it.
+	Provider string `json:"provider"         yaml:"provider"`
+	Host     string `json:"host,omitempty"   yaml:"host,omitempty"`
+	Base     string `json:"base"             yaml:"base"`
+	// Tip is the base commit the plan was built on, empty when no plan was recorded.
+	Tip string `json:"tip,omitempty" yaml:"tip,omitempty"`
+	// At is unix seconds, and ElapsedMS how long the provider took to answer.
+	At        int64 `json:"at"         yaml:"at"`
+	ElapsedMS int64 `json:"elapsed_ms" yaml:"elapsed_ms"`
+}
+
+// Inflight joins jobs to in: its Changes, Fetched and Unproposed. It reads nothing and
 // calls nothing, so one store and one snapshot always render the same list.
-func Inflight(list job.List, in InflightInput) job.List {
-	list.Changes, list.Fetched, list.Unproposed = nil, nil, nil
+func Inflight(jobs job.List, in InflightInput) InflightList {
+	list := InflightList{List: jobs}
 	if in.Fetch == nil {
 		return list
 	}
@@ -61,7 +156,7 @@ func Inflight(list job.List, in InflightInput) job.List {
 	tree := jobTree(list.Jobs, in.Me.Lease)
 	places, verdicts := planFacts(plan)
 
-	add := func(ch job.InflightChange) {
+	add := func(ch InflightChange) {
 		if ch.Branch != "" {
 			ch.Jobs = slices.Clone(byBranch[ch.Branch])
 		}
@@ -78,7 +173,7 @@ func Inflight(list job.List, in InflightInput) job.List {
 		list.Changes = append(list.Changes, ch)
 	}
 	for _, c := range in.Changes.Changes {
-		add(job.InflightChange{
+		add(InflightChange{
 			ID: c.ID, Title: c.Title, Author: c.Author, Head: c.Head, Branch: c.Branch, Base: c.Base, Fork: c.Fork,
 			Intent: string(c.Method),
 		})
@@ -88,7 +183,7 @@ func Inflight(list job.List, in InflightInput) job.List {
 		if u.Base != "" && u.Base != in.Changes.Base {
 			continue
 		}
-		add(job.InflightChange{
+		add(InflightChange{
 			ID: u.ID, Title: u.Title, Author: u.Author, Head: u.Head, Branch: u.Branch, Base: u.Base,
 			Mark: string(u.Mark),
 		})
@@ -110,23 +205,23 @@ func Inflight(list job.List, in InflightInput) job.List {
 
 // changeAttention is whose turn ch is. A kick-back outranks intent: a change still carrying
 // intent after the queue kicked it is waiting on its author, not on the queue.
-func changeAttention(ch job.InflightChange) job.InflightAttention {
+func changeAttention(ch InflightChange) InflightAttention {
 	switch {
 	case ch.Mark == string(qtypes.MarkKickedBack), ch.Mark == string(qtypes.MarkNeedsRegeneration),
 		ch.Decision == qtypes.DecisionKick.String():
-		return job.AttentionAuthor
+		return AttentionAuthor
 	case ch.Code == string(qtypes.CodeWaitNotApproved):
-		return job.AttentionReview
+		return AttentionReview
 	case ch.Intent != "":
-		return job.AttentionQueue
+		return AttentionQueue
 	}
-	return job.AttentionNone
+	return AttentionNone
 }
 
 // InflightDetail is why a change is where it is: its place in the plan, and
 // the verdict's code and reason or the mark it shows. It names the partition
 // only when partitions exceeds one, and is "" with nothing to say.
-func InflightDetail(c job.InflightChange, partitions int) string {
+func InflightDetail(c InflightChange, partitions int) string {
 	var parts []string
 	if c.Position > 0 {
 		place := fmt.Sprintf("pos %d", c.Position)

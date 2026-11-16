@@ -188,7 +188,7 @@ func TestExitEvidence(t *testing.T) { suite.Run(t, new(exitEvidenceSuite)) }
 func (s *exitEvidenceSuite) row() job.Job {
 	row := acceptRow()
 	row.Check = &job.LeaseCheck{Target: "go::go-test", Project: "."}
-	row.Validation = row.Check.String()
+	row.Validation = CheckCommand(*row.Check)
 	row.Goals = []job.Goal{job.Goal{ID: "lint", Check: job.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
 	return row
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -186,7 +187,7 @@ func TestServeStdioRoundTrip(t *testing.T) {
 		Ts:   ev.Ts,
 		Kind: trailtypes.KindMCPToolCall,
 		Origin: jobtypes.Origin{
-			User: ev.User, UID: ev.UID, EntryPoint: jobtypes.EntryPointMCP, Host: "stdio-test/1.0", Credential: jobtypes.CredentialStdio,
+			User: ev.User, UID: ev.UID, EntryPoint: jobtypes.EntryPointMCP, Host: "stdio-test/1.0", Credential: auth.CredentialStdio().Recorded(),
 		},
 		Workspace:     ev.Workspace,
 		UserAgent:     ev.UserAgent,
@@ -229,8 +230,8 @@ func TestServeStdioRefusesOptionsWithoutAWorkspace(t *testing.T) {
 // all, and a console token's grant.
 func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, jobtypes.AccessConnector, jobtypes.CredentialStdio.Grant, "stdio reaches the MCP tools and nothing past them")
-	assert.True(t, jobtypes.CredentialStdio.Grant.Allows(ToolNeed))
+	assert.Equal(t, auth.AccessConnector(), auth.CredentialStdio().Grant, "stdio reaches the MCP tools and nothing past them")
+	assert.True(t, auth.CredentialStdio().Grant.Allows(ToolNeed))
 
 	ran := 0
 	h := authorize(func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -238,7 +239,7 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 		return mcplib.NewToolResultText("ran"), nil
 	})
 	req := callRequest(hint.ToolConfig.String(), nil)
-	with := func(c jobtypes.Credential) func(context.Context) context.Context {
+	with := func(c auth.Credential) func(context.Context) context.Context {
 		return func(ctx context.Context) context.Context { return trail.ContextWithCredential(ctx, c) }
 	}
 
@@ -247,10 +248,10 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 		want  string
 	}{
 		"no credential":   {func(ctx context.Context) context.Context { return ctx }, "[MGS9015] config needs mcp=write and the caller holds nothing"},
-		"console grant":   {with(jobtypes.Credential{Kind: jobtypes.KindStored, Grant: jobtypes.AccessConsole}), "[MGS9015] config needs mcp=write and the caller holds console=write"},
-		"stdio":           {with(jobtypes.CredentialStdio), "ran"},
-		"connector token": {with(jobtypes.Credential{Kind: jobtypes.KindStored, Grant: jobtypes.AccessConnector}), "ran"},
-		"operator token":  {with(jobtypes.Credential{Kind: jobtypes.KindOperator, Grant: jobtypes.AccessOperator}), "ran"},
+		"console grant":   {with(auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConsole()}), "[MGS9015] config needs mcp=write and the caller holds console=write"},
+		"stdio":           {with(auth.CredentialStdio()), "ran"},
+		"connector token": {with(auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConnector()}), "ran"},
+		"operator token":  {with(auth.Credential{Kind: auth.KindOperator, Grant: auth.AccessOperator()}), "ran"},
 	} {
 		res, err := h(tc.stamp(t.Context()), req)
 		require.NoError(t, err, name)
@@ -280,7 +281,7 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	}
 	h, err := HTTPHandler(Options{Magus: m, Logger: quietLogger()})
 	require.NoError(t, err)
-	connector := jobtypes.Credential{Kind: jobtypes.KindStored, Grant: jobtypes.AccessConnector}
+	connector := auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConnector()}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), connector)))
 	}))
@@ -346,11 +347,11 @@ func TestHTTPToolCallReadsTheRequestCredential(t *testing.T) {
 	require.NoError(t, err)
 
 	for name, tc := range map[string]struct {
-		cred      jobtypes.Credential
+		cred      auth.Credential
 		wantError bool
 	}{
-		"connector": {jobtypes.Credential{Kind: jobtypes.KindStored, Grant: jobtypes.AccessConnector}, false},
-		"console":   {jobtypes.Credential{Kind: jobtypes.KindStored, Grant: jobtypes.AccessConsole}, true},
+		"connector": {auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConnector()}, false},
+		"console":   {auth.Credential{Kind: auth.KindStored, Grant: auth.AccessConsole()}, true},
 	} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), tc.cred)))

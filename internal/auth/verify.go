@@ -9,8 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // Verify authenticates presented on the server's LOOPBACK listener and returns the credential
@@ -27,33 +25,33 @@ import (
 // revoke takes effect without a restart, and a load error fails closed. A store that fails to
 // load (a retired connectors.d, say) refuses stored tokens only: the operator token never
 // opens it.
-func Verify(presented string) (job.Credential, bool) {
+func Verify(presented string) (Credential, bool) {
 	kind, ok := credentialKind(presented)
 	if !ok {
-		return job.Credential{}, false
+		return Credential{}, false
 	}
 	switch kind {
-	case job.KindOperator:
+	case KindOperator:
 		v := currentView()
 		if v.operatorSum == "" {
-			return job.Credential{}, false
+			return Credential{}, false
 		}
 		if subtle.ConstantTimeCompare([]byte(digest(presented)), []byte(v.operatorSum)) != 1 {
-			return job.Credential{}, false
+			return Credential{}, false
 		}
 		return v.operator, true
-	case job.KindStored:
+	case KindStored:
 		v := currentView()
 		if !v.storeOK {
-			return job.Credential{}, false
+			return Credential{}, false
 		}
-		t, ok := lookup(v.tokens, presented, job.KindStored, time.Now())
+		t, ok := lookup(v.tokens, presented, KindStored, time.Now())
 		if !ok {
-			return job.Credential{}, false
+			return Credential{}, false
 		}
 		return t.Credential(), true
 	}
-	return job.Credential{}, false
+	return Credential{}, false
 }
 
 // revalidateEvery bounds how long a view is trusted while nothing it stats has changed.
@@ -66,7 +64,7 @@ type view struct {
 	sig         string
 	loaded      time.Time
 	operatorSum string
-	operator    job.Credential
+	operator    Credential
 	tokens      []Token
 	storeOK     bool
 }

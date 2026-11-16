@@ -228,7 +228,7 @@ func TestJobReader(t *testing.T) {
 // taskReader answers an embedder's tasks as job rows.
 type taskReader []job.Job
 
-func (r taskReader) List() ([]job.Job, error) { return r, nil }
+func (r taskReader) List(context.Context) ([]job.Job, error) { return r, nil }
 
 func (s *jobReaderSuite) SetupTest() {
 	testkit.Isolate(s.T())

@@ -29,7 +29,6 @@ import (
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
@@ -122,7 +121,7 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	require.NoError(t, err)
 	store, err := auth.LoadStore(dir)
 	require.NoError(t, err)
-	connectorTok, _, err := store.Mint(job.AccessOperator, auth.MintRequest{Name: "test", Grant: job.AccessConnector, TTL: time.Hour})
+	connectorTok, _, err := store.Mint(auth.AccessOperator(), auth.MintRequest{Name: "test", Grant: auth.AccessConnector(), TTL: time.Hour})
 	require.NoError(t, err)
 
 	// status issues a GET and returns only the status code. It must NOT read the
@@ -398,7 +397,7 @@ func mintConsoleToken(t *testing.T) secrets.Secret {
 	require.NoError(t, err)
 	store, err := auth.LoadStore(dir)
 	require.NoError(t, err)
-	secret, _, err := store.Mint(job.AccessOperator, auth.MintRequest{Name: "console", Grant: job.AccessConsole, TTL: time.Hour})
+	secret, _, err := store.Mint(auth.AccessOperator(), auth.MintRequest{Name: "console", Grant: auth.AccessConsole(), TTL: time.Hour})
 	require.NoError(t, err)
 	return secret
 }
@@ -629,7 +628,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 	}
 	d := New(mcp.Options{Magus: m, Version: "test", HTTPAddr: addr, HealthRoutes: routes})
 	mounted := make(chan []string, 1)
-	d.onMounted = func(p []string, _ map[string]job.Need) { mounted <- p }
+	d.onMounted = func(p []string, _ map[string]auth.Need) { mounted <- p }
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- d.Serve(ctx) }()
@@ -896,13 +895,13 @@ func TestMCPHTTPOff(t *testing.T) {
 	m, err := magus.Open(t.Context(), fixtureWorkspace(t), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 	off := false
-	socketNeeds := make(chan map[string]job.Need, 1)
+	socketNeeds := make(chan map[string]auth.Need, 1)
 	d, tcp := testServer(t, func(opts mcp.Options) *Server {
 		opts.Magus = m
 		opts.Config.MCP.HTTP = &off
 		return New(opts, WithSocket(srv))
 	})
-	d.onSocketMounted = func(n map[string]job.Need) { socketNeeds <- n }
+	d.onSocketMounted = func(n map[string]auth.Need) { socketNeeds <- n }
 	base, patterns, needs := serveMounted(t, d, tcp)
 
 	assert.NotContains(t, patterns, "/mcp")
@@ -1174,7 +1173,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	loadedAddr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), loadedPort)
 	loaded := New(mcp.Options{Magus: m, Version: "test", HTTPAddr: loadedAddr, HealthRoutes: map[string]http.Handler{"/readyz": ok}})
 	loadedMounted := make(chan []string, 1)
-	loaded.onMounted = func(p []string, _ map[string]job.Need) { loadedMounted <- p }
+	loaded.onMounted = func(p []string, _ map[string]auth.Need) { loadedMounted <- p }
 	loadedErr := make(chan error, 1)
 	go func() { loadedErr <- loaded.Serve(ctx) }()
 	loadedBase := fmt.Sprintf("http://127.0.0.1:%d", loadedPort)
@@ -1307,16 +1306,16 @@ func TestServerSocketCarriesMCPAndTheAPIs(t *testing.T) {
 	m, err := magus.Open(t.Context(), fixtureWorkspace(t), magus.WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
-	socketNeeds := make(chan map[string]job.Need, 1)
+	socketNeeds := make(chan map[string]auth.Need, 1)
 	d, tcp := testServer(t, func(opts mcp.Options) *Server {
 		opts.Magus = m
 		return New(opts, WithSocket(srv))
 	})
-	d.onSocketMounted = func(n map[string]job.Need) { socketNeeds <- n }
+	d.onSocketMounted = func(n map[string]auth.Need) { socketNeeds <- n }
 	base, _, tcpNeeds := serveMounted(t, d, tcp)
 
 	onSocket := <-socketNeeds
-	want := map[string]job.Need{}
+	want := map[string]auth.Need{}
 	for path, need := range tcpNeeds {
 		if !strings.HasPrefix(path, "/api/") {
 			want[path] = need

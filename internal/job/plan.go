@@ -37,6 +37,7 @@ func Declare(row job.Declaration, defaultTimeout time.Duration) func(*job.Job) {
 	}
 	return func(u *job.Job) {
 		row.Apply(u)
+		u.Validation = validationLine(u.Check)
 		u.Deadline = 0
 		if d > 0 {
 			u.Deadline = deadlineAfter(d)
@@ -366,6 +367,7 @@ func specMerge(rec job.Declaration, creates bool, checkpoint func() string) func
 	}
 	return func(u *job.Job) {
 		rec.ApplySpec(u)
+		u.Validation = validationLine(u.Check)
 		if soft := slices.DeleteFunc(slices.Clone(u.Paths.Soft), func(p string) bool { return !slices.Contains(u.Paths.Write, p) }); len(soft) != len(u.Paths.Soft) {
 			u.Paths.Soft = soft
 			if len(soft) == 0 {
@@ -669,7 +671,7 @@ func resultShape(row job.Job) string {
 		switch {
 		case goal.Kind != job.GoalKindCheck:
 		case goal.ID == job.PrimaryGoalID:
-			shape.Validation = job.ResultValidation{Command: goal.Check.String(), OutputRef: "<ref its run printed>"}
+			shape.Validation = job.ResultValidation{Command: CheckCommand(goal.Check), OutputRef: "<ref its run printed>"}
 		default:
 			shape.VerificationEvidence = append(shape.VerificationEvidence, job.VerificationEvidence{GateID: goal.ID, OutputRef: "<ref its run printed>"})
 		}
@@ -700,7 +702,7 @@ func RenderGoalCommands(out io.Writer, row job.Job) {
 	fmt.Fprintln(out, "goal commands")
 	for _, goal := range row.EffectiveGoals() {
 		if goal.Kind == job.GoalKindCheck {
-			fmt.Fprintf(out, "  %s: %s\n", goal.ID, goal.Check)
+			fmt.Fprintf(out, "  %s: %s\n", goal.ID, CheckCommand(goal.Check))
 		}
 	}
 	fmt.Fprintf(out, "the result `%s` reads\n%s\n", hint.JobExit.With(row.ID, "--stdin"), resultShape(row))

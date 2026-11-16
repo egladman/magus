@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
@@ -145,7 +146,7 @@ type Options struct {
 //
 // Every request carries the server's token, the mounted paths included.
 // Where the platform reports a peer uid, the peer must also run as this user.
-// It is admitted as [job.CredentialSocketPeer] and held to its route's Need.
+// It is admitted as [auth.CredentialSocketPeer()] and held to its route's Need.
 // Elsewhere Mount refuses: nothing needing a credential rides a socket that
 // cannot name its caller.
 type Server struct {
@@ -338,7 +339,7 @@ func (s *Server) routes() (http.Handler, error) {
 	if !s.peerChecked {
 		return tokened, nil
 	}
-	return httpx.PeerGuard(rpcerr.FormatJSON, os.Getuid(), job.CredentialSocketPeer, tokened), nil
+	return httpx.PeerGuard(rpcerr.FormatJSON, os.Getuid(), auth.CredentialSocketPeer(), tokened), nil
 }
 
 // requireToken refuses any socket request without this server's token.

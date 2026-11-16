@@ -189,7 +189,7 @@ const ownBinaryPrefix = "./"
 // A script check has no such flag and is rendered as stored.
 func workerCheckLine(c jobtypes.LeaseCheck) string {
 	if c.Script != "" {
-		return c.String()
+		return job.CheckCommand(c)
 	}
 	return WorkerCheckCommand(c)
 }

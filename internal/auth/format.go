@@ -36,10 +36,10 @@ const (
 )
 
 var kindPrefixes = map[job.CredentialKind]string{
-	job.KindOperator: prefixOperator,
-	job.KindStored:   prefixStored,
-	job.KindShare:    prefixShare,
-	job.KindExchange: prefixExchange,
+	KindOperator: prefixOperator,
+	KindStored:   prefixStored,
+	KindShare:    prefixShare,
+	KindExchange: prefixExchange,
 }
 
 // credentialKind reads a token's kind from its prefix and checks its length, alphabet and

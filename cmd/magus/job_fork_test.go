@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
@@ -102,7 +103,7 @@ func (s *ForkGraderSuite) TestEveryVerdictMatchesTheUnsharedGrader() {
 	for range 2 {
 		for _, row := range s.rows() {
 			want := grade(s.T().Context(), s.root, row)
-			s.Equal(want, g.Grade(s.T().Context(), s.root, row), row.Check.String())
+			s.Equal(want, g.Grade(s.T().Context(), s.root, row), job.CheckCommand(*row.Check))
 			if want.Denied {
 				denied[row.Check.Target] = true
 			}

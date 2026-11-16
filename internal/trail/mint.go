@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 )
 
@@ -14,9 +14,9 @@ import (
 // grant it was minted under. Never the secret: the credential carries an 8-hex id and no hash.
 // Expires is zero for the operator token, which does not expire.
 type MintRecord struct {
-	Minted  job.Credential `json:"minted"`
-	Expires time.Time      `json:"expires,omitzero"`
-	Minter  job.Credential `json:"minter"`
+	Minted  auth.Credential `json:"minted"`
+	Expires time.Time       `json:"expires,omitzero"`
+	Minter  auth.Credential `json:"minter"`
 }
 
 // AppendMint records one mint under base as a token_lifecycle event whose request blob is the

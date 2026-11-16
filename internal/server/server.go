@@ -94,10 +94,10 @@ type Server struct {
 	socket Socket
 	// onSocketMounted receives each path mounted on the socket and its Need, before the
 	// server serves; the route tests read the socket's table through it.
-	onSocketMounted func(needs map[string]jobtypes.Need)
+	onSocketMounted func(needs map[string]auth.Need)
 	// onMounted receives every route pattern and each guarded pattern's Need once mounting
 	// is done, before the listener serves; the route tests read the mux through it.
-	onMounted func(patterns []string, needs map[string]jobtypes.Need)
+	onMounted func(patterns []string, needs map[string]auth.Need)
 }
 
 // Option customizes a Server.
@@ -677,17 +677,17 @@ type frame struct {
 	allowed     httpx.AllowedSet
 	siteAllowed httpx.AllowedSet
 	cors        func(http.Handler) http.Handler
-	needs       map[string]jobtypes.Need
+	needs       map[string]auth.Need
 	errs        []error
 	// socketMux is what the server mounts on its unix socket, nil without WithSocket, and
 	// socketNeeds the Need of each path on it.
 	socketMux   *http.ServeMux
-	socketNeeds map[string]jobtypes.Need
+	socketNeeds map[string]auth.Need
 }
 
 // socketRoute mounts h at pattern on the socket mux, when there is one, holding each path to
 // its Need against the credential the socket stamped.
-func (f *frame) socketRoute(pattern string, format rpcerr.Format, needs map[string]jobtypes.Need, h http.Handler) {
+func (f *frame) socketRoute(pattern string, format rpcerr.Format, needs map[string]auth.Need, h http.Handler) {
 	if f.socketMux == nil {
 		return
 	}
@@ -703,7 +703,7 @@ func (f *frame) socketRoute(pattern string, format rpcerr.Format, needs map[stri
 // guard mounts h at pattern behind wrap, then the bearer guard holding each path to its need.
 // wrap runs first, so it can answer a tokenless CORS preflight. Every guarded mount on the
 // loopback listener goes through here.
-func (f *frame) guard(pattern string, format rpcerr.Format, needs map[string]jobtypes.Need, wrap func(http.Handler) http.Handler, h http.Handler, opts ...httpx.GuardOption) {
+func (f *frame) guard(pattern string, format rpcerr.Format, needs map[string]auth.Need, wrap func(http.Handler) http.Handler, h http.Handler, opts ...httpx.GuardOption) {
 	g, err := httpx.ProcedureGuard(format, auth.Verify, needs, h, opts...)
 	if err != nil {
 		f.errs = append(f.errs, fmt.Errorf("server: %s: %w", pattern, err))
@@ -781,9 +781,9 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 	// only to be refused for want of a token, with a response it cannot read, throttled
 	// past a burst; the token is the whole boundary. Health routes are left unguarded so
 	// container orchestrators can probe them freely.
-	f := &frame{allowed: httpx.AllowedHosts(addr), needs: map[string]jobtypes.Need{}}
+	f := &frame{allowed: httpx.AllowedHosts(addr), needs: map[string]auth.Need{}}
 	if s.socket != nil {
-		f.socketMux, f.socketNeeds = http.NewServeMux(), map[string]jobtypes.Need{}
+		f.socketMux, f.socketNeeds = http.NewServeMux(), map[string]auth.Need{}
 	}
 	bind := httpx.NewServer
 	if !addr.Addr().IsLoopback() {
@@ -802,7 +802,7 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 		handler.LimitRequestBody(w, r)
 		mcpHandler.ServeHTTP(w, r)
 	})
-	mcpNeeds := map[string]jobtypes.Need{"/mcp": needMCP}
+	mcpNeeds := map[string]auth.Need{"/mcp": needMCP}
 	if s.opts.Config.MCP.HTTPEnabled() {
 		preflight, allow := httpx.OpenCORS(mcpCORS)
 		limit := httpx.NewFailureLimiter(mcpFailuresPerSecond, mcpFailureBurst)

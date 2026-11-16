@@ -70,7 +70,7 @@ func acceptRow() job.Job {
 		ID:         "harness/ledger-accept",
 		Paths:      job.Paths{Write: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"}},
 		Check:      &check,
-		Validation: check.String(),
+		Validation: CheckCommand(check),
 		State:      job.StateRunning,
 	}
 }
@@ -538,12 +538,12 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 		"./magus run test internal/ledger",
 		"magus run test internal/ledger -- -run Ledger",
 	} {
-		c, err := job.ParseLeaseRunLine(line)
+		c, err := ParseCheckCommand(line)
 		require.NoError(t, err, line)
 		assert.True(t, ranCheck(c, att, nil, goCheckSelection), line)
 	}
 
-	c, err := job.ParseLeaseRunLine("magus run test cmd/magus")
+	c, err := ParseCheckCommand("magus run test cmd/magus")
 	require.NoError(t, err)
 	assert.False(t, ranCheck(c, att, nil, goCheckSelection), "another project is another run")
 }
@@ -587,12 +587,12 @@ func TestCheckBindsOnCharm(t *testing.T) {
 	written := job.CapturedRun{Found: true, Project: ".", Target: "generate:rw"}
 	gated := job.CapturedRun{Found: true, Project: ".", Target: "generate"}
 
-	charmless, err := job.ParseLeaseRunLine("magus run generate .")
+	charmless, err := ParseCheckCommand("magus run generate .")
 	require.NoError(t, err)
 	assert.False(t, ranCheck(charmless, written, nil, goCheckSelection), "a written run is not evidence of a gated one")
 	assert.True(t, ranCheck(charmless, gated, nil, goCheckSelection))
 
-	rw, err := job.ParseLeaseRunLine("magus run generate:rw .")
+	rw, err := ParseCheckCommand("magus run generate:rw .")
 	require.NoError(t, err)
 	assert.True(t, ranCheck(rw, written, nil, goCheckSelection))
 	assert.False(t, ranCheck(rw, gated, nil, goCheckSelection), "a gated run is not evidence of a written one")
@@ -627,7 +627,7 @@ func TestCheckBindsUnderDefaultCharms(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			c, err := job.ParseLeaseRunLine(tc.check)
+			c, err := ParseCheckCommand(tc.check)
 			require.NoError(t, err)
 			tc.att.Found = true
 			assert.Equal(t, tc.want, ranCheck(c, tc.att, defaults, goCheckSelection))
@@ -653,7 +653,7 @@ func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
 	assert.True(t, ranCheck(plain, written, defaults, goCheckSelection), "a plain check still binds the default-charm run")
 	assert.False(t, ranCheck(plain, gated, defaults, goCheckSelection))
 
-	assert.Equal(t, "magus run generate . --no-default-charms", optOut.String())
+	assert.Equal(t, "magus run generate . --no-default-charms", CheckCommand(optOut))
 	assert.True(t, strings.HasSuffix(gateCommand(optOut), " run generate . --no-default-charms"), gateCommand(optOut))
 	assert.True(t, strings.HasSuffix(gateCommand(plain), " run generate ."), gateCommand(plain))
 }

@@ -3,42 +3,47 @@ package job
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
+
+type OriginSuite struct{ suite.Suite }
+
+func TestOrigin(t *testing.T) { suite.Run(t, new(OriginSuite)) }
 
 // The label names what each channel said and nothing it did not: an origin with no host and
 // no credential reads as its OS user, never as "a person" or "an agent".
-func TestOriginLabelNamesEachChannelItHas(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		origin Origin
-		want   string
-	}{
-		{Origin{User: "eli", EntryPoint: EntryPointCLI}, "eli"},
-		{Origin{User: "eli", EntryPoint: EntryPointHook, Host: "claude-code", Session: "s1"}, "eli via claude-code"},
-		{Origin{User: "eli", EntryPoint: EntryPointHook, Host: "claude-code", Session: "s1", Agent: "a1b2"}, "eli via claude-code via agent a1b2"},
-		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Kind: KindStored, ID: "3fa9c1d2", Name: "console-1"}}, "eli via token console-1 (3fa9c1d2)"},
-		{Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Credential: Credential{Kind: KindOperator, ID: "0badf00d"}}, "eli via claude-code via the operator token"},
-		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Kind: KindShare, ID: "9b2e04aa"}}, "eli via share link 9b2e04aa"},
-		{Origin{User: "eli", EntryPoint: EntryPointServer}, "server"},
-		{Origin{Host: "codex"}, "codex"},
-		{Origin{}, "unattributed"},
-	}
-	for _, c := range cases {
-		assert.Equal(t, c.want, c.origin.Label(), "%+v", c.origin)
-	}
+func (s *OriginSuite) TestALabelNamesEachChannelItHas() {
+	s.Equal("eli", Origin{User: "eli", EntryPoint: EntryPointCLI}.Label())
+	s.Equal("eli via claude-code", Origin{User: "eli", EntryPoint: EntryPointHook, Host: "claude-code", Session: "s1"}.Label())
+	s.Equal("eli via claude-code via agent a1b2",
+		Origin{User: "eli", EntryPoint: EntryPointHook, Host: "claude-code", Session: "s1", Agent: "a1b2"}.Label())
+	s.Equal("codex", Origin{Host: "codex"}.Label())
+}
+
+func (s *OriginSuite) TestALabelNamesTheCredentialByKindNameAndID() {
+	s.Equal("eli via stored console-1 (3fa9c1d2)",
+		Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Kind: "stored", ID: "3fa9c1d2", Name: "console-1"}}.Label())
+	s.Equal("eli via claude-code via operator (0badf00d)",
+		Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Credential: Credential{Kind: "operator", ID: "0badf00d"}}.Label())
+	s.Equal("stdio", Origin{Credential: Credential{Kind: "stdio"}}.Label())
+	s.Equal("eli via 9b2e04aa", Origin{User: "eli", Credential: Credential{ID: "9b2e04aa"}}.Label())
+}
+
+func (s *OriginSuite) TestTheServerAndNobodyReadAsThemselves() {
+	s.Equal("server", Origin{User: "eli", EntryPoint: EntryPointServer, Credential: Credential{Kind: "operator"}}.Label())
+	s.Equal("unattributed", Origin{}.Label())
+	s.Equal("unattributed", Origin{Session: "s1", UID: "501"}.Label(), "a session id and a uid name nobody")
 }
 
 // A filter names one channel's value, and matches only that value exactly: the rendered
 // label is prose, and matching it would tie what a filter selects to its wording.
-func TestOriginNamesMatchesEachFieldExactly(t *testing.T) {
-	t.Parallel()
+func (s *OriginSuite) TestNamesMatchesEachFieldExactly() {
 	o := Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Agent: "a1b2",
-		Credential: Credential{Kind: KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: AccessConnector}}
+		Credential: Credential{Kind: "stored", ID: "3fa9c1d2", Name: "laptop"}}
 	for _, name := range []string{"eli", "claude-code", "a1b2", "stored", "3fa9c1d2", "laptop", "mcp"} {
-		assert.True(t, o.Names(name), name)
+		s.True(o.Names(name), name)
 	}
-	for _, name := range []string{"", "el", "eli via claude-code", "claude", "s1", "3fa9", "mcp=write", "token laptop (3fa9c1d2)"} {
-		assert.False(t, o.Names(name), name)
+	for _, name := range []string{"", "el", "eli via claude-code", "claude", "s1", "3fa9", "stored laptop (3fa9c1d2)"} {
+		s.False(o.Names(name), name)
 	}
 }

@@ -6,8 +6,8 @@ package proc
 import (
 	"time"
 
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 )
@@ -37,14 +37,14 @@ const (
 )
 
 var (
-	needConsoleRead  = job.Need{Scope: job.ScopeConsole, Level: job.LevelRead}
-	needConsoleWrite = job.Need{Scope: job.ScopeConsole, Level: job.LevelWrite}
+	needConsoleRead  = auth.Need{Scope: auth.ScopeConsole, Level: auth.LevelRead}
+	needConsoleWrite = auth.Need{Scope: auth.ScopeConsole, Level: auth.LevelWrite}
 )
 
 // routeNeeds is the Need of every proc route. Reading the pool is a console read; anything
 // that runs magus, drops workspaces or stops the process is a console write, the level the
 // console's own JobService RunJob takes.
-var routeNeeds = map[string]job.Need{
+var routeNeeds = map[string]auth.Need{
 	pathRun:      needConsoleWrite,
 	pathJobs:     needConsoleWrite,
 	pathStatus:   needConsoleRead,

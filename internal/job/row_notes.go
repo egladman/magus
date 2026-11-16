@@ -29,11 +29,11 @@ func ConsoleSkew(serverVersion, cliVersion string) string {
 
 // InflightScope keeps the caller's changes, or every change when all is set. Never nil,
 // so an empty scope encodes as [].
-func InflightScope(changes []job.InflightChange, all bool) []job.InflightChange {
+func InflightScope(changes []InflightChange, all bool) []InflightChange {
 	if all {
-		return append([]job.InflightChange{}, changes...)
+		return append([]InflightChange{}, changes...)
 	}
-	mine := []job.InflightChange{}
+	mine := []InflightChange{}
 	for _, c := range changes {
 		if c.Mine {
 			mine = append(mine, c)

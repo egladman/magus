@@ -3,16 +3,11 @@ package auth
 import (
 	"bytes"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -20,10 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
-
-var okHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-})
 
 // TokenSuite isolates XDG_STATE_HOME per test, so no test touches the real state dir.
 type TokenSuite struct {
@@ -49,7 +40,7 @@ func (s *TokenSuite) TestRoundTrip() {
 	require.NoError(t, err)
 	kind, ok := credentialKind(tok.Reveal())
 	require.True(t, ok, "GenerateOperator must mint a well-formed token")
-	assert.Equal(t, job.KindOperator, kind)
+	assert.Equal(t, KindOperator, kind)
 
 	path, err := SaveOperator(tok)
 	require.NoError(t, err)
@@ -96,7 +87,7 @@ func (s *TokenSuite) TestOldOperatorFileIsRefusedWithTheReissueCommand() {
 		require.ErrorIs(t, err, types.OperatorTokenFormat, "the server must not start on %q", old)
 	}
 	// A valid store token copied into the operator file is refused too: its kind is wrong.
-	stored, err := mintSecret(job.KindStored)
+	stored, err := mintSecret(KindStored)
 	require.NoError(t, err)
 	_, err = SaveOperator(secrets.New(stored))
 	require.NoError(t, err)
@@ -120,27 +111,6 @@ func (s *TokenSuite) TestOperatorPathLocation() {
 	path, err := OperatorPath()
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(s.stateDir, "magus", "mcp_token"), path)
-}
-
-// The guard re-reads the operator file per request: a rotate or revoke takes effect without
-// rebuilding the handler.
-func (s *TokenSuite) TestGuardHotReload() {
-	t := s.T()
-	a, _ := GenerateOperator()
-	_, err := SaveNewOperator(a)
-	require.NoError(t, err)
-	need := job.Need{Scope: job.ScopeMCP, Level: job.LevelWrite}
-	h, err := httpx.BearerGuard(rpcerr.FormatJSON, Verify, need, okHandler)
-	require.NoError(t, err)
-
-	assert.Equal(t, http.StatusOK, requestStatus(h, "Bearer "+a.Reveal()))
-	b, _ := GenerateOperator()
-	_, err = SaveOperator(b)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusUnauthorized, requestStatus(h, "Bearer "+a.Reveal()), "old token after rotate")
-	assert.Equal(t, http.StatusOK, requestStatus(h, "Bearer "+b.Reveal()))
-	require.NoError(t, RevokeOperator())
-	assert.Equal(t, http.StatusUnauthorized, requestStatus(h, "Bearer "+b.Reveal()), "after revoke")
 }
 
 // EnsureOperator persists a token on first use and never writes the secret to the log.
@@ -179,19 +149,6 @@ func TestTokenIDStable(t *testing.T) {
 	assert.Len(t, TokenID("abc"), 8)
 }
 
-// requestStatus drives one request from a loopback peer through h with the given Authorization
-// header (empty = none).
-func requestStatus(h http.Handler, authHeader string) int {
-	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
-	req.RemoteAddr = "127.0.0.1:40000"
-	if authHeader != "" {
-		req.Header.Set("Authorization", authHeader)
-	}
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-	return rr.Code
-}
-
 // Replacing a token in one coarse tick can leave every stat unchanged. The next
 // verification must still reject the revoked credential and accept its replacement.
 func TestTokenNamesInvalidateTheVerificationView(t *testing.T) {
@@ -203,7 +160,7 @@ func TestTokenNamesInvalidateTheVerificationView(t *testing.T) {
 	require.NoError(t, err)
 	store, err := LoadStore(dir)
 	require.NoError(t, err)
-	prior, priorToken, err := store.Mint(job.AccessOperator, MintRequest{Name: "prior", Grant: job.AccessConnector, TTL: time.Hour})
+	prior, priorToken, err := store.Mint(AccessOperator(), MintRequest{Name: "prior", Grant: AccessConnector(), TTL: time.Hour})
 	require.NoError(t, err)
 	credential, ok := Verify(prior.Reveal())
 	require.True(t, ok)
@@ -214,9 +171,9 @@ func TestTokenNamesInvalidateTheVerificationView(t *testing.T) {
 	require.NoError(t, err)
 	signature := statSignature(state)
 
-	_, err = store.Revoke(job.AccessOperator, "prior")
+	_, err = store.Revoke(AccessOperator(), "prior")
 	require.NoError(t, err)
-	fresh, freshToken, err := store.Mint(job.AccessOperator, MintRequest{Name: "fresh", Grant: job.AccessConnector, TTL: time.Hour})
+	fresh, freshToken, err := store.Mint(AccessOperator(), MintRequest{Name: "fresh", Grant: AccessConnector(), TTL: time.Hour})
 	require.NoError(t, err)
 	require.NoError(t, os.Chtimes(dir, before.ModTime(), before.ModTime()))
 	after, err := os.Stat(dir)
@@ -228,5 +185,5 @@ func TestTokenNamesInvalidateTheVerificationView(t *testing.T) {
 	assert.Equal(t, freshToken.Credential(), credential)
 	credential, ok = Verify(prior.Reveal())
 	assert.False(t, ok)
-	assert.Equal(t, job.Credential{}, credential)
+	assert.Equal(t, Credential{}, credential)
 }

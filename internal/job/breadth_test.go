@@ -163,7 +163,7 @@ func TestBroadClaimPermittedPathPassesThroughPermit(t *testing.T) {
 	row := job.Job{ID: "sweep", Paths: job.Paths{Write: []string{"**/*.go"}}}
 
 	kept, permitted := broadClaimProblems(context.Background(), root, row, Workspace{}, nil).
-		Permit([]job.Deviation{{Code: types.WritePathTooBroad, Subject: "**/*.go", Reason: "a rename touches every package"}})
+		Permit([]job.Deviation{{Code: job.Code(types.WritePathTooBroad), Subject: "**/*.go", Reason: "a rename touches every package"}})
 
 	assert.Empty(t, kept)
 	require.Len(t, permitted, 1)

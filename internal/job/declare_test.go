@@ -254,7 +254,7 @@ func (s *widenSuite) SetupTest() {
 	row := job.Job{ID: "w", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	row.Paths.Write = []string{"a.go"}
 	row.Check = &job.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = row.Check.String()
+	row.Validation = CheckCommand(*row.Check)
 	s.store = tempStore(s.T(), s.T().TempDir())
 	seed(s.T(), s.store, row)
 }
@@ -309,7 +309,7 @@ func (s *narrowSuite) SetupTest() {
 	row := job.Job{ID: "w", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	row.Paths.Write = []string{"a.go", "b.go", "c.go#Run"}
 	row.Check = &job.LeaseCheck{Target: "test", Project: "."}
-	row.Validation = row.Check.String()
+	row.Validation = CheckCommand(*row.Check)
 	row.Goals = []job.Goal{{ID: "g", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}}
 	s.store = tempStore(s.T(), s.T().TempDir())
 	seed(s.T(), s.store, row)
