@@ -1,4 +1,4 @@
-package main
+package knowledge
 
 import (
 	"strings"
@@ -23,7 +23,7 @@ func TestStripVCSAttrsLeavesTheSourceGraphIntact(t *testing.T) {
 		{ID: "file:d.md"},
 	}}
 
-	stripVCSAttrs(&g)
+	StripVCSAttrs(&g)
 
 	assert.Equal(t, map[string]string{"lang": "go"}, g.Nodes[0].Attrs)
 	assert.Equal(t, map[string]string{"vcs_last_commit": "abc", "lang": "go"}, shared,
@@ -39,11 +39,11 @@ func TestStripVCSAttrsLeavesTheSourceGraphIntact(t *testing.T) {
 }
 
 func TestBaselineHasSymbols(t *testing.T) {
-	assert.False(t, baselineHasSymbols(types.KnowledgeGraphOutput{}))
-	assert.False(t, baselineHasSymbols(types.KnowledgeGraphOutput{
+	assert.False(t, BaselineHasSymbols(types.KnowledgeGraphOutput{}))
+	assert.False(t, BaselineHasSymbols(types.KnowledgeGraphOutput{
 		Nodes: []types.KnowledgeNode{{ID: "target:build", Kind: types.KindTarget}},
 	}))
-	assert.True(t, baselineHasSymbols(types.KnowledgeGraphOutput{
+	assert.True(t, BaselineHasSymbols(types.KnowledgeGraphOutput{
 		Nodes: []types.KnowledgeNode{
 			{ID: "target:build", Kind: types.KindTarget},
 			{ID: "sym:Open", Kind: types.KindSymbol},
@@ -87,18 +87,13 @@ func sampleGraphDiff() types.KnowledgeGraphDiff {
 // TestDiffNamesIsOnlyIDs pins the -o name contract: one node id per line and nothing else,
 // because the projection exists to be fed to another tool.
 func TestDiffNamesIsOnlyIDs(t *testing.T) {
-	out := captureStdout(t, func() {
-		require.NoError(t, diffNames(sampleGraphDiff()))
-	})
-
-	assert.Equal(t, []string{"target:web:build", "target:web:lint", "project:web"},
-		strings.Fields(strings.TrimSpace(out)))
+	assert.Equal(t, []string{"target:web:build", "target:web:lint", "project:web"}, DiffNames(sampleGraphDiff()))
 }
 
 func TestDiffTextCountsBeforeTheList(t *testing.T) {
-	out := captureStdout(t, func() {
-		require.NoError(t, diffText(sampleGraphDiff()))
-	})
+	var buf strings.Builder
+	require.NoError(t, DiffText(&buf, sampleGraphDiff()))
+	out := buf.String()
 
 	assert.Contains(t, out, "graph diff against HEAD~1")
 	assert.Contains(t, out, "nodes: +1 -1 ~1")
@@ -110,7 +105,7 @@ func TestDiffTextCountsBeforeTheList(t *testing.T) {
 }
 
 func TestRenderDiffMarkdownCarriesEverySection(t *testing.T) {
-	md := string(renderDiffMarkdown(sampleGraphDiff()))
+	md := string(RenderDiffMarkdown(sampleGraphDiff()))
 
 	assert.Contains(t, md, "# Knowledge graph diff")
 	assert.Contains(t, md, "Base: `HEAD~1`. Nodes +1 -1 ~1; edges +1 -1.")
@@ -123,7 +118,7 @@ func TestRenderDiffMarkdownCarriesEverySection(t *testing.T) {
 
 	// An empty diff renders the headline and no section headings, so a CI comment on a
 	// change that moved no graph structure says exactly that.
-	empty := string(renderDiffMarkdown(types.KnowledgeGraphDiff{Base: "main"}))
+	empty := string(RenderDiffMarkdown(types.KnowledgeGraphDiff{Base: "main"}))
 	assert.Contains(t, empty, "Nodes +0 -0 ~0; edges +0 -0.")
 	assert.NotContains(t, empty, "## ")
 }

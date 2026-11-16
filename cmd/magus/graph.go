@@ -7,15 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
-	"net/netip"
 	"net/url"
 	"os"
-	"os/exec"
-	"runtime"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
@@ -30,9 +25,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
-	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/render"
-	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
@@ -198,7 +191,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		scriptsErr = errors.Join(scriptsErr, fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused))
 	}
 	omitted := knowledge.ShardErrors(config.CacheDir(root, globalCfg))
-	scriptsErr = errors.Join(scriptsErr, graphBuildShardFailure(ctx, omitted))
+	scriptsErr = errors.Join(scriptsErr, knowledge.GraphBuildShardFailure(ctx, omitted))
 	if opts.Format != outputText {
 		rec := graphBuildOutput{Nodes: out.NodeCount, Edges: out.EdgeCount, Reindexed: reindexed, Refused: refused != nil, OmittedShards: omitted}
 		if err := emitRecord(opts, rec, []string{root}); err != nil {
@@ -247,13 +240,8 @@ func writeGuardIndexes(ctx context.Context, root string) error {
 	return nil
 }
 
-const (
-	// graphBuildPoll is how often a waiting graph build retries.
-	graphBuildPoll = 250 * time.Millisecond
-	// A build's own process while it assembles the graph. Measured 2026-10-31
-	// here: 1.83 and 2.13 GiB resident, 2.28 GiB in that day's memory panic.
-	graphBuildMemoryMB = 2400
-)
+// graphBuildPoll is how often a waiting graph build retries.
+const graphBuildPoll = maintenance.GraphBuildPoll
 
 // acquireGraphBuild takes the machine's build lock, then the store's, waiting
 // on each and saying so. waitedOn is the build whose work this one can load.
@@ -266,30 +254,14 @@ func acquireGraphBuild(ctx context.Context, root string) (release func() error, 
 	if err != nil {
 		return nil, nil, fmt.Errorf("magus graph build: %w", err)
 	}
-	me := maintenance.GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build` in " + wsRoot, Store: dir}
-	if proc.IsJob(ctx) {
-		me.By = "the server's sync-graph job in " + wsRoot
-	}
 	notices := noticeLines{ctx: ctx, level: slog.LevelInfo, label: "magus graph build", prefix: "magus graph build: "}
-	machine, behind, err := maintenance.AcquireMachineGraphBuild(ctx, me, notices, graphBuildPoll)
-	if err != nil {
-		return nil, nil, fmt.Errorf("magus graph build: %w", err)
-	}
-	store, waitedOn, err := maintenance.AcquireGraphBuild(ctx, dir, me, notices, graphBuildPoll)
-	if err != nil {
-		return nil, nil, errors.Join(err, machine.Release())
-	}
-	// The build ahead released this store first, so its lock read free.
-	if waitedOn == nil && behind != nil && behind.Store == dir {
-		waitedOn = behind
-	}
-	return func() error { return errors.Join(store.Release(), machine.Release()) }, waitedOn, nil
+	return maintenance.AcquireGraphBuilds(ctx, wsRoot, dir, notices)
 }
 
 // admitGraphBuild claims the machine budget for assembling the graph, under
 // the workspace's broker policy.
 func admitGraphBuild(ctx context.Context, admit cache.MachineAdmitter, root string) (func(), error) {
-	return admitUnderBrokerPolicy(ctx, admit, root, "graph-build", graphBuildMemoryMB)
+	return admitUnderBrokerPolicy(ctx, admit, root, "graph-build", maintenance.GraphBuildMemoryMB)
 }
 
 // noticeLines logs each line written to it as a notice. It stands in for os.Stderr where a
@@ -470,7 +442,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if ef.Reproducible {
-		stripUnreproducible(&out)
+		knowledge.StripUnreproducible(&out)
 	}
 	// Omitted under --reproducible for the same reason as everything else it drops: the
 	// fingerprint identifies the BINARY, not the graph, so two builds of one source rewrote
@@ -556,57 +528,6 @@ func graphExportSCIP(ctx context.Context, root string, out io.Writer, probe term
 	return m.ExportSCIP(ctx, out)
 }
 
-// stripUnreproducible removes everything from an exported graph that is not a function of
-// the source tree, leaving an artifact that regenerates byte-identically anywhere.
-//
-// Two kinds qualify, for the same reason and not the obvious one. Locally OBSERVED data
-// (run timings, output refs, coverage, loaded agent contact) varies by machine. Git HISTORY (author nodes,
-// co_changes edges, per-file churn, the dir_commits roll-up, prose staleness) varies by COMMIT, and that is
-// the sharper problem for a checked-in export: committing anything changes the churn, so
-// the artifact invalidates itself and the drift gate fires on the commit that just fixed
-// it. The @dirs shard calls its inputs deterministic, which is true per HEAD and is not the
-// property a committed file needs.
-//
-// Graph.Output shares node attribute maps with the live graph, so this copies rather than
-// deleting in place. Interactive queries and the live graph keep all of it.
-func stripUnreproducible(g *types.KnowledgeGraphOutput) {
-	drop := func(key string) bool {
-		return knowledge.IsRuntimeAttr(key) || knowledge.IsHistoryAttr(key) || knowledge.IsSessionAttr(key)
-	}
-
-	nodes := g.Nodes[:0]
-	for _, n := range g.Nodes {
-		// An author node exists only because git history does, so it goes whole rather than
-		// surviving as a bare id with every attr stripped off it.
-		if n.Kind == types.KindAuthor {
-			continue
-		}
-		kept := make(map[string]string, len(n.Attrs))
-		for key, value := range n.Attrs {
-			if !drop(key) {
-				kept[key] = value
-			}
-		}
-		if len(kept) == 0 {
-			kept = nil
-		}
-		n.Attrs = kept
-		nodes = append(nodes, n)
-	}
-	g.Nodes = nodes
-	g.NodeCount = len(nodes)
-
-	links := g.Links[:0]
-	for _, link := range g.Links {
-		if link.Provenance == knowledge.ProvenanceRuntime || link.Relation == types.RelationAuthored || link.Relation == types.RelationCoChanges {
-			continue
-		}
-		links = append(links, link)
-	}
-	g.Links = links
-	g.EdgeCount = len(links)
-}
-
 // graphStats reports the knowledge graph's shape: god nodes, orphans, and doc
 // coverage. It reads the graph cache-first rather than git history, the
 // structural companion to insight's history lenses (insight report embeds it).
@@ -643,45 +564,7 @@ func graphStats(ctx context.Context, root string, args []string) error {
 		}
 		return emitNames(os.Stdout, names)
 	}
-	return statsText(out)
-}
-
-func statsText(out types.KnowledgeStats) error {
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("graph: %d nodes, %d edges\n", out.NodeCount, out.EdgeCount)
-	// The connectivity lens: fragmentation is a data-quality signal. One component with few isolated nodes
-	// is a well-linked graph; many components / a high isolated count means the builder left relationships
-	// undefined (the discoverability gap to chase).
-	fmt.Printf("connectivity: %d component(s), largest holds %d, %d isolated node(s)\n\n",
-		out.ComponentCount, out.LargestComponentSize, out.IsolatedCount)
-	fmt.Println("god nodes (most connected):")
-	fmt.Printf("  %6s  %4s  %4s  %-11s  %s\n", "DEGREE", "IN", "OUT", "KIND", "LABEL")
-	for _, g := range out.Gods {
-		fmt.Printf("  %6d  %4d  %4d  %-11s  %s\n", g.Degree, g.In, g.Out, g.Kind, g.Label)
-	}
-	if len(out.Orphans) > 0 {
-		// Orphans is a capped sample; name the true isolated total so a large graph does not read as if
-		// only len(Orphans) nodes are unlinked.
-		if out.IsolatedCount > len(out.Orphans) {
-			fmt.Printf("\norphans (showing %d of %d isolated):\n", len(out.Orphans), out.IsolatedCount)
-		} else {
-			fmt.Printf("\norphans (%d):\n", len(out.Orphans))
-		}
-		for _, o := range out.Orphans {
-			fmt.Printf("  %-11s  %-26s  %s\n", o.Kind, server.Truncate(o.Label, 26), o.Reason)
-		}
-	}
-	if len(out.Coverage) > 0 {
-		fmt.Println("\ndoc coverage:")
-		for _, c := range out.Coverage {
-			fmt.Printf("  %-11s  %d/%d (%d%%)", c.Kind, c.Documented, c.Total, c.Percent)
-			if len(c.Undocumented) > 0 {
-				fmt.Printf("  missing: %s", strings.Join(c.Undocumented, ", "))
-			}
-			fmt.Println()
-		}
-	}
-	return nil
+	return knowledge.StatsText(os.Stdout, out)
 }
 
 // loadKnowledgeGraph gathers the workspace inputs and runs the cache-first build,
@@ -861,7 +744,7 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 // browser at this page with the workspace's graph delivered PRIVATELY: either in a
 // URL fragment (default) or fetched from an ephemeral loopback server (--serve).
 // Either way the graph stays on the machine: the site only serves static assets.
-const defaultExploreURL = "https://eli.gladman.cc/magus/console/graph/"
+const defaultExploreURL = console.HostedExplorerURL
 
 // fragmentWarnBytes is a conservative ceiling on the encoded fragment. The whole
 // URL rides on the command line to the browser and into the address bar; Chrome
@@ -932,7 +815,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	// flipping to a live+token URL whenever a server happens to be listening. Explicit
 	// --follow --print still prints the follow URL.
 	if !follow && !serve && !printOnly {
-		if liveBridgeReachable(ctx) {
+		if httpx.LiveBridgeReachable(ctx, mcpAddrString()) {
 			follow = true
 		}
 	}
@@ -982,7 +865,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	slog.InfoContext(ctx, fmt.Sprintf("opening the graph explorer for this workspace (%d nodes, %d edges).\n"+
 		"your graph rides in the link fragment and is never uploaded - it does not leave your machine.", out.NodeCount, out.EdgeCount),
 		attr.Notice(""))
-	if err := openBrowser(openURL); err != nil {
+	if err := interactive.OpenBrowser(openURL); err != nil {
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
 		return exit.Reported(exit.Failure)
@@ -997,37 +880,13 @@ func hostedPageAllowed(ctx context.Context, page, notice, base string, printOnly
 	if printOnly {
 		return nil
 	}
-	err := checkHostedPageOrigin(base, globalCfg.MCP.AllowedOrigins)
+	err := httpx.CheckHostedPageOrigin(base, globalCfg.MCP.AllowedOrigins)
 	if err == nil {
 		return nil
 	}
 	slog.ErrorContext(ctx, "refused to open the "+page, attr.Notice(notice), attr.Error(err),
 		attr.Why("Add the origin to mcp.allowed_origins in magus.yaml, pass --url a loopback mirror, or use --print for the link alone."))
 	return exit.Reported(exit.Failure)
-}
-
-// checkHostedPageOrigin passes a loopback base and an origin named in allowed.
-func checkHostedPageOrigin(base string, allowed []string) error {
-	origin, err := httpx.ParseOrigin(base)
-	if err != nil {
-		return err
-	}
-	if slices.Contains(allowed, origin) || isLoopbackOrigin(origin) {
-		return nil
-	}
-	return fmt.Errorf("the page at %s is not in mcp.allowed_origins", origin)
-}
-
-func isLoopbackOrigin(origin string) bool {
-	u, err := url.Parse(origin)
-	if err != nil {
-		return false
-	}
-	if u.Hostname() == "localhost" {
-		return true
-	}
-	ip, err := netip.ParseAddr(u.Hostname())
-	return err == nil && ip.Unmap().IsLoopback()
 }
 
 // graphOpenTargets opens the workspace's target dependency graph in the hosted
@@ -1083,7 +942,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 
 	slog.InfoContext(ctx, "opening the graph explorer for this workspace's target graph.\n"+
 		"your graph rides in the link fragment and is never uploaded - it does not leave your machine.", attr.Notice(""))
-	if err := openBrowser(openURL); err != nil {
+	if err := interactive.OpenBrowser(openURL); err != nil {
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
 		return exit.Reported(exit.Failure)
@@ -1113,7 +972,7 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 	slog.InfoContext(ctx, fmt.Sprintf("handing this workspace's graph (%d nodes, %d edges) to your browser over loopback (%s).\n"+
 		"it is served once, CORS-locked to %s, and never leaves your machine; the server stops as soon as the page has it.",
 		nodes, edges, bs.Addr(), origin), attr.Notice(""))
-	if err := openBrowser(openURL); err != nil {
+	if err := interactive.OpenBrowser(openURL); err != nil {
 		slog.WarnContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Open this yourself (the server is waiting):\n  "+openURL))
 	}
@@ -1130,139 +989,6 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 		return fmt.Errorf("graph export --open --serve: unexpected serve outcome %v", outcome)
 	}
 	return nil
-}
-
-// openBrowser launches a browser for a URL and does not wait: the browser owns the
-// tab from there. It honors the freedesktop/de-facto BROWSER convention first, so a
-// user can force a specific browser on any platform (e.g.
-// `BROWSER=firefox magus query out1a2b3c --open`); only when BROWSER is unset or every
-// entry fails does it fall back to the OS default handler (macOS `open`, Windows
-// FileProtocolHandler, else `xdg-open`, which itself already respects BROWSER and the
-// desktop's default-web-browser setting on Linux).
-func openBrowser(raw string) error {
-	target, err := safeBrowserURL(raw)
-	if err != nil {
-		return err
-	}
-	if err := openViaBrowserEnv(target); err == nil {
-		return nil
-	}
-	var cmd *exec.Cmd
-	// The opener binary is fixed; the only variable is the URL, and safeBrowserURL
-	// above has already required an http(s) scheme and a host and re-serialized it.
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", target) //nolint:gosec // G702: fixed opener, URL validated by safeBrowserURL
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", target) //nolint:gosec // G702: fixed opener, URL validated by safeBrowserURL
-	default:
-		cmd = exec.Command("xdg-open", target) //nolint:gosec // G702: fixed opener, URL validated by safeBrowserURL
-	}
-	return cmd.Start()
-}
-
-// safeBrowserURL parses raw and returns it only if it is an http(s) URL, re-serialized
-// from the parsed form.
-//
-// The base of every URL magus opens is overridable (`--url` for the explorer,
-// MAGUS_LOG_VIEWER_URL for the log viewer), so what reaches the opener is not a
-// constant, and it is handed to a program as an argument. Two things follow. A string
-// beginning with "-" would be read by the opener as a FLAG rather than a URL, which the
-// scheme check rules out. And a scheme like file: or a shell-ish string is not something
-// magus should hand a launcher on the strength of an environment variable.
-//
-// Re-serializing rather than returning raw is the part that makes this a sanitizer and
-// not just a check: what gets executed is what was parsed and validated, so no unparsed
-// tail can ride along.
-func safeBrowserURL(raw string) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return "", fmt.Errorf("not a URL: %w", err)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return "", fmt.Errorf("refusing to open %q: only http and https URLs are opened", raw)
-	}
-	if u.Host == "" {
-		return "", fmt.Errorf("refusing to open %q: no host", raw)
-	}
-	return u.String(), nil
-}
-
-// errNoBrowserEnvEntry means no $BROWSER entry launched (or BROWSER was unset), so the
-// caller falls back to the platform opener. The specific entries tried are not worth
-// carrying: openBrowser only branches on nil-vs-non-nil, so a richer error would be
-// built and immediately discarded.
-var errNoBrowserEnvEntry = errors.New("no BROWSER entry launched")
-
-// openViaBrowserEnv tries the $BROWSER convention: a colon-separated list of commands,
-// each either containing "%s" (replaced by the URL) or taking the URL as a trailing
-// argument. The first entry that launches wins. Returns errNoBrowserEnvEntry if BROWSER
-// is unset or no entry starts, so the caller falls back to the platform opener.
-func openViaBrowserEnv(url string) error {
-	env := strings.TrimSpace(os.Getenv("BROWSER"))
-	if env == "" {
-		return errNoBrowserEnvEntry
-	}
-	for _, entry := range strings.Split(env, ":") {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-		var fields []string
-		if strings.Contains(entry, "%s") {
-			fields = strings.Fields(strings.ReplaceAll(entry, "%s", url))
-		} else {
-			fields = append(strings.Fields(entry), url)
-		}
-		if len(fields) == 0 {
-			continue
-		}
-		cmd := exec.Command(fields[0], fields[1:]...) //nolint:gosec // G702: user's own configured browser-open command, not remote input
-		if err := cmd.Start(); err == nil {
-			return nil
-		}
-	}
-	return errNoBrowserEnvEntry
-}
-
-// probeLiveBridgeTimeout bounds the real HTTP probe of the console below.
-const probeLiveBridgeTimeout = 2 * time.Second
-
-// probeLiveBridge issues a real HTTP GET to the console's guarded
-// /api/v1/graph route to confirm it is actually up, mirroring the doctor
-// bridge check (internal/doctor/checks_mcp.go probeBridgeReachability). A
-// server-status probe alone is not enough: serverSnapshot accepts ANY
-// reachable proc socket, which is a different transport than
-// the console this URL targets: a proc-mode server with no bridge running
-// would otherwise let a token be printed for an address nothing is listening
-// on. A 401/403 response proves the guarded route exists (auth runs before
-// the handler); connection refused/timeout means the bridge is down.
-func probeLiveBridge(ctx context.Context, addr string) error {
-	target := fmt.Sprintf("http://%s/api/v1/graph", addr)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("bridge not reachable at %s: %w", target, err)
-	}
-	defer resp.Body.Close()
-	switch resp.StatusCode {
-	case http.StatusUnauthorized, http.StatusForbidden:
-		return nil
-	default:
-		return fmt.Errorf("bridge at %s responded with unexpected status %d", target, resp.StatusCode)
-	}
-}
-
-// liveBridgeReachable reports whether the console is actually up, for the
-// zero-arg auto-switch in graphOpen. It never emits a token; it only decides
-// whether to attempt live mode at all.
-func liveBridgeReachable(ctx context.Context) bool {
-	pctx, cancel := context.WithTimeout(ctx, probeLiveBridgeTimeout)
-	defer cancel()
-	return probeLiveBridge(pctx, mcpAddrString()) == nil
 }
 
 // graphOpenLive opens the Graph Explorer served BY the running server from its own
@@ -1286,9 +1012,9 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 	// --print is exempt. It is the scriptable "just give me the URL" form, and a command
 	// that only prints must not leave a background process behind as a side effect.
 	if printOnly {
-		pctx, cancel := context.WithTimeout(ctx, probeLiveBridgeTimeout)
+		pctx, cancel := context.WithTimeout(ctx, httpx.ProbeLiveBridgeTimeout)
 		defer cancel()
-		if err := probeLiveBridge(pctx, hostPort); err != nil {
+		if err := httpx.ProbeLiveBridge(pctx, hostPort); err != nil {
 			slog.ErrorContext(ctx, "the console is not reachable.", attr.Notice("magus graph export --open --follow --print"),
 				attr.Why("start it: "+hint.ServerStart.String()))
 			return exit.Reported(exit.Failure)
@@ -1318,7 +1044,7 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 
 	slog.InfoContext(ctx, fmt.Sprintf("opening the graph explorer in live mode (server at %s).\n"+
 		"the explorer connects directly to your local server; your graph never leaves your machine.", hostPort), attr.Notice(""))
-	if err := openBrowser(openURL); err != nil {
+	if err := interactive.OpenBrowser(openURL); err != nil {
 		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
 		return exit.Reported(exit.Failure)
@@ -1326,19 +1052,16 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 	return nil
 }
 
-// A narrowed test leaves coverage incomplete without invalidating the refreshed symbols.
-// Keep that gap visible, while a corrupt profile or any other shard failure still fails.
-func graphBuildShardFailure(ctx context.Context, omitted []string) error {
-	var failed []string
-	for _, message := range omitted {
-		if strings.HasPrefix(message, "@coverage: coverage profile omits ") {
-			interactive.Hint(ctx, "graph refreshed without complete coverage", attr.Error(errors.New(message)))
-			continue
-		}
-		failed = append(failed, message)
-	}
-	if len(failed) > 0 {
-		return fmt.Errorf("magus graph build: left out of the graph: %s", strings.Join(failed, "; "))
-	}
-	return nil
+// checkHostedPageOrigin, openBrowser, probeLiveBridge and probeLiveBridgeTimeout stay named
+// here for callers in files this move does not own (live.go, server.go, query_output.go).
+func checkHostedPageOrigin(base string, allowed []string) error {
+	return httpx.CheckHostedPageOrigin(base, allowed)
 }
+
+func openBrowser(raw string) error { return interactive.OpenBrowser(raw) }
+
+func probeLiveBridge(ctx context.Context, addr string) error {
+	return httpx.ProbeLiveBridge(ctx, addr)
+}
+
+const probeLiveBridgeTimeout = httpx.ProbeLiveBridgeTimeout

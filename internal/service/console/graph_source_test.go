@@ -1,4 +1,4 @@
-package main
+package console
 
 import (
 	"testing"
@@ -71,5 +71,9 @@ func TestGithubRawBase(t *testing.T) {
 // carrying a link that 404s. No docs/graph.json means no link, decided before any VCS
 // resolution is attempted.
 func TestGraphExplorerLinkNeedsACommittedGraph(t *testing.T) {
-	assert.Equal(t, "", graphExplorerLink(t.Context(), t.TempDir()))
+	asked := func() string {
+		t.Error("the source base was asked for without a committed graph")
+		return ""
+	}
+	assert.Equal(t, "", GraphExplorerLink(t.TempDir(), asked))
 }

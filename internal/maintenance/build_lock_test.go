@@ -3,6 +3,7 @@ package maintenance
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -194,4 +195,68 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+func TestAcquireGraphBuildsWaitsOnAnotherCheckoutsMachineLock(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	lock, _, err := AcquireMachineGraphBuild(t.Context(),
+		GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the symbol refresh of /other"}, io.Discard, time.Millisecond)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = lock.Release() })
+	store := t.TempDir()
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+
+	_, _, err = AcquireGraphBuilds(ctx, "/ws", store, io.Discard)
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Contains(t, err.Error(), "stopped waiting for the symbol refresh of /other")
+	_, running := RunningGraphBuild(store)
+	assert.False(t, running, "a waiter holds no store, so a read does not take it for a build")
+}
+
+// acquireBehindBuild runs AcquireGraphBuilds queued behind a holder of the machine lock
+// that wrote ahead's store, and returns who it can load from.
+func acquireBehindBuild(t *testing.T, aheadStore, store string) *GraphBuildHolder {
+	t.Helper()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ahead := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "the build ahead", Store: aheadStore}
+	lock, _, err := AcquireMachineGraphBuild(t.Context(), ahead, io.Discard, time.Millisecond)
+	require.NoError(t, err)
+
+	type result struct {
+		release  func() error
+		waitedOn *GraphBuildHolder
+		err      error
+	}
+	got := make(chan result, 1)
+	go func() {
+		release, waitedOn, err := AcquireGraphBuilds(t.Context(), "/ws", store, io.Discard)
+		got <- result{release, waitedOn, err}
+	}()
+	select {
+	case r := <-got:
+		t.Fatalf("it took the machine lock while another held it: %+v", r)
+	case <-time.After(50 * time.Millisecond):
+	}
+	require.NoError(t, lock.Release())
+	r := <-got
+	require.NoError(t, r.err)
+	require.NoError(t, r.release())
+	return r.waitedOn
+}
+
+func TestAcquireGraphBuildsLoadsFromTheBuildAheadOnItsOwnStore(t *testing.T) {
+	store := t.TempDir()
+
+	waitedOn := acquireBehindBuild(t, store, store)
+
+	require.NotNil(t, waitedOn)
+	assert.Equal(t, "the build ahead", waitedOn.By)
+}
+
+func TestAcquireGraphBuildsStillBuildsBehindAnotherCheckout(t *testing.T) {
+	waitedOn := acquireBehindBuild(t, "/other/knowledge", t.TempDir())
+
+	assert.Nil(t, waitedOn)
 }

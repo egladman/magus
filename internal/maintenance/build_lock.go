@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -223,4 +224,34 @@ func readGraphBuildHolder(path string) (h GraphBuildHolder, ok bool, err error) 
 		return GraphBuildHolder{}, false, fmt.Errorf("maintenance: %s: %w", path, err)
 	}
 	return h, true, nil
+}
+
+const (
+	// GraphBuildPoll is how often a waiting graph build retries.
+	GraphBuildPoll = 250 * time.Millisecond
+	// GraphBuildMemoryMB is a build's own process while it assembles the graph. Measured
+	// 2026-10-31 here: 1.83 and 2.13 GiB resident, 2.28 GiB in that day's memory panic.
+	GraphBuildMemoryMB = 2400
+)
+
+// AcquireGraphBuilds takes the machine's build lock, then the store's at dir, waiting
+// on each and saying so to notices. waitedOn is the build whose work this one can load.
+func AcquireGraphBuilds(ctx context.Context, wsRoot, dir string, notices io.Writer) (release func() error, waitedOn *GraphBuildHolder, err error) {
+	me := GraphBuildHolder{PID: os.Getpid(), Started: time.Now(), By: "`magus graph build` in " + wsRoot, Store: dir}
+	if proc.IsJob(ctx) {
+		me.By = "the server's sync-graph job in " + wsRoot
+	}
+	machine, behind, err := AcquireMachineGraphBuild(ctx, me, notices, GraphBuildPoll)
+	if err != nil {
+		return nil, nil, fmt.Errorf("magus graph build: %w", err)
+	}
+	store, waitedOn, err := AcquireGraphBuild(ctx, dir, me, notices, GraphBuildPoll)
+	if err != nil {
+		return nil, nil, errors.Join(err, machine.Release())
+	}
+	// The build ahead released this store first, so its lock read free.
+	if waitedOn == nil && behind != nil && behind.Store == dir {
+		waitedOn = behind
+	}
+	return func() error { return errors.Join(store.Release(), machine.Release()) }, waitedOn, nil
 }

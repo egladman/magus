@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -15,7 +14,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -88,7 +86,7 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 	// symbol nodes (a symbol-seeded export), include symbols here too, else every
 	// baseline symbol would surface as a spurious removal. A --rev baseline is always
 	// domain-only (an archive has no built .scip indexes), so the current side is too.
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, baselineHasSymbols(baseline))
+	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, knowledge.BaselineHasSymbols(baseline))
 	if err != nil {
 		return err
 	}
@@ -97,20 +95,20 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 	// domain shape, and the base side never has them (a --rev export tree has no history,
 	// and an exported baseline predates the current commit), so keeping them would report
 	// nearly every file node as changed. Strip them from both sides for a structural diff.
-	stripVCSAttrs(&baseline)
-	stripVCSAttrs(&current)
+	knowledge.StripVCSAttrs(&baseline)
+	knowledge.StripVCSAttrs(&current)
 	diff := knowledge.DiffGraphs(baseLabel, baseline, current)
 
 	switch outOpts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(outOpts, diff)
 	case outputMarkdown:
-		_, err := os.Stdout.Write(renderDiffMarkdown(diff))
+		_, err := os.Stdout.Write(knowledge.RenderDiffMarkdown(diff))
 		return err
 	case outputName:
-		return diffNames(diff)
+		return emitNames(os.Stdout, knowledge.DiffNames(diff))
 	}
-	return diffText(diff)
+	return knowledge.DiffText(os.Stdout, diff)
 }
 
 // diffBaseline resolves the base graph to diff against: either a git revision (--rev,
@@ -134,172 +132,6 @@ func diffBaseline(ctx context.Context, root, rev string, pos []string) (types.Kn
 		return types.KnowledgeGraphOutput{}, "", fmt.Errorf("graph diff: decode baseline %q (expected `%s` output): %w", baselinePath, hint.GraphExport.With("-o", "json"), err)
 	}
 	return baseline, baselinePath, nil
-}
-
-// stripVCSAttrs removes the @vcs enrichment attrs (the "vcs_" namespace: last commit,
-// date, count) from every node, so a graph diff reflects domain shape rather than which
-// files got new commits since the base. See graphDiff for why both sides are stripped.
-// It replaces (never mutates) a node's Attrs map: Graph.Output() shares the live graph's
-// maps by reference, so deleting in place would corrupt the source graph.
-func stripVCSAttrs(g *types.KnowledgeGraphOutput) {
-	for i := range g.Nodes {
-		src := g.Nodes[i].Attrs
-		hasVCS := false
-		for k := range src {
-			if strings.HasPrefix(k, "vcs_") {
-				hasVCS = true
-				break
-			}
-		}
-		if !hasVCS {
-			continue // nothing to strip; leave the shared map untouched
-		}
-		kept := make(map[string]string, len(src))
-		for k, v := range src {
-			if !strings.HasPrefix(k, "vcs_") {
-				kept[k] = v
-			}
-		}
-		if len(kept) == 0 {
-			kept = nil
-		}
-		g.Nodes[i].Attrs = kept
-	}
-}
-
-// baselineHasSymbols reports whether an exported graph contains any symbol nodes, so the
-// current graph can be built to match (see graphDiff).
-func baselineHasSymbols(g types.KnowledgeGraphOutput) bool {
-	for _, n := range g.Nodes {
-		if n.Kind == types.KindSymbol {
-			return true
-		}
-	}
-	return false
-}
-
-// diffNames prints the changed node IDs one per line (added, removed, then changed),
-// the `-o name` projection for piping into other tools.
-func diffNames(d types.KnowledgeGraphDiff) error {
-	names := make([]string, 0, len(d.NodesAdded)+len(d.NodesRemoved)+len(d.NodesChanged))
-	for _, n := range d.NodesAdded {
-		names = append(names, n.ID)
-	}
-	for _, n := range d.NodesRemoved {
-		names = append(names, n.ID)
-	}
-	for _, c := range d.NodesChanged {
-		names = append(names, c.ID)
-	}
-	return emitNames(os.Stdout, names)
-}
-
-// diffText prints a plain-text summary of a graph diff.
-func diffText(d types.KnowledgeGraphDiff) error {
-	fmt.Printf("graph diff against %s\n", d.Base)
-	fmt.Printf("  nodes: +%d -%d ~%d\n", len(d.NodesAdded), len(d.NodesRemoved), len(d.NodesChanged))
-	fmt.Printf("  edges: +%d -%d\n", len(d.EdgesAdded), len(d.EdgesRemoved))
-	for _, n := range d.NodesAdded {
-		fmt.Printf("  + %s\n", n.ID)
-	}
-	for _, n := range d.NodesRemoved {
-		fmt.Printf("  - %s\n", n.ID)
-	}
-	for _, c := range d.NodesChanged {
-		fmt.Printf("  ~ %s (%v)\n", c.ID, c.Fields)
-	}
-	return nil
-}
-
-// renderDiffMarkdown renders a graph diff as a Markdown report for a CI comment.
-func renderDiffMarkdown(d types.KnowledgeGraphDiff) []byte {
-	var b md.Builder
-	b.Heading(1, "Knowledge graph diff")
-	b.Paragraphf("Base: `%s`. Nodes +%d -%d ~%d; edges +%d -%d.",
-		d.Base, len(d.NodesAdded), len(d.NodesRemoved), len(d.NodesChanged), len(d.EdgesAdded), len(d.EdgesRemoved))
-
-	if len(d.NodesAdded) > 0 {
-		b.Heading(2, "Nodes added")
-		b.List(nodeItems(d.NodesAdded)...)
-	}
-	if len(d.NodesRemoved) > 0 {
-		b.Heading(2, "Nodes removed")
-		b.List(nodeItems(d.NodesRemoved)...)
-	}
-	if len(d.NodesChanged) > 0 {
-		b.Heading(2, "Nodes changed")
-		rows := make([][]string, len(d.NodesChanged))
-		for i, c := range d.NodesChanged {
-			rows[i] = []string{md.Code(c.ID), md.Codes(c.Fields), changeDetail(c)}
-		}
-		b.Table([]string{"Node", "Fields", "Before -> After"}, []md.Align{md.Left, md.Left, md.Left}, rows)
-	}
-	if len(d.EdgesAdded) > 0 {
-		b.Heading(2, "Edges added")
-		b.List(edgeItems(d.EdgesAdded)...)
-	}
-	if len(d.EdgesRemoved) > 0 {
-		b.Heading(2, "Edges removed")
-		b.List(edgeItems(d.EdgesRemoved)...)
-	}
-	return b.Bytes()
-}
-
-func nodeItems(nodes []types.KnowledgeNode) []string {
-	out := make([]string, len(nodes))
-	for i, n := range nodes {
-		out[i] = fmt.Sprintf("%s [%s]", md.Code(n.ID), n.Kind)
-	}
-	return out
-}
-
-func edgeItems(edges []types.KnowledgeEdge) []string {
-	out := make([]string, len(edges))
-	for i, e := range edges {
-		out[i] = fmt.Sprintf("%s --%s--> %s", md.Code(e.Source), e.Relation, md.Code(e.Target))
-	}
-	return out
-}
-
-// changeDetail summarizes a changed node's before -> after values, one field per line,
-// truncated so the Markdown table cell stays readable. Attrs are summarized as a marker
-// rather than dumped (the full maps live in the json output's before/after).
-func changeDetail(c types.KnowledgeNodeChange) string {
-	parts := make([]string, 0, len(c.Fields))
-	for _, f := range c.Fields {
-		before, after := nodeField(c.Before, f), nodeField(c.After, f)
-		parts = append(parts, fmt.Sprintf("%s: %s -> %s", f, md.Code(clip(before)), md.Code(clip(after))))
-	}
-	return strings.Join(parts, "<br>")
-}
-
-// nodeField returns a node's value for a diffable field name as a string. attrs is
-// reported as a marker; the full map is in the json output.
-func nodeField(n types.KnowledgeNode, field string) string {
-	switch field {
-	case "kind":
-		return n.Kind
-	case "label":
-		return n.Label
-	case "doc":
-		return n.Doc
-	case "source":
-		return n.Source
-	default: // attrs
-		return fmt.Sprintf("%d attrs", len(n.Attrs))
-	}
-}
-
-// clip shortens a value for a table cell, replacing empties with a visible marker.
-func clip(s string) string {
-	if s == "" {
-		return "(empty)"
-	}
-	const max = 40
-	if len(s) > max {
-		return s[:max-3] + "..."
-	}
-	return s
 }
 
 // baseGraphFromRev builds a base knowledge graph from a revision's tracked files. It
