@@ -152,8 +152,8 @@ func TestBroadClaimDropsIgnoredFilesAndReadsTheLoadedProjects(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, `write path "*/*.go" matches 4 files in 2 projects: more than 1 project`, got[0].Message)
 
-	ws.Ignored = func(files []string) []string {
-		return slices.DeleteFunc(slices.Clone(files), func(f string) bool { return f != "web/x.go" })
+	ws.Ignored = func(files []string) ([]string, error) {
+		return slices.DeleteFunc(slices.Clone(files), func(f string) bool { return f != "web/x.go" }), nil
 	}
 	assert.Empty(t, broadClaimProblems(context.Background(), root, row, ws, nil))
 }

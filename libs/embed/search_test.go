@@ -459,10 +459,10 @@ func BenchmarkReadIndex(b *testing.B) {
 // deduplicated before indexing; its column is never compared with cosqa's.
 var externalSubsets = []string{"cosqa", "cosqa-dedup", "stackoverflow-qa", "csn-python", "csn-go", "ccr-go"}
 
-// teacherSystems are the runs `embed bench -model CodeRankEmbed` writes; the harness
-// runs the lexical arms and potion itself. nomic-embed-text-v1.5 stays out until its
-// port matches the reference model and its SO-QA gap is reconciled.
-var teacherSystems = []string{"CodeRankEmbed-query-prompt", "CodeRankEmbed-symmetric"}
+// teacherSystems are the runs `embed bench` writes for CodeRankEmbed and nomic-embed-text-v1.5;
+// the harness runs the lexical arms and potion itself. nomic-embed-text-v1.5 runs through
+// the Go port, whose SO-QA gap against the reference model is not reconciled.
+var teacherSystems = []string{"CodeRankEmbed-query-prompt", "CodeRankEmbed-symmetric", "nomic-embed-text-v1.5-query-prompt", "nomic-embed-text-v1.5-symmetric"}
 
 const (
 	externalDepth = 100
@@ -531,7 +531,7 @@ type externalResult struct {
 // dir/runs/<digest>/ and scores every run there. The digest is the first 16 hex of the
 // sha256 of queries.jsonl followed by corpus.jsonl, which `embed bench` computes the
 // same way, so a run of an older export is never scored against this one.
-func runExternalSubset(dir string, s externalSubset, potion *potionModel) (externalResult, error) {
+func runExternalSubset(dir string, s externalSubset, potion *potionModel, table *Table) (externalResult, error) {
 	digest, err := exportExternalSubset(dir, s)
 	if err != nil {
 		return externalResult{}, err
@@ -552,6 +552,11 @@ func runExternalSubset(dir string, s externalSubset, potion *potionModel) (exter
 	res := externalResult{subset: s, digest: digest, scores: map[string]externalScore{}}
 	dense := map[string]rankeval.TRECRun{"potion-code-16M-v2": potion.run("potion-code-16M-v2", s)}
 	if err := writeExternalRun(runs, dense["potion-code-16M-v2"]); err != nil {
+		return externalResult{}, err
+	}
+	converted := tableRun(convertedSystem, table, s)
+	dense[convertedSystem] = converted
+	if err := writeExternalRun(runs, converted); err != nil {
 		return externalResult{}, err
 	}
 	for _, name := range teacherSystems {
@@ -852,11 +857,12 @@ func externalReport(bench string, results []externalResult) string {
 	b.WriteString("- Ties go by score, then the FNV-1a hash of the doc id (`rankeval.CompareHits`), in every arm.\n")
 	b.WriteString("- BM25: k1 1.2, b 0.75, score order with no matched-term ordering, float64. `bm25` uses Lucene's English analyzer without stemming; `bm25-magustok` uses magus's `embed.Tokens`.\n")
 	b.WriteString("- potion-code-16M-v2 follows model2vec's `StaticModel.encode` at max_length 512, scored by cosine; its tokenizer strips accents for Latin-1 and Latin Extended-A letters only.\n")
-	b.WriteString("- CodeRankEmbed runs through libs/embed/train's Go teacher at 512 tokens, CLS pooled.\n")
+	b.WriteString("- potion-code-16M-v2-converted is the shipped int8 table, scored with the runtime's own `Table.Embed` and `embed.Tokens` at weight 1; it is a separate system from the original potion.\n")
+	b.WriteString("- CodeRankEmbed runs through libs/train's Go teacher at 512 tokens, CLS pooled.\n")
 	b.WriteString("- Fusion: reciprocal rank, k = 60, over the top 100 of each list.\n")
 	b.WriteString("- cosqa-dedup deduplicates cosqa's corpus by exact text before indexing. Read its column apart from cosqa's, never against it.\n")
 	b.WriteString("- csn-go queries lose the declared name they start with. csn-python and csn-go run text to code; ccr-go keeps CoIR's code-to-code direction over the test partition.\n")
-	b.WriteString("- nomic-embed-text-v1.5 is left out until its port matches the reference model and its SO-QA gap is reconciled.\n")
+	b.WriteString("- nomic-embed-text-v1.5 runs through the Go port with its model-card prefixes; its SO-QA gap against the reference model is not reconciled.\n")
 	b.WriteString("- Intervals are 95%: Student t for nDCG@10 and recall@100, Wilson for success@100 (recall@100 where every query has one relevant doc).\n\n")
 
 	systems := map[string]bool{}
@@ -922,7 +928,7 @@ func externalReport(bench string, results []externalResult) string {
 	var missing []string
 	for _, r := range results {
 		if len(r.missing) > 0 {
-			missing = append(missing, fmt.Sprintf("- %s %s: `embed bench -subset %s -model CodeRankEmbed`",
+			missing = append(missing, fmt.Sprintf("- %s %s: `embed bench -subset %s -model <teacher>`",
 				r.subset.name, strings.Join(r.missing, ", "), filepath.Join(bench, r.subset.name)))
 		}
 	}
@@ -937,7 +943,7 @@ func percentInterval(v, lo, hi float64) string {
 }
 
 // The potion-code-16M-v2 snapshot the Python baseline fetched, pinned by digest since
-// libs/embed/train/inputs.jsonl does not list it.
+// libs/train/embed/inputs.jsonl does not list it.
 const (
 	potionRevision        = "e9d2a44ca6a05ac6685f3b23709ea57eb7352d5b"
 	potionWeightsSHA256   = "75cf7a6c2171b230ad19b1e7d8e0b1aee86da5a02af8e7cacedd9921d227623c"
@@ -1135,7 +1141,7 @@ const wordPieceMaxChars = 100
 // potionTokens is the Hugging Face tokenizers pipeline of potion's tokenizer.json
 // without special tokens: BertNormalizer (clean text, pad CJK, strip accents,
 // lowercase), BertPreTokenizer, and greedy longest-match WordPiece with "##"
-// continuations. It copies libs/embed/train/teacher's WordPiece, which this module
+// continuations. It copies libs/train/embed/teacher's WordPiece, which this module
 // cannot import, and strips accents through latinBase instead of NFD, since this
 // module does not require golang.org/x/text: an accented letter outside Latin-1 and
 // Latin Extended-A keeps its accent.
@@ -2228,18 +2234,106 @@ func TestExternalEval(t *testing.T) {
 	data, bench := filepath.Join(root, "data"), filepath.Join(root, "bench")
 	potion, err := loadPotion(filepath.Join(root, "hf", "hub", "models--minishlab--potion-code-16M-v2", "snapshots", potionRevision))
 	require.NoError(t, err)
+	table, err := loadShippedTable(filepath.Join(root, "potion-code-16M-v2.table"))
+	require.NoError(t, err)
 
 	var results []externalResult
 	for _, name := range subsets {
 		s, err := loadExternalSubset(data, name)
 		require.NoError(t, err, name)
-		res, err := runExternalSubset(filepath.Join(bench, name), s, potion)
+		res, err := runExternalSubset(filepath.Join(bench, name), s, potion, table)
 		require.NoError(t, err, name)
 		results = append(results, res)
 	}
 	report := externalReport(bench, results)
 	require.NoError(t, os.WriteFile(filepath.Join(bench, "eval.md"), []byte(report), 0o644))
 	t.Log("\n" + report)
+	for _, rec := range externalRecords(table.Digest(), results) {
+		require.NoError(t, rankeval.AppendEvalRecord("evals.jsonl", rec))
+	}
+}
+
+// convertedSystem is the shipped table, potion-code-16M-v2 converted to the int8
+// format, scored beside the original potion it was converted from.
+const convertedSystem = "potion-code-16M-v2-converted"
+
+// loadShippedTable reads the converted table and refuses one whose sha256 differs from
+// the pin in gen/table.digest, so the rows it records name the table that ships.
+func loadShippedTable(path string) (*Table, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	pin, err := Pin()
+	if err != nil {
+		return nil, err
+	}
+	if sum := sha256.Sum256(data); hex.EncodeToString(sum[:]) != pin {
+		return nil, fmt.Errorf("%s has sha256 %x, the pin in gen/table.digest says %s: rerun the convert target", path, sum, pin)
+	}
+	return ReadTable(data)
+}
+
+// tableRun ranks every query of s against its docs with the runtime's own scoring,
+// int64(Σ q.Q[j]·d.Q[j])·d.InvNorm, over Tokens at weight 1. A text the table has no
+// token for is never ranked, as in Embed.
+func tableRun(tag string, table *Table, s externalSubset) rankeval.TRECRun {
+	embed := func(texts []externalText) ([]Vector, []bool) {
+		vecs, ok := make([]Vector, len(texts)), make([]bool, len(texts))
+		parallel(len(texts), func(i int) {
+			vecs[i], ok[i] = table.Embed([]Field{{Tokens: Tokens(texts[i].Text), Weight: 1}})
+		})
+		return vecs, ok
+	}
+	qv, qok := embed(s.queries)
+	dv, dok := embed(s.docs)
+	hits := make([][]rankeval.Hit, len(s.queries))
+	parallel(len(s.queries), func(i int) {
+		if !qok[i] {
+			return
+		}
+		hits[i] = rankeval.Top(func(yield func(rankeval.Hit) bool) {
+			for j, d := range dv {
+				if !dok[j] {
+					continue
+				}
+				var sum int64
+				for k, x := range qv[i].Q {
+					sum += int64(x) * int64(d.Q[k])
+				}
+				if !yield(rankeval.Hit{Doc: s.docs[j].ID, Score: float64(sum * int64(d.InvNorm))}) {
+					return
+				}
+			}
+		}, externalDepth)
+	})
+	run := rankeval.TRECRun{Tag: tag, Queries: map[string][]rankeval.Hit{}}
+	for i, q := range s.queries {
+		if len(hits[i]) > 0 {
+			run.Queries[q.ID] = hits[i]
+		}
+	}
+	return run
+}
+
+// externalRecords is one nDCG@10 row and one recall@100 row per scored system and
+// subset, in a fixed order so a rerun appends the same lines.
+func externalRecords(tableDigest string, results []externalResult) []rankeval.EvalRecord {
+	var out []rankeval.EvalRecord
+	for _, r := range results {
+		for _, name := range slices.Sorted(maps.Keys(r.scores)) {
+			sc := r.scores[name]
+			base := rankeval.EvalRecord{System: name, TableDigest: tableDigest, Set: r.subset.name, Queries: len(r.subset.queries), Export: r.digest}
+			ndcg, recall := base, base
+			ndcg.Metric, ndcg.Value, ndcg.Low, ndcg.High = "ndcg@10", sc.ndcg, sc.ndcgLow, sc.ndcgHigh
+			recall.Metric, recall.Value, recall.Low, recall.High = "recall@100", sc.recall, sc.recallLow, sc.recallHi
+			if sc.success {
+				recall.Metric = "success@100"
+			}
+			out = append(out, ndcg, recall)
+		}
+	}
+	return out
 }
 
 func TestExternalHarnessHybridDecoding(t *testing.T) {
@@ -2425,4 +2519,22 @@ func TestExternalHarnessFuseReciprocalRank(t *testing.T) {
 		{Doc: "x", Score: first},
 		{Doc: "z", Score: second},
 	}, got.Queries["q"])
+}
+
+func TestExternalHarnessRecords(t *testing.T) {
+	s := externalSubset{name: "toy", queries: []externalText{{"q1", "a"}, {"q2", "b"}}}
+	res := externalResult{subset: s, digest: "0123456789abcdef", scores: map[string]externalScore{
+		"bm25": {ndcg: 0.5, ndcgLow: 0.4, ndcgHigh: 0.6, recall: 0.9, recallLow: 0.8, recallHi: 1, success: true},
+		"a":    {ndcg: 0.1, ndcgLow: 0, ndcgHigh: 0.2, recall: 0.3, recallLow: 0.2, recallHi: 0.4},
+	}}
+	got := externalRecords("dig", []externalResult{res})
+	require.Len(t, got, 4)
+	assert.Equal(t, "a", got[0].System)
+	assert.Equal(t, "recall@100", got[1].Metric)
+	assert.Equal(t, "success@100", got[3].Metric)
+	assert.Equal(t, 2, got[0].Queries)
+	for _, r := range got {
+		_, err := marshalJSON(r)
+		require.NoError(t, err)
+	}
 }

@@ -299,7 +299,7 @@ jobs:
       #
       # The promise covers every generator but the symbol index's readers. Root generate
       # leaves out symbol-digest-generate, whose gen/symbol-index.json is gitignored and so
-      # has no drift to check, and this step leaves out libs/embed/train, whose generate
+      # has no drift to check, and this step leaves out libs/train, whose generate
       # needs it. Building the full index cost the plan 7m30s-12m45s, so those drift
       # gates run in the shard that holds them, and drifted embed training data fails there.
       # The step names what it dropped and fails if the filter drops anything else.
@@ -310,18 +310,22 @@ jobs:
         shell: bash
         run: |
           magus affected list -o name > "$RUNNER_TEMP/affected"
-          grep -vxF libs/embed/train "$RUNNER_TEMP/affected" > "$RUNNER_TEMP/pregate" || true
+          grep -vxF libs/train "$RUNNER_TEMP/affected" > "$RUNNER_TEMP/pregate" || true
           dropped=$(grep -vxF -f "$RUNNER_TEMP/pregate" "$RUNNER_TEMP/affected" || true)
-          if [ -n "$dropped" ] && [ "$dropped" != libs/embed/train ]; then
-            echo "::error::the pre-gate filter dropped more than libs/embed/train: ${dropped//$'\n'/ }"
+          if [ -n "$dropped" ] && [ "$dropped" != libs/train ]; then
+            echo "::error::the pre-gate filter dropped more than libs/train: ${dropped//$'\n'/ }"
             exit 1
           fi
           if [ -n "$dropped" ]; then
-            echo "::notice::pre-gate generate skips libs/embed/train: it needs the full symbol index; its shard gates it"
+            echo "::notice::pre-gate generate skips libs/train: it needs the full symbol index; its shard gates it"
           fi
           mapfile -t projects < "$RUNNER_TEMP/pregate"
           if [ "${#projects[@]}" -gt 0 ]; then
-            magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}"
+            if ! magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}"; then
+              echo "::error::generated output is stale. Run \`magus run generate:rw .\` and commit the result."
+              echo "::error::Or queue this PR with \`gh pr merge --auto --squash\`: the merge queue regenerates stale generated files in its own candidate."
+              exit 1
+            fi
           fi
 
       # The local tier the drift gate built, for the stages to replay generate from instead
