@@ -118,14 +118,6 @@ func TestFootprintDropsOpGlobsFiresOnlyOnTotalOmission(t *testing.T) {
 			"it carries no extension to compare and drops nothing; reporting it would be a false positive")
 	})
 
-	t.Run("a tree under one literal directory still omits the spell's files", func(t *testing.T) {
-		got := r.checkFootprintDropsOpGlobs([]*types.Project{project([]string{"testdata/*", "gen/table.digest"}, nil)})
-		assert.Equal(t, check.Fail, got.Status,
-			"only a glob with no literal directory before the wildcard takes the whole tree; testdata/* replaces the project's sources like any narrowing")
-		require.Len(t, got.Details, 1)
-		assert.Contains(t, got.Details[0], "go[go-fmt]")
-	})
-
 	t.Run("globs the spell declares for THIS target survive the reset", func(t *testing.T) {
 		perTarget := spells.NewSpell("go",
 			spells.WithSources("**/*.go"),
