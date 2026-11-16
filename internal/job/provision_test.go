@@ -2,6 +2,7 @@ package job
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -76,4 +78,46 @@ func (s *progressWriterSuite) TestProgressGoesToStderrUnlessQuiet() {
 	s.Equal(os.Stderr, progressWriter(s.T().Context()))
 	slog.SetDefault(slog.New(slog.NewTextHandler(&s.said, &slog.HandlerOptions{Level: slog.LevelWarn})))
 	s.Equal(io.Discard, progressWriter(s.T().Context()))
+}
+
+// FailedProvisionSuite pins what a fork says, and leaves, when readying its checkout fails.
+type FailedProvisionSuite struct {
+	suite.Suite
+	repo  *testkit.Repo
+	store *Store
+}
+
+func TestFailedProvisionSuite(t *testing.T) { suite.Run(t, new(FailedProvisionSuite)) }
+
+func (s *FailedProvisionSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": ""})
+	s.store = NewStore(Location{StateBase: s.T().TempDir(), CacheDir: s.T().TempDir(), Root: s.repo.Root()})
+}
+
+// failed bootstraps wt, which fails: the forker declares no hook.
+func (s *FailedProvisionSuite) failed(wt types.JobWorktree, made bool) error {
+	return FailedProvision(s.T().Context(), s.store, wt, made, bootstrapCheckout(s.T().Context(), lowDisk, "false", s.repo.Root(), wt.Root))
+}
+
+func (s *FailedProvisionSuite) TestAnAdoptedCheckoutStaysAndTheErrorSaysSo() {
+	dir := s.repo.AddWorktree("adopted").Root()
+
+	err := s.failed(types.JobWorktree{Root: dir, Source: s.repo.Root(), Base: s.repo.Head()}, false)
+
+	s.Require().ErrorContains(err, NoCheckoutHook)
+	s.NotContains(err.Error(), "removed")
+	s.ErrorContains(err, fmt.Sprintf("%s stays as it was, since this fork did not make it", dir))
+	s.DirExists(dir)
+}
+
+func (s *FailedProvisionSuite) TestACheckoutThisForkMadeIsRemovedAndTheErrorSaysSo() {
+	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w", filepath.Join(s.T().TempDir(), "w"), "", "")
+	s.Require().NoError(err)
+	s.Require().True(made)
+
+	err = s.failed(wt, made)
+
+	s.Require().ErrorContains(err, NoCheckoutHook)
+	s.ErrorContains(err, fmt.Sprintf("this fork made %s, so it removed it", wt.Root))
+	s.NoDirExists(wt.Root)
 }

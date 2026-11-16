@@ -107,18 +107,18 @@ func ProvisionCheckout(ctx context.Context, store *Store, ws Workspace, disk Dis
 	}
 	if ws.Unavailable != "" {
 		slog.InfoContext(ctx, fmt.Sprintf("the workspace did not load (%s), so every project's dependencies are installed", ws.Unavailable), attr.Notice("note"))
-		return placed != "", BootstrapCheckout(ctx, disk, exe, forker, wt.Root)
+		return placed != "", bootstrapCheckout(ctx, disk, exe, forker, wt.Root)
 	}
 	var declared types.Job
 	row.Apply(&declared)
-	return placed != "", BootstrapCheckout(ctx, disk, exe, forker, wt.Root, "--install", InstallProjects(forker, declared, ws.Projects))
+	return placed != "", bootstrapCheckout(ctx, disk, exe, forker, wt.Root, "--install", InstallProjects(forker, declared, ws.Projects))
 }
 
-// BootstrapCheckout builds ./magus in dir, a checkout the fork made or
+// bootstrapCheckout builds ./magus in dir, a checkout the fork made or
 // adopted, from dir's own sources. exe runs the forker's copy of its
 // checkout.bootstrap hook from forker. Progress goes to stderr, since the
 // fork's stdout is its record.
-func BootstrapCheckout(ctx context.Context, disk Disk, exe, forker, dir string, flags ...string) error {
+func bootstrapCheckout(ctx context.Context, disk Disk, exe, forker, dir string, flags ...string) error {
 	hook, err := CheckoutHook(forker)
 	if err != nil {
 		return fmt.Errorf("magus job fork: %w", err)

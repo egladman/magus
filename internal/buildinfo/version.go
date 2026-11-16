@@ -8,18 +8,18 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// SourceRepository is where this binary's commit can be fetched, provided it was pushed.
-const SourceRepository = "https://github.com/egladman/magus"
+// sourceRepository is where this binary's commit can be fetched, provided it was pushed.
+const sourceRepository = "https://github.com/egladman/magus"
 
 // UnknownVersion is the unstamped-build default, and the dev-build sentinel the proc
 // adoption gate keys on to fingerprint one (proc.devVersionSentinel); keep the two in
 // sync. Named because a server reports it too, and the two must not be compared.
 const UnknownVersion = "unknown"
 
-// BuiltDirty reports whether b was built from a modified tree, whose source exists only
+// builtDirty reports whether b was built from a modified tree, whose source exists only
 // on the machine that built it. go-build marks that in the version (describe's -dirty
 // suffix); a bare `go build` leaves it in the VCS stamp instead.
-func BuiltDirty(b types.MagusBuild) bool {
+func builtDirty(b types.MagusBuild) bool {
 	if strings.HasSuffix(b.Version, "-dirty") {
 		return true
 	}
@@ -71,7 +71,7 @@ type VersionEmbedded struct {
 // the contract digest, which can fail to hash: the caller adds it.
 func NewVersionOutput(b types.MagusBuild, builtBy string) VersionOutput {
 	return VersionOutput{
-		Version: b.Version, Commit: b.Commit, Dirty: BuiltDirty(b), Repository: SourceRepository,
+		Version: b.Version, Commit: b.Commit, Dirty: builtDirty(b), Repository: sourceRepository,
 		BuildDate: b.Date, BuiltBy: builtBy, Engine: "buzz",
 		Embedded: VersionEmbedded{FigureSHA256: figure.SourceSHA256()},
 	}

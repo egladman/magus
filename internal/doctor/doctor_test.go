@@ -9,14 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
@@ -947,4 +948,45 @@ func TestCheckGraphBounds(t *testing.T) {
 			Message: "could not build the knowledge graph: boom",
 		}, r.checkGraphBounds(t.Context()))
 	})
+}
+
+// TestBuildServerInfoRespectsServerDisabled pins that server.enabled=false stops the
+// probe before it resolves an address, let alone dials one.
+//
+// The regression this guards is a silent one: the probe used to fall straight through to
+// address resolution, which never consults the setting, so an invocation that had opted
+// out of the server still reached whatever server the host happened to be running. It
+// surfaced as a testscript failure: the suite sets MAGUS_SERVER_ENABLED=false to stay
+// hermetic, and `magus doctor` then probed the real socket and reported on a bridge the
+// test never asked about. It reproduced only where a server was actually up (CI), which
+// is what made it hard to see.
+//
+// Addr is set deliberately: it is the one input BuildServerInfo honours
+// without any discovery, so asserting SockAddr stays EMPTY proves the short-circuit fires
+// ahead of address resolution. Without it the field is populated even when nothing
+// answers, which is exactly the assertion that fails if the guard is removed. Testing it
+// this way needs no live server, so the test discriminates on any machine, unlike a
+// Reachable-only assertion, which passes vacuously wherever discovery finds nothing.
+func TestBuildServerInfoRespectsServerDisabled(t *testing.T) {
+	di := BuildServerInfo(context.Background(), ServerSource{
+		Addr:          "unix:///nonexistent/magus-test.sock",
+		ServerEnabled: false,
+	})
+
+	assert.Empty(t, di.SockAddr, "a disabled server must not even resolve an address")
+	assert.False(t, di.Reachable, "a disabled server must never be dialled")
+	assert.Empty(t, di.Workspaces, "no workspaces are reported from a server that was not asked")
+}
+
+// TestStatusGlyph maps every documented status to its plain (uncoloured) marker and
+// confirms the unknown-status fallback.
+func TestStatusGlyph(t *testing.T) {
+	assert.Equal(t, "[pass]", statusGlyph(check.OK, false))
+	assert.Equal(t, "[fail]", statusGlyph(check.Fail, false))
+	assert.Equal(t, "[?]", statusGlyph("", false))
+	assert.Equal(t, "[?]", statusGlyph("unknown", false))
+	assert.Equal(t, "[?]", statusGlyph("OK", false)) // case-sensitive by design
+	// Coloured variant wraps the marker in ANSI but preserves the label.
+	assert.Contains(t, statusGlyph(check.Fail, true), "[fail]")
+	assert.Contains(t, statusGlyph(check.Fail, true), "\x1b[31m")
 }

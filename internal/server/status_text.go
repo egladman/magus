@@ -89,10 +89,10 @@ func PrintStatusText(w io.Writer, r daemon.Snapshot, v StatusView) {
 	if r.Broker != nil {
 		PrintBrokerRows(w, *r.Broker, r.BrokerPolicy, now)
 	} else {
-		PrintBrokerDown(w, r.BrokerPolicy)
+		printBrokerDown(w, r.BrokerPolicy)
 	}
 	if r.Server != nil {
-		PrintServerRows(w, r.Server, now)
+		printServerRows(w, r.Server, now)
 	} else {
 		fmt.Fprintf(w, "server   -      not running (`%s` serves MCP and the console)\n", hint.ServerStart)
 	}
@@ -147,9 +147,9 @@ func PrintStatusText(w io.Writer, r daemon.Snapshot, v StatusView) {
 	printPoolServers(w, r.Pools)
 	if r.MCPEndpoint != nil {
 		mcp := daemon.Console(*r.MCPEndpoint)
-		PrintEndpointStatus(w, "mcp endpoint", &mcp)
+		printEndpointStatus(w, "mcp endpoint", &mcp)
 	}
-	PrintEndpointStatus(w, "console", r.Console)
+	printEndpointStatus(w, "console", r.Console)
 	printSymbolIndexStatus(w, r.SymbolIndexes)
 	printLockStatus(w, r.Locks)
 	printPipeWaitStatus(w, r.PipeWaits)
@@ -282,9 +282,9 @@ func PrintWorkByOwner(w io.Writer, r broker.WorkReport, now time.Time) {
 	_ = tw.Flush()
 }
 
-// PrintBrokerDown is the broker row when none answers, naming the policy that decides
+// printBrokerDown is the broker row when none answers, naming the policy that decides
 // what that means.
-func PrintBrokerDown(w io.Writer, policy types.BrokerPolicy) {
+func printBrokerDown(w io.Writer, policy types.BrokerPolicy) {
 	why := "a run starts one"
 	if policy.Resolved() == types.BrokerOff {
 		why = "runs here never ask one"
@@ -292,9 +292,9 @@ func PrintBrokerDown(w io.Writer, policy types.BrokerPolicy) {
 	fmt.Fprintf(w, "broker   -      not running (%s; broker: %s)\n", why, policy.Resolved())
 }
 
-// PrintServerRows renders the server one fact per row: the server itself, each listener,
+// printServerRows renders the server one fact per row: the server itself, each listener,
 // and the workspaces whose graph and symbols it keeps current.
-func PrintServerRows(w io.Writer, st *daemon.Server, now time.Time) {
+func printServerRows(w io.Writer, st *daemon.Server, now time.Time) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "server\t%d\t%s\n", st.PID, strings.Join(nonEmpty(
 		upText(st.StartTime, now), st.Version, st.Executable, st.Socket), "  "))
@@ -476,13 +476,13 @@ func printPoolSummary(w io.Writer, p *daemon.Output, label string) {
 		p.Capacity, p.Running, p.Available, p.Queued)
 }
 
-// PrintEndpointStatus renders the runtime health of an endpoint a person or agent host
+// printEndpointStatus renders the runtime health of an endpoint a person or agent host
 // connects to, under heading: the MCP endpoint ("is my magus tool reachable", separate
 // from the pool block, which reports the proc socket) and the console (where to open it,
 // which until now lived only in the server's log). Both snapshot sections share one
 // shape, so one renderer keeps the two from drifting. Omitted when the snapshot carries
 // no such section (e.g. a server's own snapshot).
-func PrintEndpointStatus(w io.Writer, heading string, e *daemon.Console) {
+func printEndpointStatus(w io.Writer, heading string, e *daemon.Console) {
 	if e == nil {
 		return
 	}

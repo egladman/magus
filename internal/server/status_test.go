@@ -1056,7 +1056,7 @@ func TestServerVersionSkewPoolParentRemedy(t *testing.T) {
 func TestPrintEndpointStatus(t *testing.T) {
 	render := func(m *daemon.Console) string {
 		var b strings.Builder
-		PrintEndpointStatus(&b, "mcp endpoint", m)
+		printEndpointStatus(&b, "mcp endpoint", m)
 		return b.String()
 	}
 
@@ -1095,4 +1095,30 @@ func (s *CapacityReserveSuite) TestTheMemoryFigureNamesWhatItLeftTheOS() {
 
 func (s *CapacityReserveSuite) TestABrokerThatSendsNoReserveShowsTheBudgetAlone() {
 	s.Equal("mem 1.0 GiB/4.0 GiB", capacityText(types.MachineSnapshot{BudgetMB: 4096, HeldMB: 1024}))
+}
+
+func TestBrokerDownRowNamesThePolicy(t *testing.T) {
+	var buf bytes.Buffer
+	printBrokerDown(&buf, types.BrokerOff)
+	assert.Contains(t, buf.String(), "not running (runs here never ask one; broker: off)")
+
+	buf.Reset()
+	printBrokerDown(&buf, "")
+	assert.Contains(t, buf.String(), "a run starts one; broker: best-effort", "unset reads as the default it behaves as")
+}
+
+func TestServerRowsNameEveryListener(t *testing.T) {
+	var buf bytes.Buffer
+	printServerRows(&buf, &daemon.Server{
+		PID: 47001, Socket: "unix:///run/magus/server.sock", StartTime: time.Now().Add(-time.Hour),
+		Listeners: []daemon.Listener{
+			{Kind: daemon.ListenerSocket, Address: "unix:///run/magus/server.sock"},
+			{Kind: daemon.ListenerHTTP, Address: "127.0.0.1:7391"},
+		},
+		Watch: []string{"/repo"},
+	}, time.Now())
+	got := buf.String()
+	assert.Contains(t, got, "server  47001")
+	assert.Contains(t, got, "listen  47001  http 127.0.0.1:7391")
+	assert.Contains(t, got, "watch   47001  graph+symbols  /repo")
 }
