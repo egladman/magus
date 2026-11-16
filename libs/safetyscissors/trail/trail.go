@@ -182,20 +182,34 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 func eventsPath(dir string) string { return filepath.Join(dir, activityDir, eventsFile) }
 func blobsPath(dir string) string  { return filepath.Join(dir, activityDir, blobsSubDir) }
 
+// InvalidReadError is a [ReadRecent] that names no directory or asks for fewer than one
+// event: a caller bug, refused rather than answered with an empty trail.
+type InvalidReadError struct {
+	Dir   string
+	Limit int
+}
+
+func (e *InvalidReadError) Error() string {
+	if e.Dir == "" {
+		return "trail: read names no directory"
+	}
+	return fmt.Sprintf("trail: read limit %d is below 1", e.Limit)
+}
+
 // ReadRecent returns up to limit events from the tail of the trail under dir, newest
-// first. A missing or empty trail, an empty dir or a limit below 1 yields no events and
-// no error. A corrupt line is skipped, not fatal. Memory is O(limit) however long the
-// file is.
+// first. A missing or empty trail yields an empty slice and no error; an empty dir or a
+// limit below 1 is an [*InvalidReadError]. A corrupt line is skipped, not fatal. Memory
+// is O(limit) however long the file is.
 func ReadRecent(dir string, limit int) ([]Event, error) {
 	if dir == "" || limit <= 0 {
-		return nil, nil
+		return nil, &InvalidReadError{Dir: dir, Limit: limit}
 	}
 	f, err := os.Open(eventsPath(dir))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
+			return []Event{}, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("trail: open %s: %w", eventsPath(dir), err)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -217,7 +231,7 @@ func ReadRecent(dir string, limit int) ([]Event, error) {
 		}
 	}
 	if err := sc.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("trail: read %s: %w", eventsPath(dir), err)
 	}
 
 	out := make([]Event, 0, len(buf))

@@ -122,7 +122,7 @@ func (s *PruneSuite) TestDeletesAnInvocationWhoseNewestFactAgedOut() {
 	s.writeAged("stale", 40*24*time.Hour, []Record{s.result("stale", 1, 40*24*time.Hour)})
 	s.writeAged("fresh", time.Hour, []Record{s.result("fresh", 1, time.Hour)})
 
-	Prune(s.dir, retention)
+	s.Require().NoError(Prune(s.dir, retention))
 
 	s.Equal([]string{"fresh"}, s.stored())
 	s.Len(s.read().Records, 1)
@@ -137,7 +137,7 @@ func (s *PruneSuite) TestKeepsEveryFactInAFileItSpares() {
 		s.result("long-lived", 3, time.Hour),
 	})
 
-	Prune(s.dir, retention)
+	s.Require().NoError(Prune(s.dir, retention))
 
 	s.Equal([]string{"long-lived"}, s.stored(), "the newest record is inside the window, so the file is not old")
 	s.Len(s.read().Records, 3, "a spared file is spared whole")
@@ -147,7 +147,7 @@ func (s *PruneSuite) TestKeepsEveryFactInAFileItSpares() {
 func (s *PruneSuite) TestDecidesOnRecordsNotOnTheFilesystemClock() {
 	s.writeAged("misdated", 200*24*time.Hour, []Record{s.result("misdated", 1, time.Hour)})
 
-	Prune(s.dir, retention)
+	s.Require().NoError(Prune(s.dir, retention))
 
 	s.Equal([]string{"misdated"}, s.stored())
 }
@@ -156,7 +156,7 @@ func (s *PruneSuite) TestDecidesOnRecordsNotOnTheFilesystemClock() {
 func (s *PruneSuite) TestAgesByTheCallersClock() {
 	s.writeAged("recent", time.Hour, []Record{s.result("recent", 1, time.Hour)})
 
-	Prune(s.dir, retention, WithClock(func() time.Time { return time.Now().Add(60 * 24 * time.Hour) }))
+	s.Require().NoError(Prune(s.dir, retention, WithClock(func() time.Time { return time.Now().Add(60 * 24 * time.Hour) })))
 
 	s.Empty(s.stored(), "sixty days on, an hour-old fact is past a thirty-day window")
 }
@@ -167,7 +167,7 @@ func (s *PruneSuite) TestExemptsAFileHoldingAHeldGroup() {
 	s.writeAged("blocked", age, []Record{s.record("blocked", 1, msAgo(age), kindHeld, grouped{Group: "g1"})})
 	s.writeAged("quiet", age, []Record{s.result("quiet", 1, age)})
 
-	Prune(s.dir, retention, WithTie(testTie()))
+	s.Require().NoError(Prune(s.dir, retention, WithTie(testTie())))
 
 	s.Equal([]string{"blocked"}, s.stored(), "the exemption covers the held file only; its neighbor ages out normally")
 }
@@ -180,7 +180,7 @@ func (s *PruneSuite) TestKeepsAnOldHalfWhileItsGroupHasAYoungOne() {
 	})
 	s.writeAged("answer", 199*24*time.Hour, []Record{s.record("answer", 1, msAgo(199*24*time.Hour), kindTied, grouped{Group: "g1"})})
 
-	Prune(s.dir, retention, WithTie(testTie()))
+	s.Require().NoError(Prune(s.dir, retention, WithTie(testTie())))
 
 	s.Equal([]string{"answer", "asker"}, s.stored())
 }
@@ -190,7 +190,7 @@ func (s *PruneSuite) TestWithoutATieTheOldHalfGoes() {
 	s.writeAged("asker", time.Hour, []Record{s.record("asker", 1, msAgo(time.Hour), kindTied, grouped{Group: "g1"})})
 	s.writeAged("answer", 199*24*time.Hour, []Record{s.record("answer", 1, msAgo(199*24*time.Hour), kindTied, grouped{Group: "g1"})})
 
-	Prune(s.dir, retention)
+	s.Require().NoError(Prune(s.dir, retention))
 
 	s.Equal([]string{"asker"}, s.stored())
 }
@@ -202,7 +202,7 @@ func (s *PruneSuite) TestDeletesAGroupsFilesTogetherOnceAllAgedOut() {
 	s.writeAged("asker", age, []Record{s.record("asker", 1, msAgo(age), kindTied, grouped{Group: "g1"})})
 	s.writeAged("answer", age-time.Hour, []Record{s.record("answer", 1, msAgo(age-time.Hour), kindTied, grouped{Group: "g1"})})
 
-	Prune(s.dir, retention, WithTie(testTie()))
+	s.Require().NoError(Prune(s.dir, retention, WithTie(testTie())))
 
 	s.Empty(s.stored())
 }
@@ -218,7 +218,7 @@ func (s *PruneSuite) TestExemptionPropagatesThroughASharedFile() {
 	})
 	s.writeAged("answer", age, []Record{s.record("answer", 1, msAgo(age), kindTied, grouped{Group: "g-done"})})
 
-	Prune(s.dir, retention, WithTie(testTie()))
+	s.Require().NoError(Prune(s.dir, retention, WithTie(testTie())))
 
 	s.Equal([]string{"answer", "asker"}, s.stored())
 }
@@ -278,8 +278,9 @@ func (s *PruneSuite) TestOpenNeverPrunesItsOwnFile() {
 func (s *PruneSuite) TestANonPositiveWindowKeepsEverything() {
 	s.writeAged("ancient", 400*24*time.Hour, []Record{s.result("ancient", 1, 400*24*time.Hour)})
 
-	Prune(s.dir, 0)
-	Prune(s.dir, -time.Hour)
+	s.Require().NoError(Prune(filepath.Join(s.dir, "absent"), retention), "a store that does not exist has nothing to prune")
+	s.Require().NoError(Prune(s.dir, 0))
+	s.Require().NoError(Prune(s.dir, -time.Hour))
 
 	s.Equal([]string{"ancient"}, s.stored())
 }
@@ -325,7 +326,7 @@ func (s *PruneSuite) TestASchemaOneFileIsCountedAndAgesOutByItsTimestamps() {
 	s.Equal(Fold{Records: fold.Records, Invocations: 3, Skipped: 1, Legacy: 4}, fold,
 		"a line written before the rename is not damage; the undated one is")
 
-	Prune(s.dir, DefaultRetention)
+	s.Require().NoError(Prune(s.dir, DefaultRetention))
 	s.NoFileExists(old, "a schema-1 file past the window ages out like any other")
 	s.FileExists(young)
 	s.FileExists(undated, "a file with no dated line has no known age, so it stays")
@@ -340,7 +341,7 @@ func (s *PruneSuite) TestCapsTheStoreAtItsNewestFiles() {
 	}
 	s.writeLegacy("legacy", time.Now().Add(-30*time.Minute))
 
-	prune(s.dir, retention, 3, "inv4"+FileExt, newOptions(nil))
+	s.Require().NoError(prune(s.dir, retention, 3, "inv4"+FileExt, newOptions(nil)))
 
 	s.Equal([]string{"inv0", "inv1", "inv4", "legacy"}, s.stored(),
 		"the newest three by newest fact survive, schema-1 included, and the writer's own file is never past the cap")
@@ -357,7 +358,7 @@ func (s *PruneSuite) TestCapSparesTheNewestLoadedSessions() {
 		})
 	}
 
-	prune(s.dir, retention, 2, "", newOptions(nil))
+	s.Require().NoError(prune(s.dir, retention, 2, "", newOptions(nil)))
 
 	s.Equal([]string{"inv0", "inv1", "loaded"}, s.stored(), "a loaded host session is the rare kind the cap must not push out")
 }
@@ -371,7 +372,7 @@ func (s *PruneSuite) TestCapStillHonorsTheTie() {
 		})
 	}
 
-	prune(s.dir, retention, 2, "", newOptions([]Option{WithTie(testTie())}))
+	s.Require().NoError(prune(s.dir, retention, 2, "", newOptions([]Option{WithTie(testTie())})))
 
 	s.Equal([]string{"asker", "inv0", "inv1"}, s.stored(), "a held file is exempt from the cap as from retention")
 }

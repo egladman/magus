@@ -193,7 +193,9 @@ func (s *WriterSuite) TestOpenResumesTheSequenceOfAnExistingInvocation() {
 func (s *WriterSuite) TestOpenRejectsAnIDThatCouldEscapeTheStore() {
 	for _, id := range []string{"", "../escape", "a/b", "."} {
 		_, err := Open(s.T().TempDir(), id, InvocationStart{})
-		s.Require().ErrorIs(err, ErrInvalidID, "invocation id %q", id)
+		var invalid *InvalidIDError
+		s.Require().ErrorAs(err, &invalid, "invocation id %q", id)
+		s.Equal(id, invalid.ID)
 	}
 }
 
@@ -490,8 +492,22 @@ func (s *ReadSuite) TestReadInvocationReadsOneFile() {
 	writeRaw(&s.Suite, dir, "a", []Record{{V: APIVersion, Invocation: "a", Seq: 1, Kind: KindTargetResult, Ts: 1}})
 	writeRaw(&s.Suite, dir, "b", []Record{{V: APIVersion, Invocation: "b", Seq: 1, Kind: KindTargetResult, Ts: 2}})
 
-	s.Equal([]Record{{V: APIVersion, Invocation: "a", Seq: 1, Kind: KindTargetResult, Ts: 1}}, ReadInvocation(dir, "a"))
-	s.Empty(ReadInvocation(dir, "absent"))
+	got, err := ReadInvocation(dir, "a")
+	s.Require().NoError(err)
+	s.Equal([]Record{{V: APIVersion, Invocation: "a", Seq: 1, Kind: KindTargetResult, Ts: 1}}, got)
+	got, err = ReadInvocation(dir, "absent")
+	s.Require().NoError(err)
+	s.Empty(got)
+}
+
+// An id that could name a file outside the store is refused before anything opens.
+func (s *ReadSuite) TestReadInvocationRefusesAnEscapingID() {
+	dir := s.T().TempDir()
+	for _, id := range []string{"", "../a", "a/b", "."} {
+		_, err := ReadInvocation(dir, id)
+		var invalid *InvalidIDError
+		s.Require().ErrorAs(err, &invalid, "invocation id %q", id)
+	}
 }
 
 type PreFoldRecordSuite struct {
@@ -596,7 +612,7 @@ func (s *LoadSuite) TestLoadEventsRecordsTheHostOnTheInvocationStart() {
 		LastMs:     got.LastMs,
 		Facts:      got.Facts,
 		Events:     1,
-		Agent:      got.Agent,
+		Producer:   got.Producer,
 		pairAtMs:   got.pairAtMs,
 	}, got)
 }
@@ -615,7 +631,20 @@ func (s *LoadSuite) TestSummarizeReadsTheNewestModelAndHostVersionPair() {
 	s.Require().NoError(err)
 	summaries := Summarize(fold)
 	s.Require().Len(summaries, 1)
-	s.Equal(Agent{Model: "claude-opus-5-5", HostVersion: "2.1.280"}, summaries[0].Agent, "the newest event's pair wins, not the first")
+	s.Equal(Agent{Model: "claude-opus-5-5", HostVersion: "2.1.280"}, summaries[0].Producer, "the newest event's pair wins, not the first")
+}
+
+// The pair and the inlined Origin's subagent id are two keys: a shared one drops both
+// under either JSON build.
+func (s *LoadSuite) TestSummaryKeepsTheSubagentAndThePairApart() {
+	sum := Summary{Invocation: "i", Producer: Agent{Model: "m"}}
+	sum.Agent = "sub-1"
+	raw, err := codec.Marshal(sum)
+	s.Require().NoError(err)
+	var back map[string]any
+	s.Require().NoError(codec.Unmarshal(raw, &back))
+	s.Equal("sub-1", back["agent"])
+	s.Equal(map[string]any{"model": "m"}, back["producer"])
 }
 
 // A host that never names a model or its own version summarizes with both empty: a
@@ -629,7 +658,7 @@ func (s *LoadSuite) TestSummarizeLeavesTheModelPairEmptyWhenNoEventNamesOne() {
 	s.Require().NoError(err)
 	summaries := Summarize(fold)
 	s.Require().Len(summaries, 1)
-	s.Zero(summaries[0].Agent)
+	s.Zero(summaries[0].Producer)
 }
 
 // NewestEventMs reads the HOST's timestamp: a store loaded today from a month-old
@@ -663,5 +692,7 @@ func (s *LoadSuite) TestValidEventKind() {
 // A load refuses a session id that could not name a file, and says which.
 func (s *LoadSuite) TestLoadEventsRefusesAnInvalidSessionID() {
 	_, err := LoadEvents(s.T().Context(), s.T().TempDir(), []LoadEvent{loadable("../x", "h1", "r1", 10)}, InvocationStart{})
-	s.Require().ErrorIs(err, ErrInvalidID)
+	var invalid *InvalidIDError
+	s.Require().ErrorAs(err, &invalid)
+	s.Equal("../x", invalid.ID)
 }

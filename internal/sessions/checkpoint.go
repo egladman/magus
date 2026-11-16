@@ -86,7 +86,10 @@ func RecordCheckpoint(dir string, c Checkpoint, start session.InvocationStart) (
 	// file checkpointInvocationID names and nowhere else, so folding the store would
 	// decode a 30-day history to answer a question one file holds, on every turn of
 	// every session, which is when this runs.
-	records := session.ReadInvocation(dir, id)
+	records, err := session.ReadInvocation(dir, id)
+	if err != nil {
+		return c, false, err
+	}
 	if prev, ok := latestCheckpoint(records); ok && prev == c {
 		return c, false, nil
 	}

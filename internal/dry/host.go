@@ -18,10 +18,10 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/safetyscissors/job"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"github.com/egladman/magus/libs/secrets"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
+	trailtypes "github.com/egladman/magus/types/trail"
 )
 
 // installHost wires a session for magusfile evaluation, layering host modules

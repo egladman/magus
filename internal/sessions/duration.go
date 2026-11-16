@@ -62,7 +62,10 @@ func lastRunDuration(dir, project, target string, ran func(session.InvocationSta
 	project, target = path.Clean(cmp.Or(project, ".")), baseTarget(target)
 	newest := names[max(0, len(names)-maxInvocationFiles):]
 	for _, name := range slices.Backward(newest) {
-		records := session.ReadInvocation(dir, strings.TrimSuffix(name, session.FileExt))
+		records, err := session.ReadInvocation(dir, strings.TrimSuffix(name, session.FileExt))
+		if err != nil {
+			continue
+		}
 		if !slices.ContainsFunc(records, func(rec session.Record) bool {
 			var s session.InvocationStart
 			return rec.Kind == session.KindInvocationStart && codec.Unmarshal(rec.Payload, &s) == nil && ran(s)

@@ -65,7 +65,7 @@ func readPathContact(dir, path string) PathContact {
 	if dir == "" || path == "" {
 		return out
 	}
-	fold, err := session.ReadAgentEvents(dir)
+	fold, err := session.FoldAgentEvents(dir)
 	if err != nil {
 		return out
 	}

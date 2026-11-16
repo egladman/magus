@@ -1211,7 +1211,7 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 	if err != nil {
 		return nil
 	}
-	fold, err := session.ReadAgentEvents(dir)
+	fold, err := session.FoldAgentEvents(dir)
 	if err != nil {
 		return nil
 	}

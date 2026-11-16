@@ -23,7 +23,7 @@ func (s *GateFoldSuite) TestReadGateResultsFoldsOnlyGateVerdicts() {
 	}})
 	s.Require().NoError(RecordGate(dir, GateResult{Target: "ci", Scope: GateScopeAffected, Commit: "abc123", Outcome: session.OutcomePass}, session.InvocationStart{}))
 
-	_, err := session.ReadAgentEvents(dir)
+	_, err := session.FoldAgentEvents(dir)
 	s.Require().NoError(err)
 	gates, err := ReadGateResults(dir)
 	s.Require().NoError(err)

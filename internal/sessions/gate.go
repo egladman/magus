@@ -24,8 +24,8 @@ import (
 const KindGateResult = "gate_result"
 
 // ReadGateResults is [session.ReadAll] narrowed to the [KindGateResult] records; see
-// [session.ReadKind].
-func ReadGateResults(dir string) (session.Fold, error) { return session.ReadKind(dir, KindGateResult) }
+// [session.FoldKind].
+func ReadGateResults(dir string) (session.Fold, error) { return session.FoldKind(dir, KindGateResult) }
 
 // OutcomeDeferred marks a gate invocation that was REFUSED as redundant under
 // load (MGS3010, exit 75) rather than run. It is a record of the deferral

@@ -72,10 +72,18 @@ export fun mark_lint(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
-// Runs the suite; the root merges coverage.out into its coverage badge.
+// Runs the suite on encoding/json, the build without the experiment; the root merges
+// coverage.out into its coverage badge. The experiment is turned off by name, since the
+// workspace's own environment turns it on.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles(["coverage.out"]);
-    go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
+    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "nojsonv2"}),
+                  {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
+}
+// Runs the same suite on encoding/json/v2: every module type holds only while both
+// builds pass it unchanged.
+export fun test_jsonv2(ctx: magus\Context, args: [str]) > void {
+    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["./..."]});
 }
 // mark_test runs the mark script's in-file test blocks.
 export fun mark_test(ctx: magus\Context, args: [str]) > void !> any {
@@ -87,5 +95,5 @@ export fun mark_test(ctx: magus\Context, args: [str]) > void !> any {
 export fun ci(ctx: magus\Context, args: [str]) > void {
     // Only ci rewrites files: format first, so lint, build and test read the formatted tree.
     ctx.needs(format);
-    ctx.needs(lint, build, test, mark_lint, mark_test);
+    ctx.needs(lint, build, test, test_jsonv2, mark_lint, mark_test);
 }

@@ -115,7 +115,7 @@ func denyFailedGate(workspace string, red sessions.GateRecord) denial {
 	if err != nil {
 		return denial{}
 	}
-	results, err := session.ReadKind(dir, session.KindTargetResult)
+	results, err := session.FoldKind(dir, session.KindTargetResult)
 	if err != nil {
 		return denial{}
 	}
@@ -181,7 +181,7 @@ func gateUnchanged(ctx context.Context, deps Dependencies, workspace string) (se
 	if !ok || last.Commit == "" {
 		return sessions.GateRecord{}, false
 	}
-	if written, err := session.ReadKind(dir, sessions.KindHarnessWrite); err == nil {
+	if written, err := session.FoldKind(dir, sessions.KindHarnessWrite); err == nil {
 		if hw, ok := sessions.LatestHarnessWrite(written); ok && hw.At.After(last.At) {
 			return sessions.GateRecord{}, false
 		}

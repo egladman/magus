@@ -1,3 +1,6 @@
+// Package trail is the guard trail as magus's Buzz API reads it: what the guard recorded
+// about one session inside a window, and the marks a person leaves on its rows.
+// magus\session(opts).trail() and its marks are the only producers and readers.
 package trail
 
 import (
@@ -10,23 +13,25 @@ import (
 type Section string
 
 const (
-	// Refused rows are rules that denied a call, keyed by rule.
-	Refused Section = "refused"
-	// Advised rows are rules that let a call through with advice, keyed by rule.
-	Advised Section = "advised"
-	// Unguarded rows are command shapes that passed with no rule, keyed by shape:
+	// SectionRefused rows are rules that denied a call, keyed by rule.
+	SectionRefused Section = "refused"
+	// SectionAdvised rows are rules that let a call through with advice, keyed by rule.
+	SectionAdvised Section = "advised"
+	// SectionUnguarded rows are command shapes that passed with no rule, keyed by shape:
 	// the guard candidates.
-	Unguarded Section = "unguarded"
-	// NextNotTaken rows are commands a verdict served as `next` that the agent
+	SectionUnguarded Section = "unguarded"
+	// SectionNextNotTaken rows are commands a verdict served as `next` that the agent
 	// never ran, keyed by rule and the served command's shape.
-	NextNotTaken Section = "next-not-taken"
+	SectionNextNotTaken Section = "next-not-taken"
 )
 
 // Sections lists every section in label order: A, B, C, D.
-func Sections() []Section { return []Section{Refused, Advised, Unguarded, NextNotTaken} }
+func Sections() []Section {
+	return []Section{SectionRefused, SectionAdvised, SectionUnguarded, SectionNextNotTaken}
+}
 
-// Letter is the section's label prefix, "" for a value outside the set.
-func (s Section) Letter() string {
+// letter is the section's label prefix, "" for a value outside the set.
+func (s Section) letter() string {
 	for i, known := range Sections() {
 		if s == known {
 			return string(rune('A' + i))
@@ -35,10 +40,10 @@ func (s Section) Letter() string {
 	return ""
 }
 
-// Validate reports a section outside the set, naming the ones that exist.
+// Validate reports a section outside the set as an [*UnknownValueError].
 func (s Section) Validate() error {
-	if s.Letter() == "" {
-		return fmt.Errorf("trail section %q is not one of %s", s, joinValues(Sections()))
+	if s.letter() == "" {
+		return &UnknownValueError{Field: "section", Value: string(s), Known: valueStrings(Sections())}
 	}
 	return nil
 }
@@ -47,35 +52,48 @@ func (s Section) Validate() error {
 type Verdict string
 
 const (
-	// ShouldDeny says the row's calls should be refused next time.
-	ShouldDeny Verdict = "should-deny"
-	// ShouldAdvise says the row's calls should draw advice next time.
-	ShouldAdvise Verdict = "should-advise"
-	// WrongDeny says the rule refused calls it should have let through.
-	WrongDeny Verdict = "wrong-deny"
-	// Fine says the row needs no change.
-	Fine Verdict = "fine"
+	// VerdictShouldDeny says the row's calls should be refused next time.
+	VerdictShouldDeny Verdict = "should-deny"
+	// VerdictShouldAdvise says the row's calls should draw advice next time.
+	VerdictShouldAdvise Verdict = "should-advise"
+	// VerdictWrongDeny says the rule refused calls it should have let through.
+	VerdictWrongDeny Verdict = "wrong-deny"
+	// VerdictFine says the row needs no change.
+	VerdictFine Verdict = "fine"
 )
 
 // Verdicts lists every verdict a mark may carry.
-func Verdicts() []Verdict { return []Verdict{ShouldDeny, ShouldAdvise, WrongDeny, Fine} }
+func Verdicts() []Verdict {
+	return []Verdict{VerdictShouldDeny, VerdictShouldAdvise, VerdictWrongDeny, VerdictFine}
+}
 
-// Validate reports a verdict outside the set, naming the ones that exist.
+// Validate reports a verdict outside the set as an [*UnknownValueError].
 func (v Verdict) Validate() error {
 	for _, known := range Verdicts() {
 		if v == known {
 			return nil
 		}
 	}
-	return fmt.Errorf("trail verdict %q is not one of %s", v, joinValues(Verdicts()))
+	return &UnknownValueError{Field: "verdict", Value: string(v), Known: valueStrings(Verdicts())}
 }
 
-func joinValues[T ~string](values []T) string {
+// UnknownValueError is a section or verdict outside its set. Known lists the set.
+type UnknownValueError struct {
+	Field string
+	Value string
+	Known []string
+}
+
+func (e *UnknownValueError) Error() string {
+	return fmt.Sprintf("trail: %s %q is not one of %s", e.Field, e.Value, strings.Join(e.Known, ", "))
+}
+
+func valueStrings[T ~string](values []T) []string {
 	parts := make([]string, len(values))
 	for i, v := range values {
 		parts[i] = string(v)
 	}
-	return strings.Join(parts, ", ")
+	return parts
 }
 
 // Trail is what the guard recorded about one session inside a window.

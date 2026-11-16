@@ -4,7 +4,6 @@
 package verdict
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -26,13 +25,13 @@ const (
 	Deny Decision = "deny"
 )
 
-var decisions = enum.Set[Decision]{Allow, Advise, Deny}
+func decisions() enum.Set[Decision] { return enum.Set[Decision]{Allow, Advise, Deny} }
 
 // Values lists the decisions a rule may return, excluding the zero value.
-func (d Decision) Values() []string { return decisions.Strings() }
+func (d Decision) Values() []string { return decisions().Strings() }
 
 // Valid reports whether d is a declared decision or unset.
-func (d Decision) Valid() bool { return decisions.Valid(d) }
+func (d Decision) Valid() bool { return decisions().Valid(d) }
 
 // String renders d for an error message: the value, or "unset" when empty.
 func (d Decision) String() string { return enum.String(d) }
@@ -40,14 +39,24 @@ func (d Decision) String() string { return enum.String(d) }
 // MarshalText writes the name as given.
 func (d Decision) MarshalText() ([]byte, error) { return []byte(d), nil }
 
-// UnmarshalText sets d from a name, refusing one outside Values.
+// UnmarshalText sets d from a name, refusing one outside Values with an
+// [*UnknownDecisionError].
 func (d *Decision) UnmarshalText(text []byte) error {
 	v := Decision(text)
 	if !v.Valid() {
-		return fmt.Errorf("unknown guard decision %q (want one of %v)", text, v.Values())
+		return &UnknownDecisionError{Decision: string(text)}
 	}
 	*d = v
 	return nil
+}
+
+// UnknownDecisionError is a decision name outside [Decision.Values].
+type UnknownDecisionError struct {
+	Decision string
+}
+
+func (e *UnknownDecisionError) Error() string {
+	return fmt.Sprintf("verdict: unknown guard decision %q (want one of %v)", e.Decision, Decision("").Values())
 }
 
 // rank orders decisions by strictness, so merging two verdicts keeps the stricter. An
@@ -75,23 +84,54 @@ type Verdict struct {
 
 // reservedRuleNames are the seams an unnamed verdict reports under; a rule named after
 // one would read as an unnamed answer.
-var reservedRuleNames = []string{"command", "spawn", "write", "stop", "step"}
+func reservedRuleNames() []string { return []string{"command", "spawn", "write", "stop", "step"} }
 
-// ruleName is a rule's name as written: lowercase words of letters and digits joined by
-// single hyphens. It is a label, never normalized, so "rule2" stands as written.
-var ruleName = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+// isRuleName reports whether name is a rule's name as written: lowercase words of
+// letters and digits joined by single hyphens. It is a label, never normalized, so
+// "rule2" stands as written.
+func isRuleName(name string) bool {
+	for word := range strings.SplitSeq(name, "-") {
+		if word == "" {
+			return false
+		}
+		for i := 0; i < len(word); i++ {
+			if c := word[i]; (c < 'a' || c > 'z') && (c < '0' || c > '9') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// RuleNameError is a rule name [ValidateRuleName] refuses. Suggestion is the kebab-case
+// spelling when the name is not one, and Reserved is set when it names a seam.
+type RuleNameError struct {
+	Name       string
+	Suggestion string
+	Reserved   bool
+}
+
+func (e *RuleNameError) Error() string {
+	switch {
+	case e.Name == "":
+		return "verdict: guard rule name is empty"
+	case e.Reserved:
+		return fmt.Sprintf("verdict: guard rule name %q is reserved: an unnamed %s rule reports under it", e.Name, e.Name)
+	}
+	return fmt.Sprintf("verdict: guard rule name %q is not lowercase letters and digits joined by single hyphens, as in %q", e.Name, e.Suggestion)
+}
 
 // ValidateRuleName refuses a Verdict rule name that is not lowercase words joined by
-// hyphens, or that names a seam. The refusal suggests the kebab-case spelling.
+// hyphens, or that names a seam, with a [*RuleNameError]. The refusal suggests the
+// kebab-case spelling.
 func ValidateRuleName(name string) error {
-	if name == "" {
-		return errors.New("guard rule name is empty")
-	}
-	if !ruleName.MatchString(name) {
-		return fmt.Errorf("guard rule name %q is not lowercase letters and digits joined by single hyphens, as in %q", name, kebabCase(name))
-	}
-	if slices.Contains(reservedRuleNames, name) {
-		return fmt.Errorf("guard rule name %q is reserved: an unnamed %s rule reports under it", name, name)
+	switch {
+	case name == "":
+		return &RuleNameError{}
+	case !isRuleName(name):
+		return &RuleNameError{Name: name, Suggestion: kebabCase(name)}
+	case slices.Contains(reservedRuleNames(), name):
+		return &RuleNameError{Name: name, Reserved: true}
 	}
 	return nil
 }
@@ -121,18 +161,15 @@ func Stricter(a, b Verdict) Verdict {
 	return Verdict{Decision: a.Decision, Reason: strings.Join(reasons, "\n\n"), Rule: rule}
 }
 
-// kebabSplitWord and kebabSplitNumberLetter copy magus's types.Normalize, which this
-// module may not import, so a refused name suggests the spelling magus would.
-var (
-	kebabSplitWord         = regexp.MustCompile(`([a-z])([A-Z0-9])|([a-zA-Z])([0-9])|([0-9])([a-zA-Z])|([A-Z])([A-Z])([a-z])`)
-	kebabSplitNumberLetter = regexp.MustCompile(`([0-9])([a-zA-Z])`)
-)
-
 // kebabCase lowercases s and inserts '-' at camelCase and letter/digit boundaries,
-// collapsing every non-alphanumeric run to a single '-'.
+// collapsing every non-alphanumeric run to a single '-'. Its two patterns copy magus's
+// types.Normalize, which this module may not import, so a refused name suggests the
+// spelling magus would. They compile per call: only a refusal reaches here.
 func kebabCase(s string) string {
-	s = kebabSplitWord.ReplaceAllString(s, `$1$3$5$7 $2$4$6$8$9`)
-	s = kebabSplitNumberLetter.ReplaceAllString(s, "$1 $2")
+	splitWord := regexp.MustCompile(`([a-z])([A-Z0-9])|([a-zA-Z])([0-9])|([0-9])([a-zA-Z])|([A-Z])([A-Z])([a-z])`)
+	splitNumberLetter := regexp.MustCompile(`([0-9])([a-zA-Z])`)
+	s = splitWord.ReplaceAllString(s, `$1$3$5$7 $2$4$6$8$9`)
+	s = splitNumberLetter.ReplaceAllString(s, "$1 $2")
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {

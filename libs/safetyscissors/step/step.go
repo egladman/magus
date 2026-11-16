@@ -2,7 +2,11 @@
 // each kind of step before any is judged (ADR 0046).
 package step
 
-import "time"
+import (
+	"time"
+
+	"github.com/egladman/magus/libs/codec"
+)
 
 // APIVersion is the version of the Step record, carried as api_version. A Step that
 // names another version is refused.
@@ -37,7 +41,8 @@ type Spec struct {
 	Command      string   `json:"command,omitempty"`
 	// SpawnDescriptionField is where a spawn spec's description sits.
 	SpawnDescriptionField string `json:"spawn_description_field,omitempty"`
-	InputSchema           []byte `json:"input_schema,omitempty"`
+	// InputSchema is a JSON Schema, carried as the JSON it is rather than base64.
+	InputSchema codec.RawMessage `json:"input_schema,omitzero"`
 }
 
 // Request is what a step rule reads: the step, its spec's capabilities, and the paths

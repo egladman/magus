@@ -56,7 +56,9 @@ func (s *AttentionTieSuite) read() session.Fold {
 	return fold
 }
 
-func (s *AttentionTieSuite) prune() { session.Prune(s.dir, retention, session.WithTie(AttentionTie())) }
+func (s *AttentionTieSuite) prune() {
+	s.Require().NoError(session.Prune(s.dir, retention, session.WithTie(AttentionTie())))
+}
 
 // Rule 1: a request nobody has answered pins every file naming it, however old. The
 // queue belongs to a person, and a retention window that emptied it would be an

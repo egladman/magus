@@ -2,6 +2,7 @@ package trail
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -120,15 +121,16 @@ func TestReadRecent_LimitKeepsTailNewestFirst(t *testing.T) {
 	}
 }
 
-func TestReadRecent_MissingOrEmptyBase(t *testing.T) {
+func TestReadRecent_MissingTrailIsEmptyAndNoBaseIsRefused(t *testing.T) {
 	if evs, err := trailtypes.ReadRecent(t.TempDir(), 10); err != nil || len(evs) != 0 {
 		t.Errorf("missing trail: got %d events, err %v; want 0, nil", len(evs), err)
 	}
-	if evs, err := trailtypes.ReadRecent("", 10); err != nil || evs != nil {
-		t.Errorf("empty base: got %v, %v; want nil, nil", evs, err)
+	var invalid *trailtypes.InvalidReadError
+	if _, err := trailtypes.ReadRecent("", 10); !errors.As(err, &invalid) {
+		t.Errorf("empty base: got %v; want an InvalidReadError", err)
 	}
-	if evs, err := trailtypes.ReadRecent(t.TempDir(), 0); err != nil || evs != nil {
-		t.Errorf("zero limit: got %v, %v; want nil, nil", evs, err)
+	if _, err := trailtypes.ReadRecent(t.TempDir(), 0); !errors.As(err, &invalid) {
+		t.Errorf("zero limit: got %v; want an InvalidReadError", err)
 	}
 }
 

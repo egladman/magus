@@ -165,7 +165,7 @@ func RenderShow(w io.Writer, s ShowSummary) {
 		fmt.Fprintf(w, "transcript %s\n", s.Transcript)
 	}
 	fmt.Fprintln(w)
-	for _, kind := range session.EventKinds {
+	for _, kind := range session.EventKinds() {
 		if n := s.ByKind[kind]; n > 0 {
 			fmt.Fprintf(w, "  %-14s %d\n", kind, n)
 		}

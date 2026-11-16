@@ -22,7 +22,11 @@ func (s *DecisionSuite) TestUnmarshalTextAcceptsEachDecisionAndUnset() {
 
 func (s *DecisionSuite) TestUnmarshalTextRefusesAnUndeclaredDecision() {
 	d := Deny
-	s.Require().EqualError(d.UnmarshalText([]byte("block")), `unknown guard decision "block" (want one of [allow advise deny])`)
+	err := d.UnmarshalText([]byte("block"))
+	var unknown *UnknownDecisionError
+	s.Require().ErrorAs(err, &unknown)
+	s.Equal("block", unknown.Decision)
+	s.EqualError(err, `verdict: unknown guard decision "block" (want one of [allow advise deny])`)
 	s.Equal(Deny, d, "a refused name leaves the decision as it was")
 }
 
@@ -88,17 +92,23 @@ func (s *DecisionSuite) TestValidateRuleNameAcceptsKebabCase() {
 	for _, name := range []string{"pull-request-text", "no-curl", "rule-2", "rule2", "h1-heading"} {
 		s.Require().NoError(ValidateRuleName(name), name)
 	}
+	for _, name := range []string{"-lead", "trail-", "double--hyphen", "Upper", "under_score"} {
+		s.Require().Error(ValidateRuleName(name), name)
+	}
 }
 
 // The refusal suggests the spelling magus's Normalize would give the name.
 func (s *DecisionSuite) TestValidateRuleNameSuggestsTheKebabSpelling() {
-	s.Require().EqualError(ValidateRuleName("pullRequestText"), `guard rule name "pullRequestText" is not lowercase letters and digits joined by single hyphens, as in "pull-request-text"`)
-	s.Require().EqualError(ValidateRuleName("pull_request"), `guard rule name "pull_request" is not lowercase letters and digits joined by single hyphens, as in "pull-request"`)
-	s.Require().EqualError(ValidateRuleName("HTTPServer2"), `guard rule name "HTTPServer2" is not lowercase letters and digits joined by single hyphens, as in "http-server-2"`)
+	s.Require().EqualError(ValidateRuleName("pullRequestText"), `verdict: guard rule name "pullRequestText" is not lowercase letters and digits joined by single hyphens, as in "pull-request-text"`)
+	s.Require().EqualError(ValidateRuleName("pull_request"), `verdict: guard rule name "pull_request" is not lowercase letters and digits joined by single hyphens, as in "pull-request"`)
+	s.Require().EqualError(ValidateRuleName("HTTPServer2"), `verdict: guard rule name "HTTPServer2" is not lowercase letters and digits joined by single hyphens, as in "http-server-2"`)
+	var refused *RuleNameError
+	s.Require().ErrorAs(ValidateRuleName("pull_request"), &refused)
+	s.Equal("pull-request", refused.Suggestion)
 }
 
 func (s *DecisionSuite) TestValidateRuleNameRefusesEmptyAndSeamNames() {
-	s.Require().EqualError(ValidateRuleName(""), `guard rule name is empty`)
-	s.Require().EqualError(ValidateRuleName("command"), `guard rule name "command" is reserved: an unnamed command rule reports under it`)
-	s.Require().EqualError(ValidateRuleName("step"), `guard rule name "step" is reserved: an unnamed step rule reports under it`)
+	s.Require().EqualError(ValidateRuleName(""), `verdict: guard rule name is empty`)
+	s.Require().EqualError(ValidateRuleName("command"), `verdict: guard rule name "command" is reserved: an unnamed command rule reports under it`)
+	s.Require().EqualError(ValidateRuleName("step"), `verdict: guard rule name "step" is reserved: an unnamed step rule reports under it`)
 }

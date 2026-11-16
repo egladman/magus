@@ -14,7 +14,12 @@ import (
 // It carries no FileExt, so neither [ReadAll] nor [Prune] mistakes it for an invocation,
 // and it sits beside its source so every reader of the store shares one: a new reader
 // reuses the fold the others already paid for. One file per kind, so a reader of a few
-// records of one kind never decodes the many of another beside them.
+// records of one kind never decodes the many of another beside them. The kind names the
+// file, which is why [FoldKind] refuses one [ValidFileID] would.
+//
+// It is one JSON document rewritten whole, not JSON Lines: it is a derived snapshot that
+// is never the authority, replaced through a rename each time it changes, and a reader
+// that cannot trust it refolds from the invocation files.
 func foldCachePath(dir, kind string) string {
 	return filepath.Join(dir, fmt.Sprintf(".fold-%s.json", kind))
 }
@@ -46,11 +51,14 @@ func (e foldEntry) sameFile(fi os.FileInfo) bool {
 	return e.Size == fi.Size() && e.ModNs == fi.ModTime().UnixNano() && e.Ino == inode(fi)
 }
 
-// ReadAgentEvents is [ReadAll] narrowed to the [KindAgentEvent] records; see [ReadKind].
-func ReadAgentEvents(dir string) (Fold, error) { return ReadKind(dir, KindAgentEvent) }
+// FoldAgentEvents is [ReadAll] narrowed to the [KindAgentEvent] records; see [FoldKind].
+func FoldAgentEvents(dir string) (Fold, error) { return FoldKind(dir, KindAgentEvent) }
 
-// ReadKind is [ReadAll] narrowed to the records of one kind, with Invocations, Skipped and
-// Legacy counted over the whole store as ReadAll counts them.
+// FoldKind is [ReadAll] narrowed to the records of one kind, with Invocations, Skipped and
+// Legacy counted over the whole store as ReadAll counts them. It is not a pure read: it
+// rewrites the kind's fold cache under dir, mode 0600 like the invocation files, whenever
+// the files it folded changed. A kind [ValidFileID] refuses is an [*InvalidIDError],
+// since the kind names the cache file.
 //
 // It reads only the invocation files that changed since the last call for that kind. The
 // fold is cached under dir, keyed by each file's name, size, modification time and inode,
@@ -62,14 +70,17 @@ func ReadAgentEvents(dir string) (Fold, error) { return ReadKind(dir, KindAgentE
 // refolds from the files, and a failed write leaves the next call to refold again. Two
 // callers racing to write each replace it whole with a fold that was correct for the files
 // they listed, so neither can leave an entry that claims more than its file held.
-func ReadKind(dir, kind string) (Fold, error) {
+func FoldKind(dir, kind string) (Fold, error) {
 	var fold Fold
+	if !ValidFileID(kind) {
+		return fold, &InvalidIDError{Field: "kind", ID: kind}
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fold, nil
 		}
-		return fold, fmt.Errorf("session: read store %s: %w", dir, err)
+		return fold, &StoreError{Op: "read store", Path: dir, Err: err}
 	}
 	cachePath := foldCachePath(dir, kind)
 	prev := readFoldCache(cachePath, kind)
@@ -109,7 +120,7 @@ func ReadKind(dir, kind string) (Fold, error) {
 	sortRecords(fold.Records)
 	if changed || len(next.Files) != len(prev.Files) {
 		if b, err := codec.Marshal(next); err == nil {
-			_ = codec.RewriteLines(cachePath, [][]byte{b}, 0o644)
+			_ = codec.RewriteLines(cachePath, [][]byte{b}, 0o600)
 		}
 	}
 	return fold, nil

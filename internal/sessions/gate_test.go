@@ -222,7 +222,7 @@ func (s *FailuresOwedSuite) gate(inv, outcome string) GateRecord {
 }
 
 func (s *FailuresOwedSuite) owed(gate GateRecord) []types.TargetRef {
-	fold, err := session.ReadKind(s.dir, session.KindTargetResult)
+	fold, err := session.FoldKind(s.dir, session.KindTargetResult)
 	s.Require().NoError(err)
 	return FailuresOwed(gate, fold)
 }
@@ -314,7 +314,7 @@ func (s *HarnessWriteSuite) record(paths ...string) {
 }
 
 func (s *HarnessWriteSuite) latest() (HarnessWriteRecord, bool) {
-	fold, err := session.ReadKind(s.dir, KindHarnessWrite)
+	fold, err := session.FoldKind(s.dir, KindHarnessWrite)
 	s.Require().NoError(err)
 	return LatestHarnessWrite(fold)
 }

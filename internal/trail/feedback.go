@@ -5,7 +5,6 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +12,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/codec"
+	trailtypes "github.com/egladman/magus/libs/safetyscissors/trail"
+	trailrecord "github.com/egladman/magus/types/trail"
 )
 
 // FeedbackWindow selects one session's observations: the events inside [Since, Until]
@@ -59,9 +60,9 @@ func FeedbackBases(checkouts []string, cacheRel string, since time.Time) []strin
 // trail rotates blobs out with the events that cite them.
 //
 // Checkouts on the result names the bases that held at least one event of the session.
-func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
+func ReadFeedback(bases []string, w FeedbackWindow) (trailrecord.Trail, error) {
 	since, until := w.Since.UnixMilli(), w.Until.UnixMilli()
-	out := trailtypes.Trail{Start: since, End: until, Session: w.Session}
+	out := trailrecord.Trail{Start: since, End: until, Session: w.Session}
 	type sourced struct {
 		base string
 		e    trailtypes.Event
@@ -108,7 +109,7 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
 			if e.Action == ActionAgentContinue {
 				continue
 			}
-			sp := trailtypes.Spawn{At: e.Ts, Agent: e.Agent, Child: e.Action, Lease: e.Lease}
+			sp := trailrecord.Spawn{At: e.Ts, Agent: e.Agent, Child: e.Action, Lease: e.Lease}
 			if raw, err := trailtypes.ReadBlob(s.base, e.RequestRef); err == nil {
 				var req agentSpawnRequest
 				if codec.Unmarshal(raw, &req) == nil {
@@ -122,12 +123,12 @@ func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
 	return out, nil
 }
 
-func feedbackObservation(base string, e trailtypes.Event) (trailtypes.Observation, bool) {
+func feedbackObservation(base string, e trailtypes.Event) (trailrecord.Observation, bool) {
 	var req agentCommandRequest
 	var resp agentCommandResponse
 	raw, err := trailtypes.ReadBlob(base, e.RequestRef)
 	if err != nil || codec.Unmarshal(raw, &req) != nil {
-		return trailtypes.Observation{}, false
+		return trailrecord.Observation{}, false
 	}
 	// A read carries no response blob: no rule judges it.
 	if e.ResponseRef != "" {
@@ -135,7 +136,7 @@ func feedbackObservation(base string, e trailtypes.Event) (trailtypes.Observatio
 			_ = codec.Unmarshal(raw, &resp)
 		}
 	}
-	obs := trailtypes.Observation{
+	obs := trailrecord.Observation{
 		At: e.Ts, Agent: e.Agent, Lease: e.Lease, Tool: req.Tool,
 		Command: req.Command, Path: req.Path,
 		Decision: resp.Decision, Rule: resp.Rule, PreauthorizedBy: resp.PreauthorizedBy,

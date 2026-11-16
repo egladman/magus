@@ -258,13 +258,13 @@ type Writer struct {
 // of ten thousand invocations cost every run 17ms to delete nothing.
 //
 // An id that already has a file is RESUMED rather than restarted: see [Writer.resume].
-// An id [ValidFileID] refuses is an [ErrInvalidID].
+// An id [ValidFileID] refuses is an [*InvalidIDError].
 func Open(dir, invocation string, start InvocationStart, opts ...Option) (*Writer, error) {
 	if !ValidFileID(invocation) {
-		return nil, fmt.Errorf("session: invocation id %q: %w", invocation, ErrInvalidID)
+		return nil, &InvalidIDError{Field: "invocation id", ID: invocation}
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("session: create store %s: %w", dir, err)
+		return nil, &StoreError{Op: "create store", Path: dir, Err: err}
 	}
 	o := newOptions(opts)
 	stamp := filepath.Join(dir, pruneStamp)
@@ -329,20 +329,20 @@ func (w *Writer) write(kind string, payload any) error {
 	if payload != nil {
 		raw, err := codec.Marshal(payload)
 		if err != nil {
-			return fmt.Errorf("session: encode %s payload: %w", kind, err)
+			return &StoreError{Op: "encode " + kind + " payload", Path: w.path, Err: err}
 		}
 		rec.Payload = raw
 	}
 	line, err := codec.Marshal(rec)
 	if err != nil {
-		return fmt.Errorf("session: encode %s record: %w", kind, err)
+		return &StoreError{Op: "encode " + kind + " record", Path: w.path, Err: err}
 	}
 
 	// Opened and closed per append rather than held: an invocation's facts are
 	// low-frequency, and a long-lived handle would need a close nobody on a CLI path is
 	// positioned to run.
 	if err := codec.AppendLines(w.path, [][]byte{line}, 0o600, codec.WithoutSync()); err != nil {
-		return fmt.Errorf("session: append %s record: %w", kind, err)
+		return &StoreError{Op: "append " + kind + " record", Path: w.path, Err: err}
 	}
 	w.seq++
 	return nil
@@ -387,7 +387,7 @@ func ReadAll(dir string) (Fold, error) {
 		if os.IsNotExist(err) {
 			return fold, nil
 		}
-		return fold, fmt.Errorf("session: read store %s: %w", dir, err)
+		return fold, &StoreError{Op: "read store", Path: dir, Err: err}
 	}
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), FileExt) {
@@ -408,11 +408,27 @@ func ReadAll(dir string) (Fold, error) {
 
 // ReadInvocation returns the records one invocation's file holds, in file order, or none
 // when it has no file. It reads that file alone: a caller that knows which invocation
-// holds its answer need not fold the store.
-func ReadInvocation(dir, invocation string) []Record {
+// holds its answer need not fold the store. An id [ValidFileID] refuses, which could name
+// a file outside dir, is an [*InvalidIDError] before anything is opened.
+func ReadInvocation(dir, invocation string) ([]Record, error) {
+	if !ValidFileID(invocation) {
+		return nil, &InvalidIDError{Field: "invocation id", ID: invocation}
+	}
 	records, _, _, _ := readFile(filepath.Join(dir, invocation+FileExt))
-	return records
+	return records, nil
 }
+
+// StoreError is a store operation that failed on the filesystem or in encoding: Op says
+// what was being done, Path where.
+type StoreError struct {
+	Op   string
+	Path string
+	Err  error
+}
+
+func (e *StoreError) Error() string { return fmt.Sprintf("session: %s %s: %v", e.Op, e.Path, e.Err) }
+
+func (e *StoreError) Unwrap() error { return e.Err }
 
 // sortRecords puts a fold in the (Ts, Invocation, Seq) order every reader downstream is
 // specified against. Anything that assembles a [Fold] outside [ReadAll] has to apply it
@@ -533,11 +549,12 @@ type Summary struct {
 	Facts        int             `json:"facts"`
 	Events       int             `json:"events"` // of Facts, the ones a load put here
 	Targets      []TargetResult  `json:"targets,omitempty"`
-	// Agent is the pair off the NEWEST loaded [AgentEvent] that named one, so a session
-	// spanning a model or host switch reports what it ended on rather than what it began
-	// with. Zero when no loaded event named either.
-	Agent Agent `json:"agent,omitzero"`
-	// pairAtMs is the AtMs of the event Agent came from, kept only to decide whether a
+	// Producer is the [Agent] pair off the NEWEST loaded [AgentEvent] that named one, so a
+	// session spanning a model or host switch reports what it ended on rather than what it
+	// began with. Zero when no loaded event named either. Its key is not "agent", which the
+	// inlined Origin's subagent id already spells.
+	Producer Agent `json:"producer,omitzero"`
+	// pairAtMs is the AtMs of the event Producer came from, kept only to decide whether a
 	// later event's pair should replace it; never serialized.
 	pairAtMs int64
 }
@@ -579,7 +596,7 @@ func Summarize(fold Fold) []Summary {
 			s.Events++
 			var ev AgentEvent
 			if codec.Unmarshal(rec.Payload, &ev) == nil && ev.Agent != (Agent{}) && ev.AtMs >= s.pairAtMs {
-				s.Agent, s.pairAtMs = ev.Agent, ev.AtMs
+				s.Producer, s.pairAtMs = ev.Agent, ev.AtMs
 			}
 		}
 	}
@@ -615,14 +632,17 @@ const (
 	EventMagusCall    = "magus.call"
 )
 
-// EventKinds is the accepted set, in the order a diagnostic lists it.
-var EventKinds = []string{
-	EventShellCommand, EventFileRead, EventFileWrite,
-	EventSkillLoad, EventHookOutput, EventSpawn, EventMagusCall,
+// EventKinds is the accepted set, in the order a diagnostic lists it, as a fresh slice
+// the caller may keep.
+func EventKinds() []string {
+	return []string{
+		EventShellCommand, EventFileRead, EventFileWrite,
+		EventSkillLoad, EventHookOutput, EventSpawn, EventMagusCall,
+	}
 }
 
 // ValidEventKind reports whether kind is one a store keeps.
-func ValidEventKind(kind string) bool { return slices.Contains(EventKinds, kind) }
+func ValidEventKind(kind string) bool { return slices.Contains(EventKinds(), kind) }
 
 // The verdicts a re-judged shell command carries in [AgentEvent.Verdict]: what today's
 // rules say about it. One set here so the loader that writes them and the readers that

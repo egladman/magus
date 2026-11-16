@@ -43,6 +43,7 @@ func (s *RecordSuite) TestASpecRoundTripsAsJSON() {
 	var got Spec
 	s.Require().NoError(codec.Unmarshal(raw, &got))
 	s.Equal(spec, got)
+	s.Contains(string(raw), `"input_schema":{"type":"object"}`, "the schema is JSON, not base64")
 
 	bare, err := codec.Marshal(Spec{Kind: "tool"})
 	s.Require().NoError(err)

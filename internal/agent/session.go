@@ -58,4 +58,4 @@ func SessionStances() []string { return slices.Clone(sessionStances) }
 // shell.command is the one that gets re-judged offline against the current rules;
 // magus.call is a direct tool call to magus, which never appears as a shell command
 // and so would otherwise be invisible to the audit.
-func SessionKinds() []string { return slices.Clone(session.EventKinds) }
+func SessionKinds() []string { return session.EventKinds() }

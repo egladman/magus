@@ -59,19 +59,23 @@ func (s *ReadSuite) TestReadRecentLimitKeepsTheTail() {
 	s.Equal([]int64{10, 9, 8}, []int64{got[0].Ts, got[1].Ts, got[2].Ts})
 }
 
-func (s *ReadSuite) TestReadRecentOfNothingIsEmptyAndNoError() {
+func (s *ReadSuite) TestReadRecentOfAMissingTrailIsEmptyAndNoError() {
 	got, err := ReadRecent(s.dir, 10)
 	s.Require().NoError(err)
 	s.Empty(got, "a missing trail")
 
-	got, err = ReadRecent("", 10)
-	s.Require().NoError(err)
-	s.Empty(got, "an empty dir")
+	s.NotNil(got, "a missing trail is empty, not nil")
+}
+
+func (s *ReadSuite) TestReadRecentRefusesNoDirAndNoLimit() {
+	var invalid *InvalidReadError
+	_, err := ReadRecent("", 10)
+	s.Require().ErrorAs(err, &invalid, "an empty dir")
 
 	s.writeLines(s.eventLine(Event{Ts: 1, Kind: KindJob}))
-	got, err = ReadRecent(s.dir, 0)
-	s.Require().NoError(err)
-	s.Empty(got, "a zero limit")
+	_, err = ReadRecent(s.dir, 0)
+	s.Require().ErrorAs(err, &invalid, "a zero limit")
+	s.Equal(0, invalid.Limit)
 }
 
 func (s *ReadSuite) TestReadRecentSkipsACorruptLine() {

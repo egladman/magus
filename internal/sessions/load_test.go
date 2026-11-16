@@ -190,7 +190,7 @@ var adapterCases = map[string]string{
 // A kind the session contract gains with no adapter case is a kind no load has
 // ever been shown to store.
 func TestSessionAdapterCasesCoverEveryKind(t *testing.T) {
-	for _, kind := range session.EventKinds {
+	for _, kind := range session.EventKinds() {
 		assert.Contains(t, adapterCases, kind,
 			"adapterCases has no line for %q: every kind in the session contract needs one", kind)
 	}
@@ -201,14 +201,14 @@ func TestLoadStoresEveryAdapterCase(t *testing.T) {
 	root := t.TempDir()
 
 	lines := make([]string, 0, len(adapterCases))
-	for _, kind := range session.EventKinds {
+	for _, kind := range session.EventKinds() {
 		lines = append(lines, adapterCases[kind])
 	}
 	summary, err := loadStream(t, root, lines...)
 	require.NoError(t, err)
 
 	want := map[string]int{}
-	for _, kind := range session.EventKinds {
+	for _, kind := range session.EventKinds() {
 		want[kind] = 1
 	}
 	assert.Equal(t, want, summary.ByKind, "each adapter line loads as the kind it names")

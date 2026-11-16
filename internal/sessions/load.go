@@ -172,7 +172,7 @@ func validateLoadEvent(ev wireEvent) string {
 	case ev.Ref == "":
 		return "no ref, so the event cannot be deduplicated"
 	case !session.ValidEventKind(ev.Kind):
-		return fmt.Sprintf("kind %q is not one of %s", ev.Kind, strings.Join(session.EventKinds, ", "))
+		return fmt.Sprintf("kind %q is not one of %s", ev.Kind, strings.Join(session.EventKinds(), ", "))
 	}
 	if !session.ValidFileID(ev.Session) {
 		return fmt.Sprintf("session id %q must be alphanumeric with - and _ (it names the session file)", ev.Session)
@@ -237,7 +237,7 @@ func repositoryScope(dir string) func(string) bool {
 func RenderLoadSummary(w io.Writer, s LoadSummary) {
 	fmt.Fprintf(w, "loaded %d, deduped %d, dropped %d (another repository), rejected %d\n",
 		s.Loaded, s.Deduped, s.Dropped, len(s.Rejects))
-	for _, kind := range session.EventKinds {
+	for _, kind := range session.EventKinds() {
 		if n := s.ByKind[kind]; n > 0 {
 			fmt.Fprintf(w, "  %-14s %d\n", kind, n)
 		}

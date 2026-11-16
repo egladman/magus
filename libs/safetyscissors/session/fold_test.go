@@ -27,7 +27,7 @@ func TestFoldCache(t *testing.T) { suite.Run(t, new(FoldCacheSuite)) }
 
 func (s *FoldCacheSuite) SetupTest() { s.dir = s.T().TempDir() }
 
-// oracle is ReadAll, narrowed the way ReadKind narrows.
+// oracle is ReadAll, narrowed the way FoldKind narrows.
 func (s *FoldCacheSuite) oracle(kind string) Fold {
 	fold, err := ReadAll(s.dir)
 	s.Require().NoError(err)
@@ -41,7 +41,7 @@ func (s *FoldCacheSuite) oracle(kind string) Fold {
 	return fold
 }
 
-func (s *FoldCacheSuite) TestReadAgentEventsMatchesReadAll() {
+func (s *FoldCacheSuite) TestFoldAgentEventsMatchesReadAll() {
 	writeRaw(&s.Suite, s.dir, "a", []Record{
 		{V: APIVersion, Invocation: "a", Seq: 1, Kind: KindInvocationStart, Ts: 1},
 		agentRecord("a", 2, "x.go"),
@@ -51,7 +51,7 @@ func (s *FoldCacheSuite) TestReadAgentEventsMatchesReadAll() {
 	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, "legacy"+FileExt), []byte(legacy), 0o644))
 
 	for range 2 { // the miss that writes the cache, then the hit that reads it
-		got, err := ReadAgentEvents(s.dir)
+		got, err := FoldAgentEvents(s.dir)
 		s.Require().NoError(err)
 		s.Equal(s.oracle(KindAgentEvent), got)
 	}
@@ -63,7 +63,7 @@ func (s *FoldCacheSuite) TestReadAgentEventsMatchesReadAll() {
 func (s *FoldCacheSuite) TestReadsOnlyFilesThatChanged() {
 	writeRaw(&s.Suite, s.dir, "a", []Record{agentRecord("a", 1, "x.go")})
 	writeRaw(&s.Suite, s.dir, "b", []Record{agentRecord("b", 2, "y.go")})
-	_, err := ReadAgentEvents(s.dir)
+	_, err := FoldAgentEvents(s.dir)
 	s.Require().NoError(err)
 
 	pathA := filepath.Join(s.dir, "a"+FileExt)
@@ -82,7 +82,7 @@ func (s *FoldCacheSuite) TestReadsOnlyFilesThatChanged() {
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(KindAgentEvent, AgentEvent{Host: "h", Kind: EventFileWrite, Ref: "w", Text: "z.go"}))
 
-	got, err := ReadAgentEvents(s.dir)
+	got, err := FoldAgentEvents(s.dir)
 	s.Require().NoError(err)
 	s.Require().Len(got.Records, 3, "a's cached record, b's original, and b's append")
 	s.Equal("a", got.Records[0].Invocation, "a was served from the cache, not reread")
@@ -91,7 +91,7 @@ func (s *FoldCacheSuite) TestReadsOnlyFilesThatChanged() {
 
 func (s *FoldCacheSuite) TestRefoldsFromATornCache() {
 	writeRaw(&s.Suite, s.dir, "a", []Record{agentRecord("a", 1, "x.go")})
-	_, err := ReadAgentEvents(s.dir)
+	_, err := FoldAgentEvents(s.dir)
 	s.Require().NoError(err)
 
 	cache := foldCachePath(s.dir, KindAgentEvent)
@@ -99,7 +99,7 @@ func (s *FoldCacheSuite) TestRefoldsFromATornCache() {
 	s.Require().NoError(err)
 	s.Require().NoError(os.WriteFile(cache, whole[:len(whole)/2], 0o644))
 
-	got, err := ReadAgentEvents(s.dir)
+	got, err := FoldAgentEvents(s.dir)
 	s.Require().NoError(err)
 	s.Equal(s.oracle(KindAgentEvent), got)
 
@@ -111,12 +111,12 @@ func (s *FoldCacheSuite) TestRefoldsFromATornCache() {
 func (s *FoldCacheSuite) TestForgetsAPrunedFile() {
 	writeRaw(&s.Suite, s.dir, "a", []Record{agentRecord("a", 1, "x.go")})
 	writeRaw(&s.Suite, s.dir, "b", []Record{agentRecord("b", 2, "y.go")})
-	_, err := ReadAgentEvents(s.dir)
+	_, err := FoldAgentEvents(s.dir)
 	s.Require().NoError(err)
 
 	s.Require().NoError(os.Remove(filepath.Join(s.dir, "a"+FileExt)))
 
-	got, err := ReadAgentEvents(s.dir)
+	got, err := FoldAgentEvents(s.dir)
 	s.Require().NoError(err)
 	s.Equal(s.oracle(KindAgentEvent), got)
 	s.NotContains(readFoldCache(foldCachePath(s.dir, KindAgentEvent), KindAgentEvent).Files, "a"+FileExt)
@@ -130,9 +130,9 @@ func (s *FoldCacheSuite) TestEachKindKeepsItsOwnCache() {
 	s.Require().NoError(err)
 	s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "ci", Outcome: OutcomePass}))
 
-	_, err = ReadAgentEvents(s.dir)
+	_, err = FoldAgentEvents(s.dir)
 	s.Require().NoError(err)
-	results, err := ReadKind(s.dir, KindTargetResult)
+	results, err := FoldKind(s.dir, KindTargetResult)
 	s.Require().NoError(err)
 	s.Require().Len(results.Records, 1)
 	s.Equal(KindTargetResult, results.Records[0].Kind)
@@ -140,9 +140,27 @@ func (s *FoldCacheSuite) TestEachKindKeepsItsOwnCache() {
 		"the result cache holds no agent event")
 
 	s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "ci", Outcome: OutcomeFail}))
-	results, err = ReadKind(s.dir, KindTargetResult)
+	results, err = FoldKind(s.dir, KindTargetResult)
 	s.Require().NoError(err)
 	s.Len(results.Records, 2)
+}
+
+// The kind names the cache file, so one that could escape the store is refused, and the
+// cache is as private as the invocation files it folds.
+func (s *FoldCacheSuite) TestFoldKindRefusesAnEscapingKindAndWritesItsCachePrivate() {
+	for _, kind := range []string{"", "../x", "a/b"} {
+		_, err := FoldKind(s.dir, kind)
+		var invalid *InvalidIDError
+		s.Require().ErrorAs(err, &invalid, "kind %q", kind)
+		s.Equal("kind", invalid.Field)
+	}
+
+	writeRaw(&s.Suite, s.dir, "a", []Record{agentRecord("a", 1, "x.go")})
+	_, err := FoldAgentEvents(s.dir)
+	s.Require().NoError(err)
+	fi, err := os.Stat(foldCachePath(s.dir, KindAgentEvent))
+	s.Require().NoError(err)
+	s.Equal(os.FileMode(0o600), fi.Mode().Perm())
 }
 
 // Readers and writers race on one store. Each read must equal some fold of the files,
@@ -172,7 +190,7 @@ func (s *FoldCacheSuite) TestUnderConcurrentReadersAndWriters() {
 					return
 				default:
 				}
-				got, err := ReadAgentEvents(s.dir)
+				got, err := FoldAgentEvents(s.dir)
 				if s.NoError(err) {
 					s.LessOrEqual(len(got.Records), writers*appends)
 				}
@@ -183,7 +201,7 @@ func (s *FoldCacheSuite) TestUnderConcurrentReadersAndWriters() {
 	close(stop)
 	readers.Wait()
 
-	got, err := ReadAgentEvents(s.dir)
+	got, err := FoldAgentEvents(s.dir)
 	s.Require().NoError(err)
 	s.Len(got.Records, writers*appends)
 	s.Equal(s.oracle(KindAgentEvent), got)

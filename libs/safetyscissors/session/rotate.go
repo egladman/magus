@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,12 +19,12 @@ import (
 // prunes with it; a caller that wants a different window calls [Prune] directly.
 const DefaultRetention = 30 * 24 * time.Hour
 
-// DefaultMaxFiles caps how many invocation files a store keeps, newest fact first.
+// defaultMaxFiles caps how many invocation files a store keeps, newest fact first.
 // Retention alone did not bound it: every command that records a fact writes a file, so
 // an active repository wrote about eight hundred a day and held seventeen thousand inside
 // the window. The cap is a count because what every reader of a store pays grows with
 // the files it lists.
-const DefaultMaxFiles = 10000
+const defaultMaxFiles = 10000
 
 // agentFileFloor is how many of the newest files holding loaded agent events survive the
 // cap however many invocation files are newer. Invocation files arrive by the hundred a
@@ -59,12 +60,15 @@ type Tie struct {
 // blocked: the common "nothing to do" path never touches the lock at all, and a caller
 // that does contend skips pruning this round rather than waiting to prune again a
 // moment later, which "at most once per interval" already tolerates.
+//
+// Every error is dropped, a failed prune included: Open cannot fail over housekeeping,
+// and the next interval prunes again.
 func claimStalePruneStamp(dir, stamp, keep string, o options) {
 	_ = codec.WithLock(context.Background(), stamp+".lock", 0, func() error {
 		if fi, err := os.Stat(stamp); err == nil && o.now().Sub(fi.ModTime()) < pruneInterval {
 			return nil // another caller already pruned and refreshed the stamp while this one waited
 		}
-		prune(dir, DefaultRetention, DefaultMaxFiles, keep, o)
+		_ = prune(dir, DefaultRetention, defaultMaxFiles, keep, o)
 		now := o.now()
 		if os.Chtimes(stamp, now, now) != nil {
 			_ = os.WriteFile(stamp, nil, 0o644)
@@ -74,7 +78,7 @@ func claimStalePruneStamp(dir, stamp, keep string, o options) {
 }
 
 // Prune deletes whole invocation files whose newest fact is older than retain, and then
-// the oldest of what remains past [DefaultMaxFiles], sparing the newest agentFileFloor
+// the oldest of what remains past defaultMaxFiles (10000), sparing the newest agentFileFloor
 // files that hold loaded agent events.
 //
 // A schema-1 file ages like any other: its lines still carry a timestamp, so its age is
@@ -86,9 +90,11 @@ func claimStalePruneStamp(dir, stamp, keep string, o options) {
 // third state (a file whose beginning is missing) that no reader in this package is
 // written to expect. A retain of zero or less disables pruning entirely.
 //
-// It is best-effort and reports nothing: every failure path leaves the store exactly
-// as it found it. Callers on the write path must not be able to lose a fact because
-// housekeeping went wrong.
+// It returns a [*StoreError] for a store it could not list and for each file it chose
+// but could not delete, joined; a store that does not exist has nothing to prune. A
+// failure deletes nothing it did not mean to: every file it cannot read or that changed
+// since it was read is kept. Callers on the write path must not be able to lose a fact
+// because housekeeping went wrong, which is why [Open] drops the error.
 //
 // # Ties
 //
@@ -109,23 +115,26 @@ func claimStalePruneStamp(dir, stamp, keep string, o options) {
 // Rule 2 keeps a file alive while a younger sibling shares one of its groups, which
 // delays that file rather than pinning it: the sibling ages out too, and then both go.
 // Rule 1 does pin, for as long as the Tie holds the group, which is the intended trade.
-func Prune(dir string, retain time.Duration, opts ...Option) {
-	prune(dir, retain, DefaultMaxFiles, "", newOptions(opts))
+func Prune(dir string, retain time.Duration, opts ...Option) error {
+	return prune(dir, retain, defaultMaxFiles, "", newOptions(opts))
 }
 
 // prune is [Prune] with the caller's own invocation file held back. Open passes its
 // invocation file so a writer can never delete the file it is about to append to,
 // whatever the clock or a reused invocation id says. maxFiles of zero or less leaves the
 // count uncapped.
-func prune(dir string, retain time.Duration, maxFiles int, keep string, o options) {
+func prune(dir string, retain time.Duration, maxFiles int, keep string, o options) error {
 	if retain <= 0 {
-		return
+		return nil
 	}
 	cutoff := o.now().Add(-retain)
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return &StoreError{Op: "list store to prune", Path: dir, Err: err}
 	}
 
 	// Modification time is a cheap pre-filter, never the retention test: a file it
@@ -157,7 +166,7 @@ func prune(dir string, retain time.Duration, maxFiles int, keep string, o option
 	}
 	overCap := maxFiles > 0 && len(names) > maxFiles
 	if len(stale) == 0 && !overCap {
-		return
+		return nil
 	}
 
 	cutoffMs := cutoff.UnixMilli()
@@ -206,7 +215,7 @@ func prune(dir string, retain time.Duration, maxFiles int, keep string, o option
 		}
 	}
 	if len(candidates) == 0 {
-		return
+		return nil
 	}
 
 	sortRecords(all)
@@ -233,6 +242,7 @@ func prune(dir string, retain time.Duration, maxFiles int, keep string, o option
 		}
 	}
 
+	var errs []error
 	for name := range candidates {
 		path := filepath.Join(dir, name)
 		// An invocation idle past the window can still wake up and append. Re-stat so a
@@ -243,8 +253,11 @@ func prune(dir string, retain time.Duration, maxFiles int, keep string, o option
 		if !ok || err != nil || !info.ModTime().Equal(listed) {
 			continue
 		}
-		_ = os.Remove(path)
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, &StoreError{Op: "prune", Path: path, Err: err})
+		}
 	}
+	return errors.Join(errs...)
 }
 
 func (t Tie) key(rec Record) string {

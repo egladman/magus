@@ -209,7 +209,7 @@ func sessionLoadUsage(fs *flag.FlagSet) func() {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Load a normalized agent-session event stream into this repository's session")
 		fmt.Fprintln(os.Stderr, "store: one JSON object per line, host vocabulary already mapped onto magus's.")
-		fmt.Fprintf(os.Stderr, "Every line needs host, session, kind and ref; kind is one of %s.\n", strings.Join(session.EventKinds, ", "))
+		fmt.Fprintf(os.Stderr, "Every line needs host, session, kind and ref; kind is one of %s.\n", strings.Join(session.EventKinds(), ", "))
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Events are keyed on (host, session, kind, ref), so re-running an adapter over the same")
 		fmt.Fprintln(os.Stderr, "transcript loads nothing twice. Events whose cwd belongs to another repository")
