@@ -1,4 +1,4 @@
-package main
+package ci
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -55,9 +57,9 @@ func (s *GateScopeSuite) TestNothingAffectedIsAffectedScope() {
 func (s *GateScopeSuite) TestAProjectScopedPassIsNotTheBranchGate() {
 	testkit.Isolate(s.T())
 	root := s.T().TempDir()
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1",
+	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1",
 		projects: []string{"libs/cmdline"}, scope: sessions.GateScopeProject}
-	g.record(context.Background(), nil, false, nil)
+	g.Record(context.Background(), nil, false, nil)
 
 	dir, err := sessions.Dir(root)
 	s.Require().NoError(err)
@@ -83,16 +85,13 @@ func seedGreenGate(t *testing.T, root, fp string) {
 	}, sessions.InvocationStart{Workspace: root}))
 }
 
-// pinPoolLoad pins the load answer for one test, restoring the real probe after.
-func pinPoolLoad(t *testing.T, saturated bool) {
-	t.Helper()
-	prev := gatePoolProbe
+// poolProbe answers a fixed load, so no test needs a broker.
+func poolProbe(saturated bool) func(context.Context) (bool, string) {
 	state := "idle: 2 of 8 slots held"
 	if saturated {
 		state = "saturated: 8 of 8 slots held, 2 runs queued"
 	}
-	gatePoolProbe = func(context.Context) (bool, string) { return saturated, state }
-	t.Cleanup(func() { gatePoolProbe = prev })
+	return func(context.Context) (bool, string) { return saturated, state }
 }
 
 // TestGateEvaluateRefusesUnderLoad is the refusal: a recorded green gate with
@@ -104,10 +103,10 @@ func TestGateEvaluateRefusesUnderLoad(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
-	err := g.evaluate(context.Background(), false)
+	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
+	g.poolProbe = poolProbe(true)
+	err := g.Evaluate(context.Background(), false)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, types.RedundantGateDeferred), "the refusal carries MGS3010")
 	assert.Equal(t, exit.TempFail, exit.Code(err), "the refusal states EX_TEMPFAIL, the same convention as MGS3009")
@@ -131,10 +130,10 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c2", fp: "fp-1", projects: []string{"."}, scope: sessions.GateScopeAffected}
-	require.Error(t, g.evaluate(context.Background(), false))
+	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c2", fp: "fp-1", projects: []string{"."}, scope: sessions.GateScopeAffected}
+	g.poolProbe = poolProbe(true)
+	require.Error(t, g.Evaluate(context.Background(), false))
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
@@ -174,7 +173,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 		DeferredTo: "c1",
 	}, *deferred)
 
-	require.Error(t, g.evaluate(context.Background(), false), "still refuses after its own deferral record")
+	require.Error(t, g.Evaluate(context.Background(), false), "still refuses after its own deferral record")
 }
 
 // TestGateEvaluateRefusesWhenIdle: the same finding on an IDLE pool also refuses.
@@ -187,10 +186,10 @@ func TestGateEvaluateRefusesWhenIdle(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	pinPoolLoad(t, false)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
-	err := g.evaluate(context.Background(), false)
+	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
+	g.poolProbe = poolProbe(false)
+	err := g.Evaluate(context.Background(), false)
 	require.Error(t, err, "an idle machine is not a reason to re-verify a passed gate")
 	assert.Contains(t, err.Error(), "re-verifies a gate that already passed",
 		"the refusal names redundancy, not load, as its reason")
@@ -202,10 +201,10 @@ func TestGateEvaluateRefusesWhenIdle(t *testing.T) {
 func TestGateEvaluateInertWithoutRecord(t *testing.T) {
 	testkit.Isolate(t)
 	t.Setenv("MAGUS_LEVEL", "0")
-	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: t.TempDir(), target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
-	require.NoError(t, g.evaluate(context.Background(), false))
+	g := &GateRedundancy{root: t.TempDir(), target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
+	g.poolProbe = poolProbe(true)
+	require.NoError(t, g.Evaluate(context.Background(), false))
 }
 
 // TestGateEvaluateOverride: --no-redundancy-check runs under load with a green
@@ -215,10 +214,10 @@ func TestGateEvaluateOverride(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
-	require.NoError(t, g.evaluate(context.Background(), true))
+	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
+	g.poolProbe = poolProbe(true)
+	require.NoError(t, g.Evaluate(context.Background(), true))
 }
 
 // TestGateEvaluateOtherBranch: a record for another branch says nothing about
@@ -228,10 +227,10 @@ func TestGateEvaluateOtherBranch(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "other", commit: "c1", fp: "fp-1"}
-	require.NoError(t, g.evaluate(context.Background(), false))
+	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "other", commit: "c1", fp: "fp-1"}
+	g.poolProbe = poolProbe(true)
+	require.NoError(t, g.Evaluate(context.Background(), false))
 }
 
 // TestGateEvaluateFailedRecord: a recorded FAIL never defers, whatever the
@@ -246,10 +245,10 @@ func TestGateEvaluateFailedRecord(t *testing.T) {
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
 		Outcome: sessions.OutcomeFail, Fingerprint: "fp-1",
 	}, sessions.InvocationStart{Workspace: root}))
-	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
-	require.NoError(t, g.evaluate(context.Background(), false))
+	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
+	g.poolProbe = poolProbe(true)
+	require.NoError(t, g.Evaluate(context.Background(), false))
 }
 
 // TestGateEvaluateNestedNeverRefuses: a magus under another magus reads its
@@ -259,17 +258,17 @@ func TestGateEvaluateNestedNeverRefuses(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	pinPoolLoad(t, true)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
-	require.NoError(t, g.evaluate(context.Background(), false))
+	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
+	g.poolProbe = poolProbe(true)
+	require.NoError(t, g.Evaluate(context.Background(), false))
 }
 
 // TestGateRenderFindingDelta pins the every-file block a delta refusal or
 // advisory prints: one line per path with the class and the declaration that
 // classified it, so a reader disputes the decision line by line.
 func TestGateRenderFindingDelta(t *testing.T) {
-	g := &gateRedundancy{target: types.TargetCI, ref: "b", fp: "fp-2"}
+	g := &GateRedundancy{target: types.TargetCI, ref: "b", fp: "fp-2"}
 	f := gateFinding{
 		rec: sessions.GateRecord{
 			GateResult: sessions.GateResult{Ref: "b", Commit: "c1", Fingerprint: "fp-1", Inv: "inv123"},
@@ -307,20 +306,20 @@ func TestRenderSizing(t *testing.T) {
 	assert.Equal(t, "ci gate sized mechanical against 01234567; override: --no-redundancy-check\n"+
 		"  run.go: mechanical (comment-only: only comments differ; lint and generators read comments)\n"+
 		"  gate: magus run lint . --no-default-charms && magus run generate docs --no-default-charms",
-		renderSizing(types.TargetCI, rep))
+		RenderSizing(types.TargetCI, rep))
 
 	rep = types.TierReport{Base: "c1", Tier: check.RiskTrivial, Gate: []types.TierGateStep{},
 		Evidence: []check.TierEvidence{{Path: "notes.md", Class: "prose", Tier: check.RiskTrivial, Why: "prose"}}}
 	assert.Equal(t, "ci gate sized trivial against c1; override: --no-redundancy-check\n"+
 		"  notes.md: trivial (prose: prose)\n"+
-		"  gate: none", renderSizing(types.TargetCI, rep))
+		"  gate: none", RenderSizing(types.TargetCI, rep))
 
 	rep = types.TierReport{Base: "c1", Tier: check.RiskScoped,
 		Gate: []types.TierGateStep{{Target: "test", Projects: []string{"."}, Op: "go::go-test", Packages: []string{"fx/a", "fx/b"},
 			Argv: []string{"magus", "run", "test", ".", "--no-default-charms"}}}}
 	assert.Equal(t, "ci gate sized scoped against c1; override: --no-redundancy-check\n"+
 		"  gate: magus run test . --no-default-charms\n"+
-		"  narrowed: go::go-test in . test runs 2 package(s): fx/a fx/b", renderSizing(types.TargetCI, rep))
+		"  narrowed: go::go-test in . test runs 2 package(s): fx/a fx/b", RenderSizing(types.TargetCI, rep))
 }
 
 // TestGateSizeInert: sizing is off for an inert gate and a forced run, before anything
@@ -328,10 +327,10 @@ func TestRenderSizing(t *testing.T) {
 func TestGateSizeInert(t *testing.T) {
 	t.Parallel()
 
-	var absent *gateRedundancy
-	assert.Nil(t, absent.size(context.Background(), "", false))
-	g := &gateRedundancy{target: types.TargetCI}
-	assert.Nil(t, g.size(context.Background(), "", true), "--no-redundancy-check runs the full gate")
+	var absent *GateRedundancy
+	assert.Nil(t, absent.Size(context.Background(), "", false))
+	g := &GateRedundancy{target: types.TargetCI}
+	assert.Nil(t, g.Size(context.Background(), "", true), "--no-redundancy-check runs the full gate")
 	assert.Empty(t, g.tier)
 }
 
@@ -343,11 +342,11 @@ func TestGateSizeInert(t *testing.T) {
 func TestGateRecordsUndeclaredSeeds(t *testing.T) {
 	t.Parallel()
 
-	var absent *gateRedundancy
-	absent.noteUndeclaredSeeds([]string{"."})
+	var absent *GateRedundancy
+	absent.NoteUndeclaredSeeds([]string{"."})
 
-	g := &gateRedundancy{target: types.TargetCI, ref: "b", commit: "c1", projects: []string{".", "docs"}}
-	g.noteUndeclaredSeeds([]string{"."})
+	g := &GateRedundancy{target: types.TargetCI, ref: "b", commit: "c1", projects: []string{".", "docs"}}
+	g.NoteUndeclaredSeeds([]string{"."})
 	assert.Equal(t, []string{"."}, g.undeclared)
 }
 
@@ -357,7 +356,7 @@ func TestGateRecordsUndeclaredSeeds(t *testing.T) {
 func TestGateRenderFindingNamesTheUndeclaredSeeds(t *testing.T) {
 	t.Parallel()
 
-	g := &gateRedundancy{target: types.TargetCI, ref: "b", fp: "fp-2"}
+	g := &GateRedundancy{target: types.TargetCI, ref: "b", fp: "fp-2"}
 	f := gateFinding{rec: sessions.GateRecord{GateResult: sessions.GateResult{
 		Ref: "b", Commit: "c1", Fingerprint: "fp-1", Inv: "inv123",
 		UndeclaredSeeds: []string{".", "docs"},
@@ -381,18 +380,18 @@ func TestGateRecordsNothingWhenTheRunWasCutShort(t *testing.T) {
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
+	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
 
 	cut, cancel := context.WithCancel(context.Background())
 	cancel()
-	g.record(cut, nil, true /* cutShort */, nil)
+	g.Record(cut, nil, true /* cutShort */, nil)
 
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 	_, ok := sessions.LatestGate(fold, "b", types.TargetCI)
 	assert.False(t, ok, "a cancelled run must record no verdict, whatever it returned")
 
-	g.record(context.Background(), nil, false, nil)
+	g.Record(context.Background(), nil, false, nil)
 	rec, ok := sessions.LatestGate(fold2(t, dir), "b", types.TargetCI)
 	require.True(t, ok, "a run that finished still records")
 	assert.Equal(t, sessions.OutcomePass, rec.Outcome)
@@ -409,11 +408,11 @@ func TestGateRecordsAVerdictDecidedBeforeTheSignal(t *testing.T) {
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 
-	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
+	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
 
 	interrupted, cancel := context.WithCancel(context.Background())
 	cancel()
-	g.record(interrupted, nil, false /* the run had already returned */, nil)
+	g.Record(interrupted, nil, false /* the run had already returned */, nil)
 
 	rec, ok := sessions.LatestGate(fold2(t, dir), "b", types.TargetCI)
 	require.True(t, ok, "a verdict decided before the signal must survive it")
@@ -426,6 +425,69 @@ func fold2(t *testing.T, dir string) sessions.Fold {
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 	return fold
+}
+
+// repairedGate is a gate whose store holds a repairing run that left a.txt, with probe
+// standing in for the checkout comparison.
+func repairedGate(t *testing.T, probe func(context.Context, types.VCSDriver, string, []types.RepairedFile) ([]types.RepairedFile, error)) *GateRedundancy {
+	t.Helper()
+	testkit.Isolate(t)
+	g := &GateRedundancy{root: t.TempDir(), drv: stubDriver{}, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1",
+		scope: sessions.GateScopeAffected, repairs: probe}
+	g.Record(context.Background(), &types.UncommittedRepairError{
+		Files:      []types.RepairedFile{{Path: "a.txt", Digest: "d"}},
+		Diagnostic: types.DiagnosticErrorf(types.UncommittedRepair, "ci repaired 1 file"),
+	}, false, nil)
+	return g
+}
+
+type stubDriver struct{ types.VCSDriver }
+
+func TestGateRefusesWhileTheProbeHoldsARepair(t *testing.T) {
+	g := repairedGate(t, func(_ context.Context, _ types.VCSDriver, _ string, files []types.RepairedFile) ([]types.RepairedFile, error) {
+		return files, nil
+	})
+
+	err := g.Evaluate(context.Background(), false)
+	require.ErrorIs(t, err, types.UncommittedRepair)
+	assert.Contains(t, err.Error(), "repaired 1 file still uncommitted: a.txt")
+	assert.NotEqual(t, exit.TempFail, exit.Code(err), "a refusal to verify uncommitted bytes is no deferral")
+	assert.Error(t, g.Evaluate(context.Background(), true), "the refusal is no redundancy check")
+}
+
+func TestGateRunsOnceTheProbeHoldsNoRepair(t *testing.T) {
+	g := repairedGate(t, func(context.Context, types.VCSDriver, string, []types.RepairedFile) ([]types.RepairedFile, error) {
+		return nil, nil
+	})
+
+	assert.NoError(t, g.Evaluate(context.Background(), false))
+}
+
+func TestGateRunsWhenTheRepairProbeIsMissingOrFails(t *testing.T) {
+	g := repairedGate(t, nil)
+	assert.NoError(t, g.Evaluate(context.Background(), false), "an unanswered check is said and the gate runs")
+
+	g = repairedGate(t, func(context.Context, types.VCSDriver, string, []types.RepairedFile) ([]types.RepairedFile, error) {
+		return nil, errors.New("no checkout")
+	})
+	assert.NoError(t, g.Evaluate(context.Background(), false))
+}
+
+func TestDescribePoolSaysWhatItSaw(t *testing.T) {
+	saturated, state := DescribePool(&types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8})
+	assert.True(t, saturated)
+	assert.Equal(t, "saturated: 8 of 8 slots held", state)
+
+	saturated, state = DescribePool(&types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2})
+	assert.False(t, saturated)
+	assert.Equal(t, "idle: 2 of 8 slots held", state)
+}
+
+func TestIsGateInvocationIsTheWholeExecutingCITarget(t *testing.T) {
+	assert.True(t, IsGateInvocation(types.TargetCI, false, false))
+	assert.False(t, IsGateInvocation(types.TargetCI, true, false), "a shard is not the gate")
+	assert.False(t, IsGateInvocation(types.TargetCI, false, true), "a dry run executes nothing")
+	assert.False(t, IsGateInvocation("test", false, false))
 }
 
 func TestCIRecordSuite(t *testing.T) { suite.Run(t, new(CIRecordSuite)) }
@@ -443,12 +505,12 @@ func hexDigest(content string) string {
 
 // repairedCheckout commits a.txt untidy, leaves it repaired and uncommitted,
 // and records the ci run that repaired it.
-func (s *CIRecordSuite) repairedCheckout() (*testkit.Repo, *gateRedundancy) {
+func (s *CIRecordSuite) repairedCheckout() (*testkit.Repo, *GateRedundancy) {
 	testkit.Isolate(s.T())
 	repo := testkit.NewRepository(s.T(), map[string]string{".gitignore": ".magus/\n", "a.txt": "messy\n"})
 	s.write(repo, "a.txt", "tidy\n")
 	g := s.gate(repo, "b")
-	g.record(context.Background(), &types.UncommittedRepairError{
+	g.Record(context.Background(), &types.UncommittedRepairError{
 		Writers:    []types.TargetRef{{Project: ".", Target: "tidy"}},
 		Files:      []types.RepairedFile{tidyRepair},
 		Diagnostic: types.DiagnosticErrorf(types.UncommittedRepair, "ci repaired 1 file through .:tidy: a.txt"),
@@ -456,12 +518,12 @@ func (s *CIRecordSuite) repairedCheckout() (*testkit.Repo, *gateRedundancy) {
 	return repo, g
 }
 
-func (s *CIRecordSuite) gate(repo *testkit.Repo, ref string) *gateRedundancy {
+func (s *CIRecordSuite) gate(repo *testkit.Repo, ref string) *GateRedundancy {
 	res, err := vcs.Resolve(s.T().Context(), repo.Root(), "", types.VCSOptions{})
 	s.Require().NoError(err)
-	return &gateRedundancy{
+	return &GateRedundancy{
 		root: repo.Root(), drv: res.VCS, target: types.TargetCI, ref: ref, commit: repo.Head(),
-		fp: "fp-1", projects: []string{"."}, scope: sessions.GateScopeAffected,
+		fp: "fp-1", projects: []string{"."}, scope: sessions.GateScopeAffected, repairs: dirtyRepairs,
 	}
 }
 
@@ -500,7 +562,7 @@ func (s *CIRecordSuite) TestRepairedRunRecordsAFailureWithEachFilesDigest() {
 func (s *CIRecordSuite) TestRerunWithUncommittedRepairsRefuses() {
 	_, g := s.repairedCheckout()
 
-	err := g.evaluate(context.Background(), false)
+	err := g.Evaluate(context.Background(), false)
 	s.Require().True(errors.Is(err, types.UncommittedRepair), "got %v", err)
 	s.Contains(err.Error(), "repaired 1 file still uncommitted: a.txt")
 	s.NotEqual(exit.TempFail, exit.Code(err), "a refusal to verify uncommitted bytes is no deferral")
@@ -512,54 +574,79 @@ func (s *CIRecordSuite) TestCommitThatLeavesTheRepairsOutStillRefuses() {
 	repo.Git("add", "b.txt")
 	repo.Git("commit", "-q", "-m", "b")
 
-	s.Error(s.gate(repo, "b").evaluate(context.Background(), false))
+	s.Error(s.gate(repo, "b").Evaluate(context.Background(), false))
 }
 
 func (s *CIRecordSuite) TestRerunAfterTheCommitRuns() {
 	repo, _ := s.repairedCheckout()
 	repo.Commit("tidy", nil)
 
-	s.NoError(s.gate(repo, "b").evaluate(context.Background(), false))
+	s.NoError(s.gate(repo, "b").Evaluate(context.Background(), false))
 }
 
 func (s *CIRecordSuite) TestRerunAfterTheRepairsAreDiscardedRuns() {
 	repo, g := s.repairedCheckout()
 	repo.Git("checkout", "--", "a.txt")
 
-	s.NoError(g.evaluate(context.Background(), false))
+	s.NoError(g.Evaluate(context.Background(), false))
 }
 
 func (s *CIRecordSuite) TestRepairedFileEditedFurtherDoesNotRefuse() {
 	repo, g := s.repairedCheckout()
 	s.write(repo, "a.txt", "tidy, then edited\n")
 
-	s.NoError(g.evaluate(context.Background(), false))
+	s.NoError(g.Evaluate(context.Background(), false))
 }
 
 func (s *CIRecordSuite) TestRefusalIgnoresNoRedundancyCheck() {
 	_, g := s.repairedCheckout()
 
-	s.Error(g.evaluate(context.Background(), true), "the refusal is no redundancy check")
+	s.Error(g.Evaluate(context.Background(), true), "the refusal is no redundancy check")
 }
 
 func (s *CIRecordSuite) TestOtherWorktreesRepairsDoNotRefuse() {
 	repo, _ := s.repairedCheckout()
 	other := repo.AddWorktree("other")
 
-	s.NoError(s.gate(other, "other").evaluate(context.Background(), false))
+	s.NoError(s.gate(other, "other").Evaluate(context.Background(), false))
 }
 
 func (s *CIRecordSuite) TestBranchSwitchAtTheSameCommitStillRefuses() {
 	repo, _ := s.repairedCheckout()
 	repo.Git("switch", "-q", "-c", "feature")
 
-	s.Error(s.gate(repo, "feature").evaluate(context.Background(), false))
+	s.Error(s.gate(repo, "feature").Evaluate(context.Background(), false))
 }
 
 func (s *CIRecordSuite) TestRefusalRecordsNothing() {
 	repo, g := s.repairedCheckout()
 	before := s.records(repo.Root())
 
-	s.Require().Error(g.evaluate(context.Background(), false))
+	s.Require().Error(g.Evaluate(context.Background(), false))
 	s.Equal(before, s.records(repo.Root()), "a refusal's own record would shadow the repair's")
+}
+
+// dirtyRepairs stands in for the checkout comparison magus.UncommittedRepairs makes: a
+// recorded file is held while git lists it dirty and it still has its recorded digest.
+func dirtyRepairs(_ context.Context, _ types.VCSDriver, dir string, files []types.RepairedFile) ([]types.RepairedFile, error) {
+	out, err := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	if err != nil {
+		return nil, err
+	}
+	var held []types.RepairedFile
+	for _, line := range strings.Split(string(out), "\n") {
+		if len(line) < 4 {
+			continue
+		}
+		for _, f := range files {
+			content, err := os.ReadFile(filepath.Join(dir, f.Path))
+			if err != nil {
+				return nil, err
+			}
+			if line[3:] == f.Path && hexDigest(string(content)) == f.Digest {
+				held = append(held, f)
+			}
+		}
+	}
+	return held, nil
 }
