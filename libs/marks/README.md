@@ -13,7 +13,7 @@ its weight. It comes in caution yellow and in blue, each as an app icon, a favic
 a touch icon:
 
 <p>
-  <img src="gen/safetyscissors-yellow.svg" width="240" alt="Half-open safety scissors in navy on caution yellow.">
+  <img src="gen/safetyscissors-yellow.svg" width="240" alt="Half-open safety scissors in charcoal on caution yellow.">
   <img src="gen/safetyscissors-blue.svg" width="240" alt="Half-open safety scissors in cream on blue.">
 </p>
 

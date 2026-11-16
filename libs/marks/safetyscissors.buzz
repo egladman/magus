@@ -259,6 +259,9 @@ export object Design {
 // RIVET is where the blades cross, upright; everything turns about it.
 final RIVET = Pt{ x = CENTER, y = 540.0 };
 
+// HUB is the radius of the round boss the levers share about the rivet.
+final HUB = 50.0;
+
 // Lever is one half of the scissors, upright and closed: a blade on side s
 // of the rivet and the finger loop on the far side, which cross there.
 object Lever {
@@ -269,12 +272,13 @@ object Lever {
 }
 
 fun lever(d: Design, s: double) > Lever {
-    final heel = Pt{ x = CENTER + s * 22.0, y = 560.0 };
+    // Both heels and both shanks end in one circle on the rivet, so the
+    // levers turn on it as a single round hub with no heel showing past it.
     final top = Pt{ x = CENTER + s * 4.0, y = 262.0 + d.nose };
     final loopC = Pt{ x = CENTER - s * 108.0, y = 700.0 };
     return Lever{
-        blade = capsule(top, topR: d.nose, heel: heel, heelR: 50.0),
-        shank = capsule(Pt{ x = CENTER - s * 6.0, y = 570.0 }, topR: 34.0, heel: loopC, heelR: 62.0),
+        blade = capsule(top, topR: d.nose, heel: RIVET, heelR: HUB),
+        shank = capsule(RIVET, topR: HUB, heel: loopC, heelR: 62.0),
         loop = superellipsePoints(loopC.x, cy: loopC.y, ax: 104.0, ay: 96.0, n: 2.0),
         hole = superellipsePoints(loopC.x, cy: loopC.y + 4.0, ax: 58.0, ay: 50.0, n: 2.0),
     };
@@ -472,7 +476,7 @@ export fun draw(at: Placement, variant: str) > result\Result::<str> {
 // DESIGNS are the mark in caution yellow and in blue: the pair half open
 // and leaning.
 export final DESIGNS = [
-    Design{ name = "yellow", ground = "#f2a91c", ink = "#1f2333", open = 34.0, tilt = 30.0 },
+    Design{ name = "yellow", ground = "#f2a91c", ink = "#36322b", open = 34.0, tilt = 30.0 },
     Design{ name = "blue", ground = "#2f6fe0", ink = "#f4eee2", open = 34.0, tilt = 30.0 },
 ];
 
