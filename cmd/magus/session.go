@@ -662,7 +662,7 @@ func briefReaders() brief.Readers {
 	return brief.Readers{
 		OpenJobs: func(ctx context.Context, root string) (*job.Store, error) { return openJobs(ctx, root, jobOpen{}) },
 		ActingLease: func(ctx context.Context, root string) string {
-			lease, _, _ := checkoutLease(ctx, root)
+			lease, _, _ := guard.CheckoutLease(ctx, root, jobPlace)
 			return lease
 		},
 		PromptCache: promptCacheForCheckout,

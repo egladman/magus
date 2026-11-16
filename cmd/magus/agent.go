@@ -9,13 +9,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
@@ -23,7 +21,6 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // agentSkills is the catalog of skills magus ships. Sources, rendering, provenance, installation
@@ -150,8 +147,8 @@ func agentInstallCommand(ctx context.Context, args []string) error {
 
 	var written, changed, removed []string
 	for _, dest := range dests {
-		base, leaf := installTarget(af.Dir, dest, af.Global)
-		w, ch, r, err := installSkillTree(base, leaf, af.Force, af.DryRun, form)
+		base, leaf := agent.SkillTarget(af.Dir, dest, af.Global)
+		w, ch, r, err := agentSkills.InstallSkillTree(base, leaf, af.Force, af.DryRun, form)
 		if err != nil {
 			return err
 		}
@@ -160,7 +157,7 @@ func agentInstallCommand(ctx context.Context, args []string) error {
 		removed = append(removed, r...)
 	}
 	if opts.Format != outputText {
-		return emitRecord(opts, agentInstallOutput{DryRun: af.DryRun, Written: nonNil(written), Changed: nonNil(changed), Removed: nonNil(removed)}, written)
+		return emitRecord(opts, agent.InstallOutput{DryRun: af.DryRun, Written: agent.NonNil(written), Changed: agent.NonNil(changed), Removed: agent.NonNil(removed)}, written)
 	}
 	for _, p := range written {
 		if af.DryRun {
@@ -169,7 +166,7 @@ func agentInstallCommand(ctx context.Context, args []string) error {
 		}
 		slog.With(attr.Component("agent install")).InfoContext(ctx, "wrote", slog.String("path", p))
 	}
-	reportRemovedSkills(os.Stdout, removed, af.DryRun)
+	agent.ReportRemovedSkills(os.Stdout, removed, af.DryRun)
 	printAgentInstallNextSteps(ctx, af.Dir, written, changed, form, af.DryRun)
 	return nil
 }
@@ -195,182 +192,47 @@ func writeSkillTar(opts output.Options, dests []string, form types.SkillForm) er
 	return nil
 }
 
-type agentInstallOutput struct {
-	DryRun  bool     `json:"dry_run"`
-	Written []string `json:"written"`
-	Changed []string `json:"changed"`
-	Removed []string `json:"removed"`
-}
-
-func nonNil(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
-}
-
-// reportRemovedSkills prints one line per removal on stdout, so a delete shows at the
-// default log level. A silent delete is how a person loses a skill they thought they
-// had. Both installers share it so the wording stays one.
-func reportRemovedSkills(w io.Writer, removed []string, dryRun bool) {
-	verb := "removed"
-	if dryRun {
-		verb = "would remove"
-	}
-	for _, p := range removed {
-		fmt.Fprintf(w, "%s skill this binary no longer ships: %s\n", verb, p)
-	}
-}
-
-// installSkillTree writes one skill tree, then removes the skill directories this
-// binary no longer ships. Only directories carrying magus's stamp are candidates
-// (see Catalog.StaleSkillDirs), so a hand-authored skill beside them survives.
-// Under dryRun it touches nothing and returns what a run would write and remove.
-func installSkillTree(base, leaf string, force, dryRun bool, form types.SkillForm) (written, changed, removed []string, err error) {
-	if dryRun {
-		if written, err = agentSkills.PlanSkillTree(base, leaf, form); err != nil {
-			return nil, nil, nil, err
-		}
-		removed, err = agentSkills.StaleSkillDirs(base, leaf, form)
-		return written, nil, removed, err
-	}
-	if written, changed, err = agentSkills.WriteSkillTree(base, leaf, force, form); err != nil {
-		return nil, nil, nil, err
-	}
-	// After writing, never before: a prune that ran first would delete a skill
-	// this install then failed to replace.
-	removed, err = agentSkills.PruneSkillTree(base, leaf, form)
-	return written, changed, removed, err
-}
-
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
 // the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
 func printAgentInstallNextSteps(ctx context.Context, dir string, written, changed []string, form types.SkillForm, dryRun bool) {
-	if !interactive.HintsEnabled() || len(written) == 0 {
+	if !interactive.HintsEnabled() {
 		return
 	}
-	// A rehearsal that claims it installed something stops the reader looking for
-	// the real run.
-	if dryRun {
-		interactive.Hint(ctx, fmt.Sprintf("dry run: %d file(s) would be written; nothing was changed. Re-run without --dry-run to apply", len(written)))
-		return
+	hints := agentSkills.InstallHints(dir, written, changed, form, dryRun)
+	for _, h := range hints {
+		interactive.Hint(ctx, h)
 	}
-	// What the run DID, not how many files it touched. A --force reinstall rewrites every
-	// file whether or not its bytes moved, so "installed 30 file(s)" is the same sentence
-	// on the run that changed everything and the run that changed nothing. A reader who
-	// sees it three times stops reading it, which is the run where it finally mattered.
-	switch {
-	case len(changed) == 0:
-		interactive.Hint(ctx, fmt.Sprintf("%d skill file(s) were already current; nothing changed", len(written)))
-	case len(changed) == len(written):
-		interactive.Hint(ctx, fmt.Sprintf("wrote all %d skill file(s); commit them so your team and agents share them", len(written)))
-	default:
-		interactive.Hint(ctx, fmt.Sprintf("updated %d of %d skill file(s), the rest already current; commit them so your team and agents share them: %s",
-			len(changed), len(written), strings.Join(skillNames(changed), ", ")))
+	if len(hints) > 0 && !dryRun {
+		printAgentsBlockToPaste(ctx, dir)
 	}
-	reportContextCost(ctx, dir, written)
-	if form == types.SkillFormBoth {
-		interactive.Hint(ctx, "both installs the short body under each skill's own name plus an always-full <name>-full reference; pass --skill-form=short or --skill-form=full when one body per skill is required")
-	}
-	// MAGUS.md is regenerated for HUMAN readers; the skills send agents to the live
-	// verbs instead, because a generated index is only true as of its last run.
-	interactive.Hint(ctx, fmt.Sprintf("regenerate MAGUS.md for human readers:  %s  (the skills send agents to the live verbs: %s, %s)", hint.DescribeGraph.With("-o", "markdown"), hint.DescribeTargets.String(), hint.Ls.String()))
-	interactive.Hint(ctx, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
-	interactive.Hint(ctx, "  \""+vcsSafetyRule+"\"")
-	interactive.Hint(ctx, "starter AGENTS.md you can own and tweak (prints, never writes):  "+hint.AgentStarter.String())
-	printAgentsBlockToPaste(ctx, dir)
 }
 
-// skillNames reduces <dest>-relative SKILL.md paths to the skill names a reader
-// recognizes: ".claude/skills/magus-run/SKILL.md" is the file, "magus-run" is the thing.
-func skillNames(paths []string) []string {
-	out := make([]string, 0, len(paths))
-	for _, p := range paths {
-		out = append(out, filepath.Base(filepath.Dir(p)))
-	}
-	slices.Sort(out)
-	return out
-}
-
-// printAgentsBlockToPaste offers the managed AGENTS.md block for the developer
-// to paste. Silent when their file already carries a current one: 80 lines of
-// Markdown on every --force reinstall is how a reader learns to scroll past this
-// command's output, including the actionable parts.
+// printAgentsBlockToPaste offers the managed AGENTS.md block for the developer to paste.
 func printAgentsBlockToPaste(ctx context.Context, dir string) {
-	verb := "add it to AGENTS.md at your repo root"
-	// No workspace is open at this point in `agent install` (dir is an explicit CLI
-	// argument, not a discovered root), so there is no wired harness list to pass; the
-	// AGENTS.md staleness check below does not need one anyway.
-	for _, s := range agentSkills.CheckStatuses(ctx, dir) {
-		if s.Location != agent.AgentsFile {
-			continue
-		}
-		if !s.Stale {
-			return
-		}
-		verb = "your AGENTS.md has an older copy: replace it BETWEEN the markers and leave the rest of the file alone"
+	intro, block, ok := agentSkills.PasteOffer(ctx, dir, declaresRoutingIndex(ctx, dir))
+	if !ok {
+		return
 	}
-	interactive.Hint(ctx, fmt.Sprintf("magus does not write AGENTS.md. That file is yours. If your agent host reads it, %s:", verb))
-	slog.InfoContext(ctx, "\n"+agentSkills.AgentsBlock(declaresRoutingIndex(ctx, dir)), attr.Notice(""))
+	interactive.Hint(ctx, intro)
+	slog.InfoContext(ctx, "\n"+block, attr.Notice(""))
 }
 
-// declaresRoutingIndex reports whether the workspace rooted at dir declares MAGUS.md as an
-// output of its root project. Any failure reads as false: a block that omits the link is
-// correct for a workspace that may not exist yet, while a link to a missing file is not.
-//
-// dir must BE the workspace root. AGENTS.md is pasted at dir, so a root found above it
-// would make the block's relative link point at a file that is not beside it.
+// declaresRoutingIndex asks the opened workspace for its root project's outputs.
 func declaresRoutingIndex(ctx context.Context, dir string) bool {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return false
-	}
-	root, err := workspace.FindRoot(abs)
-	if err != nil || root != abs {
-		return false
-	}
-	ws, err := magus.Inspect(ctx, root, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
-	if err != nil {
-		return false
-	}
-	p := ws.Get(".")
-	return p != nil && slices.ContainsFunc(p.AllOutputs(), func(g types.Glob) bool { return g.Pattern == "MAGUS.md" })
+	return agent.DeclaresRoutingIndex(ctx, dir, workspace.FindRoot, func(ctx context.Context, root string) ([]types.Glob, error) {
+		ws, err := magus.Inspect(ctx, root, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
+		if err != nil {
+			return nil, err
+		}
+		p := ws.Get(".")
+		if p == nil {
+			return nil, nil
+		}
+		return p.AllOutputs(), nil
+	})
 }
 
-// vcsSafetyRule is the one always-on version-control rule worth carrying in a
-// repo's agent instruction file: it stops one agent's whole-tree revert from destroying
-// another's uncommitted work. Shared by the install hint and the starter doc.
-const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself, never delegate it to a subagent, and never discard or revert uncommitted changes across the whole tree to verify a build - build in place. A whole-tree revert permanently destroys a concurrent agent's uncommitted work."
-
-// agentStarterDoc returns an AGENTS.md starter for a developer to paste and own.
-//
-// The magus guidance arrives inside its begin/end markers (the same bytes
-// install prints), so `magus doctor` can grade it once pasted.
-func agentStarterDoc(routingIndex bool) string {
-	return fmt.Sprintf(`# AGENTS.md
-
-<!-- A starter for AI agents working in this repo. Own and edit this file:
-     fill in the project-specific sections below. Everything outside the
-     magus:skills markers is yours; magus never writes this file. -->
-
-## Project
-
-<!-- What this repo is, its primary language(s), and where the entry points
-     and top-level layout live. A few sentences. -->
-
-## Conventions
-
-<!-- The non-obvious house rules an agent cannot infer from the code:
-     naming, error handling, comment style, and what NOT to touch. -->
-
-## Version control
-
-- %s
-
-%s`, vcsSafetyRule, agentSkills.AgentsBlock(routingIndex))
-}
-
-// agentStarterCommand prints agentStarterDoc to stdout, never to a file. The starter is meant
+// agentStarterCommand prints the starter AGENTS.md to stdout, never to a file. The starter is meant
 // for the workspace root, so the root override or the working directory decides the routing
 // index line.
 func agentStarterCommand(ctx context.Context, rootOverride string) error {
@@ -378,77 +240,6 @@ func agentStarterCommand(ctx context.Context, rootOverride string) error {
 	if dir == "" {
 		dir = "."
 	}
-	fmt.Fprint(os.Stdout, agentStarterDoc(declaresRoutingIndex(ctx, dir)))
+	fmt.Fprint(os.Stdout, agentSkills.StarterDoc(declaresRoutingIndex(ctx, dir)))
 	return nil
-}
-
-// reportContextCost tells the caller how many bytes of instruction the install
-// just added, and what the other form would have cost.
-//
-// BYTES, not tokens: a token count is only true for one tokenizer, and these
-// files are installed for whatever host the reader uses. Printed at all for
-// accountability: an install that never states its own cost has no pressure on
-// it to shrink.
-func reportContextCost(ctx context.Context, dir string, written []string) {
-	// Twins are counted separately, not folded in: only the primary is
-	// always-loaded, and a twin is a reference copy fetched by name when a reader
-	// needs the long form. Summing them would report the always-loaded cost as
-	// roughly double what a session actually carries.
-	var installed int64
-	var twins int64
-	for _, rel := range written {
-		info, err := os.Stat(filepath.Join(dir, rel))
-		if err != nil {
-			continue
-		}
-		if agent.IsFullTwinName(filepath.Base(filepath.Dir(rel))) {
-			twins += info.Size()
-			continue
-		}
-		installed += info.Size()
-	}
-	if installed == 0 {
-		return
-	}
-	msg := fmt.Sprintf("context cost: %s of always-loaded instructions", byteSize(installed))
-	// What the always-loaded set would cost if the long form were the one carried. Kept
-	// even though it is no longer a flag to choose between, because it is the number that
-	// justifies the split: without it the reader cannot see what the shorter form buys.
-	if alt, err := agentSkills.VariantSize(typesagent.SkillVariantFull); err == nil && alt > installed {
-		msg += fmt.Sprintf("; the full form would be %s", byteSize(alt))
-	}
-	if twins > 0 {
-		msg += fmt.Sprintf("; plus %s of full twins, loaded only when asked for by name", byteSize(twins))
-	}
-	interactive.Hint(ctx, msg)
-}
-
-// byteSize renders a size the way a reader compares it, not the way a machine
-// stores it.
-func byteSize(n int64) string {
-	if n < 1024 {
-		return fmt.Sprintf("%d B", n)
-	}
-	return fmt.Sprintf("%.1f KB", float64(n)/1024)
-}
-
-// installTarget resolves a destination into the (base, leaf) pair the catalog
-// writers take.
-//
-// --global is the flag that permits an absolute destination, and it never
-// worked: this command let one past its own guard and Catalog.WriteSkillTree
-// then refused it unconditionally, so `agent install /abs/path --global` failed
-// with the message telling the caller to pass the flag they had just passed.
-//
-// Fixed HERE rather than by adding an escape hatch to the catalog. That guard is
-// the library's own safety property (it also blocks "../../outside", which no
-// CLI flag should be able to switch off), so instead the absolute path is split
-// into the directory it names and the leaf inside it. The containment check the
-// catalog performs is then still meaningful: the write stays under the directory
-// the caller actually named.
-func installTarget(dir, dest string, global bool) (base, leaf string) {
-	if global && filepath.IsAbs(dest) {
-		return filepath.Dir(dest), filepath.Base(dest)
-	}
-	return dir, dest
 }

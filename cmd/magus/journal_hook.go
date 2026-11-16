@@ -4,10 +4,15 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 )
 
 // withInvocationJournal adds this invocation's fact handler to the capture fan-out.
 func withInvocationJournal(ctx context.Context, handlers []slog.Handler, root, verb string, args []string) []slog.Handler {
-	return trail.WithInvocationJournal(ctx, handlers, root, verb, args, version, checkoutLease)
+	lease := func(ctx context.Context, root string) (string, types.LeaseSource, error) {
+		return guard.CheckoutLease(ctx, root, jobPlace)
+	}
+	return trail.WithInvocationJournal(ctx, handlers, root, verb, args, version, lease)
 }

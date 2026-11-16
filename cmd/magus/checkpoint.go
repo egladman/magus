@@ -89,7 +89,7 @@ func checkpointCommand(ctx context.Context, root string, in io.Reader, out io.Wr
 		return err
 	}
 	spawn := trail.SpawnFromEnv()
-	lease, leaseFrom, err := checkoutLease(ctx, wsRoot)
+	lease, leaseFrom, err := guard.CheckoutLease(ctx, wsRoot, jobPlace)
 	if err != nil {
 		return fmt.Errorf("magus session checkpoint: %w", err)
 	}

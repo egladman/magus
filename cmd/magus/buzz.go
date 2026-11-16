@@ -23,6 +23,7 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/coverage"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
@@ -523,7 +524,7 @@ func recordLease(ctx context.Context, root, script string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	lease, _, err := checkoutLease(ctx, here)
+	lease, _, err := guard.CheckoutLease(ctx, here, jobPlace)
 	if err != nil || lease != "" {
 		return lease, err
 	}

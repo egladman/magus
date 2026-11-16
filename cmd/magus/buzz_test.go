@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
@@ -1283,7 +1284,7 @@ func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 	dir, err := magus.ResolveCacheDir(root)
 	require.NoError(t, err)
 	store := cache.NewOutputStore(dir)
-	lease, _, err := checkoutLease(t.Context(), root)
+	lease, _, err := guard.CheckoutLease(t.Context(), root, jobPlace)
 	require.NoError(t, err)
 	ref := cache.PortableRef(buzzRunKey("probe.buzz", "code", lease, []string{"--x"}))
 	out, d, err := store.ByRef(ref)
@@ -1313,7 +1314,7 @@ func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 
 	dir, err := magus.ResolveCacheDir(s.root)
 	s.Require().NoError(err)
-	lease, _, err := checkoutLease(s.T().Context(), s.root)
+	lease, _, err := guard.CheckoutLease(s.T().Context(), s.root, jobPlace)
 	s.Require().NoError(err)
 	_, d, err := cache.NewOutputStore(dir).ByRef(cache.PortableRef(buzzRunKey("p.buzz", "code", lease, args)))
 	s.Require().NoError(err)
@@ -1395,7 +1396,7 @@ func TestBuzzTestRunIsRecordedWithItsTestLines(t *testing.T) {
 			captureStdout(t, func() { runErr = buzzCommand(t.Context(), root, []string{"-t", script}) })
 			assert.Equal(t, tc.failed, runErr != nil, "%v", runErr)
 
-			lease, _, err := checkoutLease(t.Context(), root)
+			lease, _, err := guard.CheckoutLease(t.Context(), root, jobPlace)
 			require.NoError(t, err)
 			out, d, err := store.ByRef(cache.PortableRef(buzzRunKey(script, code, lease, []string{"-t"})))
 			require.NoError(t, err)
