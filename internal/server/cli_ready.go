@@ -38,7 +38,7 @@ func ReapSpawned(ctx context.Context, pid int, sock string) {
 	if err != nil {
 		return
 	}
-	_ = p.Kill()
+	_ = p.Kill() // the child may have exited already, which is what reaping wants
 }
 
 // waitServerReady polls the server socket until it answers a status query or the timeout

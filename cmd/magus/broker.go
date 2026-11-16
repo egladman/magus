@@ -402,4 +402,3 @@ func brokerUnits(ctx context.Context, args []string) error {
 		attr.Notice(""), attr.Component("magus"), attr.Next(enable))
 	return nil
 }
-

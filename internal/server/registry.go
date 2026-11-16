@@ -177,7 +177,7 @@ func newRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, ttl 
 }
 
 // ResolveDeclaredWorkspaces merges cfg.Server.Workspaces and MAGUS_SERVER_WORKSPACES into absolute paths.
-func ResolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
+func ResolveDeclaredWorkspaces(ctx context.Context, cfgList []string, envVal string) []string {
 	var raw []string
 	raw = append(raw, cfgList...)
 	for _, p := range filepath.SplitList(envVal) {
@@ -193,7 +193,7 @@ func ResolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 	for _, p := range raw {
 		abs, err := filepath.Abs(p)
 		if err != nil {
-			slog.With(attr.Component("server")).Warn("skipping declared workspace (cannot resolve absolute path)",
+			slog.With(attr.Component("server")).WarnContext(ctx, "skipping declared workspace (cannot resolve absolute path)",
 				"path", p, "err", err)
 			continue
 		}
@@ -201,7 +201,7 @@ func ResolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 			continue
 		}
 		if st, err := os.Stat(abs); err != nil || !st.IsDir() {
-			slog.With(attr.Component("server")).Warn("skipping declared workspace (not a directory)",
+			slog.With(attr.Component("server")).WarnContext(ctx, "skipping declared workspace (not a directory)",
 				"path", abs)
 			continue
 		}

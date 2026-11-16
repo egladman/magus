@@ -71,7 +71,7 @@ func SpawnDetached(args []string, logPath string) (pid int, err error) {
 	if err != nil {
 		return 0, fmt.Errorf("open log %s: %w", logPath, err)
 	}
-	defer func() { _ = logf.Close() }()
+	defer func() { _ = logf.Close() }() // the child holds its own descriptor for the log
 
 	cmd := DetachedCommand(exe, args)
 	cmd.Env = detachedChildEnv()

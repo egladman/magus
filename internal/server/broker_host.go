@@ -117,9 +117,9 @@ func ServeBroker(ctx context.Context, o BrokerRun) error {
 	// anything new is hosted.
 	journal, jerr := service.NewJournal(filepath.Join(proc.SockDir(), "services"))
 	if jerr != nil {
-		slog.With(attr.Component("broker")).Warn("service journal unavailable; crash reaping disabled", attr.Error(jerr))
+		slog.With(attr.Component("broker")).WarnContext(ctx, "service journal unavailable; crash reaping disabled", attr.Error(jerr))
 	} else if res := journal.Sweep(ctx); res.Reaped > 0 || res.Unreapable > 0 {
-		slog.With(attr.Component("broker")).Info("reaped orphaned services a previous broker left",
+		slog.With(attr.Component("broker")).InfoContext(ctx, "reaped orphaned services a previous broker left",
 			slog.Int("reaped", res.Reaped), slog.Int("left_running", res.Unreapable))
 	}
 	reg := service.New(service.ExecRunner{}, defaultServiceIdle, service.WithJournal(journal))
@@ -285,8 +285,8 @@ func AdmissionLogPath() string { return StateLogPath("admissions.jsonl") }
 // admissionsKeep is the admissions a compaction of the store leaves.
 const admissionsKeep = 5000
 
-// ServerLogPath is BrokerLogPath's counterpart for a server `server start` detached.
-func ServerLogPath() string { return StateLogPath("server.log") }
+// LogPath is BrokerLogPath's counterpart for a server `server start` detached.
+func LogPath() string { return StateLogPath("server.log") }
 
 // crashReportDir is where the broker saves the crash report of a process it watched.
 func crashReportDir() string { return StateLogPath("crashes") }

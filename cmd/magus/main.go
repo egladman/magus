@@ -60,8 +60,8 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/pipe"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
@@ -976,7 +976,7 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 		// `server --foreground` and returns once it is accepting. done==true means we are
 		// that parent (or a server was already running, or spawning failed); only a
 		// foreground server falls through to build and run it in this process.
-		if code, done := server.StartBackground(rootCtx, cfg, subArgs, server.ServerLogPath(), os.Args[1:]); done {
+		if code, done := server.StartBackground(rootCtx, cfg, subArgs, server.LogPath(), os.Args[1:]); done {
 			return rootCtx, startupResult{cleanup: cleanup}, code
 		}
 		startServer(rootCtx, cfg, rc)

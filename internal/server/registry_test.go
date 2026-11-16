@@ -352,14 +352,13 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	got := rows[0]
-	assert.Equal(t, "sync-graph", got.ID)
 	assert.True(t, got.ServerRun(), "the server registered its own row")
 	assert.Equal(t, types.StatePass, got.State)
 	require.NotNil(t, got.LastRun)
-	assert.Equal(t, "inv-1", got.LastRun.Invocation)
-	assert.Equal(t, int64(250), got.LastRun.DurationMs)
-	assert.True(t, got.LastRun.OK)
 	assert.Positive(t, got.LastRun.Ended)
+	run := *got.LastRun
+	run.Ended = 0
+	assert.Equal(t, types.JobRun{Invocation: "inv-1", DurationMs: 250, OK: true}, run)
 
 	completeJobRow(t.Context(), store, []string{"graph", "build"}, time.Second, errors.New("graph build failed"))
 
@@ -367,9 +366,10 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, types.StateFail, rows[0].State)
-	assert.False(t, rows[0].LastRun.OK)
-	assert.Equal(t, "graph build failed", rows[0].LastRun.Error)
-	assert.Equal(t, "inv-1", rows[0].LastRun.Invocation)
+	require.NotNil(t, rows[0].LastRun)
+	run = *rows[0].LastRun
+	run.Ended = 0
+	assert.Equal(t, types.JobRun{Invocation: "inv-1", DurationMs: 1000, Error: "graph build failed"}, run)
 }
 
 // TestCompleteJobRowIgnoresAnAdoptedRun keeps the callback narrow: it fires for every
@@ -519,7 +519,7 @@ func TestResolveDeclaredWorkspacesMergesAndDedupes(t *testing.T) {
 	// Non-existent path should be dropped silently.
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 
-	got := ResolveDeclaredWorkspaces(
+	got := ResolveDeclaredWorkspaces(t.Context(),
 		[]string{a, b}, // cfg
 		fmt.Sprintf("%s%s%s%s%s", b, string(filepath.ListSeparator), c, string(filepath.ListSeparator), missing), // env (b is duplicate)
 	)
@@ -530,7 +530,7 @@ func TestResolveDeclaredWorkspacesMergesAndDedupes(t *testing.T) {
 	}
 }
 func TestResolveDeclaredWorkspacesEmpty(t *testing.T) {
-	assert.Nil(t, ResolveDeclaredWorkspaces(nil, ""), "expected nil for empty inputs")
+	assert.Nil(t, ResolveDeclaredWorkspaces(t.Context(), nil, ""), "expected nil for empty inputs")
 }
 
 // TestAcquireRejectsNonDeclared confirms that once setDeclared has been

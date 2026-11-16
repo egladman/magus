@@ -13,7 +13,7 @@ import (
 
 func TestOpenWorkspaceKeepsTheContextOnError(t *testing.T) {
 	t.Chdir(t.TempDir())
-	ctx, err := OpenWorkspace(context.Background(), io.Discard, func(context.Context, config.Config, string) (Held, error) { return nil, nil })
+	ctx, err := OpenWorkspace(context.Background(), io.Discard, func(context.Context, config.Config, string) (Held, error) { return Held{}, nil })
 	require.Error(t, err)
 	assert.NotNil(t, ctx)
 }

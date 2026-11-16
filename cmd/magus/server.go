@@ -247,7 +247,7 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 	}
 
 	slog.InfoContext(ctx, fmt.Sprintf("starting the server to serve the console, from %s.", root), attr.Notice(""), attr.Component("magus"))
-	logPath := server.ServerLogPath()
+	logPath := server.LogPath()
 	pid, err := proc.SpawnDetached([]string{"server", "--foreground"}, logPath)
 	if err != nil {
 		return fmt.Errorf("could not start the server: %w", err)
@@ -1016,7 +1016,8 @@ func leasedBrokerClient(lease string) *broker.Client {
 }
 
 // describe.go, which this move does not hold, still names these two.
-var (
-	loadWorkspaceConfig       = server.LoadWorkspaceConfig
-	resolveDeclaredWorkspaces = server.ResolveDeclaredWorkspaces
-)
+var loadWorkspaceConfig = server.LoadWorkspaceConfig
+
+func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
+	return server.ResolveDeclaredWorkspaces(context.Background(), cfgList, envVal)
+}

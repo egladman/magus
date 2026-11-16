@@ -6,10 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interp/mcpclient"
-	"github.com/egladman/magus/types"
 )
 
 // runClientWorker is the private re-exec entry point for the MCP client tool.
@@ -24,17 +22,12 @@ func runClientWorker(ctx context.Context, in io.Reader, out, errOut io.Writer) i
 	})
 }
 
-// clientWorkspace is a *magus.Magus as the client worker holds it.
-type clientWorkspace struct{ *magus.Magus }
-
-func (w clientWorkspace) Repository() types.WorkspaceRepository { return viewInternals(w.Magus) }
-
 // openClientWorkspace publishes cfg, which loadMagus reads, and loads root.
 func openClientWorkspace(ctx context.Context, cfg config.Config, root string) (mcpclient.Held, error) {
 	globalCfg = cfg
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		return nil, err
+		return mcpclient.Held{}, err
 	}
-	return clientWorkspace{m}, nil
+	return mcpclient.Held{Repository: viewInternals(m), ApplySandbox: m.ApplySandbox, CacheDir: m.CacheDir()}, nil
 }

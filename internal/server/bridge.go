@@ -43,15 +43,15 @@ import (
 // workspace load to learn it, which is what lets this run ahead of the MCP gate. A root
 // that will not resolve leaves the base empty, and every writer already treats an empty
 // base as "drop the record, best-effort".
-func (h *Host) publishTrailBase() {
+func (h *Host) publishTrailBase(ctx context.Context) {
 	root, err := workspace.FindRoot("")
 	if err != nil {
-		slog.Warn("no workspace root; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
+		slog.WarnContext(ctx, "no workspace root; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
 	}
 	loc, err := h.Place(root)
 	if err != nil {
-		slog.Warn("cache or state dir unresolvable; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
+		slog.WarnContext(ctx, "cache or state dir unresolvable; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
 	}
 	h.trailBase = loc.CacheDir
@@ -73,11 +73,11 @@ func (h *Host) StartBridge(ctx context.Context, cancel context.CancelFunc) {
 	// nothing to do with MCP, but it used to be published below the MCP gate, so
 	// mcp.enabled: false left it empty, the maintenance scheduler bailed at every tick,
 	// and no background job was ever recorded.
-	h.publishTrailBase()
+	h.publishTrailBase(ctx)
 	mcpOn := h.Config.MCP.Enabled == nil || *h.Config.MCP.Enabled
 	addr, err := netip.ParseAddrPort(MCPAddress(h.Config.MCP))
 	if mcpOn && err != nil {
-		slog.Error("MCP skipped: invalid MCP address", attr.Error(err))
+		slog.ErrorContext(ctx, "MCP skipped: invalid MCP address", attr.Error(err))
 		mcpOn = false
 	}
 	// The bridge Magus MUST share the server's single provider (WithProvider) so the
@@ -96,13 +96,13 @@ func (h *Host) StartBridge(ctx context.Context, cancel context.CancelFunc) {
 	if err != nil {
 		root, rerr := workspace.FindRoot("")
 		if !mcpOn || rerr != nil || h.registry == nil {
-			slog.Warn("workspace unavailable; no MCP, console or watch for it", attr.Error(err))
+			slog.WarnContext(ctx, "workspace unavailable; no MCP, console or watch for it", attr.Error(err))
 			return
 		}
 		// Serve anyway: a console and an agent that can connect and read the diagnostic
 		// beat a server with nothing listening. The registry holds the failure and retries
 		// once a source changes; every route is served when that load succeeds.
-		slog.Warn("workspace failed to load; serving its failure until a source changes",
+		slog.WarnContext(ctx, "workspace failed to load; serving its failure until a source changes",
 			slog.String("root", root), attr.Error(err))
 		h.registry.failBridge(root, err)
 		h.httpAddr.Store(addr.String())
@@ -160,7 +160,7 @@ func (h *Host) serveUnloadedBridge(ctx context.Context, cancel context.CancelFun
 	select {
 	case err := <-done:
 		if err != nil && ctx.Err() == nil {
-			slog.Error("MCP HTTP server failed; initiating server shutdown", attr.Error(err))
+			slog.ErrorContext(ctx, "MCP HTTP server failed; initiating server shutdown", attr.Error(err))
 			cancel()
 		}
 	case m := <-active:
@@ -169,7 +169,7 @@ func (h *Host) serveUnloadedBridge(ctx context.Context, cancel context.CancelFun
 		if m == nil {
 			return
 		}
-		slog.Info("workspace loaded; serving every route", slog.String("root", root))
+		slog.InfoContext(ctx, "workspace loaded; serving every route", slog.String("root", root))
 		h.startWatch(ctx, m)
 		h.serveBridge(ctx, cancel, m, addr)
 	}
@@ -272,7 +272,7 @@ func (h *Host) serveBridge(ctx context.Context, cancel context.CancelFunc, m *ma
 			// Any other error means MCP is gone while the server is still up —
 			// clients would receive no response indefinitely. Cancel the server
 			// context to trigger a clean restart by the process supervisor.
-			slog.Error("MCP HTTP server failed; initiating server shutdown", attr.Error(err))
+			slog.ErrorContext(ctx, "MCP HTTP server failed; initiating server shutdown", attr.Error(err))
 			cancel()
 		}
 	}()
@@ -344,10 +344,6 @@ type Host struct {
 
 // NewHost is a Host that has not started.
 func NewHost(deps HostDeps) *Host { return &Host{HostDeps: deps, stop: func() {}} }
-
-// Provider is the observability provider the server shares between its registry and its
-// bridge Magus, built by Start.
-func (h *Host) Provider() observability.Provider { return h.provider }
 
 // TrailBase is the server-wide activity-trail location, "" until the bridge publishes it.
 func (h *Host) TrailBase() string { return h.trailBase }
@@ -450,8 +446,8 @@ func (h *Host) Start(ctx context.Context) {
 	telCfg.LocalCollect = true
 	sharedTel, terr := otlp.New(ctx, telCfg)
 	if terr != nil {
-		slog.With(attr.Component("server")).Warn("telemetry init failed; dashboard metrics disabled", attr.Error(terr))
-		sharedTel, _ = otlp.New(ctx, observability.Config{})
+		slog.With(attr.Component("server")).WarnContext(ctx, "telemetry init failed; dashboard metrics disabled", attr.Error(terr))
+		sharedTel, _ = otlp.New(ctx, observability.Config{}) // the empty config builds the disabled provider, which cannot fail
 	}
 	h.provider = sharedTel
 
@@ -460,7 +456,7 @@ func (h *Host) Start(ctx context.Context) {
 	h.runs = console.NewRunRegistry()
 
 	brokerClient := h.BrokerClient(false, broker.WithLease(""))
-	declared := ResolveDeclaredWorkspaces(cfg.Server.Workspaces, os.Getenv("MAGUS_SERVER_WORKSPACES"))
+	declared := ResolveDeclaredWorkspaces(ctx, cfg.Server.Workspaces, os.Getenv("MAGUS_SERVER_WORKSPACES"))
 	reg := newRegistry(ctx, lim, brokerClient, ttl, sharedTel, h.Registry)
 	reg.setDeclared(declared)
 	h.registry = reg // publish so the bridge can adopt its workspace into it
@@ -499,16 +495,16 @@ func (h *Host) Start(ctx context.Context) {
 		CallerOwnsSignals: true,
 	})
 	if err != nil {
-		slog.With(attr.Component("server")).Error("init failed", attr.Error(err))
+		slog.With(attr.Component("server")).ErrorContext(ctx, "init failed", attr.Error(err))
 		return
 	}
 	addr = srv.Addr()
-	_ = os.Setenv(proc.SocketEnv, addr)
-	_ = os.Setenv(proc.TokenEnv, srv.Token())
+	_ = os.Setenv(proc.SocketEnv, addr)       // Setenv fails only on an invalid key, and these are constants
+	_ = os.Setenv(proc.TokenEnv, srv.Token()) // Setenv fails only on an invalid key, and these are constants
 	if err := srv.Start(ctx); err != nil {
-		_ = os.Unsetenv(proc.SocketEnv)
-		_ = os.Unsetenv(proc.TokenEnv)
-		slog.With(attr.Component("server")).Error("start failed", attr.Error(err))
+		_ = os.Unsetenv(proc.SocketEnv) // Unsetenv fails only on an invalid key, and these are constants
+		_ = os.Unsetenv(proc.TokenEnv)  // Unsetenv fails only on an invalid key, and these are constants
+		slog.With(attr.Component("server")).ErrorContext(ctx, "start failed", attr.Error(err))
 		return
 	}
 	h.procSrv = srv // publish so the command's blocking loop unblocks on an RPC shutdown
@@ -521,7 +517,7 @@ func (h *Host) Start(ctx context.Context) {
 			// reg.close so a workspace can't be closed under an in-flight build.
 			srv.Close()
 			reg.close()
-			_ = brokerClient.Close()
+			_ = brokerClient.Close() // shutting down: the broker drops a lease whose client is gone
 			close(stopped)
 		})
 	}
@@ -728,10 +724,10 @@ func ServeMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Wr
 // stale until a manual `magus run ::scip`. It reports whether the symbol indexer started.
 func watchWorkspace(ctx context.Context, m *magus.Magus) bool {
 	if _, werr := m.WatchKnowledgeGraph(ctx); werr != nil {
-		slog.Warn("knowledge-graph watcher unavailable; queries will rebuild per call", attr.Error(werr))
+		slog.WarnContext(ctx, "knowledge-graph watcher unavailable; queries will rebuild per call", attr.Error(werr))
 	}
 	if _, werr := m.WatchSymbolIndexing(ctx); werr != nil {
-		slog.Warn("symbol auto-indexer unavailable; symbol indexes will not refresh automatically", attr.Error(werr))
+		slog.WarnContext(ctx, "symbol auto-indexer unavailable; symbol indexes will not refresh automatically", attr.Error(werr))
 		return false
 	}
 	return true

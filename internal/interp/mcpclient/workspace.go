@@ -15,10 +15,10 @@ import (
 
 // Held is the workspace a client worker opened: what its scripts act on, the sandbox
 // they run in and the cache directory their trail lands in.
-type Held interface {
-	Repository() types.WorkspaceRepository
-	ApplySandbox(ctx context.Context) (context.Context, error)
-	CacheDir() string
+type Held struct {
+	Repository   types.WorkspaceRepository
+	ApplySandbox func(ctx context.Context) (context.Context, error)
+	CacheDir     string
 }
 
 // Opener opens root with cfg, which the opener also publishes process-wide: opening reads
@@ -52,13 +52,13 @@ func OpenWorkspace(ctx context.Context, errOut io.Writer, open Opener) (context.
 	if err != nil {
 		return ctx, err
 	}
-	ctx = types.WithWorkspace(ctx, m.Repository())
+	ctx = types.WithWorkspace(ctx, m.Repository)
 	sandboxed, err := m.ApplySandbox(ctx)
 	if err != nil {
 		return ctx, err
 	}
 	ctx = spawn.WithOutputWriters(sandboxed, errOut, errOut)
-	ctx = trail.ContextWithBase(ctx, m.CacheDir())
+	ctx = trail.ContextWithBase(ctx, m.CacheDir)
 	ctx = types.WithJobLease(ctx, trail.LeaseFromEnv())
 	return trail.ContextWithEntryPoint(ctx, types.EntryPointMCP), nil
 }
