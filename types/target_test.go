@@ -171,23 +171,6 @@ func TestCeilingExceededErrorOmitsTheSplitForALeaf(t *testing.T) {
 		`target "build" exceeded its declared timeout of 1m0s after 1m30s; its process tree was killed`)
 }
 
-func TestMemorySizingString(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "declared", MemorySizing{}.String())
-	assert.Equal(t, "measured over 54 runs", MemorySizing{Samples: 54}.String())
-	assert.Equal(t, "measured over 9 runs of any shape", MemorySizing{Samples: 9, AnyShape: true}.String())
-}
-
-func TestSlotSizingString(t *testing.T) {
-	t.Parallel()
-	assert.Empty(t, SlotSizing{}.String(), "nothing recorded says nothing")
-	assert.Equal(t, "declared", SlotSizing{Source: SlotsDeclared}.String())
-	assert.Equal(t, "unmeasured", SlotSizing{Source: SlotsUnmeasured}.String())
-	assert.Equal(t, "for its memory", SlotSizing{Source: SlotsForMemory}.String())
-	assert.Equal(t, "measured over 4 runs", SlotSizing{Source: SlotsMeasured, Samples: 4}.String())
-	assert.Equal(t, "measured over 7 runs of any shape", SlotSizing{Source: SlotsMeasured, Samples: 7, AnyShape: true}.String())
-}
-
 // TestChainBuilderReadsLikeTheBody: Needs(a, b).Needs(c) is `ctx.needs(a, b); ctx.needs(c)`,
 // with a cross-project step spelled the way ChainStep.Ref prints one.
 func TestChainBuilderReadsLikeTheBody(t *testing.T) {

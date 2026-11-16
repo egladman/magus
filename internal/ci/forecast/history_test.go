@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,7 +137,7 @@ func TestHistorySchemaLock(t *testing.T) {
 					RecentOutcomes: []Outcome{
 						{Result: "pass", AffectedByDiff: true, DurationMs: 11_000, At: time.Now(), Attempts: 1},
 						{Result: "volatile", AffectedByDiff: false, DurationMs: 22_000, At: time.Now(), Attempts: 2,
-							MaxRSSBytes: 1 << 30, CPUMs: 41_000, Slots: 4, Curve: types.MemoryCurve{19: 1024},
+							MaxRSSBytes: 1 << 30, CPUMs: 41_000, Slots: 4, Curve: budget.Curve{19: 1024},
 							Charms: []string{"rw"}, ArgsHash: ArgsHash([]string{"-run", "X"})},
 					},
 				},
@@ -1567,7 +1568,7 @@ func TestMeasuredRunsWidthSaturation(t *testing.T) {
 func TestCurveRoundTripsThroughJSONL(t *testing.T) {
 	t.Parallel()
 
-	var curve types.MemoryCurve
+	var curve budget.Curve
 	for i := range curve {
 		curve[i] = uint32(100 * (i + 1))
 	}
@@ -1607,7 +1608,7 @@ func TestProfileIsP90PerBucket(t *testing.T) {
 
 	full := NewShape(nil, nil)
 	run := func(ms int64, first, last uint32) Outcome {
-		var c types.MemoryCurve
+		var c budget.Curve
 		c[0], c[19] = first, last
 		return Outcome{Result: OutcomePass, DurationMs: ms, MaxRSSBytes: int64(max(first, last)) << 20, Curve: c,
 			Charms: full.Charms, ArgsHash: full.ArgsHash}
@@ -1621,7 +1622,7 @@ func TestProfileIsP90PerBucket(t *testing.T) {
 	}}}}}
 
 	got := h.MeasuredRuns().Profile(".", "test", full)
-	want := types.MemoryProfile{D10Ms: 14_000, D90Ms: 46_000, Runs: 5}
+	want := budget.Profile{D10Ms: 14_000, D90Ms: 46_000, Runs: 5}
 	want.Curve[0], want.Curve[19] = 3160, 4600
 	assert.Equal(t, want, got, "each bucket is its own p90: the first's and the last's come from different runs")
 	assert.Less(t, got.Curve.PeakMB(), 5000, "below every run's peak, which a summed peak would claim")
@@ -1634,16 +1635,16 @@ func TestProfileCountsOnlyRunsWithACurve(t *testing.T) {
 	t.Parallel()
 
 	full, extended := NewShape(nil, nil), NewShape([]string{"extended"}, nil)
-	curve := types.MemoryCurve{0: 700}
-	o := func(r OutcomeResult, c types.MemoryCurve, s Shape) Outcome {
+	curve := budget.Curve{0: 700}
+	o := func(r OutcomeResult, c budget.Curve, s Shape) Outcome {
 		return Outcome{Result: r, DurationMs: 1_000, MaxRSSBytes: 900 << 20, Curve: c, Charms: s.Charms, ArgsHash: s.ArgsHash}
 	}
 	h := History{Projects: map[string]map[string]Stats{".": {"magusfile/test": {RecentOutcomes: []Outcome{
 		o(OutcomePass, curve, full),
 		o(OutcomeVolatile, curve, full),
-		o(OutcomeFail, types.MemoryCurve{0: 9000}, full),
-		o(OutcomePass, types.MemoryCurve{}, full),
-		o(OutcomePass, types.MemoryCurve{0: 8000}, extended),
+		o(OutcomeFail, budget.Curve{0: 9000}, full),
+		o(OutcomePass, budget.Curve{}, full),
+		o(OutcomePass, budget.Curve{0: 8000}, extended),
 	}}}}}
 	x := h.MeasuredRuns()
 

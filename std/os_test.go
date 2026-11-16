@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -158,7 +159,7 @@ func TestOsWithSlots(t *testing.T) {
 func TestOsWithSlotsGivesBackHeldSlot(t *testing.T) {
 	lim := cache.NewLimiter(3)
 	require.NoError(t, lim.Acquire(context.Background())) // simulate the held build slot
-	ctx := cache.WithSlotHeld(cache.ContextWithLimiter(context.Background(), lim))
+	ctx := budget.WithSlotHeld(cache.ContextWithLimiter(context.Background(), lim))
 
 	err := ProcWithSlots(ctx, 3, cbFunc(func(context.Context) error {
 		assert.Equal(t, 3, lim.Snapshot().Running, "Running during with_slots (held slot should be handed back)")
@@ -180,7 +181,7 @@ func TestOsWithSlotsReseatsTheJobserver(t *testing.T) {
 	stepCtx, closeStep, err := spawn.SeatJobserver(cache.ContextWithLimiter(context.Background(), lim), 4)
 	require.NoError(t, err)
 	defer closeStep()
-	stepCtx = cache.WithSlotsHeld(stepCtx, 4)
+	stepCtx = budget.WithSlotsHeld(stepCtx, 4)
 
 	// Reads one token only when the pool should hold one: a read on a pool with none
 	// blocks for as long as the test runs.
@@ -969,11 +970,11 @@ func TestRunSeatedSuite(t *testing.T) { suite.Run(t, new(RunSeatedSuite)) }
 func seatLabel(i int) string { return fmt.Sprintf("call %d", i) }
 
 // stepHolding is a context whose step holds n slots of a limiter of capacity.
-func (s *RunSeatedSuite) stepHolding(capacity, n int) (context.Context, *cache.Limiter) {
+func (s *RunSeatedSuite) stepHolding(capacity, n int) (context.Context, *budget.Limiter) {
 	lim := cache.NewLimiter(capacity)
 	s.Require().NoError(lim.AcquireN(s.T().Context(), n))
 	s.T().Cleanup(func() { lim.ReleaseN(n) })
-	return cache.WithSlotsHeld(cache.ContextWithLimiter(s.T().Context(), lim), n), lim
+	return budget.WithSlotsHeld(cache.ContextWithLimiter(s.T().Context(), lim), n), lim
 }
 
 // recorder is a run writer a call can watch from inside the batch.
@@ -1171,7 +1172,7 @@ func BenchmarkRunSeated(b *testing.B) {
 		if err := lim.AcquireN(b.Context(), 8); err != nil {
 			b.Fatal(err)
 		}
-		ctx := cache.WithSlotsHeld(cache.ContextWithLimiter(b.Context(), lim), 8)
+		ctx := budget.WithSlotsHeld(cache.ContextWithLimiter(b.Context(), lim), 8)
 		for b.Loop() {
 			runSeated(ctx, 32, seatLabel, sleep)
 		}

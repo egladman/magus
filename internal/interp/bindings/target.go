@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -423,7 +424,7 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 	lim := cache.LimiterFromContext(ctx)
 	return cache.LendMachineClaim(ctx, func(ctx context.Context) error {
 		return proc.RunChildSync(ctx, lim, func() error {
-			return cd.Dispatch(cache.WithoutSlotHeld(ctx), dep, target)
+			return cd.Dispatch(budget.WithoutSlotHeld(ctx), dep, target)
 		})
 	})
 }

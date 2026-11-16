@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -151,5 +152,5 @@ func TestInstallReachedThroughNeedsRunsAtWidthOne(t *testing.T) {
 	defer cancel()
 	require.NoError(t, pool.Dispatch(ctx, []string{"install"}, nil))
 	assert.True(t, installed.Load())
-	assert.Equal(t, cache.LimiterStats{Capacity: 1}, lim.Snapshot(), "every slot taken was given back")
+	assert.Equal(t, budget.LimiterStats{Capacity: 1}, lim.Snapshot(), "every slot taken was given back")
 }

@@ -188,6 +188,8 @@ linters:
             - github.com/egladman/magus/libs/diagnostics$
             # The version header every record leads with; a leaf library itself.
             - github.com/egladman/magus/libs/apiversion$
+            # The claim and memory types a target's sizing and the broker share.
+            - github.com/egladman/magus/libs/safetyscissors/budget$
             - github.com/egladman/magus/internal/json$
             - github.com/egladman/magus/types/enum$
             - github.com/egladman/magus/types/agent$
@@ -209,7 +211,7 @@ linters:
             - pkg: os/user$
               desc: types is the near-leaf domain package and may not reach the world
             - pkg: github.com/egladman/magus/
-              desc: types may depend on spells, libs/diagnostics, internal/json and its own domain packages, nothing else in magus
+              desc: types may depend on spells, libs/diagnostics, libs/apiversion, libs/safetyscissors/budget, internal/json and its own domain packages, nothing else in magus
 
         # libs/conventions, libs/proofread and libs/testpairing are magus-repo policy, never shipped.
         root-imports-no-repo-policy:

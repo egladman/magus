@@ -92,6 +92,7 @@ require (
 	github.com/egladman/magus/libs/diagnostics v0.2.0
 	github.com/egladman/magus/libs/embed v0.1.0
 	github.com/egladman/magus/libs/gopherbuzz v0.2.0
+	github.com/egladman/magus/libs/safetyscissors v0.1.0
 	github.com/egladman/magus/libs/scipbuzz v0.1.0
 	github.com/egladman/magus/libs/termkit v0.1.0
 	github.com/egladman/magus/libs/text v0.1.0
@@ -149,6 +150,8 @@ replace github.com/egladman/magus/libs/diagnostics => ./libs/diagnostics
 replace github.com/egladman/magus/libs/embed => ./libs/embed
 
 replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz
+
+replace github.com/egladman/magus/libs/safetyscissors => ./libs/safetyscissors
 
 replace github.com/egladman/magus/libs/scipbuzz => ./libs/scipbuzz
 

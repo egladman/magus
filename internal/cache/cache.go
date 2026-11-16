@@ -37,6 +37,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -288,10 +289,10 @@ type Step struct {
 	MemoryDeclaredBy string
 	// MemorySizing says whether MemoryMB is the declaration or a figure sized from
 	// measured runs, so a refusal names where it came from. Never hashed.
-	MemorySizing types.MemorySizing
+	MemorySizing budget.Sizing
 	// MemoryProfile is the curve MemoryMB peaks over, zero when the claim is a peak
 	// held flat. Never hashed.
-	MemoryProfile types.MemoryProfile
+	MemoryProfile budget.Profile
 	// Under is "<project>:<target>" of the composer an inline member runs
 	// under, "" otherwise. Never hashed.
 	Under string
@@ -383,12 +384,12 @@ type stepClaim struct {
 	// MemoryMB and Sizing are the machine claim's memory, zero for a step admitted
 	// beneath an ancestor's claim, which takes none of its own.
 	MemoryMB int
-	Sizing   types.MemorySizing
+	Sizing   budget.Sizing
 }
 
 type runCtx struct {
 	step    *Step
-	limiter *Limiter
+	limiter *budget.Limiter
 	// auditReplay judges the paths a hit just wrote; see AuditReplay.
 	auditReplay func(ctx context.Context, s Step, written []string) error
 	// localHit is the step's key when it was admitted as a local hit; see replayLocal.
@@ -672,7 +673,7 @@ func replayLocal(hash string, files int) RunOption {
 // this step, and a NoCache or SkipReplay step never replays, so none of those hash here.
 // A hashing error answers "" and leaves Run to hash again and report it.
 func (c *Cache) localHitKey(ctx context.Context, s *Step) (string, int) {
-	if c.machine == nil || admissionFromContext(ctx).machineClaim || s.NoCache || s.SkipReplay {
+	if c.machine == nil || budget.MachineClaimHeld(ctx) || s.NoCache || s.SkipReplay {
 		return "", 0
 	}
 	hashCtx, endHash := tracerFromContext(ctx).StartSpan(ctx, "magus.cache.hash")
@@ -756,7 +757,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// that this step's seat is parked rather than working: this lock is one of the two
 	// ways a step blocks while holding its slots.
 	unlock, err := hashLocks.acquireNamed(ctx, hash, stepLabel(s), func(holder string) func() {
-		return BlockedOn(ctx, fmt.Sprintf("the cache lock for %s, held by %s", shortHash(hash), displayLockParty(holder)))
+		return budget.BlockedOn(ctx, fmt.Sprintf("the cache lock for %s, held by %s", shortHash(hash), displayLockParty(holder)))
 	})
 	if err != nil {
 		return result, err
@@ -1308,11 +1309,10 @@ func reproTarget(s Step) string {
 // its members claim their own. The retake is fallible, since a stranger can refuse it
 // after they ran, but a held wait hung on a need shared by siblings filling every slot.
 func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Context, func(), error) {
-	held := admissionFromContext(ctx)
-	if held.machineClaim {
+	if budget.MachineClaimHeld(ctx) {
 		return withMachineHold(ctx, nil), func() {}, nil
 	}
-	h := &machineHold{gate: c.machine, claim: types.MachineClaim{
+	h := &machineHold{gate: c.machine, claim: budget.Claim{
 		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
 		MemoryMB: s.MemoryMB, Profile: s.MemoryProfile, Sizing: s.MemorySizing, Slots: slots,
 		SlotsFloor: min(max(s.SlotsFloor, 0), slots),
@@ -1328,13 +1328,12 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 		return ctx, nil, err
 	}
 	h.id, h.release, h.slots = seat.id, seat.release, seat.slots
-	held.machineClaim = true
 	ctx = withMachineHold(ctx, h)
 	if seat.id != "" {
 		ctx = withStepGroups(ctx, c.machine.admit, h.current)
 		ctx = withOverrunWatch(ctx, c.machine.admit, h.current, s.MemoryProfile)
 	}
-	return held.on(ctx), h.close, nil
+	return budget.WithMachineClaim(ctx, true), h.close, nil
 }
 
 // reportRefusal puts a step that was refused before it started on the record a failed
@@ -1407,13 +1406,12 @@ func withWhy(err error, attrs ...slog.Attr) []any {
 //
 // Factored out of RunAll so work running OUTSIDE the batch is accounted the same way
 // rather than through a second, quietly divergent path; see [Cache.RunAside].
-func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Context, int, func(), error) {
+func (c *Cache) admit(ctx context.Context, s Step, lim *budget.Limiter) (context.Context, int, func(), error) {
 	slots := grantedSlots(ctx, s, stepSlots(s, lim))
-	hold, err := lim.acquireWatched(ctx, slots, stepLabel(s))
+	ctx, releaseSeat, err := lim.Seat(ctx, slots, stepLabel(s))
 	if err != nil {
 		return ctx, 0, nil, err
 	}
-	ctx = withSlotHold(ctx, hold)
 	// Report occupancy on both edges of the slot's life, so an interactive run can show a
 	// live pool counter. Handlers that render no status line ignore the event, so piped
 	// and CI output are unchanged.
@@ -1427,10 +1425,7 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 	prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "running"})
 	return ctx, slots, func() {
 		doneInflight()
-		// Retire the hold before the slots go back, so a peer waking on them never reads
-		// a record that occupies nothing.
-		hold.done()
-		lim.ReleaseN(slots)
+		releaseSeat()
 		c.logPool(ctx, lim)
 		prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "finished"})
 	}, nil
@@ -1524,7 +1519,7 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 }
 
 // runAsideAdmitted is RunAside past the machine claim, which ctx carries if one was taken.
-func (c *Cache) runAsideAdmitted(ctx context.Context, s Step, lim *Limiter, fn func(context.Context) error, opts []RunOption) (Result, error) {
+func (c *Cache) runAsideAdmitted(ctx context.Context, s Step, lim *budget.Limiter, fn func(context.Context) error, opts []RunOption) (Result, error) {
 	ctx, slots, release, err := c.admit(ctx, s, lim)
 	if err != nil {
 		return Result{ProjectPath: s.ProjectPath}, err
@@ -1735,7 +1730,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if key == "" || errors.Is(err, errLocalEntryGone) {
 				ran = false
 				var claim stepClaim
-				if !admissionFromContext(gctx).machineClaim {
+				if !budget.MachineClaimHeld(gctx) {
 					claim.MemoryMB, claim.Sizing = s.MemoryMB, s.MemorySizing
 				}
 				// The machine budget comes before the slot, so a step queues for it holding
@@ -2068,8 +2063,8 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			if strings.HasPrefix(rel, "cas/") {
 				wantSum = path.Base(rel)
 			}
-			budget := c.importLimit()
-			if _, err := writeCacheFile(tr, clean, wantSum, &budget); err != nil {
+			limit := c.importLimit()
+			if _, err := writeCacheFile(tr, clean, wantSum, &limit); err != nil {
 				return fmt.Errorf("magus/cache: import %q: %w", clean, err)
 			}
 		}
@@ -2494,4 +2489,30 @@ func netAttrs(rec *httpx.Recorder) []any {
 		return nil
 	}
 	return []any{slog.Int64("remote_ns", int64(rec.Elapsed()))}
+}
+
+// logPool emits one cache.pool event carrying the limiter's current occupancy, the feed
+// behind the interactive pool status line.
+//
+// The numbers are a point-in-time sample: peers acquire and release while this reads
+// them, so a reader may see a count that never existed at any single instant. Cheap and
+// current is the right trade for a status line, and it is why nothing downstream should
+// compute from these values; [Limiter.Snapshot] is the authoritative view.
+func (c *Cache) logPool(ctx context.Context, lim *budget.Limiter) {
+	if lim == nil {
+		return
+	}
+	// Only a handler with a live region can show this. Emitting regardless would put two
+	// events per step into JSON output on stdout, where machine consumers read results,
+	// and would bury the results in CI logs.
+	ph, ok := c.log.Handler().(*PrettyHandler)
+	if !ok || !ph.RendersBand() {
+		return
+	}
+	s := lim.Snapshot()
+	c.log.LogAttrs(ctx, slog.LevelInfo, "cache.pool",
+		slog.Int("capacity", s.Capacity),
+		slog.Int("running", s.Running),
+		slog.Int("queued", s.Queued),
+	)
 }

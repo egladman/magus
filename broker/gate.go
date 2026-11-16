@@ -6,14 +6,14 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
 // markGateLocked records when sess, a gate, asked for its first claim, and the run its
 // claims belong to, so the magus processes it runs are known as the gate's. Callers hold
 // s.mu.
-func (s *server) markGateLocked(sess *session, c types.MachineClaim) {
+func (s *server) markGateLocked(sess *session, c budget.Claim) {
 	if !sess.hello.Gate || !sess.gateAsked.IsZero() {
 		return
 	}
@@ -23,7 +23,7 @@ func (s *server) markGateLocked(sess *session, c types.MachineClaim) {
 
 // gateLocked is the gate session c runs under: sess itself when it is a gate, else the
 // gate whose run c runs underneath, nil for none. Callers hold s.mu.
-func (s *server) gateLocked(sess *session, c types.MachineClaim) *session {
+func (s *server) gateLocked(sess *session, c budget.Claim) *session {
 	if sess.hello.Gate {
 		return sess
 	}
@@ -57,11 +57,11 @@ func (s *server) aheadLocked(p *parked, atHead bool) *parked {
 
 // requestLocked is the budget's answer to an unparked claim, judged as a parked one is:
 // behind the first gate waiting, when c is no gate's. Callers hold s.mu.
-func (s *server) requestLocked(sess *session, c types.MachineClaim) types.MachineVerdict {
+func (s *server) requestLocked(sess *session, c budget.Claim) budget.Verdict {
 	p := &parked{sess: sess, claim: c, gate: s.gateLocked(sess, c) != nil}
 	if ahead := s.aheadLocked(p, true); ahead != nil {
 		head := ahead.claim
-		head.Slots = cache.SlotsFloor(head)
+		head.Slots = budget.SlotsFloor(head)
 		id := s.budget.Assert(head)
 		defer s.budget.Release(id)
 	}
@@ -97,6 +97,6 @@ func (s *server) enqueueLocked(p *parked) {
 
 // jobWeight is what c weighs in the queue. A run bound to no job, and a job
 // that names no weight, carry zero and weigh the default.
-func jobWeight(c types.MachineClaim) float64 {
+func jobWeight(c budget.Claim) float64 {
 	return cmp.Or(c.Weight, types.DefaultJobWeight)
 }

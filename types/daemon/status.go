@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 	"time"
 )
@@ -252,7 +253,7 @@ type Broker struct {
 	StartTime  time.Time `json:"start_time" yaml:"start_time"`
 	// Capacity is the whole budget, what is held, every claim holding it, and every
 	// request it holds until the budget can answer it.
-	Capacity types.MachineSnapshot `json:"capacity" yaml:"capacity"`
+	Capacity budget.Snapshot `json:"capacity" yaml:"capacity"`
 	// Services are the shared services it hosts right now.
 	Services []Service `json:"services,omitempty" yaml:"services,omitempty"`
 	// IdleExitSeconds is how long the broker stays up once it holds nothing: no claim,

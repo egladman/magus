@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -56,14 +57,14 @@ func TestDecideGateMatrix(t *testing.T) {
 func TestPoolSaturated(t *testing.T) {
 	cases := []struct {
 		name string
-		snap *types.MachineSnapshot
+		snap *budget.Snapshot
 		want bool
 	}{
 		{"nil snapshot fails open", nil, false},
-		{"idle", &types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2}, false},
-		{"all slots held", &types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8}, true},
-		{"all memory held", &types.MachineSnapshot{BudgetMB: 1000, HeldMB: 1000}, true},
-		{"unlimited axes never saturate", &types.MachineSnapshot{HeldSlots: 100, HeldMB: 100000}, false},
+		{"idle", &budget.Snapshot{BudgetSlots: 8, HeldSlots: 2}, false},
+		{"all slots held", &budget.Snapshot{BudgetSlots: 8, HeldSlots: 8}, true},
+		{"all memory held", &budget.Snapshot{BudgetMB: 1000, HeldMB: 1000}, true},
+		{"unlimited axes never saturate", &budget.Snapshot{HeldSlots: 100, HeldMB: 100000}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -702,11 +703,11 @@ func TestGateRunsWhenTheRepairProbeIsMissingOrFails(t *testing.T) {
 }
 
 func TestDescribePoolSaysWhatItSaw(t *testing.T) {
-	saturated, state := DescribePool(&types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8})
+	saturated, state := DescribePool(&budget.Snapshot{BudgetSlots: 8, HeldSlots: 8})
 	assert.True(t, saturated)
 	assert.Equal(t, "saturated: 8 of 8 slots held", state)
 
-	saturated, state = DescribePool(&types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2})
+	saturated, state = DescribePool(&budget.Snapshot{BudgetSlots: 8, HeldSlots: 2})
 	assert.False(t, saturated)
 	assert.Equal(t, "idle: 2 of 8 slots held", state)
 }

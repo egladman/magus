@@ -20,7 +20,7 @@ const (
 	// it a build is using the machine, which is what a build is for.
 	//
 	// Low headroom only warns. What magus queues on is the DECLARED budget,
-	// cache.MachineBudget, and what it refuses on besides is ReadPressure.
+	// budget.Machine, and what it refuses on besides is ReadPressure.
 	LowHeadroomDivisor = 8
 
 	// reWarnDropBytes is how much further the floor must fall before saying so

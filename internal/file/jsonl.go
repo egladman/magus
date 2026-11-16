@@ -17,6 +17,8 @@ import (
 
 // A store is JSON Lines: one object per line, appended when an entry changes, the last line
 // for a key being the entry. See docs/design/principles/everything-is-a-file.md.
+// libs/safetyscissors/internal/jsonl copies this and lock.go, because that module may not
+// import magus.
 
 // Lines is what [ReadLines] found in a JSON Lines file.
 type Lines struct {

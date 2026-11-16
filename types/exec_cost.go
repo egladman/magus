@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 )
 
 // Peak resident memory and CPU time, collected per target execution.
@@ -161,8 +163,8 @@ func (c *execCost) notify(at time.Duration, held int64) {
 // elapsed time at the call: each bucket sums, across execs, each exec's largest
 // sample in that bucket. A sample past the elapsed time lands in the last bucket.
 // The zero curve means nothing was sampled.
-func Curve(ctx context.Context) MemoryCurve {
-	var out MemoryCurve
+func Curve(ctx context.Context) budget.Curve {
+	var out budget.Curve
 	c, ok := ctx.Value(execCostKey{}).(*execCost)
 	if !ok {
 		return out
@@ -176,13 +178,13 @@ func Curve(ctx context.Context) MemoryCurve {
 }
 
 // binSums returns the curve in bytes. Callers hold c.mu.
-func (c *execCost) binSums() [MemoryCurveBuckets]int64 {
-	var sums [MemoryCurveBuckets]int64
-	width := max(c.now().Sub(c.start)/MemoryCurveBuckets, 1)
+func (c *execCost) binSums() [budget.CurveBuckets]int64 {
+	var sums [budget.CurveBuckets]int64
+	width := max(c.now().Sub(c.start)/budget.CurveBuckets, 1)
 	for _, series := range c.series {
-		var peaks [MemoryCurveBuckets]int64
+		var peaks [budget.CurveBuckets]int64
 		for _, s := range series.samples {
-			bin := min(max(int(s.At/width), 0), MemoryCurveBuckets-1)
+			bin := min(max(int(s.At/width), 0), budget.CurveBuckets-1)
 			peaks[bin] = max(peaks[bin], s.Bytes)
 		}
 		for i, p := range peaks {
@@ -235,4 +237,11 @@ func CPUMs(ctx context.Context) int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.cpuMs
+}
+
+// MemorySample is one reading of a process tree's resident memory, taken At after
+// the exec started.
+type MemorySample struct {
+	At    time.Duration
+	Bytes int64
 }

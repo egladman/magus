@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -14,17 +15,17 @@ import (
 // no cache entry. Its cost stays off the collector of the body it runs in.
 func TestRunInlineClaimsSlotsAndMemoryWithoutACacheEntry(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
-	b, _ := testBudget(t, 10_000, 8)
+	b := testBudget(t, 10_000, 8)
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 	member := Step{ProjectPath: ".", Target: "conventions", MemoryMB: 4000, Slots: 3, Under: ".:lint"}
 	composer := types.WithExecCost(t.Context())
 
-	var held types.MachineSnapshot
+	var held budget.Snapshot
 	var slots int
 	var peak int64
 	err = c.RunInline(composer, member, func(ctx context.Context) error {
-		held, slots = b.Snapshot(), SlotsHeld(ctx)
+		held, slots = b.Snapshot(), budget.SlotsHeld(ctx)
 		types.RecordPeakRSS(ctx, 4096)
 		peak = types.PeakRSS(ctx)
 		return nil
@@ -46,7 +47,7 @@ func TestRunInlineClaimsSlotsAndMemoryWithoutACacheEntry(t *testing.T) {
 // a holder does: a second claim queued behind its own composer never seats.
 func TestRunInlineRidesAClaimItsComposerStillHolds(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
-	b, _ := testBudget(t, 10_000, 8)
+	b := testBudget(t, 10_000, 8)
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 	lim := WithLimiter(NewLimiter(8))
@@ -68,8 +69,8 @@ func TestRunInlineRidesAClaimItsComposerStillHolds(t *testing.T) {
 // a claim, its slots and the inflight record, then their release.
 func BenchmarkInlineMemberAdmission(b *testing.B) {
 	b.Setenv("MAGUS_LEVEL", "")
-	budget := NewMachineBudget(1<<20, 1<<10)
-	c, err := Open(b.Context(), b.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: budget}, 0))
+	machine := budget.NewMachine(1<<20, 1<<10)
+	c, err := Open(b.Context(), b.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: machine}, 0))
 	require.NoError(b, err)
 	lim := WithLimiter(NewLimiter(8))
 	member := Step{ProjectPath: ".", Target: "conventions", MemoryMB: 4000, Slots: 2, Under: ".:lint"}

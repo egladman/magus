@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 	"io"
 	"log/slog"
@@ -13,10 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/types"
 )
 
 // DefaultIdleExit is how long a broker stays up once it holds nothing. Longer than the
@@ -46,7 +46,7 @@ type Option func(*serveOptions)
 
 type serveOptions struct {
 	budgetMB, budgetSlots int
-	reserve               types.MemoryReserve
+	reserve               budget.Reserve
 	services              ServiceHost
 	idleExit              time.Duration
 	log                   *slog.Logger
@@ -54,7 +54,7 @@ type serveOptions struct {
 	drain                 <-chan struct{}
 	drainGrace            time.Duration
 	crashDir              string
-	admissions            *file.Log[types.MachineAdmission]
+	admissions            *file.Log[budget.Admission]
 }
 
 // WithCapacity sizes the host's budget. A non-positive figure leaves that axis
@@ -65,7 +65,7 @@ func WithCapacity(memoryMB, slots int) Option {
 
 // WithMemoryReserve names what the memory budget leaves the OS, so status can
 // say where the figure came from.
-func WithMemoryReserve(r types.MemoryReserve) Option {
+func WithMemoryReserve(r budget.Reserve) Option {
 	return func(o *serveOptions) { o.reserve = r }
 }
 
@@ -120,7 +120,7 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 	s := &server{
 		handshake:  handshake,
 		opts:       o,
-		budget:     cache.NewMachineBudget(o.budgetMB, o.budgetSlots).WithReserve(o.reserve),
+		budget:     budget.NewMachine(o.budgetMB, o.budgetSlots).WithReserve(o.reserve).WithWrappers(types.IsWrapperInvocation),
 		socket:     "unix://" + ln.Addr().String(),
 		executable: exe,
 		started:    time.Now(),
@@ -197,7 +197,7 @@ loop:
 
 type server struct {
 	opts       serveOptions
-	budget     *cache.MachineBudget
+	budget     *budget.Machine
 	socket     string
 	handshake  string
 	executable string
@@ -510,14 +510,14 @@ func (s *server) dispatch(ctx context.Context, sess *session, w *frameWriter, f 
 			s.park(&parked{sess: sess, w: w, id: f.ID, kind: "claim", since: time.Now(), claim: c, try: s.claimTry(sess, c)})
 			return
 		}
-		var v types.MachineVerdict
+		var v budget.Verdict
 		// Held across the grant so a drain starting now cannot count holders between a
 		// claim being seated and being recorded against its connection.
 		s.mu.Lock()
 		switch {
 		case req.Reassert:
 			s.seatLocked(sess, c, true)
-			v = types.MachineVerdict{Granted: true, Fits: true, ID: s.budget.Assert(c)}
+			v = budget.Verdict{Granted: true, Fits: true, ID: s.budget.Assert(c)}
 		case s.draining:
 			s.mu.Unlock()
 			_ = w.write(typeError, f.ID, s.drainingError())
@@ -526,7 +526,7 @@ func (s *server) dispatch(ctx context.Context, sess *session, w *frameWriter, f 
 			// A run kept out by its tree's validation cap waits, as one kept out by its own
 			// run's steps does, and the reply says whose run holds the seat.
 			if wait := s.seatLocked(sess, c, false); wait != nil {
-				v = types.MachineVerdict{Fits: true, OwnRun: true}
+				v = budget.Verdict{Fits: true, OwnRun: true}
 				s.mu.Unlock()
 				_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: v, Seat: wait})
 				return
@@ -697,7 +697,7 @@ func (s *server) dispatch(ctx context.Context, sess *session, w *frameWriter, f 
 
 // attribute fills in who holds a claim from the connection's hello, where the claim
 // left it out.
-func (s *server) attribute(sess *session, c types.MachineClaim) types.MachineClaim {
+func (s *server) attribute(sess *session, c budget.Claim) budget.Claim {
 	if c.PID == 0 {
 		c.PID = sess.hello.PID
 	}

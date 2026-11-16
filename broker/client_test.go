@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -46,7 +47,7 @@ func TestReleaseDuringReassertReachesTheNewBroker(t *testing.T) {
 	addr := testAddr(t)
 	stopFirst, _ := serve(t, addr, WithCapacity(1000, 4))
 	c := dial(t, addr)
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 900})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 900})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 	stopFirst()
@@ -72,7 +73,7 @@ func TestReleaseDuringReassertReachesTheNewBroker(t *testing.T) {
 			return
 		}
 		c.Release(context.Background(), v.ID)
-		_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: types.MachineVerdict{Granted: true, ID: "reasserted"}})
+		_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: budget.Verdict{Granted: true, ID: "reasserted"}})
 		f, err = r.read()
 		if err != nil || f.Type != typeRelease {
 			return
@@ -157,7 +158,7 @@ func standIn(ln net.Listener, n string, refuse bool, drop <-chan struct{}) {
 		case typeHello:
 			_ = w.write(typeHelloReply, f.ID, helloReply{PID: os.Getpid(), Protocol: APIVersion})
 		case typeClaim:
-			_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: types.MachineVerdict{Granted: true, Fits: true, ID: "remote-" + n}})
+			_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: budget.Verdict{Granted: true, Fits: true, ID: "remote-" + n}})
 		case typeHold:
 			if refuse {
 				_ = w.write(typeError, f.ID, errorReply{Code: CodeUnknownType, Message: "no such claim"})
@@ -189,7 +190,7 @@ func TestReassertWarnsOnceWhenTheNewBrokerRefusesGroupHolds(t *testing.T) {
 	go standIn(ln, "1", false, drop)
 	c := dial(t, addr)
 	t.Cleanup(func() { _ = c.Close() })
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: "libs/xdg", Target: "go-test", MemoryMB: 100})
+	v, err := c.Request(t.Context(), budget.Claim{Project: "libs/xdg", Target: "go-test", MemoryMB: 100})
 	require.NoError(t, err)
 	_, err = c.HoldGroup(t.Context(), v.ID, 4242, "sleep 30")
 	require.NoError(t, err)
@@ -234,7 +235,7 @@ func TestOverrunRoundTripAndAnOlderBroker(t *testing.T) {
 			case typeHello:
 				_ = w.write(typeHelloReply, f.ID, helloReply{PID: os.Getpid(), Protocol: APIVersion})
 			case typeClaim:
-				_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: types.MachineVerdict{Granted: true, Fits: true, ID: "remote-1"}})
+				_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: budget.Verdict{Granted: true, Fits: true, ID: "remote-1"}})
 			case typeOverrun:
 				var req overrunRequest
 				if decodeBody(f, &req) == nil {
@@ -254,7 +255,7 @@ func TestOverrunRoundTripAndAnOlderBroker(t *testing.T) {
 	}()
 
 	c := dial(t, addr)
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 900})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 900})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 

@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
@@ -90,7 +91,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"broker off · no server\n")
 
 	assertCompact("a broker that measured the host shows its seated slots",
-		daemon.Snapshot{Broker: &daemon.Broker{Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 3}}},
+		daemon.Snapshot{Broker: &daemon.Broker{Capacity: budget.Snapshot{BudgetSlots: 8, HeldSlots: 3}}},
 		"broker 3/8 slots · no server\n")
 
 	assertCompact("server idle",
@@ -331,9 +332,9 @@ func TestBrokerRowsNameEveryClaim(t *testing.T) {
 	var buf bytes.Buffer
 	PrintBrokerRows(&buf, daemon.Broker{
 		PID: 48213,
-		Capacity: types.MachineSnapshot{
+		Capacity: budget.Snapshot{
 			BudgetMB: 48 << 10, HeldMB: 10 << 10, BudgetSlots: 8, HeldSlots: 6,
-			Holders: []types.MachineClaimant{
+			Holders: []budget.Claimant{
 				{Project: ".", Target: "test", PID: 41221, MemoryMB: 10 << 10, Slots: 4, Dir: "/tree/polish", Command: "magus affected ci", Since: time.Now().Add(-90 * time.Second)},
 				{Project: "docs", Target: "ci", PID: 41999, Slots: 2, Dir: "/tree/hardening"},
 			},
@@ -358,17 +359,17 @@ func TestBrokerRowsNameOwnersWaitersAndRefusals(t *testing.T) {
 	var buf bytes.Buffer
 	PrintBrokerRows(&buf, daemon.Broker{
 		PID: 48213,
-		Capacity: types.MachineSnapshot{
+		Capacity: budget.Snapshot{
 			BudgetSlots: 8, HeldSlots: 8,
-			Holders: []types.MachineClaimant{{Project: ".", Target: "test", PID: 41221, Slots: 8, Dir: "/tree/polish", Owner: "fix-cache"}},
-			Waiting: []types.MachineWaiter{
+			Holders: []budget.Claimant{{Project: ".", Target: "test", PID: 41221, Slots: 8, Dir: "/tree/polish", Owner: "fix-cache"}},
+			Waiting: []budget.Waiter{
 				{PID: 41300, Project: ".", Target: "lint", Slots: 2, Dir: "/tree/a", Owner: "unleased", Since: now.Add(-time.Minute)},
 				{PID: 41301, Project: "docs", Target: "ci", Owner: "job-b", Tree: "root-job", Since: now},
 			},
-			Refused: []types.MachineAdmission{{
+			Refused: []budget.Admission{{
 				At: now.Add(-2 * time.Minute), PID: 41400, Project: ".", Target: "ci", Slots: 4, Dir: "/tree/b",
 				Owner: "spawned by root", Fits: true,
-				Holders: []types.MachineClaimant{{PID: 41221, Owner: "fix-cache"}, {PID: 41222}},
+				Holders: []budget.Claimant{{PID: 41221, Owner: "fix-cache"}, {PID: 41222}},
 			}},
 		},
 	}, types.BrokerRequired, now)
@@ -387,7 +388,7 @@ func TestBrokerRowsNameEveryParkedRequest(t *testing.T) {
 	var buf bytes.Buffer
 	PrintBrokerRows(&buf, daemon.Broker{
 		PID: 48213,
-		Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8, Waiting: []types.MachineWaiter{
+		Capacity: budget.Snapshot{BudgetSlots: 8, HeldSlots: 8, Waiting: []budget.Waiter{
 			{Project: "docs", Target: "lint", PID: 41300, MemoryMB: 2 << 10, Slots: 2, Dir: "/tree/polish", Command: "magus run lint docs"},
 		}},
 	}, types.BrokerRequired, time.Now())
@@ -400,9 +401,9 @@ func TestBrokerRowsNameEveryParkedRequest(t *testing.T) {
 // magusfile declares and a reader comparing the two would otherwise see a mismatch.
 func TestHolderMemTextNamesTheSizing(t *testing.T) {
 	assert.Equal(t, "mem 5.7 GiB measured over 54 runs",
-		holderMemText(types.MachineClaimant{MemoryMB: 5879, Sizing: types.MemorySizing{Samples: 54}}))
-	assert.Equal(t, "mem 10.0 GiB", holderMemText(types.MachineClaimant{MemoryMB: 10 << 10}), "a declaration reads bare")
-	assert.Empty(t, holderMemText(types.MachineClaimant{Slots: 2}), "a slots-only claim has no memory to explain")
+		holderMemText(budget.Claimant{MemoryMB: 5879, Sizing: budget.Sizing{Samples: 54}}))
+	assert.Equal(t, "mem 10.0 GiB", holderMemText(budget.Claimant{MemoryMB: 10 << 10}), "a declaration reads bare")
+	assert.Empty(t, holderMemText(budget.Claimant{Slots: 2}), "a slots-only claim has no memory to explain")
 }
 
 // TestStatusBreaksDownOnlyHoldersOverAQuarterOfTheBudget: a big claim says
@@ -411,8 +412,8 @@ func TestStatusBreaksDownOnlyHoldersOverAQuarterOfTheBudget(t *testing.T) {
 	var buf bytes.Buffer
 	PrintBrokerRows(&buf, daemon.Broker{
 		PID: 1,
-		Capacity: types.MachineSnapshot{BudgetMB: 16 << 10, BudgetSlots: 8, Holders: []types.MachineClaimant{
-			{Project: ".", Target: "test", PID: 10, MemoryMB: 5 << 10, Sizing: types.MemorySizing{Samples: 54}},
+		Capacity: budget.Snapshot{BudgetMB: 16 << 10, BudgetSlots: 8, Holders: []budget.Claimant{
+			{Project: ".", Target: "test", PID: 10, MemoryMB: 5 << 10, Sizing: budget.Sizing{Samples: 54}},
 			{Project: ".", Target: "lint", PID: 11, MemoryMB: 1 << 10},
 		}},
 	}, types.BrokerRequired, time.Now())
@@ -424,7 +425,7 @@ func TestStatusBreaksDownOnlyHoldersOverAQuarterOfTheBudget(t *testing.T) {
 // question people open status to ask, and a silent section reads as a missing feature.
 func TestBrokerRowsIdle(t *testing.T) {
 	var idle bytes.Buffer
-	PrintBrokerRows(&idle, daemon.Broker{PID: 7, Capacity: types.MachineSnapshot{BudgetMB: 48 << 10, BudgetSlots: 8}}, "", time.Now())
+	PrintBrokerRows(&idle, daemon.Broker{PID: 7, Capacity: budget.Snapshot{BudgetMB: 48 << 10, BudgetSlots: 8}}, "", time.Now())
 	assert.Contains(t, idle.String(), "slots 0/8  mem 0 MiB/48.0 GiB  broker: best-effort")
 	assert.NotContains(t, idle.String(), "held")
 }
@@ -713,7 +714,7 @@ func statusFixture(now time.Time) daemon.Snapshot {
 		BrokerPolicy: types.BrokerBestEffort,
 		Broker: &daemon.Broker{
 			PID: 48213, Protocol: "magus.broker/v1alpha1", Socket: "unix:///run/magus/" + broker.SocketName, StartTime: now.Add(-time.Hour),
-			Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2, BudgetMB: 4096, HeldMB: 1024},
+			Capacity: budget.Snapshot{BudgetSlots: 8, HeldSlots: 2, BudgetMB: 4096, HeldMB: 1024},
 			Services: []daemon.Service{
 				{ID: "svc-db", Label: "postgres", Command: "docker compose up db", Ports: []string{"5432"}, State: daemon.ServiceRunning, Dependents: 2},
 				{ID: "svc-bare"},
@@ -1087,14 +1088,14 @@ func TestCapacityReserveSuite(t *testing.T) { suite.Run(t, new(CapacityReserveSu
 
 func (s *CapacityReserveSuite) TestTheMemoryFigureNamesWhatItLeftTheOS() {
 	s.Equal("slots 8/10  mem 14.4 GiB/21.0 GiB (24.0 GiB less 3.0 GiB: the aggressive profile keeps 1/8, at least 1 GiB)",
-		capacityText(types.MachineSnapshot{
+		capacityText(budget.Snapshot{
 			BudgetSlots: 10, HeldSlots: 8, BudgetMB: 21504, HeldMB: 14746,
-			Reserve: types.MemoryReserve{TotalMB: 24576, ReservedMB: 3072, Rule: "the aggressive profile keeps 1/8, at least 1 GiB"},
+			Reserve: budget.Reserve{TotalMB: 24576, ReservedMB: 3072, Rule: "the aggressive profile keeps 1/8, at least 1 GiB"},
 		}))
 }
 
 func (s *CapacityReserveSuite) TestABrokerThatSendsNoReserveShowsTheBudgetAlone() {
-	s.Equal("mem 1.0 GiB/4.0 GiB", capacityText(types.MachineSnapshot{BudgetMB: 4096, HeldMB: 1024}))
+	s.Equal("mem 1.0 GiB/4.0 GiB", capacityText(budget.Snapshot{BudgetMB: 4096, HeldMB: 1024}))
 }
 
 func TestBrokerDownRowNamesThePolicy(t *testing.T) {

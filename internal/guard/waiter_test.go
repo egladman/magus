@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -289,10 +290,10 @@ func TestSleepPollLeavesTheOrchestratorsBudgetWait(t *testing.T) {
 func TestBudgetFullSaysHowFullAndWhatHoldsIt(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	assert.Empty(t, BudgetFull(types.MachineSnapshot{}, now), "an unmeasured budget")
-	assert.Empty(t, BudgetFull(types.MachineSnapshot{BudgetSlots: 4, HeldSlots: 3, BudgetMB: 8192, HeldMB: 1024}, now))
+	assert.Empty(t, BudgetFull(budget.Snapshot{}, now), "an unmeasured budget")
+	assert.Empty(t, BudgetFull(budget.Snapshot{BudgetSlots: 4, HeldSlots: 3, BudgetMB: 8192, HeldMB: 1024}, now))
 
-	full := BudgetFull(types.MachineSnapshot{BudgetSlots: 4, HeldSlots: 2, BudgetMB: 8192, HeldMB: 8192, Holders: []types.MachineClaimant{
+	full := BudgetFull(budget.Snapshot{BudgetSlots: 4, HeldSlots: 2, BudgetMB: 8192, HeldMB: 8192, Holders: []budget.Claimant{
 		{Target: "go-test", Dir: "/w/a", Since: now.Add(-90 * time.Second)},
 	}}, now)
 	assert.Contains(t, full, "the build budget is full (mem ")
@@ -528,7 +529,7 @@ func TestSleepPollRefusesAProcessWaitOnARunHoldingASeat(t *testing.T) {
 	worker := figuresLease()
 	worker.Parent = "figures"
 	ctx, _ := fleetFixture(t, worker)
-	standBudget(t, types.MachineSnapshot{Holders: []types.MachineClaimant{{PID: 4242, Target: "go-test", Project: "."}}})
+	standBudget(t, budget.Snapshot{Holders: []budget.Claimant{{PID: 4242, Target: "go-test", Project: "."}}})
 	for _, line := range []string{
 		"caffeinate -w 4242",
 		"caffeinate -i -w 4242",

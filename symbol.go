@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"maps"
@@ -778,7 +779,7 @@ func (m *Magus) admitSymbolRefresh(ctx context.Context) (func(), error) {
 		return func() {}, nil
 	}
 	policy := cmp.Or(m.brokerPolicy, m.cfg.Broker)
-	return cache.AdmitMachine(ctx, m.broker, types.MachineClaim{
+	return cache.AdmitMachine(ctx, m.broker, budget.Claim{
 		Project:  ".",
 		Target:   "symbol-refresh",
 		MemoryMB: symbolRefreshMemoryMB,

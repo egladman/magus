@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 )
@@ -311,15 +312,15 @@ func printServerRows(w io.Writer, st *daemon.Server, now time.Time) {
 }
 
 // capacityText is the capacity row's figures: slots and memory held of the whole.
-func capacityText(c types.MachineSnapshot) string {
+func capacityText(c budget.Snapshot) string {
 	parts := make([]string, 0, 2)
 	if c.BudgetSlots > 0 {
 		parts = append(parts, fmt.Sprintf("slots %d/%d", c.HeldSlots, c.BudgetSlots))
 	}
 	if c.BudgetMB > 0 {
-		mem := fmt.Sprintf("mem %s/%s", types.FormatMB(c.HeldMB), types.FormatMB(c.BudgetMB))
+		mem := fmt.Sprintf("mem %s/%s", budget.FormatMB(c.HeldMB), budget.FormatMB(c.BudgetMB))
 		if r := c.Reserve; r.TotalMB > 0 {
-			mem += fmt.Sprintf(" (%s less %s: %s)", types.FormatMB(r.TotalMB), types.FormatMB(r.ReservedMB), r.Rule)
+			mem += fmt.Sprintf(" (%s less %s: %s)", budget.FormatMB(r.TotalMB), budget.FormatMB(r.ReservedMB), r.Rule)
 		}
 		parts = append(parts, mem)
 	}
@@ -333,13 +334,13 @@ func mbText(prefix string, mb int) string {
 	if mb <= 0 {
 		return ""
 	}
-	return prefix + types.FormatMB(mb)
+	return prefix + budget.FormatMB(mb)
 }
 
 // holderMemText is a holder's memory claim, naming the runs it was measured over when
 // it was sized from them. A bare figure is a declaration: a claimant recorded by a magus
 // that does not report sizing reads the same way, which is what it claimed.
-func holderMemText(h types.MachineClaimant) string {
+func holderMemText(h budget.Claimant) string {
 	text := mbText("mem ", h.MemoryMB)
 	if text != "" && h.Sizing.Measured() {
 		text += " " + h.Sizing.String()
@@ -349,12 +350,12 @@ func holderMemText(h types.MachineClaimant) string {
 
 // holdsOverAQuarter reports a holder big enough that where its figure came
 // from is worth a row.
-func holdsOverAQuarter(h types.MachineClaimant, budgetMB int) bool {
+func holdsOverAQuarter(h budget.Claimant, budgetMB int) bool {
 	return budgetMB > 0 && h.MemoryMB*4 > budgetMB
 }
 
 // refusedHoldersText names the holders that kept a refused claim out, by pid and owner.
-func refusedHoldersText(holders []types.MachineClaimant) string {
+func refusedHoldersText(holders []budget.Claimant) string {
 	if len(holders) == 0 {
 		return ""
 	}

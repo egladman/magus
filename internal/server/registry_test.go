@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/daemon"
 
 	"github.com/egladman/magus"
@@ -57,7 +58,7 @@ func newTestRegistry() *wsRegistry {
 // scriptedOpens makes r.open fail until ok is closed, counting every attempt.
 func scriptedOpens(r *wsRegistry, ok <-chan struct{}) *atomic.Int32 {
 	var n atomic.Int32
-	r.open = func(root string, _ *cache.Limiter, _ *broker.Client, _ observability.Provider) (*magus.Magus, error) {
+	r.open = func(root string, _ *budget.Limiter, _ *broker.Client, _ observability.Provider) (*magus.Magus, error) {
 		n.Add(1)
 		select {
 		case <-ok:
@@ -411,7 +412,7 @@ func (s *RegistryLeaseSuite) SetupTest() {
 		s.dialed = append(s.dialed, lease)
 		return broker.NewClient("unix:///nonexistent/" + lease)
 	}
-	s.r.open = func(_ string, _ *cache.Limiter, b *broker.Client, _ observability.Provider) (*magus.Magus, error) {
+	s.r.open = func(_ string, _ *budget.Limiter, b *broker.Client, _ observability.Provider) (*magus.Magus, error) {
 		s.opened = append(s.opened, b)
 		return &magus.Magus{}, nil
 	}
@@ -659,7 +660,7 @@ func TestWarmInBackgroundTrackedByClose(t *testing.T) {
 }
 
 // testOpen opens root as a library caller would.
-func testOpen(root string, lim *cache.Limiter, _ *broker.Client, _ observability.Provider) (*magus.Magus, error) {
+func testOpen(root string, lim *budget.Limiter, _ *broker.Client, _ observability.Provider) (*magus.Magus, error) {
 	cfg, err := LoadWorkspaceConfig(root)
 	if err != nil {
 		return nil, fmt.Errorf("load config %s: %w", root, err)
@@ -669,6 +670,6 @@ func testOpen(root string, lim *cache.Limiter, _ *broker.Client, _ observability
 
 // newTestRegistryAt is newRegistry opening workspaces as a library caller would, with the
 // janitor running.
-func newTestRegistryAt(ctx context.Context, lim *cache.Limiter, b *broker.Client, ttl time.Duration, tel observability.Provider) *wsRegistry {
+func newTestRegistryAt(ctx context.Context, lim *budget.Limiter, b *broker.Client, ttl time.Duration, tel observability.Provider) *wsRegistry {
 	return newRegistry(ctx, lim, b, ttl, tel, RegistryDeps{Open: testOpen, LeaseOf: func(string) string { return "" }})
 }

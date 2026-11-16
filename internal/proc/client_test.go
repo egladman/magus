@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -184,7 +185,7 @@ func TestRunChildSyncSlotLending(t *testing.T) {
 	t.Parallel()
 	lim := cache.NewLimiter(2)
 	// The caller holds a slot, so RunChildSync lends it for the child's duration.
-	ctx := cache.WithSlotHeld(context.Background())
+	ctx := budget.WithSlotHeld(context.Background())
 
 	// Acquire both slots so the limiter is saturated.
 	require.NoError(t, lim.Acquire(ctx))

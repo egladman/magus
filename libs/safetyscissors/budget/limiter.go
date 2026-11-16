@@ -1,17 +1,16 @@
-package cache
+package budget
 
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/semaphore"
 )
 
-// Limiter is a FIFO-fair weighted semaphore that bounds concurrent work and
-// exposes live occupancy metrics for the pool inspector.
+// Limiter is a FIFO-fair weighted semaphore that bounds concurrent work in one process
+// and exposes live occupancy. It is safe for concurrent use.
 type Limiter struct {
 	sem     *semaphore.Weighted
 	cap     int
@@ -19,11 +18,37 @@ type Limiter struct {
 	queued  atomic.Int64
 	// watch records who holds the slots and what each holder is waiting on, so a wait
 	// nothing in this process can end is refused rather than hung. Nil on an unlimited
-	// limiter, where no caller ever queues. See deadlock.go.
+	// limiter, where no caller ever queues. See watch.go.
 	watch *slotWatch
 
 	hook atomic.Pointer[func(PoolEvent)]
 }
+
+// LimiterOption configures a [Limiter] at construction.
+type LimiterOption func(*limiterOptions)
+
+type limiterOptions struct {
+	refusal func(SlotDeadlock) error
+	grace   time.Duration
+}
+
+// WithRefusal sets the error a wedged pool hands every waiter, built from what the
+// limiter saw. Without it the waiters get the [SlotDeadlock] itself.
+func WithRefusal(fn func(SlotDeadlock) error) LimiterOption {
+	return func(o *limiterOptions) { o.refusal = fn }
+}
+
+// WithDeadlockGrace sets how long the pool must stay wedged before a wait is refused.
+// The default is [DefaultDeadlockGrace].
+func WithDeadlockGrace(d time.Duration) LimiterOption {
+	return func(o *limiterOptions) { o.grace = d }
+}
+
+// DefaultDeadlockGrace is how long a pool must stay wedged before the wait is called
+// impossible. A hand-off is not instantaneous: a step releases its slots in a defer while
+// the peer that wanted them is already queued, so a sample taken in that window shows
+// every slot held with nobody running. The grace outlives that window and nothing else.
+const DefaultDeadlockGrace = 3 * time.Second
 
 // PoolEvent is one change to a Limiter's slots; exactly one of Queued and Running is
 // non-zero. Queued is +n the instant a caller begins waiting for n slots (before the
@@ -55,10 +80,14 @@ func (l *Limiter) fire(ev PoolEvent) {
 	}
 }
 
-// NewLimiter returns a Limiter with capacity n. n <= 0 means unlimited
-// (Acquire and AcquireN always succeed immediately).
-func NewLimiter(n int) *Limiter {
-	l := &Limiter{cap: n, watch: newSlotWatch(n)}
+// NewLimiter returns a Limiter with capacity n. n <= 0 means unlimited (Acquire and
+// AcquireN always succeed immediately).
+func NewLimiter(n int, opts ...LimiterOption) *Limiter {
+	o := limiterOptions{grace: DefaultDeadlockGrace}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	l := &Limiter{cap: n, watch: newSlotWatch(n, o)}
 	if n > 0 {
 		l.sem = semaphore.NewWeighted(int64(n))
 	}
@@ -71,12 +100,9 @@ func (l *Limiter) Acquire(ctx context.Context) error {
 	return l.AcquireN(ctx, 1)
 }
 
-// AcquireN acquires n slots under FIFO fairness. n < 1 is floored to 1 (a defensive
-// guard; every real caller already passes >= 1). A request above capacity can never
-// be satisfied by any wait, so it fails immediately rather than blocking forever;
-// callers decide whether to clamp first (RunAll, where a slot count is a coarse
-// throttle) or surface the error (os.with_slots/archive, where reserving more slots
-// than exist would desync the reservation from the tool's own worker count). Returns
+// AcquireN acquires n slots under FIFO fairness. n < 1 is floored to 1. A request above
+// capacity can never be satisfied by any wait, so it fails immediately rather than
+// blocking forever; callers decide whether to clamp first or surface the error. Returns
 // ctx.Err() on cancellation.
 func (l *Limiter) AcquireN(ctx context.Context, n int) error {
 	if l.sem == nil {
@@ -119,16 +145,15 @@ func (l *Limiter) ReleaseN(n int) {
 }
 
 // Yield releases the caller's slots for the duration of fn and re-acquires them before
-// returning. It releases every slot the caller holds (SlotsHeld(ctx), floored at 1): a
+// returning. It releases every slot the caller holds ([SlotsHeld], floored at 1): a
 // weighted step that released only one would pin the rest while fn's own AcquireN blocks
 // on them. Re-acquire uses a non-cancellable context so the caller always returns holding
-// its slots (RunAll releases unconditionally; a slotless return would panic), and it
-// re-enters the FIFO queue at the back.
+// its slots, and it re-enters the FIFO queue at the back.
 //
-// Every holder takes its slot through Admit, which marks the context, so SlotsHeld names
-// what the caller holds. The floor of 1 covers a caller that acquired with a raw Acquire;
-// callers holding nothing check SlotHeld and never reach here, which is what keeps the
-// floor from over-releasing.
+// Every holder takes its slot through [Limiter.Admit] or [Limiter.Seat], which mark the
+// context, so SlotsHeld names what the caller holds. The floor of 1 covers a caller that
+// acquired with a raw Acquire; callers holding nothing check [SlotHeld] and never reach
+// here, which is what keeps the floor from over-releasing.
 //
 // Trade-off: the non-cancellable re-acquire can block a returning yield on a saturated
 // limiter even after ctx is cancelled, slowing shutdown until peers free the slots.
@@ -139,7 +164,7 @@ func (l *Limiter) Yield(ctx context.Context, fn func() error) error {
 	}
 	// The hold record has to say so too: a step whose slots are back in the pool occupies
 	// nothing, and a watch that still counted them would read a pool with room as full.
-	hold := admissionFromContext(ctx).hold
+	hold := seatFromContext(ctx).hold
 	defer hold.yield()()
 	l.ReleaseN(n)
 	defer l.reacquireYielded(ctx, n)
@@ -154,7 +179,7 @@ func (l *Limiter) Yield(ctx context.Context, fn func() error) error {
 // release.
 func (l *Limiter) reacquireYielded(ctx context.Context, n int) {
 	if w := l.watch; w != nil {
-		waiter := w.beginWait(fmt.Sprintf("%s (taking back yielded slots)", admissionFromContext(ctx).hold.name()), n, func() {})
+		waiter := w.beginWait(fmt.Sprintf("%s (taking back yielded slots)", seatFromContext(ctx).hold.name()), n, func() {})
 		// The refusal it may carry is for the waiters the verdict could end; this one it
 		// could not, and the caller returns holding its slots either way.
 		defer func() { _ = w.endWait(waiter) }()
@@ -172,37 +197,12 @@ type LimiterStats struct {
 // Capacity returns the limiter's slot capacity. 0 means unlimited.
 func (l *Limiter) Capacity() int { return l.cap }
 
-// Snapshot returns a point-in-time view of the limiter.
+// Snapshot returns a point-in-time view of the limiter. Peers acquire and release while
+// it reads, so the counts may never have held at any single instant together.
 func (l *Limiter) Snapshot() LimiterStats {
 	return LimiterStats{
 		Capacity: l.cap,
 		Running:  int(l.running.Load()),
 		Queued:   int(l.queued.Load()),
 	}
-}
-
-// logPool emits one cache.pool event carrying the limiter's current occupancy, the feed
-// behind the interactive pool status line.
-//
-// The numbers are a point-in-time sample: peers acquire and release while this reads
-// them, so a reader may see a count that never existed at any single instant. Cheap and
-// current is the right trade for a status line, and it is why nothing downstream should
-// compute from these values; [Limiter.Snapshot] is the authoritative view.
-func (c *Cache) logPool(ctx context.Context, lim *Limiter) {
-	if lim == nil {
-		return
-	}
-	// Only a handler with a live region can show this. Emitting regardless would put two
-	// events per step into JSON output on stdout, where machine consumers read results,
-	// and would bury the results in CI logs.
-	ph, ok := c.log.Handler().(*PrettyHandler)
-	if !ok || !ph.RendersBand() {
-		return
-	}
-	s := lim.Snapshot()
-	c.log.LogAttrs(ctx, slog.LevelInfo, "cache.pool",
-		slog.Int("capacity", s.Capacity),
-		slog.Int("running", s.Running),
-		slog.Int("queued", s.Queued),
-	)
 }

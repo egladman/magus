@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -645,7 +646,7 @@ func admitSessionBrief(ctx context.Context, admit cache.MachineAdmitter, root st
 		return func() {}, nil
 	}
 	required := globalCfg.Broker.Resolved() == types.BrokerRequired
-	return cache.AdmitMachine(ctx, admit, types.MachineClaim{
+	return cache.AdmitMachine(ctx, admit, budget.Claim{
 		Project:  ".",
 		Target:   "session-brief",
 		MemoryMB: briefMemoryMB,

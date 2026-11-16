@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -146,7 +147,7 @@ func TestSizeMemoryClaim(t *testing.T) {
 		declaredMB int
 		same, all  forecast.Measurement
 		wantMB     int
-		wantSizing types.MemorySizing
+		wantSizing budget.Sizing
 	}{
 		{
 			name:       "measured runs of this shape undercut the declaration",
@@ -154,7 +155,7 @@ func TestSizeMemoryClaim(t *testing.T) {
 			same:       forecast.Measurement{Value: 4703 * mib, Runs: 54},
 			all:        forecast.Measurement{Value: 5000 * mib, Runs: 80},
 			wantMB:     4703, // the highest peak, with no margin
-			wantSizing: types.MemorySizing{Samples: 54},
+			wantSizing: budget.Sizing{Samples: 54},
 		},
 		{
 			name:       "the declaration caps a measurement above it",
@@ -167,7 +168,7 @@ func TestSizeMemoryClaim(t *testing.T) {
 			declaredMB: 10240,
 			all:        forecast.Measurement{Value: 4000 * mib, Runs: 10},
 			wantMB:     4000,
-			wantSizing: types.MemorySizing{Samples: 10, AnyShape: true},
+			wantSizing: budget.Sizing{Samples: 10, AnyShape: true},
 		},
 		{
 			name:       "a shape with too few runs falls back too, even to a larger peak",
@@ -175,7 +176,7 @@ func TestSizeMemoryClaim(t *testing.T) {
 			same:       forecast.Measurement{Value: 100 * mib, Runs: minMeasuredRuns - 1},
 			all:        forecast.Measurement{Value: 4000 * mib, Runs: 10},
 			wantMB:     4000,
-			wantSizing: types.MemorySizing{Samples: 10, AnyShape: true},
+			wantSizing: budget.Sizing{Samples: 10, AnyShape: true},
 		},
 		{
 			name:       "too few runs of any shape keeps the declaration",
@@ -193,7 +194,7 @@ func TestSizeMemoryClaim(t *testing.T) {
 			name:       "an undeclared target claims its measured peak, with no ceiling",
 			same:       forecast.Measurement{Value: 9000 * mib, Runs: minMeasuredRuns},
 			wantMB:     9000,
-			wantSizing: types.MemorySizing{Samples: minMeasuredRuns},
+			wantSizing: budget.Sizing{Samples: minMeasuredRuns},
 		},
 		{
 			name: "an undeclared target with too few runs claims nothing",
@@ -203,7 +204,7 @@ func TestSizeMemoryClaim(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			curve := types.MemoryProfile{Runs: minMeasuredRuns}
+			curve := budget.Profile{Runs: minMeasuredRuns}
 			mb, sizing, _ := sizeMemoryClaim("test", tc.declaredMB, tc.same, tc.all, forecast.Measurement{}, curve)
 			assert.Equal(t, tc.wantMB, mb)
 			assert.Equal(t, tc.wantSizing, sizing)
@@ -216,18 +217,18 @@ func TestSizeMemoryClaim(t *testing.T) {
 // bucket under the declaration ceiling.
 func TestSizeMemoryClaimSaysItFellBackToPeak(t *testing.T) {
 	measured := forecast.Measurement{Value: 5788 * mib, Runs: 13}
-	short := types.MemoryProfile{Runs: minMeasuredRuns - 1}
+	short := budget.Profile{Runs: minMeasuredRuns - 1}
 	mb, sizing, profile := sizeMemoryClaim("test", 0, measured, measured, forecast.Measurement{}, short)
 	assert.Equal(t, 5788, mb, "the highest peak")
-	assert.Equal(t, types.MemoryProfile{}, profile)
+	assert.Equal(t, budget.Profile{}, profile)
 	assert.Equal(t, "test: no memory curve for this shape (2 of 3 runs); claimed the 5.7 GiB peak", sizing.Fallback)
 	assert.Equal(t, "measured over 13 runs; test: no memory curve for this shape (2 of 3 runs); claimed the 5.7 GiB peak", sizing.String())
 
-	curve := types.MemoryProfile{D10Ms: 40_000, D90Ms: 60_000, Runs: minMeasuredRuns}
+	curve := budget.Profile{D10Ms: 40_000, D90Ms: 60_000, Runs: minMeasuredRuns}
 	curve.Curve[0], curve.Curve[19] = 1000, 5788
 	mb, sizing, profile = sizeMemoryClaim("test", 5000, measured, measured, forecast.Measurement{}, curve)
 	assert.Equal(t, 5000, mb, "the declaration caps the peak")
-	assert.Equal(t, types.MemorySizing{}, sizing, "nothing fell back")
+	assert.Equal(t, budget.Sizing{}, sizing, "nothing fell back")
 	want := curve
 	want.Curve[19] = 5000
 	assert.Equal(t, want, profile, "each bucket as measured, the last capped at the 5000 MiB declaration")
@@ -261,7 +262,7 @@ func TestSizeClaimSizesOnlyTheTargetsOwnFigure(t *testing.T) {
 	size := newClaimSizer(&x, shape, m.chainReadsCharm)
 	var step cache.Step
 	sizing := m.sizeClaim(&step, p, "test", size)
-	want := types.MemorySizing{Samples: 3, Slots: types.SlotSizing{Source: types.SlotsUnmeasured},
+	want := budget.Sizing{Samples: 3, Slots: budget.SlotSizing{Source: budget.SlotsUnmeasured},
 		Fallback: "test: no memory curve for this shape (0 of 3 runs); claimed the 3.9 GiB peak"}
 	assert.Equal(t, cache.Step{MemoryMB: 4000, MemoryDeclaredBy: "test", MemorySizing: want, Slots: 1, SlotsFloor: 1}, step,
 		"the highest passing peak, under the declaration")
@@ -300,16 +301,16 @@ func TestSizeClaimMeasuresAnUndeclaredTarget(t *testing.T) {
 		return step
 	}
 
-	measuredSlots := types.SlotSizing{Source: types.SlotsMeasured, Samples: minMeasuredRuns}
+	measuredSlots := budget.SlotSizing{Source: budget.SlotsMeasured, Samples: minMeasuredRuns}
 	flat := "scip: no memory curve for this shape (0 of 3 runs); claimed the 1.6 GiB peak"
-	assert.Equal(t, cache.Step{MemoryMB: 1600, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: measuredSlots, Fallback: flat}, Slots: 3, SlotsFloor: 1},
+	assert.Equal(t, cache.Step{MemoryMB: 1600, MemoryDeclaredBy: "scip", MemorySizing: budget.Sizing{Samples: minMeasuredRuns, Slots: measuredSlots, Fallback: flat}, Slots: 3, SlotsFloor: 1},
 		claim(types.Target{}, minMeasuredRuns), "the 1600 MiB peak and three slots, granted from one")
-	assert.Equal(t, cache.Step{MemorySizing: types.MemorySizing{Slots: types.SlotSizing{Source: types.SlotsUnmeasured}}},
+	assert.Equal(t, cache.Step{MemorySizing: budget.Sizing{Slots: budget.SlotSizing{Source: budget.SlotsUnmeasured}}},
 		claim(types.Target{}, minMeasuredRuns-1), "too few runs claim no memory and one slot")
-	assert.Equal(t, cache.Step{MemoryMB: 1600, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: types.SlotSizing{Source: types.SlotsDeclared}, Fallback: flat}, Slots: 1, SlotsFloor: 1},
+	assert.Equal(t, cache.Step{MemoryMB: 1600, MemoryDeclaredBy: "scip", MemorySizing: budget.Sizing{Samples: minMeasuredRuns, Slots: budget.SlotSizing{Source: budget.SlotsDeclared}, Fallback: flat}, Slots: 1, SlotsFloor: 1},
 		claim(types.Target{Slots: 1}, minMeasuredRuns), "declared slots beat the measured width")
 	capped := "scip: no memory curve for this shape (0 of 3 runs); claimed the 1.0 GiB peak"
-	assert.Equal(t, cache.Step{MemoryMB: 1024, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Slots: measuredSlots, Fallback: capped}, Slots: 3, SlotsFloor: 1},
+	assert.Equal(t, cache.Step{MemoryMB: 1024, MemoryDeclaredBy: "scip", MemorySizing: budget.Sizing{Slots: measuredSlots, Fallback: capped}, Slots: 3, SlotsFloor: 1},
 		claim(types.Target{MemoryMB: 1024}, minMeasuredRuns), "declared memory caps the measured peak")
 }
 
@@ -324,7 +325,7 @@ func TestSizeClaimNamesSlotsTakenForMemory(t *testing.T) {
 	var step cache.Step
 	sizing := m.sizeClaim(&step, p, "test", nil)
 	assert.Equal(t, 3, step.Slots)
-	assert.Equal(t, types.SlotSizing{Source: types.SlotsForMemory}, sizing.Slots)
+	assert.Equal(t, budget.SlotSizing{Source: budget.SlotsForMemory}, sizing.Slots)
 
 	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
 		cache.WithMachineAdmission(broker.NewClient("unix:///nonexistent/broker.sock"), 0))
@@ -333,9 +334,9 @@ func TestSizeClaimNamesSlotsTakenForMemory(t *testing.T) {
 	step = cache.Step{}
 	sizing = m.sizeClaim(&step, p, "test", nil)
 	assert.Equal(t, cache.Step{Slots: 2, SlotsFloor: 2, MemoryMB: 3072, MemoryDeclaredBy: "test",
-		MemorySizing: types.MemorySizing{Slots: types.SlotSizing{Source: types.SlotsDeclared}}}, step,
+		MemorySizing: budget.Sizing{Slots: budget.SlotSizing{Source: budget.SlotsDeclared}}}, step,
 		"a declared width is its floor too")
-	assert.Equal(t, types.SlotSizing{Source: types.SlotsDeclared}, sizing.Slots)
+	assert.Equal(t, budget.SlotSizing{Source: budget.SlotsDeclared}, sizing.Slots)
 }
 
 // A Go target runs only as wide as its claim, so a claim its runs saturate doubles, up
@@ -377,7 +378,7 @@ func TestNarrowedClaimIsCappedByTheFullRunPeak(t *testing.T) {
 		return forecast.NewShape([]string{types.CharmReadWrite}, []string{"-run", arg})
 	}
 	full := forecast.NewShape(nil, nil)
-	claim := func(runs ...forecast.Outcome) (int, types.MemorySizing) {
+	claim := func(runs ...forecast.Outcome) (int, budget.Sizing) {
 		h := forecast.History{Projects: map[string]map[string]forecast.Stats{".": {"go/test": {RecentOutcomes: runs}}}}
 		x := h.MeasuredRuns()
 		mb, sizing, _ := newClaimSizer(&x, narrowed("X"), readsNoCharm).memory(p, "test", 0)
@@ -413,7 +414,7 @@ func TestNarrowedRunsNeverSizeAFullRun(t *testing.T) {
 
 	mb, sizing, _ := newClaimSizer(&x, full, readsNoCharm).memory(p, "test", 10240)
 	assert.Equal(t, 10240, mb, "two full runs are too few, and the narrowed runs do not make up the count")
-	assert.Equal(t, types.MemorySizing{}, sizing)
+	assert.Equal(t, budget.Sizing{}, sizing)
 }
 
 func TestSizeSlotClaim(t *testing.T) {

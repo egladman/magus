@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
@@ -41,7 +42,7 @@ func bindStatus(f **flaggen.ServerStatusFlags) func(*flag.FlagSet) {
 }
 
 // queryCapacity is the broker's build budget as status reads it.
-func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
+func queryCapacity(ctx context.Context) (budget.Snapshot, error) {
 	st, err := server.QueryBroker(ctx)
 	return st.Capacity, err
 }

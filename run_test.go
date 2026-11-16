@@ -39,6 +39,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -219,7 +220,7 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	other, err := broker.Dial(t.Context(), addr)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = other.Close() })
-	held, err := other.Request(t.Context(), types.MachineClaim{
+	held, err := other.Request(t.Context(), budget.Claim{
 		Project: ".", Target: "ci", Slots: 4, PID: holderPID, Dir: "/elsewhere/checkout",
 	})
 	require.NoError(t, err)

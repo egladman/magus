@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 )
 
 // TestSlotWaitMeter pins wall-time union semantics: overlapping waits count once,
@@ -51,7 +53,7 @@ func TestSlotWaitMeterFedByLimiter(t *testing.T) {
 	require.NoError(t, lim.Acquire(context.Background()))
 
 	queued := make(chan struct{})
-	lim.SetHooks(func(ev PoolEvent) {
+	lim.SetHooks(func(ev budget.PoolEvent) {
 		if ev.Queued == 0 {
 			return
 		}

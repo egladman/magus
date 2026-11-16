@@ -1,14 +1,8 @@
-package cache
+package budget
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
-	"io"
-	"os"
-	"path/filepath"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -17,10 +11,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestLimiterSnapshot(t *testing.T) {
-	t.Parallel()
+type LimiterSuite struct{ suite.Suite }
+
+func TestLimiter(t *testing.T) { suite.Run(t, new(LimiterSuite)) }
+
+func (s *LimiterSuite) TestSnapshot() {
+	t := s.T()
 	l := NewLimiter(3)
 	assert.Equal(t, LimiterStats{Capacity: 3, Running: 0, Queued: 0}, l.Snapshot(), "initial snapshot")
 
@@ -33,8 +32,8 @@ func TestLimiterSnapshot(t *testing.T) {
 	assert.Equal(t, 1, l.Snapshot().Running, "after release")
 }
 
-func TestLimiterUnlimited(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestUnlimited() {
+	t := s.T()
 	l := NewLimiter(0)
 	for range 100 {
 		require.NoError(t, l.Acquire(context.Background()))
@@ -43,8 +42,8 @@ func TestLimiterUnlimited(t *testing.T) {
 	assert.Equal(t, LimiterStats{}, snap, "an unlimited limiter reports no capacity and counts nothing running")
 }
 
-func TestLimiterCancelledAcquire(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestCancelledAcquire() {
+	t := s.T()
 	l := NewLimiter(1)
 	_ = l.Acquire(context.Background()) // fill the slot
 
@@ -53,8 +52,8 @@ func TestLimiterCancelledAcquire(t *testing.T) {
 	assert.Error(t, l.Acquire(ctx), "expected error on cancelled acquire")
 }
 
-func TestLimiterYield(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestYield() {
+	t := s.T()
 	l := NewLimiter(2)
 	_ = l.Acquire(context.Background())
 	_ = l.Acquire(context.Background()) // both slots taken
@@ -89,8 +88,8 @@ func TestLimiterYield(t *testing.T) {
 	assert.Equal(t, 2, maxSeen, "maxSeen inside fn")
 }
 
-func TestLimiterAcquireN(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestAcquireN() {
+	t := s.T()
 	l := NewLimiter(4)
 
 	require.NoError(t, l.AcquireN(context.Background(), 3), "AcquireN(3)")
@@ -100,15 +99,15 @@ func TestLimiterAcquireN(t *testing.T) {
 	assert.Equal(t, 0, l.Snapshot().Running, "after ReleaseN(3)")
 }
 
-func TestLimiterAcquireNTooMany(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestAcquireNTooMany() {
+	t := s.T()
 	l := NewLimiter(4)
 	assert.Error(t, l.AcquireN(context.Background(), 5), "expected error when requesting more slots than capacity")
 	assert.Equal(t, 0, l.Snapshot().Running, "after rejected AcquireN")
 }
 
-func TestLimiterAcquireNCancel(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestAcquireNCancel() {
+	t := s.T()
 	l := NewLimiter(2)
 	_ = l.AcquireN(context.Background(), 2) // fill all slots
 
@@ -120,8 +119,8 @@ func TestLimiterAcquireNCancel(t *testing.T) {
 
 // TestLimiterFairQueueing verifies FIFO fairness: a large request at the head
 // of the queue blocks smaller requests behind it until it can be fully satisfied.
-func TestLimiterFairQueueing(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestFairQueueing() {
+	t := s.T()
 	l := NewLimiter(4)
 
 	// Hold all 4 slots.
@@ -181,8 +180,8 @@ func TestLimiterFairQueueing(t *testing.T) {
 
 // TestLimiterHooks verifies that the hook SetHooks installs hears every acquire as +1
 // running and every release as -1 running.
-func TestLimiterHooks(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestHooks() {
+	t := s.T()
 	l := NewLimiter(2)
 
 	var running []int
@@ -235,8 +234,8 @@ func TestLimiterHooks(t *testing.T) {
 // TestLimiterWaitingHook verifies the hook's Queued deltas mirror the internal queued counter
 // exactly: it fires +n the instant a caller begins waiting and -n once its Acquire returns,
 // so their running sum tracks Snapshot().Queued at every step.
-func TestLimiterWaitingHook(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestWaitingHook() {
+	t := s.T()
 	l := NewLimiter(1)
 	var net atomic.Int64
 	l.SetHooks(func(ev PoolEvent) { net.Add(int64(ev.Queued)) })
@@ -275,8 +274,8 @@ func TestLimiterWaitingHook(t *testing.T) {
 // restored (re-acquire is non-cancellable) so callers like RunAll, which
 // release their slot unconditionally on return, stay balanced. fn's error is
 // returned unchanged.
-func TestLimiterYieldRestoresSlotOnCancel(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestYieldRestoresSlotOnCancel() {
+	t := s.T()
 	l := NewLimiter(1)
 	_ = l.Acquire(context.Background()) // hold the only slot
 
@@ -297,8 +296,8 @@ func TestLimiterYieldRestoresSlotOnCancel(t *testing.T) {
 // yield it around a cancelled child, then release once on return. If Yield
 // returned slot-less, the deferred Release would over-release the semaphore
 // (x/sync/semaphore panics on net over-release) or silently inflate capacity.
-func TestLimiterYieldNoOverReleaseOnCancel(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestYieldNoOverReleaseOnCancel() {
+	t := s.T()
 	l := NewLimiter(2)
 	for range 5 {
 		require.NoError(t, l.Acquire(context.Background()))
@@ -315,8 +314,8 @@ func TestLimiterYieldNoOverReleaseOnCancel(t *testing.T) {
 // admission slot with a raw Acquire and never marks the context, so an unmarked ctx there
 // means one slot held. Without the floor that slot stays held through the whole forwarded
 // run and every adopted child inflates the shared pool by one.
-func TestLimiterYieldReleasesOneSlotForAnUnmarkedCaller(t *testing.T) {
-	t.Parallel()
+func (s *LimiterSuite) TestYieldReleasesOneSlotForAnUnmarkedCaller() {
+	t := s.T()
 	l := NewLimiter(1)
 	require.NoError(t, l.Acquire(context.Background()))
 
@@ -327,78 +326,4 @@ func TestLimiterYieldReleasesOneSlotForAnUnmarkedCaller(t *testing.T) {
 	}))
 	assert.Equal(t, 0, inside, "an unmarked caller still yields its one slot")
 	assert.Equal(t, 1, l.Snapshot().Running, "and holds it again on return")
-}
-
-// makeTar writes a gzip-compressed tar containing one file of size n bytes.
-func makeTar(t *testing.T, name string, size int64) io.Reader {
-	t.Helper()
-	var buf bytes.Buffer
-	gw := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gw)
-	require.NoError(t, tw.WriteHeader(&tar.Header{
-		Name:     name,
-		Typeflag: tar.TypeReg,
-		Size:     size,
-	}), "tar header")
-	_, err := io.Copy(tw, io.LimitReader(zeroReader{}, size))
-	require.NoError(t, err, "tar body")
-	require.NoError(t, tw.Close(), "tar close")
-	require.NoError(t, gw.Close(), "gzip close")
-	return &buf
-}
-
-type zeroReader struct{}
-
-func (zeroReader) Read(p []byte) (int, error) {
-	for i := range p {
-		p[i] = 0
-	}
-	return len(p), nil
-}
-
-// TestImportMaxBytesCapsTarBomb verifies that a tar entry larger than
-// WithMaxImportBytes is rejected rather than silently truncated. Import
-// accepts arbitrary input from CI/S3; a truncated write that still returns
-// success would commit a corrupt blob that Replay never re-verifies (see
-// snapshot.go's replayBlob, which just reflinks/copies by name).
-func TestImportMaxBytesCapsTarBomb(t *testing.T) {
-	t.Parallel()
-
-	cdir := t.TempDir()
-	c, err := Open(t.Context(), cdir, WithMaxImportBytes(1024))
-	require.NoError(t, err, "Open")
-
-	// Create a "bomb": a single entry that would be 1 MiB without the cap.
-	const entrySize = 1 << 20
-	archive := makeTar(t, "manifests/test/entry", entrySize)
-
-	err = c.Import(context.Background(), archive)
-	require.Error(t, err, "Import must reject an oversized entry rather than truncating it")
-	assert.ErrorIs(t, err, errImportTooLarge)
-
-	// No truncated (corrupt) file must be left behind at the destination.
-	dest := filepath.Join(cdir, "manifests", "test", "entry")
-	_, statErr := os.Stat(dest)
-	assert.True(t, os.IsNotExist(statErr), "oversized entry must not leave a truncated file on disk")
-}
-
-// TestImportDefaultCapApplied ensures Import works normally when no cap
-// option is set — the default cap must be large enough for real archives.
-func TestImportDefaultCapApplied(t *testing.T) {
-	t.Parallel()
-
-	cdir := t.TempDir()
-	c, err := Open(t.Context(), cdir)
-	require.NoError(t, err, "Open")
-
-	// A small legitimate entry — must pass through untruncated.
-	const entrySize = 4096
-	archive := makeTar(t, "manifests/test/small", entrySize)
-
-	require.NoError(t, c.Import(context.Background(), archive), "Import")
-
-	dest := filepath.Join(cdir, "manifests", "test", "small")
-	fi, err := os.Stat(dest)
-	require.NoError(t, err, "stat")
-	assert.Equal(t, int64(entrySize), fi.Size())
 }

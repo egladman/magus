@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -82,16 +83,16 @@ func (m *Magus) hostUsableBytes() int64 {
 //
 // size is nil to claim the declarations as written, or newClaimSizer's answer to claim
 // what this shape of run has measured.
-func (m *Magus) sizeClaim(step *cache.Step, p *types.Project, target string, size *claimSizer) types.MemorySizing {
+func (m *Magus) sizeClaim(step *cache.Step, p *types.Project, target string, size *claimSizer) budget.Sizing {
 	mb := p.TargetPolicies[target].MemoryMB
-	var sizing types.MemorySizing
-	var profile types.MemoryProfile
+	var sizing budget.Sizing
+	var profile budget.Profile
 	if size != nil {
 		mb, sizing, profile = size.memory(p, target, mb)
 	}
-	slots, slotSizing := p.TargetPolicies[target].Slots, types.SlotSizing{Source: types.SlotsDeclared}
+	slots, slotSizing := p.TargetPolicies[target].Slots, budget.SlotSizing{Source: budget.SlotsDeclared}
 	if slots == 0 {
-		slotSizing = types.SlotSizing{Source: types.SlotsUnmeasured}
+		slotSizing = budget.SlotSizing{Source: budget.SlotsUnmeasured}
 		if size != nil {
 			slots, slotSizing = size.slots(p, target, m.limiter().Capacity())
 		}
@@ -99,12 +100,12 @@ func (m *Magus) sizeClaim(step *cache.Step, p *types.Project, target string, siz
 	budgetMB := mem.BudgetMB(m.hostUsableBytes(), m.cfg.ConcurrencyProfile)
 	step.Slots = slotsForPolicy(slots, mb, m.limiter().Capacity(), budgetMB, m.cache.MachineArbitrated())
 	if step.Slots > max(slots, 1) {
-		slotSizing = types.SlotSizing{Source: types.SlotsForMemory}
+		slotSizing = budget.SlotSizing{Source: budget.SlotsForMemory}
 	}
 	// A declared width is what the target needs; any other runs with
 	// what the machine grants it.
 	step.SlotsFloor = min(1, step.Slots)
-	if slotSizing.Source == types.SlotsDeclared {
+	if slotSizing.Source == budget.SlotsDeclared {
 		step.SlotsFloor = step.Slots
 	}
 	sizing.Slots = slotSizing
@@ -156,7 +157,7 @@ func (s *claimSizer) readShape(proj *types.Project, target string) forecast.Shap
 
 // memory sizes target's memory claim; declaredMB is 0 when it declares none. See
 // sizeMemoryClaim.
-func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) (int, types.MemorySizing, types.MemoryProfile) {
+func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) (int, budget.Sizing, budget.Profile) {
 	shape := s.readShape(proj, target)
 	same, all := s.runs.Peak(proj.Path, target, shape)
 	var full forecast.Measurement
@@ -167,42 +168,42 @@ func (s *claimSizer) memory(proj *types.Project, target string, declaredMB int) 
 }
 
 // slots sizes the slot claim of a target that declares none. See sizeSlotClaim.
-func (s *claimSizer) slots(proj *types.Project, target string, capacity int) (int, types.SlotSizing) {
+func (s *claimSizer) slots(proj *types.Project, target string, capacity int) (int, budget.SlotSizing) {
 	same, all := s.runs.Width(proj.Path, target, s.readShape(proj, target))
 	return sizeSlotClaim(same, all, capacity)
 }
 
 // trustedMeasurement picks what a claim is sized from: the runs of this shape, else
 // every run of the target, and neither when fewer than minMeasuredRuns measured it.
-func trustedMeasurement(sameShape, anyShape forecast.Measurement) (forecast.Measurement, types.MemorySizing, bool) {
+func trustedMeasurement(sameShape, anyShape forecast.Measurement) (forecast.Measurement, budget.Sizing, bool) {
 	switch {
 	case sameShape.Runs >= minMeasuredRuns:
-		return sameShape, types.MemorySizing{Samples: sameShape.Runs}, true
+		return sameShape, budget.Sizing{Samples: sameShape.Runs}, true
 	case anyShape.Runs >= minMeasuredRuns:
-		return anyShape, types.MemorySizing{Samples: anyShape.Runs, AnyShape: true}, true
+		return anyShape, budget.Sizing{Samples: anyShape.Runs, AnyShape: true}, true
 	}
-	return forecast.Measurement{}, types.MemorySizing{}, false
+	return forecast.Measurement{}, budget.Sizing{}, false
 }
 
 // sizeMemoryClaim is the highest measured peak in MiB, capped by a
 // declaration; too few runs claim the declaration. fullPeak caps a narrowed
 // shape. A curve short of minMeasuredRuns runs is held flat, said in Fallback.
-func sizeMemoryClaim(target string, declaredMB int, sameShape, anyShape, fullPeak forecast.Measurement, profile types.MemoryProfile) (int, types.MemorySizing, types.MemoryProfile) {
+func sizeMemoryClaim(target string, declaredMB int, sameShape, anyShape, fullPeak forecast.Measurement, profile budget.Profile) (int, budget.Sizing, budget.Profile) {
 	peak, sizing, ok := trustedMeasurement(sameShape, anyShape)
 	if !ok {
-		return declaredMB, types.MemorySizing{}, types.MemoryProfile{}
+		return declaredMB, budget.Sizing{}, budget.Profile{}
 	}
 	if !sizing.AnyShape && fullPeak.Runs > 0 {
 		peak.Value = min(peak.Value, fullPeak.Value)
 	}
 	mb := int(math.Ceil(float64(peak.Value) / (1 << 20)))
 	if declaredMB > 0 && mb >= declaredMB {
-		mb, sizing = declaredMB, types.MemorySizing{}
+		mb, sizing = declaredMB, budget.Sizing{}
 	}
 	if profile.Runs < minMeasuredRuns {
 		sizing.Fallback = fmt.Sprintf("%s: no memory curve for this shape (%d of %d runs); claimed the %s peak",
-			target, profile.Runs, minMeasuredRuns, types.FormatMB(mb))
-		return mb, sizing, types.MemoryProfile{}
+			target, profile.Runs, minMeasuredRuns, budget.FormatMB(mb))
+		return mb, sizing, budget.Profile{}
 	}
 	if declaredMB > 0 {
 		for i, bucket := range profile.Curve {
@@ -216,12 +217,12 @@ func sizeMemoryClaim(target string, declaredMB int, sameShape, anyShape, fullPea
 // when the budget is limited, or 0, which takes one slot, when too few runs measured
 // it. A run whose claim capped its width doubles the claim, so a Go-heavy target that
 // runs only as wide as its slots (spawn.SeatJobserver) still measures its way wider.
-func sizeSlotClaim(sameShape, anyShape forecast.Measurement, capacity int) (int, types.SlotSizing) {
+func sizeSlotClaim(sameShape, anyShape forecast.Measurement, capacity int) (int, budget.SlotSizing) {
 	width, measured, ok := trustedMeasurement(sameShape, anyShape)
 	if !ok {
-		return 0, types.SlotSizing{Source: types.SlotsUnmeasured}
+		return 0, budget.SlotSizing{Source: budget.SlotsUnmeasured}
 	}
-	sizing := types.SlotSizing{Source: types.SlotsMeasured, Samples: measured.Samples, AnyShape: measured.AnyShape}
+	sizing := budget.SlotSizing{Source: budget.SlotsMeasured, Samples: measured.Samples, AnyShape: measured.AnyShape}
 	if capacity > 0 {
 		return min(int(width.Value), capacity), sizing
 	}

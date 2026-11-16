@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 )
@@ -13,7 +14,7 @@ import (
 type gateClaimsKey struct{}
 
 type gateSizing struct {
-	claims      func(ctx context.Context, targets []types.Target) ([]types.MachineClaim, error)
+	claims      func(ctx context.Context, targets []types.Target) ([]budget.Claim, error)
 	budgetMB    int
 	budgetSlots int
 }
@@ -23,7 +24,7 @@ type gateSizing struct {
 // admission does, from the measured runs of a ci shape; it lives with the run path,
 // outside this package, so the CLI hands it in. A Run whose ctx carries none reports
 // that check skipped.
-func WithGateClaims(ctx context.Context, claims func(ctx context.Context, targets []types.Target) ([]types.MachineClaim, error), budgetMB, budgetSlots int) context.Context {
+func WithGateClaims(ctx context.Context, claims func(ctx context.Context, targets []types.Target) ([]budget.Claim, error), budgetMB, budgetSlots int) context.Context {
 	return context.WithValue(ctx, gateClaimsKey{}, gateSizing{claims: claims, budgetMB: budgetMB, budgetSlots: budgetSlots})
 }
 
@@ -55,7 +56,7 @@ func (r *runner) checkGateFits(ctx context.Context, projects []*types.Project) c
 
 // gradeGateFits fails on every claim larger than the whole budget on either axis. A
 // non-positive budget is an axis this host could not measure, which bounds nothing.
-func gradeGateFits(claims []types.MachineClaim, budgetMB, budgetSlots int) check.Check {
+func gradeGateFits(claims []budget.Claim, budgetMB, budgetSlots int) check.Check {
 	var details []string
 	for _, c := range claims {
 		memory := budgetMB > 0 && c.MemoryMB > budgetMB
@@ -64,7 +65,7 @@ func gradeGateFits(claims []types.MachineClaim, budgetMB, budgetSlots int) check
 			continue
 		}
 		what := fmt.Sprintf("%s %s claims %s (%s) and %d slot(s)",
-			types.ProjectDisplayName(c.Project, "", ""), c.Target, types.FormatMB(c.MemoryMB), c.Sizing, max(c.Slots, 1))
+			types.ProjectDisplayName(c.Project, "", ""), c.Target, budget.FormatMB(c.MemoryMB), c.Sizing, max(c.Slots, 1))
 		if c.Under != "" {
 			what += ", running under " + c.Under
 		}
@@ -74,7 +75,7 @@ func gradeGateFits(claims []types.MachineClaim, budgetMB, budgetSlots int) check
 		return check.Check{
 			Name: gateFitsCheck, Status: check.OK,
 			Message: fmt.Sprintf("every step of the ci gate fits this machine's build budget of %s across %d slots",
-				types.FormatMB(budgetMB), budgetSlots),
+				budget.FormatMB(budgetMB), budgetSlots),
 		}
 	}
 	slices.Sort(details)
@@ -83,7 +84,7 @@ func gradeGateFits(claims []types.MachineClaim, budgetMB, budgetSlots int) check
 		Status: check.Fail,
 		Message: fmt.Sprintf(
 			"%d step(s) of the ci gate claim more than this machine's whole build budget of %s across %d slots, so `%s` is refused here every time (see %s). Lower the claim: correct a drifted memory_mb (the memory-declarations check compares it to what magus measured), split the target, or run the gate on a bigger machine",
-			len(details), types.FormatMB(budgetMB), budgetSlots, hint.Affected.With("ci"), types.CodeURL(types.MachineBudgetExhausted)),
+			len(details), budget.FormatMB(budgetMB), budgetSlots, hint.Affected.With("ci"), types.CodeURL(types.MachineBudgetExhausted)),
 		Details: details,
 	}
 }

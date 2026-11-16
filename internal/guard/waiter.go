@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -115,7 +116,7 @@ func budgetHolderWait(ctx context.Context, command string, d Dialect) bool {
 	if err != nil {
 		return false
 	}
-	return slices.ContainsFunc(s.Holders, func(h types.MachineClaimant) bool {
+	return slices.ContainsFunc(s.Holders, func(h budget.Claimant) bool {
 		return h.PID > 0 && slices.Contains(pids, strconv.Itoa(h.PID))
 	})
 }
@@ -363,7 +364,7 @@ const budgetReadTimeout = time.Second
 
 // budgetSnapshot reads this user's machine build budget from its broker. A var so a test
 // stands a budget in without a broker.
-var budgetSnapshot = func(ctx context.Context) (types.MachineSnapshot, error) {
+var budgetSnapshot = func(ctx context.Context) (budget.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(ctx, budgetReadTimeout)
 	defer cancel()
 	st, err := broker.QueryStatus(ctx, broker.DefaultAddr())
@@ -374,13 +375,13 @@ var budgetSnapshot = func(ctx context.Context) (types.MachineSnapshot, error) {
 // it: how full, who holds it, and that it frees as those runs end. "" when a slot and
 // memory are both free, or the budget is unmeasured. Holders are read oldest first, as
 // the broker serves them.
-func BudgetFull(s types.MachineSnapshot, now time.Time) string {
+func BudgetFull(s budget.Snapshot, now time.Time) string {
 	var held []string
 	if s.BudgetSlots > 0 && s.HeldSlots >= s.BudgetSlots {
 		held = append(held, fmt.Sprintf("slots %d/%d", s.HeldSlots, s.BudgetSlots))
 	}
 	if s.BudgetMB > 0 && s.HeldMB >= s.BudgetMB {
-		held = append(held, fmt.Sprintf("mem %s/%s", types.FormatMB(s.HeldMB), types.FormatMB(s.BudgetMB)))
+		held = append(held, fmt.Sprintf("mem %s/%s", budget.FormatMB(s.HeldMB), budget.FormatMB(s.BudgetMB)))
 	}
 	if len(held) == 0 {
 		return ""

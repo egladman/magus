@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -19,7 +21,9 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -62,14 +66,14 @@ func (s *MemoryPressureSuite) reading(reason string, err error) {
 const badMemory = "the memory compressor holds 97% of its segment limit"
 
 func (s *MemoryPressureSuite) gate() (*machineGate, *budgetAdmitter) {
-	b, _ := testBudget(s.T(), 10_000, 8)
+	b := testBudget(s.T(), 10_000, 8)
 	return testGate(s.T(), b)
 }
 
 func (s *MemoryPressureSuite) TestABadReadingRefusesBeforeTheBudgetIsAsked() {
 	s.reading(badMemory, nil)
 	g, adm := s.gate()
-	_, err := g.acquire(s.T().Context(), types.MachineClaim{Project: "docs", Target: "test", PID: 100})
+	_, err := g.acquire(s.T().Context(), budget.Claim{Project: "docs", Target: "test", PID: 100})
 	s.Require().ErrorIs(err, types.MemoryPressureHigh)
 	var exit types.ExitError
 	s.Require().ErrorAs(err, &exit)
@@ -83,7 +87,7 @@ func (s *MemoryPressureSuite) TestABadReadingRefusesBeforeTheBudgetIsAsked() {
 func (s *MemoryPressureSuite) TestARefusalOffersNoWaitForASeat() {
 	s.reading(badMemory, nil)
 	g, _ := s.gate()
-	_, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test"})
+	_, err := g.acquire(s.T().Context(), budget.Claim{Target: "test"})
 	s.NotContains(err.Error(), "--wait")
 }
 
@@ -91,7 +95,7 @@ func (s *MemoryPressureSuite) TestARefusalToALeasedWorkerNamesTheOwedFiling() {
 	s.T().Setenv("XDG_STATE_HOME", s.T().TempDir())
 	s.reading(badMemory, nil)
 	g, _ := s.gate()
-	_, err := g.acquire(types.WithJobLease(s.T().Context(), "wave/api"), types.MachineClaim{Target: "test"})
+	_, err := g.acquire(types.WithJobLease(s.T().Context(), "wave/api"), budget.Claim{Target: "test"})
 	s.Require().ErrorIs(err, types.MemoryPressureHigh)
 	s.Contains(err.Error(), LeasedPressureNext("wave/api"))
 	s.NotContains(err.Error(), "never waits for a seat", "a seat is not what this lacks")
@@ -104,10 +108,10 @@ func (s *MemoryPressureSuite) TestAnIntegrationIsToldToFreeMemory() {
 
 func (s *MemoryPressureSuite) TestAClaimHeldIntoBadMemoryHandsItsSeatBack() {
 	s.reading("", nil)
-	b, _ := testBudget(s.T(), 10_000, 8)
+	b := testBudget(s.T(), 10_000, 8)
 	adm := &turningAdmitter{MachineAdmitter: &budgetAdmitter{budget: b}, turn: func() { s.reading(badMemory, nil) }}
 	g := &machineGate{admit: adm, log: newLogger("", 0)}
-	_, err := g.acquire(s.T().Context(), types.MachineClaim{Project: ".", Target: "ci", PID: 100})
+	_, err := g.acquire(s.T().Context(), budget.Claim{Project: ".", Target: "ci", PID: 100})
 	s.Require().ErrorIs(err, types.MemoryPressureHigh)
 	s.Empty(b.Snapshot().Holders, "the seat went back")
 }
@@ -115,7 +119,7 @@ func (s *MemoryPressureSuite) TestAClaimHeldIntoBadMemoryHandsItsSeatBack() {
 func (s *MemoryPressureSuite) TestANestedRunPassesUnderItsRunningParent() {
 	s.reading(badMemory, nil)
 	g, _ := s.gate()
-	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100, Ancestors: []string{"1:parent"}})
+	release, err := g.acquire(s.T().Context(), budget.Claim{Target: "test", PID: 100, Ancestors: []string{"1:parent"}})
 	s.Require().NoError(err)
 	release()
 	s.Zero(s.reads)
@@ -126,7 +130,7 @@ var underWrapper = "1:" + types.WrapperInvocation("exec")
 func (s *MemoryPressureSuite) TestARunUnderOnlyAWrapperIsRefused() {
 	s.reading(badMemory, nil)
 	g, adm := s.gate()
-	_, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100, Ancestors: []string{underWrapper}})
+	_, err := g.acquire(s.T().Context(), budget.Claim{Target: "test", PID: 100, Ancestors: []string{underWrapper}})
 	s.Require().ErrorIs(err, types.MemoryPressureHigh)
 	s.Zero(adm.requests, "no running step sits above it")
 }
@@ -134,7 +138,7 @@ func (s *MemoryPressureSuite) TestARunUnderOnlyAWrapperIsRefused() {
 func (s *MemoryPressureSuite) TestARunUnderAStepUnderAWrapperPasses() {
 	s.reading(badMemory, nil)
 	g, _ := s.gate()
-	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100, Ancestors: []string{underWrapper, "2:parent"}})
+	release, err := g.acquire(s.T().Context(), budget.Claim{Target: "test", PID: 100, Ancestors: []string{underWrapper, "2:parent"}})
 	s.Require().NoError(err)
 	release()
 	s.Zero(s.reads)
@@ -144,7 +148,7 @@ func (s *MemoryPressureSuite) TestARunUnderAWrapperUnderAStepPasses() {
 	s.T().Setenv("MAGUS_LEVEL", "1")
 	s.reading(badMemory, nil)
 	g, _ := s.gate()
-	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100, Ancestors: []string{underWrapper}})
+	release, err := g.acquire(s.T().Context(), budget.Claim{Target: "test", PID: 100, Ancestors: []string{underWrapper}})
 	s.Require().NoError(err)
 	release()
 }
@@ -153,7 +157,7 @@ func (s *MemoryPressureSuite) TestANestedRunThatLostItsAncestryPassesToo() {
 	s.T().Setenv("MAGUS_LEVEL", "1")
 	s.reading(badMemory, nil)
 	g, _ := s.gate()
-	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+	release, err := g.acquire(s.T().Context(), budget.Claim{Target: "test", PID: 100})
 	s.Require().NoError(err)
 	release()
 }
@@ -164,7 +168,7 @@ func (s *MemoryPressureSuite) TestAPartialReadingSaysSoOnceAndStillRefuses() {
 	var logged bytes.Buffer
 	g.log = slog.New(slog.NewTextHandler(&logged, nil))
 	for range 2 {
-		_, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+		_, err := g.acquire(s.T().Context(), budget.Claim{Target: "test", PID: 100})
 		s.Require().ErrorIs(err, types.MemoryPressureHigh)
 	}
 	s.Equal(1, strings.Count(logged.String(), "compressor segments are unread"))
@@ -173,7 +177,7 @@ func (s *MemoryPressureSuite) TestAPartialReadingSaysSoOnceAndStillRefuses() {
 func (s *MemoryPressureSuite) TestATestGateReadsTheStandIn() {
 	before := standInReads.Load()
 	g, _ := s.gate()
-	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+	release, err := g.acquire(s.T().Context(), budget.Claim{Target: "test", PID: 100})
 	s.Require().NoError(err)
 	release()
 	s.Greater(standInReads.Load(), before)
@@ -182,7 +186,7 @@ func (s *MemoryPressureSuite) TestATestGateReadsTheStandIn() {
 func (s *MemoryPressureSuite) TestAHealthyReadingSeatsTheClaim() {
 	s.reading("", nil)
 	g, adm := s.gate()
-	release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+	release, err := g.acquire(s.T().Context(), budget.Claim{Target: "test", PID: 100})
 	s.Require().NoError(err)
 	release()
 	s.Equal(1, adm.requests)
@@ -194,7 +198,7 @@ func (s *MemoryPressureSuite) TestAnUnreadableHostSaysSoOnceAndAdmits() {
 	var logged bytes.Buffer
 	g.log = slog.New(slog.NewTextHandler(&logged, nil))
 	for range 2 {
-		release, err := g.acquire(s.T().Context(), types.MachineClaim{Target: "test", PID: 100})
+		release, err := g.acquire(s.T().Context(), budget.Claim{Target: "test", PID: 100})
 		s.Require().NoError(err)
 		release()
 	}
@@ -208,7 +212,7 @@ func (s *MemoryPressureSuite) TestAnUnreadableHostSaysSoOnceAndAdmits() {
 func (s *MemoryPressureSuite) TestARunningStepRetakesItsClaimUnderPressure() {
 	s.reading("", nil)
 	g, _ := s.gate()
-	claim := types.MachineClaim{Target: "ci", PID: 100}
+	claim := budget.Claim{Target: "ci", PID: 100}
 	seat, err := g.claim(s.T().Context(), claim)
 	s.Require().NoError(err)
 	h := &machineHold{gate: g, claim: claim, id: seat.id, release: seat.release, slots: seat.slots}
@@ -225,13 +229,13 @@ func (s *MemoryPressureSuite) TestARunningStepRetakesItsClaimUnderPressure() {
 func (s *MemoryPressureSuite) TestAdmitMachineRefusesHostWorkToo() {
 	s.reading(badMemory, nil)
 	_, adm := s.gate()
-	_, err := AdmitMachine(s.T().Context(), adm, types.MachineClaim{Project: ".", Target: "session-brief"}, false, 0)
+	_, err := AdmitMachine(s.T().Context(), adm, budget.Claim{Project: ".", Target: "session-brief"}, false, 0)
 	s.Require().ErrorIs(err, types.MemoryPressureHigh)
 }
 
 func (s *MemoryPressureSuite) TestNoAdmitterReadsNoMemory() {
 	s.reading(badMemory, nil)
-	release, err := AdmitMachine(s.T().Context(), nil, types.MachineClaim{Target: "test"}, false, 0)
+	release, err := AdmitMachine(s.T().Context(), nil, budget.Claim{Target: "test"}, false, 0)
 	s.Require().NoError(err, "broker: off wires no admitter, and is the one way out of a machine stuck bad")
 	release()
 	s.Zero(s.reads)
@@ -244,16 +248,16 @@ type turningAdmitter struct {
 	turn func()
 }
 
-func (a *turningAdmitter) Claim(ctx context.Context, c types.MachineClaim, parked func(types.MachineVerdict)) (types.MachineVerdict, error) {
+func (a *turningAdmitter) Claim(ctx context.Context, c budget.Claim, parked func(budget.Verdict)) (budget.Verdict, error) {
 	a.turn()
 	return a.MachineAdmitter.Claim(ctx, c, parked)
 }
 
 func TestMachineRefusalNamesTheOversizedClaimAndThatNoWaitSeatsIt(t *testing.T) {
-	b, _ := testBudget(t, 4000, 8)
+	b := testBudget(t, 4000, 8)
 	g, _ := testGate(t, b)
 
-	_, err := g.acquire(t.Context(), types.MachineClaim{
+	_, err := g.acquire(t.Context(), budget.Claim{
 		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 26_000, Slots: 1, PID: 100,
 	})
 	require.Error(t, err)
@@ -265,12 +269,12 @@ func TestMachineRefusalNamesTheOversizedClaimAndThatNoWaitSeatsIt(t *testing.T) 
 // refusingAdmitter answers every request with err.
 type refusingAdmitter struct{ err error }
 
-func (a refusingAdmitter) Claim(context.Context, types.MachineClaim, func(types.MachineVerdict)) (types.MachineVerdict, error) {
-	return types.MachineVerdict{}, a.err
+func (a refusingAdmitter) Claim(context.Context, budget.Claim, func(budget.Verdict)) (budget.Verdict, error) {
+	return budget.Verdict{}, a.err
 }
 
-func (a refusingAdmitter) Request(context.Context, types.MachineClaim) (types.MachineVerdict, error) {
-	return types.MachineVerdict{}, a.err
+func (a refusingAdmitter) Request(context.Context, budget.Claim) (budget.Verdict, error) {
+	return budget.Verdict{}, a.err
 }
 
 func (refusingAdmitter) Release(context.Context, string) {}
@@ -293,7 +297,7 @@ func (a overrunAdmitter) Overrun(_ context.Context, id string) { a.overruns <- i
 
 func TestOverrunIsSentOnce(t *testing.T) {
 	admit := overrunAdmitter{overruns: make(chan string, 4)}
-	profile := types.MemoryProfile{D10Ms: 10_000, D90Ms: 10_000, Runs: 3}
+	profile := budget.Profile{D10Ms: 10_000, D90Ms: 10_000, Runs: 3}
 	for i := range profile.Curve {
 		profile.Curve[i] = 100
 	}
@@ -324,7 +328,7 @@ func TestOverrunIsSentOnce(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	unwatched := withOverrunWatch(types.WithExecCost(t.Context()), admit, func() string { return "claim-2" }, types.MemoryProfile{})
+	unwatched := withOverrunWatch(types.WithExecCost(t.Context()), admit, func() string { return "claim-2" }, budget.Profile{})
 	assert.Nil(t, unwatched.Value(overrunWatchKey{}), "a claim with no profile is charged its peak already")
 }
 
@@ -398,7 +402,7 @@ func TestAStepGroupRefusalWarnsOnceForManyChildren(t *testing.T) {
 	}
 	logs := captureLogs(t)
 	holder := &refusingHolder{}
-	hold := &machineHold{claim: types.MachineClaim{Project: "libs/xdg", Target: "go-test"}, id: "claim-1"}
+	hold := &machineHold{claim: budget.Claim{Project: "libs/xdg", Target: "go-test"}, id: "claim-1"}
 	ctx := withMachineHold(t.Context(), hold)
 	ctx = withStepGroups(ctx, holder, hold.current)
 
@@ -430,7 +434,7 @@ func TestAStepGroupStartedWhileTheClaimIsLentWarnsOfNothing(t *testing.T) {
 	}
 	logs := captureLogs(t)
 	holder := &refusingHolder{}
-	hold := &machineHold{claim: types.MachineClaim{Project: "libs/xdg", Target: "go-test"}, id: "claim-1", release: func() {}}
+	hold := &machineHold{claim: budget.Claim{Project: "libs/xdg", Target: "go-test"}, id: "claim-1", release: func() {}}
 	ctx := withMachineHold(t.Context(), hold)
 	ctx = withStepGroups(ctx, holder, hold.current)
 
@@ -466,7 +470,7 @@ func TestAStepGroupRidesItsStepsClaim(t *testing.T) {
 		t.Skip("windows starts a step's group unwatched")
 	}
 	t.Setenv("MAGUS_LEVEL", "")
-	b, _ := testBudget(t, 10_000, 8)
+	b := testBudget(t, 10_000, 8)
 	admit := &groupAdmitter{budgetAdmitter: &budgetAdmitter{budget: b}}
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(admit, 0))
 	require.NoError(t, err)
@@ -498,33 +502,34 @@ func TestAStepGroupRidesItsStepsClaim(t *testing.T) {
 func TestMachineGateRefusesWhatTheAdmitterRefused(t *testing.T) {
 	refusal := types.ExitError{Code: ExitCodeMachineDeclaration, Err: errors.New("jobs.max_validations is -1")}
 	g := &machineGate{admit: refusingAdmitter{err: refusal}, log: newLogger("", 0)}
-	_, err := g.acquire(t.Context(), types.MachineClaim{Target: "test"})
+	_, err := g.acquire(t.Context(), budget.Claim{Target: "test"})
 	require.ErrorIs(t, err, refusal.Err)
 
 	g = &machineGate{admit: refusingAdmitter{err: errors.New("dial: no such file")}, log: newLogger("", 0)}
-	release, err := g.acquire(t.Context(), types.MachineClaim{Target: "test"})
+	release, err := g.acquire(t.Context(), budget.Claim{Target: "test"})
 	require.NoError(t, err, "an unreachable broker still admits under best-effort")
 	release()
 }
 
 func TestVerdictSaysItPackedByCurve(t *testing.T) {
-	b, now := testBudget(t, 10_000, 8)
+	now := testBudgetNow
+	b := testBudget(t, 10_000, 8)
 	require.True(t, b.Request(curveClaim(100, 7000, 1000, 50_000), 0).Granted)
 	c := curveClaim(200, 1000, 7000, 50_000)
 	v := b.Request(c, 0)
 	require.False(t, v.Granted)
 
-	assert.Contains(t, machineBusyError(c, v, *now, "", 0, waitBound{}).Error(),
+	assert.Contains(t, machineBusyError(c, v, now, "", 0, waitBound{}).Error(),
 		"The broker packed by curve: the claims pass the 9.8 GiB budget together at 12:00:25, 25s from now.")
 
 	old := v
 	old.Packed = false
-	assert.Contains(t, machineBusyError(c, old, *now, "", 0, waitBound{}).Error(),
+	assert.Contains(t, machineBusyError(c, old, now, "", 0, waitBound{}).Error(),
 		"The broker packed by peak, predating memory curves: this claimed the 6.8 GiB peak, which passes the budget now.",
 		"a broker that predates curves answers Packed false")
 
-	flat := types.MachineClaim{Project: ".", Target: "lint", MemoryMB: 7000, PID: 200}
-	assert.Contains(t, machineBusyError(flat, types.MachineVerdict{BudgetMB: 10_000, HeldMB: 7000}, *now, "", 0, waitBound{}).Error(),
+	flat := budget.Claim{Project: ".", Target: "lint", MemoryMB: 7000, PID: 200}
+	assert.Contains(t, machineBusyError(flat, budget.Verdict{BudgetMB: 10_000, HeldMB: 7000}, now, "", 0, waitBound{}).Error(),
 		"The broker packed by peak: this claimed the 6.8 GiB peak, which passes the budget now.")
 }
 
@@ -532,7 +537,7 @@ func TestVerdictSaysItPackedByCurve(t *testing.T) {
 // the budget seats one step at a time, so the second waits out the first.
 func TestAStepResultCarriesItsClaimAndItsWait(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
-	b, _ := testBudget(t, 10_000, 1)
+	b := testBudget(t, 10_000, 1)
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 
@@ -566,7 +571,7 @@ func TestAStepResultCarriesItsClaimAndItsWait(t *testing.T) {
 // A replay runs nothing, so its result carries no claim and no cost.
 func TestAReplayedStepCarriesNoClaim(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
-	b, _ := testBudget(t, 10_000, 8)
+	b := testBudget(t, 10_000, 8)
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 	steps := []Step{{ProjectPath: ".", Target: "build", MemoryMB: 512}}
@@ -591,15 +596,15 @@ func TestAReplayedStepCarriesNoClaim(t *testing.T) {
 // A refusal says how the slots were sized as well as the memory, so a reader knows
 // whether to look at a slots policy, the run history, or the memory claim.
 func TestMachineDeclarationNamesHowSlotsWereSized(t *testing.T) {
-	measured := types.SlotSizing{Source: types.SlotsMeasured, Samples: 4}
+	measured := budget.SlotSizing{Source: budget.SlotsMeasured, Samples: 4}
 	assert.Equal(t, "it takes 3 slots (measured over 4 runs)",
-		describeMachineDeclaration(types.MachineClaim{Target: "scip", Slots: 3, Sizing: types.MemorySizing{Slots: measured}}))
+		describeMachineDeclaration(budget.Claim{Target: "scip", Slots: 3, Sizing: budget.Sizing{Slots: measured}}))
 	assert.Equal(t, "it claims 2.0 GiB (declared) and takes 1 slot (unmeasured)",
-		describeMachineDeclaration(types.MachineClaim{Target: "test", MemoryMB: 2048, Slots: 1,
-			Sizing: types.MemorySizing{Slots: types.SlotSizing{Source: types.SlotsUnmeasured}}}))
+		describeMachineDeclaration(budget.Claim{Target: "test", MemoryMB: 2048, Slots: 1,
+			Sizing: budget.Sizing{Slots: budget.SlotSizing{Source: budget.SlotsUnmeasured}}}))
 	assert.Equal(t, "it runs test, which claims 6.0 GiB (measured over 5 runs), and takes 6 slots (for its memory)",
-		describeMachineDeclaration(types.MachineClaim{Target: "ci", DeclaredBy: "test", MemoryMB: 6144, Slots: 6,
-			Sizing: types.MemorySizing{Samples: 5, Slots: types.SlotSizing{Source: types.SlotsForMemory}}}))
+		describeMachineDeclaration(budget.Claim{Target: "ci", DeclaredBy: "test", MemoryMB: 6144, Slots: 6,
+			Sizing: budget.Sizing{Samples: 5, Slots: budget.SlotSizing{Source: budget.SlotsForMemory}}}))
 }
 
 // composed is a skip_cache composer and the members its one ctx.needs call dispatches; a
@@ -621,7 +626,7 @@ func leaves(composer Step, members ...Step) composed {
 // composedRun runs root under a cache admitted by b, and inside each composer its members
 // as steps of their own, all at once, as one ctx.needs call's members are dispatched. It
 // returns the most leaves that ran at once and the members' joined errors.
-func composedRun(t *testing.T, b *MachineBudget, root composed) (int, error) {
+func composedRun(t *testing.T, b *budget.Machine, root composed) (int, error) {
 	t.Helper()
 	t.Setenv("MAGUS_LEVEL", "")
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
@@ -674,7 +679,7 @@ func composedRun(t *testing.T, b *MachineBudget, root composed) (int, error) {
 // one call each fit beside their composer, and together they do not. Each claims for
 // itself, so all four run, two at a time.
 func TestChildrenClaimTheirOwnQueueBesideTheirComposer(t *testing.T) {
-	b, _ := testBudget(t, 10_000, 8)
+	b := testBudget(t, 10_000, 8)
 	var members []Step
 	for _, name := range []string{"lint", "build", "test", "security"} {
 		members = append(members, Step{ProjectPath: ".", Target: name, MemoryMB: 4000, NoCache: true})
@@ -688,7 +693,7 @@ func TestChildrenClaimTheirOwnQueueBesideTheirComposer(t *testing.T) {
 // TestChildClaimLargerThanTheMachineNamesItself: a member over the whole budget is
 // refused at once, by its own name, while its siblings run.
 func TestChildClaimLargerThanTheMachineNamesItself(t *testing.T) {
-	b, _ := testBudget(t, 10_000, 8)
+	b := testBudget(t, 10_000, 8)
 	_, err := composedRun(t, b, leaves(Step{ProjectPath: ".", Target: "ci", MemoryMB: 1000, NoCache: true},
 		Step{ProjectPath: ".", Target: "lint", MemoryMB: 2000, NoCache: true},
 		Step{ProjectPath: ".", Target: "test", MemoryMB: 12_000, NoCache: true},
@@ -702,7 +707,7 @@ func TestChildClaimLargerThanTheMachineNamesItself(t *testing.T) {
 // TestChildClaimRunsInItsWaitingComposersSeat: a member that fits the budget alone but
 // not beside its composer runs, because the composer holds nothing while it waits.
 func TestChildClaimRunsInItsWaitingComposersSeat(t *testing.T) {
-	b, _ := testBudget(t, 10_000, 8)
+	b := testBudget(t, 10_000, 8)
 	_, err := composedRun(t, b, leaves(Step{ProjectPath: ".", Target: "ci", MemoryMB: 3000, NoCache: true},
 		Step{ProjectPath: ".", Target: "test", MemoryMB: 8000, NoCache: true},
 	))
@@ -713,7 +718,7 @@ func TestChildClaimRunsInItsWaitingComposersSeat(t *testing.T) {
 // member composes generators of its own, and the members alone fill every slot. Each
 // composer holds nothing while it waits, so every generator runs.
 func TestNestedComposersNeverHoldTheSeatsTheirMembersNeed(t *testing.T) {
-	b, _ := testBudget(t, 10_000, 4)
+	b := testBudget(t, 10_000, 4)
 	root := composed{step: Step{ProjectPath: ".", Target: "generate", NoCache: true}}
 	for _, name := range []string{"index-generate", "graph-generate", "docs-generate", "job-generate"} {
 		root.members = append(root.members, leaves(Step{ProjectPath: ".", Target: name, NoCache: true},
@@ -735,7 +740,7 @@ func TestNestedComposersNeverHoldTheSeatsTheirMembersNeed(t *testing.T) {
 func TestMembersWaitingOnASharedNeedLendTheirSeats(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
 	const members = 4
-	b, _ := testBudget(t, 10_000, members)
+	b := testBudget(t, 10_000, members)
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 	lim := WithLimiter(NewLimiter(8))
@@ -783,7 +788,7 @@ func TestMembersWaitingOnASharedNeedLendTheirSeats(t *testing.T) {
 // hold, and what it says while it does.
 type BudgetWaitSuite struct {
 	suite.Suite
-	b      *MachineBudget
+	b      *budget.Machine
 	adm    *budgetAdmitter
 	gate   *machineGate
 	logged *lockedLog
@@ -797,17 +802,17 @@ func (s *BudgetWaitSuite) SetupTest() {
 	s.T().Setenv("MAGUS_LEVEL", "0")
 	s.T().Setenv(spawn.AncestorsEnvVar, "")
 	s.T().Setenv("XDG_STATE_HOME", s.T().TempDir())
-	s.b, _ = testBudget(s.T(), 10_000, 8)
+	s.b = testBudget(s.T(), 10_000, 8)
 	s.adm = &budgetAdmitter{budget: s.b}
 	s.logged = &lockedLog{}
 	s.gate = &machineGate{admit: s.adm, wait: time.Minute, log: slog.New(slog.NewTextHandler(s.logged, nil))}
-	v := s.b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100}, 0)
+	v := s.b.Request(budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100}, 0)
 	s.Require().True(v.Granted)
 	s.holder = v.ID
 }
 
 // stranger is pid 200's claim, which the holder keeps out.
-var stranger = types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 5000, PID: 200}
+var stranger = budget.Claim{Project: "docs", Target: "ci", MemoryMB: 5000, PID: 200}
 
 func (s *BudgetWaitSuite) said(text string) bool { return strings.Contains(s.logged.String(), text) }
 
@@ -859,7 +864,7 @@ func (s *BudgetWaitSuite) TestAHolderChangeSaysSoOnce() {
 	done := acquireAsync(s.T().Context(), s.gate, stranger)
 	s.Eventually(func() bool { return s.said("waiting for a seat") }, 5*time.Second, 5*time.Millisecond)
 
-	s.Require().True(s.b.Request(types.MachineClaim{Project: "web", Target: "lint", MemoryMB: 500, PID: 300}, 0).Granted)
+	s.Require().True(s.b.Request(budget.Claim{Project: "web", Target: "lint", MemoryMB: 500, PID: 300}, 0).Granted)
 	s.adm.wake()
 	s.Eventually(func() bool { return s.said("still waiting for a seat for docs ci") }, 5*time.Second, 5*time.Millisecond)
 	s.True(s.said("arrived pid 300 web lint"))
@@ -883,9 +888,9 @@ func (s *BudgetWaitSuite) TestAFinalAskAtTheBoundThatFitsIsSeated() {
 }
 
 func (s *BudgetWaitSuite) TestANestedChildUnderAHolderIsFreeSeatedNotQueued() {
-	parent := s.b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 500, PID: 400, Invocation: "400:root"}, 0)
+	parent := s.b.Request(budget.Claim{Project: ".", Target: "ci", MemoryMB: 500, PID: 400, Invocation: "400:root"}, 0)
 	s.Require().True(parent.Granted)
-	release, err := s.gate.acquire(s.T().Context(), types.MachineClaim{
+	release, err := s.gate.acquire(s.T().Context(), budget.Claim{
 		Project: ".", Target: "go-test", MemoryMB: 4000, PID: 401, Invocation: "401:child", Ancestors: []string{"400:root"},
 	})
 
@@ -896,12 +901,12 @@ func (s *BudgetWaitSuite) TestANestedChildUnderAHolderIsFreeSeatedNotQueued() {
 
 func (s *BudgetWaitSuite) TestAComposersRetakeWaitsInsteadOfFailing() {
 	s.adm.Release(s.T().Context(), s.holder)
-	claim := types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 6000, PID: 500}
+	claim := budget.Claim{Project: ".", Target: "ci", MemoryMB: 6000, PID: 500}
 	seat, err := s.gate.claim(s.T().Context(), claim)
 	s.Require().NoError(err)
 	h := &machineHold{gate: s.gate, claim: claim, id: seat.id, release: seat.release, slots: seat.slots}
 	h.lend()
-	member := s.b.Request(types.MachineClaim{Project: "x", Target: "build", MemoryMB: 9000, PID: 600}, 0)
+	member := s.b.Request(budget.Claim{Project: "x", Target: "build", MemoryMB: 9000, PID: 600}, 0)
 	s.Require().True(member.Granted)
 
 	retaken := make(chan error, 1)
@@ -927,14 +932,14 @@ func (s *BudgetWaitSuite) TestALeasedWorkerWaitsItsBoundThenNamesTheOwedFiling()
 // roomAtTheBound parks every claim and seats the one unparked ask.
 type roomAtTheBound struct{ *budgetAdmitter }
 
-func (a *roomAtTheBound) Claim(ctx context.Context, _ types.MachineClaim, parked func(types.MachineVerdict)) (types.MachineVerdict, error) {
-	parked(types.MachineVerdict{Fits: true, Holders: []types.MachineClaimant{{Project: ".", Target: "test", PID: 100}}})
+func (a *roomAtTheBound) Claim(ctx context.Context, _ budget.Claim, parked func(budget.Verdict)) (budget.Verdict, error) {
+	parked(budget.Verdict{Fits: true, Holders: []budget.Claimant{{Project: ".", Target: "test", PID: 100}}})
 	<-ctx.Done()
-	return types.MachineVerdict{}, ctx.Err()
+	return budget.Verdict{}, ctx.Err()
 }
 
-func (a *roomAtTheBound) Request(context.Context, types.MachineClaim) (types.MachineVerdict, error) {
-	return types.MachineVerdict{Granted: true, Fits: true, ID: "at-the-bound"}, nil
+func (a *roomAtTheBound) Request(context.Context, budget.Claim) (budget.Verdict, error) {
+	return budget.Verdict{Granted: true, Fits: true, ID: "at-the-bound"}, nil
 }
 
 // lockedLog is a log the gate writes from its own goroutines.
@@ -957,14 +962,14 @@ func (l *lockedLog) String() string {
 
 func (s *BudgetWaitSuite) timedWait() (context.Context, *budgetWait) {
 	g := &machineGate{wait: 50 * time.Millisecond, log: s.gate.log}
-	wctx, w := g.newBudgetWait(s.T().Context(), types.MachineClaim{Project: ".", Target: "test"})
+	wctx, w := g.newBudgetWait(s.T().Context(), budget.Claim{Project: ".", Target: "test"})
 	s.T().Cleanup(w.stop)
 	return wctx, w
 }
 
 var (
-	strangerHolds = types.MachineVerdict{Fits: true, Holders: []types.MachineClaimant{{PID: 7, Project: ".", Target: "lint"}}}
-	ownRunHolds   = types.MachineVerdict{Fits: true, OwnRun: true}
+	strangerHolds = budget.Verdict{Fits: true, Holders: []budget.Claimant{{PID: 7, Project: ".", Target: "lint"}}}
+	ownRunHolds   = budget.Verdict{Fits: true, OwnRun: true}
 )
 
 func (s *BudgetWaitSuite) TestAWaitThatTurnsToItsOwnRunNeverExpires() {
@@ -988,10 +993,10 @@ func (s *BudgetWaitSuite) TestAWaitThatTurnsToStrangersAgainStartsItsBoundAgain(
 
 func TestBudgetWaitLineNamesEachHoldersBreakdownAndTheSoonestEndAsAtLeast(t *testing.T) {
 	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
-	v := types.MachineVerdict{Holders: []types.MachineClaimant{
-		{Project: ".", Target: "lint", PID: 10, MemoryMB: 4915, Sizing: types.MemorySizing{Samples: 48}, Dir: "/a",
-			Since: now.Add(-time.Minute), Profile: types.MemoryProfile{Runs: 48, D10Ms: 90_000, D90Ms: 300_000}},
-		{Project: ".", Target: "conventions", Under: ".:lint", PID: 10, MemoryMB: 4300, Sizing: types.MemorySizing{Samples: 12}},
+	v := budget.Verdict{Holders: []budget.Claimant{
+		{Project: ".", Target: "lint", PID: 10, MemoryMB: 4915, Sizing: budget.Sizing{Samples: 48}, Dir: "/a",
+			Since: now.Add(-time.Minute), Profile: budget.Profile{Runs: 48, D10Ms: 90_000, D90Ms: 300_000}},
+		{Project: ".", Target: "conventions", Under: ".:lint", PID: 10, MemoryMB: 4300, Sizing: budget.Sizing{Samples: 12}},
 		{Project: ".", Target: "vet", PID: 11},
 	}}
 	assert.Equal(t, "held by pid 10 (root) lint 4.8 GiB: own peak over 48 runs, in /a; "+
@@ -1002,23 +1007,749 @@ func TestBudgetWaitLineNamesEachHoldersBreakdownAndTheSoonestEndAsAtLeast(t *tes
 func TestGrantedSlotsFromABrokerWithoutGrantsAreTheFullWidthSaidOnce(t *testing.T) {
 	var logged bytes.Buffer
 	g := &machineGate{log: slog.New(slog.NewTextHandler(&logged, nil))}
-	elastic := types.MachineClaim{Project: ".", Target: "test", Slots: 6, SlotsFloor: 1}
+	elastic := budget.Claim{Project: ".", Target: "test", Slots: 6, SlotsFloor: 1}
 
-	first := g.granted(t.Context(), elastic, types.MachineVerdict{Granted: true, ID: "1.1"})
-	second := g.granted(t.Context(), elastic, types.MachineVerdict{Granted: true, ID: "1.2"})
+	first := g.granted(t.Context(), elastic, budget.Verdict{Granted: true, ID: "1.1"})
+	second := g.granted(t.Context(), elastic, budget.Verdict{Granted: true, ID: "1.2"})
 	assert.Equal(t, [2]int{6, 6}, [2]int{first.slots, second.slots})
 	assert.Equal(t, 1, strings.Count(logged.String(), "the broker grants no elastic slots"))
-	assert.Equal(t, 2, g.granted(t.Context(), elastic, types.MachineVerdict{Granted: true, ID: "1.3", Slots: 2}).slots)
+	assert.Equal(t, 2, g.granted(t.Context(), elastic, budget.Verdict{Granted: true, ID: "1.3", Slots: 2}).slots)
 }
 
 func TestAComposersRetakeAsksTheWidthItRunsWith(t *testing.T) {
-	h := &machineHold{claim: types.MachineClaim{Target: "lint", Slots: 8, SlotsFloor: 1}, slots: 3}
-	assert.Equal(t, types.MachineClaim{Target: "lint", Slots: 3, SlotsFloor: 3}, h.retake(),
+	h := &machineHold{claim: budget.Claim{Target: "lint", Slots: 8, SlotsFloor: 1}, slots: 3}
+	assert.Equal(t, budget.Claim{Target: "lint", Slots: 3, SlotsFloor: 3}, h.retake(),
 		"its jobserver and GOMAXPROCS were fixed at three")
 }
 
 func TestBudgetWaitLineSaysItsPlaceInTheQueue(t *testing.T) {
-	assert.Empty(t, describeMachineQueue(types.MachineVerdict{}), "a broker without positions says nothing")
-	assert.Equal(t, "; 1 claim is ahead of it in the queue", describeMachineQueue(types.MachineVerdict{Ahead: 1}))
-	assert.Equal(t, "; 3 claims are ahead of it in the queue", describeMachineQueue(types.MachineVerdict{Ahead: 3}))
+	assert.Empty(t, describeMachineQueue(budget.Verdict{}), "a broker without positions says nothing")
+	assert.Equal(t, "; 1 claim is ahead of it in the queue", describeMachineQueue(budget.Verdict{Ahead: 1}))
+	assert.Equal(t, "; 3 claims are ahead of it in the queue", describeMachineQueue(budget.Verdict{Ahead: 3}))
+}
+
+// curveClaim is a claim over a 100s run holding early for its first half and late for
+// its second, with a duration band from d10Ms to 100s, claiming its peak.
+func curveClaim(pid int, early, late uint32, d10Ms int64) budget.Claim {
+	p := budget.Profile{D10Ms: d10Ms, D90Ms: 100_000, Runs: 3}
+	for i := range p.Curve {
+		p.Curve[i] = early
+		if i >= budget.CurveBuckets/2 {
+			p.Curve[i] = late
+		}
+	}
+	return budget.Claim{Project: ".", Target: "test", MemoryMB: p.Curve.PeakMB(), Profile: p, Slots: 1, PID: pid}
+}
+
+// testBudgetNow is the instant every testBudget's clock stands at.
+var testBudgetNow = time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+
+// testBudget is a machine budget whose clock stands at testBudgetNow and that knows
+// magus's wrapper invocations, as the broker's does.
+func testBudget(t *testing.T, mb, slots int) *budget.Machine {
+	t.Helper()
+	return budget.NewMachine(mb, slots).WithWrappers(types.IsWrapperInvocation).
+		WithClock(func() time.Time { return testBudgetNow })
+}
+
+// budgetAdmitter is a MachineAdmitter answering from a budget a test
+// writes. Like the broker, it queues a claim that can fit until a release
+// seats it. It records every request so the gate's calls can be observed.
+type budgetAdmitter struct {
+	mu       sync.Mutex
+	freed    sync.Cond
+	budget   *budget.Machine
+	requests int
+	fail     error
+	released []string
+	overruns []string
+}
+
+func (*budgetAdmitter) HoldGroup(context.Context, string, int, string) (string, error) {
+	return "", nil
+}
+
+func (*budgetAdmitter) ReleaseHold(context.Context, string) error { return nil }
+
+func (f *budgetAdmitter) Claim(ctx context.Context, c budget.Claim, parked func(budget.Verdict)) (budget.Verdict, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.requests++
+	if f.fail != nil {
+		return budget.Verdict{}, f.fail
+	}
+	f.freed.L = &f.mu
+	stop := context.AfterFunc(ctx, func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.freed.Broadcast()
+	})
+	defer stop()
+	sent := ""
+	for {
+		v := f.budget.Request(c, 0)
+		if v.Granted || !v.Fits {
+			return v, nil
+		}
+		if k := fmt.Sprint(v.OwnRun, v.Holders); k != sent && parked != nil {
+			sent = k
+			f.mu.Unlock()
+			parked(v)
+			f.mu.Lock()
+		}
+		if ctx.Err() != nil {
+			return budget.Verdict{}, ctx.Err()
+		}
+		f.freed.Wait()
+	}
+}
+
+func (f *budgetAdmitter) Request(_ context.Context, c budget.Claim) (budget.Verdict, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail != nil {
+		return budget.Verdict{}, f.fail
+	}
+	return f.budget.Request(c, 0), nil
+}
+
+// wake re-judges every parked claim, as a broker does when a holder joins.
+func (f *budgetAdmitter) wake() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.freed.L = &f.mu
+	f.freed.Broadcast()
+}
+
+func (f *budgetAdmitter) Release(_ context.Context, id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.released = append(f.released, id)
+	f.budget.Release(id)
+	f.freed.L = &f.mu
+	f.freed.Broadcast()
+}
+
+func (f *budgetAdmitter) Overrun(_ context.Context, id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.overruns = append(f.overruns, id)
+	f.budget.Overrun(id)
+}
+
+func testGate(t *testing.T, b *budget.Machine) (*machineGate, *budgetAdmitter) {
+	t.Helper()
+	adm := &budgetAdmitter{budget: b}
+	g := &machineGate{admit: adm, log: newLogger("", 0)}
+	return g, adm
+}
+
+func TestAdmitMachineClaimsAndReleasesNonRunWork(t *testing.T) {
+	b := testBudget(t, 1000, 2)
+	adm := &budgetAdmitter{budget: b}
+	release, err := AdmitMachine(t.Context(), adm, budget.Claim{
+		Project: ".", Target: "session-brief", MemoryMB: 512,
+	}, false, 0)
+	require.NoError(t, err)
+
+	holders := b.Snapshot().Holders
+	require.Len(t, holders, 1)
+	assert.NotEmpty(t, holders[0].Dir)
+	assert.Equal(t, budget.Claimant{
+		Project: ".", Target: "session-brief", PID: os.Getpid(), MemoryMB: 512, Slots: 1,
+		Dir:     holders[0].Dir,     // where the test binary runs
+		Command: holders[0].Command, // the test binary's argv
+		Since:   testBudgetNow,
+	}, holders[0])
+
+	other := b.Request(budget.Claim{Project: ".", Target: "build", MemoryMB: 600, PID: os.Getpid() + 1}, 0)
+	assert.False(t, other.Granted, "the brief's claim must count against another invocation")
+	release()
+	assert.Empty(t, b.Snapshot().Holders)
+}
+
+func TestABudgetWaitOfZeroRefusesAtOnceNamingTheHolder(t *testing.T) {
+	b := testBudget(t, 10_000, 8)
+	g, adm := testGate(t, b)
+
+	_, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.NoError(t, err)
+
+	_, err = g.acquire(t.Context(), budget.Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, types.MachineBudgetExhausted), "the code is what maps to exit 75")
+	assert.Contains(t, err.Error(), "It did not wait")
+	assert.Contains(t, err.Error(), "pid 100 (root) test")
+	assert.Equal(t, 2, adm.requests, "a refusal is one request, not a poll")
+}
+
+// acquireAsync runs g.acquire on its own goroutine, so a test can tell a wait from an
+// answer.
+func acquireAsync(ctx context.Context, g *machineGate, c budget.Claim) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		release, err := g.acquire(ctx, c)
+		if release != nil {
+			release()
+		}
+		done <- err
+	}()
+	return done
+}
+
+// requireWaits asserts the acquire is still pending, then that it is granted once
+// free runs.
+func requireWaits(t *testing.T, done <-chan error, free func()) {
+	t.Helper()
+	select {
+	case err := <-done:
+		t.Fatalf("acquire answered (%v) while the budget was full of its own run's claims; it must wait for them", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	free()
+	select {
+	case err := <-done:
+		require.NoError(t, err, "granted once its own run's claim is released")
+	case <-time.After(5 * time.Second):
+		t.Fatal("never granted after the blocking claim was released")
+	}
+}
+
+// TestMachineGateWaitsOnClaimsOfItsOwnProcess is the server shape: two unrelated
+// invocations in ONE process, and the budget is full of the first one's claim. Nothing
+// here is another magus process, so the second queues rather than exiting 75.
+func TestMachineGateWaitsOnClaimsOfItsOwnProcess(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "0")
+	b := testBudget(t, 10_000, 8)
+	g, _ := testGate(t, b)
+
+	release, err := g.acquire(t.Context(), budget.Claim{
+		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Invocation: "100:inv-a",
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	done := acquireAsync(ctx, g, budget.Claim{
+		Project: "docs", Target: "ci", MemoryMB: 9000, PID: 100, Invocation: "100:inv-b",
+	})
+	requireWaits(t, done, release)
+}
+
+// TestMachineGateWaitsOnItsOwnRunsSiblings is a ci target whose parallel steps each shell
+// out to a magus of their own: the children are separate processes under one root, and
+// the second queues behind the first rather than failing the parent. A stranger asking
+// for the same room is still refused.
+func TestMachineGateWaitsOnItsOwnRunsSiblings(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "0")
+	const root = "100:inv-root"
+	b := testBudget(t, 10_000, 8)
+	g, _ := testGate(t, b)
+
+	_, err := g.acquire(t.Context(), budget.Claim{
+		Project: ".", Target: "ci", MemoryMB: 1000, PID: 100, Invocation: root,
+	})
+	require.NoError(t, err, "the parent step")
+	releaseFirst, err := g.acquire(t.Context(), budget.Claim{
+		Project: "libs/shared", Target: "build", MemoryMB: 9000, PID: 200,
+		Invocation: "200:inv-child-a", Ancestors: []string{root},
+	})
+	require.NoError(t, err, "the first child is excused from its parent's claim")
+
+	_, err = g.acquire(t.Context(), budget.Claim{
+		Project: "x", Target: "build", MemoryMB: 9000, PID: 400, Invocation: "400:inv-stranger",
+	})
+	require.Error(t, err, "under budget_wait 0 a stranger is refused, not queued")
+	assert.True(t, errors.Is(err, types.MachineBudgetExhausted))
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	done := acquireAsync(ctx, g, budget.Claim{
+		Project: "libs/shared", Target: "test", MemoryMB: 9000, PID: 300,
+		Invocation: "300:inv-child-b", Ancestors: []string{root},
+	})
+	requireWaits(t, done, releaseFirst)
+}
+
+// TestMachineGateStopsWaitingWithItsContext pins the bound on the own-run wait: the
+// caller's context, and nothing left on the budget once it ends.
+func TestMachineGateStopsWaitingWithItsContext(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "0")
+	b := testBudget(t, 10_000, 8)
+	g, _ := testGate(t, b)
+
+	_, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+	defer cancel()
+	_, err = g.acquire(ctx, budget.Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 100})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Len(t, b.Snapshot().Holders, 1, "a wait that ended holds nothing")
+}
+
+// TestRunAllReportsAMachineRefusal pins that a step the budget refuses is put on the
+// record a failed step is: the refusal happens before Run, whose fail is what logs a
+// failure and fires the result observers, so skipping that left `magus run` exiting 75
+// with nothing printed after the header.
+func TestRunAllReportsAMachineRefusal(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	b := testBudget(t, 10_000, 8)
+	held := b.Request(budget.Claim{
+		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
+	}, 0)
+	require.True(t, held.Granted, "the fixture's holder must own the budget")
+
+	var out bytes.Buffer
+	c, err := Open(t.Context(), t.TempDir(),
+		WithLogger(slog.New(prettyHandler(&out, slog.LevelInfo))),
+		WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
+	require.NoError(t, err)
+
+	sink := &eventSink{}
+	ctx := journal.WithLogger(t.Context(), journal.NewLogger(sink))
+	ctx = journal.WithInvocationID(ctx, "invrefused")
+
+	var observed []error
+	_, err = c.RunAll(ctx, []Step{{ProjectPath: ".", Target: "test", MemoryMB: 9000}},
+		func(context.Context, Step) error {
+			t.Error("a refused step must not run")
+			return nil
+		},
+		OnResult(func(_ *Step, _ *Result, err error) { observed = append(observed, err) }))
+
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeMachineBusy, stated.ExitCode())
+
+	printed := out.String()
+	assert.Contains(t, printed, "[fail] workspace test (not started)\n")
+	assert.Contains(t, printed, "  cause: [MGS3009] not starting (root) test: no seat is free")
+	assert.Contains(t, printed, "held by pid 100 (root) test (8.8 GiB)")
+	assert.NotContains(t, printed, "output:", "nothing ran, so there is no captured output to point at")
+	assert.Contains(t, printed, "  reproduce: magus run test .\n")
+
+	require.Len(t, observed, 1, "the result observers feed -o jsonl's run.target.result and run.diagnostic")
+	assert.ErrorIs(t, observed[0], types.MachineBudgetExhausted)
+	assert.Equal(t, Stats{Error: 1}, c.Stats(), "a refusal counts toward the run's failed total")
+
+	// The session store and `magus session --brief` read failures off result events, so a
+	// refusal that emitted none left them showing a run that never happened.
+	events := sink.snapshot()
+	require.Len(t, events, 1)
+	assert.Equal(t, refusalEvent("invrefused"), normalizeRefusal(t, events[0]),
+		"nothing ran, so nothing was captured and there is no ref")
+}
+
+// refusalEvent is the result event a machine refusal of `.`'s test journals, with the
+// volatile fields normalizeRefusal clears.
+func refusalEvent(inv string) journal.Event {
+	return journal.Event{
+		Inv: inv, Project: ".", Target: "test", Kind: journal.KindResult, Level: "error",
+		Status: journal.StatusFail, DiagnosticCode: string(types.MachineBudgetExhausted),
+	}
+}
+
+// normalizeRefusal clears a refusal event's timestamp and its cause text, which names the
+// holder's figures, once the text is checked to give the cause.
+func normalizeRefusal(t *testing.T, e journal.Event) journal.Event {
+	t.Helper()
+	assert.Contains(t, e.Text, "no seat is free")
+	e.Ts, e.Text = 0, ""
+	return e
+}
+
+// RunAside has no batch to report the refusal to, so its caller sees only the returned
+// error; the journal is where the record of a run that did nothing lives.
+func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	b := testBudget(t, 10_000, 8)
+	held := b.Request(budget.Claim{
+		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
+	}, 0)
+	require.True(t, held.Granted, "the fixture's holder must own the budget")
+
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
+	require.NoError(t, err)
+
+	sink := &eventSink{}
+	ctx := journal.WithLogger(t.Context(), journal.NewLogger(sink))
+	_, err = c.RunAside(ctx, Step{ProjectPath: ".", Target: "test", MemoryMB: 9000},
+		func(context.Context) error {
+			t.Error("a refused step must not run")
+			return nil
+		})
+
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	events := sink.snapshot()
+	require.Len(t, events, 1)
+	assert.Equal(t, refusalEvent(events[0].Inv), normalizeRefusal(t, events[0]))
+
+	// A claim that ends because the run was cancelled is not a refusal to put on record.
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = c.RunAside(cancelled, Step{ProjectPath: ".", Target: "test", MemoryMB: 9000},
+		func(context.Context) error {
+			t.Error("a cancelled step must not run")
+			return nil
+		})
+	require.Error(t, err)
+	assert.Len(t, sink.snapshot(), 1, "a cancelled claim journals nothing")
+}
+
+// cachedUnderFullBudget warms a local entry for step with no admitter, then reopens the
+// same cache under an admitter whose budget another checkout's claim has filled.
+func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *budgetAdmitter) {
+	t.Helper()
+	t.Setenv("MAGUS_LEVEL", "")
+	cdir := t.TempDir()
+	warm, err := Open(t.Context(), cdir, WithLocalWrite(true))
+	require.NoError(t, err)
+	_, err = warm.RunAll(t.Context(), []Step{step}, func(context.Context, Step) error { return nil })
+	require.NoError(t, err, "warming the entry")
+
+	b := testBudget(t, 10_000, 8)
+	held := b.Request(budget.Claim{
+		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
+	}, 0)
+	require.True(t, held.Granted, "the fixture's holder must own the budget")
+	adm := &budgetAdmitter{budget: b}
+	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithMachineAdmission(adm, 0))
+	require.NoError(t, err)
+	return c, adm
+}
+
+// TestRunAllReplaysALocalHitWithoutAMachineClaim is two fully cached `magus run test .`
+// in different checkouts: the second must replay, not exit 75 for memory it never uses.
+func TestRunAllReplaysALocalHitWithoutAMachineClaim(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("v1"), 0o644))
+	step := Step{ProjectPath: ".", WorkspaceRoot: root, Target: "test", Sources: types.MustParseGlobs("a.txt"), MemoryMB: 9000}
+	c, adm := cachedUnderFullBudget(t, step)
+	noRun := func(context.Context) error {
+		t.Error("a cached step must replay, not run")
+		return nil
+	}
+
+	results, err := c.RunAll(t.Context(), []Step{step}, func(ctx context.Context, _ Step) error { return noRun(ctx) })
+	require.NoError(t, err)
+	assert.True(t, results[0].Hit)
+
+	r, err := c.RunAside(t.Context(), step, noRun)
+	require.NoError(t, err)
+	assert.True(t, r.Hit)
+
+	assert.Zero(t, adm.requests, "a local hit asks the machine budget for nothing")
+}
+
+func TestRunAllClaimsForAStepThatWillExecute(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(root string, s *Step)
+	}{
+		{"source changed", func(root string, _ *Step) {
+			require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("v2-different-length"), 0o644))
+		}},
+		{"no cache", func(_ string, s *Step) { s.NoCache = true }},
+		{"skip replay", func(_ string, s *Step) { s.SkipReplay = true }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("v1"), 0o644))
+			step := Step{ProjectPath: ".", WorkspaceRoot: root, Target: "test", Sources: types.MustParseGlobs("a.txt"), MemoryMB: 9000}
+			c, adm := cachedUnderFullBudget(t, step)
+			tc.edit(root, &step)
+
+			_, err := c.RunAll(t.Context(), []Step{step}, func(context.Context, Step) error {
+				t.Error("a refused step must not run")
+				return nil
+			})
+			require.ErrorIs(t, err, types.MachineBudgetExhausted)
+			assert.Equal(t, 1, adm.requests)
+		})
+	}
+}
+
+// TestRunRefusesToExecuteAGoneLocalHit pins what keeps an evicted entry from running
+// unclaimed: under replayLocal, Run neither falls through to fn nor to another tier.
+func TestRunRefusesToExecuteAGoneLocalHit(t *testing.T) {
+	c, err := Open(t.Context(), t.TempDir(), WithLocalWrite(true))
+	require.NoError(t, err)
+	_, err = c.Run(t.Context(), Step{ProjectPath: ".", Target: "test"}, func(context.Context) error {
+		t.Error("a step admitted as a local hit must not execute")
+		return nil
+	}, replayLocal(strings.Repeat("0", 64), 0))
+	require.ErrorIs(t, err, errLocalEntryGone)
+}
+
+func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
+	b := testBudget(t, 4000, 8)
+	g, _ := testGate(t, b)
+
+	_, err := g.acquire(t.Context(), budget.Claim{
+		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 64_000, PID: 100,
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, types.MachineBudgetExhausted))
+	assert.Contains(t, err.Error(), "runs test, which claims 62.5 GiB (declared)",
+		"a composed target is held over a number a target in its chain wrote")
+	assert.Contains(t, err.Error(), "Waiting would not help")
+}
+
+// The refusal an author meets with a 26 GiB target on a 32 GiB machine. magus budgets less
+// than the whole machine (a quarter under balanced/conservative, all but a small floor
+// under aggressive), so the figure in the message is smaller than the RAM the reader can
+// see, and a refusal that does not say so reads as arithmetic magus got wrong. It names no
+// fixed percentage: which reservation applied is not something this budget records, and a
+// number right for one profile is a lie for the other.
+func TestMachineDeclarationNamesAMeasuredFigure(t *testing.T) {
+	c := budget.Claim{Target: "test", MemoryMB: 5880, Slots: 1,
+		Sizing: budget.Sizing{Samples: 53, AnyShape: true}}
+	assert.Equal(t, "it claims 5.7 GiB (measured over 53 runs of any shape) and takes 1 slot",
+		describeMachineDeclaration(c))
+}
+
+func TestMachineRefusalExplainsTheGapAndTheDeclarationCheck(t *testing.T) {
+	b := testBudget(t, 4000, 8)
+	g, _ := testGate(t, b)
+
+	_, err := g.acquire(t.Context(), budget.Claim{
+		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 26_000, Slots: 1, PID: 100,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "3.9 GiB", "the budget it did not fit in")
+	assert.Contains(t, err.Error(), "claims 25.4 GiB (declared)", "and the declaration held against it")
+	assert.Contains(t, err.Error(), "not the whole machine",
+		"a budget smaller than the machine reads as a miscount unless the gap is explained")
+	assert.Contains(t, err.Error(), "MGS1030",
+		"magus has measured this target's peak, so the author is sent to the check rather than to a guess")
+}
+
+// The other axis: a step declaring more slots than the machine has cores is refused by the
+// same path, and neither the memory fraction nor a memory check has anything to say about it.
+func TestMachineRefusalForTooManySlotsStaysAboutSlots(t *testing.T) {
+	b := testBudget(t, 32_000, 8)
+	g, _ := testGate(t, b)
+
+	_, err := g.acquire(t.Context(), budget.Claim{
+		Project: ".", Target: "test", MemoryMB: 1000, Slots: 32, PID: 100,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "8 slots in total")
+	assert.NotContains(t, err.Error(), "MGS1030", "a core count is not a declaration MGS1030 measures")
+	assert.NotContains(t, err.Error(), "75%", "and the memory share is not why this was refused")
+}
+
+func TestMachineGateAdmitsWhenTheArbiterIsGone(t *testing.T) {
+	b := testBudget(t, 10_000, 8)
+	g, adm := testGate(t, b)
+	adm.fail = errors.New("dial: connection refused")
+
+	release, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.NoError(t, err, "losing the arbiter must not fail a build that was going to run")
+	require.NotNil(t, release)
+	release()
+}
+
+// TestMachineGateRequiredRefusesWhenTheArbiterIsGone is broker: required. The step does
+// not start, and the refusal exits 69 rather than 75: no arbiter is not a busy host.
+func TestMachineGateRequiredRefusesWhenTheArbiterIsGone(t *testing.T) {
+	b := testBudget(t, 10_000, 8)
+	g, adm := testGate(t, b)
+	g.required = true
+	adm.fail = errors.New("dial: connection refused")
+
+	release, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.Error(t, err)
+	assert.Nil(t, release)
+	assert.ErrorIs(t, err, types.BrokerUnavailable)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeBrokerUnavailable, stated.ExitCode())
+	assert.Contains(t, err.Error(), "connection refused", "the cause stays on the error")
+}
+
+// A broker from another build is not reported as no broker.
+func TestMachineGateNamesABrokerFromAnotherBuild(t *testing.T) {
+	b := testBudget(t, 10_000, 8)
+	g, adm := testGate(t, b)
+	var logged bytes.Buffer
+	g.log = slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	adm.fail = types.WrapDiagnostic(types.PeerFromAnotherBuild, errors.New("broker: expected a hello speaking protocol 2"), "hello")
+
+	release, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.NoError(t, err, "best-effort runs on without the broker")
+	release()
+	assert.Contains(t, logged.String(), string(types.PeerFromAnotherBuild))
+	assert.Contains(t, logged.String(), "a broker from another magus build answered")
+	assert.NotContains(t, logged.String(), "no broker answered")
+}
+
+func TestMachineGateRequiredRefusesABrokerFromAnotherBuild(t *testing.T) {
+	b := testBudget(t, 10_000, 8)
+	g, adm := testGate(t, b)
+	g.required = true
+	adm.fail = types.WrapDiagnostic(types.PeerFromAnotherBuild, errors.New("broker: expected a hello speaking protocol 2"), "hello")
+
+	_, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.ErrorIs(t, err, types.PeerFromAnotherBuild)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeBrokerUnavailable, stated.ExitCode())
+}
+
+func TestMachineGateIsInertWithoutAnAdmitter(t *testing.T) {
+	var g *machineGate
+	release, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000})
+	require.NoError(t, err)
+	assert.NotNil(t, release, "a library caller with no host to arbitrate behaves as before")
+}
+
+// TestMachineGateRefusesANestedRunBlindToItsAncestry is C7. A nested magus that cannot
+// name its ancestors cannot be excused from its parent's claim, so admitting it would
+// admit a claim indistinguishable from a stranger's against a budget its own parent
+// already filled.
+func TestMachineGateRefusesANestedRunBlindToItsAncestry(t *testing.T) {
+	// Nested, and the ancestry did not survive: a magusfile that cleared the
+	// environment. Both variables are set explicitly because the fallback reads the
+	// environment, so a test that named only one would be judging the harness's.
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "")
+	b := testBudget(t, 10_000, 8)
+	g, _ := testGate(t, b)
+
+	held, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.NoError(t, err)
+	defer held()
+
+	// Bounded, so a regression that admits this claim (instead of refusing it) fails in a
+	// second rather than hanging the package until the go test timeout.
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	// No Ancestors on the claim, none on the context, none in the environment.
+	_, err = g.acquire(ctx, budget.Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
+	require.Error(t, err, "this claim cannot be excused from its own parent's")
+	require.NotErrorIs(t, err, context.DeadlineExceeded, "it must REFUSE immediately, not wait out the ctx")
+	assert.True(t, errors.Is(err, types.MachineBudgetExhausted))
+	assert.Contains(t, err.Error(), "MAGUS_INVOCATION_ANCESTORS")
+}
+
+func TestMachineGateNotBlindWhenNotNested(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "0")
+	assert.False(t, blindToOwnAncestry(t.Context()), "a top-level run has no ancestry to lose")
+}
+
+// The empty-ctx fallback has no producer on the run path: runResolved's first statement is
+// attributeRun, which reads the environment itself and appends this run, so admit always
+// sees a stamped ctx. This pins the contract rather than a caller.
+func TestAncestryFallsBackToTheEnvironmentForAnUnstampedCaller(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
+
+	assert.Equal(t, []string{"3217:inv-parent"}, ancestorInvocations(context.Background()),
+		"the environment is the only carrier an unstamped caller has")
+	assert.False(t, blindToOwnAncestry(context.Background()),
+		"a consumer that CAN name its ancestors is not blind, whatever stamped ctx")
+
+	// ctx still wins when something upstream stamped it: under the server the process
+	// environment belongs to no invocation, and the ancestry on ctx is the run's own.
+	ctx := types.WithInvocationAncestors(context.Background(), []string{"55:inv-adopted"})
+	assert.Equal(t, []string{"55:inv-adopted"}, ancestorInvocations(ctx),
+		"a stamped ctx is authoritative; the environment is the fallback, not an override")
+}
+
+// The shape a library run actually arrives in: attributeRun leaves ancestry as
+// [parent..., self], and mintedHere strips self, so an SDK consumer is excused from its
+// parent's claim by a different branch than the test above.
+func TestAncestryStripsThisRunFromWhatAttributeRunStamped(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "1")
+
+	stamped := types.AppendInvocationAncestor(
+		types.WithInvocationAncestors(context.Background(), []string{"3217:inv-parent"}),
+		os.Getpid(), "inv-self")
+
+	assert.Equal(t, []string{"3217:inv-parent"}, ancestorInvocations(stamped),
+		"a run must not count itself among the claims it is excused from")
+	assert.Equal(t, fmt.Sprintf("%d:inv-self", os.Getpid()), selfInvocation(stamped))
+	assert.False(t, blindToOwnAncestry(stamped),
+		"a run that can name its parent is not blind")
+}
+
+// The same case end to end through the budget: the parent's claim filled the machine, and
+// the in-process run has to be excused from it or the pair deadlocks, since the parent
+// cannot release until this run ends.
+func TestLibraryCallerIsExcusedFromItsParentsClaim(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "1")
+	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "3217:inv-parent")
+
+	b := testBudget(t, 10_000, 8)
+	parent := b.Request(budget.Claim{
+		Project: ".", Target: "ci", MemoryMB: 10_000, Slots: 1, PID: 3217, Invocation: "3217:inv-parent",
+	}, 0)
+	require.True(t, parent.Granted, "the shard's own run fills the machine")
+
+	// The ctx admit actually sees for an SDK consumer: attributeRun adopted the parent
+	// from the environment and appended this run, which ancestorInvocations strips back
+	// off. A bare context.Background() here is a shape runResolved cannot produce.
+	stamped := types.AppendInvocationAncestor(
+		types.WithInvocationAncestors(context.Background(), []string{"3217:inv-parent"}),
+		os.Getpid(), "inv-self")
+	g, _ := testGate(t, b)
+	release, err := g.acquire(stamped, budget.Claim{
+		Project: "svc-a", Target: "alpha", MemoryMB: 500, Slots: 1, PID: 4000,
+		Ancestors: ancestorInvocations(stamped),
+	})
+	require.NoError(t, err, "an in-process run must be excused from the claim its own parent holds")
+	require.NotNil(t, release)
+	release()
+}
+
+func TestDescribeMachineHoldersBoundsTheList(t *testing.T) {
+	holders := make([]budget.Claimant, 0, 6)
+	for i := range 6 {
+		holders = append(holders, budget.Claimant{Project: ".", Target: "test", PID: 100 + i})
+	}
+	got := describeMachineHolders(holders)
+	assert.Equal(t, 4, strings.Count(got, "pid "), "a refusal names a few holders, not every one")
+	assert.Contains(t, got, "and 2 more")
+	assert.Equal(t, "nothing else holds a claim", describeMachineHolders(nil))
+}
+
+// TestMachineRefusalStatesItsExitCode pins the method the SERVER reads. mapExitCode
+// sees the concrete error and could go on matching the diagnostic code; a run the
+// server executes for an adopted client cannot, because the type does not survive the
+// socket. Without the method the refusal exits 75 alone and 1 under a server, which is
+// the exact split exit.Code exists to close.
+func TestMachineRefusalStatesItsExitCode(t *testing.T) {
+	b := testBudget(t, 10_000, 8)
+	g, _ := testGate(t, b)
+
+	_, err := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	require.NoError(t, err)
+	_, busy := g.acquire(t.Context(), budget.Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
+	require.Error(t, busy)
+
+	_, tooBig := g.acquire(t.Context(), budget.Claim{Project: ".", Target: "ci", MemoryMB: 64_000, PID: 300})
+	require.Error(t, tooBig)
+
+	// The code is per REFUSAL, not per package. A busy machine is EX_TEMPFAIL because the
+	// same command succeeds later; a declaration that exceeds the whole budget answers the
+	// same way forever, and telling a retry wrapper it was temporary loops it.
+	for _, tc := range []struct {
+		err  error
+		want int
+	}{
+		{busy, ExitCodeMachineBusy},
+		{fmt.Errorf("run: %w", busy), ExitCodeMachineBusy},
+		{tooBig, ExitCodeMachineDeclaration},
+	} {
+		var stated interface{ ExitCode() int }
+		require.ErrorAs(t, tc.err, &stated, "%v must state its exit code across the socket", tc.err)
+		assert.Equal(t, tc.want, stated.ExitCode(), "%v", tc.err)
+		assert.True(t, errors.Is(tc.err, types.MachineBudgetExhausted), "and stay matchable by its code")
+	}
+	assert.NotEqual(t, ExitCodeMachineBusy, ExitCodeMachineDeclaration,
+		"a permanent refusal that shares EX_TEMPFAIL is a retry loop")
 }

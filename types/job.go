@@ -799,7 +799,7 @@ type Job struct {
 	// on the base or in an integration. EndReason says where, for a person.
 	Landed bool `json:"landed,omitempty" yaml:"landed,omitempty"`
 	// Weight is a lean, never a guarantee: a run bound to the job carries it on its
-	// MachineClaim. In (0,1]; zero reads as DefaultJobWeight.
+	// budget.Claim. In (0,1]; zero reads as DefaultJobWeight.
 	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`
 	// Paused is the unix second a person paused the job, zero while it is not. A claim the
 	// holder already has finishes; exec and the guard refuse its next magus run.

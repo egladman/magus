@@ -23,8 +23,8 @@ import (
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 )
 
 func TestOwnsItsSignals(t *testing.T) {
@@ -170,7 +170,7 @@ func holdClaim(t *testing.T) *broker.Client {
 	c, err := broker.Dial(t.Context(), broker.DefaultAddr())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c.Close() })
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", Slots: 1})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "test", Slots: 1})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 	return c
@@ -221,7 +221,7 @@ func TestBrokerTermDrainsUntilItsHoldersFinish(t *testing.T) {
 	late, err := broker.Dial(t.Context(), broker.DefaultAddr())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = late.Close() })
-	_, err = late.Request(t.Context(), types.MachineClaim{Project: "api", Target: "build", Slots: 1})
+	_, err = late.Request(t.Context(), budget.Claim{Project: "api", Target: "build", Slots: 1})
 	var be *broker.Error
 	require.ErrorAs(t, err, &be)
 	assert.Equal(t, broker.CodeDraining, be.Code)

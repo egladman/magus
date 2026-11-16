@@ -11,7 +11,7 @@
 //     magus, and not in project either (the watch-ignore constructors need
 //     internal/file/watch, which already imports project).
 //   - Signatures: Load and WithLimiter carry internal types (*config.Config,
-//     *cache.Limiter). Keeping them here lets the server inject a shared limiter
+//     *budget.Limiter). Keeping them here lets the server inject a shared limiter
 //     without those internals leaking onto the public magus API.
 package workspace
 
@@ -19,9 +19,9 @@ import (
 	"io"
 
 	"github.com/egladman/magus/broker"
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -29,7 +29,7 @@ import (
 type Load struct {
 	ConfigPath string
 	Preloaded  *config.Config
-	Limiter    *cache.Limiter
+	Limiter    *budget.Limiter
 	Registry   *WorkspaceRegistry
 	// Broker is a broker client the caller shares across Open calls; nil lets Open make
 	// its own. BrokerGiven records that the caller passed one, so Open can refuse a nil
@@ -93,7 +93,7 @@ func WithLoadedConfig(cfg config.Config) Option {
 }
 
 // WithLimiter injects a pre-built concurrency limiter (e.g. shared across server workspaces).
-func WithLimiter(lim *cache.Limiter) Option {
+func WithLimiter(lim *budget.Limiter) Option {
 	return func(o Options) { o.Loading().Limiter = lim }
 }
 

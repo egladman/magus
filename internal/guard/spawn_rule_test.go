@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	// The interpreter a real magusfile load needs, which cmd/magus links in production.
 	"github.com/egladman/magus/internal/fixture"
 	_ "github.com/egladman/magus/internal/interp/bindings"
@@ -1694,17 +1695,17 @@ func TestAnExitedBindingYieldsToABaggageClaim(t *testing.T) {
 // No guard test reads this machine's broker: a full budget there would advise on every
 // root spawn the tests expect to pass.
 func init() {
-	budgetSnapshot = func(context.Context) (types.MachineSnapshot, error) {
-		return types.MachineSnapshot{}, errors.New("no broker in a guard test")
+	budgetSnapshot = func(context.Context) (budget.Snapshot, error) {
+		return budget.Snapshot{}, errors.New("no broker in a guard test")
 	}
 }
 
 // standBudget makes s the budget every spawn reads until the test ends. Callers never run
 // in parallel, since the reader is the package's.
-func standBudget(t *testing.T, s types.MachineSnapshot) {
+func standBudget(t *testing.T, s budget.Snapshot) {
 	t.Helper()
 	was := budgetSnapshot
-	budgetSnapshot = func(context.Context) (types.MachineSnapshot, error) { return s, nil }
+	budgetSnapshot = func(context.Context) (budget.Snapshot, error) { return s, nil }
 	t.Cleanup(func() { budgetSnapshot = was })
 }
 
@@ -1723,12 +1724,12 @@ func TestSpawnIntoAFullBuildBudgetIsAdvised(t *testing.T) {
 		return Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "claude-code"})
 	}
 	since := time.Now().Add(-6 * time.Minute)
-	full := types.MachineSnapshot{BudgetSlots: 2, HeldSlots: 2, Holders: []types.MachineClaimant{
+	full := budget.Snapshot{BudgetSlots: 2, HeldSlots: 2, Holders: []budget.Claimant{
 		{Project: ".", Target: "go-test", Dir: "/w/a", Since: since},
 		{Project: "docs", Target: "lint", Dir: "/w/b", Since: since.Add(time.Minute)},
 	}}
 
-	standBudget(t, types.MachineSnapshot{BudgetSlots: 2, HeldSlots: 1})
+	standBudget(t, budget.Snapshot{BudgetSlots: 2, HeldSlots: 1})
 	assert.Equal(t, "pass", spawn("budget-room", "").Decision, "a free slot says nothing")
 
 	standBudget(t, full)
@@ -1742,7 +1743,7 @@ func TestSpawnIntoAFullBuildBudgetIsAdvised(t *testing.T) {
 
 func TestSpawnIntoAFullBudgetSkipsAdviceForAWorkerThatRunsNoTarget(t *testing.T) {
 	check := &types.LeaseCheck{Target: "go-test", Project: "."}
-	full := types.MachineSnapshot{BudgetSlots: 2, HeldSlots: 2}
+	full := budget.Snapshot{BudgetSlots: 2, HeldSlots: 2}
 	for _, tc := range []struct {
 		name   string
 		row    types.Job

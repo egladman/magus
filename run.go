@@ -47,6 +47,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -1427,7 +1428,7 @@ func (r *composedRunner) runKeyedStep(ctx context.Context, p *types.Project, ste
 	run := func() error {
 		return r.runs.Once(ctx, types.TargetRef{Project: p.Path, Target: step.Target}, func() error {
 			handler := r.m.targetHandler(step.Target)
-			_, err := r.m.cache.RunAside(cache.WithoutSlotHeld(ctx), step, func(ctx context.Context) error {
+			_, err := r.m.cache.RunAside(budget.WithoutSlotHeld(ctx), step, func(ctx context.Context) error {
 				ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(r.runs.Passed(p.Path)...))
 				// The caller's args are not this step's.
 				ctx = project.WithExtraArgs(ctx, step.ExtraArgs)
@@ -1437,7 +1438,7 @@ func (r *composedRunner) runKeyedStep(ctx context.Context, p *types.Project, ste
 		})
 	}
 	lim := cache.LimiterFromContext(ctx)
-	if lim == nil || !cache.SlotHeld(ctx) {
+	if lim == nil || !budget.SlotHeld(ctx) {
 		return run()
 	}
 	return lim.Yield(ctx, run)
@@ -3629,7 +3630,7 @@ func measuredOutcome(ctx context.Context, start time.Time, result forecast.Outco
 		At:          time.Now(),
 		MaxRSSBytes: types.PeakRSS(ctx),
 		CPUMs:       types.CPUMs(ctx),
-		Slots:       cache.SlotsHeld(ctx),
+		Slots:       budget.SlotsHeld(ctx),
 		Curve:       types.Curve(ctx),
 		Charms:      shape.Charms,
 		ArgsHash:    shape.ArgsHash,

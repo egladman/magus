@@ -1,7 +1,7 @@
 ---
 title: "ADR 0050: the harness is a module named safetyscissors"
 order: 50
-description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. This record is written before any code; nothing is extracted until the open pull requests on magus merge."
+description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. Steps 1 and 4, the budget and the JSON Lines helpers, are built."
 tags: [adr, decision, sdk, harness, guard, jobs, module]
 status: proposed
 date: 2026-11-15
@@ -112,20 +112,28 @@ diagnostics already are. Its path is `github.com/egladman/magus/libs/safetysciss
 vanity path waits until the module leaves the repository, if it ever does. Its packages,
 each with one job:
 
-| Package   | Holds                                                                                       |
-| --------- | ------------------------------------------------------------------------------------------- |
-| `verdict` | `Decision`, `Verdict`, `Judgment`, the stricter-of merge, `DeniedError`                     |
-| `step`    | the step and its declared rows (ADR 0046), `Rule`, `Table`, `(Table).Judge`                 |
-| `job`     | the job store opened on a directory, `Job`, write paths, goals, fork, exit, grade, `Covers` |
-| `trail`   | append-only events, written and read                                                        |
-| `session` | session ids and their append-only records                                                   |
-| `sandbox` | read, write and exec policy, narrowed to a lease                                            |
-| `budget`  | the slot limiter, machine claims, and a spend limit priced from rows the caller supplies    |
-| `tier`    | the model tier set and price table built from rows the caller supplies                      |
-| `redact`  | resolving secrets and redacting them from what is recorded                                  |
+| Package   | Holds                                                                                                            |
+| --------- | ---------------------------------------------------------------------------------------------------------------- |
+| `verdict` | `Decision`, `Verdict`, `Judgment`, the stricter-of merge, `DeniedError`                                          |
+| `step`    | the step and its declared rows (ADR 0046), `Rule`, `Table`, `(Table).Judge`                                      |
+| `job`     | the job store opened on a directory, `Job`, write paths, goals, fork, exit, grade, `Covers`                      |
+| `trail`   | append-only events: read through the package, written only by the module's own packages                          |
+| `session` | session ids and their append-only records                                                                        |
+| `sandbox` | read, write and exec policy, narrowed to a lease                                                                 |
+| `budget`  | the slot limiter, machine claims and their memory curves, and a spend limit priced from rows the caller supplies |
+| `tier`    | the model tier set and price table built from rows the caller supplies                                           |
+| `redact`  | resolving secrets and redacting them from what is recorded                                                       |
 
 The root package holds only the package doc. Call sites read `verdict.Deny` or
 `job.Covers`, never a themed name.
+
+The trail's writer lives in `libs/safetyscissors/internal`, so only the module's own
+packages append to it, and the public `trail` package exports reading only. magus keeps
+its own events in its own trail. This is part 7's refusal of a caller writing the trail,
+made a package boundary; decided 2026-11-16 by the build, Eli to confirm.
+
+The Buzz-facing names stay as they are: a magusfile reads the same bindings after each
+step, and only Go spellings move; decided 2026-11-16 by the build, Eli to confirm.
 
 ### 2. It runs with nothing but a directory
 
@@ -135,8 +143,15 @@ The root package holds only the package doc. Call sites read `verdict.Deny` or
   the caller passes.
 - Nothing is process-global. The grader `SetCheckGrader` sets today becomes an option on
   the store.
-- The core imports only the standard library and the repository's own `libs/*` modules.
-  OpenTelemetry, if it comes, is a separate sub-module.
+- The core imports the standard library, `golang.org/x/sync`, `golang.org/x/sys`,
+  `github.com/bmatcuk/doublestar/v4` and the repository's own `libs/*` modules, and nothing
+  else; decided 2026-11-16 by the build, Eli to confirm. A test in the module (`doc_test.go`) fails on any other direct
+  requirement in its `go.mod`, and testify is allowed there for the tests alone. The file
+  lock is `x/sys` (`flock`, `LockFileEx`) in place of `gofrs/flock`, and JSON Schema
+  generation (`google/jsonschema-go`) stays on magus's side. OpenTelemetry, if it comes,
+  is a separate sub-module.
+- The module needs no `GOEXPERIMENT=jsonv2`: it encodes with `encoding/json` and leaves
+  `<`, `>` and `&` unescaped, the bytes magus's v2 codec writes; decided 2026-11-16 by the build, Eli to confirm.
 - No VCS is required. A grade that needs to know what changed takes it from an observer
   the caller supplies; magus's observer reads VCS.
 - A step table with no rule is a construction error. The guard passing `rm -rf /` in an
@@ -208,7 +223,8 @@ Only seams that already have a second implementation become interfaces:
   (`internal/secret/secret.go:46`, `:104`).
 
 Repository identity becomes a directory string, not an interface. Each seam gets one
-option and a fake in `libs/testkit`.
+option. The module's tests carry their own fakes: it never imports `libs/testkit` or the
+root module, so a fake lives beside the test that needs it; decided 2026-11-16 by the build, Eli to confirm.
 
 ### 7. What it refuses
 
@@ -247,24 +263,34 @@ Eli picked it on 2026-11-15.
 
 ### 9. Extraction order
 
-Each step merges on its own and leaves magus green. No step starts until the open
-pull requests on magus have merged.
+Each step merges on its own and leaves magus green. Eli approved building every step on
+2026-11-15, ahead of the open pull requests merging.
 
-| Step | Moves                                                                                                | Size                          | Needs Eli's call                 | State   |
-| ---- | ---------------------------------------------------------------------------------------------------- | ----------------------------- | -------------------------------- | ------- |
-| 1    | `budget`: `internal/cache/limiter.go`, the machine claim and its three types                         | ~500 lines                    | no                               | planned |
-| 2    | `verdict` and `step` types out of `types/guard.go`, `types/guard_judgment.go`, `types/agent/step.go` | ~700 lines                    | yes: breaks the Go API lock      | planned |
-| 3    | `tier`: `types/agent/model.go`, `internal/agent/model`, `TierCeiling` (`register.go:111-117`)        | ~650 lines                    | no                               | planned |
-| 4    | the JSON Lines store helpers the module's stores need                                                | ~1,500 lines                  | no                               | planned |
-| 5    | `trail` core; feedback marks, replay and env propagation stay in magus                               | ~1,500 lines                  | no                               | planned |
-| 6    | `session`, with the directory supplied by the caller                                                 | ~2,000 lines                  | no                               | planned |
-| 7    | `redact` from `internal/secret`                                                                      | ~1,300 lines                  | no                               | planned |
-| 8    | the job types out of `types`, with no alias, and the generated Buzz mirrors regenerated              | ~5,000 lines                  | yes: 16+ importers               | planned |
-| 9    | the `job` store core, with config as `Limits`, VCS as a directory, env and stderr as options         | ~8,000-10,000 of 23,431 lines | yes: the `jobs.jsonl` location   | planned |
-| 10   | the guard engine: the step table and settings, with magus's 137 built-ins registered as rules        | the largest                   | yes: `Judge`'s structure changes | planned |
-| 11   | `sandbox`, after step 9, with its own grant type replacing `spells.Sandbox`                          | ~2,800 lines                  | no                               | planned |
+| Step | Moves                                                                                                                                           | Size                          | Needs Eli's call                                                                                                                       | State   |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1    | `budget`: `internal/cache/limiter.go` and its slot watch, the machine budget, the claim types and the memory curve and sizing types they carry  | ~2,000 lines                  | no; breaks the Go API lock                                                                                                             | done    |
+| 2    | `verdict` and `step` types out of `types/guard.go`, `types/guard_judgment.go`, `types/agent/step.go`                                            | ~700 lines                    | yes: breaks the Go API lock                                                                                                            | planned |
+| 3    | `tier`: `types/agent/model.go`, `internal/agent/model`, `TierCeiling` (`register.go:111-117`)                                                   | ~650 lines                    | no                                                                                                                                     | planned |
+| 4    | the JSON Lines store helpers the module's stores need, copied into `internal/jsonl` with `types/enum` into `internal/enum`; magus keeps its own | ~500 lines                    | no                                                                                                                                     | done    |
+| 5    | `trail` core; feedback marks, replay and env propagation stay in magus                                                                          | ~1,500 lines                  | no                                                                                                                                     | planned |
+| 6    | `session`, with the directory supplied by the caller                                                                                            | ~2,000 lines                  | no                                                                                                                                     | planned |
+| 7    | `redact` from `internal/secret`                                                                                                                 | ~1,300 lines                  | no                                                                                                                                     | planned |
+| 8    | the job types out of `types`, with no alias, and the generated Buzz mirrors regenerated                                                         | ~5,000 lines                  | yes: 16+ importers                                                                                                                     | planned |
+| 9    | the `job` store core, with config as `Limits`, VCS as a directory, env and stderr as options                                                    | ~8,000-10,000 of 23,431 lines | no: `jobs.jsonl` stays where `vcs.StateDir` puts it, and magus passes that directory (decided 2026-11-16 by the build, Eli to confirm) | planned |
+| 10   | the guard engine: the step table and settings, with magus's 137 built-ins registered as rules                                                   | the largest                   | yes: `Judge`'s structure changes                                                                                                       | planned |
+| 11   | `sandbox`, after step 9, with its own grant type replacing `spells.Sandbox`                                                                     | ~2,800 lines                  | no                                                                                                                                     | planned |
 
 Sizes are estimates from the line counts above, not measured diffs.
+
+Step 1 moved more than its row first named. A claim carries its memory curve and sizing,
+and a snapshot carries its waiters and recorded admissions, so `types.MemoryProfile`,
+`MemoryCurve`, `MemorySizing`, `SlotSizing`, `FormatMB`, `MachineWaiter` and
+`MachineAdmission` moved with the claim. The limiter took its slot watch and the one
+context value that says what a step holds, and a refusal of a wedged pool is a
+`budget.SlotDeadlock` that magus turns into MGS3013 through `budget.WithRefusal`. The
+machine budget learns which invocations only wrap a command from `WithWrappers`, since
+the wrapper id stays magus's. Each name lost its `Machine` or `Memory` prefix
+(`budget.Claim`, `budget.Profile`), with no alias, so the Go API lock records a break.
 
 ### Principles checked
 
@@ -371,8 +397,9 @@ What would reopen it: a collision appearing before the first tag.
 - The Go API lock records breaks at steps 2, 8, 9 and 10.
 - `Judge` stops hard-wiring its rules. The built-ins become registered rules, and
   magus's guard behavior must not change; the guard's existing tests are that check.
-- The job store's directory comes from the caller, so magus decides whether rows stay
-  under `$XDG_STATE_HOME/magus/jobs`, a decision step 9 makes.
+- The job store's directory comes from the caller. Rows stay under
+  `$XDG_STATE_HOME/magus/jobs`, where `vcs.StateDir` puts them, and magus passes that
+  directory; decided 2026-11-16 by the build, Eli to confirm.
 - The module is tagged as `<module path>/vX.Y.Z`, as the other nested modules are, and
   gets its own Go API lock.
 - [The Go SDK reference](../reference/go-sdk.md) changes its "the harness is CLI-only"
@@ -438,8 +465,9 @@ decided.
     no replacement.
   - Windows starts unsupported. Restricted tokens, job objects and AppContainer are
     reachable from `golang.org/x/sys/windows`, at several weeks of work each.
-  - The default mode becomes `required`. A platform with no confinement fails loudly
-    and names the opt-out, instead of today's notice and an unconfined child.
+  - The module's default mode is `required`. A platform with no confinement fails loudly
+    and names the opt-out, instead of today's notice and an unconfined child. magus's own
+    config default is unchanged; decided 2026-11-16 by the build, Eli to confirm.
 - The record's new API group. Job rows carry `batch.magus/v1alpha1` today
   (`internal/job/store.go:338`). It stops naming magus everywhere it is written, and the
   string is still to pick.

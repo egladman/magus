@@ -1,6 +1,8 @@
 // Package enum checks closed sets of named string values. Go has no enum type, so a
 // defined string accepts any string; a Set is the case list the boundary checks
 // against. Each package declares its sets by hand beside the types they close.
+//
+// libs/safetyscissors/internal/enum is a copy, because that module may not import magus.
 package enum
 
 import "slices"

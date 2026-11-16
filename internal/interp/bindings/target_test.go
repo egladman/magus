@@ -14,6 +14,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1207,7 +1208,7 @@ func (i inlineInterceptor) InterceptTarget(ctx context.Context, name string, inv
 // claimLog is a machine admitter that seats every claim and records it.
 type claimLog struct {
 	mu       sync.Mutex
-	claims   []types.MachineClaim
+	claims   []budget.Claim
 	released []string
 }
 
@@ -1225,14 +1226,14 @@ func (l *claimLog) claimed() []string {
 	return out
 }
 
-func (l *claimLog) Claim(_ context.Context, c types.MachineClaim, _ func(types.MachineVerdict)) (types.MachineVerdict, error) {
+func (l *claimLog) Claim(_ context.Context, c budget.Claim, _ func(budget.Verdict)) (budget.Verdict, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.claims = append(l.claims, c)
-	return types.MachineVerdict{Granted: true, Fits: true, ID: c.Target}, nil
+	return budget.Verdict{Granted: true, Fits: true, ID: c.Target}, nil
 }
 
-func (l *claimLog) Request(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+func (l *claimLog) Request(ctx context.Context, c budget.Claim) (budget.Verdict, error) {
 	return l.Claim(ctx, c, nil)
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"maps"
@@ -112,7 +113,7 @@ type Client struct {
 // remote is empty while no broker does. overrun is set once Overrun names the claim, so
 // a broker the claim is re-asserted on charges its peak too.
 type heldClaim struct {
-	claim   types.MachineClaim
+	claim   budget.Claim
 	remote  string
 	overrun bool
 }
@@ -199,7 +200,7 @@ func (c *Client) Addr() string { return c.addr }
 //
 // If ctx ends after the broker granted but before the answer arrived, the grant is
 // handed straight back.
-func (c *Client) Request(ctx context.Context, claim types.MachineClaim) (types.MachineVerdict, error) {
+func (c *Client) Request(ctx context.Context, claim budget.Claim) (budget.Verdict, error) {
 	return c.claim(ctx, claim, false, nil)
 }
 
@@ -207,14 +208,14 @@ func (c *Client) Request(ctx context.Context, claim types.MachineClaim) (types.M
 // broker's queue until it is seated or ctx ends, which returns ctx's
 // error. parked hears each report of what keeps it out, bar a validation
 // seat wait, which is logged here.
-func (c *Client) Claim(ctx context.Context, claim types.MachineClaim, parked func(types.MachineVerdict)) (types.MachineVerdict, error) {
+func (c *Client) Claim(ctx context.Context, claim budget.Claim, parked func(budget.Verdict)) (budget.Verdict, error) {
 	return c.claim(ctx, claim, true, parked)
 }
 
-func (c *Client) claim(ctx context.Context, claim types.MachineClaim, park bool, onParked func(types.MachineVerdict)) (types.MachineVerdict, error) {
+func (c *Client) claim(ctx context.Context, claim budget.Claim, park bool, onParked func(budget.Verdict)) (budget.Verdict, error) {
 	cn, err := c.open(ctx)
 	if err != nil {
-		return types.MachineVerdict{}, err
+		return budget.Verdict{}, err
 	}
 	var reply claimReply
 	late := func(f frame) {
@@ -236,7 +237,7 @@ func (c *Client) claim(ctx context.Context, claim types.MachineClaim, park bool,
 		err = cn.roundTrip(ctx, c.next(), typeClaim, claimRequest{Claim: claim}, typeClaimReply, &reply, late)
 	}
 	if err != nil {
-		return types.MachineVerdict{}, err
+		return budget.Verdict{}, err
 	}
 	c.noteSeat(ctx, reply.Seat)
 	if reply.Verdict.Granted {
@@ -625,7 +626,7 @@ func (c *Client) reassertRiders(ctx, dctx context.Context, cn *conn) (map[string
 	for id, r := range riders {
 		c.mu.Lock()
 		hold := r.hold
-		var claim types.MachineClaim
+		var claim budget.Claim
 		if h, ok := c.held[r.claim]; ok {
 			hold.Claim = h.remote
 			claim = h.claim

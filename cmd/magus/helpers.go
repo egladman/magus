@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 )
@@ -60,12 +61,12 @@ func magusFromContext(ctx context.Context) (*magus.Magus, bool) {
 // bootstrapLimiterKey carries a limiter shared between the proc server and workspace.
 type bootstrapLimiterKey struct{}
 
-func withBootstrapLimiter(ctx context.Context, lim *cache.Limiter) context.Context {
+func withBootstrapLimiter(ctx context.Context, lim *budget.Limiter) context.Context {
 	return context.WithValue(ctx, bootstrapLimiterKey{}, lim)
 }
 
-func bootstrapLimiterFromContext(ctx context.Context) *cache.Limiter {
-	lim, _ := ctx.Value(bootstrapLimiterKey{}).(*cache.Limiter)
+func bootstrapLimiterFromContext(ctx context.Context) *budget.Limiter {
+	lim, _ := ctx.Value(bootstrapLimiterKey{}).(*budget.Limiter)
 	return lim
 }
 

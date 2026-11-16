@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
@@ -317,7 +318,7 @@ func servedFixtures() []servedFixture {
 	return []servedFixture{
 		{"a root's merge names the script that brings the base in", rootMergeServesBaseScript},
 		{"a stale index's rebuild", func(t *testing.T, _ context.Context, _ Dependencies, role servedRole) (Request, []string) {
-			standBudget(t, types.MachineSnapshot{BudgetSlots: 1, HeldSlots: 1})
+			standBudget(t, budget.Snapshot{BudgetSlots: 1, HeldSlots: 1})
 			root := recordedSearchTree(t)
 			cacheDir := t.TempDir()
 			require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{}))

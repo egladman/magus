@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"net"
@@ -108,7 +109,7 @@ func IsJob(ctx context.Context) bool {
 // Options configures the proc server created by New.
 type Options struct {
 	Handler         func(ctx context.Context, args []string) error // required; ctx carries Root/Cwd
-	Limiter         *cache.Limiter                                 // shared budget; nil → private limiter
+	Limiter         *budget.Limiter                                // shared budget; nil → private limiter
 	Concurrency     int                                            // ignored when Limiter is set; 0 → default
 	Version         string                                         // "" disables version-mismatch check
 	Address         string                                         // "" → auto-generate in SockDir()
@@ -504,7 +505,7 @@ type service struct {
 	handler         func(ctx context.Context, args []string) error
 	read            func(ctx context.Context, root, verb string, request []byte) ([]byte, error)
 	stopped         <-chan struct{}
-	lim             *cache.Limiter
+	lim             *budget.Limiter
 	version         string // human-facing display version; surfaced as StatusReply.Version
 	gateVersion     string // adoption identity for the version gate (see adoptionIdentity); "" disables the gate
 	workspaceLister func() []Workspace

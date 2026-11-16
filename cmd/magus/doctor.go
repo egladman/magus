@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -82,15 +83,15 @@ func doctorCommand(ctx context.Context, root string, args []string) error {
 	}
 	// The budget the broker starts with (brokerServe); a ci run strips every write charm,
 	// and its verify passes claim without one.
-	ctx = doctor.WithGateClaims(ctx, func(ctx context.Context, targets []types.Target) ([]types.MachineClaim, error) {
+	ctx = doctor.WithGateClaims(ctx, func(ctx context.Context, targets []types.Target) ([]budget.Claim, error) {
 		m, err := loadMagus(ctx, root)
 		if err != nil {
 			return nil, err
 		}
 		return m.MachineClaims(ctx, targets, nil, nil), nil
 	}, mem.BudgetMB(mem.UsableBytes(ctx), globalCfg.ConcurrencyProfile), cache.MachineCeiling())
-	ctx = doctor.WithAdmissions(ctx, func(context.Context) ([]types.MachineAdmission, error) {
-		return file.Log[types.MachineAdmission]{Path: server.AdmissionLogPath()}.Load()
+	ctx = doctor.WithAdmissions(ctx, func(context.Context) ([]budget.Admission, error) {
+		return file.Log[budget.Admission]{Path: server.AdmissionLogPath()}.Load()
 	})
 	out := doctor.Run(ctx, root, ws, wsErr, dopts...)
 

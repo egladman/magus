@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -41,28 +42,28 @@ func TestAJobTreeRunsAsManyValidationsAsItsCap(t *testing.T) {
 	root := NewClient(addr)
 	t.Cleanup(func() { _ = root.Close() })
 
-	v, err := first.Request(t.Context(), types.MachineClaim{Target: "go-test", Invocation: "1:a"})
+	v, err := first.Request(t.Context(), budget.Claim{Target: "go-test", Invocation: "1:a"})
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
-	v, err = second.Request(t.Context(), types.MachineClaim{Target: "go-test", Invocation: "2:b"})
+	v, err = second.Request(t.Context(), budget.Claim{Target: "go-test", Invocation: "2:b"})
 	require.NoError(t, err)
 	assert.False(t, v.Granted, "a second run of the tree waits for the seat")
 	assert.True(t, v.OwnRun, "and waits rather than refusing")
 	assert.True(t, second.seatWaiting.Load(), "the wait is said")
 
-	v, err = nested.Request(t.Context(), types.MachineClaim{Target: "build", Invocation: "3:c", Ancestors: []string{"1:a"}})
+	v, err = nested.Request(t.Context(), budget.Claim{Target: "build", Invocation: "3:c", Ancestors: []string{"1:a"}})
 	require.NoError(t, err)
 	assert.True(t, v.Granted, "a magus nested under the seated run shares its seat")
 
-	v, err = root.Request(t.Context(), types.MachineClaim{Target: "test", Invocation: "4:d"})
+	v, err = root.Request(t.Context(), budget.Claim{Target: "test", Invocation: "4:d"})
 	require.NoError(t, err)
 	assert.True(t, v.Granted, "a run nobody leased is never counted")
 
 	require.NoError(t, first.Close())
 	require.NoError(t, nested.Close())
 	assert.Eventually(t, func() bool {
-		v, err := second.Request(t.Context(), types.MachineClaim{Target: "go-test", Invocation: "2:b"})
+		v, err := second.Request(t.Context(), budget.Claim{Target: "go-test", Invocation: "2:b"})
 		return err == nil && v.Granted
 	}, 2*time.Second, 10*time.Millisecond, "the seat passes on once its run's connections close")
 	assert.False(t, second.seatWaiting.Load())
@@ -77,7 +78,7 @@ func TestWorkNamesEachRunsOwner(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(0, 10))
 	worker := leasedClient(t, addr, "plan/a", "plan", 0)
-	_, err := worker.Request(t.Context(), types.MachineClaim{Target: "go-test", Slots: 4})
+	_, err := worker.Request(t.Context(), budget.Claim{Target: "go-test", Slots: 4})
 	require.NoError(t, err)
 
 	r, err := QueryWork(t.Context(), addr)
@@ -200,7 +201,7 @@ func holdAGroupUntilKilled(addr string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	v, err := c.Request(ctx, types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
+	v, err := c.Request(ctx, budget.Claim{Project: ".", Target: "go-test", Slots: 1})
 	if err != nil || !v.Granted {
 		fmt.Fprintln(os.Stderr, "claim not granted", err)
 		return 2
@@ -288,7 +289,7 @@ func TestAStepGroupEndsWithItsClaim(t *testing.T) {
 	c := dial(t, addr)
 	pgid, done := stepGroup(t)
 
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "go-test", Slots: 1})
 	require.NoError(t, err)
 	_, err = c.HoldGroup(t.Context(), v.ID, pgid, "sleep 30")
 	require.NoError(t, err)
@@ -314,7 +315,7 @@ func TestAReleasedStepGroupIsLeftAlone(t *testing.T) {
 	c := dial(t, addr)
 	pgid, _ := stepGroup(t)
 
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "go-test", Slots: 1})
 	require.NoError(t, err)
 	id, err := c.HoldGroup(t.Context(), v.ID, pgid, "sleep 30")
 	require.NoError(t, err)
@@ -341,7 +342,7 @@ func TestAStepGroupRidesItsClaimOntoANewBroker(t *testing.T) {
 	c := NewClient(addr)
 	t.Cleanup(func() { _ = c.Close() })
 	pgid, done := stepGroup(t)
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "go-test", Slots: 1})
 	require.NoError(t, err)
 	_, err = c.HoldGroup(t.Context(), v.ID, pgid, "sleep 30")
 	require.NoError(t, err)
@@ -374,7 +375,7 @@ func TestAGroupThatTookAHeldIdIsLeftAlone(t *testing.T) {
 	c := dial(t, addr)
 	pgid, done := stepGroup(t)
 
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "go-test", Slots: 1})
 	require.NoError(t, err)
 	_, err = c.Hold(t.Context(), Hold{Claim: v.ID, PGID: pgid, Command: "sleep 30", Held: time.Now().Add(-time.Hour)})
 	require.NoError(t, err)
@@ -395,7 +396,7 @@ func TestALeaderlessStepGroupIsLeftRunning(t *testing.T) {
 	root := t.TempDir()
 	pgid := orphanGroup(t)
 
-	v, err := c.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
+	v, err := c.Request(t.Context(), budget.Claim{Project: ".", Target: "go-test", Slots: 1})
 	require.NoError(t, err)
 	_, err = c.HoldGroup(types.WithWorkspace(t.Context(), rootedWorkspace{root: root}), v.ID, pgid, "sleep 30")
 	require.NoError(t, err)
@@ -421,7 +422,7 @@ func TestAStepGroupNeedsAClaimOfItsConnection(t *testing.T) {
 	serve(t, addr, WithCapacity(1000, 4))
 	c := dial(t, addr)
 	other := dial(t, addr)
-	v, err := other.Request(t.Context(), types.MachineClaim{Project: ".", Target: "go-test", Slots: 1})
+	v, err := other.Request(t.Context(), budget.Claim{Project: ".", Target: "go-test", Slots: 1})
 	require.NoError(t, err)
 
 	_, err = c.HoldGroup(t.Context(), v.ID, 4242, "sleep 30")
@@ -444,7 +445,7 @@ func TestARunUnderAHeldCommandSharesItsClaim(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	v, err := dial(t, addr).Request(ctx, types.MachineClaim{
+	v, err := dial(t, addr).Request(ctx, budget.Claim{
 		Project: "libs/x", Target: "install", Slots: 1, PID: 2, Invocation: "2:run", Ancestors: []string{wrapper},
 	})
 	require.NoError(t, err)
@@ -456,7 +457,7 @@ func TestARunUnderAHeldCommandGetsNoSeatOnAFullBudget(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(1000, 4))
 	wrapper := "1:" + types.WrapperInvocation("exec")
-	stranger, err := dial(t, addr).Request(t.Context(), types.MachineClaim{Project: "other", Target: "test", MemoryMB: 900, PID: 3})
+	stranger, err := dial(t, addr).Request(t.Context(), budget.Claim{Project: "other", Target: "test", MemoryMB: 900, PID: 3})
 	require.NoError(t, err)
 	require.True(t, stranger.Granted)
 	cmd, _ := startGroup(t)
@@ -468,7 +469,7 @@ func TestARunUnderAHeldCommandGetsNoSeatOnAFullBudget(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	v, err := dial(t, addr).Request(ctx, types.MachineClaim{
+	v, err := dial(t, addr).Request(ctx, budget.Claim{
 		Project: "libs/x", Target: "test", MemoryMB: 500, PID: 2, Invocation: "2:run", Ancestors: []string{wrapper},
 	})
 	require.NoError(t, err)

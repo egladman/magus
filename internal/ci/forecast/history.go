@@ -74,6 +74,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -272,7 +273,7 @@ type Outcome struct {
 	// Curve is the run's memory over its own duration (types.Curve). The zero curve,
 	// omitted, is UNMEASURED: a fully replayed run, a platform that cannot sample, or
 	// an outcome written before v9.
-	Curve types.MemoryCurve `json:"curve,omitzero"`
+	Curve budget.Curve `json:"curve,omitzero"`
 	// Charms and ArgsHash are the run's [Shape]; the target is the key the outcome is
 	// filed under. Two runs of one target reach different peaks when their shapes
 	// differ (`-- -run TestOne` against the whole suite).
@@ -1183,7 +1184,7 @@ func (h *History) MeasuredRuns() MeasuredRuns {
 		for key, st := range targets {
 			var kept []Outcome
 			for _, o := range st.RecentOutcomes {
-				if o.Result != OutcomeFail && (o.MaxRSSBytes > 0 || measuredWidth(o) || o.Curve != (types.MemoryCurve{})) {
+				if o.Result != OutcomeFail && (o.MaxRSSBytes > 0 || measuredWidth(o) || o.Curve != (budget.Curve{})) {
 					kept = append(kept, Outcome{
 						Result: o.Result, DurationMs: o.DurationMs, MaxRSSBytes: o.MaxRSSBytes, CPUMs: o.CPUMs,
 						Slots: o.Slots, Curve: o.Curve, Charms: slices.Clone(o.Charms), ArgsHash: o.ArgsHash,
@@ -1237,8 +1238,8 @@ const saturatedMilli = 900
 // profile. target resolves as [History.PredictPeakRSS] does, and spells serving one
 // target fold as [Measurement] folds: the larger bucket, the wider duration band, the
 // fewer runs.
-func (x MeasuredRuns) Profile(project, target string, shape Shape) types.MemoryProfile {
-	var out types.MemoryProfile
+func (x MeasuredRuns) Profile(project, target string, shape Shape) budget.Profile {
+	var out budget.Profile
 	for _, s := range targetHistories(x.projects[project], target) {
 		p := curveProfile(s.RecentOutcomes, shape)
 		switch {
@@ -1258,17 +1259,17 @@ func (x MeasuredRuns) Profile(project, target string, shape Shape) types.MemoryP
 }
 
 // curveProfile is [MeasuredRuns.Profile] over one spell's outcomes.
-func curveProfile(outcomes []Outcome, shape Shape) types.MemoryProfile {
+func curveProfile(outcomes []Outcome, shape Shape) budget.Profile {
 	var runs []Outcome
 	for _, o := range outcomes {
-		if o.Curve != (types.MemoryCurve{}) && shape.matches(o) {
+		if o.Curve != (budget.Curve{}) && shape.matches(o) {
 			runs = append(runs, o)
 		}
 	}
 	if len(runs) == 0 {
-		return types.MemoryProfile{}
+		return budget.Profile{}
 	}
-	out := types.MemoryProfile{Runs: len(runs)}
+	out := budget.Profile{Runs: len(runs)}
 	column := make([]int64, len(runs))
 	for i := range out.Curve {
 		for j, o := range runs {

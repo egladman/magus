@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/daemon"
 	"github.com/egladman/magus/types/diff"
 	"io"
@@ -92,7 +93,7 @@ func TestSpellTargetSources_nilMap(t *testing.T) {
 }
 
 // TestForEachSpell_BudgetHonored verifies that when the context carries a
-// cache.Limiter (as set by cache.RunAll), forEachSpell does not exceed the
+// budget.Limiter (as set by cache.RunAll), forEachSpell does not exceed the
 // configured concurrency cap.  Before the fix, spell goroutines acquired no
 // limiter slot, so N projects × M spells could run N×M concurrent subprocesses
 // against a cap of N.
@@ -109,7 +110,7 @@ func TestForEachSpell_BudgetHonored(t *testing.T) {
 	require.NoError(t, lim.Acquire(ctx))
 	defer lim.Release()
 	ctx = cache.ContextWithLimiter(ctx, lim)
-	ctx = cache.WithSlotHeld(ctx)
+	ctx = budget.WithSlotHeld(ctx)
 
 	var (
 		mu       sync.Mutex

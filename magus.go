@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
@@ -121,7 +122,7 @@ type Magus struct {
 	historySaid sync.Once
 
 	limOnce   sync.Once
-	lim       *cache.Limiter
+	lim       *budget.Limiter
 	slotWaits cache.SlotWaitMeter
 
 	buzzPoolOnce sync.Once
@@ -1009,7 +1010,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		return nil, errors.Join(err, m.closeBroker())
 	}
 	m.cache = c
-	m.limiter().SetHooks(func(ev cache.PoolEvent) {
+	m.limiter().SetHooks(func(ev budget.PoolEvent) {
 		if ev.Queued != 0 {
 			m.tel.RecordPoolSlots(ctx, observability.PoolQueued, int64(ev.Queued))
 			m.slotWaits.Add(ev.Queued)
@@ -2127,7 +2128,7 @@ func (m *Magus) AffectedFromPaths(ctx context.Context, paths []string) (*types.A
 	return project.AffectedFromPaths(ctx, m.ws, paths)
 }
 
-func (m *Magus) limiter() *cache.Limiter {
+func (m *Magus) limiter() *budget.Limiter {
 	m.limOnce.Do(func() {
 		n := m.cfg.Concurrency
 		if n <= 0 {
@@ -2168,17 +2169,17 @@ func (m *Magus) buzzPoolRegistry() *buzz.PoolRegistry {
 // poolSlots is the Buzz pool's view of the workspace limiter. A pooled target's body runs
 // under the same slot mark a cache step's does, so an install or a child magus it starts
 // sees the slot the body holds and yields it rather than queueing behind it.
-type poolSlots struct{ lim *cache.Limiter }
+type poolSlots struct{ lim *budget.Limiter }
 
 func (s poolSlots) Acquire(ctx context.Context, name string) (context.Context, func(), error) {
 	return s.lim.Admit(ctx, name)
 }
 
 func (s poolSlots) Yield(ctx context.Context, fn func(context.Context) error) error {
-	if !cache.SlotHeld(ctx) {
+	if !budget.SlotHeld(ctx) {
 		return fn(ctx)
 	}
-	return s.lim.Yield(ctx, func() error { return fn(cache.WithoutSlotHeld(ctx)) })
+	return s.lim.Yield(ctx, func() error { return fn(budget.WithoutSlotHeld(ctx)) })
 }
 
 // Close releases workspace resources (VM pools, the sessions the guard's function
@@ -2408,7 +2409,7 @@ func magusfileOverride(p *types.Project, resolved []*spells.Spell, target string
 
 // forEachSpell runs fn against every spell on p. Spells run in parallel, and all run to
 // completion so one failure does not mask others. When the context carries a
-// [cache.Limiter] and the caller holds a slot, the fan-out yields the slot and each spell
+// [budget.Limiter] and the caller holds a slot, the fan-out yields the slot and each spell
 // acquires its own, keeping total concurrent spells bounded by the workspace cap.
 func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(context.Context, *spells.Spell) error) error {
 	resolved := p.ResolvedSpells
@@ -2434,7 +2435,7 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 		return nil
 	}
 	lim := cache.LimiterFromContext(ctx)
-	slotHeld := lim != nil && cache.SlotHeld(ctx)
+	slotHeld := lim != nil && budget.SlotHeld(ctx)
 	bounded := lim != nil
 
 	type result struct {

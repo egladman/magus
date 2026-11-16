@@ -12,11 +12,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/daemon"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/file/watch"
@@ -112,7 +112,7 @@ type wsRegistry struct {
 	mu       sync.Mutex
 	entries  map[string]*wsEntry
 	declared map[string]struct{} // nil/empty = legacy lazy mode (any workspace admissible)
-	lim      *cache.Limiter
+	lim      *budget.Limiter
 	broker   *broker.Client         // the server's own connection, shared by every workspace whose checkout binds no lease
 	tel      observability.Provider // shared with the bridge Magus; owned by the server, outlives evictions
 	ttl      time.Duration
@@ -120,7 +120,7 @@ type wsRegistry struct {
 	// open, awaitChange, leaseOf and leasedBroker are seams for tests; production opens
 	// with openWorkspace, waits on a filesystem watcher, reads the checkout record and
 	// dials with leasedBrokerClient.
-	open         func(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error)
+	open         func(root string, lim *budget.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error)
 	awaitChange  func(e *wsEntry) bool
 	leaseOf      func(root string) string
 	leasedBroker func(lease string) *broker.Client
@@ -136,7 +136,7 @@ type wsRegistry struct {
 // is opened, which lease a checkout binds and the broker client that names it, and how an
 // adopted run or a background job executes once its workspace is held.
 type RegistryDeps struct {
-	Open         func(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error)
+	Open         func(root string, lim *budget.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error)
 	LeaseOf      func(root string) string
 	LeasedBroker func(lease string) *broker.Client
 	Dispatch     Dispatch
@@ -151,7 +151,7 @@ type Dispatch struct {
 }
 
 // newRegistry builds a wsRegistry that evicts a workspace idle for ttl, and starts its janitor.
-func newRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, ttl time.Duration, tel observability.Provider, deps RegistryDeps) *wsRegistry {
+func newRegistry(ctx context.Context, lim *budget.Limiter, b *broker.Client, ttl time.Duration, tel observability.Provider, deps RegistryDeps) *wsRegistry {
 	if ttl <= 0 {
 		ttl = defaultIdleTTL
 	}

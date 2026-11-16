@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -48,20 +49,20 @@ func BudgetMB(usableBytes int64, profile types.ConcurrencyProfile) int {
 
 // Reserve is what profile keeps back from usableBytes for the OS and desktop.
 // No profile keeps nothing, so a budget never equals the machine.
-func Reserve(usableBytes int64, profile types.ConcurrencyProfile) types.MemoryReserve {
+func Reserve(usableBytes int64, profile types.ConcurrencyProfile) budget.Reserve {
 	if usableBytes <= 0 {
-		return types.MemoryReserve{}
+		return budget.Reserve{}
 	}
 	totalMB := int(usableBytes / (1 << 20))
 	if profile == types.ProfileAggressive {
-		return types.MemoryReserve{
+		return budget.Reserve{
 			TotalMB:    totalMB,
 			ReservedMB: min(max(totalMB/aggressiveShare, aggressiveFloorMB), totalMB),
 			Rule:       "the aggressive profile keeps 1/8, at least 1 GiB",
 		}
 	}
 	budgetMB := int(float64(usableBytes) * UsableFraction / (1 << 20))
-	return types.MemoryReserve{
+	return budget.Reserve{
 		TotalMB:    totalMB,
 		ReservedMB: totalMB - budgetMB,
 		Rule:       fmt.Sprintf("the %s profile keeps 1/4", cmp.Or(profile, types.ProfileBalanced)),

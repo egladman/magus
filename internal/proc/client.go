@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types"
 )
 
@@ -130,8 +130,8 @@ func Shutdown(ctx context.Context, addr string) error {
 // RunChildSync yields the caller's concurrency slot for the duration of fn so a
 // child magus process can acquire it, keeping the total budget flat. If lim is
 // nil or no slot is held fn runs unchanged (avoids over-releasing the semaphore).
-func RunChildSync(ctx context.Context, lim *cache.Limiter, fn func() error) error {
-	if lim == nil || !cache.SlotHeld(ctx) {
+func RunChildSync(ctx context.Context, lim *budget.Limiter, fn func() error) error {
+	if lim == nil || !budget.SlotHeld(ctx) {
 		return fn()
 	}
 	return lim.Yield(ctx, fn)

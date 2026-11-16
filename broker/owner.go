@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -153,7 +154,7 @@ func (s *server) holdLocked(ctx context.Context, sess *session, h Hold) string {
 		return id
 	}
 	slots := max(h.Slots, 1)
-	id := s.budget.Assert(types.MachineClaim{
+	id := s.budget.Assert(budget.Claim{
 		Target: "job exec", Slots: slots, PID: sess.hello.PID, Dir: sess.hello.Dir, Command: h.Command,
 		Invocation: h.Invocation, Ancestors: h.Ancestors,
 	})
@@ -469,10 +470,10 @@ func (s *server) runLocked(sess *session, slots int) Work {
 // force seats it whatever the cap, for a claim re-asserted on a new broker, whose step
 // is already running. Callers hold s.mu.
 //
-// The seat is the RUN's (see [types.MachineClaim.Run]), so a nested magus under a
+// The seat is the RUN's (see [budget.Claim.Run]), so a nested magus under a
 // seated run shares its seat rather than waiting on its own parent, and it is held until
 // the connection closes, so a run between two steps does not lose it to another.
-func (s *server) seatLocked(sess *session, c types.MachineClaim, force bool) *SeatWait {
+func (s *server) seatLocked(sess *session, c budget.Claim, force bool) *SeatWait {
 	h := sess.hello
 	if h.Tree == "" || h.MaxValidations <= 0 || sess.seat != "" {
 		return nil

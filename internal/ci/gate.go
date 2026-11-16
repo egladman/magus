@@ -40,6 +40,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -89,7 +90,7 @@ func decideGate(f gateFacts) gateDecision {
 // poolSaturated reports whether a new run would be refused by the machine
 // budget: an axis with a limit is fully held. A nil snapshot is an absent
 // arbiter and reads as idle (fail open).
-func poolSaturated(m *types.MachineSnapshot) bool {
+func poolSaturated(m *budget.Snapshot) bool {
 	if m == nil {
 		return false
 	}
@@ -771,7 +772,7 @@ func PlanInheritance(ctx context.Context, ws GateWorkspace) *InheritFinding {
 
 // DescribePool is whether the pool is saturated, with the capacity behind either answer, so
 // the finding can print what the probe saw.
-func DescribePool(m *types.MachineSnapshot) (saturated bool, state string) {
+func DescribePool(m *budget.Snapshot) (saturated bool, state string) {
 	desc := fmt.Sprintf("%d of %d slots held", m.HeldSlots, m.BudgetSlots)
 	if !poolSaturated(m) {
 		return false, "idle: " + desc

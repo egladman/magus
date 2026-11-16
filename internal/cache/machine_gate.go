@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -26,8 +27,8 @@ import (
 type MachineAdmitter interface {
 	// Claim queues c until it is seated or ctx ends; a claim larger
 	// than the whole budget answers at once. parked hears each report.
-	Claim(ctx context.Context, c types.MachineClaim, parked func(types.MachineVerdict)) (types.MachineVerdict, error)
-	Request(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error)
+	Claim(ctx context.Context, c budget.Claim, parked func(budget.Verdict)) (budget.Verdict, error)
+	Request(ctx context.Context, c budget.Claim) (budget.Verdict, error)
 	Release(ctx context.Context, id string)
 	// Overrun says the granted claim id held more than its memory curve predicted, so
 	// the budget charges it its full peak until Release. Best-effort, like Release.
@@ -51,7 +52,7 @@ type kickingAdmitter struct {
 	kick func()
 }
 
-func (k *kickingAdmitter) Claim(ctx context.Context, c types.MachineClaim, parked func(types.MachineVerdict)) (types.MachineVerdict, error) {
+func (k *kickingAdmitter) Claim(ctx context.Context, c budget.Claim, parked func(budget.Verdict)) (budget.Verdict, error) {
 	k.kick()
 	return k.MachineAdmitter.Claim(ctx, c, parked)
 }
@@ -96,7 +97,7 @@ const ExitCodeBrokerUnavailable = 69
 // Zero PID, Dir, Invocation, Ancestors and Slots are filled the way claimMachine
 // fills a step's claim, so a caller names the work (Project, Target, MemoryMB) and
 // nothing else.
-func AdmitMachine(ctx context.Context, admit MachineAdmitter, c types.MachineClaim, required bool, wait time.Duration) (release func(), err error) {
+func AdmitMachine(ctx context.Context, admit MachineAdmitter, c budget.Claim, required bool, wait time.Duration) (release func(), err error) {
 	if c.PID == 0 {
 		c.PID = os.Getpid()
 	}
@@ -166,7 +167,7 @@ type machineGate struct {
 // A broker that dies, or a transport that breaks, admits the step and says so once
 // under best-effort; under required it refuses with MGS3022 (exit 69).
 // A machine short of memory refuses with MGS3053 (exit 75) before that.
-func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func(), error) {
+func (g *machineGate) acquire(ctx context.Context, c budget.Claim) (func(), error) {
 	seat, err := g.claim(ctx, c)
 	return seat.release, err
 }
@@ -180,13 +181,13 @@ type machineSeat struct {
 }
 
 // unarbitrated is the seat of a claim no budget judged: its full width.
-func unarbitrated(c types.MachineClaim, release func()) machineSeat {
+func unarbitrated(c budget.Claim, release func()) machineSeat {
 	return machineSeat{slots: max(c.Slots, 1), release: release}
 }
 
 // granted is the seat verdict v gave c. A broker that names no grant
 // predates them and seated the full width, which is said once.
-func (g *machineGate) granted(ctx context.Context, c types.MachineClaim, v types.MachineVerdict) machineSeat {
+func (g *machineGate) granted(ctx context.Context, c budget.Claim, v budget.Verdict) machineSeat {
 	seat := machineSeat{id: v.ID, slots: v.Slots, release: g.releaser(v.ID)}
 	if seat.slots < 1 {
 		seat.slots = max(c.Slots, 1)
@@ -204,7 +205,7 @@ func (g *machineGate) granted(ctx context.Context, c types.MachineClaim, v types
 // while it waits on members that claim their own and take it again after.
 type machineHold struct {
 	gate  *machineGate
-	claim types.MachineClaim
+	claim budget.Claim
 
 	mu      sync.Mutex
 	id      string
@@ -280,7 +281,7 @@ func (h *machineHold) reclaim(ctx context.Context) error {
 
 // retake is the claim reclaim asks for: fixed at the width the step
 // already runs with, since its jobserver and GOMAXPROCS cannot change.
-func (h *machineHold) retake() types.MachineClaim {
+func (h *machineHold) retake() budget.Claim {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	c := h.claim
@@ -313,21 +314,19 @@ func LendMachineClaim(ctx context.Context, fn func(context.Context) error) error
 	}
 	lent := func(ctx context.Context) error {
 		h.lend()
-		held := admissionFromContext(ctx)
-		held.machineClaim = false
-		err := fn(withMachineHold(held.on(ctx), nil))
+		err := fn(withMachineHold(budget.WithMachineClaim(ctx, false), nil))
 		return errors.Join(err, h.reclaim(ctx))
 	}
 	lim := LimiterFromContext(ctx)
-	if lim == nil || !SlotHeld(ctx) {
+	if lim == nil || !budget.SlotHeld(ctx) {
 		return lent(ctx)
 	}
-	return lim.Yield(ctx, func() error { return lent(WithoutSlotHeld(ctx)) })
+	return lim.Yield(ctx, func() error { return lent(budget.WithoutSlotHeld(ctx)) })
 }
 
 // claim is acquire, returning the whole seat. broker: off arbitrates nothing
 // and reads no memory either.
-func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (machineSeat, error) {
+func (g *machineGate) claim(ctx context.Context, c budget.Claim) (machineSeat, error) {
 	if g == nil || g.admit == nil {
 		return unarbitrated(c, func() {}), nil
 	}
@@ -349,7 +348,7 @@ func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (machineS
 // refuseUnderPressure is the MGS3053 refusal while the kernel says memory is
 // bad. A missing or partial reading is said once. A nested run passes: refusing
 // it would fail the running step above it. A wrapper above it runs no step.
-func (g *machineGate) refuseUnderPressure(ctx context.Context, c types.MachineClaim) error {
+func (g *machineGate) refuseUnderPressure(ctx context.Context, c budget.Claim) error {
 	if types.RunsUnderAStep(c.Ancestors) || spawn.CurrentLevel() > 0 {
 		return nil
 	}
@@ -367,14 +366,14 @@ func (g *machineGate) refuseUnderPressure(ctx context.Context, c types.MachineCl
 
 // seat asks the budget for c, with no reading of memory. It waits in the
 // budget's queue, and a wait on other invocations ends at g's bound.
-func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (machineSeat, error) {
+func (g *machineGate) seat(ctx context.Context, c budget.Claim) (machineSeat, error) {
 	if g == nil || g.admit == nil {
 		return unarbitrated(c, func() {}), nil
 	}
 	wctx, w := g.newBudgetWait(ctx, c)
 	defer w.stop()
 	c = w.claim
-	v, err := g.ask(wctx, c, func(v types.MachineVerdict) { w.parked(ctx, v) })
+	v, err := g.ask(wctx, c, func(v budget.Verdict) { w.parked(ctx, v) })
 	if err != nil {
 		if ctx.Err() != nil {
 			return machineSeat{}, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
@@ -406,7 +405,7 @@ func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (machineSe
 // atBound is the one unparked ask a wait gets at its bound: the room may
 // have come free as the bound passed. Otherwise it is MGS3009 naming the
 // holders now.
-func (g *machineGate) atBound(ctx context.Context, c types.MachineClaim, w *budgetWait) (machineSeat, error) {
+func (g *machineGate) atBound(ctx context.Context, c budget.Claim, w *budgetWait) (machineSeat, error) {
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
 	defer cancel()
 	// The broker records the wait this ask ends.
@@ -456,7 +455,7 @@ func budgetBound(ctx context.Context, wait time.Duration) waitBound {
 type budgetWait struct {
 	cancel context.CancelFunc
 	gate   *machineGate
-	claim  types.MachineClaim
+	claim  budget.Claim
 	bound  waitBound
 	// blind is a nested run that lost its ancestry. It never queues behind
 	// another invocation.
@@ -464,14 +463,14 @@ type budgetWait struct {
 
 	mu      sync.Mutex
 	since   time.Time
-	holders []types.MachineClaimant
-	verdict types.MachineVerdict
+	holders []budget.Claimant
+	verdict budget.Verdict
 	timer   *time.Timer
 	gen     int
 	fired   bool
 }
 
-func (g *machineGate) newBudgetWait(ctx context.Context, c types.MachineClaim) (context.Context, *budgetWait) {
+func (g *machineGate) newBudgetWait(ctx context.Context, c budget.Claim) (context.Context, *budgetWait) {
 	wctx, cancel := context.WithCancel(ctx)
 	bound := budgetBound(ctx, g.wait)
 	c.WaitBoundMS = bound.d.Milliseconds()
@@ -481,7 +480,7 @@ func (g *machineGate) newBudgetWait(ctx context.Context, c types.MachineClaim) (
 // parked hears each report of what keeps the claim out. A wait on its own
 // run passes in silence and clears the bound a wait on other invocations
 // started. A wait on other invocations says so, and again when they change.
-func (w *budgetWait) parked(ctx context.Context, v types.MachineVerdict) {
+func (w *budgetWait) parked(ctx context.Context, v budget.Verdict) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if v.OwnRun {
@@ -529,7 +528,7 @@ func (w *budgetWait) parked(ctx context.Context, v types.MachineVerdict) {
 // describeHolderChange names the holders that arrived and left since the
 // last report, by pid. The full list was said once when the wait began; an
 // unchanged set returns "".
-func describeHolderChange(before, now []types.MachineClaimant) string {
+func describeHolderChange(before, now []budget.Claimant) string {
 	was := make(map[int]bool, len(before))
 	for _, h := range before {
 		was[h.PID] = true
@@ -553,7 +552,7 @@ func describeHolderChange(before, now []types.MachineClaimant) string {
 // describeMachineWait names each holder with what its claim is made of,
 // and the soonest a holder's own history says it may finish. Durations ran
 // 2.4 to 4 times low on 2026-11-07, so that is only ever "at least".
-func describeMachineWait(v types.MachineVerdict, now time.Time) string {
+func describeMachineWait(v budget.Verdict, now time.Time) string {
 	if len(v.Holders) == 0 {
 		return "nothing else holds a claim"
 	}
@@ -593,7 +592,7 @@ func describeMachineWait(v types.MachineVerdict, now time.Time) string {
 
 // describeMachineQueue is the parked claims ahead of this one. A broker
 // without a queue position sends none, and this says nothing.
-func describeMachineQueue(v types.MachineVerdict) string {
+func describeMachineQueue(v budget.Verdict) string {
 	switch v.Ahead {
 	case 0:
 		return ""
@@ -623,7 +622,7 @@ func (w *budgetWait) expired() bool {
 	return w.fired
 }
 
-func (w *budgetWait) last() types.MachineVerdict {
+func (w *budgetWait) last() budget.Verdict {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.verdict
@@ -666,7 +665,7 @@ func (w *budgetWait) stop() {
 // ask is one Claim, beating the stall watchdog every lockWaitHeartbeat while the budget
 // holds it: the holders may be another invocation of this process or of this job tree,
 // whose progress the watchdog does not see, and a queued run must not trip MGS3012.
-func (g *machineGate) ask(ctx context.Context, c types.MachineClaim, parked func(types.MachineVerdict)) (types.MachineVerdict, error) {
+func (g *machineGate) ask(ctx context.Context, c budget.Claim, parked func(budget.Verdict)) (budget.Verdict, error) {
 	done := make(chan struct{})
 	beating := make(chan struct{})
 	go func() {
@@ -743,12 +742,12 @@ type overrunWatchKey struct{}
 type overrunWatch struct {
 	admit   MachineAdmitter
 	id      func() string
-	profile types.MemoryProfile
+	profile budget.Profile
 }
 
 // withOverrunWatch marks ctx as holding the claim id names, granted with profile. A claim
 // with no profile is charged its peak already, so there is nothing to watch.
-func withOverrunWatch(ctx context.Context, admit MachineAdmitter, id func() string, profile types.MemoryProfile) context.Context {
+func withOverrunWatch(ctx context.Context, admit MachineAdmitter, id func() string, profile budget.Profile) context.Context {
 	if id() == "" || profile.Runs == 0 {
 		return ctx
 	}
@@ -867,7 +866,7 @@ func (g *machineGate) admitOpen(ctx context.Context, err error) func() {
 // brokerUnavailableError is the refusal under `broker: required`: nothing answered for
 // the host's capacity, and the setting says a step must not start unarbitrated.
 // A broker from another build counts as none.
-func brokerUnavailableError(c types.MachineClaim, err error) error {
+func brokerUnavailableError(c budget.Claim, err error) error {
 	if errors.Is(err, types.PeerFromAnotherBuild) {
 		return types.ExitError{Code: ExitCodeBrokerUnavailable, Err: types.WrapDiagnostic(types.PeerFromAnotherBuild, err,
 			"not starting %s %s: a broker from another magus build answered for this host's capacity (%v), and broker: required refuses to run unarbitrated",
@@ -935,7 +934,7 @@ func workingDir() string {
 // machineBusyError is the answer once a wait reaches its bound: other
 // invocations still fill the machine. A leased caller files the check owed,
 // since a refusal leaves no output ref to cite.
-func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Time, lease string, waited time.Duration, bound waitBound) error {
+func machineBusyError(c budget.Claim, v budget.Verdict, now time.Time, lease string, waited time.Duration, bound waitBound) error {
 	why := fmt.Sprintf("waited %s for a seat, %s. That is %s", waited.Round(time.Second), describeMachineHolders(v.Holders), bound.source)
 	next := fmt.Sprintf("Raise %s, or free a holder, then run the same command again", BudgetWaitSource)
 	if bound.d == 0 {
@@ -966,7 +965,7 @@ func LeasedPressureNext(lease string) string {
 
 // memoryPressureError is no wait: the budget queue waits on declared claims
 // and cannot see this.
-func memoryPressureError(c types.MachineClaim, reason, lease string) error {
+func memoryPressureError(c budget.Claim, reason, lease string) error {
 	next := fmt.Sprintf("Free memory, then run the same command again: `%s` shows what magus holds, and this reading counts everything on the machine", hint.ServerStatus.String())
 	if lease != "" {
 		next = LeasedPressureNext(lease)
@@ -988,7 +987,7 @@ func claimLease(ctx context.Context) string {
 // instant the sum passes the budget. The broker sends no instant, so it is found here
 // from the holders' curves by the rule the broker applies; a broker that predates
 // curves answers Packed false.
-func describeMachinePacking(c types.MachineClaim, v types.MachineVerdict, now time.Time) string {
+func describeMachinePacking(c budget.Claim, v budget.Verdict, now time.Time) string {
 	if !v.Packed {
 		if c.MemoryMB <= 0 {
 			return "packed by peak"
@@ -997,29 +996,21 @@ func describeMachinePacking(c types.MachineClaim, v types.MachineVerdict, now ti
 		if c.Profile.Runs > 0 {
 			how = "packed by peak, predating memory curves"
 		}
-		peak := fmt.Sprintf("%s: this claimed the %s peak", how, types.FormatMB(c.MemoryMB))
+		peak := fmt.Sprintf("%s: this claimed the %s peak", how, budget.FormatMB(c.MemoryMB))
 		if v.BudgetMB > 0 && v.HeldMB+c.MemoryMB > v.BudgetMB {
 			peak += ", which passes the budget now"
 		}
 		return peak
 	}
-	budget := NewMachineBudget(v.BudgetMB, 0)
-	budget.now = func() time.Time { return now }
-	for i, h := range v.Holders {
-		budget.claims[strconv.Itoa(i)] = &machineEntry{
-			claim:   types.MachineClaim{MemoryMB: h.MemoryMB, Profile: h.Profile},
-			started: h.Since,
-		}
-	}
-	at, breached := budget.breach(c, func(string, types.MachineClaim) bool { return false })
+	at, breached := budget.Breach(v.BudgetMB, v.Holders, c, now)
 	if !breached {
 		return "packed by curve"
 	}
 	if at.Equal(now) {
-		return fmt.Sprintf("packed by curve: the claims pass the %s budget together now", types.FormatMB(v.BudgetMB))
+		return fmt.Sprintf("packed by curve: the claims pass the %s budget together now", budget.FormatMB(v.BudgetMB))
 	}
 	return fmt.Sprintf("packed by curve: the claims pass the %s budget together at %s, %s from now",
-		types.FormatMB(v.BudgetMB), at.Format(time.TimeOnly), at.Sub(now).Round(time.Second))
+		budget.FormatMB(v.BudgetMB), at.Format(time.TimeOnly), at.Sub(now).Round(time.Second))
 }
 
 // machineDoesNotFitError is the refusal no wait can fix: the declaration does not fit
@@ -1036,11 +1027,11 @@ func describeMachinePacking(c types.MachineClaim, v types.MachineVerdict, now ti
 // keeps a free seat from being a waiver stops firing for exactly the claims it exists
 // for. So over-admission stays where freeSlot left it: at most one claim per stalled
 // ancestor, and never a claim larger than the whole budget.
-func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error {
+func machineDoesNotFitError(c budget.Claim, v budget.Verdict) error {
 	return types.ExitError{Code: ExitCodeMachineDeclaration, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"refusing to start %s %s: %s, which does not fit in this machine's whole build budget of %s across %d slots. Waiting would not help; %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
-		types.FormatMB(v.BudgetMB), v.BudgetSlots, describeMachineOversize(c, v))}
+		budget.FormatMB(v.BudgetMB), v.BudgetSlots, describeMachineOversize(c, v))}
 }
 
 // describeMachineOversize says what to change, which is not the same sentence for the two
@@ -1053,10 +1044,10 @@ func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error 
 // conservative; a small fixed floor, under aggressive), and the budget here carries no
 // record of which one applied. Naming one number would be right for one profile and a
 // lie for the other.
-func describeMachineOversize(c types.MachineClaim, v types.MachineVerdict) string {
+func describeMachineOversize(c budget.Claim, v budget.Verdict) string {
 	if v.BudgetMB > 0 && c.MemoryMB > v.BudgetMB {
 		return fmt.Sprintf("the claim that does not fit is %s %s at %s against a budget of %s, and no wait seats it. That budget is what magus reserved for build work here, not the whole machine; the rest runs the OS, its page cache, and (outside concurrency_profile: aggressive) everything else sharing it. Narrow the run to fewer projects or a lighter target, or run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine.",
-			displayProject(c.Project), c.Target, types.FormatMB(c.MemoryMB), types.FormatMB(v.BudgetMB))
+			displayProject(c.Project), c.Target, budget.FormatMB(c.MemoryMB), budget.FormatMB(v.BudgetMB))
 	}
 	return fmt.Sprintf("this machine has %d slots in total, so a step taking %d never fits. Correct the declaration if it is wrong, or run this on a bigger machine.",
 		v.BudgetSlots, max(c.Slots, 1))
@@ -1065,7 +1056,7 @@ func describeMachineOversize(c types.MachineClaim, v types.MachineVerdict) strin
 // machineBlindError is the refusal for a nested magus that cannot name its ancestors.
 // It says what to fix, because the cause is a magusfile clearing the environment rather
 // than anything about the machine.
-func machineBlindError(c types.MachineClaim, v types.MachineVerdict) error {
+func machineBlindError(c budget.Claim, v budget.Verdict) error {
 	return types.ExitError{Code: ExitCodeMachineDeclaration, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this magus runs underneath another one but was started without %s, so it cannot tell its own parent's claim from a stranger's and will not queue behind a run that is waiting for it; %s. %s."+
 			" Pass that variable through to nested magus invocations, or let magus set it by not clearing the environment.",
@@ -1076,7 +1067,7 @@ func machineBlindError(c types.MachineClaim, v types.MachineVerdict) error {
 // describeMachineDeclaration says where the memory and slots came from. A composed
 // target is held over a number a target in its chain wrote, and a reader sent to its
 // own policy would find nothing to change there.
-func describeMachineDeclaration(c types.MachineClaim) string {
+func describeMachineDeclaration(c budget.Claim) string {
 	slots := fmt.Sprintf("%d slot", max(c.Slots, 1))
 	if max(c.Slots, 1) != 1 {
 		slots += "s"
@@ -1087,17 +1078,17 @@ func describeMachineDeclaration(c types.MachineClaim) string {
 	if c.MemoryMB <= 0 {
 		return "it takes " + slots
 	}
-	what := fmt.Sprintf("it claims %s (%s) and takes %s", types.FormatMB(c.MemoryMB), c.Sizing, slots)
+	what := fmt.Sprintf("it claims %s (%s) and takes %s", budget.FormatMB(c.MemoryMB), c.Sizing, slots)
 	if c.DeclaredBy != "" && c.DeclaredBy != c.Target {
-		what = fmt.Sprintf("it runs %s, which claims %s (%s), and takes %s", c.DeclaredBy, types.FormatMB(c.MemoryMB), c.Sizing, slots)
+		what = fmt.Sprintf("it runs %s, which claims %s (%s), and takes %s", c.DeclaredBy, budget.FormatMB(c.MemoryMB), c.Sizing, slots)
 	}
 	return what
 }
 
-func describeMachineRemaining(v types.MachineVerdict) string {
+func describeMachineRemaining(v budget.Verdict) string {
 	parts := make([]string, 0, 2)
 	if v.BudgetMB > 0 {
-		parts = append(parts, fmt.Sprintf("%s of %s is left", types.FormatMB(max(v.BudgetMB-v.HeldMB, 0)), types.FormatMB(v.BudgetMB)))
+		parts = append(parts, fmt.Sprintf("%s of %s is left", budget.FormatMB(max(v.BudgetMB-v.HeldMB, 0)), budget.FormatMB(v.BudgetMB)))
 	}
 	if v.BudgetSlots > 0 {
 		parts = append(parts, fmt.Sprintf("%d of %d slots are free", max(v.BudgetSlots-v.HeldSlots, 0), v.BudgetSlots))
@@ -1110,7 +1101,7 @@ func describeMachineRemaining(v types.MachineVerdict) string {
 
 // describeMachineHolders names who is holding the budget, so a refusal is a fact the
 // reader can act on rather than a number.
-func describeMachineHolders(holders []types.MachineClaimant) string {
+func describeMachineHolders(holders []budget.Claimant) string {
 	if len(holders) == 0 {
 		return "nothing else holds a claim"
 	}
@@ -1119,7 +1110,7 @@ func describeMachineHolders(holders []types.MachineClaimant) string {
 	for _, h := range holders[:min(len(holders), show)] {
 		desc := fmt.Sprintf("pid %d %s %s", h.PID, displayProject(h.Project), h.Target)
 		if h.MemoryMB > 0 {
-			desc += fmt.Sprintf(" (%s)", types.FormatMB(h.MemoryMB))
+			desc += fmt.Sprintf(" (%s)", budget.FormatMB(h.MemoryMB))
 		}
 		if h.Dir != "" {
 			desc += ", in " + h.Dir

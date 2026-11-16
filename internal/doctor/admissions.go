@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/types/check"
 )
 
@@ -14,7 +14,7 @@ type admissionsKey struct{}
 // WithAdmissions returns ctx carrying the reader of the broker's admissions
 // store for the budget-admissions check. The store lives with the broker, so
 // the CLI hands it in. A Run whose ctx carries none reports it skipped.
-func WithAdmissions(ctx context.Context, load func(ctx context.Context) ([]types.MachineAdmission, error)) context.Context {
+func WithAdmissions(ctx context.Context, load func(ctx context.Context) ([]budget.Admission, error)) context.Context {
 	return context.WithValue(ctx, admissionsKey{}, load)
 }
 
@@ -26,7 +26,7 @@ const admissionsWindow = 24 * time.Hour
 // checkBudgetAdmissions counts refusals in the last day and seated waits past
 // a quarter of their bound. It changes nothing and never fails.
 func (r *runner) checkBudgetAdmissions(ctx context.Context) check.Check {
-	load, ok := ctx.Value(admissionsKey{}).(func(context.Context) ([]types.MachineAdmission, error))
+	load, ok := ctx.Value(admissionsKey{}).(func(context.Context) ([]budget.Admission, error))
 	if !ok {
 		return check.Check{Name: budgetAdmissionsCheck, Status: check.OK, Evidence: check.EvidenceUnknown, Message: "no admissions reader supplied; skipped"}
 	}
@@ -39,16 +39,16 @@ func (r *runner) checkBudgetAdmissions(ctx context.Context) check.Check {
 
 // gradeBudgetAdmissions counts refusals within admissionsWindow of now, and
 // waits past a quarter of their bound.
-func gradeBudgetAdmissions(admissions []types.MachineAdmission, now time.Time) check.Check {
+func gradeBudgetAdmissions(admissions []budget.Admission, now time.Time) check.Check {
 	var refused, slow int
 	for _, a := range admissions {
 		if now.Sub(a.At) > admissionsWindow {
 			continue
 		}
 		switch a.Outcome {
-		case types.AdmissionRefused:
+		case budget.AdmissionRefused:
 			refused++
-		case types.AdmissionSeated:
+		case budget.AdmissionSeated:
 			if a.WaitBoundMS > 0 && a.WaitedMS*4 > a.WaitBoundMS {
 				slow++
 			}

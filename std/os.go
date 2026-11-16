@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
@@ -639,7 +640,7 @@ func ProcWithSlots(ctx context.Context, n int, cb func(ctx context.Context) erro
 	if lim := cache.LimiterFromContext(ctx); lim != nil && n > 0 {
 		// Hand back every slot we hold (a weighted step holds more than one) so
 		// reserving n cannot deadlock on slots we pin ourselves.
-		if held := cache.SlotsHeld(ctx); held > 0 {
+		if held := budget.SlotsHeld(ctx); held > 0 {
 			lim.ReleaseN(held)
 			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
 		}
@@ -710,7 +711,7 @@ func seatWidth(ctx context.Context, n int) int {
 		slog.InfoContext(ctx, "no concurrency limiter on the context, so the commands run one at a time", "commands", n)
 		return 1
 	}
-	held := cache.SlotsHeld(ctx)
+	held := budget.SlotsHeld(ctx)
 	if held < 1 {
 		slog.InfoContext(ctx, "the caller holds no slot of the concurrency limiter, so the commands run one at a time", "commands", n)
 		return 1

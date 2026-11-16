@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	typesagent "github.com/egladman/magus/types/agent"
@@ -808,7 +809,7 @@ func TestAForkUnderJobExecSharesItsClaim(t *testing.T) {
 	stranger, err := broker.Dial(t.Context(), broker.DefaultAddr())
 	require.NoError(t, err)
 	defer func() { _ = stranger.Close() }()
-	v, err := stranger.Request(t.Context(), types.MachineClaim{Project: "other", Target: "test", Slots: 1, PID: 1})
+	v, err := stranger.Request(t.Context(), budget.Claim{Project: "other", Target: "test", Slots: 1, PID: 1})
 	require.NoError(t, err)
 	out, err := run("run", "--no-cache", "test", ".")
 	require.Error(t, err, out)

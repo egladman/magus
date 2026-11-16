@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/diff"
@@ -963,7 +964,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 }
 
 // openWorkspace opens root the way every registry workspace is opened.
-func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
+func openWorkspace(root string, lim *budget.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
 	cfg, err := server.LoadWorkspaceConfig(root)
 	if err != nil {
 		return nil, fmt.Errorf("load config %s: %w", root, err)

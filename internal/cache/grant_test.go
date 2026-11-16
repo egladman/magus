@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/proc/spawn"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -96,7 +96,7 @@ func TestRunAllSlotsHandbackNoDeadlock(t *testing.T) {
 		// Mirror OsWithSlots: hand back the slots we hold, then reserve `threads`.
 		// With the whole budget held, reserving 2 can only succeed if the handback
 		// released both of our slots.
-		held := SlotsHeld(ctx)
+		held := budget.SlotsHeld(ctx)
 		if held > 0 {
 			lim.ReleaseN(held)
 			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
@@ -167,8 +167,8 @@ func TestGrantedSlotsReachGOMAXPROCSAndTheRecordedWidth(t *testing.T) {
 		t.Skip("the probe reads the child's environment through sh")
 	}
 	t.Setenv("MAGUS_LEVEL", "")
-	b, _ := testBudget(t, 0, 10)
-	require.True(t, b.Request(types.MachineClaim{Project: "other", Target: "test", Slots: 7, PID: os.Getpid() + 1}, 0).Granted)
+	b := testBudget(t, 0, 10)
+	require.True(t, b.Request(budget.Claim{Project: "other", Target: "test", Slots: 7, PID: os.Getpid() + 1}, 0).Granted)
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 
@@ -176,7 +176,7 @@ func TestGrantedSlotsReachGOMAXPROCSAndTheRecordedWidth(t *testing.T) {
 	var procs string
 	step := Step{ProjectPath: ".", Target: "test", WorkspaceRoot: t.TempDir(), Slots: 8, SlotsFloor: 1, NoCache: true}
 	_, err = c.RunAll(t.Context(), []Step{step}, func(ctx context.Context, _ Step) error {
-		held = SlotsHeld(ctx)
+		held = budget.SlotsHeld(ctx)
 		out, err := spawn.Exec(ctx, "sh", []string{"-c", `printf %s "$GOMAXPROCS"`}, spawn.ExecOptions{Capture: true, Quiet: true})
 		procs = out.Stdout
 		return err
@@ -189,14 +189,14 @@ func TestGrantedSlotsReachGOMAXPROCSAndTheRecordedWidth(t *testing.T) {
 // A step the budget seated at full width keeps it.
 func TestGrantedSlotsOfAFixedStepAreItsWidth(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
-	b, _ := testBudget(t, 0, 10)
+	b := testBudget(t, 0, 10)
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 
 	var held int
 	step := Step{ProjectPath: ".", Target: "scip", WorkspaceRoot: t.TempDir(), Slots: 4, NoCache: true}
 	_, err = c.RunAll(t.Context(), []Step{step}, func(ctx context.Context, _ Step) error {
-		held = SlotsHeld(ctx)
+		held = budget.SlotsHeld(ctx)
 		return nil
 	}, WithLimiter(NewLimiter(8)))
 	require.NoError(t, err)
