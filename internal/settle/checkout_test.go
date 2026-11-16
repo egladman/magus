@@ -1,4 +1,4 @@
-package main
+package settle
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ func TestPrintCheckoutSuite(t *testing.T) {
 
 func (s *PrintCheckoutSuite) TestTheTextNamesThePathWhatRanAndTheRemoval() {
 	var out bytes.Buffer
-	printCheckout(&out, job.ReviewCheckoutRecord{
+	PrintCheckout(&out, job.ReviewCheckoutRecord{
 		Path: "/c/checkout-0123456789ab", Revision: "0123456789abcdef", VCS: "git",
 		Bootstrap: job.ReviewBootstrap{Ran: true, Install: []string{".", "console"}, Harnesses: true, HookNote: job.NoCheckoutHook},
 		Remove:    "magus vcs checkout --remove /c/checkout-0123456789ab",
@@ -41,7 +41,7 @@ func (s *PrintCheckoutSuite) TestTheTextNamesThePathWhatRanAndTheRemoval() {
 
 func (s *PrintCheckoutSuite) TestTheTextNamesTheHookThatRan() {
 	var out bytes.Buffer
-	printCheckout(&out, job.ReviewCheckoutRecord{
+	PrintCheckout(&out, job.ReviewCheckoutRecord{
 		Path: "/c/x", Revision: "abc", VCS: "git",
 		Bootstrap: job.ReviewBootstrap{Ran: true, Install: []string{}, Harnesses: true, Hook: "hack/b.buzz"},
 		Remove:    "magus vcs checkout --remove /c/x",
@@ -56,7 +56,7 @@ func (s *PrintCheckoutSuite) TestTheTextNamesTheHookThatRan() {
 
 func (s *PrintCheckoutSuite) TestTheTextOfASkippedBootstrapSaysSo() {
 	var out bytes.Buffer
-	printCheckout(&out, job.ReviewCheckoutRecord{
+	PrintCheckout(&out, job.ReviewCheckoutRecord{
 		Path: "/c/x", Revision: "abc", VCS: "git",
 		Bootstrap: job.ReviewBootstrap{Install: []string{}, HookNote: "--no-bootstrap: nothing ran in the checkout"},
 		Remove:    "magus vcs checkout --remove /c/x",
@@ -84,7 +84,7 @@ func (s *PreserveBeforeRemovalSuite) TestRemovingACheckoutPreservesItFirst() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	s.T().Cleanup(func() { slog.SetDefault(prev) })
 
-	s.Require().NoError(preserveBeforeRemoval(s.T().Context(), dir, res))
+	s.Require().NoError(PreserveBeforeRemoval(s.T().Context(), dir, res))
 	s.Contains(logged.String(), "preserved the uncommitted work in")
 
 	refs, err := exec.Command("git", "-C", dir, "for-each-ref", "refs/magus/preserved/").Output()
@@ -92,12 +92,12 @@ func (s *PreserveBeforeRemovalSuite) TestRemovingACheckoutPreservesItFirst() {
 	s.NotEmpty(strings.TrimSpace(string(refs)), "nothing was captured before the removal")
 
 	logged.Reset()
-	s.Require().NoError(preserveBeforeRemoval(s.T().Context(), dir, res))
+	s.Require().NoError(PreserveBeforeRemoval(s.T().Context(), dir, res))
 	s.Contains(logged.String(), "already preserved")
 }
 
 func (s *PreserveBeforeRemovalSuite) TestAMissingCheckoutHasNothingToPreserve() {
 	missing := filepath.Join(s.T().TempDir(), "gone")
 
-	s.NoError(preserveBeforeRemoval(s.T().Context(), missing, types.VCSResolution{}))
+	s.NoError(PreserveBeforeRemoval(s.T().Context(), missing, types.VCSResolution{}))
 }

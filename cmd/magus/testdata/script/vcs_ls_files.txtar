@@ -95,6 +95,21 @@ stdout '"code": "MGS4'
 exec magus vcs ls-files --include-unexplained
 stdout '^out/gen\.txt$'
 
+# The merge-driver verb is the VCS's callback, never typed by hand, so its usage contract is
+# pinned beside the other vcs verbs. A bare invocation is a usage error: exit 0 is how a
+# driver tells git the conflict was resolved, and a human at a prompt resolved nothing. The
+# resolution itself is unit-tested in internal/settle/driver_test.go.
+! exec magus vcs merge-driver
+stderr 'expected 5 arguments'
+stderr 'Usage: magus vcs merge-driver %O %A %B %L %P'
+stderr 'git, hg and Sapling invoke it during a merge'
+stderr 'Wire it once per clone with .magus init.'
+stderr 'magus vcs resolve'
+
+# git and hg always pass exactly 5 arguments, so any other count is its own error.
+! exec magus vcs merge-driver onlyonearg
+stderr '\[error\] magus vcs merge-driver: expected 5 arguments \(ancestor result other markerSize path\), got 1'
+
 -- magus.yaml --
 default_charms: [rw]
 -- .gitignore --
