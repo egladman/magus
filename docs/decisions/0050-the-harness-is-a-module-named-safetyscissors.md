@@ -401,7 +401,7 @@ decided.
     answer reaches the trail only through judging.
 
   The answerer is whoever the caller routes the question to, and the library cannot
-  tell which. Most often it will be another model, sometimes a person, sometimes a
+  tell which. Most often it is another model, sometimes a person, sometimes a
   script. An answer means only that something the caller chose said yes, never that a
   person approved. The record keeps the answerer's label as given and calls it
   unverified, and nothing in the module's names or messages implies a human.
