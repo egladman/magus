@@ -12,11 +12,11 @@ import (
 	"github.com/egladman/magus/types/check"
 )
 
-// OrderLines renders the reading order for a terminal: each group, each step with its hunks
+// orderLines renders the reading order for a terminal: each group, each step with its hunks
 // and the sentence that placed them, then the completeness line. A generated group is folded
 // to one line unless showGenerated. Nothing for a diff with no order, because the note it
 // carries says why.
-func OrderLines(rev diff.Diff, showGenerated bool) []string {
+func orderLines(rev diff.Diff, showGenerated bool) []string {
 	order := rev.Order
 	if order == nil {
 		return nil
@@ -188,7 +188,7 @@ func hunkRanges(rev diff.Diff) map[string]string {
 
 // printOrder writes the reading order under the file summary.
 func printOrder(w io.Writer, rev diff.Diff, showGenerated bool) {
-	for _, line := range OrderLines(rev, showGenerated) {
+	for _, line := range orderLines(rev, showGenerated) {
 		fmt.Fprintln(w, line)
 	}
 }

@@ -51,13 +51,13 @@ func (in Source) RiskBase() string {
 	}
 }
 
-// RevRange resolves --rev, which is written base...head the way git and the branch-overlap
+// revRange resolves --rev, which is written base...head the way git and the branch-overlap
 // reader already spell a symmetric difference.
 //
 // Two dots are REFUSED rather than quietly accepted as three. They are a different question (what
 // head has that base has, including everything base gained meanwhile), and a reviewer who typed the
 // git spelling out of habit would get a diff padded with commits the branch author never wrote.
-func RevRange(rev string) (Source, error) {
+func revRange(rev string) (Source, error) {
 	base, head, ok := strings.Cut(rev, "...")
 	if !ok {
 		if b, _, two := strings.Cut(rev, ".."); two {
@@ -118,7 +118,7 @@ func SourceFromFlags(patchFlag, revFlag string) (Source, error) {
 	case patch != "" && rev != "":
 		return Source{}, exit.Usagef("magus diff: --patch and --rev each name a changeset, so only one may be given")
 	case rev != "":
-		return RevRange(rev)
+		return revRange(rev)
 	case patch == "-":
 		return Source{Kind: SourceStdin, Label: "a patch on stdin"}, nil
 	case patch != "":

@@ -29,7 +29,7 @@ type Sources struct {
 	// HistoryPath is the recorded run history the cost lens reads; empty skips the lens.
 	HistoryPath string
 	// Advisors runs the local advisors against base.
-	Advisors func(ctx context.Context, base string, rev difftypes.Diff) ([]AdviceSection, []string, error)
+	Advisors func(ctx context.Context, base string, rev difftypes.Diff) ([]review.AdviceSection, []string, error)
 	// Anchors joins the declared notes stores against the changeset.
 	Anchors func(ctx context.Context, rev difftypes.Diff) ([]review.AnchorHit, error)
 	// LoadGraph reads the knowledge graph the symbol lens needs.

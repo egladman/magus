@@ -42,7 +42,7 @@ func orderTestDiff() diff.Diff {
 }
 
 func orderText(rev diff.Diff, showGenerated bool) string {
-	return strings.Join(OrderLines(rev, showGenerated), "\n") + "\n"
+	return strings.Join(orderLines(rev, showGenerated), "\n") + "\n"
 }
 
 func TestOrderLinesNameEachStepWithItsHunksAndWhy(t *testing.T) {
@@ -103,7 +103,7 @@ func TestOrderLinesAreEmptyWithoutAnOrder(t *testing.T) {
 	rev := orderTestDiff()
 	rev.Order = nil
 
-	assert.Empty(t, OrderLines(rev, true))
+	assert.Empty(t, orderLines(rev, true))
 }
 
 func TestOrderLinesNameWhatTheOrderCouldNotAccountFor(t *testing.T) {

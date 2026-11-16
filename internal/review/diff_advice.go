@@ -1,7 +1,6 @@
 package review
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -10,8 +9,6 @@ import (
 
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
-	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types/diff"
 )
 
@@ -101,7 +98,7 @@ func collectAdvice(ctx context.Context, dir string, files []string, base string)
 	var sections []AdviceSection
 	var notes []string
 	for _, file := range files {
-		out, warnings, err := runAdvisor(ctx, dir, file)
+		out, warnings, err := bindings.RunScriptMain(ctx, dir, file)
 		// Sections printed before the failure are kept: an advisor that publishes and
 		// then dies has already said something true, and dropping it would report the
 		// finding as absent rather than as partial.
@@ -201,73 +198,6 @@ func shareReview(rev diff.Diff) (func(), error) {
 		}
 		_ = os.Remove(f.Name())
 	}, nil
-}
-
-// runAdvisor evaluates one advisor in-process and returns what it printed, the warnings
-// its compilation raised, and the error that ended it. Nothing here writes or exits: all
-// three are the caller's to report.
-//
-// The session is built as `magus buzz <file>` builds one (same modules, same
-// strict parse mode, warnings drained at the same point, `fun main() > int` read rather
-// than discarded), so an advisor cannot behave one way in CI and another way here. Two
-// differences remain, both deliberate:
-//
-//   - std.print goes to a buffer, not stdout. That IS the transport: a section is a line
-//     the advisor printed, and parseAdviceSections reads them back.
-//   - the include path is set on the session rather than through BUZZ_INCLUDE_PATH, for
-//     the reason at the call site below.
-//
-// Where those two observations LAND differs as well, and has to. `magus buzz` prints
-// warnings to stderr and exits with main's value; ten advisors run here, and the ninth
-// failing is not a verdict on `magus diff`. Both become notes instead.
-func runAdvisor(ctx context.Context, dir, file string) (string, []string, error) {
-	src, err := os.ReadFile(filepath.Join(dir, file))
-	if err != nil {
-		return "", nil, err
-	}
-	sess := buzz.NewSession(ctx)
-	defer func() { _ = sess.Close() }()
-	// `import "advice"` resolves against this list. The composite action gets the same
-	// effect from BUZZ_INCLUDE_PATH; setting it directly keeps the advisor's view of the
-	// filesystem out of the process environment.
-	sess.SetIncludeDirs([]string{dir})
-
-	var out bytes.Buffer
-	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(&out))
-	bindings.RegisterMagusNamespace(ctx, sess)
-	if err := bindings.RegisterSpellSourceModules(sess); err != nil {
-		return "", nil, err
-	}
-
-	if err := sess.Exec(ctx, string(src)); err != nil {
-		return out.String(), nil, err
-	}
-	// Drained where `magus buzz` drains them: after Exec, before main. These are parse and
-	// check diagnostics (BZZ3001 unused import, and the rest), so Exec is where all of them
-	// are produced, and it never fails on one, which is exactly why they need collecting
-	// rather than trusting a green run. An advisor whose imports have rotted is the kind of
-	// thing a reader wants told, not left to read as an advisor with nothing to say.
-	var warnings []string
-	for _, w := range sess.Warnings() {
-		w.File = file
-		warnings = append(warnings, w.String())
-	}
-
-	mainFn := sess.GetGlobal("main")
-	if !mainFn.IsFun() {
-		return out.String(), warnings, fmt.Errorf("no main() to run (an advisor must define `fun main() > void` or `fun main() > int`)")
-	}
-	ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(nil)})
-	if err != nil {
-		return out.String(), warnings, err
-	}
-	// `fun main() > int` is upstream's exit-status convention, and the checker permits it,
-	// so an advisor may report failure by returning rather than by throwing. Discarding the
-	// value read that advisor as having succeeded.
-	if ret.IsInt() && ret.AsInt() != 0 {
-		return out.String(), warnings, fmt.Errorf("main() returned %d (non-zero means the advisor failed)", ret.AsInt())
-	}
-	return out.String(), warnings, nil
 }
 
 // parseAdviceSections picks the section objects out of one advisor's output. An advisor

@@ -220,7 +220,7 @@ func TestDiffSourceFromFlags(t *testing.T) {
 
 func TestRevRangeFromFlag(t *testing.T) {
 	t.Run("base...head is the accepted spelling", func(t *testing.T) {
-		in, err := RevRange("main...feat/audience")
+		in, err := revRange("main...feat/audience")
 
 		require.NoError(t, err)
 		assert.Equal(t, Source{
@@ -234,7 +234,7 @@ func TestRevRangeFromFlag(t *testing.T) {
 	// The positive case above is what keeps this honest: every refusal below would also pass
 	// against a parser that rejected everything, and then --rev would be unusable while green.
 	t.Run("two dots are refused rather than read as three", func(t *testing.T) {
-		_, err := RevRange("main..feat/audience")
+		_, err := revRange("main..feat/audience")
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "three dots")
@@ -243,7 +243,7 @@ func TestRevRangeFromFlag(t *testing.T) {
 
 	t.Run("a missing end is refused rather than defaulted", func(t *testing.T) {
 		for _, rev := range []string{"main...", "...feat/audience"} {
-			_, err := RevRange(rev)
+			_, err := revRange(rev)
 
 			require.Error(t, err, rev)
 			assert.Contains(t, err.Error(), "needs both ends", rev)
@@ -251,7 +251,7 @@ func TestRevRangeFromFlag(t *testing.T) {
 	})
 
 	t.Run("a bare ref is refused, because it names one end of two", func(t *testing.T) {
-		_, err := RevRange("feat/audience")
+		_, err := revRange("feat/audience")
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "base...head")

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -191,10 +192,10 @@ func TestCollectAdviceDropsWarningsFromAnAdvisorThatRan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("setAdviceEnv: %v", err)
 	}
-	_, warnings, err := runAdvisor(context.Background(), dir, "warned.buzz")
+	_, warnings, err := bindings.RunScriptMain(context.Background(), dir, "warned.buzz")
 	restore()
 	if err != nil {
-		t.Fatalf("runAdvisor: %v", err)
+		t.Fatalf("RunScriptMain: %v", err)
 	}
 	if !slices.ContainsFunc(warnings, func(w string) bool { return strings.Contains(w, "[BZZ3002]") }) {
 		t.Fatalf("warnings = %v, want BZZ3002 from the fixture", warnings)

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/review"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -12,7 +13,7 @@ import (
 // real run produces: eleven advisors publish, one has something to say, and ten publish an
 // empty body to withdraw whatever they said last time.
 func TestImpactCountsFindingsNotSections(t *testing.T) {
-	lines := advisorLines([]AdviceSection{
+	lines := advisorLines([]review.AdviceSection{
 		{Name: "unclaimed", Title: "Files no project claims"},
 		{Name: "conformance", Title: "A target name diverges", Body: "rename it\n"},
 		{Name: "skip-cache", Title: "A target opted out of the cache"},

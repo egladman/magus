@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -25,15 +26,6 @@ type advisorBase struct {
 	// this clone. The AGE a reader sees is derived from this at render rather than stored:
 	// a report teed to a file and read tomorrow must not still claim today's number.
 	Tip string `json:"tip,omitempty" yaml:"tip,omitempty"`
-}
-
-// AdviceSection is one advisor's finding: the section it owns in the pull-request
-// comment, rendered for a local reader instead. An EMPTY Body is a retraction (the
-// advisor ran and found nothing) and is a section like any other, not an absence.
-type AdviceSection struct {
-	Name  string `json:"name"  yaml:"name"`
-	Title string `json:"title" yaml:"title"`
-	Body  string `json:"body"  yaml:"body"`
 }
 
 // resolveAdvisorBase dates this clone's copy of the ref the advisors compared against.
@@ -100,7 +92,7 @@ func ageText(d time.Duration) string {
 	}
 }
 
-func advisorLines(sections []AdviceSection, failed []string, base *advisorBase) []string {
+func advisorLines(sections []review.AdviceSection, failed []string, base *advisorBase) []string {
 	// Prepended to whichever headline follows, including "nothing to report": a clean set
 	// measured against a ref from last week is the case where the caveat matters MOST, and
 	// hanging it off a finding count would drop it exactly there.
@@ -115,7 +107,7 @@ func advisorLines(sections []AdviceSection, failed []string, base *advisorBase) 
 	// finding, and counting sections rather than findings reported ten of them where there
 	// was one, each rendered as a title with nothing underneath. A reader who learns the
 	// headline overstates by an order of magnitude stops reading the section.
-	var found []AdviceSection
+	var found []review.AdviceSection
 	var clear []string
 	for _, s := range sections {
 		if strings.TrimRight(s.Body, "\n") == "" {

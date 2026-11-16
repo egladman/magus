@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	difftypes "github.com/egladman/magus/types/diff"
 	"io"
 	"log/slog"
 	"net/http"
@@ -33,6 +32,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
+	difftypes "github.com/egladman/magus/types/diff"
 )
 
 // cliTokens is the shell's token store as the review routes use it.
@@ -850,13 +850,8 @@ func impactSources(m *magus.Magus, rootOverride string) reviewimpact.Sources {
 	return reviewimpact.Sources{
 		OwnershipCommits: diffHistoryCommits,
 		HistoryPath:      globalCfg.HistoryPath,
-		Advisors: func(ctx context.Context, base string, rev difftypes.Diff) ([]reviewimpact.AdviceSection, []string, error) {
-			got, notes, err := runLocalAdvisors(ctx, m, base, rev)
-			sections := make([]reviewimpact.AdviceSection, len(got))
-			for i, s := range got {
-				sections[i] = reviewimpact.AdviceSection(s)
-			}
-			return sections, notes, err
+		Advisors: func(ctx context.Context, base string, rev difftypes.Diff) ([]review.AdviceSection, []string, error) {
+			return runLocalAdvisors(ctx, m, base, rev)
 		},
 		Anchors: func(ctx context.Context, rev difftypes.Diff) ([]review.AnchorHit, error) {
 			return impactAnchors(ctx, rootOverride, rev)

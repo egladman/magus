@@ -14,10 +14,10 @@ import (
 // makes with its pointers. An absent cost is a workspace with no run history, and rendering it
 // as zero would tell a reader the build is free.
 type Report struct {
-	Reach     *reachSummary   `json:"reach,omitempty"     yaml:"reach,omitempty"`
-	Ownership []projectOwner  `json:"ownership,omitempty" yaml:"ownership,omitempty"`
-	Cost      *costEstimate   `json:"cost,omitempty"      yaml:"cost,omitempty"`
-	Advisors  []AdviceSection `json:"advisors,omitempty"  yaml:"advisors,omitempty"`
+	Reach     *reachSummary          `json:"reach,omitempty"     yaml:"reach,omitempty"`
+	Ownership []projectOwner         `json:"ownership,omitempty" yaml:"ownership,omitempty"`
+	Cost      *costEstimate          `json:"cost,omitempty"      yaml:"cost,omitempty"`
+	Advisors  []review.AdviceSection `json:"advisors,omitempty"  yaml:"advisors,omitempty"`
 	// AdvisorNotes names each advisor that could not run. Surfaced rather than swallowed, so
 	// an empty advisor list reads as "they all passed" only when it is one.
 	AdvisorNotes []string `json:"advisor_notes,omitempty" yaml:"advisor_notes,omitempty"`

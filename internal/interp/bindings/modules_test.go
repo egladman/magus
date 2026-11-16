@@ -1625,13 +1625,13 @@ func TestEveryEncodedTypeIsMirrored(t *testing.T) {
 		assert.True(t, encoded[name], "%s is listed as a boundary type but the registry gives it no encoder; drop it from this list", name)
 	}
 	assert.Len(t, owners, 15,
-		"a types/ struct gained or lost its encoder: add it to the boundary registry (cmd/magus-utils/boundary_types.go), generate it, wire it into RegisterSpellSourceModules, and list it in TestEveryBoundaryTypeHasAMirror")
+		"a types/ struct gained or lost its encoder: add it to the boundary registry (cmd/magus-utils/boundary_types.go), generate it, wire it into registerSpellSourceModules, and list it in TestEveryBoundaryTypeHasAMirror")
 }
 
 // TestMagusNamespaceIsTyped is the guard for the half of the typed-host-module work
 // that is easiest to lose. "magus" is bound as a session GLOBAL, not a lazily-imported
 // module, so the import-triggered SetModuleDecls collection never runs for it: it is
-// declared directly (RegisterSpellSourceModules). The first version of this change wired
+// declared directly (registerSpellSourceModules). The first version of this change wired
 // the generated declarations into the module loop only, which types every bare-import
 // module (os, fs, vcs, ...) and silently leaves the magus namespace Unknown. Nothing
 // failed: a magusfile kept loading, every target kept running, and a wrong field on a

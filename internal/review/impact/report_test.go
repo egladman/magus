@@ -33,7 +33,7 @@ func fixture() Report {
 				{Project: "docs", Target: "test", Ms: 60_000, Samples: 1},
 			},
 		},
-		Advisors: []AdviceSection{
+		Advisors: []review.AdviceSection{
 			{Name: "exported-api", Title: "A public symbol changed", Body: "diff.Diff is exported.\nBump the minor."},
 			// A retraction sits in the fixture because every real run has several: it must not
 			// read as a finding, and it must not read as an advisor that failed either.
