@@ -120,8 +120,8 @@ func shellCommand(ctx context.Context, args []string) error {
 
 type envRefusalKey struct{}
 
-// withEnvRefusal hands shellCommand the MGS1046 error startup found, for it to answer as the
-// verdict instead of judging the input.
+// withEnvRefusal hands shellCommand the MGS1046 error startup found, for it to answer as a
+// call nothing judged.
 func withEnvRefusal(ctx context.Context, err error) context.Context {
 	return context.WithValue(ctx, envRefusalKey{}, err)
 }
@@ -129,22 +129,9 @@ func withEnvRefusal(ctx context.Context, err error) context.Context {
 type staleConfigKey struct{}
 
 // withStaleConfig hands shellCommand a magus.yaml failure this build
-// predates. The guard judges it as a stale binary's load failure.
+// predates, for it to answer as a call nothing judged.
 func withStaleConfig(ctx context.Context, err error) context.Context {
 	return context.WithValue(ctx, staleConfigKey{}, err)
-}
-
-// staleConfigDependencies loads no rule, since the binary cannot read the
-// workspace's config. The stale-binary rule refuses what changes state.
-func staleConfigDependencies(ctx context.Context, rootOverride string, failure error) guard.Dependencies {
-	binary, _ := runningBinaryPath()
-	deps, _ := guard.NewDependencies(ctx, guard.Wiring{BinaryVersion: version, Binary: binary})
-	deps.CacheDir = guardCacheDir(rootOverride)
-	deps.LoadFailure = failure
-	deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
-		return nil, failure
-	}
-	return deps
 }
 
 // shellCommandWithErrorWriter is shellCommand's transport seam. The CLI reports a deny reason on
@@ -193,20 +180,14 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		return err
 	}
 
-	// Answered as a deny, never as the exit a startup refusal would be: a hook reads a
-	// failed guard as no verdict and fails open, so an environment magus knows is wrong
-	// would disarm every rule for the session. --observe and --message carry no verdict to
-	// deny.
-	envRefusal, _ := ctx.Value(envRefusalKey{}).(error)
-	if refusal := cmp.Or(envRefusal, deadlineErr); refusal != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
-		remedy := "Fix the environment the agent host runs in."
-		if envRefusal == nil {
-			remedy = "Retry it; the magus that handed it on sets a fresh deadline."
-		}
+	// A deadline the handing magus spent is answered as a deny, never as an exit: a host
+	// reads a failed guard as no verdict. --observe and --message carry no verdict to deny.
+	if deadlineErr != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		verdict := types.GuardJudgment{
 			APIVersion: agent.GuardAPIVersion,
 			Decision:   "deny",
-			Reason:     fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. %s", refusal.Error(), remedy),
+			Reason: fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. "+
+				"Retry it; the magus that handed it on sets a fresh deadline.", deadlineErr.Error()),
 		}
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
@@ -248,6 +229,22 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	if by := delegatedBy(ctx); by != "" {
 		self, _ := runningBinaryPath()
 		judge = fmt.Sprintf("Judged by %s, this checkout's own ./magus, which %s handed the call to.", self, by)
+	}
+	// An environment or magus.yaml this magus cannot read loads no policy, so nothing
+	// judges the call: only the workspace's repair passes, as the glue's startup answers.
+	envRefusal, _ := ctx.Value(envRefusalKey{}).(error)
+	staleConfig, _ := ctx.Value(staleConfigKey{}).(error)
+	if cause := cmp.Or(envRefusal, staleConfig); cause != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
+		root, _ := guardRoot(judgeRoot)
+		answer, reason := guard.UnjudgedEvent(root, input, cause)
+		verdict := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: answer.Decision(), Reason: reason}
+		if verdict.Decision == "advise" {
+			verdict.Reason, verdict.Context = "", reason
+		}
+		if err := writeGuardVerdict(out, opts, verdict); err != nil {
+			return err
+		}
+		return verdictExit(errOut, opts, verdict)
 	}
 	// A hook's stdout is the host's pipe; a terminal on it means someone typed this.
 	window := terminalWindow()
@@ -418,9 +415,6 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 // loadGuardDependenciesAt is loadGuardDependencies for a call whose authority
 // resolved: its policy loads from the row's checkout at the row's revision.
 func loadGuardDependenciesAt(ctx context.Context, rootOverride string, authority guard.CallAuthority) (guard.Dependencies, *guard.WorkspaceRules) {
-	if failure, ok := ctx.Value(staleConfigKey{}).(error); ok {
-		return staleConfigDependencies(ctx, rootOverride, failure), nil
-	}
 	root, err := guardRoot(rootOverride)
 	if err != nil {
 		root = ""

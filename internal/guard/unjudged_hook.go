@@ -44,14 +44,32 @@ func (u Unjudged) ExitCode() int {
 // open is answered rather than hung.
 const hookEventWait = 2 * time.Second
 
-// UnjudgedHook answers the hook event on r that no guard policy can judge, because the
-// magus asked could not start for root: cause is why. It reads the event as `magus
-// shell` does, a host envelope keyed by field or a bare command line, and an event r
-// has not closed on within two seconds as empty. A command equal to one of the
-// workspace's repair lines, once trimmed, is the repair, and a stop event is a stop;
-// every other event is refused. reason names cause and the repair, "" for the repair.
+// Decision is the `magus shell` verdict that carries u: a pass for the repair, an advise
+// for a stop, whose reason reaches the agent as it ends, and a deny for a refusal.
+func (u Unjudged) Decision() string {
+	switch u {
+	case unjudgedRepair:
+		return "pass"
+	case unjudgedStop:
+		return "advise"
+	case unjudgedRefused:
+	}
+	return "deny"
+}
+
+// UnjudgedHook is [UnjudgedEvent] for the event on r, read until r closes; an event r
+// has not closed on within two seconds reads as empty.
 func UnjudgedHook(root string, r io.Reader, cause error) (answer Unjudged, reason string) {
-	event := readHookEvent(r, hookEventWait)
+	return UnjudgedEvent(root, readHookEvent(r, hookEventWait), cause)
+}
+
+// UnjudgedEvent answers a hook event that no guard policy can judge, because the magus
+// asked could not load root: cause is why. It reads event as `magus shell` does, a host
+// envelope keyed by field or a bare command line. A command equal to one of the
+// workspace's repair lines, once trimmed, is the repair, and a stop event is a stop;
+// every other event is refused, a read included. reason names cause and the repair, ""
+// for the repair.
+func UnjudgedEvent(root, event string, cause error) (answer Unjudged, reason string) {
 	lines := repairLines(root)
 	command, isCommand := unjudgedCommand(event)
 	if isCommand && slices.Contains(lines, strings.TrimSpace(command)) {
