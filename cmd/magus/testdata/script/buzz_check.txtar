@@ -37,13 +37,16 @@ stderr 'two_errors\.buzz'
 stderr 'must be labeled'
 exec magus buzz --check --embedded embedded_only.buzz
 
-# an unresolved magus/spell/* import is the one diagnostic that does not mean what it
-# says: those paths are bound by the workspace loader, so a note says which check
-# settles it rather than leaving a fine magusfile reading as broken
-! exec magus buzz --check --embedded spell_import.buzz
+# a magus/spell/* import binds as a magusfile load binds it, and a file importing one
+# is read by the loader's embedded rules without --embedded
+exec magus buzz --check spell_import.buzz
+! stderr .
+
+# a misspelled spell import still fails, and a hint names the spells that resolve
+! exec magus buzz --check spell_typo.buzz
 stderr 'BZZ2001'
-stderr 'note: magus/spell/\* is bound by the workspace loader'
-stderr 'a magusfile, a target definition'
+stderr 'no spell "gooo" to import as "magus/spell/gooo", did you mean "go"'
+stderr 'built-in spells: '
 
 # --check and -t are different modes and are refused together rather than ordered
 ! exec magus buzz --check -t ok.buzz
@@ -77,6 +80,9 @@ fun main(args: [str]) > void {
     std\print(pair("x", "y"));
 }
 -- spell_import.buzz --
+import "magus";
 import "magus/spell/go";
 
-fun main(args: [str]) > void {}
+magus\project({"spells": [go]});
+-- spell_typo.buzz --
+import "magus/spell/gooo";

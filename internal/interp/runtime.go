@@ -1099,6 +1099,24 @@ func RegisterBuzzSpellImportCheck(fn func(handles []string) error) {
 	buzzSpellImportCheckFn = fn
 }
 
+// CheckSpellImports refuses the first handle no `import "magus/spell/<handle>"`
+// resolves to, naming the nearest spell and every built-in one. It is the check a
+// magusfile load runs, for a caller that holds handles rather than a magusfile.
+// It fails, rather than passing, when no check is registered.
+func CheckSpellImports(handles []string) error {
+	if buzzSpellImportCheckFn == nil {
+		return errors.New("interp: no Buzz spell-import check is registered")
+	}
+	return buzzSpellImportCheckFn(handles)
+}
+
+// ImportsSpell reports whether src imports a `magus/spell/<handle>` module, which
+// makes it a magusfile or a target definition: source the workspace loader reads
+// under the embedded rules.
+func ImportsSpell(src string) bool {
+	return len(spellImportNames(src)) > 0
+}
+
 // spellImportNames returns the <handle> of every `import "magus/spell/<handle>"`
 // statement in src. It reads the parsed AST, not the raw text, so a commented-out
 // or string-literal import never counts.
