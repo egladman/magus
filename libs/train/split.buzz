@@ -1,0 +1,414 @@
+import "result";
+import "std";
+import "fs";
+import "vcs";
+import "magus";
+import "crypto";
+import "encoding/json";
+import "embed/holdout";
+
+// The salt orders the provenance groups for the byte-capped holdout; a new version means
+// a new split, so the digest in gen/split.digest moves with it. The dev salt picks the
+// train-side groups whose files lend their last lines to the dev sets.
+final salt = "codemodel-holdout/v1:";
+final devSalt = "codemodel-dev/v1:";
+
+final languages = [".go", ".buzz", ".ts", ".tsx"];
+
+fun languageOf(path: str) > str {
+    if (path.endsWith(".go")) {
+        return "go";
+    }
+    if (path.endsWith(".buzz")) {
+        return "buzz";
+    }
+    return "typescript";
+}
+
+fun inDotDir(path: str) > bool {
+    foreach (seg in path.split("/")) {
+        if (seg.startsWith(".")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// wanted keeps hand-written code a model could be asked to write: no harness copy, no
+// fixture, no generated tree, no declaration file, no vendored dependency.
+export fun wanted(path: str) > bool {
+    var ext = false;
+    foreach (e in languages) {
+        if (path.endsWith(e)) {
+            ext = true;
+        }
+    }
+    if (!ext or path.endsWith(".d.ts") or inDotDir(path)) {
+        return false;
+    }
+    foreach (seg in path.split("/")) {
+        if (seg == "testdata" or seg == "gen" or seg == "node_modules" or seg == "vendor") {
+            return false;
+        }
+    }
+    return true;
+}
+
+// candidates lists the files of rev worth splitting, minus the ones magus describes as
+// generated output, and writes them to dir/candidates.jsonl for the dedup to read.
+export fun candidates(rev: str, dir: str) > result\Result::<int> {
+    try {
+        final listing = vcs\cmd(["-c", "core.quotepath=off", "ls-tree", "-r", "--full-tree", "--name-only", rev], opts: vcs\CommandOptions{quiet = true}).stdout;
+        final paths: mut [str] = mut [];
+        foreach (p in listing.split("\n")) {
+            if (p != "" and wanted(p)) {
+                paths.append(p);
+            }
+        }
+        _ = paths.sort(fun (a: str, b: str) > bool => a < b);
+        final generated: mut {str: bool} = mut {};
+        foreach (d in magus\describe.file(paths).files) {
+            generated[d.path] = d.role == "output";
+        }
+        final lines: mut [str] = mut [];
+        foreach (p in paths) {
+            if (!(generated[p] ?? false)) {
+                lines.append(json\stringify({"path": p, "language": languageOf(p)}));
+            }
+        }
+        fs\mkdirAll(dir);
+        fs\writeFile(fs\join(dir, name: "candidates.jsonl"), content: lines.join("\n") + "\n");
+        return result\ok::<int>(lines.len());
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "split: list candidates at {rev}");
+    }
+}
+
+export object Item {
+    path: str,
+    language: str,
+    bytes: int,
+}
+
+export object Placed {
+    path: str,
+    language: str,
+    bytes: int,
+    group: str,
+    side: str,
+    dev: bool,
+}
+
+final tracked = ["buzz", "go", "typescript"];
+
+fun total(m: {str: int}, key: str) > int {
+    return m[key] ?? 0;
+}
+
+// subdivide splits every group over 3% of a language's bytes by the next path component
+// below its files' common directory, again for each piece still over 3%, until a piece is
+// under 3% or is one file. It answers each path's piece name.
+fun subdivide(items: [Item], dealt: {str: str}, langTotal: {str: int}) > {str: str} {
+    final piece: mut {str: str} = mut {};
+    foreach (it in items) {
+        piece[it.path] = dealt[it.path] ?? "";
+    }
+    final leaf: mut {str: bool} = mut {};
+    var changed = true;
+    while (changed) {
+        changed = false;
+        final bytes: mut {str: int} = mut {};
+        final members: mut {str: mut [str]} = mut {};
+        foreach (it in items) {
+            final name = piece[it.path] ?? "";
+            final key = "{name}|{it.language}";
+            bytes[key] = total(bytes, key: key) + it.bytes;
+            if (members[name] == null) {
+                members[name] = mut [];
+            }
+            members[name]!.append(it.path);
+        }
+        final names: mut [str] = mut [];
+        foreach (name, paths in members) {
+            names.append(name);
+        }
+        _ = names.sort(fun (a: str, b: str) > bool => a < b);
+        foreach (name in names) {
+            var over = false;
+            foreach (lang in tracked) {
+                if (total(bytes, key: "{name}|{lang}") * 100 > total(langTotal, key: lang) * 3) {
+                    over = true;
+                }
+            }
+            if (!over or (leaf[name] ?? false)) {
+                continue;
+            }
+            final paths = members[name]!;
+            var common = -1;
+            foreach (p in paths) {
+                final dirs = p.split("/");
+                final depth = dirs.len() - 1;
+                if (common < 0) {
+                    common = depth;
+                } else {
+                    var shared = 0;
+                    final first = paths[0].split("/");
+                    while (shared < common and shared < depth and first[shared] == dirs[shared]) {
+                        shared = shared + 1;
+                    }
+                    common = shared;
+                }
+            }
+            final keys: mut {str: bool} = mut {};
+            final next: mut {str: str} = mut {};
+            foreach (p in paths) {
+                final parts = p.split("/");
+                final key = parts.sub(0, len: common + 1).join("/");
+                next[p] = key;
+                keys[key] = true;
+            }
+            if (keys.len() < 2) {
+                leaf[name] = true;
+                continue;
+            }
+            foreach (p in paths) {
+                piece[p] = "{name}#{next[p] ?? ""}";
+            }
+            changed = true;
+        }
+    }
+    return piece;
+}
+
+// plan deals the items' groups (holdout's deal, with each link merging its two files'
+// groups), subdivides the groups over 3% of a language's bytes, and holds groups out in
+// sha256(salt + group) order until each language has 10% of its bytes. A link still merges
+// the pieces of two copies. A group that would take a language past 12% waits for a smaller
+// one; a group still over 3% of any language's bytes, one file or a linked set, is never
+// held out, and its files lend their last lines to the dev set. Every other train group lends
+// them when its dev bucket is 0 of 16.
+export fun plan(items: [Item], links: [[str]]) > [Placed] {
+    final paths: mut [str] = mut [];
+    foreach (it in items) {
+        paths.append(it.path);
+    }
+    final none: {str: bool} = {};
+    final dealt = holdout\deal(paths, generated: none, figures: none, links: links);
+    final dealtTotal: mut {str: int} = mut {};
+    foreach (it in items) {
+        dealtTotal[it.language] = total(dealtTotal, key: it.language) + it.bytes;
+    }
+    final piece = subdivide(items, dealt: dealt.group, langTotal: dealtTotal);
+    final merged = mut holdout\Groups{parent = mut {}};
+    foreach (l in links) {
+        if (piece[l[0]] -> a) {
+            if (piece[l[1]] -> b) {
+                merged.join(a, b: b);
+            }
+        }
+    }
+    final groupOf: mut {str: str} = mut {};
+    foreach (it in items) {
+        groupOf[it.path] = merged.find(piece[it.path] ?? "");
+    }
+    final langTotal: mut {str: int} = mut {};
+    final groupLang: mut {str: int} = mut {};
+    final seen: mut {str: bool} = mut {};
+    foreach (it in items) {
+        final g = groupOf[it.path] ?? "";
+        langTotal[it.language] = total(langTotal, key: it.language) + it.bytes;
+        final key = "{g}|{it.language}";
+        groupLang[key] = total(groupLang, key: key) + it.bytes;
+        seen[g] = true;
+    }
+    final order: mut [str] = mut [];
+    final rank: mut {str: str} = mut {};
+    foreach (g, flag in seen) {
+        order.append(g);
+        rank[g] = crypto\sha256Hex(salt + g);
+    }
+    _ = order.sort(fun (a: str, b: str) > bool => (rank[a] ?? "") < (rank[b] ?? ""));
+    final big: mut {str: bool} = mut {};
+    foreach (g in order) {
+        foreach (lang in tracked) {
+            if (total(groupLang, key: "{g}|{lang}") * 100 > total(langTotal, key: lang) * 3) {
+                big[g] = true;
+            }
+        }
+    }
+    final held: mut {str: int} = mut {};
+    final test: mut {str: bool} = mut {};
+    foreach (g in order) {
+        if (big[g] ?? false) {
+            continue;
+        }
+        var below = false;
+        var fits = true;
+        foreach (lang in tracked) {
+            final b = total(groupLang, key: "{g}|{lang}");
+            if (b == 0) {
+                continue;
+            }
+            final h = total(held, key: lang);
+            if (h * 10 < total(langTotal, key: lang)) {
+                below = true;
+            }
+            if ((h + b) * 100 > total(langTotal, key: lang) * 12) {
+                fits = false;
+            }
+        }
+        if (below and fits) {
+            test[g] = true;
+            foreach (lang in tracked) {
+                held[lang] = total(held, key: lang) + total(groupLang, key: "{g}|{lang}");
+            }
+        }
+    }
+    final placed: mut [Placed] = mut [];
+    foreach (it in items) {
+        final g = groupOf[it.path] ?? "";
+        final isTest = test[g] ?? false;
+        var dev = false;
+        if (!isTest) {
+            dev = (big[g] ?? false) or holdout\prefixValue(crypto\sha256Hex(devSalt + g)) % 16 == 0;
+        }
+        placed.append(Placed{
+            path = it.path,
+            language = it.language,
+            bytes = it.bytes,
+            group = g,
+            side = if (isTest) "test" else "train",
+            dev = dev,
+        });
+    }
+    _ = placed.sort(fun (a: Placed, b: Placed) > bool => a.path < b.path);
+    return placed;
+}
+
+// place reads dir/files.jsonl and dir/links.jsonl, which the dedup wrote, and writes
+// dir/split.jsonl.
+export fun place(dir: str) > result\Result::<int> {
+    try {
+        final items: mut [Item] = mut [];
+        foreach (line in fs\readLines(fs\join(dir, name: "files.jsonl"))) {
+            if (line == "") {
+                continue;
+            }
+            final row: {str: any} = json\parse(line);
+            items.append(Item{path = "{row["path"]!}", language = "{row["language"]!}", bytes = std\toInt(row["bytes"]!)});
+        }
+        final links: mut [[str]] = mut [];
+        foreach (line in fs\readLines(fs\join(dir, name: "links.jsonl"))) {
+            if (line == "") {
+                continue;
+            }
+            final row: {str: any} = json\parse(line);
+            links.append(["{row["a"]!}", "{row["b"]!}"]);
+        }
+        final placed = plan(items, links: links);
+        final lines: mut [str] = mut [];
+        foreach (p in placed) {
+            lines.append(json\stringify({
+                "path": p.path, "language": p.language, "bytes": p.bytes,
+                "group": p.group, "side": p.side, "dev": p.dev,
+            }));
+        }
+        fs\writeFile(fs\join(dir, name: "split.jsonl"), content: lines.join("\n") + "\n");
+        return result\ok::<int>(placed.len());
+    } catch (err: any) {
+        return result\caught::<int>(err, doing: "split: place {dir}");
+    }
+}
+
+fun fixture() > [Item] {
+    final items: mut [Item] = mut [];
+    for (var i = 0; i < 40; i = i + 1) {
+        items.append(Item{path = "pkg{i}/a.go", language = "go", bytes = 100});
+        items.append(Item{path = "pkg{i}/b.buzz", language = "buzz", bytes = 50});
+    }
+    items.append(Item{path = "huge/big.buzz", language = "buzz", bytes = 1000});
+    return items;
+}
+
+test "a held-out language share lands between 10% and 12%" {
+    final placed = plan(fixture(), links: [<[str]>]);
+    var goHeld = 0;
+    var goAll = 0;
+    foreach (p in placed) {
+        if (p.language == "go") {
+            goAll = goAll + p.bytes;
+            if (p.side == "test") {
+                goHeld = goHeld + p.bytes;
+            }
+        }
+    }
+    std\assert(goHeld * 10 >= goAll and goHeld * 100 <= goAll * 12, message: "go share {goHeld}/{goAll}");
+}
+
+test "a group over 3% of a language is never held out and lends its tail to dev" {
+    foreach (p in plan(fixture(), links: [<[str]>])) {
+        if (p.path == "huge/big.buzz") {
+            std\assert(p.side == "train", message: "side");
+            std\assert(p.dev, message: "dev");
+        }
+    }
+}
+
+test "a big directory is cut into pieces by file" {
+    final items: mut [Item] = mut [];
+    for (var i = 0; i < 40; i = i + 1) {
+        items.append(Item{path = "pkg{i}/a.go", language = "go", bytes = 100});
+    }
+    for (var i = 0; i < 10; i = i + 1) {
+        items.append(Item{path = "mega/f{i}.go", language = "go", bytes = 100});
+    }
+    final groups: mut {str: bool} = mut {};
+    foreach (p in plan(items, links: [<[str]>])) {
+        if (p.path.startsWith("mega/")) {
+            groups[p.group] = true;
+        }
+    }
+    std\assert(groups.len() == 10, message: "ten pieces, got {groups.len()}");
+}
+
+test "a link rejoins the pieces of two copies" {
+    final items: mut [Item] = mut [];
+    for (var i = 0; i < 40; i = i + 1) {
+        items.append(Item{path = "pkg{i}/a.go", language = "go", bytes = 100});
+    }
+    for (var i = 0; i < 10; i = i + 1) {
+        items.append(Item{path = "mega/f{i}.go", language = "go", bytes = 100});
+    }
+    final placed = plan(items, links: [["mega/f1.go", "pkg3/a.go"]]);
+    var f1 = "";
+    var a3 = "";
+    foreach (p in placed) {
+        if (p.path == "mega/f1.go") {
+            f1 = p.side;
+        }
+        if (p.path == "pkg3/a.go") {
+            a3 = p.side;
+        }
+    }
+    std\assert(f1 == a3, message: "sides {f1} {a3}");
+}
+
+test "a link puts both files on one side" {
+    final placed = plan(fixture(), links: [["pkg1/a.go", "pkg2/a.go"], ["pkg2/a.go", "pkg3/a.go"]]);
+    final sides: mut {str: bool} = mut {};
+    foreach (p in placed) {
+        if (p.path == "pkg1/a.go" or p.path == "pkg2/a.go" or p.path == "pkg3/a.go") {
+            sides[p.side] = true;
+        }
+    }
+    std\assert(sides.len() == 1, message: "linked files share a side");
+}
+
+test "wanted drops fixtures, generated trees and declaration files" {
+    std\assert(wanted("internal/x/x.go"), message: "code");
+    std\assert(!wanted("internal/x/gen/x.go"), message: "gen");
+    std\assert(!wanted("a/testdata/x.go"), message: "testdata");
+    std\assert(!wanted("web/types.d.ts"), message: "d.ts");
+    std\assert(!wanted(".claude/skills/x.ts"), message: "dot dir");
+    std\assert(!wanted("README.md"), message: "markdown");
+}

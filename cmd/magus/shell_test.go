@@ -2740,9 +2740,9 @@ func (s *unjudgedHookSuite) TestClaudeCodeRefusesACallThatMayChangeState() {
 	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["claude-code"]).Validate(reply))
 }
 
-func (s *unjudgedHookSuite) TestClaudeCodeLetsAReadPassAndStillTellsThePerson() {
+func (s *unjudgedHookSuite) TestClaudeCodeRefusesAReadAndTellsThePerson() {
 	reply := s.reply("magus-command.buzz", "claude-code", `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"README.md"}}`)
-	s.NotContains(reply["hookSpecificOutput"], "permissionDecision")
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
 	s.Contains(reply["systemMessage"], "could not judge this call")
 }
 
@@ -2799,22 +2799,62 @@ func (s *unjudgedHookSuite) bootstrapEvent(command string) string {
 	return fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":%s}}`, encoded)
 }
 
-func (s *unjudgedHookSuite) TestTheBootstrapLineAloneIsLetThroughAndTheNoticeStays() {
-	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent(ward.BootstrapCommand))
+// repairRootEnv and repairLinesEnv are the variables guard.ExportRepairLines fills for the
+// hook glue, spelled out because the glue reads them by these names.
+const (
+	repairRootEnv  = "__MAGUS_REPAIR_ROOT"
+	repairLinesEnv = "__MAGUS_REPAIR_LINES"
+)
+
+// suppliedRepair is a workspace whose repair lines magus handed the glue, as startup does.
+func (s *unjudgedHookSuite) suppliedRepair() string {
+	root := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
+	// Setenv first so the test restores both after ExportRepairLines overwrites them.
+	s.T().Setenv(repairRootEnv, "")
+	s.T().Setenv(repairLinesEnv, "")
+	s.Require().NoError(guard.ExportRepairLines(root))
+	return root
+}
+
+// repairEvent is a shell call from root.
+func (s *unjudgedHookSuite) repairEvent(root, command string) string {
+	encoded, err := json.Marshal(map[string]any{"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "Bash",
+		"cwd": root, "tool_input": map[string]any{"command": command}})
+	s.Require().NoError(err)
+	return string(encoded)
+}
+
+func (s *unjudgedHookSuite) TestTheRepairLineAloneIsLetThroughAndTheNoticeStays() {
+	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.suppliedRepair(), "magus self update"))
 	s.NotContains(reply["hookSpecificOutput"], "permissionDecision")
 	s.Contains(reply["systemMessage"], "could not judge this call")
 	s.Require().NoError(glueLoadSchema(s.T(), glueHostOutputSchema["claude-code"]).Validate(reply))
 }
 
-func (s *unjudgedHookSuite) TestTheBootstrapLineWithAnotherCommandAfterItIsRefused() {
-	reply := s.reply("magus-command.buzz", "claude-code", s.bootstrapEvent(ward.BootstrapCommand+" && git stash"))
+func (s *unjudgedHookSuite) TestAnotherWorkspacesRepairIsRefused() {
+	s.suppliedRepair()
+	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.T().TempDir(), "magus self update"))
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
+	s.Contains(reply["systemMessage"], "magus did not supply the repair lines of")
+}
+
+func (s *unjudgedHookSuite) TestTheRepairLineWithAnotherCommandAfterItIsRefused() {
+	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.suppliedRepair(), "magus self update && git stash"))
 	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
 }
 
-func (s *unjudgedHookSuite) TestCursorLetsTheBootstrapLineThrough() {
-	encoded, err := json.Marshal(ward.BootstrapCommand)
+func (s *unjudgedHookSuite) TestASourceBuildIsRefusedWhereTheWorkspaceInstallsARelease() {
+	reply := s.reply("magus-command.buzz", "claude-code", s.repairEvent(s.suppliedRepair(), ward.BootstrapCommand))
+	s.Equal("deny", reply["hookSpecificOutput"].(map[string]any)["permissionDecision"])
+}
+
+func (s *unjudgedHookSuite) TestCursorLetsTheRepairLineThrough() {
+	root := s.suppliedRepair()
+	encoded, err := json.Marshal(map[string]any{"hook_event_name": "beforeShellExecution", "conversation_id": "c", "generation_id": "g",
+		"command": "magus self update", "cwd": root})
 	s.Require().NoError(err)
-	reply := s.reply("cursor-hook.buzz", "cursor", fmt.Sprintf(`{"hook_event_name":"beforeShellExecution","conversation_id":"c","generation_id":"g","command":%s,"cwd":"/tmp"}`, encoded))
+	reply := s.reply("cursor-hook.buzz", "cursor", string(encoded))
 	s.Equal("allow", reply["permission"])
 	s.Contains(reply["user_message"], "could not judge this call")
 }
@@ -2833,18 +2873,12 @@ func (s *unjudgedHookSuite) TestTheSessionStartTextPromisesNoGitStatus() {
 	s.NotContains(string(body), "`git status` and the fix still run")
 }
 
-// The hook carries a copy of the bootstrap, since with no magus it cannot ask.
-func (s *unjudgedHookSuite) TestTheHookBootstrapIsWardsCommand() {
+// The hook reads its repair from the variable magus fills, never from a copy of the rules.
+func (s *unjudgedHookSuite) TestTheHookReadsTheRepairMagusSupplies() {
 	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "lib", "hook.buzz"))
 	s.Require().NoError(err)
-	s.Contains(string(body), fmt.Sprintf("final BOOTSTRAP = %q;", ward.BootstrapCommand))
-}
-
-// The hook carries a copy of the relink, which it passes with no judge.
-func (s *unjudgedHookSuite) TestTheHookRelinkIsWardsCommand() {
-	body, err := os.ReadFile(filepath.Join(glueTemplateDir, "lib", "hook.buzz"))
-	s.Require().NoError(err)
-	s.Contains(string(body), fmt.Sprintf("final RELINK = %q;", ward.RelinkAt("")))
+	s.Contains(string(body), fmt.Sprintf("final REPAIR_ENV = %q;", repairLinesEnv))
+	s.NotContains(string(body), ward.BootstrapCommand)
 }
 
 // staleConfigSuite pins the guard over a magus.yaml key this build predates
@@ -2885,10 +2919,16 @@ func (s *staleConfigSuite) judge(command string) types.GuardJudgment {
 	return v
 }
 
-func (s *staleConfigSuite) TestAStateChangeIsRefusedAsAStaleBinary() {
+func (s *staleConfigSuite) TestAStateChangeIsRefusedAsUnjudged() {
 	v := s.judge("touch notes.txt")
-	s.Contains(v.Reason, "built from another contract than this tree carries")
-	s.Equal(types.GuardJudgment{Decision: "deny", Rule: "stale-binary"}, types.GuardJudgment{Decision: v.Decision, Rule: v.Rule})
+	s.Equal("deny", v.Decision)
+	s.Contains(v.Reason, "magus guard could not judge this call, so it is refused")
+	s.Contains(v.Reason, "hack/dev/bootstrap-checkout.buzz -- --here --verify-ready")
+}
+
+func (s *staleConfigSuite) TestAReadIsRefusedToo() {
+	v := s.judge("cat README.md")
+	s.Equal("deny", v.Decision, "no policy loaded to say which reads the workspace guards")
 }
 
 func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
@@ -2910,8 +2950,8 @@ func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
 	s.Require().NoError(err)
 	var v types.GuardJudgment
 	s.Require().NoError(json.Unmarshal(body, &v), string(body))
-	s.Contains(v.Reason, "built from another contract than this tree carries")
-	s.Equal(types.GuardJudgment{Decision: "deny", Rule: "stale-binary"}, types.GuardJudgment{Decision: v.Decision, Rule: v.Rule})
+	s.Contains(v.Reason, "magus guard could not judge this call, so it is refused")
+	s.Equal("deny", v.Decision)
 	s.Equal(2, code, "the guard's deny exit, never startup's 1")
 }
 
@@ -2952,4 +2992,37 @@ func (s *CheckoutJudgeDepsSuite) TestADelegateKeepsItsRules() {
 	ctx := context.WithValue(context.Background(), delegatedByKey{}, filepath.Join(s.root, "magus"))
 	deps := checkoutJudgeDeps(ctx, guard.Dependencies{}, s.root, s.binary)
 	s.NoError(deps.LoadFailure)
+}
+
+type StaleToolRowsSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestStaleToolRowsSuite(t *testing.T) { suite.Run(t, new(StaleToolRowsSuite)) }
+
+func (s *StaleToolRowsSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	dir := filepath.Join(s.root, ".claude", "magus", "tools")
+	s.Require().NoError(os.MkdirAll(dir, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, types.ToolHostFile), []byte("claude-code\n"), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, types.ToolVersionFile), []byte("13\n"), 0o644))
+	saved := guardRoot
+	guardRoot = func(string) (string, error) { return s.root, nil }
+	s.T().Cleanup(func() { guardRoot = saved })
+}
+
+func (s *StaleToolRowsSuite) TestRowsOfAnotherStampRefuseWithTheInstallStep() {
+	req := guard.Request{Host: "claude-code"}
+	_, known, refusal := applyHostFacts(s.T().Context(), &req)
+
+	s.False(known)
+	s.Require().NotNil(refusal)
+	s.Require().Error(refusal.err)
+	s.Equal(types.NextStep{
+		ID:   "harness-install",
+		Run:  "magus agent harness install --id claude-code",
+		Argv: []string{"magus", "agent", "harness", "install", "--id", "claude-code"},
+		Why:  "installs the tool rows of claude-code, when the workspace loads that harness",
+	}, refusal.next)
 }

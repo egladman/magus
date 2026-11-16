@@ -127,18 +127,23 @@ export fun mgs_listUnsupportedHooks() > [HookBinding] {
     ];
 }
 
-// A timed-out gating hook must block the call: otherwise retrying a slow guard
-// becomes a way to run a command it would refuse.
+// Every entry but a stop fails closed: a hook that crashed, timed out or found no magus
+// cannot judge, and a guard that cannot judge refuses. Otherwise retrying a slow guard
+// becomes a way to run a command it would refuse. A stop's block resumes the agent on
+// work no rule can judge, so a stop that could not be judged ends.
 fun cursor_entry(hook: HookCommand) > {str: any} {
     final entry = mut {<str: any>};
     if (hook.matcher != "") { entry["matcher"] = hook.matcher; }
     final command = buzzCommand(HOOK_DIR, script: hook.script, flags: hook.flags);
     entry["command"] = if (hook.script == "magus-duration") command + " # magus:harness" else command;
     entry["timeout"] = hook.timeoutS;
-    if (hook.event == "beforeMCPExecution" or hook.event == "beforeShellExecution" or hook.event == "preToolUse") {
-        entry["failClosed"] = true;
-    }
+    if (!cursor_stops(hook.event)) { entry["failClosed"] = true; }
     return entry;
+}
+
+// cursor_stops reports an event whose failed hook ends the agent's turn rather than blocks.
+fun cursor_stops(event: str) > bool {
+    return event == "stop" or event == "subagentStop";
 }
 
 // cursor_entries groups the hooks by event, in the order each event first appears.
@@ -311,8 +316,9 @@ test "the entries cover every Cursor event magus uses, one guard entry each" {
         final guard = block.entries[0];
         assert\equal("{guard["command"]}", cursor_guard_command(), "every event names the guard script");
         assert\equal(guard["timeout"] as? int, HOOK_TIMEOUT_S, "every entry bounds how long magus may run");
-        final gating = names[i] == "beforeMCPExecution" or names[i] == "beforeShellExecution" or names[i] == "preToolUse";
-        assert\equal((guard["failClosed"] as? bool) ?? false, gating, "a failed gating hook must not let the call through");
+        foreach (entry in block.entries) {
+            assert\equal((entry["failClosed"] as? bool) ?? false, !cursor_stops(names[i]), "a hook that cannot judge lets only a stop through");
+        }
         assert\equal((guard["matcher"] as? str) ?? "", cursor_matcher(names[i]), "the matcher the event takes");
     }
     final post = entries[names.indexOf("postToolUse")!];

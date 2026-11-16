@@ -652,8 +652,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if spec.Schema {
-		fmt.Print(job.DeclarationSchema)
-		return nil
+		return emitSchema(job.DeclarationSchema)
 	}
 
 	if spec.Checkout != "" {
@@ -676,12 +675,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			return exit.Usagef("magus job fork: --stdin takes the job from the record, so %s would be ignored: put it in the record (`%s` prints its fields)",
 				strings.Join(dropped, ", "), hint.JobFork.With("--schema"))
 		}
-		var defaulted bool
-		if row, defaulted, err = job.DecodeStdinDeclaration(os.Stdin); err != nil {
+		if row, err = job.DecodeStdinDeclaration(os.Stdin); err != nil {
 			return exit.Usagef("magus job fork: %s (`%s` prints the schema it must satisfy)", err, hint.JobFork.With("--schema"))
-		}
-		if defaulted {
-			slog.InfoContext(ctx, fmt.Sprintf("the record names no api_version, so it was read as %s", types.JobAPIVersion), attr.Notice("note"))
 		}
 		if row.Checkout, err = recordCheckout(row.Checkout, spec.Checkout); err != nil {
 			return err
@@ -1297,8 +1292,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if schema {
-		fmt.Print(job.ResultSchema)
-		return nil
+		return emitSchema(job.ResultSchema)
 	}
 	switch {
 	case len(pos) == 0:
@@ -1486,8 +1480,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if schema {
-		fmt.Print(job.ResultSchema)
-		return nil
+		return emitSchema(job.ResultSchema)
 	}
 	if len(pos) != 1 {
 		return exit.Usagef("magus job wait: requires exactly one job")

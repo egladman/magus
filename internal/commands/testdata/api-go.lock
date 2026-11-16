@@ -1890,6 +1890,7 @@ github.com/egladman/magus/types.DriftResultRecord.Files field []Path
 github.com/egladman/magus/types.DriftResultRecord.Message field string
 github.com/egladman/magus/types.DriftResultRecord.URL field string
 github.com/egladman/magus/types.DriftWarn const DriftPolicy = "warn"
+github.com/egladman/magus/types.DropsSubject const untyped string = "drops "
 github.com/egladman/magus/types.Duplication type struct
 github.com/egladman/magus/types.Duplication.Answer field KnowledgeAnswer "json:\"answer\"     yaml:\"answer\""
 github.com/egladman/magus/types.Duplication.Definition field string "json:\"definition\" yaml:\"definition\""
@@ -2888,6 +2889,7 @@ github.com/egladman/magus/types.JobProblem.Error method func() *DiagnosticError
 github.com/egladman/magus/types.JobProblem.Field field string "json:\"field,omitempty\""
 github.com/egladman/magus/types.JobProblem.Fix field string "json:\"fix\""
 github.com/egladman/magus/types.JobProblem.Message field string "json:\"message\""
+github.com/egladman/magus/types.JobProblem.Permissible method func() bool
 github.com/egladman/magus/types.JobProblem.Subject field string "json:\"subject,omitempty\""
 github.com/egladman/magus/types.JobProblemError type struct
 github.com/egladman/magus/types.JobProblemError.Error method(ptr) func() string

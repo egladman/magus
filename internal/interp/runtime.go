@@ -838,7 +838,8 @@ type PolicyStore struct {
 }
 
 // GuardPolicyStore is the PolicyStore for the workspace at root. It creates
-// nothing. The error says why there is no store: no root, no build id, no
+// nothing in the cache, and the sealing key in the state dir only when none is
+// there yet. The error says why there is no store: no root, no build id, no
 // user cache, or no sealing key.
 func GuardPolicyStore(root string) (PolicyStore, error) {
 	if root == "" {
@@ -1068,7 +1069,8 @@ func Parse(ctx context.Context, src *Source) ([]Target, error) {
 // targets is the session's dispatchable target registry; exports maps each
 // canonical target key to the exported function value itself, so ctx.needs
 // can verify a passed function IS the exported target (nil when the session
-// has no export discovery, e.g. the REPL). parseMode=true collects names only.
+// has no export discovery, e.g. the REPL). parseMode=true collects names only, and is
+// also the only mode whose function rules are stored; it does not stub target bodies.
 // An error means the magus declarations could not be installed.
 type BuzzHostBindingsFn func(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool) error
 
@@ -1095,6 +1097,24 @@ func RegisterBuzzSpellImportCheck(fn func(handles []string) error) {
 		panic("interp: Buzz spell-import check already registered")
 	}
 	buzzSpellImportCheckFn = fn
+}
+
+// CheckSpellImports refuses the first handle no `import "magus/spell/<handle>"`
+// resolves to, naming the nearest spell and every built-in one. It is the check a
+// magusfile load runs, for a caller that holds handles rather than a magusfile.
+// It fails, rather than passing, when no check is registered.
+func CheckSpellImports(handles []string) error {
+	if buzzSpellImportCheckFn == nil {
+		return errors.New("interp: no Buzz spell-import check is registered")
+	}
+	return buzzSpellImportCheckFn(handles)
+}
+
+// ImportsSpell reports whether src imports a `magus/spell/<handle>` module, which
+// makes it a magusfile or a target definition: source the workspace loader reads
+// under the embedded rules.
+func ImportsSpell(src string) bool {
+	return len(spellImportNames(src)) > 0
 }
 
 // spellImportNames returns the <handle> of every `import "magus/spell/<handle>"`

@@ -111,7 +111,8 @@ func ProvisionCheckout(ctx context.Context, store *Store, ws Workspace, disk Dis
 	}
 	var declared types.Job
 	row.Apply(&declared)
-	return placed != "", bootstrapCheckout(ctx, disk, exe, forker, wt.Root, "--install", InstallProjects(forker, declared, ws.Projects))
+	install := InstallProjects(forker, wt.Root, declared, ws.Projects)
+	return placed != "", bootstrapCheckout(ctx, disk, exe, forker, wt.Root, "--install", install)
 }
 
 // bootstrapCheckout builds ./magus in dir, a checkout the fork made or

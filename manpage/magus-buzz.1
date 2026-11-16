@@ -31,14 +31,16 @@ Protocol over stdio for an editor integration.
 is the only way to judge a script whose whole job is a side effect: a hook
 that reads stdin and shells out cannot be validated by running it. It takes
 several paths, reports every diagnostic rather than stopping at the first,
-and fails only on errors; warnings print and pass. Resolving a file import
-still executes that module's top level, since there is no check\-only import
-pass.
+and fails on any of them, warnings included. Resolving a file import still
+executes that module's top level, since there is no check\-only import pass.
 .PP
-It cannot resolve magus/spell/*, which the workspace loader binds, so a
-magusfile or a target definition reports an unresolved import. Those are
-the files magus already checks by loading them; \-\-check is for the ones
-nothing loads.
+\-\-check resolves magus/spell/* to the spells this build ships, as a
+magusfile load does, without loading the workspace, so a magusfile or a
+target definition checks as a standalone file. A file that imports one is
+checked by the \-\-embedded rules the loader reads it under. Only the named
+file's own imports decide that: a spell import reached through a module it
+imports does not. A misspelled spell import fails, and a hint names the
+spells that resolve. A project/<path> import needs the workspace and fails.
 .PP
 \-C changes the working directory first, in every mode, so one command line
 runs the same from any directory: magus buzz \-C "$ROOT" \-s hooks/guard.buzz.

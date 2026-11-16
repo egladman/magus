@@ -1064,7 +1064,7 @@ func (s *Store) migrate(found int, held bool) error {
 		if newer, ok := errors.AsType[*migrate.NewerError](err); ok {
 			return types.DiagnosticErrorf(types.JobStoreWriterOlder, "%s", newer.Error())
 		}
-		return err
+		return namePath(err, s.path)
 	}
 	if err := st.Check(found); err != nil {
 		return refuse(err)

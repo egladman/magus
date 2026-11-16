@@ -3,6 +3,7 @@ package buzz
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -966,7 +967,10 @@ var accumulationSizes = []struct {
 
 // benchAccumulation joins 68-byte lines at each accumulation size: decl
 // declares the accumulator, step extends it from line, tail leaves the
-// result in kept.
+// result in kept. Its metrics are what each run leaves after a forced GC,
+// as BenchmarkSessionChurn reports them; B/op cannot show what a run keeps.
+// The default benchtime grows one process to tens of GB here, so run one
+// size per process with -benchtime 20x.
 func benchAccumulation(b *testing.B, decl, step, tail string) {
 	for _, size := range accumulationSizes {
 		b.Run(size.name, func(b *testing.B) {
@@ -978,9 +982,23 @@ for (var i = 0; i < %d; i = i + 1) {
 }
 %s
 final __r = kept.len();`, decl, size.lines, step, tail))
+			slots0, inuse0 := retained()
 			benchRun(b, chunk, env)
+			b.StopTimer()
+			slots1, inuse1 := retained()
+			b.ReportMetric(float64(slots1-slots0)/float64(b.N), "liveslots/op")
+			b.ReportMetric((float64(inuse1)-float64(inuse0))/float64(b.N), "heapinuse-B/op")
 		})
 	}
+}
+
+// retained reports the live heap slots and Go heap bytes a forced GC leaves.
+// Under buzz_safe or buzz_unsafe the slot count reads 0.
+func retained() (slots int, inuse uint64) {
+	runtime.GC()
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	return vmpackage.ReadHeapStats().Objects, ms.HeapInuse
 }
 
 // BenchmarkStringConcatLoop extends one string with `+` per line. B/op and

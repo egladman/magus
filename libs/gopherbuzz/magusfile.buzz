@@ -59,12 +59,12 @@ export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
     golangci\lintLib("libs/gopherbuzz", ctx.hasCharm("rw"));
 }
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
-// Runs the suite under the default tags, then again under buzz_safe.
+// Runs the suite with -race under the default tags, then again under buzz_safe.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // Declared so a cache hit leaves the profile the root's coverage badge merges.
     ctx.writesFiles(["coverage.out"]);
-    go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
-    _ = proc\exec("go", ["test", "-tags", "buzz_safe", "./..."]);
+    go["go-test"](ctx, {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
+    _ = proc\exec("go", ["test", "-race", "-tags", "buzz_safe", "./..."]);
 }
 
 // Runs the benchmarks/comparison module's tests, which test's ./... skips because that

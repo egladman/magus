@@ -311,6 +311,11 @@ func askGuard(ctx context.Context, invoke invoker, invocation magusCall) guardVe
 	return decideVerdict(envelope)
 }
 
+// unjudgedVerdict is a call no magus judged, which the plugin refuses with no exception.
+// A magus that runs but cannot read its workspace answers the repair line itself, so
+// only a crash, a garbled answer or a missing binary lands here. Matching repair lines
+// here would be a second parser of them in wasm, drifting from internal/guard's, so
+// the repair is refused with the rest; every host refuses a missing binary alike.
 func unjudgedVerdict(why string) guardVerdict { return guardVerdict{Decision: "unjudged", Why: why} }
 
 // invokeWithLegacyRetry drops the newer flags when magus prints nothing.

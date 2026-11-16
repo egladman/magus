@@ -818,8 +818,9 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (spells.Descriptor, bo
 	if err != nil {
 		// A plain Buzz library imported by name (not a spell) is expected here:
 		// resolution falls through to a normal module import. Only a genuinely
-		// malformed spell is worth logging.
-		if !errors.Is(err, spell.ErrNotASpell) {
+		// malformed spell is worth logging; a file that vanished after the directory
+		// listing is not malformed.
+		if !errors.Is(err, spell.ErrNotASpell) && !errors.Is(err, fs.ErrNotExist) {
 			slog.With(attr.Component("spell")).ErrorContext(ctx, "could not load a local Buzz spell", slog.String("path", path), attr.Error(err))
 		}
 		return spells.Descriptor{}, false

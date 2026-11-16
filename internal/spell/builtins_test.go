@@ -133,6 +133,18 @@ func BenchmarkLoadShipped(b *testing.B) {
 	}
 }
 
+// BenchmarkMagusNamespaces is the declaration parse every host-module
+// registration pays; its allocations are the parse of the embedded source, the
+// tokens come from the shared cache.
+func BenchmarkMagusNamespaces(b *testing.B) {
+	decls := MagusDeclSource()
+	b.ReportAllocs()
+	for b.Loop() {
+		_, err := magusNamespaces(decls)
+		require.NoError(b, err)
+	}
+}
+
 func TestShippedDir(t *testing.T) {
 	for name, want := range map[string]string{
 		"go":             "golang",

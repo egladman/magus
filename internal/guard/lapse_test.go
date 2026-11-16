@@ -25,6 +25,7 @@ func lapseNow(ctx context.Context, t *testing.T, base Dependencies, req Request,
 	t.Helper()
 	short, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
+	waitForLapsedWork(t)
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
 	return JudgeWithin(short, base, req, func(ctx context.Context) types.GuardJudgment {

@@ -62,14 +62,14 @@ func regeneratedWorkspace(t *testing.T) (string, []*types.Project) {
 	return root, projects
 }
 
-func ignoresCoverage(paths []string) []string {
+func ignoresCoverage(paths []string) ([]string, error) {
 	var out []string
 	for _, p := range paths {
 		if strings.HasPrefix(p, "coverage/") {
 			out = append(out, p)
 		}
 	}
-	return out
+	return out, nil
 }
 
 func TestRegeneratedOutside(t *testing.T) {
@@ -84,7 +84,7 @@ func TestRegeneratedOutside(t *testing.T) {
 	tests := []struct {
 		name    string
 		row     types.Job
-		ignored func([]string) []string
+		ignored func([]string) ([]string, error)
 		want    []RegeneratedOutput
 	}{
 		{

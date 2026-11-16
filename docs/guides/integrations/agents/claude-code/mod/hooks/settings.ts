@@ -15,7 +15,6 @@ export type Settings = {
   spawnMaxInputUsdPerMTok: number
   sessionBudgetUsd: number
   budgetGate: Gate
-  ratesFile: string
 }
 
 const num = (v: unknown, fallback: number): number =>
@@ -31,15 +30,14 @@ const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T):
 export function readSettings(o: PluginOptions): Settings {
   const ttl = o.cacheTtl
   return {
-    cacheGate: pick(o.cacheGate, ['off', 'warn', 'confirm'], 'warn'),
+    cacheGate: pick(o.cacheGate, ['off', 'warn', 'confirm'], 'confirm'),
     gateMinTokens: num(o.gateMinTokens, 50_000),
     cacheTtl: ttl === '5m' || ttl === '1h' ? ttl : 'auto',
-    priceStepGate: pick(o.priceStepGate, ['off', 'warn', 'confirm'], 'warn'),
+    priceStepGate: pick(o.priceStepGate, ['off', 'warn', 'confirm'], 'confirm'),
     priceStepMarginTokens: num(o.priceStepMarginTokens, 10_000),
     spawnGate: pick(o.spawnGate, ['off', 'deny'], 'off'),
     spawnMaxInputUsdPerMTok: num(o.spawnMaxInputUsdPerMTok, 2),
     sessionBudgetUsd: num(o.sessionBudgetUsd, 0),
-    budgetGate: pick(o.budgetGate, ['off', 'warn', 'confirm'], 'warn'),
-    ratesFile: typeof o.ratesFile === 'string' ? o.ratesFile.trim() : '',
+    budgetGate: pick(o.budgetGate, ['off', 'warn', 'confirm'], 'confirm'),
   }
 }

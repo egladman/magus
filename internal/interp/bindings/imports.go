@@ -158,7 +158,7 @@ func resolveLocalSpellImport(ctx context.Context, im *remotespell.Imports, impor
 			if err := embeddedShadow(im, m.Name, filepath.Dir(path)); err != nil {
 				return importFailed(ctx, err)
 			}
-			return spellHandleFromMeta(*m), true
+			return spellHandleFromMeta(m), true
 		}
 	}
 	if !probed && escapedFrom != "" {
@@ -169,24 +169,18 @@ func resolveLocalSpellImport(ctx context.Context, im *remotespell.Imports, impor
 	return vm.Null, false
 }
 
-// resolveSpellCandidate loads the spell at path, answering a candidate this load
-// already resolved from the probes' memo.
-func resolveSpellCandidate(ctx context.Context, probes *interp.ImportProbes, path string) (*spells.Descriptor, bool) {
-	if m, known := probes.SpellAt(path); known {
-		return m, m != nil
+// resolveSpellCandidate loads the spell at path. The probes answer an absent file
+// from a directory listing and a plain module from a stat; a compiled spell is
+// remembered by compileBuzzSpell, which records nothing when the compile fails.
+func resolveSpellCandidate(ctx context.Context, probes *interp.ImportProbes, path string) (spells.Descriptor, bool) {
+	if !probes.IsFile(path) {
+		return spells.Descriptor{}, false
 	}
-	var spec *spells.Descriptor
-	if probes.IsFile(path) {
-		// loadLocalSpell absolutizes a relative path and registers the Buzz spell
-		// with handler op support, so the returned handle's name resolves to a
-		// handler op-capable spell whether it is bound to a project or wired as
-		// the remote cache backend.
-		if m, ok := loadLocalSpell(ctx, path); ok {
-			spec = &m
-		}
-	}
-	probes.RecordSpellAt(path, spec)
-	return spec, spec != nil
+	// loadLocalSpell absolutizes a relative path and registers the Buzz spell
+	// with handler op support, so the returned handle's name resolves to a
+	// handler op-capable spell whether it is bound to a project or wired as
+	// the remote cache backend.
+	return loadLocalSpell(ctx, path)
 }
 
 // resolveRemoteSpellImport binds a spell imported by registry path from its verified

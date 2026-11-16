@@ -87,6 +87,13 @@ saying it, delete it here.
   `.gitignore` negation. Bootstrap links it into every declared host's skill root;
   tool-specific directories are ignored local installations. Keep shared loop
   instructions in `.agents/loops/`.
+- Before a push, run one passing narrow run over each changed file and nothing wider.
+  GitHub Actions runs `ci` on the pull request.
+- Never run `magus run ci <project>` or `magus affected ci` locally. The one exception
+  is `magus affected ci` when a change moves packages, renames, or edits a magusfile.
+  A job's check is a narrow target over what it writes, never `ci`.
+- This replaces the magus-run skill's `ci <project>` step here, because the root project
+  covers every Go file.
 
 ## Binary
 

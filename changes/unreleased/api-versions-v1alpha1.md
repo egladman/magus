@@ -10,8 +10,8 @@
   stamps, tokens, session records, the owed record, the workspace cache and the merge
   queue ids (`mergequeue.<kind>/v1alpha1`).
 - **Rebuild every checkout's `./magus` after this lands.** A job store row stamped with an
-  integer still reads as `magus.job/v1alpha1`, and an older magus cannot read a row this
-  one wrote.
+  integer is refused, naming the store file to move aside, and an older magus cannot read a
+  row this one wrote.
 - **Other old state is refused, naming its fix.** Move it aside or delete it
   (`tokens.d`), rerun `magus agent install` and `magus agent harness install`, and relock
   with `magus spell lock --update`.

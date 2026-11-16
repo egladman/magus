@@ -460,6 +460,21 @@ fun output(stop: Stop, host: str, judged: fun (reply: str) > [Finding]) > str {
     return shaped(host, text: text);
 }
 
+// unannounced keeps the findings of rules the session has not been told, and marks
+// each as told. A reply whose every finding repeats yields none, so nothing is sent.
+fun unannounced(found: [Finding], session: str) > [Finding] {
+    final fresh = mut [<Finding>];
+    final told = mut {<str: bool>};
+    foreach (f in found) {
+        if (told[f.rule] == true) { fresh.append(f); continue; }
+        if (hook\noticeOnce(session, family: "reply-rule-{f.rule}", file: "proofread-reply.buzz")) {
+            told[f.rule] = true;
+            fresh.append(f);
+        }
+    }
+    return fresh;
+}
+
 fun main(args: [str]) > void {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_FLAG, DECISIONS_FLAG, PROOFREAD_FLAG]) catch null;
     if (parsed == null) { return; }
@@ -509,7 +524,7 @@ fun main(args: [str]) > void {
                 fix: "Run `{reader.bin} agent-reply --stdin` on a reply and read why.");
         } else {
             printed = held(pendingStore(), host: host, session: session,
-                printed: output(stop, host: host, judged: judging(judgment.found)));
+                printed: output(stop, host: host, judged: judging(unannounced(judgment.found, session: session))));
         }
     }
     if (printed != "") {
@@ -635,6 +650,16 @@ test "a reply made while continuing is not judged, so the agent cannot loop" {
         final printed = output(Stop{ reply = "Done.", again = true }, host: host, judged: judging([offer]));
         std\assert(printed == "", message: "{host}: {printed}");
     }
+}
+
+test "a rule is named once per session and a reply of repeats sends nothing" {
+    final session = "proofread-reply-{std\random(min: 0, max: 1000000)}";
+    final first = unannounced([offer, offer], session: session);
+    std\assert(first.len() == 2, message: "both findings of a new rule go out: {first.len()}");
+    std\assert(unannounced([offer], session: session).len() == 0, message: "a repeat is held back");
+    final other = Finding{ rule = "bold-label", line = 1, message = "Open." };
+    final mixed = unannounced([offer, other], session: session);
+    std\assert(mixed.len() == 1 and mixed[0].rule == "bold-label", message: "only the new rule: {mixed.len()}");
 }
 
 test "nothing to advise prints nothing" {
