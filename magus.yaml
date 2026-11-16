@@ -157,6 +157,12 @@ knowledge:
           scopes:
             cmd/magus: 89
             internal: 14
+            # the env and config digests moved out of cmd/magus: the config digest
+            # encodes the loaded config through internal/json.
+            internal/config: 15
+            # detach moved out of cmd/magus: the detached child's environment drops
+            # the variables internal/proc/spawn names.
+            internal/proc: 15
             # job evidence moved out of cmd/magus: *magus.Magus runs through every
             # signature, the shared boundary names the config.Filename constant, and the
             # callers claim reads occurrences through workspacegraph. It holds the symbol
