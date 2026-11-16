@@ -999,7 +999,7 @@ func openOutputRef(ctx context.Context, m *magus.Magus, ref string, o outputRefO
 	var inv magus.Invocation
 	if desc.Inv != "" {
 		// Best-effort lineage: omitted if the run log aged out.
-		inv, _ = m.InvocationByID(desc.Inv)
+		inv, _ = m.InvocationByID(desc.Inv) // a run log that aged out leaves the lineage empty
 	}
 	// The run's per-class key digests let the viewer compare keys across
 	// machines. Best-effort: a run predating key-input persistence opens

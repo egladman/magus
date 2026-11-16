@@ -1497,7 +1497,12 @@ func (s *BuzzRunnerTestSuite) SetupTest() {
 }
 
 func (s *BuzzRunnerTestSuite) script(name, assertion string) string {
-	return writeBuzz(s.T(), s.dir, name, "import \"std\";\n\ntest \""+name+"\" {\n    std\\assert("+assertion+", message: \""+name+"\");\n}\n")
+	return writeBuzz(s.T(), s.dir, name, fmt.Sprintf(`import "std";
+
+test "%[1]s" {
+    std\assert(%[2]s, message: "%[1]s");
+}
+`, name, assertion))
 }
 
 func (s *BuzzRunnerTestSuite) test(profile string, paths ...string) (string, error) {
@@ -1558,7 +1563,7 @@ func (s *BuzzRunnerTestSuite) TestATestRunIsRecordedWithItsTestLines() {
 	s.NoError(s.records[0].Err)
 	s.Contains(string(s.records[0].Out), `ok    test "a.buzz"`)
 	s.Contains(string(s.records[0].Out), "1 passed, 0 failed, 0 skipped")
-	s.Error(s.records[1].Err)
+	s.Require().Error(s.records[1].Err)
 	s.Contains(string(s.records[1].Out), `FAIL  test "b.buzz"`)
 	s.Contains(string(s.records[1].Out), "0 passed, 1 failed, 0 skipped")
 }

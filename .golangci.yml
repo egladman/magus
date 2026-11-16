@@ -334,7 +334,7 @@ linters:
           # message-commands), exempt until the terse-output rewrites land. Delete an
           # entry once its file is clean; never add one.
           allow:
-            - {file: cmd/magus/spell.go, reason: staged}
+            - {file: internal/spell/remote/registry.go, reason: staged}
             - {file: cmd/magus/stale_index.go, reason: staged}
             - {file: describe.go, reason: staged}
             - {file: internal/auth/share.go, reason: staged}
@@ -413,6 +413,7 @@ linters:
             - {file: cmd/magus/shell.go, reason: "the guard's verdict on stderr is the hook protocol a host reads"}
             - {file: cmd/magus/queue.go, reason: relays the stderr of the hooks and gates a queue verb runs}
             - {file: cmd/magus/buzz.go, reason: "relays a script's own output under --check"}
+            - {file: internal/interp/script_check.go, reason: "relays a checked script's own top-level output to stderr, apart from the answer"}
             - {file: internal/interp/step_gate.go, reason: "a step prompt blocks the run on its answer, so -q must not hide it"}
             - {file: internal/cache/interrupt.go, reason: "the first Ctrl-C's answer, which a quiet display would turn into a hang"}
             - {file: internal/interactive/failures/prompt.go, reason: the end-of-run failure prompt and its OSC 52 copy}

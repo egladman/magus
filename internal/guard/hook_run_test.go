@@ -1399,17 +1399,6 @@ func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 	assert.Equal(t, trail.Event{Kind: trail.KindAgentCommand, Action: "Bash", Outcome: trail.OutcomeOK, DurationMs: 420, Preview: "observed"}, event)
 }
 
-// denyRules is a magusfile whose spawn rule denies every spawn and whose command rule
-// denies every command.
-const denyRules = `import "magus";
-
-magus\spawn(fun (req: SpawnRequest) > GuardVerdict {
-    return magus\deny("Name a model.");
-});
-magus\command(fun (req: CommandRequest) > GuardVerdict {
-    return magus\deny("Not in this repository.");
-});
-`
 
 // installHostRows writes the tool rows directory install writes for host under the working
 // directory, with the given rows and limits.

@@ -41,8 +41,7 @@ func verdictExit(errOut io.Writer, opts output.Options, verdict types.GuardJudgm
 
 // writeVerdict renders a verdict through the standard output arm.
 func (e HookEnv) writeVerdict(out io.Writer, opts output.Options, verdict types.GuardJudgment) error {
-	switch opts.Format {
-	case output.Text:
+	if opts.Format == output.Text {
 		switch verdict.Decision {
 		case "deny":
 			fmt.Fprintf(out, "%s %s\n", decisionLabel("deny", verdict.Rule), verdict.Reason)

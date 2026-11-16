@@ -27,5 +27,5 @@ func (c *Catalog) StarterDoc(routingIndex bool) string {
 
 - %s
 
-%s`, VCSSafetyRule, c.AgentsBlock(routingIndex))
+%s`, vcsSafetyRule, c.AgentsBlock(routingIndex))
 }

@@ -49,7 +49,7 @@ func NewClient(ctx context.Context, httpClient *http.Client, spells config.Spell
 	if err != nil {
 		return nil, fmt.Errorf("spells.registries %s: load the workspace to reach its secret provider: %w", host, err)
 	}
-	user, pass, err := RegistryCredential(ctx, spells, host, r)
+	user, pass, err := registryCredential(ctx, spells, host, r)
 	if err != nil {
 		return nil, err
 	}
@@ -57,9 +57,9 @@ func NewClient(ctx context.Context, httpClient *http.Client, spells config.Spell
 	return c, nil
 }
 
-// RegistryCredential resolves host's spells.registries entry through r, which registers
+// registryCredential resolves host's spells.registries entry through r, which registers
 // the value for redaction before returning it.
-func RegistryCredential(ctx context.Context, spells config.SpellsConfig, host string, r *secret.Resolver) (string, types.Secret, error) {
+func registryCredential(ctx context.Context, spells config.SpellsConfig, host string, r *secret.Resolver) (string, types.Secret, error) {
 	entry, ok := spells.Registry(host)
 	if !ok {
 		return "", types.Secret{}, fmt.Errorf("spells.registries has no entry for %s", host)
@@ -81,7 +81,7 @@ func LockClient(httpClient func() *http.Client, spells config.SpellsConfig) func
 		if _, ok := spells.Registry(host); !ok {
 			return c, nil
 		}
-		user, pass, err := RegistryCredential(ctx, spells, host, r)
+		user, pass, err := registryCredential(ctx, spells, host, r)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +122,7 @@ type LockSummary struct {
 
 // Summarize lists every pin lock holds, sorted by import path.
 func Summarize(lock Lock) []LockSummary {
-	out := []LockSummary{}
+	out := make([]LockSummary, 0, len(lock.Spells))
 	for _, path := range slices.Sorted(maps.Keys(lock.Spells)) {
 		e := lock.Spells[path]
 		out = append(out, LockSummary{Path: path, Tag: e.Tag, Digest: e.Digest})

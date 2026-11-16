@@ -1,7 +1,9 @@
 package remote
 
 import (
+	"fmt"
 	"io/fs"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -49,13 +51,13 @@ func TestListShipped(t *testing.T) {
 }
 
 func TestShippedDirRefusesANameMagusDoesNotShip(t *testing.T) {
-	dir, err := ShippedDir("go")
+	dir, err := shippedDir("go")
 	require.NoError(t, err)
 	assert.Equal(t, "golang", dir)
 
 	for _, name := range []string{"nope", "golang", "harness"} {
-		_, err := ShippedDir(name)
-		require.ErrorContains(t, err, `magus ships no spell "`+name+`"`)
+		_, err := shippedDir(name)
+		require.ErrorContains(t, err, fmt.Sprintf("magus ships no spell %q", name))
 	}
 }
 
@@ -66,7 +68,7 @@ func TestEjectShippedMatchesBuildShipped(t *testing.T) {
 	require.NoError(t, err)
 
 	ws, dst := t.TempDir(), "spells/go"
-	res, next, err := EjectShipped(ws, "go", ws+"/"+dst)
+	res, next, err := EjectShipped(ws, "go", filepath.Join(ws, dst))
 	require.NoError(t, err)
 	assert.Equal(t, built.Digest, res.Digest)
 	assert.Equal(t, Override{Import: "magus/spell/go", Path: dst}, res.Override, "a copy inside the workspace is declared by its relative path")

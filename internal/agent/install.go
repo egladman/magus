@@ -14,10 +14,10 @@ import (
 	typesagent "github.com/egladman/magus/types/agent"
 )
 
-// VCSSafetyRule is the one always-on version-control rule worth carrying in a
+// vcsSafetyRule is the one always-on version-control rule worth carrying in a
 // repo's agent instruction file: it stops one agent's whole-tree revert from destroying
 // another's uncommitted work. Shared by the install hint and the starter doc.
-const VCSSafetyRule = "Version control is the orchestrator's job: do it yourself, never delegate it to a subagent, and never discard or revert uncommitted changes across the whole tree to verify a build - build in place. A whole-tree revert permanently destroys a concurrent agent's uncommitted work."
+const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself, never delegate it to a subagent, and never discard or revert uncommitted changes across the whole tree to verify a build - build in place. A whole-tree revert permanently destroys a concurrent agent's uncommitted work."
 
 // InstallOutput is the record `magus agent install` emits under -o.
 type InstallOutput struct {
@@ -92,7 +92,7 @@ func (c *Catalog) InstallHints(dir string, written, changed []string, form types
 		hints = append(hints, fmt.Sprintf("wrote all %d skill file(s); commit them so your team and agents share them", len(written)))
 	default:
 		hints = append(hints, fmt.Sprintf("updated %d of %d skill file(s), the rest already current; commit them so your team and agents share them: %s",
-			len(changed), len(written), strings.Join(SkillNames(changed), ", ")))
+			len(changed), len(written), strings.Join(skillNames(changed), ", ")))
 	}
 	if cost := c.ContextCost(dir, written); cost != "" {
 		hints = append(hints, cost)
@@ -105,13 +105,13 @@ func (c *Catalog) InstallHints(dir string, written, changed []string, form types
 	return append(hints,
 		fmt.Sprintf("regenerate MAGUS.md for human readers:  %s  (the skills send agents to the live verbs: %s, %s)", hint.DescribeGraph.With("-o", "markdown"), hint.DescribeTargets.String(), hint.Ls.String()),
 		"safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:",
-		"  \""+VCSSafetyRule+"\"",
+		"  \""+vcsSafetyRule+"\"",
 		"starter AGENTS.md you can own and tweak (prints, never writes):  "+hint.AgentStarter.String())
 }
 
-// SkillNames reduces <dest>-relative SKILL.md paths to the skill names a reader
+// skillNames reduces <dest>-relative SKILL.md paths to the skill names a reader
 // recognizes: ".claude/skills/magus-run/SKILL.md" is the file, "magus-run" is the thing.
-func SkillNames(paths []string) []string {
+func skillNames(paths []string) []string {
 	out := make([]string, 0, len(paths))
 	for _, p := range paths {
 		out = append(out, filepath.Base(filepath.Dir(p)))
@@ -192,22 +192,22 @@ func (c *Catalog) ContextCost(dir string, written []string) string {
 	if installed == 0 {
 		return ""
 	}
-	msg := fmt.Sprintf("context cost: %s of always-loaded instructions", ByteSize(installed))
+	msg := fmt.Sprintf("context cost: %s of always-loaded instructions", byteSize(installed))
 	// What the always-loaded set would cost if the long form were the one carried. Kept
 	// even though it is no longer a flag to choose between, because it is the number that
 	// justifies the split: without it the reader cannot see what the shorter form buys.
 	if alt, err := c.VariantSize(typesagent.SkillVariantFull); err == nil && alt > installed {
-		msg += fmt.Sprintf("; the full form would be %s", ByteSize(alt))
+		msg += fmt.Sprintf("; the full form would be %s", byteSize(alt))
 	}
 	if twins > 0 {
-		msg += fmt.Sprintf("; plus %s of full twins, loaded only when asked for by name", ByteSize(twins))
+		msg += fmt.Sprintf("; plus %s of full twins, loaded only when asked for by name", byteSize(twins))
 	}
 	return msg
 }
 
-// ByteSize renders a size the way a reader compares it, not the way a machine
+// byteSize renders a size the way a reader compares it, not the way a machine
 // stores it.
-func ByteSize(n int64) string {
+func byteSize(n int64) string {
 	if n < 1024 {
 		return fmt.Sprintf("%d B", n)
 	}

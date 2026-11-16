@@ -37,7 +37,7 @@ type Loaders struct {
 // wrote a config: root, or the working directory when root is "".
 func JudgeDir(root string) string {
 	if root == "" {
-		root, _ = os.Getwd()
+		root, _ = os.Getwd() // an unreadable cwd leaves root empty, which the write judge refuses
 	}
 	return root
 }
@@ -51,9 +51,9 @@ func LogConfigInit(ctx context.Context, cfgPath string, wrote bool) {
 	slog.With(attr.Component("init")).InfoContext(ctx, "config exists, left as it is", slog.String("path", cfgPath))
 }
 
-// XDGConfigTarget returns $XDG_CONFIG_HOME/magus/magus.yaml, creating nothing,
+// xdgConfigTarget returns $XDG_CONFIG_HOME/magus/magus.yaml, creating nothing,
 // so --dry-run can name the destination without making it.
-func XDGConfigTarget() (string, error) {
+func xdgConfigTarget() (string, error) {
 	dir, err := xdg.ConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine config directory: %w", err)
@@ -64,7 +64,7 @@ func XDGConfigTarget() (string, error) {
 // XDGConfigPath returns the same path, creating the directory. The form a real
 // run uses.
 func XDGConfigPath() (string, error) {
-	target, err := XDGConfigTarget()
+	target, err := xdgConfigTarget()
 	if err != nil {
 		return "", err
 	}
@@ -79,7 +79,7 @@ func XDGConfigPath() (string, error) {
 // It reads state rather than assuming: a config is only overwritten with --force
 // and a magusfile never is, so a flat "would write" would overstate both.
 func PrintPlan(root string, global, local, force bool) error {
-	target, err := XDGConfigTarget()
+	target, err := xdgConfigTarget()
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func PrintPlan(root string, global, local, force bool) error {
 		return nil
 	}
 
-	if MagusfilePresent(root) {
+	if magusfilePresent(root) {
 		fmt.Fprintln(os.Stdout, "magusfile:    already present, would be left alone")
 	} else {
 		fmt.Fprintln(os.Stdout, "magusfile:    magusfile.buzz - would write a starter")
@@ -161,21 +161,21 @@ func PrintNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal boo
 // WriteMagusfileStub writes body as a starter magusfile.buzz in dir when the directory
 // has no magus declaration file yet. A pre-existing magusfile.buzz or magusfiles/
 // directory is left untouched.
-func WriteMagusfileStub(dir, body string) error {
-	if MagusfilePresent(dir) {
+func WriteMagusfileStub(ctx context.Context, dir, body string) error {
+	if magusfilePresent(dir) {
 		return nil
 	}
 	path := filepath.Join(dir, "magusfile.buzz")
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		return fmt.Errorf("init: write %s: %w", path, err)
 	}
-	slog.With(attr.Component("init")).Info("wrote magusfile", slog.String("path", path))
+	slog.InfoContext(ctx, "wrote magusfile", slog.String("path", path), attr.Component("init"))
 	return nil
 }
 
-// MagusfilePresent reports whether dir already holds a magus project
+// magusfilePresent reports whether dir already holds a magus project
 // declaration: a magusfile.buzz file or a magusfiles/ directory.
-func MagusfilePresent(dir string) bool {
+func magusfilePresent(dir string) bool {
 	if _, err := os.Stat(filepath.Join(dir, "magusfile.buzz")); err == nil {
 		return true
 	}
@@ -227,7 +227,7 @@ func InstallMergeDriver(ctx context.Context, l Loaders, root, vcsFlag string) er
 	if err := installer.InstallMergeDriver(ctx, m.Root(), globs); err != nil {
 		return fmt.Errorf("init: install %s merge driver: %w", name, err)
 	}
-	if err := InstallHooks(ctx, installer, name, m.Root()); err != nil {
+	if err := installHooks(ctx, installer, name, m.Root()); err != nil {
 		return err
 	}
 
@@ -243,10 +243,10 @@ func InstallMergeDriver(ctx context.Context, l Loaders, root, vcsFlag string) er
 	return nil
 }
 
-// InstallHooks writes the git-style hooks `magus init` owns: the refresh and drift
+// installHooks writes the git-style hooks `magus init` owns: the refresh and drift
 // hooks. Server start only refreshes sections that already exist, so this is where a
 // repository first gets them.
-func InstallHooks(ctx context.Context, installer any, name, root string) error {
+func installHooks(ctx context.Context, installer any, name, root string) error {
 	log := slog.With(attr.Component("init"))
 	type install struct {
 		kind, done string

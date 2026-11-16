@@ -163,7 +163,7 @@ func scriptWriters(ctx context.Context) (prose, records io.Writer) {
 
 func (r *ScriptRunner) execScript(ctx context.Context, o ScriptOptions, src coverage.BuzzScript, scriptOut io.Writer, cov *buzz.LineCoverage) error {
 	sess := newScriptSession(ctx, o, src.Name)
-	defer func() { _ = sess.Close() }()
+	defer func() { _ = sess.Close() }() // the script has run; a close error has no reader
 	addProfileObserver(ctx, sess)
 	lateErr, err := r.installHost(ctx, sess, src.Code, scriptOut)
 	if err != nil {

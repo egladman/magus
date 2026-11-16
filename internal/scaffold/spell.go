@@ -37,18 +37,18 @@ func WriteSpell(ctx context.Context, dir, name string, force bool) (pkgDir, path
 	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
 		return "", "", fmt.Errorf("init spell: create %s: %w", pkgDir, err)
 	}
-	if err := os.WriteFile(path, []byte(RenderSpell(name)), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(renderSpell(name)), 0o644); err != nil {
 		return "", "", fmt.Errorf("init spell: write %s: %w", path, err)
 	}
 	slog.With(attr.Component("init spell")).InfoContext(ctx, "wrote spell", slog.String("path", path))
 	return pkgDir, path, nil
 }
 
-// RenderSpell renders the starter spell.buzz for a handle. It is a complete,
+// renderSpell renders the starter spell.buzz for a handle. It is a complete,
 // self-contained built-in-style spell (it imports only the pure magus/spell and
 // magus/charm modules, so it compiles without host bindings) plus a test block,
 // with teaching comments on every contract function.
-func RenderSpell(name string) string {
+func renderSpell(name string) string {
 	return strings.ReplaceAll(scaffoldTemplate, "SPELLNAME", name)
 }
 

@@ -67,7 +67,7 @@ func (r Reads) SearchGraph(ctx context.Context, ws ReadWorkspace, cfg config.Con
 		// the shards the answer touches are decoded.
 		stop := tr.Phase("query.load_and_search")
 		if refresh {
-			SeedFromPublishedGraph(ctx, cfg, ws)
+			seedFromPublishedGraph(ctx, cfg, ws)
 		}
 		out, g, err = Query(ctx, ws, ws.Root(), cfg, refresh, read.Input, read.Budget, slog.Default())
 		stop()
@@ -91,7 +91,7 @@ func (r Reads) SearchGraph(ctx context.Context, ws ReadWorkspace, cfg config.Con
 	if readerErr != nil && out.Ranking != nil {
 		out.Ranking.Skipped = append(out.Ranking.Skipped, "reader: "+readerErr.Error())
 	}
-	return AnswerQuery(ctx, g, read, out, seeded, r.MeasuredCoverage(ctx, ws, cfg)), nil
+	return answerQuery(ctx, g, read, out, seeded, r.MeasuredCoverage(ctx, ws, cfg)), nil
 }
 
 // SearchLoaded is SearchGraph over g, a graph loaded once for many reads: it must hold
@@ -102,12 +102,12 @@ func SearchLoaded(ctx context.Context, g *knowledge.Graph, read knowledge.GraphR
 	stop := observability.TraceFromContext(ctx).Phase("query.search")
 	out := g.QueryPage(read.Input, read.Budget, 0, 0, table)
 	stop()
-	return AnswerQuery(ctx, g, read, out, knowledge.SeedsLazyLayer(read.Input), coverage)
+	return answerQuery(ctx, g, read, out, knowledge.SeedsLazyLayer(read.Input), coverage)
 }
 
-// AnswerQuery judges out, what g matched for read, and names the nearest node when
+// answerQuery judges out, what g matched for read, and names the nearest node when
 // nothing matched.
-func AnswerQuery(ctx context.Context, g *knowledge.Graph, read knowledge.GraphRead, out types.KnowledgeQueryOutput, seeded bool, coverage CoverageFunc) knowledge.QueryResult {
+func answerQuery(ctx context.Context, g *knowledge.Graph, read knowledge.GraphRead, out types.KnowledgeQueryOutput, seeded bool, coverage CoverageFunc) knowledge.QueryResult {
 	stop := observability.TraceFromContext(ctx).Phase("query.coverage")
 	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, coverage(read.Input, seeded))
 	stop()
@@ -180,7 +180,7 @@ func (r Reads) LoadGraph(ctx context.Context, ws ReadWorkspace, cfg config.Confi
 		// A refresh is the moment the expensive half (the SCIP shards, which are never
 		// committed) would otherwise be recomputed, and a branch switch reaches here
 		// through the VCS refresh hook's sync-graph job.
-		SeedFromPublishedGraph(ctx, cfg, ws)
+		seedFromPublishedGraph(ctx, cfg, ws)
 	}
 	g, err := Build(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
 	if err != nil {
@@ -194,7 +194,7 @@ func (r Reads) LoadGraph(ctx context.Context, ws ReadWorkspace, cfg config.Confi
 	return g, nil
 }
 
-// SeedFromPublishedGraph points the workspace's knowledge store at the published artifact,
+// seedFromPublishedGraph points the workspace's knowledge store at the published artifact,
 // so the rebuild that follows fetches a missing shard instead of recomputing it. It fetches
 // nothing itself: the store asks, shard by shard and by fingerprint, for only what it lacks.
 //
@@ -214,7 +214,7 @@ func (r Reads) LoadGraph(ctx context.Context, ws ReadWorkspace, cfg config.Confi
 //
 // Does nothing unless knowledge.published_ref names an artifact. Opt-in per repository,
 // because reading a graph decides what magus answers about this tree.
-func SeedFromPublishedGraph(ctx context.Context, cfg config.Config, ws types.Inspector) {
+func seedFromPublishedGraph(ctx context.Context, cfg config.Config, ws types.Inspector) {
 	ref := cfg.Knowledge.PublishedRef
 	if ref == "" {
 		return

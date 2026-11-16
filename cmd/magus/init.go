@@ -142,7 +142,7 @@ func initCommand(ctx context.Context, root string, args []string) error {
 	// default config target sits outside the repo entirely ($XDG_CONFIG_HOME).
 	// Writing the config first left an orphaned global config behind whenever a
 	// later step (e.g. a bad --root) failed.
-	if err := scaffold.WriteMagusfileStub(root, starterMagusfileBuzz); err != nil {
+	if err := scaffold.WriteMagusfileStub(ctx, root, starterMagusfileBuzz); err != nil {
 		return err
 	}
 

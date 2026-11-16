@@ -154,7 +154,7 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	ctx = trail.ContextWithEntryPoint(ctx, entry)
 	// The spell catalog is compiled in, so the raw-tool rule judges a lapsed call too.
 	base := Dependencies{CacheDir: e.CacheDir(""), BinaryVersion: e.Version, Spells: project.DefaultSpellRegistry().All}
-	base.Binary, _ = e.BinaryPath()
+	base.Binary, _ = e.BinaryPath() // an unresolved binary leaves Binary empty, which the rules read as unknown
 	ctx = agent.ContextWithToolRows(ctx, req.Tools)
 	ctx, finishSnapshot := WithPolicySnapshotWrite(ctx)
 	// The rules load inside the bound too: a magusfile's imports parse to the end however

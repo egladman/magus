@@ -2,6 +2,7 @@ package remote
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,7 +18,10 @@ import (
 
 func writeSpellsYAML(t *testing.T, root, path, tag string) {
 	t.Helper()
-	body := "spells:\n  \"" + path + "\":\n    tag: " + tag + "\n"
+	body := fmt.Sprintf(`spells:
+  %q:
+    tag: %s
+`, path, tag)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(body), 0o644))
 }
 
@@ -30,17 +34,17 @@ func TestRegistryCredentialResolvesThroughTheSecretProvider(t *testing.T) {
 	r := secret.New()
 	t.Setenv("SPELL_REGISTRY_TOKEN", "ghp_abcdef123456")
 
-	user, pass, err := RegistryCredential(t.Context(), spells, "ghcr.io", r)
+	user, pass, err := registryCredential(t.Context(), spells, "ghcr.io", r)
 	require.NoError(t, err)
 	assert.Equal(t, "ci", user)
 	assert.Equal(t, "ghp_abcdef123456", pass.Reveal())
 	assert.Equal(t, "token=***", r.RedactString("token=ghp_abcdef123456"))
 
-	_, _, err = RegistryCredential(t.Context(), spells, "docker.io", r)
+	_, _, err = registryCredential(t.Context(), spells, "docker.io", r)
 	require.ErrorContains(t, err, "no entry for docker.io")
 
 	unset := config.SpellsConfig{Registries: []config.SpellRegistry{{Host: "ghcr.io", Username: "ci", PasswordRef: "SPELL_REGISTRY_UNSET"}}}
-	_, _, err = RegistryCredential(t.Context(), unset, "ghcr.io", secret.New())
+	_, _, err = registryCredential(t.Context(), unset, "ghcr.io", secret.New())
 	require.ErrorContains(t, err, "$SPELL_REGISTRY_UNSET is not set")
 }
 

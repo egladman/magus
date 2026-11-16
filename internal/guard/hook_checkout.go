@@ -27,8 +27,8 @@ import (
 // itself delegated.
 func takeDelegation(ctx context.Context) (context.Context, context.CancelFunc, error) {
 	by, deadline := os.Getenv(delegatedEnv), os.Getenv(HookDeadlineEnv)
-	_ = os.Unsetenv(delegatedEnv)
-	_ = os.Unsetenv(HookDeadlineEnv)
+	_ = os.Unsetenv(delegatedEnv)    // a constant name, so Unsetenv cannot fail
+	_ = os.Unsetenv(HookDeadlineEnv) // a constant name, so Unsetenv cannot fail
 	if by == "" {
 		return ctx, func() {}, nil
 	}

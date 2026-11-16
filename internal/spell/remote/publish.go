@@ -54,14 +54,14 @@ func BuildDir(ctx context.Context, opts types.VCSOptions, dir, source string) (o
 	if err != nil {
 		return oci.Artifact{}, BuildResult{}, err
 	}
-	res, err := Describe(content)
+	res, err := describe(content)
 	return content, res, err
 }
 
 // BuildShipped is the artifact a release publishes for the spell magus ships as
 // name, exactly as Shipped packs it, so a push writes the digest eject stamps.
 func BuildShipped(name string) (oci.Artifact, BuildResult, error) {
-	dir, err := ShippedDir(name)
+	dir, err := shippedDir(name)
 	if err != nil {
 		return oci.Artifact{}, BuildResult{}, err
 	}
@@ -69,12 +69,12 @@ func BuildShipped(name string) (oci.Artifact, BuildResult, error) {
 	if err != nil {
 		return oci.Artifact{}, BuildResult{}, err
 	}
-	res, err := Describe(content)
+	res, err := describe(content)
 	return content, res, err
 }
 
-// Describe reads the digests and annotations a build reports off its artifact.
-func Describe(content oci.Artifact) (BuildResult, error) {
+// describe reads the digests and annotations a build reports off its artifact.
+func describe(content oci.Artifact) (BuildResult, error) {
 	m, err := content.Manifest()
 	if err != nil {
 		return BuildResult{}, err
@@ -88,8 +88,8 @@ func Describe(content oci.Artifact) (BuildResult, error) {
 	}, nil
 }
 
-// ShippedDir is where the spell magus ships as name lives in its embedded tree.
-func ShippedDir(name string) (string, error) {
+// shippedDir is where the spell magus ships as name lives in its embedded tree.
+func shippedDir(name string) (string, error) {
 	dir, ok := spell.ShippedDir(name)
 	if !ok {
 		return "", fmt.Errorf("magus ships no spell %q, `magus spell ls %s` lists them", name, ShippedPath)
@@ -122,7 +122,7 @@ type Override struct {
 // EjectShipped copies the spell magus ships as name into dst for the workspace at
 // wsRoot ("" when there is none) to own. next says how the workspace puts the copy to use.
 func EjectShipped(wsRoot, name, dst string) (res PullResult, next string, err error) {
-	dir, err := ShippedDir(name)
+	dir, err := shippedDir(name)
 	if err != nil {
 		return PullResult{}, "", err
 	}

@@ -72,7 +72,7 @@ func (r *ScriptRunner) CheckFile(ctx context.Context, path string, embedded bool
 		opts = append(opts, buzz.WithEmbedded())
 	}
 	sess := buzz.NewSession(ctx, opts...)
-	defer func() { _ = sess.Close() }()
+	defer func() { _ = sess.Close() }() // the diagnostics are already decided; a close error has no reader
 	if dir := scriptImportDir(resolved); dir != "" {
 		sess.SetIncludeDirs(append([]string{dir}, sess.IncludeDirs()...))
 	}
