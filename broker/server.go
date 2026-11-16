@@ -120,7 +120,7 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 	s := &server{
 		handshake:  handshake,
 		opts:       o,
-		budget:     budget.NewMachine(o.budgetMB, o.budgetSlots).WithReserve(o.reserve).WithWrappers(types.IsWrapperInvocation),
+		budget:     budget.NewMachine(o.budgetMB, o.budgetSlots, budget.WithReserve(o.reserve), budget.WithWrappers(types.IsWrapperInvocation)),
 		socket:     "unix://" + ln.Addr().String(),
 		executable: exe,
 		started:    time.Now(),
@@ -517,7 +517,7 @@ func (s *server) dispatch(ctx context.Context, sess *session, w *frameWriter, f 
 		switch {
 		case req.Reassert:
 			s.seatLocked(sess, c, true)
-			v = budget.Verdict{Granted: true, Fits: true, ID: s.budget.Assert(c)}
+			v = budget.Verdict{Granted: true, Fits: true, ID: s.budget.Adopt(c)}
 		case s.draining:
 			s.mu.Unlock()
 			_ = w.write(typeError, f.ID, s.drainingError())

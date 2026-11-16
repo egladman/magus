@@ -173,7 +173,7 @@ func (s *ForkSeatSuite) TestAFullBudgetRefusesTheForkWithExit75() {
 	s.Equal(75, exit.Code)
 	s.Require().Len(full.claims, 1)
 	got := full.claims[0]
-	got.PID, got.Invocation, got.Ancestors, got.WaitBoundMS = 0, "", nil, 0
+	got.PID, got.Invocation, got.Ancestors, got.WaitBound = 0, "", nil, 0
 	s.Equal(budget.Claim{Project: ".", Target: "job-fork", MemoryMB: guard.ForkValidationMemoryMB, Slots: 1, Dir: resolveRootOrEmpty(dir)}, got)
 }
 

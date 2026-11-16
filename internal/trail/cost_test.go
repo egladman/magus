@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -17,14 +18,13 @@ var costEpoch = time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)
 
 // fixtureModels stand in for the rows a harness spell publishes; no table is built into
 // magus.
-func fixtureModels() tier.Table {
-	return tier.InEffect([]tier.Pricing{
-		{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.50, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
-		{ID: "claude-opus-5-5", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20},
-		{ID: "claude-sonnet-5-5", Window: 1_000_000, Input: 2, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10, Output: 10},
-		{ID: "claude-haiku-5-5", Window: 1_000_000, Input: 0.10, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01, Output: 0.50,
-			LongContext: &tier.PriceStep{Above: 100_000, Multiplier: 5}},
-		{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.10, Output: 5},
+func fixtureModels() model.Table {
+	return model.InEffect([]model.Row{
+		{ID: "claude-fable-5-1", Window: 1_000_000, Price: budget.Price{Input: 10, CacheWrite5m: 12.50, CacheWrite1h: 20, CacheRead: 0.25, Output: 50}},
+		{ID: "claude-opus-5-5", Window: 1_000_000, Price: budget.Price{Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20, Output: 20}},
+		{ID: "claude-sonnet-5-5", Window: 1_000_000, Price: budget.Price{Input: 2, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10, Output: 10}},
+		{ID: "claude-haiku-5-5", Window: 1_000_000, Price: budget.Price{Input: 0.10, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01, Output: 0.50, LongContext: &budget.PriceStep{Above: 100_000, Multiplier: 5}}},
+		{ID: "claude-haiku-4-5", Window: 200_000, Price: budget.Price{Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.10, Output: 5}},
 	}, nil)
 }
 

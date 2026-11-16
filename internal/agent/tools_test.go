@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
@@ -111,10 +113,9 @@ func testModelFacts(t testing.TB) *ModelFacts {
 		Hosts:  map[string][]string{"host": {"small", "large"}},
 	})
 	require.NoError(t, err)
-	return &ModelFacts{Tiers: tiers, Rows: []tier.Pricing{
-		{ID: "small-1", Tier: "economy", Alias: "small", Window: 200_000, Input: 1, Output: 5},
-		{ID: "large-1", Tier: "standard", Alias: "large", Window: 1_000_000, Input: 3, CacheWrite5m: 3.75, CacheWrite1h: 6, CacheRead: 0.3, Output: 15,
-			LongContext: &tier.PriceStep{Above: 200_000, Multiplier: 2}},
+	return &ModelFacts{Tiers: tiers, Rows: []model.Row{
+		{ID: "small-1", Tier: "economy", Alias: "small", Window: 200_000, Price: budget.Price{Input: 1, Output: 5}},
+		{ID: "large-1", Tier: "standard", Alias: "large", Window: 1_000_000, Price: budget.Price{Input: 3, CacheWrite5m: 3.75, CacheWrite1h: 6, CacheRead: 0.3, Output: 15, LongContext: &budget.PriceStep{Above: 200_000, Multiplier: 2}}},
 	}}
 }
 

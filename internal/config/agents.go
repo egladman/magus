@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/internal/agent/model"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -54,18 +55,16 @@ type AgentModel struct {
 	StepFactor float64 `json:"step_factor" yaml:"step_factor" validate:"required_with=PriceStep,omitempty,gte=1"`
 }
 
-// ModelOverrides returns Models as the overrides tier.InEffect applies, sorted by id.
-func (a Agents) ModelOverrides() []tier.Pricing {
-	out := make([]tier.Pricing, 0, len(a.Models))
+// ModelOverrides returns Models as the overrides model.InEffect applies, sorted by id.
+func (a Agents) ModelOverrides() []model.Row {
+	out := make([]model.Row, 0, len(a.Models))
 	for _, id := range slices.Sorted(maps.Keys(a.Models)) {
 		m := a.Models[id]
-		row := tier.Pricing{
-			ID: id, Window: m.Window, Input: tier.USDPerMTok(m.Input), Output: tier.USDPerMTok(m.Output),
-			CacheWrite5m: tier.USDPerMTok(m.CacheWrite5m), CacheWrite1h: tier.USDPerMTok(m.CacheWrite1h),
-			CacheRead: tier.USDPerMTok(m.CacheRead),
+		row := model.Row{
+			ID: id, Window: m.Window, Price: budget.Price{Input: budget.USDPerMTok(m.Input), Output: budget.USDPerMTok(m.Output), CacheWrite5m: budget.USDPerMTok(m.CacheWrite5m), CacheWrite1h: budget.USDPerMTok(m.CacheWrite1h), CacheRead: budget.USDPerMTok(m.CacheRead)},
 		}
 		if m.PriceStep > 0 {
-			row.LongContext = &tier.PriceStep{Above: m.PriceStep, Multiplier: m.StepFactor}
+			row.LongContext = &budget.PriceStep{Above: m.PriceStep, Multiplier: m.StepFactor}
 		}
 		out = append(out, row)
 	}

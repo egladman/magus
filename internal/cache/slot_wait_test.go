@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -49,19 +50,21 @@ func TestSlotWaitMeterGrantOrder(t *testing.T) {
 // measured, and the queue drains back to empty.
 func TestSlotWaitMeterFedByLimiter(t *testing.T) {
 	var m SlotWaitMeter
-	lim := NewLimiter(1)
-	require.NoError(t, lim.Acquire(context.Background()))
-
 	queued := make(chan struct{})
-	lim.SetHooks(func(ev budget.PoolEvent) {
-		if ev.Queued == 0 {
+	// The holder's own uncontended acquire is not the wait under test.
+	var armed atomic.Bool
+	lim := NewLimiter(1, budget.WithPoolEvents(func(ev budget.PoolEvent) {
+		if ev.Queued == 0 || !armed.Load() {
 			return
 		}
 		m.Add(ev.Queued)
 		if ev.Queued > 0 {
 			close(queued)
 		}
-	})
+	}))
+	require.NoError(t, lim.Acquire(context.Background()))
+	armed.Store(true)
+
 	acquired := make(chan error, 1)
 	go func() { acquired <- lim.Acquire(context.Background()) }()
 	<-queued

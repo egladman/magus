@@ -1,17 +1,12 @@
 package tier
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 )
-
-var errDeclaration = errors.New("model tier declaration")
 
 // Tier is one case of the model-tier enum a workspace declares. Only a
 // Set hands one out, so a Tier always names a declared case; the zero
@@ -41,29 +36,49 @@ func (t Tier) Rank() int {
 func (t Tier) IsZero() bool { return t.set == nil }
 
 // Above reports whether t ranks above u. Ranks compare only within one declaration, so
-// it errors when the two come from different sets or either is the zero value.
+// it errors with a [*CompareError] when the two come from different sets or either is
+// the zero value.
 func (t Tier) Above(u Tier) (bool, error) {
-	if t.set == nil || u.set == nil {
-		return false, fmt.Errorf("model tiers %q and %q cannot be compared: one is unassigned", t.Name(), u.Name())
-	}
-	if t.set != u.set {
-		return false, fmt.Errorf("model tiers %q (%s) and %q (%s) come from different declarations", t.Name(), t.set.enum, u.Name(), u.set.enum)
+	if t.set == nil || u.set == nil || t.set != u.set {
+		return false, &CompareError{T: t, U: u}
 	}
 	return t.rank > u.rank, nil
 }
 
+// CompareError is [Tier.Above]'s refusal of two tiers that do not compare: one is
+// unassigned, or they come from different declarations.
+type CompareError struct {
+	T, U Tier
+}
+
+func (e *CompareError) Error() string {
+	if e.T.set == nil || e.U.set == nil {
+		return fmt.Sprintf("model tiers %q and %q cannot be compared: one is unassigned", e.T.Name(), e.U.Name())
+	}
+	return fmt.Sprintf("model tiers %q (%s) and %q (%s) come from different declarations", e.T.Name(), e.T.set.enum, e.U.Name(), e.U.set.enum)
+}
+
 // Within is nil when t ranks at or below ceiling, the bound a child's tier keeps to its
-// parent's. It errors naming both tiers when t ranks above ceiling, and as [Tier.Above]
-// does when the two cannot be compared.
+// parent's. It errors with a [*RanksAboveError] when t ranks above ceiling, and as
+// [Tier.Above] does when the two cannot be compared.
 func (t Tier) Within(ceiling Tier) error {
 	above, err := t.Above(ceiling)
 	if err != nil {
 		return err
 	}
 	if above {
-		return fmt.Errorf("model tier %s (rank %d) ranks above %s (rank %d)", t.Name(), t.rank, ceiling.Name(), ceiling.rank)
+		return &RanksAboveError{Tier: t, Ceiling: ceiling}
 	}
 	return nil
+}
+
+// RanksAboveError is [Tier.Within]'s refusal of a tier ranked above its ceiling.
+type RanksAboveError struct {
+	Tier, Ceiling Tier
+}
+
+func (e *RanksAboveError) Error() string {
+	return fmt.Sprintf("model tier %s (rank %d) ranks above %s (rank %d)", e.Tier.Name(), e.Tier.rank, e.Ceiling.Name(), e.Ceiling.rank)
 }
 
 // MarshalText writes the case name. There is no UnmarshalText: a name becomes a
@@ -80,75 +95,6 @@ type Set struct {
 	bounds     []Bounds
 	skills     []SkillVariant
 	hosts      map[string][]string
-}
-
-// State is the model-tier declaration a workspace holds: the root
-// magusfile's, none when it turned tiers off, or else the shipped default.
-// The zero value holds no declaration and no default. Safe for concurrent use.
-type State struct {
-	mu  sync.Mutex
-	set *Set
-	// declared tells a magusfile's nil (tiers off) apart from no
-	// declaration, which leaves the tiers to build.
-	declared bool
-	build    func() (*Set, error)
-}
-
-// Declare records a magusfile's declaration, replacing one an earlier
-// evaluation of the same magusfile recorded. nil records that it turned
-// model tiers off, so the default does not apply.
-func (s *State) Declare(set *Set) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.set, s.declared = set, true
-}
-
-// SetDefault records how to build the declaration a workspace gets when its
-// magusfile declares none. Nothing builds it until [State.Tiers].
-func (s *State) SetDefault(build func() (*Set, error)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.build = build
-}
-
-// Tiers returns the declaration, nil when tiers are off or nothing set a
-// default. A default that builds is kept. One that fails returns its error,
-// and the next call builds again.
-func (s *State) Tiers() (*Set, error) {
-	s.mu.Lock()
-	if s.declared || s.build == nil {
-		defer s.mu.Unlock()
-		return s.set, nil
-	}
-	build := s.build
-	s.mu.Unlock()
-
-	// Outside the lock: the build loads a Buzz module, which must not wait
-	// on this state. Racing callers build the same set; the first kept wins.
-	set, err := build()
-	if err != nil {
-		return nil, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.declared {
-		s.set, s.declared = set, true
-	}
-	return s.set, nil
-}
-
-type stateKey struct{}
-
-// WithState returns ctx carrying s, the state a magusfile's
-// magus\modelTiers declares into.
-func WithState(ctx context.Context, s *State) context.Context {
-	return context.WithValue(ctx, stateKey{}, s)
-}
-
-// StateFromContext returns the state on ctx, or nil.
-func StateFromContext(ctx context.Context) *State {
-	s, _ := ctx.Value(stateKey{}).(*State)
-	return s
 }
 
 // Declaration is the raw declaration a magusfile's Buzz enum and its mapping
@@ -175,7 +121,7 @@ type Bounds struct {
 }
 
 // NewSet validates decl and builds the set. Every problem is reported at
-// once: no cases, a duplicate or empty case, a default out of range, a bounds, skills
+// once, one [*DeclarationError] each, joined: no cases, a duplicate or empty case, a default out of range, a bounds, skills
 // or host list whose length differs from the cases, a negative bound, an invalid skill
 // variant, an empty host id or alias, or one host giving two cases the same alias.
 // Adjacent cases may share one: a host with fewer models repeats an id.
@@ -184,7 +130,7 @@ func NewSet(decl Declaration) (*Set, error) {
 	if len(problems) > 0 {
 		errs := make([]error, len(problems))
 		for i, p := range problems {
-			errs[i] = fmt.Errorf("%w: enum %s at %s: %s", errDeclaration, decl.Enum, decl.Site, p)
+			errs[i] = &DeclarationError{Enum: decl.Enum, Site: decl.Site, Problem: p}
 		}
 		return nil, errors.Join(errs...)
 	}
@@ -206,6 +152,15 @@ func NewSet(decl Declaration) (*Set, error) {
 		skills: slices.Clone(decl.Skills),
 		hosts:  hosts,
 	}, nil
+}
+
+// DeclarationError is one problem [NewSet] found in a declaration.
+type DeclarationError struct {
+	Enum, Site, Problem string
+}
+
+func (e *DeclarationError) Error() string {
+	return fmt.Sprintf("model tier declaration: enum %s at %s: %s", e.Enum, e.Site, e.Problem)
 }
 
 // caseProblems checks the enum's name, its cases and the default rank.
@@ -297,9 +252,9 @@ func (s *Set) All() []Tier {
 	return out
 }
 
-// Parse returns the tier named name. An unknown name errors, naming the declared cases.
-// An old name [Renamed] respells reads as its new one,
-// when the set declares the new name and not the old.
+// Parse returns the tier named name. An unknown name is an [*UnknownTierError]. An old
+// name [Renamed] respells reads as its new one, when the set declares the new name and
+// not the old; a caller that must say so checks Renamed itself.
 func (s *Set) Parse(name string) (Tier, error) {
 	if i, ok := s.byName[name]; ok {
 		return Tier{set: s, rank: i}, nil
@@ -309,7 +264,18 @@ func (s *Set) Parse(name string) (Tier, error) {
 			return Tier{set: s, rank: i}, nil
 		}
 	}
-	return Tier{}, fmt.Errorf("%q is not a model tier: enum %s at %s declares %s", name, s.enum, s.site, strings.Join(s.cases, ", "))
+	return Tier{}, &UnknownTierError{Name: name, Enum: s.enum, Site: s.site, Cases: slices.Clone(s.cases)}
+}
+
+// UnknownTierError is [Set.Parse]'s refusal of a name the declaration does not declare.
+type UnknownTierError struct {
+	Name, Enum, Site string
+	// Cases are the declared case names, cheapest first.
+	Cases []string
+}
+
+func (e *UnknownTierError) Error() string {
+	return fmt.Sprintf("%q is not a model tier: enum %s at %s declares %s", e.Name, e.Enum, e.Site, strings.Join(e.Cases, ", "))
 }
 
 // renamedModelTiers maps each old shipped tier name to its new one.
@@ -317,21 +283,12 @@ func (s *Set) Parse(name string) (Tier, error) {
 // still names economy, standard or principal.
 var renamedModelTiers = map[string]string{"economy": "routine", "standard": "bounded", "principal": "design"}
 
-var renamedModelTierSaid sync.Map
-
-// Renamed is the new spelling of an old shipped tier name,
-// and false for any other name. The first read of each old name
-// in a process warns once. compat: see renamedModelTiers.
+// Renamed is the new spelling of an old shipped tier name, and false for any other
+// name. It says nothing itself: a caller reading an old name tells its own reader.
+// compat: see renamedModelTiers.
 func Renamed(name string) (string, bool) {
 	renamed, ok := renamedModelTiers[name]
-	if !ok {
-		return "", false
-	}
-	if _, said := renamedModelTierSaid.LoadOrStore(name, true); !said {
-		slog.WarnContext(context.Background(), fmt.Sprintf("model tier %s is now spelled %s: magus reads %s as %s until the next release, so write %s",
-			name, renamed, name, renamed, renamed))
-	}
-	return renamed, true
+	return renamed, ok
 }
 
 // At returns the tier at rank, and false when rank is outside the declaration.
@@ -361,17 +318,42 @@ func (s *Set) Skills(t Tier) SkillVariant {
 	return s.skills[t.rank]
 }
 
-// Alias returns the model host spawns for t. It errors for a tier from another set and
-// for a host the declaration does not map, naming the hosts it does.
+// Alias returns the model host spawns for t. It errors with a [*ForeignTierError] for a
+// tier from another set and an [*UnmappedHostError] for a host the declaration does not
+// map.
 func (s *Set) Alias(host string, t Tier) (string, error) {
 	if t.set != s {
-		return "", fmt.Errorf("model tier %q is not a case of enum %s", t.Name(), s.enum)
+		return "", &ForeignTierError{Tier: t.Name(), Enum: s.enum}
 	}
 	aliases, ok := s.hosts[host]
 	if !ok {
-		return "", fmt.Errorf("enum %s at %s maps no model for harness %s: its hosts are %s", s.enum, s.site, host, s.hostIDs())
+		return "", &UnmappedHostError{Host: host, Enum: s.enum, Site: s.site, Hosts: s.Hosts()}
 	}
 	return aliases[t.rank], nil
+}
+
+// ForeignTierError is a tier handed to a [Set] that did not declare it.
+type ForeignTierError struct {
+	Tier, Enum string
+}
+
+func (e *ForeignTierError) Error() string {
+	return fmt.Sprintf("model tier %q is not a case of enum %s", e.Tier, e.Enum)
+}
+
+// UnmappedHostError is [Set.Alias]'s refusal of a harness the declaration maps no model
+// for. Hosts are the harnesses it does map, sorted.
+type UnmappedHostError struct {
+	Host, Enum, Site string
+	Hosts            []string
+}
+
+func (e *UnmappedHostError) Error() string {
+	hosts := "none"
+	if len(e.Hosts) > 0 {
+		hosts = strings.Join(e.Hosts, ", ")
+	}
+	return fmt.Sprintf("enum %s at %s maps no model for harness %s: its hosts are %s", e.Enum, e.Site, e.Host, hosts)
 }
 
 // Resolve returns the tier host's alias names, and false when host is unmapped or no
@@ -423,11 +405,4 @@ func (s *Set) Site() string { return s.site }
 // Hosts lists the ids of the harnesses the declaration maps to models, in order.
 func (s *Set) Hosts() []string {
 	return slices.Sorted(maps.Keys(s.hosts))
-}
-
-func (s *Set) hostIDs() string {
-	if len(s.hosts) == 0 {
-		return "none"
-	}
-	return strings.Join(s.Hosts(), ", ")
 }

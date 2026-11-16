@@ -25,7 +25,7 @@ func isWrapper(invocation string) bool {
 func testBudget(t *testing.T, mb, slots int) (*Machine, *time.Time) {
 	t.Helper()
 	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
-	b := NewMachine(mb, slots).WithWrappers(isWrapper).WithClock(func() time.Time { return now })
+	b := NewMachine(mb, slots, WithWrappers(isWrapper), WithClock(func() time.Time { return now }))
 	return b, &now
 }
 
@@ -237,7 +237,7 @@ func (s *MachineSuite) TestAssertRecordsWhatDoesNotFit() {
 	b, _ := testBudget(t, 10_000, 8)
 	require.True(t, b.Request(Claim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100}, 0).Granted)
 
-	id := b.Assert(Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
+	id := b.Adopt(Claim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
 	require.NotEmpty(t, id)
 	// An asserted claim counts even over the budget, and takes the one slot every step spends.
 	snap := b.Snapshot()
@@ -408,7 +408,7 @@ func (s *MachineSuite) TestSharesAWrappersClaimWithItsChild() {
 	t := s.T()
 	b, _ := testBudget(t, 0, 1)
 	w := wrapped(100)
-	b.Assert(w)
+	b.Adopt(w)
 	v := b.Request(Claim{Project: "x", Target: "install", Slots: 1, PID: 200, Ancestors: []string{w.Invocation}}, 0)
 	assert.True(t, v.Granted, "the only slot is its wrapper's")
 
@@ -422,7 +422,7 @@ func (s *MachineSuite) TestGivesAWrappersChildNoSeatOnAFullMachine() {
 	b, _ := testBudget(t, 1000, 4)
 	require.True(t, b.Request(Claim{Project: "other", Target: "test", MemoryMB: 900, Slots: 1, PID: 300}, 0).Granted)
 	w := wrapped(100)
-	b.Assert(w)
+	b.Adopt(w)
 
 	v := b.Request(Claim{Project: "x", Target: "test", MemoryMB: 500, Slots: 1, PID: 200, Ancestors: []string{w.Invocation}}, 0)
 	assert.False(t, v.Granted, "it would hold 1400 MB of a 1000 MB budget")
@@ -441,8 +441,8 @@ func (s *MachineSuite) TestSeatsAChildOfEachStalledRootUnderAWrapper() {
 		}, 0)
 	}
 	wrapA, wrapB := wrapped(100), wrapped(200)
-	b.Assert(wrapA)
-	b.Assert(wrapB)
+	b.Adopt(wrapA)
+	b.Adopt(wrapB)
 	require.True(t, b.Request(Claim{Target: "ci", MemoryMB: 6000, Slots: 1, PID: 110, Invocation: "110:a", Ancestors: []string{wrapA.Invocation}}, 0).Granted)
 	require.True(t, b.Request(Claim{Target: "ci", MemoryMB: 6000, Slots: 1, PID: 210, Invocation: "210:b", Ancestors: []string{wrapB.Invocation}}, 0).Granted)
 
@@ -457,7 +457,7 @@ func (s *MachineSuite) TestSeatsAChildThroughAWrapperUnderAStalledStep() {
 	require.True(t, b.Request(Claim{Target: "other", MemoryMB: 500, Slots: 1, PID: 300}, 0).Granted)
 	require.True(t, b.Request(Claim{Target: "ci", MemoryMB: 500, Slots: 1, PID: 100, Invocation: "100:run"}, 0).Granted)
 	w := wrapped(200, "100:run")
-	b.Assert(w)
+	b.Adopt(w)
 
 	child := func(pid int) Claim {
 		return Claim{
@@ -505,7 +505,7 @@ func (s *MachineSuite) TestNextChangeIsTheEarliestCurveBreakpoint() {
 	_, ok := b.NextChange()
 	assert.False(t, ok, "an empty budget never changes on its own")
 
-	b.Assert(Claim{Target: "flat", MemoryMB: 1000})
+	b.Adopt(Claim{Target: "flat", MemoryMB: 1000})
 	_, ok = b.NextChange()
 	assert.False(t, ok, "a claim held flat changes only when released")
 
@@ -513,7 +513,7 @@ func (s *MachineSuite) TestNextChangeIsTheEarliestCurveBreakpoint() {
 	for i := range profile.Curve {
 		profile.Curve[i] = 100
 	}
-	b.Assert(Claim{Target: "curved", MemoryMB: 100, Profile: profile})
+	b.Adopt(Claim{Target: "curved", MemoryMB: 100, Profile: profile})
 	at, ok := b.NextChange()
 	require.True(t, ok)
 	step := 10 * time.Second / CurveBuckets

@@ -1,7 +1,6 @@
 package tier
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -51,7 +50,8 @@ func (s *modelTierSuite) refused(edit func(*Declaration)) error {
 	set, err := NewSet(decl)
 	s.Require().Error(err)
 	s.Nil(set)
-	s.ErrorIs(err, errDeclaration)
+	var problem *DeclarationError
+	s.ErrorAs(err, &problem)
 	return err
 }
 
@@ -325,16 +325,6 @@ func (s *modelTierSuite) TestEveryProblemIsReported() {
 	s.Contains(err.Error(), "skills covers 0 cases")
 }
 
-func (s *modelTierSuite) TestTheVocabulariesCloseTheirSets() {
-	s.Equal([]string{"short", "full"}, SkillVariant("").Values())
-	s.Equal([]string{"job", "matrix", "user-matrix", "default"}, Source("").Values())
-	s.False(SkillVariant("medium").Valid())
-	s.True(SkillVariantFull.Full())
-	s.False(SkillVariantFull.Short())
-	s.True(SkillVariantShort.Short())
-	s.Equal("short", SkillVariantShort.String(), "the skill-variant stamp prints this")
-}
-
 func (s *modelTierSuite) TestTheSetNamesItsSiteAndHosts() {
 	decl := fourTiers()
 	decl.Hosts = map[string][]string{
@@ -351,108 +341,26 @@ func (s *modelTierSuite) TestTheSetNamesItsSiteAndHosts() {
 	s.Empty(s.tiers(bare).Hosts())
 }
 
-func (s *modelTierSuite) TestTheForkLineNamesTheReasonAndSite() {
-	tier := Assignment{Name: "routine", Source: SourceMatrix, Reason: "small", Site: "magusfile.buzz:20"}
-	s.Equal(`routine (rank 0), matrix: "small" at magusfile.buzz:20`, tier.String())
-}
+func (s *modelTierSuite) TestRefusalsAreTyped() {
+	set := s.tiers(fourTiers())
+	_, err := set.Parse("bounde")
+	var unknown *UnknownTierError
+	s.Require().ErrorAs(err, &unknown)
+	s.Equal([]string{"routine", "bounded", "design", "frontier"}, unknown.Cases)
 
-func (s *modelTierSuite) TestTheForkLineNamesAReasonAlone() {
-	tier := Assignment{Name: "bounded", Rank: 1, Source: SourceDefault, Reason: "the declared default"}
-	s.Equal(`bounded (rank 1), default: "the declared default"`, tier.String())
-}
+	var above *RanksAboveError
+	s.Require().ErrorAs(s.at(set, 2).Within(s.at(set, 1)), &above)
+	s.Equal("design", above.Tier.Name())
 
-func (s *modelTierSuite) TestTheForkLineNamesTheSourceAlone() {
-	s.Equal("design (rank 2), job", Assignment{Name: "design", Rank: 2, Source: SourceJob}.String())
-}
+	var incomparable *CompareError
+	s.Require().ErrorAs(s.at(set, 0).Within(Tier{}), &incomparable)
 
-func (s *modelTierSuite) TestTheForkLineSaysWhichTiersShareAnID() {
-	tier := Assignment{Name: "frontier", Rank: 3, Source: SourceJob, Shared: []string{"codex runs design and frontier on one id, gpt-6-astra"}}
-	s.Equal("frontier (rank 3), job; codex runs design and frontier on one id, gpt-6-astra", tier.String())
-}
+	_, err = set.Alias("nobody", set.Default())
+	var unmapped *UnmappedHostError
+	s.Require().ErrorAs(err, &unmapped)
+	s.Equal([]string{testHost}, unmapped.Hosts)
 
-type modelTierStateSuite struct {
-	suite.Suite
-}
-
-func TestState(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(modelTierStateSuite))
-}
-
-func (s *modelTierStateSuite) named(enum string) *Set {
-	decl := fourTiers()
-	decl.Enum = enum
-	set, err := NewSet(decl)
-	s.Require().NoError(err)
-	return set
-}
-
-func (s *modelTierStateSuite) TestNoDeclarationAndNoDefaultIsNil() {
-	var state State
-	set, err := state.Tiers()
-	s.Require().NoError(err)
-	s.Nil(set)
-}
-
-func (s *modelTierStateSuite) TestTheDefaultBuildsOnceOnTheFirstAsk() {
-	var state State
-	builds := 0
-	shipped := s.named("Shipped")
-	state.SetDefault(func() (*Set, error) { builds++; return shipped, nil })
-	s.Zero(builds, "setting the default builds nothing")
-	for range 2 {
-		set, err := state.Tiers()
-		s.Require().NoError(err)
-		s.Same(shipped, set)
-	}
-	s.Equal(1, builds)
-}
-
-func (s *modelTierStateSuite) TestADeclarationReplacesTheDefaultAndARerunReplacesIt() {
-	var state State
-	state.SetDefault(func() (*Set, error) { return s.named("Shipped"), nil })
-	first, second := s.named("First"), s.named("Second")
-	state.Declare(first)
-	set, err := state.Tiers()
-	s.Require().NoError(err)
-	s.Same(first, set)
-	state.Declare(second)
-	set, err = state.Tiers()
-	s.Require().NoError(err)
-	s.Same(second, set)
-}
-
-func (s *modelTierStateSuite) TestADeclarationOfNilTurnsTiersOff() {
-	var state State
-	state.SetDefault(func() (*Set, error) {
-		return nil, errors.New("the default must not build when tiers are off")
-	})
-	state.Declare(nil)
-	set, err := state.Tiers()
-	s.Require().NoError(err)
-	s.Nil(set)
-}
-
-func (s *modelTierStateSuite) TestADefaultThatFailsReturnsItsErrorAndBuildsAgain() {
-	var state State
-	builds := 0
-	shipped := s.named("Shipped")
-	state.SetDefault(func() (*Set, error) {
-		builds++
-		if builds == 1 {
-			return nil, errors.New("broken")
-		}
-		return shipped, nil
-	})
-	_, err := state.Tiers()
-	s.Require().ErrorContains(err, "broken")
-	set, err := state.Tiers()
-	s.Require().NoError(err)
-	s.Same(shipped, set)
-}
-
-func (s *modelTierStateSuite) TestTheContextCarriesTheState() {
-	state := &State{}
-	s.Same(state, StateFromContext(WithState(s.T().Context(), state)))
-	s.Nil(StateFromContext(s.T().Context()))
+	_, err = set.Alias(testHost, s.at(s.tiers(fourTiers()), 0))
+	var foreign *ForeignTierError
+	s.Require().ErrorAs(err, &foreign)
 }

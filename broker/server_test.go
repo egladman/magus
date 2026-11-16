@@ -171,7 +171,7 @@ func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
 	require.Len(t, c.Waiting, 1)
 	w := c.Waiting[0]
 	assert.Equal(t, budget.Waiter{PID: 102, Project: ".", Target: "lint", Slots: 1, Dir: w.Dir, Command: w.Command,
-		Owner: "plan/b", Tree: "plan", Since: w.Since, WaitedMS: w.WaitedMS}, w)
+		Owner: "plan/b", Tree: "plan", Since: w.Since, WaitedMs: w.WaitedMs}, w)
 	require.Len(t, c.Refused, 1)
 	r := c.Refused[0]
 	assert.Equal(t, 103, r.PID)

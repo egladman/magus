@@ -11,7 +11,6 @@ import (
 
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
@@ -158,7 +157,7 @@ const noCallFacts = "the trail holds no per-call facts for this session"
 // SummarizeCost folds one session's trail into the cost sections. tr is nil when this
 // checkout's trail holds nothing for the session, in which case no section is measured.
 // tr is not modified.
-func SummarizeCost(tr *SessionTrail, table tier.Table) *SessionCost {
+func SummarizeCost(tr *SessionTrail, table model.Table) *SessionCost {
 	c := &SessionCost{NotMeasured: map[costSection]string{}}
 	if tr == nil {
 		for _, s := range costSections {
@@ -336,10 +335,10 @@ func tallyShadow(main []SessionCall) []shadowTally {
 	return out
 }
 
-// estimateDollars prices the main thread's context through [tier.Table.PriceContext], the
+// estimateDollars prices the main thread's context through [model.Table.PriceContext], the
 // arithmetic a job's recorded outcome is priced by too, and returns its reason instead when
 // the price would be a guess.
-func estimateDollars(main []SessionCall, table tier.Table) (*dollarEstimate, string) {
+func estimateDollars(main []SessionCall, table model.Table) (*dollarEstimate, string) {
 	facts := make([]types.AgentFacts, len(main))
 	for i, call := range main {
 		facts[i] = call.AgentFacts

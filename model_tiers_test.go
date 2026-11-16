@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/job"
@@ -42,7 +43,7 @@ func TestModelRowsLetAJobPutResolveAnAliasThroughARealMagus(t *testing.T) {
 		Display:    agent.HarnessDisplay{Name: "Opus host"},
 		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
 		Config:     types.HarnessConfig{Path: "hooks.json"},
-		Models:     []tier.Pricing{{ID: "claude-opus-test", Alias: "opus", Tier: "design"}},
+		Models:     []model.Row{{ID: "claude-opus-test", Alias: "opus", Tier: "design"}},
 	})
 	root := writeWorkspace(t, map[string]string{
 		"magus.yaml":                  "",
@@ -110,6 +111,6 @@ func (s *modelTiersSuite) TestTheMatrixIsTheRegistrysLatest() {
 func (s *modelTiersSuite) TestTheLoadContextCarriesTheTiers() {
 	m := &Magus{wsReg: workspace.NewWorkspaceRegistry()}
 	ctx := m.installWorkspaceRegistry(s.T().Context())
-	s.Same(&m.modelTiers, tier.StateFromContext(ctx))
+	s.Same(&m.modelTiers, model.TierStateFromContext(ctx))
 	s.Same(m.wsReg, workspace.WorkspaceRegistryFromContext(ctx))
 }

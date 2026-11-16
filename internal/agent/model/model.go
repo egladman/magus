@@ -3,7 +3,6 @@ package model
 import (
 	"fmt"
 
-	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
 
@@ -21,7 +20,7 @@ type contextFloor struct {
 // call to price, billing that is not metered on every call, or a model the table does not
 // know. Consecutive calls reporting the same context are one model call that ran several
 // tools, so they are priced once.
-func PriceContext(t tier.Table, calls []types.AgentFacts) (contextFloor, string) {
+func PriceContext(t Table, calls []types.AgentFacts) (contextFloor, string) {
 	var samples []types.AgentFacts
 	for _, call := range calls {
 		if call.ContextTokens > 0 {
@@ -53,7 +52,7 @@ func PriceContext(t tier.Table, calls []types.AgentFacts) (contextFloor, string)
 		prev = call
 		floor.Calls++
 		floor.Tokens += call.ContextTokens
-		floor.USD += float64(call.ContextTokens) / 1e6 * float64(pricing.CacheRead) * pricing.PriceMultiplier(call.ContextTokens)
+		floor.USD += float64(call.ContextTokens) / 1e6 * float64(pricing.CacheRead) * pricing.Multiplier(call.ContextTokens)
 	}
 	return floor, ""
 }

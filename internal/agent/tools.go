@@ -12,8 +12,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
@@ -27,7 +29,7 @@ const ToolRowsVersion types.APIVersion = "magus.tool-rows/v1alpha1"
 // publishes through mgs_listModels, and the workspace's model-tier declaration, nil when it
 // declares none or turned tiers off.
 type ModelFacts struct {
-	Rows  []tier.Pricing
+	Rows  []model.Row
 	Tiers *tier.Set
 }
 
@@ -339,7 +341,7 @@ func ToolRowsFromContext(ctx context.Context) (ToolRows, bool) {
 	return rows, ok
 }
 
-// modelRowLine is one model row as the models file keeps it; tier.Pricing carries no
+// modelRowLine is one model row as the models file keeps it; model.Row carries no
 // wire tags.
 type modelRowLine struct {
 	ID           string  `json:"id"`
@@ -355,7 +357,7 @@ type modelRowLine struct {
 	StepFactor   float64 `json:"step_factor,omitzero"`
 }
 
-func encodeModelRows(rows []tier.Pricing) string {
+func encodeModelRows(rows []model.Row) string {
 	var b strings.Builder
 	for _, r := range rows {
 		line := modelRowLine{
@@ -370,19 +372,18 @@ func encodeModelRows(rows []tier.Pricing) string {
 	return b.String()
 }
 
-func decodeModelRows(body []byte) ([]tier.Pricing, error) {
-	var rows []tier.Pricing
+func decodeModelRows(body []byte) ([]model.Row, error) {
+	var rows []model.Row
 	for i, raw := range jsonLines(body) {
 		var line modelRowLine
 		if err := codec.Unmarshal(raw, &line); err != nil {
 			return nil, fmt.Errorf("line %d: %w", i+1, err)
 		}
-		row := tier.Pricing{
-			ID: line.ID, Tier: line.Tier, Alias: line.Alias, Window: line.Window, Input: tier.USDPerMTok(line.Input), CacheWrite5m: tier.USDPerMTok(line.CacheWrite5m),
-			CacheWrite1h: tier.USDPerMTok(line.CacheWrite1h), CacheRead: tier.USDPerMTok(line.CacheRead), Output: tier.USDPerMTok(line.Output),
+		row := model.Row{
+			ID: line.ID, Tier: line.Tier, Alias: line.Alias, Window: line.Window, Price: budget.Price{Input: budget.USDPerMTok(line.Input), CacheWrite5m: budget.USDPerMTok(line.CacheWrite5m), CacheWrite1h: budget.USDPerMTok(line.CacheWrite1h), CacheRead: budget.USDPerMTok(line.CacheRead), Output: budget.USDPerMTok(line.Output)},
 		}
 		if line.PriceStep > 0 {
-			row.LongContext = &tier.PriceStep{Above: line.PriceStep, Multiplier: line.StepFactor}
+			row.LongContext = &budget.PriceStep{Above: line.PriceStep, Multiplier: line.StepFactor}
 		}
 		rows = append(rows, row)
 	}

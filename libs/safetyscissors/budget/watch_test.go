@@ -15,7 +15,12 @@ import (
 // so a refusal does not cost every test three seconds.
 const testGrace = 50 * time.Millisecond
 
-func newTestLimiter(n int) *Limiter { return NewLimiter(n, WithDeadlockGrace(testGrace)) }
+func newTestLimiter(t *testing.T, n int) *Limiter {
+	t.Helper()
+	grace, err := WithDeadlockGrace(testGrace)
+	require.NoError(t, err)
+	return NewLimiter(n, grace)
+}
 
 func requireDeadlock(t *testing.T, err error) {
 	t.Helper()
@@ -32,7 +37,7 @@ func TestWatch(t *testing.T) { suite.Run(t, new(WatchSuite)) }
 // proceed until a seat frees.
 func wedgedPool(t *testing.T) *Limiter {
 	t.Helper()
-	lim := newTestLimiter(2)
+	lim := newTestLimiter(t, 2)
 	build, err := lim.acquireWatched(context.Background(), 1, ". build")
 	require.NoError(t, err)
 	test, err := lim.acquireWatched(context.Background(), 1, ". test")
@@ -68,7 +73,7 @@ func (s *WatchSuite) TestSlotWatchRefusesAWaitNothingCanEnd() {
 
 func (s *WatchSuite) TestSlotWatchLeavesABusyPoolAlone() {
 	t := s.T()
-	lim := newTestLimiter(2)
+	lim := newTestLimiter(s.T(), 2)
 	working, err := lim.acquireWatched(context.Background(), 1, ". build")
 	require.NoError(t, err)
 	parked, err := lim.acquireWatched(context.Background(), 1, ". test")
@@ -95,7 +100,7 @@ func (s *WatchSuite) TestSlotWatchLeavesABusyPoolAlone() {
 
 func (s *WatchSuite) TestSlotWatchIgnoresAYieldedHold() {
 	t := s.T()
-	lim := newTestLimiter(2)
+	lim := newTestLimiter(s.T(), 2)
 	composer, err := lim.acquireWatched(context.Background(), 1, ". ci")
 	require.NoError(t, err)
 	blocked, err := lim.acquireWatched(context.Background(), 1, ". test")
@@ -113,16 +118,16 @@ func (s *WatchSuite) TestSlotWatchIgnoresAYieldedHold() {
 	lim.Release()
 }
 
-func (s *WatchSuite) TestBlockedOnIsANoOpOutsideAnAdmittedStep() {
+func (s *WatchSuite) TestMarkWaitingIsANoOpOutsideAnAdmittedStep() {
 	t := s.T()
 	// A bare Run in a test, a spell reaching a wait with no seat of its own: the mark has
 	// nowhere to land and the call site must not have to know that.
-	assert.NotPanics(t, func() { BlockedOn(context.Background(), "the cache lock")() })
+	assert.NotPanics(t, func() { MarkWaiting(context.Background(), "the cache lock")() })
 }
 
 func (s *WatchSuite) TestAdmitMarksTheStepBlockedWhileItWaitsForMoreSlots() {
 	t := s.T()
-	lim := newTestLimiter(2)
+	lim := newTestLimiter(s.T(), 2)
 	parent, err := lim.acquireWatched(context.Background(), 1, ". ci")
 	require.NoError(t, err)
 	other, err := lim.acquireWatched(context.Background(), 1, ". test")
@@ -144,7 +149,7 @@ func (s *WatchSuite) TestAdmitMarksTheStepBlockedWhileItWaitsForMoreSlots() {
 // by hand at the end.
 func (s *WatchSuite) TestSlotWatchSeesAYieldReacquire() {
 	t := s.T()
-	lim := newTestLimiter(2)
+	lim := newTestLimiter(s.T(), 2)
 	build, err := lim.acquireWatched(context.Background(), 1, ". build")
 	require.NoError(t, err)
 	composer, err := lim.acquireWatched(context.Background(), 1, ". ci")
@@ -162,7 +167,7 @@ func (s *WatchSuite) TestSlotWatchSeesAYieldReacquire() {
 	back := make(chan struct{})
 	go func() {
 		defer close(back)
-		lim.reacquireYielded(ctx, 1)
+		_ = lim.reacquireYielded(ctx, 1)
 	}()
 
 	_, err = lim.acquireWatched(t.Context(), 1, ". mocks-generate")
@@ -185,7 +190,7 @@ func (s *WatchSuite) TestSlotWatchSeesAYieldReacquire() {
 // step that needed it, or the run waits out --target-timeout instead of being refused.
 func (s *WatchSuite) TestAdmitShowsItsHolderToTheSlotWatch() {
 	t := s.T()
-	lim := newTestLimiter(1)
+	lim := newTestLimiter(s.T(), 1)
 	parent, err := lim.acquireWatched(context.Background(), 1, "libs/textsearch test")
 	require.NoError(t, err)
 	ctx := withSlotHold(WithSlotHeld(context.Background()), parent)
@@ -204,7 +209,7 @@ func (s *WatchSuite) TestAdmitShowsItsHolderToTheSlotWatch() {
 
 	parent.done()
 	lim.Release()
-	assert.Equal(t, LimiterStats{Capacity: 1}, lim.Snapshot(), "Admit's release gave its slot back")
+	assert.Equal(t, LimiterSnapshot{Capacity: 1}, lim.Snapshot(), "Admit's release gave its slot back")
 }
 
 // TestSlotWatchKeepsANestedYieldUntilTheOuterEnds: a yield nested inside another on the
@@ -213,7 +218,7 @@ func (s *WatchSuite) TestAdmitShowsItsHolderToTheSlotWatch() {
 // not read it as holding the slot someone else took in the meantime.
 func (s *WatchSuite) TestSlotWatchKeepsANestedYieldUntilTheOuterEnds() {
 	t := s.T()
-	lim := newTestLimiter(1)
+	lim := newTestLimiter(s.T(), 1)
 	composer, err := lim.acquireWatched(context.Background(), 1, ". test")
 	require.NoError(t, err)
 	composer.block("its spells")
@@ -242,7 +247,9 @@ func (s *WatchSuite) TestRefusalIsTheCallersError() {
 	t := s.T()
 	coded := errors.New("coded refusal")
 	var saw SlotDeadlock
-	lim := NewLimiter(2, WithDeadlockGrace(testGrace), WithRefusal(func(d SlotDeadlock) error {
+	grace, err := WithDeadlockGrace(testGrace)
+	require.NoError(t, err)
+	lim := NewLimiter(2, grace, WithRefusal(func(d SlotDeadlock) error {
 		saw = d
 		return coded
 	}))
@@ -265,11 +272,47 @@ func (s *WatchSuite) TestRefusalIsTheCallersError() {
 // Seat's release retires the hold and gives the slots back.
 func (s *WatchSuite) TestSeatReleaseGivesTheSlotsBack() {
 	t := s.T()
-	lim := newTestLimiter(3)
+	lim := newTestLimiter(s.T(), 3)
 	held, release, err := lim.Seat(t.Context(), 2, ". build")
 	require.NoError(t, err)
 	assert.Equal(t, 0, SlotsHeld(held), "Seat leaves marking the slots held to the body")
 	assert.Equal(t, 2, lim.Snapshot().Running)
 	release()
-	assert.Equal(t, LimiterStats{Capacity: 3}, lim.Snapshot())
+	assert.Equal(t, LimiterSnapshot{Capacity: 3}, lim.Snapshot())
+}
+
+// A seat of fewer than one slot takes one, as AcquireN floors it, so its release gives
+// that slot back rather than leaking it.
+func (s *WatchSuite) TestSeatFloorsACountBelowOne() {
+	lim := newTestLimiter(s.T(), 1)
+	_, release, err := lim.Seat(s.T().Context(), 0, ". build")
+	s.Require().NoError(err)
+	s.Equal(1, lim.Snapshot().Running)
+	release()
+	s.Equal(LimiterSnapshot{Capacity: 1}, lim.Snapshot())
+}
+
+func (s *WatchSuite) TestDeadlockGraceRefusesANonPositiveGrace() {
+	for _, d := range []time.Duration{0, -time.Second} {
+		opt, err := WithDeadlockGrace(d)
+		s.Nil(opt)
+		var refused *GraceError
+		s.Require().ErrorAs(err, &refused)
+		s.Equal(d, refused.Grace)
+	}
+}
+
+// A timer stopped after it fired still runs its verdict; it must leave the timer armed
+// since alone, or that one fires unwatched.
+func (s *WatchSuite) TestAStaleTimerLeavesTheArmedOneAlone() {
+	w := newTestLimiter(s.T(), 1).watch
+	stale := time.NewTimer(time.Hour)
+	defer stale.Stop()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.armLocked(time.Hour)
+	armed := w.timer
+	defer armed.Stop()
+	w.fireVerdictLocked(stale)
+	s.Same(armed, w.timer)
 }

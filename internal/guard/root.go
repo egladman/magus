@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -383,7 +384,7 @@ func gradeMainWrite(deps Dependencies, judged verdict.Judgment, path string, lea
 // fire. The magusfile load cannot say so: the harness rows that make the table load after
 // it. The table is read only for a stated figure, and one with no window has nothing to
 // bound it by.
-func budgetPastEveryWindow(s builtin.Setting, table func() tier.Table) (costFinding, bool) {
+func budgetPastEveryWindow(s builtin.Setting, table func() model.Table) (costFinding, bool) {
 	if s.Decision == builtin.Off || s.Tokens <= 0 {
 		return costFinding{}, false
 	}
@@ -485,7 +486,7 @@ type forkedTier struct {
 	set    *tier.Set
 	// rows are the mgs_listModels rows: their aliases name the short model a host's spawn
 	// tool takes where the declaration maps only full ids.
-	rows []tier.Pricing
+	rows []model.Row
 }
 
 // boundModelTier is the tier row was forked at, as tierIn finds it in the workspace's
@@ -556,12 +557,12 @@ func (f forkedTier) refusal(host, model string) string {
 
 // sameListedModel reports whether a and b name one mgs_listModels row by exact
 // id or alias. A tierless row still names a model, so another spelling matches.
-func sameListedModel(rows []tier.Pricing, a, b string) bool {
+func sameListedModel(rows []model.Row, a, b string) bool {
 	if a == "" || b == "" {
 		return false
 	}
 	idx := func(m string) int {
-		return slices.IndexFunc(rows, func(r tier.Pricing) bool {
+		return slices.IndexFunc(rows, func(r model.Row) bool {
 			return r.ID == m || r.Alias != "" && r.Alias == m
 		})
 	}

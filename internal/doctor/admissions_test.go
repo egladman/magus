@@ -30,9 +30,9 @@ func (s *BudgetAdmissionsSuite) TestCountsRefusalsInTheLastDayOnly() {
 
 func (s *BudgetAdmissionsSuite) TestCountsWaitsPastAQuarterOfTheirBound() {
 	got := gradeBudgetAdmissions([]budget.Admission{
-		{At: admissionsNow, Outcome: budget.AdmissionSeated, WaitedMS: 300, WaitBoundMS: 1000},
-		{At: admissionsNow, Outcome: budget.AdmissionSeated, WaitedMS: 250, WaitBoundMS: 1000},
-		{At: admissionsNow, Outcome: budget.AdmissionSeated, WaitedMS: 100, WaitBoundMS: 1000},
+		{At: admissionsNow, Outcome: budget.AdmissionSeated, WaitedMs: 300, WaitBound: time.Second},
+		{At: admissionsNow, Outcome: budget.AdmissionSeated, WaitedMs: 250, WaitBound: time.Second},
+		{At: admissionsNow, Outcome: budget.AdmissionSeated, WaitedMs: 100, WaitBound: time.Second},
 	}, admissionsNow)
 	s.Contains(got.Message, "1 wait(s) past a quarter")
 }

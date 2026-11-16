@@ -21,13 +21,13 @@ func TestAdmissionLogRecordsASeatedWaitAndARefusal(t *testing.T) {
 	held, err := holder.Claim(t.Context(), budget.Claim{Project: ".", Target: "vet", Slots: 1, PID: 100}, nil)
 	require.NoError(t, err)
 	require.True(t, held.Granted)
-	waiting := claimAsync(t, t.Context(), addr, waiter, budget.Claim{Project: ".", Target: "test", Slots: 1, PID: 200, WaitBoundMS: 60_000})
+	waiting := claimAsync(t, t.Context(), addr, waiter, budget.Claim{Project: ".", Target: "test", Slots: 1, PID: 200, WaitBound: time.Minute})
 	requirePending(t, waiting)
 	time.Sleep(5 * time.Millisecond) // a wait the record can measure
 	holder.Release(t.Context(), held.ID)
 	require.True(t, requireAnswer(t, waiting).v.Granted)
 
-	refused, err := holder.Request(t.Context(), budget.Claim{Project: ".", Target: "lint", Slots: 1, PID: 300, WaitedMS: 30_000, WaitBoundMS: 30_000})
+	refused, err := holder.Request(t.Context(), budget.Claim{Project: ".", Target: "lint", Slots: 1, PID: 300, WaitedMs: 30_000, WaitBound: 30 * time.Second})
 	require.NoError(t, err)
 	require.False(t, refused.Granted)
 
@@ -39,13 +39,13 @@ func TestAdmissionLogRecordsASeatedWaitAndARefusal(t *testing.T) {
 
 	assert.Equal(t, budget.AdmissionSeated, got[0].Outcome)
 	assert.Equal(t, "test", got[0].Target)
-	assert.Positive(t, got[0].WaitedMS, "a seated wait says how long it waited")
-	assert.Equal(t, int64(60_000), got[0].WaitBoundMS)
+	assert.Positive(t, got[0].WaitedMs, "a seated wait says how long it waited")
+	assert.Equal(t, time.Minute, got[0].WaitBound)
 	assert.Equal(t, 1, got[0].Slots)
 
 	assert.Equal(t, budget.AdmissionRefused, got[1].Outcome)
 	assert.Equal(t, "lint", got[1].Target)
-	assert.Equal(t, int64(30_000), got[1].WaitedMS)
+	assert.Equal(t, int64(30_000), got[1].WaitedMs)
 	assert.Equal(t, 1, got[1].BudgetSlots)
 	require.Len(t, got[1].Holders, 1)
 	assert.Equal(t, "test", got[1].Holders[0].Target)

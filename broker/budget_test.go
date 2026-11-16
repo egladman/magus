@@ -28,7 +28,7 @@ func waiters(t *testing.T, addr string) []budget.Waiter {
 	require.NoError(t, err)
 	w := st.Capacity.Waiting
 	for i := range w {
-		w[i].Since, w[i].WaitedMS = time.Time{}, 0
+		w[i].Since, w[i].WaitedMs = time.Time{}, 0
 	}
 	return w
 }
@@ -352,7 +352,7 @@ func TestCapacityJSONCarriesOwnersWaitersAndRefusals(t *testing.T) {
 	b, err := codec.Marshal(budget.Snapshot{
 		BudgetSlots: 10, HeldSlots: 8,
 		Holders: []budget.Claimant{holder},
-		Waiting: []budget.Waiter{{PID: 2, Project: ".", Target: "lint", Slots: 1, Dir: "/w", Owner: "unleased", Since: at, WaitedMS: 1500}},
+		Waiting: []budget.Waiter{{PID: 2, Project: ".", Target: "lint", Slots: 1, Dir: "/w", Owner: "unleased", Since: at, WaitedMs: 1500}},
 		Refused: []budget.Admission{{At: at, PID: 3, Project: ".", Target: "ci", Slots: 4, Owner: "spawned by root", Fits: true,
 			Holders: []budget.Claimant{holder}}},
 	})

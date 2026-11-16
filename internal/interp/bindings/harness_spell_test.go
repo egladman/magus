@@ -11,8 +11,10 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
@@ -477,14 +479,13 @@ func TestAHarnessWithAnUnknownChannelIsRefused(t *testing.T) {
 
 func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {
 	rows := loadShippedHarness(t, "claude-code").Models
-	assert.Equal(t, []tier.Pricing{
-		{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
-		{ID: "claude-opus-5-5", Tier: "design", Alias: "opus", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.2, Output: 20},
-		{ID: "claude-fable-5-2", Tier: "frontier", Alias: "fable", Window: 1_000_000, Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
-		{ID: "claude-sonnet-5-5", Tier: "bounded", Alias: "sonnet", Window: 1_000_000, Input: 2, CacheWrite5m: 2.5, CacheWrite1h: 4, CacheRead: 0.1, Output: 10},
-		{ID: "claude-haiku-5-5", Tier: "routine", Alias: "haiku", Window: 1_000_000, Input: 0.1, CacheWrite5m: 0.125, CacheWrite1h: 0.2, CacheRead: 0.01, Output: 0.5,
-			LongContext: &tier.PriceStep{Above: 100_000, Multiplier: 5}},
-		{ID: "claude-haiku-4-5", Window: 200_000, Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.1, Output: 5},
+	assert.Equal(t, []model.Row{
+		{ID: "claude-fable-5-1", Window: 1_000_000, Price: budget.Price{Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50}},
+		{ID: "claude-opus-5-5", Tier: "design", Alias: "opus", Window: 1_000_000, Price: budget.Price{Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.2, Output: 20}},
+		{ID: "claude-fable-5-2", Tier: "frontier", Alias: "fable", Window: 1_000_000, Price: budget.Price{Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50}},
+		{ID: "claude-sonnet-5-5", Tier: "bounded", Alias: "sonnet", Window: 1_000_000, Price: budget.Price{Input: 2, CacheWrite5m: 2.5, CacheWrite1h: 4, CacheRead: 0.1, Output: 10}},
+		{ID: "claude-haiku-5-5", Tier: "routine", Alias: "haiku", Window: 1_000_000, Price: budget.Price{Input: 0.1, CacheWrite5m: 0.125, CacheWrite1h: 0.2, CacheRead: 0.01, Output: 0.5, LongContext: &budget.PriceStep{Above: 100_000, Multiplier: 5}}},
+		{ID: "claude-haiku-4-5", Window: 200_000, Price: budget.Price{Input: 1, CacheWrite5m: 1.25, CacheWrite1h: 2, CacheRead: 0.1, Output: 5}},
 	}, rows)
 	for _, id := range []string{"codex", "cursor", "opencode"} {
 		assert.Empty(t, loadShippedHarness(t, id).Models, id)
@@ -495,12 +496,11 @@ func TestValidateModelRowsReadsPricesAndTiers(t *testing.T) {
 	got, tiers, err := validateModelRows([]types.HarnessModel{{
 		ID: "m-1", Tier: "bounded", Alias: "mid", Window: 200000,
 		Price: types.Price{Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3, CacheRead: 0.1, Output: 7},
-		Step:  tier.PriceStep{Above: 100000, Multiplier: 2},
+		Step:  types.PriceStep{Above: 100000, Multiplier: 2},
 	}})
 
 	require.NoError(t, err)
-	assert.Equal(t, []tier.Pricing{{ID: "m-1", Tier: "bounded", Alias: "mid", Window: 200000, Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3,
-		CacheRead: 0.1, Output: 7, LongContext: &tier.PriceStep{Above: 100000, Multiplier: 2}}}, got)
+	assert.Equal(t, []model.Row{{ID: "m-1", Tier: "bounded", Alias: "mid", Window: 200000, Price: budget.Price{Input: 1.5, CacheWrite5m: 2, CacheWrite1h: 3, CacheRead: 0.1, Output: 7, LongContext: &budget.PriceStep{Above: 100000, Multiplier: 2}}}}, got)
 	assert.Equal(t, map[string][]string{"bounded": {"m-1"}}, tiers)
 
 	_, tiers, err = validateModelRows([]types.HarnessModel{{ID: "m-1"}})
@@ -513,9 +513,9 @@ func TestValidateModelRowsRefusesWhatNamesNoOneModel(t *testing.T) {
 		rows []types.HarnessModel
 		want string
 	}{
-		"step without multiplier": {[]types.HarnessModel{{ID: "m-1", Step: tier.PriceStep{Above: 100000}}},
+		"step without multiplier": {[]types.HarnessModel{{ID: "m-1", Step: types.PriceStep{Above: 100000}}},
 			"row 1 (m-1) sets one of the price step's above and multiplier without the other"},
-		"multiplier without step": {[]types.HarnessModel{{ID: "m-1", Step: tier.PriceStep{Multiplier: 2}}},
+		"multiplier without step": {[]types.HarnessModel{{ID: "m-1", Step: types.PriceStep{Multiplier: 2}}},
 			"row 1 (m-1) sets one of the price step's above and multiplier without the other"},
 		"alias without a tier": {[]types.HarnessModel{{ID: "m-1", Alias: "mid"}},
 			"row 1 (m-1) sets alias mid without a tier, so the alias names no tier"},

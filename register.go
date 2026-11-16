@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/guard/steps"
@@ -209,7 +210,7 @@ func WorkspaceRegistryFromContext(ctx context.Context) *WorkspaceRegistry {
 // installWorkspaceRegistry puts what a magusfile declares into on ctx: the
 // registry, and the model tiers and step rules m holds.
 func (m *Magus) installWorkspaceRegistry(ctx context.Context) context.Context {
-	ctx = tier.WithState(workspace.ContextWithRegistry(ctx, m.wsReg), &m.modelTiers)
+	ctx = model.WithTierState(workspace.ContextWithRegistry(ctx, m.wsReg), &m.modelTiers)
 	return steps.WithGroup(ctx, &m.stepRules)
 }
 

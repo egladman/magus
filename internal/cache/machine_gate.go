@@ -410,7 +410,7 @@ func (g *machineGate) atBound(ctx context.Context, c budget.Claim, w *budgetWait
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
 	defer cancel()
 	// The broker records the wait this ask ends.
-	c.WaitedMS = w.waited().Milliseconds()
+	c.WaitedMs = w.waited().Milliseconds()
 	v, err := g.admit.Request(rctx, c)
 	switch {
 	case err != nil:
@@ -474,7 +474,7 @@ type budgetWait struct {
 func (g *machineGate) newBudgetWait(ctx context.Context, c budget.Claim) (context.Context, *budgetWait) {
 	wctx, cancel := context.WithCancel(ctx)
 	bound := budgetBound(ctx, g.wait)
-	c.WaitBoundMS = bound.d.Milliseconds()
+	c.WaitBound = bound.d
 	return wctx, &budgetWait{cancel: cancel, gate: g, claim: c, bound: bound, blind: blindToOwnAncestry(ctx)}
 }
 

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/guard/steps"
 	"github.com/egladman/magus/internal/hint"
@@ -107,7 +108,7 @@ type Dependencies struct {
 	// only for a judgment that needs a window or a price, never for one that needs only
 	// the billing mode. Nil means no rows: a rule then finds no facts for a model, as for
 	// one the table does not know. It is read per judgment and never kept past one.
-	ModelRows func() []tier.Pricing
+	ModelRows func() []model.Row
 	// ModelTiers yields the workspace's model-tier declaration, nil when it turned tiers
 	// off or did not load. It opens the workspace whole, so the guard asks only once a job
 	// row the call is bound to records a tier. Nil means no declaration: the tier rules then
@@ -2475,7 +2476,7 @@ type location struct {
 	// workspace root does, and that difference is the whole of what focus judges.
 	dir string
 	// models is the judged request's Dependencies.ModelRows.
-	models func() []tier.Pricing
+	models func() []model.Row
 	// policies is what the workspace declares and how it was read, read once per judgment
 	// and only when a rule asks.
 	policies func() declaredIndex

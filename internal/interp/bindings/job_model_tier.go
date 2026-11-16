@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
@@ -47,7 +48,7 @@ declareDefault(modeltiers\ModelTier, modeltiers\defaultTier, modeltiers\bounds, 
 // Nothing declared here selects a model at run time.
 func registerModelTiers(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, magus vm.Value) {
 	// A load that holds no tiers, as the guard's, still checks a declaration.
-	tiers := tier.StateFromContext(ctx)
+	tiers := model.TierStateFromContext(ctx)
 	if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil && tiers != nil {
 		// The context outlives the load that built it: a fork asks long after.
 		defaultCtx := context.WithoutCancel(ctx)
@@ -137,7 +138,7 @@ func registerModelTierMatrix(ctx context.Context, sess *buzz.Session, obs buzz.D
 			}
 			return vm.Null, nil
 		}
-		reg.SetModelTierMatrix(buzzModelTierMatrix(sess, tier.StateFromContext(ctx), args[0], modelTierSite(ctx)))
+		reg.SetModelTierMatrix(buzzModelTierMatrix(sess, model.TierStateFromContext(ctx), args[0], modelTierSite(ctx)))
 		// The fork calls it after this load has closed.
 		reg.Keep(sess.Keep())
 		return vm.Null, nil
@@ -412,17 +413,18 @@ func defaultModelTierSet(ctx context.Context, wired []string) (*tier.Set, error)
 
 // buzzModelTierMatrix checks the answer against the declaration in force when it is
 // called, since the modelTiers and modelTier calls may come in either order.
-func buzzModelTierMatrix(sess *buzz.Session, tiers *tier.State, matrix vm.Value, site string) types.ModelTierMatrix {
+func buzzModelTierMatrix(sess *buzz.Session, tiers *model.TierState, matrix vm.Value, site string) types.ModelTierMatrix {
 	return func(ctx context.Context, req types.ModelTierRequest) (*tier.Assignment, error) {
 		if tiers == nil {
 			return nil, fmt.Errorf("%s: the load that registered the matrix holds no model tiers", modelTierMember)
 		}
 		set, err := tiers.Tiers()
-		if err != nil {
+		var off *model.TiersOffError
+		switch {
+		case errors.As(err, &off):
+			return nil, fmt.Errorf("%s: the workspace has no model tiers to choose among: %w", modelTierMember, err)
+		case err != nil:
 			return nil, fmt.Errorf("%s: the default model tier declaration does not load: %w", modelTierMember, err)
-		}
-		if set == nil {
-			return nil, fmt.Errorf("%s: the workspace has no model tiers to choose among: magus\\modelTiers(null) turned them off", modelTierMember)
 		}
 		return callModelTierMatrix(ctx, sess, set, matrix, req, site, tier.SourceMatrix)
 	}

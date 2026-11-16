@@ -19,9 +19,9 @@ const ExitCodeSlotDeadlock = 78
 
 // NewLimiter returns magus's limiter of capacity n (n <= 0 is unlimited): a
 // [budget.Limiter] whose refusal of a wait no slot can end is MGS3013, exiting
-// [ExitCodeSlotDeadlock].
-func NewLimiter(n int) *budget.Limiter {
-	return budget.NewLimiter(n, budget.WithRefusal(slotDeadlockError))
+// [ExitCodeSlotDeadlock]. opts follow that refusal, so one of them may replace it.
+func NewLimiter(n int, opts ...budget.LimiterOption) *budget.Limiter {
+	return budget.NewLimiter(n, append([]budget.LimiterOption{budget.WithRefusal(slotDeadlockError)}, opts...)...)
 }
 
 // slotDeadlockError builds the MGS3013 error from what the limiter saw. It carries its

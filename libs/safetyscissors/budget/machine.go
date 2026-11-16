@@ -49,36 +49,40 @@ type entry struct {
 	overrun bool
 }
 
+// MachineOption configures a [Machine] at construction.
+type MachineOption func(*Machine)
+
 // NewMachine returns a budget of budgetMB megabytes and budgetSlots concurrency
 // slots. A non-positive figure leaves that half unlimited, the fallback for a host the
 // caller cannot measure.
-func NewMachine(budgetMB, budgetSlots int) *Machine {
-	return &Machine{
+func NewMachine(budgetMB, budgetSlots int, opts ...MachineOption) *Machine {
+	m := &Machine{
 		budgetMB:    budgetMB,
 		budgetSlots: budgetSlots,
 		claims:      map[string]*entry{},
 	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
 
 // WithReserve records what the memory budget left the OS, for Snapshot to name.
-func (b *Machine) WithReserve(r Reserve) *Machine {
-	b.reserve = r
-	return b
+func WithReserve(r Reserve) MachineOption {
+	return func(m *Machine) { m.reserve = r }
 }
 
 // WithWrappers names the invocations that only wrap a command: they hold slots and run
 // no step, so nothing is blocked in exec above their children. Without it every
 // invocation is a step, and a wrapper's child may be seated free on its account.
-func (b *Machine) WithWrappers(isWrapper func(invocation string) bool) *Machine {
-	b.wrapper = isWrapper
-	return b
+func WithWrappers(isWrapper func(invocation string) bool) MachineOption {
+	return func(m *Machine) { m.wrapper = isWrapper }
 }
 
 // WithClock charges curved claims by now instead of the real clock, so a caller that
 // replays or simulates a host reaches the verdict the host would have.
-func (b *Machine) WithClock(now func() time.Time) *Machine {
-	b.now = now
-	return b
+func WithClock(now func() time.Time) MachineOption {
+	return func(m *Machine) { m.now = now }
 }
 
 func (b *Machine) isWrapper(invocation string) bool {
@@ -164,11 +168,11 @@ func (b *Machine) grant(ceiling, floor, heldSlots, queued int) int {
 	return max(floor, min(ceiling, share))
 }
 
-// Assert records a claim without asking whether it fits, and returns its id. It is for
+// Adopt records a claim without asking whether it fits, and returns its id. It is for
 // a claim granted by an arbiter that has since died: the step is already running, so its
 // memory is spent whatever this budget thinks, and refusing to record it would admit
 // new work against memory that is in use.
-func (b *Machine) Assert(c Claim) string {
+func (b *Machine) Adopt(c Claim) string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if c.Slots < 1 {
@@ -490,8 +494,7 @@ func isMachineAncestor(invocation string, ancestors []string) bool {
 // when they never do. It explains a verdict after the fact from the holders the verdict
 // named.
 func Breach(budgetMB int, holders []Claimant, c Claim, now time.Time) (at time.Time, ok bool) {
-	b := NewMachine(budgetMB, 0)
-	b.now = func() time.Time { return now }
+	b := NewMachine(budgetMB, 0, WithClock(func() time.Time { return now }))
 	for i, h := range holders {
 		b.claims[strconv.Itoa(i)] = &entry{
 			claim:   Claim{MemoryMB: h.MemoryMB, Profile: h.Profile},

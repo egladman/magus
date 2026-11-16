@@ -21,12 +21,12 @@ func TestLimiter(t *testing.T) { suite.Run(t, new(LimiterSuite)) }
 func (s *LimiterSuite) TestSnapshot() {
 	t := s.T()
 	l := NewLimiter(3)
-	assert.Equal(t, LimiterStats{Capacity: 3, Running: 0, Queued: 0}, l.Snapshot(), "initial snapshot")
+	assert.Equal(t, LimiterSnapshot{Capacity: 3, Running: 0, Queued: 0}, l.Snapshot(), "initial snapshot")
 
 	_ = l.Acquire(context.Background())
 	_ = l.Acquire(context.Background())
 	snap := l.Snapshot()
-	assert.Equal(t, LimiterStats{Capacity: 3, Running: 2}, snap, "after 2 acquires")
+	assert.Equal(t, LimiterSnapshot{Capacity: 3, Running: 2}, snap, "after 2 acquires")
 
 	l.Release()
 	assert.Equal(t, 1, l.Snapshot().Running, "after release")
@@ -39,7 +39,7 @@ func (s *LimiterSuite) TestUnlimited() {
 		require.NoError(t, l.Acquire(context.Background()))
 	}
 	snap := l.Snapshot()
-	assert.Equal(t, LimiterStats{}, snap, "an unlimited limiter reports no capacity and counts nothing running")
+	assert.Equal(t, LimiterSnapshot{}, snap, "an unlimited limiter reports no capacity and counts nothing running")
 }
 
 func (s *LimiterSuite) TestCancelledAcquire() {
@@ -178,22 +178,20 @@ func (s *LimiterSuite) TestFairQueueing() {
 	assert.Equal(t, 0, l.Snapshot().Running, "post-fairness-test running")
 }
 
-// TestLimiterHooks verifies that the hook SetHooks installs hears every acquire as +1
-// running and every release as -1 running.
-func (s *LimiterSuite) TestHooks() {
+// TestPoolEvents verifies that the events WithPoolEvents installs hear every acquire as
+// +1 running and every release as -1 running.
+func (s *LimiterSuite) TestPoolEvents() {
 	t := s.T()
-	l := NewLimiter(2)
-
 	var running []int
 	var mu sync.Mutex
-	l.SetHooks(func(ev PoolEvent) {
+	l := NewLimiter(2, WithPoolEvents(func(ev PoolEvent) {
 		if ev.Running == 0 {
 			return
 		}
 		mu.Lock()
 		running = append(running, ev.Running)
 		mu.Unlock()
-	})
+	}))
 
 	_ = l.Acquire(context.Background())
 	_ = l.Acquire(context.Background())
@@ -205,13 +203,12 @@ func (s *LimiterSuite) TestHooks() {
 	mu.Unlock()
 
 	// Contended case: second Acquire on a full pool should observe wait > 0.
-	l2 := NewLimiter(1)
 	var waited atomic.Int64
-	l2.SetHooks(func(ev PoolEvent) {
+	l2 := NewLimiter(1, WithPoolEvents(func(ev PoolEvent) {
 		if ev.Running > 0 {
 			waited.Store(int64(ev.Wait))
 		}
-	})
+	}))
 	_ = l2.Acquire(context.Background()) // fill pool
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -236,9 +233,8 @@ func (s *LimiterSuite) TestHooks() {
 // so their running sum tracks Snapshot().Queued at every step.
 func (s *LimiterSuite) TestWaitingHook() {
 	t := s.T()
-	l := NewLimiter(1)
 	var net atomic.Int64
-	l.SetHooks(func(ev PoolEvent) { net.Add(int64(ev.Queued)) })
+	l := NewLimiter(1, WithPoolEvents(func(ev PoolEvent) { net.Add(int64(ev.Queued)) }))
 
 	// Uncontended: the hook still hears +1 (before Acquire) and -1 (on return), netting 0.
 	require.NoError(t, l.Acquire(context.Background()))
@@ -326,4 +322,42 @@ func (s *LimiterSuite) TestYieldReleasesOneSlotForAnUnmarkedCaller() {
 	}))
 	assert.Equal(t, 0, inside, "an unmarked caller still yields its one slot")
 	assert.Equal(t, 1, l.Snapshot().Running, "and holds it again on return")
+}
+
+// A derived limiter shares the pool and reports only what was taken through it.
+func (s *LimiterSuite) TestWithPoolEventsSharesThePool() {
+	var base, derived atomic.Int64
+	l := NewLimiter(2, WithPoolEvents(func(ev PoolEvent) { base.Add(int64(ev.Running)) }))
+	d := l.WithPoolEvents(func(ev PoolEvent) { derived.Add(int64(ev.Running)) })
+
+	s.Require().NoError(d.Acquire(s.T().Context()))
+	s.Equal(1, l.Snapshot().Running, "the derived limiter's acquire holds a slot of the shared pool")
+	s.Equal(int64(1), derived.Load())
+	s.Zero(base.Load(), "the original's events hear only what it takes")
+	s.Require().NoError(l.Acquire(s.T().Context()))
+	s.Equal(2, d.Snapshot().Running)
+	d.Release()
+	l.Release()
+	s.Equal(LimiterSnapshot{Capacity: 2}, l.Snapshot())
+}
+
+// A context marked with more slots than the pool has yields the whole pool, never more,
+// so the semaphore is not released past what it handed out.
+func (s *LimiterSuite) TestYieldReleasesNoMoreThanTheCapacity() {
+	l := NewLimiter(2)
+	s.Require().NoError(l.AcquireN(s.T().Context(), 2))
+	inside := -1
+	s.Require().NoError(l.Yield(WithSlotsHeld(s.T().Context(), 5), func() error {
+		inside = l.Snapshot().Running
+		return nil
+	}))
+	s.Zero(inside)
+	s.Equal(2, l.Snapshot().Running, "it takes back what it yielded")
+}
+
+func (s *LimiterSuite) TestAcquireAboveCapacityIsACapacityError() {
+	err := NewLimiter(2).AcquireN(s.T().Context(), 3)
+	var refused *CapacityError
+	s.Require().ErrorAs(err, &refused)
+	s.Equal(CapacityError{Slots: 3, Capacity: 2}, *refused)
 }

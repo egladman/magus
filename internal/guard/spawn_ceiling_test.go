@@ -6,9 +6,11 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -68,10 +70,10 @@ func (s *SpawnAboveParentTierSuite) denied() verdict.Judgment {
 }
 
 // pricedRows price sonnet and opus by alias at the tiers the declaration maps.
-func pricedRows() []tier.Pricing {
-	return []tier.Pricing{
-		{ID: "claude-sonnet-5-5", Alias: "sonnet", Tier: "standard", Input: 3, Output: 15},
-		{ID: "claude-opus-5-5", Alias: "opus", Tier: "principal", Input: 5, Output: 25},
+func pricedRows() []model.Row {
+	return []model.Row{
+		{ID: "claude-sonnet-5-5", Alias: "sonnet", Tier: "standard", Price: budget.Price{Input: 3, Output: 15}},
+		{ID: "claude-opus-5-5", Alias: "opus", Tier: "principal", Price: budget.Price{Input: 5, Output: 25}},
 	}
 }
 
@@ -93,8 +95,8 @@ func (s *SpawnAboveParentTierSuite) TestAProvenHigherTierIsAdvisedWithItsCost() 
 
 func (s *SpawnAboveParentTierSuite) TestAPriceNoRowGivesIsUnknown() {
 	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
-	deps.ModelRows = func() []tier.Pricing {
-		return []tier.Pricing{{ID: "claude-opus-5-5", Alias: "opus", Tier: "principal", Input: 5}}
+	deps.ModelRows = func() []model.Row {
+		return []model.Row{{ID: "claude-opus-5-5", Alias: "opus", Tier: "principal", Price: budget.Price{Input: 5}}}
 	}
 
 	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "opus"))
@@ -228,8 +230,8 @@ func (s *SpawnAboveParentTierSuite) TestTwoUnknownModelsAreAdvisedTogether() {
 // A session's full model id resolves by the harness row naming its tier.
 func (s *SpawnAboveParentTierSuite) TestTheHarnessRowsTierResolvesASessionsID() {
 	ctx, deps, _ := ceilingFixture(s.T(), "claude-sonnet-5-5", true)
-	deps.ModelRows = func() []tier.Pricing {
-		return []tier.Pricing{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
+	deps.ModelRows = func() []model.Row {
+		return []model.Row{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
 	}
 
 	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "opus"))
@@ -240,8 +242,8 @@ func (s *SpawnAboveParentTierSuite) TestTheHarnessRowsTierResolvesASessionsID() 
 
 func (s *SpawnAboveParentTierSuite) TestADatedSpellingIsAnotherID() {
 	ctx, deps, _ := ceilingFixture(s.T(), "claude-sonnet-5-5", true)
-	deps.ModelRows = func() []tier.Pricing {
-		return []tier.Pricing{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
+	deps.ModelRows = func() []model.Row {
+		return []model.Row{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
 	}
 
 	v := judgeSpawnBy(ctx, s.T(), deps, "", "claude-sonnet-5-5-20261001")
@@ -251,8 +253,8 @@ func (s *SpawnAboveParentTierSuite) TestADatedSpellingIsAnotherID() {
 }
 
 // aliasedRows carry aliases no declaration maps; fable's names no tier.
-func aliasedRows() []tier.Pricing {
-	return []tier.Pricing{
+func aliasedRows() []model.Row {
+	return []model.Row{
 		{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "mid"},
 		{ID: "claude-opus-5-5", Tier: "principal", Alias: "top"},
 		{ID: "claude-fable-5-1", Alias: "fable"},
@@ -301,8 +303,8 @@ func (s *SpawnAboveParentTierSuite) TestAnUnmappedHostIsNamed() {
 }
 
 // secondRows put two rows at the principal tier.
-func secondRows() []tier.Pricing {
-	return []tier.Pricing{
+func secondRows() []model.Row {
+	return []model.Row{
 		{ID: "claude-sonnet-5-5", Tier: "standard"},
 		{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
 		{ID: "claude-next-1", Tier: "principal", Alias: "next"},
@@ -331,8 +333,8 @@ func (s *SpawnAboveParentTierSuite) TestASecondRowAtOneTierResolvesByAlias() {
 
 func (s *SpawnAboveParentTierSuite) TestASessionOnASecondRowAtOneTierPassesItsPeer() {
 	ctx, deps, _ := ceilingFixture(s.T(), "claude-next-1", true)
-	deps.ModelRows = func() []tier.Pricing {
-		return []tier.Pricing{
+	deps.ModelRows = func() []model.Row {
+		return []model.Row{
 			{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
 			{ID: "claude-next-1", Tier: "principal", Alias: "next"},
 		}

@@ -24,7 +24,7 @@ type SlotDeadlock struct {
 // Error names every holder and what each is blocked on: a wait a reader cannot attribute
 // is a wait they can only interrupt.
 func (d SlotDeadlock) Error() string {
-	return fmt.Sprintf("refusing to keep waiting for a slot: all %d slots are held by steps that are"+
+	return fmt.Sprintf("budget: refusing to keep waiting for a slot: all %d slots are held by steps that are"+
 		" themselves waiting, so no slot can free and nothing queued can start, holding %s, queued %s",
 		d.Capacity, strings.Join(d.Holding, ", "), strings.Join(d.Queued, ", "))
 }
@@ -95,14 +95,17 @@ func newSlotWatch(n int, o limiterOptions) *slotWatch {
 }
 
 // Seat takes n slots for the work named label and records the hold, so a later waiter
-// can tell a slot that is working from one that is stuck. It returns ctx carrying the
-// hold, which a blocking wait inside the work marks itself on ([BlockedOn]), and release,
+// can tell a slot that is working from one that is stuck. n < 1 is floored to 1, as
+// [Limiter.AcquireN] floors it, so release gives back what was taken. It returns ctx
+// carrying the hold, which a blocking wait inside the work marks itself on
+// ([MarkWaiting]), and release,
 // which retires the hold and gives the slots back. Seat does not mark ctx as holding
 // slots; [WithSlotsHeld] does, where the work's body starts.
 //
 // When every slot is held by a step that is itself waiting, the wait is refused with the
 // limiter's refusal error once the wedge has held for its grace.
 func (l *Limiter) Seat(ctx context.Context, n int, label string) (context.Context, func(), error) {
+	n = max(n, 1)
 	hold, err := l.acquireWatched(ctx, n, label)
 	if err != nil {
 		return ctx, nil, err
@@ -124,7 +127,7 @@ func (l *Limiter) acquireWatched(ctx context.Context, n int, label string) (*slo
 	// A caller already holding slots is waiting WHILE HOLDING them, which is the
 	// hold-and-wait half of the deadlock. Marked here rather than at each call site: this
 	// is the only way to reach the queue, so the mark cannot be forgotten.
-	unblock := BlockedOn(ctx, fmt.Sprintf("%d build slot(s)", n))
+	unblock := MarkWaiting(ctx, fmt.Sprintf("%d build slot(s)", n))
 	defer unblock()
 
 	waitCtx, cancel := context.WithCancel(ctx)
@@ -261,8 +264,21 @@ func (w *slotWatch) evaluateLocked() {
 		w.wedgedSince = time.Now()
 	}
 	if w.timer == nil {
-		w.timer = time.AfterFunc(w.grace, w.fireVerdict)
+		w.armLocked(w.grace)
 	}
+}
+
+// armLocked starts the grace timer. The timer passes itself to fireVerdict, which acts
+// only while it is still the armed one: a timer stopped after it fired would otherwise
+// clear, or re-arm over, the timer that replaced it.
+func (w *slotWatch) armLocked(d time.Duration) {
+	var t *time.Timer
+	t = time.AfterFunc(d, func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		w.fireVerdictLocked(t)
+	})
+	w.timer = t
 }
 
 // wedgedLocked reports the shape no wait can end: something is queued for a slot, every
@@ -290,20 +306,22 @@ func (w *slotWatch) wedgedLocked() bool {
 	return held >= w.capacity
 }
 
-// fireVerdict runs the grace after the pool wedged, and cancels every waiter with the
-// refusal when the wedge has held for the whole of it. It re-reads the state rather than
-// trusting the timer: the wedge may have broken and re-formed, in which case the new one
-// has only the remainder of its own grace to outlive.
-func (w *slotWatch) fireVerdict() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+// fireVerdictLocked runs the grace after the pool wedged, and cancels every waiter with
+// the refusal when the wedge has held for the whole of it. It re-reads the state rather
+// than trusting the timer: the wedge may have broken and re-formed, in which case the
+// new one has only the remainder of its own grace to outlive. fired is the timer that
+// ran it; one no longer armed does nothing.
+func (w *slotWatch) fireVerdictLocked(fired *time.Timer) {
+	if w.timer != fired {
+		return
+	}
 	w.timer = nil
 	if !w.wedgedLocked() {
 		w.wedgedSince = time.Time{}
 		return
 	}
 	if remaining := w.grace - time.Since(w.wedgedSince); remaining > 0 {
-		w.timer = time.AfterFunc(remaining, w.fireVerdict)
+		w.armLocked(remaining)
 		return
 	}
 	err := w.refusalLocked()
@@ -333,11 +351,11 @@ func (w *slotWatch) refusalLocked() error {
 	return d
 }
 
-// BlockedOn marks the admitted step in ctx as waiting on what until the returned func
+// MarkWaiting marks the admitted step in ctx as waiting on what until the returned func
 // runs, so a wait that fills the pool can be told from work that is progressing.
 //
 // A no-op outside an admitted step, which is what lets a wait site call it unconditionally
 // rather than branching on whether it holds a seat.
-func BlockedOn(ctx context.Context, what string) func() {
+func MarkWaiting(ctx context.Context, what string) func() {
 	return seatFromContext(ctx).hold.block(what)
 }

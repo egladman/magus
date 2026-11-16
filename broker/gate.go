@@ -62,7 +62,7 @@ func (s *server) requestLocked(sess *session, c budget.Claim) budget.Verdict {
 	if ahead := s.aheadLocked(p, true); ahead != nil {
 		head := ahead.claim
 		head.Slots = budget.SlotsFloor(head)
-		id := s.budget.Assert(head)
+		id := s.budget.Adopt(head)
 		defer s.budget.Release(id)
 	}
 	return s.budget.Request(c, len(s.queue))

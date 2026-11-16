@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
@@ -24,7 +25,6 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/session"
-	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
 
@@ -350,11 +350,11 @@ func sessionShow(root string, args []string) error {
 // harness rows, and the cost section then reports no facts for a model rather than failing
 // the report. The workspace is opened apart from the process's shared handle, which a
 // session read never needs.
-func sessionModelTable(root string) tier.Table {
+func sessionModelTable(root string) model.Table {
 	rows := guard.HarnessModelRows(context.Background(), root, func(ctx context.Context) (types.WorkspaceRepository, error) {
 		return magus.Inspect(ctx, root, append(cliOptions(), workspace.WithLoadedConfig(globalCfg), magus.WithVersion(version))...)
 	})
-	return tier.InEffect(rows(), globalCfg.Agents.ModelOverrides())
+	return model.InEffect(rows(), globalCfg.Agents.ModelOverrides())
 }
 
 // directiveStore opens the advisories store of the repository root names.

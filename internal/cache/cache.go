@@ -757,7 +757,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// that this step's seat is parked rather than working: this lock is one of the two
 	// ways a step blocks while holding its slots.
 	unlock, err := hashLocks.acquireNamed(ctx, hash, stepLabel(s), func(holder string) func() {
-		return budget.BlockedOn(ctx, fmt.Sprintf("the cache lock for %s, held by %s", shortHash(hash), displayLockParty(holder)))
+		return budget.MarkWaiting(ctx, fmt.Sprintf("the cache lock for %s, held by %s", shortHash(hash), displayLockParty(holder)))
 	})
 	if err != nil {
 		return result, err
@@ -1400,7 +1400,7 @@ func withWhy(err error, attrs ...slog.Attr) []any {
 // slot count, and one release that gives the seats back.
 //
 // The returned context is what a blocking wait inside the step marks itself on
-// ([BlockedOn]), so the slot watch can tell a seat doing work from one that cannot
+// ([budget.MarkWaiting]), so the slot watch can tell a seat doing work from one that cannot
 // proceed. A caller that ran the step under the context it passed IN would take every
 // wait as progress.
 //

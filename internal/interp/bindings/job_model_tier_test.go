@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -23,19 +24,19 @@ import (
 // loadModelTiers runs src as the root magusfile of a workspace that has wired harnesses,
 // and returns the registry with the session already CLOSED: a fork asks long after the
 // load that declared the tiers.
-func loadModelTiers(t *testing.T, src string, harnesses ...string) (*workspace.WorkspaceRegistry, *tier.State, error) {
+func loadModelTiers(t *testing.T, src string, harnesses ...string) (*workspace.WorkspaceRegistry, *model.TierState, error) {
 	t.Helper()
 	reg := workspace.NewWorkspaceRegistry()
 	t.Cleanup(func() { _ = reg.Close() })
 	for _, h := range harnesses {
 		reg.AddHarness(h)
 	}
-	tiers := &tier.State{}
-	ctx := tier.WithState(workspace.ContextWithRegistry(t.Context(), reg), tiers)
+	tiers := &model.TierState{}
+	ctx := model.WithTierState(workspace.ContextWithRegistry(t.Context(), reg), tiers)
 	return reg, tiers, execModelTiers(t, ctx, src)
 }
 
-func requireTiers(t *testing.T, tiers *tier.State) *tier.Set {
+func requireTiers(t *testing.T, tiers *model.TierState) *tier.Set {
 	t.Helper()
 	set, err := tiers.Tiers()
 	require.NoError(t, err)
@@ -166,7 +167,11 @@ import "magus";
 magus\modelTiers(null);
 `)
 	require.NoError(t, err)
-	assert.Nil(t, requireTiers(t, tiers), "off is not the shipped default")
+	set, err := tiers.Tiers()
+	var off *model.TiersOffError
+	require.ErrorAs(t, err, &off, "off is not the shipped default")
+	assert.True(t, off.TurnedOff)
+	assert.Nil(t, set)
 }
 
 func TestModelTiersNullTakesNothingElse(t *testing.T) {

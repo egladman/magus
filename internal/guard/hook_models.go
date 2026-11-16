@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
@@ -29,8 +30,8 @@ func onceInspected[T any](ctx context.Context, inspect func(context.Context) (ty
 // spell. A workspace that does not load or carries no wiring, wires no harness or wires none
 // that publishes rows yields no rows, which the guard reads as no facts about a model
 // rather than an error.
-func HarnessModelRows(ctx context.Context, root string, inspect func(context.Context) (types.WorkspaceRepository, error)) func() []tier.Pricing {
-	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) []tier.Pricing {
+func HarnessModelRows(ctx context.Context, root string, inspect func(context.Context) (types.WorkspaceRepository, error)) func() []model.Row {
+	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) []model.Row {
 		wired, err := workspace.WiredHarnesses(ws)
 		if err != nil {
 			return nil
@@ -41,7 +42,7 @@ func HarnessModelRows(ctx context.Context, root string, inspect func(context.Con
 
 // modelRows is HarnessModelRows for the workspace found from rootOverride, opened as
 // the guard's other rules open it, so one load serves them all. nil outside a workspace.
-func (e HookEnv) modelRows(ctx context.Context, rootOverride string) func() []tier.Pricing {
+func (e HookEnv) modelRows(ctx context.Context, rootOverride string) func() []model.Row {
 	root, err := workspace.FindRoot(rootOverride)
 	if err != nil {
 		return nil

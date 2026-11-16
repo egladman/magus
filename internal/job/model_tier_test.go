@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
@@ -291,7 +293,7 @@ func TestResolveModelTierReadsHarnessModelRowAliases(t *testing.T) {
 		Skills: []tier.SkillVariant{tier.SkillVariantFull, tier.SkillVariantShort, tier.SkillVariantShort},
 	})
 	require.NoError(t, err)
-	models := []tier.Pricing{
+	models := []model.Row{
 		{ID: "claude-haiku-9", Alias: "haiku", Tier: "routine"},
 		{ID: "claude-sonnet-9", Alias: "sonnet", Tier: "bounded"},
 		{ID: "claude-opus-9", Alias: "opus", Tier: "design"},
@@ -825,10 +827,10 @@ func TestForkAboveParent(t *testing.T) { suite.Run(t, new(forkAboveParentSuite))
 
 func (s *forkAboveParentSuite) SetupTest() {
 	s.store = tieredStore(s.T(), tierSet(s.T()), nil)
-	s.store.modelRows = func() []tier.Pricing {
-		return []tier.Pricing{
-			{ID: "claude-haiku-5-5", Alias: "haiku", Input: 1, Output: 5},
-			{ID: "claude-opus-5-5", Alias: "opus", Input: 5, Output: 25},
+	s.store.modelRows = func() []model.Row {
+		return []model.Row{
+			{ID: "claude-haiku-5-5", Alias: "haiku", Price: budget.Price{Input: 1, Output: 5}},
+			{ID: "claude-opus-5-5", Alias: "opus", Price: budget.Price{Input: 5, Output: 25}},
 		}
 	}
 	parent := lease("p")

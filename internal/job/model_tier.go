@@ -8,10 +8,12 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
@@ -22,7 +24,7 @@ import (
 //
 // rows is the plan the row joins, which is where the parent's rank is read. WriteProjects
 // stays empty: a project is a graph fact, which [Store] fills from Location.Owners.
-func newModelTierRequest(row job.Job, rows []job.Job, set *tier.Set, models []tier.Pricing, history []types.ModelTierRecord) types.ModelTierRequest {
+func newModelTierRequest(row job.Job, rows []job.Job, set *tier.Set, models []model.Row, history []types.ModelTierRecord) types.ModelTierRequest {
 	req := types.ModelTierRequest{
 		ID:           row.ID,
 		Parent:       row.Parent,
@@ -98,7 +100,7 @@ func writeFileCount(writePaths []string) int {
 // declaredModelTier is the tier a row's requested model names, false when it
 // names none. A requested tier must be one of set, and an id beside it must
 // map to no other tier. host is empty when the tier decides.
-func declaredModelTier(set *tier.Set, models []tier.Pricing, m job.Model) (tier.Tier, string, bool, error) {
+func declaredModelTier(set *tier.Set, models []model.Row, m job.Model) (tier.Tier, string, bool, error) {
 	if set == nil || m.IsZero() {
 		return tier.Tier{}, "", false, nil
 	}
@@ -126,7 +128,7 @@ func declaredModelTier(set *tier.Set, models []tier.Pricing, m job.Model) (tier.
 // modelIDTier is the tier a host model id maps to, through each host's
 // alias list and then the harness model rows ([modelRowsHost]). Two hosts
 // mapping it to different tiers is an error.
-func modelIDTier(set *tier.Set, models []tier.Pricing, model string) (resolved tier.Tier, host string, ok bool, err error) {
+func modelIDTier(set *tier.Set, models []model.Row, model string) (resolved tier.Tier, host string, ok bool, err error) {
 	for _, h := range set.Hosts() {
 		t, found := set.Resolve(h, model)
 		switch {
@@ -170,11 +172,11 @@ func mapper(host string) string {
 	return "harness " + host
 }
 
-// modelRowTier is the tier of the models row whose id or alias is exactly model, the lookup
+// modelRowTier is the tier of the models row whose id or alias is exactly id, the lookup
 // the guard makes in modelTierByExactID. False for any other model.
-func modelRowTier(set *tier.Set, models []tier.Pricing, model string) (tier.Tier, bool) {
-	i := slices.IndexFunc(models, func(r tier.Pricing) bool {
-		return r.Tier != "" && (r.ID == model || r.Alias != "" && r.Alias == model)
+func modelRowTier(set *tier.Set, models []model.Row, id string) (tier.Tier, bool) {
+	i := slices.IndexFunc(models, func(r model.Row) bool {
+		return r.Tier != "" && (r.ID == id || r.Alias != "" && r.Alias == id)
 	})
 	if i < 0 {
 		return tier.Tier{}, false
@@ -198,7 +200,7 @@ func modelRowTier(set *tier.Set, models []tier.Pricing, model string) (tier.Tier
 //   - default: the declaration's default, with the skills the declaration gives it.
 //
 // A nil matrix declines. set must not be nil.
-func resolveModelTier(ctx context.Context, set *tier.Set, models []tier.Pricing, matrix func(context.Context, types.ModelTierRequest) (*tier.Assignment, error), req types.ModelTierRequest, row job.Job) (tier.Assignment, error) {
+func resolveModelTier(ctx context.Context, set *tier.Set, models []model.Row, matrix func(context.Context, types.ModelTierRequest) (*tier.Assignment, error), req types.ModelTierRequest, row job.Job) (tier.Assignment, error) {
 	if set == nil {
 		return tier.Assignment{}, errors.New("job: no model tiers to assign from")
 	}
@@ -260,7 +262,7 @@ func resolveModelTier(ctx context.Context, set *tier.Set, models []tier.Pricing,
 // assignModelTier is the tier for row, written into plan. It runs under [Store.mutate]'s
 // lock with plan as it stood before the write, so the bound is read where it is spent.
 func (s *Store) assignModelTier(ctx context.Context, row job.Job, plan []job.Job) (tier.Assignment, error) {
-	var models []tier.Pricing
+	var models []model.Row
 	if s.modelRows != nil {
 		models = s.modelRows()
 	}
@@ -384,7 +386,7 @@ func aboveParentNote(ctx context.Context, store *Store, row job.Job, plan []job.
 	if s.Decision == builtin.Off {
 		return ""
 	}
-	var models []tier.Pricing
+	var models []model.Row
 	if store.modelRows != nil {
 		models = store.modelRows()
 	}
@@ -403,23 +405,23 @@ func tierModel(row job.Job) string {
 // ModelCost says what model and parent each cost per million tokens, input
 // and output, from the harness model rows (mgs_listModels) matched by exact
 // id or alias. A price no row gives is said to be unknown, never zero.
-func ModelCost(rows []tier.Pricing, model, parent string) string {
+func ModelCost(rows []model.Row, model, parent string) string {
 	return fmt.Sprintf("per million tokens, %s, and %s", modelPrice(rows, model), modelPrice(rows, parent))
 }
 
 // modelPrice is one model's prices as ModelCost says them.
-func modelPrice(rows []tier.Pricing, model string) string {
-	i := slices.IndexFunc(rows, func(r tier.Pricing) bool {
-		return r.ID == model || r.Alias != "" && r.Alias == model
+func modelPrice(rows []model.Row, id string) string {
+	i := slices.IndexFunc(rows, func(r model.Row) bool {
+		return r.ID == id || r.Alias != "" && r.Alias == id
 	})
 	if i < 0 {
-		return model + "'s price is unknown, since no mgs_listModels row names it"
+		return id + "'s price is unknown, since no mgs_listModels row names it"
 	}
-	return fmt.Sprintf("%s costs %s and %s", model, usdPrice(rows[i].Input, "input"), usdPrice(rows[i].Output, "output"))
+	return fmt.Sprintf("%s costs %s and %s", id, usdPrice(rows[i].Input, "input"), usdPrice(rows[i].Output, "output"))
 }
 
 // usdPrice says p for what; a row leaves an unknown price 0.
-func usdPrice(p tier.USDPerMTok, what string) string {
+func usdPrice(p budget.USDPerMTok, what string) string {
 	if p <= 0 {
 		return fmt.Sprintf("an unknown %s price", what)
 	}

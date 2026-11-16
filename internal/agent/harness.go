@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/codec"
-	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -105,8 +105,8 @@ type HarnessDescriptor struct {
 	// Tools is the host's tool table, nil for a harness that declares none.
 	Tools *types.HarnessTools `json:"tools,omitempty"`
 	// Models are the rows of the models this host runs; nil for a harness that publishes
-	// none. Never read from JSON, since tier.Pricing carries no wire tags.
-	Models []tier.Pricing `json:"-"`
+	// none. Never read from JSON, since model.Row carries no wire tags.
+	Models []model.Row `json:"-"`
 }
 
 // ShortestForegroundMax is the shortest foreground maximum among harnesses, the longest a
@@ -312,9 +312,9 @@ func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescri
 // HarnessModelRows is the model rows the wired harnesses publish through mgs_listModels.
 // A harness that does not load contributes none, which the guard reads as no facts about
 // a model rather than an error. ctx must carry the workspace the harness spells load in.
-func HarnessModelRows(ctx context.Context, root string, wired []string) []tier.Pricing {
+func HarnessModelRows(ctx context.Context, root string, wired []string) []model.Row {
 	ctx = ContextWithWiredHarnesses(ctx, wired)
-	var rows []tier.Pricing
+	var rows []model.Row
 	for _, id := range wired {
 		if d, _, err := LoadHarness(ctx, root, id); err == nil {
 			rows = append(rows, d.Models...)

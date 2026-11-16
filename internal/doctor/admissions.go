@@ -49,7 +49,7 @@ func gradeBudgetAdmissions(admissions []budget.Admission, now time.Time) check.C
 		case budget.AdmissionRefused:
 			refused++
 		case budget.AdmissionSeated:
-			if a.WaitBoundMS > 0 && a.WaitedMS*4 > a.WaitBoundMS {
+			if a.WaitBound > 0 && time.Duration(a.WaitedMs)*time.Millisecond*4 > a.WaitBound {
 				slow++
 			}
 		}

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -1009,7 +1010,7 @@ func TestMagusJobSchemaIsTheDeclarationSchema(t *testing.T) {
 type ratedWorkspace struct {
 	ledgerWorkspace
 	tiers *tier.Set
-	rows  []tier.Pricing
+	rows  []model.Row
 }
 
 func (w *ratedWorkspace) ModelTiers(context.Context) *tier.Set   { return w.tiers }
@@ -1018,8 +1019,8 @@ func (w *ratedWorkspace) CheckSpawn(_, _ tier.Tier) error        { return nil }
 func (w *ratedWorkspace) SpawnCeiling(context.Context) (builtin.Setting, error) {
 	return builtin.Setting{Decision: builtin.Advise}, nil
 }
-func (w *ratedWorkspace) Models(context.Context) func() []tier.Pricing {
-	return func() []tier.Pricing { return w.rows }
+func (w *ratedWorkspace) Models(context.Context) func() []model.Row {
+	return func() []model.Row { return w.rows }
 }
 
 func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
@@ -1033,7 +1034,7 @@ func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 	ws := &ratedWorkspace{
 		ledgerWorkspace: ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()},
 		tiers:           set,
-		rows:            []tier.Pricing{{ID: "claude-opus-9", Alias: "opus", Tier: "principal"}},
+		rows:            []model.Row{{ID: "claude-opus-9", Alias: "opus", Tier: "principal"}},
 	}
 
 	got, err := MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", jobtypes.Put{Agent: &jobtypes.Agent{Instructions: "ship it", Model: jobtypes.Model{ID: "opus"}, Worker: jobtypes.Worker{Type: jobtypes.WorkerTypeResumed}}, ReadOnly: new(true)})

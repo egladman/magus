@@ -153,5 +153,5 @@ func TestInstallReachedThroughNeedsRunsAtWidthOne(t *testing.T) {
 	defer cancel()
 	require.NoError(t, pool.Dispatch(ctx, []string{"install"}, nil))
 	assert.True(t, installed.Load())
-	assert.Equal(t, budget.LimiterStats{Capacity: 1}, lim.Snapshot(), "every slot taken was given back")
+	assert.Equal(t, budget.LimiterSnapshot{Capacity: 1}, lim.Snapshot(), "every slot taken was given back")
 }

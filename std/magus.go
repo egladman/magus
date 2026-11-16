@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -1593,7 +1594,7 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	// std cannot import internal/agent, which loads the harness spells, so the workspace
 	// supplies the reader.
 	if models, ok := ws.(interface {
-		Models(ctx context.Context) func() []tier.Pricing
+		Models(ctx context.Context) func() []model.Row
 	}); ok {
 		loc.ModelRows = models.Models(ctx)
 	}

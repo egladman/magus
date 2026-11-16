@@ -149,7 +149,7 @@ func (s *server) judgeLocked(p, starved *parked) (reply, outcome) {
 	}
 	head := starved.claim
 	head.Slots = budget.SlotsFloor(head)
-	id := s.budget.Assert(head)
+	id := s.budget.Adopt(head)
 	defer s.budget.Release(id)
 	return p.try(p)
 }
@@ -252,7 +252,7 @@ func (s *server) waitingLocked(now time.Time) []budget.Waiter {
 		out = append(out, budget.Waiter{
 			Project: c.Project, Target: c.Target, PID: c.PID, MemoryMB: c.MemoryMB,
 			Slots: max(c.Slots, 1), Dir: c.Dir, Command: c.Command, Owner: sessionOwner(p.sess), Tree: tree,
-			Since: p.since, WaitedMS: now.Sub(p.since).Milliseconds(),
+			Since: p.since, WaitedMs: now.Sub(p.since).Milliseconds(),
 		})
 	}
 	slices.SortStableFunc(out, func(a, b budget.Waiter) int { return a.Since.Compare(b.Since) })
@@ -273,7 +273,7 @@ func (s *server) claimTry(sess *session, c budget.Claim) func(*parked) (reply, o
 			sess.claims[v.ID] = v.Slots
 			if p.sent != "" && !p.why.Verdict.OwnRun {
 				waited := c
-				waited.WaitedMS = max(time.Since(p.since).Milliseconds(), 1)
+				waited.WaitedMs = max(time.Since(p.since).Milliseconds(), 1)
 				s.ledger.claimed(s.conns, sess, waited, v, time.Now())
 			}
 			return reply{typeClaimReply, claimReply{Verdict: v}}, seated
@@ -323,11 +323,11 @@ type budgetLedger struct {
 }
 
 // claimed records a claim's verdict when it is the MGS3009 refusal the client turns it
-// into. A grant is recorded when the claim waited on other runs (WaitedMS).
+// into. A grant is recorded when the claim waited on other runs (WaitedMs).
 func (l *budgetLedger) claimed(conns map[net.Conn]*session, sess *session, c budget.Claim, v budget.Verdict, now time.Time) {
 	outcome := budget.AdmissionRefused
 	switch {
-	case v.Granted && c.WaitedMS > 0:
+	case v.Granted && c.WaitedMs > 0:
 		outcome = budget.AdmissionSeated
 	case v.Granted, v.Fits && v.OwnRun:
 		return
@@ -368,7 +368,7 @@ func machineAdmission(c budget.Claim, owner string, v budget.Verdict, owners map
 	return budget.Admission{
 		At: now, Outcome: outcome, PID: c.PID, Project: c.Project, Target: c.Target, Under: c.Under,
 		MemoryMB: c.MemoryMB, Slots: slots, Dir: c.Dir, Command: c.Command, Owner: owner, Fits: v.Fits,
-		WaitedMS: c.WaitedMS, WaitBoundMS: c.WaitBoundMS, Sizing: c.Sizing,
+		WaitedMs: c.WaitedMs, WaitBound: c.WaitBound, Sizing: c.Sizing,
 		BudgetMB: v.BudgetMB, HeldMB: v.HeldMB, BudgetSlots: v.BudgetSlots, HeldSlots: v.HeldSlots,
 		Holders: holders,
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -595,8 +596,8 @@ func TestSpawnNamesModelResolvesAHarnessRowsAlias(t *testing.T) {
 	ctx := tierFixture(t, set, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	deps := strictDeps(t)
 	deps.ModelTiers = func() *tier.Set { return set }
-	deps.ModelRows = func() []tier.Pricing {
-		return []tier.Pricing{
+	deps.ModelRows = func() []model.Row {
+		return []model.Row{
 			{ID: "claude-haiku-5-5", Tier: "economy", Alias: "haiku"},
 			{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
 		}
@@ -702,7 +703,7 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 			ctx := tierFixture(t, facts.Tiers, jobtypes.Job{ID: "scout", Agent: &jobtypes.Agent{Model: jobtypes.Model{Tier: tc.tier}, Worker: jobtypes.Worker{Type: jobtypes.WorkerTypeResumed}}, ReadOnly: true, State: jobtypes.StateDeclared})
 			deps := strictDeps(t)
 			deps.ModelTiers = func() *tier.Set { return facts.Tiers }
-			deps.ModelRows = func() []tier.Pricing { return facts.Rows }
+			deps.ModelRows = func() []model.Row { return facts.Rows }
 			at := hookLocation(ctx, deps)
 			hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
 			writeCostState(hint.NewGate(at.cacheDir, hookAttribution{Host: "claude-code", Session: "s"}.factsKey()), costState{Model: tc.parent})
@@ -784,7 +785,7 @@ func TestBudgetTokensPastEveryWindowIsRefused(t *testing.T) {
 func TestBudgetPastEveryWindowReadsTheTableOnlyForAStatedFigure(t *testing.T) {
 	t.Parallel()
 	reads := 0
-	table := func() tier.Table {
+	table := func() model.Table {
 		reads++
 		return fixtureModelTable()
 	}
@@ -999,8 +1000,8 @@ func (s *RecoversOwnCheckoutSuite) TestASecondCommandIsNotRecovery() {
 }
 
 // tierlessFableRows lists claude-fable-5-1 with no tier.
-func tierlessFableRows() []tier.Pricing {
-	return []tier.Pricing{{ID: "claude-fable-5-1", Alias: "fable"}}
+func tierlessFableRows() []model.Row {
+	return []model.Row{{ID: "claude-fable-5-1", Alias: "fable"}}
 }
 
 func TestARowNamingFableSpawnsOnFable(t *testing.T) {

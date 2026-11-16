@@ -139,12 +139,21 @@ type Price struct {
 // none), the short alias the host takes for it in a spawn ("" for none), its context window
 // in tokens, its price, and its long-context step, whose zero Above means none.
 type HarnessModel struct {
-	ID     string         `json:"id"`
-	Tier   string         `json:"tier,omitzero"`
-	Alias  string         `json:"alias,omitzero"`
-	Window int64          `json:"window,omitzero"`
-	Price  Price          `json:"price"`
-	Step   tier.PriceStep `json:"step,omitzero"`
+	ID     string    `json:"id"`
+	Tier   string    `json:"tier,omitzero"`
+	Alias  string    `json:"alias,omitzero"`
+	Window int64     `json:"window,omitzero"`
+	Price  Price     `json:"price"`
+	Step   PriceStep `json:"step,omitzero"`
+}
+
+// PriceStep is a long-context surcharge as a harness spell returns it: every price is
+// multiplied by Multiplier once a call's prompt passes Above tokens. It copies
+// budget.PriceStep so the Buzz mirror stays in types and budget never becomes a
+// boundary package.
+type PriceStep struct {
+	Above      int64
+	Multiplier float64
 }
 
 // HarnessTool is one row of a host's tool table: a tool by the host's own name, and what

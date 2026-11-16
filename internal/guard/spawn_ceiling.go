@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -52,7 +53,7 @@ func gradeSpawnCeiling(deps Dependencies, judged verdict.Judgment, env hookReque
 		from = types.ThreadReported
 	}
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
-	var rows []tier.Pricing
+	var rows []model.Row
 	if at.models != nil {
 		rows = at.models()
 	}
@@ -126,15 +127,15 @@ func SpawnCeilingSetting(ctx context.Context, root string) (builtin.Setting, err
 	return s, nil
 }
 
-// modelTierByExactID is model's tier: the case the declaration maps model to for host, else the
-// tier the mgs_listModels row whose id or alias is exactly model names. False for any other
+// modelTierByExactID is id's tier: the case the declaration maps id to for host, else the
+// tier the mgs_listModels row whose id or alias is exactly id names. False for any other
 // model.
-func modelTierByExactID(set *tier.Set, host, model string, rows []tier.Pricing) (tier.Tier, bool) {
-	if t, ok := set.Resolve(host, model); ok {
+func modelTierByExactID(set *tier.Set, host, id string, rows []model.Row) (tier.Tier, bool) {
+	if t, ok := set.Resolve(host, id); ok {
 		return t, true
 	}
-	i := slices.IndexFunc(rows, func(r tier.Pricing) bool {
-		return r.Tier != "" && (r.ID == model || r.Alias != "" && r.Alias == model)
+	i := slices.IndexFunc(rows, func(r model.Row) bool {
+		return r.Tier != "" && (r.ID == id || r.Alias != "" && r.Alias == id)
 	})
 	if i < 0 {
 		return tier.Tier{}, false

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/log/attr"
@@ -116,7 +117,7 @@ func (e HookEnv) loadDependenciesAt(ctx context.Context, rootOverride string, au
 	if tools, hook := agent.ToolRowsFromContext(ctx); hook {
 		facts, err := tools.Models()
 		if err == nil {
-			deps.ModelRows = func() []tier.Pricing { return facts.Rows }
+			deps.ModelRows = func() []model.Row { return facts.Rows }
 			deps.ModelTiers = func() *tier.Set { return facts.Tiers }
 			return deps, rules
 		}

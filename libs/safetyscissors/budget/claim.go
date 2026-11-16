@@ -2,7 +2,6 @@ package budget
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/egladman/magus/libs/codec"
@@ -48,10 +47,47 @@ type Claim struct {
 	Under string `json:"under,omitempty" yaml:"under,omitempty"`
 	// SlotsFloor is the fewest slots the claim runs with; 0 means Slots.
 	SlotsFloor int `json:"slots_floor,omitzero" yaml:"slots_floor,omitempty"`
-	// WaitBoundMS is the client's wait budget or sooner deadline.
-	WaitBoundMS int64 `json:"wait_bound_ms,omitzero" yaml:"wait_bound_ms,omitempty"`
-	// WaitedMS is set on the ask made at the bound.
-	WaitedMS int64 `json:"waited_ms,omitzero" yaml:"waited_ms,omitempty"`
+	// WaitBound is the client's wait budget or sooner deadline. It crosses the wire as
+	// wait_bound_ms, whole milliseconds.
+	WaitBound time.Duration `json:"-" yaml:"-"`
+	// WaitedMs is set on the ask made at the bound.
+	WaitedMs int64 `json:"waited_ms,omitzero" yaml:"waited_ms,omitempty"`
+}
+
+// claimFields has Claim's fields and tags but none of its methods, so encoding it
+// cannot call MarshalJSON again.
+type claimFields Claim
+
+// claimWire is Claim as it crosses a process boundary.
+type claimWire struct {
+	claimFields `yaml:",inline"`
+
+	WaitBoundMs int64 `json:"wait_bound_ms,omitzero" yaml:"wait_bound_ms,omitempty"`
+}
+
+func (c Claim) wire() claimWire {
+	return claimWire{claimFields: claimFields(c), WaitBoundMs: c.WaitBound.Milliseconds()}
+}
+
+// MarshalJSON encodes the claim through its wire shape.
+func (c Claim) MarshalJSON() ([]byte, error) {
+	return codec.Marshal(c.wire())
+}
+
+// MarshalYAML renders the claim through its wire shape, as JSON carries it.
+func (c Claim) MarshalYAML() (any, error) {
+	return c.wire(), nil
+}
+
+// UnmarshalJSON decodes a claim from its wire shape.
+func (c *Claim) UnmarshalJSON(b []byte) error {
+	var w claimWire
+	if err := codec.Unmarshal(b, &w); err != nil {
+		return fmt.Errorf("budget: decode machine claim: %w", err)
+	}
+	*c = Claim(w.claimFields)
+	c.WaitBound = time.Duration(w.WaitBoundMs) * time.Millisecond
+	return nil
 }
 
 // Run is the outermost invocation the claim runs underneath, or its own when it has no
@@ -100,8 +136,8 @@ type Waiter struct {
 	// budget.
 	Tree  string    `json:"tree,omitempty" yaml:"tree,omitempty"`
 	Since time.Time `json:"since" yaml:"since"`
-	// WaitedMS is how long it had waited when the status was read.
-	WaitedMS int64 `json:"waited_ms" yaml:"waited_ms"`
+	// WaitedMs is how long it had waited when the status was read.
+	WaitedMs int64 `json:"waited_ms" yaml:"waited_ms"`
 }
 
 // AdmissionOutcome is how the arbiter answered a claim it recorded.
@@ -131,33 +167,51 @@ type Admission struct {
 	Owner    string           `json:"owner,omitempty" yaml:"owner,omitempty"`
 	// Fits is false when no state of the machine admits the claim.
 	Fits bool `json:"fits" yaml:"fits"`
-	// WaitedMS and WaitBoundMS are how long the claim waited, and the bound.
-	WaitedMS    int64      `json:"waited_ms,omitzero" yaml:"waited_ms,omitempty"`
-	WaitBoundMS int64      `json:"wait_bound_ms,omitzero" yaml:"wait_bound_ms,omitempty"`
-	Sizing      Sizing     `json:"sizing,omitzero" yaml:"sizing,omitempty"`
-	BudgetMB    int        `json:"budget_mb,omitzero" yaml:"budget_mb,omitempty"`
-	HeldMB      int        `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`
-	BudgetSlots int        `json:"budget_slots,omitzero" yaml:"budget_slots,omitempty"`
-	HeldSlots   int        `json:"held_slots,omitzero" yaml:"held_slots,omitempty"`
-	Holders     []Claimant `json:"holders,omitempty" yaml:"holders,omitempty"`
+	// WaitedMs and WaitBound are how long the claim waited, and the bound. WaitBound is
+	// stored as wait_bound_ms, whole milliseconds.
+	WaitedMs    int64         `json:"waited_ms,omitzero" yaml:"waited_ms,omitempty"`
+	WaitBound   time.Duration `json:"-" yaml:"-"`
+	Sizing      Sizing        `json:"sizing,omitzero" yaml:"sizing,omitempty"`
+	BudgetMB    int           `json:"budget_mb,omitzero" yaml:"budget_mb,omitempty"`
+	HeldMB      int           `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`
+	BudgetSlots int           `json:"budget_slots,omitzero" yaml:"budget_slots,omitempty"`
+	HeldSlots   int           `json:"held_slots,omitzero" yaml:"held_slots,omitempty"`
+	Holders     []Claimant    `json:"holders,omitempty" yaml:"holders,omitempty"`
 }
 
-// admissionWire has Admission's fields and tags but none of its methods, so encoding it
-// cannot call MarshalJSON again.
-type admissionWire Admission
+// admissionFields has Admission's fields and tags but none of its methods, so encoding
+// it cannot call MarshalJSON again.
+type admissionFields Admission
+
+// admissionWire is Admission as its store line holds it.
+type admissionWire struct {
+	admissionFields `yaml:",inline"`
+
+	WaitBoundMs int64 `json:"wait_bound_ms,omitzero" yaml:"wait_bound_ms,omitempty"`
+}
+
+func (a Admission) wire() admissionWire {
+	return admissionWire{admissionFields: admissionFields(a), WaitBoundMs: a.WaitBound.Milliseconds()}
+}
 
 // MarshalJSON encodes the admission through its wire shape.
 func (a Admission) MarshalJSON() ([]byte, error) {
-	return codec.Marshal(admissionWire(a))
+	return codec.Marshal(a.wire())
+}
+
+// MarshalYAML renders the admission through its wire shape, as its store line holds it.
+func (a Admission) MarshalYAML() (any, error) {
+	return a.wire(), nil
 }
 
 // UnmarshalJSON decodes an admission from its wire shape.
 func (a *Admission) UnmarshalJSON(b []byte) error {
 	var w admissionWire
 	if err := codec.Unmarshal(b, &w); err != nil {
-		return fmt.Errorf("decode machine admission: %w", err)
+		return fmt.Errorf("budget: decode machine admission: %w", err)
 	}
-	*a = Admission(w)
+	*a = Admission(w.admissionFields)
+	a.WaitBound = time.Duration(w.WaitBoundMs) * time.Millisecond
 	return nil
 }
 
@@ -210,18 +264,4 @@ type Reserve struct {
 	TotalMB    int    `json:"total_mb,omitzero" yaml:"total_mb,omitempty"`
 	ReservedMB int    `json:"reserved_mb,omitzero" yaml:"reserved_mb,omitempty"`
 	Rule       string `json:"rule,omitempty" yaml:"rule,omitempty"`
-}
-
-// HolderList names each holder as its pid, its command (or its target and project when it
-// carries none) and how long it has held its seat at now, comma-joined.
-func (s Snapshot) HolderList(now time.Time) string {
-	holders := make([]string, len(s.Holders))
-	for i, h := range s.Holders {
-		what := fmt.Sprintf("%s %s", h.Target, h.Project)
-		if h.Command != "" {
-			what = fmt.Sprintf("`%s`", h.Command)
-		}
-		holders[i] = fmt.Sprintf("pid %d (%s) for %s", h.PID, what, now.Sub(h.Since).Round(time.Second))
-	}
-	return strings.Join(holders, ", ")
 }

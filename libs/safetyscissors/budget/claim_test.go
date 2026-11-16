@@ -21,7 +21,7 @@ func (s *ClaimSuite) TestAdmissionRoundTripKeepsEveryField() {
 		At: time.Date(2026, 11, 7, 1, 2, 3, 0, time.UTC), Outcome: AdmissionSeated,
 		PID: 7, Project: "svc", Target: "lint", Under: "svc:ci", MemoryMB: 4096, Slots: 2,
 		Dir: "/w", Command: "run ci && echo <done>", Owner: "job-a", Fits: true,
-		WaitedMS: 1500, WaitBoundMS: 3000,
+		WaitedMs: 1500, WaitBound: 3 * time.Second,
 		Sizing:   Sizing{Samples: 12},
 		BudgetMB: 24000, HeldMB: 8000, BudgetSlots: 8, HeldSlots: 3,
 		Holders: []Claimant{{Project: "svc", Target: "test", PID: 9, Under: "svc:ci"}},
@@ -48,7 +48,7 @@ func (s *ClaimSuite) TestAdmissionUnmarshalNamesTheTypeOnError() {
 }
 
 func (s *ClaimSuite) TestClaimRoundTrips() {
-	in := Claim{Project: "p", Target: "t", Under: "p:ci", SlotsFloor: 1, WaitBoundMS: 5, WaitedMS: 4}
+	in := Claim{Project: "p", Target: "t", Under: "p:ci", SlotsFloor: 1, WaitBound: 5 * time.Millisecond, WaitedMs: 4}
 	b, err := codec.Marshal(in)
 	require.NoError(s.T(), err)
 	var out Claim
@@ -75,11 +75,17 @@ func (s *ClaimSuite) TestVerdictAddsOnlySlotsAndAheadWhenSeated() {
 	assert.Equal(t, base, got, "slots and ahead are the only keys a seated verdict adds")
 }
 
-func (s *ClaimSuite) TestHolderListNamesCommandOrTarget() {
-	now := time.Date(2026, 11, 7, 0, 1, 0, 0, time.UTC)
-	snap := Snapshot{Holders: []Claimant{
-		{PID: 1, Project: ".", Target: "test", Since: now.Add(-30 * time.Second)},
-		{PID: 2, Command: "go test ./...", Since: now.Add(-time.Minute)},
-	}}
-	assert.Equal(s.T(), "pid 1 (test .) for 30s, pid 2 (`go test ./...`) for 1m0s", snap.HolderList(now))
+// The bound crosses the wire as whole milliseconds, under the key it always had.
+func (s *ClaimSuite) TestWaitBoundIsMillisecondsOnTheWire() {
+	b, err := codec.Marshal(Claim{Project: "p", Target: "t", WaitBound: 1500 * time.Millisecond})
+	s.Require().NoError(err)
+	s.JSONEq(`{"project":"p","target":"t","pid":0,"wait_bound_ms":1500}`, string(b))
+	b, err = codec.Marshal(Admission{PID: 1, Project: "p", Target: "t", WaitBound: 2 * time.Second})
+	s.Require().NoError(err)
+	s.Contains(string(b), `"wait_bound_ms":2000`)
+}
+
+func (s *ClaimSuite) TestClaimUnmarshalNamesTheTypeOnError() {
+	var c Claim
+	s.ErrorContains(codec.Unmarshal([]byte(`{"pid":"x"}`), &c), "budget: decode machine claim")
 }

@@ -49,7 +49,7 @@ func (s *SlotDeadlockSuite) TestNewLimiterRefusesWithMGS3013() {
 	held, release, err := lim.Admit(t.Context(), ". build")
 	require.NoError(t, err)
 	defer release()
-	unblock := budget.BlockedOn(held, "the cache lock")
+	unblock := budget.MarkWaiting(held, "the cache lock")
 	defer unblock()
 	_, _, err = lim.Admit(t.Context(), ". test")
 	require.ErrorIs(t, err, types.BuildSlotsDeadlocked)

@@ -31,18 +31,27 @@ func (c *Curve) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON decodes a JSON array of exactly CurveBuckets numbers. Any other length is
-// an error naming it: a short array padded with zeros would read as a run that used
+// a [*CurveLengthError]: a short array padded with zeros would read as a run that used
 // nothing for its last slices.
 func (c *Curve) UnmarshalJSON(b []byte) error {
 	var buckets []uint32
 	if err := codec.Unmarshal(b, &buckets); err != nil {
-		return fmt.Errorf("decode memory curve: %w", err)
+		return fmt.Errorf("budget: decode memory curve: %w", err)
 	}
 	if len(buckets) != CurveBuckets {
-		return fmt.Errorf("memory curve has %d buckets, want %d", len(buckets), CurveBuckets)
+		return &CurveLengthError{Buckets: len(buckets)}
 	}
 	copy(c[:], buckets)
 	return nil
+}
+
+// CurveLengthError is a decoded curve whose bucket count is not [CurveBuckets].
+type CurveLengthError struct {
+	Buckets int
+}
+
+func (e *CurveLengthError) Error() string {
+	return fmt.Sprintf("budget: memory curve has %d buckets, want %d", e.Buckets, CurveBuckets)
 }
 
 // Profile is what a target's recorded runs of one shape say about its memory over time:

@@ -1049,8 +1049,8 @@ var testBudgetNow = time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
 // magus's wrapper invocations, as the broker's does.
 func testBudget(t *testing.T, mb, slots int) *budget.Machine {
 	t.Helper()
-	return budget.NewMachine(mb, slots).WithWrappers(types.IsWrapperInvocation).
-		WithClock(func() time.Time { return testBudgetNow })
+	return budget.NewMachine(mb, slots, budget.WithWrappers(types.IsWrapperInvocation),
+		budget.WithClock(func() time.Time { return testBudgetNow }))
 }
 
 // budgetAdmitter is a MachineAdmitter answering from a budget a test

@@ -154,7 +154,7 @@ func (s *server) holdLocked(ctx context.Context, sess *session, h Hold) string {
 		return id
 	}
 	slots := max(h.Slots, 1)
-	id := s.budget.Assert(budget.Claim{
+	id := s.budget.Adopt(budget.Claim{
 		Target: "job exec", Slots: slots, PID: sess.hello.PID, Dir: sess.hello.Dir, Command: h.Command,
 		Invocation: h.Invocation, Ancestors: h.Ancestors,
 	})

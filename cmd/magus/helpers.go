@@ -346,7 +346,7 @@ func cliOptions() []magus.Option {
 	return []magus.Option{
 		magus.WithEnv(os.Environ()), magus.WithStderr(os.Stderr), magus.WithCommandLine(os.Args),
 		magus.WithSpawnRule(tier.Ceiling),
-		magus.WithSecrets(secrets.WithOpener(bindings.SecretOpener)),
+		magus.WithSecrets(secrets.WithOpener(bindings.SecretOpener())),
 	}
 }
 

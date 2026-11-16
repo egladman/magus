@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -125,7 +126,7 @@ type storeConfig struct {
 	build string
 	// modelTiers and modelTierMatrix are Location's.
 	modelTiers      *tier.Set
-	modelRows       func() []tier.Pricing
+	modelRows       func() []model.Row
 	modelTierMatrix func(context.Context, types.ModelTierRequest) (*tier.Assignment, error)
 	spawnRule       func(parent, child tier.Tier) error
 	spawnCeiling    func(context.Context) (builtin.Setting, error)
@@ -196,7 +197,7 @@ type Location struct {
 	// ModelRows is the harness model rows (mgs_listModels), which name a model by id or
 	// alias for a tier the declaration's hosts do not map. Nil leaves only the hosts to
 	// resolve a model.
-	ModelRows func() []tier.Pricing
+	ModelRows func() []model.Row
 	// ModelTierMatrix is the function the workspace registered to choose a tier, or nil.
 	// It runs inside the write, while the Store's locks are held, so it must not touch
 	// the Store.

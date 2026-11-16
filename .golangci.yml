@@ -191,7 +191,7 @@ linters:
             - github.com/egladman/magus/libs/safetyscissors/budget$
             # The rule decision an agent context's shadow tally and a rule record count by.
             - github.com/egladman/magus/libs/safetyscissors/verdict$
-            # The model tier and price types a job, a spawn and a harness row carry.
+            # The model tier types a job and a spawn carry.
             - github.com/egladman/magus/libs/safetyscissors/tier$
             # The job record, its claim grammar and the origin every record stamps.
             - github.com/egladman/magus/libs/safetyscissors/job$

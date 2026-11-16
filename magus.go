@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
@@ -126,6 +127,10 @@ type Magus struct {
 	limOnce   sync.Once
 	lim       *budget.Limiter
 	slotWaits cache.SlotWaitMeter
+	// poolEvents is what the limiter reports its slot changes to, set by Open, and
+	// poolTelemetry is whether Open has finished wiring what they record into.
+	poolEvents    func(budget.PoolEvent)
+	poolTelemetry atomic.Bool
 
 	buzzPoolOnce sync.Once
 	buzzPoolReg  *buzz.PoolRegistry
@@ -216,7 +221,7 @@ type Magus struct {
 	// steps is WithStepRows' and WithStepRule's, checked at Open.
 	steps guard.StepTable
 	// modelTiers is what the root magusfile's magus\modelTiers declared.
-	modelTiers tier.State
+	modelTiers model.TierState
 	// stepRules is what the root magusfile's magus\guard.step registered.
 	// Load checks the step specs against its kinds.
 	stepRules steps.Group
@@ -641,8 +646,11 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if isJSONLLog(cfg.Log) {
 		m.records = secrets.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(m.stderr), cfg.Log.SlogLevel()))
 	}
+	m.poolEvents = func(ev budget.PoolEvent) { m.recordPoolEvent(ctx, ev) }
 	if vo.Limiter != nil {
-		m.limOnce.Do(func() { m.lim = vo.Limiter })
+		// The caller built its limiter before this Magus had telemetry, so this Magus
+		// takes its own view of that pool, reporting what it takes.
+		m.limOnce.Do(func() { m.lim = vo.Limiter.WithPoolEvents(m.poolEvents) })
 	}
 	m.broker, m.brokerGiven, m.brokerPolicy = vo.Broker, vo.BrokerGiven, vo.BrokerPolicy
 	m.metricsCollect = vo.MetricsCollect
@@ -1012,18 +1020,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		return nil, errors.Join(err, m.closeBroker())
 	}
 	m.cache = c
-	m.limiter().SetHooks(func(ev budget.PoolEvent) {
-		if ev.Queued != 0 {
-			m.tel.RecordPoolSlots(ctx, observability.PoolQueued, int64(ev.Queued))
-			m.slotWaits.Add(ev.Queued)
-		}
-		if ev.Running > 0 {
-			m.tel.RecordPoolWait(ctx, ev.Wait.Seconds())
-		}
-		if ev.Running != 0 {
-			m.tel.RecordPoolSlots(ctx, observability.PoolRunning, int64(ev.Running))
-		}
-	})
+	m.poolTelemetry.Store(true)
 	return m, nil
 }
 
@@ -2144,9 +2141,28 @@ func (m *Magus) limiter() *budget.Limiter {
 				slog.Int("cpus", cache.MachineCeiling()))
 			n = clamped
 		}
-		m.lim = cache.NewLimiter(n)
+		m.lim = cache.NewLimiter(n, budget.WithPoolEvents(m.poolEvents))
 	})
 	return m.lim
+}
+
+// recordPoolEvent records one change to the limiter's slots into telemetry and the
+// slot-wait meter, once Open has finished: the limiter exists before m.tel does, and a
+// slot taken while the magusfile loads is not a run's.
+func (m *Magus) recordPoolEvent(ctx context.Context, ev budget.PoolEvent) {
+	if !m.poolTelemetry.Load() {
+		return
+	}
+	if ev.Queued != 0 {
+		m.tel.RecordPoolSlots(ctx, observability.PoolQueued, int64(ev.Queued))
+		m.slotWaits.Add(ev.Queued)
+	}
+	if ev.Running > 0 {
+		m.tel.RecordPoolWait(ctx, ev.Wait.Seconds())
+	}
+	if ev.Running != 0 {
+		m.tel.RecordPoolSlots(ctx, observability.PoolRunning, int64(ev.Running))
+	}
 }
 
 // buzzPoolRegistry returns the shared Buzz session pool registry.

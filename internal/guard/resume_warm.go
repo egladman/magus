@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
-	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
 const denyRuleSpawnWarmWorker denyRuleName = "spawn-warm-worker"
@@ -71,7 +71,7 @@ func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row jobtyp
 	if err != nil {
 		return denial{}, false
 	}
-	var models []tier.Pricing
+	var models []model.Row
 	if at.models != nil {
 		models = at.models()
 	}
@@ -86,7 +86,7 @@ func denyWarmSpawn(ctx context.Context, at location, facts hint.Gate, row jobtyp
 // findWarmWorker is the worker row continues: one that stopped or ended
 // within ttl, which row follows or shares a path with. A new worker type,
 // another role, another checkout or a near price step answers false.
-func findWarmWorker(facts hint.Gate, rows []jobtypes.Job, row jobtypes.Job, title string, models []tier.Pricing, ttl time.Duration, now time.Time) (warmWorker, bool) {
+func findWarmWorker(facts hint.Gate, rows []jobtypes.Job, row jobtypes.Job, title string, models []model.Row, ttl time.Duration, now time.Time) (warmWorker, bool) {
 	if (row.Agent != nil && row.Agent.Worker.Type == jobtypes.WorkerTypeNew) || ttl <= 0 {
 		return warmWorker{}, false
 	}
@@ -156,11 +156,11 @@ func continuationLink(row, ended jobtypes.Job) string {
 // nearPriceStep reports whether the worker's last observed context is within
 // priceStepMargin of its model's long-context price step, or past it. False when either
 // is unknown: an unpriced model is not a reason to pay orientation again.
-func nearPriceStep(rec spawnedAgent, model string, models []tier.Pricing) bool {
-	if rec.ContextTokens == nil || model == "" {
+func nearPriceStep(rec spawnedAgent, id string, models []model.Row) bool {
+	if rec.ContextTokens == nil || id == "" {
 		return false
 	}
-	i := slices.IndexFunc(models, func(m tier.Pricing) bool { return m.ID == model || m.Alias != "" && m.Alias == model })
+	i := slices.IndexFunc(models, func(m model.Row) bool { return m.ID == id || m.Alias != "" && m.Alias == id })
 	if i < 0 || models[i].LongContext == nil || models[i].LongContext.Above <= 0 {
 		return false
 	}

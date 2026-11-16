@@ -15,12 +15,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// SecretOpener opens the spell-backed secret provider a magusfile selected by name, for
-// secrets.WithOpener. It lives in the bindings layer because running the spell's handler
-// op needs the Buzz VM, which the magus library does not link; cmd/magus passes it to
-// every workspace it opens.
-func SecretOpener(ctx context.Context, name string) (secrets.Provider, error) { //nolint:ireturn // secrets.Opener's signature
-	return openSpellSecretProvider(ctx, name)
+// SecretOpener returns the opener of the spell-backed secret provider a magusfile
+// selected by name, for secrets.WithOpener. It lives in the bindings layer because
+// running the spell's handler op needs the Buzz VM, which the magus library does not
+// link; cmd/magus passes it to every workspace it opens.
+func SecretOpener() secrets.Opener {
+	return func(ctx context.Context, name string) (secrets.Provider, error) {
+		return openSpellSecretProvider(ctx, name)
+	}
 }
 
 // openSpellSecretProvider resolves the selected spell by name and adapts it to

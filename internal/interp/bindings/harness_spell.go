@@ -4,16 +4,20 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	bindgen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/interp/bindings/gen/decode"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -229,7 +233,7 @@ func cheapestTierModel(ctx context.Context, id string, tierModels map[string]str
 	if len(tierModels) == 0 {
 		return "", nil
 	}
-	if model, ok := rowTierModel(tierModels, cheapest.Name()); ok {
+	if model, ok := rowTierModel(ctx, tierModels, cheapest.Name()); ok {
 		return model, nil
 	}
 	return "", fmt.Errorf("its mgs_listModels rows name a model for tiers %s and none for %s, the cheapest tier of the declaration at %s, so "+
@@ -266,7 +270,7 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 		}
 		models := make([]string, len(cases))
 		for i, c := range cases {
-			model, ok := rowTierModel(tiers, c)
+			model, ok := rowTierModel(ctx, tiers, c)
 			if !ok {
 				return nil, fmt.Errorf("harness spell %q: its mgs_listModels rows name no model for tier %s, so add tier = %q to the row of the model that tier runs on",
 					id, c, c)
@@ -279,13 +283,17 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 }
 
 // rowTierModel is the model tiers names for tierName, also under the old name
-// a row may still spell it with. compat: see libs/safetyscissors/tier renamedModelTiers.
-func rowTierModel(tiers map[string]string, tierName string) (string, bool) {
+// a row may still spell it with, which it warns of. compat: see
+// libs/safetyscissors/tier renamedModelTiers.
+func rowTierModel(ctx context.Context, tiers map[string]string, tierName string) (string, bool) {
 	if model, ok := tiers[tierName]; ok {
 		return model, true
 	}
 	for _, name := range slices.Sorted(maps.Keys(tiers)) {
 		if renamed, ok := tier.Renamed(name); ok && renamed == tierName {
+			slog.With(attr.Component("magus")).WarnContext(ctx, fmt.Sprintf(
+				"model tier %s is now spelled %s: magus reads %s as %s until the next release, so write %s",
+				name, renamed, name, renamed, renamed))
 			return tiers[name], true
 		}
 	}
@@ -349,8 +357,8 @@ func pickTierModels(tierRows map[string][]string, mapped func(tierName string) (
 // validateModelRows reads model rows into prices and each tier's row ids.
 // A half-set price step, or an alias without a tier or on two rows, names
 // no one model, so each is an error. Several rows may share a tier.
-func validateModelRows(rows []types.HarnessModel) ([]tier.Pricing, map[string][]string, error) {
-	out := make([]tier.Pricing, len(rows))
+func validateModelRows(rows []types.HarnessModel) ([]model.Row, map[string][]string, error) {
+	out := make([]model.Row, len(rows))
 	aliases := map[string]string{}
 	var tiers map[string][]string
 	for i, r := range rows {
@@ -375,14 +383,11 @@ func validateModelRows(rows []types.HarnessModel) ([]tier.Pricing, map[string][]
 		if (r.Step.Above > 0) != (r.Step.Multiplier > 0) {
 			return nil, nil, fmt.Errorf("row %d (%s) sets one of the price step's above and multiplier without the other", i+1, r.ID)
 		}
-		out[i] = tier.Pricing{
-			ID: r.ID, Tier: r.Tier, Alias: r.Alias, Window: r.Window, Input: tier.USDPerMTok(r.Price.Input),
-			CacheWrite5m: tier.USDPerMTok(r.Price.CacheWrite5m), CacheWrite1h: tier.USDPerMTok(r.Price.CacheWrite1h),
-			CacheRead: tier.USDPerMTok(r.Price.CacheRead), Output: tier.USDPerMTok(r.Price.Output),
+		out[i] = model.Row{
+			ID: r.ID, Tier: r.Tier, Alias: r.Alias, Window: r.Window, Price: budget.Price{Input: budget.USDPerMTok(r.Price.Input), CacheWrite5m: budget.USDPerMTok(r.Price.CacheWrite5m), CacheWrite1h: budget.USDPerMTok(r.Price.CacheWrite1h), CacheRead: budget.USDPerMTok(r.Price.CacheRead), Output: budget.USDPerMTok(r.Price.Output)},
 		}
 		if r.Step.Above > 0 {
-			step := r.Step
-			out[i].LongContext = &step
+			out[i].LongContext = &budget.PriceStep{Above: r.Step.Above, Multiplier: r.Step.Multiplier}
 		}
 	}
 	return out, tiers, nil
