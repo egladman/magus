@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -1463,14 +1464,14 @@ func TestParityChangesByCommitReportsStatus(t *testing.T) {
 		require.NoError(t, err, "ChangesByCommit")
 		require.Len(t, changes, 1, "%s: the limit must bound the result", b.name)
 
-		got := make(map[string]types.ChangeStatus, len(changes[0].Files))
+		got := make(map[string]job.ChangeStatus, len(changes[0].Files))
 		for _, f := range changes[0].Files {
 			got[f.Path] = f.Status
 		}
-		assert.Equal(t, map[string]types.ChangeStatus{
-			"keep.txt": types.ChangeModified,
-			"new.txt":  types.ChangeAdded,
-			"gone.txt": types.ChangeDeleted,
+		assert.Equal(t, map[string]job.ChangeStatus{
+			"keep.txt": job.ChangeModified,
+			"new.txt":  job.ChangeAdded,
+			"gone.txt": job.ChangeDeleted,
 		}, got, "%s reported %v", b.name, changes[0].Files)
 	})
 }
@@ -2107,7 +2108,7 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapRangeReporter, "RangeCommits", func(d types.VCSDriver, dir string) error { return errOf(d.RangeCommits(ctx, dir, "-x", "-x", nil)) }},
 		{types.CapRangeReporter, "MissingCommits", func(d types.VCSDriver, dir string) error { return errOf(d.MissingCommits(ctx, dir, "-x", "-x")) }},
 		{types.CapRegionReporter, "Regions", func(d types.VCSDriver, dir string) error {
-			return errOf(d.Regions(ctx, dir, "-x", []types.FileChange{{Path: "x"}}))
+			return errOf(d.Regions(ctx, dir, "-x", []job.FileChange{{Path: "x"}}))
 		}},
 		{types.CapAncestryReporter, "IsAncestor", func(d types.VCSDriver, dir string) error { return errOf(d.IsAncestor(ctx, dir, "-x", "-x")) }},
 		{types.CapCheckoutFastForwarder, "FastForward", func(d types.VCSDriver, dir string) error { return d.FastForward(ctx, dir, "-x") }},

@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 	"github.com/egladman/magus/types"
@@ -93,7 +94,7 @@ func (s *Service) CreateToken(ctx context.Context, req *connect.Request[tokenv1.
 	if err != nil {
 		return nil, connectError(err)
 	}
-	if grant.MCP != types.LevelNone || grant.Tokens != types.LevelNone {
+	if grant.MCP != job.LevelNone || grant.Tokens != job.LevelNone {
 		return nil, connectError(types.WrapDiagnostic(types.TokenRequestInvalid, auth.ErrInvalidTokenRequest,
 			"token: the console mints console grants only; mint an /mcp token with `magus config mcp connector create`"))
 	}
@@ -123,8 +124,8 @@ func (s *Service) RevokeToken(ctx context.Context, req *connect.Request[tokenv1.
 	caller := trail.CredentialFromContext(ctx).Grant
 	if s.share != nil {
 		if info, ok := s.share.Active(); ok && shareMatches(info, id) {
-			if !types.GrantViewer.Within(caller) {
-				return nil, connectError(types.WrapDiagnostic(types.GrantInsufficient, auth.ErrExceedsGrant, "token: revoking the share link needs %s", types.GrantViewer))
+			if !job.AccessViewer.Within(caller) {
+				return nil, connectError(types.WrapDiagnostic(types.GrantInsufficient, auth.ErrExceedsGrant, "token: revoking the share link needs %s", job.AccessViewer))
 			}
 			if s.share.CloseIf(info.ID) {
 				return connect.NewResponse(shareInfo(info)), nil
@@ -181,7 +182,7 @@ func shareInfo(i share.TokenInfo) *tokenv1.TokenInfo {
 		Name:       shareTokenLabel,
 		Id:         i.ID,
 		Class:      tokenv1.CredentialClass_CREDENTIAL_CLASS_SHARE,
-		Grant:      wireGrant(types.GrantViewer),
+		Grant:      wireGrant(job.AccessViewer),
 		ExpireTime: timestamppb.New(i.Expires),
 	}
 }
@@ -191,27 +192,27 @@ func shareMatches(i share.TokenInfo, identifier string) bool {
 	return identifier == shareTokenLabel || identifier == i.ID
 }
 
-var wireLevels = map[types.Level]tokenv1.Level{
-	types.LevelNone:  tokenv1.Level_LEVEL_UNSPECIFIED,
-	types.LevelRead:  tokenv1.Level_LEVEL_READ,
-	types.LevelWrite: tokenv1.Level_LEVEL_WRITE,
+var wireLevels = map[job.Level]tokenv1.Level{
+	job.LevelNone:  tokenv1.Level_LEVEL_UNSPECIFIED,
+	job.LevelRead:  tokenv1.Level_LEVEL_READ,
+	job.LevelWrite: tokenv1.Level_LEVEL_WRITE,
 }
 
-func wireGrant(g types.Grant) *tokenv1.Grant {
+func wireGrant(g job.Access) *tokenv1.Grant {
 	return &tokenv1.Grant{Tokens: wireLevels[g.Tokens], Mcp: wireLevels[g.MCP], Console: wireLevels[g.Console]}
 }
 
 // fromWireGrant reads a wire grant, refusing a level this magus does not know.
-func fromWireGrant(w *tokenv1.Grant) (types.Grant, error) {
-	level := func(l tokenv1.Level) (types.Level, error) {
+func fromWireGrant(w *tokenv1.Grant) (job.Access, error) {
+	level := func(l tokenv1.Level) (job.Level, error) {
 		for local, wire := range wireLevels {
 			if wire == l {
 				return local, nil
 			}
 		}
-		return types.LevelNone, types.WrapDiagnostic(types.TokenRequestInvalid, auth.ErrInvalidTokenRequest, "token: unknown level %d", l)
+		return job.LevelNone, types.WrapDiagnostic(types.TokenRequestInvalid, auth.ErrInvalidTokenRequest, "token: unknown level %d", l)
 	}
-	var g types.Grant
+	var g job.Access
 	var err error
 	if g.Tokens, err = level(w.GetTokens()); err != nil {
 		return g, err
@@ -223,15 +224,15 @@ func fromWireGrant(w *tokenv1.Grant) (types.Grant, error) {
 	return g, err
 }
 
-func wireKind(c types.CredentialKind) tokenv1.CredentialClass {
+func wireKind(c job.CredentialKind) tokenv1.CredentialClass {
 	switch c {
-	case types.KindOperator:
+	case job.KindOperator:
 		return tokenv1.CredentialClass_CREDENTIAL_CLASS_OPERATOR
-	case types.KindStored:
+	case job.KindStored:
 		return tokenv1.CredentialClass_CREDENTIAL_CLASS_STORED
-	case types.KindShare:
+	case job.KindShare:
 		return tokenv1.CredentialClass_CREDENTIAL_CLASS_SHARE
-	case types.KindExchange:
+	case job.KindExchange:
 		return tokenv1.CredentialClass_CREDENTIAL_CLASS_EXCHANGE
 	}
 	return tokenv1.CredentialClass_CREDENTIAL_CLASS_UNSPECIFIED
@@ -260,7 +261,7 @@ func AuditSubject(resp connect.AnyResponse) (blob []byte, preview string) {
 	if info.GetName() != "" {
 		preview += fmt.Sprintf(" (%s)", info.GetName())
 	}
-	if g, err := fromWireGrant(info.GetGrant()); err == nil && g != (types.Grant{}) {
+	if g, err := fromWireGrant(info.GetGrant()); err == nil && g != (job.Access{}) {
 		preview += " " + g.String()
 	}
 	if info.ExpireTime != nil {

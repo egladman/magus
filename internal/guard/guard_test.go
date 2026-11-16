@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/suite"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -20,6 +19,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
@@ -37,11 +38,11 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -198,13 +199,13 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 // against, so two workers sharing a checkout are each denied outside their own paths
 // rather than both running ungraded.
 func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
-	one := types.Job{
-		ID: "wave/one", Agent: typesagent.Instructed("the store"), Paths: types.JobPaths{Write: []string{"internal/job/**"}},
-		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
+	one := jobtypes.Job{
+		ID: "wave/one", Agent: jobtypes.Instructed("the store"), Paths: jobtypes.Paths{Write: []string{"internal/job/**"}},
+		State: jobtypes.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: jobtypes.BaseMatch, Registered: 1,
 	}
-	two := types.Job{
-		ID: "wave/two", Agent: typesagent.Instructed("the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}},
-		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
+	two := jobtypes.Job{
+		ID: "wave/two", Agent: jobtypes.Instructed("the guard"), Paths: jobtypes.Paths{Write: []string{"internal/guard/**"}},
+		State: jobtypes.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: jobtypes.BaseMatch, Registered: 1,
 	}
 	ctx, _ := fleetFixture(t, one, two)
 
@@ -260,13 +261,13 @@ func TestJudgeLeavesCallersWithoutAFormAlone(t *testing.T) {
 // while its terminal window still keys what the guard remembers for it.
 func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
 	dir := t.TempDir()
-	ctx := trail.ContextWithEntryPoint(WithLocation(t.Context(), dir, "/repo", ""), types.EntryPointCLI)
+	ctx := trail.ContextWithEntryPoint(WithLocation(t.Context(), dir, "/repo", ""), jobtypes.EntryPointCLI)
 
 	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "test-host", Window: "tty:w1"})
 
 	events := trailEvents(t, dir, trail.KindAgentCommand)
 	require.Len(t, events, 1)
-	assert.Equal(t, types.EntryPointCLI, events[0].EntryPoint)
+	assert.Equal(t, jobtypes.EntryPointCLI, events[0].EntryPoint)
 	assert.Empty(t, events[0].Session, "a terminal window is not a host session")
 	assert.NotContains(t, events[0].Label(), "agent", "a terminal call is never labeled an agent")
 
@@ -293,7 +294,7 @@ type policyCase struct {
 	checkout *types.CheckoutState
 	// jobs are the rows the job store holds when the input arrives. A running row with no
 	// checkout root is taken in the case's own checkout.
-	jobs []types.Job
+	jobs []jobtypes.Job
 	// corruptStore replaces the job store with bytes it cannot decode.
 	corruptStore bool
 	// lease is the job the caller acts under, "" for the orchestrator or a person.
@@ -352,10 +353,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "pr-watch", name: "one read of a pull request's state", input: bash("gh pr view 300 --json state,autoMergeRequest"), decision: decisionPass},
 		{rule: "worker-runs-gate", name: "a review worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/review footprint", decision: decisionDeny, reason: "integrate"},
 		{rule: "worker-runs-gate", name: "the checkout's integrator runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint",
-			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/**"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
+			jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"docs/**"}}, Check: &jobtypes.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
 		{rule: "worker-runs-gate", name: "an integrate title with no lease taken here", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint", decision: decisionDeny, reason: "integrate"},
 		{rule: "worker-builds-magus", name: "the checkout's integrator builds magus", input: bash("./magus run go-build ."), worker: "root/integrate footprint",
-			jobs: []types.Job{{ID: "footprint", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"docs/**"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
+			jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"docs/**"}}, Check: &jobtypes.LeaseCheck{Target: "go-test", Project: "."}}}, lease: "footprint", decision: decisionPass},
 		{rule: "detached-push-unqualified", name: "a detached push to a new branch", input: bash("git push origin HEAD:guard-pr-polling"),
 			checkout: &types.CheckoutState{RemoteBranches: []string{"origin/main"}}, decision: decisionDeny, reason: "HEAD:refs/heads/guard-pr-polling"},
 		{rule: "push-authority", name: "a subagent opens a pull request", input: bash(`gh pr create --title "fix: pin the key" --body "Pins it."`),
@@ -372,30 +373,30 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		}), decision: decisionDeny, reason: "magus job fork footprint --parent root --model sonnet --read-only"},
 		{rule: "spawn-without-job-row", name: "a spawn naming an ended row", input: agentSpawn(map[string]any{
 			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StatePass}}, decision: decisionDeny, reason: "has ended (pass)"},
+		}), jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StatePass}}, decision: decisionDeny, reason: "has ended (pass)"},
 		{rule: "spawn-without-job-row", name: "a spawn naming a live nested row", input: agentSpawn(map[string]any{
 			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
-		}), jobs: []types.Job{{ID: "root/footprint", Parent: "root", State: types.StateDeclared, ReadOnly: true}}, decision: decisionPass},
+		}), jobs: []jobtypes.Job{{ID: "root/footprint", Parent: "root", State: jobtypes.StateDeclared, ReadOnly: true}}, decision: decisionPass},
 		{rule: "spawn-without-job-row", name: "a spawn while the store cannot be read", input: agentSpawn(map[string]any{
 			"description": "root/review footprint", "prompt": "Review it.", "model": "sonnet",
 		}), corruptStore: true, decision: decisionAdvise, reason: "went unchecked"},
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker sharing the checkout", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: decisionDeny, reason: `isolation: "worktree"`},
+		}), jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateDeclared}}, decision: decisionDeny, reason: `isolation: "worktree"`},
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared, Worktree: &types.JobWorktree{Root: "/checkouts/footprint"}}}, decision: decisionPass},
+		}), jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateDeclared, Worktree: &jobtypes.Worktree{Root: "/checkouts/footprint"}}}, decision: decisionPass},
 		{rule: "worker-builds-magus", name: "a worker rebuilds the binary", input: bash("./magus run go-build ."),
-			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: decisionDeny, reason: "a worker does not build magus"},
+			lease: "footprint", jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateRunning}}, decision: decisionDeny, reason: "a worker does not build magus"},
 		{rule: "worker-builds-magus", name: "a worker bootstraps the binary", input: bash("GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."),
-			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: decisionDeny, reason: "ask the main session to place ./magus"},
+			lease: "footprint", jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateRunning}}, decision: decisionDeny, reason: "ask the main session to place ./magus"},
 		{rule: "worker-builds-magus", name: "the orchestrator rebuilds the binary", input: bash("./magus run go-build ."), decision: decisionPass},
 		{rule: "brief-builds-magus", name: "a brief tells its worker to build", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Implement it, then run `./magus run go-build .` first.", "model": "sonnet", "isolation": "worktree",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared, Worktree: &types.JobWorktree{Root: "/checkouts/footprint"}}}, decision: decisionDeny, reason: "tells the worker to build magus"},
+		}), jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateDeclared, Worktree: &jobtypes.Worktree{Root: "/checkouts/footprint"}}}, decision: decisionDeny, reason: "tells the worker to build magus"},
 		{rule: "brief-builds-magus", name: "a brief that names the build only to forbid it", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Never run `./magus run go-build .`; use the binary already placed.", "model": "sonnet", "isolation": "worktree",
-		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared, Worktree: &types.JobWorktree{Root: "/checkouts/footprint"}}}, decision: decisionPass},
+		}), jobs: []jobtypes.Job{{ID: "footprint", State: jobtypes.StateDeclared, Worktree: &jobtypes.Worktree{Root: "/checkouts/footprint"}}}, decision: decisionPass},
 		{rule: "worker-bootstrap", name: "a subagent runs the bootstrap", input: bash("go run -trimpath ./cmd/magus run go-build --no-cache ."),
 			worker: "root/feat footprint", decision: decisionDeny, reason: "a worker does not build magus"},
 		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), binary: true, decision: decisionDeny, reason: "magus query output"},
@@ -416,11 +417,11 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			}
 			store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: hookLocation(ctx, Dependencies{}).workspace})
 			for _, row := range tc.jobs {
-				if row.State == types.StateRunning && row.CheckoutRoot == "" {
+				if row.State == jobtypes.StateRunning && row.CheckoutRoot == "" {
 					row.CheckoutRoot = hookLocation(ctx, Dependencies{}).workspace
 				}
 				row.Validated = 1
-				_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+				_, err := store.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 				require.NoError(t, err)
 				if row.Worktree != nil {
 					_, err = store.RecordWorktree(t.Context(), row.ID, *row.Worktree)
@@ -1002,10 +1003,10 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 		{
 			name: "a once-per-session notice",
 			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
-				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
+				ctx, _ := fleetFixture(t, jobtypes.Job{ID: "finished", State: jobtypes.StatePass})
 				return ctx, Dependencies{}, Request{Input: "ls", Lease: "finished", Session: "s1"}
 			},
-			want: verdict.Judgment{Decision: decisionAdvise, Rule: string(advisoryLeaseTerminal), Lease: "finished", LeaseFrom: string(types.LeaseSourceFlag)},
+			want: verdict.Judgment{Decision: decisionAdvise, Rule: string(advisoryLeaseTerminal), Lease: "finished", LeaseFrom: string(jobtypes.LeaseSourceFlag)},
 		},
 		{
 			name: "a denied command",
@@ -1018,7 +1019,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 		{
 			name: "an unregistered worker's first write",
 			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
-				ctx, root := fleetFixture(t, types.Job{ID: "worker", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"app/**"}}})
+				ctx, root := fleetFixture(t, jobtypes.Job{ID: "worker", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"app/**"}}})
 				bindCaller(t, ctx, hookAttribution{}, "worker")
 				// An edit of a file already there, so no new-directory or new-file rule speaks.
 				require.NoError(t, os.MkdirAll(filepath.Join(root, "app"), 0o755))
@@ -1026,7 +1027,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				commitCheckout(t, root)
 				return ctx, Dependencies{}, Request{Input: filepath.Join(root, "app", "main.go"), IsPath: true}
 			},
-			want: verdict.Judgment{Decision: decisionPass, Lease: "worker", LeaseFrom: string(types.LeaseSourceMarker)},
+			want: verdict.Judgment{Decision: decisionPass, Lease: "worker", LeaseFrom: string(jobtypes.LeaseSourceMarker)},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1262,7 +1263,7 @@ func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
 			{decision: builtin.Deny, first: decisionDeny, again: decisionDeny},
 		} {
 			t.Run(fmt.Sprintf("%s/%s", string(notice.rule), tt.decision), func(t *testing.T) {
-				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
+				ctx, _ := fleetFixture(t, jobtypes.Job{ID: "finished", State: jobtypes.StatePass})
 				deps := withSetting(string(notice.rule), tt.decision)
 				judge := func() verdict.Judgment {
 					v := Judge(ctx, deps, Request{Input: "ls", Lease: notice.lease, Session: "s1"})
@@ -1309,13 +1310,13 @@ func BenchmarkWithJobStoreRows(b *testing.B) {
 	cacheDir := b.TempDir()
 	at := location{cacheDir: cacheDir, workspace: root, dir: root}
 	store := job.NewStore(at.jobs())
-	states := []types.JobState{types.StatePass, types.StatePass, types.StateFail, types.StateNoReturn, types.StateDeclared}
+	states := []jobtypes.State{jobtypes.StatePass, jobtypes.StatePass, jobtypes.StateFail, jobtypes.StateNoReturn, jobtypes.StateDeclared}
 	for i := range 300 {
-		row := types.Job{
+		row := jobtypes.Job{
 			ID: fmt.Sprintf("root-%d/job-%d", i%20, i), Parent: fmt.Sprintf("root-%d", i%20),
-			State: states[i%len(states)], Paths: types.JobPaths{Write: []string{"internal/guard/guard.go"}},
+			State: states[i%len(states)], Paths: jobtypes.Paths{Write: []string{"internal/guard/guard.go"}},
 		}
-		_, err := store.Update(b.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		_, err := store.Update(b.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(b, err)
 	}
 	ctx := b.Context()
@@ -1331,9 +1332,9 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 	root, cacheDir := t.TempDir(), t.TempDir()
 	at := location{cacheDir: cacheDir, workspace: root, dir: root}
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
-	put := func(row types.Job) {
+	put := func(row jobtypes.Job) {
 		t.Helper()
-		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		_, err := store.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	rowsOf := func() []string {
@@ -1348,9 +1349,9 @@ func TestJobStoreRowsAreReadFreshEachCall(t *testing.T) {
 		return ids
 	}
 
-	put(types.Job{ID: "a", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"x.go"}}, Agent: &typesagent.Spec{Model: typesagent.Model{ID: "sonnet"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}})
+	put(jobtypes.Job{ID: "a", State: jobtypes.StateDeclared, Paths: jobtypes.Paths{Write: []string{"x.go"}}, Agent: &jobtypes.Agent{Model: jobtypes.Model{ID: "sonnet"}, Worker: jobtypes.Worker{Type: jobtypes.WorkerTypeResumed}}})
 	assert.Equal(t, []string{"a"}, rowsOf())
-	put(types.Job{ID: "b", State: types.StateDeclared})
+	put(jobtypes.Job{ID: "b", State: jobtypes.StateDeclared})
 	assert.Equal(t, []string{"a", "b"}, rowsOf())
 }
 
@@ -2325,22 +2326,22 @@ type resolveAuthoritySuite struct {
 
 func TestResolveAuthority(t *testing.T) { suite.Run(t, new(resolveAuthoritySuite)) }
 
-type rowsReader []types.Job
+type rowsReader []jobtypes.Job
 
-func (r rowsReader) List() ([]types.Job, error) { return r, nil }
+func (r rowsReader) List() ([]jobtypes.Job, error) { return r, nil }
 
 func (s *resolveAuthoritySuite) SetupTest() {
 	s.ws = s.T().TempDir()
 	s.checkout = s.T().TempDir()
 }
 
-func (s *resolveAuthoritySuite) resolve(req Request, rows ...types.Job) CallAuthority {
+func (s *resolveAuthoritySuite) resolve(req Request, rows ...jobtypes.Job) CallAuthority {
 	ctx := WithLocation(s.T().Context(), filepath.Join(s.ws, ".magus"), s.ws, s.ws)
 	return ResolveAuthority(ctx, Dependencies{JobReader: rowsReader(rows)}, req)
 }
 
 func (s *resolveAuthoritySuite) TestALeasedCallTakesItsRowsCheckoutAndAuthority() {
-	row := types.Job{ID: "task", State: types.StateRunning, Authority: "abc123", CheckoutRoot: s.checkout}
+	row := jobtypes.Job{ID: "task", State: jobtypes.StateRunning, Authority: "abc123", CheckoutRoot: s.checkout}
 
 	got := s.resolve(Request{Input: "ls", Lease: "task", Authority: "ignored"}, row)
 
@@ -2348,14 +2349,14 @@ func (s *resolveAuthoritySuite) TestALeasedCallTakesItsRowsCheckoutAndAuthority(
 }
 
 func (s *resolveAuthoritySuite) TestAForkedWorktreeOutranksTheExecCheckout() {
-	row := types.Job{ID: "task", State: types.StateRunning, Authority: "abc123", CheckoutRoot: s.T().TempDir(),
-		Worktree: &types.JobWorktree{Root: s.checkout}}
+	row := jobtypes.Job{ID: "task", State: jobtypes.StateRunning, Authority: "abc123", CheckoutRoot: s.T().TempDir(),
+		Worktree: &jobtypes.Worktree{Root: s.checkout}}
 
 	s.Equal(s.checkout, s.resolve(Request{Input: "ls", Lease: "task"}, row).Checkout)
 }
 
 func (s *resolveAuthoritySuite) TestACheckoutGoneFromDiskLoadsTheCallersOwn() {
-	row := types.Job{ID: "task", State: types.StateRunning, Authority: "abc123", CheckoutRoot: filepath.Join(s.checkout, "gone")}
+	row := jobtypes.Job{ID: "task", State: jobtypes.StateRunning, Authority: "abc123", CheckoutRoot: filepath.Join(s.checkout, "gone")}
 
 	s.Empty(s.resolve(Request{Input: "ls", Lease: "task"}, row).Checkout)
 }
@@ -2371,7 +2372,7 @@ func (s *resolveAuthoritySuite) TestALeaseNoRowCarriesKeepsTheRequestsAuthority(
 }
 
 func (s *resolveAuthoritySuite) TestAPendingRowHasNoAuthorityYet() {
-	got := s.resolve(Request{Input: "ls", PendingRow: &types.Job{ID: "fork"}, Authority: "target"})
+	got := s.resolve(Request{Input: "ls", PendingRow: &jobtypes.Job{ID: "fork"}, Authority: "target"})
 
 	s.Equal(CallAuthority{Lease: "fork", Revision: "target"}, got)
 }

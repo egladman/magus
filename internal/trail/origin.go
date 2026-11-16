@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // osAccount is read once: a process cannot change the account it runs as, and the
@@ -38,14 +38,14 @@ type entryPointKey struct{}
 
 // ContextWithEntryPoint returns ctx recording e as where work under it entered magus. The
 // innermost call wins, so a server handling an RPC call stamps rpc over server.
-func ContextWithEntryPoint(ctx context.Context, e types.EntryPoint) context.Context {
+func ContextWithEntryPoint(ctx context.Context, e job.EntryPoint) context.Context {
 	return context.WithValue(ctx, entryPointKey{}, e)
 }
 
 // EntryPointFromContext returns the entry point [ContextWithEntryPoint] recorded on ctx,
 // or "" when none was.
-func EntryPointFromContext(ctx context.Context) types.EntryPoint {
-	e, _ := ctx.Value(entryPointKey{}).(types.EntryPoint)
+func EntryPointFromContext(ctx context.Context) job.EntryPoint {
+	e, _ := ctx.Value(entryPointKey{}).(job.EntryPoint)
 	return e
 }
 
@@ -55,14 +55,14 @@ type credentialKey struct{}
 // presented. httpx's bearer guard is the one door that verifies a credential, and so the
 // one caller that sets it; [StampOrigin] reads it onto every record made under ctx, and a
 // handler that mints reads its Grant as the minter's.
-func ContextWithCredential(ctx context.Context, c types.Credential) context.Context {
+func ContextWithCredential(ctx context.Context, c job.Credential) context.Context {
 	return context.WithValue(ctx, credentialKey{}, c)
 }
 
 // CredentialFromContext returns the credential [ContextWithCredential] recorded on ctx, or
 // the zero credential, which grants nothing, when the request passed no bearer guard.
-func CredentialFromContext(ctx context.Context) types.Credential {
-	c, _ := ctx.Value(credentialKey{}).(types.Credential)
+func CredentialFromContext(ctx context.Context) job.Credential {
+	c, _ := ctx.Value(credentialKey{}).(job.Credential)
 	return c
 }
 
@@ -81,12 +81,12 @@ func HostFromContext(ctx context.Context) string {
 	return host
 }
 
-// LocalOrigin is the part of an [types.Origin] this process can read for itself: the OS
+// LocalOrigin is the part of an [job.Origin] this process can read for itself: the OS
 // account it runs as, and the entry point, credential and host ctx records. Session and
 // Agent stay empty for the caller to fill from what a host's hook delivered.
-func LocalOrigin(ctx context.Context) types.Origin {
+func LocalOrigin(ctx context.Context) job.Origin {
 	name, uid := osAccount()
-	return types.Origin{
+	return job.Origin{
 		User: name, UID: uid,
 		EntryPoint: EntryPointFromContext(ctx), Credential: CredentialFromContext(ctx), Host: HostFromContext(ctx),
 	}
@@ -94,9 +94,9 @@ func LocalOrigin(ctx context.Context) types.Origin {
 
 // hookOrigin is the origin of an observation a host's hook delivered. An observation
 // that names no entry point came through the hook, the only producer that omits it.
-func hookOrigin(o types.Origin) types.Origin {
+func hookOrigin(o job.Origin) job.Origin {
 	if o.EntryPoint == "" {
-		o.EntryPoint = types.EntryPointHook
+		o.EntryPoint = job.EntryPointHook
 	}
 	return o
 }
@@ -104,13 +104,13 @@ func hookOrigin(o types.Origin) types.Origin {
 // StampOrigin returns o with the OS account this process runs as and, where o names none,
 // the entry point, credential and host ctx records. The account is never taken from o: it
 // is the one field no caller can know better than the OS.
-func StampOrigin(ctx context.Context, o types.Origin) types.Origin {
+func StampOrigin(ctx context.Context, o job.Origin) job.Origin {
 	local := LocalOrigin(ctx)
 	o.User, o.UID = local.User, local.UID
 	if o.EntryPoint == "" {
 		o.EntryPoint = local.EntryPoint
 	}
-	if o.Credential == (types.Credential{}) {
+	if o.Credential == (job.Credential{}) {
 		o.Credential = local.Credential
 	}
 	if o.Host == "" {

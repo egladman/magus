@@ -177,7 +177,6 @@ linters:
           list-mode: lax
           files:
             - "${base-path}/types/*.go"
-            - "${base-path}/types/agent/*.go"
             - "${base-path}/types/check/*.go"
             - "${base-path}/types/impact/*.go"
             - "${base-path}/types/vcs/*.go"
@@ -194,9 +193,10 @@ linters:
             - github.com/egladman/magus/libs/safetyscissors/verdict$
             # The model tier and price types a job, a spawn and a harness row carry.
             - github.com/egladman/magus/libs/safetyscissors/tier$
+            # The job record, its claim grammar and the origin every record stamps.
+            - github.com/egladman/magus/libs/safetyscissors/job$
             - github.com/egladman/magus/internal/json$
             - github.com/egladman/magus/types/enum$
-            - github.com/egladman/magus/types/agent$
             - github.com/egladman/magus/types/check$
             - github.com/egladman/magus/types/impact$
             - github.com/egladman/magus/types/vcs$
@@ -215,7 +215,7 @@ linters:
             - pkg: os/user$
               desc: types is the near-leaf domain package and may not reach the world
             - pkg: github.com/egladman/magus/
-              desc: types may depend on spells, libs/diagnostics, libs/apiversion, libs/safetyscissors/budget, verdict and tier, internal/json and its own domain packages, nothing else in magus
+              desc: types may depend on spells, libs/diagnostics, libs/apiversion, libs/safetyscissors/budget, verdict, tier and job, internal/json and its own domain packages, nothing else in magus
 
         # libs/conventions, libs/proofread and libs/testpairing are magus-repo policy, never shipped.
         root-imports-no-repo-policy:

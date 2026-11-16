@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/review"
 	store "github.com/egladman/magus/internal/notes"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 func TestNotesLsByTagListsOpenGapsWithTheirFindLines(t *testing.T) {
@@ -53,7 +53,7 @@ func TestServerReviewCommentsRevokesItsToken(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		presented = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		cred, ok := auth.Verify(presented)
-		if !ok || cred.Kind != types.KindStored {
+		if !ok || cred.Kind != job.KindStored {
 			http.Error(w, "no", http.StatusForbidden)
 			return
 		}

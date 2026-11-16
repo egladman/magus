@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +33,7 @@ func TestALockWaitNamesTheHolder(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
-	_, err := waiter.Update(ctx, "blocked", func(*types.Job) {})
+	_, err := waiter.Update(ctx, "blocked", func(*job.Job) {})
 	close(release)
 	require.NoError(t, <-done)
 

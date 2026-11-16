@@ -3,7 +3,7 @@ package settle
 import (
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -12,10 +12,10 @@ import (
 // whole-file or glob writer included so it can refuse the settle, but only a path some job
 // claims by declaration is asked about at all.
 func TestJobsWriting(t *testing.T) {
-	rows := []types.Job{
-		{ID: "a", Paths: types.JobPaths{Write: []string{"a.go#A"}}},
-		{ID: "glob", Paths: types.JobPaths{Write: []string{"**/*.go"}}},
-		{ID: "other", Paths: types.JobPaths{Write: []string{"b.go#B", "docs/**"}}},
+	rows := []job.Job{
+		{ID: "a", Paths: job.Paths{Write: []string{"a.go#A"}}},
+		{ID: "glob", Paths: job.Paths{Write: []string{"**/*.go"}}},
+		{ID: "other", Paths: job.Paths{Write: []string{"b.go#B", "docs/**"}}},
 	}
 	writers, claimed := jobsWriting(rows, "a.go")
 	assert.True(t, claimed)

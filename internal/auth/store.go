@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -81,20 +82,20 @@ var (
 type Token struct {
 	// ID is the first 8 hex of SHA256. It is what a record names the token by, because Name
 	// can be reused after a revoke and ID cannot.
-	ID      string               `json:"id"`
-	Name    string               `json:"name"`
-	Kind    types.CredentialKind `json:"class"`
-	SHA256  string               `json:"sha256"`
-	Grant   types.Grant          `json:"grant"`
-	Created time.Time            `json:"created"`
-	Expires time.Time            `json:"expires"`
+	ID      string             `json:"id"`
+	Name    string             `json:"name"`
+	Kind    job.CredentialKind `json:"class"`
+	SHA256  string             `json:"sha256"`
+	Grant   job.Access         `json:"grant"`
+	Created time.Time          `json:"created"`
+	Expires time.Time          `json:"expires"`
 	// TokenTTL is, on an exchange code, the lifetime of the stored token it is traded for.
 	TokenTTL time.Duration `json:"token_ttl,omitzero"`
 }
 
 // Credential is the credential this record verifies as.
-func (t Token) Credential() types.Credential {
-	return types.Credential{Kind: t.Kind, ID: t.ID, Name: t.Name, Grant: t.Grant}
+func (t Token) Credential() job.Credential {
+	return job.Credential{Kind: t.Kind, ID: t.ID, Name: t.Name, Grant: t.Grant}
 }
 
 // Expired reports whether now is past the record's expiry.
@@ -123,7 +124,7 @@ func (r *tokenRecord) UnmarshalJSON(b []byte) error {
 // (for a grant reaching /mcp) or "console-N". TTL is required, in (0, MaxTokenTTL].
 type MintRequest struct {
 	Name  string
-	Grant types.Grant
+	Grant job.Access
 	TTL   time.Duration
 }
 
@@ -305,9 +306,9 @@ func parseTokenRecord(name, path string, info fs.FileInfo, now time.Time) (Token
 	t := rec.Token
 	var bound time.Duration
 	switch t.Kind {
-	case types.KindStored:
+	case job.KindStored:
 		bound = MaxTokenTTL
-	case types.KindExchange:
+	case job.KindExchange:
 		bound = ExchangeCodeTTL
 		if t.TokenTTL <= 0 || t.TokenTTL > MaxTokenTTL {
 			return Token{}, invalidRecord(path, "its code stands for a token living %s", t.TokenTTL)
@@ -324,9 +325,9 @@ func parseTokenRecord(name, path string, info fs.FileInfo, now time.Time) (Token
 		return Token{}, invalidRecord(path, "its hash or id is malformed")
 	case t.Grant.Validate() != nil:
 		return Token{}, invalidRecord(path, "%v", t.Grant.Validate())
-	case t.Grant == types.Grant{}:
+	case t.Grant == job.Access{}:
 		return Token{}, invalidRecord(path, "it grants nothing")
-	case t.Grant.Tokens != types.LevelNone:
+	case t.Grant.Tokens != job.LevelNone:
 		return Token{}, invalidRecord(path, "tokens=%s is the operator's alone", t.Grant.Tokens)
 	case t.Created.IsZero() || t.Created.After(now):
 		return Token{}, invalidRecord(path, "its creation time %s is missing or in the future", t.Created.Format(time.RFC3339))
@@ -423,31 +424,31 @@ func (s *Store) removeExact(t Token) error {
 }
 
 // Mint stores a new token and returns its secret, which cannot be recovered afterwards.
-// minter is the grant of whoever asks: the CLI passes [types.GrantOperator] (the shell is the
+// minter is the grant of whoever asks: the CLI passes [job.AccessOperator] (the shell is the
 // user), and a server handler passes the grant of the credential its request verified as. It
 // refuses, each with a coded error unwrapping to its sentinel: an invalid or empty grant, or
 // one holding tokens=write, which only the operator has (ErrInvalidTokenRequest); a grant not
 // Within minter (ErrExceedsGrant); a TTL outside (0, MaxTokenTTL] (ErrTokenLifetime); a name
 // that is invalid or looks like an id (ErrInvalidTokenRequest), or is taken (ErrTokenExists).
 // Nothing is clamped. Before writing it deletes every expired record, as List does.
-func (s *Store) Mint(minter types.Grant, req MintRequest) (secret types.Secret, rec Token, err error) {
+func (s *Store) Mint(minter job.Access, req MintRequest) (secret types.Secret, rec Token, err error) {
 	st := s.state()
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	return s.mint(st, minter, req, types.KindStored, req.TTL, 0)
+	return s.mint(st, minter, req, job.KindStored, req.TTL, 0)
 }
 
 // MintCode stores a one-time exchange code for the token req describes, and returns the code.
 // The code is not a bearer anywhere: it lives ExchangeCodeTTL, and Redeem trades it once for
 // the token. It is checked against minter exactly as Mint checks the token it stands for.
-func (s *Store) MintCode(minter types.Grant, req MintRequest) (code types.Secret, rec Token, err error) {
+func (s *Store) MintCode(minter job.Access, req MintRequest) (code types.Secret, rec Token, err error) {
 	st := s.state()
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if err := checkTTL(req.TTL); err != nil {
 		return types.Secret{}, Token{}, err
 	}
-	return s.mint(st, minter, req, types.KindExchange, ExchangeCodeTTL, req.TTL)
+	return s.mint(st, minter, req, job.KindExchange, ExchangeCodeTTL, req.TTL)
 }
 
 func checkTTL(ttl time.Duration) error {
@@ -459,19 +460,19 @@ func checkTTL(ttl time.Duration) error {
 }
 
 // mint writes one record. The caller holds st.mu.
-func (s *Store) mint(st *dirState, minter types.Grant, req MintRequest, kind types.CredentialKind, life, tokenTTL time.Duration) (types.Secret, Token, error) {
+func (s *Store) mint(st *dirState, minter job.Access, req MintRequest, kind job.CredentialKind, life, tokenTTL time.Duration) (types.Secret, Token, error) {
 	switch {
 	case req.Grant.Validate() != nil:
 		return types.Secret{}, Token{}, invalidRequest("%v", req.Grant.Validate())
-	case req.Grant.Tokens != types.LevelNone:
+	case req.Grant.Tokens != job.LevelNone:
 		return types.Secret{}, Token{}, invalidRequest("tokens=%s is the operator's alone; no stored token holds it", req.Grant.Tokens)
 	case !req.Grant.Within(minter):
 		return types.Secret{}, Token{}, types.WrapDiagnostic(types.GrantInsufficient, ErrExceedsGrant,
 			"auth: a token may not be granted more than its minter holds: asked for %s, holds %s", req.Grant, grantOrNothing(minter))
-	case req.Grant == types.Grant{}:
+	case req.Grant == job.Access{}:
 		return types.Secret{}, Token{}, invalidRequest("a token must grant something")
 	}
-	if kind == types.KindStored {
+	if kind == job.KindStored {
 		if err := checkTTL(life); err != nil {
 			return types.Secret{}, Token{}, err
 		}
@@ -521,15 +522,15 @@ func (s *Store) mint(st *dirState, minter types.Grant, req MintRequest, kind typ
 	return types.NewSecret(secret), rec, nil
 }
 
-func defaultName(g types.Grant, n int) string {
+func defaultName(g job.Access, n int) string {
 	prefix := "console"
-	if g.MCP != types.LevelNone {
+	if g.MCP != job.LevelNone {
 		prefix = "connector"
 	}
 	return fmt.Sprintf("%s-%d", prefix, n)
 }
 
-func grantOrNothing(g types.Grant) string {
+func grantOrNothing(g job.Access) string {
 	if s := g.String(); s != "" {
 		return s
 	}
@@ -561,7 +562,7 @@ func writeTokenRecord(dir string, t Token) error {
 // BearerRejected). The token takes the code's name when it is still free.
 func (s *Store) Redeem(code string) (secret types.Secret, rec Token, err error) {
 	notFound := types.WrapDiagnostic(types.BearerRejected, ErrTokenNotFound, "auth: the link code is wrong, expired, or already used; open a fresh link")
-	if kind, ok := credentialKind(code); !ok || kind != types.KindExchange {
+	if kind, ok := credentialKind(code); !ok || kind != job.KindExchange {
 		return types.Secret{}, Token{}, notFound
 	}
 	st := s.state()
@@ -570,7 +571,7 @@ func (s *Store) Redeem(code string) (secret types.Secret, rec Token, err error) 
 	if err := s.read(st); err != nil {
 		return types.Secret{}, Token{}, err
 	}
-	match, ok := lookup(st.tokens, code, types.KindExchange, time.Now())
+	match, ok := lookup(st.tokens, code, job.KindExchange, time.Now())
 	if !ok {
 		return types.Secret{}, Token{}, notFound
 	}
@@ -588,14 +589,14 @@ func (s *Store) Redeem(code string) (secret types.Secret, rec Token, err error) 
 	if slices.ContainsFunc(st.tokens, func(t Token) bool { return t.Name == match.Name }) {
 		match.Name = "" // taken since; the token gets the next free name
 	}
-	return s.mint(st, match.Grant, MintRequest{Name: match.Name, Grant: match.Grant, TTL: match.TokenTTL}, types.KindStored, match.TokenTTL, 0)
+	return s.mint(st, match.Grant, MintRequest{Name: match.Name, Grant: match.Grant, TTL: match.TokenTTL}, job.KindStored, match.TokenTTL, 0)
 }
 
 // Revoke deletes the token q names: by exact id when q is 8 hex digits, by exact name
 // otherwise (no name looks like an id, so the two never mix). revoker is the grant of whoever
 // asks, and a token outside it is refused (ErrExceedsGrant), as Mint refuses one. It deletes
 // the file by the record's validated name, and only if the file still holds that record.
-func (s *Store) Revoke(revoker types.Grant, q string) (Token, error) {
+func (s *Store) Revoke(revoker job.Access, q string) (Token, error) {
 	q = strings.TrimSpace(q)
 	st := s.state()
 	st.mu.Lock()
@@ -633,7 +634,7 @@ func (s *Store) Revoke(revoker types.Grant, q string) (Token, error) {
 // mgs_ token is refused before any hashing, so an operator, share or exchange secret never
 // matches here even if a record carried its hash.
 func (s *Store) Lookup(presented string) (Token, bool) {
-	if kind, ok := credentialKind(presented); !ok || kind != types.KindStored {
+	if kind, ok := credentialKind(presented); !ok || kind != job.KindStored {
 		return Token{}, false
 	}
 	st := s.state()
@@ -642,12 +643,12 @@ func (s *Store) Lookup(presented string) (Token, bool) {
 	if err := s.read(st); err != nil {
 		return Token{}, false
 	}
-	return lookup(st.tokens, presented, types.KindStored, time.Now())
+	return lookup(st.tokens, presented, job.KindStored, time.Now())
 }
 
 // lookup compares presented against every record of kind in constant time, and does not
 // stop at a match.
-func lookup(tokens []Token, presented string, kind types.CredentialKind, now time.Time) (Token, bool) {
+func lookup(tokens []Token, presented string, kind job.CredentialKind, now time.Time) (Token, bool) {
 	got := []byte(digest(presented))
 	var match Token
 	found := false

@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/figure"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/text/plural"
-	"github.com/egladman/magus/types"
 )
 
 // The budgets magus/figure holds one figure to.
@@ -57,7 +57,7 @@ type PlanFigure struct {
 // Plan is the job rows as a forest. A job hangs from its fork
 // parent, else from the first integrator that merges it.
 type Plan struct {
-	byID     map[string]types.Job
+	byID     map[string]job.Job
 	order    []string
 	children map[string][]string
 	roots    []string
@@ -65,12 +65,12 @@ type Plan struct {
 }
 
 // NewPlan lays rows out as a forest, whatever order they come in.
-func NewPlan(rows []types.Job) *Plan {
+func NewPlan(rows []job.Job) *Plan {
 	rows = slices.Clone(rows)
-	slices.SortStableFunc(rows, func(a, b types.Job) int {
+	slices.SortStableFunc(rows, func(a, b job.Job) int {
 		return cmp.Or(cmp.Compare(a.Created, b.Created), cmp.Compare(a.ID, b.ID))
 	})
-	p := &Plan{byID: map[string]types.Job{}, children: map[string][]string{}}
+	p := &Plan{byID: map[string]job.Job{}, children: map[string][]string{}}
 	for _, r := range rows {
 		if _, dup := p.byID[r.ID]; !dup {
 			p.byID[r.ID] = r
@@ -332,8 +332,8 @@ func planSlug(name string) string {
 	return strings.Trim(slug, "-")
 }
 
-func planUnfinished(state types.JobState) bool {
-	return state == types.StateDeclared || state == types.StateRunning
+func planUnfinished(state job.State) bool {
+	return state == job.StateDeclared || state == job.StateRunning
 }
 
 func planDash(s string) string {
@@ -345,7 +345,7 @@ func planDash(s string) string {
 
 // FigureRecord is f as a magus/figure record. A group's box links to
 // the file its figure is written to.
-func (p *Plan) FigureRecord(f *PlanFigure, holder func(types.Job) string) figure.Figure {
+func (p *Plan) FigureRecord(f *PlanFigure, holder func(job.Job) string) figure.Figure {
 	plain, optional := figure.Look("plain"), figure.Look("optional")
 	rec := figure.Figure{
 		ID:          f.ID,
@@ -373,7 +373,7 @@ func (p *Plan) FigureRecord(f *PlanFigure, holder func(types.Job) string) figure
 }
 
 // actor is n as a box, and whether a job it draws is unfinished.
-func (p *Plan) actor(n planNode, holder func(types.Job) string, plain, optional figure.Look) (figure.Actor, bool) {
+func (p *Plan) actor(n planNode, holder func(job.Job) string, plain, optional figure.Look) (figure.Actor, bool) {
 	a := figure.Actor{Name: n.Name, Look: &plain}
 	open := 0
 	for _, id := range n.jobs() {
@@ -410,7 +410,7 @@ func planFlow(e planEdge, actors map[string]figure.Actor) figure.Flow {
 }
 
 // Print writes each figure's boxes and edges as text.
-func (p *Plan) Print(out io.Writer, figs []*PlanFigure, holder func(types.Job) string) {
+func (p *Plan) Print(out io.Writer, figs []*PlanFigure, holder func(job.Job) string) {
 	for i, f := range figs {
 		if i > 0 {
 			fmt.Fprintln(out)

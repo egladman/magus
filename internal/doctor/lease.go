@@ -12,8 +12,8 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 )
 
@@ -40,7 +40,7 @@ func checkJobTree(loc job.Location, limits config.Jobs, now int64) check.Check {
 		return check.Check{Name: name, Status: check.Fail, Evidence: check.EvidenceUnknown,
 			Message: fmt.Sprintf("could not read the job store: %v", err)}
 	}
-	flagged := types.NewJobList(rows).Flag(now, limits.StaleAfter)
+	flagged := jobtypes.NewList(rows).Flag(now, limits.StaleAfter)
 	var parts, details []string
 	if len(flagged.Stale) > 0 {
 		parts = append(parts, fmt.Sprintf("%d live job(s) not updated within jobs.stale_after (%s): %s",
@@ -96,7 +96,7 @@ func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) che
 	if id == "" {
 		return check.Check{Name: name, Status: check.OK, Message: "no lease bound; the guard advises only"}
 	}
-	if from == types.LeaseSourceContested {
+	if from == jobtypes.LeaseSourceContested {
 		return check.Check{
 			Name:    name,
 			Status:  check.Fail,
@@ -117,7 +117,7 @@ func checkBoundLease(ctx context.Context, loc job.Location, wired ...string) che
 			Message:  fmt.Sprintf("could not read the job store: %v", err),
 		}
 	}
-	i := slices.IndexFunc(rows, func(lease types.Job) bool { return lease.ID == id })
+	i := slices.IndexFunc(rows, func(lease jobtypes.Job) bool { return lease.ID == id })
 	if i < 0 {
 		return check.Check{
 			Name:    name,

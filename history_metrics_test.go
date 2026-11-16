@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -234,7 +235,7 @@ func TestModelTierLensReportsWhatTheJobHistoryHolds(t *testing.T) {
 	assert.Equal(t, types.ModelTiers{Definition: types.ModelTiersDefinition, Models: []types.ModelTierRecord{}}, empty)
 
 	require.NoError(t, forecast.UpdateHistory(t.Context(), m.cfg.HistoryPath, func(h *forecast.History) error {
-		h.RecordJob(types.JobOutcome{Job: "a", ModelTier: "economy", Kind: types.JobKindCheck, State: types.StatePass, ChecksRun: 2})
+		h.RecordJob(types.JobOutcome{Job: "a", ModelTier: "economy", Kind: types.JobKindCheck, State: job.StatePass, ChecksRun: 2})
 		return nil
 	}))
 	got, err := m.ModelTierLens(t.Context())

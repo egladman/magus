@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -199,9 +200,9 @@ func TestNextSourcePath(t *testing.T) {
 // The role is read off the row, and a worker's write paths come back with it so the filter
 // can place a write.
 func TestRoleForGradesTheActingRow(t *testing.T) {
-	rows := []types.Job{
-		{ID: "harness/worker", Paths: types.JobPaths{Write: []string{"internal/hint/**"}}},
-		{ID: "harness/reviewer", ReadOnly: true, Paths: types.JobPaths{Read: []string{"cmd/magus/**"}}},
+	rows := []job.Job{
+		{ID: "harness/worker", Paths: job.Paths{Write: []string{"internal/hint/**"}}},
+		{ID: "harness/reviewer", ReadOnly: true, Paths: job.Paths{Read: []string{"cmd/magus/**"}}},
 		{ID: "harness/watcher"},
 	}
 	for _, tc := range []struct {

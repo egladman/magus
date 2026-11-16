@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -35,7 +36,7 @@ type CheckVerdict struct {
 // the checkout at root, against that workspace's rules. The guard lives above this
 // package, so the CLI supplies the implementation. One grader serves every checkout a
 // door opens stores for, so it must be safe for concurrent use.
-type CheckGrader func(ctx context.Context, root string, row types.Job) CheckVerdict
+type CheckGrader func(ctx context.Context, root string, row job.Job) CheckVerdict
 
 var (
 	installedGraderMu sync.RWMutex
@@ -127,8 +128,8 @@ func installedCheckGrader() CheckGrader {
 // linking its binary, so a worker the guard keeps from building can still run it. The
 // grader also judges it to tell a deny of the declared check from a deny of every command
 // the worker runs.
-func CompilingCheck() types.LeaseCheck {
-	return types.LeaseCheck{Target: "go::go-vet", Project: "."}
+func CompilingCheck() job.LeaseCheck {
+	return job.LeaseCheck{Target: "go::go-vet", Project: "."}
 }
 
 // humanOnlyRule is the guard rule that refuses a run of a target the workspace declares a
@@ -144,7 +145,7 @@ const humanOnlyRule = "human-only"
 // deferred grade ends the grading the same way but is no problem: the row is stored. A
 // Store with no grader of its own grades with the one [SetCheckGrader] installed; with
 // neither, and for a job with no check, nothing is found.
-func deniedCheckProblems(ctx context.Context, store *Store, row types.Job) types.JobProblems {
+func deniedCheckProblems(ctx context.Context, store *Store, row job.Job) types.JobProblems {
 	if store == nil {
 		return nil
 	}
@@ -153,14 +154,14 @@ func deniedCheckProblems(ctx context.Context, store *Store, row types.Job) types
 		return nil
 	}
 	var (
-		graded []types.LeaseCheck
+		graded []job.LeaseCheck
 		ps     types.JobProblems
 	)
 	for _, goal := range row.EffectiveGoals() {
-		if goal.Kind != types.GoalKindCheck || goal.Check.Target == "" && goal.Check.Script == "" {
+		if goal.Kind != job.GoalKindCheck || goal.Check.Target == "" && goal.Check.Script == "" {
 			continue
 		}
-		if slices.ContainsFunc(graded, func(c types.LeaseCheck) bool { return types.SameLeaseCheck(&c, &goal.Check) }) {
+		if slices.ContainsFunc(graded, func(c job.LeaseCheck) bool { return job.SameLeaseCheck(&c, &goal.Check) }) {
 			continue
 		}
 		graded = append(graded, goal.Check)
@@ -168,7 +169,7 @@ func deniedCheckProblems(ctx context.Context, store *Store, row types.Job) types
 		pending.Check = &goal.Check
 		verdict := grader(ctx, store.root, pending)
 		which := "check"
-		if goal.ID != types.PrimaryGoalID {
+		if goal.ID != job.PrimaryGoalID {
 			which = fmt.Sprintf("goal %s's check", goal.ID)
 		}
 		if verdict.Deferred != "" {
@@ -190,7 +191,7 @@ func deniedCheckProblems(ctx context.Context, store *Store, row types.Job) types
 }
 
 // ungradedCheckProblem words a check of row id the guard reached no verdict on, quoting why.
-func ungradedCheckProblem(id, which string, check types.LeaseCheck, why string) types.JobProblem {
+func ungradedCheckProblem(id, which string, check job.LeaseCheck, why string) types.JobProblem {
 	return types.JobProblem{
 		Code: types.JobUngraded,
 		Message: fmt.Sprintf("%s's %s `%s` could not be graded against the guard: %s,"+
@@ -201,7 +202,7 @@ func ungradedCheckProblem(id, which string, check types.LeaseCheck, why string) 
 
 // replacementCheckFix is what a denied check of row becomes.
 // The compiling check grades only Go, so another row gets its own kind.
-func replacementCheckFix(row types.Job) string {
+func replacementCheckFix(row job.Job) string {
 	writes := func(ext string) (string, bool) {
 		i := slices.IndexFunc(row.Paths.Write, func(p string) bool { return path.Ext(p) == ext })
 		if i < 0 {
@@ -226,7 +227,7 @@ func replacementCheckFix(row types.Job) string {
 // deniedCheckProblem words the problem with row's check. A target a person runs
 // can never be a worker's check, so that problem asks for another.
 // Any other deny gets [replacementCheckFix].
-func deniedCheckProblem(row types.Job, which string, check types.LeaseCheck, verdict CheckVerdict) types.JobProblem {
+func deniedCheckProblem(row job.Job, which string, check job.LeaseCheck, verdict CheckVerdict) types.JobProblem {
 	id := row.ID
 	reason := strings.Join(strings.Fields(verdict.Reason), " ")
 	if verdict.Rule == humanOnlyRule {

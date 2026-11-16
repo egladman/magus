@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // caller is who this call comes from, as the job store keys a binding.
@@ -35,7 +35,7 @@ func boundJob(who hookAttribution, at location) job.Binding {
 }
 
 // resolveActingLease is the lease a call acts under. See [resolveLease].
-func resolveActingLease(who hookAttribution, at location, explicit string) (string, types.LeaseSource) {
+func resolveActingLease(who hookAttribution, at location, explicit string) (string, jobtypes.LeaseSource) {
 	return resolveLease(who, explicit, boundJob(who, at).Job)
 }
 
@@ -47,7 +47,7 @@ func resolveActingLease(who hookAttribution, at location, explicit string) (stri
 // parent's session id, so a subagent that read its session's record would be graded as
 // its parent, and a parent that read the checkout's would be graded as whichever
 // identity-less caller took a job here last.
-func resolveLease(who hookAttribution, explicit, bound string) (string, types.LeaseSource) {
+func resolveLease(who hookAttribution, explicit, bound string) (string, jobtypes.LeaseSource) {
 	q := job.LeaseQuery{Flag: explicit, Claim: trail.LeaseFromEnv()}
 	if who.caller().Identified() {
 		q.CallerJob = bound
@@ -106,7 +106,7 @@ func ResolveAuthority(ctx context.Context, base Dependencies, req Request) CallA
 
 // rowCheckout is the checkout row's holder works in, "" when none stands.
 // A checkout gone from disk ends its row, so the caller's own judges it.
-func rowCheckout(row types.Job) string {
+func rowCheckout(row jobtypes.Job) string {
 	dir := row.CheckoutRoot
 	if row.Worktree != nil && row.Worktree.Removed == 0 {
 		dir = cmp.Or(row.Worktree.Root, dir)
@@ -204,14 +204,14 @@ func execFlagTakesValue(name string) bool {
 // its session reads terminal here, and the exec takes it back.
 func bindOnExec(ctx context.Context, at location, who hookAttribution, command string) {
 	id := execTarget(command)
-	if !types.ValidJobID(id) {
+	if !jobtypes.ValidID(id) {
 		return
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
 		return
 	}
-	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == id })
+	i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == id })
 	if i < 0 || rows[i].PausedAt(time.Now().Unix()) {
 		return
 	}
@@ -288,7 +288,7 @@ func releaseOnEnd(at location, who hookAttribution, command string) {
 				continue
 			}
 			operands, _ := verbArgv(c.Args, verb)
-			if len(operands) == 0 || !types.ValidJobID(operands[0]) {
+			if len(operands) == 0 || !jobtypes.ValidID(operands[0]) {
 				continue
 			}
 			if store == nil {
@@ -317,8 +317,8 @@ func bindingUnlessEnded(ctx context.Context, at location, b job.Binding) job.Bin
 	if err != nil {
 		return b
 	}
-	state := func(id string) types.JobState {
-		if i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == id }); i >= 0 {
+	state := func(id string) jobtypes.State {
+		if i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == id }); i >= 0 {
 			return rows[i].State
 		}
 		return ""
@@ -326,7 +326,7 @@ func bindingUnlessEnded(ctx context.Context, at location, b job.Binding) job.Bin
 	switch held := state(b.Job); {
 	case held.Terminal():
 		return job.Binding{}
-	case held == types.StateExited:
+	case held == jobtypes.StateExited:
 		if claim := trail.LeaseFromEnv(); claim != b.Job && state(claim).Editing() {
 			return job.Binding{}
 		}

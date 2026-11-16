@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/types/impact"
@@ -730,7 +731,7 @@ type Comment struct {
 	Author Author `json:"author" yaml:"author"`
 	// Origin is where the write came from, stamped by the server: the OS account, the entry
 	// point, and the credential or MCP client that carried it.
-	Origin types.Origin `json:"origin,omitzero" yaml:"origin,omitzero"`
+	Origin job.Origin `json:"origin,omitzero" yaml:"origin,omitzero"`
 	// AgentName is the opaque host label an MCP client passed, empty on the review route.
 	// Attribution only: nothing branches on it, matching the hook's treatment of the same field.
 	AgentName string `json:"agent_name,omitempty" yaml:"agent_name,omitempty"`

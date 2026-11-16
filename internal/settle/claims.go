@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/risk"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,7 +29,7 @@ import (
 //
 // A path some job claims by declaration gets one line saying it settled or which condition
 // failed. A path no job claims is passed over in silence, since claims say nothing about it.
-func ByClaims(ctx context.Context, out io.Writer, m *magus.Magus, drv types.VCSDriver, jobs func() ([]types.Job, error), ours, against string, conflicts []types.Conflict) ([]types.Conflict, error) {
+func ByClaims(ctx context.Context, out io.Writer, m *magus.Magus, drv types.VCSDriver, jobs func() ([]job.Job, error), ours, against string, conflicts []types.Conflict) ([]types.Conflict, error) {
 	root := m.Root()
 	rows, err := jobs()
 	if err != nil {
@@ -69,13 +70,13 @@ func ByClaims(ctx context.Context, out io.Writer, m *magus.Magus, drv types.VCSD
 
 // jobsWriting returns the rows with a write path on p, and whether any of them claims p by
 // declaration.
-func jobsWriting(rows []types.Job, p string) (writers []types.Job, claimed bool) {
+func jobsWriting(rows []job.Job, p string) (writers []job.Job, claimed bool) {
 	for _, row := range rows {
 		writes := false
 		for _, e := range row.Paths.Write {
-			if types.PathsIntersect(e, p) {
+			if job.PathsIntersect(e, p) {
 				writes = true
-				claimed = claimed || types.HasClaim(e)
+				claimed = claimed || job.HasClaim(e)
 			}
 		}
 		if writes {
@@ -118,7 +119,7 @@ const (
 
 // settle is the merge of p, or an unsettledError naming the first condition that failed.
 // how names the claims that settled it.
-func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job) (merged []byte, how string, err error) {
+func (s *claimSettle) settle(ctx context.Context, p string, writers []job.Job) (merged []byte, how string, err error) {
 	if _, _, ok := risk.MatchScopes(risk.MergeScopes(s.m.All()), p); !ok {
 		return nil, "", unsettledf("no project's merge_low_risk covers it")
 	}
@@ -129,7 +130,7 @@ func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job)
 	if err != nil {
 		return nil, "", err
 	}
-	var jobs [2][]types.Job
+	var jobs [2][]job.Job
 	for _, row := range writers {
 		if side, ok := s.resolveSide(ctx, row, base); ok {
 			jobs[side] = append(jobs[side], row)
@@ -142,14 +143,14 @@ func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job)
 			return nil, "", unsettledf("no job whose work %s carries writes it", names[side])
 		}
 		for _, row := range rows {
-			if row.State != types.StatePass {
-				return nil, "", unsettledf("job %s is %s, not recorded pass by `magus job wait`", row.ID, cmp.Or(row.State, types.StateDeclared))
+			if row.State != job.StatePass {
+				return nil, "", unsettledf("job %s is %s, not recorded pass by `magus job wait`", row.ID, cmp.Or(row.State, job.StateDeclared))
 			}
 			for _, e := range row.Paths.Write {
-				if !types.PathsIntersect(e, p) {
+				if !job.PathsIntersect(e, p) {
 					continue
 				}
-				_, decl := types.SplitClaim(e)
+				_, decl := job.SplitClaim(e)
 				if decl == "" {
 					return nil, "", unsettledf("job %s writes it whole (%s), not by declaration", row.ID, e)
 				}
@@ -198,7 +199,7 @@ func (s *claimSettle) mergeBase(ctx context.Context) (string, error) {
 // already in the merge base, or no revision here names it. The work is the revision row's
 // checkout has checked out, else a revision named row.ID: the branch-per-job convention
 // hack/dev/merge-job-branches.buzz also reads.
-func (s *claimSettle) resolveSide(ctx context.Context, row types.Job, base string) (mergeSide, bool) {
+func (s *claimSettle) resolveSide(ctx context.Context, row job.Job, base string) (mergeSide, bool) {
 	tip := row.ID
 	if info, err := os.Stat(row.CheckoutRoot); err == nil && info.IsDir() {
 		if ref, err := s.drv.Ref(ctx, row.CheckoutRoot); err == nil && ref != "" {

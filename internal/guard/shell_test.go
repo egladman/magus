@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types/diff"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,9 +20,12 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/command"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -2617,11 +2618,11 @@ func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 	}
 
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
-	assert.Equal(t, graded{false, "lease-a", types.LeaseSourceEnv}, gradedAs(edit("internal/ledger/store.go")))
-	assert.Equal(t, graded{true, "lease-a", types.LeaseSourceEnv}, gradedAs(edit("cmd/magus/main.go")))
+	assert.Equal(t, graded{false, "lease-a", jobtypes.LeaseSourceEnv}, gradedAs(edit("internal/ledger/store.go")))
+	assert.Equal(t, graded{true, "lease-a", jobtypes.LeaseSourceEnv}, gradedAs(edit("cmd/magus/main.go")))
 
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
-	assert.Equal(t, graded{true, "lease-b", types.LeaseSourceEnv}, gradedAs(edit("internal/ledger/store.go")))
+	assert.Equal(t, graded{true, "lease-b", jobtypes.LeaseSourceEnv}, gradedAs(edit("internal/ledger/store.go")))
 
 	t.Setenv(trail.EnvBaggage, "")
 	assert.Equal(t, graded{}, gradedAs(edit("internal/ledger/store.go")), "no lease held in this checkout")
@@ -2713,8 +2714,8 @@ func (s *GradeEditSuite) edit(rel string) verdict.Judgment {
 func (s *GradeEditSuite) TestTheCheckoutBindingNamesTheLease() {
 	s.T().Setenv(trail.EnvBaggage, "")
 	bindCaller(s.T(), s.testContext(), hookAttribution{}, "lease-a")
-	s.Equal(graded{false, "lease-a", types.LeaseSourceMarker}, gradedAs(s.edit("internal/ledger/store.go")))
-	s.Equal(graded{true, "lease-a", types.LeaseSourceMarker}, gradedAs(s.edit("cmd/magus/main.go")))
+	s.Equal(graded{false, "lease-a", jobtypes.LeaseSourceMarker}, gradedAs(s.edit("internal/ledger/store.go")))
+	s.Equal(graded{true, "lease-a", jobtypes.LeaseSourceMarker}, gradedAs(s.edit("cmd/magus/main.go")))
 }
 
 func (s *GradeEditSuite) TestAnUnreadLeaseStoreRefusesLoudly() {
@@ -2742,8 +2743,8 @@ func (s *PersonLeaseSuite) SetupTest() {
 // holdHere records id as taken in this checkout, as `job exec` does.
 func (s *PersonLeaseSuite) holdHere(id string, paths ...string) {
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: hookLocation(s.testContext(), Dependencies{}).cacheDir, Root: s.root})
-	_, err := store.Update(s.T().Context(), id, func(cur *types.Job) {
-		*cur = types.Job{ID: id, Paths: types.JobPaths{Write: paths}, State: types.StateRunning, CheckoutRoot: s.root}
+	_, err := store.Update(s.T().Context(), id, func(cur *jobtypes.Job) {
+		*cur = jobtypes.Job{ID: id, Paths: jobtypes.Paths{Write: paths}, State: jobtypes.StateRunning, CheckoutRoot: s.root}
 	})
 	s.Require().NoError(err)
 }
@@ -2776,7 +2777,7 @@ func (s *PersonLeaseSuite) TestAPersonMayWriteTheHookWiringInALeasedCheckout() {
 func (s *PersonLeaseSuite) TestAClaimStillBindsTheProcess() {
 	s.holdHere("lease-c", "web/**")
 	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
-	s.Equal(graded{true, "lease-a", types.LeaseSourceEnv}, gradedAs(s.edit("cmd/magus/main.go")))
+	s.Equal(graded{true, "lease-a", jobtypes.LeaseSourceEnv}, gradedAs(s.edit("cmd/magus/main.go")))
 }
 
 const (
@@ -2806,7 +2807,7 @@ func (s *PersonLeaseSuite) TestASessionBoundRenameDryRunIsRefusedUntilItNamesIts
 	v := s.judgeBound(renameDryRun)
 	s.Contains(v.Reason, "start the line with `export BAGGAGE=magus.lease=lease-a;`")
 	v.Reason = ""
-	s.Equal(verdict.Judgment{APIVersion: v.APIVersion, Decision: decisionDeny, Rule: string(denyRuleEditUngraded), Lease: "lease-a", LeaseFrom: string(types.LeaseSourceAgent)}, v)
+	s.Equal(verdict.Judgment{APIVersion: v.APIVersion, Decision: decisionDeny, Rule: string(denyRuleEditUngraded), Lease: "lease-a", LeaseFrom: string(jobtypes.LeaseSourceAgent)}, v)
 }
 
 func (s *PersonLeaseSuite) TestTheClaimedRenameGradesPathsOutsideTheRow() {
@@ -2814,8 +2815,8 @@ func (s *PersonLeaseSuite) TestTheClaimedRenameGradesPathsOutsideTheRow() {
 	s.NotEqual(decisionDeny, claimed.Decision, claimed.Reason)
 
 	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
-	s.Equal(graded{true, "lease-a", types.LeaseSourceEnv}, gradedAs(s.edit("cmd/magus/main.go")), "outside the row")
-	s.Equal(graded{false, "lease-a", types.LeaseSourceEnv}, gradedAs(s.edit("internal/ledger/store.go")), "inside the row")
+	s.Equal(graded{true, "lease-a", jobtypes.LeaseSourceEnv}, gradedAs(s.edit("cmd/magus/main.go")), "outside the row")
+	s.Equal(graded{false, "lease-a", jobtypes.LeaseSourceEnv}, gradedAs(s.edit("internal/ledger/store.go")), "inside the row")
 }
 
 func (s *PersonLeaseSuite) TestARewriteClaimingAnotherLeaseIsRefused() {

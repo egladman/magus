@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -124,7 +125,7 @@ func TestRunAdoptsClientAncestry(t *testing.T) {
 func TestRunAdoptsClientLease(t *testing.T) {
 	got := make(chan string, 1)
 	s := newJobService(func(ctx context.Context, _ []string) error {
-		got <- types.JobLeaseFromContext(ctx)
+		got <- job.LeaseFromContext(ctx)
 		return nil
 	})
 
@@ -141,12 +142,12 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 	for name, id := range map[string]string{
 		"spaces":   "not a lease id",
 		"newlines": "fleet/f3\nsecret=hunter2",
-		"toolong":  strings.Repeat("a", types.MaxJobIDLen+1),
+		"toolong":  strings.Repeat("a", job.MaxIDLen+1),
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := make(chan string, 1)
 			s := newJobService(func(ctx context.Context, _ []string) error {
-				got <- types.JobLeaseFromContext(ctx)
+				got <- job.LeaseFromContext(ctx)
 				return nil
 			})
 

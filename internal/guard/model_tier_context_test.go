@@ -10,9 +10,9 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types/agent"
 )
 
 // A leased subagent is advised once its reported context passes its row's tier cap, and
@@ -50,7 +50,7 @@ func TestModelTierContextCapAdvisesPastTheTiersCap(t *testing.T) {
 func TestModelTierContextCapNeedsATierWithACap(t *testing.T) {
 	set := testModelTiers(t, "claude-code")
 	lease := fixture.FleetLeases()[0]
-	lease.Agent = &agent.Spec{Model: agent.Model{ID: "sonnet"}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}
+	lease.Agent = &job.Agent{Model: job.Model{ID: "sonnet"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}
 	ctx := tierFixture(t, set, lease)
 	at := hookLocation(ctx, Dependencies{})
 	who := hookAttribution{Host: "claude-code", Session: "s", Agent: "a1"}

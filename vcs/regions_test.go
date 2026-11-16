@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -42,19 +43,19 @@ two
 `
 
 // changedFileChanges is what a caller hands Regions: ChangedFiles for base, as FileChanges.
-func changedFileChanges(t *testing.T, dir, base string) []types.FileChange {
+func changedFileChanges(t *testing.T, dir, base string) []job.FileChange {
 	t.Helper()
 	paths, err := gitVCS{}.ChangedFiles(t.Context(), dir, base)
 	require.NoError(t, err)
-	files := make([]types.FileChange, len(paths))
+	files := make([]job.FileChange, len(paths))
 	for i, p := range paths {
-		files[i] = types.FileChange{Path: p}
+		files[i] = job.FileChange{Path: p}
 	}
 	return files
 }
 
-func region(path string, side types.RegionSide, from, to int, decl, driver string) types.RegionChange {
-	return types.RegionChange{File: types.FileChange{Path: path}, Side: side, Lines: [2]int{from, to}, Declaration: decl, Driver: driver}
+func region(path string, side job.RegionSide, from, to int, decl, driver string) job.RegionChange {
+	return job.RegionChange{File: job.FileChange{Path: path}, Side: side, Lines: [2]int{from, to}, Declaration: decl, Driver: driver}
 }
 
 func TestRegions(t *testing.T) {
@@ -63,8 +64,8 @@ func TestRegions(t *testing.T) {
 		declB = "func B() int {"
 		declC = "func C() {"
 	)
-	was, now := types.RegionOld, types.RegionNew
-	golang := func(side types.RegionSide, from, to int, decl string) types.RegionChange {
+	was, now := job.RegionOld, job.RegionNew
+	golang := func(side job.RegionSide, from, to int, decl string) job.RegionChange {
 		return region("a.go", side, from, to, decl, "golang")
 	}
 	cases := []struct {
@@ -72,32 +73,32 @@ func TestRegions(t *testing.T) {
 		config map[string]string
 		edit   func(t *testing.T, dir string)
 		// files, when set, replaces ChangedFiles as the files to refine.
-		files []types.FileChange
-		want  []types.RegionChange
+		files []job.FileChange
+		want  []job.RegionChange
 	}{
 		{
 			name: "a modified body is its own function on both sides",
 			edit: func(t *testing.T, dir string) { replaceIn(t, dir, "a.go", "return 1", "return 10") },
-			want: []types.RegionChange{golang(was, 6, 6, declA), golang(now, 6, 6, declA)},
+			want: []job.RegionChange{golang(was, 6, 6, declA), golang(now, 6, 6, declA)},
 		},
 		{
 			name: "a new function is named as itself and its neighbours are not reported",
 			edit: func(t *testing.T, dir string) {
 				replaceIn(t, dir, "a.go", "func B", "func New() int {\n\treturn 3\n}\n\nfunc B")
 			},
-			want: []types.RegionChange{golang(now, 9, 12, "func New() int {")},
+			want: []job.RegionChange{golang(now, 9, 12, "func New() int {")},
 		},
 		{
 			name: "a deleted function is named on the old side only",
 			edit: func(t *testing.T, dir string) {
 				replaceIn(t, dir, "a.go", "func B() int {\n\treturn 2\n}\n\n", "")
 			},
-			want: []types.RegionChange{golang(was, 9, 12, declB)},
+			want: []job.RegionChange{golang(was, 9, 12, declB)},
 		},
 		{
 			name: "an edit above the first declaration has no declaration",
 			edit: func(t *testing.T, dir string) { replaceIn(t, dir, "a.go", `"fmt"`, `"os"`) },
-			want: []types.RegionChange{golang(was, 3, 3, ""), golang(now, 3, 3, "")},
+			want: []job.RegionChange{golang(was, 3, 3, ""), golang(now, 3, 3, "")},
 		},
 		{
 			name: "two separate edits in one file stay two regions",
@@ -105,7 +106,7 @@ func TestRegions(t *testing.T) {
 				replaceIn(t, dir, "a.go", "return 1", "return 10")
 				replaceIn(t, dir, "a.go", `"c"`, `"see"`)
 			},
-			want: []types.RegionChange{
+			want: []job.RegionChange{
 				golang(was, 6, 6, declA), golang(was, 14, 14, declC),
 				golang(now, 6, 6, declA), golang(now, 14, 14, declC),
 			},
@@ -118,7 +119,7 @@ func TestRegions(t *testing.T) {
 			},
 			// The comment directly above B2 is B2's. The blank line B2 replaced is mid-hunk,
 			// between lines the edit touches, so it keeps A's name.
-			want: []types.RegionChange{
+			want: []job.RegionChange{
 				golang(was, 6, 8, declA), golang(was, 9, 10, declB),
 				golang(now, 6, 7, declA), golang(now, 8, 10, "func B2() int {"),
 			},
@@ -129,7 +130,7 @@ func TestRegions(t *testing.T) {
 				replaceIn(t, dir, "doc.md", "one\n", "one\nmore\n")
 				replaceIn(t, dir, "doc.md", "two", "TWO")
 			},
-			want: []types.RegionChange{
+			want: []job.RegionChange{
 				region("doc.md", was, 8, 8, "## Two", "markdown"),
 				region("doc.md", now, 6, 6, "## One", "markdown"),
 				region("doc.md", now, 9, 9, "## Two", "markdown"),
@@ -139,7 +140,7 @@ func TestRegions(t *testing.T) {
 			// git's default funcname would name "func A() int {" here.
 			name: "a path with no driver reports its lines only",
 			edit: func(t *testing.T, dir string) { replaceIn(t, dir, "plain.txt", "return 1", "return 10") },
-			want: []types.RegionChange{
+			want: []job.RegionChange{
 				region("plain.txt", was, 6, 6, "", ""),
 				region("plain.txt", now, 6, 6, "", ""),
 			},
@@ -148,7 +149,7 @@ func TestRegions(t *testing.T) {
 			name:   "a driver defined in repository config is honoured",
 			config: map[string]string{"diff.spell.xfuncname": "^target ([a-z]+)"},
 			edit:   func(t *testing.T, dir string) { replaceIn(t, dir, "x.spell", "run two", "run 2") },
-			want: []types.RegionChange{
+			want: []job.RegionChange{
 				region("x.spell", was, 4, 4, "two", "spell"),
 				region("x.spell", now, 4, 4, "two", "spell"),
 			},
@@ -162,7 +163,7 @@ func TestRegions(t *testing.T) {
 				require.NoError(t, os.Remove(filepath.Join(dir, "doc.md")))
 				writeRepositoryFile(t, dir, "blob.bin", "\x00\x01\x02changed")
 			},
-			want: []types.RegionChange{
+			want: []job.RegionChange{
 				region("added.go", now, 1, 2, "", "golang"),
 				region("added.go", now, 3, 3, "func D() {}", "golang"),
 				region("doc.md", was, 1, 3, "# Title", "markdown"),
@@ -180,8 +181,8 @@ func TestRegions(t *testing.T) {
 				writeRepositoryFile(t, dir, "sub/new.txt", "n\n")
 				writeRepositoryFile(t, dir, "elsewhere.txt", "e\n")
 			},
-			files: []types.FileChange{{Path: "sub/new.txt"}, {Path: "sub/s.txt"}, {Path: "plain.txt"}},
-			want: []types.RegionChange{
+			files: []job.FileChange{{Path: "sub/new.txt"}, {Path: "sub/s.txt"}, {Path: "plain.txt"}},
+			want: []job.RegionChange{
 				region("sub/new.txt", now, 1, 1, "", ""),
 				region("sub/s.txt", was, 1, 1, "", ""),
 				region("sub/s.txt", now, 1, 1, "", ""),
@@ -228,7 +229,7 @@ func TestRegionsOfNoFilesIsNothing(t *testing.T) {
 func TestRegionsRefusesABaseItCannotResolve(t *testing.T) {
 	dir := testkit.NewRepository(t, map[string]string{"a.txt": "a\n"}).Root()
 	writeRepositoryFile(t, dir, "a.txt", "b\n")
-	files := []types.FileChange{{Path: "a.txt"}}
+	files := []job.FileChange{{Path: "a.txt"}}
 
 	_, err := gitVCS{}.Regions(t.Context(), dir, "no-such-rev", files)
 	require.Error(t, err)
@@ -253,19 +254,19 @@ func TestRegionsStayInsideTheFilesGiven(t *testing.T) {
 	writeRepositoryFile(t, dir, "new.txt", "c\n")
 
 	changed := changedFileChanges(t, dir, "main")
-	require.ElementsMatch(t, []types.FileChange{{Path: "mine.txt"}, {Path: "new.txt"}}, changed)
-	given := slices.Concat(changed, []types.FileChange{{Path: "theirs.txt"}})
+	require.ElementsMatch(t, []job.FileChange{{Path: "mine.txt"}, {Path: "new.txt"}}, changed)
+	given := slices.Concat(changed, []job.FileChange{{Path: "theirs.txt"}})
 	regions, err := gitVCS{}.Regions(t.Context(), dir, "main", given)
 	require.NoError(t, err)
 
-	var files []types.FileChange
+	var files []job.FileChange
 	for _, r := range regions {
 		files = append(files, r.File)
 	}
 	require.NotEmpty(t, files)
 	require.Subset(t, given, files, "a region outside the files given")
 	require.Subset(t, changed, files, "a region outside ChangedFiles")
-	require.NotContains(t, files, types.FileChange{Path: "theirs.txt"}, "main's own commit read as this branch's change")
+	require.NotContains(t, files, job.FileChange{Path: "theirs.txt"}, "main's own commit read as this branch's change")
 }
 
 func TestRegionsIgnoresConfigThatChangesTheParse(t *testing.T) {
@@ -280,13 +281,13 @@ func TestRegionsIgnoresConfigThatChangesTheParse(t *testing.T) {
 	replaceIn(t, dir, "a.go", "return 1", "return 10")
 	replaceIn(t, dir, "a.go", `"c"`, `"see"`)
 
-	got, err := gitVCS{}.Regions(t.Context(), dir, "HEAD", []types.FileChange{{Path: "a.go"}})
+	got, err := gitVCS{}.Regions(t.Context(), dir, "HEAD", []job.FileChange{{Path: "a.go"}})
 	require.NoError(t, err)
-	assert.Equal(t, []types.RegionChange{
-		region("a.go", types.RegionOld, 6, 6, "func A() int {", "golang"),
-		region("a.go", types.RegionOld, 14, 14, "func C() {", "golang"),
-		region("a.go", types.RegionNew, 6, 6, "func A() int {", "golang"),
-		region("a.go", types.RegionNew, 14, 14, "func C() {", "golang"),
+	assert.Equal(t, []job.RegionChange{
+		region("a.go", job.RegionOld, 6, 6, "func A() int {", "golang"),
+		region("a.go", job.RegionOld, 14, 14, "func C() {", "golang"),
+		region("a.go", job.RegionNew, 6, 6, "func A() int {", "golang"),
+		region("a.go", job.RegionNew, 14, 14, "func C() {", "golang"),
 	}, got)
 }
 
@@ -297,29 +298,29 @@ func TestRegionsBetween(t *testing.T) {
 	dir := testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n*.buzz diff=buzz\n", "a.go": "package gone\n"}).Root()
 	edited := strings.Replace(regionsGo, "return 2", "return 20", 1)
 	added := regionsGo + "\nfunc D() {\n}\n"
-	was, now := types.RegionOld, types.RegionNew
+	was, now := job.RegionOld, job.RegionNew
 	for _, tc := range []struct {
 		name          string
 		path          string
 		before, after string
-		want          []types.RegionChange
+		want          []job.RegionChange
 	}{
 		{
 			name: "an edited body", path: "a.go", before: regionsGo, after: edited,
-			want: []types.RegionChange{region("a.go", was, 10, 10, "func B() int {", "golang"), region("a.go", now, 10, 10, "func B() int {", "golang")},
+			want: []job.RegionChange{region("a.go", was, 10, 10, "func B() int {", "golang"), region("a.go", now, 10, 10, "func B() int {", "golang")},
 		},
 		{
 			// Line 16 is the blank line the hunk starts with; it leads into D, not C.
 			name: "an added function is itself, its leading blank line included", path: "a.go", before: regionsGo, after: added,
-			want: []types.RegionChange{region("a.go", now, 16, 18, "func D() {", "golang")},
+			want: []job.RegionChange{region("a.go", now, 16, 18, "func D() {", "golang")},
 		},
 		{
 			name: "no before places every line", path: "a.go", after: "package a\n\nfunc X() {\n}\n",
-			want: []types.RegionChange{region("a.go", now, 1, 2, "", "golang"), region("a.go", now, 3, 4, "func X() {", "golang")},
+			want: []job.RegionChange{region("a.go", now, 1, 2, "", "golang"), region("a.go", now, 3, 4, "func X() {", "golang")},
 		},
 		{
 			name: "a path with no driver still has lines", path: "notes.txt", before: "a\nb\n", after: "a\nc\n",
-			want: []types.RegionChange{region("notes.txt", was, 2, 2, "", ""), region("notes.txt", now, 2, 2, "", "")},
+			want: []job.RegionChange{region("notes.txt", was, 2, 2, "", ""), region("notes.txt", now, 2, 2, "", "")},
 		},
 		{name: "identical versions change nothing", path: "a.go", before: regionsGo, after: regionsGo},
 		{
@@ -327,7 +328,7 @@ func TestRegionsBetween(t *testing.T) {
 			// own comment go down to them; the comment a blank line away stays with A.
 			name: "doc comments belong below, and a var block is named", path: "a.go",
 			after: "package a\n\nfunc A() {\n}\n\n// stays with A\n\n// B says hi.\nfunc B() {\n}\n// table\nvar (\n\tx = 1\n)\n\nconst one = 1\n",
-			want: []types.RegionChange{
+			want: []job.RegionChange{
 				region("a.go", now, 1, 2, "", "golang"),
 				region("a.go", now, 3, 7, "func A() {", "golang"),
 				region("a.go", now, 8, 10, "func B() {", "golang"),
@@ -338,7 +339,7 @@ func TestRegionsBetween(t *testing.T) {
 		{
 			name: "a comment above the first declaration is that declaration's", path: "a.go",
 			after: "package a\n\n// A does it.\n// Twice.\nfunc A() {\n}\n",
-			want: []types.RegionChange{
+			want: []job.RegionChange{
 				region("a.go", now, 1, 2, "", "golang"),
 				region("a.go", now, 3, 6, "func A() {", "golang"),
 			},
@@ -346,7 +347,7 @@ func TestRegionsBetween(t *testing.T) {
 		{
 			name: "a buzz doc comment", path: "x.buzz",
 			after: "fun a() > void {\n}\n\n// b does it.\nfun b() > void {\n}\n",
-			want: []types.RegionChange{
+			want: []job.RegionChange{
 				region("x.buzz", now, 1, 3, "fun a() > void {", "buzz"),
 				region("x.buzz", now, 4, 6, "fun b() > void {", "buzz"),
 			},
@@ -354,7 +355,7 @@ func TestRegionsBetween(t *testing.T) {
 		{
 			name: "a markdown comment above a heading", path: "d.md",
 			after: "# T\n\ntext\n<!-- note -->\n## S\nbody\n",
-			want: []types.RegionChange{
+			want: []job.RegionChange{
 				region("d.md", now, 1, 3, "# T", "markdown"),
 				region("d.md", now, 4, 6, "## S", "markdown"),
 			},
@@ -364,19 +365,19 @@ func TestRegionsBetween(t *testing.T) {
 			name: "an added const with a doc comment takes the blank line before it", path: "a.go",
 			before: "const A = 1\nconst B = 2\n",
 			after:  "const A = 1\n\n// C is new.\nconst C = 3\nconst B = 2\n",
-			want:   []types.RegionChange{region("a.go", now, 2, 4, "const C = 3", "golang")},
+			want:   []job.RegionChange{region("a.go", now, 2, 4, "const C = 3", "golang")},
 		},
 		{
 			name: "an added func with a doc comment takes the blank line before it", path: "a.go",
 			before: "const A = 1\nconst B = 2\n",
 			after:  "const A = 1\n\n// C does it.\nfunc C() {\n}\nconst B = 2\n",
-			want:   []types.RegionChange{region("a.go", now, 2, 5, "func C() {", "golang")},
+			want:   []job.RegionChange{region("a.go", now, 2, 5, "func C() {", "golang")},
 		},
 		{
 			name: "an added func with no doc comment takes the blank line before it", path: "a.go",
 			before: "const A = 1\nconst B = 2\n",
 			after:  "const A = 1\n\nfunc C() {\n}\nconst B = 2\n",
-			want:   []types.RegionChange{region("a.go", now, 2, 4, "func C() {", "golang")},
+			want:   []job.RegionChange{region("a.go", now, 2, 4, "func C() {", "golang")},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -457,13 +458,13 @@ func TestRegionsOfTestsTaggedFilesAndEmbeddedBuzz(t *testing.T) {
 
 	got, err := gitVCS{}.Regions(t.Context(), dir, "HEAD", changedFileChanges(t, dir, "HEAD"))
 	require.NoError(t, err)
-	assert.Equal(t, []types.RegionChange{
-		region("a_test.go", types.RegionOld, 4, 4, "func TestA(t *testing.T) {", "golang"),
-		region("a_test.go", types.RegionNew, 4, 4, "func TestA(t *testing.T) {", "golang"),
-		region("embed.go", types.RegionOld, 6, 6, "func Script() string {", "golang"),
-		region("embed.go", types.RegionNew, 6, 6, "func Script() string {", "golang"),
-		region("libs/x/vm/jit_amd64.go", types.RegionOld, 6, 6, "func compile() int {", "golang"),
-		region("libs/x/vm/jit_amd64.go", types.RegionNew, 6, 6, "func compile() int {", "golang"),
+	assert.Equal(t, []job.RegionChange{
+		region("a_test.go", job.RegionOld, 4, 4, "func TestA(t *testing.T) {", "golang"),
+		region("a_test.go", job.RegionNew, 4, 4, "func TestA(t *testing.T) {", "golang"),
+		region("embed.go", job.RegionOld, 6, 6, "func Script() string {", "golang"),
+		region("embed.go", job.RegionNew, 6, 6, "func Script() string {", "golang"),
+		region("libs/x/vm/jit_amd64.go", job.RegionOld, 6, 6, "func compile() int {", "golang"),
+		region("libs/x/vm/jit_amd64.go", job.RegionNew, 6, 6, "func compile() int {", "golang"),
 	}, got)
 }
 
@@ -579,13 +580,13 @@ func TestRegionsBetweenNamesProjectKeys(t *testing.T) {
 	after := []byte(strings.Replace(projectMagusfile, `"timeout": "25m"`, `"timeout": "30m"`, 1))
 	got, err := gitVCS{}.RegionsBetween(t.Context(), dir, "magusfile.buzz", []byte(projectMagusfile), after)
 	require.NoError(t, err)
-	assert.Equal(t, []types.RegionChange{
-		region("magusfile.buzz", types.RegionOld, 15, 15, "project.targets.test", "buzz"),
-		region("magusfile.buzz", types.RegionNew, 15, 15, "project.targets.test", "buzz"),
+	assert.Equal(t, []job.RegionChange{
+		region("magusfile.buzz", job.RegionOld, 15, 15, "project.targets.test", "buzz"),
+		region("magusfile.buzz", job.RegionNew, 15, 15, "project.targets.test", "buzz"),
 	}, got)
 	for _, r := range got {
-		assert.True(t, types.NamesDeclaration("project.targets.test", r.Declaration))
-		assert.False(t, types.NamesDeclaration("project.targets.go-test", r.Declaration))
+		assert.True(t, job.NamesDeclaration("project.targets.test", r.Declaration))
+		assert.False(t, job.NamesDeclaration("project.targets.go-test", r.Declaration))
 	}
 }
 

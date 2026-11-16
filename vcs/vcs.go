@@ -17,6 +17,7 @@ import (
 	"unicode"
 
 	semver "github.com/Masterminds/semver/v3"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -383,7 +384,7 @@ func keepSubtree(changes []types.CommitChange, prefix string) []types.CommitChan
 		return changes
 	}
 	for i := range changes {
-		changes[i].Files = slices.DeleteFunc(changes[i].Files, func(f types.FileChange) bool {
+		changes[i].Files = slices.DeleteFunc(changes[i].Files, func(f job.FileChange) bool {
 			return !strings.HasPrefix(f.Path, prefix)
 		})
 	}

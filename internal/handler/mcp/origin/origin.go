@@ -5,7 +5,7 @@ package origin
 import "context"
 
 // Client is the MCP client that triggered a piece of work, as it named itself. It is the
-// host application, which types.Origin records as Host; it is not a subagent, and not the
+// host application, which job.Origin records as Host; it is not a subagent, and not the
 // model driving the host.
 type Client struct {
 	// Name is the client identifier from the MCP initialize handshake's clientInfo, e.g.

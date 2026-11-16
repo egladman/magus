@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -52,16 +53,16 @@ func (s *ForkGraderSuite) counted(ctx context.Context, root string) (guard.Depen
 }
 
 // rows are checks a fork's validation grades, the denied go-build among them.
-func (s *ForkGraderSuite) rows() []types.Job {
-	var rows []types.Job
-	for _, c := range []types.LeaseCheck{
+func (s *ForkGraderSuite) rows() []jobtypes.Job {
+	var rows []jobtypes.Job
+	for _, c := range []jobtypes.LeaseCheck{
 		{Target: "go-build", Project: "."},
 		{Target: "go::go-vet", Project: "."},
 		{Target: "go-test", Project: "."},
 		{Target: "lint", Project: ".", NoDefaultCharms: true, Args: []string{"run.go"}},
 		{Target: types.TargetCI, Project: "."},
 	} {
-		rows = append(rows, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"run.go"}}, Check: &c})
+		rows = append(rows, jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"run.go"}}, Check: &c})
 	}
 	return rows
 }

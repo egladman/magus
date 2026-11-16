@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -17,14 +18,14 @@ import (
 
 type GradeCheckSuite struct {
 	suite.Suite
-	row types.Job
+	row jobtypes.Job
 }
 
 func TestGradeCheckSuite(t *testing.T) { suite.Run(t, new(GradeCheckSuite)) }
 
 func (s *GradeCheckSuite) SetupTest() {
 	testkit.Isolate(s.T())
-	s.row = types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	s.row = jobtypes.Job{ID: "w", Check: &jobtypes.LeaseCheck{Target: "go-build", Project: "."}}
 }
 
 // A workspace whose rules did not load defers the grade, and says so rather than refuse on a

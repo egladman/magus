@@ -14,8 +14,8 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
-	"github.com/egladman/magus/types"
 )
 
 // heartbeatInterval is how often a (session, lease) pair is stamped at most. A stamp
@@ -160,7 +160,7 @@ func compactHeartbeats(ctx context.Context, store file.JSONL[heartbeat], now tim
 
 // newestStamp is the newest stamp under row's lease in the store of the checkout its holder
 // took it in and in workspace's, false when neither holds one.
-func newestStamp(row types.Job, workspace string) (heartbeat, bool) {
+func newestStamp(row jobtypes.Job, workspace string) (heartbeat, bool) {
 	var newest heartbeat
 	for _, root := range slices.Compact([]string{row.CheckoutRoot, workspace}) {
 		if root == "" {
@@ -185,7 +185,7 @@ func newestStamp(row types.Job, workspace string) (heartbeat, bool) {
 
 // deadOwners is each of owners other than exclude holding rel whose holder [deadHolder]
 // judges dead at now.
-func deadOwners(at location, owners []types.Job, rel, exclude string, now time.Time) []job.DeadHolder {
+func deadOwners(at location, owners []jobtypes.Job, rel, exclude string, now time.Time) []job.DeadHolder {
 	var out []job.DeadHolder
 	store := job.NewStore(at.jobs())
 	for _, row := range owners {
@@ -217,7 +217,7 @@ func clearHolderStopped(ctx context.Context, at location, who hookAttribution) {
 // stop passed [SilentLeaseAfter], or it went silent that long with no
 // background command. An untaken row, a server's and an unread
 // transcript are never dead.
-func deadHolder(store *job.Store, at location, row types.Job, now time.Time) (job.DeadHolder, bool) {
+func deadHolder(store *job.Store, at location, row jobtypes.Job, now time.Time) (job.DeadHolder, bool) {
 	if !job.Editing(row) || row.Registered == 0 || row.ServerRun() {
 		return job.DeadHolder{}, false
 	}
@@ -260,7 +260,7 @@ type SilentLease struct {
 //
 // The workspace's stamps are read from the user state dir; cacheDir is the host-scratch
 // directory the transcript reader keeps its own state in.
-func SilentLeases(root, cacheDir string, rows []types.Job, now time.Time, after time.Duration) ([]SilentLease, error) {
+func SilentLeases(root, cacheDir string, rows []jobtypes.Job, now time.Time, after time.Duration) ([]SilentLease, error) {
 	store, err := heartbeatStore(root)
 	if err != nil {
 		return nil, err

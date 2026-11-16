@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -337,7 +338,7 @@ func vcsFailed(err error, format string, args ...any) error {
 // lines land in, through the driver's Regions: the one implementation the job store's
 // footprint reads, so a script and `magus job wait` never disagree about a declaration.
 // dir "" is the target's cwd.
-func VCSRegions(ctx context.Context, base, dir string) ([]types.RegionChange, error) {
+func VCSRegions(ctx context.Context, base, dir string) ([]job.RegionChange, error) {
 	v, defaultBase, dir, err := vcsAt(ctx, "regions", dir)
 	if err != nil {
 		return nil, err
@@ -356,9 +357,9 @@ func VCSRegions(ctx context.Context, base, dir string) ([]types.RegionChange, er
 	if err != nil {
 		return nil, fmt.Errorf("vcs.regions: %w", err)
 	}
-	files := make([]types.FileChange, 0, len(paths))
+	files := make([]job.FileChange, 0, len(paths))
 	for _, p := range paths {
-		files = append(files, types.FileChange{Path: p})
+		files = append(files, job.FileChange{Path: p})
 	}
 	regions, err := v.Regions(ctx, root, base, files)
 	if err != nil {

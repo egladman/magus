@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/diff"
@@ -88,7 +89,7 @@ func serverUsage() {
 }
 
 func serverStart(ctx context.Context, args []string) error {
-	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
+	ctx = trail.ContextWithEntryPoint(ctx, jobtypes.EntryPointServer)
 	var sf *flaggen.ServerStartFlags
 	_, err := commandParse("server start", args, func(fs *flag.FlagSet) {
 		sf = flaggen.BindServerStart(fs)
@@ -845,7 +846,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 		trail.Append(ctx, m.CacheDir(), trail.Event{
 			Ts:        time.Now().UnixMilli(),
 			Kind:      trail.KindJob,
-			Origin:    types.Origin{EntryPoint: types.EntryPointServer},
+			Origin:    jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
 			Workspace: m.Root(),
 			Action:    "review.said",
 			Outcome:   trail.OutcomeOK,
@@ -878,7 +879,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	trail.Append(ctx, m.CacheDir(), trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindJob,
-		Origin:    types.Origin{EntryPoint: types.EntryPointServer},
+		Origin:    jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
 		Workspace: m.Root(),
 		Action:    "review.merged",
 		Outcome:   trail.OutcomeOK,

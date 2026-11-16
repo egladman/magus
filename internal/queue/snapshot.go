@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	magustypes "github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -26,10 +27,10 @@ const SchemaSnapshot = "mergequeue.snapshot/v1alpha1"
 // answers without the network. `magus queue ls` writes it, having paid for the call,
 // and `magus queue plan` adds its plan to it.
 type Snapshot struct {
-	Schema  string                   `json:"schema"`
-	Fetched magustypes.InflightFetch `json:"fetched"`
-	Changes types.Changes            `json:"changes"`
-	Plan    *types.Plan              `json:"plan,omitempty"`
+	Schema  string                 `json:"schema"`
+	Fetched jobtypes.InflightFetch `json:"fetched"`
+	Changes types.Changes          `json:"changes"`
+	Plan    *types.Plan            `json:"plan,omitempty"`
 }
 
 // snapshotDir is the repository's queue state: every worktree and clone of it reads the
@@ -158,7 +159,7 @@ func RecordPlan(root string, p types.Plan) error {
 
 // JoinInflight joins list to the newest snapshot of the repository at root, as me sees
 // it. It reads the snapshot and each job checkout's branch, and never the network.
-func JoinInflight(ctx context.Context, root string, list magustypes.JobList, me job.Identity) (magustypes.JobList, error) {
+func JoinInflight(ctx context.Context, root string, list jobtypes.List, me job.Identity) (jobtypes.List, error) {
 	s, ok, err := NewestSnapshot(root)
 	if err != nil {
 		return list, err
@@ -173,7 +174,7 @@ func JoinInflight(ctx context.Context, root string, list magustypes.JobList, me 
 
 // checkoutBranches reads the branch each distinct job checkout is on. A checkout that is
 // gone, or on no branch, is left out.
-func checkoutBranches(ctx context.Context, rows []magustypes.Job) map[string]string {
+func checkoutBranches(ctx context.Context, rows []jobtypes.Job) map[string]string {
 	out := map[string]string{}
 	seen := map[string]bool{}
 	for _, row := range rows {

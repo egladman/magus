@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -155,7 +156,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	// point came through the hook.
 	require.Equal(t, stamped(t, event, Event{
 		Kind:      KindAgentCommand,
-		Origin:    types.Origin{EntryPoint: types.EntryPointHook, Host: "codex", Session: "abc123"},
+		Origin:    job.Origin{EntryPoint: job.EntryPointHook, Host: "codex", Session: "abc123"},
 		Workspace: "/repo/magus",
 		Action:    "Bash",
 		Outcome:   OutcomeOK,
@@ -209,7 +210,7 @@ func TestAppendAgentCommand_RecordsHowLongTheToolRan(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
-	event.Ts, event.Origin, event.Workspace = 0, types.Origin{}, ""
+	event.Ts, event.Origin, event.Workspace = 0, job.Origin{}, ""
 	event.RequestRef, event.ResponseRef, event.RequestBytes, event.ResponseBytes = "", "", 0, 0
 	assert.Equal(t, Event{Kind: KindAgentCommand, Action: "Bash", Outcome: OutcomeOK, DurationMs: 1500, Preview: "observed"}, event)
 }
@@ -249,7 +250,7 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 	}
 	require.Equal(t, stamped(t, judged, Event{
 		Kind:          KindAgentCommand,
-		Origin:        types.Origin{EntryPoint: types.EntryPointHook},
+		Origin:        job.Origin{EntryPoint: job.EntryPointHook},
 		Action:        "Bash",
 		Outcome:       OutcomeOK,
 		Preview:       "guard: pass",
@@ -263,7 +264,7 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 	require.Empty(t, unknown.Phases)
 	require.Equal(t, stamped(t, spawns[0], Event{
 		Kind:          KindAgentSpawn,
-		Origin:        types.Origin{EntryPoint: types.EntryPointHook},
+		Origin:        job.Origin{EntryPoint: job.EntryPointHook},
 		Action:        "Explore",
 		Outcome:       OutcomeOK,
 		Binary:        "/work/tree/magus",
@@ -283,7 +284,7 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	// No host session means unattributed, never a default party.
 	require.Equal(t, stamped(t, event, Event{
 		Kind:    KindAgentCommand,
-		Origin:  types.Origin{EntryPoint: types.EntryPointHook},
+		Origin:  job.Origin{EntryPoint: job.EntryPointHook},
 		Action:  "command",
 		Outcome: OutcomeOK,
 		Preview: "guard: advise",
@@ -411,7 +412,7 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 	event.Ts, event.RequestRef, event.RequestBytes = 0, "", 0
 	require.Equal(t, Event{
 		Kind:      KindAgentSpawn,
-		Origin:    StampOrigin(t.Context(), types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
+		Origin:    StampOrigin(t.Context(), job.Origin{EntryPoint: job.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "Explore",
 		Lease:     "notes-store-6b",
@@ -448,7 +449,7 @@ func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing
 	// An unlabelled callee still says a spawn happened, and names no lease.
 	require.Equal(t, stamped(t, events[0], Event{
 		Kind:    KindAgentSpawn,
-		Origin:  types.Origin{EntryPoint: types.EntryPointHook},
+		Origin:  job.Origin{EntryPoint: job.EntryPointHook},
 		Action:  "agent.spawn",
 		Outcome: OutcomeOK,
 	}), events[0])
@@ -539,9 +540,9 @@ func TestLeaseFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
 func TestAppendAgentCommand_RecordsOnlyTheSuppliedLease(t *testing.T) {
 	t.Setenv(EnvBaggage, BaggageLease+"=fleet/from-env")
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Lease: "fleet/supplied", LeaseFrom: types.LeaseSourceMarker})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Lease: "fleet/supplied", LeaseFrom: job.LeaseSourceMarker})
 	// A supplied lease that fails the charset is not stamped, and nothing stands in for it.
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Lease: "not a lease id", LeaseFrom: types.LeaseSourceFlag})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Lease: "not a lease id", LeaseFrom: job.LeaseSourceFlag})
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: "pass"})
 
 	events, err := ReadRecent(dir, 3)
@@ -552,10 +553,10 @@ func TestAppendAgentCommand_RecordsOnlyTheSuppliedLease(t *testing.T) {
 	assert.Empty(t, events[1].LeaseFrom, "a dropped lease drops its source")
 	assert.Equal(t, stamped(t, events[2], Event{
 		Kind:      KindAgentCommand,
-		Origin:    types.Origin{EntryPoint: types.EntryPointHook},
+		Origin:    job.Origin{EntryPoint: job.EntryPointHook},
 		Action:    "Bash",
 		Lease:     "fleet/supplied",
-		LeaseFrom: types.LeaseSourceMarker,
+		LeaseFrom: job.LeaseSourceMarker,
 		Outcome:   OutcomeOK,
 		Preview:   "observed",
 	}), events[2])
@@ -965,7 +966,7 @@ func TestTrailKeepsStructuralFields(t *testing.T) {
 	Append(ctx, base, Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      KindAgentCommand,
-		Origin:    types.Origin{Host: "agent-7"},
+		Origin:    job.Origin{Host: "agent-7"},
 		Workspace: "/repos/magus",
 		Action:    "Bash",
 		Outcome:   OutcomeOK,

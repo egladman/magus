@@ -1,4 +1,4 @@
-package types
+package job
 
 import (
 	"testing"
@@ -34,7 +34,7 @@ func TestOriginLabelNamesEachChannelItHas(t *testing.T) {
 func TestOriginNamesMatchesEachFieldExactly(t *testing.T) {
 	t.Parallel()
 	o := Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Agent: "a1b2",
-		Credential: Credential{Kind: KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: GrantConnector}}
+		Credential: Credential{Kind: KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: AccessConnector}}
 	for _, name := range []string{"eli", "claude-code", "a1b2", "stored", "3fa9c1d2", "laptop", "mcp"} {
 		assert.True(t, o.Names(name), name)
 	}

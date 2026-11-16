@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	"github.com/egladman/magus/types"
 )
 
 type jobRecordReadSuite struct {
@@ -17,7 +17,7 @@ type jobRecordReadSuite struct {
 func TestJobRecordRead(t *testing.T) { suite.Run(t, new(jobRecordReadSuite)) }
 
 func (s *jobRecordReadSuite) record(source string) jobRecord {
-	r := recordJob(types.Job{ID: "a", State: types.StateDeclared,
+	r := recordJob(job.Job{ID: "a", State: job.StateDeclared,
 		ModelTier: &tier.Assignment{Name: "bounded", Source: tier.SourceJob}}, nil)
 	r.Status.ModelTier.Source = source
 	return r

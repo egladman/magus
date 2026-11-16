@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -256,7 +257,7 @@ func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callD
 
 	r.failed = append(r.failed, checkoutStateFailures(ctx, drv, co)...)
 	rows, err := jobRowsAt(ctx, at)
-	var tries types.JobAttempts
+	var tries job.Attempts
 	if err == nil {
 		tries, err = leaseAttempts(ctx, at)
 	}
@@ -326,11 +327,11 @@ func checkoutStateFailures(ctx context.Context, drv types.VCSDriver, co types.Re
 // that exited ungraded, and unfiled one that exited with no result.
 type checkoutJobScan struct {
 	failed          []string
-	finished        []types.Job
+	finished        []job.Job
 	exited, unfiled string
 }
 
-func scanCheckoutJobs(deps Dependencies, rows []types.Job, tries types.JobAttempts, co types.RegisteredCheckout) checkoutJobScan {
+func scanCheckoutJobs(deps Dependencies, rows []job.Job, tries job.Attempts, co types.RegisteredCheckout) checkoutJobScan {
 	var scan checkoutJobScan
 	for _, row := range rows {
 		if row.Worktree.Standing() && samePath(row.Worktree.Root, co.Root) && !mayWorkIn(deps, rows, row) {
@@ -341,15 +342,15 @@ func scanCheckoutJobs(deps Dependencies, rows []types.Job, tries types.JobAttemp
 			continue
 		}
 		switch {
-		case row.State == types.StateExited && tries.Result(row.ID) == nil:
+		case row.State == job.StateExited && tries.Result(row.ID) == nil:
 			// No result was filed: only the tree can lose work.
 			scan.unfiled = row.ID
 		case row.State.Live():
 			scan.failed = append(scan.failed, fmt.Sprintf("job %s (%s) was taken in it (`%s`)", row.ID, row.State, hint.DescribeJob.With(row.ID)))
-			if row.State == types.StateExited {
+			if row.State == job.StateExited {
 				scan.exited = row.ID
 			}
-		case row.State == types.StatePass || row.State == types.StateFail:
+		case row.State == job.StatePass || row.State == job.StateFail:
 			scan.finished = append(scan.finished, row)
 		}
 	}
@@ -360,11 +361,11 @@ func scanCheckoutJobs(deps Dependencies, rows []types.Job, tries types.JobAttemp
 // whose fork made and locked it, and owned a lock over a finished worker.
 type checkoutLock struct {
 	failed []string
-	forked *types.Job
+	forked *job.Job
 	owned  bool
 }
 
-func judgeCheckoutLock(deps Dependencies, rows, finished []types.Job, co types.RegisteredCheckout, s removalSite) checkoutLock {
+func judgeCheckoutLock(deps Dependencies, rows, finished []job.Job, co types.RegisteredCheckout, s removalSite) checkoutLock {
 	var lock checkoutLock
 	switch {
 	case !co.Locked || s.unlock:
@@ -372,7 +373,7 @@ func judgeCheckoutLock(deps Dependencies, rows, finished []types.Job, co types.R
 		// git removes a locked worktree only with -f -f, which would also
 		// discard changes, so a fork's checkout goes through magus, which
 		// removes it only once it holds no work.
-		i := slices.IndexFunc(rows, func(row types.Job) bool {
+		i := slices.IndexFunc(rows, func(row job.Job) bool {
 			return row.Worktree.Standing() && samePath(row.Worktree.Root, co.Root) && mayWorkIn(deps, rows, row)
 		})
 		if i < 0 {
@@ -577,14 +578,14 @@ func ownedCheckouts(ctx context.Context, deps Dependencies, at location) []strin
 // mayWorkIn reports whether the caller is row's holder or its root: the session holding row
 // or a job row descends from, a caller holding no job that no session spawned, or an agent
 // spawned for row whose binding the call does not carry yet.
-func mayWorkIn(deps Dependencies, rows []types.Job, row types.Job) bool {
+func mayWorkIn(deps Dependencies, rows []job.Job, row job.Job) bool {
 	if deps.lease == "" {
 		return deps.caller.Agent == "" || spawnedAsJob(deps.facts, rows, deps.caller.Agent, row.ID)
 	}
 	if deps.lease == row.ID {
 		return true
 	}
-	return slices.ContainsFunc(types.JobAncestors(rows, row.ID), func(a types.Job) bool { return a.ID == deps.lease })
+	return slices.ContainsFunc(job.Ancestors(rows, row.ID), func(a job.Job) bool { return a.ID == deps.lease })
 }
 
 // lockHeld is the condition a lock fails when nothing proves who holds it is done.
@@ -599,12 +600,12 @@ func lockHeld(co types.RegisteredCheckout) string {
 // lockOwner names the finished job whose worker locked a checkout, when the caller is the
 // session that spawned it: a root caller, and a spawn record in its own session facts
 // naming the job. "" when nothing proves that.
-func lockOwner(deps Dependencies, rows, finished []types.Job) string {
+func lockOwner(deps Dependencies, rows, finished []job.Job) string {
 	if !deps.caller.Identified() || deps.caller.Agent != "" {
 		return ""
 	}
 	if deps.lease != "" {
-		i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == deps.lease })
+		i := slices.IndexFunc(rows, func(row job.Job) bool { return row.ID == deps.lease })
 		if i < 0 || rows[i].Parent != "" {
 			return ""
 		}
@@ -716,7 +717,7 @@ func locateRemoval(c locatedCall) (removalSite, string) {
 
 // jobRowsAt is leaseRows for a rule that must refuse without a store: no cache directory
 // is no job store to read, not an empty one.
-func jobRowsAt(ctx context.Context, at location) ([]types.Job, error) {
+func jobRowsAt(ctx context.Context, at location) ([]job.Job, error) {
 	if at.cacheDir == "" {
 		return nil, errors.New("no cache directory resolved for this workspace")
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -50,7 +51,7 @@ type SymbolReader func(ctx context.Context, name, signature string) (SymbolFact,
 // The regions a diff placed are cached in the footprint cache on ctx, which [Wait] and
 // [GradeGates] set to their store's, so a dry-run store's grading writes none.
 func CheckpointObserver(root string, symbols SymbolReader) Observer {
-	return func(ctx context.Context, row types.Job) (Observed, error) {
+	return func(ctx context.Context, row job.Job) (Observed, error) {
 		ctx = withFootprintCache(ctx, footprintCacheIn(ctx).forRow(row))
 		tree := WorkTree(root, row)
 		var driver types.VCSDriver
@@ -84,7 +85,7 @@ func CheckpointObserver(root string, symbols SymbolReader) Observer {
 // WorkTree is the checkout a job's work lives in: the one that took it, while it still
 // exists, else root. The waiter usually sits in another checkout, and grading that one's
 // diff held the job to work it never did.
-func WorkTree(root string, row types.Job) string {
+func WorkTree(root string, row job.Job) string {
 	if row.CheckoutRoot == "" || root == "" {
 		return root
 	}
@@ -135,7 +136,7 @@ type diffFrom struct {
 // is then an ancestor of HEAD, so it is the merge base, and the commits the rebase brought
 // in read as the holder's. ReportedBase is not consulted there, since it is the base the
 // holder reported when it took the job, not the one it rebased onto.
-func diffBase(ctx context.Context, driver types.VCSDriver, tree string, row types.Job) diffFrom {
+func diffBase(ctx context.Context, driver types.VCSDriver, tree string, row job.Job) diffFrom {
 	checkpoint := checkpointRevision(row.Checkpoint)
 	if checkpoint == "" || driver == nil {
 		return diffFrom{revision: checkpoint, named: checkpoint}
@@ -169,7 +170,7 @@ func diffBase(ctx context.Context, driver types.VCSDriver, tree string, row type
 // landedSince is what row's branch committed since base. A path counts only if
 // it differs from every line row may take work from, so a merge or squash of
 // one is left out. A shared checkout's HEAD is not row's.
-func landedSince(ctx context.Context, driver types.VCSDriver, tree, base string, row types.Job) ([]string, bool, string) {
+func landedSince(ctx context.Context, driver types.VCSDriver, tree, base string, row job.Job) ([]string, bool, string) {
 	var tips []string
 	ownHead := tree == row.CheckoutRoot && (row.Worktree.Standing() || row.Parent == "")
 	if head, err := driver.FindCommit(ctx, tree, ""); err == nil && ownHead {
@@ -243,9 +244,9 @@ func changedSince(ctx context.Context, driver types.VCSDriver, unresolved, root,
 		seen.RegionsKnown = true
 		return seen
 	}
-	files := make([]types.FileChange, len(changed))
+	files := make([]job.FileChange, len(changed))
 	for i, p := range changed {
-		files[i] = types.FileChange{Path: p}
+		files[i] = job.FileChange{Path: p}
 	}
 	seen.Regions, seen.RegionsKnown, seen.RegionsReason = regionsSince(ctx, driver, root, revision, files)
 	return seen
@@ -254,7 +255,7 @@ func changedSince(ctx context.Context, driver types.VCSDriver, unresolved, root,
 // regionsSince is Regions with its failure turned into the reason a reader is shown. A
 // backend declining the capability is named as that, since it is the one failure nobody
 // can fix by re-running.
-func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision string, files []types.FileChange) ([]types.RegionChange, bool, string) {
+func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision string, files []job.FileChange) ([]job.RegionChange, bool, string) {
 	cache := footprintCacheIn(ctx)
 	key, keyed := cache.regionsKey(ctx, driver, root, revision, files)
 	if keyed {
@@ -285,7 +286,7 @@ func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision st
 // magus\job.list cannot disagree about a footprint. Only the overlaps pay for it: a list
 // with none reads no VCS at all. Version control that is disabled or does not resolve
 // leaves each footprint unknown, naming why.
-func MeasureOverlaps(ctx context.Context, root string, rows []types.Job, overlaps []types.JobOverlap) []types.JobOverlap {
+func MeasureOverlaps(ctx context.Context, root string, rows []job.Job, overlaps []job.Overlap) []job.Overlap {
 	if len(overlaps) == 0 {
 		return overlaps
 	}
@@ -297,29 +298,29 @@ func MeasureOverlaps(ctx context.Context, root string, rows []types.Job, overlap
 }
 
 // Report is the job list every read door serves: the rows, swept as [Store.List] sweeps
-// them; the overlaps, blocked and read-only rows [types.NewJobList] derives; the rows
+// them; the overlaps, blocked and read-only rows [job.NewList] derives; the rows
 // flagged overdue, orphaned or stale as of now (unix seconds) against staleAfter; and each
 // overlap's footprint measured at the store's checkout. `magus ls jobs`, magus\job.list and
 // JobService's ListJobs all build it here, so no two doors disagree about a row.
 //
 // It never joins the queue snapshot: in-flight changes are the queue's, and a door that
 // wants them joins them itself.
-func (s *Store) Report(ctx context.Context, now int64, staleAfter time.Duration) (types.JobList, error) {
+func (s *Store) Report(ctx context.Context, now int64, staleAfter time.Duration) (job.List, error) {
 	rows, err := s.List()
 	if err != nil {
-		return types.JobList{}, err
+		return job.List{}, err
 	}
 	tries, err := s.Attempts()
 	if err != nil {
-		return types.JobList{}, err
+		return job.List{}, err
 	}
-	list := types.NewJobList(HardenWritten(ctx, s, rows)).Flag(now, staleAfter)
+	list := job.NewList(HardenWritten(ctx, s, rows)).Flag(now, staleAfter)
 	list.Attempts = BoundAttempts(list.Jobs, tries, now)
 	list.Overlaps = ContendedOverlaps(list.Jobs, list.Overlaps, s.workspaceProjects)
 	// A footprint reads each holder's diff, a VCS call per changed path, and a stale row's
 	// holder is the one least likely to still be writing: on a store of abandoned rows,
 	// measuring them all held `magus ls jobs` for minutes.
-	stale := func(o types.JobOverlap) bool {
+	stale := func(o job.Overlap) bool {
 		return slices.Contains(list.Stale, o.JobA) || slices.Contains(list.Stale, o.JobB)
 	}
 	measured := MeasureOverlaps(withFootprintCache(ctx, s.footprintCache()), s.root, list.Jobs, slices.DeleteFunc(slices.Clone(list.Overlaps), stale))
@@ -328,7 +329,7 @@ func (s *Store) Report(ctx context.Context, now int64, staleAfter time.Duration)
 			list.Overlaps[i], measured = measured[0], measured[1:]
 			continue
 		}
-		list.Overlaps[i].Footprint = &types.JobOverlapFootprint{Verdict: types.FootprintUnknown,
+		list.Overlaps[i].Footprint = &job.OverlapFootprint{Verdict: job.FootprintUnknown,
 			Reason: fmt.Sprintf("not measured: %s or %s is stale (jobs.stale_after is %s)", o.JobA, o.JobB, staleAfter)}
 	}
 	return list, nil
@@ -344,9 +345,9 @@ func (s *Store) StaleAfter() (time.Duration, error) { return s.resolveStaleAfter
 // question it cannot answer is a FootprintUnknown verdict naming why. A nil driver is
 // version control that did not resolve.
 //
-// Both sides of each diff are compared, per [types.Collisions]: two jobs deleting lines
+// Both sides of each diff are compared, per [job.Collisions]: two jobs deleting lines
 // from one declaration both touch it.
-func OverlapFootprints(ctx context.Context, driver types.VCSDriver, rows []types.Job, overlaps []types.JobOverlap) []types.JobOverlap {
+func OverlapFootprints(ctx context.Context, driver types.VCSDriver, rows []job.Job, overlaps []job.Overlap) []job.Overlap {
 	if len(overlaps) == 0 {
 		return overlaps
 	}
@@ -369,13 +370,13 @@ func OverlapFootprints(ctx context.Context, driver types.VCSDriver, rows []types
 
 // footprint is one job's regions, or why they are not known.
 type footprint struct {
-	regions []types.RegionChange
+	regions []job.RegionChange
 	known   bool
 	reason  string
 }
 
-func readFootprint(ctx context.Context, driver types.VCSDriver, rows []types.Job, id string) footprint {
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+func readFootprint(ctx context.Context, driver types.VCSDriver, rows []job.Job, id string) footprint {
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	if i < 0 {
 		return footprint{reason: fmt.Sprintf("no job %s is declared", id)}
 	}
@@ -410,7 +411,7 @@ func readFootprint(ctx context.Context, driver types.VCSDriver, rows []types.Job
 }
 
 // compareFootprints collides two footprints' regions, both sides of each.
-func compareFootprints(idA string, a footprint, idB string, b footprint) types.JobOverlapFootprint {
+func compareFootprints(idA string, a footprint, idB string, b footprint) job.OverlapFootprint {
 	var unknown []string
 	for _, side := range []struct {
 		id string
@@ -421,21 +422,21 @@ func compareFootprints(idA string, a footprint, idB string, b footprint) types.J
 		}
 	}
 	if len(unknown) > 0 {
-		return types.JobOverlapFootprint{Verdict: types.FootprintUnknown, Reason: strings.Join(unknown, "; ")}
+		return job.OverlapFootprint{Verdict: job.FootprintUnknown, Reason: strings.Join(unknown, "; ")}
 	}
-	collisions := types.Collisions(asLocators(a.regions), asLocators(b.regions))
+	collisions := job.Collisions(asLocators(a.regions), asLocators(b.regions))
 	if len(collisions) == 0 {
-		return types.JobOverlapFootprint{Verdict: types.FootprintDisjoint}
+		return job.OverlapFootprint{Verdict: job.FootprintDisjoint}
 	}
 	shared := make([]string, len(collisions))
 	for i, l := range collisions {
 		shared[i] = l.String()
 	}
-	return types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: shared}
+	return job.OverlapFootprint{Verdict: job.FootprintShared, Shared: shared}
 }
 
-func asLocators(regions []types.RegionChange) []types.Locator {
-	out := make([]types.Locator, len(regions))
+func asLocators(regions []job.RegionChange) []job.Locator {
+	out := make([]job.Locator, len(regions))
 	for i, r := range regions {
 		out[i] = r
 	}
@@ -451,14 +452,14 @@ func asLocators(regions []types.RegionChange) []types.Locator {
 // filepath.Glob. Under filepath.Glob `**` is one segment, so `db/migrations/**` found
 // nothing two levels down and an `absent` gate over it PASSED while the files were there:
 // a false certification, which is the one direction this design may never fail in.
-func presentIn(root string, row types.Job) ([]string, bool) {
+func presentIn(root string, row job.Job) ([]string, bool) {
 	if root == "" {
 		return nil, false
 	}
 	tree := os.DirFS(root)
 	var out []string
 	for _, gate := range row.EffectiveGoals() {
-		if gate.Kind != types.GoalKindPaths {
+		if gate.Kind != job.GoalKindPaths {
 			continue
 		}
 		for _, declared := range gate.Paths {
@@ -480,7 +481,7 @@ func presentIn(root string, row types.Job) ([]string, bool) {
 // observation unknown: a graph that answered for three names and failed on the fourth cannot
 // be told apart from one that found the fourth absent, and those mean opposite things to a
 // gate.
-func (o *Observed) readSymbols(ctx context.Context, goals []types.Goal, read SymbolReader) {
+func (o *Observed) readSymbols(ctx context.Context, goals []job.Goal, read SymbolReader) {
 	o.Symbols, o.Signatures, o.conflicts, o.SymbolsKnown = nil, nil, nil, false
 	if read == nil {
 		return
@@ -488,7 +489,7 @@ func (o *Observed) readSymbols(ctx context.Context, goals []types.Goal, read Sym
 	symbols, signatures := map[string]SymbolFact{}, map[string]SymbolFact{}
 	declared, conflicts := map[string]string{}, map[string]bool{}
 	for _, gate := range goals {
-		if gate.Kind != types.GoalKindSymbol {
+		if gate.Kind != job.GoalKindSymbol {
 			continue
 		}
 		for _, name := range gate.Symbols {
@@ -496,7 +497,7 @@ func (o *Observed) readSymbols(ctx context.Context, goals []types.Goal, read Sym
 				continue
 			}
 			signature := ""
-			if gate.Expect == types.ExpectSignature {
+			if gate.Expect == job.ExpectSignature {
 				signature = gate.Signature
 				if prior, ok := declared[name]; ok && prior != signature {
 					conflicts[name] = true
@@ -508,7 +509,7 @@ func (o *Observed) readSymbols(ctx context.Context, goals []types.Goal, read Sym
 			if !ok {
 				return
 			}
-			if gate.Expect == types.ExpectSignature {
+			if gate.Expect == job.ExpectSignature {
 				signatures[name] = fact
 			} else {
 				symbols[name] = fact
@@ -691,7 +692,7 @@ func (s *Store) footprintCache() footprintCache {
 }
 
 // forRow is c filing its entries under row's checkpoint revision.
-func (c footprintCache) forRow(row types.Job) footprintCache {
+func (c footprintCache) forRow(row job.Job) footprintCache {
 	c.revision = checkpointRevision(row.Checkpoint)
 	return c
 }
@@ -702,7 +703,7 @@ func (c footprintCache) forRow(row types.Job) footprintCache {
 // configuration placement reads (see regionsConfig), and each file's name and working-tree
 // content. A .gitattributes that changed is among files. false when c is off or any of them
 // cannot be read.
-func (c footprintCache) regionsKey(ctx context.Context, driver types.VCSDriver, root, revision string, files []types.FileChange) (string, bool) {
+func (c footprintCache) regionsKey(ctx context.Context, driver types.VCSDriver, root, revision string, files []job.FileChange) (string, bool) {
 	h, ok := c.keyHash("regions", root, revision)
 	if !ok || driver == nil {
 		return "", false
@@ -728,7 +729,7 @@ func (c footprintCache) regionsKey(ctx context.Context, driver types.VCSDriver, 
 // that checkout's HEAD and uncommitted state (see checkoutState) and the configuration
 // placement reads there (see regionsConfig), read through driver. false when c is off or
 // the checkout cannot be read.
-func (c footprintCache) footprintKey(ctx context.Context, driver types.VCSDriver, row types.Job) (string, bool) {
+func (c footprintCache) footprintKey(ctx context.Context, driver types.VCSDriver, row job.Job) (string, bool) {
 	h, ok := c.keyHash("footprint", row.CheckoutRoot, row.Checkpoint)
 	if !ok || driver == nil {
 		return "", false
@@ -869,15 +870,15 @@ func digestPath(h hash.Hash, root, rel string, walk bool) bool {
 // footprintEntry is one cached read. Key is recorded so a file that answers to another key
 // (a truncated name, a hand edit) is a miss rather than an answer.
 type footprintEntry struct {
-	Key     string               `json:"key"`
-	Regions []types.RegionChange `json:"regions"`
+	Key     string             `json:"key"`
+	Regions []job.RegionChange `json:"regions"`
 }
 
 func (c footprintCache) entryPath(key string) string {
 	return filepath.Join(c.dir, revisionDir(c.revision), key+".json")
 }
 
-func (c footprintCache) read(key string) ([]types.RegionChange, bool) {
+func (c footprintCache) read(key string) ([]job.RegionChange, bool) {
 	raw, err := os.ReadFile(c.entryPath(key))
 	if err != nil {
 		return nil, false
@@ -891,7 +892,7 @@ func (c footprintCache) read(key string) ([]types.RegionChange, bool) {
 
 // write files regions under key. Best effort: a cache that cannot be written is a later
 // miss, never a failed read.
-func (c footprintCache) write(key string, regions []types.RegionChange) {
+func (c footprintCache) write(key string, regions []job.RegionChange) {
 	if c.readOnly {
 		return
 	}

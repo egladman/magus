@@ -10,8 +10,8 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,12 +28,12 @@ func emitJournalEvent(t *testing.T, h slog.Handler, e journal.Event) {
 
 // leaseResolver answers every checkout with lease, from and err. Which lease wins is
 // job.RunLease's rule and is tested there; the journal stamps what the resolver says.
-func leaseResolver(lease string, from types.LeaseSource, err error) func(context.Context, string) (string, types.LeaseSource, error) {
-	return func(context.Context, string) (string, types.LeaseSource, error) { return lease, from, err }
+func leaseResolver(lease string, from job.LeaseSource, err error) func(context.Context, string) (string, job.LeaseSource, error) {
+	return func(context.Context, string) (string, job.LeaseSource, error) { return lease, from, err }
 }
 
 // withJournalLease wires the handler with a fixed build version and resolve as the lease.
-func withJournalLease(ctx context.Context, handlers []slog.Handler, root, verb string, args []string, resolve func(context.Context, string) (string, types.LeaseSource, error)) []slog.Handler {
+func withJournalLease(ctx context.Context, handlers []slog.Handler, root, verb string, args []string, resolve func(context.Context, string) (string, job.LeaseSource, error)) []slog.Handler {
 	return WithInvocationJournal(ctx, handlers, root, verb, args, "test", resolve)
 }
 
@@ -174,7 +174,7 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 	} {
 		t.Run(verb, func(t *testing.T) {
 			root := t.TempDir()
-			handlers := withJournalLease(context.Background(), nil, root, verb, args, leaseResolver("fleet/f3", types.LeaseSourceEnv, nil))
+			handlers := withJournalLease(context.Background(), nil, root, verb, args, leaseResolver("fleet/f3", job.LeaseSourceEnv, nil))
 			require.Len(t, handlers, 1)
 			emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
 
@@ -187,7 +187,7 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 			require.Len(t, summaries, 1)
 			assert.Equal(t, "fleet/f3", summaries[0].Lease)
 			assert.Equal(t, []sessions.TargetResult{
-				{Target: "ci", Project: "api", Outcome: sessions.OutcomePass, Lease: "fleet/f3", LeaseFrom: types.LeaseSourceEnv},
+				{Target: "ci", Project: "api", Outcome: sessions.OutcomePass, Lease: "fleet/f3", LeaseFrom: job.LeaseSourceEnv},
 			}, summaries[0].Targets)
 		})
 	}
@@ -200,7 +200,7 @@ func TestWithInvocationJournalRecordsNoLeaseWhenTheBindingDoesNotRead(t *testing
 	root := t.TempDir()
 
 	handlers := withJournalLease(context.Background(), nil, root, "run", []string{"ci"},
-		leaseResolver("fleet/claimed", types.LeaseSourceEnv, errors.New("marker unreadable")))
+		leaseResolver("fleet/claimed", job.LeaseSourceEnv, errors.New("marker unreadable")))
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Status: journal.StatusPass})
 

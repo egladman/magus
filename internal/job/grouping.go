@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/ci/volatility"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -102,7 +103,7 @@ func (f *groupingFold) add(group []types.JobOutcome) {
 	var start, end int64
 	for i, o := range group {
 		f.rec.Jobs++
-		if o.State == types.StatePass {
+		if o.State == job.StatePass {
 			f.pass++
 		}
 		f.unattributed += o.Unattributed

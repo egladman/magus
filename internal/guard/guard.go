@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/xdg"
@@ -203,7 +204,7 @@ type Dependencies struct {
 	BinaryVersion string
 	// JobReader is what the lease rules read job rows through, nil for the
 	// job store of the checkout judged. An SDK caller passes its own.
-	JobReader types.JobReader
+	JobReader jobtypes.Reader
 	// Steps is the step rows and Go step rules JudgeStep reads.
 	// Zero denies every step as undeclared.
 	Steps StepTable
@@ -664,7 +665,7 @@ type Request struct {
 	// PendingRow is the row of a lease the store does not carry yet, graded as if it did: it
 	// joins the rows the rules read, and Lease defaults to its id. For a fork that must know
 	// what the guard will say to its holder before the holder exists.
-	PendingRow *types.Job
+	PendingRow *jobtypes.Job
 	// Dir is the absolute directory the call runs in, which decides the workspace and the
 	// relative paths a command names. It outranks a host envelope's cwd, which decides both
 	// when Dir is empty. Empty, or relative, with no envelope cwd, is the process's working
@@ -2478,7 +2479,7 @@ type location struct {
 	// and only when a rule asks.
 	policies func() declaredIndex
 	// rows is the request's Dependencies.JobReader, nil for the job store.
-	rows types.JobReader
+	rows jobtypes.Reader
 }
 
 // jobs places the job store and checkout record of the checkout at. A user state dir that
@@ -2551,7 +2552,7 @@ func rereadJobStoreRows(ctx context.Context, at location) context.Context {
 		log.idle()
 	}
 	// An embedder's reader answers rows alone: its tasks keep no attempts.
-	var tries []types.Attempt
+	var tries []jobtypes.Attempt
 	if err == nil && store != nil {
 		tries, err = store.Attempts()
 	}
@@ -2584,15 +2585,15 @@ func withOutputStore(ctx context.Context, at location) context.Context {
 // of the same id. An unreadable store stays unreadable: a rule must not grade a pending row
 // against rows it never saw. With no snapshot pinned at all (no cache dir to read one from)
 // the row is the only one the rules see.
-func withPendingRow(ctx context.Context, row types.Job) context.Context {
+func withPendingRow(ctx context.Context, row jobtypes.Job) context.Context {
 	snap, _ := job.SnapshotFromContext(ctx)
 	if snap.Err != nil {
 		return ctx
 	}
 	if row.State == "" {
-		row.State = types.StateDeclared
+		row.State = jobtypes.StateDeclared
 	}
-	rows := slices.DeleteFunc(slices.Clone(snap.Rows), func(r types.Job) bool { return r.ID == row.ID })
+	rows := slices.DeleteFunc(slices.Clone(snap.Rows), func(r jobtypes.Job) bool { return r.ID == row.ID })
 	ctx = context.WithValue(ctx, pendingRowKey{}, row.ID)
 	return job.WithSnapshot(ctx, job.Snapshot{Rows: append(rows, row.Clone()), Attempts: snap.Attempts})
 }
@@ -2607,7 +2608,7 @@ func pendingRowID(ctx context.Context) string {
 
 // leaseRows reports the pinned job store, reading it when nothing pinned one. A test that
 // calls a single rule gets its own read, which is what every rule used to do.
-func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
+func leaseRows(ctx context.Context, at location) ([]jobtypes.Job, error) {
 	if pinned, ok := job.SnapshotFromContext(ctx); ok {
 		return pinned.Rows, pinned.Err
 	}
@@ -2621,7 +2622,7 @@ func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 // entries covering rel, the one path a write grade asks about. Hardening every entry
 // checks each against every region of its holder's diff, which ran a test-file edit
 // against a 526-entry integration row past the hook's budget.
-func hardenCovering(rows []types.Job, rel string, harden func([]types.Job) []types.Job) []types.Job {
+func hardenCovering(rows []jobtypes.Job, rel string, harden func([]jobtypes.Job) []jobtypes.Job) []jobtypes.Job {
 	narrowed := slices.Clone(rows)
 	for i, row := range rows {
 		narrowed[i].Paths.Soft = slices.DeleteFunc(slices.Clone(row.Paths.Soft), func(entry string) bool {
@@ -2740,7 +2741,7 @@ func withRegisteredBase(ctx context.Context, deps Dependencies, at location, age
 	if !ok || snap.Err != nil {
 		return ctx
 	}
-	i := slices.IndexFunc(snap.Rows, func(row types.Job) bool { return row.ID == agentJob })
+	i := slices.IndexFunc(snap.Rows, func(row jobtypes.Job) bool { return row.ID == agentJob })
 	if i < 0 || !snap.Rows[i].State.Live() || (snap.Rows[i].Registered != 0 && !baseSuperseded(ctx, deps, at, snap.Rows[i])) {
 		return ctx
 	}
@@ -2811,7 +2812,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Event:           who.Event,
 		Tool:            tool,
 		Lease:           lease,
-		LeaseFrom:       types.LeaseSource(judgment.LeaseFrom),
+		LeaseFrom:       jobtypes.LeaseSource(judgment.LeaseFrom),
 		PreauthorizedBy: preauth,
 		Decision:        judgment.Decision,
 		Reason:          judgment.Reason,

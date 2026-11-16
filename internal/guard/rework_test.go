@@ -7,10 +7,9 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -36,10 +35,10 @@ func newReworkFixture(t *testing.T) reworkFixture {
 	}
 }
 
-func (f reworkFixture) putJob(t *testing.T, state types.JobState) {
+func (f reworkFixture) putJob(t *testing.T, state jobtypes.State) {
 	t.Helper()
-	row := types.Job{ID: "guard-facts", Agent: agent.Instructed("prove it"), Paths: types.JobPaths{Write: []string{"a.go"}}, Validation: "magus run test", State: state}
-	_, err := f.store.Update(f.testContext(t), row.ID, func(cur *types.Job) { *cur = row })
+	row := jobtypes.Job{ID: "guard-facts", Agent: jobtypes.Instructed("prove it"), Paths: jobtypes.Paths{Write: []string{"a.go"}}, Validation: "magus run test", State: state}
+	_, err := f.store.Update(f.testContext(t), row.ID, func(cur *jobtypes.Job) { *cur = row })
 	require.NoError(t, err)
 }
 
@@ -54,14 +53,14 @@ func (f reworkFixture) rounds(t *testing.T) int {
 func TestRecordReworkCountsAContinuationSentAfterTheWorkerHandedBack(t *testing.T) {
 	tests := []struct {
 		name  string
-		state types.JobState
+		state jobtypes.State
 		want  int
 	}{
-		{"an exited job", types.StateExited, 1},
-		{"a passed job", types.StatePass, 1},
-		{"a failed job", types.StateFail, 1},
-		{"a job still running", types.StateRunning, 0},
-		{"a job nobody took", types.StateDeclared, 0},
+		{"an exited job", jobtypes.StateExited, 1},
+		{"a passed job", jobtypes.StatePass, 1},
+		{"a failed job", jobtypes.StateFail, 1},
+		{"a job still running", jobtypes.StateRunning, 0},
+		{"a job nobody took", jobtypes.StateDeclared, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -78,7 +77,7 @@ func TestRecordReworkCountsAContinuationSentAfterTheWorkerHandedBack(t *testing.
 
 func TestRecordReworkAttributesOnlyWhatTheSpawnRecordNames(t *testing.T) {
 	f := newReworkFixture(t)
-	f.putJob(t, types.StateExited)
+	f.putJob(t, jobtypes.StateExited)
 
 	recordRework(f.testContext(t), f.at, f.facts, "ghost")
 	assert.Zero(t, f.rounds(t), "an agent magus never saw names no job")
@@ -98,7 +97,7 @@ func TestRecordReworkAttributesOnlyWhatTheSpawnRecordNames(t *testing.T) {
 
 func TestRecordReworkResolvesAnAgentByItsName(t *testing.T) {
 	f := newReworkFixture(t)
-	f.putJob(t, types.StateExited)
+	f.putJob(t, jobtypes.StateExited)
 	writeAgentMarker(f.facts, agentAliasKind("brisk-heron"), []byte("a1b2c3"))
 	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{Description: reworkTitle, Name: "brisk-heron"})
 
@@ -109,7 +108,7 @@ func TestRecordReworkResolvesAnAgentByItsName(t *testing.T) {
 
 func TestRecordReworkWritesNothingInADryRun(t *testing.T) {
 	f := newReworkFixture(t)
-	f.putJob(t, types.StateExited)
+	f.putJob(t, jobtypes.StateExited)
 	writeSpawnedAgent(f.facts, "a1b2c3", spawnedAgent{Description: reworkTitle})
 	dry, cancel := withDryRunDeadline(f.testContext(t))
 	defer cancel()
@@ -121,7 +120,7 @@ func TestRecordReworkWritesNothingInADryRun(t *testing.T) {
 
 func TestAContinueJudgedByTheGuardCountsAsReworkOnce(t *testing.T) {
 	f := newReworkFixture(t)
-	f.putJob(t, types.StateExited)
+	f.putJob(t, jobtypes.StateExited)
 	deps := Dependencies{}
 	Judge(f.testContext(t), deps, Request{Input: finishedSpawn(t, reworkTitle, "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
 	require.Zero(t, f.rounds(t), "the spawn is not a continuation")
@@ -146,11 +145,11 @@ func TestContinueToExitedWorkerSuite(t *testing.T) {
 
 func (s *ContinueToExitedWorkerSuite) SetupTest() {
 	s.f = newReworkFixture(s.T())
-	s.f.putJob(s.T(), types.StateRunning)
+	s.f.putJob(s.T(), jobtypes.StateRunning)
 	Judge(s.f.testContext(s.T()), Dependencies{}, Request{Input: finishedSpawn(s.T(), reworkTitle, "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
 }
 
-func (s *ContinueToExitedWorkerSuite) continueWorker(state types.JobState) verdict.Judgment {
+func (s *ContinueToExitedWorkerSuite) continueWorker(state jobtypes.State) verdict.Judgment {
 	s.f.putJob(s.T(), state)
 	continueTo := `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
 		`"tool_name":"SendMessage","tool_input":{"to":"brisk-heron","message":"Widen with job apply and fix the review comments."},"tool_use_id":"toolu_02"}`
@@ -158,39 +157,39 @@ func (s *ContinueToExitedWorkerSuite) continueWorker(state types.JobState) verdi
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnExitedWorkerAdvisesTheRoot() {
-	v := s.continueWorker(types.StateExited)
+	v := s.continueWorker(jobtypes.StateExited)
 	s.Equal(decisionAdvise, v.Decision)
 	s.Contains(v.Context, "job guard-facts is exited; widen it yourself with `")
 	s.Contains(v.Context, "job exec guard-facts")
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnEndedWorkerAdvisesTheRoot() {
-	v := s.continueWorker(types.StatePass)
+	v := s.continueWorker(jobtypes.StatePass)
 	s.Equal(decisionAdvise, v.Decision)
 	s.Contains(v.Context, "job guard-facts is pass; fork a new job for more work")
 }
 
 // A continued worker is still bound: no advice and no rework round.
 func (s *ContinueToExitedWorkerSuite) TestContinueToAStoppedWorkerSaysNothing() {
-	v := s.continueWorker(types.StateRunning)
+	v := s.continueWorker(jobtypes.StateRunning)
 	s.NotContains(v.Context, "job guard-facts is")
 	s.Zero(s.f.rounds(s.T()))
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnOtherwiseEndedNoReturnWorkerAdvisesFork() {
-	v := s.continueWorker(types.StateNoReturn)
+	v := s.continueWorker(jobtypes.StateNoReturn)
 	s.Equal(decisionAdvise, v.Decision)
 	s.Contains(v.Context, "fork a new job for more work")
 	s.NotContains(v.Context, "job exec guard-facts")
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToARunningWorkerSaysNothing() {
-	v := s.continueWorker(types.StateRunning)
+	v := s.continueWorker(jobtypes.StateRunning)
 	s.NotContains(v.Context, "job guard-facts is")
 }
 
 func (s *ContinueToExitedWorkerSuite) TestContinueToAnExitedWorkerNeverDenies() {
-	v := s.continueWorker(types.StateExited)
+	v := s.continueWorker(jobtypes.StateExited)
 	s.NotEqual(decisionDeny, v.Decision, v.Reason)
 }
 

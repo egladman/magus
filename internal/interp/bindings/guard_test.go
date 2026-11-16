@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -330,7 +331,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 
 	got, err = rule(t.Context(), types.CommandRequest{
 		Host: "codex", Command: "while true; do make; done", Role: types.AgentRoleWorker,
-		Lease:    &types.Job{ID: "guard-command"},
+		Lease:    &jobtypes.Job{ID: "guard-command"},
 		Parent:   "orchestrator/feat guard-command",
 		Agent:    "a534fcfe",
 		Commands: []types.CommandInvocation{{Program: "true", Repeats: true}, {Program: "make", Repeats: true}},
@@ -483,7 +484,7 @@ func TestSpawnRuleSeesTheRequestAfterTheLoadCloses(t *testing.T) {
 	idle := int64(90_000)
 	got, err = rule(t.Context(), types.SpawnRequest{
 		Kind: types.SpawnKindContinue, Host: "claude-code", Model: "sonnet", Role: types.AgentRoleWorker,
-		Lease:  &types.Job{ID: "guard-spawn"},
+		Lease:  &jobtypes.Job{ID: "guard-spawn"},
 		Target: &types.SpawnTarget{Agent: "auditor", IdleMs: &idle},
 		Parent: "orchestrator/brisk-heron/implement adr 0002",
 	}, facts)
@@ -634,7 +635,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
 `)
 	require.NoError(t, err)
 	facts := hint.NewGate(t.TempDir(), "claude-code/s1")
-	rows := []types.Job{{ID: "guard-facts", State: types.StateRunning}, {ID: "guard-docs", State: types.StateDeclared}}
+	rows := []jobtypes.Job{{ID: "guard-facts", State: jobtypes.StateRunning}, {ID: "guard-docs", State: jobtypes.StateDeclared}}
 	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: rows})
 	tokens := int64(19925)
 

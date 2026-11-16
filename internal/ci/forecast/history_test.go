@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -147,7 +148,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		Alpha:               []int64{4_800, 5_200},
 		WorkspaceFallbackMs: 9_000,
 		Runs:                []Run{{Commit: "39e02449", Ref: "main", Target: "ci", Status: RunPassed, At: time.Now()}},
-		Jobs:                []types.JobOutcome{{Job: "docs", ModelTier: "economy", Kind: types.JobKindCheck, State: types.StatePass, Ended: 1}},
+		Jobs:                []types.JobOutcome{{Job: "docs", ModelTier: "economy", Kind: types.JobKindCheck, State: job.StatePass, Ended: 1}},
 	}
 
 	path := filepath.Join(t.TempDir(), "history.jsonl")
@@ -1248,13 +1249,13 @@ func TestJobOutcomesAreCappedAndMergeAsAUnion(t *testing.T) {
 	assert.Equal(t, int64(25), w.Jobs[0].Ended, "the oldest are the ones dropped")
 
 	var a, b History
-	a.RecordJob(types.JobOutcome{Job: "x", Ended: 2, State: types.StatePass})
-	b.RecordJob(types.JobOutcome{Job: "y", Ended: 1, State: types.StateFail})
-	b.RecordJob(types.JobOutcome{Job: "x", Ended: 2, State: types.StatePass})
+	a.RecordJob(types.JobOutcome{Job: "x", Ended: 2, State: job.StatePass})
+	b.RecordJob(types.JobOutcome{Job: "y", Ended: 1, State: job.StateFail})
+	b.RecordJob(types.JobOutcome{Job: "x", Ended: 2, State: job.StatePass})
 	a.Merge(&b)
 	want := []types.JobOutcome{
-		{Job: "y", Ended: 1, State: types.StateFail},
-		{Job: "x", Ended: 2, State: types.StatePass},
+		{Job: "y", Ended: 1, State: job.StateFail},
+		{Job: "x", Ended: 2, State: job.StatePass},
 	}
 	assert.Equal(t, want, a.Jobs, "a shared outcome is kept once, in time order")
 
@@ -1277,11 +1278,11 @@ func TestJobOutcomeWithWorkSurvivesARoundTripAndMergesOnce(t *testing.T) {
 
 	tokens := int64(41_000)
 	worked := types.JobOutcome{
-		Job: "w", Ended: 5, Attempt: 1, State: types.StatePass, Parent: "root", ParentAttempt: 2,
+		Job: "w", Ended: 5, Attempt: 1, State: job.StatePass, Parent: "root", ParentAttempt: 2,
 		Projects: []string{"internal/job", "types"}, Unattributed: 1,
 		Work: &types.JobWork{Calls: 9, Writes: 2, SetupCalls: 6, SetupTokens: &tokens, Denials: 1},
 	}
-	unknown := types.JobOutcome{Job: "u", Ended: 6, Attempt: 1, State: types.StateFail}
+	unknown := types.JobOutcome{Job: "u", Ended: 6, Attempt: 1, State: job.StateFail}
 
 	path := filepath.Join(t.TempDir(), "history.json")
 	require.NoError(t, UpdateHistory(t.Context(), path, func(h *History) error {

@@ -19,10 +19,9 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -31,7 +30,7 @@ import (
 // fleetFixture stands up a workspace root and a lease ledger holding leases, and
 // returns the context pinning both plus the root. Everything lands in temporary
 // directories, so a guard test never reads or writes the checkout's real ledger.
-func fleetFixture(t *testing.T, leases ...types.Job) (context.Context, string) {
+func fleetFixture(t *testing.T, leases ...jobtypes.Job) (context.Context, string) {
 	t.Helper()
 	root, cacheDir := fixture.SeedLeases(t, leases...)
 	location := location{cacheDir: cacheDir, workspace: root}
@@ -78,11 +77,11 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 	})
 
 	t.Run("a read-only lease writing anywhere", func(t *testing.T) {
-		leases := append(fixture.FleetLeases(), types.Job{
+		leases := append(fixture.FleetLeases(), jobtypes.Job{
 			ID:       "scout",
-			Agent:    agent.Instructed("inventory the guard rules"),
+			Agent:    jobtypes.Instructed("inventory the guard rules"),
 			ReadOnly: true,
-			State:    types.StateRunning,
+			State:    jobtypes.StateRunning,
 		})
 		ctx, root := fleetFixture(t, leases...)
 		got := gradeLeasedWrite(ctx, Dependencies{}, "scout", filepath.Join(root, "README.md"))
@@ -99,7 +98,7 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 // can neither verify nor end the owner, so the denial names the root of the owner's tree
 // and files one attention row for it, however often the write is retried.
 func TestGradeLeasedWriteKnocksOnTheOwnersTreeRoot(t *testing.T) {
-	leases := append(fixture.FleetLeases(), types.Job{ID: "orch", Agent: agent.Instructed("plan"), ReadOnly: true, State: types.StateRunning, Registered: 1})
+	leases := append(fixture.FleetLeases(), jobtypes.Job{ID: "orch", Agent: jobtypes.Instructed("plan"), ReadOnly: true, State: jobtypes.StateRunning, Registered: 1})
 	leases[0].Parent = "orch"
 	ctx, root := fleetFixture(t, leases...)
 	for range 2 {
@@ -162,7 +161,7 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 
 	t.Run("every lease terminal", func(t *testing.T) {
 		leases := fixture.FleetLeases()
-		leases[0].State, leases[1].State = types.StatePass, types.StateNoReturn
+		leases[0].State, leases[1].State = jobtypes.StatePass, jobtypes.StateNoReturn
 		ctx, root := fleetFixture(t, leases...)
 		// A finished lease has stopped competing for its paths, which is the rule
 		// types.leaseOverlaps applies when it decides which pairs to report.
@@ -259,7 +258,7 @@ func TestGradeLeasedWriteInvalidLeaseID(t *testing.T) {
 	t.Run("the notice itself is the id rule, not the write rule", func(t *testing.T) {
 		assert.Contains(t, adviseInvalidLease("lease b!").Say, "not a valid lease id")
 		assert.Contains(t, adviseInvalidLease("lease b!").Say, "magus.lease")
-		assert.Contains(t, adviseInvalidLease(strings.Repeat("u", types.MaxJobIDLen+1)).Say, "not a valid lease id")
+		assert.Contains(t, adviseInvalidLease(strings.Repeat("u", jobtypes.MaxIDLen+1)).Say, "not a valid lease id")
 		assert.Empty(t, adviseInvalidLease("lease-a"))
 		assert.Empty(t, adviseInvalidLease(""), "naming no lease is not a typo")
 	})
@@ -613,7 +612,7 @@ func fleetLedger(t *testing.T, ctx context.Context) *job.Store {
 	return job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: loc.cacheDir, Root: loc.workspace})
 }
 
-func unattributedWrites(t *testing.T, store *job.Store, id string) []types.JobUnattributedWrite {
+func unattributedWrites(t *testing.T, store *job.Store, id string) []jobtypes.UnattributedWrite {
 	t.Helper()
 	rows, err := store.List()
 	require.NoError(t, err)
@@ -644,7 +643,7 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 	require.Len(t, recorded, 1, "the owner is told what moved under it")
 	assert.Equal(t, "internal/ledger/store.go", recorded[0].Path)
 	assert.NotEmpty(t, recorded[0].Digest)
-	assert.NotEqual(t, types.DigestAbsent, recorded[0].Digest,
+	assert.NotEqual(t, jobtypes.DigestAbsent, recorded[0].Digest,
 		"a digest of nothing gives the owner nothing to compare against")
 	assert.NotZero(t, recorded[0].At)
 
@@ -681,11 +680,11 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 // This is the enforcement point, and it is a deny because an advisory is the same pinky promise
 // with better wording.
 func TestGradeLeasedWriteRequiresACheckpoint(t *testing.T) {
-	unregistered := func() []types.Job {
+	unregistered := func() []jobtypes.Job {
 		fleet := fixture.FleetLeases()
 		fleet[1].Registered = 0
 		fleet[1].ReportedBase = ""
-		fleet[1].BaseVerdict = types.BaseUnknown
+		fleet[1].BaseVerdict = jobtypes.BaseUnknown
 		return fleet
 	}
 
@@ -727,7 +726,7 @@ func TestGradeLeasedWriteRequiresACheckpoint(t *testing.T) {
 func TestGradeLeasedWriteFlagsADivergedBase(t *testing.T) {
 	fleet := fixture.FleetLeases()
 	fleet[1].ReportedBase = "rev-somewhere-else"
-	fleet[1].BaseVerdict = types.BaseDiverged
+	fleet[1].BaseVerdict = jobtypes.BaseDiverged
 	ctx, root := fleetFixture(t, fleet...)
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
@@ -931,7 +930,7 @@ func TestGradeLeasedWriteNamesARevokedPath(t *testing.T) {
 	leases[1].Paths.Write = append(leases[1].Paths.Write, "internal/thing/new.go")
 	ctx, root := fleetFixture(t, leases...)
 	store := storeAt(ctx)
-	revoked, err := store.Update(ctx, "lease-b", func(u *types.Job) {
+	revoked, err := store.Update(ctx, "lease-b", func(u *jobtypes.Job) {
 		u.Paths.Write = slices.DeleteFunc(u.Paths.Write, func(p string) bool { return p == "internal/thing/new.go" })
 	})
 	require.NoError(t, err)
@@ -946,20 +945,20 @@ func TestGradeLeasedWriteNamesARevokedPath(t *testing.T) {
 // dependentFleet is a plan where "waiter" is queued behind "dep" and declares the paths dep
 // has to write in. dep declares no write paths, which scopes nothing, so the only thing
 // that can deny its write is another job's ownership.
-func dependentFleet(depState types.JobState) []types.Job {
-	registered := func(j types.Job) types.Job {
-		j.Checkpoint, j.ReportedBase, j.BaseVerdict, j.Registered = "rev-a", "rev-a", types.BaseMatch, 1
+func dependentFleet(depState jobtypes.State) []jobtypes.Job {
+	registered := func(j jobtypes.Job) jobtypes.Job {
+		j.Checkpoint, j.ReportedBase, j.BaseVerdict, j.Registered = "rev-a", "rev-a", jobtypes.BaseMatch, 1
 		return j
 	}
-	return []types.Job{
-		registered(types.Job{ID: "dep", Agent: agent.Instructed("land the store"), State: depState}),
-		registered(types.Job{ID: "waiter", Agent: agent.Instructed("build on the store"), Paths: types.JobPaths{Write: []string{"internal/job/**"}}, DependsOn: []string{"dep"}, State: types.StateDeclared}),
-		registered(types.Job{ID: "other", Agent: agent.Instructed("unrelated"), Paths: types.JobPaths{Write: []string{"docs/**"}}, State: types.StateRunning}),
+	return []jobtypes.Job{
+		registered(jobtypes.Job{ID: "dep", Agent: jobtypes.Instructed("land the store"), State: depState}),
+		registered(jobtypes.Job{ID: "waiter", Agent: jobtypes.Instructed("build on the store"), Paths: jobtypes.Paths{Write: []string{"internal/job/**"}}, DependsOn: []string{"dep"}, State: jobtypes.StateDeclared}),
+		registered(jobtypes.Job{ID: "other", Agent: jobtypes.Instructed("unrelated"), Paths: jobtypes.Paths{Write: []string{"docs/**"}}, State: jobtypes.StateRunning}),
 	}
 }
 
 func TestGradeLeasedWriteQueuedDependentDoesNotBlockItsDependency(t *testing.T) {
-	ctx, root := fleetFixture(t, dependentFleet(types.StateRunning)...)
+	ctx, root := fleetFixture(t, dependentFleet(jobtypes.StateRunning)...)
 	got := gradeLeasedWrite(ctx, Dependencies{}, "dep", filepath.Join(root, "internal/job/store.go"))
 	assert.Empty(t, got.Decision, got.Reason)
 
@@ -969,15 +968,15 @@ func TestGradeLeasedWriteQueuedDependentDoesNotBlockItsDependency(t *testing.T) 
 
 func TestGradeLeasedWriteDependentBlocksOnceItsDependencyPasses(t *testing.T) {
 	for _, tt := range []struct {
-		state types.JobState
+		state jobtypes.State
 		owns  bool
 	}{
-		{types.StateDeclared, false},
-		{types.StateRunning, false},
-		{types.StateExited, false},
-		{types.StateFail, false},
-		{types.StateNoReturn, false},
-		{types.StatePass, true},
+		{jobtypes.StateDeclared, false},
+		{jobtypes.StateRunning, false},
+		{jobtypes.StateExited, false},
+		{jobtypes.StateFail, false},
+		{jobtypes.StateNoReturn, false},
+		{jobtypes.StatePass, true},
 	} {
 		t.Run(string(tt.state), func(t *testing.T) {
 			ctx, root := fleetFixture(t, dependentFleet(tt.state)...)
@@ -995,13 +994,13 @@ func TestGradeLeasedWriteDependentBlocksOnceItsDependencyPasses(t *testing.T) {
 // A holder that filed its result and was sent back still holds its boundary: exited is
 // live, so its write outside its paths is denied whether or not another job is editing.
 func TestGradeLeasedWriteHoldsAnExitedHolderToItsPaths(t *testing.T) {
-	registered := func(j types.Job) types.Job {
-		j.Checkpoint, j.ReportedBase, j.BaseVerdict, j.Registered = "rev-a", "rev-a", types.BaseMatch, 1
+	registered := func(j jobtypes.Job) jobtypes.Job {
+		j.Checkpoint, j.ReportedBase, j.BaseVerdict, j.Registered = "rev-a", "rev-a", jobtypes.BaseMatch, 1
 		return j
 	}
-	holder := registered(types.Job{ID: "holder", Agent: agent.Instructed("land the store"), Paths: types.JobPaths{Write: []string{"internal/job/**"}}, State: types.StateExited})
-	sibling := registered(types.Job{ID: "sibling", Agent: agent.Instructed("unrelated"), Paths: types.JobPaths{Write: []string{"docs/**"}}, State: types.StateRunning})
-	for name, rows := range map[string][]types.Job{
+	holder := registered(jobtypes.Job{ID: "holder", Agent: jobtypes.Instructed("land the store"), Paths: jobtypes.Paths{Write: []string{"internal/job/**"}}, State: jobtypes.StateExited})
+	sibling := registered(jobtypes.Job{ID: "sibling", Agent: jobtypes.Instructed("unrelated"), Paths: jobtypes.Paths{Write: []string{"docs/**"}}, State: jobtypes.StateRunning})
+	for name, rows := range map[string][]jobtypes.Job{
 		"alone":            {holder},
 		"beside a sibling": {holder, sibling},
 	} {
@@ -1027,9 +1026,9 @@ func TestGradeLeasedWriteUnderAnOverdueLease(t *testing.T) {
 	assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/main.go")).Decision)
 	rows, err := leaseRows(ctx, hookLocation(ctx, Dependencies{}))
 	require.NoError(t, err)
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "lease-b" })
+	i := slices.IndexFunc(rows, func(r jobtypes.Job) bool { return r.ID == "lease-b" })
 	require.GreaterOrEqual(t, i, 0)
-	assert.Equal(t, types.StateNoReturn, rows[i].State)
+	assert.Equal(t, jobtypes.StateNoReturn, rows[i].State)
 	assert.Contains(t, rows[i].EndReason, "deadline passed")
 
 	leases[1].Registered = 0
@@ -1098,17 +1097,17 @@ func TestLeasedPathAdvisesOncePerSessionPerLease(t *testing.T) {
 // The holder of a leased path may be a person or an agent, so the advisory says where the
 // job was taken, or that nobody has taken it, and never guesses which.
 func TestHolderNoticeSaysWhereTheJobWasTaken(t *testing.T) {
-	assert.Contains(t, holderNotice(types.Job{Registered: 1, CheckoutRoot: "/src/ana"}), "whoever took it in /src/ana")
-	assert.Contains(t, holderNotice(types.Job{Registered: 1}), "whoever took it may be editing")
-	assert.Contains(t, holderNotice(types.Job{}), "nobody has taken it yet")
+	assert.Contains(t, holderNotice(jobtypes.Job{Registered: 1, CheckoutRoot: "/src/ana"}), "whoever took it in /src/ana")
+	assert.Contains(t, holderNotice(jobtypes.Job{Registered: 1}), "whoever took it may be editing")
+	assert.Contains(t, holderNotice(jobtypes.Job{}), "nobody has taken it yet")
 }
 
 // entryFleet is an orchestrator lease and a worker forked beneath it, whose holder took
 // its job in the fixture's workspace so the guard reads its trail from there.
-func entryFleet(root string) []types.Job {
-	return []types.Job{
-		{ID: "orch", Paths: types.JobPaths{Write: []string{"cmd/**"}}, State: types.StateRunning, Registered: 1},
-		{ID: "orch/worker", Parent: "orch", Paths: types.JobPaths{Write: []string{"internal/ledger/**"}}, State: types.StateRunning, Registered: 1, CheckoutRoot: root},
+func entryFleet(root string) []jobtypes.Job {
+	return []jobtypes.Job{
+		{ID: "orch", Paths: jobtypes.Paths{Write: []string{"cmd/**"}}, State: jobtypes.StateRunning, Registered: 1},
+		{ID: "orch/worker", Parent: "orch", Paths: jobtypes.Paths{Write: []string{"internal/ledger/**"}}, State: jobtypes.StateRunning, Registered: 1, CheckoutRoot: root},
 	}
 }
 
@@ -1127,7 +1126,7 @@ func TestEnterAdmitsAnOrchestratorIntoALiveJobsWritePath(t *testing.T) {
 	ctx, root := fleetFixture(t)
 	store := storeAt(ctx)
 	for _, row := range entryFleet(root) {
-		_, err := store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+		_, err := store.Update(ctx, row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	target := filepath.Join(root, "internal/ledger/store.go")
@@ -1175,8 +1174,8 @@ func TestEnterAdmitsAnOrchestratorIntoALiveJobsWritePath(t *testing.T) {
 func TestEnterRefuses(t *testing.T) {
 	ctx, root := fleetFixture(t)
 	store := storeAt(ctx)
-	for _, row := range append(entryFleet(root), types.Job{ID: "done", Paths: types.JobPaths{Write: []string{"docs/**"}}, State: types.StatePass}) {
-		_, err := store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+	for _, row := range append(entryFleet(root), jobtypes.Job{ID: "done", Paths: jobtypes.Paths{Write: []string{"docs/**"}}, State: jobtypes.StatePass}) {
+		_, err := store.Update(ctx, row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 
@@ -1342,9 +1341,9 @@ func TestGradeLeasedWriteInTheLeasesOwnCheckout(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "std"), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
 	}
-	_, err := storeAt(ctx).Update(ctx, "w", func(cur *types.Job) {
-		*cur = types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"std/*.go"}}, State: types.StateRunning,
-			Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1, CheckoutRoot: wt}
+	_, err := storeAt(ctx).Update(ctx, "w", func(cur *jobtypes.Job) {
+		*cur = jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"std/*.go"}}, State: jobtypes.StateRunning,
+			Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: jobtypes.BaseMatch, Registered: 1, CheckoutRoot: wt}
 	})
 	require.NoError(t, err)
 	scratch := t.TempDir()
@@ -1365,7 +1364,7 @@ func TestGradeLeasedWriteInTheLeasesOwnCheckout(t *testing.T) {
 // the added path is written in the job's checkout like the declared ones, and a write in the
 // session's checkout is the one refused.
 func TestGradeLeasedWriteToAPathAWideningAddedInTheLeasesCheckout(t *testing.T) {
-	for _, state := range []types.JobState{types.StateRunning, types.StateExited} {
+	for _, state := range []jobtypes.State{jobtypes.StateRunning, jobtypes.StateExited} {
 		t.Run(string(state), func(t *testing.T) {
 			ctx, session := fleetFixture(t)
 			own := t.TempDir()
@@ -1374,18 +1373,18 @@ func TestGradeLeasedWriteToAPathAWideningAddedInTheLeasesCheckout(t *testing.T) 
 				require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
 			}
 			store := storeAt(ctx)
-			_, err := store.Update(ctx, "w", func(cur *types.Job) {
-				*cur = types.Job{ID: "w", Agent: agent.Instructed("widen me"), Paths: types.JobPaths{Write: []string{"std/*.go"}}, State: state,
-					Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1, CheckoutRoot: own}
+			_, err := store.Update(ctx, "w", func(cur *jobtypes.Job) {
+				*cur = jobtypes.Job{ID: "w", Agent: jobtypes.Instructed("widen me"), Paths: jobtypes.Paths{Write: []string{"std/*.go"}}, State: state,
+					Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: jobtypes.BaseMatch, Registered: 1, CheckoutRoot: own}
 			})
 			require.NoError(t, err)
-			_, err = store.RecordWorktree(ctx, "w", types.JobWorktree{Root: own, Source: session})
+			_, err = store.RecordWorktree(ctx, "w", jobtypes.Worktree{Root: own, Source: session})
 			require.NoError(t, err)
 
-			widen := types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "w", Agent: agent.Instructed("widen me"),
-				Checkpoint: "rev-a", Paths: types.JobPaths{Write: []string{"std/*.go", "cmd/*.go"}},
-				Goals: []types.Goal{{ID: "done", Kind: types.GoalKindPaths, Expect: types.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
-			_, err = job.Apply(ctx, store, []types.Declaration{widen}, config.Jobs{}, nil, nil, false)
+			widen := jobtypes.Declaration{Schema: jobtypes.Schema{Version: jobtypes.APIVersion}, ID: "w", Agent: jobtypes.Instructed("widen me"),
+				Checkpoint: "rev-a", Paths: jobtypes.Paths{Write: []string{"std/*.go", "cmd/*.go"}},
+				Goals: []jobtypes.Goal{{ID: "done", Kind: jobtypes.GoalKindPaths, Expect: jobtypes.ExpectChanged, Paths: []string{"cmd/*.go"}}}}
+			_, err = job.Apply(ctx, store, []jobtypes.Declaration{widen}, config.Jobs{}, nil, nil, false)
 			require.NoError(t, err)
 
 			added := gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(own, "cmd", "main.go"))
@@ -1411,11 +1410,11 @@ func TestGradeLeasedWriteInTheCheckoutTheLeasesForkMade(t *testing.T) {
 				require.NoError(t, os.MkdirAll(filepath.Join(dir, "std"), 0o755))
 				require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
 			}
-			row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"std/*.go"}}, State: types.StateRunning,
-				Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1,
-				CheckoutRoot: session, Worktree: &types.JobWorktree{Root: own, Source: session}}
+			row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"std/*.go"}}, State: jobtypes.StateRunning,
+				Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: jobtypes.BaseMatch, Registered: 1,
+				CheckoutRoot: session, Worktree: &jobtypes.Worktree{Root: own, Source: session}}
 			// Only a fork writes the worktree record, so the rows are pinned rather than stored.
-			ctx := job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{row}})
+			ctx := job.WithSnapshot(ctx, job.Snapshot{Rows: []jobtypes.Job{row}})
 
 			assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "w", filepath.Join(own, "std", "module.go")).Decision,
 				"a write the lease's paths cover, in the checkout its fork made")
@@ -1440,10 +1439,10 @@ func TestJudgeGradesWriteAndEditInTheCheckoutTheLeasesForkMade(t *testing.T) {
 	}
 	module := filepath.Join(own, "std", "module.go")
 	require.NoError(t, os.WriteFile(module, []byte("package std\n\nfunc A() {}\n"), 0o644))
-	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"std/*.go"}}, State: types.StateRunning,
-		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1, Authority: "rev-a",
-		CheckoutRoot: session, Worktree: &types.JobWorktree{Root: own, Source: session}}
-	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{row}})
+	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"std/*.go"}}, State: jobtypes.StateRunning,
+		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: jobtypes.BaseMatch, Registered: 1, Authority: "rev-a",
+		CheckoutRoot: session, Worktree: &jobtypes.Worktree{Root: own, Source: session}}
+	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []jobtypes.Job{row}})
 	judge := func(tool string, input map[string]any) verdict.Judgment {
 		return Judge(ctx, Dependencies{}, Request{Host: "claude-code", Lease: "w", Input: hookJSON(t, map[string]any{
 			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": tool, "cwd": session,
@@ -1509,10 +1508,10 @@ func TestASoftPathItsHolderWroteIsOwned(t *testing.T) {
 	_, cacheDir := fixture.SeedLeases(t)
 	holder := testkit.NewRepository(t, files)
 	root := holder.Root()
-	row := types.Job{ID: "holder", State: types.StateRunning, Paths: types.JobPaths{Write: []string{rel}, Soft: []string{rel}},
+	row := jobtypes.Job{ID: "holder", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{rel}, Soft: []string{rel}},
 		Checkpoint: holder.Head(), CheckoutRoot: root, Registered: 1, Validated: 1}
 	_, err := job.NewStore(job.Location{CacheDir: cacheDir, StateBase: fixture.StateBase(t), Root: root}).
-		Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 	require.NoError(t, err)
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: root})
 	write := func(session string) verdict.Judgment {
@@ -1533,13 +1532,13 @@ func TestHardenCoveringHandsOnlyTheEntriesCoveringThePath(t *testing.T) {
 	for i := range 500 {
 		soft = append(soft, fmt.Sprintf("internal/p%d/p_test.go", i))
 	}
-	rows := []types.Job{
-		{ID: "integrate", Paths: types.JobPaths{Soft: append(slices.Clone(soft), "internal/guard/guard_test.go")}},
-		{ID: "other", Paths: types.JobPaths{Soft: []string{"internal/guard/*_test.go", "docs/a.md"}}},
-		{ID: "quiet", Paths: types.JobPaths{Write: []string{"internal/guard/guard.go"}}},
+	rows := []jobtypes.Job{
+		{ID: "integrate", Paths: jobtypes.Paths{Soft: append(slices.Clone(soft), "internal/guard/guard_test.go")}},
+		{ID: "other", Paths: jobtypes.Paths{Soft: []string{"internal/guard/*_test.go", "docs/a.md"}}},
+		{ID: "quiet", Paths: jobtypes.Paths{Write: []string{"internal/guard/guard.go"}}},
 	}
 	var handed [][]string
-	got := hardenCovering(rows, "internal/guard/guard_test.go", func(narrowed []types.Job) []types.Job {
+	got := hardenCovering(rows, "internal/guard/guard_test.go", func(narrowed []jobtypes.Job) []jobtypes.Job {
 		out := slices.Clone(narrowed)
 		for i, row := range narrowed {
 			handed = append(handed, row.Paths.Soft)
@@ -1550,10 +1549,10 @@ func TestHardenCoveringHandsOnlyTheEntriesCoveringThePath(t *testing.T) {
 		return out
 	})
 	assert.Equal(t, [][]string{{"internal/guard/guard_test.go"}, {"internal/guard/*_test.go"}, nil}, handed)
-	assert.Equal(t, []types.Job{
-		{ID: "integrate", Paths: types.JobPaths{Soft: soft}},
-		{ID: "other", Paths: types.JobPaths{Soft: []string{"internal/guard/*_test.go", "docs/a.md"}}},
-		{ID: "quiet", Paths: types.JobPaths{Write: []string{"internal/guard/guard.go"}}},
+	assert.Equal(t, []jobtypes.Job{
+		{ID: "integrate", Paths: jobtypes.Paths{Soft: soft}},
+		{ID: "other", Paths: jobtypes.Paths{Soft: []string{"internal/guard/*_test.go", "docs/a.md"}}},
+		{ID: "quiet", Paths: jobtypes.Paths{Write: []string{"internal/guard/guard.go"}}},
 	}, got)
 }
 
@@ -1578,15 +1577,15 @@ func (s *UnboundWriteInJobCheckoutSuite) SetupTest() {
 		s.Require().NoError(os.MkdirAll(filepath.Join(dir, "std"), 0o755))
 		s.Require().NoError(os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
 	}
-	s.pin(types.StateRunning)
+	s.pin(jobtypes.StateRunning)
 }
 
 // pin holds the job store at one row in state whose fork made s.own.
-func (s *UnboundWriteInJobCheckoutSuite) pin(state types.JobState) {
-	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"std/*.go"}}, State: state,
-		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1,
-		CheckoutRoot: s.own, Worktree: &types.JobWorktree{Root: s.own, Source: s.session}}
-	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{row}}))
+func (s *UnboundWriteInJobCheckoutSuite) pin(state jobtypes.State) {
+	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"std/*.go"}}, State: state,
+		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: jobtypes.BaseMatch, Registered: 1,
+		CheckoutRoot: s.own, Worktree: &jobtypes.Worktree{Root: s.own, Source: s.session}}
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{row}}))
 }
 
 // write is an editor Write of path by agent, or by the root session when
@@ -1614,7 +1613,7 @@ func (s *UnboundWriteInJobCheckoutSuite) TestDenyNamesTheJobAndJobExec() {
 }
 
 func (s *UnboundWriteInJobCheckoutSuite) TestUnboundSubagentWriteAfterTerminalWaitIsDenied() {
-	s.pin(types.StatePass)
+	s.pin(jobtypes.StatePass)
 	v := s.write("a1b2c3", filepath.Join(s.own, "std", "module.go"))
 	s.Equal(decisionDeny, v.Decision)
 	s.Contains(v.Reason, "that job is pass")
@@ -1703,9 +1702,9 @@ func (s *ExitedHolderBindingSuite) TestEditIntoTheJobCheckoutAfterOwnExitIsDenie
 	s.Require().NoError(os.MkdirAll(filepath.Join(own, "hack"), 0o755))
 	s.Require().NoError(os.WriteFile(filepath.Join(own, "magusfile.buzz"), nil, 0o644))
 	s.Require().NoError(os.WriteFile(filepath.Join(own, "hack", "README.md"), []byte("# hack\n"), 0o644))
-	_, err := s.store.Update(s.testContext(), heldJob, func(cur *types.Job) { cur.CheckoutRoot = own })
+	_, err := s.store.Update(s.testContext(), heldJob, func(cur *jobtypes.Job) { cur.CheckoutRoot = own })
 	s.Require().NoError(err)
-	_, err = s.store.RecordWorktree(s.testContext(), heldJob, types.JobWorktree{Root: own, Source: s.root})
+	_, err = s.store.RecordWorktree(s.testContext(), heldJob, jobtypes.Worktree{Root: own, Source: s.root})
 	s.Require().NoError(err)
 	s.exitOwnJob()
 
@@ -1741,7 +1740,7 @@ func snapshotLayer(snap job.Snapshot) func(context.Context) context.Context {
 	return func(ctx context.Context) context.Context { return job.WithSnapshot(ctx, snap) }
 }
 
-func fleetLayers(t *testing.T, leases ...types.Job) (ctxLayers, string) {
+func fleetLayers(t *testing.T, leases ...jobtypes.Job) (ctxLayers, string) {
 	ctx, root := fleetFixture(t, leases...)
 	return ctxLayers{atLayer(ctx.Value(locationKey{}).(location))}, root
 }

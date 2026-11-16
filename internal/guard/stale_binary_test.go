@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -333,7 +334,7 @@ func TestStaleBinaryLetsAWorkerFastForwardToItsBinary(t *testing.T) {
 // A read-only scout may still record its work while the binary is stale: `job exec`,
 // `job exit` and `buzz --record` pass for it, and stay denied for a lease that writes.
 func TestStaleBinaryLetsAReadOnlyScoutRecord(t *testing.T) {
-	scout := types.Job{ID: "scout", ReadOnly: true, State: types.StateRunning, Registered: 1}
+	scout := jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, fixture.FleetLeases()[0], scout)
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
@@ -506,7 +507,7 @@ func TestHookRowsRecordEachPhase(t *testing.T) {
 // so a recorded event compares whole and a field added to it cannot be dropped unseen. A
 // phase keeps its name and whether it lapsed.
 func clearVolatile(e trail.Event) trail.Event {
-	e.Ts, e.Origin, e.Workspace, e.GuardMs = 0, types.Origin{}, "", 0
+	e.Ts, e.Origin, e.Workspace, e.GuardMs = 0, jobtypes.Origin{}, "", 0
 	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
 	e.Preview, e.VerdictRef = "", ""
 	phases := make([]trail.Phase, len(e.Phases))
@@ -1035,8 +1036,8 @@ func (s *LoadRecoverySuite) SetupTest() {
 
 // pin answers the job store with one row recording checkpoint.
 func (s *LoadRecoverySuite) pin(checkpoint string) func(context.Context) context.Context {
-	row := types.Job{ID: "base", State: types.StateRunning, Registered: 1, Checkpoint: checkpoint}
-	return snapshotLayer(job.Snapshot{Rows: []types.Job{row}})
+	row := jobtypes.Job{ID: "base", State: jobtypes.StateRunning, Registered: 1, Checkpoint: checkpoint}
+	return snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{row}})
 }
 
 func (s *LoadRecoverySuite) judge(line string) verdict.Judgment {

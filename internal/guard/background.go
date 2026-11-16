@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // denyRuleWorkerBackgroundRun names the refusal of a bound worker's magus run the host was
@@ -56,7 +56,7 @@ func (c shellCall) foregroundLimit() (time.Duration, bool) {
 
 // workerRun is the target runs one command makes, under the bound worker making them.
 type workerRun struct {
-	lease types.Job
+	lease job.Job
 	runs  []targetRun
 	// refusals holds check-timeout to one refusal per target per session when the workspace
 	// raised it to deny: the deny gate holds nothing, and a refused run narrowed to one test

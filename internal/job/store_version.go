@@ -8,9 +8,9 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // storePathToken stands for the store file in a fix text written where the
@@ -154,7 +154,7 @@ func headerEntry(e migrate.Entry) bool {
 }
 
 // envelopeRow rewrites a flat row as its [jobRecord]. A server's row is
-// told by its registration once holder goes. A member types.Job does not
+// told by its registration once holder goes. A member job.Job does not
 // declare is kept on the record as it was. The flat row spelled its paths
 // before they nested, so flat reads them.
 func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
@@ -162,7 +162,7 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	var row types.Job
+	var row job.Job
 	var flat struct {
 		Holder     string           `json:"holder"`
 		APIVersion types.APIVersion `json:"api_version"`
@@ -177,16 +177,16 @@ func envelopeRow(e migrate.Entry) (migrate.Entry, error) {
 	if err := json.Unmarshal(text, &flat); err != nil {
 		return nil, fmt.Errorf("reading holder: %w", err)
 	}
-	if _, old := e["schema_version"]; old || (flat.APIVersion != "" && flat.APIVersion.Compare(types.JobAPIVersion) < 0) {
-		return nil, types.RefuseVersion(types.JobAPIVersion, flat.APIVersion, "job: row "+row.ID, staleStoreFix(storePathToken))
+	if _, old := e["schema_version"]; old || (flat.APIVersion != "" && flat.APIVersion.Compare(job.APIVersion) < 0) {
+		return nil, types.RefuseVersion(job.APIVersion, flat.APIVersion, "job: row "+row.ID, staleStoreFix(storePathToken))
 	}
 	holder := flat
 	if holder.Holder == "server" {
-		row.RegisteredBy.EntryPoint = types.EntryPointServer
+		row.RegisteredBy.EntryPoint = job.EntryPointServer
 	}
-	row.Paths = types.JobPaths{Write: flat.WritePaths, Read: flat.ReadPaths, Deny: flat.DenyPaths, Soft: flat.SoftPaths}
+	row.Paths = job.Paths{Write: flat.WritePaths, Read: flat.ReadPaths, Deny: flat.DenyPaths, Soft: flat.SoftPaths}
 	r := recordJob(row, nil)
-	declared, read := jsonNames(reflect.TypeFor[types.Job]()), jsonNames(reflect.TypeOf(flat))
+	declared, read := jsonNames(reflect.TypeFor[job.Job]()), jsonNames(reflect.TypeOf(flat))
 	for k, v := range e {
 		if !declared[k] && !read[k] {
 			if r.Unknown == nil {
@@ -284,7 +284,7 @@ func workerResumed(e migrate.Entry) (migrate.Entry, error) {
 		return e, nil
 	}
 	var err error
-	if worker["type"], err = json.Marshal(agent.WorkerTypeResumed); err == nil {
+	if worker["type"], err = json.Marshal(job.WorkerTypeResumed); err == nil {
 		if section["worker"], err = json.Marshal(worker); err == nil {
 			e["agent"], err = json.Marshal(section)
 		}
@@ -328,7 +328,7 @@ func agentSection(e migrate.Entry) (migrate.Entry, error) {
 	if old.Criteria == "" && old.Model == "" && old.FreshReason == "" || old.Holder == "server" {
 		return e, nil
 	}
-	spec := agent.Spec{Instructions: old.Criteria, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}
+	spec := job.Agent{Instructions: old.Criteria, Worker: job.Worker{Type: job.WorkerTypeResumed}}
 	switch {
 	case old.Model == "":
 	// These entries predate ModelTierSourceJob and stored "row" for it.
@@ -338,7 +338,7 @@ func agentSection(e migrate.Entry) (migrate.Entry, error) {
 		spec.Model.ID = old.Model
 	}
 	if old.FreshReason != "" {
-		spec.Worker = agent.Worker{Type: agent.WorkerTypeNew, Reason: old.FreshReason}
+		spec.Worker = job.Worker{Type: job.WorkerTypeNew, Reason: old.FreshReason}
 	}
 	if e["agent"], err = json.Marshal(spec); err != nil {
 		return nil, fmt.Errorf("writing the agent section: %w", err)

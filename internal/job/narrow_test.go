@@ -11,9 +11,9 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -64,11 +64,11 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			fork := NewStore(tempLocation(t, root))
-			_, forkErr := ForkMerge(t.Context(), fork, "wave/job", func(u *types.Job) {
-				u.Check, u.State, u.Paths.Write = forkCheck(), types.StateDeclared, tc.paths
+			_, forkErr := ForkMerge(t.Context(), fork, "wave/job", func(u *job.Job) {
+				u.Check, u.State, u.Paths.Write = forkCheck(), job.StateDeclared, tc.paths
 			}, config.Jobs{}, nil)
 			apply := NewStore(tempLocation(t, root))
-			_, applyErr := Apply(t.Context(), apply, []types.Declaration{{ID: "wave/job", Paths: types.JobPaths{Write: tc.paths}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+			_, applyErr := Apply(t.Context(), apply, []job.Declaration{{ID: "wave/job", Paths: job.Paths{Write: tc.paths}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 			for door, err := range map[string]error{"fork": forkErr, "apply": applyErr} {
 				if tc.want == "" {
 					require.NoError(t, err, door)
@@ -90,21 +90,21 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 	t.Run("an apply adding it to a live job", func(t *testing.T) {
 		t.Parallel()
 		s := NewStore(tempLocation(t, root))
-		seed(t, s, types.Job{ID: "wave/job", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"notes.buzz"}}, Check: forkCheck()})
-		_, err := Apply(t.Context(), s, []types.Declaration{{ID: "wave/job", Paths: types.JobPaths{Write: []string{"notes.buzz", "magusfile.buzz"}}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+		seed(t, s, job.Job{ID: "wave/job", State: job.StateRunning, Paths: job.Paths{Write: []string{"notes.buzz"}}, Check: forkCheck()})
+		_, err := Apply(t.Context(), s, []job.Declaration{{ID: "wave/job", Paths: job.Paths{Write: []string{"notes.buzz", "magusfile.buzz"}}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 		require.ErrorIs(t, err, types.WritePathConfigWholeFile)
 	})
 
 	t.Run("a checkout that places no line of either", func(t *testing.T) {
 		t.Parallel()
 		bare := testkit.NewRepository(t, map[string]string{"magusfile.buzz": configMagusfile, "magus.yaml": "jobs:\n  stale_after: 2h\n"}).Root()
-		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tempLocation(t, bare)), types.Job{ID: "wave/job", Paths: types.JobPaths{Write: []string{"magusfile.buzz", "magus.yaml"}}}))
+		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tempLocation(t, bare)), job.Job{ID: "wave/job", Paths: job.Paths{Write: []string{"magusfile.buzz", "magus.yaml"}}}))
 	})
 
 	t.Run("a magus.yaml that declares nothing yet", func(t *testing.T) {
 		t.Parallel()
 		empty := testkit.NewRepository(t, map[string]string{".gitattributes": "*.yaml diff=yaml\n", "magus.yaml": "{}\n"}).Root()
-		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tempLocation(t, empty)), types.Job{ID: "wave/job", Paths: types.JobPaths{Write: []string{"magus.yaml"}}}))
+		assert.Empty(t, wholeFileConfigClaimProblems(t.Context(), NewStore(tempLocation(t, empty)), job.Job{ID: "wave/job", Paths: job.Paths{Write: []string{"magus.yaml"}}}))
 	})
 }
 
@@ -131,28 +131,28 @@ func (s *narrowHoldSuite) TearDownTest() { s.shared.AssertUnchanged(s.T()) }
 func (s *narrowHoldSuite) SetupTest() {
 	s.loc = tempLocation(s.T(), s.root)
 	s.s = NewStore(s.loc)
-	seed(s.T(), s.s, types.Job{ID: "cfg", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"**/*.buzz"}}, Check: forkCheck()})
-	seed(s.T(), s.s, types.Job{ID: "lit", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"notes.buzz"}}, Check: forkCheck()})
+	seed(s.T(), s.s, job.Job{ID: "cfg", State: job.StateRunning, Paths: job.Paths{Write: []string{"**/*.buzz"}}, Check: forkCheck()})
+	seed(s.T(), s.s, job.Job{ID: "lit", State: job.StateRunning, Paths: job.Paths{Write: []string{"notes.buzz"}}, Check: forkCheck()})
 }
 
-func (s *narrowHoldSuite) narrow(id, file string, touched ...string) (types.Job, []string, error) {
+func (s *narrowHoldSuite) narrow(id, file string, touched ...string) (job.Job, []string, error) {
 	return NarrowHold(s.T().Context(), s.s, id, file, touched, "")
 }
 
-func (s *narrowHoldSuite) stored(id string) types.Job {
+func (s *narrowHoldSuite) stored(id string) job.Job {
 	row, err := s.s.stored(id)
 	s.Require().NoError(err)
 	return row
 }
 
 func (s *narrowHoldSuite) TestAPatternHoldNarrowsToTheTouchedDeclarations() {
-	peer := types.Job{ID: "peer", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"magusfile.buzz#project.name"}}}
+	peer := job.Job{ID: "peer", State: job.StateDeclared, Paths: job.Paths{Write: []string{"magusfile.buzz#project.name"}}}
 	rows, err := s.s.List()
 	s.Require().NoError(err)
-	s.Equal(types.WriteProofOverlapping, s.s.WriteProof(rows, peer), "the pattern covers the magusfile whole")
+	s.Equal(job.WriteProofOverlapping, s.s.WriteProof(rows, peer), "the pattern covers the magusfile whole")
 
 	// The holder narrows its own row: the claims sit inside what its pattern covered.
-	got, added, err := NarrowHold(s.T().Context(), boundStore(s.loc, "cfg"), "cfg", "magusfile.buzz", []string{"project.targets.test", types.Preamble}, "")
+	got, added, err := NarrowHold(s.T().Context(), boundStore(s.loc, "cfg"), "cfg", "magusfile.buzz", []string{"project.targets.test", job.Preamble}, "")
 	s.Require().NoError(err)
 	body, err := os.ReadFile(filepath.Join(s.root, "magusfile.buzz"))
 	s.Require().NoError(err)
@@ -161,7 +161,7 @@ func (s *narrowHoldSuite) TestAPatternHoldNarrowsToTheTouchedDeclarations() {
 	s.Equal([]string{"**/*.buzz", "magusfile.buzz#project.targets.test"}, got.Paths.Write)
 	s.Require().Len(got.Releases, 1)
 	s.NotZero(got.Releases[0].ReleasedAt)
-	s.Equal(types.JobRelease{Path: "magusfile.buzz", Digest: "sha256:" + hex.EncodeToString(sum[:]), ReleasedAt: got.Releases[0].ReleasedAt, Narrowed: true},
+	s.Equal(job.Release{Path: "magusfile.buzz", Digest: "sha256:" + hex.EncodeToString(sum[:]), ReleasedAt: got.Releases[0].ReleasedAt, Narrowed: true},
 		got.Releases[0])
 	s.Equal([]string{"project.targets.test"}, ClaimedDeclarations(got, "magusfile.buzz"))
 	s.Nil(ClaimedDeclarations(got, "libs/lib/magusfile.buzz"), "the pattern still covers every other file whole")
@@ -169,7 +169,7 @@ func (s *narrowHoldSuite) TestAPatternHoldNarrowsToTheTouchedDeclarations() {
 
 	rows, err = s.s.List()
 	s.Require().NoError(err)
-	s.Equal(types.WriteProofDisjoint, s.s.WriteProof(rows, peer), "a narrowed file is out of the pattern's reach")
+	s.Equal(job.WriteProofDisjoint, s.s.WriteProof(rows, peer), "a narrowed file is out of the pattern's reach")
 }
 
 func (s *narrowHoldSuite) TestALaterCallGrowsTheClaims() {
@@ -206,7 +206,7 @@ func (s *narrowHoldSuite) TestALiteralEntryNarrowsAndStays() {
 }
 
 func (s *narrowHoldSuite) TestANarrowedHoldWithNoClaimHoldsNothingWhole() {
-	got, added, err := s.narrow("lit", "notes.buzz", types.Preamble)
+	got, added, err := s.narrow("lit", "notes.buzz", job.Preamble)
 	s.Require().NoError(err)
 
 	s.Empty(added)
@@ -225,7 +225,7 @@ func (s *narrowHoldSuite) TestAGrantRecordsItsFork() {
 }
 
 func (s *narrowHoldSuite) TestADeclarationAnotherRowClaimsIsRefused() {
-	seed(s.T(), s.s, types.Job{ID: "keys", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"magusfile.buzz#project.name"}}, Check: forkCheck()})
+	seed(s.T(), s.s, job.Job{ID: "keys", State: job.StateRunning, Paths: job.Paths{Write: []string{"magusfile.buzz#project.name"}}, Check: forkCheck()})
 
 	_, _, err := s.narrow("cfg", "magusfile.buzz", "project.targets.test", "project.name")
 	s.Require().Error(err)
@@ -235,7 +235,7 @@ func (s *narrowHoldSuite) TestADeclarationAnotherRowClaimsIsRefused() {
 }
 
 func (s *narrowHoldSuite) TestAFileNoDriverPlacesIsRefused() {
-	seed(s.T(), s.s, types.Job{ID: "txt", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"notes.txt"}}, Check: forkCheck()})
+	seed(s.T(), s.s, job.Job{ID: "txt", State: job.StateRunning, Paths: job.Paths{Write: []string{"notes.txt"}}, Check: forkCheck()})
 
 	_, _, err := s.narrow("txt", "notes.txt", "anything")
 	s.Require().Error(err)
@@ -244,7 +244,7 @@ func (s *narrowHoldSuite) TestAFileNoDriverPlacesIsRefused() {
 }
 
 func (s *narrowHoldSuite) TestARowHoldingNoWholeEntryIsRefused() {
-	seed(s.T(), s.s, types.Job{ID: "keys", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"magusfile.buzz#project.name"}}, Check: forkCheck()})
+	seed(s.T(), s.s, job.Job{ID: "keys", State: job.StateRunning, Paths: job.Paths{Write: []string{"magusfile.buzz#project.name"}}, Check: forkCheck()})
 
 	_, _, err := s.narrow("keys", "magusfile.buzz", "project.targets.test")
 	s.Require().Error(err)
@@ -261,23 +261,23 @@ func (s *narrowHoldSuite) TestARedeclarationKeepsTheNarrowing() {
 	_, _, err := s.narrow("lit", "notes.buzz", "fun note() > void {")
 	s.Require().NoError(err)
 
-	applied, err := Apply(s.T().Context(), s.s, []types.Declaration{{ID: "lit", Paths: types.JobPaths{Write: []string{"notes.buzz", "notes.buzz#note"}}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+	applied, err := Apply(s.T().Context(), s.s, []job.Declaration{{ID: "lit", Paths: job.Paths{Write: []string{"notes.buzz", "notes.buzz#note"}}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
 	s.True(Narrowed(applied[0].Next, "notes.buzz"))
 }
 
 func (s *narrowHoldSuite) TestAReforkEndsTheNarrowing() {
-	narrowed := types.Job{ID: "lit", State: types.StatePass, Paths: types.JobPaths{Write: []string{"notes.buzz", "notes.buzz#note"}},
-		Releases: []types.JobRelease{{Path: "notes.buzz", Narrowed: true, ReleasedAt: 1}}}
+	narrowed := job.Job{ID: "lit", State: job.StatePass, Paths: job.Paths{Write: []string{"notes.buzz", "notes.buzz#note"}},
+		Releases: []job.Release{{Path: "notes.buzz", Narrowed: true, ReleasedAt: 1}}}
 	next := narrowed.Clone()
-	next.State = types.StateDeclared
+	next.State = job.StateDeclared
 
 	s.Empty(s.s.releases(s.T().Context(), narrowed, next, 2, false))
 }
 
 func (s *narrowHoldSuite) TestNamingAPatternedFileAgainEndsTheNarrowing() {
-	narrowed := types.Job{ID: "cfg", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"**/*.buzz", "magusfile.buzz#build"}},
-		Releases: []types.JobRelease{{Path: "magusfile.buzz", Narrowed: true, ReleasedAt: 1}}}
+	narrowed := job.Job{ID: "cfg", State: job.StateRunning, Paths: job.Paths{Write: []string{"**/*.buzz", "magusfile.buzz#build"}},
+		Releases: []job.Release{{Path: "magusfile.buzz", Narrowed: true, ReleasedAt: 1}}}
 	next := narrowed.Clone()
 	next.Paths.Write = append(next.Paths.Write, "magusfile.buzz")
 
@@ -292,13 +292,13 @@ type releaseUnderPatternSuite struct {
 
 func TestReleaseUnderPattern(t *testing.T) { suite.Run(t, new(releaseUnderPatternSuite)) }
 
-func (s *releaseUnderPatternSuite) applied(write ...string) types.Job {
+func (s *releaseUnderPatternSuite) applied(write ...string) job.Job {
 	loc := tempLocation(s.T(), testkit.NewRepository(s.T(), configFiles).Root())
 	store := NewStore(loc)
-	seed(s.T(), store, types.Job{ID: "cfg", Agent: agent.Instructed("goal"), State: types.StateRunning, Paths: types.JobPaths{Write: []string{"**/*.buzz"}}, Check: forkCheck()})
+	seed(s.T(), store, job.Job{ID: "cfg", Agent: job.Instructed("goal"), State: job.StateRunning, Paths: job.Paths{Write: []string{"**/*.buzz"}}, Check: forkCheck()})
 	_, _, err := NarrowHold(s.T().Context(), boundStore(loc, "cfg"), "cfg", "magusfile.buzz", []string{"project.targets.test"}, "")
 	s.Require().NoError(err)
-	applied, err := Apply(s.T().Context(), store, []types.Declaration{{ID: "cfg", Agent: agent.Instructed("goal"), Paths: types.JobPaths{Write: write}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+	applied, err := Apply(s.T().Context(), store, []job.Declaration{{ID: "cfg", Agent: job.Instructed("goal"), Paths: job.Paths{Write: write}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
 	return applied[0].Next
 }
@@ -320,7 +320,7 @@ func (s *releaseUnderPatternSuite) TestAKeptClaimIsNamedAsTheHold() {
 }
 
 func (s *releaseUnderPatternSuite) TestAReleasedFileNoPatternNamesIsNotNoted() {
-	s.Empty(ReleasedUnderPattern(types.Job{Paths: types.JobPaths{Write: []string{"a.go"}}, Releases: []types.JobRelease{{Path: "b.go"}}}))
+	s.Empty(ReleasedUnderPattern(job.Job{Paths: job.Paths{Write: []string{"a.go"}}, Releases: []job.Release{{Path: "b.go"}}}))
 }
 
 // A fork refused over a magusfile another live job holds files one release request per
@@ -331,15 +331,15 @@ func TestConfigRefusalRequestsOneRelease(t *testing.T) {
 	root := testkit.NewRepository(t, configFiles).Root()
 	elsewhere := testkit.NewRepository(t, configFiles)
 	s := NewStore(tempLocation(t, root))
-	seed(t, s, types.Job{ID: "cfg", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"**/*.buzz"}}, Checkpoint: elsewhere.Head(), CheckoutRoot: elsewhere.Root()})
+	seed(t, s, job.Job{ID: "cfg", State: job.StateRunning, Paths: job.Paths{Write: []string{"**/*.buzz"}}, Checkpoint: elsewhere.Head(), CheckoutRoot: elsewhere.Root()})
 	fork := func(id string, paths ...string) error {
-		_, err := ForkMerge(t.Context(), s, id, func(u *types.Job) {
-			u.Check, u.State, u.Paths.Write = forkCheck(), types.StateDeclared, paths
+		_, err := ForkMerge(t.Context(), s, id, func(u *job.Job) {
+			u.Check, u.State, u.Paths.Write = forkCheck(), job.StateDeclared, paths
 		}, config.Jobs{}, nil)
 		return err
 	}
 
-	_, err := Apply(t.Context(), s, []types.Declaration{{ID: "slots", Paths: types.JobPaths{Write: []string{"magusfile.buzz"}}, Check: forkCheck()}}, config.Jobs{}, nil, nil, true)
+	_, err := Apply(t.Context(), s, []job.Declaration{{ID: "slots", Paths: job.Paths{Write: []string{"magusfile.buzz"}}, Check: forkCheck()}}, config.Jobs{}, nil, nil, true)
 	require.ErrorIs(t, err, types.WritePathConfigWholeFile)
 	assert.Empty(t, releaseRequests(t, root), "a dry run is refused the same way and files nothing")
 
@@ -357,7 +357,7 @@ func TestConfigRefusalRequestsOneRelease(t *testing.T) {
 	assert.Contains(t, requests[0].Message, "magus session dispose")
 
 	// MGS3032: a holder in another checkout already claims the key the fork wants.
-	seed(t, s, types.Job{ID: "keys", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"magusfile.buzz#project.name"}}, Checkpoint: elsewhere.Head(), CheckoutRoot: elsewhere.Root()})
+	seed(t, s, job.Job{ID: "keys", State: job.StateRunning, Paths: job.Paths{Write: []string{"magusfile.buzz#project.name"}}, Checkpoint: elsewhere.Head(), CheckoutRoot: elsewhere.Root()})
 	require.ErrorIs(t, fork("name", "magusfile.buzz#project.name"), types.WritePathFileShared)
 	requests = releaseRequests(t, root)
 	require.Len(t, requests, 2)
@@ -382,13 +382,13 @@ func TestReleaseRequestRowSuite(t *testing.T) {
 }
 
 func (s *ReleaseRequestRowSuite) SetupTest() {
-	s.store = NewStore(declared(s.T(), types.Job{ID: "h", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}}))
-	filed, err := s.store.FileReleaseRequest(s.T().Context(), "h", types.JobReleaseRequest{ID: "att-1", File: "a.go", Wanted: []string{"a.go"}, Message: "wanted"})
+	s.store = NewStore(declared(s.T(), job.Job{ID: "h", State: job.StateRunning, Paths: job.Paths{Write: []string{"a.go", "b.go"}}}))
+	filed, err := s.store.FileReleaseRequest(s.T().Context(), "h", job.ReleaseRequest{ID: "att-1", File: "a.go", Wanted: []string{"a.go"}, Message: "wanted"})
 	s.Require().NoError(err)
 	s.Require().True(filed)
 }
 
-func (s *ReleaseRequestRowSuite) requests() []types.JobReleaseRequest {
+func (s *ReleaseRequestRowSuite) requests() []job.ReleaseRequest {
 	return storedRows(s.T(), s.store)["h"].ReleaseRequests
 }
 
@@ -416,25 +416,25 @@ func (s *ReleaseRequestRowSuite) TestTheStoreStampsTheTime() {
 }
 
 func (s *ReleaseRequestRowSuite) TestTheSameIDIsNotFiledTwice() {
-	filed, err := s.store.FileReleaseRequest(s.T().Context(), "h", types.JobReleaseRequest{ID: "att-1", File: "a.go"})
+	filed, err := s.store.FileReleaseRequest(s.T().Context(), "h", job.ReleaseRequest{ID: "att-1", File: "a.go"})
 	s.Require().NoError(err)
 	s.False(filed)
 	s.Len(s.requests(), 1)
 }
 
 func (s *ReleaseRequestRowSuite) TestAnUnknownHolderIsAnError() {
-	_, err := s.store.FileReleaseRequest(s.T().Context(), "nobody", types.JobReleaseRequest{ID: "att-2", File: "a.go"})
+	_, err := s.store.FileReleaseRequest(s.T().Context(), "nobody", job.ReleaseRequest{ID: "att-2", File: "a.go"})
 	s.ErrorIs(err, ErrUnknownJob)
 }
 
 func (s *ReleaseRequestRowSuite) TestAWriteToTheRowKeepsIt() {
-	_, err := s.store.Update(s.T().Context(), "h", func(cur *types.Job) { cur.Agent = agent.Instructed("changed") })
+	_, err := s.store.Update(s.T().Context(), "h", func(cur *job.Job) { cur.Agent = job.Instructed("changed") })
 	s.Require().NoError(err)
 	s.Len(s.requests(), 1)
 }
 
 func (s *ReleaseRequestRowSuite) TestNarrowingPastTheFileClearsIt() {
-	_, err := s.store.Update(s.T().Context(), "h", func(cur *types.Job) { cur.Paths.Write = []string{"b.go"} })
+	_, err := s.store.Update(s.T().Context(), "h", func(cur *job.Job) { cur.Paths.Write = []string{"b.go"} })
 	s.Require().NoError(err)
 	s.Empty(s.requests())
 }
@@ -463,10 +463,10 @@ func releaseRequests(t *testing.T, root string) []sessions.AttentionRequest {
 func (s *exitEvidenceSuite) TestOwedForAnyReasonButNoSeatIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: "generated drift"}}
+	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: "generated drift"}}
 
-	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
 	s.ErrorContains(err, `goal "lint" is filed as owed because "generated drift", and the reasons a run is owed are "no seat" and "remote CI runs it"`)
 	s.ErrorContains(err, "the integrator regenerates")
@@ -475,10 +475,10 @@ func (s *exitEvidenceSuite) TestOwedForAnyReasonButNoSeatIsRefused() {
 func (s *exitEvidenceSuite) TestOwedCheckForAnyReasonButNoSeatIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: "not this row's target"}
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+	result.Validation = job.ResultValidation{Command: row.Validation, Owed: "not this row's target"}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedNoSeat}}
 
-	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
 	s.ErrorContains(err, `goal "check" is filed as owed because "not this row's target"`)
 }
@@ -492,11 +492,11 @@ func (s *exitEvidenceSuite) TestNarrowedLintOverTheClaimedFilesIsFiled() {
 		s.Require().NoError(os.WriteFile(full, []byte("package x\n"), 0o644))
 	}
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}
-	exit := func(args ...string) (types.Job, error) {
-		resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
-			return types.JobAttempt{Found: true, Ref: ref, Project: ".", Target: "lint", ExtraArgs: args, TimestampMs: 9_999_999_999_999}, nil
+	result.Validation = job.ResultValidation{Command: row.Validation, Owed: job.OwedNoSeat}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}
+	exit := func(args ...string) (job.Job, error) {
+		resolve := func(_ context.Context, ref string) (job.CapturedRun, error) {
+			return job.CapturedRun{Found: true, Ref: ref, Project: ".", Target: "lint", ExtraArgs: args, TimestampMs: 9_999_999_999_999}, nil
 		}
 		return Exit(s.T().Context(), boundStore(loc, row.ID).InWorkspace(goCheckWorkspace(".")), row.ID, &result, resolve)
 	}
@@ -506,22 +506,22 @@ func (s *exitEvidenceSuite) TestNarrowedLintOverTheClaimedFilesIsFiled() {
 
 	exited, err := exit("cmd/magus/ledger.go", "internal/ledger/report.go")
 	s.Require().NoError(err)
-	s.Equal(types.StateExited, exited.State)
+	s.Equal(job.StateExited, exited.State)
 }
 
 func TestLintGoalLeavesOutTheTestsAForkAddedByItself(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	merge := func(u *types.Job) {
+	merge := func(u *job.Job) {
 		u.Paths.Write, u.Paths.Soft, u.Check = []string{"cli/registry.go", "cli/registry_test.go"}, []string{"cli/registry_test.go"}, forkCheck()
 	}
 	merged, err := resolveMerge(t.Context(), s, nil, "w", merge, nil)
 	require.NoError(t, err)
-	var row types.Job
+	var row job.Job
 	merged(&row)
 
-	i := slices.IndexFunc(row.Goals, func(g types.Goal) bool { return g.ID == "lint" })
+	i := slices.IndexFunc(row.Goals, func(g job.Goal) bool { return g.ID == "lint" })
 	require.GreaterOrEqual(t, i, 0, "goals: %v", row.Goals)
 	assert.Equal(t, []string{"cli/registry.go"}, row.Goals[i].Check.Args, "lint reads a soft path once the row changes it")
 	assert.Contains(t, row.Paths.Write, "cli/registry_test.go", "the worker may still write it")

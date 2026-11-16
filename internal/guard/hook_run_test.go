@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/output"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
@@ -122,7 +123,7 @@ func reorderFlagsFirst(fset *flag.FlagSet, args []string) []string {
 
 // hookFleet stands up a workspace root and a lease ledger holding leases, and
 // returns the context pinning both, the workspace root, and the resolved cache dir.
-func hookFleet(t *testing.T, leases ...types.Job) (ctx context.Context, root, cacheDir string) {
+func hookFleet(t *testing.T, leases ...jobtypes.Job) (ctx context.Context, root, cacheDir string) {
 	t.Helper()
 	root, cacheDir = fixture.SeedLeases(t, leases...)
 	return WithLocation(t.Context(), cacheDir, root, ""), root, cacheDir
@@ -225,7 +226,7 @@ func TestHookCmd_UnreadableStdinFailsClosed(t *testing.T) {
 // hookCommandEvent is the trail event a shell hook is expected to append for one command or
 // path: everything the hook sets, with the clock, the content-addressed blobs and the verdict's
 // provenance, which other tests pin, taken from got so a new field still has to match.
-func hookCommandEvent(ctx context.Context, got trail.Event, origin types.Origin, action, preview string) trail.Event {
+func hookCommandEvent(ctx context.Context, got trail.Event, origin jobtypes.Origin, action, preview string) trail.Event {
 	return trail.Event{
 		Ts:            got.Ts,
 		Kind:          trail.KindAgentCommand,
@@ -307,7 +308,7 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	require.Len(t, events, 1)
 	got := events[0]
 	// A piped call is the hook's.
-	assert.Equal(t, hookCommandEvent(ctx, got, types.Origin{EntryPoint: types.EntryPointHook}, "shell.command", "guard: deny"), got)
+	assert.Equal(t, hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}, "shell.command", "guard: deny"), got)
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
@@ -331,7 +332,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
-	assert.Equal(t, hookCommandEvent(ctx, got, types.Origin{EntryPoint: types.EntryPointHook}, "file.write", "guard: advise"), got)
+	assert.Equal(t, hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}, "file.write", "guard: advise"), got)
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","path":"AGENTS.md","tool":"file.write","thread":"unknown","thread_from":"inferred"}`, string(body))
@@ -376,7 +377,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentCommand,
-		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
+		Origin:    trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "shell.command",
 		Outcome:   trail.OutcomeOK,
@@ -437,7 +438,7 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 	// "guard: pass". The trail already distinguishes the two, and recording a verdict here
 	// would have every read claim the guard ran and cleared it: the exact conflation --observe
 	// exists to remove. The wire verdict the host reads is still pass.
-	assert.Equal(t, hookCommandEvent(ctx, got, types.Origin{EntryPoint: types.EntryPointHook}, "file.read", "observed"), got)
+	assert.Equal(t, hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}, "file.read", "observed"), got)
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
@@ -506,7 +507,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 	require.Len(t, events, 1)
 	got := events[0]
 	assert.Equal(t,
-		hookCommandEvent(ctx, got, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "s9"}, "file.read", "observed"),
+		hookCommandEvent(ctx, got, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "claude-code", Session: "s9"}, "file.read", "observed"),
 		got)
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
@@ -566,7 +567,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	assertJudgedBy(t, &got)
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentSpawn,
-		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
+		Origin:    trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "Explore",
 		Lease:     "notes-store-6b",
@@ -605,7 +606,7 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 	assert.Equal(t, trail.Event{
 		Ts:           events[0].Ts,
 		Kind:         trail.KindAgentSpawn,
-		Origin:       trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook}),
+		Origin:       trail.StampOrigin(ctx, jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook}),
 		Workspace:    "/repo/magus",
 		Action:       "agent.spawn",
 		Outcome:      trail.OutcomeOK,
@@ -987,7 +988,7 @@ func TestHookCmdLetsAnUndeclaredLeaseRepairItself(t *testing.T) {
 // names a session, and every rule keyed on it has quietly stopped applying.
 func TestHookCmdNoticesATerminalLease(t *testing.T) {
 	done := narrowLease()
-	done.State = types.StatePass
+	done.State = jobtypes.StatePass
 	ctx, _, _ := hookFleet(t, done)
 
 	var first bytes.Buffer
@@ -1345,8 +1346,8 @@ func TestHookCmd_RefusesSpawnBeforeTheBrief(t *testing.T) {
 func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	testkit.Isolate(t)
 	root, cacheDir := testkit.NewRepository(t, nil).Root(), t.TempDir()
-	row := types.Job{ID: "worker", Paths: types.JobPaths{Write: []string{"a.go"}}, Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1}
-	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	row := jobtypes.Job{ID: "worker", Paths: jobtypes.Paths{Write: []string{"a.go"}}, Check: &jobtypes.LeaseCheck{Target: "test", Project: "."}, State: jobtypes.StateRunning, Registered: 1}
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 	require.NoError(t, err)
 	ctx := WithLocation(t.Context(), cacheDir, root, "")
 	run := func(flags ...string) verdict.Judgment {
@@ -1396,7 +1397,7 @@ func TestShellDurationRecordsTheToolAndPasses(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
-	event.Ts, event.Origin, event.Workspace, event.RequestRef, event.ResponseRef, event.RequestBytes, event.ResponseBytes = 0, types.Origin{}, "", "", "", 0, 0
+	event.Ts, event.Origin, event.Workspace, event.RequestRef, event.ResponseRef, event.RequestBytes, event.ResponseBytes = 0, jobtypes.Origin{}, "", "", "", 0, 0
 	assert.Equal(t, trail.Event{Kind: trail.KindAgentCommand, Action: "Bash", Outcome: trail.OutcomeOK, DurationMs: 420, Preview: "observed"}, event)
 }
 

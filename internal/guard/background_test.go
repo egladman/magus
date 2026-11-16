@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // claudeLimits are the foreground limits one host's wiring declares: two minutes for a call
@@ -71,7 +71,7 @@ func TestDenyWorkerBackgroundRunRefusesOnlyABackgroundedCheck(t *testing.T) {
 		integratorCtx, integrator := integratorFixture(t, integrated, "root/integrate "+integrated.ID)
 		assert.Empty(t, workerDenial(integratorCtx, integrator, integrated.ID, "./magus affected ci", background), "the checkout's integrator")
 		done := figuresLease()
-		done.State = types.StatePass
+		done.State = job.StatePass
 		doneCtx, _ := fleetFixture(t, done)
 		assert.Empty(t, workerDenial(doneCtx, deps, done.ID, "./magus run diagrams_generate docs", background), "a finished row")
 	})

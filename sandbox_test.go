@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/trail"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
@@ -64,8 +65,8 @@ func TestApplySandboxNarrowsToTheLeaseOnTheContext(t *testing.T) {
 	m := openSandboxed(t, types.SandboxModeBestEffort)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: m.ws.Root})
 	for _, id := range []string{"fleet/client", "fleet/daemon"} {
-		_, err := store.Update(t.Context(), id, func(cur *types.Job) {
-			*cur = types.Job{ID: id, Parent: "fleet/root", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"pkg/**"}}}
+		_, err := store.Update(t.Context(), id, func(cur *jobtypes.Job) {
+			*cur = jobtypes.Job{ID: id, Parent: "fleet/root", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"pkg/**"}}}
 		})
 		require.NoError(t, err)
 	}
@@ -79,7 +80,7 @@ func TestApplySandboxNarrowsToTheLeaseOnTheContext(t *testing.T) {
 		return p.Lease
 	}
 
-	assert.Equal(t, "fleet/client", leaseOf(types.WithJobLease(t.Context(), "fleet/client")))
+	assert.Equal(t, "fleet/client", leaseOf(jobtypes.WithLease(t.Context(), "fleet/client")))
 	assert.Equal(t, "fleet/daemon", leaseOf(t.Context()), "with no lease on ctx the environment's claim stands")
 }
 

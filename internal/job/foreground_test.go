@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 func lastRunTook(d time.Duration) LastRun {
@@ -22,7 +22,7 @@ func foregroundLimit(d time.Duration) ForegroundMax {
 func TestOverrunsForegroundNamesACheckLongerThanTheForeground(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	row := job.Job{ID: "w", Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
 	asked := func(project, target string) (time.Duration, bool) {
 		assert.Equal(t, ".", project)
 		assert.Equal(t, "go-test", target)
@@ -47,15 +47,15 @@ func TestOverrunsForegroundNamesACheckLongerThanTheForeground(t *testing.T) {
 func TestOverrunsForegroundIsFalseWhenNothingOverruns(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	row := job.Job{ID: "w", Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
 	for name, tc := range map[string]struct {
-		row     types.Job
+		row     job.Job
 		lastRun LastRun
 		limit   ForegroundMax
 	}{
 		"a check that fits":          {row, lastRunTook(5 * time.Minute), foregroundLimit(10 * time.Minute)},
 		"no host declares a maximum": {row, lastRunTook(14 * time.Minute), foregroundLimit(0)},
-		"no check":                   {types.Job{ID: "r", ReadOnly: true}, lastRunTook(14 * time.Minute), foregroundLimit(10 * time.Minute)},
+		"no check":                   {job.Job{ID: "r", ReadOnly: true}, lastRunTook(14 * time.Minute), foregroundLimit(10 * time.Minute)},
 		"no recorded run": {row, lastRunTook(0), func() (time.Duration, bool) {
 			t.Error("the harnesses are not loaded for a check with no recorded run")
 			return 0, false
@@ -70,10 +70,10 @@ func TestOverrunsForegroundIsFalseWhenNothingOverruns(t *testing.T) {
 func TestOverrunsForegroundLooksPastACheckWithNoRecordedRun(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{
+	row := job.Job{
 		ID:    "w",
-		Check: &types.LeaseCheck{Target: "go-vet", Project: "."},
-		Goals: []types.Goal{{ID: "test", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "go-test", Project: "."}}},
+		Check: &job.LeaseCheck{Target: "go-vet", Project: "."},
+		Goals: []job.Goal{{ID: "test", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "go-test", Project: "."}}},
 	}
 	asked := 0
 	lastRun := func(_, target string) (time.Duration, bool) {

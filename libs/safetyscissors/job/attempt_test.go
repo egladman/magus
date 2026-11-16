@@ -1,11 +1,11 @@
-package types
+package job
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/json"
+	"encoding/json"
 )
 
 type AttemptSuite struct {
@@ -53,18 +53,18 @@ func (s *AttemptSuite) TestAForkedTryIsSuperseded() {
 func (s *AttemptSuite) TestCloneSharesNoSliceOrResult() {
 	refs := func() []string { return append(make([]string, 0, 4), "out1") }
 	orig := Attempt{Job: "a", N: 1, Status: AttemptStatus{
-		Result:      &JobResult{Job: "a", ChangedPaths: refs(), UnresolvedRisks: refs()},
+		Result:      &Result{Job: "a", ChangedPaths: refs(), UnresolvedRisks: refs()},
 		Unmet:       []VerificationStatus{{ID: "unit", Violations: refs()}},
 		Violations:  refs(),
 		FailingRefs: refs(),
-		Denials:     append(make([]JobDenial, 0, 4), JobDenial{Rule: "lease-write"}),
+		Denials:     append(make([]Denial, 0, 4), Denial{Rule: "lease-write"}),
 	}}
 	want := Attempt{Job: "a", N: 1, Status: AttemptStatus{
-		Result:      &JobResult{Job: "a", ChangedPaths: refs(), UnresolvedRisks: refs()},
+		Result:      &Result{Job: "a", ChangedPaths: refs(), UnresolvedRisks: refs()},
 		Unmet:       []VerificationStatus{{ID: "unit", Violations: refs()}},
 		Violations:  refs(),
 		FailingRefs: refs(),
-		Denials:     []JobDenial{{Rule: "lease-write"}},
+		Denials:     []Denial{{Rule: "lease-write"}},
 	}}
 
 	c := orig.Clone()
@@ -74,21 +74,21 @@ func (s *AttemptSuite) TestCloneSharesNoSliceOrResult() {
 	c.Status.Unmet[0].Violations[0] = "changed"
 	c.Status.Violations = append(c.Status.Violations, "x")
 	c.Status.FailingRefs[0] = "changed"
-	c.Status.Denials = append(c.Status.Denials, JobDenial{Rule: "x"})
+	c.Status.Denials = append(c.Status.Denials, Denial{Rule: "x"})
 
 	s.Equal(want, orig)
 }
 
 func (s *AttemptSuite) TestNewJobAttemptsGroupsByJobInOrderOfN() {
-	got := NewJobAttempts([]Attempt{{Job: "a", N: 2}, {Job: "b", N: 1}, {Job: "a", N: 1}})
-	s.Equal(JobAttempts{
+	got := NewAttempts([]Attempt{{Job: "a", N: 2}, {Job: "b", N: 1}, {Job: "a", N: 1}})
+	s.Equal(Attempts{
 		"a": {{Job: "a", N: 1}, {Job: "a", N: 2}},
 		"b": {{Job: "b", N: 1}},
 	}, got)
 }
 
 func (s *AttemptSuite) TestAJobWithNoTriesIsOnItsFirst() {
-	tries := NewJobAttempts(nil)
+	tries := NewAttempts(nil)
 	s.Equal(1, tries.LiveN("a"))
 	s.Equal(Attempt{Job: "a", N: 1}, tries.Live("a"))
 	s.Empty(tries.Prior("a"))
@@ -97,23 +97,23 @@ func (s *AttemptSuite) TestAJobWithNoTriesIsOnItsFirst() {
 
 func (s *AttemptSuite) TestATryNoForkSupersededIsLive() {
 	running := Attempt{Job: "a", N: 2, Status: AttemptStatus{Started: 10}}
-	tries := NewJobAttempts([]Attempt{{Job: "a", N: 1, Status: AttemptStatus{State: StateFail}}, running})
+	tries := NewAttempts([]Attempt{{Job: "a", N: 1, Status: AttemptStatus{State: StateFail}}, running})
 	s.Equal(2, tries.LiveN("a"))
 	s.Equal(running, tries.Live("a"))
 }
 
 func (s *AttemptSuite) TestAForkStartsTheTryPastTheNewestSuperseded() {
 	failed := Attempt{Job: "a", N: 1, Status: AttemptStatus{State: StateFail}}
-	tries := NewJobAttempts([]Attempt{failed})
+	tries := NewAttempts([]Attempt{failed})
 	s.Equal(2, tries.LiveN("a"))
 	s.Equal(Attempt{Job: "a", N: 2}, tries.Live("a"))
 	s.Equal([]Attempt{failed}, tries.Prior("a"))
 }
 
 func (s *AttemptSuite) TestResultIsWhatTheLiveTryFiled() {
-	filed := &JobResult{Job: "a", ChangedPaths: []string{"x.go"}}
-	tries := NewJobAttempts([]Attempt{
-		{Job: "a", N: 1, Status: AttemptStatus{State: StateFail, Result: &JobResult{Job: "a"}}},
+	filed := &Result{Job: "a", ChangedPaths: []string{"x.go"}}
+	tries := NewAttempts([]Attempt{
+		{Job: "a", N: 1, Status: AttemptStatus{State: StateFail, Result: &Result{Job: "a"}}},
 		{Job: "a", N: 2, Status: AttemptStatus{Result: filed}},
 	})
 	s.Equal(filed, tries.Result("a"))

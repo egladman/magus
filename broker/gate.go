@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/safetyscissors/budget"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // markGateLocked records when sess, a gate, asked for its first claim, and the run its
@@ -98,5 +98,5 @@ func (s *server) enqueueLocked(p *parked) {
 // jobWeight is what c weighs in the queue. A run bound to no job, and a job
 // that names no weight, carry zero and weigh the default.
 func jobWeight(c budget.Claim) float64 {
-	return cmp.Or(c.Weight, types.DefaultJobWeight)
+	return cmp.Or(c.Weight, job.DefaultWeight)
 }

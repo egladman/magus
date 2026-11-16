@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -26,7 +27,7 @@ const deletionHeading = "deletion candidates in the write paths: nothing else na
 //
 // Candidates are findings for the holder to finish or delete, never goals: the graph
 // measures references, it does not judge them.
-func UnreferencedInPaths(row types.Job, unreferenced []types.UnreferencedEntry) []types.UnreferencedEntry {
+func UnreferencedInPaths(row job.Job, unreferenced []types.UnreferencedEntry) []types.UnreferencedEntry {
 	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil
 	}
@@ -106,7 +107,7 @@ type ReferencedFile struct {
 // reports it. Tests sort first, then by count. A read-only row gets nil.
 //
 // A finding, never a refusal: whether the change reaches a caller is the holder's call.
-func ReferencedOutside(root string, row types.Job, projects []*types.Project, referrers func(file, declaration string) map[string]int) []ReferencedFile {
+func ReferencedOutside(root string, row job.Job, projects []*types.Project, referrers func(file, declaration string) map[string]int) []ReferencedFile {
 	if row.ReadOnly || len(row.Paths.Write) == 0 || referrers == nil {
 		return nil
 	}
@@ -128,11 +129,11 @@ func ReferencedOutside(root string, row types.Job, projects []*types.Project, re
 		}
 	}
 	for _, entry := range row.Paths.Write {
-		if p, decl := types.SplitClaim(entry); decl != "" {
+		if p, decl := job.SplitClaim(entry); decl != "" {
 			add(entry, referrers(path.Clean(p), decl))
 			continue
 		}
-		for _, file := range writtenFiles(root, types.Job{Paths: types.JobPaths{Write: []string{entry}, Deny: row.Paths.Deny}}) {
+		for _, file := range writtenFiles(root, job.Job{Paths: job.Paths{Write: []string{entry}, Deny: row.Paths.Deny}}) {
 			add(file, referrers(file, ""))
 		}
 	}

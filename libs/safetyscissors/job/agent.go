@@ -1,4 +1,4 @@
-package agent
+package job
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 
 // Spec is a job's agent section: what the agent taking the job is asked for.
 // A job with none is ordinary work, such as a server's maintenance run.
-type Spec struct {
+type Agent struct {
 	// Model is the requested model. Zero leaves the choice to the
 	// workspace's matrix or default.
 	Model Model `json:"model,omitzero" yaml:"model,omitempty"`
@@ -21,12 +21,12 @@ type Spec struct {
 
 // Instructed is a section carrying instructions and no model request, taken
 // by the warm worker when there is one.
-func Instructed(instructions string) *Spec {
-	return &Spec{Instructions: instructions, Worker: Worker{Type: WorkerTypeResumed}}
+func Instructed(instructions string) *Agent {
+	return &Agent{Instructions: instructions, Worker: Worker{Type: WorkerTypeResumed}}
 }
 
 // Clone is a copy of s that shares nothing with it, nil for nil.
-func (s *Spec) Clone() *Spec {
+func (s *Agent) Clone() *Agent {
 	if s == nil {
 		return nil
 	}
@@ -36,7 +36,7 @@ func (s *Spec) Clone() *Spec {
 
 // Trimmed is a clone of s with its model and worker reason trimmed of
 // space, nil for nil.
-func (s *Spec) Trimmed() *Spec {
+func (s *Agent) Trimmed() *Agent {
 	c := s.Clone()
 	if c != nil {
 		c.Model.ID = strings.TrimSpace(c.Model.ID)
@@ -47,7 +47,7 @@ func (s *Spec) Trimmed() *Spec {
 }
 
 // RequestedModel is s's model, the zero Model for nil.
-func (s *Spec) RequestedModel() Model {
+func (s *Agent) RequestedModel() Model {
 	if s == nil {
 		return Model{}
 	}
@@ -96,7 +96,7 @@ const (
 
 // Validate refuses a section no door stores: a worker type outside the
 // set, a new worker with no reason, or a reason on a resumed worker.
-func (s Spec) Validate() error {
+func (s Agent) Validate() error {
 	switch {
 	case s.Worker.Type == "":
 		return fmt.Errorf("agent: the section names no worker.type, one of %s",

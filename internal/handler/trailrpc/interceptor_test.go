@@ -17,6 +17,7 @@ import (
 	// Blank-imported so every magus.*.v1 service descriptor is registered in protoregistry.GlobalFiles
 	// for TestKnownVerbs to enumerate. This is the whole point of the arch test: a new service/method
 	// linked into the server is visible here, so an unclassified verb cannot ship unnoticed.
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	_ "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
@@ -28,7 +29,6 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
-	"github.com/egladman/magus/types"
 )
 
 func TestClassify(t *testing.T) {
@@ -146,7 +146,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	want := trail.Event{
 		Ts:         got.Ts,
 		Kind:       trail.KindTokenLifecycle,
-		Origin:     types.Origin{User: got.User, UID: got.UID, EntryPoint: types.EntryPointRPC, Credential: console1},
+		Origin:     job.Origin{User: got.User, UID: got.UID, EntryPoint: job.EntryPointRPC, Credential: console1},
 		Action:     "RevokeToken",
 		Outcome:    trail.OutcomeOK,
 		DurationMs: got.DurationMs,
@@ -155,8 +155,8 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 }
 
 var (
-	console1 = types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
-	operator = types.Credential{Kind: types.KindOperator, ID: "0badf00d", Grant: types.GrantOperator}
+	console1 = job.Credential{Kind: job.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: job.AccessConsole}
+	operator = job.Credential{Kind: job.KindOperator, ID: "0badf00d", Grant: job.AccessOperator}
 )
 
 // subjectService answers a revoke with a named token, so the WithSubject test can show the
@@ -203,9 +203,9 @@ func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
 
 // verifiedAs stands in for the bearer guard, which puts the verified credential and the rpc
 // entry point on the request context before any service sees it.
-func verifiedAs(credential types.Credential, next http.Handler) http.Handler {
+func verifiedAs(credential job.Credential, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), credential), types.EntryPointRPC)
+		ctx := trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), credential), job.EntryPointRPC)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -245,7 +245,7 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	// Newest-first: the mutation, then the read, both naming the operator credential.
 	type row struct {
 		action     string
-		credential types.Credential
+		credential job.Credential
 	}
 	got := []row{{events[0].Action, events[0].Credential}, {events[1].Action, events[1].Credential}}
 	want := []row{{"RevokeToken", operator}, {"ListTokens", operator}}

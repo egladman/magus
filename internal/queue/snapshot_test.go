@@ -11,12 +11,12 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/queue/types"
-	magustypes "github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 func fetchedSnapshot(base string, at int64) Snapshot {
 	return Snapshot{
-		Fetched: magustypes.InflightFetch{Provider: "github", Host: "github.com", Base: base, At: at, ElapsedMS: 3},
+		Fetched: jobtypes.InflightFetch{Provider: "github", Host: "github.com", Base: base, At: at, ElapsedMS: 3},
 		Changes: types.Changes{Schema: types.SchemaChanges, Base: base, Changes: []types.Change{
 			{ID: "7", Head: head("7"), Base: base, Branch: "feat", Author: "ann", Method: types.MethodSquash},
 		}},
@@ -119,7 +119,7 @@ func TestSnapshotRecordPlan(t *testing.T) {
 
 func TestSnapshotJoinInflight(t *testing.T) {
 	root := t.TempDir()
-	list := magustypes.JobList{Jobs: []magustypes.Job{{ID: "a", State: magustypes.StateRunning}}}
+	list := jobtypes.List{Jobs: []jobtypes.Job{{ID: "a", State: jobtypes.StateRunning}}}
 
 	got, err := JoinInflight(t.Context(), root, list, job.Identity{Login: "ann"})
 	require.NoError(t, err)
@@ -128,11 +128,11 @@ func TestSnapshotJoinInflight(t *testing.T) {
 	require.NoError(t, WriteSnapshot(root, fetchedSnapshot("main", 200)))
 	got, err = JoinInflight(t.Context(), root, list, job.Identity{Login: "ann"})
 	require.NoError(t, err)
-	assert.Equal(t, magustypes.JobList{
+	assert.Equal(t, jobtypes.List{
 		Jobs:    list.Jobs,
-		Fetched: &magustypes.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 200, ElapsedMS: 3},
-		Changes: []magustypes.InflightChange{{
-			ID: "7", Head: head("7"), Base: "main", Branch: "feat", Author: "ann", Intent: "squash", Mine: true, Attention: magustypes.AttentionQueue,
+		Fetched: &jobtypes.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 200, ElapsedMS: 3},
+		Changes: []jobtypes.InflightChange{{
+			ID: "7", Head: head("7"), Base: "main", Branch: "feat", Author: "ann", Intent: "squash", Mine: true, Attention: jobtypes.AttentionQueue,
 		}},
 	}, got)
 }

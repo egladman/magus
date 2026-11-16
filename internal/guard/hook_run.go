@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -97,9 +98,9 @@ func (e HookEnv) RunHook(ctx context.Context, call HookCall, in io.Reader, out, 
 	}
 	// A hook's stdout is the host's pipe; a terminal on it means someone typed this.
 	window := call.Window
-	entry := types.EntryPointHook
+	entry := job.EntryPointHook
 	if window != "" {
-		entry = types.EntryPointCLI
+		entry = job.EntryPointCLI
 	}
 	req := Request{
 		Input:      input,

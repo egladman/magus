@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -17,7 +17,7 @@ type IntegratorVCSSuite struct {
 	at      location
 	deps    Dependencies
 	repo    worktreeRepo
-	row     types.Job
+	row     job.Job
 	landing string
 }
 
@@ -154,7 +154,7 @@ func (s *IntegratorVCSSuite) ledgerContext() context.Context { return contextWit
 // IntegrationMergeSpellingsSuite pins how an integrate row names a branch.
 type IntegrationMergeSpellingsSuite struct {
 	suite.Suite
-	row types.Job
+	row job.Job
 }
 
 func TestIntegrationMergeSpellingsSuite(t *testing.T) {
@@ -162,7 +162,7 @@ func TestIntegrationMergeSpellingsSuite(t *testing.T) {
 }
 
 func (s *IntegrationMergeSpellingsSuite) SetupTest() {
-	s.row = types.Job{ID: "integrate", Integrates: []string{"done-a"}}
+	s.row = job.Job{ID: "integrate", Integrates: []string{"done-a"}}
 }
 
 func (s *IntegrationMergeSpellingsSuite) merges(line string) bool {

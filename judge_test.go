@@ -12,6 +12,7 @@ import (
 
 	hostagent "github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
@@ -225,9 +226,9 @@ func TestJobReader(t *testing.T) {
 }
 
 // taskReader answers an embedder's tasks as job rows.
-type taskReader []types.Job
+type taskReader []job.Job
 
-func (r taskReader) List() ([]types.Job, error) { return r, nil }
+func (r taskReader) List() ([]job.Job, error) { return r, nil }
 
 func (s *jobReaderSuite) SetupTest() {
 	testkit.Isolate(s.T())
@@ -237,11 +238,11 @@ func (s *jobReaderSuite) SetupTest() {
 }
 
 func (s *jobReaderSuite) judge(authority string) verdict.Judgment {
-	task := types.Job{ID: "task", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.go"}}, Authority: authority}
+	task := job.Job{ID: "task", State: job.StateRunning, Paths: job.Paths{Write: []string{"a.go"}}, Authority: authority}
 	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
-	j, err := m.JudgeCommand(types.WithJobLease(s.T().Context(), "task"), "s1", m.Root(), "./build.sh")
+	j, err := m.JudgeCommand(job.WithLease(s.T().Context(), "task"), "s1", m.Root(), "./build.sh")
 	s.Require().NoError(err)
 	return j
 }
@@ -262,12 +263,12 @@ func (s *jobReaderSuite) TestATaskWithAnAuthorityIsNotRefusedForIt() {
 // A task is judged by the policy of the checkout its job names.
 func (s *jobReaderSuite) TestATaskIsJudgedByItsJobsCheckout() {
 	other := testkit.NewRepository(s.T(), map[string]string{"magusfile.buzz": refuseEverything})
-	task := types.Job{ID: "task", State: types.StateRunning, Authority: other.Head(), CheckoutRoot: other.Root()}
+	task := job.Job{ID: "task", State: job.StateRunning, Authority: other.Head(), CheckoutRoot: other.Root()}
 	m, err := Open(s.T().Context(), s.root, WithJobReader(taskReader{task}), WithSpawnRule(tier.Ceiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
 
-	j, err := m.JudgeCommand(types.WithJobLease(s.T().Context(), "task"), "s1", m.Root(), "ls")
+	j, err := m.JudgeCommand(job.WithLease(s.T().Context(), "task"), "s1", m.Root(), "ls")
 
 	s.Require().NoError(err)
 	s.Contains(j.Reason, "Not in this workspace.")

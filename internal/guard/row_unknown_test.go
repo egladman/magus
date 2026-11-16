@@ -17,8 +17,8 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/ward"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types"
 )
 
 // plantUnknownMember appends id's stored record again with a spec
@@ -29,7 +29,7 @@ func plantUnknownMember(t *testing.T, ctx context.Context, id, member string) {
 	store := job.NewStore(job.Location{CacheDir: at.cacheDir, StateBase: fixture.StateBase(t), Root: at.workspace})
 	rows, err := store.List()
 	require.NoError(t, err)
-	require.True(t, slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }), "%s is seeded", id)
+	require.True(t, slices.ContainsFunc(rows, func(r jobtypes.Job) bool { return r.ID == id }), "%s is seeded", id)
 	path, err := store.Path()
 	require.NoError(t, err)
 	raw, err := os.ReadFile(path)
@@ -116,7 +116,7 @@ func TestRowUnknownPassesTheRecoveryLines(t *testing.T) {
 type RowUnknownVCSLinesSuite struct {
 	suite.Suite
 	layers ctxLayers
-	row    types.Job
+	row    jobtypes.Job
 }
 
 func TestRowUnknownVCSLinesSuite(t *testing.T) {
@@ -170,7 +170,7 @@ func TestRowUnknownPassesARowItCanRead(t *testing.T) {
 type RowUnknownReadOnlyCallerSuite struct {
 	suite.Suite
 	layers ctxLayers
-	row    types.Job
+	row    jobtypes.Job
 	deps   Dependencies
 }
 
@@ -179,7 +179,7 @@ func TestRowUnknownReadOnlyCallerSuite(t *testing.T) {
 }
 
 func (s *RowUnknownReadOnlyCallerSuite) SetupTest() {
-	s.row = types.Job{ID: "scout", ReadOnly: true, State: types.StateRunning, Registered: 1}
+	s.row = jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateRunning, Registered: 1}
 	s.layers, _ = fleetLayers(s.T(), s.row)
 	plantUnknownMember(s.T(), s.testContext(), s.row.ID, "widens_paths")
 	s.deps = Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
@@ -221,8 +221,8 @@ func (s *RowUnknownReadOnlyCallerSuite) TestACheckoutDeclaringNoHookAsksForAPlac
 
 // The spawn gate refuses a row the hook cannot read before a worker meets it.
 func TestSpawnBoundToAnUnreadableRowIsDeniedWithTheRootsRemedy(t *testing.T) {
-	row := withUnknown(types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared}, "widens_paths")
-	titled := func() (types.Job, bool) { return row, true }
+	row := withUnknown(jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared}, "widens_paths")
+	titled := func() (jobtypes.Job, bool) { return row, true }
 	deps := Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
 	at := location{cacheDir: t.TempDir()}
 
@@ -238,8 +238,8 @@ func TestSpawnBoundToAnUnreadableRowIsDeniedWithTheRootsRemedy(t *testing.T) {
 }
 
 func TestSpawnBoundToAReadableRowIsNotDeniedForSkew(t *testing.T) {
-	row := types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared}
-	titled := func() (types.Job, bool) { return row, true }
+	row := jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared}
+	titled := func() (jobtypes.Job, bool) { return row, true }
 	at := location{cacheDir: t.TempDir()}
 
 	got := gradeSpawnModel(Dependencies{}, verdict.Judgment{Decision: decisionPass}, hookRequest{IsSpawn: true, DeclaredModel: "haiku"},
@@ -248,7 +248,7 @@ func TestSpawnBoundToAReadableRowIsNotDeniedForSkew(t *testing.T) {
 	assert.NotEqual(t, decisionDeny, got.Decision)
 }
 
-func withUnknown(row types.Job, member string) types.Job {
+func withUnknown(row jobtypes.Job, member string) jobtypes.Job {
 	row.Unknown = []string{"spec." + member}
 	return row
 }

@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // wantServerInstructions is the exact block every MCP client reads at session
@@ -184,8 +184,8 @@ func TestServeStdioRoundTrip(t *testing.T) {
 	assert.Equal(t, trail.Event{
 		Ts:   ev.Ts,
 		Kind: trail.KindMCPToolCall,
-		Origin: types.Origin{
-			User: ev.User, UID: ev.UID, EntryPoint: types.EntryPointMCP, Host: "stdio-test/1.0", Credential: types.CredentialStdio,
+		Origin: jobtypes.Origin{
+			User: ev.User, UID: ev.UID, EntryPoint: jobtypes.EntryPointMCP, Host: "stdio-test/1.0", Credential: jobtypes.CredentialStdio,
 		},
 		Workspace:     ev.Workspace,
 		UserAgent:     ev.UserAgent,
@@ -228,8 +228,8 @@ func TestServeStdioRefusesOptionsWithoutAWorkspace(t *testing.T) {
 // all, and a console token's grant.
 func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, types.GrantConnector, types.CredentialStdio.Grant, "stdio reaches the MCP tools and nothing past them")
-	assert.True(t, types.CredentialStdio.Grant.Allows(ToolNeed))
+	assert.Equal(t, jobtypes.AccessConnector, jobtypes.CredentialStdio.Grant, "stdio reaches the MCP tools and nothing past them")
+	assert.True(t, jobtypes.CredentialStdio.Grant.Allows(ToolNeed))
 
 	ran := 0
 	h := authorize(func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -237,7 +237,7 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 		return mcplib.NewToolResultText("ran"), nil
 	})
 	req := callRequest(hint.ToolConfig.String(), nil)
-	with := func(c types.Credential) func(context.Context) context.Context {
+	with := func(c jobtypes.Credential) func(context.Context) context.Context {
 		return func(ctx context.Context) context.Context { return trail.ContextWithCredential(ctx, c) }
 	}
 
@@ -246,10 +246,10 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 		want  string
 	}{
 		"no credential":   {func(ctx context.Context) context.Context { return ctx }, "[MGS9015] config needs mcp=write and the caller holds nothing"},
-		"console grant":   {with(types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}), "[MGS9015] config needs mcp=write and the caller holds console=write"},
-		"stdio":           {with(types.CredentialStdio), "ran"},
-		"connector token": {with(types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}), "ran"},
-		"operator token":  {with(types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}), "ran"},
+		"console grant":   {with(jobtypes.Credential{Kind: jobtypes.KindStored, Grant: jobtypes.AccessConsole}), "[MGS9015] config needs mcp=write and the caller holds console=write"},
+		"stdio":           {with(jobtypes.CredentialStdio), "ran"},
+		"connector token": {with(jobtypes.Credential{Kind: jobtypes.KindStored, Grant: jobtypes.AccessConnector}), "ran"},
+		"operator token":  {with(jobtypes.Credential{Kind: jobtypes.KindOperator, Grant: jobtypes.AccessOperator}), "ran"},
 	} {
 		res, err := h(tc.stamp(t.Context()), req)
 		require.NoError(t, err, name)
@@ -267,19 +267,19 @@ func TestHTTPStampsTheCallersLeaseFromTheBaggageHeader(t *testing.T) {
 	useClientStandIn(t)
 	m := fixtureMagus(t)
 	jobs := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: m.CacheDir(), Root: m.Root()})
-	for _, row := range []types.Job{
-		{ID: "root/worker", Paths: types.JobPaths{Write: []string{"internal/job"}}, State: types.StateRunning},
+	for _, row := range []jobtypes.Job{
+		{ID: "root/worker", Paths: jobtypes.Paths{Write: []string{"internal/job"}}, State: jobtypes.StateRunning},
 		// A row that writes must name what grades it, or the store refuses the put before
 		// it reaches the lease check this test is about.
-		{ID: "root/other", Paths: types.JobPaths{Write: []string{"internal/guard", "internal/hint"}}, State: types.StateRunning,
-			Check: &types.LeaseCheck{Target: "test", Project: "."}},
+		{ID: "root/other", Paths: jobtypes.Paths{Write: []string{"internal/guard", "internal/hint"}}, State: jobtypes.StateRunning,
+			Check: &jobtypes.LeaseCheck{Target: "test", Project: "."}},
 	} {
-		_, err := jobs.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		_, err := jobs.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	h, err := HTTPHandler(Options{Magus: m, Logger: quietLogger()})
 	require.NoError(t, err)
-	connector := types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}
+	connector := jobtypes.Credential{Kind: jobtypes.KindStored, Grant: jobtypes.AccessConnector}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), connector)))
 	}))
@@ -345,11 +345,11 @@ func TestHTTPToolCallReadsTheRequestCredential(t *testing.T) {
 	require.NoError(t, err)
 
 	for name, tc := range map[string]struct {
-		cred      types.Credential
+		cred      jobtypes.Credential
 		wantError bool
 	}{
-		"connector": {types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}, false},
-		"console":   {types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, true},
+		"connector": {jobtypes.Credential{Kind: jobtypes.KindStored, Grant: jobtypes.AccessConnector}, false},
+		"console":   {jobtypes.Credential{Kind: jobtypes.KindStored, Grant: jobtypes.AccessConsole}, true},
 	} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r.WithContext(trail.ContextWithCredential(r.Context(), tc.cred)))

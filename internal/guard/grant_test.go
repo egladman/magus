@@ -14,13 +14,14 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
 
 // grantRows are two live parentless rows, so a root session holding either commits from
 // its own checkout and hooks-off is the only rule a --no-verify commit meets.
-func grantRows() (granted, other types.Job) {
+func grantRows() (granted, other jobtypes.Job) {
 	granted, other = narrowLease(), narrowLease()
 	granted.ID, other.ID = "guard/granted", "guard/other"
 	return granted, other
@@ -138,7 +139,7 @@ func TestGateWaiverIsAPersonsKeystroke(t *testing.T) {
 }
 
 func TestWaiverNoteNamesWhoWhenAndWhy(t *testing.T) {
-	w := types.GateWaiver{Commit: "abc1234def5678", By: types.Origin{User: "eli"}, At: time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC).Unix(), Reason: "CI is down"}
+	w := types.GateWaiver{Commit: "abc1234def5678", By: jobtypes.Origin{User: "eli"}, At: time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC).Unix(), Reason: "CI is down"}
 	want := fmt.Sprintf("magus workspace: abc1234 goes out ungated under the waiver %s typed at 2026-10-24T12:00:00Z: CI is down", w.By.Label())
 	assert.Equal(t, want, waiverNote("abc1234", w))
 }

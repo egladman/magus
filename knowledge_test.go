@@ -7,6 +7,17 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"maps"
+	"net/http"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/edit"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -16,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
@@ -27,16 +39,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
-	"io"
-	"log/slog"
-	"maps"
-	"net/http"
-	"os"
-	"path/filepath"
-	"slices"
-	"strings"
-	"testing"
-	"time"
 )
 
 // mkGlobalWS writes a single-project workspace with one target and returns its root.
@@ -1526,7 +1528,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 func newCommit(id string, paths ...string) types.CommitChange {
 	c := types.CommitChange{ID: id}
 	for _, p := range paths {
-		c.Files = append(c.Files, types.FileChange{Path: p})
+		c.Files = append(c.Files, job.FileChange{Path: p})
 	}
 	return c
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,19 +38,19 @@ func TestParseExpiry(t *testing.T) {
 
 func TestMintTokenNamesAndRefusesAReusedName(t *testing.T) {
 	outsideAnyWorkspace(t)
-	mint := func(name string, g types.Grant) (auth.Token, error) {
+	mint := func(name string, g job.Access) (auth.Token, error) {
 		_, rec, err := mintToken(auth.MintRequest{Name: name, Grant: g, TTL: time.Hour}, false)
 		return rec, err
 	}
 	for _, c := range []struct {
-		grant types.Grant
+		grant job.Access
 		want  string
-	}{{types.GrantConnector, "connector-1"}, {types.GrantConnector, "connector-2"}, {types.GrantViewer, "console-1"}} {
+	}{{job.AccessConnector, "connector-1"}, {job.AccessConnector, "connector-2"}, {job.AccessViewer, "console-1"}} {
 		rec, err := mint("", c.grant)
 		require.NoError(t, err)
 		assert.Equal(t, c.want, rec.Name)
 	}
-	_, err := mint("connector-1", types.GrantConsole)
+	_, err := mint("connector-1", job.AccessConsole)
 	assert.ErrorIs(t, err, types.TokenNameExists)
 }
 

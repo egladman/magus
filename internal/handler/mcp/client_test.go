@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
@@ -51,7 +52,7 @@ func TestClientStandInProcess(t *testing.T) {
 		if ws, err = magus.Open(ctx, root, magus.WithSpawnRule(tier.Ceiling)); err != nil {
 			return ctx, err
 		}
-		return types.WithJobLease(types.WithWorkspace(ctx, ws), trail.LeaseFromEnv()), nil
+		return job.WithLease(types.WithWorkspace(ctx, ws), trail.LeaseFromEnv()), nil
 	})
 	if ws != nil {
 		_ = ws.Close()
@@ -144,7 +145,7 @@ func taskServer(t *testing.T) (*mcpserver.MCPServer, *magus.Magus, func(string) 
 	useClientStandIn(t)
 	m := fixtureMagus(t)
 	srv := buildServer(Options{Magus: m, Logger: quietLogger(), Version: "test"}, quietLogger(), &mcpserver.Hooks{}, func(context.Context) origin.Client { return origin.Client{Name: "task-test"} })
-	ctx := trail.ContextWithCredential(context.Background(), types.CredentialStdio)
+	ctx := trail.ContextWithCredential(context.Background(), job.CredentialStdio)
 	send := func(frame string) json.RawMessage {
 		t.Helper()
 		raw, err := json.Marshal(srv.HandleMessage(ctx, []byte(frame)))

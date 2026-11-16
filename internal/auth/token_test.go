@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -47,7 +48,7 @@ func (s *TokenSuite) TestRoundTrip() {
 	require.NoError(t, err)
 	kind, ok := credentialKind(tok.Reveal())
 	require.True(t, ok, "GenerateOperator must mint a well-formed token")
-	assert.Equal(t, types.KindOperator, kind)
+	assert.Equal(t, job.KindOperator, kind)
 
 	path, err := SaveOperator(tok)
 	require.NoError(t, err)
@@ -94,7 +95,7 @@ func (s *TokenSuite) TestOldOperatorFileIsRefusedWithTheReissueCommand() {
 		require.ErrorIs(t, err, types.OperatorTokenFormat, "the server must not start on %q", old)
 	}
 	// A valid store token copied into the operator file is refused too: its kind is wrong.
-	stored, err := mintSecret(types.KindStored)
+	stored, err := mintSecret(job.KindStored)
 	require.NoError(t, err)
 	_, err = SaveOperator(types.NewSecret(stored))
 	require.NoError(t, err)
@@ -127,7 +128,7 @@ func (s *TokenSuite) TestGuardHotReload() {
 	a, _ := GenerateOperator()
 	_, err := SaveNewOperator(a)
 	require.NoError(t, err)
-	need := types.Need{Scope: types.ScopeMCP, Level: types.LevelWrite}
+	need := job.Need{Scope: job.ScopeMCP, Level: job.LevelWrite}
 	h, err := httpx.BearerGuard(rpcerr.FormatJSON, Verify, need, okHandler)
 	require.NoError(t, err)
 
@@ -201,7 +202,7 @@ func TestTokenNamesInvalidateTheVerificationView(t *testing.T) {
 	require.NoError(t, err)
 	store, err := LoadStore(dir)
 	require.NoError(t, err)
-	prior, priorToken, err := store.Mint(types.GrantOperator, MintRequest{Name: "prior", Grant: types.GrantConnector, TTL: time.Hour})
+	prior, priorToken, err := store.Mint(job.AccessOperator, MintRequest{Name: "prior", Grant: job.AccessConnector, TTL: time.Hour})
 	require.NoError(t, err)
 	credential, ok := Verify(prior.Reveal())
 	require.True(t, ok)
@@ -212,9 +213,9 @@ func TestTokenNamesInvalidateTheVerificationView(t *testing.T) {
 	require.NoError(t, err)
 	signature := statSignature(state)
 
-	_, err = store.Revoke(types.GrantOperator, "prior")
+	_, err = store.Revoke(job.AccessOperator, "prior")
 	require.NoError(t, err)
-	fresh, freshToken, err := store.Mint(types.GrantOperator, MintRequest{Name: "fresh", Grant: types.GrantConnector, TTL: time.Hour})
+	fresh, freshToken, err := store.Mint(job.AccessOperator, MintRequest{Name: "fresh", Grant: job.AccessConnector, TTL: time.Hour})
 	require.NoError(t, err)
 	require.NoError(t, os.Chtimes(dir, before.ModTime(), before.ModTime()))
 	after, err := os.Stat(dir)
@@ -226,5 +227,5 @@ func TestTokenNamesInvalidateTheVerificationView(t *testing.T) {
 	assert.Equal(t, freshToken.Credential(), credential)
 	credential, ok = Verify(prior.Reveal())
 	assert.False(t, ok)
-	assert.Equal(t, types.Credential{}, credential)
+	assert.Equal(t, job.Credential{}, credential)
 }

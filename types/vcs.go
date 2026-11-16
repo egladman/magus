@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // VCSDriver is one version control backend: git, Mercurial, Sapling, Jujutsu, or the
@@ -779,26 +781,13 @@ type StagedFileReporter interface {
 	StagedFiles(ctx context.Context, dir string) ([]string, error)
 }
 
-// ChangeStatus is what a commit did to one path. It exists so churn attribution can
-// tell a rename from a delete-plus-add: without that distinction a file's history
-// splits across every name it ever had, and each fragment ranks as a separate,
-// quieter file than the one thing actually being rewritten.
-type ChangeStatus string
-
-const (
-	ChangeAdded    ChangeStatus = "added"
-	ChangeModified ChangeStatus = "modified"
-	ChangeDeleted  ChangeStatus = "deleted"
-	ChangeRenamed  ChangeStatus = "renamed"
-)
-
 // CommitChange reduces one commit to who made it, when, and the repo-relative
 // paths it touched: the input to churn attribution (no message or diff content).
 type CommitChange struct {
 	ID     string
 	Author string
 	Date   time.Time
-	Files  []FileChange
+	Files  []job.FileChange
 }
 
 // ChurnReporter is the capability to report which files recent commits touched, so
@@ -919,14 +908,14 @@ type RegionReporter interface {
 	// refine. A file with no diff driver still yields its regions, with Driver and
 	// Declaration empty: which lines changed is known even when what encloses them is not.
 	// An unresolvable base is an error, not an empty answer.
-	Regions(ctx context.Context, root, base string, files []FileChange) ([]RegionChange, error)
+	Regions(ctx context.Context, root, base string, files []job.FileChange) ([]job.RegionChange, error)
 	// RegionsBetween is Regions for two versions of one file the caller holds, such as a
 	// file and the edit about to be written over it: the regions of path that before and
 	// after differ in, placed by path's diff driver as root's attributes name it. Neither
 	// version is read from the checkout. A nil before is an empty file, so every line of
 	// after is a RegionNew region, which is how a caller reads where each declaration of a
 	// file lies.
-	RegionsBetween(ctx context.Context, root, path string, before, after []byte) ([]RegionChange, error)
+	RegionsBetween(ctx context.Context, root, path string, before, after []byte) ([]job.RegionChange, error)
 	// Drivers names the diff driver root's attributes give each of paths, the one Regions
 	// would place its lines with. A path with none is absent from the map: Regions reports
 	// its lines with no Declaration.

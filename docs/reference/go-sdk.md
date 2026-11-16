@@ -238,7 +238,7 @@ with a nil error; the error is for a judgment that could not be made, such as a
 `*types.EngineNotLinkedError` when the workspace's guard rules need the engine. A rule
 that would ask the person denies, since there is no host to put the question to.
 
-The lease a call acts under rides `ctx` through `types.WithJobLease`, and the session
+The lease a call acts under rides `ctx` through `job.WithLease`, and the session
 names what that agent did before, so a fire-once advice fires once and spawn records
 count. `Run` judges each target the same way before anything runs, as the
 `magus run <target> <project>` line the CLI would be judged by. Pass
@@ -266,8 +266,8 @@ backend is held to the same trust set as a wired one.
 
 The `std` package holds the Go side of every Buzz host module, and its exported API is
 in the same lock as the root package. The job, graph and trail doors take typed
-options: `std.MagusPutJob` a `types.JobPut`, whose nil fields leave the row as it is;
-`std.MagusExitJob` a `types.JobResult`; `std.MagusWaitJob` a `*types.JobResult`, nil
+options: `std.MagusPutJob` a `job.Put`, whose nil fields leave the row as it is;
+`std.MagusExitJob` a `job.Result`; `std.MagusWaitJob` a `*job.Result`, nil
 for the evidence the exit filed; `std.MagusQuery` a `types.KnowledgeQueryOptions`;
 `std.MagusRefs` a `types.KnowledgeRefsOptions`; and `std.MagusTrailRead` a
 `types.TrailReadOptions`. Each reads the workspace on `ctx`: pass `m.Context(ctx)`, as

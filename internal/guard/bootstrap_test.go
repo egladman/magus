@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/ward"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -383,7 +384,7 @@ type CheckoutBootstrapSuite struct {
 	suite.Suite
 	layers         ctxLayers
 	root, checkout string
-	holder, other  types.Job
+	holder, other  jobtypes.Job
 }
 
 func TestCheckoutBootstrapSuite(t *testing.T) {
@@ -393,9 +394,9 @@ func TestCheckoutBootstrapSuite(t *testing.T) {
 func (s *CheckoutBootstrapSuite) SetupTest() {
 	s.checkout = s.T().TempDir()
 	s.layers, s.root = fleetLayers(s.T())
-	s.holder = types.Job{ID: "pages-fix", State: types.StateRunning, Registered: 1, CheckoutRoot: s.checkout, Worktree: &types.JobWorktree{Root: s.checkout, Source: s.root}}
-	s.other = types.Job{ID: "other", State: types.StateRunning, Registered: 1}
-	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{s.holder, s.other}}))
+	s.holder = jobtypes.Job{ID: "pages-fix", State: jobtypes.StateRunning, Registered: 1, CheckoutRoot: s.checkout, Worktree: &jobtypes.Worktree{Root: s.checkout, Source: s.root}}
+	s.other = jobtypes.Job{ID: "other", State: jobtypes.StateRunning, Registered: 1}
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{s.holder, s.other}}))
 	declareCheckoutHook(s.T(), s.root)
 }
 

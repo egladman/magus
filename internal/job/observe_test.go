@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -28,19 +29,19 @@ import (
 func TestPathsGateReadsTheDiffAndNotTheReport(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{
+	row := job.Job{
 		ID:      "unit",
 		Created: 1,
-		Paths:   types.JobPaths{Write: []string{"db", "api"}},
-		Goals: []types.Goal{
-			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**"}},
+		Paths:   job.Paths{Write: []string{"db", "api"}},
+		Goals: []job.Goal{
+			{ID: "migration", Kind: job.GoalKindPaths, Paths: []string{"db/migrations/**"}},
 		},
 	}
 	// The holder says it wrote the migration. The diff says it wrote something else.
-	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql"}}
+	rep := job.Result{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql"}}
 	seen := Observed{Changed: []string{"api/handler.go"}, ChangedKnown: true, ChangedFrom: "abc1234"}
 
-	status := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, seen)
+	status := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, seen)
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), `nothing matching "db/migrations/**" changed since abc1234`)
 }
@@ -48,18 +49,18 @@ func TestPathsGateReadsTheDiffAndNotTheReport(t *testing.T) {
 func TestPathsGateVerifiesWhenTheDiffCoversEveryGlob(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{
+	row := job.Job{
 		ID:      "unit",
 		Created: 1,
-		Paths:   types.JobPaths{Write: []string{"db", "api"}},
-		Goals: []types.Goal{
-			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**", "api"}},
+		Paths:   job.Paths{Write: []string{"db", "api"}},
+		Goals: []job.Goal{
+			{ID: "migration", Kind: job.GoalKindPaths, Paths: []string{"db/migrations/**", "api"}},
 		},
 	}
-	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql", "api/handler.go"}}
+	rep := job.Result{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql", "api/handler.go"}}
 	seen := Observed{Changed: []string{"db/migrations/001.sql", "api/handler.go"}, ChangedKnown: true, ChangedFrom: "abc1234"}
 
-	status := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, seen)
+	status := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, seen)
 	assert.True(t, status.Verified, "violations: %v", status.Violations)
 }
 
@@ -69,18 +70,18 @@ func TestPathsGateVerifiesWhenTheDiffCoversEveryGlob(t *testing.T) {
 func TestPathsGateNamesEveryUnmetGlob(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{
+	row := job.Job{
 		ID:      "unit",
 		Created: 1,
-		Paths:   types.JobPaths{Write: []string{"db"}},
-		Goals: []types.Goal{
-			{ID: "both", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**", "db/schema.sql", "db/seed.sql"}},
+		Paths:   job.Paths{Write: []string{"db"}},
+		Goals: []job.Goal{
+			{ID: "both", Kind: job.GoalKindPaths, Paths: []string{"db/migrations/**", "db/schema.sql", "db/seed.sql"}},
 		},
 	}
-	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql"}}
+	rep := job.Result{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql"}}
 	seen := Observed{Changed: []string{"db/migrations/001.sql"}, ChangedKnown: true, ChangedFrom: "abc1234"}
 
-	status := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, seen)
+	status := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, seen)
 	assert.False(t, status.Verified)
 	assert.Len(t, status.Gates, 1)
 	assert.Len(t, status.Gates[0].Violations, 2, "one per unmet glob, not one for the gate")
@@ -92,17 +93,17 @@ func TestPathsGateNamesEveryUnmetGlob(t *testing.T) {
 func TestPathsGateRefusesWhenTheDiffCouldNotBeRead(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{
+	row := job.Job{
 		ID:      "unit",
 		Created: 1,
-		Paths:   types.JobPaths{Write: []string{"db"}},
-		Goals: []types.Goal{
-			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**"}},
+		Paths:   job.Paths{Write: []string{"db"}},
+		Goals: []job.Goal{
+			{ID: "migration", Kind: job.GoalKindPaths, Paths: []string{"db/migrations/**"}},
 		},
 	}
-	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql"}}
+	rep := job.Result{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql"}}
 
-	status := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, Observed{})
+	status := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, Observed{})
 	assert.False(t, status.Verified)
 	require.Len(t, status.Gates, 1)
 	assert.Contains(t, strings.Join(status.Gates[0].Violations, "\n"), "could not read what this job changed")
@@ -116,7 +117,7 @@ func TestPathsGateSeparatesNothingChangedFromNobodyLooked(t *testing.T) {
 
 	// Resolved, as every stored gate is: the verifier grades the fields and never defaults
 	// them, so a raw gate here would exercise a shape production cannot produce.
-	gate := types.Goal{ID: "g", Kind: types.GoalKindPaths, Paths: []string{"db/**"}}.Resolve()
+	gate := job.Goal{ID: "g", Kind: job.GoalKindPaths, Paths: []string{"db/**"}}.Resolve()
 
 	looked := verifySubjectGate(gate, Observed{ChangedKnown: true, ChangedFrom: "abc1234"})
 	assert.False(t, looked.Verified)
@@ -143,26 +144,26 @@ func TestEveryKindAndExpectPairIsGraded(t *testing.T) {
 		Symbols:     map[string]SymbolFact{},
 	}
 	graded := 0
-	for _, kind := range types.GoalKinds() {
-		if kind == types.GoalKindCheck {
+	for _, kind := range job.GoalKinds() {
+		if kind == job.GoalKindCheck {
 			continue // graded against the output store, not against Observed
 		}
-		for _, expect := range types.GoalExpects() {
+		for _, expect := range job.GoalExpects() {
 			// ONE subject, matching the kind. Carrying both Paths and Symbols made
 			// Validate refuse every pair as two subjects, so this loop used to `continue`
 			// on every iteration and grade nothing at all.
-			gate := types.Goal{ID: "g", Kind: kind, Expect: expect}
-			if kind == types.GoalKindPaths {
+			gate := job.Goal{ID: "g", Kind: kind, Expect: expect}
+			if kind == job.GoalKindPaths {
 				gate.Paths = []string{"nope/**"}
 			} else {
 				gate.Symbols = []string{"Nope"}
 			}
-			if err := gate.Validate(); err != nil {
+			if err := types.ValidateGoal(gate); err != nil {
 				continue // the matrix refuses this pair, so there is nothing to grade
 			}
 			graded++
 			status := verifySubjectGate(gate, seen)
-			if kind == types.GoalKindPaths && expect == types.ExpectAbsent {
+			if kind == job.GoalKindPaths && expect == job.ExpectAbsent {
 				// A path the tree was read for and holds nothing of IS absent.
 				assert.True(t, status.Verified, "%s/%s: nothing named is present, so it holds", kind, expect)
 				continue
@@ -184,17 +185,17 @@ func TestEveryKindAndExpectPairIsGraded(t *testing.T) {
 func TestGradeGatesReportsAPrimaryCheck(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{
+	row := job.Job{
 		ID:      "unit",
 		Created: 1,
-		Paths:   types.JobPaths{Write: []string{"api"}},
-		Check:   &types.LeaseCheck{Target: "go-test", Project: "api"},
+		Paths:   job.Paths{Write: []string{"api"}},
+		Check:   &job.LeaseCheck{Target: "go-test", Project: "api"},
 	}
-	status := VerifyGates(row, types.JobResult{Job: "unit", ChangedPaths: []string{"api/x.go"}},
-		types.JobAttempt{}, nil, []types.Job{row}, Observed{})
+	status := VerifyGates(row, job.Result{Job: "unit", ChangedPaths: []string{"api/x.go"}},
+		job.CapturedRun{}, nil, []job.Job{row}, Observed{})
 
 	require.Len(t, status.Gates, 1, "a job whose only gate is its primary check must report that gate")
-	assert.Equal(t, types.PrimaryGoalID, status.Gates[0].ID)
+	assert.Equal(t, job.PrimaryGoalID, status.Gates[0].ID)
 	assert.False(t, status.Gates[0].Verified, "no run was recorded, so the check is unmet")
 }
 
@@ -206,7 +207,7 @@ func TestCheckpointObserverCutsThePatchDigest(t *testing.T) {
 
 	// An empty root resolves no VCS, so the observation is UNKNOWN rather than empty,
 	// which is the contract a paths gate turns on.
-	seen, err := CheckpointObserver("", nil)(t.Context(), types.Job{Checkpoint: "abc1234+deadbeef"})
+	seen, err := CheckpointObserver("", nil)(t.Context(), job.Job{Checkpoint: "abc1234+deadbeef"})
 	require.NoError(t, err)
 	assert.False(t, seen.ChangedKnown)
 	assert.False(t, seen.RegionsKnown)
@@ -216,13 +217,13 @@ func TestCheckpointObserverCutsThePatchDigest(t *testing.T) {
 func TestChangedSinceReadsRegionsForTheChangedPathsOnly(t *testing.T) {
 	t.Parallel()
 
-	regions := []types.RegionChange{
-		{File: types.FileChange{Path: "a.go"}, Side: types.RegionNew, Lines: [2]int{4, 9}, Declaration: "func X() {", Driver: "golang"},
-		{File: types.FileChange{Path: "b.md"}, Side: types.RegionOld, Lines: [2]int{2, 2}},
+	regions := []job.RegionChange{
+		{File: job.FileChange{Path: "a.go"}, Side: job.RegionNew, Lines: [2]int{4, 9}, Declaration: "func X() {", Driver: "golang"},
+		{File: job.FileChange{Path: "b.md"}, Side: job.RegionOld, Lines: [2]int{2, 2}},
 	}
 	driver := typestest.NewMockVCSDriver(t)
 	driver.EXPECT().ChangedFiles(mock.Anything, "/repo", "abc1234").Return([]string{"a.go", "b.md"}, nil)
-	driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []types.FileChange{{Path: "a.go"}, {Path: "b.md"}}).Return(regions, nil)
+	driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []job.FileChange{{Path: "a.go"}, {Path: "b.md"}}).Return(regions, nil)
 
 	seen := changedSince(t.Context(), driver, "", "/repo", "abc1234+deadbeef")
 
@@ -239,7 +240,7 @@ func TestChangedSinceLeavesRegionsUnknownWhenTheVCSDeclines(t *testing.T) {
 
 	driver := typestest.NewMockVCSDriver(t)
 	driver.EXPECT().ChangedFiles(mock.Anything, "/repo", "abc1234").Return([]string{"a.go"}, nil)
-	driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []types.FileChange{{Path: "a.go"}}).
+	driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []job.FileChange{{Path: "a.go"}}).
 		Return(nil, &types.VCSUnsupportedError{VCS: "git", Capability: types.CapRegionReporter})
 
 	seen := changedSince(t.Context(), driver, "", "/repo", "abc1234")
@@ -270,7 +271,7 @@ func TestChangedSinceSaysWhyRegionsAreUnknown(t *testing.T) {
 	t.Run("regions unreadable", func(t *testing.T) {
 		driver := typestest.NewMockVCSDriver(t)
 		driver.EXPECT().ChangedFiles(mock.Anything, "/repo", "abc1234").Return([]string{"a.go"}, nil)
-		driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []types.FileChange{{Path: "a.go"}}).Return(nil, errors.New("exit 128"))
+		driver.EXPECT().Regions(mock.Anything, "/repo", "abc1234", []job.FileChange{{Path: "a.go"}}).Return(nil, errors.New("exit 128"))
 		seen := changedSince(t.Context(), driver, "", "/repo", "abc1234")
 		assert.Equal(t, Observed{
 			Changed: []string{"a.go"}, ChangedKnown: true, ChangedFrom: "abc1234",
@@ -303,7 +304,7 @@ func TestCheckpointObserverDiffsFromTheHoldersBase(t *testing.T) {
 	git := repo.Git
 	git("checkout", "-q", "-b", "plan")
 	checkpoint := commit("plan.txt")
-	row := types.Job{ID: "w", Checkpoint: checkpoint, CheckoutRoot: root}
+	row := job.Job{ID: "w", Checkpoint: checkpoint, CheckoutRoot: root}
 	observe := func() Observed {
 		seen, err := CheckpointObserver(root, nil)(t.Context(), row)
 		require.NoError(t, err)
@@ -353,7 +354,7 @@ func TestDiffBaseFallsBackToTheReportedBase(t *testing.T) {
 				driver.EXPECT().MergeBase(mock.Anything, "/repo", "head1", "abc1234").Return("", false, tc.mergeBase)
 			}
 
-			got := diffBase(t.Context(), driver, "/repo", types.Job{Checkpoint: "abc1234+deadbeef", ReportedBase: tc.reported})
+			got := diffBase(t.Context(), driver, "/repo", job.Job{Checkpoint: "abc1234+deadbeef", ReportedBase: tc.reported})
 
 			assert.Equal(t, diffFrom{revision: tc.wantRev, named: tc.wantNamed}, got)
 		})
@@ -363,15 +364,15 @@ func TestDiffBaseFallsBackToTheReportedBase(t *testing.T) {
 func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "unit", Created: 1, Paths: types.JobPaths{Write: []string{"api"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "api"}}
-	regions := []types.RegionChange{{File: types.FileChange{Path: "api/x.go"}, Side: types.RegionNew, Lines: [2]int{1, 3}, Declaration: "func Y() {"}}
-	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"api/x.go"}}
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"api"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "api"}}
+	regions := []job.RegionChange{{File: job.FileChange{Path: "api/x.go"}, Side: job.RegionNew, Lines: [2]int{1, 3}, Declaration: "func Y() {"}}
+	rep := job.Result{Job: "unit", ChangedPaths: []string{"api/x.go"}}
 	base := Observed{Changed: []string{"api/x.go"}, ChangedKnown: true, ChangedFrom: "abc1234"}
 	withRegions := base
 	withRegions.Regions, withRegions.RegionsKnown = regions, true
 
-	without := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, base)
-	with := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, withRegions)
+	without := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, base)
+	with := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, withRegions)
 
 	assert.Equal(t, regions, with.Footprint)
 	assert.True(t, with.FootprintKnown)
@@ -381,7 +382,7 @@ func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 
 	declined := base
 	declined.RegionsReason = "git does not report changed regions (RegionReporter)"
-	status := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, declined)
+	status := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, declined)
 	assert.False(t, status.FootprintKnown)
 	assert.Equal(t, "git does not report changed regions (RegionReporter)", status.FootprintReason)
 }
@@ -392,24 +393,24 @@ func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 func TestVerifyGatesReportsTheSymbolDeltaAndGradesNothingOnIt(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "unit", Created: 1, Paths: types.JobPaths{Write: []string{"api"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "api"},
-		Goals: []types.Goal{
-			{ID: "new", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Declared"}},
-			{ID: "root/field", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Goal#Signature"}},
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"api"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "api"},
+		Goals: []job.Goal{
+			{ID: "new", Kind: job.GoalKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"Declared"}},
+			{ID: "root/field", Kind: job.GoalKindSymbol, Expect: job.ExpectPresent, Symbols: []string{"Goal#Signature"}},
 		}}
-	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"api/x.go"}}
+	rep := job.Result{Job: "unit", ChangedPaths: []string{"api/x.go"}}
 	base := Observed{Changed: []string{"api/x.go"}, ChangedKnown: true, ChangedFrom: "abc1234", RegionsKnown: true,
-		Regions: []types.RegionChange{
-			{File: types.FileChange{Path: "api/x.go"}, Side: types.RegionNew, Lines: [2]int{4, 9}},
-			{File: types.FileChange{Path: "api/x.go"}, Side: types.RegionOld, Lines: [2]int{2, 3}},
+		Regions: []job.RegionChange{
+			{File: job.FileChange{Path: "api/x.go"}, Side: job.RegionNew, Lines: [2]int{4, 9}},
+			{File: job.FileChange{Path: "api/x.go"}, Side: job.RegionOld, Lines: [2]int{2, 3}},
 		}}
 	delta := base
 	delta.AddedExports = []string{"Zeta", "Goal#Signature", "Declared", "Alpha"}
 	delta.LeftUnreferenced = []string{"old (api/y.go:3)", "helper (api/x.go:9)"}
 	delta.SymbolDeltaKnown = true
 
-	without := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, base)
-	with := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, delta)
+	without := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, base)
+	with := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, delta)
 
 	assert.Equal(t, []int{6, 2}, []int{with.LinesAdded, with.LinesDeleted})
 	wantWith := without
@@ -424,7 +425,7 @@ type landedSuite struct {
 	suite.Suite
 	repo *testkit.Repo
 	wt   *testkit.Repo
-	row  types.Job
+	row  job.Job
 }
 
 func TestLanded(t *testing.T) { suite.Run(t, new(landedSuite)) }
@@ -433,10 +434,10 @@ func (s *landedSuite) SetupTest() {
 	s.repo = testkit.NewRepository(s.T(), map[string]string{"a.go": "package a\n", "out.txt": "seed\n"})
 	checkpoint := s.repo.Head()
 	s.wt = s.repo.AddWorktree("job")
-	s.row = types.Job{
+	s.row = job.Job{
 		ID: "job", Created: 1, Parent: strings.TrimSpace(s.repo.Git("branch", "--show-current")),
-		Paths: types.JobPaths{Write: []string{"a.go"}}, Checkpoint: checkpoint, CheckoutRoot: s.wt.Root(),
-		Worktree: &types.JobWorktree{Root: s.wt.Root()},
+		Paths: job.Paths{Write: []string{"a.go"}}, Checkpoint: checkpoint, CheckoutRoot: s.wt.Root(),
+		Worktree: &job.Worktree{Root: s.wt.Root()},
 	}
 }
 
@@ -449,8 +450,8 @@ func (s *landedSuite) commitOwn(file, body string) {
 func (s *landedSuite) violations() string {
 	seen, err := CheckpointObserver(s.repo.Root(), nil)(s.T().Context(), s.row)
 	s.Require().NoError(err)
-	rep := types.JobResult{Job: s.row.ID, ChangedPaths: []string{"a.go"}}
-	return strings.Join(VerifyGates(s.row, rep, types.JobAttempt{}, nil, []types.Job{s.row}, seen).Violations, "\n")
+	rep := job.Result{Job: s.row.ID, ChangedPaths: []string{"a.go"}}
+	return strings.Join(VerifyGates(s.row, rep, job.CapturedRun{}, nil, []job.Job{s.row}, seen).Violations, "\n")
 }
 
 func (s *landedSuite) TestAPathTheResultLeavesOutIsGraded() {
@@ -550,8 +551,8 @@ func (s *landedSuite) TestARowWithNoBranchOrCheckoutSaysSoInANote() {
 	s.row.ID, s.row.Worktree = "elsewhere", nil
 	seen, err := CheckpointObserver(s.repo.Root(), nil)(s.T().Context(), s.row)
 	s.Require().NoError(err)
-	rep := types.JobResult{Job: s.row.ID, ChangedPaths: []string{"a.go"}}
-	notes := VerifyGates(s.row, rep, types.JobAttempt{}, nil, []types.Job{s.row}, seen).Notes
+	rep := job.Result{Job: s.row.ID, ChangedPaths: []string{"a.go"}}
+	notes := VerifyGates(s.row, rep, job.CapturedRun{}, nil, []job.Job{s.row}, seen).Notes
 	s.Contains(strings.Join(notes, "\n"), "the write paths graded changed_paths alone")
 }
 
@@ -640,22 +641,22 @@ func (s *landedSuite) TestALineThatDoesNotResolveBroughtNothingIn() {
 type overlapFixture struct {
 	root, other string
 	driver      *typestest.MockVCSDriver
-	rows        []types.Job
+	rows        []job.Job
 }
 
 func newOverlapFixture(t *testing.T) overlapFixture {
 	t.Helper()
 	f := overlapFixture{root: t.TempDir(), other: t.TempDir(), driver: typestest.NewMockVCSDriver(t)}
-	f.rows = []types.Job{
-		{ID: "a", Checkpoint: "reva", Paths: types.JobPaths{Write: []string{"api"}}, State: types.StateRunning, CheckoutRoot: f.root},
-		{ID: "b", Checkpoint: "revb+digest", Paths: types.JobPaths{Write: []string{"api/x.go"}}, State: types.StateRunning, CheckoutRoot: f.other},
+	f.rows = []job.Job{
+		{ID: "a", Checkpoint: "reva", Paths: job.Paths{Write: []string{"api"}}, State: job.StateRunning, CheckoutRoot: f.root},
+		{ID: "b", Checkpoint: "revb+digest", Paths: job.Paths{Write: []string{"api/x.go"}}, State: job.StateRunning, CheckoutRoot: f.other},
 	}
 	return f
 }
 
 // region is a region git placed in decl, or, with no decl, one no driver could place.
-func region(path, decl string, side types.RegionSide) types.RegionChange {
-	r := types.RegionChange{File: types.FileChange{Path: path}, Side: side, Lines: [2]int{1, 2}, Declaration: decl}
+func region(path, decl string, side job.RegionSide) job.RegionChange {
+	r := job.RegionChange{File: job.FileChange{Path: path}, Side: side, Lines: [2]int{1, 2}, Declaration: decl}
 	if decl != "" {
 		r.Driver = "golang"
 	}
@@ -668,75 +669,75 @@ func TestOverlapFootprints(t *testing.T) {
 	// Each job's diff since its checkpoint, as ChangedFiles reports it and Regions is asked
 	// to refine.
 	changed := []string{"api/x.go", "api/y.go", "api/notes.txt"}
-	files := []types.FileChange{{Path: "api/x.go"}, {Path: "api/y.go"}, {Path: "api/notes.txt"}}
+	files := []job.FileChange{{Path: "api/x.go"}, {Path: "api/y.go"}, {Path: "api/notes.txt"}}
 	declined := &types.VCSUnsupportedError{VCS: "git", Capability: types.CapRegionReporter}
 	for _, tc := range []struct {
 		name       string
-		a, b       []types.RegionChange
+		a, b       []job.RegionChange
 		regionsErr error
 		untakenB   bool
 		askA, askB bool
-		want       types.JobOverlapFootprint
+		want       job.OverlapFootprint
 	}{
 		{
 			name: "disjoint",
-			a:    []types.RegionChange{region("api/x.go", "func X() {", types.RegionNew)},
-			b:    []types.RegionChange{region("api/x.go", "func Y() {", types.RegionNew)},
+			a:    []job.RegionChange{region("api/x.go", "func X() {", job.RegionNew)},
+			b:    []job.RegionChange{region("api/x.go", "func Y() {", job.RegionNew)},
 			askA: true, askB: true,
-			want: types.JobOverlapFootprint{Verdict: types.FootprintDisjoint},
+			want: job.OverlapFootprint{Verdict: job.FootprintDisjoint},
 		},
 		{
 			name: "shared",
-			a: []types.RegionChange{
-				region("api/x.go", "func X() {", types.RegionNew),
-				region("api/notes.txt", "", types.RegionNew),
-				region("api/y.go", "func Z() {", types.RegionNew),
+			a: []job.RegionChange{
+				region("api/x.go", "func X() {", job.RegionNew),
+				region("api/notes.txt", "", job.RegionNew),
+				region("api/y.go", "func Z() {", job.RegionNew),
 			},
-			b: []types.RegionChange{
-				region("api/y.go", "func Z() {", types.RegionNew),
-				region("api/x.go", "func X() {", types.RegionNew),
-				region("api/x.go", "func X() {", types.RegionNew),
-				region("api/notes.txt", "", types.RegionNew),
+			b: []job.RegionChange{
+				region("api/y.go", "func Z() {", job.RegionNew),
+				region("api/x.go", "func X() {", job.RegionNew),
+				region("api/x.go", "func X() {", job.RegionNew),
+				region("api/notes.txt", "", job.RegionNew),
 			},
 			askA: true, askB: true,
-			want: types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"api/notes.txt", "api/x.go#func X() {", "api/y.go#func Z() {"}},
+			want: job.OverlapFootprint{Verdict: job.FootprintShared, Shared: []string{"api/notes.txt", "api/x.go#func X() {", "api/y.go#func Z() {"}},
 		},
 		{
 			name: "deletions from one declaration share it",
-			a:    []types.RegionChange{region("api/x.go", "func X() {", types.RegionOld)},
-			b:    []types.RegionChange{region("api/x.go", "func X() {", types.RegionOld)},
+			a:    []job.RegionChange{region("api/x.go", "func X() {", job.RegionOld)},
+			b:    []job.RegionChange{region("api/x.go", "func X() {", job.RegionOld)},
 			askA: true, askB: true,
-			want: types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"api/x.go#func X() {"}},
+			want: job.OverlapFootprint{Verdict: job.FootprintShared, Shared: []string{"api/x.go#func X() {"}},
 		},
 		{
 			name: "a deletion and an edit of one declaration share it",
-			a:    []types.RegionChange{region("api/x.go", "func X() {", types.RegionOld)},
-			b:    []types.RegionChange{region("api/x.go", "func X() {", types.RegionNew)},
+			a:    []job.RegionChange{region("api/x.go", "func X() {", job.RegionOld)},
+			b:    []job.RegionChange{region("api/x.go", "func X() {", job.RegionNew)},
 			askA: true, askB: true,
-			want: types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"api/x.go#func X() {"}},
+			want: job.OverlapFootprint{Verdict: job.FootprintShared, Shared: []string{"api/x.go#func X() {"}},
 		},
 		{
 			name: "a region no driver placed covers its whole file",
-			a:    []types.RegionChange{region("api/x.go", "", types.RegionNew)},
-			b: []types.RegionChange{
-				region("api/x.go", "func Y() {", types.RegionNew),
-				region("api/y.go", "func Z() {", types.RegionNew),
+			a:    []job.RegionChange{region("api/x.go", "", job.RegionNew)},
+			b: []job.RegionChange{
+				region("api/x.go", "func Y() {", job.RegionNew),
+				region("api/y.go", "func Z() {", job.RegionNew),
 			},
 			askA: true, askB: true,
-			want: types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"api/x.go#func Y() {"}},
+			want: job.OverlapFootprint{Verdict: job.FootprintShared, Shared: []string{"api/x.go#func Y() {"}},
 		},
 		{
 			name:     "checkout missing",
-			a:        []types.RegionChange{region("api/x.go", "func X() {", types.RegionNew)},
+			a:        []job.RegionChange{region("api/x.go", "func X() {", job.RegionNew)},
 			untakenB: true,
 			askA:     true,
-			want:     types.JobOverlapFootprint{Verdict: types.FootprintUnknown, Reason: "b: no checkout of this repository has taken b"},
+			want:     job.OverlapFootprint{Verdict: job.FootprintUnknown, Reason: "b: no checkout of this repository has taken b"},
 		},
 		{
 			name:       "capability declined",
 			regionsErr: declined,
 			askA:       true, askB: true,
-			want: types.JobOverlapFootprint{Verdict: types.FootprintUnknown,
+			want: job.OverlapFootprint{Verdict: job.FootprintUnknown,
 				Reason: "a: git does not report changed regions (RegionReporter); b: git does not report changed regions (RegionReporter)"},
 		},
 	} {
@@ -759,11 +760,11 @@ func TestOverlapFootprints(t *testing.T) {
 				f.driver.EXPECT().ChangedFiles(mock.Anything, f.other, "revb").Return(changed, nil)
 				f.driver.EXPECT().Regions(mock.Anything, f.other, "revb", files).Return(tc.b, tc.regionsErr)
 			}
-			overlaps := []types.JobOverlap{{JobA: "a", JobB: "b", PathsA: []string{"api"}, PathsB: []string{"api/x.go"}}}
+			overlaps := []job.Overlap{{JobA: "a", JobB: "b", PathsA: []string{"api"}, PathsB: []string{"api/x.go"}}}
 
 			got := OverlapFootprints(t.Context(), f.driver, f.rows, overlaps)
 
-			assert.Equal(t, []types.JobOverlap{{
+			assert.Equal(t, []job.Overlap{{
 				JobA: "a", JobB: "b", PathsA: []string{"api"}, PathsB: []string{"api/x.go"}, Footprint: &tc.want,
 			}}, got)
 		})
@@ -773,12 +774,12 @@ func TestOverlapFootprints(t *testing.T) {
 func TestOverlapFootprintsWithNoVCS(t *testing.T) {
 	t.Parallel()
 
-	rows := []types.Job{{ID: "a", Checkpoint: "reva", CheckoutRoot: "/repo"}, {ID: "b"}}
-	overlaps := []types.JobOverlap{{JobA: "a", JobB: "b"}}
+	rows := []job.Job{{ID: "a", Checkpoint: "reva", CheckoutRoot: "/repo"}, {ID: "b"}}
+	overlaps := []job.Overlap{{JobA: "a", JobB: "b"}}
 	got := OverlapFootprints(t.Context(), nil, rows, overlaps)
 
-	assert.Equal(t, &types.JobOverlapFootprint{
-		Verdict: types.FootprintUnknown,
+	assert.Equal(t, &job.OverlapFootprint{
+		Verdict: job.FootprintUnknown,
 		Reason:  "a: no version control answered here; b: b was declared without a checkpoint",
 	}, got[0].Footprint)
 	assert.Nil(t, overlaps[0].Footprint, "the caller's overlaps are not written through")
@@ -794,18 +795,18 @@ func TestMeasureOverlaps(t *testing.T) {
 	root := repo.Root()
 	rev := repo.Head()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
-	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"api"}}},
-		{ID: "b", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"api/x.go"}}},
+	rows := []job.Job{
+		{ID: "a", State: job.StateRunning, Checkpoint: rev, CheckoutRoot: root, Paths: job.Paths{Write: []string{"api"}}},
+		{ID: "b", State: job.StateRunning, Checkpoint: rev, CheckoutRoot: root, Paths: job.Paths{Write: []string{"api/x.go"}}},
 	}
-	overlaps := types.NewJobList(rows).Overlaps
+	overlaps := job.NewList(rows).Overlaps
 	require.Len(t, overlaps, 1)
 
 	got := MeasureOverlaps(t.Context(), root, rows, overlaps)
 
 	require.NotNil(t, got[0].Footprint)
-	assert.Equal(t, &types.JobOverlapFootprint{
-		Verdict: types.FootprintShared,
+	assert.Equal(t, &job.OverlapFootprint{
+		Verdict: job.FootprintShared,
 		Shared:  []string{"api/x.go#func X() {"},
 	}, got[0].Footprint, got[0].Footprint.Reason)
 	assert.Empty(t, MeasureOverlaps(t.Context(), "/nonexistent", rows, nil))
@@ -825,8 +826,8 @@ func TestReportSkipsFootprintsOfStaleRows(t *testing.T) {
 	const now, hour = int64(100_000), int64(3600)
 	s, _ := sweepStore(t, now, 2*time.Hour)
 	s.root = root
-	held := func(id, path string, updated int64) types.Job {
-		return types.Job{ID: id, State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{path}},
+	held := func(id, path string, updated int64) job.Job {
+		return job.Job{ID: id, State: job.StateRunning, Checkpoint: rev, CheckoutRoot: root, Paths: job.Paths{Write: []string{path}},
 			Registered: updated, Created: updated, Updated: updated}
 	}
 	plant(t, s, held("old", "api", now-3*hour), held("a", "api", now), held("b", "api/x.go", now))
@@ -845,9 +846,9 @@ func TestReportSkipsFootprintsOfStaleRows(t *testing.T) {
 		overlaps = append(overlaps, got{o.JobA, o.JobB, o.Footprint.Verdict, o.Footprint.Reason})
 	}
 	assert.Equal(t, []got{
-		{"old", "a", types.FootprintUnknown, "not measured: old or a is stale (jobs.stale_after is 2h0m0s)"},
-		{"old", "b", types.FootprintUnknown, "not measured: old or b is stale (jobs.stale_after is 2h0m0s)"},
-		{"a", "b", types.FootprintShared, ""},
+		{"old", "a", job.FootprintUnknown, "not measured: old or a is stale (jobs.stale_after is 2h0m0s)"},
+		{"old", "b", job.FootprintUnknown, "not measured: old or b is stale (jobs.stale_after is 2h0m0s)"},
+		{"a", "b", job.FootprintShared, ""},
 	}, overlaps)
 }
 
@@ -891,7 +892,7 @@ func (d *countingDriver) ChangedFiles(ctx context.Context, dir, base string) ([]
 	return d.VCSDriver.ChangedFiles(ctx, dir, base)
 }
 
-func (d *countingDriver) Regions(ctx context.Context, root, base string, files []types.FileChange) ([]types.RegionChange, error) {
+func (d *countingDriver) Regions(ctx context.Context, root, base string, files []job.FileChange) ([]job.RegionChange, error) {
 	d.count("Regions")
 	return d.VCSDriver.Regions(ctx, root, base, files)
 }
@@ -923,16 +924,16 @@ const twoFuncs = "package api\n\nfunc X() {\n\treturn\n}\n\nfunc Y() {\n\treturn
 
 // overlapCheckouts is two checkouts of one repository at its first commit, job a taken in
 // the first and b in the second, both writing api/x.go.
-func overlapCheckouts(t testing.TB) (a, b *testkit.Repo, rows []types.Job, overlaps []types.JobOverlap) {
+func overlapCheckouts(t testing.TB) (a, b *testkit.Repo, rows []job.Job, overlaps []job.Overlap) {
 	t.Helper()
 	a = testkit.NewRepository(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": twoFuncs})
 	b = a.AddWorktree("b")
 	rev := a.Head()
-	rows = []types.Job{
-		{ID: "a", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: a.Root(), Paths: types.JobPaths{Write: []string{"api/x.go"}}, Updated: 1},
-		{ID: "b", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: b.Root(), Paths: types.JobPaths{Write: []string{"api/x.go"}}, Updated: 1},
+	rows = []job.Job{
+		{ID: "a", State: job.StateRunning, Checkpoint: rev, CheckoutRoot: a.Root(), Paths: job.Paths{Write: []string{"api/x.go"}}, Updated: 1},
+		{ID: "b", State: job.StateRunning, Checkpoint: rev, CheckoutRoot: b.Root(), Paths: job.Paths{Write: []string{"api/x.go"}}, Updated: 1},
 	}
-	overlaps = types.NewJobList(rows).Overlaps
+	overlaps = job.NewList(rows).Overlaps
 	require.Len(t, overlaps, 1)
 	return a, b, rows, overlaps
 }
@@ -948,14 +949,14 @@ func TestOverlapFootprintsReuseAnUnchangedCheckout(t *testing.T) {
 	b.Write("api/x.go", strings.Replace(twoFuncs, "func Y() {\n\treturn", "func Y() {\n\tpanic(2)", 1))
 	driver := gitDriver(t, a.Root())
 	ctx := withFootprintCache(t.Context(), footprintCache{dir: t.TempDir(), build: testBuild})
-	uncached := func() []types.JobOverlap {
+	uncached := func() []job.Overlap {
 		got := OverlapFootprints(t.Context(), driver, rows, overlaps)
 		driver.take()
 		return got
 	}
 
 	want := uncached()
-	assert.Equal(t, types.FootprintDisjoint, want[0].Footprint.Verdict, want[0].Footprint.Reason)
+	assert.Equal(t, job.FootprintDisjoint, want[0].Footprint.Verdict, want[0].Footprint.Reason)
 	assert.Equal(t, want, OverlapFootprints(ctx, driver, rows, overlaps), "cold")
 	driver.take()
 	assert.Equal(t, want, OverlapFootprints(ctx, driver, rows, overlaps), "warm")
@@ -964,7 +965,7 @@ func TestOverlapFootprintsReuseAnUnchangedCheckout(t *testing.T) {
 
 	b.Write("api/x.go", strings.Replace(twoFuncs, "return", "panic(3)", 2))
 	want = uncached()
-	assert.Equal(t, types.FootprintShared, want[0].Footprint.Verdict)
+	assert.Equal(t, job.FootprintShared, want[0].Footprint.Verdict)
 	assert.Equal(t, want, OverlapFootprints(ctx, driver, rows, overlaps), "an edit is a miss")
 	assert.Positive(t, driver.take()["ChangedFiles"])
 
@@ -990,7 +991,7 @@ func TestFootprintCacheMissesOnAnEditedFuncname(t *testing.T) {
 	a.Write("api/x.go", strings.Replace(twoFuncs, "func X() {\n\treturn", "func X() {\n\tpanic(1)", 1))
 	driver := gitDriver(t, root)
 	dir := t.TempDir()
-	regionsCtx := withFootprintCache(t.Context(), footprintCache{dir: dir, build: testBuild}.forRow(types.Job{Checkpoint: rev}))
+	regionsCtx := withFootprintCache(t.Context(), footprintCache{dir: dir, build: testBuild}.forRow(job.Job{Checkpoint: rev}))
 	footprintCtx := withFootprintCache(t.Context(), footprintCache{dir: dir, build: testBuild})
 	regions := func(ctx context.Context) Observed { return changedSince(ctx, driver, "", root, rev) }
 
@@ -1059,8 +1060,8 @@ func TestFootprintCacheKeysOnTheBuild(t *testing.T) {
 
 	repo := testkit.NewRepository(t, map[string]string{"a.go": twoFuncs})
 	driver := gitDriver(t, repo.Root())
-	row := types.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()}
-	files := []types.FileChange{{Path: "a.go"}}
+	row := job.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()}
+	files := []job.FileChange{{Path: "a.go"}}
 	keys := func(build string) ([2]string, bool) {
 		cache := footprintCache{dir: t.TempDir(), build: build}.forRow(row)
 		regions, regionsOK := cache.regionsKey(t.Context(), driver, repo.Root(), repo.Head(), files)
@@ -1088,10 +1089,10 @@ func TestFootprintCacheKeysNothingForABackendThatHidesItsConfig(t *testing.T) {
 
 	repo := testkit.NewRepository(t, map[string]string{"a.go": twoFuncs})
 	hidden := struct{ types.VCSDriver }{gitDriver(t, repo.Root()).VCSDriver}
-	cache := footprintCache{dir: t.TempDir(), build: testBuild}.forRow(types.Job{Checkpoint: repo.Head()})
-	_, keyed := cache.regionsKey(t.Context(), hidden, repo.Root(), repo.Head(), []types.FileChange{{Path: "a.go"}})
+	cache := footprintCache{dir: t.TempDir(), build: testBuild}.forRow(job.Job{Checkpoint: repo.Head()})
+	_, keyed := cache.regionsKey(t.Context(), hidden, repo.Root(), repo.Head(), []job.FileChange{{Path: "a.go"}})
 	assert.False(t, keyed)
-	_, keyed = cache.footprintKey(t.Context(), hidden, types.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()})
+	_, keyed = cache.footprintKey(t.Context(), hidden, job.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()})
 	assert.False(t, keyed)
 }
 
@@ -1104,10 +1105,10 @@ func TestFootprintCacheMissesOnAnEditedAttributeFileOutsideTheTree(t *testing.T)
 	global := filepath.Join(t.TempDir(), "attributes")
 	repo.Git("config", "core.attributesFile", global)
 	driver := gitDriver(t, repo.Root())
-	cache := footprintCache{dir: t.TempDir(), build: testBuild}.forRow(types.Job{Checkpoint: repo.Head()})
-	row := types.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()}
+	cache := footprintCache{dir: t.TempDir(), build: testBuild}.forRow(job.Job{Checkpoint: repo.Head()})
+	row := job.Job{ID: "a", Checkpoint: repo.Head(), CheckoutRoot: repo.Root()}
 	keys := func() [2]string {
-		regions, keyed := cache.regionsKey(t.Context(), driver, repo.Root(), repo.Head(), []types.FileChange{{Path: "a.go"}})
+		regions, keyed := cache.regionsKey(t.Context(), driver, repo.Root(), repo.Head(), []job.FileChange{{Path: "a.go"}})
 		require.True(t, keyed)
 		footprint, keyed := cache.footprintKey(t.Context(), driver, row)
 		require.True(t, keyed)
@@ -1136,7 +1137,7 @@ func TestRegionsSinceReuseUnchangedFiles(t *testing.T) {
 	root, rev := repo.Root(), repo.Head()
 	repo.Write("api/x.go", strings.Replace(twoFuncs, "func X() {\n\treturn", "func X() {\n\tpanic(1)", 1))
 	driver := gitDriver(t, root)
-	ctx := withFootprintCache(t.Context(), footprintCache{dir: t.TempDir(), build: testBuild}.forRow(types.Job{Checkpoint: rev}))
+	ctx := withFootprintCache(t.Context(), footprintCache{dir: t.TempDir(), build: testBuild}.forRow(job.Job{Checkpoint: rev}))
 	read := func(ctx context.Context) Observed { return changedSince(ctx, driver, "", root, rev) }
 
 	for _, edit := range []string{"", "func Y() {\n\tpanic(2)"} {
@@ -1158,7 +1159,7 @@ func TestFootprintCacheMissesOnABadEntry(t *testing.T) {
 	t.Parallel()
 
 	cache := footprintCache{dir: t.TempDir(), revision: "abc123"}
-	regions := []types.RegionChange{region("a.go", "func X() {", types.RegionNew)}
+	regions := []job.RegionChange{region("a.go", "func X() {", job.RegionNew)}
 	cache.write("k1", regions)
 	got, ok := cache.read("k1")
 	require.True(t, ok)
@@ -1200,7 +1201,7 @@ func TestReportOfADryRunStoreCachesNothing(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Len(t, list.Overlaps, 1)
-		assert.NotEqual(t, types.FootprintUnknown, list.Overlaps[0].Footprint.Verdict, list.Overlaps[0].Footprint.Reason)
+		assert.NotEqual(t, job.FootprintUnknown, list.Overlaps[0].Footprint.Verdict, list.Overlaps[0].Footprint.Reason)
 		_, err = os.Stat(footprintsDir(s.path))
 		assert.Equal(t, dryRun, errors.Is(err, os.ErrNotExist), "dry run %v", dryRun)
 	}
@@ -1217,9 +1218,9 @@ func TestRetentionPrunesFootprintsNoLiveRowNames(t *testing.T) {
 	for _, rev := range []string{"live", "over", "gone"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, revisionDir(rev), "k"), 0o755))
 	}
-	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, Checkpoint: "live+0123", Updated: 1},
-		{ID: "b", State: types.StatePass, Checkpoint: "over", Updated: 1},
+	rows := []job.Job{
+		{ID: "a", State: job.StateRunning, Checkpoint: "live+0123", Updated: 1},
+		{ID: "b", State: job.StatePass, Checkpoint: "over", Updated: 1},
 	}
 	// Retained long ago, so this write runs a pass.
 	require.NoError(t, s.update(t.Context(), func(f *jobsFile) error { f.Jobs, f.Retained = rows, 1; return nil }))
@@ -1239,7 +1240,7 @@ const benchFiles = 12
 
 // editedCheckouts is overlapCheckouts with benchFiles files edited in each checkout, and the
 // changed files of the first.
-func editedCheckouts(b *testing.B) (rows []types.Job, overlaps []types.JobOverlap, root, rev string, files []types.FileChange) {
+func editedCheckouts(b *testing.B) (rows []job.Job, overlaps []job.Overlap, root, rev string, files []job.FileChange) {
 	b.Helper()
 	a, other, rows, _ := overlapCheckouts(b)
 	tree := map[string]string{}
@@ -1252,13 +1253,13 @@ func editedCheckouts(b *testing.B) (rows []types.Job, overlaps []types.JobOverla
 		p := fmt.Sprintf("api/f%d.go", i)
 		a.Write(p, strings.Replace(twoFuncs, "return", "panic(1)", 2))
 		other.Write(p, strings.Replace(twoFuncs, "func Y() {\n\treturn", "func Y() {\n\tpanic(2)", 1))
-		files = append(files, types.FileChange{Path: p})
+		files = append(files, job.FileChange{Path: p})
 	}
 	for i := range rows {
 		rows[i].Checkpoint = rev
 		rows[i].Paths.Write = []string{"api/*.go"}
 	}
-	return rows, types.NewJobList(rows).Overlaps, a.Root(), rev, files
+	return rows, job.NewList(rows).Overlaps, a.Root(), rev, files
 }
 
 // BenchmarkRegionsSinceWarm places the changed lines of benchFiles edited files: cold reads
@@ -1299,7 +1300,7 @@ func BenchmarkOverlapFootprintsWarm(b *testing.B) {
 	require.Len(b, overlaps, 1)
 	driver := gitDriver(b, root)
 	cache := withFootprintCache(b.Context(), footprintCache{dir: b.TempDir(), build: testBuild})
-	if got := OverlapFootprints(cache, driver, rows, overlaps); got[0].Footprint.Verdict == types.FootprintUnknown {
+	if got := OverlapFootprints(cache, driver, rows, overlaps); got[0].Footprint.Verdict == job.FootprintUnknown {
 		b.Fatal(got[0].Footprint.Reason)
 	}
 	for _, tc := range []struct {

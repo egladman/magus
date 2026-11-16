@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -119,7 +120,7 @@ func driftVerdict(ws types.WorkspaceReader, writePath string, touched []string) 
 // touchedPaths spells the touched projects as paths FocusForPaths can resolve.
 //
 // The root project is the reason this exists. That function reads its arguments as
-// lease DECLARATIONS, and types.LiteralPrefix answers "" for a bare ".", so a set
+// lease DECLARATIONS, and job.LiteralPrefix answers "" for a bare ".", so a set
 // holding only the root resolves to no seed at all and the whole rule goes quiet. In a
 // workspace whose root project owns most of the tree, that is the rule being quiet
 // nearly always, which is how it would have shipped inert.
@@ -195,7 +196,7 @@ func touchedProjects(g hint.Gate) []string {
 // write. A lease that declares none covers nothing: an orchestrator that named no write
 // path drew no boundary this rule could defer to.
 func leaseCoversWrite(ctx context.Context, actingLease string, location location, writePath string) bool {
-	if actingLease == "" || !types.ValidJobID(actingLease) || location.cacheDir == "" {
+	if actingLease == "" || !job.ValidID(actingLease) || location.cacheDir == "" {
 		return false
 	}
 	rel, inside := workspaceRelative(leaseCheckout(ctx, location, actingLease), writePath)

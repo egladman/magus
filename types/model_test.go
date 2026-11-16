@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,11 +21,11 @@ func TestJobOutcomeOmitsAnUnnumberedAttemptAndARetryableEnding(t *testing.T) {
 		require.NoError(t, json.Unmarshal(raw, &m))
 		return m
 	}
-	first := members(JobOutcome{Job: "a", Kind: JobKindCheck, State: StatePass})
+	first := members(JobOutcome{Job: "a", Kind: JobKindCheck, State: job.StatePass})
 	assert.NotContains(t, first, "attempt")
 	assert.NotContains(t, first, "retry")
 
-	again := members(JobOutcome{Job: "a", Kind: JobKindCheck, State: StateFail, Attempt: 2, Retry: RetryAfterWidening})
+	again := members(JobOutcome{Job: "a", Kind: JobKindCheck, State: job.StateFail, Attempt: 2, Retry: job.RetryAfterWidening})
 	assert.Equal(t, float64(2), again["attempt"])
 	assert.Equal(t, "widening", again["retry"])
 }

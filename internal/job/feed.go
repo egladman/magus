@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // Attribution is which job a changed path belongs to, and the declaration that decided it.
@@ -46,7 +46,7 @@ type Attribution struct {
 // A job that has ended holds nothing. Rows are kept after they finish, and a finished
 // boundary that kept answering would collect the next holder's writes for as long as the
 // row lived.
-func AttributeWrite(rows []types.Job, rel string) (Attribution, bool) {
+func AttributeWrite(rows []job.Job, rel string) (Attribution, bool) {
 	var out Attribution
 	var claimants []string
 	for _, row := range rows {
@@ -103,7 +103,7 @@ type FeedEvent struct {
 	// the tool label for a tool call, the rendered command for a run.
 	Action string
 	// Origin is the recorded origin of a tool call, whole; zero on the other kinds.
-	Origin types.Origin
+	Origin job.Origin
 	// Decision is the guard's verdict on a tool call: pass, advise, ask or deny. Empty on
 	// an observation the guard did not judge, which is what --observe records, and on the
 	// other two kinds.
@@ -132,7 +132,7 @@ type FeedEvent struct {
 // caller's batch. An unattributable path still produces an event, with an empty Job: a
 // write outside every declared boundary is the one a reader most wants to see, and dropping
 // it is how a view comes to show a quiet tree while somebody is editing it.
-func FileEvents(rows []types.Job, ts int64, paths []string) []FeedEvent {
+func FileEvents(rows []job.Job, ts int64, paths []string) []FeedEvent {
 	out := make([]FeedEvent, 0, len(paths))
 	for _, p := range paths {
 		at, _ := AttributeWrite(rows, p)
@@ -189,7 +189,7 @@ func eventDecision(e trail.Event) string {
 // RunEvents is every run magus recorded against one job: the primary check, each goal,
 // and the server's own last run for a catalog job. They are facts the
 // store already holds, so the feed serves them without asking the output store anything.
-func RunEvents(row types.Job) []FeedEvent {
+func RunEvents(row job.Job) []FeedEvent {
 	out := make([]FeedEvent, 0, 2+len(row.GateAttempts))
 	if row.Attempt != nil && row.Attempt.Found {
 		out = append(out, runEvent(row.ID, *row.Attempt, "check"))
@@ -209,7 +209,7 @@ func RunEvents(row types.Job) []FeedEvent {
 	return out
 }
 
-func runEvent(id string, a types.JobAttempt, note string) FeedEvent {
+func runEvent(id string, a job.CapturedRun, note string) FeedEvent {
 	e := FeedEvent{Ts: a.TimestampMs, Kind: FeedRun, Job: id, Action: a.String(), Ref: a.Ref, Outcome: trail.OutcomeOK, Note: note}
 	if a.Failed {
 		e.Outcome = trail.OutcomeError
@@ -340,7 +340,7 @@ type RunCursor struct{ sent map[string]bool }
 func NewRunCursor() *RunCursor { return &RunCursor{sent: map[string]bool{}} }
 
 // Prime marks everything the store already holds as reported, without yielding it.
-func (c *RunCursor) Prime(rows []types.Job) {
+func (c *RunCursor) Prime(rows []job.Job) {
 	for _, row := range rows {
 		for _, e := range RunEvents(row) {
 			c.sent[runKey(e)] = true
@@ -349,7 +349,7 @@ func (c *RunCursor) Prime(rows []types.Job) {
 }
 
 // Next returns the runs recorded since the last call.
-func (c *RunCursor) Next(rows []types.Job) []FeedEvent {
+func (c *RunCursor) Next(rows []job.Job) []FeedEvent {
 	var out []FeedEvent
 	for _, row := range rows {
 		for _, e := range RunEvents(row) {

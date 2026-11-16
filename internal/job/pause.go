@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // Pause marks each job paused for reason until the unix second until, zero for no bound,
@@ -19,12 +19,12 @@ import (
 // Pausing a paused job keeps the first time and takes the new owner, reason and bound. A
 // bound caller is refused, since a holder that could pause or resume jobs could also lift
 // its own pause.
-func (s *Store) Pause(ctx context.Context, reason string, until int64, ids ...string) ([]types.Job, error) {
+func (s *Store) Pause(ctx context.Context, reason string, until int64, ids ...string) ([]job.Job, error) {
 	if strings.TrimSpace(reason) == "" {
 		return nil, errors.New("job: a pause names its reason, which the holder and the person resuming it read")
 	}
-	by := trail.StampOrigin(ctx, types.Origin{})
-	return s.setPaused(ctx, ids, func(cur *types.Job, now int64) error {
+	by := trail.StampOrigin(ctx, job.Origin{})
+	return s.setPaused(ctx, ids, func(cur *job.Job, now int64) error {
 		if until != 0 && until <= now {
 			return fmt.Errorf("job: %s: the pause's bound is already past, so it would lapse as it was written", cur.ID)
 		}
@@ -37,21 +37,21 @@ func (s *Store) Pause(ctx context.Context, reason string, until int64, ids ...st
 }
 
 // Resume lifts the pause on each job. Resuming a job that is not paused changes nothing.
-func (s *Store) Resume(ctx context.Context, ids ...string) ([]types.Job, error) {
-	return s.setPaused(ctx, ids, func(cur *types.Job, _ int64) error {
-		cur.Paused, cur.PausedBy, cur.PauseReason, cur.PausedUntil = 0, types.Origin{}, "", 0
+func (s *Store) Resume(ctx context.Context, ids ...string) ([]job.Job, error) {
+	return s.setPaused(ctx, ids, func(cur *job.Job, _ int64) error {
+		cur.Paused, cur.PausedBy, cur.PauseReason, cur.PausedUntil = 0, job.Origin{}, "", 0
 		return nil
 	})
 }
 
 // setPaused applies change to each of ids, a live job.
-func (s *Store) setPaused(ctx context.Context, ids []string, change func(cur *types.Job, now int64) error) ([]types.Job, error) {
+func (s *Store) setPaused(ctx context.Context, ids []string, change func(cur *job.Job, now int64) error) ([]job.Job, error) {
 	if actor := s.Actor(); actor.Bound() && len(ids) > 0 {
 		return nil, refuse(actor, ids[0], "a holder neither pauses nor resumes a job; that is a person's or the orchestrator's")
 	}
-	rows := make([]types.Job, 0, len(ids))
+	rows := make([]job.Job, 0, len(ids))
 	for _, id := range ids {
-		row, err := s.mutate(ctx, id, asDeclaration, func(cur *types.Job, exists bool, now int64) error {
+		row, err := s.mutate(ctx, id, asDeclaration, func(cur *job.Job, exists bool, now int64) error {
 			switch {
 			case !exists:
 				return fmt.Errorf("%w: %q, `%s` lists the declared ids", ErrUnknownJob, id, hint.LsJobs)
@@ -70,7 +70,7 @@ func (s *Store) setPaused(ctx context.Context, ids []string, change func(cur *ty
 
 // PausedLine is the one line that refuses a paused job's holder a magus run, naming who
 // paused it and why, and the command that lifts it. Exec and the guard both say it.
-func PausedLine(row types.Job) string {
+func PausedLine(row job.Job) string {
 	line := fmt.Sprintf("job %s is paused", row.ID)
 	if row.PauseReason != "" {
 		line = fmt.Sprintf("%s by %s: %s", line, row.PausedBy.Label(), row.PauseReason)

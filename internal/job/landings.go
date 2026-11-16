@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -55,8 +56,8 @@ type probeLog struct {
 // landingCandidate reports a running or exited row in a checkout, the only
 // rows a landing can be judged for. The checkout's diff decides, so a row
 // whose holder filed no result still qualifies.
-func landingCandidate(row types.Job) bool {
-	return (row.State == types.StateExited || row.State == types.StateRunning) && !row.ServerRun() && !row.ReadOnly &&
+func landingCandidate(row job.Job) bool {
+	return (row.State == job.StateExited || row.State == job.StateRunning) && !row.ServerRun() && !row.ReadOnly &&
 		row.CheckoutRoot != "" &&
 		checkpointRevision(row.Checkpoint) != ""
 }
@@ -69,7 +70,7 @@ func landingCandidate(row types.Job) bool {
 // same probes again, and two readers at once split the rows rather than both probing
 // every one. A probe history that cannot be read or written only costs the interval,
 // never a verdict.
-func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
+func (s *Store) landings(rows []job.Job, now int64) map[string]landing {
 	probe := s.landed
 	if probe == nil {
 		probe = s.landedOnBase
@@ -78,7 +79,7 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 	var history map[string]landingProbe
 	read := false
 	next := map[string]landingProbe{}
-	var due []types.Job
+	var due []job.Job
 	for _, row := range rows {
 		if !landingCandidate(row) {
 			continue
@@ -98,7 +99,7 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 	if since := now - lastProbeRound(history); since >= 0 && since < int64(landingRound/time.Second) {
 		due = nil
 	}
-	slices.SortStableFunc(due, func(a, b types.Job) int { return cmp.Compare(history[a.ID].At, history[b.ID].At) })
+	slices.SortStableFunc(due, func(a, b job.Job) int { return cmp.Compare(history[a.ID].At, history[b.ID].At) })
 	due = due[:min(len(due), landingBudget)]
 	for _, row := range due {
 		next[row.ID] = landingProbe{At: now, Updated: row.Updated}
@@ -205,7 +206,7 @@ func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) e
 //
 // The diff is read, never the result's changed_paths: a result naming the part of the work
 // that landed would otherwise end the job while the rest has not.
-func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
+func (s *Store) landedOnBase(ctx context.Context, row job.Job) string {
 	if s.root == "" {
 		return ""
 	}
@@ -237,9 +238,9 @@ func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
 // that names row.ID in its Integrates, or "" when no such checkout holds it. The base only
 // gains the work when the integration lands, so until then the integration's own checkout
 // is where a merged worker shows. Same content check as [Store.landedOnBase].
-func (s *Store) landedInIntegration(ctx context.Context, row types.Job, rows []types.Job) string {
+func (s *Store) landedInIntegration(ctx context.Context, row job.Job, rows []job.Job) string {
 	for _, into := range rows {
-		if into.State != types.StateRunning || into.CheckoutRoot == "" || !slices.Contains(into.Integrates, row.ID) {
+		if into.State != job.StateRunning || into.CheckoutRoot == "" || !slices.Contains(into.Integrates, row.ID) {
 			continue
 		}
 		res, err := vcs.Resolve(ctx, into.CheckoutRoot, "", types.VCSOptions{})
@@ -272,7 +273,7 @@ func (s *Store) landedInIntegration(ctx context.Context, row types.Job, rows []t
 // A path that reads otherwise still counts as landed when merging
 // the work onto target changes nothing: the base edited it later.
 // held says which of the two held, for the end reason.
-func contentLanded(ctx context.Context, driver types.VCSDriver, row types.Job, head types.Commit, targetRoot string, target types.Commit) (paths int, held string) {
+func contentLanded(ctx context.Context, driver types.VCSDriver, row job.Job, head types.Commit, targetRoot string, target types.Commit) (paths int, held string) {
 	checkpoint := checkpointRevision(row.Checkpoint)
 	if dirty, err := driver.Dirty(ctx, row.CheckoutRoot, nil); err != nil || dirty {
 		return 0, ""
@@ -319,9 +320,9 @@ func mergeChangesNothing(ctx context.Context, driver types.VCSDriver, root, chec
 // head or the branch moves, and a read spends [unmergedBudget] at most, so a
 // stop hook can call it. What the budget left unread is named in Unknown.
 // Repo policy decides what a fact stops. tries holds each row's filed result.
-func Unmerged(ctx context.Context, root string, rows []types.Job, tries types.JobAttempts) types.JobUnmergedReport {
-	var report types.JobUnmergedReport
-	var work []types.Job
+func Unmerged(ctx context.Context, root string, rows []job.Job, tries job.Attempts) job.UnmergedReport {
+	var report job.UnmergedReport
+	var work []job.Job
 	for _, row := range rows {
 		if row.ServerRun() || row.LeftUnmerged != "" || !ownTree(rows, root, row) {
 			continue
@@ -369,17 +370,17 @@ func Unmerged(ctx context.Context, root string, rows []types.Job, tries types.Jo
 
 // unanswered are the items no answer on row settles. An answer naming a row
 // the store lost settles nothing.
-func unanswered(rows []types.Job, row types.Job, items []string, why string) []types.JobUnmerged {
-	var out []types.JobUnmerged
+func unanswered(rows []job.Job, row job.Job, items []string, why string) []job.Unmerged {
+	var out []job.Unmerged
 	for _, item := range items {
-		i := slices.IndexFunc(row.Deferred, func(d types.JobDeferred) bool { return d.Item == item })
-		if i >= 0 && (row.Deferred[i].Reason != "" || slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == row.Deferred[i].Job })) {
+		i := slices.IndexFunc(row.Deferred, func(d job.Deferred) bool { return d.Item == item })
+		if i >= 0 && (row.Deferred[i].Reason != "" || slices.ContainsFunc(rows, func(r job.Job) bool { return r.ID == row.Deferred[i].Job })) {
 			continue
 		}
-		out = append(out, types.JobUnmerged{
+		out = append(out, job.Unmerged{
 			Job: row.ID, Item: item, Why: why,
 			Remedy: fmt.Sprintf("declare a row for it, or dismiss it: `%s` with {\"api_version\":%q,\"id\":%q,\"deferred\":[{\"item\":\"<item>\",\"row\":\"<row>\"}]}, or \"reason\":\"<why>\" in place of row",
-				hint.JobApply.With("--stdin"), types.JobAPIVersion, row.ID),
+				hint.JobApply.With("--stdin"), job.APIVersion, row.ID),
 		})
 	}
 	return out
@@ -438,20 +439,20 @@ type unmergedRead struct {
 	unread    int
 	stale     int
 	recut     int
-	tries     types.JobAttempts
+	tries     job.Attempts
 }
 
 // run answers every row in work from the stored facts, then asks the version
 // control about what moved: unseen heads first, then the oldest answers. rows
 // says which stored answers still have a row.
-func (r *unmergedRead) run(ctx context.Context, rows, work []types.Job) {
+func (r *unmergedRead) run(ctx context.Context, rows, work []job.Job) {
 	ctx, cancel := context.WithTimeout(ctx, unmergedBudget)
 	defer cancel()
 	path := unmergedFactsPath(r.root)
 	stored := readUnmergedFacts(path)
 	r.readHeads(ctx)
 	r.rows = make(map[string]*unmergedRow, len(work))
-	var due []types.Job
+	var due []job.Job
 	for _, row := range work {
 		rr := r.place(ctx, row, stored.facts[unmergedKey(row.ID, r.branch)])
 		r.rows[row.ID] = rr
@@ -459,7 +460,7 @@ func (r *unmergedRead) run(ctx context.Context, rows, work []types.Job) {
 			due = append(due, row)
 		}
 	}
-	slices.SortStableFunc(due, func(a, b types.Job) int {
+	slices.SortStableFunc(due, func(a, b job.Job) int {
 		x, y := r.rows[a.ID], r.rows[b.ID]
 		return cmp.Or(cmp.Compare(x.fact.CutAt, y.fact.CutAt), cmp.Compare(boolRank(x.seen), boolRank(y.seen)), cmp.Compare(x.fact.MergedAt, y.fact.MergedAt))
 	})
@@ -475,7 +476,7 @@ func (r *unmergedRead) run(ctx context.Context, rows, work []types.Job) {
 		}
 	}
 	err := writeUnmergedFacts(path, stored, next, func(f unmergedFact) bool {
-		return slices.ContainsFunc(rows, func(row types.Job) bool { return row.ID == f.ID }) && r.branchStands(f.Branch)
+		return slices.ContainsFunc(rows, func(row job.Job) bool { return row.ID == f.ID }) && r.branchStands(f.Branch)
 	})
 	if err != nil {
 		// Unmerged runs outside the job store lock and cannot return an error.
@@ -494,7 +495,7 @@ func (r *unmergedRead) branchStands(branch string) bool {
 }
 
 // ask checks due in order until the budget ends, and returns what to store.
-func (r *unmergedRead) ask(ctx context.Context, due []types.Job) map[string]unmergedFact {
+func (r *unmergedRead) ask(ctx context.Context, due []job.Job) map[string]unmergedFact {
 	next := map[string]unmergedFact{}
 	for _, row := range due {
 		if ctx.Err() != nil {
@@ -548,7 +549,7 @@ func (r *unmergedRead) readHeads(ctx context.Context) {
 // place finds row's head and says which stored answers still stand. A stored
 // merge stands until its head moves. A stored miss stands for one tip of the
 // branch. A status stands for landingInterval, while the row is not edited.
-func (r *unmergedRead) place(ctx context.Context, row types.Job, stored unmergedFact) *unmergedRow {
+func (r *unmergedRead) place(ctx context.Context, row job.Job, stored unmergedFact) *unmergedRow {
 	rr := &unmergedRow{}
 	head, where, err := r.head(ctx, row)
 	rr.where = where
@@ -571,7 +572,7 @@ func (r *unmergedRead) place(ctx context.Context, row types.Job, stored unmerged
 
 // head is the commit holding row's work and the checkout it was read in, ""
 // when the branch named for the job answered instead.
-func (r *unmergedRead) head(ctx context.Context, row types.Job) (string, string, error) {
+func (r *unmergedRead) head(ctx context.Context, row job.Job) (string, string, error) {
 	if where := heldCheckout(row); where != "" {
 		if info, err := os.Stat(where); err == nil && info.IsDir() {
 			if id := r.checkouts[resolved(where)]; id != "" {
@@ -594,7 +595,7 @@ func (r *unmergedRead) head(ctx context.Context, row types.Job) (string, string,
 
 // check asks the version control what place found due. Past the deadline it
 // leaves a question due, so no half answer is stored.
-func (r *unmergedRead) check(ctx context.Context, rr *unmergedRow, row types.Job) {
+func (r *unmergedRead) check(ctx context.Context, rr *unmergedRow, row job.Job) {
 	f := &rr.fact
 	if rr.dirtyDue {
 		dirty, unread := uncommitted(ctx, rr.where, row)
@@ -641,11 +642,11 @@ func (r *unmergedRead) holds(ctx context.Context, f *unmergedFact) (bool, int, e
 // facts is what row's work leaves off the branch: uncommitted paths, commits,
 // or an unreadable head. A row with no checkout, no branch and no filed path
 // has nothing to lose, nor one a passed integration names.
-func (r *unmergedRead) facts(rows []types.Job, row types.Job) []types.JobUnmerged {
+func (r *unmergedRead) facts(rows []job.Job, row job.Job) []job.Unmerged {
 	state := fmt.Sprintf("or state why it stays off: `%s` with {\"api_version\":%q,\"id\":%q,\"left_unmerged\":\"<why>\"}",
-		hint.JobApply.With("--stdin"), types.JobAPIVersion, row.ID)
-	fact := func(head, why, remedy string) types.JobUnmerged {
-		return types.JobUnmerged{Job: row.ID, Head: head, Why: why, Remedy: fmt.Sprintf("%s, %s", remedy, state)}
+		hint.JobApply.With("--stdin"), job.APIVersion, row.ID)
+	fact := func(head, why, remedy string) job.Unmerged {
+		return job.Unmerged{Job: row.ID, Head: head, Why: why, Remedy: fmt.Sprintf("%s, %s", remedy, state)}
 	}
 	rr := r.rows[row.ID]
 	switch {
@@ -655,11 +656,11 @@ func (r *unmergedRead) facts(rows []types.Job, row types.Job) []types.JobUnmerge
 		if result := r.tries.Result(row.ID); rr.where == "" && (result == nil || len(result.ChangedPaths) == 0 || integratedByPass(rows, row.ID)) {
 			return nil
 		}
-		return []types.JobUnmerged{fact("", fmt.Sprintf("its head cannot be read: %s", rr.headErr), "restore its branch "+row.ID)}
+		return []job.Unmerged{fact("", fmt.Sprintf("its head cannot be read: %s", rr.headErr), "restore its branch "+row.ID)}
 	case !rr.seen && (rr.dirtyDue || rr.mergedDue):
 		return nil
 	}
-	var out []types.JobUnmerged
+	var out []job.Unmerged
 	f := rr.fact
 	short := shortRevision(types.Commit{ID: f.Head, Short: f.Short})
 	switch {
@@ -774,16 +775,16 @@ func writeUnmergedFacts(path string, stored storedUnmergedFacts, next map[string
 	return file.RewriteLines(path, all, 0o644)
 }
 
-func integratedByPass(rows []types.Job, id string) bool {
-	return slices.ContainsFunc(rows, func(r types.Job) bool {
-		return r.State == types.StatePass && slices.Contains(r.Integrates, id)
+func integratedByPass(rows []job.Job, id string) bool {
+	return slices.ContainsFunc(rows, func(r job.Job) bool {
+		return r.State == job.StatePass && slices.Contains(r.Integrates, id)
 	})
 }
 
 // Settle writes each record's answers onto the row it names, ended or not.
 // Only an orchestrator settles: a holder cannot wave off what it deferred.
 // Every record is checked before any is written.
-func (s *Store) Settle(ctx context.Context, records []types.Declaration, dryRun bool) ([]types.Job, error) {
+func (s *Store) Settle(ctx context.Context, records []job.Declaration, dryRun bool) ([]job.Job, error) {
 	if lease := s.Actor().Lease; lease != "" {
 		return nil, fmt.Errorf("%s holds a lease, and only its orchestrator settles a row", lease)
 	}
@@ -795,22 +796,22 @@ func (s *Store) Settle(ctx context.Context, records []types.Declaration, dryRun 
 	if err != nil {
 		return nil, err
 	}
-	if err := checkSettles(rows, types.NewJobAttempts(all), records); err != nil {
+	if err := checkSettles(rows, job.NewAttempts(all), records); err != nil {
 		return nil, err
 	}
-	settled := make([]types.Job, 0, len(records))
+	settled := make([]job.Job, 0, len(records))
 	for _, rec := range records {
-		apply := func(u *types.Job) {
+		apply := func(u *job.Job) {
 			if rec.LeftUnmerged != "" {
 				u.LeftUnmerged = strings.TrimSpace(rec.LeftUnmerged)
 			}
 			for _, d := range rec.Deferred {
-				u.Deferred = slices.DeleteFunc(u.Deferred, func(have types.JobDeferred) bool { return have.Item == d.Item })
+				u.Deferred = slices.DeleteFunc(u.Deferred, func(have job.Deferred) bool { return have.Item == d.Item })
 				u.Deferred = append(u.Deferred, d)
 			}
 		}
 		if dryRun {
-			row := rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })].Clone()
+			row := rows[slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == rec.ID })].Clone()
 			apply(&row)
 			settled = append(settled, row)
 			continue
@@ -824,18 +825,18 @@ func (s *Store) Settle(ctx context.Context, records []types.Declaration, dryRun 
 	return settled, nil
 }
 
-func checkSettles(rows []types.Job, tries types.JobAttempts, records []types.Declaration) error {
+func checkSettles(rows []job.Job, tries job.Attempts, records []job.Declaration) error {
 	var errs []error
 	for _, rec := range records {
 		if !rec.Settles() {
 			errs = append(errs, fmt.Errorf("%s declares a spec, and a record settling a row applies with others settling rows only", rec.ID))
 			continue
 		}
-		if err := rec.Validate(); err != nil {
+		if err := types.ValidateDeclaration(rec); err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
+		i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == rec.ID })
 		if i < 0 {
 			errs = append(errs, fmt.Errorf("nothing declares job %s, so nothing settles", rec.ID))
 			continue
@@ -847,7 +848,7 @@ func checkSettles(rows []types.Job, tries types.JobAttempts, records []types.Dec
 
 // settleErrors refuses an answer naming an item the result lacks or a row
 // nobody declared, so a typo never reads as settled.
-func settleErrors(rows []types.Job, result *types.JobResult, rec types.Declaration) []error {
+func settleErrors(rows []job.Job, result *job.Result, rec job.Declaration) []error {
 	var errs []error
 	var items []string
 	if result != nil {
@@ -857,7 +858,7 @@ func settleErrors(rows []types.Job, result *types.JobResult, rec types.Declarati
 		if !slices.Contains(items, d.Item) {
 			errs = append(errs, fmt.Errorf("%s's result defers no item %q", rec.ID, d.Item))
 		}
-		if d.Job != "" && !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == d.Job }) {
+		if d.Job != "" && !slices.ContainsFunc(rows, func(r job.Job) bool { return r.ID == d.Job }) {
 			errs = append(errs, fmt.Errorf("%s answers %q with row %s, which nothing declares", rec.ID, d.Item, d.Job))
 		}
 	}

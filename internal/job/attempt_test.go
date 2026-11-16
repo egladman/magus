@@ -12,30 +12,30 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // filedTry is job id's first try, having filed result.
-func filedTry(id string, result *types.JobResult) types.Attempt {
-	return types.Attempt{Job: id, N: 1, Status: types.AttemptStatus{Result: result}}
+func filedTry(id string, result *job.Result) job.Attempt {
+	return job.Attempt{Job: id, N: 1, Status: job.AttemptStatus{Result: result}}
 }
 
 // fileTry files result on job id's try in progress, as an exit does.
-func fileTry(t *testing.T, s *Store, id string, result *types.JobResult) {
+func fileTry(t *testing.T, s *Store, id string, result *job.Result) {
 	t.Helper()
 	require.NoError(t, s.fileResult(t.Context(), id, result, time.Now().Unix()))
 }
 
 // triesIn are the tries s holds, by job.
-func triesIn(t *testing.T, s *Store) types.JobAttempts {
+func triesIn(t *testing.T, s *Store) job.Attempts {
 	t.Helper()
 	all, err := s.Attempts()
 	require.NoError(t, err)
-	return types.NewJobAttempts(all)
+	return job.NewAttempts(all)
 }
 
 // liveTry is job id's try in progress in s.
-func liveTry(t *testing.T, s *Store, id string) types.Attempt {
+func liveTry(t *testing.T, s *Store, id string) job.Attempt {
 	t.Helper()
 	return triesIn(t, s).Live(id)
 }
@@ -68,7 +68,7 @@ func (s *attemptStoreSuite) TestASpawnStartsTheLiveTry() {
 	got, err := s.store.StartAttempt(s.T().Context(), "a", s.at(10))
 
 	s.Require().NoError(err)
-	s.Equal(types.Attempt{Job: "a", N: 1, Status: types.AttemptStatus{Started: 10}}, got)
+	s.Equal(job.Attempt{Job: "a", N: 1, Status: job.AttemptStatus{Started: 10}}, got)
 	s.Equal(got, liveTry(s.T(), s.store, "a"))
 }
 
@@ -87,18 +87,18 @@ func (s *attemptStoreSuite) TestAStartAfterAnEndStartsTheTryAgain() {
 	seed(s.T(), s.store, running("a"))
 	_, err := s.store.StartAttempt(s.T().Context(), "a", s.at(10))
 	s.Require().NoError(err)
-	s.Require().NoError(s.store.EndAttempt(s.T().Context(), "a", types.AttemptEndHandback, s.at(15)))
+	s.Require().NoError(s.store.EndAttempt(s.T().Context(), "a", job.AttemptEndHandback, s.at(15)))
 
 	got, err := s.store.StartAttempt(s.T().Context(), "a", s.at(20))
 
 	s.Require().NoError(err)
-	s.Equal(types.Attempt{Job: "a", N: 1, Status: types.AttemptStatus{Started: 20}}, got)
+	s.Equal(job.Attempt{Job: "a", N: 1, Status: job.AttemptStatus{Started: 20}}, got)
 	s.True(got.Running())
 }
 
 func (s *attemptStoreSuite) TestAStartNamingNoLiveJobIsRefused() {
 	ended := running("a")
-	ended.State = types.StatePass
+	ended.State = job.StatePass
 	seed(s.T(), s.store, ended)
 
 	_, err := s.store.StartAttempt(s.T().Context(), "a", s.at(10))
@@ -113,17 +113,17 @@ func (s *attemptStoreSuite) TestTheFirstEndObservedStands() {
 	_, err := s.store.StartAttempt(s.T().Context(), "a", s.at(10))
 	s.Require().NoError(err)
 
-	s.Require().NoError(s.store.EndAttempt(s.T().Context(), "a", types.AttemptEndHandback, s.at(15)))
-	s.Require().NoError(s.store.EndAttempt(s.T().Context(), "a", types.AttemptEndStop, s.at(16)))
+	s.Require().NoError(s.store.EndAttempt(s.T().Context(), "a", job.AttemptEndHandback, s.at(15)))
+	s.Require().NoError(s.store.EndAttempt(s.T().Context(), "a", job.AttemptEndStop, s.at(16)))
 
 	got := liveTry(s.T(), s.store, "a")
-	s.Equal(types.AttemptStatus{Started: 10, Ended: 15, End: types.AttemptEndHandback}, got.Status)
+	s.Equal(job.AttemptStatus{Started: 10, Ended: 15, End: job.AttemptEndHandback}, got.Status)
 }
 
 func (s *attemptStoreSuite) TestACallerBoundToNoJobEndsNothing() {
 	seed(s.T(), s.store, running("a"))
 
-	s.Require().NoError(s.store.EndCallerAttempt(s.T().Context(), Caller{}, types.AttemptEndStop, s.at(15)))
+	s.Require().NoError(s.store.EndCallerAttempt(s.T().Context(), Caller{}, job.AttemptEndStop, s.at(15)))
 
 	s.Empty(triesIn(s.T(), s.store))
 }
@@ -132,30 +132,30 @@ func (s *attemptStoreSuite) TestAFiledResultEndsTheTryByExit() {
 	seed(s.T(), s.store, running("a"))
 	_, err := s.store.StartAttempt(s.T().Context(), "a", s.at(10))
 	s.Require().NoError(err)
-	result := &types.JobResult{Job: "a", ChangedPaths: []string{"a.go"}}
+	result := &job.Result{Job: "a", ChangedPaths: []string{"a.go"}}
 
 	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", result, 30))
 
 	got := liveTry(s.T(), s.store, "a")
-	s.Equal(types.AttemptStatus{Started: 10, Ended: 30, End: types.AttemptEndExit, Result: result}, got.Status)
+	s.Equal(job.AttemptStatus{Started: 10, Ended: 30, End: job.AttemptEndExit, Result: result}, got.Status)
 }
 
 func (s *attemptStoreSuite) TestAResultFiledAfterAnEndKeepsThatEnd() {
 	seed(s.T(), s.store, running("a"))
-	s.Require().NoError(s.store.EndAttempt(s.T().Context(), "a", types.AttemptEndHandback, s.at(15)))
+	s.Require().NoError(s.store.EndAttempt(s.T().Context(), "a", job.AttemptEndHandback, s.at(15)))
 
-	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", &types.JobResult{Job: "a"}, 30))
+	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", &job.Result{Job: "a"}, 30))
 
 	got := liveTry(s.T(), s.store, "a")
-	s.Equal(types.AttemptStatus{Ended: 15, End: types.AttemptEndHandback, Result: &types.JobResult{Job: "a"}}, got.Status)
+	s.Equal(job.AttemptStatus{Ended: 15, End: job.AttemptEndHandback, Result: &job.Result{Job: "a"}}, got.Status)
 }
 
 // An id declared again after its row was dropped is a new job, so it
 // starts on its first try with nothing filed.
 func (s *attemptStoreSuite) TestADroppedRowTakesItsTriesWithIt() {
 	plant(s.T(), s.store, running("a"), running("b"))
-	fileTry(s.T(), s.store, "a", &types.JobResult{Job: "a"})
-	fileTry(s.T(), s.store, "b", &types.JobResult{Job: "b"})
+	fileTry(s.T(), s.store, "a", &job.Result{Job: "a"})
+	fileTry(s.T(), s.store, "b", &job.Result{Job: "b"})
 
 	plant(s.T(), s.store, running("b"))
 
@@ -179,7 +179,7 @@ func (s *attemptStoreSuite) TestALineAnotherVersionWroteIsRefused() {
 
 func (s *attemptStoreSuite) TestATryIsStoredAsAnAttemptRecord() {
 	seed(s.T(), s.store, running("a"))
-	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", &types.JobResult{Job: "a", ChangedPaths: []string{"a.go"}}, 30))
+	s.Require().NoError(s.store.fileResult(s.T().Context(), "a", &job.Result{Job: "a", ChangedPaths: []string{"a.go"}}, 30))
 
 	raw, err := os.ReadFile(filepath.Join(filepath.Dir(s.storePath()), attemptsFileName))
 	s.Require().NoError(err)
@@ -199,7 +199,7 @@ func (s *attemptStoreSuite) TestATryIsStoredAsAnAttemptRecord() {
 func (s *attemptStoreSuite) TestEnvelopingAttemptsRewritesTheOlderLines() {
 	path := filepath.Join(filepath.Dir(s.storePath()), attemptsFileName)
 	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
-	current, err := json.Marshal(recordAttempt(types.Attempt{Job: "b", N: 1, Status: types.AttemptStatus{Started: 3}}))
+	current, err := json.Marshal(recordAttempt(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}))
 	s.Require().NoError(err)
 	s.Require().NoError(os.WriteFile(path, []byte(fmt.Sprintf("%s\n%s\n",
 		`{"api_version":"magus.job/v1alpha1","job":"a","n":2,"status":{"state":"no_return","ended":5,"end":"job"},"dropped":true}`, current)), 0o600))
@@ -214,7 +214,7 @@ func (s *attemptStoreSuite) TestEnvelopingAttemptsRewritesTheOlderLines() {
 	s.Require().Len(recs, 1, "the dropped try reads as gone")
 	got, err := recs[0].attempt()
 	s.Require().NoError(err)
-	s.Equal(types.Attempt{Job: "b", N: 1, Status: types.AttemptStatus{Started: 3}}, got)
+	s.Equal(job.Attempt{Job: "b", N: 1, Status: job.AttemptStatus{Started: 3}}, got)
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
 	s.Contains(string(raw), `"jobState":"NoReturn"`)
@@ -223,11 +223,11 @@ func (s *attemptStoreSuite) TestEnvelopingAttemptsRewritesTheOlderLines() {
 
 func (s *attemptStoreSuite) TestAnArchiveKeepsTheTriesOfTheRowsItHolds() {
 	plant(s.T(), s.store, running("a"), running("b"))
-	fileTry(s.T(), s.store, "a", &types.JobResult{Job: "a"})
-	fileTry(s.T(), s.store, "b", &types.JobResult{Job: "b"})
+	fileTry(s.T(), s.store, "a", &job.Result{Job: "a"})
+	fileTry(s.T(), s.store, "b", &job.Result{Job: "b"})
 	path := filepath.Join(s.T().TempDir(), "jobs-archive.attempts.jsonl")
 
-	s.Require().NoError(s.store.archiveAttempts(path, []types.Job{running("a")}))
+	s.Require().NoError(s.store.archiveAttempts(path, []job.Job{running("a")}))
 
 	raw, err := os.ReadFile(path)
 	s.Require().NoError(err)
@@ -239,7 +239,7 @@ func (s *attemptStoreSuite) TestAnArchiveKeepsTheTriesOfTheRowsItHolds() {
 func (s *attemptStoreSuite) TestAnArchiveOfRowsWithNoTriesWritesNoFile() {
 	path := filepath.Join(s.T().TempDir(), "jobs-archive.attempts.jsonl")
 
-	s.Require().NoError(s.store.archiveAttempts(path, []types.Job{running("a")}))
+	s.Require().NoError(s.store.archiveAttempts(path, []job.Job{running("a")}))
 
 	s.NoFileExists(path)
 }
@@ -247,14 +247,14 @@ func (s *attemptStoreSuite) TestAnArchiveOfRowsWithNoTriesWritesNoFile() {
 func (s *attemptStoreSuite) TestBoundAttemptsReadsATryPastItsJobsDeadlineAsEnded() {
 	row := running("a")
 	row.Deadline = 50
-	tries := []types.Attempt{
-		{Job: "a", N: 1, Status: types.AttemptStatus{Started: 10}},
-		{Job: "gone", N: 1, Status: types.AttemptStatus{Started: 10}},
+	tries := []job.Attempt{
+		{Job: "a", N: 1, Status: job.AttemptStatus{Started: 10}},
+		{Job: "gone", N: 1, Status: job.AttemptStatus{Started: 10}},
 	}
 
-	got := BoundAttempts([]types.Job{row}, tries, 60)
+	got := BoundAttempts([]job.Job{row}, tries, 60)
 
-	s.Equal([]types.Attempt{{Job: "a", N: 1, Status: types.AttemptStatus{Started: 10, Ended: 50, End: types.AttemptEndDeadline}}}, got,
+	s.Equal([]job.Attempt{{Job: "a", N: 1, Status: job.AttemptStatus{Started: 10, Ended: 50, End: job.AttemptEndDeadline}}}, got,
 		"a try of a job the rows lack is left out")
 }
 
@@ -280,12 +280,12 @@ func (s *attemptStoreSuite) TestMigrationThreeMovesARowsTriesToAttempts() {
 	s.Require().Len(rows, 1)
 
 	tries := triesIn(s.T(), s.store)
-	s.Equal([]types.Attempt{
-		{Job: "a", N: 1, Status: types.AttemptStatus{State: types.StateNoReturn, Ended: 5, End: types.AttemptEndJob,
-			Retry: types.RetryVerdict{Retryable: true}}},
-		{Job: "a", N: 2, Status: types.AttemptStatus{State: types.StateFail, Ended: 7, End: types.AttemptEndJob,
-			Result: &types.JobResult{Job: "a", UnresolvedRisks: []string{"not tried"}}, Retry: types.RetryVerdict{Retryable: true}}},
-		{Job: "a", N: 3, Status: types.AttemptStatus{Result: &types.JobResult{Job: "a", ChangedPaths: []string{"a.go"}}}},
+	s.Equal([]job.Attempt{
+		{Job: "a", N: 1, Status: job.AttemptStatus{State: job.StateNoReturn, Ended: 5, End: job.AttemptEndJob,
+			Retry: job.RetryVerdict{Retryable: true}}},
+		{Job: "a", N: 2, Status: job.AttemptStatus{State: job.StateFail, Ended: 7, End: job.AttemptEndJob,
+			Result: &job.Result{Job: "a", UnresolvedRisks: []string{"not tried"}}, Retry: job.RetryVerdict{Retryable: true}}},
+		{Job: "a", N: 3, Status: job.AttemptStatus{Result: &job.Result{Job: "a", ChangedPaths: []string{"a.go"}}}},
 	}, tries["a"])
 	s.Equal(3, tries.LiveN("a"))
 

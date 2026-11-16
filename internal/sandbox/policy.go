@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -57,7 +58,7 @@ type Policy struct {
 	// derived from config alone. Read only to name the boundary on a denial.
 	Lease string
 	// LeaseFrom is which source answered Lease, recorded beside it on a denial.
-	LeaseFrom types.LeaseSource
+	LeaseFrom job.LeaseSource
 
 	// writtenAt maps a rule's path to the path it was declared at, where following
 	// links moved it. Read by WritesOutside.

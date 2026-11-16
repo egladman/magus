@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,24 +84,24 @@ func TestRegeneratedOutside(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		row     types.Job
+		row     job.Job
 		ignored func([]string) ([]string, error)
 		want    []RegeneratedOutput
 	}{
 		{
 			name:    "outputs outside the paths, most specific read first, project baseline last, ignored dropped",
-			row:     types.Job{Paths: types.JobPaths{Write: []string{"cmd/*.go", "cli/*.go", "docs/rules/*.md"}}},
+			row:     job.Job{Paths: job.Paths{Write: []string{"cmd/*.go", "cli/*.go", "docs/rules/*.md"}}},
 			ignored: ignoresCoverage,
 			want:    []RegeneratedOutput{apiLock, manpage, cliFlags, typesGen},
 		},
 		{
 			name: "no ignore answer drops nothing",
-			row:  types.Job{Paths: types.JobPaths{Write: []string{"cmd/*.go", "cli/*.go", "docs/rules/*.md"}}},
+			row:  job.Job{Paths: job.Paths{Write: []string{"cmd/*.go", "cli/*.go", "docs/rules/*.md"}}},
 			want: []RegeneratedOutput{apiLock, manpage, cliFlags, coverage, typesGen},
 		},
 		{
 			name:    "a literal path the job will create counts as written",
-			row:     types.Job{Paths: types.JobPaths{Write: []string{"cli/shell_flags.go"}}},
+			row:     job.Job{Paths: job.Paths{Write: []string{"cli/shell_flags.go"}}},
 			ignored: ignoresCoverage,
 			want: []RegeneratedOutput{
 				apiLock,
@@ -112,18 +113,18 @@ func TestRegeneratedOutside(t *testing.T) {
 		},
 		{
 			name:    "a deny path takes an output back out of a covering write path",
-			row:     types.Job{Paths: types.JobPaths{Write: []string{"docs/**", "cli/registry.go"}, Deny: []string{"docs/manpage/*.md"}}},
+			row:     job.Job{Paths: job.Paths{Write: []string{"docs/**", "cli/registry.go"}, Deny: []string{"docs/manpage/*.md"}}},
 			ignored: ignoresCoverage,
 			want:    []RegeneratedOutput{apiLock, manpage, cliFlags, typesGen},
 		},
 		{
 			name:    "sources outside the paths name nothing",
-			row:     types.Job{Paths: types.JobPaths{Write: []string{"docs/rules/guard.md"}}},
+			row:     job.Job{Paths: job.Paths{Write: []string{"docs/rules/guard.md"}}},
 			ignored: ignoresCoverage,
 		},
 		{
 			name: "a read-only row writes nothing",
-			row:  types.Job{ReadOnly: true},
+			row:  job.Job{ReadOnly: true},
 		},
 	}
 	for _, tc := range tests {

@@ -12,7 +12,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -22,7 +21,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
@@ -57,6 +55,7 @@ import (
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
@@ -70,6 +69,7 @@ import (
 	"github.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1/toolv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1/viewerv1alpha1connect"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -94,10 +94,10 @@ type Server struct {
 	socket Socket
 	// onSocketMounted receives each path mounted on the socket and its Need, before the
 	// server serves; the route tests read the socket's table through it.
-	onSocketMounted func(needs map[string]types.Need)
+	onSocketMounted func(needs map[string]jobtypes.Need)
 	// onMounted receives every route pattern and each guarded pattern's Need once mounting
 	// is done, before the listener serves; the route tests read the mux through it.
-	onMounted func(patterns []string, needs map[string]types.Need)
+	onMounted func(patterns []string, needs map[string]jobtypes.Need)
 }
 
 // Option customizes a Server.
@@ -265,7 +265,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				// ONE consumer of the watcher, two audiences: the SSE stream's graph
 				// invalidation and the activity feed's attributed file changes. Two read
 				// loops over one channel would take alternate batches.
-				jobFeed = console.NewJobFeed(ctx, bWatcher, opts.Magus.Root(), func() []types.Job {
+				jobFeed = console.NewJobFeed(ctx, bWatcher, opts.Magus.Root(), func() []jobtypes.Job {
 					rows, err := opts.Jobs.List()
 					if err != nil {
 						return nil
@@ -420,7 +420,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// nothing rather than failing the mount: without them the stream still serves
 			// the guard's observations, which is what this service served before.
 			activitySvc := activityhandler.NewService(s.activityWorkspaces(),
-				activityhandler.WithJobs(func() []types.Job {
+				activityhandler.WithJobs(func() []jobtypes.Job {
 					rows, jerr := opts.Jobs.List()
 					if jerr != nil {
 						return nil
@@ -677,17 +677,17 @@ type frame struct {
 	allowed     httpx.AllowedSet
 	siteAllowed httpx.AllowedSet
 	cors        func(http.Handler) http.Handler
-	needs       map[string]types.Need
+	needs       map[string]jobtypes.Need
 	errs        []error
 	// socketMux is what the server mounts on its unix socket, nil without WithSocket, and
 	// socketNeeds the Need of each path on it.
 	socketMux   *http.ServeMux
-	socketNeeds map[string]types.Need
+	socketNeeds map[string]jobtypes.Need
 }
 
 // socketRoute mounts h at pattern on the socket mux, when there is one, holding each path to
 // its Need against the credential the socket stamped.
-func (f *frame) socketRoute(pattern string, format rpcerr.Format, needs map[string]types.Need, h http.Handler) {
+func (f *frame) socketRoute(pattern string, format rpcerr.Format, needs map[string]jobtypes.Need, h http.Handler) {
 	if f.socketMux == nil {
 		return
 	}
@@ -703,7 +703,7 @@ func (f *frame) socketRoute(pattern string, format rpcerr.Format, needs map[stri
 // guard mounts h at pattern behind wrap, then the bearer guard holding each path to its need.
 // wrap runs first, so it can answer a tokenless CORS preflight. Every guarded mount on the
 // loopback listener goes through here.
-func (f *frame) guard(pattern string, format rpcerr.Format, needs map[string]types.Need, wrap func(http.Handler) http.Handler, h http.Handler, opts ...httpx.GuardOption) {
+func (f *frame) guard(pattern string, format rpcerr.Format, needs map[string]jobtypes.Need, wrap func(http.Handler) http.Handler, h http.Handler, opts ...httpx.GuardOption) {
 	g, err := httpx.ProcedureGuard(format, auth.Verify, needs, h, opts...)
 	if err != nil {
 		f.errs = append(f.errs, fmt.Errorf("server: %s: %w", pattern, err))
@@ -781,9 +781,9 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 	// only to be refused for want of a token, with a response it cannot read, throttled
 	// past a burst; the token is the whole boundary. Health routes are left unguarded so
 	// container orchestrators can probe them freely.
-	f := &frame{allowed: httpx.AllowedHosts(addr), needs: map[string]types.Need{}}
+	f := &frame{allowed: httpx.AllowedHosts(addr), needs: map[string]jobtypes.Need{}}
 	if s.socket != nil {
-		f.socketMux, f.socketNeeds = http.NewServeMux(), map[string]types.Need{}
+		f.socketMux, f.socketNeeds = http.NewServeMux(), map[string]jobtypes.Need{}
 	}
 	bind := httpx.NewServer
 	if !addr.Addr().IsLoopback() {
@@ -802,7 +802,7 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 		handler.LimitRequestBody(w, r)
 		mcpHandler.ServeHTTP(w, r)
 	})
-	mcpNeeds := map[string]types.Need{"/mcp": needMCP}
+	mcpNeeds := map[string]jobtypes.Need{"/mcp": needMCP}
 	if s.opts.Config.MCP.HTTPEnabled() {
 		preflight, allow := httpx.OpenCORS(mcpCORS)
 		limit := httpx.NewFailureLimiter(mcpFailuresPerSecond, mcpFailureBurst)

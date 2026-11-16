@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/clikit/exit"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -20,7 +21,7 @@ const PushUnverifiedRule = "push-unverified"
 
 // GrantJobRule records the grant of rule to job id and tells out. emit, when not nil,
 // writes the grant as the structured record instead of the sentence.
-func GrantJobRule(ctx context.Context, store *job.Store, out io.Writer, emit func(types.JobGrant) error, id, rule string, lasting time.Duration) error {
+func GrantJobRule(ctx context.Context, store *job.Store, out io.Writer, emit func(jobtypes.Grant) error, id, rule string, lasting time.Duration) error {
 	var until int64
 	if lasting > 0 {
 		until = time.Now().Add(lasting).Unix()

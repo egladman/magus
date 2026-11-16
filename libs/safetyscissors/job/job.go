@@ -1,9 +1,11 @@
-package types
+package job
 
 import (
 	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -13,51 +15,50 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	"github.com/egladman/magus/types/agent"
 )
 
-// errInvalidJob opens every error a job record's validation returns.
-
-// JobState is where one lease stands. The three terminal values are
+// State is where one lease stands. The three terminal values are
 // the point of the set: a job that never reaches one is a job nobody closed.
 //
 // NoReturn is deliberately distinct from Fail. A worker that died, stalled, or was
 // killed produced no verdict at all, and folding that into "failed" claims a judgment
 // nobody made: the root agent still has to go look. Silence is not a pass, and it is
 // not a failure either.
-type JobState string
+type State string
 
 const (
 	// StateDeclared is a job written before its worker was spawned.
-	StateDeclared JobState = "declared"
+	StateDeclared State = "declared"
 	// StateRunning is a holder in flight.
-	StateRunning JobState = "running"
+	StateRunning State = "running"
 	// StateExited is a job its holder returned, with a result filed and nobody waiting on
 	// it yet. The POSIX reading exactly: the child is done and its status has not been
 	// collected, which is neither "still working" nor any judgment of the work.
-	StateExited JobState = "exited"
+	StateExited State = "exited"
 	// StatePass is a job whose acceptance criteria and assigned check both
 	// passed, as judged by the agent that owns it.
-	StatePass JobState = "pass"
+	StatePass State = "pass"
 	// StateFail is a lease that returned and did not meet its criteria.
-	StateFail JobState = "fail"
+	StateFail State = "fail"
 	// StateNoReturn is a lease that never reported: dead, stalled, or cancelled.
-	StateNoReturn JobState = "no_return"
+	StateNoReturn State = "no_return"
 )
 
-// JobStates is the closed set, in lifecycle order. The vocabulary lives beside the
+// States is the closed set, in lifecycle order. The vocabulary lives beside the
 // constants because four readers quote it: the job decoder, the put merge, the
 // published schema, and the error each of them raises. A closed set that drifts
 // rejects a client for a value the schema told it to send.
-func JobStates() []JobState {
-	return []JobState{StateDeclared, StateRunning, StateExited, StatePass, StateFail, StateNoReturn}
+func States() []State {
+	return []State{StateDeclared, StateRunning, StateExited, StatePass, StateFail, StateNoReturn}
 }
 
-// ValidJobState reports whether s is one of [JobStates]. An empty state is NOT.
+// ValidState reports whether s is one of [States]. An empty state is NOT.
 // A job that has not said where it stands carries none, and the callers that
 // allow that test for it themselves.
-func ValidJobState(s JobState) bool { return slices.Contains(JobStates(), s) }
+func ValidState(s State) bool { return slices.Contains(States(), s) }
 
 // LeaseCheck is the one check a lease runs, in the parts the output store records a run
 // by. The parts are the target, the project it runs in, and whatever
@@ -167,7 +168,7 @@ const (
 	GoalKindSymbol GoalKind = "symbol"
 )
 
-// GoalKinds is the closed set, for the same reason JobStates is one: the validator, the
+// GoalKinds is the closed set, for the same reason States is one: the validator, the
 // published schema and the error each of them raises all quote it, and a vocabulary that
 // drifts rejects a client for a value the schema told it to send.
 func GoalKinds() []GoalKind {
@@ -366,7 +367,7 @@ func ParseLeaseRunLine(s string) (LeaseCheck, error) {
 	return ParseLeaseCheck(strings.Join(words[1:], " "))
 }
 
-// JobBaseVerdict says how the base a worker reported at registration compares
+// BaseVerdict says how the base a worker reported at registration compares
 // with the Checkpoint its lease was handed. A FACT computed at that moment, never a
 // refusal: a diverged worker is registered like any other and told what diverged.
 //
@@ -374,26 +375,26 @@ func ParseLeaseRunLine(s string) (LeaseCheck, error) {
 // dirty-patch digest, so two trees can share a revision and hold different uncommitted
 // work; that is neither agreement nor the kind of divergence a respawn fixes, and folding
 // it into either one sends the worker to the wrong remedy.
-type JobBaseVerdict string
+type BaseVerdict string
 
 const (
 	// BaseMatch is a reported base identical to the checkpoint, digest included.
-	BaseMatch JobBaseVerdict = "match"
+	BaseMatch BaseVerdict = "match"
 	// BaseRevisionMatch is the same revision carrying a different uncommitted patch.
-	BaseRevisionMatch JobBaseVerdict = "revision-match"
+	BaseRevisionMatch BaseVerdict = "revision-match"
 	// BaseDiverged is a different revision: the worker is not on the tree it was handed.
-	BaseDiverged JobBaseVerdict = "diverged"
+	BaseDiverged BaseVerdict = "diverged"
 	// BaseUnknown is a registration with nothing to compare against, because the lease was
 	// declared without a Checkpoint. Distinct from BaseMatch on the same ground
 	// StateNoReturn is distinct from StateFail: claiming agreement nobody observed is a
 	// judgment the ledger did not make.
-	BaseUnknown JobBaseVerdict = "unknown"
+	BaseUnknown BaseVerdict = "unknown"
 )
 
 // Terminal reports whether the lease is done, however it ended. It keeps a finished lease
 // out of the overlap report below, and it is what `ledger accept` reads to refuse
 // re-grading a job somebody already graded.
-func (s JobState) Terminal() bool {
+func (s State) Terminal() bool {
 	return s == StatePass || s == StateFail || s == StateNoReturn
 }
 
@@ -406,19 +407,19 @@ func (s JobState) Terminal() bool {
 // rejects sends it back to the same write paths; dropping the job out of live here would
 // leave every write after `job exit` graded by nothing at all. What an exited job no
 // longer does is claim its paths against another job: it blocks no other fork and is in
-// no overlap (see [JobState.Editing]).
-func (s JobState) Live() bool {
+// no overlap (see [State.Editing]).
+func (s State) Live() bool {
 	return s == StateDeclared || s == StateRunning || s == StateExited
 }
 
 // Editing reports whether a holder may still be writing the job's paths: declared or
 // running. Only an editing job claims its write paths against another job's.
-func (s JobState) Editing() bool {
+func (s State) Editing() bool {
 	return s == StateDeclared || s == StateRunning
 }
 
 // PathHolders are the jobs that hold their write paths against everyone else
-// now. These are the [JobState.Editing] ones. An exited job filed its result
+// now. These are the [State.Editing] ones. An exited job filed its result
 // and holds nothing, so an output in its paths is anyone's to regenerate.
 // The write judge and the run-output judge both read ownership here. rows is
 // not modified.
@@ -426,36 +427,36 @@ func PathHolders(rows []Job) []Job {
 	return slices.DeleteFunc(slices.Clone(rows), func(r Job) bool { return !r.State.Editing() })
 }
 
-// DefaultJobWeight is the weight of a job that names none, and of a run bound to no job.
-const DefaultJobWeight = 0.5
+// DefaultWeight is the weight of a job that names none, and of a run bound to no job.
+const DefaultWeight = 0.5
 
-// ValidJobWeight reports whether w is in (0,1]. Out of range is refused, never clamped.
-func ValidJobWeight(w float64) bool { return w > 0 && w <= 1 }
+// ValidWeight reports whether w is in (0,1]. Out of range is refused, never clamped.
+func ValidWeight(w float64) bool { return w > 0 && w <= 1 }
 
-// MaxJobIDLen bounds a lease id: long enough for a branch-shaped ledger name, short
+// MaxIDLen bounds a lease id: long enough for a branch-shaped ledger name, short
 // enough that the id stays a correlation key rather than a payload riding every event
 // line.
-const MaxJobIDLen = 128
+const MaxIDLen = 128
 
-// ValidJobID reports whether id may be stamped as a lease and checked out as a branch:
-// see [JobIDRule].
+// ValidID reports whether id may be stamped as a lease and checked out as a branch:
+// see [IDRule].
 //
 // The narrowness is a security property: a lease id is EXEMPT from the redaction
 // internal/trail applies to every other event field, so every channel that stamps one
 // passes its candidate through here first. It lives beside [Job] because the ledger and
 // the trail both read the id.
-func ValidJobID(id string) bool { return JobIDRule(id) == "" }
+func ValidID(id string) bool { return IDRule(id) == "" }
 
-// JobIDRule names the rule id breaks, or returns "" for a valid id. The id is also the
+// IDRule names the rule id breaks, or returns "" for a valid id. The id is also the
 // branch ForkWorktree creates, so it is held to what every driver accepts as one:
 // lowercase letters, digits, '-' and '.', with '/' only between segments, no segment
-// empty or starting with '.' or '-', never ':' or '..', at most [MaxJobIDLen] characters.
-func JobIDRule(id string) string {
+// empty or starting with '.' or '-', never ':' or '..', at most [MaxIDLen] characters.
+func IDRule(id string) string {
 	switch {
 	case id == "":
 		return "an id is not empty"
-	case len(id) > MaxJobIDLen:
-		return fmt.Sprintf("an id is at most %d characters", MaxJobIDLen)
+	case len(id) > MaxIDLen:
+		return fmt.Sprintf("an id is at most %d characters", MaxIDLen)
 	case strings.Contains(id, ".."):
 		return "an id never contains .."
 	}
@@ -479,17 +480,17 @@ func JobIDRule(id string) string {
 	return ""
 }
 
-// JobAPIVersion is the job shape this magus writes and the only one a
-// client may send. [JobSchema] is its ledger. An added field does not
-// move it, since [Schema].Unknown carries unknown members through a
-// rewrite. JobSchema.Requires names what each later version brings.
-const JobAPIVersion APIVersion = "magus.job/v1alpha1"
+// APIVersion is the job shape this module writes and the only one a
+// client may send. An added field does not move it, since [Schema].Unknown
+// carries unknown members through a rewrite. It is untyped so that a
+// caller's own version type, as magus's types.APIVersion, takes it as it is.
+const APIVersion = "magus.job/v1alpha1"
 
-// JobResultAPIVersion is the result shape a holder files, the only one
+// ResultAPIVersion is the result shape a holder files, the only one
 // the decoder accepts.
-const JobResultAPIVersion APIVersion = "magus.job-result/v1alpha1"
+const ResultAPIVersion = "magus.job-result/v1alpha1"
 
-// JobWriteProof is what the fork could prove about a job's write paths against the other
+// WriteProof is what the fork could prove about a job's write paths against the other
 // live jobs bound to the SAME CHECKOUT, or not bound to any yet, at the moment it was
 // declared.
 //
@@ -498,18 +499,18 @@ const JobResultAPIVersion APIVersion = "magus.job-result/v1alpha1"
 // orchestrator can make: it may have sequenced them, or split one file deliberately. What
 // nobody could do before is READ that call back afterwards, so a plan full of overlapping
 // write paths and a plan whose write paths were checked looked identical.
-type JobWriteProof string
+type WriteProof string
 
 const (
 	// WriteProofAlone is a fork made when no other live job with write paths was bound to
 	// the checkout or still waiting to be taken in it. There was nothing to be disjoint
 	// FROM, which is not the same claim as disjoint and is why it is its own value.
-	WriteProofAlone JobWriteProof = "alone"
+	WriteProofAlone WriteProof = "alone"
 	// WriteProofDisjoint is a job whose write paths intersect no other such job's here.
-	WriteProofDisjoint JobWriteProof = "disjoint"
+	WriteProofDisjoint WriteProof = "disjoint"
 	// WriteProofOverlapping is one whose write paths intersect another's. The fork stands;
 	// the job says so.
-	WriteProofOverlapping JobWriteProof = "overlapping"
+	WriteProofOverlapping WriteProof = "overlapping"
 )
 
 // LeaseSource is which channel answered the lease a call acts under. Every source but
@@ -537,12 +538,12 @@ const (
 	LeaseSourceEnv LeaseSource = "env"
 )
 
-// JobResult is the result a holder files for a job.
-type JobResult struct {
+// Result is the result a holder files for a job.
+type Result struct {
 	Schema               `yaml:",inline"`
 	Job                  string                 `json:"job,omitempty" yaml:"job,omitempty"`
 	ChangedPaths         []string               `json:"changed_paths" yaml:"changed_paths"`
-	Validation           JobResultValidation    `json:"validation,omitempty" yaml:"validation,omitempty"`
+	Validation           ResultValidation       `json:"validation,omitempty" yaml:"validation,omitempty"`
 	VerificationEvidence []VerificationEvidence `json:"verification_evidence,omitempty" yaml:"verification_evidence,omitempty"`
 	Descendants          []string               `json:"descendants,omitempty" yaml:"descendants,omitempty"`
 	UnresolvedRisks      []string               `json:"unresolved_risks" yaml:"unresolved_risks"`
@@ -566,9 +567,9 @@ type VerificationEvidence struct {
 	Unrun string `json:"unrun,omitempty" yaml:"unrun,omitempty"`
 }
 
-// JobResultValidation cites the output for a job's primary check, or names in Owed why its
+// ResultValidation cites the output for a job's primary check, or names in Owed why its
 // run is owed to the integration, as [VerificationEvidence] does.
-type JobResultValidation struct {
+type ResultValidation struct {
 	Command   string `json:"command" yaml:"command"`
 	OutputRef string `json:"output_ref" yaml:"output_ref"`
 	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
@@ -586,8 +587,8 @@ const OwedNoSeat = "no seat"
 // remote CI (ci.remote_gate) that runs it on the pull request.
 const OwedRemoteCI = "remote CI runs it"
 
-// JobStatus reports the result of verifying a job.
-type JobStatus struct {
+// Status reports the result of verifying a job.
+type Status struct {
 	Job             string               `json:"job" yaml:"job"`
 	Verified        bool                 `json:"verified" yaml:"verified"`
 	Violations      []string             `json:"violations,omitempty" yaml:"violations,omitempty"`
@@ -616,7 +617,7 @@ type JobStatus struct {
 	FootprintUnclaimed []string `json:"footprint_unclaimed,omitempty" yaml:"footprint_unclaimed,omitempty"`
 	// Entries are the job's recorded entries, so a footprint line in an entered path reads
 	// as the entrant's write rather than the holder's.
-	Entries []JobEntry `json:"entries,omitempty" yaml:"entries,omitempty"`
+	Entries []Entry `json:"entries,omitempty" yaml:"entries,omitempty"`
 	// LinesAdded and LinesDeleted sum the Footprint's new and old sides, so they mean
 	// something only when FootprintKnown does.
 	LinesAdded   int `json:"lines_added" yaml:"lines_added"`
@@ -636,7 +637,7 @@ type JobStatus struct {
 }
 
 // Clean reports whether the holder's result left no risk unresolved.
-func (s JobStatus) Clean() bool { return len(s.UnresolvedRisks) == 0 }
+func (s Status) Clean() bool { return len(s.UnresolvedRisks) == 0 }
 
 // VerificationStatus reports verification of one goal.
 type VerificationStatus struct {
@@ -652,8 +653,8 @@ type VerificationStatus struct {
 	Violations []string `json:"violations,omitempty" yaml:"violations,omitempty"`
 }
 
-// JobAttempt is the stored record for one captured run.
-type JobAttempt struct {
+// CapturedRun is the stored record for one captured run.
+type CapturedRun struct {
 	Found       bool   `json:"found" yaml:"found"`
 	Ref         string `json:"ref,omitempty" yaml:"ref,omitempty"`
 	TimestampMs int64  `json:"timestamp_ms,omitempty" yaml:"timestamp_ms,omitempty"`
@@ -681,14 +682,14 @@ type JobAttempt struct {
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
-// JobGateAttempt is the stored output record for one goal.
-type JobGateAttempt struct {
-	GateID  string     `json:"gate_id" yaml:"gate_id"`
-	Attempt JobAttempt `json:"attempt" yaml:"attempt"`
+// GateAttempt is the stored output record for one goal.
+type GateAttempt struct {
+	GateID  string      `json:"gate_id" yaml:"gate_id"`
+	Attempt CapturedRun `json:"attempt" yaml:"attempt"`
 }
 
 // String renders the recorded command.
-func (a JobAttempt) String() string {
+func (a CapturedRun) String() string {
 	target := a.Target
 	if a.Spell != "" {
 		target = fmt.Sprintf("%s::%s", a.Spell, target)
@@ -696,12 +697,12 @@ func (a JobAttempt) String() string {
 	return LeaseCheck{Target: target, Project: a.Project, Args: a.ExtraArgs}.String()
 }
 
-// JobPaths is a job's declared boundary. Write and Deny bound what its lease
+// Paths is a job's declared boundary. Write and Deny bound what its lease
 // writes, and are empty on a read-only lease by design. Read widens what it
 // reads, each entry to its project's dependencies. Read is its own list
 // because a worker that must read a shared library must not be handed the
 // right to write it.
-type JobPaths struct {
+type Paths struct {
 	// Write entries of the form `<file>#<declaration>` claim one
 	// declaration of the file (see SplitClaim).
 	Write []string `json:"write,omitempty" yaml:"write,omitempty" schema:"writepath"`
@@ -735,14 +736,14 @@ type Job struct {
 	Parent string `json:"parent,omitempty" yaml:"parent,omitempty"`
 	// Agent is the agent section: the requested model, the instructions and
 	// the worker. Nil is ordinary work, and nothing graded reads it.
-	Agent *agent.Spec `json:"agent,omitempty" yaml:"agent,omitempty"`
+	Agent *Agent `json:"agent,omitempty" yaml:"agent,omitempty"`
 	// Checkpoint is the working state this lease was handed, in the form
 	// `magus vcs checkpoint -o name` prints: the revision, plus a dirty-patch digest
 	// when the tree was not clean. A string, the form an orchestrator has at
 	// spawn time and `magus graph diff --rev` takes.
 	Checkpoint string `json:"checkpoint,omitempty" yaml:"checkpoint,omitempty"`
-	// Paths are the declared write and read boundary. See [JobPaths].
-	Paths JobPaths `json:"paths,omitzero" yaml:"paths,omitempty"`
+	// Paths are the declared write and read boundary. See [Paths].
+	Paths Paths `json:"paths,omitzero" yaml:"paths,omitempty"`
 	// DependsOn are the ids of leases that must land before this one, so a reader can
 	// see the ordering the orchestrator committed to.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
@@ -763,7 +764,7 @@ type Job struct {
 	// the workspace's agents.brief_format. Empty defers to magus.yaml.
 	BriefFormat BriefFormat `json:"brief_format,omitempty" yaml:"brief_format,omitempty"`
 	// Delivery is how the person chose to deliver this job's work, one of
-	// JobDeliveries; empty means nobody chose. Workspace policy judges it.
+	// Deliveries; empty means nobody chose. Workspace policy judges it.
 	Delivery string `json:"delivery,omitempty" yaml:"delivery,omitempty"`
 	// ParentHead is the branch a stacked job's pull request is based on.
 	ParentHead string `json:"parent_head,omitempty" yaml:"parent_head,omitempty"`
@@ -779,7 +780,7 @@ type Job struct {
 	// Claims are the write paths this attempt's holder added with a proof the store
 	// re-proved, oldest first. Store-computed like ModelTier; a fork of the next attempt
 	// starts it over.
-	Claims []JobClaim `json:"claims,omitempty" yaml:"claims,omitempty"`
+	Claims []Claim `json:"claims,omitempty" yaml:"claims,omitempty"`
 	// Generation counts changes to the declared spec, as Kubernetes'
 	// metadata.generation does. Store-computed. A result, attempt or grade
 	// taken against an earlier Generation reads as stale; zero is unknown.
@@ -792,7 +793,7 @@ type Job struct {
 	// job; zero takes the default. A fork raising it past jobs.max_claims is refused.
 	MaxClaims int `json:"max_claims,omitempty" yaml:"max_claims,omitempty"`
 	// Deferred answers the items the job's result left for later.
-	Deferred []JobDeferred `json:"deferred,omitempty" yaml:"deferred,omitempty"`
+	Deferred []Deferred `json:"deferred,omitempty" yaml:"deferred,omitempty"`
 	// LeftUnmerged is the stated reason the job's work stays off the merge
 	// branch. It exempts the job's work and its deferred items.
 	LeftUnmerged string `json:"left_unmerged,omitempty" yaml:"left_unmerged,omitempty"`
@@ -800,7 +801,7 @@ type Job struct {
 	// on the base or in an integration. EndReason says where, for a person.
 	Landed bool `json:"landed,omitempty" yaml:"landed,omitempty"`
 	// Weight is a lean, never a guarantee: a run bound to the job carries it on its
-	// budget.Claim. In (0,1]; zero reads as DefaultJobWeight.
+	// budget.Claim. In (0,1]; zero reads as DefaultWeight.
 	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`
 	// Paused is the unix second a person paused the job, zero while it is not. A claim the
 	// holder already has finishes; exec and the guard refuse its next magus run.
@@ -813,7 +814,7 @@ type Job struct {
 	// Rejection is the last `magus job wait` that refused the live try,
 	// which leaves State where it was. Store-computed. The tries are
 	// [Attempt] records beside the job.
-	Rejection *JobRejection `json:"rejection,omitempty" yaml:"rejection,omitempty"`
+	Rejection *Rejection `json:"rejection,omitempty" yaml:"rejection,omitempty"`
 	// Check is the one check this lease runs. See [LeaseCheck].
 	Check *LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
 	// Validation is Check rendered as the command that runs it.
@@ -828,9 +829,9 @@ type Job struct {
 	// or symbols this job changed, added or removed. Check is graded as one more goal. Named
 	// goals rather than gates so the word never collides with the CI gate.
 	Goals []Goal `json:"goals,omitempty" yaml:"goals,omitempty"`
-	// State is the job's lifecycle position. See JobState for why no_return is
+	// State is the job's lifecycle position. See State for why no_return is
 	// its own value.
-	State JobState `json:"state,omitempty" yaml:"state,omitempty"`
+	State State `json:"state,omitempty" yaml:"state,omitempty"`
 	// ReadOnly marks the abbreviated job the skill describes: it gathers
 	// evidence and writes nothing, so empty WritePaths and DenyPaths are
 	// correct rather than missing.
@@ -839,23 +840,23 @@ type Job struct {
 	// carried at that moment. Store-computed and output-only, like the timestamps: a
 	// worker announces a release by shrinking WritePaths, and the digest is what the
 	// next agent needs to tell whether it inherited the file the releaser left.
-	Releases []JobRelease `json:"releases,omitempty" yaml:"releases,omitempty"`
+	Releases []Release `json:"releases,omitempty" yaml:"releases,omitempty"`
 	// Unattributed are paths this lease owns that somebody outside it wrote,
 	// newest last, at most MaxUnattributedWrites and one entry per path. The
 	// AGENT GUARD records them. Store-computed.
-	Unattributed []JobUnattributedWrite `json:"unattributed,omitempty" yaml:"unattributed,omitempty"`
+	Unattributed []UnattributedWrite `json:"unattributed,omitempty" yaml:"unattributed,omitempty"`
 	// Entries are the acknowledged writes into this job's write paths by
 	// somebody other than its holder, oldest first, at most two per job.
 	// Store-computed like Releases.
-	Entries []JobEntry `json:"entries,omitempty" yaml:"entries,omitempty"`
+	Entries []Entry `json:"entries,omitempty" yaml:"entries,omitempty"`
 	// ReleaseRequests are refused forks asking the holder to release write
 	// paths. Store-computed, and here so a hook reads them without a fold.
-	ReleaseRequests []JobReleaseRequest `json:"release_requests,omitempty" yaml:"release_requests,omitempty" buzz:"-"`
+	ReleaseRequests []ReleaseRequest `json:"release_requests,omitempty" yaml:"release_requests,omitempty" buzz:"-"`
 	// WriteProof is what the fork could prove about this job's write paths against the
 	// other live jobs bound to the checkout it was declared in. Store-computed and
 	// output-only like Releases: it is a fact about the plan at one instant, and a caller
-	// that could assert it could assert the proof it stands for. See [JobWriteProof].
-	WriteProof JobWriteProof `json:"write_proof,omitempty" yaml:"write_proof,omitempty"`
+	// that could assert it could assert the proof it stands for. See [WriteProof].
+	WriteProof WriteProof `json:"write_proof,omitempty" yaml:"write_proof,omitempty"`
 	// Deviations are the permissible problems the declaration accepted, copied from it.
 	Deviations []Deviation `json:"deviations,omitempty" yaml:"deviations,omitempty"`
 	// Validated is when the store last validated the whole record, in unix
@@ -871,7 +872,7 @@ type Job struct {
 	// registered and kept as the fact it was then. Empty until a lease registers, which is
 	// why there is no vocabulary member for "never registered": an absent verdict is not
 	// a judgment, and inventing one would be the mistake StateNoReturn exists to avoid.
-	BaseVerdict JobBaseVerdict `json:"base_verdict,omitempty" yaml:"base_verdict,omitempty"`
+	BaseVerdict BaseVerdict `json:"base_verdict,omitempty" yaml:"base_verdict,omitempty"`
 	// RegisteredBy is where the write that CREATED this job came from.
 	// The store stamps it on the first write. Distinct from Registered, when a
 	// WORKER reported its base.
@@ -894,7 +895,7 @@ type Job struct {
 	// Worktree is the checkout a fork made or adopted for this job (see [Declaration.Checkout]), nil
 	// when the job works wherever it is taken. Store-computed like CheckoutRoot: only the
 	// fork that made it and the removal at the job's end write it.
-	Worktree *JobWorktree `json:"worktree,omitempty" yaml:"worktree,omitempty"`
+	Worktree *Worktree `json:"worktree,omitempty" yaml:"worktree,omitempty"`
 	// EndReason is why the job ended as no_return: the sweep's reason, or which
 	// end a holder's or a person's exit was. Store-computed; see
 	// job.Store.List for the sweep's rules.
@@ -911,18 +912,18 @@ type Job struct {
 	// Attempt is the run record behind the live try's result, resolved
 	// in the holder's OWN checkout, so a waiter in another checkout
 	// reopens it. The result is on the [Attempt].
-	Attempt *JobAttempt `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	Attempt *CapturedRun `json:"attempt,omitempty" yaml:"attempt,omitempty"`
 	// GateAttempts are the portable output-store snapshots for every explicit goal.
 	// Attempt remains the snapshot for the primary Check.
-	GateAttempts []JobGateAttempt `json:"gate_attempts,omitempty" yaml:"gate_attempts,omitempty"`
+	GateAttempts []GateAttempt `json:"gate_attempts,omitempty" yaml:"gate_attempts,omitempty"`
 	// LastRun is the job's most recent run, nil until one is submitted. The
 	// invocation id lands at submit, the cost and outcome when the run ends.
-	LastRun *JobRun `json:"last_run,omitempty" yaml:"last_run,omitempty"`
+	LastRun *Run `json:"last_run,omitempty" yaml:"last_run,omitempty"`
 	// Integration is the latest grade of this job's check goals in another tree, nil until
 	// `magus job wait --integration` records one. Store-computed like Result, and kept
 	// beside State rather than moving it: a job that passed where it was written and fails
 	// once merged is two facts, and one field could hold only the later.
-	Integration *JobIntegration `json:"integration,omitempty" yaml:"integration,omitempty"`
+	Integration *Integration `json:"integration,omitempty" yaml:"integration,omitempty"`
 	// WaiterEvidence names the goals whose passing run came from the waiter's checkout
 	// rather than the holder's, nil unless `magus job wait --evidence` took some. It sits
 	// beside GateAttempts, which keep the holder's own attempts untouched: a goal that
@@ -930,16 +931,16 @@ type Job struct {
 	// Gates entry is one goal, the ref taken for it and its verdict; Checkout and At say
 	// where and when.
 	//
-	// A JobIntegration because the record is the same one --integration keeps: goals graded
+	// A Integration because the record is the same one --integration keeps: goals graded
 	// against runs in another checkout. What differs is only that these verdicts moved the
 	// job's state, so the record exists only for a job that passed.
-	WaiterEvidence *JobIntegration `json:"waiter_evidence,omitempty" yaml:"waiter_evidence,omitempty"`
+	WaiterEvidence *Integration `json:"waiter_evidence,omitempty" yaml:"waiter_evidence,omitempty"`
 }
 
-// JobWorktree is the checkout `magus job fork --checkout` made or adopted for one job: the
+// Worktree is the checkout `magus job fork --checkout` made or adopted for one job: the
 // job's holder takes it there and nowhere else. One the fork made (Made) magus removes once
 // the job ends unless removing it would lose work.
-type JobWorktree struct {
+type Worktree struct {
 	// Root is the checkout's top level, absolute.
 	Root string `json:"root" yaml:"root"`
 	// Source is the checkout the fork made it from, which removes it: an hg share or a jj
@@ -968,11 +969,11 @@ type JobWorktree struct {
 
 // Standing reports whether the checkout has not been removed: it binds its job's holder,
 // and the guard treats it as its job's own.
-func (w *JobWorktree) Standing() bool { return w != nil && w.Removed == 0 }
+func (w *Worktree) Standing() bool { return w != nil && w.Removed == 0 }
 
-// JobIntegration is a job's check goals graded against runs recorded in Checkout, the tree
+// Integration is a job's check goals graded against runs recorded in Checkout, the tree
 // an integration branch was merged into, at At (unix seconds).
-type JobIntegration struct {
+type Integration struct {
 	Checkout string               `json:"checkout" yaml:"checkout"`
 	At       int64                `json:"at" yaml:"at"`
 	Verified bool                 `json:"verified" yaml:"verified"`
@@ -981,17 +982,17 @@ type JobIntegration struct {
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
-// JobRejection is a `magus job wait` that refused the live attempt, At unix seconds.
-type JobRejection struct {
+// Rejection is a `magus job wait` that refused the live attempt, At unix seconds.
+type Rejection struct {
 	Unmet              []VerificationStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
 	Violations         []string             `json:"violations,omitempty"          yaml:"violations,omitempty"`
 	At                 int64                `json:"at"                            yaml:"at"`
 	ObservedGeneration int                  `json:"observed_generation,omitzero"  yaml:"observed_generation,omitempty"`
 }
 
-// JobDenial is one guard denial of a job's holder, Ts unix seconds. VerdictRef reopens the
+// Denial is one guard denial of a job's holder, Ts unix seconds. VerdictRef reopens the
 // guard's verdict.
-type JobDenial struct {
+type Denial struct {
 	Rule       string `json:"rule"                  yaml:"rule"`
 	Reason     string `json:"reason,omitempty"      yaml:"reason,omitempty"`
 	Action     string `json:"action,omitempty"      yaml:"action,omitempty"`
@@ -1019,12 +1020,12 @@ type Declaration struct {
 	// Parent is the lease this one was spawned under, empty for a lease the root declared.
 	Parent string `json:"parent,omitempty" schema:"leaseid"`
 	// Agent is the agent section; nil is ordinary work. See [Job.Agent].
-	Agent *agent.Spec `json:"agent,omitempty"`
+	Agent *Agent `json:"agent,omitempty"`
 	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
 	// name` prints it.
 	Checkpoint string `json:"checkpoint,omitempty"`
-	// Paths are what this lease may write and read. See [JobPaths].
-	Paths JobPaths `json:"paths,omitzero"`
+	// Paths are what this lease may write and read. See [Paths].
+	Paths Paths `json:"paths,omitzero"`
 	// DependsOn names the lease ids that must land before this one.
 	DependsOn []string `json:"depends_on,omitempty" schema:"leaseid"`
 	// Integrates names the branches this job merges; see [Job.Integrates].
@@ -1046,7 +1047,7 @@ type Declaration struct {
 	// Checkout is an absolute directory, outside the workspace, where the fork makes a new
 	// checkout of the repository for this job at its checkpoint, or at the forking
 	// checkout's revision when it names none.
-	// The job owns it: see [JobWorktree]. Empty works wherever the job is taken.
+	// The job owns it: see [Worktree]. Empty works wherever the job is taken.
 	Checkout string `json:"checkout,omitempty" schema:"abspath"`
 	// compat(until: no client or stored ledger still sends owned_paths, focus
 	// or forbidden_paths): see Declaration. Observe it by grepping the
@@ -1064,7 +1065,7 @@ type Declaration struct {
 	// State is the job's lifecycle position, empty for a job that has not said
 	// where it stands. no_return is a lease that never reported, which is not
 	// a failure.
-	State JobState `json:"state,omitempty"`
+	State State `json:"state,omitempty"`
 	// ReadOnly marks a lease that gathers evidence and writes nothing, so empty write
 	// paths are correct rather than missing.
 	ReadOnly bool `json:"read_only,omitempty"`
@@ -1087,7 +1088,7 @@ type Declaration struct {
 	// MaxClaims caps how many proved claims one attempt takes; zero takes the default. See
 	// [Job.MaxClaims].
 	MaxClaims int `json:"max_claims,omitempty"`
-	// Deviations accept permissible problems (see [Permissible]) on the record's own authority.
+	// Deviations accept permissible problems on the record's own authority.
 	Deviations []Deviation `json:"deviations,omitempty"`
 	// Enter turns the record into an entry rather than a declaration: it acknowledges one
 	// write into this path, inside the write paths of the live job ID names, by somebody
@@ -1096,25 +1097,25 @@ type Declaration struct {
 	// Claim turns the record into a proved claim of the job ID names: each entry adds
 	// one write path with the proof the store re-proves before it writes. A record carrying
 	// it declares nothing else.
-	Claim []JobClaimRequest `json:"claim,omitempty"`
+	Claim []ClaimRequest `json:"claim,omitempty"`
 	// Deferred and LeftUnmerged turn the record into a settlement of the
 	// job ID names, ended or not. It declares nothing else.
-	Deferred     []JobDeferred `json:"deferred,omitempty"`
-	LeftUnmerged string        `json:"left_unmerged,omitempty"`
+	Deferred     []Deferred `json:"deferred,omitempty"`
+	LeftUnmerged string     `json:"left_unmerged,omitempty"`
 }
 
-// JobDeferred answers one item of a job's result. Item is its exact text.
+// Deferred answers one item of a job's result. Item is its exact text.
 // Exactly one of Job, the declared job carrying it, and Reason, why it is
 // dismissed, is set.
-type JobDeferred struct {
+type Deferred struct {
 	Item   string `json:"item"             yaml:"item"`
 	Job    string `json:"job,omitempty"    yaml:"job,omitempty" schema:"leaseid"`
 	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
 }
 
-// JobUnmerged is one fact against a job: work off the merge branch, or a
+// Unmerged is one fact against a job: work off the merge branch, or a
 // deferred item nothing answers. Head is empty when no commit could be read.
-type JobUnmerged struct {
+type Unmerged struct {
 	Job  string `json:"job"            yaml:"job"`
 	Head string `json:"head,omitempty" yaml:"head,omitempty"`
 	// Item is the deferred item's text, empty for a fact about the work.
@@ -1123,22 +1124,22 @@ type JobUnmerged struct {
 	Remedy string `json:"remedy"         yaml:"remedy"`
 }
 
-// JobUnmergedReport is what the checkout's branch does not hold. Unknown says
+// UnmergedReport is what the checkout's branch does not hold. Unknown says
 // why the branch could not be read: Jobs then holds deferred items only, and
 // a job absent from it is not thereby merged. Risks are unanswered unresolved
 // risks: listed for reading, and no work the branch lacks.
-type JobUnmergedReport struct {
-	Branch  string        `json:"branch,omitempty"  yaml:"branch,omitempty"`
-	Jobs    []JobUnmerged `json:"jobs,omitempty"    yaml:"jobs,omitempty"`
-	Risks   []JobUnmerged `json:"risks,omitempty"   yaml:"risks,omitempty"`
-	Unknown string        `json:"unknown,omitempty" yaml:"unknown,omitempty"`
+type UnmergedReport struct {
+	Branch  string     `json:"branch,omitempty"  yaml:"branch,omitempty"`
+	Jobs    []Unmerged `json:"jobs,omitempty"    yaml:"jobs,omitempty"`
+	Risks   []Unmerged `json:"risks,omitempty"   yaml:"risks,omitempty"`
+	Unknown string     `json:"unknown,omitempty" yaml:"unknown,omitempty"`
 }
 
-// JobForkFacts is what a fork leaves waiting: finished branches off the base
+// ForkFacts is what a fork leaves waiting: finished branches off the base
 // and commits since the last full test. It holds facts only, and repo policy
 // decides what they stop. BranchesUnknown and TestUnknown say why a side went
 // unread.
-type JobForkFacts struct {
+type ForkFacts struct {
 	// FinishedBranches names each as `<branch> (job <job>, <n> commit(s))`.
 	FinishedBranches []string `json:"finished_branches,omitempty" yaml:"finished_branches,omitempty"`
 	BranchesUnknown  string   `json:"branches_unknown,omitempty"  yaml:"branches_unknown,omitempty"`
@@ -1152,7 +1153,7 @@ type JobForkFacts struct {
 
 // Lines renders the report for a person, one line per fact, none when there
 // is nothing to say.
-func (r JobUnmergedReport) Lines() []string {
+func (r UnmergedReport) Lines() []string {
 	var out []string
 	if r.Unknown != "" {
 		out = append(out, "not merged: unknown, "+r.Unknown)
@@ -1173,7 +1174,7 @@ func (r JobUnmergedReport) Lines() []string {
 	return out
 }
 
-// JobClaimRequest is one write path a claim record asks for, and Because the proof:
+// ClaimRequest is one write path a claim record asks for, and Because the proof:
 // `refs:<symbol>`, `test:<file>`, `output:<project>:<target>` or `released`. See
 // [ParseClaimEvidence].
 //
@@ -1181,7 +1182,7 @@ func (r JobUnmergedReport) Lines() []string {
 // the request into one per declaration holding an occurrence of it, path
 // `<file>#<declaration>` because `refs:<symbol>`, and the store proves each of those as
 // it would one written by hand.
-type JobClaimRequest struct {
+type ClaimRequest struct {
 	Path    string `json:"path,omitempty" schema:"writepath"`
 	Because string `json:"because,omitempty" schema:"nonblank"`
 	Callers string `json:"callers,omitempty" schema:"nonblank"`
@@ -1237,9 +1238,9 @@ func ParseClaimEvidence(because string) (ClaimEvidence, error) {
 	return e, nil
 }
 
-// JobClaim is one write path a holder added with a proof. Proof is the sentence the
+// Claim is one write path a holder added with a proof. Proof is the sentence the
 // store found it true by, At unix seconds and By who wrote it.
-type JobClaim struct {
+type Claim struct {
 	Path     string        `json:"path"     yaml:"path"`
 	Evidence ClaimEvidence `json:"evidence" yaml:"evidence"`
 	Proof    string        `json:"proof"    yaml:"proof"`
@@ -1259,7 +1260,7 @@ func (r *Declaration) FoldLegacyNames() error {
 		switch {
 		case len(from) == 0:
 		case len(*into) > 0:
-			err = errors.Join(err, DiagnosticErrorf(JobRecordInvalid, "a declaration names %s or its renamed spelling, not both", name))
+			err = errors.Join(err, Fault{Kind: FaultRecord, Field: name, Message: fmt.Sprintf("a declaration names %s or its renamed spelling, not both", name)})
 		default:
 			*into = from
 		}
@@ -1287,18 +1288,15 @@ func pathOutsideWorkspace(p string) string {
 	return ""
 }
 
-// Validate reports what is wrong with a declared job, or nil: every problem
-// [Declaration.Problems] finds, joined.
-func (r Declaration) Validate() error { return r.Problems().Error() }
-
-// Problems is every problem the record shows on its own, without a workspace: each field's
-// shape, the check, the deviations and the goals. It never stops at the first.
-func (r Declaration) Problems() JobProblems {
-	var ps JobProblems
+// Faults is every fault the record shows on its own, without a workspace: each field's
+// shape, the check, the deviations and the goals. It never stops at the first. A
+// deviation may permit only a code in permissible, the caller's own.
+func (r Declaration) Faults(permissible ...diagnostics.Code) []Fault {
+	var ps []Fault
 	invalid := func(field, message, fix string) {
-		ps = append(ps, JobProblem{Code: JobRecordInvalid, Field: field, Message: message, Fix: fix})
+		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Fix: fix})
 	}
-	if rule := JobIDRule(strings.TrimSpace(r.ID)); rule != "" {
+	if rule := IDRule(strings.TrimSpace(r.ID)); rule != "" {
 		invalid("id", fmt.Sprintf("%q is not a lease id: %s", r.ID, rule), "name a branch-shaped id such as fix-parser or area/fix-parser")
 	}
 	if r.Enter != "" {
@@ -1311,12 +1309,12 @@ func (r Declaration) Problems() JobProblems {
 		return ps
 	}
 	if len(r.Claim) > 0 {
-		return append(ps, r.claimProblems()...)
+		return append(ps, r.claimFaults()...)
 	}
 	if r.Settles() {
-		return append(ps, r.settlementProblems()...)
+		return append(ps, r.settlementFaults()...)
 	}
-	if p := strings.TrimSpace(r.Parent); p != "" && !ValidJobID(p) {
+	if p := strings.TrimSpace(r.Parent); p != "" && !ValidID(p) {
 		invalid("parent", fmt.Sprintf("parent %q is not a lease id", r.Parent), "name the id of the job this one was forked under")
 	}
 	if r.Agent != nil {
@@ -1325,7 +1323,7 @@ func (r Declaration) Problems() JobProblems {
 		}
 	}
 	for i, dep := range r.DependsOn {
-		if d := strings.TrimSpace(dep); d != "" && !ValidJobID(d) {
+		if d := strings.TrimSpace(dep); d != "" && !ValidID(d) {
 			invalid(fmt.Sprintf("depends_on[%d]", i), fmt.Sprintf("depends_on[%d] %q is not a lease id", i, dep),
 				"name the id of a job that must land first")
 		}
@@ -1343,27 +1341,27 @@ func (r Declaration) Problems() JobProblems {
 	if len(r.Integrates) > 0 && r.ReadOnly {
 		invalid("read_only", "an integration job merges branches, so it writes", "drop read_only, or drop integrates")
 	}
-	if r.State != "" && !ValidJobState(r.State) {
-		invalid("state", fmt.Sprintf("state %q is not a job state", r.State), "use one of "+JobStateVocabulary())
+	if r.State != "" && !ValidState(r.State) {
+		invalid("state", fmt.Sprintf("state %q is not a job state", r.State), "use one of "+StateVocabulary())
 	}
-	if _, err := ParseJobTimeout(r.Timeout); err != nil {
+	if _, err := ParseTimeout(r.Timeout); err != nil {
 		invalid("timeout", fmt.Sprintf("timeout %q is not a positive duration", r.Timeout), "name one such as 30m or 2h, or leave it out")
 	}
 	if r.BriefFormat != "" && !r.BriefFormat.Valid() {
 		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", r.BriefFormat),
 			fmt.Sprintf("use one of %s, or leave it out for magus.yaml's agents.brief_format", strings.Join(r.BriefFormat.Values(), ", ")))
 	}
-	if r.Delivery != "" && !slices.Contains(JobDeliveries(), r.Delivery) {
+	if r.Delivery != "" && !slices.Contains(Deliveries(), r.Delivery) {
 		invalid("delivery", fmt.Sprintf("delivery %q is not a delivery", r.Delivery),
-			"use one of "+strings.Join(JobDeliveries(), ", "))
+			"use one of "+strings.Join(Deliveries(), ", "))
 	}
 	if r.ParentHead != "" && r.Delivery != DeliveryStacked {
 		invalid("parent_head", "parent_head is the base of a stacked job's pull request, and this job is not stacked",
 			"drop parent_head, or set delivery to "+DeliveryStacked)
 	}
-	if r.Weight != nil && !ValidJobWeight(*r.Weight) {
+	if r.Weight != nil && !ValidWeight(*r.Weight) {
 		invalid("weight", fmt.Sprintf("weight %v is outside (0,1]", *r.Weight),
-			fmt.Sprintf("use a weight above 0 and at most 1, or leave it out for %v", DefaultJobWeight))
+			fmt.Sprintf("use a weight above 0 and at most 1, or leave it out for %v", DefaultWeight))
 	}
 	if r.MaxAttempts < 0 {
 		invalid("max_attempts", fmt.Sprintf("max_attempts is %d, and it is a count of forks", r.MaxAttempts), "use a positive count, or 0 for no cap")
@@ -1394,8 +1392,8 @@ func (r Declaration) Problems() JobProblems {
 				"name an entry of paths.write, or drop it")
 		}
 	}
-	_, declared, checkProblems := r.check()
-	ps = append(ps, checkProblems...)
+	_, declared, checkFaults := r.check()
+	ps = append(ps, checkFaults...)
 	for i, b := range r.Breaks {
 		if strings.TrimSpace(b) == "" {
 			at := fmt.Sprintf("breaks[%d]", i)
@@ -1404,9 +1402,9 @@ func (r Declaration) Problems() JobProblems {
 	}
 	for i, w := range r.Deviations {
 		at := fmt.Sprintf("deviations[%d]", i)
-		if !Permissible(w.Code) && !(JobProblem{Code: w.Code, Subject: w.Subject}).Permissible() {
+		if !slices.Contains(permissible, w.Code) {
 			invalid(at+".code", fmt.Sprintf("%s permits %q, which is not a permissible code", at, w.Code),
-				fmt.Sprintf("permit only %s, %s or %s, and fix the record for anything else", WritePathTooBroad, OutputOutsideWritePaths, GateNotRun))
+				fmt.Sprintf("permit only %s, and fix the record for anything else", orList(permissible)))
 		}
 		if strings.TrimSpace(w.Subject) == "" {
 			invalid(at+".subject", at+" names no subject", "name the write path, `target project` or output path the problem names")
@@ -1415,15 +1413,15 @@ func (r Declaration) Problems() JobProblems {
 			invalid(at+".reason", at+" gives no reason", "say why the problem is accepted, such as \"the root regenerates it\"")
 		}
 	}
-	return append(ps, goalsProblems(r.Goals, declared)...)
+	return append(ps, goalFaults(r.Goals, declared)...)
 }
 
-// claimProblems is every problem of a claim record: it carries only schema_version, id
+// claimFaults is every fault of a claim record: it carries only schema_version, id
 // and claim, and each entry names one literal workspace path and a proof that parses.
-func (r Declaration) claimProblems() JobProblems {
-	var ps JobProblems
+func (r Declaration) claimFaults() []Fault {
+	var ps []Fault
 	invalid := func(field, message, fix string) {
-		ps = append(ps, JobProblem{Code: JobRecordInvalid, Field: field, Message: message, Fix: fix})
+		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Fix: fix})
 	}
 	rest := r
 	rest.Schema, rest.ID, rest.Claim = Schema{}, "", nil
@@ -1445,7 +1443,7 @@ func (r Declaration) claimProblems() JobProblems {
 			invalid(at+".path", at+" names no path", "name the file to add, relative to the workspace root")
 		case pathOutsideWorkspace(p) != "":
 			invalid(at+".path", fmt.Sprintf("%s %q %s", at, w.Path, pathOutsideWorkspace(p)), "name it relative to the workspace root")
-		case IsGlobMeta(p) || strings.Contains(p, "#"):
+		case isGlobMeta(p) || strings.Contains(p, "#"):
 			invalid(at+".path", fmt.Sprintf("%s %q is a pattern or a claim, and a proof covers one file", at, w.Path), "name one file")
 		}
 		if _, err := ParseClaimEvidence(w.Because); err != nil {
@@ -1461,10 +1459,10 @@ func (r Declaration) Settles() bool {
 	return len(r.Deferred) > 0 || r.LeftUnmerged != ""
 }
 
-func (r Declaration) settlementProblems() JobProblems {
-	var ps JobProblems
+func (r Declaration) settlementFaults() []Fault {
+	var ps []Fault
 	invalid := func(field, message, fix string) {
-		ps = append(ps, JobProblem{Code: JobRecordInvalid, Field: field, Message: message, Fix: fix})
+		ps = append(ps, Fault{Kind: FaultRecord, Field: field, Message: message, Fix: fix})
 	}
 	rest := r
 	rest.Schema, rest.ID, rest.Deferred, rest.LeftUnmerged = Schema{}, "", nil, ""
@@ -1483,20 +1481,20 @@ func (r Declaration) settlementProblems() JobProblems {
 			invalid(at+".item", at+" names no item", "copy the item's text from the job's result")
 		case (row == "") == (reason == ""):
 			invalid(at, at+" answers with neither or both of job and reason", "name the declared job that carries it, or the reason it is dismissed")
-		case row != "" && !ValidJobID(row):
+		case row != "" && !ValidID(row):
 			invalid(at+".job", fmt.Sprintf("%s job %q is not a lease id", at, d.Job), "name the declared job that carries it")
 		}
 	}
 	return ps
 }
 
-// goalsProblems is every problem of a record's goals: each goal's own shape, then what
+// goalFaults is every fault of a record's goals: each goal's own shape, then what
 // only the set shows. primary says the record declares a check, the goal named
 // PrimaryGoalID a depends_on may name.
-func goalsProblems(goals []Goal, primary bool) JobProblems {
-	var ps JobProblems
+func goalFaults(goals []Goal, primary bool) []Fault {
+	var ps []Fault
 	bad := func(field, message, fix string) {
-		ps = append(ps, JobProblem{Code: JobGoalInvalid, Field: field, Message: message, Fix: fix})
+		ps = append(ps, Fault{Kind: FaultGoal, Field: field, Message: message, Fix: fix})
 	}
 	index := make(map[string]int, len(goals))
 	if primary {
@@ -1504,7 +1502,7 @@ func goalsProblems(goals []Goal, primary bool) JobProblems {
 	}
 	for i, gate := range goals {
 		at := fmt.Sprintf("goals[%d]", i)
-		ps = append(ps, gate.problems(at)...)
+		ps = append(ps, gate.faults(at)...)
 		if _, dup := index[gate.ID]; dup {
 			bad(at+".id", fmt.Sprintf("goals carries duplicate id %q", gate.ID), "give each goal its own id")
 			continue
@@ -1554,8 +1552,8 @@ func goalsProblems(goals []Goal, primary bool) JobProblems {
 
 // oneSignaturePerSymbol refuses two signature goals on one symbol: the graph answers one
 // declaration per name, so two shapes for it make a goal nobody could meet.
-func oneSignaturePerSymbol(goals []Goal) JobProblems {
-	var ps JobProblems
+func oneSignaturePerSymbol(goals []Goal) []Fault {
+	var ps []Fault
 	held := map[string]string{}
 	for i, gate := range goals {
 		if gate.Resolve().Expect != ExpectSignature {
@@ -1567,8 +1565,8 @@ func oneSignaturePerSymbol(goals []Goal) JobProblems {
 				continue
 			}
 			if other, ok := held[name]; ok {
-				ps = append(ps, JobProblem{
-					Code:    JobGoalInvalid,
+				ps = append(ps, Fault{
+					Kind:    FaultGoal,
 					Field:   fmt.Sprintf("goals[%d].symbols[%d]", i, j),
 					Message: fmt.Sprintf("goals %q and %q both expect a signature of %q, and a symbol has one", other, gate.ID, name),
 					Fix:     "keep one signature goal per symbol",
@@ -1581,21 +1579,21 @@ func oneSignaturePerSymbol(goals []Goal) JobProblems {
 	return ps
 }
 
-// Validate reports whether a goal can be matched to an output record without
-// interpreting a shell command: every problem it shows on its own, joined.
-func (g Goal) Validate() error { return g.problems("").Error() }
+// Faults is every fault g shows on its own: what keeps it from being matched to an
+// output record without interpreting a shell command.
+func (g Goal) Faults() []Fault { return g.faults("") }
 
-// problems is every problem g shows on its own, each Field under field (`goals[1]`).
-func (g Goal) problems(field string) JobProblems {
-	var ps JobProblems
+// faults is every fault g shows on its own, each Field under field (`goals[1]`).
+func (g Goal) faults(field string) []Fault {
+	var ps []Fault
 	bad := func(sub, message, fix string) {
 		at := sub
 		if field != "" {
 			at = fmt.Sprintf("%s.%s", field, sub)
 		}
-		ps = append(ps, JobProblem{Code: JobGoalInvalid, Field: at, Message: message, Fix: fix})
+		ps = append(ps, Fault{Kind: FaultGoal, Field: at, Message: message, Fix: fix})
 	}
-	if rule := JobIDRule(strings.TrimSpace(g.ID)); rule != "" {
+	if rule := IDRule(strings.TrimSpace(g.ID)); rule != "" {
 		bad("id", fmt.Sprintf("id %q is not a goal id: %s", g.ID, rule), "use a lowercase, branch-shaped id")
 	}
 	// Validates what the job WILL BE, not what arrived. A declaration off the
@@ -1666,16 +1664,16 @@ func (c LeaseCheck) validScript() error {
 	}
 }
 
-// ParseJobTimeout reads a declared timeout: empty is no bound and parses to zero, anything
+// ParseTimeout reads a declared timeout: empty is no bound and parses to zero, anything
 // else must be a positive Go duration.
-func ParseJobTimeout(s string) (time.Duration, error) {
+func ParseTimeout(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, nil
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil || d <= 0 {
-		return 0, DiagnosticErrorf(JobRecordInvalid, "timeout %q is not a positive duration such as 30m or 2h", s)
+		return 0, fmt.Errorf("timeout %q is not a positive duration such as 30m or 2h", s)
 	}
 	return d, nil
 }
@@ -1705,11 +1703,11 @@ func (u Job) StaleAt(observed int) bool {
 	return observed != 0 && u.Generation != 0 && observed != u.Generation
 }
 
-// JobIdleSince is when job's jobs.stale_after clock started, in unix seconds.
+// IdleSince is when job's jobs.stale_after clock started, in unix seconds.
 // A declared job nobody took is QUEUED while a dependency is still editing, so
 // waiting is true. Otherwise the clock is the later of its last update and its
 // dependencies'. A dependency no job declares holds nothing back.
-func JobIdleSince(rows []Job, row Job) (since int64, waiting bool) {
+func IdleSince(rows []Job, row Job) (since int64, waiting bool) {
 	since = row.Updated
 	if row.State != StateDeclared || row.Registered != 0 {
 		return since, false
@@ -1727,11 +1725,11 @@ func JobIdleSince(rows []Job, row Job) (since int64, waiting bool) {
 	return since, false
 }
 
-// JobStaleAt reports whether job has been idle at least after as of now, in
-// unix seconds, with its clock read by [JobIdleSince]. A queued job is never
+// StaleAt reports whether job has been idle at least after as of now, in
+// unix seconds, with its clock read by [IdleSince]. A queued job is never
 // stale, and a zero or negative after is never.
-func JobStaleAt(rows []Job, row Job, now int64, after time.Duration) bool {
-	since, waiting := JobIdleSince(rows, row)
+func StaleAt(rows []Job, row Job, now int64, after time.Duration) bool {
+	since, waiting := IdleSince(rows, row)
 	return !waiting && after > 0 && now-since >= int64(after/time.Second)
 }
 
@@ -1746,15 +1744,15 @@ func quoteJoin[T ~string](items []T, sep string) string {
 
 // check is the job's declared check, from either spelling, and whether it
 // declares one. A line that does not parse is refused HERE, at the door.
-func (r Declaration) check() (LeaseCheck, bool, JobProblems) {
-	invalid := func(field string, err error, fix string) JobProblems {
-		return JobProblems{{Code: JobRecordInvalid, Field: field, Message: err.Error(), Fix: fix}}
+func (r Declaration) check() (LeaseCheck, bool, []Fault) {
+	invalid := func(field string, err error, fix string) []Fault {
+		return []Fault{{Kind: FaultRecord, Field: field, Message: err.Error(), Fix: fix}}
 	}
 	line := strings.TrimSpace(r.Validation)
 	switch {
 	case r.Check != nil && line != "":
-		return LeaseCheck{}, false, JobProblems{{
-			Code: JobRecordInvalid, Field: "validation",
+		return LeaseCheck{}, false, []Fault{{
+			Kind: FaultRecord, Field: "validation",
 			Message: "a job carries `check` or a rendered `validation` line, not both", Fix: "send `check` alone",
 		}}
 	case r.Check != nil && r.Check.Script != "":
@@ -1793,16 +1791,16 @@ const (
 	DeliveryStacked = "stacked"
 )
 
-// JobDeliveries is the closed set [Job.Delivery] takes.
-func JobDeliveries() []string {
+// Deliveries is the closed set [Job.Delivery] takes.
+func Deliveries() []string {
 	return []string{DeliveryFold, DeliverySeparate, DeliveryStacked}
 }
 
-// JobStateVocabulary is the closed set of job states, as an error quotes it. Shared by
+// StateVocabulary is the closed set of job states, as an error quotes it. Shared by
 // Declaration.Validate and job.PutMerge, the two places a caller-supplied state is
 // checked against the set.
-func JobStateVocabulary() string {
-	states := JobStates()
+func StateVocabulary() string {
+	states := States()
 	names := make([]string, len(states))
 	for i, s := range states {
 		names[i] = string(s)
@@ -1888,9 +1886,9 @@ func trimmedNonEmpty(in []string) []string {
 	return out
 }
 
-// JobRun is one completed run of a job: what it cost, whether it worked, and what it
+// Run is one completed run of a job: what it cost, whether it worked, and what it
 // reclaimed.
-type JobRun struct {
+type Run struct {
 	// Invocation is the run's invocation id, and it can only be recorded at SUBMIT: the
 	// completion callback carries argv, duration and error and no invocation, so a run
 	// recorded only at the end could never name the log it produced.
@@ -1913,7 +1911,7 @@ type JobRun struct {
 // Digests that are not a content hash. A digest is `sha256:<hex>` of the file's bytes
 // when the path held one; these say why it could not be, so a reader is never handed a
 // hash-shaped value that is not a hash. Named for the FIELD they land in
-// (JobRelease.Digest) rather than for releases, which they do not classify.
+// (Release.Digest) rather than for releases, which they do not classify.
 const (
 	// DigestAbsent is a path with nothing on disk when it was released: a file the
 	// lease deleted, or a declared glob, which is a pattern rather than a path.
@@ -1928,7 +1926,7 @@ const (
 	DigestUnreadable = "unreadable"
 )
 
-// JobRelease is one path a lease stopped owning, and the version of it the
+// Release is one path a lease stopped owning, and the version of it the
 // next agent inherits.
 //
 // The skill has workers release a contested path as soon as they finish EDITING it
@@ -1936,7 +1934,7 @@ const (
 // what makes that safe to act on: it identifies the file the releaser left behind, and
 // a mismatch at verification time means the waiter built on a tree the releaser never
 // saw.
-type JobRelease struct {
+type Release struct {
 	Path   string `json:"path"   yaml:"path"`
 	Digest string `json:"digest" yaml:"digest"`
 	// ReleasedAt is unix seconds, stamped by the store on the put that dropped the path.
@@ -1961,29 +1959,29 @@ func (u Job) PausedAt(now int64) bool {
 	return u.Paused != 0 && (u.PausedUntil == 0 || now < u.PausedUntil)
 }
 
-// JobUnattributedWrite is one path a lease owns that somebody outside it wrote, and
+// UnattributedWrite is one path a lease owns that somebody outside it wrote, and
 // the content that writer left behind.
 //
-// The inverse of JobRelease: a release is a worker saying "I am done with this, here is
+// The inverse of Release: a release is a worker saying "I am done with this, here is
 // what I left", and this is magus saying "somebody who is not you changed this, here is
 // what is there now", so a lease that read the file earlier can find out by ASKING.
 //
 // UNATTRIBUTED is the honest word: magus knows only that the writer named no live lease,
 // so a person editing in their own checkout and an agent that forgot to export its id are
 // indistinguishable here. Naming a human would be a claim magus cannot support.
-type JobUnattributedWrite struct {
+type UnattributedWrite struct {
 	Path string `json:"path"   yaml:"path"`
 	// Digest is the content AFTER the write, on the same three-marker vocabulary as
-	// JobRelease.Digest: a hash, or DigestAbsent / DigestDir / DigestUnreadable.
+	// Release.Digest: a hash, or DigestAbsent / DigestDir / DigestUnreadable.
 	Digest string `json:"digest" yaml:"digest"`
 	// At is unix seconds, stamped by the store.
 	At int64 `json:"at" yaml:"at"`
 }
 
-// JobEntry is a party other than a job's holder acknowledging, on the record, that it
+// Entry is a party other than a job's holder acknowledging, on the record, that it
 // will write one path inside the job's write paths. The guard lets exactly one such
 // write through and stamps Consumed.
-type JobEntry struct {
+type Entry struct {
 	Path string `json:"path" yaml:"path"`
 	// By is where the acknowledging call came from, stamped by the store.
 	By Origin `json:"by" yaml:"by"`
@@ -1992,8 +1990,8 @@ type JobEntry struct {
 	Consumed int64 `json:"consumed,omitempty" yaml:"consumed,omitempty"`
 }
 
-// JobReleaseRequest is a refused fork asking a job's holder to release File.
-type JobReleaseRequest struct {
+// ReleaseRequest is a refused fork asking a job's holder to release File.
+type ReleaseRequest struct {
 	// ID is the attention request filed beside it (see sessions.RequestID).
 	ID   string `json:"id" yaml:"id"`
 	File string `json:"file" yaml:"file"`
@@ -2006,11 +2004,11 @@ type JobReleaseRequest struct {
 	At int64 `json:"at" yaml:"at"`
 }
 
-// JobOverlap is two leases whose declared WritePaths intersect. A FACT the
+// Overlap is two leases whose declared WritePaths intersect. A FACT the
 // reader is handed, never a verdict: two leases may share a path because their author
 // meant them to run in sequence, or because nobody noticed. Nothing here blocks,
 // gates, or reorders anything.
-type JobOverlap struct {
+type Overlap struct {
 	// JobA and JobB are the lease ids, in ledger order: JobA was recorded first.
 	JobA string `json:"job_a" yaml:"job_a"`
 	JobB string `json:"job_b" yaml:"job_b"`
@@ -2028,26 +2026,26 @@ type JobOverlap struct {
 	// Footprint compares what the two jobs have actually changed, declaration by
 	// declaration. Nil when no reader computed it: it needs each job's checkout and a VCS,
 	// and deriving an overlap needs neither.
-	Footprint *JobOverlapFootprint `json:"footprint,omitempty" yaml:"footprint,omitempty"`
+	Footprint *OverlapFootprint `json:"footprint,omitempty" yaml:"footprint,omitempty"`
 }
 
-// The verdicts a JobOverlap's Claims reaches.
+// The verdicts a Overlap's Claims reaches.
 const (
 	ClaimsDisjoint = "disjoint"
 	ClaimsShared   = "shared"
 )
 
-// The verdicts a JobOverlapFootprint reaches.
+// The verdicts a OverlapFootprint reaches.
 const (
 	FootprintDisjoint = "disjoint"
 	FootprintShared   = "shared"
 	FootprintUnknown  = "unknown"
 )
 
-// JobOverlapFootprint is whether two overlapping jobs' diffs touch the same declaration.
+// OverlapFootprint is whether two overlapping jobs' diffs touch the same declaration.
 // Like the overlap it hangs off, a report: two jobs sharing a function may have been
 // planned that way.
-type JobOverlapFootprint struct {
+type OverlapFootprint struct {
 	// Verdict is FootprintDisjoint, FootprintShared or FootprintUnknown.
 	Verdict string `json:"verdict" yaml:"verdict"`
 	// Shared is the Collisions of the two footprints, each Location as its String, on either
@@ -2059,18 +2057,18 @@ type JobOverlapFootprint struct {
 	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
 }
 
-// JobList is what a reader of the ledger is served: the recorded jobs, plus
+// List is what a reader of the ledger is served: the recorded jobs, plus
 // the overlaps derived from them. It has a constructor rather than a literal
 // at each read door. The MCP tool and the console's route must not disagree
 // about whether an overlap exists, as with types.NewFileReport.
-type JobList struct {
+type List struct {
 	Jobs []Job `json:"jobs" yaml:"jobs"`
 	// Attempts are the tries of Jobs the store holds, each read under its
 	// job's deadline (see [Attempt.Bound]).
-	Attempts []Attempt    `json:"attempts,omitempty" yaml:"attempts,omitempty"`
-	Overlaps []JobOverlap `json:"overlaps,omitempty" yaml:"overlaps,omitempty"`
+	Attempts []Attempt `json:"attempts,omitempty" yaml:"attempts,omitempty"`
+	Overlaps []Overlap `json:"overlaps,omitempty" yaml:"overlaps,omitempty"`
 	// Overdue, Orphans and Stale are live job ids a reader should look at,
-	// derived at one instant by [JobList.Flag]. The store's read has ended
+	// derived at one instant by [List.Flag]. The store's read has ended
 	// most orphans and untaken stale jobs (see job.Store.List).
 	Overdue []string `json:"overdue,omitempty" yaml:"overdue,omitempty"`
 	Orphans []string `json:"orphans,omitempty" yaml:"orphans,omitempty"`
@@ -2078,10 +2076,10 @@ type JobList struct {
 	// Blocked are the live jobs that claim no paths yet because a dependency
 	// has not passed, each naming the first such dependency. Derived with
 	// Overlaps.
-	Blocked []JobBlock `json:"blocked,omitempty" yaml:"blocked,omitempty"`
+	Blocked []Block `json:"blocked,omitempty" yaml:"blocked,omitempty"`
 	// ReadOnly are the jobs requiring a feature this magus lacks. It lists and
 	// honors them and refuses every write to them.
-	ReadOnly []JobReadOnly `json:"read_only,omitempty" yaml:"read_only,omitempty"`
+	ReadOnly []ReadOnly `json:"read_only,omitempty" yaml:"read_only,omitempty"`
 	// Changes are the open changes against the queue's base, joined to the jobs whose
 	// checkouts are on their branches, in the order the provider listed them. Read from
 	// the snapshot `magus queue ls` leaves; a list never fetches them.
@@ -2093,7 +2091,7 @@ type JobList struct {
 	Unproposed []string `json:"unproposed,omitempty" yaml:"unproposed,omitempty"`
 	// Unmerged is filled by `magus ls jobs` alone. It reads the version
 	// control per job, and every other door lists on a hot path.
-	Unmerged *JobUnmergedReport `json:"unmerged,omitempty" yaml:"unmerged,omitempty"`
+	Unmerged *UnmergedReport `json:"unmerged,omitempty" yaml:"unmerged,omitempty"`
 }
 
 // InflightChange is one open change as a person reads it: the provider's record joined to
@@ -2176,40 +2174,40 @@ type InflightFetch struct {
 	ElapsedMS int64 `json:"elapsed_ms" yaml:"elapsed_ms"`
 }
 
-// JobReadOnly names a job this magus will not write and the features it lacks.
-type JobReadOnly struct {
+// ReadOnly names a job this magus will not write and the features it lacks.
+type ReadOnly struct {
 	Job   string   `json:"job"   yaml:"job"`
 	Lacks []string `json:"lacks" yaml:"lacks"`
 }
 
-// JobBlock is why a live job owns none of its write paths: On, a job it depends on, is in
+// Block is why a live job owns none of its write paths: On, a job it depends on, is in
 // State rather than pass. State is empty when no job declares On.
-type JobBlock struct {
-	Job   string   `json:"job"             yaml:"job"`
-	On    string   `json:"on"              yaml:"on"`
-	State JobState `json:"state,omitempty" yaml:"state,omitempty"`
+type Block struct {
+	Job   string `json:"job"             yaml:"job"`
+	On    string `json:"on"              yaml:"on"`
+	State State  `json:"state,omitempty" yaml:"state,omitempty"`
 }
 
-// JobBlockedOn reports the first job row depends on that has not reached pass.
+// BlockedOn reports the first job row depends on that has not reached pass.
 // A blocked job claims none of its write paths, so the overlap report and the
 // guard ask this before treating a job as an owner.
 //
 // A dependency no job declares blocks too.
-func JobBlockedOn(rows []Job, row Job) (JobBlock, bool) {
+func BlockedOn(rows []Job, row Job) (Block, bool) {
 	for _, dep := range row.DependsOn {
 		i := slices.IndexFunc(rows, func(r Job) bool { return r.ID == dep })
 		if i < 0 {
-			return JobBlock{Job: row.ID, On: dep}, true
+			return Block{Job: row.ID, On: dep}, true
 		}
 		if rows[i].State != StatePass {
-			return JobBlock{Job: row.ID, On: dep, State: rows[i].State}, true
+			return Block{Job: row.ID, On: dep, State: rows[i].State}, true
 		}
 	}
-	return JobBlock{}, false
+	return Block{}, false
 }
 
 // String renders the reason as "blocked on <dep> which is <state>".
-func (b JobBlock) String() string {
+func (b Block) String() string {
 	state := string(b.State)
 	if state == "" {
 		state = "undeclared"
@@ -2220,8 +2218,8 @@ func (b JobBlock) String() string {
 // Flag fills Overdue, Orphans and Stale as of now, in unix seconds. Overdue is past its
 // deadline; an orphan is live while an ancestor has ended (pass, fail or no_return), so
 // nobody is left to wait on it; stale was not updated within staleAfter, read by
-// [JobStaleAt], and a zero staleAfter flags nothing.
-func (l JobList) Flag(now int64, staleAfter time.Duration) JobList {
+// [StaleAt], and a zero staleAfter flags nothing.
+func (l List) Flag(now int64, staleAfter time.Duration) List {
 	l.Overdue, l.Orphans, l.Stale = nil, nil, nil
 	for _, row := range l.Jobs {
 		if !row.State.Live() {
@@ -2233,7 +2231,7 @@ func (l JobList) Flag(now int64, staleAfter time.Duration) JobList {
 		if _, ended := EndedAncestor(l.Jobs, row.ID); ended {
 			l.Orphans = append(l.Orphans, row.ID)
 		}
-		if JobStaleAt(l.Jobs, row, now, staleAfter) {
+		if StaleAt(l.Jobs, row, now, staleAfter) {
 			l.Stale = append(l.Stale, row.ID)
 		}
 	}
@@ -2243,7 +2241,7 @@ func (l JobList) Flag(now int64, staleAfter time.Duration) JobList {
 // EndedAncestor returns the nearest ancestor of id in a terminal state. A job
 // with no state has not said it ended, so it does not count.
 func EndedAncestor(rows []Job, id string) (Job, bool) {
-	for _, a := range JobAncestors(rows, id) {
+	for _, a := range Ancestors(rows, id) {
 		if a.State.Terminal() {
 			return a, true
 		}
@@ -2251,14 +2249,14 @@ func EndedAncestor(rows []Job, id string) (Job, bool) {
 	return Job{}, false
 }
 
-// JobAncestors walks id's parent chain nearest first. It stops at a parent the
+// Ancestors walks id's parent chain nearest first. It stops at a parent the
 // jobs do not carry and at a cycle, since either means the plan is damaged.
 //
 // A scan per step rather than an index: chains are a few jobs deep, and every
 // list flags each live job through this. A map of the whole store per call
 // made one list quadratic in allocations. The chain walked so far is the
 // cycle check.
-func JobAncestors(rows []Job, id string) []Job {
+func Ancestors(rows []Job, id string) []Job {
 	find := func(id string) (Job, bool) {
 		i := slices.IndexFunc(rows, func(r Job) bool { return r.ID == id })
 		if i < 0 {
@@ -2277,55 +2275,55 @@ func JobAncestors(rows []Job, id string) []Job {
 	return out
 }
 
-// JobDescendants are the jobs below id by parent chain, in store order.
-func JobDescendants(rows []Job, id string) []Job {
+// Descendants are the jobs below id by parent chain, in store order.
+func Descendants(rows []Job, id string) []Job {
 	var out []Job
 	for _, r := range rows {
-		if r.ID != id && slices.ContainsFunc(JobAncestors(rows, r.ID), func(a Job) bool { return a.ID == id }) {
+		if r.ID != id && slices.ContainsFunc(Ancestors(rows, r.ID), func(a Job) bool { return a.ID == id }) {
 			out = append(out, r)
 		}
 	}
 	return out
 }
 
-// NewJobList wraps the jobs and derives the overlaps, on READ and never stored.
+// NewList wraps the jobs and derives the overlaps, on READ and never stored.
 //
 // ReportedBase, BaseVerdict and Registered are NOT derived here: they live on
 // the job and are computed once, when the worker registers.
 //
 // This is the single door onto a report, so the empty case is normalized HERE.
 // An unwritten ledger serves "jobs":[] rather than null.
-func NewJobList(jobs []Job) JobList {
+func NewList(jobs []Job) List {
 	if jobs == nil {
 		jobs = []Job{}
 	}
-	var blocked []JobBlock
-	var readOnly []JobReadOnly
+	var blocked []Block
+	var readOnly []ReadOnly
 	for _, row := range jobs {
-		if b, ok := JobBlockedOn(jobs, row); ok && row.State.Live() {
+		if b, ok := BlockedOn(jobs, row); ok && row.State.Live() {
 			blocked = append(blocked, b)
 		}
 		if lacks := row.Unmet(); lacks != nil {
-			readOnly = append(readOnly, JobReadOnly{Job: row.ID, Lacks: lacks})
+			readOnly = append(readOnly, ReadOnly{Job: row.ID, Lacks: lacks})
 		}
 	}
-	return JobList{Jobs: jobs, Overlaps: jobOverlaps(jobs), Blocked: blocked, ReadOnly: readOnly}
+	return List{Jobs: jobs, Overlaps: jobOverlaps(jobs), Blocked: blocked, ReadOnly: readOnly}
 }
 
 // jobOverlaps reports every pair of jobs whose declared write paths
 // intersect, in ledger order.
 //
-// Only a [JobState.Editing] job is in a pair. A released, exited or finished job is not
+// Only a [State.Editing] job is in a pair. A released, exited or finished job is not
 // competing for a path (that is the whole shape of the skill's early-release rule,
 // where a worker shrinks its write paths so a waiter can start), and reporting one
 // would make the report noisiest exactly when the plan is winding down. A job blocked on
 // a dependency is not in any pair either: it claims nothing until that dependency passes.
-func jobOverlaps(jobs []Job) []JobOverlap {
+func jobOverlaps(jobs []Job) []Overlap {
 	claims := func(j Job) bool {
-		_, blocked := JobBlockedOn(jobs, j)
+		_, blocked := BlockedOn(jobs, j)
 		return j.State.Editing() && len(j.HardPaths()) > 0 && !blocked
 	}
-	var out []JobOverlap
+	var out []Overlap
 	for i, a := range jobs {
 		if !claims(a) {
 			continue
@@ -2335,7 +2333,7 @@ func jobOverlaps(jobs []Job) []JobOverlap {
 				continue
 			}
 			if pa, pb := intersectingPaths(a.HardPaths(), b.HardPaths()); len(pa) > 0 {
-				out = append(out, JobOverlap{JobA: a.ID, JobB: b.ID, PathsA: pa, PathsB: pb, Claims: claimsVerdict(pa, pb)})
+				out = append(out, Overlap{JobA: a.ID, JobB: b.ID, PathsA: pa, PathsB: pb, Claims: claimsVerdict(pa, pb)})
 			}
 		}
 	}
@@ -2435,7 +2433,7 @@ func literalAgainstGlob(a, b string) (lit, glob string, ok bool) {
 	a, _ = SplitClaim(a)
 	b, _ = SplitClaim(b)
 	a, b = path.Clean(a), path.Clean(b)
-	switch aMeta, bMeta := IsGlobMeta(a), IsGlobMeta(b); {
+	switch aMeta, bMeta := isGlobMeta(a), isGlobMeta(b); {
 	case aMeta && !bMeta && b != ".":
 		return b, a, true
 	case bMeta && !aMeta && a != ".":
@@ -2525,13 +2523,13 @@ func PathWithin(inner, outer string) bool {
 		return false
 	}
 	innerFile, outerFile = path.Clean(innerFile), path.Clean(outerFile)
-	innerGlob := IsGlobMeta(innerFile)
+	innerGlob := isGlobMeta(innerFile)
 	switch {
 	case outerDecl != "":
 		return innerDecl == outerDecl && innerFile == outerFile && !innerGlob
 	case innerFile == outerFile, outerFile == ".":
 		return true
-	case !IsGlobMeta(outerFile):
+	case !isGlobMeta(outerFile):
 		return underDir(LiteralPrefix(innerFile), outerFile)
 	case !innerGlob:
 		ok, err := doublestar.Match(outerFile, innerFile)
@@ -2545,7 +2543,7 @@ func PathWithin(inner, outer string) bool {
 	if last == "" || base == last {
 		return true
 	}
-	if IsGlobMeta(base) {
+	if isGlobMeta(base) {
 		return segmentWithin(base, last)
 	}
 	matched, err := doublestar.Match(last, base)
@@ -2558,7 +2556,7 @@ func PathWithin(inner, outer string) bool {
 // that run ending in the suffix is enough, and an inner ending in a metacharacter, or
 // `**`, can end in anything.
 func segmentWithin(inner, outer string) bool {
-	if inner == "**" || !strings.HasPrefix(outer, "*") || IsGlobMeta(outer[1:]) {
+	if inner == "**" || !strings.HasPrefix(outer, "*") || isGlobMeta(outer[1:]) {
 		return false
 	}
 	suffix := outer[1:]
@@ -2615,17 +2613,19 @@ func (u Job) HardPaths() []string {
 	return slices.DeleteFunc(slices.Clone(u.Paths.Write), func(p string) bool { return slices.Contains(u.Paths.Soft, p) })
 }
 
-// JobFeatures are the Requires entries this build implements, sorted. A
+// Features are the Requires entries this build implements, sorted. A
 // job requiring another is read and listed, and only writing it is
 // refused.
-var JobFeatures = DeclarationSchema.Features()
+func Features() []string {
+	return []string{"claim-declarations", "dead-job-end", "job-generations", "signature-goals"}
+}
 
-// Unmet returns the entries of Requires that [JobFeatures] does not name,
+// Unmet returns the entries of Requires that [Features] does not name,
 // in job order, or nil when this build can write the job.
 func (u Job) Unmet() []string {
 	var out []string
 	for _, r := range u.Requires {
-		if !slices.Contains(JobFeatures, r) {
+		if !slices.Contains(Features(), r) {
 			out = append(out, r)
 		}
 	}
@@ -2714,7 +2714,7 @@ func cloneVerificationStatuses(gates []VerificationStatus) []VerificationStatus 
 }
 
 // cloneIntegration is a deep copy of g, nil for nil.
-func cloneIntegration(g *JobIntegration) *JobIntegration {
+func cloneIntegration(g *Integration) *Integration {
 	if g == nil {
 		return nil
 	}
@@ -2749,4 +2749,60 @@ func (u Job) HoldsNoBuildSeat() bool {
 		return false
 	}
 	return !slices.ContainsFunc(u.EffectiveGoals(), func(g Goal) bool { return g.Resolve().Kind == GoalKindCheck })
+}
+
+// Schema is the envelope a job record embeds. A reader ignores the members it does not
+// know and refuses only what it cannot act on; a writer carries those members back out.
+// It copies magus's types.Schema, which the module may not import, and versions with
+// apiversion.
+//
+// Embedded, never named: json inlines it, so api_version stays a
+// top-level member, and the Buzz mirrors inline it the same way.
+type Schema struct {
+	// Version is the format this record is written in. A reader refuses
+	// any other, so no reader acts on a record it cannot read.
+	Version apiversion.APIVersion `json:"api_version" yaml:"api_version" buzz:"apiVersion"`
+	// Requires names the features a reader must implement to act on this record at all.
+	// A reader lacking one treats the record as read-only; the records around it stay
+	// usable. Set only for content an older reader would act on wrongly, never for an
+	// added field it can ignore.
+	Requires []string `json:"requires,omitempty" yaml:"requires,omitempty"`
+	// Unknown holds every member this build does not declare, re-emitted unchanged when
+	// the record is written back. The `,unknown` option is encoding/json/v2's, so only a
+	// caller built with GOEXPERIMENT=jsonv2 carries the members through.
+	Unknown map[string]json.RawMessage `json:",unknown" yaml:"-" buzz:"-"`
+}
+
+// Unmet returns the entries of Requires that known does not name, in record order, or
+// nil when this reader can act on the record.
+func (s Schema) Unmet(known []string) []string {
+	var out []string
+	for _, r := range s.Requires {
+		if !slices.Contains(known, r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func (s Schema) clone() Schema {
+	s.Requires = slices.Clone(s.Requires)
+	s.Unknown = maps.Clone(s.Unknown)
+	return s
+}
+
+// isGlobMeta reports whether s holds a glob metacharacter. It copies magus's
+// types.IsGlobMeta, which the module may not import.
+func isGlobMeta(s string) bool { return strings.ContainsAny(s, "*?[{") }
+
+// orList joins codes for a sentence: "a", "a or b", "a, b or c".
+func orList(codes []diagnostics.Code) string {
+	names := make([]string, len(codes))
+	for i, c := range codes {
+		names[i] = string(c)
+	}
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
 }

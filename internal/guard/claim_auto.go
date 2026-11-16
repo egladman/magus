@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -16,7 +17,7 @@ import (
 // the write with a line naming it; otherwise the lease-claim refusal when that line would
 // apply, or no opinion. stop names what kept magus from claiming rel. rows are every job,
 // and dead the live ones holding rel whose holder [deadHolder] judged dead.
-func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, checkout string, me types.Job, rows []types.Job, dead []job.DeadHolder, rel string) (g writeGrade, stop string) {
+func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, checkout string, me jobtypes.Job, rows []jobtypes.Job, dead []job.DeadHolder, rel string) (g writeGrade, stop string) {
 	// Observing the claim facts diffs the whole checkout against the checkpoint. An
 	// integration row's diff is every merged branch, which took the write judgment past
 	// its deadline on each write, and no edge from a merge's diff proves a claim.
@@ -38,7 +39,7 @@ func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, chec
 	switch {
 	case d.Stop == "":
 		store := job.NewStore(at.jobs()).As(job.Actor{Lease: me.ID})
-		if _, err := store.Claim(ctx, me.ID, []types.JobClaimRequest{d.Request}, facts, config.Jobs{}, false); err != nil {
+		if _, err := store.Claim(ctx, me.ID, []jobtypes.ClaimRequest{d.Request}, facts, config.Jobs{}, false); err != nil {
 			return writeGrade{}, "the job store refused the claim: " + err.Error()
 		}
 		return claimedAdvice(me, d), ""
@@ -50,7 +51,7 @@ func gradeClaimOutside(ctx context.Context, deps Dependencies, at location, chec
 
 // integratedBranchChanging names the first branch me integrates that changed
 // rel since me's checkpoint, or "". A branch git cannot read shows no change.
-func integratedBranchChanging(ctx context.Context, checkout string, me types.Job, rel string) string {
+func integratedBranchChanging(ctx context.Context, checkout string, me jobtypes.Job, rel string) string {
 	rev, _ := types.ParseCheckpointToken(me.Checkpoint)
 	if rev == "" {
 		return ""
@@ -64,7 +65,7 @@ func integratedBranchChanging(ctx context.Context, checkout string, me types.Job
 }
 
 // claimedAdvice is the one line a write passes with once magus claimed its path for me.
-func claimedAdvice(me types.Job, d job.AutoClaim) writeGrade {
+func claimedAdvice(me jobtypes.Job, d job.AutoClaim) writeGrade {
 	return writeGrade{Decision: decisionAdvise,
 		Context: fmt.Sprintf("magus workspace: claimed %s for lease %s by %s: %s.", d.Request.Path, me.ID, d.Request.Because, d.Proof),
 		Why: fmt.Sprintf("The claim is recorded on the job as `%s` records one, and `%s` lists the path among its write paths.",

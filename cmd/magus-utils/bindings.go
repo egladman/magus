@@ -834,7 +834,6 @@ type boundaryPackage struct {
 var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/spells", alias: "spells"},
 	{path: "github.com/egladman/magus/types", alias: "types"},
-	{path: "github.com/egladman/magus/types/agent", alias: "typesagent"},
 	{path: "github.com/egladman/magus/types/check", alias: "check", prefix: "Check"},
 	{path: "github.com/egladman/magus/types/impact", alias: "impacttypes", prefix: "Impact"},
 	{path: "github.com/egladman/magus/types/vcs", alias: "vcstypes", prefix: "VCS"},
@@ -846,6 +845,7 @@ var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/types/diff", alias: "difftypes", prefix: "Diff"},
 	{path: "github.com/egladman/magus/internal/queue/types", alias: "queuetypes", prefix: "Queue"},
 	{path: "github.com/egladman/magus/libs/diagnostics", alias: "diagnostics"},
+	{path: "github.com/egladman/magus/libs/safetyscissors/job", alias: "job", prefix: "Job"},
 	{path: "github.com/egladman/magus/libs/safetyscissors/step", alias: "step", prefix: "Step"},
 	{path: "github.com/egladman/magus/libs/safetyscissors/tier", alias: "tier", prefix: "ModelTier"},
 	{path: "github.com/egladman/magus/libs/safetyscissors/verdict", alias: "verdict", prefix: "Guard"},

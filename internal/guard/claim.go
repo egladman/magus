@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -30,7 +31,7 @@ import (
 //
 // Nothing is read unless another lease claims a declaration of rel, so a write to a file
 // nobody claims below the whole pays for one scan of the rows and no process.
-func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Job, owners []types.Job, rel string, fields writeFields) writeGrade {
+func gradeClaimedDeclarations(ctx context.Context, workspace string, me jobtypes.Job, owners []jobtypes.Job, rel string, fields writeFields) writeGrade {
 	others := otherClaimants(me, owners, rel)
 	if len(others) == 0 {
 		return writeGrade{}
@@ -59,7 +60,7 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 	}
 	for _, r := range regions {
 		loc := r.Location()
-		if loc.Declaration == "" || loc.Declaration == types.Preamble || namedBy(mine, loc.Declaration) {
+		if loc.Declaration == "" || loc.Declaration == jobtypes.Preamble || namedBy(mine, loc.Declaration) {
 			continue
 		}
 		for _, owner := range others {
@@ -72,9 +73,9 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 }
 
 // otherClaimants are the live leases besides me claiming a declaration of rel.
-func otherClaimants(me types.Job, owners []types.Job, rel string) []types.Job {
+func otherClaimants(me jobtypes.Job, owners []jobtypes.Job, rel string) []jobtypes.Job {
 	now := time.Now().Unix()
-	var others []types.Job
+	var others []jobtypes.Job
 	for _, u := range owners {
 		if u.ID != me.ID && !u.Overdue(now) && len(claimsOn(u.HardPaths(), rel)) > 0 {
 			others = append(others, u)
@@ -87,7 +88,7 @@ func otherClaimants(me types.Job, owners []types.Job, rel string) []types.Job {
 // changes, when the store narrowed me's hold on rel or a pattern alone holds it
 // (see job.NarrowHold). Each growth is advised. A change to a declaration
 // another lease claims is denied; a write magus cannot place narrows nothing.
-func gradeNarrowedHold(ctx context.Context, at location, checkout string, me types.Job, owners []types.Job, rel string, fields writeFields) writeGrade {
+func gradeNarrowedHold(ctx context.Context, at location, checkout string, me jobtypes.Job, owners []jobtypes.Job, rel string, fields writeFields) writeGrade {
 	narrowed := job.Narrowed(me, rel)
 	if !narrowed && !coveredOnlyByPattern(me, rel) {
 		return writeGrade{}
@@ -100,7 +101,7 @@ func gradeNarrowedHold(ctx context.Context, at location, checkout string, me typ
 	mine := claimsOn(me.Paths.Write, rel)
 	var touched []string
 	for _, decl := range changed {
-		if decl == types.Preamble || namedBy(mine, decl) || slices.Contains(touched, decl) {
+		if decl == jobtypes.Preamble || namedBy(mine, decl) || slices.Contains(touched, decl) {
 			continue
 		}
 		for _, owner := range owners {
@@ -118,7 +119,7 @@ func gradeNarrowedHold(ctx context.Context, at location, checkout string, me typ
 
 // growNarrowedHold advises of me's claims on rel growing by touched, or of why
 // they did not. A dry run or an empty touched writes nothing.
-func growNarrowedHold(ctx context.Context, at location, checkout string, me types.Job, rel string, mine, touched []string, narrowed bool) writeGrade {
+func growNarrowedHold(ctx context.Context, at location, checkout string, me jobtypes.Job, rel string, mine, touched []string, narrowed bool) writeGrade {
 	if len(touched) == 0 || isDryRun(ctx) {
 		return writeGrade{}
 	}
@@ -158,10 +159,10 @@ func quotedPaths(paths []string) string {
 
 // coveredOnlyByPattern reports whether a pattern among me's whole-file write paths covers
 // rel and no literal one does.
-func coveredOnlyByPattern(me types.Job, rel string) bool {
+func coveredOnlyByPattern(me jobtypes.Job, rel string) bool {
 	byPattern := false
 	for _, entry := range me.Paths.Write {
-		p, decl := types.SplitClaim(entry)
+		p, decl := jobtypes.SplitClaim(entry)
 		if decl != "" {
 			continue
 		}
@@ -176,7 +177,7 @@ func coveredOnlyByPattern(me types.Job, rel string) bool {
 	return byPattern
 }
 
-func denyClaimedDeclaration(me, owner types.Job, rel, claim, declaration string, mine []string) writeGrade {
+func denyClaimedDeclaration(me, owner jobtypes.Job, rel, claim, declaration string, mine []string) writeGrade {
 	return writeGrade{Decision: decisionDeny, Rule: string(denyRuleClaimedDeclaration), Reason: denial{
 		Say: fmt.Sprintf("magus workspace: this edit changes %s in %s, a declaration lease %s claims; "+leaseActorClause(fmt.Sprintf("re-partition the plan, or release %s#%s once lease %s has finished with it", rel, claim, owner.ID)),
 			declaration, rel, owner.ID),
@@ -190,10 +191,10 @@ func denyClaimedDeclaration(me, owner types.Job, rel, claim, declaration string,
 
 // soleClaim names the declaration owner claims in rel when that is all it holds of the
 // file: no entry of its write paths covers rel whole.
-func soleClaim(owner types.Job, rel string) (declaration string, ok bool) {
+func soleClaim(owner jobtypes.Job, rel string) (declaration string, ok bool) {
 	var whole []string
 	for _, entry := range owner.HardPaths() {
-		if _, decl := types.SplitClaim(entry); decl == "" {
+		if _, decl := jobtypes.SplitClaim(entry); decl == "" {
 			whole = append(whole, entry)
 		}
 	}
@@ -212,7 +213,7 @@ func soleClaim(owner types.Job, rel string) (declaration string, ok bool) {
 func claimsOn(writePaths []string, rel string) []string {
 	var out []string
 	for _, entry := range writePaths {
-		if p, decl := types.SplitClaim(entry); decl != "" && p != "" && path.Clean(p) == rel {
+		if p, decl := jobtypes.SplitClaim(entry); decl != "" && p != "" && path.Clean(p) == rel {
 			out = append(out, decl)
 		}
 	}
@@ -225,7 +226,7 @@ func namedBy(claims []string, declaration string) bool {
 }
 
 func namingClaim(claims []string, declaration string) (string, bool) {
-	i := slices.IndexFunc(claims, func(c string) bool { return types.NamesClaimedDeclaration(c, declaration) })
+	i := slices.IndexFunc(claims, func(c string) bool { return jobtypes.NamesClaimedDeclaration(c, declaration) })
 	if i < 0 {
 		return "", false
 	}

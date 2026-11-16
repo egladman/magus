@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
@@ -257,9 +258,9 @@ func TestLapseDegradeSuite(t *testing.T) {
 func (s *LapseDegradeSuite) SetupTest() {
 	s.layers, s.session = fleetLayers(s.T())
 	s.own = s.T().TempDir()
-	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"std/*.go"}}, State: types.StateRunning, Registered: 1,
-		CheckoutRoot: s.own, Worktree: &types.JobWorktree{Root: s.own, Source: s.session}}
-	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{row}}))
+	row := jobtypes.Job{ID: "w", Paths: jobtypes.Paths{Write: []string{"std/*.go"}}, State: jobtypes.StateRunning, Registered: 1,
+		CheckoutRoot: s.own, Worktree: &jobtypes.Worktree{Root: s.own, Source: s.session}}
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{row}}))
 }
 
 // lapsedWrite lapses an editor Write of path by agent, or by the root
@@ -324,8 +325,8 @@ func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesABoundWorkerFromTheSessi
 // A checkout `job exec` took is the job's as much as one its fork made.
 func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAWriteInAnAdoptedCheckout() {
 	adopted := s.T().TempDir()
-	row := types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"std/*.go"}}, State: types.StateRunning, Registered: 1, CheckoutRoot: adopted}
-	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{row}}))
+	row := jobtypes.Job{ID: "a", Paths: jobtypes.Paths{Write: []string{"std/*.go"}}, State: jobtypes.StateRunning, Registered: 1, CheckoutRoot: adopted}
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{row}}))
 	for i := range lapsesBeforeDegrade + 2 {
 		v := s.lapsedWrite("a1b2c3", filepath.Join(adopted, "std", "module.go"))
 		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
@@ -334,8 +335,8 @@ func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesAWriteInAnAdoptedCheckou
 
 func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesACommandInAnAdoptedCheckout() {
 	adopted := s.T().TempDir()
-	row := types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"std/*.go"}}, State: types.StateRunning, Registered: 1, CheckoutRoot: adopted}
-	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{row}}))
+	row := jobtypes.Job{ID: "a", Paths: jobtypes.Paths{Write: []string{"std/*.go"}}, State: jobtypes.StateRunning, Registered: 1, CheckoutRoot: adopted}
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{row}}))
 	for i := range lapsesBeforeDegrade + 2 {
 		v := s.lapsedCommand("a1b2c3", adopted, "make build")
 		s.Equal(decisionDeny, v.Decision, "lapse %d", i+1)
@@ -343,8 +344,8 @@ func (s *LapseDegradeSuite) TestDegradedLapseStillDeniesACommandInAnAdoptedCheck
 }
 
 func (s *LapseDegradeSuite) TestDegradedLapsePassesACheckoutWhoseJobEnded() {
-	row := types.Job{ID: "a", Paths: types.JobPaths{Write: []string{"std/*.go"}}, State: types.StatePass, Registered: 1, CheckoutRoot: s.own}
-	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{row}}))
+	row := jobtypes.Job{ID: "a", Paths: jobtypes.Paths{Write: []string{"std/*.go"}}, State: jobtypes.StatePass, Registered: 1, CheckoutRoot: s.own}
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []jobtypes.Job{row}}))
 	for range lapsesBeforeDegrade {
 		s.Equal(decisionDeny, s.lapsedCommand("a1b2c3", s.own, "make build").Decision)
 	}

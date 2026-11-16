@@ -12,9 +12,9 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // newModelTierRequest is what a matrix function reads to choose row's tier: the row's
@@ -22,7 +22,7 @@ import (
 //
 // rows is the plan the row joins, which is where the parent's rank is read. WriteProjects
 // stays empty: a project is a graph fact, which [Store] fills from Location.Owners.
-func newModelTierRequest(row types.Job, rows []types.Job, set *tier.Set, models []tier.Pricing, history []types.ModelTierRecord) types.ModelTierRequest {
+func newModelTierRequest(row job.Job, rows []job.Job, set *tier.Set, models []tier.Pricing, history []types.ModelTierRecord) types.ModelTierRequest {
 	req := types.ModelTierRequest{
 		ID:           row.ID,
 		Parent:       row.Parent,
@@ -43,7 +43,7 @@ func newModelTierRequest(row types.Job, rows []types.Job, set *tier.Set, models 
 		req.Check = &check
 	}
 	if row.Parent != "" {
-		if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.Parent }); i >= 0 && rows[i].ModelTier != nil {
+		if i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == row.Parent }); i >= 0 && rows[i].ModelTier != nil {
 			rank := rows[i].ModelTier.Rank
 			req.ParentRank = &rank
 		}
@@ -57,19 +57,19 @@ func newModelTierRequest(row types.Job, rows []types.Job, set *tier.Set, models 
 
 // modelTierKind is what row is judged by, the first that applies: a script check, symbol
 // goals, path goals, a target check, else a reader of its prose.
-func modelTierKind(row types.Job) types.JobKind {
+func modelTierKind(row job.Job) types.JobKind {
 	var symbol, paths, target bool
 	for _, g := range row.EffectiveGoals() {
 		g = g.Resolve()
 		switch g.Kind {
-		case types.GoalKindCheck:
+		case job.GoalKindCheck:
 			if g.Check.Script != "" {
 				return types.JobKindScript
 			}
 			target = target || g.Check.Target != ""
-		case types.GoalKindSymbol:
+		case job.GoalKindSymbol:
 			symbol = true
-		case types.GoalKindPaths:
+		case job.GoalKindPaths:
 			paths = true
 		}
 	}
@@ -89,7 +89,7 @@ func modelTierKind(row types.Job) types.JobKind {
 func writeFileCount(writePaths []string) int {
 	files := make(map[string]struct{}, len(writePaths))
 	for _, p := range writePaths {
-		file, _ := types.SplitClaim(p)
+		file, _ := job.SplitClaim(p)
 		files[file] = struct{}{}
 	}
 	return len(files)
@@ -98,7 +98,7 @@ func writeFileCount(writePaths []string) int {
 // declaredModelTier is the tier a row's requested model names, false when it
 // names none. A requested tier must be one of set, and an id beside it must
 // map to no other tier. host is empty when the tier decides.
-func declaredModelTier(set *tier.Set, models []tier.Pricing, m agent.Model) (tier.Tier, string, bool, error) {
+func declaredModelTier(set *tier.Set, models []tier.Pricing, m job.Model) (tier.Tier, string, bool, error) {
 	if set == nil || m.IsZero() {
 		return tier.Tier{}, "", false, nil
 	}
@@ -149,14 +149,14 @@ func modelIDTier(set *tier.Set, models []tier.Pricing, model string) (resolved t
 // ModelRequest reads one model word, as `job fork --model` takes it: a tier
 // the workspace declares is the tier, and any other word a host model id.
 // A store opened with no model tiers reads every word as an id.
-func (s *Store) ModelRequest(word string) agent.Model {
+func (s *Store) ModelRequest(word string) job.Model {
 	word = strings.TrimSpace(word)
 	if s.modelTiers != nil {
 		if t, err := s.modelTiers.Parse(word); err == nil {
-			return agent.Model{Tier: t.Name()}
+			return job.Model{Tier: t.Name()}
 		}
 	}
-	return agent.Model{ID: word}
+	return job.Model{ID: word}
 }
 
 // modelRowsHost stands in for the host of a model the harness model rows map, since no one
@@ -198,7 +198,7 @@ func modelRowTier(set *tier.Set, models []tier.Pricing, model string) (tier.Tier
 //   - default: the declaration's default, with the skills the declaration gives it.
 //
 // A nil matrix declines. set must not be nil.
-func resolveModelTier(ctx context.Context, set *tier.Set, models []tier.Pricing, matrix func(context.Context, types.ModelTierRequest) (*tier.Assignment, error), req types.ModelTierRequest, row types.Job) (tier.Assignment, error) {
+func resolveModelTier(ctx context.Context, set *tier.Set, models []tier.Pricing, matrix func(context.Context, types.ModelTierRequest) (*tier.Assignment, error), req types.ModelTierRequest, row job.Job) (tier.Assignment, error) {
 	if set == nil {
 		return tier.Assignment{}, errors.New("job: no model tiers to assign from")
 	}
@@ -259,7 +259,7 @@ func resolveModelTier(ctx context.Context, set *tier.Set, models []tier.Pricing,
 
 // assignModelTier is the tier for row, written into plan. It runs under [Store.mutate]'s
 // lock with plan as it stood before the write, so the bound is read where it is spent.
-func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types.Job) (tier.Assignment, error) {
+func (s *Store) assignModelTier(ctx context.Context, row job.Job, plan []job.Job) (tier.Assignment, error) {
 	var models []tier.Pricing
 	if s.modelRows != nil {
 		models = s.modelRows()
@@ -279,7 +279,7 @@ func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types
 	if t, ok := s.modelTiers.At(assigned.Rank); ok {
 		assigned.Shared = s.modelTiers.SharedAliases(t)
 	}
-	others := slices.DeleteFunc(slices.Clone(plan), func(r types.Job) bool { return r.ID == row.ID })
+	others := slices.DeleteFunc(slices.Clone(plan), func(r job.Job) bool { return r.ID == row.ID })
 	if err := refuseModelTierLimits(others, assigned, s.modelTiers); err != nil {
 		return tier.Assignment{}, err
 	}
@@ -288,10 +288,10 @@ func (s *Store) assignModelTier(ctx context.Context, row types.Job, plan []types
 
 // writeProjects is the projects row's write paths fall in, through Location.Owners, which
 // the caller has checked is set.
-func (s *Store) writeProjects(ctx context.Context, row types.Job) ([]string, error) {
+func (s *Store) writeProjects(ctx context.Context, row job.Job) ([]string, error) {
 	files := make([]string, len(row.Paths.Write))
 	for i, p := range row.Paths.Write {
-		files[i], _ = types.SplitClaim(p)
+		files[i], _ = job.SplitClaim(p)
 	}
 	return s.owners(ctx, files)
 }
@@ -302,7 +302,7 @@ const spawnAboveParentTier = "spawn-above-parent-tier"
 // tierPair is a row's proven tier beside its parent's. above is why the
 // spawn rule refuses the pair, nil when it ranks at or below the parent.
 type tierPair struct {
-	parentRow     types.Job
+	parentRow     job.Job
 	parent, child tier.Tier
 	above         error
 }
@@ -310,11 +310,11 @@ type tierPair struct {
 // aboveParent judges row's tier against its parent's in plan. Only a proven
 // pair is judged. A parent missing from plan, or a tier set no longer
 // declares, gives a zero pair. A proven pair with no rule is an error.
-func aboveParent(set *tier.Set, rule func(parent, child tier.Tier) error, row types.Job, plan []types.Job) (tierPair, error) {
+func aboveParent(set *tier.Set, rule func(parent, child tier.Tier) error, row job.Job, plan []job.Job) (tierPair, error) {
 	if set == nil || row.Parent == "" || row.ModelTier == nil {
 		return tierPair{}, nil
 	}
-	i := slices.IndexFunc(plan, func(r types.Job) bool { return r.ID == row.Parent })
+	i := slices.IndexFunc(plan, func(r job.Job) bool { return r.ID == row.Parent })
 	if i < 0 {
 		return tierPair{}, nil
 	}
@@ -349,7 +349,7 @@ func spawnRefusal(err error) error {
 // refuseAboveParent refuses row's tier above its parent's only when the
 // spawn-above-parent-tier setting is deny; advise and off let it through.
 // A store with no setting reader, or one that fails, is an error.
-func refuseAboveParent(ctx context.Context, set *tier.Set, rule func(parent, child tier.Tier) error, ceiling func(context.Context) (builtin.Setting, error), row types.Job, plan []types.Job) error {
+func refuseAboveParent(ctx context.Context, set *tier.Set, rule func(parent, child tier.Tier) error, ceiling func(context.Context) (builtin.Setting, error), row job.Job, plan []job.Job) error {
 	pair, err := aboveParent(set, rule, row, plan)
 	if err != nil || pair.above == nil {
 		return err
@@ -367,12 +367,12 @@ func refuseAboveParent(ctx context.Context, set *tier.Set, rule func(parent, chi
 	err = fmt.Errorf("job: %s would run at model tier %s, and its parent %s was forked at %s,"+
 		" and this workspace sets %s to deny, so fork it at %s or lower (`--model %s`): %w",
 		row.ID, row.ModelTier, row.Parent, pair.parentRow.ModelTier, spawnAboveParentTier, pair.parent.Name(), pair.parent.Name(), pair.above)
-	return types.NonRetryable(err, types.RetryAfterPerson, "a person forks the higher-tier row or sets the rule to advise")
+	return types.NonRetryable(err, job.RetryAfterPerson, "a person forks the higher-tier row or sets the rule to advise")
 }
 
 // aboveParentNote advises a fork above its parent's tier, "" when it is not
 // or the setting is off. A setting that fails to read is said, not dropped.
-func aboveParentNote(ctx context.Context, store *Store, row types.Job, plan []types.Job) string {
+func aboveParentNote(ctx context.Context, store *Store, row job.Job, plan []job.Job) string {
 	pair, err := aboveParent(store.modelTiers, store.spawnRule, row, plan)
 	if err != nil || pair.above == nil || store.spawnCeiling == nil {
 		return ""
@@ -396,7 +396,7 @@ func aboveParentNote(ctx context.Context, store *Store, row types.Job, plan []ty
 
 // tierModel names the model a row runs: its tier's alias, its requested
 // id, or the tier's name when neither is recorded.
-func tierModel(row types.Job) string {
+func tierModel(row job.Job) string {
 	return cmp.Or(row.ModelTier.Model, row.Agent.RequestedModel().ID, row.ModelTier.Name)
 }
 
@@ -469,7 +469,7 @@ func checkMatrixAnswer(set *tier.Set, id string, answer tier.Assignment) (tier.A
 //
 // Read inside the store's write, so unlike [forkLimitProblems] two concurrent forks cannot
 // both pass a bound the pair exceeds.
-func refuseModelTierLimits(rows []types.Job, assigned tier.Assignment, set *tier.Set) error {
+func refuseModelTierLimits(rows []job.Job, assigned tier.Assignment, set *tier.Set) error {
 	named, err := set.Parse(assigned.Name)
 	if err != nil {
 		return fmt.Errorf("job: %w", err)

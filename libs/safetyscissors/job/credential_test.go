@@ -1,4 +1,4 @@
-package types
+package job
 
 import (
 	"math/rand"
@@ -9,17 +9,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/json"
+	"encoding/json"
 )
 
 // validGrants is every grant Valid accepts: console none/read/write crossed with tokens and
 // mcp each none/write. Eighteen, few enough to check every pair and triple outright.
-func validGrants() []Grant {
-	var out []Grant
+func validGrants() []Access {
+	var out []Access
 	for _, tok := range []Level{LevelNone, LevelWrite} {
 		for _, mcp := range []Level{LevelNone, LevelWrite} {
 			for _, con := range []Level{LevelNone, LevelRead, LevelWrite} {
-				out = append(out, Grant{Tokens: tok, MCP: mcp, Console: con})
+				out = append(out, Access{Tokens: tok, MCP: mcp, Console: con})
 			}
 		}
 	}
@@ -28,7 +28,7 @@ func validGrants() []Grant {
 
 // Generate makes quick draw only valid grants, so the laws below are about the lattice magus
 // uses rather than about levels Valid refuses.
-func (Grant) Generate(r *rand.Rand, _ int) reflect.Value {
+func (Access) Generate(r *rand.Rand, _ int) reflect.Value {
 	all := validGrants()
 	return reflect.ValueOf(all[r.Intn(len(all))])
 }
@@ -45,25 +45,25 @@ func TestGrantLatticeLaws(t *testing.T) {
 	t.Parallel()
 	cfg := &quick.Config{MaxCount: 2000}
 	laws := map[string]any{
-		"reflexive": func(a Grant) bool { return a.Within(a) },
-		"antisymmetric": func(a, b Grant) bool {
+		"reflexive": func(a Access) bool { return a.Within(a) },
+		"antisymmetric": func(a, b Access) bool {
 			return implies(a.Within(b) && b.Within(a), a == b)
 		},
-		"transitive": func(a, b, c Grant) bool {
+		"transitive": func(a, b, c Access) bool {
 			return implies(a.Within(b) && b.Within(c), a.Within(c))
 		},
 		// Anything a narrower grant reaches, a wider one reaches too.
-		"allows is monotone": func(a, b Grant, n Need) bool {
+		"allows is monotone": func(a, b Access, n Need) bool {
 			return implies(a.Within(b) && a.Allows(n), b.Allows(n))
 		},
-		"operator is the top":   func(a Grant) bool { return a.Within(GrantOperator) },
-		"nothing is the bottom": func(a Grant) bool { return Grant{}.Within(a) },
-		"json round-trips": func(a Grant) bool {
+		"operator is the top":   func(a Access) bool { return a.Within(AccessOperator) },
+		"nothing is the bottom": func(a Access) bool { return Access{}.Within(a) },
+		"json round-trips": func(a Access) bool {
 			b, err := json.Marshal(a)
 			if err != nil {
 				return false
 			}
-			var back Grant
+			var back Access
 			return json.Unmarshal(b, &back) == nil && back == a
 		},
 	}
@@ -92,7 +92,7 @@ func TestGrantValidateRefusesLevelsAScopeHasNoMeaningFor(t *testing.T) {
 	for _, g := range validGrants() {
 		require.NoError(t, g.Validate(), g.String())
 	}
-	for _, g := range []Grant{{Tokens: LevelRead}, {MCP: LevelRead}, {Console: 3}, {Tokens: 9}} {
+	for _, g := range []Access{{Tokens: LevelRead}, {MCP: LevelRead}, {Console: 3}, {Tokens: 9}} {
 		assert.Error(t, g.Validate(), "%+v", g)
 	}
 }
@@ -121,27 +121,27 @@ func TestNeedValidateRefusesZeroAndInvalid(t *testing.T) {
 }
 
 // The presets are hand-pinned: a change to any of them is a change to what a minted token can
-// do, and must show in a diff. A share link holds GrantViewer, so it and a viewer see the same
+// do, and must show in a diff. A share link holds AccessViewer, so it and a viewer see the same
 // routes.
 func TestGrantPresets(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "tokens=write,mcp=write,console=write", GrantOperator.String())
-	assert.Equal(t, "mcp=write", GrantConnector.String())
-	assert.Equal(t, "console=write", GrantConsole.String())
-	assert.Equal(t, "console=read", GrantViewer.String())
-	assert.Equal(t, "", Grant{}.String())
+	assert.Equal(t, "tokens=write,mcp=write,console=write", AccessOperator.String())
+	assert.Equal(t, "mcp=write", AccessConnector.String())
+	assert.Equal(t, "console=write", AccessConsole.String())
+	assert.Equal(t, "console=read", AccessViewer.String())
+	assert.Equal(t, "", Access{}.String())
 }
 
 // A stored grant reads as names, not numbers, and a record naming an unknown level fails to
 // decode rather than reading as none.
 func TestGrantJSONUsesLevelNames(t *testing.T) {
 	t.Parallel()
-	b, err := json.Marshal(GrantConnector)
+	b, err := json.Marshal(AccessConnector)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"mcp":"write"}`, string(b))
-	var g Grant
+	var g Access
 	require.NoError(t, json.Unmarshal([]byte(`{"console":"read"}`), &g))
-	assert.Equal(t, GrantViewer, g)
+	assert.Equal(t, AccessViewer, g)
 	assert.Error(t, json.Unmarshal([]byte(`{"console":"admin"}`), &g))
 }
 

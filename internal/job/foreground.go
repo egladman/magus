@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // ForegroundOverrun is a job's check whose last real run took longer than a wired agent
@@ -36,13 +36,13 @@ type ForegroundMax func() (time.Duration, bool)
 // target check, or when the limit is unknown. A check with no recorded run is passed over.
 // limit is asked once, and only once a run is found, since answering it loads the wired
 // harnesses.
-func OverrunsForeground(row types.Job, lastRun LastRun, limit ForegroundMax) (ForegroundOverrun, bool) {
+func OverrunsForeground(row job.Job, lastRun LastRun, limit ForegroundMax) (ForegroundOverrun, bool) {
 	var (
 		longest         time.Duration
 		asked, declared bool
 	)
 	for _, g := range row.EffectiveGoals() {
-		if g.Kind != types.GoalKindCheck || g.Check.Target == "" {
+		if g.Kind != job.GoalKindCheck || g.Check.Target == "" {
 			continue
 		}
 		project := cmp.Or(g.Check.Project, ".")

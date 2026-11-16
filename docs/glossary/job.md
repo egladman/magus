@@ -47,7 +47,7 @@ In the docs:
 In the code (`magus refs <name>` lists every site):
 
 - `magus\Job` (Buzz host type)
-- `types.Job` (Go)
+- `job.Job` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

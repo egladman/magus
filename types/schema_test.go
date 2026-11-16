@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,7 +62,7 @@ func loadGoldens(t *testing.T, l FormatLedger) map[APIVersion]schemaGolden {
 var packageQualifier = regexp.MustCompile(`\b[a-z][a-z0-9_]*\.`)
 
 // wireType drops the pointer and every package qualifier, so a type that moves
-// between packages is the same wire type and []types.Goal stays []Goal.
+// between packages is the same wire type and []job.Goal stays []Goal.
 func wireType(t string) string {
 	return packageQualifier.ReplaceAllString(strings.TrimPrefix(t, "*"), "")
 }
@@ -300,10 +301,10 @@ func TestSchemaUnknownRoundTrips(t *testing.T) {
 	t.Parallel()
 
 	in := `{"api_version":"magus.job-result/v1alpha99","requires":["x"],"job":"a","future_field":{"x":1}}`
-	var result JobResult
+	var result job.Result
 	require.NoError(t, json.Unmarshal([]byte(in), &result))
 	// The bag's raw values are the decoder's own; its keys are checked below.
-	assert.Equal(t, JobResult{Schema: Schema{Version: "magus.job-result/v1alpha99", Requires: []string{"x"}, Unknown: result.Unknown}, Job: "a"}, result)
+	assert.Equal(t, job.Result{Schema: job.Schema{Version: "magus.job-result/v1alpha99", Requires: []string{"x"}, Unknown: result.Unknown}, Job: "a"}, result)
 	assert.Equal(t, []string{"future_field"}, slices.Collect(maps.Keys(result.Unknown)))
 
 	out, err := json.Marshal(result)
@@ -320,5 +321,5 @@ func TestSchemaUnmet(t *testing.T) {
 	assert.Nil(t, Schema{}.Unmet(nil))
 	assert.Nil(t, Schema{Requires: []string{"a"}}.Unmet([]string{"a", "b"}))
 	assert.Equal(t, []string{"c", "d"}, Schema{Requires: []string{"c", "a", "d"}}.Unmet([]string{"a"}))
-	assert.Equal(t, []string{"claim-declarations", "dead-job-end", "job-generations", "signature-goals"}, JobFeatures)
+	assert.Equal(t, []string{"claim-declarations", "dead-job-end", "job-generations", "signature-goals"}, job.Features())
 }

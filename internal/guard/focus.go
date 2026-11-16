@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -127,7 +128,7 @@ func gradeFocusRead(ctx context.Context, deps Dependencies, actingLease, command
 		if focus, ok = project.FocusAt(ws, focusDir(location)); !ok {
 			return focusGrade{}
 		}
-		lease = types.Job{}
+		lease = jobtypes.Job{}
 	}
 	return focusVerdict(focus, job.ReadBoundary(lease), lease.ID, location.workspace, focusDir(location), operands)
 }
@@ -187,17 +188,17 @@ func focusVerdict(focus project.Focus, declared []string, leaseID, root, dir str
 // yields none, and the caller falls back to the working directory, which advises.
 // That is the intended asymmetry: a hard read boundary needs somebody to have
 // declared one.
-func focusForLease(ctx context.Context, ws types.WorkspaceReader, location location, actingLease string) (project.Focus, types.Job, bool) {
-	if actingLease == "" || !types.ValidJobID(actingLease) || location.cacheDir == "" {
-		return project.Focus{}, types.Job{}, false
+func focusForLease(ctx context.Context, ws types.WorkspaceReader, location location, actingLease string) (project.Focus, jobtypes.Job, bool) {
+	if actingLease == "" || !jobtypes.ValidID(actingLease) || location.cacheDir == "" {
+		return project.Focus{}, jobtypes.Job{}, false
 	}
 	me, enrolled := leaseRow(ctx, location, actingLease)
 	if !enrolled || !me.State.Live() {
-		return project.Focus{}, types.Job{}, false
+		return project.Focus{}, jobtypes.Job{}, false
 	}
 	focus, ok := leaseFocus(ws, me)
 	if !ok {
-		return project.Focus{}, types.Job{}, false
+		return project.Focus{}, jobtypes.Job{}, false
 	}
 	return focus, me, true
 }
@@ -205,7 +206,7 @@ func focusForLease(ctx context.Context, ws types.WorkspaceReader, location locat
 // leaseFocus is the focus a lease row declares: the projects of its write paths and its
 // read paths, which only widen. It is the job store's own read boundary, so the store's
 // subset check and this deny agree on what a lease may read.
-func leaseFocus(ws types.WorkspaceReader, me types.Job) (project.Focus, bool) {
+func leaseFocus(ws types.WorkspaceReader, me jobtypes.Job) (project.Focus, bool) {
 	return project.FocusForPaths(ws, job.ReadBoundary(me))
 }
 

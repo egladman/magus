@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // MergeKind is how a region both sides changed was settled; 0 is not settled.
@@ -48,7 +50,7 @@ func (k MergeKind) String() string {
 // MergeRegion is one region both sides changed: the locations their edits collide at,
 // and how it settled.
 type MergeRegion struct {
-	Locations []Location
+	Locations []job.Location
 	Kind      MergeKind
 }
 
@@ -84,8 +86,8 @@ func (r MergeResolution) Label() string {
 }
 
 // Unsettled lists the locations of the regions that did not settle.
-func (r MergeResolution) Unsettled() []Location {
-	var out []Location
+func (r MergeResolution) Unsettled() []job.Location {
+	var out []job.Location
 	for _, reg := range r.Regions {
 		if reg.Kind == 0 {
 			out = append(out, reg.Locations...)
@@ -136,7 +138,7 @@ type mergeAlignment struct {
 	path           string
 	o, a, b        []string
 	ma, mb         []int // base line -> the side's line it is kept as, or -1
-	hunksA, hunksB []RegionChange
+	hunksA, hunksB []job.RegionChange
 }
 
 func alignMerge(path string, base, ours, theirs []byte) (mergeAlignment, bool) {
@@ -221,32 +223,32 @@ func (m mergeAlignment) walk(markerSize int) (out []byte, regions []MergeRegion,
 // locations names a region both sides changed: where ours's and theirs's hunks over it
 // collide, else every location either side's hunks there name. Ranges are 0-based and
 // half-open over base, ours and theirs.
-func (m mergeAlignment) locations(lo, hi, aLo, aHi, bLo, bHi int) []Location {
+func (m mergeAlignment) locations(lo, hi, aLo, aHi, bLo, bHi int) []job.Location {
 	a := hunksOver(m.hunksA, lo, hi, aLo, aHi)
 	b := hunksOver(m.hunksB, lo, hi, bLo, bHi)
-	if shared := Collisions(a, b); len(shared) > 0 {
+	if shared := job.Collisions(a, b); len(shared) > 0 {
 		return shared
 	}
-	var all []Location
+	var all []job.Location
 	for _, l := range slices.Concat(a, b) {
 		all = append(all, l.Location())
 	}
-	slices.SortFunc(all, func(x, y Location) int {
+	slices.SortFunc(all, func(x, y job.Location) int {
 		return cmp.Or(cmp.Compare(x.Path, y.Path), cmp.Compare(x.Declaration, y.Declaration))
 	})
 	all = slices.Compact(all)
 	if len(all) == 0 {
-		return []Location{{Path: m.path}}
+		return []job.Location{{Path: m.path}}
 	}
 	return all
 }
 
 // hunksOver returns the hunks with lines in [lo, hi) of the base or [sLo, sHi) of the side.
-func hunksOver(hunks []RegionChange, lo, hi, sLo, sHi int) []Locator {
-	var out []Locator
+func hunksOver(hunks []job.RegionChange, lo, hi, sLo, sHi int) []job.Locator {
+	var out []job.Locator
 	for _, h := range hunks {
 		from, to := lo, hi
-		if h.Side == RegionNew {
+		if h.Side == job.RegionNew {
 			from, to = sLo, sHi
 		}
 		if h.Lines[0]-1 < to && h.Lines[1]-1 >= from {

@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -114,11 +115,11 @@ func TestExtendedFootprintRecordsSiblingTestsAsSoftPaths(t *testing.T) {
 	ws := job.Workspace{Projects: []*types.Project{{Path: ".", Sources: types.MustParseGlobs("**/*.go")}}}
 
 	rec, notes := ExtendedFootprint(t.Context(), store, graph, root,
-		types.Declaration{ID: "w", Paths: types.JobPaths{Write: []string{"cli/registry.go"}}}, ws)
+		jobtypes.Declaration{ID: "w", Paths: jobtypes.Paths{Write: []string{"cli/registry.go"}}}, ws)
 
-	assert.Equal(t, types.Declaration{
+	assert.Equal(t, jobtypes.Declaration{
 		ID: "w",
-		Paths: types.JobPaths{
+		Paths: jobtypes.Paths{
 			Write: []string{"cli/registry.go", "cli/registry_test.go"},
 			Soft:  []string{"cli/registry_test.go"},
 		},
@@ -230,7 +231,7 @@ func (s *ForkGraphSuite) footprint(paths ...string) {
 	}}
 	store := job.NewStore(job.Location{StateBase: s.T().TempDir(), Root: s.root})
 	ws := job.Workspace{Projects: []*types.Project{{Name: ".", Path: "."}}}
-	ExtendedFootprint(s.T().Context(), store, graph, s.root, types.Declaration{ID: "w", Paths: types.JobPaths{Write: paths}}, ws)
+	ExtendedFootprint(s.T().Context(), store, graph, s.root, jobtypes.Declaration{ID: "w", Paths: jobtypes.Paths{Write: paths}}, ws)
 }
 
 func (s *ForkGraphSuite) TestARowWritingDocsLoadsNoGraph() {

@@ -7,9 +7,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/libs/safetyscissors/budget"
-	"github.com/egladman/magus/types/daemon"
-	difftypes "github.com/egladman/magus/types/diff"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -52,11 +49,15 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/oci"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
+	difftypes "github.com/egladman/magus/types/diff"
 	"github.com/egladman/magus/types/release"
 	typesvcs "github.com/egladman/magus/types/vcs"
 	"github.com/egladman/magus/vcs"
@@ -210,7 +211,7 @@ type Magus struct {
 	// one instead.
 	cacheBackend types.CacheBackend
 	// jobReader is WithJobReader's; nil reads the job store.
-	jobReader types.JobReader
+	jobReader job.Reader
 	// steps is WithStepRows' and WithStepRule's, checked at Open.
 	steps guard.StepTable
 	// modelTiers is what the root magusfile's magus\modelTiers declared.
@@ -1276,7 +1277,7 @@ func (m *Magus) RangeDiff(ctx context.Context, base, head string, paths []string
 //
 // Refused, never answered empty, for the reason RangeDiff gives: an empty footprint reads as
 // "this change touched nothing".
-func (m *Magus) Regions(ctx context.Context, base string, files []types.FileChange) ([]types.RegionChange, error) {
+func (m *Magus) Regions(ctx context.Context, base string, files []job.FileChange) ([]job.RegionChange, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil {
 		return nil, fmt.Errorf("resolving the version control backend: %w", err)

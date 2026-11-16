@@ -1,6 +1,10 @@
-package types
+package job
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/egladman/magus/libs/diagnostics"
+)
 
 // Attempt is one try of a Job: what the guard saw start it, how its
 // end was observed, and what it left. A fork of the ended job starts
@@ -23,10 +27,10 @@ type AttemptStatus struct {
 	Ended int64      `json:"ended,omitzero" yaml:"ended,omitempty"`
 	End   AttemptEnd `json:"end,omitempty"  yaml:"end,omitempty"`
 	// Result is what the holder filed with `magus job exit`.
-	Result *JobResult `json:"result,omitempty" yaml:"result,omitempty"`
+	Result *Result `json:"result,omitempty" yaml:"result,omitempty"`
 	// The members below are written when a fork of the ended job starts
 	// the next try. State is what the job ended as, "" until then.
-	State              JobState             `json:"state,omitempty"               yaml:"state,omitempty"`
+	State              State                `json:"state,omitempty"               yaml:"state,omitempty"`
 	ObservedGeneration int                  `json:"observed_generation,omitzero"  yaml:"observed_generation,omitempty"`
 	EndReason          string               `json:"end_reason,omitempty"          yaml:"end_reason,omitempty"`
 	ModelTier          string               `json:"model_tier,omitempty"          yaml:"model_tier,omitempty"`
@@ -40,7 +44,7 @@ type AttemptStatus struct {
 	FailingRefs []string `json:"failing_refs,omitempty" yaml:"failing_refs,omitempty"`
 	// DenialsKnown is false once the trail rotated past the try, so
 	// empty Denials then means unknown rather than none.
-	Denials      []JobDenial  `json:"denials,omitempty"       yaml:"denials,omitempty"`
+	Denials      []Denial     `json:"denials,omitempty"       yaml:"denials,omitempty"`
 	DenialsKnown bool         `json:"denials_known,omitzero"  yaml:"denials_known,omitempty"`
 	Retry        RetryVerdict `json:"retry,omitzero"          yaml:"retry,omitempty"`
 }
@@ -85,7 +89,7 @@ func (a Attempt) Clone() Attempt {
 	s := &a.Status
 	if s.Result != nil {
 		r := *s.Result
-		r.Schema = s.Result.clone()
+		r.Schema = s.Result.Schema.clone()
 		r.ChangedPaths = slices.Clone(r.ChangedPaths)
 		r.Descendants = slices.Clone(r.Descendants)
 		r.UnresolvedRisks = slices.Clone(r.UnresolvedRisks)
@@ -100,13 +104,13 @@ func (a Attempt) Clone() Attempt {
 	return a
 }
 
-// JobAttempts are a store's attempts by job, each job's in order of N.
+// Attempts are a store's attempts by job, each job's in order of N.
 // A job with none reads as on its first try, nothing observed.
-type JobAttempts map[string][]Attempt
+type Attempts map[string][]Attempt
 
-// NewJobAttempts groups all by job.
-func NewJobAttempts(all []Attempt) JobAttempts {
-	out := JobAttempts{}
+// NewAttempts groups all by job.
+func NewAttempts(all []Attempt) Attempts {
+	out := Attempts{}
 	for _, a := range all {
 		out[a.Job] = append(out[a.Job], a)
 	}
@@ -118,7 +122,7 @@ func NewJobAttempts(all []Attempt) JobAttempts {
 
 // LiveN numbers job's try in progress: its newest try no fork
 // superseded, else one past the newest that was, else 1.
-func (j JobAttempts) LiveN(job string) int {
+func (j Attempts) LiveN(job string) int {
 	n := 1
 	for _, a := range j[job] {
 		if a.Superseded() {
@@ -132,7 +136,7 @@ func (j JobAttempts) LiveN(job string) int {
 
 // Live is job's try in progress, with only Job and N set when the
 // store holds nothing of it yet.
-func (j JobAttempts) Live(job string) Attempt {
+func (j Attempts) Live(job string) Attempt {
 	n := j.LiveN(job)
 	for _, a := range j[job] {
 		if a.N == n {
@@ -143,7 +147,7 @@ func (j JobAttempts) Live(job string) Attempt {
 }
 
 // Prior are job's tries a fork superseded, oldest first.
-func (j JobAttempts) Prior(job string) []Attempt {
+func (j Attempts) Prior(job string) []Attempt {
 	var out []Attempt
 	for _, a := range j[job] {
 		if a.Superseded() {
@@ -154,6 +158,32 @@ func (j JobAttempts) Prior(job string) []Attempt {
 }
 
 // Result is what job's try in progress filed, nil for nothing.
-func (j JobAttempts) Result(job string) *JobResult {
+func (j Attempts) Result(job string) *Result {
 	return j.Live(job).Status.Result
+}
+
+// RetryChange names what must change before repeating a failed action can help.
+type RetryChange string
+
+const (
+	// RetryAsIs is a failure that repeating unchanged may clear.
+	RetryAsIs RetryChange = ""
+	// RetryAfterConfig needs a declaration or configuration edit first.
+	RetryAfterConfig RetryChange = "config"
+	// RetryAfterWidening needs the job's write paths widened first (`magus job apply`).
+	RetryAfterWidening RetryChange = "widening"
+	// RetryAfterPerson needs a person to decide or act first.
+	RetryAfterPerson RetryChange = "person"
+	// RetryAfterUpgrade needs a different magus or tool version first.
+	RetryAfterUpgrade RetryChange = "upgrade"
+)
+
+// RetryVerdict is a classification of whether a failed action may be repeated. Change
+// and Reason are set only when Retryable is false; Code names the diagnostic whose entry
+// in the caller's non-retryable table decided it.
+type RetryVerdict struct {
+	Retryable bool             `json:"retryable"        yaml:"retryable"`
+	Change    RetryChange      `json:"change,omitempty" yaml:"change,omitempty"`
+	Reason    string           `json:"reason,omitempty" yaml:"reason,omitempty"`
+	Code      diagnostics.Code `json:"code,omitempty"   yaml:"code,omitempty"`
 }

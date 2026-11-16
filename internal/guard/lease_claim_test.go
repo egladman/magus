@@ -9,21 +9,20 @@ import (
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // leaseClaimFixture is a running job that released registry.go, which its verification then
 // sends it back to.
-func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
+func leaseClaimFixture(t *testing.T) (context.Context, string, jobtypes.Job) {
 	t.Helper()
-	row := types.Job{
+	row := jobtypes.Job{
 		ID:         "cli-ls-files",
-		Agent:      agent.Instructed("add vcs ls-files"),
-		State:      types.StateRunning,
-		Paths:      types.JobPaths{Write: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"}},
+		Agent:      jobtypes.Instructed("add vcs ls-files"),
+		State:      jobtypes.StateRunning,
+		Paths:      jobtypes.Paths{Write: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"}},
 		Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
@@ -36,7 +35,7 @@ func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
 		CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, StateBase: fixture.StateBase(t), Root: root,
 		Actor: &job.Actor{Lease: row.ID},
 	})
-	stored, err := held.Update(ctx, row.ID, func(u *types.Job) { u.Paths.Write = []string{"cmd/magus/vcs.go"} })
+	stored, err := held.Update(ctx, row.ID, func(u *jobtypes.Job) { u.Paths.Write = []string{"cmd/magus/vcs.go"} })
 	require.NoError(t, err)
 	require.Len(t, stored.Releases, 1)
 	return ctx, root, stored

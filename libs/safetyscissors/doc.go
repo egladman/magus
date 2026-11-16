@@ -6,6 +6,9 @@
 //
 //   - budget: the slot limiter, machine-wide memory and slot claims, and the verdicts
 //     an arbiter answers them with.
+//   - job: the job record a caller declares and the row a store keeps, its write paths,
+//     goals, states, results, grants and attempts, the claim grammar, the origin every
+//     record stamps, and the faults a record shows on its own.
 //   - step: one thing a program is about to do, as data, and the spec that declares
 //     each kind of step.
 //   - tier: the model tier set a caller declares, the assignment a job records, the

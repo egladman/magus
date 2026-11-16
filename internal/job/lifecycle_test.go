@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -27,19 +27,19 @@ import (
 // reason (2026-10-14). Every no_return a write records now says which end it was.
 func TestEndedReasonSaysWhichEnd(t *testing.T) {
 	t.Parallel()
-	check := &types.LeaseCheck{Target: "test", Project: "."}
+	check := &job.LeaseCheck{Target: "test", Project: "."}
 	for _, tt := range []struct {
 		name     string
-		row      types.Job
+		row      job.Job
 		filed    bool
 		byHolder bool
 		want     string
 	}{
-		{"a read-only scout that filed nothing", types.Job{ID: "s", ReadOnly: true, Registered: 1}, false, true, "ended ungraded"},
-		{"a result nobody verified", types.Job{ID: "w", Check: check, Registered: 1}, true, false, "ended unverified"},
-		{"a row nobody took", types.Job{ID: "w", Check: check}, false, false, "before any holder ran"},
-		{"its holder giving it up", types.Job{ID: "w", Check: check, Registered: 1}, false, true, "abandoned by its holder"},
-		{"the root ending an isolated worker's row", types.Job{ID: "w", Check: check, Registered: 1}, false, false, "ended by someone other than its holder"},
+		{"a read-only scout that filed nothing", job.Job{ID: "s", ReadOnly: true, Registered: 1}, false, true, "ended ungraded"},
+		{"a result nobody verified", job.Job{ID: "w", Check: check, Registered: 1}, true, false, "ended unverified"},
+		{"a row nobody took", job.Job{ID: "w", Check: check}, false, false, "before any holder ran"},
+		{"its holder giving it up", job.Job{ID: "w", Check: check, Registered: 1}, false, true, "abandoned by its holder"},
+		{"the root ending an isolated worker's row", job.Job{ID: "w", Check: check, Registered: 1}, false, false, "ended by someone other than its holder"},
 	} {
 		assert.Contains(t, endedReason(tt.row, tt.filed, tt.byHolder), tt.want, tt.name)
 	}
@@ -52,26 +52,26 @@ func TestExitPassesAReadOnlyRowNothingElseGrades(t *testing.T) {
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
-	seed(t, s, types.Job{ID: "notes", ReadOnly: true, State: types.StateRunning, Registered: 1})
-	seed(t, s, types.Job{ID: "probe", ReadOnly: true, State: types.StateRunning, Registered: 1, Check: &types.LeaseCheck{Script: "probe.buzz"}})
-	none := func(context.Context, string) (types.JobAttempt, error) { return types.JobAttempt{}, nil }
+	seed(t, s, job.Job{ID: "notes", ReadOnly: true, State: job.StateRunning, Registered: 1})
+	seed(t, s, job.Job{ID: "probe", ReadOnly: true, State: job.StateRunning, Registered: 1, Check: &job.LeaseCheck{Script: "probe.buzz"}})
+	none := func(context.Context, string) (job.CapturedRun, error) { return job.CapturedRun{}, nil }
 
-	notes, err := Exit(t.Context(), s, "notes", &types.JobResult{}, none)
+	notes, err := Exit(t.Context(), s, "notes", &job.Result{}, none)
 	require.NoError(t, err)
-	notes.Generation, notes.RegisteredBy = 0, types.Origin{}
+	notes.Generation, notes.RegisteredBy = 0, job.Origin{}
 	notes.Created, notes.Updated, notes.GateAttempts = 0, 0, nil
-	assert.Equal(t, types.Job{ID: "notes", ReadOnly: true, State: types.StatePass, Registered: 1, EndReason: returnedReason}, notes,
+	assert.Equal(t, job.Job{ID: "notes", ReadOnly: true, State: job.StatePass, Registered: 1, EndReason: returnedReason}, notes,
 		"the store's own stamps aside, a read-only row passes and changes nothing else")
 
-	probe, err := Exit(t.Context(), s, "probe", &types.JobResult{}, none)
+	probe, err := Exit(t.Context(), s, "probe", &job.Result{}, none)
 	require.NoError(t, err)
-	assert.Equal(t, types.StateExited, probe.State, "a check grades it at wait")
+	assert.Equal(t, job.StateExited, probe.State, "a check grades it at wait")
 	assert.Empty(t, probe.EndReason)
 }
 
 // observeClaim is an observer whose diff shows exactly what rep claims.
-func observeClaim(rep types.JobResult) Observer {
-	return func(context.Context, types.Job) (Observed, error) { return claimed(rep), nil }
+func observeClaim(rep job.Result) Observer {
+	return func(context.Context, job.Job) (Observed, error) { return claimed(rep), nil }
 }
 
 // TestExitFilesEvidenceForAWaitInAnotherCheckout keeps the lifecycle at the Store
@@ -85,14 +85,14 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	attempt := passingRun
 	attempt.Ref = result.Validation.OutputRef
 	attempt.TimestampMs = 9_999_999_999_999
-	resolver := func(_ context.Context, ref string) (types.JobAttempt, error) {
+	resolver := func(_ context.Context, ref string) (job.CapturedRun, error) {
 		assert.Equal(t, result.Validation.OutputRef, ref)
 		return attempt, nil
 	}
 
 	exited, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolver)
 	require.NoError(t, err)
-	assert.Equal(t, types.StateExited, exited.State)
+	assert.Equal(t, job.StateExited, exited.State)
 	filed := liveTry(t, NewStore(loc), result.Job).Status.Result
 	require.NotNil(t, filed)
 	require.NotNil(t, exited.Attempt)
@@ -106,18 +106,18 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	// when other gates existed is what let `describe job` say a check-only job had none.
 	assert.True(t, status.Clean(), "a verified job carries no risk")
 	status.UnresolvedRisks = nil
-	assert.Equal(t, types.JobStatus{
+	assert.Equal(t, job.Status{
 		Job:                result.Job,
 		Verified:           true,
 		Command:            result.Validation.Command,
-		Gates:              []types.VerificationStatus{{ID: types.PrimaryGoalID, OutputRef: result.Validation.OutputRef, Verified: true}},
+		Gates:              []job.VerificationStatus{{ID: job.PrimaryGoalID, OutputRef: result.Validation.OutputRef, Verified: true}},
 		ObservedGeneration: 1,
 	}, status)
 
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.StatePass, rows[0].State)
+	assert.Equal(t, job.StatePass, rows[0].State)
 }
 
 func TestWaitIgnoresASoftPathNobodyWrote(t *testing.T) {
@@ -131,7 +131,7 @@ func TestWaitIgnoresASoftPathNobodyWrote(t *testing.T) {
 	attempt := passingRun
 	attempt.Ref = result.Validation.OutputRef
 	attempt.TimestampMs = 9_999_999_999_999
-	resolver := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
+	resolver := func(context.Context, string) (job.CapturedRun, error) { return attempt, nil }
 
 	_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolver)
 	require.NoError(t, err)
@@ -152,12 +152,12 @@ func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
 	row := goalRow()
 	loc := declared(t, row)
 	result := goalResult()
-	attempts := map[string]types.JobAttempt{}
+	attempts := map[string]job.CapturedRun{}
 	for _, snapshot := range goalAttempts() {
 		snapshot.Attempt.TimestampMs = 9_999_999_999_999
 		attempts[snapshot.Attempt.Ref] = snapshot.Attempt
 	}
-	resolver := func(_ context.Context, ref string) (types.JobAttempt, error) { return attempts[ref], nil }
+	resolver := func(_ context.Context, ref string) (job.CapturedRun, error) { return attempts[ref], nil }
 
 	exited, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, resolver)
 	require.NoError(t, err)
@@ -172,7 +172,7 @@ func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
 
 // coveredRow is acceptRow holding only what passingResult changes, so its exit narrows
 // nothing and the spec keeps its generation.
-func coveredRow() types.Job {
+func coveredRow() job.Job {
 	row := acceptRow()
 	row.Paths.Write = []string{"internal/ledger", "cmd/magus/ledger.go"}
 	return row
@@ -185,16 +185,16 @@ type exitEvidenceSuite struct {
 
 func TestExitEvidence(t *testing.T) { suite.Run(t, new(exitEvidenceSuite)) }
 
-func (s *exitEvidenceSuite) row() types.Job {
+func (s *exitEvidenceSuite) row() job.Job {
 	row := acceptRow()
-	row.Check = &types.LeaseCheck{Target: "go::go-test", Project: "."}
+	row.Check = &job.LeaseCheck{Target: "go::go-test", Project: "."}
 	row.Validation = row.Check.String()
-	row.Goals = []types.Goal{types.Goal{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
+	row.Goals = []job.Goal{job.Goal{ID: "lint", Check: job.LeaseCheck{Target: "lint", Project: "."}}.Resolve()}
 	return row
 }
 
-func (s *exitEvidenceSuite) exit(row types.Job, result types.JobResult, attempt types.JobAttempt) (types.Job, error) {
-	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
+func (s *exitEvidenceSuite) exit(row job.Job, result job.Result, attempt job.CapturedRun) (job.Job, error) {
+	resolve := func(_ context.Context, ref string) (job.CapturedRun, error) {
 		attempt.Found, attempt.Ref, attempt.Project = true, ref, "."
 		attempt.TimestampMs = 9_999_999_999_999
 		return attempt, nil
@@ -205,42 +205,42 @@ func (s *exitEvidenceSuite) exit(row types.Job, result types.JobResult, attempt 
 func (s *exitEvidenceSuite) TestOwedGoalNeedsNoRef() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedNoSeat}}
 
-	exited, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+	exited, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
 	s.Require().NoError(err)
-	s.Equal(types.StateExited, exited.State)
+	s.Equal(job.StateExited, exited.State)
 	s.Empty(exited.GateAttempts)
 }
 
 func (s *exitEvidenceSuite) TestOwedGoalCitingARefIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat, OutputRef: "out9"}}
+	result.Validation = job.ResultValidation{Command: row.Validation, Owed: job.OwedNoSeat}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedNoSeat, OutputRef: "out9"}}
 
-	_, err := s.exit(row, result, types.JobAttempt{Target: "lint"})
+	_, err := s.exit(row, result, job.CapturedRun{Target: "lint"})
 
 	s.ErrorContains(err, `goal "lint" is filed as owed and cites output ref "out9"`)
 }
 
 func (s *exitEvidenceSuite) TestRefuseOwedReasonAcceptsRemoteCI() {
 	result := passingResult()
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedRemoteCI}}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedRemoteCI}}
 	s.Require().NoError(refuseOwedReason(result))
 
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: "too slow"}}
-	s.ErrorContains(refuseOwedReason(result), types.OwedRemoteCI)
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: "too slow"}}
+	s.ErrorContains(refuseOwedReason(result), job.OwedRemoteCI)
 }
 
 func (s *exitEvidenceSuite) TestOwedCheckCitingARefIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat, OutputRef: "out9"}
+	result.Validation = job.ResultValidation{Command: row.Validation, Owed: job.OwedNoSeat, OutputRef: "out9"}
 
-	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
 	s.ErrorContains(err, `files its check as owed and cites output ref "out9"`)
 }
@@ -248,10 +248,10 @@ func (s *exitEvidenceSuite) TestOwedCheckCitingARefIsRefused() {
 func (s *exitEvidenceSuite) TestGoalWithNeitherRefNorOwedIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint"}}
+	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint"}}
 
-	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
 	s.ErrorContains(err, `goal "lint" names none of output_ref, owed or unrun`)
 }
@@ -259,23 +259,23 @@ func (s *exitEvidenceSuite) TestGoalWithNeitherRefNorOwedIsRefused() {
 func (s *exitEvidenceSuite) TestUnrunGoalNeedsNoRef() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Unrun: "node_modules is missing"}}
+	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Unrun: "node_modules is missing"}}
 
-	exited, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+	exited, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
 	s.Require().NoError(err)
-	s.Equal(types.StateExited, exited.State)
+	s.Equal(job.StateExited, exited.State)
 	s.Empty(exited.GateAttempts)
 }
 
 func (s *exitEvidenceSuite) TestUnrunGoalCitingARefIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Unrun: "disk under its floor", OutputRef: "out9"}}
+	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Unrun: "disk under its floor", OutputRef: "out9"}}
 
-	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
 	s.ErrorContains(err, `goal "lint" is filed as unrun and cites output ref "out9"`)
 }
@@ -283,9 +283,9 @@ func (s *exitEvidenceSuite) TestUnrunGoalCitingARefIsRefused() {
 func (s *exitEvidenceSuite) TestACheckBothOwedAndUnrunIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat, Unrun: "disk under its floor"}
+	result.Validation = job.ResultValidation{Command: row.Validation, Owed: job.OwedNoSeat, Unrun: "disk under its floor"}
 
-	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test"})
 
 	s.ErrorContains(err, "files its check as both owed and unrun")
 }
@@ -293,10 +293,10 @@ func (s *exitEvidenceSuite) TestACheckBothOwedAndUnrunIsRefused() {
 func (s *exitEvidenceSuite) TestGoalRefNamingAnotherCommandIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", OutputRef: "out9"}}
+	result.Validation = job.ResultValidation{Command: row.Validation, Owed: job.OwedNoSeat}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", OutputRef: "out9"}}
 
-	_, err := s.exit(row, result, types.JobAttempt{Target: "build"})
+	_, err := s.exit(row, result, job.CapturedRun{Target: "build"})
 
 	s.ErrorContains(err, `goal "lint" cites output ref "out9"`)
 	s.ErrorContains(err, "cite a run of that check, or file it as owed")
@@ -305,21 +305,21 @@ func (s *exitEvidenceSuite) TestGoalRefNamingAnotherCommandIsRefused() {
 func (s *exitEvidenceSuite) TestCheckRefNamingAnotherCommandIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out9"}
+	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out9"}
 
-	_, err := s.exit(row, result, types.JobAttempt{Target: "build"})
+	_, err := s.exit(row, result, job.CapturedRun{Target: "build"})
 
 	s.ErrorContains(err, `goal "check" cites output ref "out9"`)
 }
 
 // exitUnderDefaults is exit in a workspace setting default_charms: [rw].
-func (s *exitEvidenceSuite) exitUnderDefaults(row types.Job, attempt types.JobAttempt) (types.Job, error) {
+func (s *exitEvidenceSuite) exitUnderDefaults(row job.Job, attempt job.CapturedRun) (job.Job, error) {
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedNoSeat}}
 	loc := declared(s.T(), row)
 	s.Require().NoError(os.WriteFile(filepath.Join(loc.Root, "magus.yaml"), []byte("default_charms: [rw]\n"), 0o644))
-	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
+	resolve := func(_ context.Context, ref string) (job.CapturedRun, error) {
 		attempt.Found, attempt.Ref, attempt.Project = true, ref, "."
 		attempt.TimestampMs = 9_999_999_999_999
 		return attempt, nil
@@ -328,13 +328,13 @@ func (s *exitEvidenceSuite) exitUnderDefaults(row types.Job, attempt types.JobAt
 }
 
 func (s *exitEvidenceSuite) TestRunUnderTheDefaultCharmsIsTheCheck() {
-	_, err := s.exitUnderDefaults(s.row(), types.JobAttempt{Target: "go-test:rw"})
+	_, err := s.exitUnderDefaults(s.row(), job.CapturedRun{Target: "go-test:rw"})
 
 	s.NoError(err)
 }
 
 func (s *exitEvidenceSuite) TestRunSkippingTheDefaultCharmsIsRefused() {
-	_, err := s.exitUnderDefaults(s.row(), types.JobAttempt{Target: "go-test"})
+	_, err := s.exitUnderDefaults(s.row(), job.CapturedRun{Target: "go-test"})
 
 	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
 	s.ErrorContains(err, "go-test:rw")
@@ -344,7 +344,7 @@ func (s *exitEvidenceSuite) TestRunUnderDefaultsOfACheckOptingOutIsRefused() {
 	row := s.row()
 	row.Check.NoDefaultCharms = true
 
-	_, err := s.exitUnderDefaults(row, types.JobAttempt{Target: "go-test:rw"})
+	_, err := s.exitUnderDefaults(row, job.CapturedRun{Target: "go-test:rw"})
 
 	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
 }
@@ -353,7 +353,7 @@ func (s *exitEvidenceSuite) TestRunOfACheckOptingOutOfDefaultsIsTheCheck() {
 	row := s.row()
 	row.Check.NoDefaultCharms = true
 
-	_, err := s.exitUnderDefaults(row, types.JobAttempt{Target: "go-test"})
+	_, err := s.exitUnderDefaults(row, job.CapturedRun{Target: "go-test"})
 
 	s.NoError(err)
 }
@@ -361,9 +361,9 @@ func (s *exitEvidenceSuite) TestRunOfACheckOptingOutOfDefaultsIsTheCheck() {
 func (s *exitEvidenceSuite) TestACharmWithNoDefaultsIsRefused() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
 
-	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test:rw"})
+	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test:rw"})
 
 	s.ErrorContains(err, `goal "check" cites output ref "out1"`)
 }
@@ -371,9 +371,9 @@ func (s *exitEvidenceSuite) TestACharmWithNoDefaultsIsRefused() {
 func (s *exitEvidenceSuite) TestTestFilterStaysTheSameCommand() {
 	row := s.row()
 	result := passingResult()
-	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.Validation = job.ResultValidation{Command: row.Validation, OutputRef: "out1"}
 
-	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test", ExtraArgs: []string{"-run", "TestX"}})
+	_, err := s.exit(row, result, job.CapturedRun{Target: "go-test", ExtraArgs: []string{"-run", "TestX"}})
 
 	s.NoError(err)
 }
@@ -385,15 +385,15 @@ type rowKeepsItsPathsSuite struct {
 
 func TestRowKeepsItsPaths(t *testing.T) { suite.Run(t, new(rowKeepsItsPathsSuite)) }
 
-func (s *rowKeepsItsPathsSuite) resolver(result types.JobResult) AttemptResolver {
-	return func(context.Context, string) (types.JobAttempt, error) {
+func (s *rowKeepsItsPathsSuite) resolver(result job.Result) AttemptResolver {
+	return func(context.Context, string) (job.CapturedRun, error) {
 		attempt := passingRun
 		attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
 		return attempt, nil
 	}
 }
 
-func (s *rowKeepsItsPathsSuite) exit(loc Location, id string, result types.JobResult) types.Job {
+func (s *rowKeepsItsPathsSuite) exit(loc Location, id string, result job.Result) job.Job {
 	s.T().Helper()
 	exited, err := Exit(s.T().Context(), boundStore(loc, id), id, &result, s.resolver(result))
 	s.Require().NoError(err)
@@ -424,7 +424,7 @@ func (s *rowKeepsItsPathsSuite) TestAbandonmentKeepsEveryPath() {
 }
 
 func (s *rowKeepsItsPathsSuite) TestRejectionGivesUpOnlyAnUntouchedPathAnotherJobTook() {
-	taker := types.Job{ID: "taker", Agent: agent.Instructed("c"), Paths: types.JobPaths{Write: []string{"docs/reference/*.md"}}, State: types.StateRunning}
+	taker := job.Job{ID: "taker", Agent: job.Instructed("c"), Paths: job.Paths{Write: []string{"docs/reference/*.md"}}, State: job.StateRunning}
 	row := acceptRow()
 	loc := declared(s.T(), row, taker)
 	result := passingResult()
@@ -440,8 +440,8 @@ func (s *rowKeepsItsPathsSuite) TestRejectionGivesUpOnlyAnUntouchedPathAnotherJo
 
 	rows, err := NewStore(loc).List()
 	s.Require().NoError(err)
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == row.ID })
-	s.Equal(types.StateRunning, rows[i].State)
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == row.ID })
+	s.Equal(job.StateRunning, rows[i].State)
 	s.Equal([]string{"internal/ledger", "cmd/magus/ledger.go"}, rows[i].Paths.Write)
 }
 
@@ -453,7 +453,7 @@ func TestWaitKeepsARejectedJobOpen(t *testing.T) {
 	result := passingResult()
 	result.ChangedPaths = nil // a writing job cannot be accepted on an empty claimed change set
 
-	status, err := Wait(t.Context(), NewStore(loc), row.ID, &result, func(_ context.Context, _ string) (types.JobAttempt, error) {
+	status, err := Wait(t.Context(), NewStore(loc), row.ID, &result, func(_ context.Context, _ string) (job.CapturedRun, error) {
 		return passingRun, nil
 	}, nil, nil)
 	require.NoError(t, err)
@@ -462,7 +462,7 @@ func TestWaitKeepsARejectedJobOpen(t *testing.T) {
 
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
-	assert.Equal(t, types.StateRunning, rows[0].State, "a rejected result is evidence to repair, not a terminal verdict")
+	assert.Equal(t, job.StateRunning, rows[0].State, "a rejected result is evidence to repair, not a terminal verdict")
 }
 
 // A rejection is recorded for the next attempt to read, in the verdict's write and with the
@@ -476,7 +476,7 @@ func TestWaitRecordsARejectionAndAPassClearsIt(t *testing.T) {
 	require.NoError(t, err)
 	run := passingRun
 	run.Ref, run.TimestampMs = passingResult().Validation.OutputRef, 9_999_999_999_999
-	resolve := func(context.Context, string) (types.JobAttempt, error) { return run, nil }
+	resolve := func(context.Context, string) (job.CapturedRun, error) { return run, nil }
 	empty := passingResult()
 	empty.ChangedPaths = nil
 
@@ -510,10 +510,10 @@ func TestWaitNeverPassesOnEvidenceOfAnEarlierSpec(t *testing.T) {
 	result := passingResult()
 	attempt := passingRun
 	attempt.Ref, attempt.TimestampMs = result.Validation.OutputRef, 9_999_999_999_999
-	resolver := func(context.Context, string) (types.JobAttempt, error) { return attempt, nil }
+	resolver := func(context.Context, string) (job.CapturedRun, error) { return attempt, nil }
 	_, err := Exit(t.Context(), boundStore(loc, result.Job), result.Job, &result, resolver)
 	require.NoError(t, err)
-	respecced, err := NewStore(loc).Update(t.Context(), result.Job, func(u *types.Job) { u.Agent = agent.Instructed("also cover the console") })
+	respecced, err := NewStore(loc).Update(t.Context(), result.Job, func(u *job.Job) { u.Agent = job.Instructed("also cover the console") })
 	require.NoError(t, err)
 	require.Equal(t, 2, respecced.Generation)
 
@@ -535,13 +535,13 @@ func TestWaitNeverPassesOnEvidenceOfAnEarlierSpec(t *testing.T) {
 	assert.Contains(t, status.Violations[i], "go-test", "the violation names the check to run again")
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
-	assert.Equal(t, types.StateRunning, rows[0].State, "the rejection sends it back to rework")
+	assert.Equal(t, job.StateRunning, rows[0].State, "the rejection sends it back to rework")
 	require.NotNil(t, rows[0].Rejection)
 	assert.Equal(t, 2, rows[0].Rejection.ObservedGeneration)
 }
 
 // lineageRow is acceptRow renamed into a tree under parent.
-func lineageRow(id, parent string) types.Job {
+func lineageRow(id, parent string) job.Job {
 	row := acceptRow()
 	row.ID, row.Parent = id, parent
 	return row
@@ -549,8 +549,8 @@ func lineageRow(id, parent string) types.Job {
 
 // lineage is a worker's tree: its root, the worker, a sibling, a row outside the tree,
 // and below the worker whatever the case adds.
-func lineage(below ...types.Job) []types.Job {
-	return append([]types.Job{
+func lineage(below ...job.Job) []job.Job {
+	return append([]job.Job{
 		lineageRow("root", ""),
 		lineageRow("root/worker", "root"),
 		lineageRow("root/sibling", "root"),
@@ -559,24 +559,24 @@ func lineage(below ...types.Job) []types.Job {
 }
 
 // waitAs waits on target as the worker leased to holder, with a result that verifies.
-func waitAs(t *testing.T, loc Location, holder, target string) (types.JobStatus, error) {
+func waitAs(t *testing.T, loc Location, holder, target string) (job.Status, error) {
 	t.Helper()
 	result := passingResult()
 	result.Job = target
 	attempt := passingRun
 	attempt.Ref = result.Validation.OutputRef
 	attempt.TimestampMs = 9_999_999_999_999
-	return Wait(t.Context(), boundStore(loc, holder), target, &result, func(context.Context, string) (types.JobAttempt, error) {
+	return Wait(t.Context(), boundStore(loc, holder), target, &result, func(context.Context, string) (job.CapturedRun, error) {
 		return attempt, nil
 	}, observeClaim(result), nil)
 }
 
 // jobStates maps each row in loc's store to its state.
-func jobStates(t *testing.T, loc Location) map[string]types.JobState {
+func jobStates(t *testing.T, loc Location) map[string]job.State {
 	t.Helper()
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
-	out := map[string]types.JobState{}
+	out := map[string]job.State{}
 	for _, row := range rows {
 		out[row.ID] = row.State
 	}
@@ -587,7 +587,7 @@ func TestWaitLetsAHolderVerifyItsDescendants(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		rows   []types.Job
+		rows   []job.Job
 		target string
 	}{
 		"child": {
@@ -611,11 +611,11 @@ func TestWaitLetsAHolderVerifyItsDescendants(t *testing.T) {
 			require.NoError(t, err)
 			assert.True(t, status.Verified, status.Violations)
 
-			want := map[string]types.JobState{}
+			want := map[string]job.State{}
 			for _, row := range tt.rows {
-				want[row.ID] = types.StateRunning
+				want[row.ID] = job.StateRunning
 			}
-			want[tt.target] = types.StatePass
+			want[tt.target] = job.StatePass
 			assert.Equal(t, want, jobStates(t, loc))
 		})
 	}
@@ -639,9 +639,9 @@ func TestWaitRefusesAHolderOutsideItsDescendants(t *testing.T) {
 			_, err := waitAs(t, loc, "root/worker", target)
 			require.EqualError(t, err, "job: this checkout holds the lease on root/worker and a holder does not verify its own work")
 
-			want := map[string]types.JobState{}
+			want := map[string]job.State{}
 			for _, row := range rows {
-				want[row.ID] = types.StateRunning
+				want[row.ID] = job.StateRunning
 			}
 			assert.Equal(t, want, jobStates(t, loc), "a refused wait writes nothing")
 		})
@@ -649,7 +649,7 @@ func TestWaitRefusesAHolderOutsideItsDescendants(t *testing.T) {
 }
 
 // plant writes rows exactly as given, timestamps included, which no write door allows.
-func plant(t *testing.T, s *Store, rows ...types.Job) {
+func plant(t *testing.T, s *Store, rows ...job.Job) {
 	t.Helper()
 	require.NoError(t, s.update(t.Context(), func(f *jobsFile) error {
 		*f = jobsFile{Jobs: rows}
@@ -669,11 +669,11 @@ func sweepStore(t *testing.T, now int64, staleAfter time.Duration) (*Store, *str
 	return s, &notices
 }
 
-func states(t *testing.T, s *Store) map[string]types.Job {
+func states(t *testing.T, s *Store) map[string]job.Job {
 	t.Helper()
 	rows, err := s.List()
 	require.NoError(t, err)
-	out := map[string]types.Job{}
+	out := map[string]job.Job{}
 	for _, r := range rows {
 		out[r.ID] = r
 	}
@@ -692,23 +692,23 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 	tests := []struct {
 		name       string
 		staleAfter time.Duration
-		rows       []types.Job
+		rows       []job.Job
 		ended      map[string]string
 	}{
 		{
 			name: "a child of an ended parent ends with it",
-			rows: []types.Job{
-				{ID: "root", State: types.StatePass, Updated: fresh},
-				{ID: "root/a", Parent: "root", State: types.StateRunning, Registered: fresh, Updated: fresh},
+			rows: []job.Job{
+				{ID: "root", State: job.StatePass, Updated: fresh},
+				{ID: "root/a", Parent: "root", State: job.StateRunning, Registered: fresh, Updated: fresh},
 			},
 			ended: map[string]string{"root/a": "parent root ended as pass, and its tree ends with it"},
 		},
 		{
 			name: "the whole tree under an ended root ends, grandchildren included",
-			rows: []types.Job{
-				{ID: "root", State: types.StateNoReturn, Updated: fresh},
-				{ID: "root/a", Parent: "root", State: types.StateRunning, Updated: fresh},
-				{ID: "root/a/b", Parent: "root/a", State: types.StateExited, Updated: fresh},
+			rows: []job.Job{
+				{ID: "root", State: job.StateNoReturn, Updated: fresh},
+				{ID: "root/a", Parent: "root", State: job.StateRunning, Updated: fresh},
+				{ID: "root/a/b", Parent: "root/a", State: job.StateExited, Updated: fresh},
 			},
 			ended: map[string]string{
 				"root/a":   "parent root ended as no_return, and its tree ends with it",
@@ -717,9 +717,9 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 		},
 		{
 			name: "a job taken in a checkout that no longer exists ends, and its children with it",
-			rows: []types.Job{
-				{ID: "w", State: types.StateDeclared, Registered: fresh, CheckoutRoot: gone, Updated: fresh},
-				{ID: "w/c", Parent: "w", State: types.StateDeclared, Updated: fresh},
+			rows: []job.Job{
+				{ID: "w", State: job.StateDeclared, Registered: fresh, CheckoutRoot: gone, Updated: fresh},
+				{ID: "w/c", Parent: "w", State: job.StateDeclared, Updated: fresh},
 			},
 			ended: map[string]string{
 				"w":   fmt.Sprintf("taken in %s, which no longer exists", gone),
@@ -728,64 +728,64 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 		},
 		{
 			name: "a checkout that is still there, one that cannot be read, and an exited holder all stay live",
-			rows: []types.Job{
-				{ID: "present", State: types.StateRunning, Registered: fresh, CheckoutRoot: here, Updated: old},
-				{ID: "undecidable", State: types.StateRunning, Registered: fresh, CheckoutRoot: filepath.Join(notDir, "sub"), Updated: old},
-				{ID: "returned", State: types.StateExited, Registered: fresh, CheckoutRoot: gone, Updated: old},
+			rows: []job.Job{
+				{ID: "present", State: job.StateRunning, Registered: fresh, CheckoutRoot: here, Updated: old},
+				{ID: "undecidable", State: job.StateRunning, Registered: fresh, CheckoutRoot: filepath.Join(notDir, "sub"), Updated: old},
+				{ID: "returned", State: job.StateExited, Registered: fresh, CheckoutRoot: gone, Updated: old},
 			},
 		},
 		{
 			name:       "a declared job nobody took ends once it is older than stale_after",
 			staleAfter: 2 * time.Hour,
-			rows: []types.Job{
-				{ID: "untaken", State: types.StateDeclared, Updated: old},
-				{ID: "recent", State: types.StateDeclared, Updated: fresh},
-				{ID: "taken", State: types.StateDeclared, Registered: old, Updated: old},
-				{ID: "running", State: types.StateRunning, Updated: old},
-				{ID: "maintenance", RegisteredBy: types.Origin{EntryPoint: types.EntryPointServer}, State: types.StateDeclared, Updated: old},
+			rows: []job.Job{
+				{ID: "untaken", State: job.StateDeclared, Updated: old},
+				{ID: "recent", State: job.StateDeclared, Updated: fresh},
+				{ID: "taken", State: job.StateDeclared, Registered: old, Updated: old},
+				{ID: "running", State: job.StateRunning, Updated: old},
+				{ID: "maintenance", RegisteredBy: job.Origin{EntryPoint: job.EntryPointServer}, State: job.StateDeclared, Updated: old},
 			},
 			ended: map[string]string{"untaken": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
 		{
 			name:       "a declared job waiting on a running dependency is queued, and an exited one starts its clock",
 			staleAfter: 2 * time.Hour,
-			rows: []types.Job{
-				{ID: "first", State: types.StateRunning, Registered: fresh, Updated: fresh},
-				{ID: "handed-back", State: types.StateExited, Registered: fresh, Updated: old},
-				{ID: "just-handed-back", State: types.StateExited, Registered: fresh, Updated: fresh},
-				{ID: "queued", State: types.StateDeclared, DependsOn: []string{"first"}, Updated: old},
-				{ID: "queued-on-exited", State: types.StateDeclared, DependsOn: []string{"handed-back"}, Updated: old},
-				{ID: "queued-on-just-exited", State: types.StateDeclared, DependsOn: []string{"just-handed-back"}, Updated: old},
+			rows: []job.Job{
+				{ID: "first", State: job.StateRunning, Registered: fresh, Updated: fresh},
+				{ID: "handed-back", State: job.StateExited, Registered: fresh, Updated: old},
+				{ID: "just-handed-back", State: job.StateExited, Registered: fresh, Updated: fresh},
+				{ID: "queued", State: job.StateDeclared, DependsOn: []string{"first"}, Updated: old},
+				{ID: "queued-on-exited", State: job.StateDeclared, DependsOn: []string{"handed-back"}, Updated: old},
+				{ID: "queued-on-just-exited", State: job.StateDeclared, DependsOn: []string{"just-handed-back"}, Updated: old},
 			},
 			ended: map[string]string{"queued-on-exited": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
 		{
 			name:       "a waiter's clock starts when its last dependency ended",
 			staleAfter: 2 * time.Hour,
-			rows: []types.Job{
-				{ID: "just-done", State: types.StatePass, Updated: fresh},
-				{ID: "long-done", State: types.StatePass, Updated: old},
-				{ID: "unblocked", State: types.StateDeclared, DependsOn: []string{"just-done", "long-done"}, Updated: old},
-				{ID: "forgotten", State: types.StateDeclared, DependsOn: []string{"long-done"}, Updated: old - 60},
+			rows: []job.Job{
+				{ID: "just-done", State: job.StatePass, Updated: fresh},
+				{ID: "long-done", State: job.StatePass, Updated: old},
+				{ID: "unblocked", State: job.StateDeclared, DependsOn: []string{"just-done", "long-done"}, Updated: old},
+				{ID: "forgotten", State: job.StateDeclared, DependsOn: []string{"long-done"}, Updated: old - 60},
 			},
 			ended: map[string]string{"forgotten": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
 		{
 			name:       "a checkout_root with no registration is not a holder",
 			staleAfter: 2 * time.Hour,
-			rows: []types.Job{
-				{ID: "forked", State: types.StateDeclared, CheckoutRoot: here, Updated: old},
+			rows: []job.Job{
+				{ID: "forked", State: job.StateDeclared, CheckoutRoot: here, Updated: old},
 			},
 			ended: map[string]string{"forked": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
 		{
 			name: "a taken job past its deadline ends, and so does its tree; an untaken or returned one stays",
-			rows: []types.Job{
-				{ID: "late", State: types.StateRunning, Registered: fresh, Deadline: now - 600, Updated: fresh},
-				{ID: "late/c", Parent: "late", State: types.StateRunning, Registered: fresh, Updated: fresh},
-				{ID: "untaken", State: types.StateDeclared, Deadline: now - 600, Updated: fresh},
-				{ID: "returned", State: types.StateExited, Registered: fresh, Deadline: now - 600, Updated: fresh},
-				{ID: "in-time", State: types.StateRunning, Registered: fresh, Deadline: now + 600, Updated: fresh},
+			rows: []job.Job{
+				{ID: "late", State: job.StateRunning, Registered: fresh, Deadline: now - 600, Updated: fresh},
+				{ID: "late/c", Parent: "late", State: job.StateRunning, Registered: fresh, Updated: fresh},
+				{ID: "untaken", State: job.StateDeclared, Deadline: now - 600, Updated: fresh},
+				{ID: "returned", State: job.StateExited, Registered: fresh, Deadline: now - 600, Updated: fresh},
+				{ID: "in-time", State: job.StateRunning, Registered: fresh, Deadline: now + 600, Updated: fresh},
 			},
 			ended: map[string]string{
 				"late":   "overdue: its deadline passed 10m0s ago",
@@ -794,16 +794,16 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 		},
 		{
 			name: "a zero stale_after ends nothing for age",
-			rows: []types.Job{{ID: "untaken", State: types.StateDeclared, Updated: 1}},
+			rows: []job.Job{{ID: "untaken", State: job.StateDeclared, Updated: 1}},
 		},
 		{
 			name:       "an untaken root outlives its working children and ends after the last untaken one",
 			staleAfter: 2 * time.Hour,
-			rows: []types.Job{
-				{ID: "busy", State: types.StateDeclared, Updated: old},
-				{ID: "busy/w", Parent: "busy", State: types.StateRunning, Registered: fresh, Updated: fresh},
-				{ID: "idle", State: types.StateDeclared, Updated: old},
-				{ID: "idle/w", Parent: "idle", State: types.StateDeclared, Updated: old},
+			rows: []job.Job{
+				{ID: "busy", State: job.StateDeclared, Updated: old},
+				{ID: "busy/w", Parent: "busy", State: job.StateRunning, Registered: fresh, Updated: fresh},
+				{ID: "idle", State: job.StateDeclared, Updated: old},
+				{ID: "idle/w", Parent: "idle", State: job.StateDeclared, Updated: old},
 			},
 			ended: map[string]string{
 				"idle/w": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)",
@@ -826,7 +826,7 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 					assert.Equal(t, wantRow, row, "%s stays as it was", want.ID)
 					continue
 				}
-				wantRow.State, wantRow.EndReason, wantRow.Updated = types.StateNoReturn, reason, now
+				wantRow.State, wantRow.EndReason, wantRow.Updated = job.StateNoReturn, reason, now
 				assert.Equal(t, wantRow, row, "%s ends as no_return with its reason, and ending a row is its own transition", want.ID)
 				lines = append(lines, fmt.Sprintf("ended %s: %s", want.ID, reason))
 			}
@@ -844,11 +844,11 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 func TestListSweepIsIdempotent(t *testing.T) {
 	s, notices := sweepStore(t, 100_000, time.Hour)
 	plant(t, s,
-		types.Job{ID: "root", State: types.StateFail, Updated: 99_000},
-		types.Job{ID: "root/a", Parent: "root", State: types.StateDeclared, Updated: 99_000},
+		job.Job{ID: "root", State: job.StateFail, Updated: 99_000},
+		job.Job{ID: "root/a", Parent: "root", State: job.StateDeclared, Updated: 99_000},
 	)
 	first := states(t, s)
-	require.Equal(t, types.StateNoReturn, first["root/a"].State)
+	require.Equal(t, job.StateNoReturn, first["root/a"].State)
 	path, err := s.Path()
 	require.NoError(t, err)
 	before, err := os.ReadFile(path)
@@ -868,7 +868,7 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 	s := tempStore(t, checkout)
 	var notices strings.Builder
 	s.notices = &notices
-	seed(t, s, types.Job{ID: "w", State: types.StateDeclared, Checkpoint: "abc"})
+	seed(t, s, job.Job{ID: "w", State: job.StateDeclared, Checkpoint: "abc"})
 
 	taken, err := s.Exec(t.Context(), "w")
 	require.NoError(t, err)
@@ -876,15 +876,15 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, abs, taken.CheckoutRoot)
 
-	seed(t, s, types.Job{ID: "w", State: types.StateDeclared, Checkpoint: "abc", Agent: agent.Instructed("rewritten")})
+	seed(t, s, job.Job{ID: "w", State: job.StateDeclared, Checkpoint: "abc", Agent: job.Instructed("rewritten")})
 	require.NoError(t, os.RemoveAll(checkout))
 
 	rows := states(t, s)
-	assert.Equal(t, stamped(types.Job{
+	assert.Equal(t, stamped(job.Job{
 		ID:           "w",
-		Agent:        agent.Instructed("rewritten"),
+		Agent:        job.Instructed("rewritten"),
 		Checkpoint:   "abc",
-		State:        types.StateNoReturn,
+		State:        job.StateNoReturn,
 		ReportedBase: taken.ReportedBase,
 		BaseVerdict:  taken.BaseVerdict,
 		Registered:   taken.Registered,
@@ -899,7 +899,7 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 func TestUnattributedWritesLeaveUpdatedAlone(t *testing.T) {
 	root := t.TempDir()
 	s := tempStore(t, root)
-	plant(t, s, types.Job{ID: "w", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a.go"}}, Created: 50, Updated: 50})
+	plant(t, s, job.Job{ID: "w", State: job.StateRunning, Paths: job.Paths{Write: []string{"a.go"}}, Created: 50, Updated: 50})
 
 	require.NoError(t, s.RecordUnattributedWrite(t.Context(), "w", "a.go"))
 
@@ -927,11 +927,11 @@ func TestSweepReadsStaleAfterFromTheWorkspace(t *testing.T) {
 			}
 			s := tempStore(t, root)
 			s.notices = io.Discard
-			plant(t, s, types.Job{ID: "untaken", State: types.StateDeclared, Updated: old})
+			plant(t, s, job.Job{ID: "untaken", State: job.StateDeclared, Updated: old})
 
-			want := types.StateDeclared
+			want := job.StateDeclared
 			if tc.ended {
-				want = types.StateNoReturn
+				want = job.StateNoReturn
 			}
 			assert.Equal(t, want, states(t, s)["untaken"].State)
 		})
@@ -943,7 +943,7 @@ func TestSweepRefusesAnUnreadableWorkspaceConfig(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte("jobs:\n  stale_aftr: 1h\n"), 0o644))
 	s := tempStore(t, root)
-	plant(t, s, types.Job{ID: "untaken", State: types.StateDeclared, Updated: 1})
+	plant(t, s, job.Job{ID: "untaken", State: job.StateDeclared, Updated: 1})
 
 	_, err := s.List()
 	assert.ErrorContains(t, err, "jobs.stale_after")
@@ -958,7 +958,7 @@ func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
 	row := acceptRow()
 	row.CheckoutRoot, row.Registered = worker, 1
 	result := passingResult()
-	here := func(context.Context, string) (types.JobAttempt, error) { return types.JobAttempt{}, nil }
+	here := func(context.Context, string) (job.CapturedRun, error) { return job.CapturedRun{}, nil }
 
 	loc := declared(t)
 	plant(t, NewStore(loc), row)
@@ -967,10 +967,10 @@ func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
 
 	var asked []string
 	loc.Outputs = func(root string) AttemptResolver {
-		return func(_ context.Context, ref string) (types.JobAttempt, error) {
+		return func(_ context.Context, ref string) (job.CapturedRun, error) {
 			asked = append(asked, root)
 			if root != worker {
-				return types.JobAttempt{}, nil
+				return job.CapturedRun{}, nil
 			}
 			found := passingRun
 			found.Ref = ref
@@ -980,7 +980,7 @@ func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
 	stored, err := Exit(t.Context(), NewStore(loc), row.ID, &result, here)
 	require.NoError(t, err)
 	assert.Equal(t, []string{worker}, asked)
-	assert.Equal(t, types.StateExited, stored.State)
+	assert.Equal(t, job.StateExited, stored.State)
 	require.NotNil(t, stored.Attempt)
 	assert.Equal(t, "a1b2c3d4", stored.Attempt.Ref)
 }
@@ -1053,27 +1053,27 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 		{id: "symbol:go a/Lonely().", label: "Lonely", file: "keep.go"},
 		{id: "symbol:go a/LegacyAdapter().", label: "LegacyAdapter", file: "keep.go"},
 	}
-	paths := func(expect types.GoalExpect, p string) types.Goal {
-		return types.Goal{ID: "goal", Kind: types.GoalKindPaths, Expect: expect, Paths: []string{p}}
+	paths := func(expect job.GoalExpect, p string) job.Goal {
+		return job.Goal{ID: "goal", Kind: job.GoalKindPaths, Expect: expect, Paths: []string{p}}
 	}
-	symbol := func(expect types.GoalExpect, name string) types.Goal {
-		return types.Goal{ID: "goal", Kind: types.GoalKindSymbol, Expect: expect, Symbols: []string{name}}
+	symbol := func(expect job.GoalExpect, name string) job.Goal {
+		return job.Goal{ID: "goal", Kind: job.GoalKindSymbol, Expect: expect, Symbols: []string{name}}
 	}
-	signature := func(name, declared string) types.Goal {
-		return types.Goal{ID: "goal", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{name}, Signature: declared}
+	signature := func(name, declared string) job.Goal {
+		return job.Goal{ID: "goal", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{name}, Signature: declared}
 	}
-	check := types.Goal{ID: "goal", Check: types.LeaseCheck{Target: "go-test", Project: "."}}
-	run := types.JobAttempt{Found: true, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}
+	check := job.Goal{ID: "goal", Check: job.LeaseCheck{Target: "go-test", Project: "."}}
+	run := job.CapturedRun{Found: true, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}
 	failed := run
 	failed.Failed = true
 
 	for _, tc := range []struct {
 		name       string
-		goal       types.Goal
+		goal       job.Goal
 		checkpoint string
 		checkout   string
 		blind      bool
-		run        types.JobAttempt
+		run        job.CapturedRun
 		holds      bool
 		why        string
 	}{
@@ -1083,21 +1083,21 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 			why: "could not read what this job changed"},
 		{name: "paths changed fails when the job's checkout is gone and the waiter's is clean", goal: paths("", "api.go"),
 			checkout: filepath.Join(t.TempDir(), "removed"), why: `nothing matching "api.go" changed`},
-		{name: "paths present holds when it is there", goal: paths(types.ExpectPresent, "new.go"), holds: true},
-		{name: "paths present fails when it is gone", goal: paths(types.ExpectPresent, "legacy.go"), why: `nothing matching "legacy.go" is in the tree`},
-		{name: "paths absent holds when it is gone", goal: paths(types.ExpectAbsent, "legacy.go"), holds: true},
-		{name: "paths absent fails while it is there", goal: paths(types.ExpectAbsent, "keep.go"), why: `"keep.go" is still in the tree`},
+		{name: "paths present holds when it is there", goal: paths(job.ExpectPresent, "new.go"), holds: true},
+		{name: "paths present fails when it is gone", goal: paths(job.ExpectPresent, "legacy.go"), why: `nothing matching "legacy.go" is in the tree`},
+		{name: "paths absent holds when it is gone", goal: paths(job.ExpectAbsent, "legacy.go"), holds: true},
+		{name: "paths absent fails while it is there", goal: paths(job.ExpectAbsent, "keep.go"), why: `"keep.go" is still in the tree`},
 		{name: "symbol changed holds when its definition changed", goal: symbol("", "Api"), holds: true},
 		{name: "symbol changed fails when its definition is untouched", goal: symbol("", "Keep"), why: "none of that changed"},
 		{name: "symbol changed fails when the graph is unreadable", goal: symbol("", "Api"), blind: true,
 			why: "could not read the symbol graph"},
-		{name: "symbol present holds while it resolves", goal: symbol(types.ExpectPresent, "Keep"), holds: true},
-		{name: "symbol present fails on a longer name that survives", goal: symbol(types.ExpectPresent, "Legacy"),
+		{name: "symbol present holds while it resolves", goal: symbol(job.ExpectPresent, "Keep"), holds: true},
+		{name: "symbol present fails on a longer name that survives", goal: symbol(job.ExpectPresent, "Legacy"),
 			why: `"Legacy" is defined nowhere`},
-		{name: "symbol absent holds once it resolves nowhere", goal: symbol(types.ExpectAbsent, "Legacy"), holds: true},
-		{name: "symbol absent fails while it still resolves", goal: symbol(types.ExpectAbsent, "Keep"), why: `"Keep" is still defined in keep.go`},
-		{name: "symbol unreferenced holds when nothing references it", goal: symbol(types.ExpectUnreferenced, "Lonely"), holds: true},
-		{name: "symbol unreferenced fails while a reference remains", goal: symbol(types.ExpectUnreferenced, "Keep"),
+		{name: "symbol absent holds once it resolves nowhere", goal: symbol(job.ExpectAbsent, "Legacy"), holds: true},
+		{name: "symbol absent fails while it still resolves", goal: symbol(job.ExpectAbsent, "Keep"), why: `"Keep" is still defined in keep.go`},
+		{name: "symbol unreferenced holds when nothing references it", goal: symbol(job.ExpectUnreferenced, "Lonely"), holds: true},
+		{name: "symbol unreferenced fails while a reference remains", goal: symbol(job.ExpectUnreferenced, "Keep"),
 			why: `2 place(s) still reference "Keep"`},
 		{name: "symbol signature holds when the indexed declaration matches", goal: signature("Api", "func Api()"), holds: true},
 		{name: "symbol signature fails when the declaration differs", goal: signature("Api", "func Api(n int)"),
@@ -1108,7 +1108,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 			why: `"Legacy" is defined nowhere the graph can see`},
 		{name: "symbol signature fails when the graph is unreadable", goal: signature("Api", "func Api()"), blind: true,
 			why: "could not read the symbol graph"},
-		{name: "symbol unreferenced fails once the definition is gone", goal: symbol(types.ExpectUnreferenced, "Legacy"),
+		{name: "symbol unreferenced fails once the definition is gone", goal: symbol(job.ExpectUnreferenced, "Legacy"),
 			why: "cannot count what still names it"},
 		{name: "check passed holds on a passing run", goal: check, run: run, holds: true},
 		{name: "check passed fails on a failed run", goal: check, run: failed, why: "did not pass"},
@@ -1116,16 +1116,16 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			row := types.Job{
-				ID: "goal", Agent: agent.Instructed("the goal holds"), Paths: types.JobPaths{Write: []string{"."}}, State: types.StateRunning, Created: 1,
+			row := job.Job{
+				ID: "goal", Agent: job.Instructed("the goal holds"), Paths: job.Paths{Write: []string{"."}}, State: job.StateRunning, Created: 1,
 				Checkpoint: cmp.Or(tc.checkpoint, checkpoint), CheckoutRoot: cmp.Or(tc.checkout, worker),
-				Goals: []types.Goal{tc.goal.Resolve()},
+				Goals: []job.Goal{tc.goal.Resolve()},
 			}
 			loc := tempLocation(t, t.TempDir())
 			plant(t, NewStore(loc), row)
-			result := types.JobResult{Schema: types.Schema{Version: types.JobResultAPIVersion}, Job: "goal", ChangedPaths: changed}
+			result := job.Result{Schema: job.Schema{Version: job.ResultAPIVersion}, Job: "goal", ChangedPaths: changed}
 			if tc.run.Found {
-				result.VerificationEvidence = []types.VerificationEvidence{{GateID: "goal", OutputRef: "ref"}}
+				result.VerificationEvidence = []job.VerificationEvidence{{GateID: "goal", OutputRef: "ref"}}
 			}
 			read := GraphSymbols(graph)
 			if tc.blind {
@@ -1133,7 +1133,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 			}
 
 			status, err := Wait(t.Context(), NewStore(loc), "goal", &result,
-				func(context.Context, string) (types.JobAttempt, error) { return tc.run, nil },
+				func(context.Context, string) (job.CapturedRun, error) { return tc.run, nil },
 				CheckpointObserver(repo.Root(), read), nil)
 			require.NoError(t, err)
 			require.Len(t, status.Gates, 1)
@@ -1141,36 +1141,36 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 			require.NoError(t, err)
 			if tc.holds {
 				assert.True(t, status.Verified, "violations: %v", status.Violations)
-				assert.Equal(t, types.StatePass, rows[0].State)
+				assert.Equal(t, job.StatePass, rows[0].State)
 				return
 			}
 			assert.False(t, status.Gates[0].Verified)
 			assert.Contains(t, strings.Join(status.Gates[0].Violations, "\n"), tc.why)
 			// Not StateRunning: the sweep ends a job whose checkout is gone before wait grades it.
-			assert.NotEqual(t, types.StatePass, rows[0].State, "an unmet goal never passes the job")
+			assert.NotEqual(t, job.StatePass, rows[0].State, "an unmet goal never passes the job")
 		})
 	}
 }
 
 // pruneRows is a plan with one row for each reason prune ends a job and each it keeps one.
-func pruneRows(now int64) []types.Job {
+func pruneRows(now int64) []job.Job {
 	fresh, old, deadline := now-60, now-int64((3*time.Hour).Seconds()), now-600
-	return []types.Job{
-		{ID: "exited", State: types.StateExited, Registered: old, Updated: old},
-		{ID: "late", State: types.StateDeclared, Deadline: deadline, Updated: fresh},
-		{ID: "late-held", State: types.StateRunning, Registered: fresh, Deadline: deadline, Updated: fresh},
-		{ID: "late-idle", State: types.StateRunning, Registered: old, Deadline: deadline, Updated: old},
-		{ID: "idle", State: types.StateRunning, Registered: old, Updated: old},
-		{ID: "busy", State: types.StateRunning, Registered: fresh, Updated: fresh},
-		{ID: "plan", State: types.StateDeclared, Updated: old},
-		{ID: "plan/w", Parent: "plan", State: types.StateRunning, Registered: fresh, Updated: fresh},
-		{ID: "old-plan", State: types.StateDeclared, Updated: old},
-		{ID: "old-plan/w", Parent: "old-plan", State: types.StateRunning, Registered: old, Updated: old},
-		{ID: "done", State: types.StateExited, Updated: fresh},
-		{ID: "done/c", Parent: "done", State: types.StateDeclared, Updated: fresh},
-		{ID: "fresh", State: types.StateDeclared, Updated: fresh},
-		{ID: "maint", RegisteredBy: types.Origin{EntryPoint: types.EntryPointServer}, State: types.StateExited, Updated: old},
-		{ID: "graded", State: types.StatePass, Updated: old},
+	return []job.Job{
+		{ID: "exited", State: job.StateExited, Registered: old, Updated: old},
+		{ID: "late", State: job.StateDeclared, Deadline: deadline, Updated: fresh},
+		{ID: "late-held", State: job.StateRunning, Registered: fresh, Deadline: deadline, Updated: fresh},
+		{ID: "late-idle", State: job.StateRunning, Registered: old, Deadline: deadline, Updated: old},
+		{ID: "idle", State: job.StateRunning, Registered: old, Updated: old},
+		{ID: "busy", State: job.StateRunning, Registered: fresh, Updated: fresh},
+		{ID: "plan", State: job.StateDeclared, Updated: old},
+		{ID: "plan/w", Parent: "plan", State: job.StateRunning, Registered: fresh, Updated: fresh},
+		{ID: "old-plan", State: job.StateDeclared, Updated: old},
+		{ID: "old-plan/w", Parent: "old-plan", State: job.StateRunning, Registered: old, Updated: old},
+		{ID: "done", State: job.StateExited, Updated: fresh},
+		{ID: "done/c", Parent: "done", State: job.StateDeclared, Updated: fresh},
+		{ID: "fresh", State: job.StateDeclared, Updated: fresh},
+		{ID: "maint", RegisteredBy: job.Origin{EntryPoint: job.EntryPointServer}, State: job.StateExited, Updated: old},
+		{ID: "graded", State: job.StatePass, Updated: old},
 	}
 }
 
@@ -1214,7 +1214,7 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, notices := sweepStore(t, now, 2*time.Hour)
-			s.landed = func(context.Context, types.Job) string { return "" }
+			s.landed = func(context.Context, job.Job) string { return "" }
 			rows := pruneRows(now)
 			plant(t, s, rows...)
 
@@ -1237,7 +1237,7 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 					assert.Empty(t, row.EndReason, row.ID)
 					continue
 				}
-				assert.Equal(t, types.StateNoReturn, row.State, row.ID)
+				assert.Equal(t, job.StateNoReturn, row.State, row.ID)
 				assert.Equal(t, tt.want[at].Reason, row.EndReason, row.ID)
 				assert.Equal(t, now, row.Updated, row.ID)
 			}
@@ -1249,10 +1249,10 @@ func TestJobPruneKeepsAJobQueuedOnALiveDependency(t *testing.T) {
 	const now = int64(100_000)
 	old := now - int64((3 * time.Hour).Seconds())
 	s, _ := sweepStore(t, now, 2*time.Hour)
-	s.landed = func(context.Context, types.Job) string { return "" }
+	s.landed = func(context.Context, job.Job) string { return "" }
 	plant(t, s,
-		types.Job{ID: "first", State: types.StateRunning, Registered: now - 60, Updated: now - 60},
-		types.Job{ID: "queued", State: types.StateDeclared, DependsOn: []string{"first"}, Updated: old},
+		job.Job{ID: "first", State: job.StateRunning, Registered: now - 60, Updated: now - 60},
+		job.Job{ID: "queued", State: job.StateDeclared, DependsOn: []string{"first"}, Updated: old},
 	)
 
 	got, err := s.Prune(t.Context(), PruneOptions{All: true})
@@ -1263,7 +1263,7 @@ func TestJobPruneKeepsAJobQueuedOnALiveDependency(t *testing.T) {
 func TestJobPruneDryRunEndsNothing(t *testing.T) {
 	const now = int64(100_000)
 	s, _ := sweepStore(t, now, 2*time.Hour)
-	s.landed = func(context.Context, types.Job) string { return "" }
+	s.landed = func(context.Context, job.Job) string { return "" }
 	plant(t, s, pruneRows(now)...)
 	path, err := s.Path()
 	require.NoError(t, err)
@@ -1282,8 +1282,8 @@ func TestJobPruneDryRunEndsNothing(t *testing.T) {
 func TestDryRunListEndsRowsOnlyInWhatItReturns(t *testing.T) {
 	const now = int64(100_000)
 	s, notices := sweepStore(t, now, 2*time.Hour)
-	s.landed = func(context.Context, types.Job) string { return "" }
-	plant(t, s, types.Job{ID: "late", State: types.StateRunning, Registered: now - 60, Deadline: now - 600, Updated: now - 60})
+	s.landed = func(context.Context, job.Job) string { return "" }
+	plant(t, s, job.Job{ID: "late", State: job.StateRunning, Registered: now - 60, Deadline: now - 600, Updated: now - 60})
 	path, err := s.Path()
 	require.NoError(t, err)
 	dir := func() map[string]string {
@@ -1303,18 +1303,18 @@ func TestDryRunListEndsRowsOnlyInWhatItReturns(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.StateNoReturn, rows[0].State)
+	assert.Equal(t, job.StateNoReturn, rows[0].State)
 	assert.Contains(t, rows[0].EndReason, overdueReasonPrefix)
 	assert.Equal(t, before, dir())
 	assert.Empty(t, notices.String())
 }
 
 func TestJobPruneRefusesABoundWorker(t *testing.T) {
-	loc := declared(t, types.Job{ID: "w", State: types.StateExited})
+	loc := declared(t, job.Job{ID: "w", State: job.StateExited})
 	_, err := boundStore(loc, "w").Prune(t.Context(), PruneOptions{})
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused)
-	assert.Equal(t, types.StateExited, jobStates(t, loc)["w"])
+	assert.Equal(t, job.StateExited, jobStates(t, loc)["w"])
 }
 
 // waiterEvidenceJob is a job its holder exited with the runs in holderRuns, in a checkout
@@ -1322,23 +1322,23 @@ func TestJobPruneRefusesABoundWorker(t *testing.T) {
 type waiterEvidenceJob struct {
 	loc            Location
 	holder, waiter string
-	row            types.Job
-	result         types.JobResult
+	row            job.Job
+	result         job.Result
 }
 
 var (
-	failedRun   = types.JobAttempt{Found: true, Ref: "holder", Project: ".", Target: "go-test", Spell: "go", Failed: true, TimestampMs: 9_999_999_999_999}
-	passedHere  = types.JobAttempt{Found: true, Ref: "here", Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}
-	otherChecks = types.JobAttempt{Found: true, Ref: "here", Project: ".", Target: "go-vet", Spell: "go", TimestampMs: 9_999_999_999_999}
+	failedRun   = job.CapturedRun{Found: true, Ref: "holder", Project: ".", Target: "go-test", Spell: "go", Failed: true, TimestampMs: 9_999_999_999_999}
+	passedHere  = job.CapturedRun{Found: true, Ref: "here", Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}
+	otherChecks = job.CapturedRun{Found: true, Ref: "here", Project: ".", Target: "go-vet", Spell: "go", TimestampMs: 9_999_999_999_999}
 )
 
-func exitedWithRuns(t *testing.T, row types.Job, result types.JobResult, holderRuns map[string]types.JobAttempt) waiterEvidenceJob {
+func exitedWithRuns(t *testing.T, row job.Job, result job.Result, holderRuns map[string]job.CapturedRun) waiterEvidenceJob {
 	t.Helper()
 	return exitedWithRunsIn(t, t.TempDir(), row, result, holderRuns)
 }
 
 // exitedWithRunsIn is exitedWithRuns with waiter as the waiter's checkout.
-func exitedWithRunsIn(t *testing.T, waiter string, row types.Job, result types.JobResult, holderRuns map[string]types.JobAttempt) waiterEvidenceJob {
+func exitedWithRunsIn(t *testing.T, waiter string, row job.Job, result job.Result, holderRuns map[string]job.CapturedRun) waiterEvidenceJob {
 	t.Helper()
 	holder := t.TempDir()
 	for _, changed := range result.ChangedPaths {
@@ -1351,7 +1351,7 @@ func exitedWithRunsIn(t *testing.T, waiter string, row types.Job, result types.J
 	row.CheckoutRoot = holder
 	loc := tempLocation(t, waiter)
 	seed(t, NewStore(loc), row)
-	_, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, func(_ context.Context, ref string) (types.JobAttempt, error) {
+	_, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, func(_ context.Context, ref string) (job.CapturedRun, error) {
 		return holderRuns[ref], nil
 	})
 	require.NoError(t, err)
@@ -1360,29 +1360,29 @@ func exitedWithRunsIn(t *testing.T, waiter string, row types.Job, result types.J
 
 // waitWithEvidence waits as the waiter, resolving refs in the waiter's own output store,
 // against a diff that shows exactly what the holder claimed.
-func (j waiterEvidenceJob) waitWithEvidence(t *testing.T, here map[string]types.JobAttempt, refs map[string]string) (types.JobStatus, error) {
+func (j waiterEvidenceJob) waitWithEvidence(t *testing.T, here map[string]job.CapturedRun, refs map[string]string) (job.Status, error) {
 	t.Helper()
 	return j.waitObserving(t, here, refs, observeClaim(j.result))
 }
 
-func (j waiterEvidenceJob) waitObserving(t *testing.T, here map[string]types.JobAttempt, refs map[string]string, observe Observer) (types.JobStatus, error) {
+func (j waiterEvidenceJob) waitObserving(t *testing.T, here map[string]job.CapturedRun, refs map[string]string, observe Observer) (job.Status, error) {
 	t.Helper()
-	return Wait(t.Context(), NewStore(j.loc), j.row.ID, nil, func(_ context.Context, ref string) (types.JobAttempt, error) {
+	return Wait(t.Context(), NewStore(j.loc), j.row.ID, nil, func(_ context.Context, ref string) (job.CapturedRun, error) {
 		return here[ref], nil
 	}, observe, refs)
 }
 
-func (j waiterEvidenceJob) stored(t *testing.T) types.Job {
+func (j waiterEvidenceJob) stored(t *testing.T) job.Job {
 	t.Helper()
 	rows, err := NewStore(j.loc).List()
 	require.NoError(t, err)
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == j.row.ID })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == j.row.ID })
 	require.GreaterOrEqual(t, i, 0)
 	return rows[i]
 }
 
 // filed is the result the job's live try holds.
-func (j waiterEvidenceJob) filed(t *testing.T) *types.JobResult {
+func (j waiterEvidenceJob) filed(t *testing.T) *job.Result {
 	t.Helper()
 	return liveTry(t, NewStore(j.loc), j.row.ID).Status.Result
 }
@@ -1391,17 +1391,17 @@ func (j waiterEvidenceJob) filed(t *testing.T) *types.JobResult {
 // evidence beside it.
 func (j waiterEvidenceJob) requireUnmoved(t *testing.T) {
 	t.Helper()
-	j.requireState(t, types.StateExited)
+	j.requireState(t, job.StateExited)
 }
 
 // requireReworked asserts the wait rejected the job back to rework, with no waiter evidence
 // beside it.
 func (j waiterEvidenceJob) requireReworked(t *testing.T) {
 	t.Helper()
-	j.requireState(t, types.StateRunning)
+	j.requireState(t, job.StateRunning)
 }
 
-func (j waiterEvidenceJob) requireState(t *testing.T, state types.JobState) {
+func (j waiterEvidenceJob) requireState(t *testing.T, state job.State) {
 	t.Helper()
 	row := j.stored(t)
 	assert.Equal(t, state, row.State)
@@ -1410,19 +1410,19 @@ func (j waiterEvidenceJob) requireState(t *testing.T, state types.JobState) {
 
 func failedPrimary(t *testing.T) waiterEvidenceJob {
 	t.Helper()
-	return exitedWithRuns(t, acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": failedRun})
+	return exitedWithRuns(t, acceptRow(), passingResult(), map[string]job.CapturedRun{"a1b2c3d4": failedRun})
 }
 
 func TestWaitTakesWaiterEvidenceForAGoalTheHolderFailed(t *testing.T) {
 	t.Parallel()
 
 	j := failedPrimary(t)
-	status, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": passedHere}, map[string]string{types.PrimaryGoalID: "here"})
+	status, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryGoalID: "here"})
 	require.NoError(t, err)
 	require.True(t, status.Verified, status.Violations)
 
 	row := j.stored(t)
-	assert.Equal(t, types.StatePass, row.State)
+	assert.Equal(t, job.StatePass, row.State)
 	require.NotNil(t, row.Attempt)
 	assert.True(t, row.Attempt.Failed, "the holder's own attempt stays beside the waiter's")
 	filed := j.filed(t)
@@ -1432,13 +1432,13 @@ func TestWaitTakesWaiterEvidenceForAGoalTheHolderFailed(t *testing.T) {
 	assert.Equal(t, j.waiter, row.WaiterEvidence.Checkout)
 	assert.NotZero(t, row.WaiterEvidence.At)
 	assert.True(t, row.WaiterEvidence.Verified)
-	assert.Equal(t, []types.VerificationStatus{{ID: types.PrimaryGoalID, Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates)
+	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryGoalID, Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates)
 }
 
 func TestWaitTakesWaiterEvidenceForOneNamedGoalOnly(t *testing.T) {
 	t.Parallel()
 
-	attempts := map[string]types.JobAttempt{}
+	attempts := map[string]job.CapturedRun{}
 	for _, snapshot := range goalAttempts() {
 		attempts[snapshot.Attempt.Ref] = snapshot.Attempt
 	}
@@ -1448,13 +1448,13 @@ func TestWaitTakesWaiterEvidenceForOneNamedGoalOnly(t *testing.T) {
 	attempts["docs-ref"] = docs
 	j := exitedWithRuns(t, goalRow(), goalResult(), attempts)
 
-	status, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": passedHere}, map[string]string{"unit": "here"})
+	status, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{"unit": "here"})
 	require.NoError(t, err)
 	require.True(t, status.Verified, status.Violations)
 
 	row := j.stored(t)
 	require.NotNil(t, row.WaiterEvidence)
-	assert.Equal(t, []types.VerificationStatus{{ID: "unit", Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates, "docs passed on the holder's evidence and took none")
+	assert.Equal(t, []job.VerificationStatus{{ID: "unit", Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates, "docs passed on the holder's evidence and took none")
 	assert.Equal(t, "unit-ref", j.filed(t).VerificationEvidence[0].OutputRef)
 	assert.True(t, row.GateAttempts[0].Attempt.Failed)
 }
@@ -1464,9 +1464,9 @@ func TestWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
 
 	j := failedPrimary(t)
 	j.loc.Outputs = func(root string) AttemptResolver {
-		return func(context.Context, string) (types.JobAttempt, error) { return passedHere, nil }
+		return func(context.Context, string) (job.CapturedRun, error) { return passedHere, nil }
 	}
-	_, err := j.waitWithEvidence(t, nil, map[string]string{types.PrimaryGoalID: "here"})
+	_, err := j.waitWithEvidence(t, nil, map[string]string{job.PrimaryGoalID: "here"})
 	require.ErrorContains(t, err, `output ref "here" names no run this checkout recorded`)
 	j.requireUnmoved(t)
 }
@@ -1476,7 +1476,7 @@ func TestWaitEvidenceStillHasToVerify(t *testing.T) {
 
 	failedHere := passedHere
 	failedHere.Failed = true
-	for name, run := range map[string]types.JobAttempt{
+	for name, run := range map[string]job.CapturedRun{
 		"a failed run":           failedHere,
 		"a run of another check": otherChecks,
 	} {
@@ -1484,7 +1484,7 @@ func TestWaitEvidenceStillHasToVerify(t *testing.T) {
 			t.Parallel()
 
 			j := failedPrimary(t)
-			status, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": run}, map[string]string{types.PrimaryGoalID: "here"})
+			status, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": run}, map[string]string{job.PrimaryGoalID: "here"})
 			require.NoError(t, err)
 			assert.False(t, status.Verified)
 			j.requireReworked(t)
@@ -1506,8 +1506,8 @@ func TestWaitEvidenceRefusesAGoalItCannotTake(t *testing.T) {
 		"a goal that is not a check": {
 			job: func(t *testing.T) waiterEvidenceJob {
 				row := acceptRow()
-				row.Goals = []types.Goal{{ID: "api", Kind: types.GoalKindPaths, Paths: []string{"internal/ledger"}}}
-				return exitedWithRuns(t, row, passingResult(), map[string]types.JobAttempt{"a1b2c3d4": failedRun})
+				row.Goals = []job.Goal{{ID: "api", Kind: job.GoalKindPaths, Paths: []string{"internal/ledger"}}}
+				return exitedWithRuns(t, row, passingResult(), map[string]job.CapturedRun{"a1b2c3d4": failedRun})
 			},
 			refs: map[string]string{"api": "here"}, want: `goal "api" is a paths goal`,
 		},
@@ -1515,9 +1515,9 @@ func TestWaitEvidenceRefusesAGoalItCannotTake(t *testing.T) {
 			job: func(t *testing.T) waiterEvidenceJob {
 				ok := passingRun
 				ok.TimestampMs = 9_999_999_999_999
-				return exitedWithRuns(t, acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": ok})
+				return exitedWithRuns(t, acceptRow(), passingResult(), map[string]job.CapturedRun{"a1b2c3d4": ok})
 			},
-			refs: map[string]string{types.PrimaryGoalID: "here"}, want: "already passes on the holder's own evidence",
+			refs: map[string]string{job.PrimaryGoalID: "here"}, want: "already passes on the holder's own evidence",
 		},
 	}
 	for name, tc := range tests {
@@ -1525,7 +1525,7 @@ func TestWaitEvidenceRefusesAGoalItCannotTake(t *testing.T) {
 			t.Parallel()
 
 			j := tc.job(t)
-			_, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": passedHere}, tc.refs)
+			_, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": passedHere}, tc.refs)
 			require.ErrorContains(t, err, tc.want)
 			j.requireUnmoved(t)
 		})
@@ -1572,7 +1572,7 @@ func TestWaitEvidenceRefusesChangedPathsThatDiffer(t *testing.T) {
 
 			j := failedPrimary(t)
 			tc.alter(t, j)
-			_, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": passedHere}, map[string]string{types.PrimaryGoalID: "here"})
+			_, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryGoalID: "here"})
 			require.ErrorContains(t, err, tc.want)
 			j.requireUnmoved(t)
 		})
@@ -1591,14 +1591,14 @@ func TestWaitEvidenceComparesTheObservedDiff(t *testing.T) {
 	observed := claimed(j.result)
 	observed.Changed = append(slices.Clone(observed.Changed), "unlisted.go")
 
-	_, err := j.waitObserving(t, map[string]types.JobAttempt{"here": passedHere}, map[string]string{types.PrimaryGoalID: "here"},
-		func(context.Context, types.Job) (Observed, error) { return observed, nil })
+	_, err := j.waitObserving(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryGoalID: "here"},
+		func(context.Context, job.Job) (Observed, error) { return observed, nil })
 
 	require.ErrorContains(t, err, "unlisted.go")
 	j.requireUnmoved(t)
 
-	_, err = j.waitObserving(t, map[string]types.JobAttempt{"here": passedHere}, map[string]string{types.PrimaryGoalID: "here"},
-		func(context.Context, types.Job) (Observed, error) { return Observed{}, nil })
+	_, err = j.waitObserving(t, map[string]job.CapturedRun{"here": passedHere}, map[string]string{job.PrimaryGoalID: "here"},
+		func(context.Context, job.Job) (Observed, error) { return Observed{}, nil })
 	require.ErrorContains(t, err, "the job's diff could not be read", "an unread diff names nothing to compare")
 	j.requireUnmoved(t)
 }
@@ -1612,7 +1612,7 @@ func TestWaitEvidenceRefusesAFileChangedAfterTheRun(t *testing.T) {
 	before := passedHere
 	before.TimestampMs = time.Now().Add(-time.Hour).UnixMilli()
 
-	_, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": before}, map[string]string{types.PrimaryGoalID: "here"})
+	_, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": before}, map[string]string{job.PrimaryGoalID: "here"})
 
 	require.ErrorContains(t, err, "did not change after it")
 	assert.Contains(t, err.Error(), "cmd/magus/ledger.go")
@@ -1627,7 +1627,7 @@ func TestWaitRefusesAHolderRunTheJobWroteAfter(t *testing.T) {
 	// Dated within the range a file time holds, which passedHere's is not.
 	run := passedHere
 	run.TimestampMs = time.Now().Add(time.Minute).UnixMilli()
-	j := exitedWithRuns(t, acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": run})
+	j := exitedWithRuns(t, acceptRow(), passingResult(), map[string]job.CapturedRun{"a1b2c3d4": run})
 	graded, err := GradeGates(t.Context(), NewStore(j.loc), j.row.ID, observeClaim(j.result))
 	require.NoError(t, err)
 	require.True(t, graded.Verified, "the control: a run after every write passes")
@@ -1651,18 +1651,18 @@ func TestWaitEvidenceCountsARunAtTheCurrentKey(t *testing.T) {
 
 	run := passedHere
 	run.TimestampMs = time.Now().Add(time.Minute).UnixMilli()
-	j := exitedWithRuns(t, acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": run})
+	j := exitedWithRuns(t, acceptRow(), passingResult(), map[string]job.CapturedRun{"a1b2c3d4": run})
 	later := time.UnixMilli(run.TimestampMs).Add(time.Hour)
 	changed := j.result.ChangedPaths[0]
 	require.NoError(t, os.Chtimes(filepath.Join(j.holder, filepath.FromSlash(changed)), later, later))
 
 	var asked []string
-	current := func(_ context.Context, tree string, run types.JobAttempt) bool {
+	current := func(_ context.Context, tree string, run job.CapturedRun) bool {
 		asked = append(asked, fmt.Sprintf("%s %s", tree, run.Ref))
 		return true
 	}
 	claimed := observeClaim(j.result)
-	observe := func(ctx context.Context, row types.Job) (Observed, error) {
+	observe := func(ctx context.Context, row job.Job) (Observed, error) {
 		seen, err := claimed(ctx, row)
 		seen.CurrentRun = current
 		return seen, err
@@ -1793,8 +1793,8 @@ func TestWaitEvidenceDatesARunByItsStart(t *testing.T) {
 				tc.alter(t, j)
 			}
 
-			status, err := j.waitObserving(t, map[string]types.JobAttempt{"here": spanning}, map[string]string{types.PrimaryGoalID: "here"},
-				func(context.Context, types.Job) (Observed, error) { return observed, nil })
+			status, err := j.waitObserving(t, map[string]job.CapturedRun{"here": spanning}, map[string]string{job.PrimaryGoalID: "here"},
+				func(context.Context, job.Job) (Observed, error) { return observed, nil })
 
 			if tc.want == "" {
 				require.NoError(t, err)
@@ -1848,7 +1848,7 @@ func TestWaitEvidenceHoldsACleanRunToItsRevision(t *testing.T) {
 			t.Parallel()
 
 			repo := testkit.NewRepository(t, map[string]string{"tools.go": "package a\n"})
-			j := exitedWithRunsIn(t, repo.Root(), acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": failedRun})
+			j := exitedWithRunsIn(t, repo.Root(), acceptRow(), passingResult(), map[string]job.CapturedRun{"a1b2c3d4": failedRun})
 			require.NoError(t, os.WriteFile(filepath.Join(j.holder, "tools.go"), []byte("package a\n"), 0o644))
 			clean := passedHere
 			clean.Revision = repo.Commit("the work", nil)
@@ -1858,8 +1858,8 @@ func TestWaitEvidenceHoldsACleanRunToItsRevision(t *testing.T) {
 				tc.alter(t, j)
 			}
 
-			status, err := j.waitObserving(t, map[string]types.JobAttempt{"here": clean}, map[string]string{types.PrimaryGoalID: "here"},
-				func(context.Context, types.Job) (Observed, error) { return observed, nil })
+			status, err := j.waitObserving(t, map[string]job.CapturedRun{"here": clean}, map[string]string{job.PrimaryGoalID: "here"},
+				func(context.Context, job.Job) (Observed, error) { return observed, nil })
 
 			if tc.want == "" {
 				require.NoError(t, err)
@@ -1881,13 +1881,13 @@ func TestWaitEvidenceRecordsTheAttemptTheRefResolvedTo(t *testing.T) {
 	j := failedPrimary(t)
 	run := passedHere
 	run.AttemptID = "1a2b3c4d5e6f"
-	status, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": run}, map[string]string{types.PrimaryGoalID: "here"})
+	status, err := j.waitWithEvidence(t, map[string]job.CapturedRun{"here": run}, map[string]string{job.PrimaryGoalID: "here"})
 	require.NoError(t, err)
 	require.True(t, status.Verified, status.Violations)
 
 	row := j.stored(t)
 	require.NotNil(t, row.WaiterEvidence)
-	assert.Equal(t, []types.VerificationStatus{{ID: types.PrimaryGoalID, Verified: true, OutputRef: "1a2b3c4d5e6f"}}, row.WaiterEvidence.Gates)
+	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryGoalID, Verified: true, OutputRef: "1a2b3c4d5e6f"}}, row.WaiterEvidence.Gates)
 }
 
 func TestWaitEvidenceNeedsTheFiledResult(t *testing.T) {
@@ -1895,9 +1895,9 @@ func TestWaitEvidenceNeedsTheFiledResult(t *testing.T) {
 
 	j := failedPrimary(t)
 	supplied := j.result
-	_, err := Wait(t.Context(), NewStore(j.loc), j.row.ID, &supplied, func(context.Context, string) (types.JobAttempt, error) {
+	_, err := Wait(t.Context(), NewStore(j.loc), j.row.ID, &supplied, func(context.Context, string) (job.CapturedRun, error) {
 		return passedHere, nil
-	}, observeClaim(supplied), map[string]string{types.PrimaryGoalID: "here"})
+	}, observeClaim(supplied), map[string]string{job.PrimaryGoalID: "here"})
 	require.ErrorContains(t, err, "starts from the result filed with the job")
 }
 
@@ -1905,9 +1905,9 @@ func TestWaitEvidenceFollowsWhoMayVerify(t *testing.T) {
 	t.Parallel()
 
 	j := failedPrimary(t)
-	_, err := Wait(t.Context(), boundStore(j.loc, j.row.ID), j.row.ID, nil, func(context.Context, string) (types.JobAttempt, error) {
+	_, err := Wait(t.Context(), boundStore(j.loc, j.row.ID), j.row.ID, nil, func(context.Context, string) (job.CapturedRun, error) {
 		return passedHere, nil
-	}, observeClaim(j.result), map[string]string{types.PrimaryGoalID: "here"})
+	}, observeClaim(j.result), map[string]string{job.PrimaryGoalID: "here"})
 	require.ErrorContains(t, err, "a holder does not verify its own work")
 }
 

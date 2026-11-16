@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -41,9 +42,9 @@ func declaredTiers(t *testing.T) *tier.Set {
 func tierOutcomes(name string, kind types.JobKind, source tier.Source, reason string, passed, failed int) []types.JobOutcome {
 	var out []types.JobOutcome
 	for i := range passed + failed {
-		state := types.StatePass
+		state := job.StatePass
 		if i >= passed {
-			state = types.StateFail
+			state = job.StateFail
 		}
 		o := types.JobOutcome{Job: fmt.Sprintf("%s-%s-%s-job-%d", name, kind, source, i), ModelTier: name, Kind: kind, Source: source, Reason: reason, State: state}
 		if source == tier.SourceMatrix {

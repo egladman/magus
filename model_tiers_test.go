@@ -12,11 +12,11 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 const opusHostSpell = `import "magus/spell";
@@ -52,7 +52,7 @@ func TestModelRowsLetAJobPutResolveAnAliasThroughARealMagus(t *testing.T) {
 	ws, err := Inspect(t.Context(), root, WithSpawnRule(tier.Ceiling))
 	require.NoError(t, err)
 
-	got, err := std.MagusPutJob(ws.(*Magus).Context(t.Context()), "w1", types.JobPut{Agent: &typesagent.Spec{Instructions: "ship it", Model: typesagent.Model{ID: "opus"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}, ReadOnly: new(true)})
+	got, err := std.MagusPutJob(ws.(*Magus).Context(t.Context()), "w1", job.Put{Agent: &job.Agent{Instructions: "ship it", Model: job.Model{ID: "opus"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}, ReadOnly: new(true)})
 	require.NoError(t, err)
 	require.NotNil(t, got.ModelTier)
 	assert.Equal(t, "design", got.ModelTier.Name)

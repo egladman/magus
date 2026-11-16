@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // withVCSLeaseGate registers gate for the test and restores whatever was registered.
@@ -28,19 +28,19 @@ func withVCSLeaseGate(t *testing.T, gate VCSLeaseGate) {
 func TestVcsLeaseRefusalAsksTheGateUnderALiveLease(t *testing.T) {
 	testkit.Isolate(t)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ws, "worker", types.JobPut{Agent: agent.Instructed("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
+	_, err := MagusPutJob(ws, "worker", job.Put{Agent: job.Instructed("ship it"), State: new(job.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	var asked []string
 	refusal := errors.New("lease-vcs: refused")
-	withVCSLeaseGate(t, func(_ context.Context, row types.Job, backend string, args []string, dir string, _ []string) error {
+	withVCSLeaseGate(t, func(_ context.Context, row job.Job, backend string, args []string, dir string, _ []string) error {
 		asked = append(asked, fmt.Sprintf("%s %s %s %s", row.ID, backend, args[0], dir))
 		return refusal
 	})
 
 	require.NoError(t, vcsLeaseRefusal(ws, "git", []string{"push"}, "/repo", nil), "no acting lease, nothing to ask")
-	require.NoError(t, vcsLeaseRefusal(types.WithJobLease(ws, "absent"), "git", []string{"push"}, "/repo", nil), "a lease with no row bounds nothing")
-	assert.ErrorIs(t, vcsLeaseRefusal(types.WithJobLease(ws, "worker"), "git", []string{"push"}, "/repo", nil), refusal)
+	require.NoError(t, vcsLeaseRefusal(job.WithLease(ws, "absent"), "git", []string{"push"}, "/repo", nil), "a lease with no row bounds nothing")
+	assert.ErrorIs(t, vcsLeaseRefusal(job.WithLease(ws, "worker"), "git", []string{"push"}, "/repo", nil), refusal)
 	assert.Equal(t, []string{"worker git push /repo"}, asked)
 }
 
@@ -52,7 +52,7 @@ func TestVcsLeaseRefusalFailsClosedWithNoGate(t *testing.T) {
 	withVCSLeaseGate(t, nil)
 
 	require.NoError(t, vcsLeaseRefusal(ws, "git", []string{"commit", "-m", "x"}, "/repo", nil))
-	err := vcsLeaseRefusal(types.WithJobLease(ws, "worker"), "git", []string{"commit", "-m", "x"}, "/repo", nil)
+	err := vcsLeaseRefusal(job.WithLease(ws, "worker"), "git", []string{"commit", "-m", "x"}, "/repo", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "lease worker is acting and this binary registers no lease-vcs gate")
 	assert.Contains(t, err.Error(), "`git commit -m x`")

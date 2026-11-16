@@ -28,9 +28,9 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/text/plural"
-	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -255,7 +255,7 @@ func partAt(v []int, i int) int {
 // JobBackgroundCommands lists the background commands the session holding row
 // still runs, each with the call that stops it, leaving out those that end on
 // their own. "" for none, and for a transcript it cannot read.
-func JobBackgroundCommands(workspace string, row types.Job, now time.Time) string {
+func JobBackgroundCommands(workspace string, row jobtypes.Job, now time.Time) string {
 	s, ok := newestStamp(row, workspace)
 	if !ok || s.Transcript == "" {
 		return ""
@@ -346,7 +346,7 @@ func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw,
 			errs = append(errs, store.StampHolderStopped(ctx, c))
 		}
 		if !resumed && !waitingStop(raw, now) {
-			errs = append(errs, store.EndCallerAttempt(ctx, c, types.AttemptEndStop, now))
+			errs = append(errs, store.EndCallerAttempt(ctx, c, jobtypes.AttemptEndStop, now))
 		}
 		return false, errors.Join(errs...)
 	}

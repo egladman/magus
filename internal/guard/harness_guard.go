@@ -7,7 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // RefreshPolicySnapshot loads the guard's policy with no hook deadline, so the
@@ -24,7 +24,7 @@ func RefreshPolicySnapshot(ctx context.Context, w Wiring) {
 // job.RunLease: the checkout's record, else the claim of the process that asked for the
 // work (a forwarded call's lease, else BAGGAGE). A CLI process knows no host session or
 // subagent, so those sources never answer here. place finds root's job location.
-func CheckoutLease(ctx context.Context, root string, place func(root string) (job.Location, error)) (string, types.LeaseSource, error) {
+func CheckoutLease(ctx context.Context, root string, place func(root string) (job.Location, error)) (string, jobtypes.LeaseSource, error) {
 	loc, err := place(root)
 	if err != nil {
 		return "", "", fmt.Errorf("resolve the checkout's lease: %w", err)

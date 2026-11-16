@@ -27,12 +27,12 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // workspace is the narrow slice of *magus.Magus the handler needs: where the trail lives, how
@@ -93,8 +93,8 @@ const jobsPrefix = "jobs/"
 func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJobsRequest]) (*connect.Response[jobv1.ListJobsResponse], error) {
 	running := s.runningByArgv(ctx)
 	list := s.report(ctx)
-	tries := types.NewJobAttempts(list.Attempts)
-	byID := make(map[string]types.Job, len(list.Jobs))
+	tries := job.NewAttempts(list.Attempts)
+	byID := make(map[string]job.Job, len(list.Jobs))
 	for _, row := range list.Jobs {
 		byID[row.ID] = row
 	}
@@ -131,9 +131,9 @@ func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJob
 // beats one that fails: the catalog beside it is still true, and the server's maintenance
 // service must not go dark because a plan file is unreadable. An unreadable stale window
 // flags no row stale and is logged, for the same reason.
-func (s *Service) report(ctx context.Context) types.JobList {
+func (s *Service) report(ctx context.Context) job.List {
 	if s.store == nil {
-		return types.NewJobList(nil)
+		return job.NewList(nil)
 	}
 	staleAfter, err := s.store.StaleAfter()
 	if err != nil {
@@ -142,7 +142,7 @@ func (s *Service) report(ctx context.Context) types.JobList {
 	}
 	list, err := s.store.InWorkspace(s.jobWorkspace(ctx)).Report(ctx, time.Now().Unix(), staleAfter)
 	if err != nil {
-		return types.NewJobList(nil)
+		return job.NewList(nil)
 	}
 	return list
 }
@@ -158,7 +158,7 @@ func (s *Service) jobWorkspace(ctx context.Context) jobstore.Workspace {
 }
 
 // rows reads the job store, empty when there is none or it will not read; see [Service.report].
-func (s *Service) rows() []types.Job {
+func (s *Service) rows() []job.Job {
 	if s.store == nil {
 		return nil
 	}
@@ -170,18 +170,18 @@ func (s *Service) rows() []types.Job {
 }
 
 // row is the stored row for the job named name, zero when nothing has recorded one.
-func (s *Service) row(name string) types.Job {
+func (s *Service) row(name string) job.Job {
 	for _, r := range s.rows() {
 		if r.ID == name {
 			return r
 		}
 	}
-	return types.Job{}
+	return job.Job{}
 }
 
 // result is what the job named name's live attempt filed, nil when it
 // filed nothing or the store will not read; see [Service.report].
-func (s *Service) result(name string) *types.JobResult {
+func (s *Service) result(name string) *job.Result {
 	if s.store == nil {
 		return nil
 	}
@@ -189,11 +189,11 @@ func (s *Service) result(name string) *types.JobResult {
 	if err != nil {
 		return nil
 	}
-	return types.NewJobAttempts(tries).Result(name)
+	return job.NewAttempts(tries).Result(name)
 }
 
 // wireOverlaps maps the overlaps [jobstore.Store.Report] derived and measured.
-func wireOverlaps(derived []types.JobOverlap) []*jobv1.JobOverlap {
+func wireOverlaps(derived []job.Overlap) []*jobv1.JobOverlap {
 	out := make([]*jobv1.JobOverlap, 0, len(derived))
 	for _, o := range derived {
 		w := &jobv1.JobOverlap{JobA: o.JobA, JobB: o.JobB, PathsA: o.PathsA, PathsB: o.PathsB, Claims: o.Claims}
@@ -267,11 +267,11 @@ func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv
 		return
 	}
 	// The server holds its catalog's rows whoever asked for the run.
-	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
-	if _, err := s.store.Update(ctx, j.Name, func(row *types.Job) {
-		row.State = types.StateRunning
+	ctx = trail.ContextWithEntryPoint(ctx, job.EntryPointServer)
+	if _, err := s.store.Update(ctx, j.Name, func(row *job.Job) {
+		row.State = job.StateRunning
 		if row.LastRun == nil {
-			row.LastRun = &types.JobRun{}
+			row.LastRun = &job.Run{}
 		}
 		row.LastRun.Invocation = inv
 	}); err != nil {
@@ -283,13 +283,13 @@ func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv
 // job assembles a job's descriptor plus its running state, last completed run (from the
 // trail), and the current size of what it maintains. running maps a worker-argv key to the live
 // invocation id, so ListJobs and submit share one status query.
-func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row types.Job, result *types.JobResult) *jobv1.Job {
+func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row job.Job, result *job.Result) *jobv1.Job {
 	info := &jobv1.Job{
 		Name:        jobsPrefix + j.Name,
 		Id:          j.Name,
 		Holder:      jobv1.JobHolder_JOB_HOLDER_SERVER,
 		Description: j.Desc,
-		State:       string(types.StateDeclared),
+		State:       string(job.StateDeclared),
 		Target:      s.targetSize(j),
 	}
 	if row.State != "" {
@@ -317,7 +317,7 @@ func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row ty
 // Running is left unset rather than derived from the state. Nothing here watched the
 // worker, and a row still reading `running` after its holder died would be the stored
 // running flag this service refuses to keep for the catalog.
-func delegatedJob(row types.Job, result *types.JobResult) *jobv1.Job {
+func delegatedJob(row job.Job, result *job.Result) *jobv1.Job {
 	j := &jobv1.Job{
 		Name:       jobsPrefix + row.ID,
 		Id:         row.ID,
@@ -377,15 +377,15 @@ func delegatedJob(row types.Job, result *types.JobResult) *jobv1.Job {
 
 // wireOrigin maps who did something to a row, nil for the zero Origin a row written before
 // origins were recorded carries.
-func wireOrigin(o types.Origin) *jobv1.JobOrigin {
-	if o == (types.Origin{}) {
+func wireOrigin(o job.Origin) *jobv1.JobOrigin {
+	if o == (job.Origin{}) {
 		return nil
 	}
 	w := &jobv1.JobOrigin{
 		User: o.User, Uid: o.UID, EntryPoint: string(o.EntryPoint),
 		Host: o.Host, Session: o.Session, Agent: o.Agent,
 	}
-	if c := o.Credential; c != (types.Credential{}) {
+	if c := o.Credential; c != (job.Credential{}) {
 		w.Credential = &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name, Grant: c.Grant.String()}
 	}
 	return w
@@ -403,7 +403,7 @@ func wireModelTier(t *tier.Assignment) *jobv1.JobModelTier {
 	}
 }
 
-func wireAgent(a *agent.Spec) *jobv1.JobAgent {
+func wireAgent(a *job.Agent) *jobv1.JobAgent {
 	if a == nil {
 		return nil
 	}
@@ -414,7 +414,7 @@ func wireAgent(a *agent.Spec) *jobv1.JobAgent {
 	}
 }
 
-func wireAttempt(a *types.JobAttempt) *jobv1.JobAttempt {
+func wireAttempt(a *job.CapturedRun) *jobv1.JobAttempt {
 	if a == nil {
 		return nil
 	}
@@ -426,7 +426,7 @@ func wireAttempt(a *types.JobAttempt) *jobv1.JobAttempt {
 	}
 }
 
-func wireIntegration(in *types.JobIntegration) *jobv1.JobIntegration {
+func wireIntegration(in *job.Integration) *jobv1.JobIntegration {
 	if in == nil {
 		return nil
 	}
@@ -438,7 +438,7 @@ func wireIntegration(in *types.JobIntegration) *jobv1.JobIntegration {
 }
 
 // storedRun maps the row's own run record to the wire JobRun.
-func storedRun(r *types.JobRun) *jobv1.JobRun {
+func storedRun(r *job.Run) *jobv1.JobRun {
 	run := &jobv1.JobRun{
 		InvocationId:   r.Invocation,
 		Ok:             r.OK,
@@ -473,7 +473,7 @@ func lastRun(e trail.Event) *jobv1.JobRun {
 // wireGoals maps the stored goals to the wire shape. check is rendered as the command that
 // runs it, the same way the row's Validation already is for the primary Check field: the
 // wire never carries the unrendered LeaseCheck, so a client needs no second parser for it.
-func wireGoals(gates []types.Goal) []*jobv1.CompletionGate {
+func wireGoals(gates []job.Goal) []*jobv1.CompletionGate {
 	if len(gates) == 0 {
 		return nil
 	}
@@ -489,7 +489,7 @@ func wireGoals(gates []types.Goal) []*jobv1.CompletionGate {
 			DependsOn:   g.DependsOn,
 			Signature:   g.Signature,
 		}
-		if g.Kind == types.GoalKindCheck && g.Check.Target != "" {
+		if g.Kind == job.GoalKindCheck && g.Check.Target != "" {
 			wire.Check = g.Check.String()
 		}
 		out = append(out, wire)
@@ -500,7 +500,7 @@ func wireGoals(gates []types.Goal) []*jobv1.CompletionGate {
 // wireJobResult maps the stored result to its console-facing wire projection. nil until a
 // holder has filed one, which is a fact the drawer needs to tell apart from a result that filed
 // nothing.
-func wireJobResult(r *types.JobResult) *jobv1.JobResult {
+func wireJobResult(r *job.Result) *jobv1.JobResult {
 	if r == nil {
 		return nil
 	}

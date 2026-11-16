@@ -22,12 +22,12 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/ward"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 func TestSettingFigure(t *testing.T) {
@@ -352,7 +352,7 @@ func TestGroundworkNamesTheIntegratorForAReset(t *testing.T) {
 // Proof is the session's from its first bound spawn: its groundwork is refused from the
 // next call, its graph reads pass, and a subagent of the same session is never judged.
 func TestOrchestratorGroundworkAfterABoundSpawn(t *testing.T) {
-	ctx, _ := fleetFixture(t, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	ctx, _ := fleetFixture(t, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	deps := levelDeps(t, types.GuardProfileLight)
 	at := hookLocation(ctx, deps)
 	hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
@@ -377,7 +377,7 @@ func TestGradeMainWrite(t *testing.T) {
 	deps := strictDeps(t)
 	who := hookAttribution{Host: "claude-code", Session: "s"}
 	grade := func(orchestrates types.Orchestration, path, lease string, prepare func(at location)) verdict.Judgment {
-		at := handedOutFixture(t, types.Job{ID: "a1", State: types.StateRunning})
+		at := handedOutFixture(t, jobtypes.Job{ID: "a1", State: jobtypes.StateRunning})
 		if orchestrates == types.OrchestrationProven {
 			hostGate(at.cacheDir, who.Host).MarkFired(hostAgentsKind)
 		}
@@ -409,7 +409,7 @@ func TestGradeMainWrite(t *testing.T) {
 }
 
 // handedOutFixture is orchestratorFixture over a job store holding rows.
-func handedOutFixture(t *testing.T, rows ...types.Job) location {
+func handedOutFixture(t *testing.T, rows ...jobtypes.Job) location {
 	t.Helper()
 	root, cacheDir := fixture.SeedLeases(t, rows...)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, ".git"), 0o755))
@@ -426,21 +426,21 @@ func TestOrchestrationFollowsTheLiveRows(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name  string
-		state types.JobState
+		state jobtypes.State
 		want  types.Orchestration
 	}{
-		{"a fork still declared", types.StateDeclared, types.OrchestrationProven},
-		{"a worker running", types.StateRunning, types.OrchestrationProven},
-		{"a worker that exited, awaiting its wait", types.StateExited, types.OrchestrationProven},
-		{"every row passed", types.StatePass, ""},
-		{"every row failed", types.StateFail, ""},
+		{"a fork still declared", jobtypes.StateDeclared, types.OrchestrationProven},
+		{"a worker running", jobtypes.StateRunning, types.OrchestrationProven},
+		{"a worker that exited, awaiting its wait", jobtypes.StateExited, types.OrchestrationProven},
+		{"every row passed", jobtypes.StatePass, ""},
+		{"every row failed", jobtypes.StateFail, ""},
 	} {
-		at := handedOutFixture(t, types.Job{ID: "a1", State: tc.state}, types.Job{ID: "a2", State: types.StatePass})
+		at := handedOutFixture(t, jobtypes.Job{ID: "a1", State: tc.state}, jobtypes.Job{ID: "a2", State: jobtypes.StatePass})
 		writeCostState(hint.NewGate(at.cacheDir, who.factsKey()), costState{Forked: []string{"a1", "a2"}})
 		assert.Equal(t, tc.want, role(at), tc.name)
 	}
 
-	at := handedOutFixture(t, types.Job{ID: "own", State: types.StateRunning})
+	at := handedOutFixture(t, jobtypes.Job{ID: "own", State: jobtypes.StateRunning})
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	writeCostState(facts, costState{Forked: []string{"own"}, Forks: map[string]int64{"own": 1}})
 	require.Equal(t, types.OrchestrationProven, role(at))
@@ -450,7 +450,7 @@ func TestOrchestrationFollowsTheLiveRows(t *testing.T) {
 	assert.Empty(t, readCostState(facts).Forked, "a row the session takes itself is no longer handed out")
 	assert.Empty(t, readCostState(facts).Forks)
 	releaseOnEnd(at, who, "./magus job exit own --stdin")
-	_, err := job.NewStore(at.jobs()).Update(t.Context(), "own", func(cur *types.Job) { cur.State = types.StateExited })
+	_, err := job.NewStore(at.jobs()).Update(t.Context(), "own", func(cur *jobtypes.Job) { cur.State = jobtypes.StateExited })
 	require.NoError(t, err)
 	assert.Empty(t, role(at), "its own row exec'd then exited leaves the session orchestrating nothing")
 }
@@ -521,7 +521,7 @@ func TestMainThreadCommandsAreJudgedByTheCostRules(t *testing.T) {
 // A spawn naming no model is refused at strict. A row forked with no model tier has no tier
 // to compare a named model against, and the declaration is never opened for it.
 func TestMainThreadSpawnsAreJudgedByTheSpawnRules(t *testing.T) {
-	ctx, _ := fleetFixture(t, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared, Agent: &typesagent.Spec{Model: typesagent.Model{ID: "haiku"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}})
+	ctx, _ := fleetFixture(t, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared, Agent: &jobtypes.Agent{Model: jobtypes.Model{ID: "haiku"}, Worker: jobtypes.Worker{Type: jobtypes.WorkerTypeResumed}}})
 	deps := strictDeps(t)
 	asked := 0
 	deps.ModelTiers = func() *tier.Set {
@@ -562,7 +562,7 @@ func TestRootStartSessionPassesTheSpawnRules(t *testing.T) {
 // the host's aliases, and the refusal names the row's whole assignment.
 func TestSpawnNamesModelComparesModelTierRanks(t *testing.T) {
 	set := testModelTiers(t, "claude-code")
-	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	ctx := tierFixture(t, set, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	deps := strictDeps(t)
 	deps.ModelTiers = func() *tier.Set { return set }
 	at := hookLocation(ctx, deps)
@@ -592,7 +592,7 @@ func TestSpawnNamesModelResolvesAHarnessRowsAlias(t *testing.T) {
 		Hosts:  map[string][]string{"claude-code": {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"}},
 	})
 	require.NoError(t, err)
-	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	ctx := tierFixture(t, set, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	deps := strictDeps(t)
 	deps.ModelTiers = func() *tier.Set { return set }
 	deps.ModelRows = func() []tier.Pricing {
@@ -621,7 +621,7 @@ func TestLeasedNestedSpawnSuite(t *testing.T) {
 func (s *LeasedNestedSpawnSuite) judge(model string, off bool) verdict.Judgment {
 	t := s.T()
 	set := testModelTiers(t, "claude-code")
-	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	ctx := tierFixture(t, set, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	deps := strictDeps(t)
 	deps.ModelTiers = func() *tier.Set { return set }
 	if off {
@@ -699,7 +699,7 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 		{"Opus", "design", "claude-opus-5-5", false},
 	} {
 		t.Run(tc.model, func(t *testing.T) {
-			ctx := tierFixture(t, facts.Tiers, types.Job{ID: "scout", Agent: &typesagent.Spec{Model: typesagent.Model{Tier: tc.tier}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}, ReadOnly: true, State: types.StateDeclared})
+			ctx := tierFixture(t, facts.Tiers, jobtypes.Job{ID: "scout", Agent: &jobtypes.Agent{Model: jobtypes.Model{Tier: tc.tier}, Worker: jobtypes.Worker{Type: jobtypes.WorkerTypeResumed}}, ReadOnly: true, State: jobtypes.StateDeclared})
 			deps := strictDeps(t)
 			deps.ModelTiers = func() *tier.Set { return facts.Tiers }
 			deps.ModelRows = func() []tier.Pricing { return facts.Rows }
@@ -727,7 +727,7 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 // hosts entry to add.
 func TestSpawnNamesModelNamesTheHostEntryToAdd(t *testing.T) {
 	set := testModelTiers(t, "other-host")
-	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	ctx := tierFixture(t, set, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	deps := strictDeps(t)
 	deps.ModelTiers = func() *tier.Set { return set }
 	at := hookLocation(ctx, deps)
@@ -744,7 +744,7 @@ func TestSpawnNamesModelNamesTheHostEntryToAdd(t *testing.T) {
 // it is not.
 func TestSpawnAboveModelTierAdvisesByRank(t *testing.T) {
 	set := testModelTiers(t, "claude-code")
-	ctx := tierFixture(t, set, types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	ctx := tierFixture(t, set, jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	deps := levelDeps(t, types.GuardProfileStandard)
 	deps.ModelTiers = func() *tier.Set { return set }
 	at := hookLocation(ctx, deps)
@@ -828,7 +828,7 @@ func testModelTiers(t *testing.T, host string) *tier.Set {
 
 // tierFixture forks rows through a job store that assigns their model tiers from set, every
 // one at economy by a matrix, and pins the location there.
-func tierFixture(t *testing.T, set *tier.Set, rows ...types.Job) context.Context {
+func tierFixture(t *testing.T, set *tier.Set, rows ...jobtypes.Job) context.Context {
 	t.Helper()
 	testkit.Isolate(t)
 	root, cacheDir := testkit.NewRepository(t, nil).Root(), t.TempDir()
@@ -838,7 +838,7 @@ func tierFixture(t *testing.T, set *tier.Set, rows ...types.Job) context.Context
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, ModelTiers: set, ModelTierMatrix: matrix, SpawnRule: tierWithin})
 	for _, row := range rows {
 		row.Validated = 1
-		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		_, err := store.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: root})
@@ -882,7 +882,7 @@ type RootGroundworkSuite struct {
 func TestRootGroundworkSuite(t *testing.T) { suite.Run(t, new(RootGroundworkSuite)) }
 
 func (s *RootGroundworkSuite) SetupTest() {
-	s.layers, _ = fleetLayers(s.T(), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared})
+	s.layers, _ = fleetLayers(s.T(), jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared})
 	s.deps = levelDeps(s.T(), types.GuardProfileLight)
 	hostGate(hookLocation(s.testContext(), s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
 	s.Require().NotEqual(decisionDeny, judgeSpawn(s.testContext(), s.T(), s.deps, "haiku").Decision)
@@ -933,10 +933,10 @@ func (s *RootCitedReadSuite) judge(line string) verdict.Judgment {
 func TestRootCitedReadSuite(t *testing.T) { suite.Run(t, new(RootCitedReadSuite)) }
 
 func (s *RootCitedReadSuite) SetupTest() {
-	research := types.Job{ID: "research", ReadOnly: true, State: types.StateExited}
-	s.layers, _ = fleetLayers(s.T(), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared}, research)
+	research := jobtypes.Job{ID: "research", ReadOnly: true, State: jobtypes.StateExited}
+	s.layers, _ = fleetLayers(s.T(), jobtypes.Job{ID: "scout", ReadOnly: true, State: jobtypes.StateDeclared}, research)
 	s.deps = levelDeps(s.T(), types.GuardProfileLight)
-	storeTries(s.T(), hookLocation(s.testContext(), s.deps), filedResult("research", &types.JobResult{
+	storeTries(s.T(), hookLocation(s.testContext(), s.deps), filedResult("research", &jobtypes.Result{
 		ChangedPaths:    []string{},
 		UnresolvedRisks: []string{"`docs/guide/page.md:12` contradicts internal/guard/root.go"},
 	}))

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -403,7 +403,7 @@ type checkpointAdviceSuite struct{ suite.Suite }
 func TestCheckpointAdviceSuite(t *testing.T) { suite.Run(t, new(checkpointAdviceSuite)) }
 
 // judgeRevisionRead judges a revision read under the lease row given.
-func (s *checkpointAdviceSuite) judgeRevisionRead(row types.Job) verdict.Judgment {
+func (s *checkpointAdviceSuite) judgeRevisionRead(row job.Job) verdict.Judgment {
 	who := hookAttribution{Host: "claude-code", Session: "5d1e7c20", Agent: "b7a4f9"}
 	ctx, _ := fleetFixture(s.T(), row)
 	bindCaller(s.T(), ctx, who, row.ID)
@@ -415,7 +415,7 @@ func (s *checkpointAdviceSuite) judgeRevisionRead(row types.Job) verdict.Judgmen
 
 // A read-only lease has nothing to park, so the advice does not reach it.
 func (s *checkpointAdviceSuite) TestReadOnlyLeaseIsNotAdvisedToCheckpoint() {
-	scout := types.Job{ID: "scout/read-only", ReadOnly: true, State: types.StateRunning, Registered: 1}
+	scout := job.Job{ID: "scout/read-only", ReadOnly: true, State: job.StateRunning, Registered: 1}
 	s.NotEqual(string(advisoryCheckpointState), s.judgeRevisionRead(scout).Rule)
 }
 

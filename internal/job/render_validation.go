@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -84,7 +85,7 @@ func ApplyValidations(err error, ids []string) ([]types.JobValidation, bool) {
 		}
 		v := byID[ids[i]]
 		if v == nil {
-			v = &types.JobValidation{Job: types.Job{ID: ids[i]}}
+			v = &types.JobValidation{Job: job.Job{ID: ids[i]}}
 			byID[ids[i]] = v
 		}
 		p := types.JobProblem{Code: diag.Code, Message: strings.TrimPrefix(diag.Msg, ids[i]+": ")}

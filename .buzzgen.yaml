@@ -40,6 +40,43 @@ packages:
       Code:
         config:
           open: a workspace mints its own codes through magus\raise beside magus's catalog
+  github.com/egladman/magus/libs/safetyscissors/job:
+    # Buzz keeps the names the types had in types, and the agent section's in types/agent.
+    config: {module: ""}
+    types:
+      Access: {config: {name: Grant}}
+      Agent: {config: {name: Spec, module: magus/agent, required: [worker]}}
+      BaseVerdict: {config: {name: JobBaseVerdict, cases: {"match": matches}}}
+      Block: {config: {name: JobBlock}}
+      CapturedRun: {config: {name: JobAttempt}}
+      Claim: {config: {name: JobClaim}}
+      Deferred: {config: {name: JobDeferred}}
+      Denial: {config: {name: JobDenial}}
+      Entry: {config: {name: JobEntry}}
+      ForkFacts: {config: {name: JobForkFacts}}
+      GateAttempt: {config: {name: JobGateAttempt}}
+      InflightAttention: {config: {zeroCase: unset}}
+      Integration: {config: {name: JobIntegration}}
+      List: {config: {name: JobList}}
+      Model: {config: {module: magus/agent}}
+      Overlap: {config: {name: JobOverlap}}
+      OverlapFootprint: {config: {name: JobOverlapFootprint}}
+      Paths: {config: {name: JobPaths}}
+      ReadOnly: {config: {name: JobReadOnly}}
+      Rejection: {config: {name: JobRejection}}
+      Release: {config: {name: JobRelease}}
+      Result: {config: {name: JobResult}}
+      ResultValidation: {config: {name: JobResultValidation}}
+      Run: {config: {name: JobRun}}
+      State: {config: {name: JobState}}
+      Status: {config: {name: JobStatus}}
+      UnattributedWrite: {config: {name: JobUnattributedWrite}}
+      Unmerged: {config: {name: JobUnmerged}}
+      UnmergedReport: {config: {name: JobUnmergedReport}}
+      Worker: {config: {module: magus/agent, required: [type]}}
+      WorkerType: {config: {module: magus/agent, zeroCase: ""}}
+      Worktree: {config: {name: JobWorktree}}
+      WriteProof: {config: {name: JobWriteProof}}
   github.com/egladman/magus/libs/safetyscissors/step:
     # Buzz keeps the names the types had in types/agent.
     config: {module: magus/agent}
@@ -78,11 +115,6 @@ packages:
       Spec: {config: {required: [platform]}}
       Symlink: {config: {required: [path, target]}}
       Tree: {config: {required: [source, path, modePolicy, symlinks]}}
-  github.com/egladman/magus/types/agent:
-    types:
-      Spec: {config: {required: [worker]}}
-      Worker: {config: {required: [type]}}
-      WorkerType: {config: {zeroCase: ""}}
   github.com/egladman/magus/internal/queue/types:
     config:
       open: the queue provider script reads it as str until its typed rewrite
@@ -146,8 +178,6 @@ packages:
       HTTPRetry: {config: {name: Retry, module: http}}
       HTTPServerOptions: {config: {name: ServerOptions, module: http}}
       ImpactResult: {config: {name: Impact}}
-      InflightAttention: {config: {zeroCase: unset}}
-      JobBaseVerdict: {config: {cases: {"match": matches}}}
       JobKind: {config: {zeroCase: ""}}
       KnowledgeEdgeRef: {config: {name: EdgeRef}}
       KnowledgeExplainOutput: {config: {name: ExplainResult}}

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -173,21 +174,21 @@ func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {
 	const title = "orchestrator/impl guard-facts"
 	for _, tt := range []struct {
 		name      string
-		row       types.Job
+		row       job.Job
 		first     bool
 		stopped   bool
 		continued bool
 		want      bool
 	}{
 		// A row stays running after its worker dies, so running alone says nothing.
-		{"a running row no spawn here took", types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a/**"}}}, false, false, false, false},
-		{"a running row an earlier spawn took", types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a/**"}}}, true, false, false, true},
-		{"a declared row nobody took", types.Job{ID: "guard-facts", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a/**"}}}, false, false, false, false},
-		{"a declared row an earlier spawn took", types.Job{ID: "guard-facts", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a/**"}}}, true, false, false, true},
-		{"a finished row", types.Job{ID: "guard-facts", State: types.StatePass, Paths: types.JobPaths{Write: []string{"a/**"}}}, true, false, false, false},
+		{"a running row no spawn here took", job.Job{ID: "guard-facts", State: job.StateRunning, Paths: job.Paths{Write: []string{"a/**"}}}, false, false, false, false},
+		{"a running row an earlier spawn took", job.Job{ID: "guard-facts", State: job.StateRunning, Paths: job.Paths{Write: []string{"a/**"}}}, true, false, false, true},
+		{"a declared row nobody took", job.Job{ID: "guard-facts", State: job.StateDeclared, Paths: job.Paths{Write: []string{"a/**"}}}, false, false, false, false},
+		{"a declared row an earlier spawn took", job.Job{ID: "guard-facts", State: job.StateDeclared, Paths: job.Paths{Write: []string{"a/**"}}}, true, false, false, true},
+		{"a finished row", job.Job{ID: "guard-facts", State: job.StatePass, Paths: job.Paths{Write: []string{"a/**"}}}, true, false, false, false},
 		// Gap 218: the host's stop releases the row, and a continue takes it back.
-		{"a running row whose worker stopped", types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a/**"}}}, true, true, false, false},
-		{"a running row whose stopped worker was continued", types.Job{ID: "guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"a/**"}}}, true, true, true, true},
+		{"a running row whose worker stopped", job.Job{ID: "guard-facts", State: job.StateRunning, Paths: job.Paths{Write: []string{"a/**"}}}, true, true, false, false},
+		{"a running row whose stopped worker was continued", job.Job{ID: "guard-facts", State: job.StateRunning, Paths: job.Paths{Write: []string{"a/**"}}}, true, true, true, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, _ := fleetFixture(t, tt.row)

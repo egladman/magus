@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings/ffi"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/suite"
@@ -81,7 +82,7 @@ func (s *CallbacksSuite) TestABoolResultCrosses() {
 // its chain across the VM, so a non-retryable one ends os\retry at once. A
 // thrown string carries no type, so every attempt runs.
 func (s *CallbacksSuite) TestRetryErrorsKeepTheirClass() {
-	refused := types.NonRetryable(errors.New("hook is not a command"), types.RetryAfterConfig, "edit the hook")
+	refused := types.NonRetryable(errors.New("hook is not a command"), job.RetryAfterConfig, "edit the hook")
 	calls := 0
 	s.sess.SetGlobal("refuse", vm.DirectValue("refuse", func(context.Context, []vm.Value) (vm.Value, error) {
 		calls++
@@ -103,7 +104,7 @@ final thrown = fun() > void !> any { tick(); throw "flaky"; };
 	_, err := std.OsRetry(s.T().Context(), 3, callback("viaHost"), fast)
 	var typed *types.NonRetryableError
 	s.Require().ErrorAs(err, &typed)
-	s.Equal(types.RetryAfterConfig, types.ClassifyRetry(err).Change)
+	s.Equal(job.RetryAfterConfig, types.ClassifyRetry(err).Change)
 	s.Equal(1, calls)
 
 	calls = 0

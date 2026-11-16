@@ -10,10 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 const (
@@ -22,19 +21,19 @@ const (
 	warmSpawnTitle = "orchestrator/feat regress-fix"
 )
 
-func (f reworkFixture) putRow(t *testing.T, row types.Job) {
+func (f reworkFixture) putRow(t *testing.T, row job.Job) {
 	t.Helper()
-	_, err := f.store.Update(f.testContext(t), row.ID, func(cur *types.Job) { *cur = row; cur.Validated = 1 })
+	_, err := f.store.Update(f.testContext(t), row.ID, func(cur *job.Job) { *cur = row; cur.Validated = 1 })
 	require.NoError(t, err)
 }
 
 // warmFixture holds an exited job gate-fits whose worker this session spawned, and a declared
 // job regress-fix built from follow.
-func warmFixture(t *testing.T, follow func(*types.Job)) reworkFixture {
+func warmFixture(t *testing.T, follow func(*job.Job)) reworkFixture {
 	t.Helper()
 	f := newReworkFixture(t)
-	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateExited, Paths: types.JobPaths{Write: []string{"internal/cache/machine.go"}}})
-	next := types.Job{ID: "regress-fix", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/cache/order.go"}}}
+	f.putRow(t, job.Job{ID: "gate-fits", State: job.StateExited, Paths: job.Paths{Write: []string{"internal/cache/machine.go"}}})
+	next := job.Job{ID: "regress-fix", State: job.StateDeclared, Paths: job.Paths{Write: []string{"internal/cache/order.go"}}}
 	follow(&next)
 	f.putRow(t, next)
 	writeSpawnedAgent(f.facts, warmAgent, spawnedAgent{ID: warmAgent, Description: warmEndedTitle, Name: "brisk-heron"})
@@ -50,8 +49,8 @@ func (f reworkFixture) spawn(t *testing.T) verdict.Judgment {
 }
 
 func TestSpawnWarmWorkerCountsAStoppedHolderAsWarm(t *testing.T) {
-	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
-	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateRunning, HolderStopped: time.Now().Unix(), Paths: types.JobPaths{Write: []string{"internal/cache/machine.go"}}})
+	f := warmFixture(t, func(j *job.Job) { j.Follows = "gate-fits" })
+	f.putRow(t, job.Job{ID: "gate-fits", State: job.StateRunning, HolderStopped: time.Now().Unix(), Paths: job.Paths{Write: []string{"internal/cache/machine.go"}}})
 
 	v := f.spawn(t)
 	require.Equal(t, verdict.Judgment{Decision: "deny", Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
@@ -61,7 +60,7 @@ func TestSpawnWarmWorkerCountsAStoppedHolderAsWarm(t *testing.T) {
 }
 
 func TestSpawnWarmWorkerAsksNoExitOfAnEndedRow(t *testing.T) {
-	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
+	f := warmFixture(t, func(j *job.Job) { j.Follows = "gate-fits" })
 
 	v := f.spawn(t)
 	require.Equal(t, string(denyRuleSpawnWarmWorker), v.Rule, v.Reason)
@@ -69,8 +68,8 @@ func TestSpawnWarmWorkerAsksNoExitOfAnEndedRow(t *testing.T) {
 }
 
 func TestSpawnWarmWorkerLeavesARunningHolderAlone(t *testing.T) {
-	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
-	f.putRow(t, types.Job{ID: "gate-fits", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/cache/machine.go"}}})
+	f := warmFixture(t, func(j *job.Job) { j.Follows = "gate-fits" })
+	f.putRow(t, job.Job{ID: "gate-fits", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/cache/machine.go"}}})
 
 	v := f.spawn(t)
 	assert.NotEqual(t, string(denyRuleSpawnWarmWorker), v.Rule, v.Reason)
@@ -79,11 +78,11 @@ func TestSpawnWarmWorkerLeavesARunningHolderAlone(t *testing.T) {
 func TestSpawnWarmWorkerRefusesAFreshSpawnWhileTheWriterIsWarm(t *testing.T) {
 	tests := []struct {
 		name   string
-		follow func(*types.Job)
+		follow func(*job.Job)
 		link   string
 	}{
-		{"a job naming its predecessor", func(j *types.Job) { j.Follows = "gate-fits" }, "follows gate-fits"},
-		{"a job sharing a write path", func(j *types.Job) { j.Paths.Write = append(j.Paths.Write, "internal/cache/*.go") }, "shares internal/cache/*.go with gate-fits"},
+		{"a job naming its predecessor", func(j *job.Job) { j.Follows = "gate-fits" }, "follows gate-fits"},
+		{"a job sharing a write path", func(j *job.Job) { j.Paths.Write = append(j.Paths.Write, "internal/cache/*.go") }, "shares internal/cache/*.go with gate-fits"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -100,7 +99,7 @@ func TestSpawnWarmWorkerRefusesAFreshSpawnWhileTheWriterIsWarm(t *testing.T) {
 }
 
 func TestSpawnWarmWorkerReadsTheWorkspaceTTL(t *testing.T) {
-	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
+	f := warmFixture(t, func(j *job.Job) { j.Follows = "gate-fits" })
 	require.NoError(t, os.WriteFile(filepath.Join(f.at.workspace, "magus.yaml"), []byte("agents:\n  prompt_cache_ttl: 1h\n"), 0o644))
 
 	v := f.spawn(t)
@@ -110,22 +109,22 @@ func TestSpawnWarmWorkerReadsTheWorkspaceTTL(t *testing.T) {
 }
 
 func TestSpawnWarmWorkerPassesAFreshReason(t *testing.T) {
-	v := warmFixture(t, func(j *types.Job) {
+	v := warmFixture(t, func(j *job.Job) {
 		j.Follows = "gate-fits"
-		j.Agent = &typesagent.Spec{Worker: typesagent.Worker{Type: typesagent.WorkerTypeNew, Reason: "gate-fits read the old limiter; this job replaces it"}}
+		j.Agent = &job.Agent{Worker: job.Worker{Type: job.WorkerTypeNew, Reason: "gate-fits read the old limiter; this job replaces it"}}
 	}).spawn(t)
 
 	assert.NotEqual(t, string(denyRuleSpawnWarmWorker), v.Rule, v.Reason)
 }
 
 func TestSpawnWarmWorkerLeavesAnUnrelatedJobAlone(t *testing.T) {
-	v := warmFixture(t, func(*types.Job) {}).spawn(t)
+	v := warmFixture(t, func(*job.Job) {}).spawn(t)
 
 	assert.NotEqual(t, string(denyRuleSpawnWarmWorker), v.Rule, v.Reason)
 }
 
 func TestSpawnWarmWorkerRemedyPassesTheGuard(t *testing.T) {
-	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
+	f := warmFixture(t, func(j *job.Job) { j.Follows = "gate-fits" })
 	require.Equal(t, string(denyRuleSpawnWarmWorker), f.spawn(t).Rule)
 
 	v := Judge(f.testContext(t), Dependencies{}, Request{Input: hookJSON(t, map[string]any{
@@ -139,8 +138,8 @@ func TestSpawnWarmWorkerRemedyPassesTheGuard(t *testing.T) {
 func TestFindWarmWorker(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	ttl := 5 * time.Minute
-	ended := types.Job{ID: "gate-fits", State: types.StatePass, Paths: types.JobPaths{Write: []string{"a.go"}}, Updated: now.Add(-2 * time.Minute).Unix()}
-	next := types.Job{ID: "regress-fix", State: types.StateDeclared, Follows: "gate-fits"}
+	ended := job.Job{ID: "gate-fits", State: job.StatePass, Paths: job.Paths{Write: []string{"a.go"}}, Updated: now.Add(-2 * time.Minute).Unix()}
+	next := job.Job{ID: "regress-fix", State: job.StateDeclared, Follows: "gate-fits"}
 	haiku := []tier.Pricing{{ID: "claude-haiku-9", Alias: "haiku", LongContext: &tier.PriceStep{Above: 100_000, Multiplier: 2}}}
 	tokens := func(n int64) *int64 { return &n }
 
@@ -163,7 +162,7 @@ func TestFindWarmWorker(t *testing.T) {
 			f := newReworkFixture(t)
 			writeSpawnedAgent(f.facts, warmAgent, tc.rec)
 
-			w, warm := findWarmWorker(f.facts, []types.Job{ended, next}, next, warmSpawnTitle, tc.models, ttl, tc.now)
+			w, warm := findWarmWorker(f.facts, []job.Job{ended, next}, next, warmSpawnTitle, tc.models, ttl, tc.now)
 
 			require.Equal(t, tc.want, warm)
 			if warm {
@@ -175,15 +174,15 @@ func TestFindWarmWorker(t *testing.T) {
 
 func TestFindWarmWorkerSkipsAWorkerOfAnotherRole(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
-	ended := types.Job{ID: "gate-fits", State: types.StatePass, Paths: types.JobPaths{Write: []string{"a.go"}}, Updated: now.Add(-time.Minute).Unix()}
-	next := types.Job{ID: "regress-fix", State: types.StateDeclared, Follows: "gate-fits"}
+	ended := job.Job{ID: "gate-fits", State: job.StatePass, Paths: job.Paths{Write: []string{"a.go"}}, Updated: now.Add(-time.Minute).Unix()}
+	next := job.Job{ID: "regress-fix", State: job.StateDeclared, Follows: "gate-fits"}
 	f := newReworkFixture(t)
 	writeSpawnedAgent(f.facts, warmAgent, spawnedAgent{ID: warmAgent, Description: warmEndedTitle})
 
-	_, warm := findWarmWorker(f.facts, []types.Job{ended, next}, next, "orchestrator/review regress-fix", nil, 5*time.Minute, now)
+	_, warm := findWarmWorker(f.facts, []job.Job{ended, next}, next, "orchestrator/review regress-fix", nil, 5*time.Minute, now)
 	assert.False(t, warm, "a reviewer is not the writer's continuation")
 
-	_, warm = findWarmWorker(f.facts, []types.Job{ended, next}, next, "other/feat regress-fix", nil, 5*time.Minute, now)
+	_, warm = findWarmWorker(f.facts, []job.Job{ended, next}, next, "other/feat regress-fix", nil, 5*time.Minute, now)
 	assert.True(t, warm, "the same role under another parent still continues")
 }
 
@@ -191,18 +190,18 @@ func TestFindWarmWorkerSkipsAWorkerOfAnotherRole(t *testing.T) {
 func TestFindWarmWorkerServesOnlyAWorkerInTheJobsCheckout(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	root := t.TempDir()
-	ended := types.Job{ID: "gate-fits", State: types.StatePass, Paths: types.JobPaths{Write: []string{"a.go"}}, CheckoutRoot: root, Updated: now.Add(-time.Minute).Unix()}
+	ended := job.Job{ID: "gate-fits", State: job.StatePass, Paths: job.Paths{Write: []string{"a.go"}}, CheckoutRoot: root, Updated: now.Add(-time.Minute).Unix()}
 	f := newReworkFixture(t)
 	writeSpawnedAgent(f.facts, warmAgent, spawnedAgent{ID: warmAgent, Description: warmEndedTitle})
-	warmFor := func(next types.Job) bool {
-		_, warm := findWarmWorker(f.facts, []types.Job{ended, next}, next, warmSpawnTitle, nil, 5*time.Minute, now)
+	warmFor := func(next job.Job) bool {
+		_, warm := findWarmWorker(f.facts, []job.Job{ended, next}, next, warmSpawnTitle, nil, 5*time.Minute, now)
 		return warm
 	}
 
-	here := types.Job{ID: "regress-fix", State: types.StateDeclared, Follows: "gate-fits"}
+	here := job.Job{ID: "regress-fix", State: job.StateDeclared, Follows: "gate-fits"}
 	assert.True(t, warmFor(here), "a job taken in the worker's checkout continues it")
 	elsewhere := here
-	elsewhere.Worktree = &types.JobWorktree{Root: filepath.Join(t.TempDir(), "gate2")}
+	elsewhere.Worktree = &job.Worktree{Root: filepath.Join(t.TempDir(), "gate2")}
 	assert.False(t, warmFor(elsewhere), "a job forked into another checkout does not")
 }
 

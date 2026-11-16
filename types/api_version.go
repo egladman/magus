@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // APIVersion names a versioned format Kubernetes-style, as
@@ -35,7 +36,7 @@ var apiVersionRe = regexp.MustCompile(
 func ParseAPIVersion(s string) (APIVersion, error) {
 	if !apiVersionRe.MatchString(s) {
 		return "", fmt.Errorf("api version %q is not <group>/v<major>[alpha<n>|beta<n>], as in %q",
-			s, JobAPIVersion)
+			s, job.APIVersion)
 	}
 	return APIVersion(s), nil
 }

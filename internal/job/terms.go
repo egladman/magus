@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/release"
 )
 
@@ -28,7 +28,7 @@ import (
 // a dedup key. Two renders of one job are byte-identical or the store has stopped being
 // the single statement of the plan.
 type Terms struct {
-	Lease types.Job `json:"job" yaml:"job"`
+	Lease job.Job `json:"job" yaml:"job"`
 	// Evidence is one line per write path the knowledge graph resolved, in declaration
 	// order. A path the graph does not know is ABSENT here rather than reported as zero:
 	// an unknown blast radius and a blast radius of zero are different facts, and the
@@ -83,7 +83,7 @@ type Terms struct {
 	// reach, from [NarrowTestScope].
 	TestScope []TestScope `json:"test_scope,omitempty" yaml:"test_scope,omitempty"`
 	// Attempts are the lease's tries the store holds, oldest first.
-	Attempts []types.Attempt `json:"attempts,omitempty" yaml:"attempts,omitempty"`
+	Attempts []job.Attempt `json:"attempts,omitempty" yaml:"attempts,omitempty"`
 }
 
 // TermsEvidence is what the knowledge graph knows about one write path: the node it
@@ -138,11 +138,11 @@ type TermsFacts struct {
 	ReferencedOutside    []ReferencedFile
 	ReferencedOutsideGap string
 	TestScope            []TestScope
-	Attempts             []types.Attempt
+	Attempts             []job.Attempt
 }
 
 // NewTerms renders one job's terms: the job itself, plus what the workspace contributed.
-func NewTerms(row types.Job, facts TermsFacts) Terms {
+func NewTerms(row job.Job, facts TermsFacts) Terms {
 	return Terms{
 		Lease:                row,
 		Evidence:             facts.Evidence,
@@ -175,7 +175,7 @@ func (b Terms) String() string {
 	if t := b.Lease.ModelTier; t != nil {
 		fmt.Fprintf(&s, "model tier: %s\nskills: %s\n", t, t.Skills)
 	}
-	if a := b.Lease.Agent; a != nil && a.Worker.Type == agent.WorkerTypeNew {
+	if a := b.Lease.Agent; a != nil && a.Worker.Type == job.WorkerTypeNew {
 		fmt.Fprintf(&s, "worker: new, since %s\n", a.Worker.Reason)
 	}
 	if b.Lease.Delivery != "" {
@@ -184,7 +184,7 @@ func (b Terms) String() string {
 
 	writeList(&s, "interface", interfaceLines(b.Lease.Goals))
 	writeBlock(&s, "instructions", b.Lease.Instructions())
-	writeAttempts(&s, b.Lease, types.NewJobAttempts(b.Attempts))
+	writeAttempts(&s, b.Lease, job.NewAttempts(b.Attempts))
 	writeList(&s, "may break", b.Lease.Breaks)
 	if b.Stage.Known() {
 		writeList(&s, "release stage", []string{stageLine(b.Stage)})
@@ -254,8 +254,8 @@ func testScopeLines(scopes []TestScope) []string {
 
 // deliveryLine says how row's work is delivered, and onto which branch when
 // it is stacked.
-func deliveryLine(row types.Job) string {
-	if row.Delivery == types.DeliveryStacked {
+func deliveryLine(row job.Job) string {
+	if row.Delivery == job.DeliveryStacked {
 		return fmt.Sprintf("%s on %s", row.Delivery, row.ParentHead)
 	}
 	return row.Delivery
@@ -264,10 +264,10 @@ func deliveryLine(row types.Job) string {
 // interfaceLines is one entry per symbol goal: what the job must leave behind, as the
 // signature the fork froze. It leads the terms because the contract a holder implements
 // is the part the rest of the brief only bounds.
-func interfaceLines(goals []types.Goal) []string {
+func interfaceLines(goals []job.Goal) []string {
 	var lines []string
 	for _, g := range goals {
-		if g.Kind != types.GoalKindSymbol {
+		if g.Kind != job.GoalKindSymbol {
 			continue
 		}
 		line := fmt.Sprintf("%s (%s)", strings.Join(g.Symbols, ", "), string(g.Expect))
@@ -289,7 +289,7 @@ const maxUnmetShown = 5
 // the newest in full, so the next holder starts from what failed and never from a
 // transcript, and each older one in a line, newest first. A first attempt with no cap writes
 // nothing.
-func writeAttempts(s *strings.Builder, row types.Job, tries types.JobAttempts) {
+func writeAttempts(s *strings.Builder, row job.Job, tries job.Attempts) {
 	if n := tries.LiveN(row.ID); n > 1 || row.MaxAttempts > 0 {
 		line := fmt.Sprintf("attempt %d", n)
 		if row.MaxAttempts > 0 {
@@ -311,7 +311,7 @@ func writeAttempts(s *strings.Builder, row types.Job, tries types.JobAttempts) {
 
 // priorSummary is one ended attempt in a line: how it ended, at which tier, and how much
 // more work and room it was given on the way.
-func priorSummary(a types.Attempt) string {
+func priorSummary(a job.Attempt) string {
 	p := a.Status
 	line := fmt.Sprintf("attempt %d: %s", a.N, p.State)
 	if p.EndReason != "" {
@@ -325,7 +325,7 @@ func priorSummary(a types.Attempt) string {
 
 // priorDetail is what the newest ended attempt left for the next holder, indented under its
 // summary, ending with its retry verdict.
-func priorDetail(a types.Attempt) []string {
+func priorDetail(a job.Attempt) []string {
 	p := a.Status
 	var risks []string
 	if p.Result != nil {
@@ -366,11 +366,11 @@ func priorDetail(a types.Attempt) []string {
 }
 
 // retryLine is an attempt's retry verdict as describe prints it.
-func retryLine(v types.RetryVerdict) string {
+func retryLine(v job.RetryVerdict) string {
 	if v.Retryable {
 		return "retryable"
 	}
-	line := "not retryable until " + string(cmp.Or(v.Change, types.RetryAfterPerson))
+	line := "not retryable until " + string(cmp.Or(v.Change, job.RetryAfterPerson))
 	if v.Reason != "" {
 		line += ": " + firstLine(v.Reason)
 	}

@@ -11,9 +11,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -23,7 +22,7 @@ import (
 type IntegrationMergePathsSuite struct {
 	suite.Suite
 	root string
-	row  types.Job
+	row  jobtypes.Job
 }
 
 func TestIntegrationMergePathsSuite(t *testing.T) {
@@ -54,7 +53,7 @@ func (s *IntegrationMergePathsSuite) SetupTest() {
 }
 
 func (s *IntegrationMergePathsSuite) grade(rel string) (writeGrade, string) {
-	return gradeClaimOutside(s.T().Context(), Dependencies{}, location{}, s.root, s.row, []types.Job{s.row}, nil, rel)
+	return gradeClaimOutside(s.T().Context(), Dependencies{}, location{}, s.root, s.row, []jobtypes.Job{s.row}, nil, rel)
 }
 
 func (s *IntegrationMergePathsSuite) TestAPathABranchItIntegratesChangedIsInScope() {
@@ -88,9 +87,9 @@ func C() {
 
 // claimFixture is a git checkout holding run.go under the golang driver, with a plan where
 // own-a claims run.go#A and the writer, own-b, claims run.go#B.
-func claimFixture(t *testing.T, extra ...types.Job) (context.Context, string) {
+func claimFixture(t *testing.T, extra ...jobtypes.Job) (context.Context, string) {
 	t.Helper()
-	leases := []types.Job{claimLease("own-a", "run.go#A"), claimLease("own-b", "run.go#B")}
+	leases := []jobtypes.Job{claimLease("own-a", "run.go#A"), claimLease("own-b", "run.go#B")}
 	ctx, root := fleetFixture(t, append(leases, extra...)...)
 	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.go diff=golang\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "run.go"), []byte(claimedGo), 0o644))
@@ -102,10 +101,10 @@ func claimFixture(t *testing.T, extra ...types.Job) (context.Context, string) {
 	return ctx, root
 }
 
-func claimLease(id string, paths ...string) types.Job {
-	return types.Job{
-		ID: id, Agent: agent.Instructed("work on " + id), Paths: types.JobPaths{Write: paths}, State: types.StateRunning,
-		Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
+func claimLease(id string, paths ...string) jobtypes.Job {
+	return jobtypes.Job{
+		ID: id, Agent: jobtypes.Instructed("work on " + id), Paths: jobtypes.Paths{Write: paths}, State: jobtypes.StateRunning,
+		Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: jobtypes.BaseMatch, Registered: 1,
 	}
 }
 
@@ -115,7 +114,7 @@ func TestAnIntegrationRowObservesNoClaimFacts(t *testing.T) {
 	row := claimLease("integration", "run.go")
 	row.Integrates = []string{"job-a", "job-b"}
 
-	g, stop := gradeClaimOutside(t.Context(), Dependencies{}, location{}, t.TempDir(), row, []types.Job{row}, nil, "other.go")
+	g, stop := gradeClaimOutside(t.Context(), Dependencies{}, location{}, t.TempDir(), row, []jobtypes.Job{row}, nil, "other.go")
 
 	assert.Equal(t, writeGrade{}, g)
 	assert.Equal(t, "integration integrates 2 branches, and none of them changed other.go", stop)
@@ -215,7 +214,7 @@ func TestNarrowedHold(t *testing.T) { suite.Run(t, new(narrowedHoldSuite)) }
 
 // narrowedLease holds file by name and claims decls. The store drops a
 // release a new row carries, so narrowSeeded records it later.
-func narrowedLease(id, file string, decls ...string) types.Job {
+func narrowedLease(id, file string, decls ...string) jobtypes.Job {
 	row := claimLease(id, file)
 	for _, d := range decls {
 		row.Paths.Write = append(row.Paths.Write, fmt.Sprintf("%s#%s", file, d))
@@ -231,7 +230,7 @@ func narrowSeeded(ctx context.Context, t *testing.T, root, id, file string) {
 	require.NoError(t, err)
 }
 
-func (s *narrowedHoldSuite) start(leases ...types.Job) {
+func (s *narrowedHoldSuite) start(leases ...jobtypes.Job) {
 	ctx, root := fleetFixture(s.T(), leases...)
 	s.ctx, s.root = func() context.Context { return ctx }, root
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, ".gitattributes"), []byte("*.buzz diff=buzz\n*.go diff=golang\n"), 0o644))
@@ -244,10 +243,10 @@ func (s *narrowedHoldSuite) start(leases ...types.Job) {
 	s.Require().NoError(err, "%s", out)
 }
 
-func (s *narrowedHoldSuite) row(id string) types.Job {
+func (s *narrowedHoldSuite) row(id string) jobtypes.Job {
 	rows, err := leaseRows(s.ctx(), hookLocation(s.ctx(), Dependencies{}))
 	s.Require().NoError(err)
-	return rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })]
+	return rows[slices.IndexFunc(rows, func(r jobtypes.Job) bool { return r.ID == id })]
 }
 
 func (s *narrowedHoldSuite) write(lease, file string, fields writeFields) writeGrade {

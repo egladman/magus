@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -19,7 +20,7 @@ import (
 const attemptsFileName = "attempts.jsonl"
 
 // attemptRecord is one line of attempts.jsonl, the persistence type of
-// [types.Attempt] (ADR 0030). The last line per job and number is the
+// [job.Attempt] (ADR 0030). The last line per job and number is the
 // attempt; a dropped line ends it with its job's row.
 type attemptRecord struct {
 	apiversion.TypeMeta
@@ -33,7 +34,7 @@ type attemptSpec struct {
 	N   int    `json:"n"`
 }
 
-// attemptStatusRecord is [types.AttemptStatus] under camelCase keys.
+// attemptStatusRecord is [job.AttemptStatus] under camelCase keys.
 // JobState is what the job ended as, never the try's lifecycle.
 type attemptStatusRecord struct {
 	Started            int64                `json:"started,omitzero"`
@@ -98,15 +99,15 @@ type retryRecord struct {
 }
 
 var (
-	wireAttemptEnd  = newWireEnum(types.AttemptEndExit, types.AttemptEndHandback, types.AttemptEndStop, types.AttemptEndDeadline, types.AttemptEndJob)
-	wireJobState    = newWireEnum(types.JobStates()...)
-	wireRetryChange = newWireEnum(types.RetryAfterConfig, types.RetryAfterWidening, types.RetryAfterPerson, types.RetryAfterUpgrade)
+	wireAttemptEnd  = newWireEnum(job.AttemptEndExit, job.AttemptEndHandback, job.AttemptEndStop, job.AttemptEndDeadline, job.AttemptEndJob)
+	wireJobState    = newWireEnum(job.States()...)
+	wireRetryChange = newWireEnum(job.RetryAfterConfig, job.RetryAfterWidening, job.RetryAfterPerson, job.RetryAfterUpgrade)
 )
 
 func (r attemptRecord) key() string { return fmt.Sprintf("%s\x00%d", r.Spec.Job, r.Spec.N) }
 
 // recordAttempt is a as the line attempts.jsonl stores.
-func recordAttempt(a types.Attempt) attemptRecord {
+func recordAttempt(a job.Attempt) attemptRecord {
 	s := a.Status
 	st := attemptStatusRecord{
 		Started: s.Started, Ended: s.Ended, End: wireAttemptEnd.spell(s.End), Result: recordResult(s.Result),
@@ -123,27 +124,27 @@ func recordAttempt(a types.Attempt) attemptRecord {
 }
 
 // attempt is r as the domain type, refusing a stored spelling no enum lists.
-func (r attemptRecord) attempt() (types.Attempt, error) {
+func (r attemptRecord) attempt() (job.Attempt, error) {
 	st := r.Status
 	var bad wireReads
-	s := types.AttemptStatus{
+	s := job.AttemptStatus{
 		Started: st.Started, Ended: st.Ended, End: wireAttemptEnd.read(st.End, &bad), Result: st.Result.result(),
 		State: wireJobState.read(st.JobState, &bad), ObservedGeneration: st.ObservedGeneration, EndReason: st.EndReason,
 		ModelTier: st.ModelTier, Checkpoint: st.Checkpoint, ReportedBase: st.ReportedBase,
 		ReworkRounds: st.ReworkRounds, Widenings: st.Widenings, Unmet: verifications(st.Unmet),
 		Violations: st.Violations, FailingRefs: st.FailingRefs, DenialsKnown: st.DenialsKnown,
-		Retry: types.RetryVerdict{Retryable: st.Retry.Retryable, Change: wireRetryChange.read(st.Retry.Change, &bad), Reason: st.Retry.Reason, Code: st.Retry.Code},
+		Retry: job.RetryVerdict{Retryable: st.Retry.Retryable, Change: wireRetryChange.read(st.Retry.Change, &bad), Reason: st.Retry.Reason, Code: st.Retry.Code},
 	}
 	if err := bad.refusal(); err != nil {
-		return types.Attempt{}, fmt.Errorf("attempt %d of job %s: %w", r.Spec.N, r.Spec.Job, err)
+		return job.Attempt{}, fmt.Errorf("attempt %d of job %s: %w", r.Spec.N, r.Spec.Job, err)
 	}
 	for _, d := range st.Denials {
-		s.Denials = append(s.Denials, types.JobDenial(d))
+		s.Denials = append(s.Denials, job.Denial(d))
 	}
-	return types.Attempt{Job: r.Spec.Job, N: r.Spec.N, Status: s}.Clone(), nil
+	return job.Attempt{Job: r.Spec.Job, N: r.Spec.N, Status: s}.Clone(), nil
 }
 
-func recordResult(r *types.JobResult) *resultRecord {
+func recordResult(r *job.Result) *resultRecord {
 	if r == nil {
 		return nil
 	}
@@ -160,17 +161,17 @@ func recordResult(r *types.JobResult) *resultRecord {
 
 // result is r as the result a holder filed. Its version was the input's,
 // checked when it was filed, and the record's own stands for it here.
-func (r *resultRecord) result() *types.JobResult {
+func (r *resultRecord) result() *job.Result {
 	if r == nil {
 		return nil
 	}
-	out := &types.JobResult{
-		Job: r.Job, ChangedPaths: r.ChangedPaths, Validation: types.JobResultValidation(r.Validation),
+	out := &job.Result{
+		Job: r.Job, ChangedPaths: r.ChangedPaths, Validation: job.ResultValidation(r.Validation),
 		Descendants: r.Descendants, UnresolvedRisks: r.UnresolvedRisks, FollowUps: r.FollowUps,
 		ObservedGeneration: r.ObservedGeneration,
 	}
 	for _, e := range r.VerificationEvidence {
-		out.VerificationEvidence = append(out.VerificationEvidence, types.VerificationEvidence(e))
+		out.VerificationEvidence = append(out.VerificationEvidence, job.VerificationEvidence(e))
 	}
 	return out
 }
@@ -213,11 +214,11 @@ func (s *Store) envelopeAttempts() error {
 		lines := make([][]byte, 0, len(read.Lines))
 		for _, line := range read.Lines {
 			var old struct {
-				APIVersion types.APIVersion    `json:"api_version"`
-				Job        string              `json:"job"`
-				N          int                 `json:"n"`
-				Status     types.AttemptStatus `json:"status"`
-				Dropped    bool                `json:"dropped"`
+				APIVersion types.APIVersion  `json:"api_version"`
+				Job        string            `json:"job"`
+				N          int               `json:"n"`
+				Status     job.AttemptStatus `json:"status"`
+				Dropped    bool              `json:"dropped"`
 			}
 			if err := json.Unmarshal(line.Text, &old); err != nil {
 				return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", log.Path, line.N, err)
@@ -226,7 +227,7 @@ func (s *Store) envelopeAttempts() error {
 				lines = append(lines, line.Text)
 				continue
 			}
-			r := recordAttempt(types.Attempt{Job: old.Job, N: old.N, Status: old.Status})
+			r := recordAttempt(job.Attempt{Job: old.Job, N: old.N, Status: old.Status})
 			r.Status.Dropped = old.Dropped
 			text, err := json.Marshal(r)
 			if err != nil {
@@ -239,9 +240,9 @@ func (s *Store) envelopeAttempts() error {
 }
 
 // Attempts is every try the store holds, in the order their last lines
-// were written, as stored: [types.Attempt.Bound] reads one under its
+// were written, as stored: [job.Attempt.Bound] reads one under its
 // job's deadline. An absent file holds none.
-func (s *Store) Attempts() ([]types.Attempt, error) {
+func (s *Store) Attempts() ([]job.Attempt, error) {
 	log, err := s.attemptsLog()
 	if err != nil {
 		return nil, err
@@ -250,7 +251,7 @@ func (s *Store) Attempts() ([]types.Attempt, error) {
 	if err != nil {
 		return nil, fmt.Errorf("job: %w", err)
 	}
-	out := make([]types.Attempt, 0, len(recs))
+	out := make([]job.Attempt, 0, len(recs))
 	for _, r := range recs {
 		if err := refuseAttemptVersion(r); err != nil {
 			return nil, err
@@ -266,12 +267,12 @@ func (s *Store) Attempts() ([]types.Attempt, error) {
 
 // BoundAttempts is attempts each read at now under its job's deadline in
 // rows. A try whose job rows does not hold is left out.
-func BoundAttempts(rows []types.Job, attempts []types.Attempt, now int64) []types.Attempt {
+func BoundAttempts(rows []job.Job, attempts []job.Attempt, now int64) []job.Attempt {
 	deadline := make(map[string]int64, len(rows))
 	for _, r := range rows {
 		deadline[r.ID] = r.Deadline
 	}
-	out := make([]types.Attempt, 0, len(attempts))
+	out := make([]job.Attempt, 0, len(attempts))
 	for _, a := range attempts {
 		if d, ok := deadline[a.Job]; ok {
 			out = append(out, a.Bound(d, now))
@@ -282,26 +283,26 @@ func BoundAttempts(rows []types.Job, attempts []types.Attempt, now int64) []type
 
 // changeLiveAttempt shows change job id's try in progress under the
 // attempts lock, and appends it when change reports it changed.
-func (s *Store) changeLiveAttempt(ctx context.Context, id string, change func(*types.Attempt) bool) (types.Attempt, error) {
+func (s *Store) changeLiveAttempt(ctx context.Context, id string, change func(*job.Attempt) bool) (job.Attempt, error) {
 	log, err := s.attemptsLog()
 	if err != nil {
-		return types.Attempt{}, err
+		return job.Attempt{}, err
 	}
-	var live types.Attempt
+	var live job.Attempt
 	var failed error
 	err = log.Update(ctx, func(recs []attemptRecord) []attemptRecord {
-		all := make([]types.Attempt, 0, len(recs))
+		all := make([]job.Attempt, 0, len(recs))
 		for _, r := range recs {
 			if failed = refuseAttemptVersion(r); failed != nil {
 				return nil
 			}
-			var a types.Attempt
+			var a job.Attempt
 			if a, failed = r.attempt(); failed != nil {
 				return nil
 			}
 			all = append(all, a)
 		}
-		live = types.NewJobAttempts(all).Live(id)
+		live = job.NewAttempts(all).Live(id)
 		if !change(&live) {
 			return nil
 		}
@@ -311,7 +312,7 @@ func (s *Store) changeLiveAttempt(ctx context.Context, id string, change func(*t
 		err = failed
 	}
 	if err != nil {
-		return types.Attempt{}, fmt.Errorf("job: %s: %w", attemptsFileName, err)
+		return job.Attempt{}, fmt.Errorf("job: %s: %w", attemptsFileName, err)
 	}
 	return live, nil
 }
@@ -320,16 +321,16 @@ func (s *Store) changeLiveAttempt(ctx context.Context, id string, change func(*t
 // live job id through at now. A try already running stays as it was,
 // so a hook fired twice records one start; an ended one starts again,
 // which is a holder sent back with more work.
-func (s *Store) StartAttempt(ctx context.Context, id string, now time.Time) (types.Attempt, error) {
+func (s *Store) StartAttempt(ctx context.Context, id string, now time.Time) (job.Attempt, error) {
 	rows, err := s.unswept()
 	if err != nil {
-		return types.Attempt{}, err
+		return job.Attempt{}, err
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	if i < 0 || !rows[i].State.Live() {
-		return types.Attempt{}, fmt.Errorf("%w: %q is not a live job, so no try of it starts", ErrUnknownJob, id)
+		return job.Attempt{}, fmt.Errorf("%w: %q is not a live job, so no try of it starts", ErrUnknownJob, id)
 	}
-	return s.changeLiveAttempt(ctx, id, func(a *types.Attempt) bool {
+	return s.changeLiveAttempt(ctx, id, func(a *job.Attempt) bool {
 		if a.Running() {
 			return false
 		}
@@ -340,8 +341,8 @@ func (s *Store) StartAttempt(ctx context.Context, id string, now time.Time) (typ
 
 // EndAttempt records that the end of job id's try in progress was
 // observed at now, as end. The first end observed stands.
-func (s *Store) EndAttempt(ctx context.Context, id string, end types.AttemptEnd, now time.Time) error {
-	_, err := s.changeLiveAttempt(ctx, id, func(a *types.Attempt) bool {
+func (s *Store) EndAttempt(ctx context.Context, id string, end job.AttemptEnd, now time.Time) error {
+	_, err := s.changeLiveAttempt(ctx, id, func(a *job.Attempt) bool {
 		if a.Status.Ended != 0 {
 			return false
 		}
@@ -353,7 +354,7 @@ func (s *Store) EndAttempt(ctx context.Context, id string, end types.AttemptEnd,
 
 // EndCallerAttempt is [Store.EndAttempt] for the job c is bound to. A
 // caller bound to none ends nothing.
-func (s *Store) EndCallerAttempt(ctx context.Context, c Caller, end types.AttemptEnd, now time.Time) error {
+func (s *Store) EndCallerAttempt(ctx context.Context, c Caller, end job.AttemptEnd, now time.Time) error {
 	if !c.Identified() {
 		return nil
 	}
@@ -366,11 +367,11 @@ func (s *Store) EndCallerAttempt(ctx context.Context, c Caller, end types.Attemp
 
 // fileResult puts result on job id's try in progress and ends it by
 // exit, as `magus job exit` does.
-func (s *Store) fileResult(ctx context.Context, id string, result *types.JobResult, now int64) error {
-	_, err := s.changeLiveAttempt(ctx, id, func(a *types.Attempt) bool {
+func (s *Store) fileResult(ctx context.Context, id string, result *job.Result, now int64) error {
+	_, err := s.changeLiveAttempt(ctx, id, func(a *job.Attempt) bool {
 		a.Status.Result = result
 		if a.Status.Ended == 0 {
-			a.Status.Ended, a.Status.End = now, types.AttemptEndExit
+			a.Status.Ended, a.Status.End = now, job.AttemptEndExit
 		}
 		return true
 	})
@@ -378,7 +379,7 @@ func (s *Store) fileResult(ctx context.Context, id string, result *types.JobResu
 }
 
 // appendAttempts appends attempts as their records.
-func (s *Store) appendAttempts(ctx context.Context, attempts ...types.Attempt) error {
+func (s *Store) appendAttempts(ctx context.Context, attempts ...job.Attempt) error {
 	if len(attempts) == 0 {
 		return nil
 	}
@@ -419,7 +420,7 @@ func (s *Store) dropAttempts(ctx context.Context, gone map[string]bool) error {
 
 // archiveAttempts writes the tries of rows to path beside the rows'
 // archive, so a cleared or deleted job keeps its results there too.
-func (s *Store) archiveAttempts(path string, rows []types.Job) error {
+func (s *Store) archiveAttempts(path string, rows []job.Job) error {
 	all, err := s.Attempts()
 	if err != nil {
 		return err
@@ -448,11 +449,11 @@ func (s *Store) archiveAttempts(path string, rows []types.Job) error {
 // storedTries is what an older jobs.jsonl row kept of its tries before
 // attempts.jsonl held them.
 type storedTries struct {
-	ID       string           `json:"id"`
-	Attempts int              `json:"attempts"`
-	Result   *types.JobResult `json:"result"`
+	ID       string      `json:"id"`
+	Attempts int         `json:"attempts"`
+	Result   *job.Result `json:"result"`
 	Prior    []struct {
-		types.AttemptStatus
+		job.AttemptStatus
 		N               int      `json:"n"`
 		UnresolvedRisks []string `json:"unresolved_risks"`
 	} `json:"prior"`
@@ -460,20 +461,20 @@ type storedTries struct {
 
 // attempts is t as the records that replace it. A prior try's risks
 // were all it kept of its result, so they become that result.
-func (t storedTries) attempts() []types.Attempt {
-	var out []types.Attempt
+func (t storedTries) attempts() []job.Attempt {
+	var out []job.Attempt
 	for _, p := range t.Prior {
-		a := types.Attempt{Job: t.ID, N: p.N, Status: p.AttemptStatus}
+		a := job.Attempt{Job: t.ID, N: p.N, Status: p.AttemptStatus}
 		if a.Status.Ended != 0 {
-			a.Status.End = types.AttemptEndJob
+			a.Status.End = job.AttemptEndJob
 		}
 		if len(p.UnresolvedRisks) > 0 {
-			a.Status.Result = &types.JobResult{Job: t.ID, UnresolvedRisks: p.UnresolvedRisks}
+			a.Status.Result = &job.Result{Job: t.ID, UnresolvedRisks: p.UnresolvedRisks}
 		}
 		out = append(out, a)
 	}
 	if t.Result != nil {
-		out = append(out, types.Attempt{Job: t.ID, N: max(t.Attempts, 1), Status: types.AttemptStatus{Result: t.Result}})
+		out = append(out, job.Attempt{Job: t.ID, N: max(t.Attempts, 1), Status: job.AttemptStatus{Result: t.Result}})
 	}
 	return out
 }
@@ -501,7 +502,7 @@ func (s *Store) moveTries(ctx context.Context) error {
 		}
 		byID[t.ID] = t
 	}
-	var moved []types.Attempt
+	var moved []job.Attempt
 	for _, id := range order {
 		moved = append(moved, byID[id].attempts()...)
 	}

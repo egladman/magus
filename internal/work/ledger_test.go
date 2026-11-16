@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -137,7 +138,7 @@ func (s *ledgerSuite) TestACheckoutALiveJobHoldsIsTrackedWithItsBranch() {
 	s.unpublished("h3", "h3")
 	s.merges("h3", types.TreeMergeResult{Tree: "tree-h3"})
 	s.branches(map[string]string{"topic": "h3"})
-	report := s.survey(surveyTerms{Jobs: []types.Job{{ID: "fix", State: types.StateRunning, CheckoutRoot: s.repo}}})
+	report := s.survey(surveyTerms{Jobs: []job.Job{{ID: "fix", State: job.StateRunning, CheckoutRoot: s.repo}}})
 	s.Equal(types.WorkTracked, s.item(report, "checkout:"+s.repo).State)
 	s.Equal("job fix (running)", s.item(report, "checkout:"+s.repo).Why)
 	s.Equal(types.WorkTracked, s.item(report, "branch:topic").State)
@@ -148,7 +149,7 @@ func (s *ledgerSuite) TestATerminalJobTracksNothing() {
 	s.dirty(s.repo, "a.go")
 	s.unpublished("h3")
 	s.branches(nil)
-	report := s.survey(surveyTerms{Jobs: []types.Job{{ID: "fix", State: types.StatePass, CheckoutRoot: s.repo}}})
+	report := s.survey(surveyTerms{Jobs: []job.Job{{ID: "fix", State: job.StatePass, CheckoutRoot: s.repo}}})
 	s.Equal(types.WorkUnaccounted, s.item(report, "checkout:"+s.repo).State)
 }
 

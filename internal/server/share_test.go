@@ -20,8 +20,8 @@ import (
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 )
 
@@ -83,7 +83,7 @@ func TestShareMintIsAudited(t *testing.T) {
 	routes := map[string]share.Route{"/api/v1/events": {Handler: http.NotFoundHandler(), Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/events")}}
 	h := (&Server{}).newShareHandler(mgr, consoleDir, routes, trailDir, slog.New(slog.DiscardHandler))
 
-	minter := types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: types.GrantConsole}
+	minter := job.Credential{Kind: job.KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: job.AccessConsole}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/share", nil)
 	req = req.WithContext(trail.ContextWithCredential(req.Context(), minter))
 	rr := httptest.NewRecorder()
@@ -118,7 +118,7 @@ func TestShareMintIsAudited(t *testing.T) {
 	require.NoError(t, json.Unmarshal(blob, &rec))
 	assert.Len(t, rec.Minted.ID, 8)
 	assert.Equal(t, trail.MintRecord{
-		Minted:  types.Credential{Kind: types.KindShare, ID: rec.Minted.ID, Name: rec.Minted.Name, Grant: types.GrantViewer},
+		Minted:  job.Credential{Kind: job.KindShare, ID: rec.Minted.ID, Name: rec.Minted.Name, Grant: job.AccessViewer},
 		Expires: rec.Expires, // stamped at mint time
 		Minter:  minter,
 	}, rec)

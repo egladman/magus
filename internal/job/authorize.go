@@ -9,8 +9,8 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // Actor is the party a job-store write is made by: the lease it is bound to.
@@ -68,8 +68,8 @@ func ActingActor(loc Location) Actor {
 // stamped it: the CLI stamps its BAGGAGE, and the daemon stamps a client's lease, or the
 // client's lack of one, so a client run never reads the daemon's own environment. Only a
 // ctx no entry point stamped, such as an embedding Go program's, falls back to BAGGAGE.
-func RunLease(ctx context.Context, loc Location) (string, types.LeaseSource) {
-	claim, ok := types.LookupJobLease(ctx)
+func RunLease(ctx context.Context, loc Location) (string, job.LeaseSource) {
+	claim, ok := job.LookupLease(ctx)
 	if !ok {
 		claim = trail.LeaseFromEnv()
 	}
@@ -176,11 +176,11 @@ func refuse(actor Actor, id, rule string) error {
 
 // landsRow reports whether actor holds an integration row that lands row id:
 // its own, or a branch its Integrates names.
-func landsRow(actor Actor, id string, rows []types.Job) bool {
+func landsRow(actor Actor, id string, rows []job.Job) bool {
 	if actor.Unstamped {
 		return false
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == actor.Lease })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == actor.Lease })
 	if i < 0 || !rows[i].State.Live() || len(rows[i].Integrates) == 0 {
 		return false
 	}
@@ -204,7 +204,7 @@ func landsRow(actor Actor, id string, rows []types.Job) bool {
 // is the asymmetry the whole rule exists for: a worker that can widen its own row has no
 // boundary at all. The one claim a holder makes is an [asClaim] write, each path
 // carrying a proof the store re-proved (see [authorizeClaim]).
-func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, exists bool, rows []types.Job) error {
+func authorizeRow(actor Actor, id string, kind grading, prev, next job.Job, exists bool, rows []job.Job) error {
 	if kind == asClaim {
 		return authorizeClaim(actor, id, prev, next, exists, rows)
 	}
@@ -237,15 +237,15 @@ func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, ex
 			}
 		case "state":
 			// Taking a declared job is what starts it, so the exec carries that move.
-			if kind == asExec && next.State == types.StateRunning && (prev.State == types.StateDeclared || prev.EndedWithSession()) {
+			if kind == asExec && next.State == job.StateRunning && (prev.State == job.StateDeclared || prev.EndedWithSession()) {
 				continue
 			}
 			// StatePass stays refused here on purpose: pass is the claim that the work
 			// met its criteria, and that judgment belongs to whoever is waiting on the
 			// row, never to the holder announcing it is done.
-			if next.State != types.StateFail && next.State != types.StateNoReturn && next.State != types.StateExited {
+			if next.State != job.StateFail && next.State != job.StateNoReturn && next.State != job.StateExited {
 				return refuse(actor, id, fmt.Sprintf("a worker may only end its own row in %s, %s, or %s, never %s",
-					types.StateFail, types.StateNoReturn, types.StateExited, next.State))
+					job.StateFail, job.StateNoReturn, job.StateExited, next.State))
 			}
 		case "reported_base":
 			// The registration, which is what a worker is asked for.
@@ -259,14 +259,14 @@ func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, ex
 // authorizeVerdict grades a bound holder's verdict: on a row below its own lease (see
 // [Actor.Verifies]), the move to pass and no other change. Wait refuses the rest at its
 // door; this refusal is what holds for any other caller of the verdict write.
-func authorizeVerdict(actor Actor, id string, prev, next types.Job, rows []types.Job) error {
+func authorizeVerdict(actor Actor, id string, prev, next job.Job, rows []job.Job) error {
 	if !actor.Verifies(rows, id) {
 		return refuse(actor, id, "a holder grades only the rows below its own lease, never its own, a sibling's or an ancestor's")
 	}
 	for _, field := range changedFields(prev, next) {
-		if field != "state" || next.State != types.StatePass {
+		if field != "state" || next.State != job.StatePass {
 			return refuse(actor, id, fmt.Sprintf("a verdict moves a row to %s and changes nothing else, and this one changes %s",
-				types.StatePass, field))
+				job.StatePass, field))
 		}
 	}
 	return nil
@@ -285,14 +285,14 @@ func authorizeVerdict(actor Actor, id string, prev, next types.Job, rows []types
 // gate, which cmd/magus/guard_gate.go reads as a capability rather than as a declaration:
 // a row whose check names it may run it, so a worker declaring a child with a gate check
 // its own row lacks would be minting the capability it was refused.
-func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []types.Job) error {
+func authorizeChild(actor Actor, id string, next job.Job, exists bool, rows []job.Job) error {
 	if exists {
 		return refuse(actor, id, "a worker writes no row but its own and the children it hands out")
 	}
 	if next.Parent != actor.Lease {
 		return refuse(actor, id, fmt.Sprintf("a row a worker creates must name %s as its parent, and this one names %q", actor.Lease, next.Parent))
 	}
-	own := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == actor.Lease })
+	own := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == actor.Lease })
 	if own < 0 {
 		return refuse(actor, id, "its own row is not in the job store, so there is no boundary to hand a child")
 	}
@@ -306,9 +306,9 @@ func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []
 		return refuse(actor, id, "a child may only break what its parent may break, and this one's breaks reach further")
 	case !subset(parent.Paths.Deny, next.Paths.Deny):
 		return refuse(actor, id, "a child carries every deny_path its parent carries, and this one drops some")
-	case next.State != "" && next.State != types.StateDeclared:
+	case next.State != "" && next.State != job.StateDeclared:
 		return refuse(actor, id, fmt.Sprintf("a child is handed out %s or with no state at all, never %s: grading a row is the orchestrator's",
-			types.StateDeclared, next.State))
+			job.StateDeclared, next.State))
 	case runsTheGate(next) && !runsTheGate(parent):
 		return refuse(actor, id, "only a lease whose parent runs the gate runs the gate, and this parent runs "+checkLine(parent))
 	}
@@ -317,8 +317,8 @@ func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []
 
 // runsTheGate reports whether a row's declared check IS the release gate, the one check
 // that carries a capability with it.
-func runsTheGate(row types.Job) bool {
-	return slices.ContainsFunc(row.EffectiveGoals(), func(gate types.Goal) bool {
+func runsTheGate(row job.Job) bool {
+	return slices.ContainsFunc(row.EffectiveGoals(), func(gate job.Goal) bool {
 		return gate.Check.Target == types.TargetCI
 	})
 }
@@ -327,7 +327,7 @@ func runsTheGate(row types.Job) bool {
 // against default_charms the way `magus run` resolves it (see ranCheck), so the command
 // is the declaration itself. Built through hint.Run so a subcommand rename is one edit;
 // types renders its own form because it imports no CLI package.
-func gateCommand(c types.LeaseCheck) string {
+func gateCommand(c job.LeaseCheck) string {
 	project := c.Project
 	if project == "" {
 		project = "."
@@ -343,7 +343,7 @@ func gateCommand(c types.LeaseCheck) string {
 }
 
 // checkLine names a row's check as a refusal quotes it.
-func checkLine(row types.Job) string {
+func checkLine(row job.Job) string {
 	gates := row.EffectiveGoals()
 	if len(gates) == 0 {
 		return "no check at all"
@@ -357,7 +357,7 @@ func checkLine(row types.Job) string {
 
 // ReadBoundary is the declarations a row may read: its write paths plus its read paths.
 // The guard's focus-read deny and the store's subset check both use it.
-func ReadBoundary(row types.Job) []string {
+func ReadBoundary(row job.Job) []string {
 	if len(row.Paths.Read) == 0 {
 		return row.Paths.Write
 	}
@@ -376,7 +376,7 @@ func authorizeClear(actor Actor) error {
 // changedFields names the DECLARED fields that differ between two versions of a row, in
 // the wire spelling a refusal quotes. Store-computed fields (the timestamps, releases,
 // the registration verdict) are not here: nothing a caller sends decides them.
-func changedFields(prev, next types.Job) []string {
+func changedFields(prev, next job.Job) []string {
 	var out []string
 	add := func(name string, differs bool) {
 		if differs {
@@ -414,7 +414,7 @@ func changedFields(prev, next types.Job) []string {
 
 // changedAgentFields names what differs between two agent sections: agent
 // when only one exists, else each member that differs.
-func changedAgentFields(prev, next *agent.Spec) []string {
+func changedAgentFields(prev, next *job.Agent) []string {
 	switch {
 	case prev == nil && next == nil:
 		return nil
@@ -437,7 +437,7 @@ func changedAgentFields(prev, next *agent.Spec) []string {
 // goalsEqual is deliberately explicit instead of reflect.DeepEqual: this path grades every
 // bound worker mutation, and the model is small, typed, and stable. Every field counts: a
 // holder that could rewrite a goal's kind, expectation or subject could grade itself done.
-func goalsEqual(a, b []types.Goal) bool {
+func goalsEqual(a, b []job.Goal) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -462,13 +462,13 @@ func listedIn(inner, outer []string) bool {
 }
 
 // subset reports whether every declaration in inner is within some entry of outer by
-// [types.PathWithin], so a holder may narrow a glob to the files it matches or a file to
+// [job.PathWithin], so a holder may narrow a glob to the files it matches or a file to
 // one declaration of it. A glob rewritten into a wider one is not within the narrower
 // (`internal/**` is not within `internal/job/*.go`).
 func subset(inner, outer []string) bool {
 	for _, p := range inner {
 		p := strings.TrimSpace(p)
-		if !slices.ContainsFunc(outer, func(o string) bool { return types.PathWithin(p, strings.TrimSpace(o)) }) {
+		if !slices.ContainsFunc(outer, func(o string) bool { return job.PathWithin(p, strings.TrimSpace(o)) }) {
 			return false
 		}
 	}

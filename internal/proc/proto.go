@@ -4,11 +4,12 @@
 package proc
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
 )
 
 // SocketEnv names the variable a magus process exports to its children: the unix://
@@ -36,14 +37,14 @@ const (
 )
 
 var (
-	needConsoleRead  = types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
-	needConsoleWrite = types.Need{Scope: types.ScopeConsole, Level: types.LevelWrite}
+	needConsoleRead  = job.Need{Scope: job.ScopeConsole, Level: job.LevelRead}
+	needConsoleWrite = job.Need{Scope: job.ScopeConsole, Level: job.LevelWrite}
 )
 
 // routeNeeds is the Need of every proc route. Reading the pool is a console read; anything
 // that runs magus, drops workspaces or stops the process is a console write, the level the
 // console's own JobService RunJob takes.
-var routeNeeds = map[string]types.Need{
+var routeNeeds = map[string]job.Need{
 	pathRun:      needConsoleWrite,
 	pathJobs:     needConsoleWrite,
 	pathStatus:   needConsoleRead,
@@ -103,7 +104,7 @@ type runRequest struct {
 	// It is the client's own claim about itself, exactly what the BAGGAGE channel's
 	// magus.lease member is (the client's trace context does not cross this socket, so
 	// an adopted run records the lease and no ancestry). The server therefore re-validates
-	// it with types.ValidJobID and drops a value that fails, matching what
+	// it with job.ValidID and drops a value that fails, matching what
 	// trail.LeaseFromEnv does with a malformed environment value: a lease id is
 	// exempt from the trail's redaction, so an unchecked one is a way to carry a
 	// credential onto an event line.

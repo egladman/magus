@@ -1,6 +1,10 @@
 package types
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/egladman/magus/libs/safetyscissors/job"
+)
 
 // AgentRole is where the calling agent stands, computed from the job store and the
 // caller's spawn record rather than declared by the caller.
@@ -85,7 +89,7 @@ type CommandRequest struct {
 	Role AgentRole
 	// Lease is the job a worker acts under, nil for root.
 	// A bound id the job store does not carry comes back with only its ID set.
-	Lease *Job
+	Lease *job.Job
 	// Thread is which thread of its session the caller is. Role says whether a lease binds
 	// it, which an unleased subagent and a person share; Thread says main or sub. It is
 	// never empty: a caller magus cannot place is AgentThreadUnknown.
@@ -141,7 +145,7 @@ type WriteRequest struct {
 	Agent         string
 	Parent        string
 	Role          AgentRole
-	Lease         *Job
+	Lease         *job.Job
 	Thread        AgentThread
 	ThreadFrom    ThreadSource
 	Orchestration Orchestration
@@ -170,7 +174,7 @@ type StopRequest struct {
 	Agent         string
 	Parent        string
 	Role          AgentRole
-	Lease         *Job
+	Lease         *job.Job
 	Thread        AgentThread
 	ThreadFrom    ThreadSource
 	Orchestration Orchestration

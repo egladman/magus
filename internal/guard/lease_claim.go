@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -17,7 +18,7 @@ const denyRuleLeaseClaim denyRuleName = "lease-claim"
 // gradeProvedClaim is the lease-claim refusal of rel for lease me, whose checkout is
 // checkout, or no opinion when no proof covers it or the apply line runs past its budget.
 // rows are every job, which the proof reads for a path another live job holds.
-func gradeProvedClaim(ctx context.Context, deps Dependencies, checkout string, me types.Job, rows []types.Job, rel string) writeGrade {
+func gradeProvedClaim(ctx context.Context, deps Dependencies, checkout string, me jobtypes.Job, rows []jobtypes.Job, rel string) writeGrade {
 	var projects []*types.Project
 	if repo, err := deps.inspect(ctx, checkout); err == nil && repo != nil {
 		projects = repo.All()
@@ -30,8 +31,8 @@ func gradeProvedClaim(ctx context.Context, deps Dependencies, checkout string, m
 	return denyLeaseClaim(me, rel, req, proof)
 }
 
-func denyLeaseClaim(me types.Job, rel string, req types.JobClaimRequest, proof string) writeGrade {
-	line, ok := job.ClaimCommand(me.ID, []types.JobClaimRequest{req})
+func denyLeaseClaim(me jobtypes.Job, rel string, req jobtypes.ClaimRequest, proof string) writeGrade {
+	line, ok := job.ClaimCommand(me.ID, []jobtypes.ClaimRequest{req})
 	if !ok {
 		return writeGrade{}
 	}

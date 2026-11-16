@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	qtypes "github.com/egladman/magus/internal/queue/types"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // Identity is who "mine" means for an in-flight list.
@@ -25,7 +25,7 @@ func (me Identity) Known() bool { return me.Lease != "" || me.Login != "" }
 // InflightInput is what [Inflight] joins a job list to.
 type InflightInput struct {
 	// Fetch is the read the changes came from, nil when the queue was never read.
-	Fetch   *types.InflightFetch
+	Fetch   *job.InflightFetch
 	Changes qtypes.Changes
 	// Plan is the queue's newest plan for the base, nil when none was recorded.
 	Plan *qtypes.Plan
@@ -37,7 +37,7 @@ type InflightInput struct {
 
 // Inflight fills list's Changes, Fetched and Unproposed from in. It reads nothing and
 // calls nothing, so one store and one snapshot always render the same list.
-func Inflight(list types.JobList, in InflightInput) types.JobList {
+func Inflight(list job.List, in InflightInput) job.List {
 	list.Changes, list.Fetched, list.Unproposed = nil, nil, nil
 	if in.Fetch == nil {
 		return list
@@ -61,7 +61,7 @@ func Inflight(list types.JobList, in InflightInput) types.JobList {
 	tree := jobTree(list.Jobs, in.Me.Lease)
 	places, verdicts := planFacts(plan)
 
-	add := func(ch types.InflightChange) {
+	add := func(ch job.InflightChange) {
 		if ch.Branch != "" {
 			ch.Jobs = slices.Clone(byBranch[ch.Branch])
 		}
@@ -78,7 +78,7 @@ func Inflight(list types.JobList, in InflightInput) types.JobList {
 		list.Changes = append(list.Changes, ch)
 	}
 	for _, c := range in.Changes.Changes {
-		add(types.InflightChange{
+		add(job.InflightChange{
 			ID: c.ID, Title: c.Title, Author: c.Author, Head: c.Head, Branch: c.Branch, Base: c.Base, Fork: c.Fork,
 			Intent: string(c.Method),
 		})
@@ -88,7 +88,7 @@ func Inflight(list types.JobList, in InflightInput) types.JobList {
 		if u.Base != "" && u.Base != in.Changes.Base {
 			continue
 		}
-		add(types.InflightChange{
+		add(job.InflightChange{
 			ID: u.ID, Title: u.Title, Author: u.Author, Head: u.Head, Branch: u.Branch, Base: u.Base,
 			Mark: string(u.Mark),
 		})
@@ -110,23 +110,23 @@ func Inflight(list types.JobList, in InflightInput) types.JobList {
 
 // changeAttention is whose turn ch is. A kick-back outranks intent: a change still carrying
 // intent after the queue kicked it is waiting on its author, not on the queue.
-func changeAttention(ch types.InflightChange) types.InflightAttention {
+func changeAttention(ch job.InflightChange) job.InflightAttention {
 	switch {
 	case ch.Mark == string(qtypes.MarkKickedBack), ch.Mark == string(qtypes.MarkNeedsRegeneration),
 		ch.Decision == qtypes.DecisionKick.String():
-		return types.AttentionAuthor
+		return job.AttentionAuthor
 	case ch.Code == string(qtypes.CodeWaitNotApproved):
-		return types.AttentionReview
+		return job.AttentionReview
 	case ch.Intent != "":
-		return types.AttentionQueue
+		return job.AttentionQueue
 	}
-	return types.AttentionNone
+	return job.AttentionNone
 }
 
 // InflightDetail is why a change is where it is: its place in the plan, and
 // the verdict's code and reason or the mark it shows. It names the partition
 // only when partitions exceeds one, and is "" with nothing to say.
-func InflightDetail(c types.InflightChange, partitions int) string {
+func InflightDetail(c job.InflightChange, partitions int) string {
 	var parts []string
 	if c.Position > 0 {
 		place := fmt.Sprintf("pos %d", c.Position)
@@ -147,16 +147,16 @@ func InflightDetail(c types.InflightChange, partitions int) string {
 }
 
 // jobTree is the ids of lease's whole tree: its root ancestor and every row below it.
-func jobTree(rows []types.Job, lease string) map[string]bool {
+func jobTree(rows []job.Job, lease string) map[string]bool {
 	if lease == "" {
 		return nil
 	}
 	root := lease
-	if up := types.JobAncestors(rows, lease); len(up) > 0 {
+	if up := job.Ancestors(rows, lease); len(up) > 0 {
 		root = up[len(up)-1].ID
 	}
 	tree := map[string]bool{root: true}
-	for _, row := range types.JobDescendants(rows, root) {
+	for _, row := range job.Descendants(rows, root) {
 		tree[row.ID] = true
 	}
 	return tree

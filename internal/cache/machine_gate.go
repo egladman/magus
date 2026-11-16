@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -704,7 +705,7 @@ func leaseWeight(ctx context.Context, cacheDir string) float64 {
 	if err != nil {
 		return 0
 	}
-	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == lease }); i >= 0 {
+	if i := slices.IndexFunc(rows, func(r jobtypes.Job) bool { return r.ID == lease }); i >= 0 {
 		return rows[i].Weight
 	}
 	return 0
@@ -953,7 +954,7 @@ func machineBusyError(c budget.Claim, v budget.Verdict, now time.Time, lease str
 // owedFiling tells a caller under a job lease how to file a refused check.
 func owedFiling(lease string) string {
 	return fmt.Sprintf("file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
-		hint.JobExit.With(lease), types.OwedNoSeat)
+		hint.JobExit.With(lease), jobtypes.OwedNoSeat)
 }
 
 // LeasedPressureNext is what a job does after MGS3053. An integration cannot

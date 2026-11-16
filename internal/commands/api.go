@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/libs/clikit/generate"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -18,7 +19,7 @@ import (
 // storeFormats are the shared store shapes this build reads.
 // Another checkout's binary may have written the rows.
 var storeFormats = []types.APIVersion{
-	types.JobAPIVersion, types.JobResultAPIVersion,
+	job.APIVersion, job.ResultAPIVersion,
 	types.EventAPIVersion, types.StoredOutputAPIVersion,
 }
 

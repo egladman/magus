@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,7 +41,7 @@ func TestClientPutRendersEveryMergedField(t *testing.T) {
 
 // jobJSONFields are the row's wire names, which is the vocabulary both job doors speak.
 func jobJSONFields() []string {
-	t := reflect.TypeFor[types.Job]()
+	t := reflect.TypeFor[jobtypes.Job]()
 	out := make([]string, 0, t.NumField())
 	for i := range t.NumField() {
 		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
@@ -71,9 +71,9 @@ func jobMergeApplies(key string) bool {
 		if err != nil {
 			continue
 		}
-		var row types.Job
+		var row jobtypes.Job
 		apply(&row)
-		if !reflect.DeepEqual(row, types.Job{}) {
+		if !reflect.DeepEqual(row, jobtypes.Job{}) {
 			return true
 		}
 	}
@@ -207,7 +207,7 @@ func TestBuildCallReadsAClientScriptByPath(t *testing.T) {
 // bare put of another row, which the rebind rule denies.
 func TestClientEntryReachesTheRebindRule(t *testing.T) {
 	me := narrowLease().ID
-	child := types.Job{ID: me + "/child", Parent: me, Paths: types.JobPaths{Write: []string{"cmd/magus/x/**"}}, State: types.StateDeclared}
+	child := jobtypes.Job{ID: me + "/child", Parent: me, Paths: jobtypes.Paths{Write: []string{"cmd/magus/x/**"}}, State: jobtypes.StateDeclared}
 	ctx, _ := fleetFixture(t, narrowLease(), child)
 
 	entry := buildCall(hint.ToolClient.String(), clientScript(enterCall(child.ID, "cmd/magus/x/a.go")), "")

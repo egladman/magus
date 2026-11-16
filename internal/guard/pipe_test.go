@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,7 @@ import (
 // `ls` renders a type private to cmd/magus; its registry example is the contract instead.
 func TestPipeRecordsNameRealFields(t *testing.T) {
 	rendered := map[string]any{
-		"ls jobs":          types.JobList{},
+		"ls jobs":          job.List{},
 		"describe file":    types.FileReport{},
 		"describe spells":  types.SpellReport{},
 		"describe targets": types.TargetReport{},

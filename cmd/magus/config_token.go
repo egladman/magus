@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -111,7 +112,7 @@ func configTokenGenerate(args []string) error {
 	if err != nil {
 		return err
 	}
-	operator := types.Credential{Kind: types.KindOperator, ID: auth.SecretID(tok), Grant: types.GrantOperator}
+	operator := job.Credential{Kind: job.KindOperator, ID: auth.SecretID(tok), Grant: job.AccessOperator}
 	auditMint("cli.generate", trail.MintRecord{Minted: operator, Minter: operator})
 
 	// The secret goes to stdout alone, once; repeating it on stderr would put it in every

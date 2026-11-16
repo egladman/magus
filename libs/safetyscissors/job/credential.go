@@ -1,4 +1,4 @@
-package types
+package job
 
 import (
 	"errors"
@@ -17,7 +17,7 @@ const (
 	ScopeConsole Scope = "console"
 )
 
-// scopes is the order a Grant renders and parses in.
+// scopes is the order an Access renders and parses in.
 var scopes = []Scope{ScopeTokens, ScopeMCP, ScopeConsole}
 
 // Level is how much of one scope a credential may use. Levels are ordered: a higher level
@@ -69,26 +69,26 @@ func (l *Level) UnmarshalText(b []byte) error {
 	return nil
 }
 
-// Grant is what a credential may do: one level per scope. The zero value grants nothing.
+// Access is what a credential may do: one level per scope. The zero value grants nothing.
 // It is a struct so a new scope is a compile error at every site that builds one.
-type Grant struct {
+type Access struct {
 	Tokens  Level `json:"tokens,omitzero" yaml:"tokens,omitempty"`
 	MCP     Level `json:"mcp,omitzero" yaml:"mcp,omitempty"`
 	Console Level `json:"console,omitzero" yaml:"console,omitempty"`
 }
 
-// The grants magus mints. A share link holds GrantViewer: it sees what a viewer token sees.
+// The grants magus mints. A share link holds AccessViewer: it sees what a viewer token sees.
 var (
-	GrantOperator  = Grant{Tokens: LevelWrite, MCP: LevelWrite, Console: LevelWrite}
-	GrantConnector = Grant{MCP: LevelWrite}
-	GrantConsole   = Grant{Console: LevelWrite}
-	GrantViewer    = Grant{Console: LevelRead}
-	// GrantSocketPeer is never minted: it is what a same-user peer on a magus unix socket holds.
-	GrantSocketPeer = Grant{MCP: LevelWrite, Console: LevelWrite}
+	AccessOperator  = Access{Tokens: LevelWrite, MCP: LevelWrite, Console: LevelWrite}
+	AccessConnector = Access{MCP: LevelWrite}
+	AccessConsole   = Access{Console: LevelWrite}
+	AccessViewer    = Access{Console: LevelRead}
+	// AccessSocketPeer is never minted: it is what a same-user peer on a magus unix socket holds.
+	AccessSocketPeer = Access{MCP: LevelWrite, Console: LevelWrite}
 )
 
 // Level returns the grant's level on s, and LevelNone for a scope it does not know.
-func (g Grant) Level(s Scope) Level {
+func (g Access) Level(s Scope) Level {
 	switch s {
 	case ScopeTokens:
 		return g.Tokens
@@ -102,7 +102,7 @@ func (g Grant) Level(s Scope) Level {
 
 // Validate refuses a level a scope has no meaning for. Token management and MCP have no read
 // half, so tokens=read and mcp=read are errors, as is any level past write.
-func (g Grant) Validate() error {
+func (g Access) Validate() error {
 	var errs []error
 	for _, s := range scopes {
 		if err := validLevel(s, g.Level(s)); err != nil {
@@ -124,11 +124,11 @@ func validLevel(s Scope, l Level) error {
 
 // Allows reports whether g reaches n: its level on n's scope is at least n's level. A need
 // of LevelNone is met by every grant.
-func (g Grant) Allows(n Need) bool { return g.Level(n.Scope) >= n.Level }
+func (g Access) Allows(n Need) bool { return g.Level(n.Scope) >= n.Level }
 
 // Within reports whether g is at most outer on every scope: everything g may do, outer may
 // do too.
-func (g Grant) Within(outer Grant) bool {
+func (g Access) Within(outer Access) bool {
 	for _, s := range scopes {
 		if g.Level(s) > outer.Level(s) {
 			return false
@@ -138,7 +138,7 @@ func (g Grant) Within(outer Grant) bool {
 }
 
 // String renders the scopes g grants, as "mcp=write,console=read", and "" for nothing.
-func (g Grant) String() string {
+func (g Access) String() string {
 	var parts []string
 	for _, s := range scopes {
 		if l := g.Level(s); l != LevelNone {
@@ -203,18 +203,18 @@ const (
 // CredentialStdio is what a `magus mcp` tool call is admitted as: the MCP scope and nothing
 // past it, the grant a connector token holds. It has no ID because it has no secret, and one
 // process serves one caller.
-var CredentialStdio = Credential{Kind: KindStdio, Grant: GrantConnector}
+var CredentialStdio = Credential{Kind: KindStdio, Grant: AccessConnector}
 
 // CredentialSocketPeer is what a request on a magus unix socket is admitted as once its peer's
 // uid matches the server's: the MCP and console scopes, never token management. A build step
 // runs as the same user and can reach the socket, and minting a token would let it keep access
 // past the run, which is also why landlock keeps it from the operator file. It has no ID
 // because it has no secret.
-var CredentialSocketPeer = Credential{Kind: KindSocketPeer, Grant: GrantSocketPeer}
+var CredentialSocketPeer = Credential{Kind: KindSocketPeer, Grant: AccessSocketPeer}
 
 // Credential is what a request was admitted as, a bearer the server verified, [CredentialStdio]
 // or [CredentialSocketPeer]: what it is, which one, what its owner called it, and what it may
-// do. The Grant is copied at verification, so a record stays
+// do. The Access is copied at verification, so a record stays
 // self-contained after the token is revoked. It never holds a secret or a full hash.
 type Credential struct {
 	// Kind is which bearer this is. The stored key stays "class": trail records,
@@ -225,7 +225,7 @@ type Credential struct {
 	ID string `json:"id,omitempty" yaml:"id,omitempty"`
 	// Name is the label the token was minted under; empty for the operator and a share.
 	Name  string `json:"name,omitempty" yaml:"name,omitempty"`
-	Grant Grant  `json:"grant,omitzero" yaml:"grant,omitempty"`
+	Grant Access `json:"grant,omitzero" yaml:"grant,omitempty"`
 }
 
 // Phrase renders the credential for a row head: "the operator token", "token laptop

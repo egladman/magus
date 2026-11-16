@@ -12,12 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
 // ungradableClaimProblems is every write or deny path of row that claims a declaration
-// (`run.go#executeStages`, see types.SplitClaim) no footprint could grade, as
+// (`run.go#executeStages`, see job.SplitClaim) no footprint could grade, as
 // WritePathClaimUngradable: an empty declaration, a claim on a glob rather than one file, a
 // checkout whose version control does not place changed lines, or a file whose extension has
 // no diff driver. An entry that names an existing path as written (`notes/a#b.md`) is
@@ -30,7 +31,7 @@ import (
 //
 // Only a row with a `#` entry reads the version control. A nil store, or one with no
 // workspace root, has no tree to ask and finds nothing.
-func ungradableClaimProblems(ctx context.Context, store *Store, row types.Job) types.JobProblems {
+func ungradableClaimProblems(ctx context.Context, store *Store, row job.Job) types.JobProblems {
 	if store == nil || store.root == "" {
 		return nil
 	}
@@ -47,11 +48,11 @@ func ungradableClaimProblems(ctx context.Context, store *Store, row types.Job) t
 		entries      []string
 	}{{"", "paths.write", row.Paths.Write}, {"deny path ", "paths.deny", row.Paths.Deny}} {
 		for i, entry := range list.entries {
-			if !types.HasClaim(entry) {
+			if !job.HasClaim(entry) {
 				continue
 			}
 			field := fmt.Sprintf("%s[%d]", list.field, i)
-			p, decl := types.SplitClaim(entry)
+			p, decl := job.SplitClaim(entry)
 			literal := strings.TrimSpace(entry)
 			if _, err := os.Lstat(filepath.Join(store.root, filepath.FromSlash(literal))); err == nil {
 				refuse(field, list.label+fmt.Sprintf("%q is a path in this tree and also reads as a claim on %q, since an unescaped # starts a claimed declaration", entry, p),
@@ -92,7 +93,7 @@ func ungradableClaimProblems(ctx context.Context, store *Store, row types.Job) t
 				all, _ = readDeclarations(ctx, driver, store.root, c.path)
 				placed[c.path] = all
 			}
-			if matched := types.NamedDeclarations(c.decl, all); len(matched) > 1 && !types.ClaimsMap(c.decl, matched) {
+			if matched := job.NamedDeclarations(c.decl, all); len(matched) > 1 && !job.ClaimsMap(c.decl, matched) {
 				message, fix := ambiguousClaimProblem(c.path, c.decl, matched, all)
 				refuse(c.field, c.label+message, fix)
 			}
@@ -118,7 +119,7 @@ const maxListedClaims = 12
 // file, one attention request asks it to release what it does not edit (see
 // requestRelease); a dry-run store files none. A nil store, one with no workspace root, or an
 // integration row finds nothing: a merge writes the merged file whole (see IntegrationOverlaps).
-func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row types.Job) types.JobProblems {
+func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row job.Job) types.JobProblems {
 	if store == nil || store.root == "" || row.Integrating() {
 		return nil
 	}
@@ -127,7 +128,7 @@ func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row types.J
 		files []string
 	)
 	for i, entry := range row.Paths.Write {
-		if types.HasClaim(entry) {
+		if job.HasClaim(entry) {
 			continue
 		}
 		file := path.Clean(strings.TrimSpace(entry))
@@ -155,7 +156,7 @@ func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row types.J
 		return nil
 	}
 	if f, err := store.read(); err == nil {
-		combined := append(slices.DeleteFunc(slices.Clone(f.Jobs), func(r types.Job) bool { return r.ID == row.ID }), row)
+		combined := append(slices.DeleteFunc(slices.Clone(f.Jobs), func(r job.Job) bool { return r.ID == row.ID }), row)
 		for _, file := range files {
 			for _, holder := range liveHolders(f.Jobs, row.ID, file) {
 				// A parent holds its children's paths by design; it is not blocking them.
@@ -182,7 +183,7 @@ func listClaims(file string, all []string) string {
 	var claims []string
 	for _, d := range ordered {
 		word := claimWord(d, all)
-		if len(types.NamedDeclarations(word, all)) != 1 {
+		if len(job.NamedDeclarations(word, all)) != 1 {
 			continue
 		}
 		claims = append(claims, fmt.Sprintf("`%s#%s`", file, word))
@@ -229,7 +230,7 @@ func driverPattern(p string) string {
 // unorderedFileShareProblems is every write path of row that would hand one claimable file
 // (no glob, not a directory, not a project root, with a diff driver) to two live, unordered
 // jobs at once, as WritePathFileShared. Such a pair is a candidate entry and a holder's
-// entry that name the same file and still intersect (types.PathsIntersect), where neither
+// entry that name the same file and still intersect (job.PathsIntersect), where neither
 // row is the other's ancestor, descendant, or depends_on partner. Each entry is reported once, against the first holder
 // found. The message names the holder's unused write paths ([unusedWritePaths]), and one
 // attention request asks the holder to release what it does not edit (see requestRelease).
@@ -238,19 +239,19 @@ func driverPattern(p string) string {
 // sharedCheckoutProblems and the overlap report already watch; a generated output
 // ([HeldApart]); a holder that exited, whose
 // editing is over (see [Editing]); a holder blocked on
-// depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
+// depends_on, which owns none of its write paths yet (job.BlockedOn); and a file with
 // no diff driver, for which depends_on is the only move. An integration row is
 // never refused here: the merge settles a shared file, and IntegrationOverlaps notes the holder.
 // An integration holder holds only the declarations its merge changed (see mergeLeftAlone).
 // A claim on declarations the holder left alone narrows the holder instead.
 // That writes the holder's row (see grantUntouched).
-func unorderedFileShareProblems(ctx context.Context, store *Store, rows []types.Job, row types.Job) types.JobProblems {
+func unorderedFileShareProblems(ctx context.Context, store *Store, rows []job.Job, row job.Job) types.JobProblems {
 	if store == nil || store.root == "" || len(row.Paths.Write) == 0 || row.Integrating() {
 		return nil
 	}
 	here, _ := filepath.Abs(store.root)
 	// A re-fork replaces its stored row, so the pair is ordered by what it declares now.
-	combined := append(slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool { return r.ID == row.ID }), row)
+	combined := append(slices.DeleteFunc(slices.Clone(rows), func(r job.Job) bool { return r.ID == row.ID }), row)
 	var ps types.JobProblems
 	for i, mine := range row.Paths.Write {
 		if p, ok := sharedFileProblem(ctx, store, rows, combined, row, here, mine); ok {
@@ -263,7 +264,7 @@ func unorderedFileShareProblems(ctx context.Context, store *Store, rows []types.
 
 // sharedFileProblem is unorderedFileShareProblems for the one write path mine.
 // A holder that left alone what row claims is narrowed and judged again.
-func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types.Job, row types.Job, here, mine string) (types.JobProblem, bool) {
+func sharedFileProblem(ctx context.Context, store *Store, rows, combined []job.Job, row job.Job, here, mine string) (types.JobProblem, bool) {
 	file, ok := literalClaimableFile(store.root, mine)
 	if !ok {
 		return types.JobProblem{}, false
@@ -281,7 +282,7 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 		}
 		// Blocked means holder owns none of its write paths yet; the fork that
 		// unblocks it runs this same check again, against whatever holds the file then.
-		if _, blocked := types.JobBlockedOn(rows, holder); blocked {
+		if _, blocked := job.BlockedOn(rows, holder); blocked {
 			continue
 		}
 		if orderedPair(combined, row.ID, holder.ID) {
@@ -305,12 +306,12 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 }
 
 // heldFile is the first entry of holder that holds file against row's mine.
-func heldFile(ctx context.Context, store *Store, rows []types.Job, row, holder types.Job, here, file, mine string) (sharedFile, bool) {
+func heldFile(ctx context.Context, store *Store, rows []job.Job, row, holder job.Job, here, file, mine string) (sharedFile, bool) {
 	for _, theirs := range holder.Paths.Write {
 		if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file {
 			continue
 		}
-		if !types.PathsIntersect(mine, theirs) || releasedReach(holder, theirs, mine) || mergeLeftAlone(ctx, store, rows, holder, mine) {
+		if !job.PathsIntersect(mine, theirs) || releasedReach(holder, theirs, mine) || mergeLeftAlone(ctx, store, rows, holder, mine) {
 			continue
 		}
 		apart, unchecked := HeldApart(WorkingCheckout(here, row), holder, store.workspaceProjects, mine, theirs)
@@ -326,39 +327,39 @@ func heldFile(ctx context.Context, store *Store, rows []types.Job, row, holder t
 // taken by row, when row claims only declarations holder left alone.
 // It answers the narrowed holder, or why nothing was granted ("" when no
 // grant applies).
-func grantUntouched(ctx context.Context, store *Store, rows []types.Job, row, holder types.Job, s sharedFile) (types.Job, bool, string) {
-	if _, decl := types.SplitClaim(s.theirs); decl != "" || holder.Integrating() {
-		return types.Job{}, false, ""
+func grantUntouched(ctx context.Context, store *Store, rows []job.Job, row, holder job.Job, s sharedFile) (job.Job, bool, string) {
+	if _, decl := job.SplitClaim(s.theirs); decl != "" || holder.Integrating() {
+		return job.Job{}, false, ""
 	}
 	if wholeFileHeld(row, s.file) {
-		return types.Job{}, false, fmt.Sprintf("%s wants %s whole; a fork claiming only declarations %s has not touched is granted them", row.ID, s.file, holder.ID)
+		return job.Job{}, false, fmt.Sprintf("%s wants %s whole; a fork claiming only declarations %s has not touched is granted them", row.ID, s.file, holder.ID)
 	}
 	touched, err := touchedDeclarations(ctx, store, rows, holder.ID, s.file)
 	if err != nil {
-		return types.Job{}, false, fmt.Sprintf("%s's footprint is unknown, so nothing of %s can be granted", holder.ID, s.file)
+		return job.Job{}, false, fmt.Sprintf("%s's footprint is unknown, so nothing of %s can be granted", holder.ID, s.file)
 	}
 	for _, c := range claimsOnFile(row, s.file) {
 		for _, d := range touched {
-			if c == d || types.NamesDeclaration(c, d) {
-				return types.Job{}, false, fmt.Sprintf("%s has touched %s#%s", holder.ID, s.file, c)
+			if c == d || job.NamesDeclaration(c, d) {
+				return job.Job{}, false, fmt.Sprintf("%s has touched %s#%s", holder.ID, s.file, c)
 			}
 		}
 	}
 	// A dry run writes nothing, so it judges holder as a grant leaves it.
 	if store.dryRun {
 		narrowed := holder.Clone()
-		narrowed.Releases = append(narrowed.Releases, types.JobRelease{Path: s.file, Narrowed: true, TakenBy: row.ID})
+		narrowed.Releases = append(narrowed.Releases, job.Release{Path: s.file, Narrowed: true, TakenBy: row.ID})
 		return narrowed, true, ""
 	}
 	narrowed, _, err := NarrowHold(ctx, store, holder.ID, s.file, touched, row.ID)
 	if err != nil {
-		return types.Job{}, false, err.Error()
+		return job.Job{}, false, err.Error()
 	}
 	return narrowed, true, ""
 }
 
 // grantNotes are a fork's lines for each hold the store narrowed for row.
-func grantNotes(rows []types.Job, row types.Job) []string {
+func grantNotes(rows []job.Job, row job.Job) []string {
 	var notes []string
 	for _, holder := range rows {
 		if holder.ID == row.ID || !Editing(holder) {
@@ -399,7 +400,7 @@ type sharedFile struct {
 
 // sharedFileRefusal is the WritePathFileShared problem for s, after asking holder to
 // release what it does not edit.
-func sharedFileRefusal(ctx context.Context, store *Store, rows []types.Job, row, holder types.Job, s sharedFile) types.JobProblem {
+func sharedFileRefusal(ctx context.Context, store *Store, rows []job.Job, row, holder job.Job, s sharedFile) types.JobProblem {
 	touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, s.file)
 	unused := unusedWritePaths(ctx, store, rows, holder)
 	wanted := slices.DeleteFunc(slices.Clone(row.Paths.Write), func(entry string) bool {
@@ -429,13 +430,13 @@ func sharedFileRefusal(ctx context.Context, store *Store, rows []types.Job, row,
 // mergeLeftAlone reports whether holder is an integration row that has changed nothing the
 // claim mine names. A merge writes a file whole, so the row holds it whole, but only what the
 // merge changed is its own. A whole-file entry, or a footprint nobody can read, is never left alone.
-func mergeLeftAlone(ctx context.Context, store *Store, rows []types.Job, holder types.Job, mine string) bool {
-	if _, decl := types.SplitClaim(mine); decl == "" || !holder.Integrating() {
+func mergeLeftAlone(ctx context.Context, store *Store, rows []job.Job, holder job.Job, mine string) bool {
+	if _, decl := job.SplitClaim(mine); decl == "" || !holder.Integrating() {
 		return false
 	}
 	driver, _ := resolveDriver(ctx, store.root)
 	fp := readFootprint(withFootprintCache(ctx, store.footprintCache()), driver, rows, holder.ID)
-	return fp.known && !slices.ContainsFunc(fp.regions, func(r types.RegionChange) bool { return usesEntry(mine, r.Location()) })
+	return fp.known && !slices.ContainsFunc(fp.regions, func(r job.RegionChange) bool { return usesEntry(mine, r.Location()) })
 }
 
 // literalClaimableFile is the file entry names, whole or by declaration, cleaned and
@@ -443,7 +444,7 @@ func mergeLeftAlone(ctx context.Context, store *Store, rows []types.Job, holder 
 // directory: none of those can be shared by a claim, so unorderedFileShareProblems
 // has nothing to compare them against.
 func literalClaimableFile(root, entry string) (string, bool) {
-	p, _ := types.SplitClaim(entry)
+	p, _ := job.SplitClaim(entry)
 	p = path.Clean(strings.TrimSpace(p))
 	if p == "" || p == "." || strings.ContainsAny(p, globMeta) {
 		return "", false
@@ -458,11 +459,11 @@ func literalClaimableFile(root, entry string) (string, bool) {
 // descendant of the other by parent chain, walked over combined (which must carry id even
 // when it is not declared yet), or one reaches the other through depends_on, any number of
 // hops.
-func orderedPair(combined []types.Job, id, other string) bool {
-	if slices.ContainsFunc(types.JobAncestors(combined, id), func(r types.Job) bool { return r.ID == other }) {
+func orderedPair(combined []job.Job, id, other string) bool {
+	if slices.ContainsFunc(job.Ancestors(combined, id), func(r job.Job) bool { return r.ID == other }) {
 		return true
 	}
-	if slices.ContainsFunc(types.JobAncestors(combined, other), func(r types.Job) bool { return r.ID == id }) {
+	if slices.ContainsFunc(job.Ancestors(combined, other), func(r job.Job) bool { return r.ID == id }) {
 		return true
 	}
 	return dependsOnTransitively(combined, id, other) || dependsOnTransitively(combined, other, id)
@@ -470,11 +471,11 @@ func orderedPair(combined []types.Job, id, other string) bool {
 
 // dependsOnTransitively reports whether from reaches on by following depends_on edges over
 // combined. seen guards a depends_on cycle from looping forever.
-func dependsOnTransitively(combined []types.Job, from, on string) bool {
+func dependsOnTransitively(combined []job.Job, from, on string) bool {
 	seen := map[string]bool{from: true}
 	queue := []string{from}
 	for len(queue) > 0 {
-		i := slices.IndexFunc(combined, func(r types.Job) bool { return r.ID == queue[0] })
+		i := slices.IndexFunc(combined, func(r job.Job) bool { return r.ID == queue[0] })
 		queue = queue[1:]
 		if i < 0 {
 			continue
@@ -493,9 +494,9 @@ func dependsOnTransitively(combined []types.Job, from, on string) bool {
 }
 
 // touchedDeclarations are the declarations holder has changed inside file so far, sorted,
-// with types.Preamble standing for lines no declaration encloses. The error says why they
+// with job.Preamble standing for lines no declaration encloses. The error says why they
 // cannot be read. Reads the tree once per call; a fork the rule passes never pays for it.
-func touchedDeclarations(ctx context.Context, store *Store, rows []types.Job, holder, file string) ([]string, error) {
+func touchedDeclarations(ctx context.Context, store *Store, rows []job.Job, holder, file string) ([]string, error) {
 	driver, _ := resolveDriver(ctx, store.root)
 	fp := readFootprint(withFootprintCache(ctx, store.footprintCache()), driver, rows, holder)
 	if !fp.known {
@@ -504,7 +505,7 @@ func touchedDeclarations(ctx context.Context, store *Store, rows []types.Job, ho
 	var decls []string
 	for _, r := range fp.regions {
 		if loc := r.Location(); loc.Path == file {
-			decls = appendUnique(decls, cmp.Or(loc.Declaration, types.Preamble))
+			decls = appendUnique(decls, cmp.Or(loc.Declaration, job.Preamble))
 		}
 	}
 	slices.Sort(decls)
@@ -521,7 +522,7 @@ func describeTouched(decls []string, unreadable error) string {
 	}
 	named := slices.Clone(decls)
 	for i, d := range named {
-		if d == types.Preamble {
+		if d == job.Preamble {
 			named[i] = "the top of the file"
 		}
 	}
@@ -533,7 +534,7 @@ func describeTouched(decls []string, unreadable error) string {
 // declarations of file, it prints the claim pair that splits the file and says whether the
 // two are disjoint. magus writes neither claim: the rows are the orchestrator's. With
 // nothing to compute a pair from it gives the generic advice.
-func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file string, touched []string) string {
+func splitAdvice(ctx context.Context, store *Store, row, holder job.Job, file string, touched []string) string {
 	orElse := fmt.Sprintf("add `--depends-on %s` to %s, or fold %s into %s", holder.ID, row.ID, row.ID, holder.ID)
 	generic := fmt.Sprintf("Claim `%s#<declaration>` on both rows, %s", file, orElse)
 	driver, _ := resolveDriver(ctx, store.root)
@@ -543,16 +544,16 @@ func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file 
 	all, _ := readDeclarations(ctx, driver, store.root, file)
 	var theirs, mine []string
 	for _, d := range touched {
-		if d != types.Preamble {
+		if d != job.Preamble {
 			theirs = appendUnique(theirs, claimWord(d, all))
 		}
 	}
 	for _, g := range row.Goals {
-		if g.Kind != types.GoalKindSymbol {
+		if g.Kind != job.GoalKindSymbol {
 			continue
 		}
 		for _, symbol := range g.Symbols {
-			if len(types.NamedDeclarations(symbol, all)) == 1 {
+			if len(job.NamedDeclarations(symbol, all)) == 1 {
 				mine = appendUnique(mine, symbol)
 			}
 		}
@@ -585,7 +586,7 @@ func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file 
 
 // sameDeclaration reports whether the claim words a and b name one declaration of all.
 func sameDeclaration(a, b string, all []string) bool {
-	return a == b || slices.ContainsFunc(all, func(d string) bool { return types.NamesClaimedDeclaration(a, d) && types.NamesClaimedDeclaration(b, d) })
+	return a == b || slices.ContainsFunc(all, func(d string) bool { return job.NamesClaimedDeclaration(a, d) && job.NamesClaimedDeclaration(b, d) })
 }
 
 func appendUnique(list []string, s string) []string {
@@ -610,7 +611,7 @@ func readDeclarations(ctx context.Context, driver types.VCSDriver, root, file st
 	}
 	var decls []string
 	for _, r := range regions {
-		if d := r.Location().Declaration; d != "" && d != types.Preamble {
+		if d := r.Location().Declaration; d != "" && d != job.Preamble {
 			decls = appendUnique(decls, d)
 		}
 	}
@@ -619,7 +620,7 @@ func readDeclarations(ctx context.Context, driver types.VCSDriver, root, file st
 
 // namedDeclarations are the entries of all that claim names. PlaceDerivedClaims (plan.go) reads it too.
 func namedDeclarations(claim string, all []string) []string {
-	return types.NamedDeclarations(claim, all)
+	return job.NamedDeclarations(claim, all)
 }
 
 // ambiguousClaim is the MGS3031 reason for a claim naming several declarations of file:
@@ -652,8 +653,8 @@ func claimWord(declaration string, all []string) string {
 		return declaration
 	}
 	names := func(word string) bool {
-		return types.NamesDeclaration(word, declaration) && !slices.ContainsFunc(all, func(d string) bool {
-			return d != declaration && types.NamesDeclaration(word, d)
+		return job.NamesDeclaration(word, declaration) && !slices.ContainsFunc(all, func(d string) bool {
+			return d != declaration && job.NamesDeclaration(word, d)
 		})
 	}
 	if strings.HasPrefix(declaration, "#") {
@@ -701,7 +702,7 @@ func wordByte(b byte) bool {
 // A row above its parent's tier is advised so, unless the setting is off.
 // Nothing is written to a row.
 // A nil store, or one with no workspace root, has no tree and returns nil.
-func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Job) []string {
+func ForkNotes(ctx context.Context, store *Store, rows []job.Job, row job.Job) []string {
 	if store == nil || store.root == "" {
 		return nil
 	}
@@ -718,8 +719,8 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		if !ok {
 			continue
 		}
-		_, decl := types.SplitClaim(entry)
-		if decl == "" || decl == types.Preamble {
+		_, decl := job.SplitClaim(entry)
+		if decl == "" || decl == job.Preamble {
 			continue
 		}
 		if projectConfig(store.root, file) {
@@ -733,7 +734,7 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		switch {
 		case !readable:
 			notes = append(notes, fmt.Sprintf("%s does not exist yet in this checkout, so %q names a declaration once it is written", file, entry))
-		case len(types.NamedDeclarations(decl, all)) == 0:
+		case len(job.NamedDeclarations(decl, all)) == 0:
 			notes = append(notes, fmt.Sprintf("%q names no declaration of %s yet; it holds one once written, so check the spelling", entry, file))
 		}
 	}
@@ -757,7 +758,7 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 				continue
 			}
 			for _, theirs := range peer.HardPaths() {
-				if other, ok := literalClaimableFile(store.root, theirs); ok && other == file && types.PathsIntersect(mine, theirs) {
+				if other, ok := literalClaimableFile(store.root, theirs); ok && other == file && job.PathsIntersect(mine, theirs) {
 					files = append(files, file)
 					break
 				}
@@ -774,12 +775,12 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 // peer waiting on a dependency owns none yet, so its line names no file. One file gets the
 // claim pair that splits it; several get a count and the advice once, as a wide row shares
 // dozens.
-func sharedFilesNote(ctx context.Context, store *Store, rows []types.Job, row, peer types.Job, files []string) string {
+func sharedFilesNote(ctx context.Context, store *Store, rows []job.Job, row, peer job.Job, files []string) string {
 	const listed = 3
 	if len(files) == 0 {
 		return ""
 	}
-	if block, waiting := types.JobBlockedOn(rows, peer); waiting && peer.CheckoutRoot == "" {
+	if block, waiting := job.BlockedOn(rows, peer); waiting && peer.CheckoutRoot == "" {
 		return fmt.Sprintf("%s and %s share %d file(s), but %s is not taken and is %s, so it writes none yet; the fork that unblocks it checks again", row.ID, peer.ID, len(files), peer.ID, block)
 	}
 	if len(files) == 1 {
@@ -802,11 +803,11 @@ func sharedFilesNote(ctx context.Context, store *Store, rows []types.Job, row, p
 // each as the claim that adds it. One answer carries the whole key list, where a claim per
 // refusal sent a worker back for each key. Empty when every touched declaration is claimed,
 // and when no checkout has taken row, since nothing has changed yet.
-func unclaimedTouches(ctx context.Context, store *Store, rows []types.Job, row types.Job, file string) string {
+func unclaimedTouches(ctx context.Context, store *Store, rows []job.Job, row job.Job, file string) string {
 	if row.CheckoutRoot == "" {
 		return ""
 	}
-	current := append(slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool { return r.ID == row.ID }), row)
+	current := append(slices.DeleteFunc(slices.Clone(rows), func(r job.Job) bool { return r.ID == row.ID }), row)
 	touched, err := touchedDeclarations(ctx, store, current, row.ID, file)
 	if err != nil {
 		return fmt.Sprintf("the declarations %s's change touches in %s could not be read (%v), so the claims it lacks there are not listed", row.ID, file, err)
@@ -818,7 +819,7 @@ func unclaimedTouches(ctx context.Context, store *Store, rows []types.Job, row t
 	}
 	var claims []string
 	for _, d := range touched {
-		if d == types.Preamble || slices.ContainsFunc(held, func(c string) bool { return types.NamesClaimedDeclaration(c, d) }) {
+		if d == job.Preamble || slices.ContainsFunc(held, func(c string) bool { return job.NamesClaimedDeclaration(c, d) }) {
 			continue
 		}
 		claims = appendUnique(claims, fmt.Sprintf("`%s#%s`", file, claimWord(d, all)))
@@ -831,6 +832,6 @@ func unclaimedTouches(ctx context.Context, store *Store, rows []types.Job, row t
 }
 
 // updatedAgo is how long ago row last wrote itself, as a refusal names it.
-func updatedAgo(row types.Job) string {
+func updatedAgo(row job.Job) string {
 	return time.Since(time.Unix(row.Updated, 0)).Round(time.Second).String()
 }

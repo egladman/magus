@@ -2,10 +2,13 @@ package types
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // JobProblem is one thing wrong with a job record, found before anything is stored or
@@ -16,7 +19,7 @@ type JobProblem struct {
 	// Field is a JSON path into the record (`paths.write[2]`, `check.project`,
 	// `goals[1].symbols[0]`), empty when the problem is the record as a whole.
 	Field string `json:"field,omitempty"`
-	// Subject is what a [Deviation] names to permit this problem: the write path, the
+	// Subject is what a [job.Deviation] names to permit this problem: the write path, the
 	// `target project` pair, or the output path. Empty on a problem no deviation reaches.
 	Subject string `json:"subject,omitempty"`
 	// Message says what is wrong, naming the field in its own words.
@@ -52,10 +55,10 @@ func (ps JobProblems) Error() error {
 
 // Permit splits ps into the problems a deviation in ds matches by code and subject and the
 // ones it does not. A deviation on a code that is not [Permissible] matches nothing;
-// [Declaration.Problems] reports it as JobRecordInvalid.
-func (ps JobProblems) Permit(ds []Deviation) (kept, permitted JobProblems) {
+// [DeclarationProblems] reports it as JobRecordInvalid.
+func (ps JobProblems) Permit(ds []job.Deviation) (kept, permitted JobProblems) {
 	for _, p := range ps {
-		if p.Permissible() && slices.ContainsFunc(ds, func(d Deviation) bool { return d.Permits(p) }) {
+		if p.Permissible() && slices.ContainsFunc(ds, func(d job.Deviation) bool { return DeviationPermits(d, p) }) {
 			permitted = append(permitted, p)
 			continue
 		}
@@ -64,19 +67,10 @@ func (ps JobProblems) Permit(ds []Deviation) (kept, permitted JobProblems) {
 	return kept, permitted
 }
 
-// Deviation permits one permissible problem on a record's own authority, with the reason a
-// reviewer reads: "the root regenerates it", "the root runs it". The name is MISRA C's: a
-// deviation record sanctions a violation with its rationale.
-type Deviation struct {
-	Code    DiagnosticCode `json:"code"`
-	Subject string         `json:"subject"`
-	Reason  string         `json:"reason" schema:"nonblank"`
-}
-
-// Permits reports whether d accepts p: the same code, and a subject equal to p's or, for an
+// DeviationPermits reports whether d accepts p: the same code, and a subject equal to p's or, for an
 // output outside the write paths or an unrun gate, a glob matching it, so `**` accepts
 // every regenerated output the integrator owns in one deviation.
-func (d Deviation) Permits(p JobProblem) bool {
+func DeviationPermits(d job.Deviation, p JobProblem) bool {
 	if d.Code != p.Code {
 		return false
 	}
@@ -90,6 +84,15 @@ func (d Deviation) Permits(p JobProblem) bool {
 	return matched
 }
 
+// PermissibleCodes are the codes a deviation may permit, in the order a fix names them:
+// each a judgment about how much a job takes on, never a record that is wrong.
+func PermissibleCodes() []DiagnosticCode {
+	return []DiagnosticCode{WritePathTooBroad, OutputOutsideWritePaths, GateNotRun}
+}
+
+// Permissible reports whether a problem of code c may be permitted.
+func Permissible(c DiagnosticCode) bool { return slices.Contains(PermissibleCodes(), c) }
+
 // DropsSubject opens the subject of a problem that a re-declaration of a live job would
 // erase a declared field: "drops paths.write". A deviation naming it is the record saying so.
 const DropsSubject = "drops "
@@ -101,27 +104,104 @@ func (p JobProblem) Permissible() bool {
 	return Permissible(p.Code) || p.Code == JobRecordInvalid && strings.HasPrefix(p.Subject, DropsSubject)
 }
 
-// Permissible reports whether a problem of code c may be permitted: only a judgment about how
-// much a job takes on, never a record that is wrong.
-func Permissible(c DiagnosticCode) bool {
-	switch c {
-	case WritePathTooBroad, OutputOutsideWritePaths, GateNotRun:
-		return true
+// faultCode is the code magus reports a record's own fault under. The module names no
+// code, so the kind decides it here.
+func faultCode(k job.FaultKind) DiagnosticCode {
+	switch k {
+	case job.FaultGoal:
+		return JobGoalInvalid
+	case job.FaultRecord:
+		return JobRecordInvalid
 	}
-	return false
+	return JobRecordInvalid
+}
+
+// FaultProblems are faults as problems, each under the code its kind maps to, in order.
+func FaultProblems(fs []job.Fault) JobProblems {
+	if len(fs) == 0 {
+		return nil
+	}
+	ps := make(JobProblems, len(fs))
+	for i, f := range fs {
+		ps[i] = JobProblem{Code: faultCode(f.Kind), Field: f.Field, Message: f.Message, Fix: f.Fix}
+	}
+	return ps
+}
+
+// DeclarationProblems is every problem d shows on its own, without a workspace: its
+// faults under magus's codes, with a deviation allowed only a [Permissible] code.
+func DeclarationProblems(d job.Declaration) JobProblems {
+	// The module allows a deviation only a listed code, and a dropped field is permitted
+	// by its subject under JobRecordInvalid, so its fault is taken back here.
+	drops := map[string]bool{}
+	for i, w := range d.Deviations {
+		if !Permissible(w.Code) && (JobProblem{Code: w.Code, Subject: w.Subject}).Permissible() {
+			drops[fmt.Sprintf("deviations[%d].code", i)] = true
+		}
+	}
+	fs := slices.DeleteFunc(d.Faults(PermissibleCodes()...), func(f job.Fault) bool { return drops[f.Field] })
+	return FaultProblems(fs)
+}
+
+// ValidateDeclaration reports what is wrong with a declared job, or nil: every problem
+// [DeclarationProblems] finds, joined.
+func ValidateDeclaration(d job.Declaration) error { return DeclarationProblems(d).Error() }
+
+// ValidateGoal reports whether g can be matched to an output record without interpreting
+// a shell command: every problem it shows on its own, joined.
+func ValidateGoal(g job.Goal) error { return FaultProblems(g.Faults()).Error() }
+
+// FoldLegacyNames folds each field d declares under its old name onto the one that
+// carries it, refusing a field named twice as JobRecordInvalid.
+func FoldLegacyNames(d *job.Declaration) error {
+	return faultsError(d.FoldLegacyNames())
+}
+
+// faultsError re-codes each [job.Fault] err joins under magus's code for its kind, and
+// passes any other error through.
+func faultsError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var errs []error
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = joined.Unwrap()
+	} else {
+		errs = []error{err}
+	}
+	out := make([]error, len(errs))
+	for i, e := range errs {
+		var f job.Fault
+		if errors.As(e, &f) {
+			out[i] = DiagnosticErrorf(faultCode(f.Kind), "%s", f.Error())
+			continue
+		}
+		out[i] = e
+	}
+	return errors.Join(out...)
+}
+
+// ParseJobTimeout reads a declared timeout as [job.ParseTimeout] does, refusing one that is
+// not a positive duration as JobRecordInvalid.
+func ParseJobTimeout(s string) (time.Duration, error) {
+	d, err := job.ParseTimeout(s)
+	if err != nil {
+		return 0, DiagnosticErrorf(JobRecordInvalid, "%v", err)
+	}
+	return d, nil
 }
 
 // JobValidation is the result of validating a record against the workspace: the job as it
 // would be stored, every problem left after deviations, the ones permitted, and each check that
 // could not run.
 type JobValidation struct {
-	Job       Job         `json:"job"`
+	Job       job.Job     `json:"job"`
 	Problems  JobProblems `json:"problems"`
 	Permitted JobProblems `json:"permitted,omitempty"`
 	// Unchecked names each check that could not run and why. A missing workspace or graph
 	// is said here, never read as a clean record.
-	Unchecked  []string      `json:"unchecked,omitempty"`
-	WriteProof JobWriteProof `json:"write_proof,omitempty"`
+	Unchecked  []string       `json:"unchecked,omitempty"`
+	WriteProof job.WriteProof `json:"write_proof,omitempty"`
 }
 
 // Error is the validation's problems as one error, nil when none are left.

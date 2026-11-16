@@ -1,4 +1,4 @@
-package types
+package job
 
 import (
 	"cmp"
@@ -257,3 +257,16 @@ func Collisions(a, b []Locator) []Location {
 	})
 	return slices.Compact(shared)
 }
+
+// ChangeStatus is what a commit did to one path. It exists so churn attribution can
+// tell a rename from a delete-plus-add: without that distinction a file's history
+// splits across every name it ever had, and each fragment ranks as a separate,
+// quieter file than the one thing actually being rewritten.
+type ChangeStatus string
+
+const (
+	ChangeAdded    ChangeStatus = "added"
+	ChangeModified ChangeStatus = "modified"
+	ChangeDeleted  ChangeStatus = "deleted"
+	ChangeRenamed  ChangeStatus = "renamed"
+)

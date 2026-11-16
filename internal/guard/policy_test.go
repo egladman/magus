@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
@@ -191,7 +192,7 @@ func TestAToolTimeRecordsTheToolsRunTimeAndJudgesNothing(t *testing.T) {
 	got.RequestBytes, got.ResponseBytes = 0, 0
 	assert.Equal(t, trail.Event{
 		Kind:       trail.KindAgentCommand,
-		Origin:     types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "s1"},
+		Origin:     job.Origin{EntryPoint: job.EntryPointHook, Host: "claude-code", Session: "s1"},
 		Action:     "Bash",
 		Outcome:    trail.OutcomeOK,
 		DurationMs: 420,
@@ -235,7 +236,7 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	// The clock, the stamped account, the workspace and the content-addressed fields are
 	// cleared first, so a field added to the event cannot be dropped here unseen.
 	e := commands[0]
-	e.Ts, e.Origin, e.Workspace, e.GuardMs = 0, types.Origin{}, "", 0
+	e.Ts, e.Origin, e.Workspace, e.GuardMs = 0, job.Origin{}, "", 0
 	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
 	e.Preview, e.VerdictRef = "", ""
 	assert.NotEmpty(t, e.Cwd, "a bare command records the directory the judge ran in")

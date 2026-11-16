@@ -1,17 +1,16 @@
 package changeset
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/types/diff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/types"
 )
 
 func TestAttachReturnsTheSameSessionForOneRoot(t *testing.T) {
@@ -243,8 +242,8 @@ func TestADraftRoundTripsThroughItsFile(t *testing.T) {
 	want := diff.Comment{
 		ID: "c7", Path: "internal/a.go", Hunk: 2, Author: diff.AuthorUnattributed, AgentName: "claude",
 		Body: "why not `x`?\n\nand\ttabs", Resolved: true, Line: 41,
-		Origin: types.Origin{User: "eli", UID: "501", EntryPoint: "console", Host: "h", Session: "s", Agent: "a",
-			Credential: types.CredentialStdio},
+		Origin: job.Origin{User: "eli", UID: "501", EntryPoint: "console", Host: "h", Session: "s", Agent: "a",
+			Credential: job.CredentialStdio},
 		Anchor: diff.CommentAnchor{Digest: "d", Quote: "return nil", Declaration: "func f()",
 			Before: []string{"", "x := 1"}, After: []string{"}", ""}},
 	}

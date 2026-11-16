@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/libs/figure"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // PlanSVGDir is dir, else the job-graph folder of the cache.
@@ -48,7 +48,7 @@ func drawPlanFigure(ctx context.Context, rec figure.Figure) (string, error) {
 
 // WritePlanSVGs writes each figure to dir as <id>.svg, naming each holder with holder. It
 // draws every figure before writing any, so a refusal writes nothing.
-func WritePlanSVGs(ctx context.Context, p *job.Plan, figs []*job.PlanFigure, dir string, holder func(types.Job) string) ([]string, error) {
+func WritePlanSVGs(ctx context.Context, p *job.Plan, figs []*job.PlanFigure, dir string, holder func(jobtypes.Job) string) ([]string, error) {
 	svgs := make([]string, len(figs))
 	for i, f := range figs {
 		svg, err := drawPlanFigure(ctx, p.FigureRecord(f, holder))

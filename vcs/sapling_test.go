@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -256,7 +257,7 @@ func TestSaplingChangesByCommitIsNewestFirst(t *testing.T) {
 	require.Len(t, changes, 2, "the limit must bound the result")
 	assert.False(t, changes[0].Date.Before(changes[1].Date),
 		"newest first: got %s then %s", changes[0].Date, changes[1].Date)
-	assert.Equal(t, []types.FileChange{{Path: "a.txt", Status: types.ChangeModified}}, changes[0].Files)
+	assert.Equal(t, []job.FileChange{{Path: "a.txt", Status: job.ChangeModified}}, changes[0].Files)
 	assert.NotEmpty(t, changes[0].Author)
 
 	// since arrives as RFC 3339 with a numeric offset: that is what project.parseSince

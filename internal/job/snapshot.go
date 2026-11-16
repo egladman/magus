@@ -3,15 +3,15 @@ package job
 import (
 	"context"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // Snapshot is the job store as one reader already read it, pinned onto a context so code
 // running inside that reader sees the same rows instead of opening the store again.
 type Snapshot struct {
-	Rows []types.Job
+	Rows []job.Job
 	// Attempts are the tries the store held, as [Store.Attempts] read them.
-	Attempts []types.Attempt
+	Attempts []job.Attempt
 	// Err is why the store could not be read, nil when it could.
 	Err error
 }
@@ -19,11 +19,11 @@ type Snapshot struct {
 // Clone returns a copy whose rows share nothing with s, for a reader that may keep or
 // edit them.
 func (s Snapshot) Clone() Snapshot {
-	rows := make([]types.Job, len(s.Rows))
+	rows := make([]job.Job, len(s.Rows))
 	for i, row := range s.Rows {
 		rows[i] = row.Clone()
 	}
-	tries := make([]types.Attempt, len(s.Attempts))
+	tries := make([]job.Attempt, len(s.Attempts))
 	for i, a := range s.Attempts {
 		tries[i] = a.Clone()
 	}

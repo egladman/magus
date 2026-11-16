@@ -6,7 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // recordRework counts one rework round on the job whose worker addressed was sent a
@@ -27,21 +27,21 @@ func recordRework(ctx context.Context, at location, facts hint.Gate, addressed s
 
 // handedBackRow is the row addressed's spawn title names when it has exited or
 // ended; false when nothing attributes one.
-func handedBackRow(ctx context.Context, at location, facts hint.Gate, addressed string) (types.Job, bool) {
+func handedBackRow(ctx context.Context, at location, facts hint.Gate, addressed string) (jobtypes.Job, bool) {
 	if at.cacheDir == "" || addressed == "" {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	rec, ok := readSpawnedAgent(facts, resolveAgentID(facts, addressed))
 	if !ok || rec.UntrustedJob != "" {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	row, ok := spawnTitleRow(rows, rec.Description)
-	if !ok || (row.State != types.StateExited && !row.State.Terminal()) {
-		return types.Job{}, false
+	if !ok || (row.State != jobtypes.StateExited && !row.State.Terminal()) {
+		return jobtypes.Job{}, false
 	}
 	return row, true
 }
@@ -56,7 +56,7 @@ func adviseContinueHandedBack(ctx context.Context, at location, facts hint.Gate,
 	return handedBackAdvice(row)
 }
 
-func handedBackAdvice(row types.Job) advice {
+func handedBackAdvice(row jobtypes.Job) advice {
 	if row.State.Terminal() {
 		return advice{
 			Say: fmt.Sprintf("magus workspace: job %s is %s; fork a new job for more work.", row.ID, row.State),

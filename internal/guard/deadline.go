@@ -20,8 +20,8 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types"
 )
 
 // hookBudget bounds one hook judgment, from the moment magus starts judging to its verdict.
@@ -540,15 +540,15 @@ func lapsedInJobCheckout(ctx context.Context, base Dependencies, who hookAttribu
 	if err != nil {
 		return false
 	}
-	live := slices.DeleteFunc(slices.Clone(rows), func(row types.Job) bool { return !row.State.Live() })
-	if !isPath && slices.ContainsFunc(live, func(row types.Job) bool { return row.ID == lease }) {
+	live := slices.DeleteFunc(slices.Clone(rows), func(row job.Job) bool { return !row.State.Live() })
+	if !isPath && slices.ContainsFunc(live, func(row job.Job) bool { return row.ID == lease }) {
 		return true
 	}
 	wheres := []string{input}
 	if !isPath {
 		wheres = lineReach(input, d, callDir)
 	}
-	return slices.ContainsFunc(live, func(row types.Job) bool {
+	return slices.ContainsFunc(live, func(row job.Job) bool {
 		root := row.CheckoutRoot
 		if row.Worktree.Standing() {
 			root = row.Worktree.Root

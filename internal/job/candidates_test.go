@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,7 +31,7 @@ func TestUnreferencedInPathsKeepsWhatAWritePathCovers(t *testing.T) {
 		unreferenced("field", "Field", "internal/job/a.go:8"),
 		unreferenced("test", "Function", "internal/job/a_test.go:5"),
 	}
-	row := types.Job{Paths: types.JobPaths{Write: []string{"internal/job", "cmd/magus/job.go#Fork"}}}
+	row := job.Job{Paths: job.Paths{Write: []string{"internal/job", "cmd/magus/job.go#Fork"}}}
 
 	got := UnreferencedInPaths(row, all)
 
@@ -45,8 +46,8 @@ func TestUnreferencedInPathsIsEmptyForARowThatWritesNothing(t *testing.T) {
 	t.Parallel()
 
 	all := []types.UnreferencedEntry{unreferenced("a", "Function", "internal/job/a.go:1")}
-	assert.Nil(t, UnreferencedInPaths(types.Job{ReadOnly: true, Paths: types.JobPaths{Write: []string{"internal/job"}}}, all))
-	assert.Nil(t, UnreferencedInPaths(types.Job{}, all))
+	assert.Nil(t, UnreferencedInPaths(job.Job{ReadOnly: true, Paths: job.Paths{Write: []string{"internal/job"}}}, all))
+	assert.Nil(t, UnreferencedInPaths(job.Job{}, all))
 }
 
 func TestReferencedOutsideNamesTheTestAndRegistryOneHopOut(t *testing.T) {
@@ -55,7 +56,7 @@ func TestReferencedOutsideNamesTheTestAndRegistryOneHopOut(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "job"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "job", "a.go"), []byte("package job\n"), 0o644))
-	row := types.Job{Paths: types.JobPaths{Write: []string{"types/conformance.go", "cmd/magus/job.go#Fork", "internal/job"}}}
+	row := job.Job{Paths: job.Paths{Write: []string{"types/conformance.go", "cmd/magus/job.go#Fork", "internal/job"}}}
 	projects := []*types.Project{{Path: ".", TargetOutputs: map[string][]types.OutputRef{"mocks": {{Glob: "**/mocks_test.go"}}}}}
 	asked := map[string]bool{}
 	referrers := func(file, declaration string) map[string]int {
@@ -88,7 +89,7 @@ func TestReferencedOutsideNamesTheTestAndRegistryOneHopOut(t *testing.T) {
 	}, got, "tests first, then by count; files the write paths cover and generated outputs are left out")
 	assert.Equal(t, map[string]bool{"types/conformance.go#": true, "cmd/magus/job.go#Fork": true, "internal/job/a.go#": true}, asked,
 		"a claim asks for its declaration, a directory for each file under it")
-	assert.Nil(t, ReferencedOutside(root, types.Job{ReadOnly: true, Paths: types.JobPaths{Write: row.Paths.Write}}, projects, referrers))
+	assert.Nil(t, ReferencedOutside(root, job.Job{ReadOnly: true, Paths: job.Paths{Write: row.Paths.Write}}, projects, referrers))
 }
 
 func TestRenderReferencedOutsideCapsAndSaysWhatToAdd(t *testing.T) {
@@ -125,11 +126,11 @@ func TestExtendFootprintExtendsNothingFromATestFile(t *testing.T) {
 		return map[string]int{"cli/other_test.go": 2}
 	}
 
-	paths, notes := ExtendFootprint(root, types.Job{Paths: types.JobPaths{Write: []string{"cli/registry_test.go"}}}, projects, referrers)
+	paths, notes := ExtendFootprint(root, job.Job{Paths: job.Paths{Write: []string{"cli/registry_test.go"}}}, projects, referrers)
 	assert.Empty(t, paths)
 	assert.Empty(t, notes)
 
-	paths, _ = ExtendFootprint(root, types.Job{Paths: types.JobPaths{Write: []string{"cli/registry.go", "cli/registry_test.go"}}}, projects, referrers)
+	paths, _ = ExtendFootprint(root, job.Job{Paths: job.Paths{Write: []string{"cli/registry.go", "cli/registry_test.go"}}}, projects, referrers)
 	assert.Equal(t, []string{"cli/other_test.go"}, paths, "the non-test path still extends")
 }
 

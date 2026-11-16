@@ -22,9 +22,9 @@ import (
 
 	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
-	"github.com/egladman/magus/types"
 )
 
 const (
@@ -59,7 +59,7 @@ type Service struct {
 	workspaces func() []Workspace
 	// The two sources WatchActivityEvents merges with the trail, both optional: see
 	// [WithJobs] and [WithFileChanges].
-	jobs  func() []types.Job
+	jobs  func() []job.Job
 	files func(context.Context) <-chan jobstore.FeedEvent
 	// poll is the follow loop's cadence, zero for [defaultPoll]. Injectable so a test does
 	// not wait on the production one.
@@ -164,8 +164,8 @@ func wireEvent(e trail.Event) *activityv1.ActivityEvent {
 }
 
 // wireCredential maps a verified credential onto the wire, nil for none.
-func wireCredential(c types.Credential) *activityv1.Credential {
-	if c == (types.Credential{}) {
+func wireCredential(c job.Credential) *activityv1.Credential {
+	if c == (job.Credential{}) {
 		return nil
 	}
 	return &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name, Grant: c.Grant.String()}
@@ -260,7 +260,7 @@ func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.
 
 // matchFilter applies the ActivityQuery's set filters (kinds/actors/actions) and the time
 // window, all ANDed; an empty or absent field does not constrain. An actors entry matches
-// an event whose origin names it in any one field (types.Origin.Names), never the rendered
+// an event whose origin names it in any one field (job.Origin.Names), never the rendered
 // label.
 func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 	if q == nil {

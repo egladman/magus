@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -68,7 +69,7 @@ type Load struct {
 	CacheBackendGiven bool
 	// JobReader, when JobReaderGiven, is the rows the guard's lease rules read
 	// in place of the job store.
-	JobReader      types.JobReader
+	JobReader      job.Reader
 	JobReaderGiven bool
 	// Misuse is every option applied to a Load that does not read it. An Option
 	// returns no error, so the entry point that reads the Load returns these.

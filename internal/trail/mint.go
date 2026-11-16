@@ -6,16 +6,16 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // MintRecord is what the trail keeps about a minted token: which token, until when, and the
 // grant it was minted under. Never the secret: the credential carries an 8-hex id and no hash.
 // Expires is zero for the operator token, which does not expire.
 type MintRecord struct {
-	Minted  types.Credential `json:"minted"`
-	Expires time.Time        `json:"expires,omitzero"`
-	Minter  types.Credential `json:"minter"`
+	Minted  job.Credential `json:"minted"`
+	Expires time.Time      `json:"expires,omitzero"`
+	Minter  job.Credential `json:"minter"`
 }
 
 // AppendMint records one mint under base as a token_lifecycle event whose request blob is the

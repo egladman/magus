@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -55,7 +56,7 @@ func warnWorkspaceUnloaded(ctx context.Context, err error) {
 // fork lists among the checks that could not run rather than failing on: the note states a
 // fact and must never be the reason a fork fails, nor read as a clean bill when it was
 // never computed.
-func forkOverrun(ctx context.Context, root string, row types.Job) (*job.ForegroundOverrun, error) {
+func forkOverrun(ctx context.Context, root string, row jobtypes.Job) (*job.ForegroundOverrun, error) {
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return nil, err
@@ -64,7 +65,7 @@ func forkOverrun(ctx context.Context, root string, row types.Job) (*job.Foregrou
 }
 
 // collectNotes is row's notes over the already loaded workspace m.
-func collectNotes(ctx context.Context, m *magus.Magus, row types.Job) job.RowNotes {
+func collectNotes(ctx context.Context, m *magus.Magus, row jobtypes.Job) job.RowNotes {
 	return job.RowNotesWith(ctx, m.Root(), m.All(), row, hostForegroundMax(ctx, m))
 }
 

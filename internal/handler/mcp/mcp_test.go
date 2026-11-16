@@ -5,7 +5,6 @@ import (
 	stdjson "encoding/json"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -13,8 +12,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
@@ -24,11 +21,14 @@ import (
 	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -174,7 +174,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 		Ts:   ev.Ts,
 		Kind: trail.KindMCPToolCall,
 		// The MCP client's own name is its host label.
-		Origin:        types.Origin{User: ev.User, UID: ev.UID, EntryPoint: types.EntryPointMCP, Host: "test-agent"},
+		Origin:        job.Origin{User: ev.User, UID: ev.UID, EntryPoint: job.EntryPointMCP, Host: "test-agent"},
 		UserAgent:     "claude-code/1.2.3", // the session User-Agent is recorded on the event
 		Action:        "client",
 		Outcome:       trail.OutcomeOK,
@@ -232,7 +232,7 @@ func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	for _, d := range Registry {
 		st, ok := tools[d.Name]
 		require.True(t, ok, d.Name)
-		res, err := st.Handler(trail.ContextWithCredential(context.Background(), types.CredentialStdio), callRequest(d.Name, nil))
+		res, err := st.Handler(trail.ContextWithCredential(context.Background(), job.CredentialStdio), callRequest(d.Name, nil))
 		require.NoError(t, err, d.Name)
 		assert.True(t, res.IsError, d.Name)
 		assert.True(t, strings.HasPrefix(allText(res), failure.Error()), "%s: %s", d.Name, allText(res))
@@ -531,15 +531,15 @@ func TestAuthorizeHoldsEveryCallerToToolNeed(t *testing.T) {
 	req.Params.Name = "status"
 
 	cases := map[string]struct {
-		cred    types.Credential
+		cred    job.Credential
 		allowed bool
 	}{
-		"socket peer":   {types.CredentialSocketPeer, true},
-		"connector":     {types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}, true},
-		"operator":      {types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}, true},
-		"console token": {types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, false},
-		"no credential": {types.Credential{}, false},
-		"viewer grant":  {types.Credential{Kind: types.KindSocketPeer, Grant: types.GrantViewer}, false},
+		"socket peer":   {job.CredentialSocketPeer, true},
+		"connector":     {job.Credential{Kind: job.KindStored, Grant: job.AccessConnector}, true},
+		"operator":      {job.Credential{Kind: job.KindOperator, Grant: job.AccessOperator}, true},
+		"console token": {job.Credential{Kind: job.KindStored, Grant: job.AccessConsole}, false},
+		"no credential": {job.Credential{}, false},
+		"viewer grant":  {job.Credential{Kind: job.KindSocketPeer, Grant: job.AccessViewer}, false},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

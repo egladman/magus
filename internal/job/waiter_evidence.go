@@ -11,15 +11,15 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // graded is the evidence a verdict grades: the result, the run behind its check, and the
 // runs behind its goals.
 type graded struct {
-	result       types.JobResult
-	attempt      types.JobAttempt
-	gateAttempts []types.JobGateAttempt
+	result       job.Result
+	attempt      job.CapturedRun
+	gateAttempts []job.GateAttempt
 }
 
 // withWaiterEvidence is ev with the runs behind the goals in refs swapped for runs
@@ -38,7 +38,7 @@ type graded struct {
 // read them as they read here now (see [sameChangedPaths]): only then is a run here a run
 // of the holder's tree. A goal records its run's attempt id where the store gave one: the
 // ref typed may name a step, which the step's next run would answer for instead.
-func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types.Job, refs map[string]string, resolve AttemptResolver, seen Observed) (graded, *types.JobIntegration, error) {
+func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row job.Job, refs map[string]string, resolve AttemptResolver, seen Observed) (graded, *job.Integration, error) {
 	if resolve == nil {
 		return graded{}, nil, errors.New("job: no output resolver reads the runs recorded in this checkout")
 	}
@@ -48,7 +48,7 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 	goals := row.EffectiveGoals()
 	ids := slices.Sorted(maps.Keys(refs))
 	for _, goalID := range ids {
-		i := slices.IndexFunc(goals, func(g types.Goal) bool { return g.ID == goalID })
+		i := slices.IndexFunc(goals, func(g job.Goal) bool { return g.ID == goalID })
 		if i < 0 {
 			held := make([]string, len(goals))
 			for j, g := range goals {
@@ -56,7 +56,7 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 			}
 			return graded{}, nil, fmt.Errorf("job: %s holds no goal %q to take evidence for (it holds %s)", row.ID, goalID, strings.Join(held, ", "))
 		}
-		if goals[i].Kind != types.GoalKindCheck {
+		if goals[i].Kind != job.GoalKindCheck {
 			return graded{}, nil, fmt.Errorf("job: goal %q is a %s goal, and only a check goal is graded from a run", goalID, goals[i].Kind)
 		}
 		ownRef, ownAttempt := ev.goalRun(goalID)
@@ -71,8 +71,8 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 	}
 	out := graded{result: ev.result, attempt: ev.attempt, gateAttempts: slices.Clone(ev.gateAttempts)}
 	out.result.VerificationEvidence = slices.Clone(ev.result.VerificationEvidence)
-	taken := &types.JobIntegration{Checkout: here}
-	runs := make([]types.JobAttempt, 0, len(ids))
+	taken := &job.Integration{Checkout: here}
+	runs := make([]job.CapturedRun, 0, len(ids))
 	for _, goalID := range ids {
 		ref := strings.TrimSpace(refs[goalID])
 		found, err := resolve(ctx, ref)
@@ -84,7 +84,7 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 		}
 		ref = cmp.Or(found.AttemptID, ref)
 		out.setGoalRun(goalID, ref, found)
-		taken.Gates = append(taken.Gates, types.VerificationStatus{ID: goalID, OutputRef: ref})
+		taken.Gates = append(taken.Gates, job.VerificationStatus{ID: goalID, OutputRef: ref})
 		runs = append(runs, found)
 	}
 
@@ -99,8 +99,8 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 }
 
 // runs is every run ev holds: the check's, then each goal's.
-func (ev graded) runs() []types.JobAttempt {
-	out := append(make([]types.JobAttempt, 0, 1+len(ev.gateAttempts)), ev.attempt)
+func (ev graded) runs() []job.CapturedRun {
+	out := append(make([]job.CapturedRun, 0, 1+len(ev.gateAttempts)), ev.attempt)
 	for _, g := range ev.gateAttempts {
 		out = append(out, g.Attempt)
 	}
@@ -108,18 +108,18 @@ func (ev graded) runs() []types.JobAttempt {
 }
 
 // goalRun is the ref and the run ev holds for goalID, zero when it holds none.
-func (ev graded) goalRun(goalID string) (string, types.JobAttempt) {
-	if goalID == types.PrimaryGoalID {
+func (ev graded) goalRun(goalID string) (string, job.CapturedRun) {
+	if goalID == job.PrimaryGoalID {
 		return ev.result.Validation.OutputRef, ev.attempt
 	}
 	var (
 		ref     string
-		attempt types.JobAttempt
+		attempt job.CapturedRun
 	)
-	if j := slices.IndexFunc(ev.result.VerificationEvidence, func(e types.VerificationEvidence) bool { return e.GateID == goalID }); j >= 0 {
+	if j := slices.IndexFunc(ev.result.VerificationEvidence, func(e job.VerificationEvidence) bool { return e.GateID == goalID }); j >= 0 {
 		ref = ev.result.VerificationEvidence[j].OutputRef
 	}
-	if j := slices.IndexFunc(ev.gateAttempts, func(g types.JobGateAttempt) bool { return g.GateID == goalID }); j >= 0 {
+	if j := slices.IndexFunc(ev.gateAttempts, func(g job.GateAttempt) bool { return g.GateID == goalID }); j >= 0 {
 		attempt = ev.gateAttempts[j].Attempt
 	}
 	return ref, attempt
@@ -127,30 +127,30 @@ func (ev graded) goalRun(goalID string) (string, types.JobAttempt) {
 
 // setGoalRun makes ref and run the evidence for goalID, in place. ev's slices must not be
 // shared with a row.
-func (ev *graded) setGoalRun(goalID, ref string, run types.JobAttempt) {
-	if goalID == types.PrimaryGoalID {
+func (ev *graded) setGoalRun(goalID, ref string, run job.CapturedRun) {
+	if goalID == job.PrimaryGoalID {
 		ev.result.Validation.OutputRef, ev.attempt = ref, run
 		return
 	}
-	if j := slices.IndexFunc(ev.result.VerificationEvidence, func(e types.VerificationEvidence) bool { return e.GateID == goalID }); j >= 0 {
+	if j := slices.IndexFunc(ev.result.VerificationEvidence, func(e job.VerificationEvidence) bool { return e.GateID == goalID }); j >= 0 {
 		ev.result.VerificationEvidence[j].OutputRef = ref
 	} else {
-		ev.result.VerificationEvidence = append(ev.result.VerificationEvidence, types.VerificationEvidence{GateID: goalID, OutputRef: ref})
+		ev.result.VerificationEvidence = append(ev.result.VerificationEvidence, job.VerificationEvidence{GateID: goalID, OutputRef: ref})
 	}
-	if j := slices.IndexFunc(ev.gateAttempts, func(g types.JobGateAttempt) bool { return g.GateID == goalID }); j >= 0 {
+	if j := slices.IndexFunc(ev.gateAttempts, func(g job.GateAttempt) bool { return g.GateID == goalID }); j >= 0 {
 		ev.gateAttempts[j].Attempt = run
 	} else {
-		ev.gateAttempts = append(ev.gateAttempts, types.JobGateAttempt{GateID: goalID, Attempt: run})
+		ev.gateAttempts = append(ev.gateAttempts, job.GateAttempt{GateID: goalID, Attempt: run})
 	}
 }
 
 // gradedTake is taken as the row records it: each goal's verdict copied from status, the
 // verdict as a whole status's own, stamped at.
-func gradedTake(taken types.JobIntegration, status types.JobStatus, at int64) *types.JobIntegration {
+func gradedTake(taken job.Integration, status job.Status, at int64) *job.Integration {
 	taken.At, taken.Verified, taken.ObservedGeneration = at, status.Verified, status.ObservedGeneration
 	taken.Gates = slices.Clone(taken.Gates)
 	for i, g := range taken.Gates {
-		if j := slices.IndexFunc(status.Gates, func(s types.VerificationStatus) bool { return s.ID == g.ID }); j >= 0 {
+		if j := slices.IndexFunc(status.Gates, func(s job.VerificationStatus) bool { return s.ID == g.ID }); j >= 0 {
 			taken.Gates[i].Verified = status.Gates[j].Verified
 			taken.Gates[i].Violations = slices.Clone(status.Gates[j].Violations)
 		}
@@ -173,7 +173,7 @@ func gradedTake(taken types.JobIntegration, status types.JobStatus, at int64) *t
 //     the weaker witness: a filesystem with coarse timestamps can date a change made in the
 //     run's first second or two before it, and a copy that keeps its times shows only
 //     through the directory it lands in.
-func sameChangedPaths(ctx context.Context, holder, here string, changed []string, runs []types.JobAttempt, current CurrentRun) error {
+func sameChangedPaths(ctx context.Context, holder, here string, changed []string, runs []job.CapturedRun, current CurrentRun) error {
 	if holder == "" {
 		return errors.New("job: the job records no checkout for its holder, so nothing shows this one holds the work the holder changed")
 	}
@@ -207,7 +207,7 @@ func sameChangedPaths(ctx context.Context, holder, here string, changed []string
 
 // readAsNow refuses unless run read each of paths, local slash paths under here, as they
 // read now; see [sameChangedPaths] for the witnesses.
-func readAsNow(ctx context.Context, here string, paths []string, run types.JobAttempt) error {
+func readAsNow(ctx context.Context, here string, paths []string, run job.CapturedRun) error {
 	if why := unreadSince(ctx, here, paths, run); why != "" {
 		return fmt.Errorf("job: a run here proves the holder's work only if %s", why)
 	}

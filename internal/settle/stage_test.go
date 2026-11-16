@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -84,11 +85,11 @@ func TestStagePathsSurvivesStalePath(t *testing.T) {
 // of a shared checkout into the caller's commit (2026-10-14).
 func TestOtherLeasesPaths(t *testing.T) {
 	root := t.TempDir()
-	rows := []types.Job{
-		{ID: "mine", State: types.StateRunning, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"api/**"}}},
-		{ID: "sibling", State: types.StateRunning, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"web/**"}}},
-		{ID: "elsewhere", State: types.StateRunning, CheckoutRoot: t.TempDir(), Paths: types.JobPaths{Write: []string{"docs/**"}}},
-		{ID: "ended", State: types.StatePass, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"cli/**"}}},
+	rows := []jobtypes.Job{
+		{ID: "mine", State: jobtypes.StateRunning, CheckoutRoot: root, Paths: jobtypes.Paths{Write: []string{"api/**"}}},
+		{ID: "sibling", State: jobtypes.StateRunning, CheckoutRoot: root, Paths: jobtypes.Paths{Write: []string{"web/**"}}},
+		{ID: "elsewhere", State: jobtypes.StateRunning, CheckoutRoot: t.TempDir(), Paths: jobtypes.Paths{Write: []string{"docs/**"}}},
+		{ID: "ended", State: jobtypes.StatePass, CheckoutRoot: root, Paths: jobtypes.Paths{Write: []string{"cli/**"}}},
 	}
 	paths := []string{"api/a.go", "web/b.ts", "docs/c.md", "cli/d.go", "README.md"}
 
@@ -104,11 +105,11 @@ func TestHeldForOtherLeasesReadsTheCallersEnvironmentLease(t *testing.T) {
 	root := testkit.NewRepository(t, nil).Root()
 	loc := job.Location{StateBase: fixture.StateBase(t), CacheDir: t.TempDir(), Root: root}
 	store := job.NewStore(loc)
-	for _, row := range []types.Job{
-		{ID: "mine", State: types.StateRunning, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"api/**"}}},
-		{ID: "sibling", State: types.StateRunning, CheckoutRoot: root, Paths: types.JobPaths{Write: []string{"web/**"}}},
+	for _, row := range []jobtypes.Job{
+		{ID: "mine", State: jobtypes.StateRunning, CheckoutRoot: root, Paths: jobtypes.Paths{Write: []string{"api/**"}}},
+		{ID: "sibling", State: jobtypes.StateRunning, CheckoutRoot: root, Paths: jobtypes.Paths{Write: []string{"web/**"}}},
 	} {
-		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		_, err := store.Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=mine")

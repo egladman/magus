@@ -10,9 +10,9 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -28,7 +28,7 @@ func TestPrintLedgerTreeRendersOverlaps(t *testing.T) {
 	child.Paths.Write = []string{"internal/ledger/store.go"}
 
 	var out strings.Builder
-	PrintTree(&out, types.NewJobList([]types.Job{parent, child}))
+	PrintTree(&out, job.NewList([]job.Job{parent, child}))
 	got := out.String()
 
 	assert.Contains(t, got, "JOB")
@@ -41,13 +41,13 @@ func TestPrintLedgerTreeRendersOverlaps(t *testing.T) {
 func TestPrintJobTreeMarksJobsNobodyIsWaitingOn(t *testing.T) {
 	t.Parallel()
 
-	rows := []types.Job{
-		{ID: "root", State: types.StatePass},
-		{ID: "root/orphan", Parent: "root", State: types.StateRunning, Updated: 100},
-		{ID: "late", State: types.StateRunning, Deadline: 50, Updated: 100},
+	rows := []job.Job{
+		{ID: "root", State: job.StatePass},
+		{ID: "root/orphan", Parent: "root", State: job.StateRunning, Updated: 100},
+		{ID: "late", State: job.StateRunning, Deadline: 50, Updated: 100},
 	}
 	var out strings.Builder
-	PrintTree(&out, types.NewJobList(rows).Flag(200, time.Minute))
+	PrintTree(&out, job.NewList(rows).Flag(200, time.Minute))
 	text := out.String()
 	assert.Contains(t, text, "overdue")
 	assert.Contains(t, text, "orphan")
@@ -59,8 +59,8 @@ func TestPrintJobTreeCodesTheReadOnlyRows(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	list := types.NewJobList([]types.Job{{ID: "newer", State: types.StateDeclared}})
-	list.ReadOnly = []types.JobReadOnly{{Job: "newer", Lacks: []string{"leases-v9"}}}
+	list := job.NewList([]job.Job{{ID: "newer", State: job.StateDeclared}})
+	list.ReadOnly = []job.ReadOnly{{Job: "newer", Lacks: []string{"leases-v9"}}}
 	PrintTree(&out, list)
 	got := out.String()
 	assert.Contains(t, got, "["+string(types.StoreRecordsNewer)+"] read-only jobs")
@@ -72,13 +72,13 @@ func TestPrintJobTreeCodesTheReadOnlyRows(t *testing.T) {
 func TestPrintJobTreeNamesWhoHoldsEachJob(t *testing.T) {
 	t.Parallel()
 
-	rows := []types.Job{
-		{ID: "taken", State: types.StateRunning, CheckoutRoot: "/src/ana"},
-		{ID: "waiting", State: types.StateDeclared},
-		{ID: "sweep", State: types.StateRunning, RegisteredBy: types.Origin{EntryPoint: types.EntryPointServer}},
+	rows := []job.Job{
+		{ID: "taken", State: job.StateRunning, CheckoutRoot: "/src/ana"},
+		{ID: "waiting", State: job.StateDeclared},
+		{ID: "sweep", State: job.StateRunning, RegisteredBy: job.Origin{EntryPoint: job.EntryPointServer}},
 	}
 	var out strings.Builder
-	PrintTree(&out, types.NewJobList(rows))
+	PrintTree(&out, job.NewList(rows))
 	holders := map[string]string{}
 	for _, line := range strings.Split(out.String(), "\n")[1:4] {
 		f := strings.Fields(line)
@@ -91,7 +91,7 @@ func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	PrintTree(&out, types.NewJobList(nil))
+	PrintTree(&out, job.NewList(nil))
 	assert.Contains(t, out.String(), fmt.Sprintf("`%s`", hint.JobFork.With("<job>")))
 	assert.Contains(t, out.String(), fmt.Sprintf("`%s` MCP tool", hint.ToolClient.String()))
 }
@@ -107,7 +107,7 @@ func TestPrintJobStatusFailedGateNamesHowToReadIt(t *testing.T) {
 	status := Status{
 		Job:        "plan",
 		Violations: []string{`goal "ci": the run behind output ref "outdeadbeef" failed, so its check did not pass`},
-		Gates: []types.VerificationStatus{
+		Gates: []job.VerificationStatus{
 			{ID: "ci", Verified: false, OutputRef: "outdeadbeef"},
 			{ID: "lint", Verified: true, OutputRef: "outfeedface"},
 		},
@@ -132,12 +132,12 @@ func TestPrintJobStatusRendersTheFootprint(t *testing.T) {
 	}{
 		{
 			name: "known",
-			status: Status{Job: "plan", Verified: true, FootprintKnown: true, Footprint: []types.RegionChange{
-				{File: types.FileChange{Path: "a.go"}, Side: types.RegionNew, Lines: [2]int{3, 9}, Declaration: "func X() {", Driver: "golang"},
-				{File: types.FileChange{Path: "a.go"}, Side: types.RegionNew, Lines: [2]int{12, 14}, Declaration: "func X() {", Driver: "golang"},
-				{File: types.FileChange{Path: "a.go"}, Side: types.RegionOld, Lines: [2]int{20, 21}, Declaration: "func Y() {", Driver: "golang"},
-				{File: types.FileChange{Path: "notes.txt"}, Side: types.RegionNew, Lines: [2]int{1, 2}},
-				{File: types.FileChange{Path: "notes.txt"}, Side: types.RegionNew, Lines: [2]int{8, 8}},
+			status: Status{Job: "plan", Verified: true, FootprintKnown: true, Footprint: []job.RegionChange{
+				{File: job.FileChange{Path: "a.go"}, Side: job.RegionNew, Lines: [2]int{3, 9}, Declaration: "func X() {", Driver: "golang"},
+				{File: job.FileChange{Path: "a.go"}, Side: job.RegionNew, Lines: [2]int{12, 14}, Declaration: "func X() {", Driver: "golang"},
+				{File: job.FileChange{Path: "a.go"}, Side: job.RegionOld, Lines: [2]int{20, 21}, Declaration: "func Y() {", Driver: "golang"},
+				{File: job.FileChange{Path: "notes.txt"}, Side: job.RegionNew, Lines: [2]int{1, 2}},
+				{File: job.FileChange{Path: "notes.txt"}, Side: job.RegionNew, Lines: [2]int{8, 8}},
 			}},
 			want: "verified plan, recorded pass\n" +
 				"footprint: where its diff since the checkpoint landed\n" +
@@ -177,12 +177,12 @@ func TestPrintJobStatusRendersTheFootprint(t *testing.T) {
 func TestPrintJobTreeRendersTheClaimsVerdict(t *testing.T) {
 	t.Parallel()
 
-	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run.go#executeStages"}}},
-		{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"run.go#RunCI"}}},
+	rows := []job.Job{
+		{ID: "a", State: job.StateRunning, Paths: job.Paths{Write: []string{"run.go#executeStages"}}},
+		{ID: "b", State: job.StateRunning, Paths: job.Paths{Write: []string{"run.go#RunCI"}}},
 	}
 	var out strings.Builder
-	PrintTree(&out, types.NewJobList(rows))
+	PrintTree(&out, job.NewList(rows))
 	_, after, ok := strings.Cut(out.String(), "\noverlaps\n")
 	require.True(t, ok, "two claims on one file are listed: %s", out.String())
 	assert.Equal(t, "  a and b claim common ground\n"+
@@ -194,29 +194,29 @@ func TestPrintJobTreeRendersTheClaimsVerdict(t *testing.T) {
 func TestPrintJobTreeRendersEachFootprintVerdict(t *testing.T) {
 	t.Parallel()
 
-	pair := func(f *types.JobOverlapFootprint) types.JobOverlap {
-		return types.JobOverlap{JobA: "a", JobB: "b", PathsA: []string{"api"}, PathsB: []string{"api/x.go"}, Footprint: f}
+	pair := func(f *job.OverlapFootprint) job.Overlap {
+		return job.Overlap{JobA: "a", JobB: "b", PathsA: []string{"api"}, PathsB: []string{"api/x.go"}, Footprint: f}
 	}
-	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"api"}}},
-		{ID: "b", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"api/x.go"}}},
+	rows := []job.Job{
+		{ID: "a", State: job.StateRunning, Paths: job.Paths{Write: []string{"api"}}},
+		{ID: "b", State: job.StateRunning, Paths: job.Paths{Write: []string{"api/x.go"}}},
 	}
 	for _, tc := range []struct {
 		name string
-		f    *types.JobOverlapFootprint
+		f    *job.OverlapFootprint
 		want string
 	}{
-		{"disjoint", &types.JobOverlapFootprint{Verdict: types.FootprintDisjoint}, "    footprints: disjoint\n"},
-		{"shared", &types.JobOverlapFootprint{Verdict: types.FootprintShared, Shared: []string{"a.go#func X", "b.go#func Y"}},
+		{"disjoint", &job.OverlapFootprint{Verdict: job.FootprintDisjoint}, "    footprints: disjoint\n"},
+		{"shared", &job.OverlapFootprint{Verdict: job.FootprintShared, Shared: []string{"a.go#func X", "b.go#func Y"}},
 			"    footprints: shared (a.go#func X, b.go#func Y)\n"},
-		{"unknown", &types.JobOverlapFootprint{Verdict: types.FootprintUnknown, Reason: "b: no checkout of this repository is bound to b"},
+		{"unknown", &job.OverlapFootprint{Verdict: job.FootprintUnknown, Reason: "b: no checkout of this repository is bound to b"},
 			"    footprints: unknown (b: no checkout of this repository is bound to b)\n"},
 		{"not computed", nil, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var out strings.Builder
-			PrintTree(&out, types.JobList{Jobs: rows, Overlaps: []types.JobOverlap{pair(tc.f)}})
+			PrintTree(&out, job.List{Jobs: rows, Overlaps: []job.Overlap{pair(tc.f)}})
 			_, after, ok := strings.Cut(out.String(), "    b: api/x.go\n")
 			require.True(t, ok, "the pair's paths are rendered: %s", out.String())
 			assert.Equal(t, tc.want, after)
@@ -228,7 +228,7 @@ func TestForkOutputCarriesReferencedOutsideBesideTheRow(t *testing.T) {
 	t.Parallel()
 
 	out := ForkOutput{
-		Job:               types.Job{ID: "fork-names-refs-outside"},
+		Job:               job.Job{ID: "fork-names-refs-outside"},
 		ReferencedOutside: []ReferencedFile{{File: "types/conformance_test.go", Count: 9, Uses: []string{"types/conformance.go"}}},
 	}
 	raw, err := json.Marshal(ForkReport{ForkOutput: out})
@@ -244,15 +244,15 @@ func TestForkOutputCarriesReferencedOutsideBesideTheRow(t *testing.T) {
 // inflightFixture is the in-flight plan's fixture: two job trees, one checkout on
 // fork-row-rebase, eight open changes on main listed out of plan order, one plan of one
 // partition and one verdict.
-func inflightFixture() (types.JobList, InflightInput) {
-	rows := []types.Job{
-		{ID: "fleet", State: types.StateRunning},
-		{ID: "child-job-wait", Parent: "fleet", State: types.StatePass, CheckoutRoot: "/w/child-job-wait"},
-		{ID: "status-wait", Parent: "fleet", State: types.StateRunning, CheckoutRoot: "/w/status-wait"},
-		{ID: "fork-row-rebase", Parent: "fleet", State: types.StateRunning, CheckoutRoot: "/w/fork-row-rebase"},
-		{ID: "inflight-view", Parent: "fleet", State: types.StateRunning, ReadOnly: true, CheckoutRoot: "/w/main"},
-		{ID: "their-fleet", State: types.StateRunning},
-		{ID: "their-work", Parent: "their-fleet", State: types.StateRunning, CheckoutRoot: "/w/theirs"},
+func inflightFixture() (job.List, InflightInput) {
+	rows := []job.Job{
+		{ID: "fleet", State: job.StateRunning},
+		{ID: "child-job-wait", Parent: "fleet", State: job.StatePass, CheckoutRoot: "/w/child-job-wait"},
+		{ID: "status-wait", Parent: "fleet", State: job.StateRunning, CheckoutRoot: "/w/status-wait"},
+		{ID: "fork-row-rebase", Parent: "fleet", State: job.StateRunning, CheckoutRoot: "/w/fork-row-rebase"},
+		{ID: "inflight-view", Parent: "fleet", State: job.StateRunning, ReadOnly: true, CheckoutRoot: "/w/main"},
+		{ID: "their-fleet", State: job.StateRunning},
+		{ID: "their-work", Parent: "their-fleet", State: job.StateRunning, CheckoutRoot: "/w/theirs"},
 	}
 	change := func(id, branch, title, author string) qtypes.Change {
 		return qtypes.Change{ID: id, Head: strings.Repeat(id, 14)[:40], Branch: branch, Base: "main", Title: title, Author: author, Method: qtypes.MethodSquash}
@@ -265,7 +265,7 @@ func inflightFixture() (types.JobList, InflightInput) {
 	c457 := change("457", "theirs", "their change", "priya")
 	c459 := change("459", "status-wait", "status wait pipe", "egladman")
 	in := InflightInput{
-		Fetch: &types.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 1790514000, ElapsedMS: 812},
+		Fetch: &job.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 1790514000, ElapsedMS: 812},
 		Changes: qtypes.Changes{
 			Base:    "main",
 			Changes: []qtypes.Change{c443, c438, c450, c445, c456, c457, c459},
@@ -284,7 +284,7 @@ func inflightFixture() (types.JobList, InflightInput) {
 		},
 		Me: Identity{Lease: "fork-row-rebase", Login: "egladman"},
 	}
-	return types.JobList{Jobs: rows}, in
+	return job.List{Jobs: rows}, in
 }
 
 // The plan's proof: the reader's two kicked-back changes first, the five queued in plan
@@ -358,12 +358,12 @@ func TestJobModelCellFallsBackToTheAssignedTier(t *testing.T) {
 	tier := &tier.Assignment{Name: "routine"}
 	tests := []struct {
 		name string
-		row  types.Job
+		row  job.Job
 		want string
 	}{
-		{"the model the row names wins", types.Job{Agent: &typesagent.Spec{Model: typesagent.Model{ID: "opus"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}, ModelTier: tier}, "opus"},
-		{"the assigned tier stands in", types.Job{ModelTier: tier}, "routine"},
-		{"neither is a dash", types.Job{}, "-"},
+		{"the model the row names wins", job.Job{Agent: &job.Agent{Model: job.Model{ID: "opus"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}, ModelTier: tier}, "opus"},
+		{"the assigned tier stands in", job.Job{ModelTier: tier}, "routine"},
+		{"neither is a dash", job.Job{}, "-"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -375,19 +375,19 @@ func TestJobModelCellFallsBackToTheAssignedTier(t *testing.T) {
 
 // The fork says which magus its checkout got, and that an adopted checkout is never removed.
 func TestPrintJobWorktreeSaysWhichMagusTheCheckoutGot(t *testing.T) {
-	made := types.JobWorktree{Root: "/w/c", Base: "0123456789abcdef", Made: true, Binary: "/w/c/magus"}
+	made := job.Worktree{Root: "/w/c", Base: "0123456789abcdef", Made: true, Binary: "/w/c/magus"}
 	for name, tc := range map[string]struct {
-		wt    types.JobWorktree
+		wt    job.Worktree
 		built bool
 		want  string
 	}{
 		"built from its own sources": {wt: made, built: true, want: "built /w/c/magus from the checkout's own sources"},
 		"a copy":                     {wt: made, want: "placed /w/c/magus, the magus the forking checkout runs"},
-		"a forker on PATH":           {wt: types.JobWorktree{Root: "/w/c", Made: true}, want: "runs magus from PATH"},
-		"adopted":                    {wt: types.JobWorktree{Root: "/w/c", Base: "0123456789abcdef"}, want: "adopted for job w at 0123456789ab; its holder takes it there with `"},
+		"a forker on PATH":           {wt: job.Worktree{Root: "/w/c", Made: true}, want: "runs magus from PATH"},
+		"adopted":                    {wt: job.Worktree{Root: "/w/c", Base: "0123456789abcdef"}, want: "adopted for job w at 0123456789ab; its holder takes it there with `"},
 	} {
 		var out bytes.Buffer
-		PrintWorktree(&out, types.Job{ID: "w", Worktree: &tc.wt}, tc.built)
+		PrintWorktree(&out, job.Job{ID: "w", Worktree: &tc.wt}, tc.built)
 		assert.Contains(t, out.String(), tc.want, name)
 	}
 }
@@ -400,11 +400,11 @@ type DescribeJobRecordSuite struct {
 func TestDescribeJobRecordSuite(t *testing.T) { suite.Run(t, new(DescribeJobRecordSuite)) }
 
 func (s *DescribeJobRecordSuite) SetupTest() {
-	s.out = DescribeOutput{Terms: Terms{Lease: types.Job{
+	s.out = DescribeOutput{Terms: Terms{Lease: job.Job{
 		ID:    "wave/a",
-		Paths: types.JobPaths{Write: []string{"a.go"}},
-		Check: &types.LeaseCheck{Target: "test", Project: "."},
-		State: types.StateDeclared,
+		Paths: job.Paths{Write: []string{"a.go"}},
+		Check: &job.LeaseCheck{Target: "test", Project: "."},
+		State: job.StateDeclared,
 	}}}
 }
 
@@ -419,7 +419,7 @@ func (s *DescribeJobRecordSuite) printed() map[string]json.RawMessage {
 func (s *DescribeJobRecordSuite) TestTheJobNamesTheAPIVersionApplyReads() {
 	var row map[string]json.RawMessage
 	s.Require().NoError(json.Unmarshal(s.printed()["job"], &row))
-	s.JSONEq(fmt.Sprintf("%q", types.JobAPIVersion), string(row["api_version"]))
+	s.JSONEq(fmt.Sprintf("%q", job.APIVersion), string(row["api_version"]))
 }
 
 func (s *DescribeJobRecordSuite) TestTheTermsAndGoalsStayBesideTheJob() {
@@ -452,47 +452,47 @@ type applyStateSuite struct {
 
 func TestApplyState(t *testing.T) { suite.Run(t, new(applyStateSuite)) }
 
-func (s *applyStateSuite) printed(from, to types.JobState, dryRun bool) string {
+func (s *applyStateSuite) printed(from, to job.State, dryRun bool) string {
 	var out bytes.Buffer
 	PrintApply(&out, []Applied{{
-		Prev:    types.Job{ID: "w", State: from, Paths: types.JobPaths{Write: []string{"a.go"}}},
-		Next:    types.Job{ID: "w", State: to, Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}},
+		Prev:    job.Job{ID: "w", State: from, Paths: job.Paths{Write: []string{"a.go"}}},
+		Next:    job.Job{ID: "w", State: to, Paths: job.Paths{Write: []string{"a.go", "b.go"}}},
 		Changed: []string{"paths.write"},
 	}}, nil, dryRun)
 	return out.String()
 }
 
 func (s *applyStateSuite) TestAKeptStateReadsStill() {
-	s.Contains(s.printed(types.StateRunning, types.StateRunning, false), "updated w, still running:\n  paths.write +b.go\n")
+	s.Contains(s.printed(job.StateRunning, job.StateRunning, false), "updated w, still running:\n  paths.write +b.go\n")
 }
 
 func (s *applyStateSuite) TestAMovedStateNamesBoth() {
-	s.Contains(s.printed(types.StateExited, types.StateDeclared, false), "updated w, exited to declared, so its holder takes it with `magus job exec w`:\n  paths.write +b.go\n")
+	s.Contains(s.printed(job.StateExited, job.StateDeclared, false), "updated w, exited to declared, so its holder takes it with `magus job exec w`:\n  paths.write +b.go\n")
 }
 
 func (s *applyStateSuite) TestADryRunNamesTheMoveItWouldMake() {
-	s.Contains(s.printed(types.StateExited, types.StateDeclared, true), "would update w, exited to declared, so its holder takes it with `magus job exec w`:\n")
+	s.Contains(s.printed(job.StateExited, job.StateDeclared, true), "would update w, exited to declared, so its holder takes it with `magus job exec w`:\n")
 }
 
 // A queue never fetched says so, and the reader is told which command reads it.
 func TestPrintInflightSaysWhenTheQueueWasNeverFetched(t *testing.T) {
 	t.Parallel()
 	var out strings.Builder
-	PrintInflight(&out, types.JobList{}, false)
+	PrintInflight(&out, job.List{}, false)
 	assert.Contains(t, out.String(), "in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes\n")
 }
 
 // Ended rows pile up, so the board lists the live ones and counts the rest.
 func TestWithoutEndedDropsEveryRowThatEndedAndItsReadOnlyShadows(t *testing.T) {
 	t.Parallel()
-	list := types.JobList{
-		Jobs: []types.Job{
-			{ID: "fleet", State: types.StateRunning},
-			{ID: "done", State: types.StatePass},
-			{ID: "lost", State: types.StateNoReturn},
-			{ID: "handed-in", State: types.StateExited},
+	list := job.List{
+		Jobs: []job.Job{
+			{ID: "fleet", State: job.StateRunning},
+			{ID: "done", State: job.StatePass},
+			{ID: "lost", State: job.StateNoReturn},
+			{ID: "handed-in", State: job.StateExited},
 		},
-		ReadOnly: []types.JobReadOnly{{Job: "done"}, {Job: "fleet"}},
+		ReadOnly: []job.ReadOnly{{Job: "done"}, {Job: "fleet"}},
 	}
 	live, ended := WithoutEnded(list)
 	var ids []string
@@ -505,6 +505,6 @@ func TestWithoutEndedDropsEveryRowThatEndedAndItsReadOnlyShadows(t *testing.T) {
 	assert.Equal(t, "fleet", live.ReadOnly[0].Job)
 }
 
-func leaseRow(id, parent string) types.Job {
-	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "bounded"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}}
+func leaseRow(id, parent string) job.Job {
+	return job.Job{ID: id, Parent: parent, State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -53,7 +54,7 @@ import (
 //
 // products are workspace-relative product paths. A writable lease may write
 // them beside its write paths, as run.go grants them to the step.
-func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseID string, from types.LeaseSource, products ...string) (*Policy, error) {
+func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseID string, from jobtypes.LeaseSource, products ...string) (*Policy, error) {
 	if policy == nil || loc.Root == "" || leaseID == "" {
 		return policy, nil
 	}
@@ -81,7 +82,7 @@ func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseI
 // without reading the store again.
 type leaseBoundary struct {
 	id       string
-	from     types.LeaseSource
+	from     jobtypes.LeaseSource
 	root     string   // the checkout, resolved
 	cacheDir string   // the workspace cache, granted back
 	granted  []string // the lease's write grants, resolved
@@ -119,15 +120,15 @@ func (b *leaseBoundary) apply(policy *Policy) *Policy {
 // workerLease returns the live row leaseID names when it states a boundary narrower than
 // the workspace: a read-only row of any model, or a worker row with write paths. A writable
 // root lease and a writable row with nothing declared report false. Liveness is
-// types.JobState.Live, the same test the guard applies, so a row the guard ignores is
+// jobtypes.State.Live, the same test the guard applies, so a row the guard ignores is
 // one the sandbox ignores.
-func workerLease(rows []types.Job, leaseID string) (types.Job, bool) {
+func workerLease(rows []jobtypes.Job, leaseID string) (jobtypes.Job, bool) {
 	for _, l := range rows {
 		if l.ID != leaseID {
 			continue
 		}
 		if !l.State.Live() {
-			return types.Job{}, false
+			return jobtypes.Job{}, false
 		}
 		// Read-only is a boundary whatever the row's place in the tree: a root row that
 		// declares it gets no writes either, rather than the whole checkout.
@@ -135,11 +136,11 @@ func workerLease(rows []types.Job, leaseID string) (types.Job, bool) {
 			return l, true
 		}
 		if l.Parent == "" || len(l.Paths.Write) == 0 {
-			return types.Job{}, false
+			return jobtypes.Job{}, false
 		}
 		return l, true
 	}
-	return types.Job{}, false
+	return jobtypes.Job{}, false
 }
 
 // grantedPaths resolves write (workspace-relative doublestar globs) against root and

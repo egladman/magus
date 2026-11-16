@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -151,13 +152,13 @@ func (w *workspace) checkpoints(t *testing.T) []checkpoint {
 }
 
 // jobRow reads one row from the workspace's own `magus ls jobs`.
-func (w *workspace) jobRow(t *testing.T, id string) types.Job {
+func (w *workspace) jobRow(t *testing.T, id string) job.Job {
 	t.Helper()
-	var listing types.JobList
+	var listing job.List
 	if err := json.Unmarshal([]byte(w.magus(t, "ls", "jobs", "-o", "json")), &listing); err != nil {
 		t.Fatalf("magus ls jobs -o json: %v", err)
 	}
-	i := slices.IndexFunc(listing.Jobs, func(r types.Job) bool { return r.ID == id })
+	i := slices.IndexFunc(listing.Jobs, func(r job.Job) bool { return r.ID == id })
 	if i < 0 {
 		t.Fatalf("magus ls jobs lists no row %s", id)
 	}

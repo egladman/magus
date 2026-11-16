@@ -8,19 +8,19 @@ import (
 
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types"
 )
 
 func TestSpawnUnvalidatedRefusesARowNothingChecked(t *testing.T) {
 	const title = "orchestrator/impl guard-facts"
-	row := types.Job{ID: "guard-facts", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a/**"}}}
+	row := jobtypes.Job{ID: "guard-facts", State: jobtypes.StateDeclared, Paths: jobtypes.Paths{Write: []string{"a/**"}}}
 	spawn := func(t *testing.T, description string, validated int64) verdict.Judgment {
 		t.Helper()
 		ctx, _ := fleetFixture(t, row)
 		at := hookLocation(ctx, Dependencies{})
 		store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
-		_, err := store.Update(ctx, row.ID, func(u *types.Job) { u.Validated = validated })
+		_, err := store.Update(ctx, row.ID, func(u *jobtypes.Job) { u.Validated = validated })
 		require.NoError(t, err)
 		return Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, map[string]any{
 			"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Agent",

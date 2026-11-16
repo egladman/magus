@@ -8,15 +8,15 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // declared plants one row through an unbound store, which is how an orchestrator declares
 // a plan, and returns the location the worker's own store shares.
-func declared(t *testing.T, rows ...types.Job) Location {
+func declared(t *testing.T, rows ...job.Job) Location {
 	t.Helper()
 
 	loc := tempLocation(t, t.TempDir())
@@ -27,13 +27,13 @@ func declared(t *testing.T, rows ...types.Job) Location {
 	return loc
 }
 
-func workerRow() types.Job {
-	return types.Job{
+func workerRow() job.Job {
+	return job.Job{
 		ID:         "adj/store",
-		Agent:      agent.Instructed("the store is the enforcement point"),
-		Paths:      types.JobPaths{Write: []string{"internal/ledger", "types/lease.go"}},
+		Agent:      job.Instructed("the store is the enforcement point"),
+		Paths:      job.Paths{Write: []string{"internal/ledger", "types/lease.go"}},
 		Validation: "magus run test internal/ledger",
-		State:      types.StateRunning,
+		State:      job.StateRunning,
 	}
 }
 
@@ -45,7 +45,7 @@ func TestBoundWorkerCannotWidenItsOwnRow(t *testing.T) {
 	loc := declared(t, workerRow())
 	s := boundStore(loc, "adj/store")
 
-	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) {
+	_, err := s.Update(t.Context(), "adj/store", func(u *job.Job) {
 		u.Paths.Write = append(u.Paths.Write, "internal/sessions")
 	})
 
@@ -69,7 +69,7 @@ func TestBoundWorkerReleasesAPath(t *testing.T) {
 	loc := declared(t, workerRow())
 	s := boundStore(loc, "adj/store")
 
-	stored, err := s.Update(t.Context(), "adj/store", func(u *types.Job) {
+	stored, err := s.Update(t.Context(), "adj/store", func(u *job.Job) {
 		u.Paths.Write = []string{"internal/ledger"}
 	})
 	require.NoError(t, err)
@@ -85,12 +85,12 @@ func TestBoundWorkerEndsItselfInFailureOrExit(t *testing.T) {
 
 	loc := declared(t, workerRow())
 
-	for _, state := range []types.JobState{types.StateFail, types.StateNoReturn, types.StateExited} {
-		_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) { u.State = state })
+	for _, state := range []job.State{job.StateFail, job.StateNoReturn, job.StateExited} {
+		_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *job.Job) { u.State = state })
 		require.NoError(t, err, "a worker reports its own %s", state)
 	}
 
-	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StatePass })
+	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *job.Job) { u.State = job.StatePass })
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "never pass")
 }
@@ -101,19 +101,19 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 	t.Parallel()
 
 	loc := declared(t, workerRow())
-	cases := map[string]func(*types.Job){
-		"validation":  func(u *types.Job) { u.Validation = "magus run ci ." },
-		"paths.read":  func(u *types.Job) { u.Paths.Read = []string{"/"} },
-		"parent":      func(u *types.Job) { u.Parent = "adj/other" },
-		"agent.model": func(u *types.Job) { u.Agent.Model = agent.Model{Tier: "design"} },
-		"breaks":      func(u *types.Job) { u.Breaks = []string{"--any-flag"} },
-		"read_only":   func(u *types.Job) { u.ReadOnly = true },
-		"deadline":    func(u *types.Job) { u.Deadline = 1 << 40 },
+	cases := map[string]func(*job.Job){
+		"validation":  func(u *job.Job) { u.Validation = "magus run ci ." },
+		"paths.read":  func(u *job.Job) { u.Paths.Read = []string{"/"} },
+		"parent":      func(u *job.Job) { u.Parent = "adj/other" },
+		"agent.model": func(u *job.Job) { u.Agent.Model = job.Model{Tier: "design"} },
+		"breaks":      func(u *job.Job) { u.Breaks = []string{"--any-flag"} },
+		"read_only":   func(u *job.Job) { u.ReadOnly = true },
+		"deadline":    func(u *job.Job) { u.Deadline = 1 << 40 },
 		// A holder that raised its own cap could fork itself past it.
-		"max_attempts": func(u *types.Job) { u.MaxAttempts = 9 },
-		"max_claims":   func(u *types.Job) { u.MaxClaims = 9 },
-		"goals": func(u *types.Job) {
-			u.Goals = []types.Goal{{ID: "gate", Check: types.LeaseCheck{Target: "ci", Project: "."}}}
+		"max_attempts": func(u *job.Job) { u.MaxAttempts = 9 },
+		"max_claims":   func(u *job.Job) { u.MaxClaims = 9 },
+		"goals": func(u *job.Job) {
+			u.Goals = []job.Goal{{ID: "gate", Check: job.LeaseCheck{Target: "ci", Project: "."}}}
 		},
 	}
 	for field, apply := range cases {
@@ -134,20 +134,20 @@ func TestBoundWorkerCannotLoosenItsGoals(t *testing.T) {
 	t.Parallel()
 
 	row := workerRow()
-	row.Goals = []types.Goal{{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}}}
+	row.Goals = []job.Goal{{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"Legacy"}}}
 	loc := declared(t, row)
-	for name, loosen := range map[string]func(*types.Goal){
-		"kind": func(g *types.Goal) {
-			g.Kind, g.Symbols, g.Paths = types.GoalKindPaths, nil, []string{"nothing"}
+	for name, loosen := range map[string]func(*job.Goal){
+		"kind": func(g *job.Goal) {
+			g.Kind, g.Symbols, g.Paths = job.GoalKindPaths, nil, []string{"nothing"}
 		},
-		"expect":  func(g *types.Goal) { g.Expect = types.ExpectPresent },
-		"symbols": func(g *types.Goal) { g.Symbols = []string{"NeverExisted"} },
-		"paths":   func(g *types.Goal) { g.Paths = []string{"x"} },
+		"expect":  func(g *job.Goal) { g.Expect = job.ExpectPresent },
+		"symbols": func(g *job.Goal) { g.Symbols = []string{"NeverExisted"} },
+		"paths":   func(g *job.Goal) { g.Paths = []string{"x"} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) { loosen(&u.Goals[0]) })
+			_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *job.Job) { loosen(&u.Goals[0]) })
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "may not change goals")
 		})
@@ -158,28 +158,28 @@ func TestBoundWorkerCannotLoosenItsGoals(t *testing.T) {
 func TestBoundWorkerWritesOnlyItsOwnRowAndChildren(t *testing.T) {
 	t.Parallel()
 
-	loc := declared(t, workerRow(), types.Job{ID: "adj/other", Paths: types.JobPaths{Write: []string{"internal/sessions"}}})
+	loc := declared(t, workerRow(), job.Job{ID: "adj/other", Paths: job.Paths{Write: []string{"internal/sessions"}}})
 
-	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/other", func(u *types.Job) {
-		u.Agent = agent.Instructed("rewritten by a neighbour")
+	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/other", func(u *job.Job) {
+		u.Agent = job.Instructed("rewritten by a neighbour")
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no row but its own")
 
-	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/child", func(u *types.Job) {
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/child", func(u *job.Job) {
 		u.Parent = "adj/store"
 		u.Paths.Write = []string{"internal/ledger"}
 	})
 	require.NoError(t, err, "a child inside the parent's own paths")
 
-	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/wide", func(u *types.Job) {
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/wide", func(u *job.Job) {
 		u.Parent = "adj/store"
 		u.Paths.Write = []string{"internal/ledger", "cmd/magus"}
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only be handed paths its parent owns")
 
-	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/orphan", func(u *types.Job) {
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/orphan", func(u *job.Job) {
 		u.Paths.Write = []string{"internal/ledger"}
 	})
 	require.Error(t, err)
@@ -203,64 +203,64 @@ func TestBoundWorkerCannotClearTheLedger(t *testing.T) {
 func TestChildCarriesEveryWritePathOfItsParent(t *testing.T) {
 	t.Parallel()
 
-	parent := types.Job{
+	parent := job.Job{
 		ID: "adj/store",
-		Paths: types.JobPaths{
+		Paths: job.Paths{
 			Write: []string{"internal/ledger", "types/lease.go"},
 			Read:  []string{"internal/ledger", "internal/hint"},
 			Deny:  []string{"MAGUS.md"},
 		},
-		State: types.StateRunning,
+		State: job.StateRunning,
 	}
 	loc := declared(t, parent)
 
 	tests := []struct {
 		name  string
-		child types.Job
+		child job.Job
 		want  string
 	}{
 		{
 			name:  "inside every boundary",
-			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}, Read: []string{"internal/hint"}, Deny: []string{"MAGUS.md", "go.mod"}}},
+			child: job.Job{Paths: job.Paths{Write: []string{"internal/ledger"}, Read: []string{"internal/hint"}, Deny: []string{"MAGUS.md", "go.mod"}}},
 		},
 		{
 			name:  "no focus of its own reads the paths it was handed",
-			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}}},
+			child: job.Job{Paths: job.Paths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}}},
 		},
 		{
 			name:  "a wider read boundary",
-			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}, Read: []string{"/"}, Deny: []string{"MAGUS.md"}}},
+			child: job.Job{Paths: job.Paths{Write: []string{"internal/ledger"}, Read: []string{"/"}, Deny: []string{"MAGUS.md"}}},
 			want:  "may only read what its parent reads",
 		},
 		{
 			name:  "a shorter deny list",
-			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}}},
+			child: job.Job{Paths: job.Paths{Write: []string{"internal/ledger"}}},
 			want:  "every deny_path its parent carries",
 		},
 		{
 			name:  "carrying a registration it never made",
-			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}}, ReportedBase: "abc123", Registered: 42},
+			child: job.Job{Paths: job.Paths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}}, ReportedBase: "abc123", Registered: 42},
 		},
 		{
 			name:  "graded on the way out",
-			child: types.Job{Paths: types.JobPaths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}}, State: types.StatePass},
+			child: job.Job{Paths: job.Paths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}}, State: job.StatePass},
 			want:  "never pass",
 		},
 		{
 			// The guard reads a row whose check IS the gate as owning it, so a child
 			// declaring one would be minting a capability its parent does not hold.
 			name: "a check the parent's does not name",
-			child: types.Job{
-				Paths: types.JobPaths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}},
-				Check: &types.LeaseCheck{Target: types.TargetCI, Project: "."},
+			child: job.Job{
+				Paths: job.Paths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}},
+				Check: &job.LeaseCheck{Target: types.TargetCI, Project: "."},
 			},
 			want: "only a lease whose parent runs the gate runs the gate",
 		},
 		{
 			name: "a check of its own that is not the gate",
-			child: types.Job{
-				Paths: types.JobPaths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}},
-				Check: &types.LeaseCheck{Target: "test", Project: "internal/ledger"},
+			child: job.Job{
+				Paths: job.Paths{Write: []string{"internal/ledger"}, Deny: []string{"MAGUS.md"}},
+				Check: &job.LeaseCheck{Target: "test", Project: "internal/ledger"},
 			},
 		},
 	}
@@ -272,7 +272,7 @@ func TestChildCarriesEveryWritePathOfItsParent(t *testing.T) {
 			child := tt.child
 			child.Parent = "adj/store"
 			id := "adj/store/" + strings.ReplaceAll(tt.name, " ", "-")
-			stored, err := boundStore(loc, "adj/store").Update(t.Context(), id, func(u *types.Job) { *u = child })
+			stored, err := boundStore(loc, "adj/store").Update(t.Context(), id, func(u *job.Job) { *u = child })
 			if tt.want == "" {
 				require.NoError(t, err)
 				assert.Zero(t, stored.Registered, "a child registers for itself or not at all")
@@ -297,7 +297,7 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 
 	require.NoError(t, s.Bind(Caller{}, "adj/other"))
 
-	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.Agent = agent.Instructed("rewritten") })
+	_, err := s.Update(t.Context(), "adj/store", func(u *job.Job) { u.Agent = job.Instructed("rewritten") })
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused, "the worker bound after construction writes no row but its own")
 	_, err = s.Clear(t.Context())
@@ -355,11 +355,11 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 
 	for name, write := range map[string]func() error{
 		"its row": func() error {
-			_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.Paths.Write = u.Paths.Write[:1] })
+			_, err := s.Update(t.Context(), "adj/store", func(u *job.Job) { u.Paths.Write = u.Paths.Write[:1] })
 			return err
 		},
 		"a new row": func() error {
-			_, err := s.Update(t.Context(), "stray", func(u *types.Job) { u.Agent = agent.Instructed("a plan of its own") })
+			_, err := s.Update(t.Context(), "stray", func(u *job.Job) { u.Agent = job.Instructed("a plan of its own") })
 			return err
 		},
 		"an ending": func() error {
@@ -379,7 +379,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 
 	after, err := s.List()
 	require.NoError(t, err)
-	assert.Equal(t, []types.Job{rows[0]}, after, "a refused write changes nothing")
+	assert.Equal(t, []job.Job{rows[0]}, after, "a refused write changes nothing")
 }
 
 // The row records who declared it: what the door the write came through put on its
@@ -389,18 +389,18 @@ func TestRowRecordsTheDoorThatDeclaredIt(t *testing.T) {
 	t.Parallel()
 
 	loc := tempLocation(t, t.TempDir())
-	cred := types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "connector-1", Grant: types.GrantConnector}
-	ctx := trail.ContextWithHost(trail.ContextWithCredential(trail.ContextWithEntryPoint(t.Context(), types.EntryPointMCP), cred), "claude-code")
+	cred := job.Credential{Kind: job.KindStored, ID: "3fa9c1d2", Name: "connector-1", Grant: job.AccessConnector}
+	ctx := trail.ContextWithHost(trail.ContextWithCredential(trail.ContextWithEntryPoint(t.Context(), job.EntryPointMCP), cred), "claude-code")
 	row := workerRow()
-	stored, err := NewStore(loc).Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+	stored, err := NewStore(loc).Update(ctx, row.ID, func(cur *job.Job) { *cur = row })
 	require.NoError(t, err)
 	want := trail.LocalOrigin(t.Context())
-	want.EntryPoint, want.Credential, want.Host = types.EntryPointMCP, cred, "claude-code"
+	want.EntryPoint, want.Credential, want.Host = job.EntryPointMCP, cred, "claude-code"
 	require.NotEmpty(t, want.UID, "the OS always answers with a uid")
 	assert.Equal(t, want, stored.RegisteredBy, "the door's facts, plus the OS account the store read itself")
 
-	after, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) {
-		u.State = types.StateFail
+	after, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *job.Job) {
+		u.State = job.StateFail
 	})
 	require.NoError(t, err)
 	assert.Equal(t, stored.RegisteredBy, after.RegisteredBy, "the registrant is the row's, not the last writer's")
@@ -416,7 +416,7 @@ func TestUnattributedWriteIsRecordedAcrossLeases(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "held.go"), []byte("package held\n"), 0o644))
 	loc := tempLocation(t, root)
 	loc.Actor = &Actor{}
-	seed(t, NewStore(loc), types.Job{ID: "adj/other", Paths: types.JobPaths{Write: []string{"held.go"}}, State: types.StateRunning})
+	seed(t, NewStore(loc), job.Job{ID: "adj/other", Paths: job.Paths{Write: []string{"held.go"}}, State: job.StateRunning})
 
 	require.NoError(t, boundStore(loc, "adj/store").RecordUnattributedWrite(t.Context(), "adj/other", "held.go"))
 
@@ -432,16 +432,16 @@ func TestUnattributedWriteIsRecordedAcrossLeases(t *testing.T) {
 func TestBoundWorkerNarrowsAWriteToADeclaration(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "adj/magusfile", Paths: types.JobPaths{Write: []string{"magusfile.buzz"}}, State: types.StateRunning}
+	row := job.Job{ID: "adj/magusfile", Paths: job.Paths{Write: []string{"magusfile.buzz"}}, State: job.StateRunning}
 	loc := declared(t, row)
 
-	stored, err := boundStore(loc, "adj/magusfile").Update(t.Context(), "adj/magusfile", func(u *types.Job) {
+	stored, err := boundStore(loc, "adj/magusfile").Update(t.Context(), "adj/magusfile", func(u *job.Job) {
 		u.Paths.Write = []string{"magusfile.buzz#lint"}
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"magusfile.buzz#lint"}, stored.Paths.Write)
 
-	_, err = boundStore(loc, "adj/magusfile").Update(t.Context(), "adj/magusfile", func(u *types.Job) {
+	_, err = boundStore(loc, "adj/magusfile").Update(t.Context(), "adj/magusfile", func(u *job.Job) {
 		u.Paths.Write = []string{"magusfile.buzz"}
 	})
 	var refused *RefusedError
@@ -453,10 +453,10 @@ func TestBoundWorkerNarrowsAWriteToADeclaration(t *testing.T) {
 func TestBoundWorkerNarrowsAGlobToItsFiles(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "adj/globs", Paths: types.JobPaths{Write: []string{"internal/**/*.go"}}, State: types.StateRunning}
+	row := job.Job{ID: "adj/globs", Paths: job.Paths{Write: []string{"internal/**/*.go"}}, State: job.StateRunning}
 	loc := declared(t, row)
 
-	stored, err := boundStore(loc, "adj/globs").Update(t.Context(), "adj/globs", func(u *types.Job) {
+	stored, err := boundStore(loc, "adj/globs").Update(t.Context(), "adj/globs", func(u *job.Job) {
 		u.Paths.Write = []string{"internal/job/authorize.go", "internal/job/*_test.go"}
 	})
 	require.NoError(t, err)
@@ -470,10 +470,10 @@ func TestBoundWorkerCannotWidenAGlob(t *testing.T) {
 		t.Run(wider, func(t *testing.T) {
 			t.Parallel()
 
-			row := types.Job{ID: "adj/globs", Paths: types.JobPaths{Write: []string{"internal/job/*.go"}}, State: types.StateRunning}
+			row := job.Job{ID: "adj/globs", Paths: job.Paths{Write: []string{"internal/job/*.go"}}, State: job.StateRunning}
 			loc := declared(t, row)
 
-			_, err := boundStore(loc, "adj/globs").Update(t.Context(), "adj/globs", func(u *types.Job) {
+			_, err := boundStore(loc, "adj/globs").Update(t.Context(), "adj/globs", func(u *job.Job) {
 				u.Paths.Write = []string{wider}
 			})
 			var refused *RefusedError
@@ -486,17 +486,17 @@ func TestBoundWorkerCannotWidenAGlob(t *testing.T) {
 func TestChildIsHandedAFileItsParentsGlobMatches(t *testing.T) {
 	t.Parallel()
 
-	parent := types.Job{ID: "adj/store", Paths: types.JobPaths{Write: []string{"internal/job/*.go"}}, State: types.StateRunning}
+	parent := job.Job{ID: "adj/store", Paths: job.Paths{Write: []string{"internal/job/*.go"}}, State: job.StateRunning}
 	loc := declared(t, parent)
 
-	stored, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store/plan", func(u *types.Job) {
-		*u = types.Job{Parent: "adj/store", Paths: types.JobPaths{Write: []string{"internal/job/plan.go"}}}
+	stored, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store/plan", func(u *job.Job) {
+		*u = job.Job{Parent: "adj/store", Paths: job.Paths{Write: []string{"internal/job/plan.go"}}}
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"internal/job/plan.go"}, stored.Paths.Write)
 
-	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/wide", func(u *types.Job) {
-		*u = types.Job{Parent: "adj/store", Paths: types.JobPaths{Write: []string{"internal/job/plan.go", "internal/sessions/a.go"}}}
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/wide", func(u *job.Job) {
+		*u = job.Job{Parent: "adj/store", Paths: job.Paths{Write: []string{"internal/job/plan.go", "internal/sessions/a.go"}}}
 	})
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused)
@@ -510,17 +510,17 @@ func TestChildIsHandedAFileItsParentsGlobMatches(t *testing.T) {
 func TestChildIsHandedADeclarationOfItsParentsFile(t *testing.T) {
 	t.Parallel()
 
-	parent := types.Job{ID: "adj/store", Paths: types.JobPaths{Write: []string{"magusfile.buzz"}}, State: types.StateRunning}
+	parent := job.Job{ID: "adj/store", Paths: job.Paths{Write: []string{"magusfile.buzz"}}, State: job.StateRunning}
 	loc := declared(t, parent)
 
-	stored, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store/lint", func(u *types.Job) {
-		*u = types.Job{Parent: "adj/store", Paths: types.JobPaths{Write: []string{"magusfile.buzz#lint"}}}
+	stored, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store/lint", func(u *job.Job) {
+		*u = job.Job{Parent: "adj/store", Paths: job.Paths{Write: []string{"magusfile.buzz#lint"}}}
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"magusfile.buzz#lint"}, stored.Paths.Write)
 
-	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/extra", func(u *types.Job) {
-		*u = types.Job{Parent: "adj/store", Paths: types.JobPaths{Write: []string{"magusfile.buzz#lint", "other.go"}}}
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/extra", func(u *job.Job) {
+		*u = job.Job{Parent: "adj/store", Paths: job.Paths{Write: []string{"magusfile.buzz#lint", "other.go"}}}
 	})
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused, "a child claims more than its parent owns when it also names other.go")
@@ -532,17 +532,17 @@ func TestChildIsHandedADeclarationOfItsParentsFile(t *testing.T) {
 func TestChildBreaksOnlyWhatItsParentMayBreak(t *testing.T) {
 	t.Parallel()
 
-	parent := types.Job{ID: "adj/store", Paths: types.JobPaths{Write: []string{"internal/ledger"}}, Breaks: []string{"--old-flag"}, State: types.StateRunning}
+	parent := job.Job{ID: "adj/store", Paths: job.Paths{Write: []string{"internal/ledger"}}, Breaks: []string{"--old-flag"}, State: job.StateRunning}
 	loc := declared(t, parent)
 
-	stored, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store/a", func(u *types.Job) {
-		*u = types.Job{Parent: "adj/store", Paths: types.JobPaths{Write: []string{"internal/ledger"}}, Breaks: []string{"--old-flag"}}
+	stored, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store/a", func(u *job.Job) {
+		*u = job.Job{Parent: "adj/store", Paths: job.Paths{Write: []string{"internal/ledger"}}, Breaks: []string{"--old-flag"}}
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"--old-flag"}, stored.Breaks)
 
-	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/b", func(u *types.Job) {
-		*u = types.Job{Parent: "adj/store", Paths: types.JobPaths{Write: []string{"internal/ledger"}}, Breaks: []string{"--old-flag", "api.Open"}}
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/b", func(u *job.Job) {
+		*u = job.Job{Parent: "adj/store", Paths: job.Paths{Write: []string{"internal/ledger"}}, Breaks: []string{"--old-flag", "api.Open"}}
 	})
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused)
@@ -558,12 +558,12 @@ func TestAuthorizeGradesAHoldersVerdict(t *testing.T) {
 	outside := "a holder grades only the rows below its own lease, never its own, a sibling's or an ancestor's"
 	for name, tc := range map[string]struct {
 		target string
-		apply  func(*types.Job)
+		apply  func(*job.Job)
 		want   error
 	}{
 		"a child passes": {
 			target: "root/worker/child",
-			apply:  func(row *types.Job) { row.State = types.StatePass },
+			apply:  func(row *job.Job) { row.State = job.StatePass },
 		},
 		"its own row": {target: "root/worker", want: refuse(holder, "root/worker", outside)},
 		"a sibling":   {target: "root/sibling", want: refuse(holder, "root/sibling", outside)},
@@ -571,13 +571,13 @@ func TestAuthorizeGradesAHoldersVerdict(t *testing.T) {
 		"unrelated":   {target: "other", want: refuse(holder, "other", outside)},
 		"a child fails": {
 			target: "root/worker/child",
-			apply:  func(row *types.Job) { row.State = types.StateFail },
+			apply:  func(row *job.Job) { row.State = job.StateFail },
 			want:   refuse(holder, "root/worker/child", "a verdict moves a row to pass and changes nothing else, and this one changes state"),
 		},
 		"a pass that widens the child": {
 			target: "root/worker/child",
-			apply: func(row *types.Job) {
-				row.State = types.StatePass
+			apply: func(row *job.Job) {
+				row.State = job.StatePass
 				row.Paths.Write = append(row.Paths.Write, "cmd/magus")
 			},
 			want: refuse(holder, "root/worker/child", "a verdict moves a row to pass and changes nothing else, and this one changes paths.write"),
@@ -588,21 +588,21 @@ func TestAuthorizeGradesAHoldersVerdict(t *testing.T) {
 			loc := declared(t, rows...)
 			apply := tc.apply
 			if apply == nil {
-				apply = func(row *types.Job) { row.State = types.StatePass }
+				apply = func(row *job.Job) { row.State = job.StatePass }
 			}
 
-			_, err := boundStore(loc, holder.Lease).mutate(t.Context(), tc.target, asVerdict, func(row *types.Job, _ bool, _ int64) error {
+			_, err := boundStore(loc, holder.Lease).mutate(t.Context(), tc.target, asVerdict, func(row *job.Job, _ bool, _ int64) error {
 				apply(row)
 				return nil
 			})
 
-			want := map[string]types.JobState{}
+			want := map[string]job.State{}
 			for _, row := range rows {
-				want[row.ID] = types.StateRunning
+				want[row.ID] = job.StateRunning
 			}
 			if tc.want == nil {
 				require.NoError(t, err)
-				want[tc.target] = types.StatePass
+				want[tc.target] = job.StatePass
 			} else {
 				assert.Equal(t, tc.want, err)
 			}
@@ -618,7 +618,7 @@ func TestAuthorizeGradesAHoldersVerdict(t *testing.T) {
 func TestRunLeaseResolvesTheStampedLeaseBeforeTheEnvironment(t *testing.T) {
 	type answer struct {
 		Lease string
-		From  types.LeaseSource
+		From  job.LeaseSource
 	}
 	for name, tc := range map[string]struct {
 		unstamped                 bool
@@ -626,12 +626,12 @@ func TestRunLeaseResolvesTheStampedLeaseBeforeTheEnvironment(t *testing.T) {
 		want                      answer
 	}{
 		"nothing":                              {unstamped: true},
-		"an unstamped ctx reads BAGGAGE":       {unstamped: true, baggage: "fleet/env", want: answer{"fleet/env", types.LeaseSourceEnv}},
+		"an unstamped ctx reads BAGGAGE":       {unstamped: true, baggage: "fleet/env", want: answer{"fleet/env", job.LeaseSourceEnv}},
 		"a stamped absence over BAGGAGE":       {baggage: "fleet/env"},
-		"the forwarded lease":                  {forwarded: "fleet/client", want: answer{"fleet/client", types.LeaseSourceEnv}},
-		"the forwarded lease over BAGGAGE":     {forwarded: "fleet/client", baggage: "fleet/env", want: answer{"fleet/client", types.LeaseSourceEnv}},
+		"the forwarded lease":                  {forwarded: "fleet/client", want: answer{"fleet/client", job.LeaseSourceEnv}},
+		"the forwarded lease over BAGGAGE":     {forwarded: "fleet/client", baggage: "fleet/env", want: answer{"fleet/client", job.LeaseSourceEnv}},
 		"an invalid forwarded lease is absent": {forwarded: "not a lease id", baggage: "fleet/env"},
-		"the record over a claim":              {forwarded: "fleet/client", bound: "fleet/bound", want: answer{"fleet/bound", types.LeaseSourceContested}},
+		"the record over a claim":              {forwarded: "fleet/client", bound: "fleet/bound", want: answer{"fleet/bound", job.LeaseSourceContested}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(trail.EnvBaggage, "")
@@ -645,7 +645,7 @@ func TestRunLeaseResolvesTheStampedLeaseBeforeTheEnvironment(t *testing.T) {
 
 			ctx := t.Context()
 			if !tc.unstamped {
-				ctx = types.WithJobLease(ctx, tc.forwarded)
+				ctx = job.WithLease(ctx, tc.forwarded)
 			}
 			lease, from := RunLease(ctx, placeAt(t, cacheDir))
 			assert.Equal(t, tc.want, answer{lease, from})

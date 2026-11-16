@@ -1,6 +1,10 @@
 package types
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/egladman/magus/libs/safetyscissors/job"
+)
 
 // minWaiverRevision is the shortest revision a waiver matches against: shorter, an
 // abbreviation could name more than one commit.
@@ -13,7 +17,7 @@ type GateWaiver struct {
 	// Commit is the full revision id the waiver covers, and no other.
 	Commit string `json:"commit" yaml:"commit"`
 	// By is who typed the waiver, as the trail records any origin.
-	By Origin `json:"by" yaml:"by"`
+	By job.Origin `json:"by" yaml:"by"`
 	// At is the unix second the line was written.
 	At int64 `json:"at" yaml:"at"`
 	// Reason is why the person skipped the gate, in their words.

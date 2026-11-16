@@ -16,8 +16,8 @@ import (
 
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 func TestBriefForAnIsolatedWorkerRefusesACompoundCommand(t *testing.T) {
@@ -96,9 +96,9 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 // TestContinuationToABoundWorkerIsNotGradedAgainstItsRow: worker-check-only grades a bound
 // worker's own runs, so a follow-up message to it is not graded as a fresh brief.
 func TestContinuationToABoundWorkerIsNotGradedAgainstItsRow(t *testing.T) {
-	row := types.Job{
-		ID: "guard/slice", Agent: agent.Instructed("fix the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}},
-		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
+	row := job.Job{
+		ID: "guard/slice", Agent: job.Instructed("fix the guard"), Paths: job.Paths{Write: []string{"internal/guard/**"}},
+		Check: &job.LeaseCheck{Target: "test", Project: "."}, State: job.StateRunning, Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
@@ -191,7 +191,7 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 		}
 	}
 	deps := figuresWorkspace(t)
-	judgeWith := func(row types.Job, defaults []string) rowJudge {
+	judgeWith := func(row job.Job, defaults []string) rowJudge {
 		d := deps
 		d.DefaultCharms = defaults
 		d.Spells = spellCatalog
@@ -252,7 +252,7 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 	assert.False(t, found, "--no-default-charms keeps the defaults off")
 
 	vet := figuresLease()
-	vet.Check = &types.LeaseCheck{Target: "go-vet", Project: "docs"}
+	vet.Check = &job.LeaseCheck{Target: "go-vet", Project: "docs"}
 	_, _, found = briefOffCheck(briefRuns("Check with `./magus run go::go-vet docs`."), judgeWith(vet, []string{"rw"}))
 	assert.False(t, found, "a check declaring no write passes under default rw")
 }
@@ -262,9 +262,9 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 // check is refused by both.
 func TestBriefAndWorkerShareOneVerdict(t *testing.T) {
 	deps := composingWorkspace(t)
-	row := types.Job{
-		ID: "guard/slice", Agent: agent.Instructed("fix the guard"), Paths: types.JobPaths{Write: []string{"internal/guard/**"}},
-		Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1,
+	row := job.Job{
+		ID: "guard/slice", Agent: job.Instructed("fix the guard"), Paths: job.Paths{Write: []string{"internal/guard/**"}},
+		Check: &job.LeaseCheck{Target: "test", Project: "."}, State: job.StateRunning, Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
 	judge := newRowJudge(ctx, deps, row, location{workspace: root, dir: root}, lazyWorkspace(ctx, deps, root))
@@ -354,17 +354,17 @@ func TestBriefNamesItsRow(t *testing.T) {
 	assert.Empty(t, briefJobIDs("Run `magus job exec <its id>` once."))
 
 	row := figuresLease()
-	got, ok := briefRow([]string{"figures/flow"}, []types.Job{row})
+	got, ok := briefRow([]string{"figures/flow"}, []job.Job{row})
 	require.True(t, ok)
 	assert.Equal(t, row.ID, got.ID)
 
-	for name, change := range map[string]func(*types.Job){
-		"a terminal row":           func(j *types.Job) { j.State = types.StatePass },
-		"a row declaring no check": func(j *types.Job) { j.Check = nil },
+	for name, change := range map[string]func(*job.Job){
+		"a terminal row":           func(j *job.Job) { j.State = job.StatePass },
+		"a row declaring no check": func(j *job.Job) { j.Check = nil },
 	} {
 		r := figuresLease()
 		change(&r)
-		_, ok := briefRow([]string{r.ID}, []types.Job{r})
+		_, ok := briefRow([]string{r.ID}, []job.Job{r})
 		assert.False(t, ok, name)
 	}
 }

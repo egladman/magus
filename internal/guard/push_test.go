@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -220,13 +221,13 @@ func TestGateStandsDownOnARevisionItCannotMatch(t *testing.T) {
 // judgePush runs one push through Judge in a workspace whose run log exists, so a gate
 // missing at HEAD is proven absent rather than unknown. gate, when set, records a finished
 // `affected ci` run with that status at HEAD first.
-func judgePush(t *testing.T, gate, lease string, leases ...types.Job) verdict.Judgment {
+func judgePush(t *testing.T, gate, lease string, leases ...jobtypes.Job) verdict.Judgment {
 	t.Helper()
 	return judgePushAs(t, true, gate, lease, leases...)
 }
 
 // judgePushAs is judgePush for a caller that does or does not declare it renders ask.
-func judgePushAs(t *testing.T, rendersAsk bool, gate, lease string, leases ...types.Job) verdict.Judgment {
+func judgePushAs(t *testing.T, rendersAsk bool, gate, lease string, leases ...jobtypes.Job) verdict.Judgment {
 	t.Helper()
 	ctx, _ := fleetFixture(t, leases...)
 	runs := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)

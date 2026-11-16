@@ -61,6 +61,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -150,17 +151,17 @@ type Record struct {
 // ancestry readable across invocations, so no chain of ancestors is stored anywhere: the
 // relation is derived from records, the way a process tree is derived from PPIDs.
 type InvocationStart struct {
-	types.Origin `json:",inline"`
-	Workspace    string `json:"workspace,omitempty"`
-	Command      string `json:"command,omitempty"`
-	Version      string `json:"version,omitempty"`
-	Lease        string `json:"lease,omitempty"`
-	// LeaseFrom is which source answered Lease; see types.LeaseSource.
-	LeaseFrom    types.LeaseSource `json:"lease_from,omitempty"`
-	TraceID      string            `json:"trace_id,omitempty"`
-	SpanID       string            `json:"span_id,omitempty"`
-	ParentSpanID string            `json:"parent_span_id,omitempty"`
-	Spawner      string            `json:"spawner,omitempty"`
+	job.Origin `json:",inline"`
+	Workspace  string `json:"workspace,omitempty"`
+	Command    string `json:"command,omitempty"`
+	Version    string `json:"version,omitempty"`
+	Lease      string `json:"lease,omitempty"`
+	// LeaseFrom is which source answered Lease; see job.LeaseSource.
+	LeaseFrom    job.LeaseSource `json:"lease_from,omitempty"`
+	TraceID      string          `json:"trace_id,omitempty"`
+	SpanID       string          `json:"span_id,omitempty"`
+	ParentSpanID string          `json:"parent_span_id,omitempty"`
+	Spawner      string          `json:"spawner,omitempty"`
 }
 
 // TargetResult is the payload of one target finishing. Replayed distinguishes a
@@ -185,7 +186,7 @@ type TargetResult struct {
 	DiagnosticCode string `json:"diagnostic_code,omitempty"`
 	Lease          string `json:"lease,omitempty"`
 	// LeaseFrom repeats the start's, for the reason Lease does.
-	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	LeaseFrom job.LeaseSource `json:"lease_from,omitempty"`
 	// What the target claimed and cost, each omitted when zero as on journal.Event; Sizing
 	// is a journal.Sizing* value, empty on a record older than these fields.
 	StartedMs   int64  `json:"started_ms,omitzero"`
@@ -534,20 +535,20 @@ type Summary struct {
 	Invocation string `json:"invocation"`
 	// Origin is the start record's, whole: the host session it ran in, the OS account, the
 	// entry point and the rest, rather than a copy of some of its fields.
-	types.Origin `json:",inline"`
-	Lease        string            `json:"lease,omitempty"`
-	LeaseFrom    types.LeaseSource `json:"lease_from,omitempty"`
-	TraceID      string            `json:"trace_id,omitempty"`
-	SpanID       string            `json:"span_id,omitempty"`
-	ParentSpanID string            `json:"parent_span_id,omitempty"`
-	Spawner      string            `json:"spawner,omitempty"`
-	Workspace    string            `json:"workspace,omitempty"`
-	Command      string            `json:"command,omitempty"`
-	StartedMs    int64             `json:"started_ms"`
-	LastMs       int64             `json:"last_ms"`
-	Facts        int               `json:"facts"`
-	Events       int               `json:"events,omitempty"` // of Facts, the ones a `magus session load` put here
-	Targets      []TargetResult    `json:"targets,omitempty"`
+	job.Origin   `json:",inline"`
+	Lease        string          `json:"lease,omitempty"`
+	LeaseFrom    job.LeaseSource `json:"lease_from,omitempty"`
+	TraceID      string          `json:"trace_id,omitempty"`
+	SpanID       string          `json:"span_id,omitempty"`
+	ParentSpanID string          `json:"parent_span_id,omitempty"`
+	Spawner      string          `json:"spawner,omitempty"`
+	Workspace    string          `json:"workspace,omitempty"`
+	Command      string          `json:"command,omitempty"`
+	StartedMs    int64           `json:"started_ms"`
+	LastMs       int64           `json:"last_ms"`
+	Facts        int             `json:"facts"`
+	Events       int             `json:"events,omitempty"` // of Facts, the ones a `magus session load` put here
+	Targets      []TargetResult  `json:"targets,omitempty"`
 	// Agent is the pair off the NEWEST loaded [AgentEvent] that named one, so a
 	// session spanning a model or host switch reports what it ended on rather than
 	// what it began with. Zero when no loaded event named either.

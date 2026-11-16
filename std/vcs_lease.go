@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
@@ -20,7 +21,7 @@ import (
 // VCSLeaseGate decides whether row, the lease a Buzz process acts under, may run the
 // version-control backend with args in dir, starting with env ("KEY=value" entries, the
 // last of a name winning): nil to run it, or the refusal to raise.
-type VCSLeaseGate func(ctx context.Context, row types.Job, backend string, args []string, dir string, env []string) error
+type VCSLeaseGate func(ctx context.Context, row jobtypes.Job, backend string, args []string, dir string, env []string) error
 
 // vcsLeaseGate is lease-vcs as internal/guard decides it, nil until the guard registers it.
 // It is registered rather than called because the guard imports this package.
@@ -67,7 +68,7 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 	// liveRow below meets as no live row, as it does any unreadable store.
 	stateBase, _ := xdg.StateDir()
 	loc := job.Location{CacheDir: cd.CacheDir(), StateBase: stateBase, Root: ws.Root()}
-	lease, _ := job.ActingLease(loc, types.JobLeaseFromContext(ctx))
+	lease, _ := job.ActingLease(loc, jobtypes.LeaseFromContext(ctx))
 	if lease == "" {
 		return nil
 	}
@@ -105,14 +106,14 @@ func childEnv(ctx context.Context) []string {
 
 // liveRow is lease's live row in the store at loc, false when the store holds none or
 // cannot be read.
-func liveRow(loc job.Location, lease string) (types.Job, bool) {
+func liveRow(loc job.Location, lease string) (jobtypes.Job, bool) {
 	rows, err := job.NewStore(loc).List()
 	if err != nil {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == lease && r.State.Live() })
+	i := slices.IndexFunc(rows, func(r jobtypes.Job) bool { return r.ID == lease && r.State.Live() })
 	if i < 0 {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	return rows[i], true
 }

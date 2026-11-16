@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -113,12 +114,12 @@ func declaredParams(d ToolDescriptor, fn handlerFn) handlerFn {
 // ToolNeed is what every MCP tool requires of the caller's credential, over either transport.
 // The server holds its /mcp route to the same Need, so a credential the route admits is never
 // refused by a tool behind it.
-var ToolNeed = types.Need{Scope: types.ScopeMCP, Level: types.LevelWrite}
+var ToolNeed = job.Need{Scope: job.ScopeMCP, Level: job.LevelWrite}
 
 // authorize refuses a call whose credential falls short of ToolNeed, as an MGS9015 tool error.
 // The credential is the one on ctx: the server's bearer guard stamps the bearer it verified,
-// ServeStdio stamps types.CredentialStdio, and the socket peer guard stamps
-// types.CredentialSocketPeer. A ctx carrying none of them holds the zero credential, which
+// ServeStdio stamps job.CredentialStdio, and the socket peer guard stamps
+// job.CredentialSocketPeer. A ctx carrying none of them holds the zero credential, which
 // grants nothing.
 func authorize(fn handlerFn) handlerFn {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -391,7 +392,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		ctx = origin.WithContext(ctx, o)
 		// The one boundary where the client's name is known: every record made under this
 		// call is stamped with it as the origin's Host.
-		ctx = trail.ContextWithHost(trail.ContextWithEntryPoint(ctx, types.EntryPointMCP), o.Name)
+		ctx = trail.ContextWithHost(trail.ContextWithEntryPoint(ctx, job.EntryPointMCP), o.Name)
 		ctx = interactive.WithHints(ctx)
 		// The workspace's secret resolver, so the trail writes below are redacted.
 		//

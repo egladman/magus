@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // isGraphRelevant reports whether any changed path feeds the knowledge graph. Mirrors
@@ -45,7 +45,7 @@ type JobFeed struct {
 	mu   sync.Mutex
 	subs map[chan job.FeedEvent]struct{}
 	root string
-	rows func() []types.Job
+	rows func() []jobtypes.Job
 	// invalidate carries the graph-relevance signal the console's SSE stream reads. Capacity
 	// one with a non-blocking send: a consumer that has not drained the pending notice is
 	// already going to rebuild, so a second notice tells it nothing.
@@ -58,7 +58,7 @@ type JobFeed struct {
 //
 // The goroutine exits when ctx is cancelled or the watcher closes its channel, and closes
 // every subscriber on the way out so a reader sees the end rather than blocking on it.
-func NewJobFeed(ctx context.Context, w *watch.Watcher, root string, rows func() []types.Job) *JobFeed {
+func NewJobFeed(ctx context.Context, w *watch.Watcher, root string, rows func() []jobtypes.Job) *JobFeed {
 	f := &JobFeed{subs: map[chan job.FeedEvent]struct{}{}, root: root, rows: rows, invalidate: make(chan struct{}, 1)}
 	go func() {
 		defer f.closeAll()

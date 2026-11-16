@@ -11,8 +11,8 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types"
 )
 
 // NewCheckGrader grades a declared check against the guard's rules for the workspace at the
@@ -45,7 +45,7 @@ type rulesByRoot struct {
 	opens *WorkspaceMemo
 }
 
-func (r *rulesByRoot) grade(ctx context.Context, root string, row types.Job) job.CheckVerdict {
+func (r *rulesByRoot) grade(ctx context.Context, root string, row jobtypes.Job) job.CheckVerdict {
 	return gradeCheck(ctx, r.current(ctx, root).judging(r.opens), root, row)
 }
 
@@ -114,7 +114,7 @@ func (g gradingRules) unchanged() bool {
 // come from a verdict on the check. Rules that would not load defer the grade instead
 // (Deferred): a binary built at the checkout may load them, so the fork keeps its row.
 // A deny from a judgment that ran out of time defers too.
-func gradeCheck(ctx context.Context, deps Dependencies, root string, row types.Job) job.CheckVerdict {
+func gradeCheck(ctx context.Context, deps Dependencies, root string, row jobtypes.Job) job.CheckVerdict {
 	if deps.LoadFailure != nil {
 		why := fmt.Sprintf("the workspace's rules did not load: %s", deps.LoadFailure)
 		slog.WarnContext(ctx, fmt.Sprintf("check `%s` was not graded, so nothing says its worker may run it; the checkout's own binary may load the rules this one cannot: %s", row.Check, why),
@@ -131,7 +131,7 @@ func gradeCheck(ctx context.Context, deps Dependencies, root string, row types.J
 		}
 		row.CheckoutRoot = dir
 	}
-	judge := func(pending types.Job) (verdict.Judgment, bool) {
+	judge := func(pending jobtypes.Job) (verdict.Judgment, bool) {
 		return JudgeLapsed(ctx, deps, Request{
 			Input:      ownBinaryPrefix + workerCheckLine(*pending.Check),
 			DryRun:     true,
@@ -187,7 +187,7 @@ const ownBinaryPrefix = "./"
 
 // workerCheckLine renders c with --budget-wait 0, which a worker's run needs.
 // A script check has no such flag and is rendered as stored.
-func workerCheckLine(c types.LeaseCheck) string {
+func workerCheckLine(c jobtypes.LeaseCheck) string {
 	if c.Script != "" {
 		return c.String()
 	}

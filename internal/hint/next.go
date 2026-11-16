@@ -8,6 +8,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -249,7 +250,7 @@ const (
 // whose row is gone still grades as a worker with no write paths: something claimed a
 // boundary, and serving the full unbound set on the strength of a missing row is the
 // wrong way to be wrong.
-func LeaseRole(rows []types.Job, id string) (Role, []string) {
+func LeaseRole(rows []job.Job, id string) (Role, []string) {
 	if id == "" {
 		return RoleUnbound, nil
 	}

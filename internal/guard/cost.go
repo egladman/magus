@@ -20,6 +20,7 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 
 	"github.com/egladman/magus/internal/cache"
@@ -834,7 +835,7 @@ func orchestration(st costState, from types.ThreadSource) types.Orchestration {
 // confirmed, and Orchestrates proven while a row the thread handed out is live (an exited
 // row waits on its `job wait`). The role is the live lease, never history: once every row
 // ends it orchestrates nothing. It writes nothing; observeCall files what it returns.
-func sessionCostState(at location, who hookAttribution, live func(id string) (types.Job, bool), now time.Time) costState {
+func sessionCostState(at location, who hookAttribution, live func(id string) (job.Job, bool), now time.Time) costState {
 	st := readCostState(hint.NewGate(at.cacheDir, who.factsKey()))
 	if len(st.Forks) > 0 {
 		confirmForks(&st, live, now)
@@ -911,7 +912,7 @@ func forkedIDs(line string) []string {
 // confirmForks moves to st.Forked each fork the store now shows live, created no earlier
 // than the call that ran it. A fork older than forkConfirmWindow that the store never
 // showed is dropped.
-func confirmForks(st *costState, live func(id string) (types.Job, bool), now time.Time) {
+func confirmForks(st *costState, live func(id string) (job.Job, bool), now time.Time) {
 	for id, judged := range st.Forks {
 		at := time.Unix(0, judged)
 		if row, ok := live(id); ok && row.Created >= at.Unix() {
@@ -932,21 +933,21 @@ func confirmForks(st *costState, live func(id string) (types.Job, bool), now tim
 
 // liveRowLookup finds a live row in the job store, read once however many ids it is asked
 // for. An unreadable store finds none.
-func liveRowLookup(ctx context.Context, at location) func(id string) (types.Job, bool) {
-	rows := sync.OnceValue(func() []types.Job {
+func liveRowLookup(ctx context.Context, at location) func(id string) (job.Job, bool) {
+	rows := sync.OnceValue(func() []job.Job {
 		rows, err := leaseRows(ctx, at)
 		if err != nil {
 			return nil
 		}
 		return rows
 	})
-	return func(id string) (types.Job, bool) {
+	return func(id string) (job.Job, bool) {
 		for _, row := range rows() {
 			if row.ID == id && row.State.Live() {
 				return row, true
 			}
 		}
-		return types.Job{}, false
+		return job.Job{}, false
 	}
 }
 
@@ -1222,7 +1223,7 @@ func mainWork(ctx context.Context, at location, st costState, line string) types
 }
 
 // runsCheck reports a run of check's target in check's project, "." when it names none.
-func runsCheck(check *types.LeaseCheck, r targetRun) bool {
+func runsCheck(check *job.LeaseCheck, r targetRun) bool {
 	if check == nil || check.Target == "" || r.verb != "run" || r.target != check.Target {
 		return false
 	}

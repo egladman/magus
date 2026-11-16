@@ -8,15 +8,16 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
 // testSelection is resolved from the loaded workspace, never from a check's
 // spelling. Nil means it was unavailable and permits no selector-specific evidence.
-type testSelection func(types.LeaseCheck) (string, bool)
+type testSelection func(job.LeaseCheck) (string, bool)
 
-func (selection testSelection) goTests(check types.LeaseCheck) bool {
+func (selection testSelection) goTests(check job.LeaseCheck) bool {
 	if check.Script != "" || selection == nil {
 		return false
 	}
@@ -24,7 +25,7 @@ func (selection testSelection) goTests(check types.LeaseCheck) bool {
 	return known && dialect == "go"
 }
 
-func (selection testSelection) known(check types.LeaseCheck) bool {
+func (selection testSelection) known(check job.LeaseCheck) bool {
 	if selection == nil {
 		return false
 	}
@@ -37,14 +38,14 @@ func (store *Store) testSelection() testSelection {
 	if why != "" {
 		return nil
 	}
-	return func(check types.LeaseCheck) (string, bool) { return resolvedTestSelection(ws, check) }
+	return func(check job.LeaseCheck) (string, bool) { return resolvedTestSelection(ws, check) }
 }
 
 // resolvedTestSelection follows the same direct dispatch the runner proves.
 // ctx.needs clears forwarded args only for its dependencies.
 // A body merely mentioning an op, or supplying explicit opts.args,
 // is not evidence that its caller's selector reaches that op.
-func resolvedTestSelection(ws Workspace, check types.LeaseCheck) (string, bool) {
+func resolvedTestSelection(ws Workspace, check job.LeaseCheck) (string, bool) {
 	if check.Script != "" {
 		return "", true
 	}
@@ -235,10 +236,10 @@ func scopedOps(sp *spells.Spell) []string {
 }
 
 // uncheckedTestSelection skips a check already in refused: it cannot run.
-func uncheckedTestSelection(ws Workspace, row types.Job, refused types.JobProblems) []string {
+func uncheckedTestSelection(ws Workspace, row job.Job, refused types.JobProblems) []string {
 	var unchecked []string
 	for _, goal := range row.EffectiveGoals() {
-		if goal.Kind != types.GoalKindCheck || goal.Check.Script != "" {
+		if goal.Kind != job.GoalKindCheck || goal.Check.Script != "" {
 			continue
 		}
 		field := goalCheckField(row, goal)

@@ -37,6 +37,7 @@ import (
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -84,7 +85,7 @@ type Store struct {
 	storeConfig
 	// dryEnded are the rows a dry-run [Exit] ended, which [Store.unswept] reads as ended
 	// so a dry run ending a tree ends its descendants before their ancestors, as a real one.
-	dryEnded map[string]types.Job
+	dryEnded map[string]job.Job
 }
 
 // storeConfig is everything a Store carries but its mutex, so a view ([Store.As],
@@ -115,7 +116,7 @@ type storeConfig struct {
 	outputs   func(root string) AttemptResolver
 	trailBase func(checkoutRoot string) (string, error)
 	// landed is the sweep's landing probe, nil for [Store.landedOnBase]; see [sweeper.landed].
-	landed func(context.Context, types.Job) string
+	landed func(context.Context, job.Job) string
 	// grader is Location.Grader.
 	grader CheckGrader
 	// dryRun is Location.DryRun.
@@ -322,7 +323,7 @@ type jobsFile struct {
 	// Retained is when the last retention pass ran, in unix seconds; see [Store.retainDue].
 	Retained int64                      `json:"retained,omitempty"`
 	Unknown  map[string]json.RawMessage `json:",unknown"`
-	Jobs     []types.Job                `json:"-"`
+	Jobs     []job.Job                  `json:"-"`
 	// stored are the rows' records as read, by id, so a rewrite keeps
 	// what this build does not declare.
 	stored map[string]jobRecord
@@ -362,7 +363,7 @@ const tailWait = 50 * time.Millisecond
 // readOnly refuses a write to row when it requires a feature this magus lacks. The row
 // stays listed and graded; only writing it is out of reach, since a write by a reader
 // that cannot act on the row's content could corrupt it.
-func readOnly(row types.Job) error {
+func readOnly(row job.Job) error {
 	lacks := row.Unmet()
 	if lacks == nil {
 		return nil
@@ -378,12 +379,12 @@ func readOnly(row types.Job) error {
 // from the content on every write, so a row that drops its last claim is writable again.
 // Any requirement the stored row carried that this build does not know never reaches here:
 // readOnly refused that write.
-func requiredFeatures(row types.Job) []string {
+func requiredFeatures(row job.Job) []string {
 	var out []string
-	if slices.ContainsFunc(slices.Concat(row.Paths.Write, row.Paths.Deny), types.HasClaim) {
+	if slices.ContainsFunc(slices.Concat(row.Paths.Write, row.Paths.Deny), job.HasClaim) {
 		out = append(out, "claim-declarations")
 	}
-	if slices.ContainsFunc(row.Goals, func(g types.Goal) bool { return g.Resolve().Expect == types.ExpectSignature }) {
+	if slices.ContainsFunc(row.Goals, func(g job.Goal) bool { return g.Resolve().Expect == job.ExpectSignature }) {
 		out = append(out, "signature-goals")
 	}
 	// Every row has a generation, so a row carrying only that is not stamped: it would make
@@ -426,8 +427,8 @@ func quoteAll(names []string) string {
 // ctx reaches the release digests and nothing else. A cancelled call still WRITES the row,
 // since the merge is already done, but it stops hashing files rather than reading the disk
 // with the store's lock held.
-func (s *Store) Update(ctx context.Context, id string, apply func(*types.Job)) (types.Job, error) {
-	return s.mutate(ctx, id, asDeclaration, func(cur *types.Job, _ bool, _ int64) error {
+func (s *Store) Update(ctx context.Context, id string, apply func(*job.Job)) (job.Job, error) {
+	return s.mutate(ctx, id, asDeclaration, func(cur *job.Job, _ bool, _ int64) error {
 		apply(cur)
 		return nil
 	})
@@ -457,17 +458,17 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 	// An OBSERVATION, and the only ungraded write here: the row it lands on is by
 	// definition somebody else's, so grading it would throw the notice away precisely when
 	// it matters, which is a worker writing a path another lease holds.
-	_, err := s.mutate(ctx, id, asObservation, func(cur *types.Job, exists bool, now int64) error {
+	_, err := s.mutate(ctx, id, asObservation, func(cur *job.Job, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("job: no such lease %q: %w", id, errNoSuchJob)
 		}
-		next := make([]types.JobUnattributedWrite, 0, len(cur.Unattributed)+1)
+		next := make([]job.UnattributedWrite, 0, len(cur.Unattributed)+1)
 		for _, w := range cur.Unattributed {
 			if w.Path != path {
 				next = append(next, w)
 			}
 		}
-		next = append(next, types.JobUnattributedWrite{
+		next = append(next, job.UnattributedWrite{
 			Path: path, Digest: s.fileDigest(ctx, path), At: now,
 		})
 		if len(next) > MaxUnattributedWrites {
@@ -497,12 +498,12 @@ const MaxJobEntries = 2
 // Refused, and nothing is written, when the job is not live, when the caller is its
 // holder, when rel is outside its write paths (that wants widening, not entering), when
 // an entry for rel is still open, and when the job already took [MaxJobEntries].
-func (s *Store) Enter(ctx context.Context, id, rel string) (types.Job, error) {
+func (s *Store) Enter(ctx context.Context, id, rel string) (job.Job, error) {
 	rel, err := entryPath(rel)
 	if err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
-	return s.Update(ctx, id, func(u *types.Job) { u.Entries = append(u.Entries, types.JobEntry{Path: rel}) })
+	return s.Update(ctx, id, func(u *job.Job) { u.Entries = append(u.Entries, job.Entry{Path: rel}) })
 }
 
 // cleanPath is a path a version control or a person named, as a slash path.
@@ -521,7 +522,7 @@ func entryPath(rel string) (string, error) {
 
 // requestsEntry reports a write whose only change is one unstamped entry appended to
 // prev's, which is how Enter and a put carrying `enter` reach mutate.
-func requestsEntry(prev, next types.Job) bool {
+func requestsEntry(prev, next job.Job) bool {
 	n := len(prev.Entries)
 	if len(next.Entries) != n+1 || next.Entries[n].At != 0 {
 		return false
@@ -536,7 +537,7 @@ func requestsEntry(prev, next types.Job) bool {
 
 // authorizeEntry grades an entry: prev is the row before it and next carries the one
 // entry appended to it.
-func authorizeEntry(actor Actor, id string, prev, next types.Job, exists bool, rows []types.Job) error {
+func authorizeEntry(actor Actor, id string, prev, next job.Job, exists bool, rows []job.Job) error {
 	entry := next.Entries[len(next.Entries)-1]
 	switch {
 	case !exists:
@@ -545,7 +546,7 @@ func authorizeEntry(actor Actor, id string, prev, next types.Job, exists bool, r
 		return fmt.Errorf("job: an entry declares nothing, and this write also changes %s", strings.Join(changedFields(prev, next), ", "))
 	case actor.Lease == id:
 		return refuse(actor, id, "a holder writes its own paths and never enters them")
-	case actor.Bound() && !slices.ContainsFunc(types.JobAncestors(rows, id), func(r types.Job) bool { return r.ID == actor.Lease }):
+	case actor.Bound() && !slices.ContainsFunc(job.Ancestors(rows, id), func(r job.Job) bool { return r.ID == actor.Lease }):
 		return refuse(actor, id, "a worker enters only a job forked beneath its own")
 	case !prev.State.Live():
 		return fmt.Errorf("job: %s is %s, so its paths are free to write and there is nothing to enter", id, prev.State)
@@ -566,34 +567,34 @@ func authorizeEntry(actor Actor, id string, prev, next types.Job, exists bool, r
 }
 
 // EntryAdvice is what an entry is answered with: what the entrant may now do, and once.
-func EntryAdvice(row types.Job, rel string) string {
+func EntryAdvice(row job.Job, rel string) string {
 	return fmt.Sprintf("entered %s on %s (%d of %d entries): your next write to it passes once its holder has been idle for a minute, and is recorded on the job",
 		rel, row.ID, len(row.Entries), MaxJobEntries)
 }
 
 // Entries is the entries recorded on job id in rows, nil when rows holds no such job.
-func Entries(rows []types.Job, id string) []types.JobEntry {
-	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
+func Entries(rows []job.Job, id string) []job.Entry {
+	if i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id }); i >= 0 {
 		return rows[i].Entries
 	}
 	return nil
 }
 
 // OpenEntry is the first entry on row that covers rel and has not been consumed.
-func OpenEntry(row types.Job, rel string) (types.JobEntry, bool) {
+func OpenEntry(row job.Job, rel string) (job.Entry, bool) {
 	for _, e := range row.Entries {
 		if e.Consumed == 0 && covers(e.Path, rel) {
 			return e, true
 		}
 	}
-	return types.JobEntry{}, false
+	return job.Entry{}, false
 }
 
 // ConsumeEntry stamps the open entry on job id covering rel as used. An observation, like
 // RecordUnattributedWrite: the guard records the write it just let through. A job with no
 // open entry for rel is left alone.
 func (s *Store) ConsumeEntry(ctx context.Context, id, rel string) error {
-	_, err := s.mutate(ctx, id, asObservation, func(cur *types.Job, exists bool, now int64) error {
+	_, err := s.mutate(ctx, id, asObservation, func(cur *job.Job, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("job: no such lease %q: %w", id, errNoSuchJob)
 		}
@@ -621,8 +622,8 @@ var boundaryFields = []string{"paths.write", "paths.deny", "paths.read"}
 // would hand the holder's job out again. A deadline may move with it, because a fork
 // re-stamps jobs.default_timeout. A re-fork that changes no boundary still resets the
 // state, which is how a rejected job is handed out again.
-func widensInPlace(prev, next types.Job) bool {
-	if !prev.State.Live() || prev.State == types.StateDeclared || next.State != types.StateDeclared {
+func widensInPlace(prev, next job.Job) bool {
+	if !prev.State.Live() || prev.State == job.StateDeclared || next.State != job.StateDeclared {
 		return false
 	}
 	moved := false
@@ -641,7 +642,7 @@ func widensInPlace(prev, next types.Job) bool {
 // record that omits it, so a projection never hardens a path. That is prev's
 // soft paths, unless row names paths.soft for one, and the
 // [IntegratorDeviations].
-func keepDerived(row *types.Job, prev types.Job) {
+func keepDerived(row *job.Job, prev job.Job) {
 	if !slices.ContainsFunc(row.Paths.Soft, func(p string) bool { return slices.Contains(prev.Paths.Write, p) }) {
 		for _, p := range prev.Paths.Soft {
 			if slices.Contains(row.Paths.Write, p) && !slices.Contains(row.Paths.Soft, p) {
@@ -650,7 +651,7 @@ func keepDerived(row *types.Job, prev types.Job) {
 		}
 	}
 	for _, w := range prev.Deviations {
-		if w.Reason == integratorRegenerates && !slices.ContainsFunc(row.Deviations, func(have types.Deviation) bool {
+		if w.Reason == integratorRegenerates && !slices.ContainsFunc(row.Deviations, func(have job.Deviation) bool {
 			return have.Code == w.Code && have.Subject == w.Subject
 		}) {
 			row.Deviations = append(row.Deviations, w)
@@ -662,7 +663,7 @@ func keepDerived(row *types.Job, prev types.Job) {
 // attempt began, for the fold a fork of the ended row makes, and whether the trail still
 // reaches back to that start. Only an ended row is read. A dry run, or a trail that cannot
 // be placed or read, gives none and unknown, which the fold records as unknown.
-func (s *Store) endedAttemptDenials(id string) ([]types.JobDenial, bool) {
+func (s *Store) endedAttemptDenials(id string) ([]job.Denial, bool) {
 	if s.dryRun {
 		return nil, false
 	}
@@ -670,7 +671,7 @@ func (s *Store) endedAttemptDenials(id string) ([]types.JobDenial, bool) {
 	if err != nil {
 		return nil, false
 	}
-	i := slices.IndexFunc(f.Jobs, func(r types.Job) bool { return r.ID == id })
+	i := slices.IndexFunc(f.Jobs, func(r job.Job) bool { return r.ID == id })
 	if i < 0 || !f.Jobs[i].State.Terminal() {
 		return nil, false
 	}
@@ -683,7 +684,7 @@ func (s *Store) endedAttemptDenials(id string) ([]types.JobDenial, bool) {
 	if err != nil {
 		return nil, false
 	}
-	denials, known, err := trail.LeaseDenials(base, id, attemptStart(row, types.NewJobAttempts(all)), maxDenialsRead)
+	denials, known, err := trail.LeaseDenials(base, id, attemptStart(row, job.NewAttempts(all)), maxDenialsRead)
 	if err != nil {
 		return nil, false
 	}
@@ -716,10 +717,10 @@ func (s *Store) holderTrail(checkoutRoot string) (string, error) {
 // caller may keep or mutate them without reaching back into the file's next read.
 //
 // Every read SWEEPS first: a live row magus can prove is dead is ended as no_return with
-// its [types.Job.EndReason], and one line per ended row goes to stderr. See [sweeper.dead]
+// its [job.Job.EndReason], and one line per ended row goes to stderr. See [sweeper.dead]
 // for the rules. The sweep is the one write a read makes, and only when a row is dead, so
 // a plan with nothing to end is still read without either lock.
-func (s *Store) List() ([]types.Job, error) {
+func (s *Store) List() ([]job.Job, error) {
 	f, err := s.read()
 	if err != nil {
 		return nil, err
@@ -731,13 +732,13 @@ func (s *Store) List() ([]types.Job, error) {
 }
 
 // endsOwnRow reports whether this store's caller holds row, so ending it is its holder's.
-func (s *Store) endsOwnRow(row types.Job) bool {
+func (s *Store) endsOwnRow(row job.Job) bool {
 	return s.Actor().Lease == row.ID || (row.CheckoutRoot != "" && row.CheckoutRoot == s.root)
 }
 
 // unswept is [Store.List] without the sweep, for a verb scoped to the rows it names: ending
 // one job must not end, or probe the landed work of, every other row in the plan.
-func (s *Store) unswept() ([]types.Job, error) {
+func (s *Store) unswept() ([]job.Job, error) {
 	f, err := s.read()
 	if err != nil {
 		return nil, err
@@ -753,17 +754,17 @@ func (s *Store) unswept() ([]types.Job, error) {
 	return rows, nil
 }
 
-func (s *Store) endDry(row types.Job) {
+func (s *Store) endDry(row job.Job) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.dryEnded == nil {
-		s.dryEnded = map[string]types.Job{}
+		s.dryEnded = map[string]job.Job{}
 	}
 	s.dryEnded[row.ID] = row.Clone()
 }
 
-func cloneRows(rows []types.Job) []types.Job {
-	out := make([]types.Job, len(rows))
+func cloneRows(rows []job.Job) []job.Job {
+	out := make([]job.Job, len(rows))
 	for i, row := range rows {
 		out[i] = row.Clone()
 	}
@@ -920,7 +921,7 @@ func (s *Store) write(f jobsFile, log jobsLog) error {
 
 // pruneFootprints removes the footprint cache of every checkpoint revision no live row in
 // rows declares, riding the retention pass. Best effort, as for the archives it drops.
-func (s *Store) pruneFootprints(rows []types.Job) {
+func (s *Store) pruneFootprints(rows []job.Job) {
 	dir := s.footprintCache().dir
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -1018,13 +1019,13 @@ func (s *Store) refuseCheckoutMigration(found int, lines []file.Line) error {
 
 // unmigratedRows reads the rows of a file at migration found as far as a
 // refusal needs them. Before [recordsEnveloped] a row's line was a
-// types.Job.
-func (s *Store) unmigratedRows(found int, lines []file.Line) ([]types.Job, error) {
+// job.Job.
+func (s *Store) unmigratedRows(found int, lines []file.Line) ([]job.Job, error) {
 	flat := found <= slices.IndexFunc(s.migrations, func(m migrate.Migration) bool { return m.Name == recordsEnveloped })
-	var rows []types.Job
+	var rows []job.Job
 	at := map[string]int{}
 	for _, line := range lines {
-		var row types.Job
+		var row job.Job
 		if flat {
 			if err := json.Unmarshal(line.Text, &row); err != nil {
 				return nil, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
@@ -1210,8 +1211,8 @@ func (s *Store) decodeRows(texts []file.Line, f *jobsFile, log *jobsLog) error {
 
 // refuseUnmetFeatures refuses a file requiring a feature this magus lacks.
 func (s *Store) refuseUnmetFeatures(f jobsFile) error {
-	known := make([]apiversion.Feature, len(types.JobFeatures))
-	for i, k := range types.JobFeatures {
+	known := make([]apiversion.Feature, len(job.Features()))
+	for i, k := range job.Features() {
 		known[i] = apiversion.Feature(k)
 	}
 	lacks := f.Metadata.Unmet(recordGroup, known)
@@ -1268,17 +1269,17 @@ func encodeJobs(f jobsFile) ([][]byte, error) {
 // The dropped row is archived first, as Clear archives, so a delete is recoverable from
 // the sibling file rather than only from whatever the caller remembers. Archives last
 // jobs.retain; see [Store.dropExpiredFiles].
-func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, error) {
+func (s *Store) Delete(ctx context.Context, id string, force bool) (job.Job, error) {
 	id = strings.TrimSpace(id)
 	if err := authorizeDelete(s.Actor(), id); err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var dropped types.Job
+	var dropped job.Job
 	err := s.update(ctx, func(f *jobsFile) error {
-		i := slices.IndexFunc(f.Jobs, func(row types.Job) bool { return row.ID == id })
+		i := slices.IndexFunc(f.Jobs, func(row job.Job) bool { return row.ID == id })
 		if i < 0 {
 			return fmt.Errorf("job: there is no job %q", id)
 		}
@@ -1293,7 +1294,7 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 		}
 		if dropped.Worktree.Standing() && dropped.Worktree.Made {
 			here, _ := filepath.Abs(s.root)
-			others := slices.DeleteFunc(slices.Clone(f.Jobs), func(row types.Job) bool { return row.ID == id })
+			others := slices.DeleteFunc(slices.Clone(f.Jobs), func(row job.Job) bool { return row.ID == id })
 			if kept := endCheckout(ctx, others, here, dropped, *dropped.Worktree, nil); kept != "" {
 				return fmt.Errorf("job: %s owns the checkout %s, which stays, so the row stays with it: %s",
 					id, dropped.Worktree.Root, kept)
@@ -1302,7 +1303,7 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 			dropped.Worktree.Removed = time.Now().Unix()
 		}
 		archived := f.header()
-		archived.Jobs, archived.stored = []types.Job{dropped}, f.stored
+		archived.Jobs, archived.stored = []job.Job{dropped}, f.stored
 		if err := s.archive(archived); err != nil {
 			return err
 		}
@@ -1310,7 +1311,7 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 		return nil
 	})
 	if err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
 	return dropped, nil
 }
@@ -1323,9 +1324,9 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 // keeps its position and takes the NEWER digest, because the version the next agent
 // inherits is the one left behind last. revoked marks what this write gave up as taken from
 // its holder rather than given up by it.
-func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, revoked bool) []types.JobRelease {
+func (s *Store) releases(ctx context.Context, prev, next job.Job, now int64, revoked bool) []job.Release {
 	refork := prev.State.Terminal() && next.State.Live()
-	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.JobRelease) bool {
+	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r job.Release) bool {
 		switch {
 		// A narrowed release outlives its entry; a re-fork ends it.
 		case r.Narrowed && refork:
@@ -1339,8 +1340,8 @@ func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, r
 		if slices.Contains(next.Paths.Write, p) || slices.Contains(prev.Paths.Soft, p) {
 			continue
 		}
-		rel := types.JobRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now, Revoked: revoked}
-		if at := slices.IndexFunc(out, func(r types.JobRelease) bool { return r.Path == p }); at >= 0 {
+		rel := job.Release{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now, Revoked: revoked}
+		if at := slices.IndexFunc(out, func(r job.Release) bool { return r.Path == p }); at >= 0 {
 			out[at] = rel
 			continue
 		}
@@ -1351,10 +1352,10 @@ func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, r
 
 // ReleasedUnderPattern says of each file row released that a pattern of its
 // write paths still names: the release stands, so the pattern does not hold it.
-func ReleasedUnderPattern(row types.Job) []string {
+func ReleasedUnderPattern(row job.Job) []string {
 	var notes []string
 	for _, r := range row.Releases {
-		file, decl := types.SplitClaim(r.Path)
+		file, decl := job.SplitClaim(r.Path)
 		if decl != "" || !heldByPattern(row, file) {
 			continue
 		}
@@ -1373,8 +1374,8 @@ func ReleasedUnderPattern(row types.Job) []string {
 // it left rather than the one it did.
 //
 // Everything that is not a readable file inside the root answers with one of the three
-// documented markers rather than a hash; types.DigestAbsent, types.DigestDir and
-// types.DigestUnreadable say which. The absent/unreadable split matters to the next
+// documented markers rather than a hash; job.DigestAbsent, job.DigestDir and
+// job.DigestUnreadable say which. The absent/unreadable split matters to the next
 // agent: "the releaser deleted it" and "something is there nobody could read" are
 // different problems. A path escaping the root is absent by the same rule: the ledger
 // describes this workspace, so a row is never handed a digest of something outside it.
@@ -1387,7 +1388,7 @@ func ReleasedUnderPattern(row types.Job) []string {
 // rather than a file other claims on it keep changing. A declaration no line is placed in
 // any more is absent.
 func (s *Store) digest(ctx context.Context, declared string) string {
-	p, decl := types.SplitClaim(declared)
+	p, decl := job.SplitClaim(declared)
 	if decl != "" {
 		return s.declarationDigest(ctx, p, decl)
 	}
@@ -1397,10 +1398,10 @@ func (s *Store) digest(ctx context.Context, declared string) string {
 // fileDigest is digest for a path SplitClaim already cut.
 func (s *Store) fileDigest(ctx context.Context, declared string) string {
 	if s.root == "" {
-		return types.DigestAbsent
+		return job.DigestAbsent
 	}
 	if ctx.Err() != nil {
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	}
 	// Symlinks are resolved on BOTH sides before the containment check. A link inside
 	// the root pointing outside it was followed and hashed, which is the one thing this
@@ -1408,40 +1409,40 @@ func (s *Store) fileDigest(ctx context.Context, declared string) string {
 	// through a symlinked parent (/tmp on macOS) would read as an escape from itself.
 	root, err := filepath.EvalSymlinks(s.root)
 	if err != nil {
-		return types.DigestAbsent
+		return job.DigestAbsent
 	}
 	full, err := filepath.EvalSymlinks(filepath.Join(root, filepath.FromSlash(declared)))
 	if err != nil {
 		// Nothing resolves at the path: a deleted file, a broken link, or a declared
 		// glob, which is a pattern rather than a path.
-		return types.DigestAbsent
+		return job.DigestAbsent
 	}
 	rel, err := filepath.Rel(root, full)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return types.DigestAbsent
+		return job.DigestAbsent
 	}
 	info, err := os.Stat(full)
 	switch {
 	case err != nil:
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	case info.IsDir():
-		return types.DigestDir
+		return job.DigestDir
 	case !info.Mode().IsRegular():
 		// A fifo, socket, or device. os.Open on a released named pipe BLOCKS until
 		// somebody writes to it, and it would block holding the store's mutex: one
 		// released fifo would wedge every ledger operation in the server.
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	case info.Size() > maxDigestBytes:
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	}
 	fh, err := os.Open(full)
 	if err != nil {
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	}
 	defer fh.Close()
 	sum := sha256.New()
 	if _, err := io.Copy(sum, fh); err != nil {
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	}
 	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
 }
@@ -1454,25 +1455,25 @@ func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
 	}
 	root, err := filepath.EvalSymlinks(s.root)
 	if err != nil {
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	}
 	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
 	if err != nil {
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	}
 	res, err := vcs.Resolve(ctx, s.root, "", types.VCSOptions{})
 	if err != nil || res.VCS == nil {
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	}
 	regions, err := res.VCS.RegionsBetween(ctx, s.root, path.Clean(p), nil, body)
 	if err != nil {
-		return types.DigestUnreadable
+		return job.DigestUnreadable
 	}
 	lines := strings.SplitAfter(string(body), "\n")
 	var spanned strings.Builder
 	found := false
 	for _, r := range regions {
-		if !types.NamesDeclaration(decl, r.Declaration) {
+		if !job.NamesDeclaration(decl, r.Declaration) {
 			continue
 		}
 		found = true
@@ -1481,7 +1482,7 @@ func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
 		}
 	}
 	if !found {
-		return types.DigestAbsent
+		return job.DigestAbsent
 	}
 	sum := sha256.Sum256([]byte(spanned.String()))
 	return "sha256:" + hex.EncodeToString(sum[:])

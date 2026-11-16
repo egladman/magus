@@ -13,9 +13,9 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -132,9 +132,9 @@ func TestDenyNamesTheInstallWhenTheSkillIsMissing(t *testing.T) {
 // somebody is already writing in is told so, with the union of the write paths to check and the
 // worktree that makes the check unnecessary.
 func TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld(t *testing.T) {
-	held := types.Job{
-		ID: "wave/holder", Agent: typesagent.Instructed("the store"), Paths: types.JobPaths{Write: []string{"internal/job", "types/job.go"}},
-		State: types.StateRunning, Registered: 1,
+	held := job.Job{
+		ID: "wave/holder", Agent: job.Instructed("the store"), Paths: job.Paths{Write: []string{"internal/job", "types/job.go"}},
+		State: job.StateRunning, Registered: 1,
 	}
 	ctx, _ := fleetFixture(t, held)
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
@@ -412,7 +412,7 @@ func (s *scheduledPromptSuite) TestPassesWhenTheTranscriptCannotBeRead() {
 // A host whose spawn answers with a name and whose child's calls carry an id: the child's
 // start joins the id to the spawn before it, so the child is graded under the spawn's job.
 func TestAChildsStartJoinsItToTheSpawnBeforeIt(t *testing.T) {
-	row := types.Job{ID: "guard-facts", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
+	row := job.Job{ID: "guard-facts", State: job.StateDeclared, Paths: job.Paths{Write: []string{"internal/guard/**"}}}
 	ctx, root := fleetFixture(t, row)
 	target := filepath.Join(root, "internal", "guard", "guard.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
@@ -555,9 +555,9 @@ type foregroundFleet struct {
 
 func newForegroundFleet(t *testing.T, jobs ...string) foregroundFleet {
 	t.Helper()
-	rows := make([]types.Job, len(jobs))
+	rows := make([]job.Job, len(jobs))
 	for i, id := range jobs {
-		rows[i] = types.Job{ID: id, State: types.StateDeclared, Paths: types.JobPaths{Write: []string{fmt.Sprintf("internal/%s/**", id)}}}
+		rows[i] = job.Job{ID: id, State: job.StateDeclared, Paths: job.Paths{Write: []string{fmt.Sprintf("internal/%s/**", id)}}}
 	}
 	layers, root := fleetLayers(t, rows...)
 	f := foregroundFleet{layers: layers, root: root}

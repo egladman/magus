@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // The isolation levels a fork can run a job at, cheapest first.
@@ -29,11 +29,11 @@ const largeWriteSet = 27
 // workspace loads, and that cover a generator's declared output; the overlaps with each live
 // peer in the forker's checkout; and a depends_on whose head the checkpoint does not hold.
 type isolationJob struct {
-	Row                types.Job
+	Row                job.Job
 	BinaryInputs       []string
 	LoadFiles          []string
 	GeneratorOutputs   []string
-	Overlaps           []types.JobOverlap
+	Overlaps           []job.Overlap
 	UnmergedDependency string
 }
 
@@ -44,15 +44,15 @@ type isolationJob struct {
 // to 1 at 0.7, and to 2 at a weight in (0, 0.3]; over largeWriteSet paths or an unmerged
 // dependency raise it back to 3. peers are the live jobs in the forker's checkout; weight 0
 // is unweighted.
-func chooseIsolation(job isolationJob, peers []types.Job, riskTolerance, weight float64) (level int, reason string) {
-	row := job.Row
+func chooseIsolation(candidate isolationJob, peers []job.Job, riskTolerance, weight float64) (level int, reason string) {
+	row := candidate.Row
 	switch {
-	case len(job.BinaryInputs) > 0:
-		return isolationOwnBuild, fmt.Sprintf("write path %s is a build input of ./cmd/magus, so a placed binary would judge the old tree", job.BinaryInputs[0])
-	case len(job.GeneratorOutputs) > 0:
-		return isolationOwnCheckout, fmt.Sprintf("write path %s is a generator's output, which a peer's run would overwrite", job.GeneratorOutputs[0])
+	case len(candidate.BinaryInputs) > 0:
+		return isolationOwnBuild, fmt.Sprintf("write path %s is a build input of ./cmd/magus, so a placed binary would judge the old tree", candidate.BinaryInputs[0])
+	case len(candidate.GeneratorOutputs) > 0:
+		return isolationOwnCheckout, fmt.Sprintf("write path %s is a generator's output, which a peer's run would overwrite", candidate.GeneratorOutputs[0])
 	}
-	if o, ok := claimlessOverlap(job.Overlaps); ok {
+	if o, ok := claimlessOverlap(candidate.Overlaps); ok {
 		return isolationOwnCheckout, fmt.Sprintf("its write paths overlap %s's (%s) with no disjoint claim", overlapPeer(o, row.ID), strings.Join(overlapPaths(o, row.ID), ", "))
 	}
 
@@ -69,35 +69,35 @@ func chooseIsolation(job isolationJob, peers []types.Job, riskTolerance, weight 
 	}
 	switch {
 	case level >= isolationOwnCheckout:
-	case job.UnmergedDependency != "":
-		level, reason = isolationOwnCheckout, fmt.Sprintf("depends_on %s is not merged at its checkpoint, so it needs its own base", job.UnmergedDependency)
+	case candidate.UnmergedDependency != "":
+		level, reason = isolationOwnCheckout, fmt.Sprintf("depends_on %s is not merged at its checkpoint, so it needs its own base", candidate.UnmergedDependency)
 	case len(row.Paths.Write) > largeWriteSet:
 		level, reason = isolationOwnCheckout, fmt.Sprintf("%d write paths, past the %d a shared checkout takes", len(row.Paths.Write), largeWriteSet)
 	}
-	if level < isolationWave && len(job.LoadFiles) > 0 && len(peers) > 0 {
-		level, reason = isolationWave, fmt.Sprintf("write path %s covers a file the workspace loads, and %s is live in this checkout", job.LoadFiles[0], peers[0].ID)
+	if level < isolationWave && len(candidate.LoadFiles) > 0 && len(peers) > 0 {
+		level, reason = isolationWave, fmt.Sprintf("write path %s covers a file the workspace loads, and %s is live in this checkout", candidate.LoadFiles[0], peers[0].ID)
 	}
 	return level, reason
 }
 
 // claimlessOverlap is the first overlap whose two sides did not claim disjoint declarations.
-func claimlessOverlap(overlaps []types.JobOverlap) (types.JobOverlap, bool) {
+func claimlessOverlap(overlaps []job.Overlap) (job.Overlap, bool) {
 	for _, o := range overlaps {
-		if o.Claims != types.ClaimsDisjoint {
+		if o.Claims != job.ClaimsDisjoint {
 			return o, true
 		}
 	}
-	return types.JobOverlap{}, false
+	return job.Overlap{}, false
 }
 
-func overlapPeer(o types.JobOverlap, id string) string {
+func overlapPeer(o job.Overlap, id string) string {
 	if o.JobA == id {
 		return o.JobB
 	}
 	return o.JobA
 }
 
-func overlapPaths(o types.JobOverlap, id string) []string {
+func overlapPaths(o job.Overlap, id string) []string {
 	if o.JobA == id {
 		return o.PathsA
 	}

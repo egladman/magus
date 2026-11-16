@@ -17,15 +17,15 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types"
 )
 
 // fileReleaseRequest puts a release request on holder's row.
 func fileReleaseRequest(t *testing.T, ctx context.Context, holder string) string {
 	t.Helper()
 	id := "att-" + holder
-	filed, err := job.NewStore(hookLocation(ctx, Dependencies{}).jobs()).FileReleaseRequest(ctx, holder, types.JobReleaseRequest{
+	filed, err := job.NewStore(hookLocation(ctx, Dependencies{}).jobs()).FileReleaseRequest(ctx, holder, jobtypes.ReleaseRequest{
 		ID:      id,
 		File:    "internal/ledger/store.go",
 		Wanted:  []string{"internal/ledger/store.go"},
@@ -51,7 +51,7 @@ func TestReleaseRequestedAdvisesTheHolderOnce(t *testing.T) {
 		assert.Contains(t, v.Context, "magus job apply -f <record>")
 		require.Equal(t, verdict.Judgment{
 			APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: v.Context,
-			Rule: string(advisoryReleaseRequested), Lease: "lease-a", LeaseFrom: string(types.LeaseSourceFlag),
+			Rule: string(advisoryReleaseRequested), Lease: "lease-a", LeaseFrom: string(jobtypes.LeaseSourceFlag),
 		}, v, v.Context)
 		assert.NotEqual(t, string(advisoryReleaseRequested), call(ctx, "holder", "lease-a").Rule, "said once a session")
 	})
@@ -87,7 +87,7 @@ func TestReleaseAdviceSuite(t *testing.T) {
 
 func (s *ReleaseAdviceSuite) TestTheMarkerIsPerLeaseNotPerSession() {
 	rows := fixture.FleetLeases()
-	rows[1].State, rows[1].Paths.Write, rows[1].Paths.Deny = types.StateRunning, rows[0].Paths.Write, nil
+	rows[1].State, rows[1].Paths.Write, rows[1].Paths.Deny = jobtypes.StateRunning, rows[0].Paths.Write, nil
 	ctx, _ := fleetFixture(s.T(), rows...)
 	fileReleaseRequest(s.T(), ctx, "lease-a")
 	fileReleaseRequest(s.T(), ctx, "lease-b")
@@ -133,7 +133,7 @@ func (s *ReleaseAdviceSuite) TestALeasedCallOpensNoSessionFile() {
 func (s *ReleaseAdviceSuite) TestAGrantedHoldNamesTheForkAndWhatIsLeft() {
 	row := fixture.FleetLeases()[0]
 	row.Paths.Write = []string{"internal/ledger/store.go", "internal/ledger/store.go#Open"}
-	row.Releases = []types.JobRelease{{Path: "internal/ledger/store.go", Narrowed: true, TakenBy: "lease-b"}}
+	row.Releases = []jobtypes.Release{{Path: "internal/ledger/store.go", Narrowed: true, TakenBy: "lease-b"}}
 	s.Equal("magus workspace: lease lease-a now holds part of a file by declaration.\n"+
 		"internal/ledger/store.go: fork lease-b was granted declarations you had not touched; you hold it by internal/ledger/store.go#Open\n"+
 		"A write to an unclaimed declaration claims it.", adviseLeaseNarrowed(row).Say)
@@ -142,19 +142,19 @@ func (s *ReleaseAdviceSuite) TestAGrantedHoldNamesTheForkAndWhatIsLeft() {
 func (s *ReleaseAdviceSuite) TestAGrantedHoldWithNoClaimSaysSo() {
 	row := fixture.FleetLeases()[0]
 	row.Paths.Write = []string{"internal/ledger/store.go"}
-	row.Releases = []types.JobRelease{{Path: "internal/ledger/store.go", Narrowed: true, TakenBy: "lease-b"}}
+	row.Releases = []jobtypes.Release{{Path: "internal/ledger/store.go", Narrowed: true, TakenBy: "lease-b"}}
 	s.Contains(adviseLeaseNarrowed(row).Say, "you hold it by no declaration yet")
 }
 
 func (s *ReleaseAdviceSuite) TestAnEndedRowIsSilent() {
 	row := fixture.FleetLeases()[0]
-	row.State = types.StateExited
-	row.Releases = []types.JobRelease{{Path: "internal/ledger/store.go", Narrowed: true, TakenBy: "lease-b"}}
+	row.State = jobtypes.StateExited
+	row.Releases = []jobtypes.Release{{Path: "internal/ledger/store.go", Narrowed: true, TakenBy: "lease-b"}}
 	s.Empty(adviseLeaseNarrowed(row).Say)
 }
 
 func (s *ReleaseAdviceSuite) TestAHoldNarrowedByItsOwnWriteIsSilent() {
 	row := fixture.FleetLeases()[0]
-	row.Releases = []types.JobRelease{{Path: "magusfile.buzz", Narrowed: true}}
+	row.Releases = []jobtypes.Release{{Path: "magusfile.buzz", Narrowed: true}}
 	s.Empty(adviseLeaseNarrowed(row).Say)
 }

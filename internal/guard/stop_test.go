@@ -9,27 +9,26 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
 // filedTry is job id's first try, having filed an empty result.
-func filedTry(id string) types.Attempt {
-	return filedResult(id, &types.JobResult{Job: id})
+func filedTry(id string) jobtypes.Attempt {
+	return filedResult(id, &jobtypes.Result{Job: id})
 }
 
 // filedResult is job id's first try, having filed result.
-func filedResult(id string, result *types.JobResult) types.Attempt {
-	return types.Attempt{Job: id, N: 1, Status: types.AttemptStatus{Result: result}}
+func filedResult(id string, result *jobtypes.Result) jobtypes.Attempt {
+	return jobtypes.Attempt{Job: id, N: 1, Status: jobtypes.AttemptStatus{Result: result}}
 }
 
 // storeTries appends tries to the attempts file of the job store at
 // places. The job package files a result only through an exit. A copy:
 // an exported fixture breaches the export-scope ceiling.
-func storeTries(t *testing.T, at location, tries ...types.Attempt) {
+func storeTries(t *testing.T, at location, tries ...jobtypes.Attempt) {
 	t.Helper()
 	path, err := job.NewStore(at.jobs()).Path()
 	require.NoError(t, err)
@@ -43,7 +42,7 @@ func storeTries(t *testing.T, at location, tries ...types.Attempt) {
 // fixtureAttemptLine is a as an attempts.jsonl record, its keys
 // camelCased. A copy, as storeTries is; enum values pass through as Go
 // spells them, which the store reads unchanged.
-func fixtureAttemptLine(t *testing.T, a types.Attempt) []byte {
+func fixtureAttemptLine(t *testing.T, a jobtypes.Attempt) []byte {
 	t.Helper()
 	raw, err := json.Marshal(a.Status)
 	require.NoError(t, err)
@@ -86,20 +85,20 @@ func fixtureCamelKeys(v any) any {
 type StopUnfiledSuite struct {
 	suite.Suite
 	// tries are the attempts the judged store holds.
-	tries []types.Attempt
+	tries []jobtypes.Attempt
 }
 
 func TestStopUnfiledSuite(t *testing.T) { suite.Run(t, new(StopUnfiledSuite)) }
 
 func (s *StopUnfiledSuite) SetupTest() { s.tries = nil }
 
-func (s *StopUnfiledSuite) row() types.Job {
-	return types.Job{ID: "spec/worker", Agent: agent.Instructed("build the spec"), Paths: types.JobPaths{Write: []string{"types/**"}},
-		State: types.StateRunning, Registered: 1}
+func (s *StopUnfiledSuite) row() jobtypes.Job {
+	return jobtypes.Job{ID: "spec/worker", Agent: jobtypes.Instructed("build the spec"), Paths: jobtypes.Paths{Write: []string{"types/**"}},
+		State: jobtypes.StateRunning, Registered: 1}
 }
 
 // stop is a subagent's stop for the leased row, judged in a store holding row.
-func (s *StopUnfiledSuite) stop(row types.Job, event string, fields map[string]any) verdict.Judgment {
+func (s *StopUnfiledSuite) stop(row jobtypes.Job, event string, fields map[string]any) verdict.Judgment {
 	ctx, root := fleetFixture(s.T(), row)
 	if len(s.tries) > 0 {
 		storeTries(s.T(), ctx.Value(locationKey{}).(location), s.tries...)
@@ -149,7 +148,7 @@ func (s *StopUnfiledSuite) TestTheSecondStopPassesAndSaysSo() {
 
 func (s *StopUnfiledSuite) TestAFiledResultLetsTheChildStop() {
 	row := s.row()
-	s.tries = []types.Attempt{filedTry(row.ID)}
+	s.tries = []jobtypes.Attempt{filedTry(row.ID)}
 	v := s.stop(row, "SubagentStop", s.subagent())
 	s.NotEqual(string(denyRuleStopUnfiled), v.Rule)
 	s.NotEqual(decisionDeny, v.Decision)
@@ -157,7 +156,7 @@ func (s *StopUnfiledSuite) TestAFiledResultLetsTheChildStop() {
 
 func (s *StopUnfiledSuite) TestADeliveredHandbackLetsTheChildStop() {
 	row := s.row()
-	s.tries = []types.Attempt{{Job: row.ID, N: 1, Status: types.AttemptStatus{Started: 10, Ended: 15, End: types.AttemptEndHandback}}}
+	s.tries = []jobtypes.Attempt{{Job: row.ID, N: 1, Status: jobtypes.AttemptStatus{Started: 10, Ended: 15, End: jobtypes.AttemptEndHandback}}}
 	v := s.stop(row, "SubagentStop", s.subagent())
 	s.NotEqual(string(denyRuleStopUnfiled), v.Rule)
 	s.NotEqual(decisionDeny, v.Decision)

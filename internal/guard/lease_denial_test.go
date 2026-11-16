@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -19,31 +19,31 @@ type LeaseDenialTextSuite struct {
 func TestLeaseDenialTextSuite(t *testing.T) { suite.Run(t, new(LeaseDenialTextSuite)) }
 
 func (s *LeaseDenialTextSuite) TestListsAtMostFiveWritePaths() {
-	row := types.Job{ID: "wide", Paths: types.JobPaths{Write: []string{"a/**", "b/**", "c/**", "d/**", "e/**", "f/**", "g/**"}}}
+	row := job.Job{ID: "wide", Paths: job.Paths{Write: []string{"a/**", "b/**", "c/**", "d/**", "e/**", "f/**", "g/**"}}}
 	s.Equal("a/**, b/**, c/**, d/**, e/** and 2 more (magus describe job wide)", writePathsShown(row))
 }
 
 func (s *LeaseDenialTextSuite) TestListsFiveWritePathsWhole() {
-	row := types.Job{ID: "narrow", Paths: types.JobPaths{Write: []string{"a/**", "b/**", "c/**", "d/**", "e/**"}}}
+	row := job.Job{ID: "narrow", Paths: job.Paths{Write: []string{"a/**", "b/**", "c/**", "d/**", "e/**"}}}
 	s.Equal("a/**, b/**, c/**, d/**, e/**", writePathsShown(row))
 }
 
 func (s *LeaseDenialTextSuite) TestTheRewriteRefusalTrimsItsWritePaths() {
-	row := types.Job{ID: "wide", Paths: types.JobPaths{Write: []string{"a/**", "b/**", "c/**", "d/**", "e/**", "f/**"}}}
+	row := job.Job{ID: "wide", Paths: job.Paths{Write: []string{"a/**", "b/**", "c/**", "d/**", "e/**", "f/**"}}}
 	got := rewriteDenial(runVerdict{run: targetRun{verb: "run", target: "generate", projects: []string{"."}}, outside: []string{"z.go"}}, row, nil)
 	s.Contains(got.Why, "and 1 more (magus describe job wide)")
 	s.NotContains(got.Why, "f/**")
 }
 
 func (s *LeaseDenialTextSuite) TestTheRewriteRefusalNamesTheFilesInItsVerdict() {
-	row := types.Job{ID: "docs", Paths: types.JobPaths{Write: []string{"docs/reference/*.md"}}}
+	row := job.Job{ID: "docs", Paths: job.Paths{Write: []string{"docs/reference/*.md"}}}
 	got := rewriteDenial(runVerdict{run: targetRun{verb: "run", target: "catalog-docs-generate", projects: []string{"docs"}}, outside: []string{"docs/concepts/spells/*.md", "docs/reference/buzz/*.md"}}, row, nil)
 	s.Contains(got.Say, "`docs/concepts/spells/*.md`, `docs/reference/buzz/*.md`")
 }
 
 func (s *LeaseDenialTextSuite) TestTheRewriteRefusalCountsTheFilesItLeavesToItsWhy() {
 	outside := []string{"a.md", "b.md", "c.md", "d.md", "e.md", "f.md", "g.md"}
-	got := rewriteDenial(runVerdict{run: targetRun{verb: "run", target: "generate", projects: []string{"."}}, outside: outside}, types.Job{ID: "narrow"}, nil)
+	got := rewriteDenial(runVerdict{run: targetRun{verb: "run", target: "generate", projects: []string{"."}}, outside: outside}, job.Job{ID: "narrow"}, nil)
 	s.Contains(got.Say, "`e.md` and 2 more outside")
 	s.NotContains(got.Say, "f.md")
 	s.Contains(got.Why, "`f.md`, `g.md`")

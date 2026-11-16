@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -31,7 +32,7 @@ type Disk struct {
 // checkout, when the parent's fork made or adopted it, and refuses one whose parent was only
 // taken there, naming it. inherited is false when the row has no parent, or the parent works
 // here or nowhere yet.
-func parentCheckout(ctx context.Context, store *Store, here string, row types.Declaration) (types.Declaration, bool, error) {
+func parentCheckout(ctx context.Context, store *Store, here string, row job.Declaration) (job.Declaration, bool, error) {
 	if row.Parent == "" {
 		return row, false, nil
 	}
@@ -52,7 +53,7 @@ func parentCheckout(ctx context.Context, store *Store, here string, row types.De
 // checkout a job's fork made adopts that checkout, so the new row's holder is bound there and
 // not refused as a sibling. An integration row forked from any other linked checkout is
 // refused: its holder merges in a checkout of its own, and the forker's tree is not one.
-func ForkCheckout(ctx context.Context, store *Store, root string, row types.Declaration) (types.Declaration, error) {
+func ForkCheckout(ctx context.Context, store *Store, root string, row job.Declaration) (job.Declaration, error) {
 	if row.Checkout != "" || root == "" {
 		return row, nil
 	}
@@ -97,7 +98,7 @@ func ForkCheckout(ctx context.Context, store *Store, root string, row types.Decl
 // ProvisionCheckout readies a checkout the fork made or moved: it reuses a
 // ./magus built at the checkout's base, else the script builds one. It then
 // installs only the projects row touches. reused says no build ran.
-func ProvisionCheckout(ctx context.Context, store *Store, ws Workspace, disk Disk, exe, forker string, row types.Declaration, wt types.JobWorktree) (reused bool, err error) {
+func ProvisionCheckout(ctx context.Context, store *Store, ws Workspace, disk Disk, exe, forker string, row job.Declaration, wt job.Worktree) (reused bool, err error) {
 	placed, err := store.PlaceBuiltBinary(ctx, exe, wt.Base, wt.Root)
 	if err != nil {
 		return false, err
@@ -109,7 +110,7 @@ func ProvisionCheckout(ctx context.Context, store *Store, ws Workspace, disk Dis
 		slog.InfoContext(ctx, fmt.Sprintf("the workspace did not load (%s), so every project's dependencies are installed", ws.Unavailable), attr.Notice("note"))
 		return placed != "", bootstrapCheckout(ctx, disk, exe, forker, wt.Root)
 	}
-	var declared types.Job
+	var declared job.Job
 	row.Apply(&declared)
 	install := InstallProjects(forker, wt.Root, declared, ws.Projects)
 	return placed != "", bootstrapCheckout(ctx, disk, exe, forker, wt.Root, "--install", install)

@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -40,13 +41,13 @@ const (
 // answered it. It is attribution and not identity: see [RequestID] for why it stays out of
 // the id.
 type AttentionOpen struct {
-	Request   string            `json:"request"`
-	Outcome   string            `json:"outcome"`
-	Severity  string            `json:"severity,omitempty"`
-	Source    string            `json:"source,omitempty"`
-	Where     string            `json:"where,omitempty"`
-	Lease     string            `json:"lease,omitempty"`
-	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	Request   string          `json:"request"`
+	Outcome   string          `json:"outcome"`
+	Severity  string          `json:"severity,omitempty"`
+	Source    string          `json:"source,omitempty"`
+	Where     string          `json:"where,omitempty"`
+	Lease     string          `json:"lease,omitempty"`
+	LeaseFrom job.LeaseSource `json:"lease_from,omitempty"`
 	// Files are the paths the event named: the subject a person judges. They stay
 	// out of RequestID for the same reason Lease does. A re-fire that adds a path
 	// must not re-key the row someone is about to close, and the first open is the
@@ -148,8 +149,8 @@ type AttentionRequest struct {
 	Source     string `json:"source,omitempty"`
 	Where      string `json:"where,omitempty"`
 	Lease      string `json:"lease,omitempty"`
-	// LeaseFrom is which source answered Lease; see types.LeaseSource.
-	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	// LeaseFrom is which source answered Lease; see job.LeaseSource.
+	LeaseFrom job.LeaseSource `json:"lease_from,omitempty"`
 	// Files are the paths the raising event named. Empty when it named none, which
 	// leaves the message as the only line the row has.
 	Files   []types.FileRef `json:"files,omitempty"`

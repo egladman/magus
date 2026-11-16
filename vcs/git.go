@@ -24,6 +24,7 @@ import (
 
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/stamp"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -1441,35 +1442,35 @@ func parseChangesByCommit(out string) []types.CommitChange {
 // A COPY is deliberately NOT lineage. Both files exist afterwards, so folding the
 // copy's history onto its source would credit one file with edits made to another;
 // it is recorded as a plain add, which is what it is from the new path's side.
-func parseNameStatus(line string) (types.FileChange, bool) {
+func parseNameStatus(line string) (job.FileChange, bool) {
 	fields := strings.Split(line, "\t")
 	if len(fields) < 2 || fields[0] == "" {
-		return types.FileChange{}, false
+		return job.FileChange{}, false
 	}
 	switch fields[0][0] {
 	case 'R':
 		if len(fields) < 3 {
-			return types.FileChange{}, false
+			return job.FileChange{}, false
 		}
-		return types.FileChange{Path: fields[2], PrevPath: fields[1], Status: types.ChangeRenamed}, true
+		return job.FileChange{Path: fields[2], PrevPath: fields[1], Status: job.ChangeRenamed}, true
 	case 'C':
 		if len(fields) < 3 {
-			return types.FileChange{}, false
+			return job.FileChange{}, false
 		}
-		return types.FileChange{Path: fields[2], Status: types.ChangeAdded}, true
+		return job.FileChange{Path: fields[2], Status: job.ChangeAdded}, true
 	case 'A':
-		return types.FileChange{Path: fields[1], Status: types.ChangeAdded}, true
+		return job.FileChange{Path: fields[1], Status: job.ChangeAdded}, true
 	case 'D':
-		return types.FileChange{Path: fields[1], Status: types.ChangeDeleted}, true
+		return job.FileChange{Path: fields[1], Status: job.ChangeDeleted}, true
 	case '?':
 		// The letter a non-git driver emits for a status IT could not translate (see
 		// jjChurnTemplate). git never writes it, and it has to be skipped explicitly:
 		// the default below would otherwise record the driver's own uncertainty as an
 		// edit to the path.
-		return types.FileChange{}, false
+		return job.FileChange{}, false
 	default:
 		// M, and the rarer T (type change) / U (unmerged): the path changed in place.
-		return types.FileChange{Path: fields[1], Status: types.ChangeModified}, true
+		return job.FileChange{Path: fields[1], Status: job.ChangeModified}, true
 	}
 }
 

@@ -15,8 +15,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,9 +56,9 @@ func bindCheckout(t *testing.T, cacheDir, id string) {
 
 // seed writes a row whole, the way a fixture means it: every field this test declared and
 // nothing carried over from a previous one.
-func seed(t *testing.T, s *job.Store, row types.Job) types.Job {
+func seed(t *testing.T, s *job.Store, row jobtypes.Job) jobtypes.Job {
 	t.Helper()
-	stored, err := s.Update(context.Background(), row.ID, func(cur *types.Job) { *cur = row })
+	stored, err := s.Update(context.Background(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 	require.NoError(t, err)
 	return stored
 }
@@ -112,13 +112,13 @@ func TestActingLeasePrefersTheMarkerOverTheEnvironment(t *testing.T) {
 
 	lease, from := job.ActingLease(place(t, cacheDir, ""), trail.LeaseFromEnv())
 	assert.Equal(t, "adj/marker", lease)
-	assert.Equal(t, types.LeaseSourceContested, from)
+	assert.Equal(t, jobtypes.LeaseSourceContested, from)
 
 	// With no marker the environment is the only answer there is, which stays true: a
 	// checkout nobody bound is the unattributed case the guard fails open on.
 	lease, from = job.ActingLease(place(t, t.TempDir(), ""), trail.LeaseFromEnv())
 	assert.Equal(t, "adj/from-env", lease)
-	assert.Equal(t, types.LeaseSourceEnv, from)
+	assert.Equal(t, jobtypes.LeaseSourceEnv, from)
 }
 
 func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
@@ -154,7 +154,7 @@ func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 
 func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 	cacheDir, root, store := newWorkspaceLedger(t)
-	seed(t, store, types.Job{ID: "adj/done", State: types.StatePass})
+	seed(t, store, jobtypes.Job{ID: "adj/done", State: jobtypes.StatePass})
 	bindCheckout(t, cacheDir, "adj/done")
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
@@ -189,7 +189,7 @@ func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 
 func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 	cacheDir, root, store := newWorkspaceLedger(t)
-	seed(t, store, types.Job{ID: "adj/live", State: types.StateRunning})
+	seed(t, store, jobtypes.Job{ID: "adj/live", State: jobtypes.StateRunning})
 	bindCheckout(t, cacheDir, "adj/live")
 
 	got := checkBoundLease(harnessProbeContext(), place(t, cacheDir, root))
@@ -237,7 +237,7 @@ func registeredLease(t *testing.T, id string) (cacheDir string, w *testkit.Works
 	repo := testkit.NewRepository(t, nil)
 	w = repo.Workspace
 	cacheDir, store := ledgerIn(t, w.Root())
-	seed(t, store, types.Job{ID: id, State: types.StateRunning, Checkpoint: repo.Head()})
+	seed(t, store, jobtypes.Job{ID: id, State: jobtypes.StateRunning, Checkpoint: repo.Head()})
 	_, err := store.Exec(context.Background(), id)
 	require.NoError(t, err)
 	bindCheckout(t, cacheDir, id)
@@ -246,17 +246,17 @@ func registeredLease(t *testing.T, id string) (cacheDir string, w *testkit.Works
 
 func TestCheckJobTreeEndsOrphansAndFlagsStaleJobs(t *testing.T) {
 	_, root, store := newWorkspaceLedger(t)
-	seed(t, store, types.Job{ID: "root", State: types.StatePass})
-	seed(t, store, types.Job{ID: "root/orphan", Parent: "root", State: types.StateRunning})
-	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
+	seed(t, store, jobtypes.Job{ID: "root", State: jobtypes.StatePass})
+	seed(t, store, jobtypes.Job{ID: "root/orphan", Parent: "root", State: jobtypes.StateRunning})
+	seed(t, store, jobtypes.Job{ID: "live", State: jobtypes.StateRunning})
 
 	now := time.Now().Unix()
 	got := checkJobTree(place(t, "", root), config.Jobs{}, now)
 	assert.Equal(t, check.OK, got.Status, "the read ended the orphan, so nothing is left to report: %s", got.Message)
 	rows, err := store.List()
 	require.NoError(t, err)
-	orphan := rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == "root/orphan" })]
-	assert.Equal(t, types.StateNoReturn, orphan.State)
+	orphan := rows[slices.IndexFunc(rows, func(r jobtypes.Job) bool { return r.ID == "root/orphan" })]
+	assert.Equal(t, jobtypes.StateNoReturn, orphan.State)
 	assert.NotEmpty(t, orphan.EndReason)
 
 	stale := checkJobTree(place(t, "", root), config.Jobs{StaleAfter: time.Minute}, now+3600)
@@ -267,7 +267,7 @@ func TestCheckJobTreeEndsOrphansAndFlagsStaleJobs(t *testing.T) {
 
 func TestCheckJobTreePassesAHealthyPlan(t *testing.T) {
 	_, root, store := newWorkspaceLedger(t)
-	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
+	seed(t, store, jobtypes.Job{ID: "live", State: jobtypes.StateRunning})
 
 	got := checkJobTree(place(t, "", root), config.Jobs{StaleAfter: time.Hour}, time.Now().Unix())
 	assert.Equal(t, check.OK, got.Status, got.Message)
@@ -275,10 +275,10 @@ func TestCheckJobTreePassesAHealthyPlan(t *testing.T) {
 
 func TestCheckJobTreeNamesJobsBlockedOnAnEndedDependency(t *testing.T) {
 	_, root, store := newWorkspaceLedger(t)
-	seed(t, store, types.Job{ID: "dep", State: types.StateFail})
-	seed(t, store, types.Job{ID: "waiter", State: types.StateDeclared, DependsOn: []string{"dep"}, Paths: types.JobPaths{Write: []string{"internal/job"}}})
-	seed(t, store, types.Job{ID: "queued", State: types.StateDeclared, DependsOn: []string{"live"}})
-	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
+	seed(t, store, jobtypes.Job{ID: "dep", State: jobtypes.StateFail})
+	seed(t, store, jobtypes.Job{ID: "waiter", State: jobtypes.StateDeclared, DependsOn: []string{"dep"}, Paths: jobtypes.Paths{Write: []string{"internal/job"}}})
+	seed(t, store, jobtypes.Job{ID: "queued", State: jobtypes.StateDeclared, DependsOn: []string{"live"}})
+	seed(t, store, jobtypes.Job{ID: "live", State: jobtypes.StateRunning})
 
 	got := checkJobTree(place(t, "", root), config.Jobs{}, time.Now().Unix())
 	require.Equal(t, check.Advice, got.Status, got.Message)

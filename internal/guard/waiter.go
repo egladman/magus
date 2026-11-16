@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -221,7 +222,7 @@ func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string)
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago, and a worker's check never waits for the budget: free a holder, or file the check as owed %q with `%s --stdin`.",
-			run, r.code, ago, types.OwedNoSeat, hint.JobExit.With(deps.lease)),
+			run, r.code, ago, job.OwedNoSeat, hint.JobExit.With(deps.lease)),
 		Why: denyRefusedRetryWhy,
 	}
 }
@@ -755,19 +756,19 @@ func denySpawnWaiter() denial {
 // already attributed to it, the host has not said that worker stopped (on stops), and the row
 // is still being worked. A running row alone is not enough: a row stays running after its
 // worker dies, and only this session's own record says a worker of its own holds it.
-func spawnDuplicate(ctx context.Context, at location, facts, stops hint.Gate, title string) (types.Job, bool) {
+func spawnDuplicate(ctx context.Context, at location, facts, stops hint.Gate, title string) (job.Job, bool) {
 	row, ok := spawnTitleJob(ctx, at, title)
 	if !ok || !row.State.Editing() {
-		return types.Job{}, false
+		return job.Job{}, false
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
-		return types.Job{}, false
+		return job.Job{}, false
 	}
 	return row, liveSpawnedJob(facts, stops, rows, row.ID)
 }
 
-func denySpawnDuplicate(row types.Job) denial {
+func denySpawnDuplicate(row job.Job) denial {
 	return denial{
 		Say: fmt.Sprintf("job %s already has a worker (%s); continue that worker with a message, or stop it before spawning another: `%s` names it.", row.ID, string(row.State), hint.DescribeJob.With(row.ID)),
 		Why: "Two workers on one job write the same paths from two contexts, and each reports a result the other never saw. " +

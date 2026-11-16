@@ -14,8 +14,8 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -110,14 +110,14 @@ func judgedAlike(t *testing.T, judge func(t *testing.T, deps func(*testing.T) De
 
 // benchWorker is a leased worker whose own check is the human-only target, so
 // worker-check-only passes the run and human-only is the rule that answers.
-func benchWorker() types.Job {
-	return types.Job{
+func benchWorker() job.Job {
+	return job.Job{
 		ID:         "bench/run",
 		Parent:     "root",
-		Agent:      agent.Instructed("run the benchmark"),
-		Paths:      types.JobPaths{Write: []string{"benchmarks/agent/**"}},
-		Check:      &types.LeaseCheck{Target: "agent-bench-run", Project: "."},
-		State:      types.StateRunning,
+		Agent:      job.Instructed("run the benchmark"),
+		Paths:      job.Paths{Write: []string{"benchmarks/agent/**"}},
+		Check:      &job.LeaseCheck{Target: "agent-bench-run", Project: "."},
+		State:      job.StateRunning,
 		Registered: 1,
 	}
 }

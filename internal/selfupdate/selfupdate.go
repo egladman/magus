@@ -34,8 +34,6 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-
-	"github.com/egladman/magus/internal/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -43,7 +41,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/retry"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"golang.org/x/mod/semver"
 )
@@ -536,7 +536,7 @@ func FetchLimited(ctx context.Context, url string, maxBytes int64, opts Options)
 		if int64(len(b)) > maxBytes {
 			return types.NonRetryable(
 				fmt.Errorf("response from %s exceeded %d bytes", url, maxBytes),
-				types.RetryAfterPerson, "a larger body will not shrink on a second fetch")
+				job.RetryAfterPerson, "a larger body will not shrink on a second fetch")
 		}
 		data = b
 		return nil
@@ -551,7 +551,7 @@ func statusError(resp *http.Response, url string) error {
 	err := fmt.Errorf("HTTP %s fetching %s", resp.Status, url)
 	code := resp.StatusCode
 	if code >= 400 && code < 500 && code != http.StatusRequestTimeout && code != http.StatusTooManyRequests {
-		return types.NonRetryable(err, types.RetryAfterPerson, "the server refused the request itself")
+		return types.NonRetryable(err, job.RetryAfterPerson, "the server refused the request itself")
 	}
 	return err
 }

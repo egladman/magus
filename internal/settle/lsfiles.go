@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -218,13 +219,13 @@ func reportExcluded(ctx context.Context, groups []types.LsFilesExcluded) {
 }
 
 // WorkspaceRelPatterns is workspaceRelPaths for write-path patterns: the path half of
-// each (types.SplitClaim) is made workspace-relative, and a literal `#` in it is escaped
+// each (jobtypes.SplitClaim) is made workspace-relative, and a literal `#` in it is escaped
 // again so job.Covers reads it as part of the path.
 func WorkspaceRelPatterns(root string, patterns []string) ([]string, error) {
 	paths := make([]string, len(patterns))
 	decls := make([]string, len(patterns))
 	for i, p := range patterns {
-		paths[i], decls[i] = types.SplitClaim(p)
+		paths[i], decls[i] = jobtypes.SplitClaim(p)
 	}
 	rel, err := workspaceRelPaths(root, paths)
 	if err != nil {
@@ -232,7 +233,7 @@ func WorkspaceRelPatterns(root string, patterns []string) ([]string, error) {
 	}
 	for i, p := range patterns {
 		rel[i] = strings.ReplaceAll(rel[i], "#", `\#`)
-		if types.HasClaim(p) {
+		if jobtypes.HasClaim(p) {
 			rel[i] += "#" + decls[i]
 		}
 	}

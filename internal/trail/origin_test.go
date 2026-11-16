@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // Every event carries the OS account that wrote it, whatever the producer said, so a row
@@ -19,10 +19,10 @@ import (
 func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	ctx := ContextWithEntryPoint(t.Context(), types.EntryPointCLI)
+	ctx := ContextWithEntryPoint(t.Context(), job.EntryPointCLI)
 
-	Append(ctx, dir, Event{Kind: KindJob, Action: "a", Origin: types.Origin{User: "forged", UID: "4242"}})
-	Append(ctx, dir, Event{Kind: KindJob, Action: "b", Origin: types.Origin{EntryPoint: types.EntryPointServer}})
+	Append(ctx, dir, Event{Kind: KindJob, Action: "a", Origin: job.Origin{User: "forged", UID: "4242"}})
+	Append(ctx, dir, Event{Kind: KindJob, Action: "b", Origin: job.Origin{EntryPoint: job.EntryPointServer}})
 
 	events, err := ReadRecent(dir, 2)
 	require.NoError(t, err)
@@ -32,13 +32,13 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	if os.Getuid() >= 0 {
 		assert.Equal(t, strconv.Itoa(os.Getuid()), local.UID)
 	}
-	byAction := map[string]types.Origin{}
+	byAction := map[string]job.Origin{}
 	for _, e := range events {
 		byAction[e.Action] = e.Origin
 	}
-	assert.Equal(t, types.Origin{User: local.User, UID: local.UID, EntryPoint: types.EntryPointCLI}, byAction["a"],
+	assert.Equal(t, job.Origin{User: local.User, UID: local.UID, EntryPoint: job.EntryPointCLI}, byAction["a"],
 		"the account is the OS's answer, never the producer's, and the entry point comes from ctx")
-	assert.Equal(t, types.Origin{User: local.User, UID: local.UID, EntryPoint: types.EntryPointServer}, byAction["b"],
+	assert.Equal(t, job.Origin{User: local.User, UID: local.UID, EntryPoint: job.EntryPointServer}, byAction["b"],
 		"a producer that names its entry point keeps it")
 }
 
@@ -46,17 +46,17 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 // made under it, so no handler copies it by hand.
 func TestStampOriginReadsTheCredentialFromTheContext(t *testing.T) {
 	t.Parallel()
-	cred := types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
-	ctx := ContextWithCredential(ContextWithEntryPoint(t.Context(), types.EntryPointRPC), cred)
+	cred := job.Credential{Kind: job.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: job.AccessConsole}
+	ctx := ContextWithCredential(ContextWithEntryPoint(t.Context(), job.EntryPointRPC), cred)
 
-	got := StampOrigin(ctx, types.Origin{Host: "console"})
+	got := StampOrigin(ctx, job.Origin{Host: "console"})
 	local := LocalOrigin(ctx)
-	assert.Equal(t, types.Origin{
-		User: local.User, UID: local.UID, EntryPoint: types.EntryPointRPC, Host: "console", Credential: cred,
+	assert.Equal(t, job.Origin{
+		User: local.User, UID: local.UID, EntryPoint: job.EntryPointRPC, Host: "console", Credential: cred,
 	}, got)
-	share := types.Credential{Kind: types.KindShare, ID: "9b2e04aa", Grant: types.GrantViewer}
-	assert.Equal(t, share, StampOrigin(ctx, types.Origin{Credential: share}).Credential, "a named credential is kept")
-	assert.Zero(t, StampOrigin(t.Context(), types.Origin{}).Credential, "no guard, no credential")
+	share := job.Credential{Kind: job.KindShare, ID: "9b2e04aa", Grant: job.AccessViewer}
+	assert.Equal(t, share, StampOrigin(ctx, job.Origin{Credential: share}).Credential, "a named credential is kept")
+	assert.Zero(t, StampOrigin(t.Context(), job.Origin{}).Credential, "no guard, no credential")
 }
 
 // A failed passwd lookup records the uid alone. user.Current's pure-Go fallback reads
@@ -79,6 +79,6 @@ func TestAccountOfNeverReadsTheEnvironment(t *testing.T) {
 func TestEntryPointFromContextIsEmptyUntilRecorded(t *testing.T) {
 	t.Parallel()
 	assert.Empty(t, EntryPointFromContext(context.Background()))
-	ctx := ContextWithEntryPoint(context.Background(), types.EntryPointServer)
-	assert.Equal(t, types.EntryPointRPC, EntryPointFromContext(ContextWithEntryPoint(ctx, types.EntryPointRPC)), "the innermost entry point wins")
+	ctx := ContextWithEntryPoint(context.Background(), job.EntryPointServer)
+	assert.Equal(t, job.EntryPointRPC, EntryPointFromContext(ContextWithEntryPoint(ctx, job.EntryPointRPC)), "the innermost entry point wins")
 }

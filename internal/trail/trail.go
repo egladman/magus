@@ -33,6 +33,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -133,33 +134,33 @@ const (
 // body never bloats the line. Field names are snake_case and match the journal's Event where
 // they overlap (Ts, DurationMs).
 //
-// Who acted is the [types.Origin], one field per channel, rather than one string a reader must
+// Who acted is the [job.Origin], one field per channel, rather than one string a reader must
 // guess the kind of. Its Host and Session duplicate what an agent-hook event also records in its
 // request blob, and that duplication is deliberate: a reader grouping a page of 200 rows by
 // agent host must not have to fetch 200 blobs to do it. They stay short, so the "lines stay
 // small" invariant holds. [Append] stamps the OS account on every event.
 type Event struct {
-	Ts           int64  `json:"ts"`                   // unix milliseconds at the action's start
-	Kind         Kind   `json:"kind"`                 // one of the Kind* constants
-	UserAgent    string `json:"user_agent,omitempty"` // caller's HTTP User-Agent, when known (MCP over HTTP)
-	types.Origin `json:",inline"`
-	Workspace    string `json:"workspace,omitempty"` // repo-relative or absolute root the action pertained to; "" for server-wide (an MCP call is not bound to one workspace)
-	Action       string `json:"action"`              // the specific action: a tool name, a job command, "connector.create"
+	Ts         int64  `json:"ts"`                   // unix milliseconds at the action's start
+	Kind       Kind   `json:"kind"`                 // one of the Kind* constants
+	UserAgent  string `json:"user_agent,omitempty"` // caller's HTTP User-Agent, when known (MCP over HTTP)
+	job.Origin `json:",inline"`
+	Workspace  string `json:"workspace,omitempty"` // repo-relative or absolute root the action pertained to; "" for server-wide (an MCP call is not bound to one workspace)
+	Action     string `json:"action"`              // the specific action: a tool name, a job command, "connector.create"
 	// Lease is the lease this action belongs to, when the producer could
 	// correlate one (a marker line, or the BAGGAGE channel); ""
 	// when uncorrelated.
 	Lease string `json:"lease,omitempty"`
 	// LeaseFrom is which source answered Lease, on the events whose producer resolved one.
-	LeaseFrom     types.LeaseSource `json:"lease_from,omitempty"`
-	Outcome       string            `json:"outcome"`                 // one of the Outcome* constants
-	Error         string            `json:"error,omitempty"`         // error text when Outcome is OutcomeError
-	DurationMs    int64             `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions; on an agent command, the host-reported tool time
-	GuardMs       int64             `json:"guard_ms,omitempty"`      // how long the guard took to judge an agent command
-	RequestRef    string            `json:"request_ref,omitempty"`   // blob ref for the request body (mcp<hash>)
-	ResponseRef   string            `json:"response_ref,omitempty"`  // blob ref for the response body
-	Preview       string            `json:"preview,omitempty"`       // opening characters of the response, for list views
-	RequestBytes  int64             `json:"request_bytes,omitempty"` // full request length
-	ResponseBytes int64             `json:"response_bytes,omitempty"`
+	LeaseFrom     job.LeaseSource `json:"lease_from,omitempty"`
+	Outcome       string          `json:"outcome"`                 // one of the Outcome* constants
+	Error         string          `json:"error,omitempty"`         // error text when Outcome is OutcomeError
+	DurationMs    int64           `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions; on an agent command, the host-reported tool time
+	GuardMs       int64           `json:"guard_ms,omitempty"`      // how long the guard took to judge an agent command
+	RequestRef    string          `json:"request_ref,omitempty"`   // blob ref for the request body (mcp<hash>)
+	ResponseRef   string          `json:"response_ref,omitempty"`  // blob ref for the response body
+	Preview       string          `json:"preview,omitempty"`       // opening characters of the response, for list views
+	RequestBytes  int64           `json:"request_bytes,omitempty"` // full request length
+	ResponseBytes int64           `json:"response_bytes,omitempty"`
 	// VerdictRef is the grd blob holding a guard deny in full, when the reader was shown
 	// the short repeat form instead. Named here so rotation keeps the blob the deny cites.
 	VerdictRef string `json:"verdict_ref,omitempty"`
@@ -243,7 +244,7 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 type AgentCommand struct {
 	Workspace string
 	// EntryPoint is where the observation entered magus; empty records a hook.
-	EntryPoint types.EntryPoint
+	EntryPoint job.EntryPoint
 	Host       string
 	Session    string
 	// Agent is the host's subagent id, empty for the main conversation.
@@ -259,7 +260,7 @@ type AgentCommand struct {
 	// Rule is the catalogued rule behind a deny, advise or ask; empty for a pass.
 	Rule      string
 	Lease     string
-	LeaseFrom types.LeaseSource
+	LeaseFrom job.LeaseSource
 	// PreauthorizedBy is the `next` template that had already served this exact command to
 	// this session, so the guard let it through without grading it against the caller's
 	// role. Empty for every other observation, which is nearly all of them.
@@ -375,13 +376,13 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 
 	// The lease is the one the producer resolved through job.LeaseQuery, recorded as given:
 	// reading BAGGAGE here as well would be a second resolution order. One that fails
-	// types.ValidJobID is dropped with its source, since no join beats a wrong one.
+	// job.ValidID is dropped with its source, since no join beats a wrong one.
 	//
 	// The prompt-marker contract is deliberately NOT run here. An observation carries a command
 	// line and a guard's reason, not a lease prompt, and a "lease:" line inside either is
 	// quoted prose rather than an orchestrator's assertion.
 	lease, leaseFrom := command.Lease, command.LeaseFrom
-	if !types.ValidJobID(lease) {
+	if !job.ValidID(lease) {
 		lease, leaseFrom = "", ""
 	}
 
@@ -396,7 +397,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	Append(ctx, base, Event{
 		Ts:            time.Now().UnixMilli(),
 		Kind:          KindAgentCommand,
-		Origin:        hookOrigin(types.Origin{EntryPoint: command.EntryPoint, Host: command.Host, Session: command.Session, Agent: command.Agent}),
+		Origin:        hookOrigin(job.Origin{EntryPoint: command.EntryPoint, Host: command.Host, Session: command.Session, Agent: command.Agent}),
 		Workspace:     command.Workspace,
 		Action:        action,
 		Lease:         lease,
@@ -438,7 +439,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 type AgentSpawn struct {
 	Workspace string
 	// EntryPoint is where the observation entered magus; empty records a hook.
-	EntryPoint types.EntryPoint
+	EntryPoint job.EntryPoint
 	Host       string
 	Session    string
 	// Agent is the host's id for the subagent that spawned, empty for the main
@@ -567,7 +568,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	Append(ctx, base, Event{
 		Ts:            time.Now().UnixMilli(),
 		Kind:          KindAgentSpawn,
-		Origin:        hookOrigin(types.Origin{EntryPoint: spawn.EntryPoint, Host: spawn.Host, Session: spawn.Session, Agent: spawn.Agent}),
+		Origin:        hookOrigin(job.Origin{EntryPoint: spawn.EntryPoint, Host: spawn.Host, Session: spawn.Session, Agent: spawn.Agent}),
 		Workspace:     spawn.Workspace,
 		Action:        action,
 		Lease:         lease,
@@ -614,7 +615,7 @@ const leaseMarker = "lease:"
 // not; the position is the only thing that separates them. Leading blank lines are
 // formatting and are skipped.
 //
-// The id itself has to satisfy [types.ValidJobID], which is where the charset and
+// The id itself has to satisfy [job.ValidID], which is where the charset and
 // its reasoning live.
 //
 // Anything else (no marker, an empty id, an id carrying spaces or punctuation outside
@@ -635,7 +636,7 @@ func leaseFromContext(handed string) string {
 			return "" // the prompt leads with something else, so it declares no lease
 		}
 		id := strings.TrimSpace(rest)
-		if !types.ValidJobID(id) {
+		if !job.ValidID(id) {
 			return ""
 		}
 		return id
@@ -1052,7 +1053,7 @@ func ValidRef(ref string) bool {
 // them would break the activity view to protect nothing, the same reasoning that leaves slog
 // attribute KEYS alone in internal/secret. Lease is the one of those derived from free text (a
 // lease prompt, or the BAGGAGE environment channel) rather than supplied by a caller,
-// which is why every channel that can stamp one runs it through [types.ValidJobID]'s bare-identifier
+// which is why every channel that can stamp one runs it through [job.ValidID]'s bare-identifier
 // rule before it can reach this exemption.
 func redactEvent(ctx context.Context, e Event) Event {
 	e.Action = secret.RedactString(ctx, e.Action)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -322,12 +323,12 @@ func (s *DenialRouteSuite) TestALongLeaseNamesItsNearestPathsAndCountsTheRest() 
 	for i := range 40 {
 		paths = append(paths, fmt.Sprintf("libs/x/f%d.go", i))
 	}
-	got := nearestWritePaths(types.Job{ID: "big", Paths: types.JobPaths{Write: paths}}, "internal/job/exit.go")
+	got := nearestWritePaths(job.Job{ID: "big", Paths: job.Paths{Write: paths}}, "internal/job/exit.go")
 	s.Equal("internal/job/fork.go, internal/job/fork_test.go, internal/job/wait.go and 42 more; `magus describe job big` lists them", got)
 }
 
 func (s *DenialRouteSuite) TestAShortLeaseIsNamedWhole() {
-	s.Equal("a.go, b.go", nearestWritePaths(types.Job{ID: "small", Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}}, "c.go"))
+	s.Equal("a.go, b.go", nearestWritePaths(job.Job{ID: "small", Paths: job.Paths{Write: []string{"a.go", "b.go"}}}, "c.go"))
 }
 
 func (s *DenialRouteSuite) TestAContractPickNamesTheForkThatLandsIt() {

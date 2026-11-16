@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 )
@@ -33,7 +34,7 @@ type Workspace struct {
 // to edit, and blocks every sibling that needs one of them. A sweep that truly needs more
 // says so in a deviation. The bounds come from the workspace's own magus.yaml, and one that
 // cannot be read is a problem of the row rather than a default.
-func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Workspace, read SymbolReader) types.JobProblems {
+func broadClaimProblems(ctx context.Context, root string, row job.Job, ws Workspace, read SymbolReader) types.JobProblems {
 	// An integration's claim is computed: what merged, plus what regenerates.
 	if row.ReadOnly || row.Integrating() {
 		return nil
@@ -55,11 +56,11 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 	var problems types.JobProblems
 	var fix func(string) string
 	for i, wp := range row.Paths.Write {
-		file, decl := types.SplitClaim(wp)
+		file, decl := job.SplitClaim(wp)
 		if decl != "" || !types.IsGlobMeta(file) {
 			continue
 		}
-		files := writtenFiles(root, types.Job{Paths: types.JobPaths{Write: []string{wp}, Deny: row.Paths.Deny}})
+		files := writtenFiles(root, job.Job{Paths: job.Paths{Write: []string{wp}, Deny: row.Paths.Deny}})
 		if ws.Ignored != nil {
 			ignored, _ := ws.Ignored(files)
 			files = slices.DeleteFunc(files, func(f string) bool { return slices.Contains(ignored, f) })
@@ -101,7 +102,7 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 // broadClaimFix measures the narrowest cover once and returns the fix text for
 // one broad write path. The fix names the cover as a ready paths.write array,
 // then the deviation that keeps the path.
-func broadClaimFix(ctx context.Context, root string, row types.Job, read SymbolReader) func(string) string {
+func broadClaimFix(ctx context.Context, root string, row job.Job, read SymbolReader) func(string) string {
 	graphless := read == nil
 	answering := read
 	if read != nil {
@@ -112,8 +113,8 @@ func broadClaimFix(ctx context.Context, root string, row types.Job, read SymbolR
 		}
 	}
 	cover := narrowestCover(ctx, root, row, answering)
-	asksGraph := slices.ContainsFunc(row.Goals, func(g types.Goal) bool {
-		return g.Kind == types.GoalKindSymbol && len(g.Symbols) > 0
+	asksGraph := slices.ContainsFunc(row.Goals, func(g job.Goal) bool {
+		return g.Kind == job.GoalKindSymbol && len(g.Symbols) > 0
 	})
 	return func(wp string) string {
 		var b strings.Builder
@@ -126,7 +127,7 @@ func broadClaimFix(ctx context.Context, root string, row types.Job, read SymbolR
 		if asksGraph && graphless {
 			b.WriteString(" (the knowledge graph did not answer the symbol goals, so only the criteria were read; `magus graph build` and fork again for a fuller list)")
 		}
-		deviation, _ := json.Marshal(types.Deviation{Code: types.WritePathTooBroad, Subject: wp, Reason: "<why this job needs all of it>"})
+		deviation, _ := json.Marshal(job.Deviation{Code: types.WritePathTooBroad, Subject: wp, Reason: "<why this job needs all of it>"})
 		fmt.Fprintf(&b, "; or keep it with the deviation %s", deviation)
 		return b.String()
 	}
@@ -136,7 +137,7 @@ func broadClaimFix(ctx context.Context, root string, row types.Job, read SymbolR
 // files defining its symbol goals with the Go tests beside them, then each existing file
 // or `file#declaration` claim named in its criteria. A nil read or an unanswered symbol
 // contributes nothing, so the cover is then the criteria's alone.
-func narrowestCover(ctx context.Context, root string, row types.Job, read SymbolReader) []string {
+func narrowestCover(ctx context.Context, root string, row job.Job, read SymbolReader) []string {
 	var cover []string
 	add := func(p string) {
 		if !slices.Contains(cover, p) {
@@ -144,7 +145,7 @@ func narrowestCover(ctx context.Context, root string, row types.Job, read Symbol
 		}
 	}
 	for _, g := range row.Goals {
-		if g.Kind != types.GoalKindSymbol || read == nil {
+		if g.Kind != job.GoalKindSymbol || read == nil {
 			continue
 		}
 		for _, name := range g.Symbols {
@@ -178,7 +179,7 @@ func criteriaPath(root, token string) (string, bool) {
 	if i := strings.IndexByte(token, ':'); i >= 0 {
 		token = token[:i]
 	}
-	file, _ := types.SplitClaim(token)
+	file, _ := job.SplitClaim(token)
 	if file == "" || types.IsGlobMeta(file) || path.IsAbs(file) {
 		return "", false
 	}

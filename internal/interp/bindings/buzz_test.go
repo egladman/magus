@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -907,7 +908,7 @@ export fun waitOnNoReturn() > void !> any {
 
 	got, err := sess.CallValue(ctx, fn, nil)
 	require.NoError(t, err)
-	assert.Equal(t, string(types.StateNoReturn), got.AsString())
+	assert.Equal(t, string(job.StateNoReturn), got.AsString())
 
 	wait, ok := sess.Exports()["waitOnNoReturn"]
 	require.True(t, ok, "exported Buzz wait entrypoint is missing")

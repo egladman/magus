@@ -32,10 +32,10 @@ import (
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // shellStdin runs `magus shell` with its input on stdin, which is the shape a host's
@@ -157,7 +157,7 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	worker := narrowLease()
 	worker.Parent = "harness"
 	_, err = job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).
-		Update(t.Context(), worker.ID, func(cur *types.Job) { *cur = worker })
+		Update(t.Context(), worker.ID, func(cur *jobtypes.Job) { *cur = worker })
 	require.NoError(t, err)
 	bindCheckout(t, cacheDir, worker.ID)
 
@@ -905,13 +905,13 @@ func (s *unjudgedHookSuite) TestTheHookReadsTheRepairMagusSupplies() {
 // narrowLease is a delegated worker assigned one package's tests: the shape the
 // multi-agent skill hands out, and the shape the gate deny is scoped to. Mirrors
 // internal/guard's own narrowLease, unexported there.
-func narrowLease() types.Job {
-	return types.Job{
+func narrowLease() jobtypes.Job {
+	return jobtypes.Job{
 		ID:         "harness/lease-scoped-deny",
-		Agent:      typesagent.Instructed("lease-scoped denies in the guard"),
-		Paths:      types.JobPaths{Write: []string{"cmd/magus/**"}},
+		Agent:      jobtypes.Instructed("lease-scoped denies in the guard"),
+		Paths:      jobtypes.Paths{Write: []string{"cmd/magus/**"}},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
-		State:      types.StateRunning,
+		State:      jobtypes.StateRunning,
 		Registered: 1,
 	}
 }

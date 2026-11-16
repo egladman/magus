@@ -5,17 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/proc/spawn"
-	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/xdg"
-	"github.com/egladman/magus/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -26,6 +15,19 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/trail"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/xdg"
+	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // mustPersist stores one execution and returns its step ref, failing the test on error.
@@ -177,7 +179,7 @@ func TestOutputDescriptorJobAttemptCarriesTheRunsIdentity(t *testing.T) {
 		Inv: "inv1", ErrMsg: "exit 1", Platform: "linux/amd64",
 	}
 	got := d.JobAttempt("outdead")
-	assert.Equal(t, types.JobAttempt{
+	assert.Equal(t, jobtypes.CapturedRun{
 		Found: true, Ref: "outdead", Project: "api", Target: "test:rw", Spell: "go", Failed: true,
 		TimestampMs: 1_700_000_000_000, DurationMs: 900, AttemptID: "outdeadbeefcafe-0a1b2c3d",
 		Revision: "abcdef0123456789abcdef0123456789abcdef01", Dirty: true,
@@ -206,7 +208,7 @@ func TestRecordOutputStampsTheActingLease(t *testing.T) {
 		t.Helper()
 		return recordIn(t.Context())
 	}
-	adopted := types.WithJobLease(t.Context(), "wave/client")
+	adopted := jobtypes.WithLease(t.Context(), "wave/client")
 
 	t.Setenv(trail.EnvBaggage, "")
 	assert.Empty(t, record().Lease, "a run under no lease records none")
@@ -1158,7 +1160,7 @@ func TestCacheHitReusesTheSameRef(t *testing.T) {
 
 	c2, err := Open(t.Context(), cdir, WithLocalWrite(false))
 	require.NoError(t, err)
-	hit, err := c2.Run(types.WithJobLease(t.Context(), "wave/hit"), step, build)
+	hit, err := c2.Run(jobtypes.WithLease(t.Context(), "wave/hit"), step, build)
 	require.NoError(t, err)
 	require.True(t, hit.Hit, "second run must hit")
 	assert.Equal(t, miss.Ref, hit.Ref, "a hit must reuse the miss's ref, never mint a new one")

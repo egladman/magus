@@ -1,10 +1,12 @@
 package job
 
-import "github.com/egladman/magus/types"
+import (
+	"github.com/egladman/magus/libs/safetyscissors/job"
+)
 
 // treeLine is one row of a job tree, and how deep its parent chain runs.
 type treeLine struct {
-	Job   types.Job
+	Job   job.Job
 	Depth int
 }
 
@@ -14,8 +16,8 @@ type treeLine struct {
 // Every row comes back. One whose parent was cleared, and one caught in a
 // parent cycle, land at depth 0: a job nobody can see is worse than one shown
 // without its indentation.
-func TreeOrder(rows []types.Job) []treeLine {
-	children := map[string][]types.Job{}
+func TreeOrder(rows []job.Job) []treeLine {
+	children := map[string][]job.Job{}
 	for _, row := range rows {
 		children[row.Parent] = append(children[row.Parent], row)
 	}

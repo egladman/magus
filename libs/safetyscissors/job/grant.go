@@ -1,11 +1,11 @@
-package types
+package job
 
 import "fmt"
 
-// JobGrant is one line of a job store's grants file: a person's approval lowering one
+// Grant is one line of a job store's grants file: a person's approval lowering one
 // guard rule to advice for one job's calls, or the revocation of it. The last line per
 // (Job, Rule) is the grant.
-type JobGrant struct {
+type Grant struct {
 	Job  string `json:"job" yaml:"job"`
 	Rule string `json:"rule" yaml:"rule"`
 	// By is who typed the grant, as the trail records any origin.
@@ -22,11 +22,11 @@ type JobGrant struct {
 }
 
 // Key names the grant a line writes: a job and a rule.
-func (g JobGrant) Key() string { return fmt.Sprintf("%s\x00%s", g.Job, g.Rule) }
+func (g Grant) Key() string { return fmt.Sprintf("%s\x00%s", g.Job, g.Rule) }
 
 // Lowers reports whether g still lowers its rule for row at now:
 // unrevoked, unexpired and given in attempt while row is running.
-// attempt is row's live try ([JobAttempts.LiveN]).
-func (g JobGrant) Lowers(row Job, attempt int, now int64) bool {
+// attempt is row's live try ([Attempts.LiveN]).
+func (g Grant) Lowers(row Job, attempt int, now int64) bool {
 	return !g.Revoked && g.Job == row.ID && row.State.Live() && g.Attempt == attempt && (g.Until == 0 || now < g.Until)
 }

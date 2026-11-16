@@ -3,8 +3,8 @@ package types
 import (
 	"context"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	"github.com/egladman/magus/types/agent"
 )
 
 // JobKind is what a job's work is judged by, derived from its row.
@@ -34,14 +34,14 @@ type ModelTierMatrix func(ctx context.Context, req ModelTierRequest) (*tier.Assi
 type ModelTierRequest struct {
 	ID, Parent, Instructions             string
 	ReadOnly                             bool
-	Check                                *LeaseCheck
-	Goals                                []Goal
+	Check                                *job.LeaseCheck
+	Goals                                []job.Goal
 	Kind                                 JobKind
 	WritePaths, WriteProjects, ReadPaths []string
 	DependsOn                            []string
 	WriteFiles                           int
 	ParentRank, DeclaredRank             *int
-	Model                                agent.Model
+	Model                                job.Model
 	History                              []ModelTierRecord
 }
 
@@ -96,7 +96,7 @@ type JobOutcome struct {
 	Reason       string            `json:"reason,omitempty"        yaml:"reason,omitempty"`
 	Site         string            `json:"site,omitempty"          yaml:"site,omitempty"`
 	WriteFiles   int               `json:"write_files"             yaml:"write_files"`
-	State        JobState          `json:"state"                   yaml:"state"`
+	State        job.State         `json:"state"                   yaml:"state"`
 	ChecksRun    int               `json:"checks_run"              yaml:"checks_run"`
 	Tokens       *int64            `json:"usage_tokens,omitzero"   yaml:"usage_tokens,omitempty"`
 	CostUSD      *float64          `json:"usage_cost_usd,omitzero" yaml:"usage_cost_usd,omitempty"`
@@ -105,7 +105,7 @@ type JobOutcome struct {
 	ReworkRounds int               `json:"rework_rounds,omitempty" yaml:"rework_rounds,omitempty"`
 	Widenings    int               `json:"widenings,omitempty"     yaml:"widenings,omitempty"`
 	Attempt      int               `json:"attempt,omitzero"        yaml:"attempt,omitempty"`
-	Retry        RetryChange       `json:"retry,omitempty"         yaml:"retry,omitempty"`
+	Retry        job.RetryChange   `json:"retry,omitempty"         yaml:"retry,omitempty"`
 	Parent       string            `json:"parent,omitempty"        yaml:"parent,omitempty"`
 	// ParentAttempt is 0 when the parent row was gone by the time the job ended.
 	ParentAttempt int      `json:"parent_attempt,omitzero" yaml:"parent_attempt,omitempty"`

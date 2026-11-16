@@ -1,19 +1,17 @@
-package types
+package job
 
-import "github.com/egladman/magus/types/agent"
-
-// JobPut is one put against a job row: the fields it changes and nothing else. A nil
+// Put is one put against a job row: the fields it changes and nothing else. A nil
 // field is left as the row has it; a non-nil field is written, and a non-nil empty value
 // is an explicit clear. That is why every field is a pointer: the second put in a job's
 // lifecycle (state running) advances the state without erasing what an earlier put
 // declared.
 //
 // The json tags are the keys magus\workspace().putJob takes in its opts map.
-type JobPut struct {
+type Put struct {
 	Parent *string `json:"parent,omitempty"`
 	// Agent replaces the row's whole agent section; the zero Spec clears it.
-	Agent      *agent.Spec `json:"agent,omitempty"`
-	Checkpoint *string     `json:"checkpoint,omitempty"`
+	Agent      *Agent  `json:"agent,omitempty"`
+	Checkpoint *string `json:"checkpoint,omitempty"`
 	// BriefFormat sets the row's brief format; empty clears it back to magus.yaml's.
 	BriefFormat *BriefFormat `json:"brief_format,omitempty"`
 	// Delivery and ParentHead: see [Job.Delivery].
@@ -26,11 +24,11 @@ type JobPut struct {
 	Timeout *string `json:"timeout,omitempty"`
 	// Enter enters the job at a path and declares nothing, so a put carrying it carries no
 	// other field.
-	Enter *string   `json:"enter,omitempty"`
-	State *JobState `json:"state,omitempty"`
+	Enter *string `json:"enter,omitempty"`
+	State *State  `json:"state,omitempty"`
 	// Check is the declared check; one with neither a target nor a script clears it.
 	Check     *LeaseCheck `json:"check,omitempty"`
-	Paths     JobPathsPut `json:"paths,omitzero"`
+	Paths     PathsPut    `json:"paths,omitzero"`
 	DependsOn *[]string   `json:"depends_on,omitempty"`
 	Breaks    *[]string   `json:"breaks,omitempty"`
 	Goals     *[]Goal     `json:"goals,omitempty"`
@@ -46,10 +44,22 @@ type JobPut struct {
 	Weight *float64 `json:"weight,omitempty"`
 }
 
-// JobPathsPut is the paths a put changes, each left, written or cleared as a
-// [JobPut] field is. A put never sets soft paths: only the store narrows them.
-type JobPathsPut struct {
+// PathsPut is the paths a put changes, each left, written or cleared as a
+// [Put] field is. A put never sets soft paths: only the store narrows them.
+type PathsPut struct {
 	Write *[]string `json:"write,omitempty"`
 	Read  *[]string `json:"read,omitempty"`
 	Deny  *[]string `json:"deny,omitempty"`
 }
+
+// BriefFormat is the shape a spawn or continuation brief takes. markdown is prose and runs
+// only the brief rules the guard always runs; buzz is one Brief literal the guard
+// type-checks before the worker sees it.
+type BriefFormat string
+
+const (
+	// BriefFormatMarkdown is a prose brief, the default.
+	BriefFormatMarkdown BriefFormat = "markdown"
+	// BriefFormatBuzz is a brief written as one Brief literal.
+	BriefFormatBuzz BriefFormat = "buzz"
+)

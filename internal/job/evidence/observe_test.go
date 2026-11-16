@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -21,9 +22,9 @@ func TestDescribeAndWaitGradeSymbolsAlike(t *testing.T) {
 	t.Parallel()
 
 	g := deltaGraph(map[string]string{"Present": "code.go:3"})
-	row := types.Job{ID: "wave/sym", Paths: types.JobPaths{Write: []string{"code.go"}}, Goals: []types.Goal{
-		{ID: "here", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Present"}},
-		{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Removed"}},
+	row := jobtypes.Job{ID: "wave/sym", Paths: jobtypes.Paths{Write: []string{"code.go"}}, Goals: []jobtypes.Goal{
+		{ID: "here", Kind: jobtypes.GoalKindSymbol, Expect: jobtypes.ExpectPresent, Symbols: []string{"Present"}},
+		{ID: "gone", Kind: jobtypes.GoalKindSymbol, Expect: jobtypes.ExpectAbsent, Symbols: []string{"Removed"}},
 	}}
 	read := func(rebuild bool, stale []types.KnowledgeStaleIndex) *Graph {
 		return &Graph{
@@ -37,10 +38,10 @@ func TestDescribeAndWaitGradeSymbolsAlike(t *testing.T) {
 			},
 		}
 	}
-	grade := func(graph *Graph) types.JobStatus {
+	grade := func(graph *Graph) jobtypes.Status {
 		seen, err := Observer("", func(string) *Graph { return graph }, Env{})(t.Context(), row)
 		require.NoError(t, err)
-		return job.VerifyGates(row, types.JobResult{Job: row.ID}, types.JobAttempt{}, nil, []types.Job{row}, seen)
+		return job.VerifyGates(row, jobtypes.Result{Job: row.ID}, jobtypes.CapturedRun{}, nil, []jobtypes.Job{row}, seen)
 	}
 
 	described, waited := grade(read(false, nil)), grade(read(true, nil))
@@ -64,8 +65,8 @@ func TestJobObserverGradesSymbolsInTheJobsOwnTree(t *testing.T) {
 	t.Parallel()
 
 	root, checkout := t.TempDir(), t.TempDir()
-	row := types.Job{ID: "wave/sym", CheckoutRoot: checkout, Goals: []types.Goal{
-		{ID: "here", Kind: types.GoalKindSymbol, Expect: types.ExpectPresent, Symbols: []string{"Present"}},
+	row := jobtypes.Job{ID: "wave/sym", CheckoutRoot: checkout, Goals: []jobtypes.Goal{
+		{ID: "here", Kind: jobtypes.GoalKindSymbol, Expect: jobtypes.ExpectPresent, Symbols: []string{"Present"}},
 	}}
 	var trees []string
 	graphIn := func(tree string) *Graph {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -41,7 +42,7 @@ func fileBlockHeld(t *testing.T, root string, loc Location, ev types.Event) (boo
 		loc.Root = root
 		return loc, nil
 	}
-	return FileAttention(t.Context(), root, ev, types.Origin{EntryPoint: types.EntryPointHook}, "test", place)
+	return FileAttention(t.Context(), root, ev, job.Origin{EntryPoint: job.EntryPointHook}, "test", place)
 }
 
 func fileBlock(t *testing.T, root string, loc Location, ev types.Event) error {
@@ -62,7 +63,7 @@ func openRequests(t *testing.T, root string) []sessions.AttentionRequest {
 // wantRequest is the request a hook files for blockedEvent under the given lease: every field
 // the event or the lease decides, with the ones the store mints (id, invocation, clock) taken
 // from got.
-func wantRequest(got sessions.AttentionRequest, lease string, from types.LeaseSource) sessions.AttentionRequest {
+func wantRequest(got sessions.AttentionRequest, lease string, from job.LeaseSource) sessions.AttentionRequest {
 	ev := blockedEvent("needs a decision")
 	return sessions.AttentionRequest{
 		ID:         got.ID,
@@ -148,7 +149,7 @@ func TestFileAttentionStoresTheClaimAlone(t *testing.T) {
 
 	open := openRequests(t, root)
 	require.Len(t, open, 1)
-	assert.Equal(t, wantRequest(open[0], "fleet/f3", types.LeaseSourceEnv), open[0])
+	assert.Equal(t, wantRequest(open[0], "fleet/f3", job.LeaseSourceEnv), open[0])
 }
 
 func TestFileAttentionStoresTheBindingAlone(t *testing.T) {
@@ -158,7 +159,7 @@ func TestFileAttentionStoresTheBindingAlone(t *testing.T) {
 
 	open := openRequests(t, root)
 	require.Len(t, open, 1)
-	assert.Equal(t, wantRequest(open[0], "fleet/bound", types.LeaseSourceMarker), open[0])
+	assert.Equal(t, wantRequest(open[0], "fleet/bound", job.LeaseSourceMarker), open[0])
 }
 
 func TestFileAttentionStoresTheBindingOverADifferentClaim(t *testing.T) {
@@ -169,7 +170,7 @@ func TestFileAttentionStoresTheBindingOverADifferentClaim(t *testing.T) {
 
 	open := openRequests(t, root)
 	require.Len(t, open, 1)
-	assert.Equal(t, wantRequest(open[0], "fleet/bound", types.LeaseSourceContested), open[0])
+	assert.Equal(t, wantRequest(open[0], "fleet/bound", job.LeaseSourceContested), open[0])
 }
 
 // An id that fails the rule attributes nothing rather than smuggling free text into a field the

@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
@@ -68,12 +69,12 @@ func newIsolatedService(t *testing.T, view shareView) *Service {
 func request[T any](msg *T) *connect.Request[T] { return connect.NewRequest(msg) }
 
 // as is a context carrying the credential the bearer guard would have verified.
-func as(grant types.Grant) context.Context {
-	return trail.ContextWithCredential(context.Background(), types.Credential{Kind: types.KindStored, ID: "0badf00d", Grant: grant})
+func as(grant job.Access) context.Context {
+	return trail.ContextWithCredential(context.Background(), job.Credential{Kind: job.KindStored, ID: "0badf00d", Grant: grant})
 }
 
 // operator is the context the server's guard gives the operator token.
-func operator() context.Context { return as(types.GrantOperator) }
+func operator() context.Context { return as(job.AccessOperator) }
 
 func store(t *testing.T) *auth.Store {
 	t.Helper()
@@ -91,9 +92,9 @@ func stored(t *testing.T) []auth.Token {
 	return toks
 }
 
-func mint(t *testing.T, name string, grant types.Grant) (string, auth.Token) {
+func mint(t *testing.T, name string, grant job.Access) (string, auth.Token) {
 	t.Helper()
-	secret, rec, err := store(t).Mint(types.GrantOperator, auth.MintRequest{Name: name, Grant: grant, TTL: time.Hour})
+	secret, rec, err := store(t).Mint(job.AccessOperator, auth.MintRequest{Name: name, Grant: grant, TTL: time.Hour})
 	require.NoError(t, err)
 	return secret.Reveal(), rec
 }
@@ -112,9 +113,9 @@ var (
 // shows one grant model and nothing derived from it.
 func TestListCarriesClassAndGrant(t *testing.T) {
 	s := newIsolatedService(t, liveShare("abcd1234"))
-	mint(t, "agent", types.GrantConnector)
-	mint(t, "laptop", types.GrantConsole)
-	mint(t, "tv", types.GrantViewer)
+	mint(t, "agent", job.AccessConnector)
+	mint(t, "laptop", job.AccessConsole)
+	mint(t, "tv", job.AccessViewer)
 
 	list, err := s.ListTokens(context.Background(), request(&tokenv1.ListTokensRequest{}))
 	require.NoError(t, err)
@@ -141,7 +142,7 @@ func TestListCarriesClassAndGrant(t *testing.T) {
 func TestListResponseCarriesNoSecretBytes(t *testing.T) {
 	shareFullHash := "deadbeef" + strings.Repeat("0", 56)
 	s := newIsolatedService(t, liveShare(shareFullHash[:8]))
-	secret, rec := mint(t, "client", types.GrantConnector)
+	secret, rec := mint(t, "client", job.AccessConnector)
 	require.Len(t, rec.SHA256, 64)
 
 	resp, err := s.ListTokens(context.Background(), request(&tokenv1.ListTokensRequest{}))
@@ -167,7 +168,7 @@ func TestListResponseCarriesNoSecretBytes(t *testing.T) {
 func TestRevokeShareTokenClosesListener(t *testing.T) {
 	sh := liveShare("feedface")
 	s := newIsolatedService(t, sh)
-	resp, err := s.RevokeToken(as(types.GrantConsole), request(&tokenv1.RevokeTokenRequest{Name: "feedface"}))
+	resp, err := s.RevokeToken(as(job.AccessConsole), request(&tokenv1.RevokeTokenRequest{Name: "feedface"}))
 	require.NoError(t, err)
 	assert.True(t, sh.closed)
 	assert.Equal(t, "feedface", sh.closeIfArg)
@@ -179,18 +180,18 @@ func TestRevokeShareTokenClosesListener(t *testing.T) {
 func TestRevokeTokenNeverReachesPastTheCallersGrant(t *testing.T) {
 	sh := liveShare("feedface")
 	s := newIsolatedService(t, sh)
-	_, conn := mint(t, "agent", types.GrantConnector)
-	_, console := mint(t, "laptop", types.GrantConsole)
+	_, conn := mint(t, "agent", job.AccessConnector)
+	_, console := mint(t, "laptop", job.AccessConsole)
 	for _, c := range []struct {
-		caller types.Grant
+		caller job.Access
 		name   string
 	}{
-		{types.GrantViewer, console.ID},
-		{types.GrantViewer, "laptop"},
-		{types.GrantConsole, conn.ID},
-		{types.GrantConnector, "laptop"},
-		{types.Grant{}, "feedface"},
-		{types.GrantConnector, "share to phone"},
+		{job.AccessViewer, console.ID},
+		{job.AccessViewer, "laptop"},
+		{job.AccessConsole, conn.ID},
+		{job.AccessConnector, "laptop"},
+		{job.Access{}, "feedface"},
+		{job.AccessConnector, "share to phone"},
 	} {
 		_, err := s.RevokeToken(as(c.caller), request(&tokenv1.RevokeTokenRequest{Name: c.name}))
 		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), "%s revoking %s", c.caller, c.name)
@@ -212,7 +213,7 @@ func TestRevokeShareLostRaceIsNotFound(t *testing.T) {
 // A revoke names an exact id or an exact name: a prefix matches nothing, share or stored.
 func TestRevokeTakesNoPrefix(t *testing.T) {
 	s := newIsolatedService(t, nil)
-	_, rec := mint(t, "c1", types.GrantConnector)
+	_, rec := mint(t, "c1", job.AccessConnector)
 	sh := liveShare(rec.ID[:1] + "0000000")
 	s.share = sh
 	for _, q := range []string{rec.ID[:1], rec.ID[:4], "c"} {
@@ -240,7 +241,7 @@ func TestNilShareManagerConstructor(t *testing.T) {
 // keyed on its id is NotFound, and the file is untouched.
 func TestOperatorTokenInvisibleAndImmutable(t *testing.T) {
 	s := newIsolatedService(t, nil)
-	_, rec := mint(t, "mcp-client", types.GrantConnector)
+	_, rec := mint(t, "mcp-client", job.AccessConnector)
 	op, err := auth.GenerateOperator()
 	require.NoError(t, err)
 	_, err = auth.SaveOperator(op)
@@ -264,13 +265,13 @@ func TestCreateTokenNeverExceedsTheCallersGrant(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	exp := timestamppb.New(time.Now().Add(time.Hour))
 	cases := []struct {
-		caller types.Grant
+		caller job.Access
 		grant  *tokenv1.Grant
 	}{
-		{types.Grant{}, wire(none, none, read)},
-		{types.GrantViewer, wire(none, none, write)},
-		{types.GrantConnector, wire(none, none, read)},
-		{types.GrantConnector, wire(none, none, write)},
+		{job.Access{}, wire(none, none, read)},
+		{job.AccessViewer, wire(none, none, write)},
+		{job.AccessConnector, wire(none, none, read)},
+		{job.AccessConnector, wire(none, none, write)},
 	}
 	for _, c := range cases {
 		_, err := s.CreateToken(as(c.caller), request(&tokenv1.CreateTokenRequest{Grant: c.grant, ExpireTime: exp}))
@@ -340,7 +341,7 @@ func TestCreateTokenDiskFailureIsInternal(t *testing.T) {
 func TestCreateTokenMintsTheGrantItNames(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	exp := timestamppb.New(time.Now().Add(time.Hour))
-	for _, want := range []types.Grant{types.GrantConsole, types.GrantViewer} {
+	for _, want := range []job.Access{job.AccessConsole, job.AccessViewer} {
 		resp, err := s.CreateToken(operator(), request(&tokenv1.CreateTokenRequest{Grant: wireGrant(want), ExpireTime: exp}))
 		require.NoError(t, err)
 		got, err := fromWireGrant(resp.Msg.GetToken().GetGrant())
@@ -360,12 +361,12 @@ func TestTokenServiceGuardAdmitsOnlyTokensWrite(t *testing.T) {
 	op, err := auth.EnsureOperator(context.Background(), nil)
 	require.NoError(t, err)
 	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
-	guarded, err := httpx.BearerGuard(rpcerr.FormatConnect, auth.Verify, types.Need{Scope: types.ScopeTokens, Level: types.LevelWrite}, h)
+	guarded, err := httpx.BearerGuard(rpcerr.FormatConnect, auth.Verify, job.Need{Scope: job.ScopeTokens, Level: job.LevelWrite}, h)
 	require.NoError(t, err)
 	srv := httptest.NewServer(guarded)
 	defer srv.Close()
 
-	for _, g := range []types.Grant{types.GrantConnector, types.GrantConsole, types.GrantViewer} {
+	for _, g := range []job.Access{job.AccessConnector, job.AccessConsole, job.AccessViewer} {
 		secret, _ := mint(t, strings.ReplaceAll(g.String(), "=", "-"), g)
 		c := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL, connect.WithInterceptors(bearer(secret)))
 		_, err := c.ListTokens(context.Background(), request(&tokenv1.ListTokensRequest{}))
@@ -382,7 +383,7 @@ func TestTokenServiceGuardAdmitsOnlyTokensWrite(t *testing.T) {
 	require.NoError(t, err)
 	got, err := fromWireGrant(resp.Msg.GetToken().GetGrant())
 	require.NoError(t, err)
-	assert.Equal(t, types.GrantConsole, got)
+	assert.Equal(t, job.AccessConsole, got)
 
 	anon := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL)
 	_, err = anon.ListTokens(context.Background(), request(&tokenv1.ListTokensRequest{}))
@@ -392,7 +393,7 @@ func TestTokenServiceGuardAdmitsOnlyTokensWrite(t *testing.T) {
 // The audit subject names the token acted on by id, name, grant and expiry, and never carries
 // the secret, even from a mint response that does.
 func TestAuditSubjectNamesTheTokenNeverItsSecret(t *testing.T) {
-	info := &tokenv1.TokenInfo{Name: "laptop", Id: "3fa9c1d2", Grant: wireGrant(types.GrantConsole),
+	info := &tokenv1.TokenInfo{Name: "laptop", Id: "3fa9c1d2", Grant: wireGrant(job.AccessConsole),
 		ExpireTime: timestamppb.New(time.Date(2026, 12, 22, 0, 0, 0, 0, time.UTC))}
 	const secret = "mgs_not-a-real-secret"
 	blob, preview := AuditSubject(connect.NewResponse(&tokenv1.CreateTokenResponse{Token: info, Secret: secret}))
@@ -416,9 +417,9 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	dir := t.TempDir()
 	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s,
 		connect.WithInterceptors(trailrpc.Interceptor(dir, trail.KindTokenLifecycle, trailrpc.WithSubject(AuditSubject))))
-	op := types.Credential{Kind: types.KindOperator, ID: "0badf00d", Grant: types.GrantOperator}
+	op := job.Credential{Kind: job.KindOperator, ID: "0badf00d", Grant: job.AccessOperator}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r.WithContext(trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), op), types.EntryPointRPC)))
+		h.ServeHTTP(w, r.WithContext(trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), op), job.EntryPointRPC)))
 	}))
 	defer srv.Close()
 	c := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL)
@@ -458,8 +459,8 @@ func TestReusedNameIsADifferentIdentityInTheTrail(t *testing.T) {
 	assert.Equal(t, secondID, second.ID)
 	_, ok = auth.Verify(firstSecret)
 	assert.False(t, ok, "the revoked secret does not come back with the name")
-	underFirst := types.Origin{Credential: types.Credential{Kind: types.KindStored, ID: firstID, Name: "laptop"}}
-	underSecond := types.Origin{Credential: second}
+	underFirst := job.Origin{Credential: job.Credential{Kind: job.KindStored, ID: firstID, Name: "laptop"}}
+	underSecond := job.Origin{Credential: second}
 	assert.True(t, underFirst.Names(firstID))
 	assert.False(t, underFirst.Names(secondID), "a record made under the first token never reads as the second")
 	assert.True(t, underFirst.Names("laptop"))

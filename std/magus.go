@@ -6,9 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/libs/safetyscissors/step"
-	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	difftypes "github.com/egladman/magus/types/diff"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -30,9 +27,13 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/diagnostics"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	difftypes "github.com/egladman/magus/types/diff"
 )
 
 // Magus declares the host-declarable subset of the magus module. The remaining
@@ -1613,7 +1614,7 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	// rediscover it from the mutable environment at each job-store write: a script
 	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run. It is
 	// the claim, so the checkout's record still outranks it.
-	if claim := types.JobLeaseFromContext(ctx); claim != "" {
+	if claim := jobtypes.LeaseFromContext(ctx); claim != "" {
 		lease, _ := job.ActingLease(loc, claim)
 		loc.Actor = &job.Actor{Lease: lease}
 	}
@@ -1621,34 +1622,34 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 }
 
 // MagusListJob backs magus\workspace().jobs() with one typed report.
-// types.NewJobList is the constructor JobService.ListJobs calls too.
+// jobtypes.NewList is the constructor JobService.ListJobs calls too.
 // So the doors cannot disagree about the rows or their overlaps.
 //
 // Inside a guard rule it answers from the rows the guard pinned, so the rule and the
 // verdict it adds to read one store. That path leaves footprints unmeasured: it is the
 // guard's hot path, and measuring reads the version control.
-func MagusListJob(ctx context.Context) (types.JobList, error) {
+func MagusListJob(ctx context.Context) (jobtypes.List, error) {
 	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
 		if snap.Err != nil {
-			return types.JobList{}, snap.Err
+			return jobtypes.List{}, snap.Err
 		}
 		snap = snap.Clone()
-		list := types.NewJobList(snap.Rows)
+		list := jobtypes.NewList(snap.Rows)
 		list.Attempts = job.BoundAttempts(snap.Rows, snap.Attempts, time.Now().Unix())
 		return list, nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.list")
 	if err != nil {
-		return types.JobList{}, err
+		return jobtypes.List{}, err
 	}
 	staleAfter, err := store.StaleAfter()
 	if err != nil {
-		return types.JobList{}, err
+		return jobtypes.List{}, err
 	}
 	ws := types.WorkspaceFromContext(ctx)
 	list, err := store.InWorkspace(contextJobWorkspace(ctx, ws)).Report(ctx, time.Now().Unix(), staleAfter)
 	if err != nil {
-		return types.JobList{}, err
+		return jobtypes.List{}, err
 	}
 	// The same join `magus ls jobs` makes, from the snapshot `magus queue ls` keeps; it
 	// never fetches.
@@ -1659,23 +1660,23 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 // MagusUnmergedJob backs magus\workspace().unmerged().
 // A rule reads the rows the guard
 // pinned, and the version control only for this call.
-func MagusUnmergedJob(ctx context.Context, workspace string) (types.JobUnmergedReport, error) {
+func MagusUnmergedJob(ctx context.Context, workspace string) (jobtypes.UnmergedReport, error) {
 	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
 		if snap.Err != nil {
-			return types.JobUnmergedReport{}, snap.Err
+			return jobtypes.UnmergedReport{}, snap.Err
 		}
 		snap = snap.Clone()
-		return job.Unmerged(ctx, workspace, snap.Rows, types.NewJobAttempts(snap.Attempts)), nil
+		return job.Unmerged(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.unmerged")
 	if err != nil {
-		return types.JobUnmergedReport{}, err
+		return jobtypes.UnmergedReport{}, err
 	}
 	snap := job.ReadSnapshot(store)
 	if snap.Err != nil {
-		return types.JobUnmergedReport{}, snap.Err
+		return jobtypes.UnmergedReport{}, snap.Err
 	}
-	return job.Unmerged(ctx, workspace, snap.Rows, types.NewJobAttempts(snap.Attempts)), nil
+	return job.Unmerged(ctx, workspace, snap.Rows, jobtypes.NewAttempts(snap.Attempts)), nil
 }
 
 // checkoutCacheDir is the cache directory of the workspace on ctx, or the one
@@ -1698,28 +1699,28 @@ func checkoutCacheDir(ctx context.Context, member string) (string, error) {
 // MagusForkFactsJob backs magus\workspace().forkFacts().
 // A rule reads the rows and the
 // output store the guard pinned.
-func MagusForkFactsJob(ctx context.Context, workspace string) (types.JobForkFacts, error) {
+func MagusForkFactsJob(ctx context.Context, workspace string) (jobtypes.ForkFacts, error) {
 	cacheDir, err := checkoutCacheDir(ctx, "job.forkFacts")
 	if err != nil {
-		return types.JobForkFacts{}, err
+		return jobtypes.ForkFacts{}, err
 	}
 	last, err := cache.NewOutputStore(cacheDir).LastFullTest()
 	if err != nil {
-		return types.JobForkFacts{}, err
+		return jobtypes.ForkFacts{}, err
 	}
 	if snap, pinned := job.SnapshotFromContext(ctx); pinned {
 		if snap.Err != nil {
-			return types.JobForkFacts{}, snap.Err
+			return jobtypes.ForkFacts{}, snap.Err
 		}
 		return job.ForkFacts(ctx, workspace, snap.Clone().Rows, last), nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.forkFacts")
 	if err != nil {
-		return types.JobForkFacts{}, err
+		return jobtypes.ForkFacts{}, err
 	}
 	rows, err := store.List()
 	if err != nil {
-		return types.JobForkFacts{}, err
+		return jobtypes.ForkFacts{}, err
 	}
 	return job.ForkFacts(ctx, workspace, rows, last), nil
 }
@@ -1728,14 +1729,14 @@ func MagusForkFactsJob(ctx context.Context, workspace string) (types.JobForkFact
 // It merges the fields put sets into row id through internal/job.PutMerge.
 // It refuses what that refuses. The Buzz opts map is decoded into
 // put by internal/job.DecodePut at the binding.
-func MagusPutJob(ctx context.Context, id string, put types.JobPut) (types.Job, error) {
+func MagusPutJob(ctx context.Context, id string, put jobtypes.Put) (jobtypes.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.put")
 	if err != nil {
-		return types.Job{}, err
+		return jobtypes.Job{}, err
 	}
 	merge, err := job.PutMerge(put)
 	if err != nil {
-		return types.Job{}, err
+		return jobtypes.Job{}, err
 	}
 	ws := types.WorkspaceFromContext(ctx)
 	var limits config.Jobs
@@ -1768,15 +1769,15 @@ func contextJobWorkspace(ctx context.Context, ws types.WorkspaceRepository) (val
 // It returns the row and job.BaseAdvice's reading, as `magus job exec` does.
 //
 // The verdict is a FACT, never a refusal: a diverged registration is recorded and
-// reported like any other. See types.Job.
-func MagusRegisterJob(ctx context.Context, id string) (types.Job, string, error) {
+// reported like any other. See jobtypes.Job.
+func MagusRegisterJob(ctx context.Context, id string) (jobtypes.Job, string, error) {
 	store, err := jobStoreFromContext(ctx, "job.register")
 	if err != nil {
-		return types.Job{}, "", err
+		return jobtypes.Job{}, "", err
 	}
 	row, err := store.Exec(ctx, strings.TrimSpace(id))
 	if err != nil {
-		return types.Job{}, "", err
+		return jobtypes.Job{}, "", err
 	}
 	return row, job.BaseAdvice(row), nil
 }
@@ -1805,45 +1806,45 @@ func MagusJobSchema(_ context.Context) (map[string]any, error) {
 // jobAttemptFromContext reads the output descriptor from the workspace already on ctx.
 // A job plan is repository-wide but output records are checkout-local, so Exit resolves
 // the worker's record once and files its portable summary on the job for a later Wait.
-func jobAttemptFromContext(ctx context.Context, ref string) (types.JobAttempt, error) {
+func jobAttemptFromContext(ctx context.Context, ref string) (jobtypes.CapturedRun, error) {
 	if strings.TrimSpace(ref) == "" {
-		return types.JobAttempt{}, nil
+		return jobtypes.CapturedRun{}, nil
 	}
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.JobAttempt{}, types.DiagnosticErrorf(types.MagusfileOnlyMember,
+		return jobtypes.CapturedRun{}, types.DiagnosticErrorf(types.MagusfileOnlyMember,
 			"magus\\job: no workspace on the context: output evidence is read from the workspace magus already has open")
 	}
 	cd, ok := ws.(workspaceCacheDir)
 	if !ok {
-		return types.JobAttempt{}, fmt.Errorf("magus\\job: this workspace has no cache directory")
+		return jobtypes.CapturedRun{}, fmt.Errorf("magus\\job: this workspace has no cache directory")
 	}
 	desc, err := cache.NewOutputStore(cd.CacheDir()).DescriptorByRef(ref)
 	switch {
 	case err == nil:
 		return desc.JobAttempt(ref), nil
 	case errors.Is(err, fs.ErrNotExist):
-		return types.JobAttempt{}, nil
+		return jobtypes.CapturedRun{}, nil
 	default:
-		return types.JobAttempt{}, err
+		return jobtypes.CapturedRun{}, err
 	}
 }
 
 // MagusExitJob backs magus\job(id).exit with a result.
 // It files result as the holder's report on row id.
-func MagusExitJob(ctx context.Context, id string, result types.JobResult) (types.Job, error) {
+func MagusExitJob(ctx context.Context, id string, result jobtypes.Result) (jobtypes.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.exit")
 	if err != nil {
-		return types.Job{}, err
+		return jobtypes.Job{}, err
 	}
 	return job.Exit(ctx, store, strings.TrimSpace(id), &result, jobAttemptFromContext)
 }
 
 // MagusAbandonJob backs magus\job(id).exit without a result.
-func MagusAbandonJob(ctx context.Context, id string) (types.Job, error) {
+func MagusAbandonJob(ctx context.Context, id string) (jobtypes.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.exit")
 	if err != nil {
-		return types.Job{}, err
+		return jobtypes.Job{}, err
 	}
 	return job.Exit(ctx, store, strings.TrimSpace(id), nil, nil)
 }
@@ -1851,10 +1852,10 @@ func MagusAbandonJob(ctx context.Context, id string) (types.Job, error) {
 // MagusWaitJob backs magus\job(id).wait.
 // A nil result selects the evidence Exit filed;
 // otherwise result is resolved locally.
-func MagusWaitJob(ctx context.Context, id string, result *types.JobResult) (types.JobStatus, error) {
+func MagusWaitJob(ctx context.Context, id string, result *jobtypes.Result) (jobtypes.Status, error) {
 	store, err := jobStoreFromContext(ctx, "job.wait")
 	if err != nil {
-		return types.JobStatus{}, err
+		return jobtypes.Status{}, err
 	}
 	// No symbol reader on this path: the workspace on the context carries the PROJECT
 	// graph, and a symbol gate needs the knowledge graph, which a magusfile has no
@@ -2113,7 +2114,7 @@ func recursiveMagusEnv(ctx context.Context) []string {
 
 // leaseEnv is the BAGGAGE through which a nested magus keeps its caller's lease.
 func leaseEnv(ctx context.Context) []string {
-	if lease := types.JobLeaseFromContext(ctx); lease != "" {
+	if lease := jobtypes.LeaseFromContext(ctx); lease != "" {
 		return []string{fmt.Sprintf("%s=%s=%s", trail.EnvBaggage, trail.BaggageLease, lease)}
 	}
 	return nil

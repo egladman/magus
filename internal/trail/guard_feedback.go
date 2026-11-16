@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // GuardFeedback is a deduplicated pattern in pre-tool observations. It is not
@@ -125,7 +125,7 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 // retained trail reaches back to since, so an empty result means none rather than unknown:
 // the whole trail fits the retained window, or it holds an agent command at or before since.
 // A missing trail is an empty one; an empty base or lease has no trail to read.
-func LeaseDenials(base, lease string, since int64, limit int) ([]types.JobDenial, bool, error) {
+func LeaseDenials(base, lease string, since int64, limit int) ([]job.Denial, bool, error) {
 	if base == "" || lease == "" || limit <= 0 {
 		return nil, false, nil
 	}
@@ -141,12 +141,12 @@ func LeaseDenials(base, lease string, since int64, limit int) ([]types.JobDenial
 		return e.Kind == KindAgentCommand && e.Ts <= from
 	})
 	held := slices.DeleteFunc(events, func(e Event) bool { return e.Lease != lease || e.Ts < from })
-	var out []types.JobDenial
+	var out []job.Denial
 	for command := range agentCommands(base, held) {
 		if command.response.Decision != "deny" {
 			continue
 		}
-		out = append(out, types.JobDenial{
+		out = append(out, job.Denial{
 			Rule:       command.response.Rule,
 			Reason:     command.response.Reason,
 			Action:     command.event.Action,

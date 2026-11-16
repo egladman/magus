@@ -7,15 +7,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // A changed file belongs to exactly one job, and nothing the worker does decides it: the
 // write paths are disjoint by construction, so the path alone names the holder.
 func TestAttributeWriteNamesTheOneWritePathThatCoversIt(t *testing.T) {
-	rows := []types.Job{
-		{ID: "pwa/job-watch", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/trail", "cmd/magus/job.go"}}},
-		{ID: "pwa/jobs-ui", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"console/src/console/plan"}}},
+	rows := []job.Job{
+		{ID: "pwa/job-watch", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/trail", "cmd/magus/job.go"}}},
+		{ID: "pwa/jobs-ui", State: job.StateRunning, Paths: job.Paths{Write: []string{"console/src/console/plan"}}},
 	}
 
 	got, ok := AttributeWrite(rows, "internal/trail/trail.go")
@@ -32,7 +32,7 @@ func TestAttributeWriteNamesTheOneWritePathThatCoversIt(t *testing.T) {
 // write outside every declared boundary is the interesting one, and silently binning it is how the
 // console came to show a quiet tree while somebody edited it.
 func TestAttributeWriteLeavesAnUnleasedPathUnattributed(t *testing.T) {
-	rows := []types.Job{{ID: "pwa/job-watch", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/trail"}}}}
+	rows := []job.Job{{ID: "pwa/job-watch", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/trail"}}}}
 
 	got, ok := AttributeWrite(rows, "README.md")
 	assert.False(t, ok)
@@ -43,9 +43,9 @@ func TestAttributeWriteLeavesAnUnleasedPathUnattributed(t *testing.T) {
 // A job that has ENDED holds nothing, so its write paths stop answering for a path. Otherwise a
 // finished job keeps collecting the next holder's writes for as long as its row is kept.
 func TestAttributeWriteIgnoresAJobThatIsNoLongerLive(t *testing.T) {
-	rows := []types.Job{
-		{ID: "old", State: types.StatePass, Paths: types.JobPaths{Write: []string{"internal/trail"}}},
-		{ID: "new", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/trail"}}},
+	rows := []job.Job{
+		{ID: "old", State: job.StatePass, Paths: job.Paths{Write: []string{"internal/trail"}}},
+		{ID: "new", State: job.StateDeclared, Paths: job.Paths{Write: []string{"internal/trail"}}},
 	}
 
 	got, ok := AttributeWrite(rows, "internal/trail/trail.go")
@@ -57,9 +57,9 @@ func TestAttributeWriteIgnoresAJobThatIsNoLongerLive(t *testing.T) {
 // says so itself, and reading the write paths alone would attribute a shared build input to
 // whichever job happened to name the directory above it.
 func TestAttributeWriteHonoursTheJobsOwnDenyPaths(t *testing.T) {
-	rows := []types.Job{{
-		ID: "pwa/job-watch", State: types.StateRunning,
-		Paths: types.JobPaths{
+	rows := []job.Job{{
+		ID: "pwa/job-watch", State: job.StateRunning,
+		Paths: job.Paths{
 			Write: []string{"internal"},
 			Deny:  []string{"internal/agent"},
 		},
@@ -76,9 +76,9 @@ func TestAttributeWriteHonoursTheJobsOwnDenyPaths(t *testing.T) {
 // A deny path naming one declaration of a file leaves the file in the job's boundary: the
 // job may still write the rest of it, so its writes there are its own.
 func TestAttributeWriteKeepsAFileWithADeniedDeclaration(t *testing.T) {
-	rows := []types.Job{{
-		ID: "pwa/job-watch", State: types.StateRunning,
-		Paths: types.JobPaths{
+	rows := []job.Job{{
+		ID: "pwa/job-watch", State: job.StateRunning,
+		Paths: job.Paths{
 			Write: []string{"internal/trail"},
 			Deny:  []string{"internal/trail/trail.go#Record", "internal/trail/*.go#Spawn"},
 		},
@@ -99,9 +99,9 @@ func TestAttributeWriteKeepsAFileWithADeniedDeclaration(t *testing.T) {
 // that picks one would tell a person a file moved under a worker that never touched it,
 // and there is nothing in the path to break the tie with.
 func TestAttributeWriteRefusesToPickBetweenTwoLiveJobs(t *testing.T) {
-	rows := []types.Job{
-		{ID: "a", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/trail"}}},
-		{ID: "b", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal"}}},
+	rows := []job.Job{
+		{ID: "a", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/trail"}}},
+		{ID: "b", State: job.StateDeclared, Paths: job.Paths{Write: []string{"internal"}}},
 	}
 
 	got, ok := AttributeWrite(rows, "internal/trail/trail.go")
@@ -118,9 +118,9 @@ func TestAttributeWriteRefusesToPickBetweenTwoLiveJobs(t *testing.T) {
 // both declared internal/trail, and `magus job watch pwa/job-watch` showed nothing at all
 // while that directory was edited.
 func TestFeedFilterMatchesAContestedPathForEveryClaimant(t *testing.T) {
-	events := FileEvents([]types.Job{
-		{ID: "pwa/job-watch", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/trail"}}},
-		{ID: "pwa/turns-capture", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"internal/trail"}}},
+	events := FileEvents([]job.Job{
+		{ID: "pwa/job-watch", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/trail"}}},
+		{ID: "pwa/turns-capture", State: job.StateDeclared, Paths: job.Paths{Write: []string{"internal/trail"}}},
 	}, 5, []string{"internal/trail/trail.go"})
 
 	require.Len(t, events, 1)

@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
@@ -197,8 +198,8 @@ func invocationList(ctx context.Context, root string, args []string) error {
 
 // localOrigin is this process's OS account, entering through e, for a verb with no ctx to
 // read the entry point from.
-func localOrigin(e types.EntryPoint) types.Origin {
-	return trail.StampOrigin(context.Background(), types.Origin{EntryPoint: e})
+func localOrigin(e jobtypes.EntryPoint) jobtypes.Origin {
+	return trail.StampOrigin(context.Background(), jobtypes.Origin{EntryPoint: e})
 }
 
 func sessionLoadUsage(fs *flag.FlagSet) func() {
@@ -260,7 +261,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 	cacheDir, _ := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	guard.JoinServedNext(summary.Events, summary.Commands, hint.ReadServedNext(cacheDir))
 	result, err := sessions.LoadEvents(ctx, dir, summary.Events, sessions.InvocationStart{
-		Origin:    localOrigin(types.EntryPointCLI),
+		Origin:    localOrigin(jobtypes.EntryPointCLI),
 		Workspace: root,
 		Command:   "session load",
 		Version:   version,
@@ -384,7 +385,7 @@ func adviseCommand(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	a, err := store.Post(context.Background(), text, expect, localOrigin(types.EntryPointCLI).User, time.Now())
+	a, err := store.Post(context.Background(), text, expect, localOrigin(jobtypes.EntryPointCLI).User, time.Now())
 	if err != nil {
 		return err
 	}
@@ -406,7 +407,7 @@ func retractCommand(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	a, err := store.Retract(context.Background(), rest[0], localOrigin(types.EntryPointCLI).User, time.Now())
+	a, err := store.Retract(context.Background(), rest[0], localOrigin(jobtypes.EntryPointCLI).User, time.Now())
 	if errors.Is(err, sessions.ErrNoDirective) {
 		return fmt.Errorf("magus session retract: run `magus session advisories --all` to list every id: %w", err)
 	}
@@ -673,7 +674,7 @@ func briefReaders() brief.Readers {
 }
 
 // readJobRows lists the repository's job store once for both the leases and the tree.
-func readJobRows(ctx context.Context, root string) ([]types.Job, error) {
+func readJobRows(ctx context.Context, root string) ([]jobtypes.Job, error) {
 	store, err := openJobs(ctx, root, jobOpen{})
 	if err != nil {
 		return nil, err

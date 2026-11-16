@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -29,19 +30,19 @@ const checkpointDigestLen = 32
 // is kept unverified. An empty token, or the checkpoint row id already holds in rows, comes
 // back unchanged: a row may name none, and one it already holds was settled when it was
 // written. With a problem, the token comes back as it was given.
-func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []types.Job, id, token string) (string, types.JobProblems) {
+func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []job.Job, id, token string) (string, types.JobProblems) {
 	return s.declaredCheckpoint(ctx, rows, id, token, false)
 }
 
 // declaredCheckpoint is [Store.DeclaredCheckpoint]. With ownCheckout the row is forked into
 // a checkout made at its checkpoint, so any revision the repository holds is placeable: its
 // work starts there, not from this checkout's HEAD.
-func (s *Store) declaredCheckpoint(ctx context.Context, rows []types.Job, id, token string, ownCheckout bool) (string, types.JobProblems) {
+func (s *Store) declaredCheckpoint(ctx context.Context, rows []job.Job, id, token string, ownCheckout bool) (string, types.JobProblems) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return "", nil
 	}
-	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 && rows[i].Checkpoint == token {
+	if i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id }); i >= 0 && rows[i].Checkpoint == token {
 		return token, nil
 	}
 	real := hint.VCSCheckpoint.With("-o name")
@@ -160,7 +161,7 @@ func (s *Store) checkoutTokenIfReadable(ctx context.Context) string {
 // row (a new one, or one that ended) that names none records the checkout's own; where none
 // can be read the row is written without one. A checkpoint it cannot place comes back as a
 // problem with merge unchanged.
-func (s *Store) declaredMerge(ctx context.Context, rows []types.Job, id string, merge func(*types.Job)) (func(*types.Job), types.JobProblems) {
+func (s *Store) declaredMerge(ctx context.Context, rows []job.Job, id string, merge func(*job.Job)) (func(*job.Job), types.JobProblems) {
 	next, updates := mergeBase(rows, id, merge)
 	merge(&next)
 	written := next.Checkpoint
@@ -169,7 +170,7 @@ func (s *Store) declaredMerge(ctx context.Context, rows []types.Job, id string, 
 		if token == "" {
 			return merge, nil
 		}
-		return func(u *types.Job) {
+		return func(u *job.Job) {
 			merge(u)
 			if strings.TrimSpace(u.Checkpoint) == "" {
 				u.Checkpoint = token
@@ -180,7 +181,7 @@ func (s *Store) declaredMerge(ctx context.Context, rows []types.Job, id string, 
 	if len(ps) > 0 || full == written {
 		return merge, ps
 	}
-	return func(u *types.Job) {
+	return func(u *job.Job) {
 		merge(u)
 		if u.Checkpoint == written {
 			u.Checkpoint = full

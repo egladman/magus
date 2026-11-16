@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
@@ -19,7 +20,7 @@ import (
 // JudgeCommand judges command, a shell line about to run in dir, as the guard hook judges
 // an agent's command: the compiled rules, the workspace's magus\guard rules beside their
 // approved copies, and what session did before. The lease ctx carries (see
-// types.WithJobLease) is the one the call acts under. The judgment is recorded on the
+// job.WithLease) is the one the call acts under. The judgment is recorded on the
 // workspace's trail as a hook's is.
 //
 // A deny is a judgment, returned with its Reason, Rule and Next and a nil error; a rule
@@ -55,7 +56,7 @@ func (m *Magus) JudgeWrite(ctx context.Context, session, dir, path string) (verd
 // or takes the step. An undeclared kind is a deny. The error is a step
 // that cannot be judged, or a failed StepRule.
 func (m *Magus) Judge(ctx context.Context, st step.Step) (verdict.Judgment, error) {
-	req := guard.Request{Dir: st.Dir, Session: st.Session, Agent: st.Agent, Lease: types.JobLeaseFromContext(ctx)}
+	req := guard.Request{Dir: st.Dir, Session: st.Session, Agent: st.Agent, Lease: job.LeaseFromContext(ctx)}
 	req.Authority, _ = ctx.Value(authorityKey{}).(string)
 	authority := guard.ResolveAuthority(ctx, guard.Dependencies{CacheDir: m.guardCacheDir, JobReader: m.jobReader}, req)
 	deps, err := m.guardDependenciesAt(ctx, authority)
@@ -66,7 +67,7 @@ func (m *Magus) Judge(ctx context.Context, st step.Step) (verdict.Judgment, erro
 }
 
 func (m *Magus) judge(ctx context.Context, req guard.Request) (verdict.Judgment, error) {
-	req.Lease = types.JobLeaseFromContext(ctx)
+	req.Lease = job.LeaseFromContext(ctx)
 	req.Authority, _ = ctx.Value(authorityKey{}).(string)
 	authority := guard.ResolveAuthority(ctx, guard.Dependencies{CacheDir: m.guardCacheDir, JobReader: m.jobReader}, req)
 	deps, err := m.guardDependenciesAt(ctx, authority)

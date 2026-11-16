@@ -7,7 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // WithInvocationJournal adds this invocation's fact handler to the capture fan-out,
@@ -26,7 +26,7 @@ import (
 // adopted run by calling runTarget/affected itself (main.go's dispatchAdopted), so a
 // forwarded run reaches this function in the server process. ctx is what tells the two
 // cases apart; see below.
-func WithInvocationJournal(ctx context.Context, handlers []slog.Handler, root, verb string, args []string, version string, checkoutLease func(ctx context.Context, root string) (string, types.LeaseSource, error)) []slog.Handler {
+func WithInvocationJournal(ctx context.Context, handlers []slog.Handler, root, verb string, args []string, version string, checkoutLease func(ctx context.Context, root string) (string, job.LeaseSource, error)) []slog.Handler {
 	// The environment is read ONCE, here, and every fact this invocation writes carries that
 	// copy. Reading it per fact would let a mid-run environment change split one
 	// invocation's facts across two leases, which is a history no producer could have meant.

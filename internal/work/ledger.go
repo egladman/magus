@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -108,7 +109,7 @@ type surveyTerms struct {
 	// Base is the revision an item is absorbed into. Required.
 	Base string
 	// Jobs are the rows that can track an item; a terminal row tracks none.
-	Jobs []types.Job
+	Jobs []job.Job
 	// LocalOnly is work.local_only. A bad glob fails the survey.
 	LocalOnly []string
 }

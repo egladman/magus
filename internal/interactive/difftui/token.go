@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -50,7 +51,7 @@ func MintToken(ctx context.Context, tk Tokens, addr string, ttl time.Duration) (
 		return types.Secret{}, "", false
 	}
 	_ = conn.Close() // a probe: nothing was written on it
-	secret, rec, err := tk.Mint(auth.MintRequest{Grant: types.GrantConsole, TTL: ttl})
+	secret, rec, err := tk.Mint(auth.MintRequest{Grant: job.AccessConsole, TTL: ttl})
 	if err != nil {
 		warn("the review is not shared with the server: its console token could not be minted", attr.Error(err))
 		return types.Secret{}, "", false

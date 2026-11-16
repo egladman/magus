@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -39,7 +40,7 @@ func TestBearerGuard(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		built(BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load, types.GrantViewer), anyNeed, okHandler)).ServeHTTP(rr, req)
+		built(BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load, job.AccessViewer), anyNeed, okHandler)).ServeHTTP(rr, req)
 		return rr
 	}
 
@@ -101,7 +102,7 @@ func TestBearerGuardWithQueryToken(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		built(BearerGuardWithQueryToken(rpcerr.FormatJSON, SingleTokenVerifier(load, types.GrantViewer), anyNeed, okHandler)).ServeHTTP(rr, req)
+		built(BearerGuardWithQueryToken(rpcerr.FormatJSON, SingleTokenVerifier(load, job.AccessViewer), anyNeed, okHandler)).ServeHTTP(rr, req)
 		return rr
 	}
 	code := func(authHeader, rawQuery string) int { return serve(authHeader, rawQuery).Code }
@@ -123,7 +124,7 @@ func TestSingleTokenVerifierLoadErrorFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
-	built(BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load, types.GrantOperator), anyNeed, okHandler)).ServeHTTP(rr, req)
+	built(BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load, job.AccessOperator), anyNeed, okHandler)).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
@@ -143,18 +144,18 @@ func TestBearerGuardVerifierRejectionFailsClosed(t *testing.T) {
 // need, never a 401 (the token is valid) and never a pass.
 func TestBearerGuardAdmitsExactlyTheGrantsThatAllowTheNeed(t *testing.T) {
 	t.Parallel()
-	scopes := []types.Scope{types.ScopeTokens, types.ScopeMCP, types.ScopeConsole}
-	levels := []types.Level{types.LevelNone, types.LevelRead, types.LevelWrite}
-	for _, tok := range []types.Level{types.LevelNone, types.LevelWrite} {
-		for _, mcp := range []types.Level{types.LevelNone, types.LevelWrite} {
+	scopes := []job.Scope{job.ScopeTokens, job.ScopeMCP, job.ScopeConsole}
+	levels := []job.Level{job.LevelNone, job.LevelRead, job.LevelWrite}
+	for _, tok := range []job.Level{job.LevelNone, job.LevelWrite} {
+		for _, mcp := range []job.Level{job.LevelNone, job.LevelWrite} {
 			for _, con := range levels {
-				grant := types.Grant{Tokens: tok, MCP: mcp, Console: con}
-				verify := func(string) (types.Credential, bool) {
-					return types.Credential{Kind: types.KindStored, Grant: grant}, true
+				grant := job.Access{Tokens: tok, MCP: mcp, Console: con}
+				verify := func(string) (job.Credential, bool) {
+					return job.Credential{Kind: job.KindStored, Grant: grant}, true
 				}
 				for _, s := range scopes {
 					for _, l := range levels[1:] {
-						need := types.Need{Scope: s, Level: l}
+						need := job.Need{Scope: s, Level: l}
 						if need.Validate() != nil {
 							continue // tokens=read and mcp=read are no need; a guard refuses to build on one
 						}
@@ -183,17 +184,17 @@ func TestBearerGuardAdmitsExactlyTheGrantsThatAllowTheNeed(t *testing.T) {
 // every record made under the request is stamped from there and no handler copies either.
 func TestBearerGuardPutsTheVerifiedCredentialOnTheContext(t *testing.T) {
 	t.Parallel()
-	cred := types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
-	named := func(presented string) (types.Credential, bool) { return cred, presented == "good" }
-	var seen types.Origin
+	cred := job.Credential{Kind: job.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: job.AccessConsole}
+	named := func(presented string) (job.Credential, bool) { return cred, presented == "good" }
+	var seen job.Origin
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = trail.StampOrigin(r.Context(), types.Origin{})
+		seen = trail.StampOrigin(r.Context(), job.Origin{})
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/x", nil)
 	req.Header.Set("Authorization", "Bearer good")
 	built(BearerGuard(rpcerr.FormatJSON, named, anyNeed, next)).ServeHTTP(httptest.NewRecorder(), req)
 	assert.Equal(t, cred, seen.Credential)
-	assert.Equal(t, types.EntryPointRPC, seen.EntryPoint)
+	assert.Equal(t, job.EntryPointRPC, seen.EntryPoint)
 	assert.Zero(t, trail.CredentialFromContext(t.Context()), "no guard, no credential")
 }
 
@@ -201,12 +202,12 @@ func TestBearerGuardPutsTheVerifiedCredentialOnTheContext(t *testing.T) {
 // constructor refuses one rather than admitting every credential.
 func TestGuardsRefuseToBuildOnAZeroOrInvalidNeed(t *testing.T) {
 	t.Parallel()
-	for _, n := range []types.Need{{}, {Scope: types.ScopeConsole}, {Scope: "files", Level: types.LevelWrite}, {Scope: types.ScopeMCP, Level: types.LevelRead}} {
+	for _, n := range []job.Need{{}, {Scope: job.ScopeConsole}, {Scope: "files", Level: job.LevelWrite}, {Scope: job.ScopeMCP, Level: job.LevelRead}} {
 		_, err := BearerGuard(rpcerr.FormatJSON, rejectAll, n, okHandler)
 		assert.Error(t, err, "BearerGuard %+v", n)
 		_, err = BearerGuardWithQueryToken(rpcerr.FormatJSON, rejectAll, n, okHandler)
 		assert.Error(t, err, "BearerGuardWithQueryToken %+v", n)
-		_, err = ProcedureGuard(rpcerr.FormatConnect, rejectAll, map[string]types.Need{"/s/A": anyNeed, "/s/B": n}, okHandler)
+		_, err = ProcedureGuard(rpcerr.FormatConnect, rejectAll, map[string]job.Need{"/s/A": anyNeed, "/s/B": n}, okHandler)
 		assert.Error(t, err, "ProcedureGuard %+v", n)
 	}
 	_, err := ProcedureGuard(rpcerr.FormatConnect, rejectAll, nil, okHandler)
@@ -217,11 +218,11 @@ func TestGuardsRefuseToBuildOnAZeroOrInvalidNeed(t *testing.T) {
 // strictest one in it, so an unlisted procedure is never the weakest door.
 func TestProcedureGuardHoldsEachProcedureToItsNeed(t *testing.T) {
 	t.Parallel()
-	read := types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
-	write := types.Need{Scope: types.ScopeConsole, Level: types.LevelWrite}
-	h := built(ProcedureGuard(rpcerr.FormatConnect, func(string) (types.Credential, bool) {
-		return types.Credential{Kind: types.KindStored, Grant: types.GrantViewer}, true
-	}, map[string]types.Need{"/s.S/List": read, "/s.S/Run": write}, okHandler))
+	read := job.Need{Scope: job.ScopeConsole, Level: job.LevelRead}
+	write := job.Need{Scope: job.ScopeConsole, Level: job.LevelWrite}
+	h := built(ProcedureGuard(rpcerr.FormatConnect, func(string) (job.Credential, bool) {
+		return job.Credential{Kind: job.KindStored, Grant: job.AccessViewer}, true
+	}, map[string]job.Need{"/s.S/List": read, "/s.S/Run": write}, okHandler))
 	for path, want := range map[string]int{"/s.S/List": http.StatusOK, "/s.S/Run": http.StatusForbidden, "/s.S/Unlisted": http.StatusForbidden} {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		req.Header.Set("Authorization", "Bearer viewer")
@@ -236,11 +237,11 @@ func TestProcedureGuardHoldsEachProcedureToItsNeed(t *testing.T) {
 // a stored token from the same peer is admitted. Judged by RemoteAddr, never a header.
 func TestOperatorTokenIsRefusedFromANonLoopbackPeer(t *testing.T) {
 	t.Parallel()
-	verify := func(presented string) (types.Credential, bool) {
+	verify := func(presented string) (job.Credential, bool) {
 		if presented == "op" {
-			return types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}, true
+			return job.Credential{Kind: job.KindOperator, Grant: job.AccessOperator}, true
 		}
-		return types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, true
+		return job.Credential{Kind: job.KindStored, Grant: job.AccessConsole}, true
 	}
 	h := built(BearerGuard(rpcerr.FormatJSON, verify, anyNeed, okHandler))
 	serve := func(token, peer string, header map[string]string) int {
@@ -270,8 +271,8 @@ func TestRevokedTokenCutsAnOpenStream(t *testing.T) {
 	t.Cleanup(func() { reverifyEvery = old })
 
 	var revoked atomic.Bool
-	verify := func(string) (types.Credential, bool) {
-		return types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, !revoked.Load()
+	verify := func(string) (job.Credential, bool) {
+		return job.Credential{Kind: job.KindStored, Grant: job.AccessConsole}, !revoked.Load()
 	}
 	started, ended := make(chan struct{}), make(chan struct{})
 	stream := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -323,10 +324,10 @@ func TestBearerToken(t *testing.T) {
 	t.Run("no scheme", func(t *testing.T) { fails(t, "abc") })
 }
 
-var rejectAll Verifier = func(string) (types.Credential, bool) { return types.Credential{}, false }
+var rejectAll Verifier = func(string) (job.Credential, bool) { return job.Credential{}, false }
 
 // anyNeed is a need every test credential below meets; the refusals here are about the token.
-var anyNeed = types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
+var anyNeed = job.Need{Scope: job.ScopeConsole, Level: job.LevelRead}
 
 // built unwraps a guard constructor for a test. A build error answers every request 500 with
 // the error text, so the status assertion that follows names it.

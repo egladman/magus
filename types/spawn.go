@@ -3,6 +3,7 @@ package types
 import (
 	"fmt"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 )
 
@@ -95,7 +96,7 @@ type SpawnRequest struct {
 	Role AgentRole
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.
-	Lease *Job
+	Lease *job.Job
 	// ModelTier is the model tier recorded on the live row a spawn's `<parent>/<role> <job>`
 	// title names. Nil on a continue, when the title names no live row, or when the row was
 	// written with no model tiers declared.
@@ -127,5 +128,5 @@ type SpawnTarget struct {
 	ContextTokens *int64
 	// Entries are the entries recorded on the job the agent was spawned for, so a resume
 	// can tell it which of its paths somebody else wrote.
-	Entries []JobEntry
+	Entries []job.Entry
 }

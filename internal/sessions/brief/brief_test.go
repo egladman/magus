@@ -22,11 +22,11 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -76,7 +76,7 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 		},
 		Leases: []briefLease{{
 			ID:    "f2-guard",
-			State: string(types.StateRunning),
+			State: string(jobtypes.StateRunning),
 			Exec:  hint.JobExec.With("f2-guard"),
 			// Longer than a line on purpose: the clip is part of the contract.
 			Instructions: strings.Repeat("hold the boundary ", 20),
@@ -253,7 +253,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 		// A lease's goal reads as one line here; the rest is `magus describe job`.
 		Leases: []briefLease{{
 			ID:           "f2-guard",
-			State:        string(types.StateRunning),
+			State:        string(jobtypes.StateRunning),
 			Exec:         hint.JobExec.With("f2-guard"),
 			Instructions: "hold the boundary",
 			Validation:   "magus run test internal/ledger",
@@ -306,15 +306,15 @@ func seedBriefLease(t *testing.T, root string) {
 	t.Helper()
 	store, err := testReaders(t, root).OpenJobs(t.Context(), root)
 	require.NoError(t, err)
-	guardRow := types.Job{
+	guardRow := jobtypes.Job{
 		ID:           "f2-guard",
-		State:        types.StateRunning,
-		Agent:        typesagent.Instructed("hold the boundary\nsecond line nobody reads here"),
+		State:        jobtypes.StateRunning,
+		Agent:        jobtypes.Instructed("hold the boundary\nsecond line nobody reads here"),
 		Validation:   "magus run test internal/ledger",
-		Paths:        types.JobPaths{Write: []string{"internal/ledger"}},
+		Paths:        jobtypes.Paths{Write: []string{"internal/ledger"}},
 		CheckoutRoot: root,
 	}
-	_, err = store.Update(t.Context(), guardRow.ID, func(cur *types.Job) { *cur = guardRow })
+	_, err = store.Update(t.Context(), guardRow.ID, func(cur *jobtypes.Job) { *cur = guardRow })
 	require.NoError(t, err)
 }
 
@@ -370,11 +370,11 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 
 	store, err := testReaders(t, root).OpenJobs(t.Context(), root)
 	require.NoError(t, err)
-	landed := types.Job{ID: "landed", State: types.StatePass, CheckoutRoot: root}
-	_, err = store.Update(ctx, landed.ID, func(cur *types.Job) { *cur = landed })
+	landed := jobtypes.Job{ID: "landed", State: jobtypes.StatePass, CheckoutRoot: root}
+	_, err = store.Update(ctx, landed.ID, func(cur *jobtypes.Job) { *cur = landed })
 	require.NoError(t, err)
-	running := types.Job{ID: "running", State: types.StateRunning, CheckoutRoot: root}
-	_, err = store.Update(ctx, running.ID, func(cur *types.Job) { *cur = running })
+	running := jobtypes.Job{ID: "running", State: jobtypes.StateRunning, CheckoutRoot: root}
+	_, err = store.Update(ctx, running.ID, func(cur *jobtypes.Job) { *cur = running })
 	require.NoError(t, err)
 
 	brief := Gather(ctx, root, nil, testReaders(t, root))
@@ -386,14 +386,14 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 func TestSessionBriefListsEachProvedClaim(t *testing.T) {
 	t.Parallel()
 
-	claims := claimLines([]types.JobClaim{{
-		Path: "internal/guard/render.go", Evidence: types.ClaimEvidence{Kind: types.ClaimRefs, Subject: "hint.Render"},
+	claims := claimLines([]jobtypes.Claim{{
+		Path: "internal/guard/render.go", Evidence: jobtypes.ClaimEvidence{Kind: jobtypes.ClaimRefs, Subject: "hint.Render"},
 		Proof: "internal/guard/render.go references hint.Render, which the job's diff changes in internal/hint/render.go",
 	}})
 	assert.Equal(t, []string{"internal/guard/render.go (refs:hint.Render): internal/guard/render.go references hint.Render, which the job's diff changes in internal/hint/render.go"}, claims)
 	assert.Nil(t, claimLines(nil), "a job with no claims lists none")
 
-	b := Payload{Leases: []briefLease{{ID: "render-change", State: string(types.StateRunning), Exec: hint.JobExec.With("render-change"), Claims: claims}}}
+	b := Payload{Leases: []briefLease{{ID: "render-change", State: string(jobtypes.StateRunning), Exec: hint.JobExec.With("render-change"), Claims: claims}}}
 	assert.Contains(t, b.Text(), "    claimed: internal/guard/render.go (refs:hint.Render): internal/guard/render.go references hint.Render")
 }
 
@@ -410,15 +410,15 @@ func TestSessionBriefNamesOnlyTheLeasesThatBindThisCheckout(t *testing.T) {
 	store, err := testReaders(t, root).OpenJobs(t.Context(), root)
 	require.NoError(t, err)
 	// Existing checkouts: a running row whose checkout is gone is ended on read.
-	for _, row := range []types.Job{
-		{ID: "here", State: types.StateRunning, CheckoutRoot: root},
-		{ID: "bound", State: types.StateDeclared},
-		{ID: "elsewhere-1", State: types.StateRunning, CheckoutRoot: t.TempDir()},
-		{ID: "elsewhere-2", State: types.StateExited, CheckoutRoot: t.TempDir()},
-		{ID: "declared-unbound", State: types.StateDeclared},
-		{ID: "done-here", State: types.StatePass, CheckoutRoot: root},
+	for _, row := range []jobtypes.Job{
+		{ID: "here", State: jobtypes.StateRunning, CheckoutRoot: root},
+		{ID: "bound", State: jobtypes.StateDeclared},
+		{ID: "elsewhere-1", State: jobtypes.StateRunning, CheckoutRoot: t.TempDir()},
+		{ID: "elsewhere-2", State: jobtypes.StateExited, CheckoutRoot: t.TempDir()},
+		{ID: "declared-unbound", State: jobtypes.StateDeclared},
+		{ID: "done-here", State: jobtypes.StatePass, CheckoutRoot: root},
 	} {
-		_, err = store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+		_, err = store.Update(ctx, row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	// Bound after the rows are written: the store refuses a bound session's write to a
@@ -456,12 +456,12 @@ func TestSessionBriefCapsLiveLeases(t *testing.T) {
 	store, err := testReaders(t, root).OpenJobs(t.Context(), root)
 	require.NoError(t, err)
 	for i := 0; i < briefMaxLeases+5; i++ {
-		row := types.Job{ID: "exited-" + strconv.Itoa(i), State: types.StateExited, CheckoutRoot: root}
-		_, err = store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+		row := jobtypes.Job{ID: "exited-" + strconv.Itoa(i), State: jobtypes.StateExited, CheckoutRoot: root}
+		_, err = store.Update(ctx, row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
-	running := types.Job{ID: "running", State: types.StateRunning, CheckoutRoot: root}
-	_, err = store.Update(ctx, running.ID, func(cur *types.Job) { *cur = running })
+	running := jobtypes.Job{ID: "running", State: jobtypes.StateRunning, CheckoutRoot: root}
+	_, err = store.Update(ctx, running.ID, func(cur *jobtypes.Job) { *cur = running })
 	require.NoError(t, err)
 
 	brief := Gather(ctx, root, nil, testReaders(t, root))
@@ -510,22 +510,22 @@ func TestSessionBriefListsTheJobTreeForkedFromThisCheckout(t *testing.T) {
 
 	store, err := testReaders(t, root).OpenJobs(t.Context(), root)
 	require.NoError(t, err)
-	for _, row := range []types.Job{
-		{ID: "plan", State: types.StateRunning, Worktree: &types.JobWorktree{Root: work, Source: root}},
-		{ID: "plan/exited", Parent: "plan", State: types.StateExited},
-		{ID: "plan/waiting", Parent: "plan", State: types.StateDeclared, DependsOn: []string{"plan/exited"}},
-		{ID: "plan/failed", Parent: "plan", State: types.StateFail},
-		{ID: "landed", State: types.StatePass, Worktree: &types.JobWorktree{Root: t.TempDir(), Source: root, Removed: 1}},
-		{ID: "elsewhere", State: types.StateRunning, Worktree: &types.JobWorktree{Root: t.TempDir(), Source: t.TempDir()}},
+	for _, row := range []jobtypes.Job{
+		{ID: "plan", State: jobtypes.StateRunning, Worktree: &jobtypes.Worktree{Root: work, Source: root}},
+		{ID: "plan/exited", Parent: "plan", State: jobtypes.StateExited},
+		{ID: "plan/waiting", Parent: "plan", State: jobtypes.StateDeclared, DependsOn: []string{"plan/exited"}},
+		{ID: "plan/failed", Parent: "plan", State: jobtypes.StateFail},
+		{ID: "landed", State: jobtypes.StatePass, Worktree: &jobtypes.Worktree{Root: t.TempDir(), Source: root, Removed: 1}},
+		{ID: "elsewhere", State: jobtypes.StateRunning, Worktree: &jobtypes.Worktree{Root: t.TempDir(), Source: t.TempDir()}},
 	} {
-		_, err = store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+		_, err = store.Update(ctx, row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 		if row.Worktree != nil {
 			_, err = store.RecordWorktree(ctx, row.ID, *row.Worktree)
 			require.NoError(t, err)
 		}
 	}
-	seedFiled(t, store, "plan/exited", &types.JobResult{UnresolvedRisks: []string{"merge is the root's", "second"}})
+	seedFiled(t, store, "plan/exited", &jobtypes.Result{UnresolvedRisks: []string{"merge is the root's", "second"}})
 
 	brief := Gather(ctx, root, nil, testReaders(t, root))
 	require.NotNil(t, brief.Jobs)
@@ -577,13 +577,13 @@ func TestSessionBriefListsTheForksOfTheJobActedUnder(t *testing.T) {
 
 	store, err := testReaders(t, root).OpenJobs(t.Context(), root)
 	require.NoError(t, err)
-	for _, row := range []types.Job{
-		{ID: "worker", State: types.StateRunning},
-		{ID: "worker/a", Parent: "worker", State: types.StateDeclared},
-		{ID: "worker/a/b", Parent: "worker/a", State: types.StatePass},
-		{ID: "sibling", State: types.StateRunning},
+	for _, row := range []jobtypes.Job{
+		{ID: "worker", State: jobtypes.StateRunning},
+		{ID: "worker/a", Parent: "worker", State: jobtypes.StateDeclared},
+		{ID: "worker/a/b", Parent: "worker/a", State: jobtypes.StatePass},
+		{ID: "sibling", State: jobtypes.StateRunning},
 	} {
-		_, err = store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+		_, err = store.Update(ctx, row.ID, func(cur *jobtypes.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	t.Setenv(trail.EnvBaggage, "magus.lease=worker")
@@ -606,10 +606,10 @@ func TestSessionBriefJobTreeCapsAndNamesWhatItCouldNotRead(t *testing.T) {
 
 	unpushed := &briefUnpushed{Base: "origin/main", Count: 2}
 	assert.Equal(t, fmt.Sprintf("gate it in its checkout (%s), then push", hint.Affected.With("ci")),
-		briefNextStep(nil, types.Job{ID: "done", State: types.StatePass}, unpushed))
-	assert.Empty(t, briefNextStep(nil, types.Job{ID: "done", State: types.StatePass}, &briefUnpushed{Base: "origin/main"}))
+		briefNextStep(nil, jobtypes.Job{ID: "done", State: jobtypes.StatePass}, unpushed))
+	assert.Empty(t, briefNextStep(nil, jobtypes.Job{ID: "done", State: jobtypes.StatePass}, &briefUnpushed{Base: "origin/main"}))
 	assert.Equal(t, "waits on gone, which no job declares",
-		briefNextStep(nil, types.Job{ID: "w", State: types.StateDeclared, DependsOn: []string{"gone"}}, nil))
+		briefNextStep(nil, jobtypes.Job{ID: "w", State: jobtypes.StateDeclared, DependsOn: []string{"gone"}}, nil))
 
 	b := Payload{Workspace: "/checkout", Jobs: &briefJobTree{
 		Jobs: []briefJob{{ID: "done", State: "pass", Checkout: "/checkout", Branch: "done", Head: "abc1234", Unpushed: unpushed}},
@@ -626,11 +626,11 @@ func TestSessionBriefJobTreeCapsAndNamesWhatItCouldNotRead(t *testing.T) {
 func TestSessionBriefNamesEveryExitedJobNobodyCollected(t *testing.T) {
 	t.Parallel()
 
-	rows := []types.Job{{ID: "root", State: types.StateRunning}}
+	rows := []jobtypes.Job{{ID: "root", State: jobtypes.StateRunning}}
 	for i := range briefMaxJobs + 2 {
-		rows = append(rows, types.Job{ID: "root/" + strconv.Itoa(i), Parent: "root", State: types.StateExited})
+		rows = append(rows, jobtypes.Job{ID: "root/" + strconv.Itoa(i), Parent: "root", State: jobtypes.StateExited})
 	}
-	rows = append(rows, types.Job{ID: "root/rejected", Parent: "root", State: types.StateExited, Rejection: &types.JobRejection{Violations: []string{"check failed"}}})
+	rows = append(rows, jobtypes.Job{ID: "root/rejected", Parent: "root", State: jobtypes.StateExited, Rejection: &jobtypes.Rejection{Violations: []string{"check failed"}}})
 
 	tree := sessionJobTree(t.Context(), rows, nil, "root", t.TempDir(), types.VCSOptions{})
 	require.NotNil(t, tree)
@@ -649,7 +649,7 @@ func TestSessionBriefNamesEveryExitedJobNobodyCollected(t *testing.T) {
 
 func TestSessionBriefListsWhatIsNotMerged(t *testing.T) {
 	t.Parallel()
-	brief := Payload{Unmerged: types.JobUnmergedReport{Branch: "feat/x", Jobs: []types.JobUnmerged{
+	brief := Payload{Unmerged: jobtypes.UnmergedReport{Branch: "feat/x", Jobs: []jobtypes.Unmerged{
 		{Job: "w", Head: "abc123", Why: "2 commit(s) are not on feat/x", Remedy: "merge abc123"},
 	}}}
 
@@ -661,19 +661,19 @@ func TestSessionBriefListsWhatIsNotMerged(t *testing.T) {
 
 func TestSessionBriefSaysAnUnknownBranchIsUnknown(t *testing.T) {
 	t.Parallel()
-	brief := Payload{Unmerged: types.JobUnmergedReport{Unknown: "no branch checked out"}}
+	brief := Payload{Unmerged: jobtypes.UnmergedReport{Unknown: "no branch checked out"}}
 
 	assert.Contains(t, brief.Text(), "not merged: unknown, no branch checked out")
 }
 
 func TestSessionBriefCapsALongUnmergedReport(t *testing.T) {
 	t.Parallel()
-	var rows []types.JobUnmerged
+	var rows []jobtypes.Unmerged
 	for i := range briefUnmergedLines + 3 {
-		rows = append(rows, types.JobUnmerged{Job: fmt.Sprintf("w%d", i), Why: "off", Remedy: "merge"})
+		rows = append(rows, jobtypes.Unmerged{Job: fmt.Sprintf("w%d", i), Why: "off", Remedy: "merge"})
 	}
 
-	text := Payload{Unmerged: types.JobUnmergedReport{Jobs: rows}}.Text()
+	text := Payload{Unmerged: jobtypes.UnmergedReport{Jobs: rows}}.Text()
 
 	assert.Contains(t, text, "and 4 more")
 	assert.NotContains(t, text, "w12")
@@ -732,7 +732,7 @@ func emitJournalEvent(t *testing.T, h slog.Handler, e journal.Event) {
 
 // seedFiled files result as the job's first attempt, beside store's rows. The job package
 // files a result only through an exit; internal/guard keeps the same copy.
-func seedFiled(t *testing.T, store *job.Store, id string, result *types.JobResult) {
+func seedFiled(t *testing.T, store *job.Store, id string, result *jobtypes.Result) {
 	t.Helper()
 	path, err := store.Path()
 	require.NoError(t, err)

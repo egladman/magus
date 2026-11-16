@@ -16,7 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/ward"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 type ContractSkewSuite struct {
@@ -71,9 +71,9 @@ func (s *ContractSkewSuite) TestAnUnreadableContractRefusesAChange() {
 }
 
 // authorityRows is a job store holding the given rows.
-type authorityRows []types.Job
+type authorityRows []job.Job
 
-func (r authorityRows) List() ([]types.Job, error) { return r, nil }
+func (r authorityRows) List() ([]job.Job, error) { return r, nil }
 
 // AuthorityContractSuite reproduces the incident of 2026-11-12. The root
 // relinked while a worker was live, and the worker's binary, built from its

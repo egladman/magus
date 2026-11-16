@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -50,8 +51,8 @@ func (s *ForkGraderSuite) load(context.Context, string) (Dependencies, *Workspac
 	}, nil
 }
 
-func (s *ForkGraderSuite) row(target string, noCharms bool) types.Job {
-	return types.Job{ID: "w", Check: &types.LeaseCheck{Target: target, Project: ".", NoDefaultCharms: noCharms}}
+func (s *ForkGraderSuite) row(target string, noCharms bool) job.Job {
+	return job.Job{ID: "w", Check: &job.LeaseCheck{Target: target, Project: ".", NoDefaultCharms: noCharms}}
 }
 
 func (s *ForkGraderSuite) TestAGradeReachedOnceIsReadBack() {

@@ -9,6 +9,7 @@ import (
 	"net/netip"
 
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -44,8 +45,8 @@ func StartTokenServer(origin string, routes map[string]http.Handler) (*TokenServ
 	}
 	t := &TokenServer{srv: s, token: types.NewSecret(hex.EncodeToString(raw)), done: make(chan struct{})}
 	// The per-run token reads its one page's data and nothing more.
-	verify := SingleTokenVerifier(func() (string, error) { return t.token.Reveal(), nil }, types.GrantViewer)
-	need := types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
+	verify := SingleTokenVerifier(func() (string, error) { return t.token.Reveal(), nil }, job.AccessViewer)
+	need := job.Need{Scope: job.ScopeConsole, Level: job.LevelRead}
 	for pattern, h := range routes {
 		guarded, err := BearerGuardWithQueryToken(rpcerr.FormatJSON, verify, need, h)
 		if err != nil {

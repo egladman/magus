@@ -31,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
@@ -417,7 +418,7 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
-	fetch := magustypes.InflightFetch{
+	fetch := job.InflightFetch{
 		Provider: f.Provider, Host: remoteHost(remote), Base: f.Base,
 		At: started.Unix(), ElapsedMS: time.Since(started).Milliseconds(),
 	}

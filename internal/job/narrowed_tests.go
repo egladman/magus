@@ -19,6 +19,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -38,17 +39,17 @@ import (
 //
 // A check naming exactly the packages of the write paths ([scopedToWritePackages]) may
 // narrow their tests too: the integration that merges the job runs the full go-test.
-func narrowedTestProblems(store *Store, row types.Job) types.JobProblems {
+func narrowedTestProblems(store *Store, row job.Job) types.JobProblems {
 	if store == nil || store.root == "" {
 		return nil
 	}
 	var ps types.JobProblems
 	for _, g := range row.EffectiveGoals() {
-		if g.Kind != types.GoalKindCheck || scopedToWritePackages(store.root, g.Check, row.Paths.Write, store.testSelection()) {
+		if g.Kind != job.GoalKindCheck || scopedToWritePackages(store.root, g.Check, row.Paths.Write, store.testSelection()) {
 			continue
 		}
 		named := fmt.Sprintf("%s's check", row.ID)
-		if g.ID != types.PrimaryGoalID {
+		if g.ID != job.PrimaryGoalID {
 			named = fmt.Sprintf("%s's goal %q", row.ID, g.ID)
 		}
 		if p, ok := narrowedCheckProblem(store.root, named, g.Check, row.Paths.Write, store.testSelection()); ok {
@@ -61,7 +62,7 @@ func narrowedTestProblems(store *Store, row types.Job) types.JobProblems {
 
 // narrowedCheckProblem is [narrowedTestProblems] for one check, named as the problem names
 // it, and false when the check leaves no test out.
-func narrowedCheckProblem(root, named string, check types.LeaseCheck, writePaths []string, selection testSelection) (types.JobProblem, bool) {
+func narrowedCheckProblem(root, named string, check job.LeaseCheck, writePaths []string, selection testSelection) (types.JobProblem, bool) {
 	if !selection.goTests(check) {
 		return types.JobProblem{}, false
 	}
@@ -310,7 +311,7 @@ func testsInWritePaths(root string, writePaths, tags []string) map[string][]stri
 // module, which `go list ./...` does not enter. Without that a `**/*.go` path would walk
 // every worktree and node_modules under the root and count fixtures as packages.
 func writePathDirs(root, entry string) []string {
-	entry, _ = types.SplitClaim(entry)
+	entry, _ = job.SplitClaim(entry)
 	entry = path.Clean(strings.TrimSpace(entry))
 	if !strings.HasSuffix(path.Base(entry), ".go") {
 		return nil
@@ -322,7 +323,7 @@ func writePathDirs(root, entry string) []string {
 		}
 		return nil
 	}
-	start := types.LiteralPrefix(dir)
+	start := job.LiteralPrefix(dir)
 	if start == "" {
 		start = "."
 	}
@@ -410,7 +411,7 @@ func isTestFunc(fn *ast.FuncDecl) bool {
 // scopedToWritePackages reports whether check is a go test naming exactly the packages of
 // writePaths: every package argument names one of them, `./dir` or `./dir/...`, and every
 // one of them is named.
-func scopedToWritePackages(root string, check types.LeaseCheck, writePaths []string, selection testSelection) bool {
+func scopedToWritePackages(root string, check job.LeaseCheck, writePaths []string, selection testSelection) bool {
 	if root == "" || !selection.goTests(check) {
 		return false
 	}

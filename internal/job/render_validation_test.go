@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,7 +15,7 @@ func TestRenderValidationNumbersEveryProblemWithItsFix(t *testing.T) {
 	t.Parallel()
 
 	v := types.JobValidation{
-		Job: types.Job{ID: "j"},
+		Job: job.Job{ID: "j"},
 		Problems: types.JobProblems{
 			{Code: types.JobCheckUnrunnable, Field: "check.target", Message: "no such target", Fix: "name a real one"},
 			{Code: types.JobUngraded, Message: "nothing grades the job"},
@@ -31,7 +32,7 @@ func TestRenderValidationNumbersEveryProblemWithItsFix(t *testing.T) {
 func TestRenderValidationDryRunPrintsTheRecordItWouldStore(t *testing.T) {
 	t.Parallel()
 
-	v := types.JobValidation{Job: types.Job{ID: "j", Paths: types.JobPaths{Write: []string{"a.go"}}}}
+	v := types.JobValidation{Job: job.Job{ID: "j", Paths: job.Paths{Write: []string{"a.go"}}}}
 	var buf bytes.Buffer
 	RenderValidation(&buf, v, true)
 	out := buf.String()
@@ -47,9 +48,9 @@ func TestRenderValidationSummarizesDeviationsAndKeepsUnchecked(t *testing.T) {
 	t.Parallel()
 
 	v := types.JobValidation{
-		Job: types.Job{
+		Job: job.Job{
 			ID:         "j",
-			Deviations: []types.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "docs/x.md", Reason: "the root regenerates it"}},
+			Deviations: []job.Deviation{{Code: types.OutputOutsideWritePaths, Subject: "docs/x.md", Reason: "the root regenerates it"}},
 		},
 		Permitted: types.JobProblems{{Code: types.OutputOutsideWritePaths, Field: "paths.write", Subject: "docs/x.md", Message: "x regenerates docs/x.md"}},
 		Unchecked: []string{"write path breadth: the workspace did not load"},
@@ -64,7 +65,7 @@ func TestRenderValidationSummarizesDeviationsAndKeepsUnchecked(t *testing.T) {
 func TestRenderValidationKeepsLargeDeviationListsOutOfText(t *testing.T) {
 	t.Parallel()
 
-	v := types.JobValidation{Job: types.Job{ID: "j"}}
+	v := types.JobValidation{Job: job.Job{ID: "j"}}
 	for range 64 {
 		v.Permitted = append(v.Permitted, types.JobProblem{
 			Code: types.OutputOutsideWritePaths, Subject: "docs/x.md", Message: "generated output is integrated by the root",

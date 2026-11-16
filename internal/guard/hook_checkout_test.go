@@ -21,9 +21,9 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 )
 
 func TestCallDirIsWhereTheCallLands(t *testing.T) {
@@ -106,11 +106,11 @@ func (s *DelegateToCheckoutSuite) pin(own string) string {
 	digest, err := job.BinaryDigest(own)
 	s.Require().NoError(err)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: s.cacheDir, Root: s.session})
-	_, err = store.Update(t.Context(), "pinned", func(cur *types.Job) {
-		*cur = types.Job{ID: "pinned", State: types.StateDeclared, Paths: types.JobPaths{Write: []string{"a.go"}}}
+	_, err = store.Update(t.Context(), "pinned", func(cur *jobtypes.Job) {
+		*cur = jobtypes.Job{ID: "pinned", State: jobtypes.StateDeclared, Paths: jobtypes.Paths{Write: []string{"a.go"}}}
 	})
 	s.Require().NoError(err)
-	_, err = store.RecordWorktree(t.Context(), "pinned", types.JobWorktree{Root: filepath.Dir(own), Binary: own, BinaryDigest: digest})
+	_, err = store.RecordWorktree(t.Context(), "pinned", jobtypes.Worktree{Root: filepath.Dir(own), Binary: own, BinaryDigest: digest})
 	s.Require().NoError(err)
 	return own
 }
@@ -351,7 +351,7 @@ func (s *DelegateToCheckoutSuite) TestABinaryRewrittenSinceItsPinIsJudgedHere() 
 func (s *DelegateToCheckoutSuite) TestAPinOnAnEndedRowHandsNothingOn() {
 	s.placePinned(s.repo.Head(), `{"decision":"deny"}`, 2)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: s.cacheDir, Root: s.session})
-	_, err := store.Update(s.T().Context(), "pinned", func(cur *types.Job) { cur.State = types.StatePass })
+	_, err := store.Update(s.T().Context(), "pinned", func(cur *jobtypes.Job) { cur.State = jobtypes.StatePass })
 	s.Require().NoError(err)
 	handled, declined, _, err := s.delegate(s.line())
 	s.Require().NoError(err)

@@ -17,10 +17,10 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
-	"github.com/egladman/magus/types"
 )
 
 func actions(events []*activityv1.ActivityEvent) []string {
@@ -50,7 +50,7 @@ func list(t *testing.T, dir string, q *activityv1.ActivityQuery) []*activityv1.A
 }
 
 // consoleCred is the verified credential the seeded token event was made under.
-var consoleCred = types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
+var consoleCred = jobtypes.Credential{Kind: jobtypes.KindStored, ID: "3fa9c1d2", Name: "console-1", Grant: jobtypes.AccessConsole}
 
 func seedTrail(t *testing.T) (dir, respRef string) {
 	t.Helper()
@@ -58,18 +58,18 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	respRef, _ = trail.WriteBlob(t.Context(), dir, "mcp", []byte("the result body"))
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 1, Kind: trail.KindMCPToolCall, UserAgent: "claude-code/1.2.3",
-		Origin: types.Origin{EntryPoint: types.EntryPointMCP, Host: "claude"},
+		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointMCP, Host: "claude"},
 		Action: "client", Outcome: trail.OutcomeOK,
 		ResponseRef: respRef, Preview: "the result body", DurationMs: 12,
 	})
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 2, Kind: trail.KindTokenLifecycle,
-		Origin: types.Origin{EntryPoint: types.EntryPointRPC, Credential: consoleCred},
+		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointRPC, Credential: consoleCred},
 		Action: "connector.create", Outcome: trail.OutcomeOK,
 	})
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 3, Kind: trail.KindJob, Workspace: "/ws/a",
-		Origin: types.Origin{EntryPoint: types.EntryPointServer},
+		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointServer},
 		Action: "graph build", Outcome: trail.OutcomeError, Error: "boom", DurationMs: 40,
 	})
 	agentReqBody := []byte(`{"api_version":"magus.agent-command/v1alpha1","tool":"Bash","command":"go test ./..."}`)
@@ -78,8 +78,8 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	agentResp, _ := trail.WriteBlob(t.Context(), dir, "agent", agentRespBody)
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 4, Kind: trail.KindAgentCommand, Workspace: "/ws/a",
-		Origin: types.Origin{EntryPoint: types.EntryPointHook, Host: "codex", Session: "abc", Agent: "a1"},
-		Lease:  "fleet/a", LeaseFrom: types.LeaseSourceMarker,
+		Origin: jobtypes.Origin{EntryPoint: jobtypes.EntryPointHook, Host: "codex", Session: "abc", Agent: "a1"},
+		Lease:  "fleet/a", LeaseFrom: jobtypes.LeaseSourceMarker,
 		Action: "Bash", Outcome: trail.OutcomeOK, RequestRef: agentReq, ResponseRef: agentResp,
 		RequestBytes: int64(len(agentReqBody)), ResponseBytes: int64(len(agentRespBody)), Preview: "guard: deny",
 	})
@@ -98,7 +98,7 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 	assert.Equal(t, "Bash", events[0].GetAction())
 	assert.Equal(t, activityv1.Kind_KIND_AGENT_COMMAND, events[0].GetKind())
 	user := trail.LocalOrigin(t.Context()).User
-	assert.Equal(t, types.Origin{User: user, Host: "codex", Agent: "a1"}.Label(), events[0].GetActor())
+	assert.Equal(t, jobtypes.Origin{User: user, Host: "codex", Agent: "a1"}.Label(), events[0].GetActor())
 	assert.Equal(t, user, events[0].GetUser(), "the OS account rides the wire on its own field")
 	assert.Equal(t, "hook", events[0].GetEntryPoint())
 	assert.Equal(t, "a1", events[0].GetAgent())
@@ -134,10 +134,10 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 }
 
 func TestEncodeHost_RecordedHostWinsAndMCPFallsBackToUserAgent(t *testing.T) {
-	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindAgentCommand, Origin: types.Origin{Host: "codex"}}))
+	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindAgentCommand, Origin: jobtypes.Origin{Host: "codex"}}))
 	assert.Equal(t, "claude-code/1.2.3", encodeHost(trail.Event{Kind: trail.KindMCPToolCall, UserAgent: "claude-code/1.2.3"}))
 	// A recorded host is what its producer observed, so it wins over the header reading.
-	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindMCPToolCall, Origin: types.Origin{Host: "codex"}, UserAgent: "curl/8"}))
+	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindMCPToolCall, Origin: jobtypes.Origin{Host: "codex"}, UserAgent: "curl/8"}))
 	// Only an MCP call's User-Agent stands in for a host; no other kind borrows one.
 	assert.Empty(t, encodeHost(trail.Event{Kind: trail.KindJob, UserAgent: "curl/8"}))
 	assert.Empty(t, encodeHost(trail.Event{Kind: trail.KindAgentCommand}))
@@ -231,7 +231,7 @@ func TestMatchFilter_ActorsActions(t *testing.T) {
 			actions(list(t, dir, &activityv1.ActivityQuery{Actors: []string{actor}})), actor)
 	}
 	user := trail.LocalOrigin(t.Context()).User
-	label := types.Origin{User: user, Credential: consoleCred}.Label()
+	label := jobtypes.Origin{User: user, Credential: consoleCred}.Label()
 	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{Actors: []string{label}}),
 		"a filter never matches the label's wording")
 }
@@ -550,10 +550,10 @@ func TestListActivityEvents_RejectsBadPageToken(t *testing.T) {
 // returns a client for it. connect.ServerStream has no injectable test sink, so a streaming
 // RPC is exercised end to end, the shape the viewer and status stream tests already use.
 // The poll is tightened so a test does not wait on the production cadence.
-func watchClient(t *testing.T, dir string, rows []types.Job, files chan job.FeedEvent) activityv1alpha1connect.ActivityServiceClient { //nolint:ireturn // the generated client type is an interface; the implementation is chosen at runtime
+func watchClient(t *testing.T, dir string, rows []jobtypes.Job, files chan job.FeedEvent) activityv1alpha1connect.ActivityServiceClient { //nolint:ireturn // the generated client type is an interface; the implementation is chosen at runtime
 	t.Helper()
 	s := NewService(func() []Workspace { return []Workspace{{Root: "/ws" + dir, CacheDir: dir}} },
-		WithJobs(func() []types.Job { return rows }),
+		WithJobs(func() []jobtypes.Job { return rows }),
 		WithFileChanges(func(context.Context) <-chan job.FeedEvent { return files }))
 	s.poll = 5 * time.Millisecond
 	path, handler := activityv1alpha1connect.NewActivityServiceHandler(s)
@@ -572,16 +572,16 @@ func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
 	dir := t.TempDir()
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 10, Kind: trail.KindAgentCommand, Action: "edit",
-		Lease: "pwa/job-watch", Origin: types.Origin{Session: "s1", Host: "claude-code"},
+		Lease: "pwa/job-watch", Origin: jobtypes.Origin{Session: "s1", Host: "claude-code"},
 		Outcome: trail.OutcomeOK, Preview: "guard: deny",
 	})
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 11, Kind: trail.KindAgentCommand, Action: "edit",
-		Lease: "pwa/elsewhere", Origin: types.Origin{Session: "s2"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
+		Lease: "pwa/elsewhere", Origin: jobtypes.Origin{Session: "s2"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
 	})
-	rows := []types.Job{{
-		ID: "pwa/job-watch", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/trail"}},
-		Attempt: &types.JobAttempt{Found: true, Ref: "out1a2b3c", TimestampMs: 12, Target: "go-test", Project: "."},
+	rows := []jobtypes.Job{{
+		ID: "pwa/job-watch", State: jobtypes.StateRunning, Paths: jobtypes.Paths{Write: []string{"internal/trail"}},
+		Attempt: &jobtypes.CapturedRun{Found: true, Ref: "out1a2b3c", TimestampMs: 12, Target: "go-test", Project: "."},
 	}}
 	files := make(chan job.FeedEvent, 1)
 	client := watchClient(t, dir, rows, files)
@@ -626,7 +626,7 @@ func TestWatchActivityEventsFollowsTheTrailForward(t *testing.T) {
 	dir := t.TempDir()
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 1, Kind: trail.KindAgentCommand,
-		Action: "already-here", Origin: types.Origin{Session: "s1"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
+		Action: "already-here", Origin: jobtypes.Origin{Session: "s1"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
 	})
 	files := make(chan job.FeedEvent)
 	client := watchClient(t, dir, nil, files)
@@ -643,7 +643,7 @@ func TestWatchActivityEventsFollowsTheTrailForward(t *testing.T) {
 
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 2, Kind: trail.KindAgentCommand,
-		Action: "landed-while-watching", Origin: types.Origin{Session: "s1"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
+		Action: "landed-while-watching", Origin: jobtypes.Origin{Session: "s1"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
 	})
 	require.True(t, stream.Receive())
 	assert.Equal(t, "landed-while-watching", stream.Msg().GetAction())

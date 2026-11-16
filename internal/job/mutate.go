@@ -9,23 +9,23 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // mutate is the locked read-modify-write [Store.Update], [Store.Exec] and
 // [Wait] share, and the only place a row is written row-wise. kind says what
 // the write is; see [grading]. apply may fail, and nothing is written then.
-func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(cur *types.Job, exists bool, now int64) error) (types.Job, error) {
-	return s.mutateSeeing(ctx, id, kind, func(cur *types.Job, exists bool, now int64, _ []types.Job) error {
+func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(cur *job.Job, exists bool, now int64) error) (job.Job, error) {
+	return s.mutateSeeing(ctx, id, kind, func(cur *job.Job, exists bool, now int64, _ []job.Job) error {
 		return apply(cur, exists, now)
 	})
 }
 
 // mutateSeeing is mutate whose apply also sees every stored row.
 // The rows are read under the same lock; apply must not change them.
-func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply func(cur *types.Job, exists bool, now int64, rows []types.Job) error) (types.Job, error) {
+func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply func(cur *job.Job, exists bool, now int64, rows []job.Job) error) (job.Job, error) {
 	if strings.TrimSpace(id) == "" {
-		return types.Job{}, ErrNoID
+		return job.Job{}, ErrNoID
 	}
 	w := &rowWrite{s: s, id: id, kind: kind}
 	// Read before the lock, like Exec's checkpoint: the trail may be another
@@ -43,7 +43,7 @@ func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply
 		return w.run(ctx, apply)
 	})
 	if err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
 	// After the row, so a refused write folds nothing.
 	if w.folded != nil {
@@ -64,31 +64,31 @@ type rowWrite struct {
 	id           string
 	kind         grading
 	actor        Actor
-	denials      []types.JobDenial
+	denials      []job.Denial
 	denialsKnown bool
 	rootHead     func() string
 
 	f    *jobsFile
 	i    int // the row's place in f.Jobs, -1 when it is new
-	prev types.Job
-	row  types.Job
+	prev job.Job
+	row  job.Job
 	now  int64
 	// entering is a declaration whose only change is one entry. refork is an
 	// ended row declared again.
 	entering, refork bool
 
 	ended  endings
-	folded *types.Attempt
-	stored types.Job
+	folded *job.Attempt
+	stored job.Job
 }
 
 func (w *rowWrite) exists() bool { return w.i >= 0 }
 
 // run is the write over w.f, under both locks.
-func (w *rowWrite) run(ctx context.Context, apply func(cur *types.Job, exists bool, now int64, rows []types.Job) error) error {
+func (w *rowWrite) run(ctx context.Context, apply func(cur *job.Job, exists bool, now int64, rows []job.Job) error) error {
 	w.ended, w.folded = endings{}, nil
-	w.i = slices.IndexFunc(w.f.Jobs, func(e types.Job) bool { return e.ID == w.id })
-	w.prev = types.Job{}
+	w.i = slices.IndexFunc(w.f.Jobs, func(e job.Job) bool { return e.ID == w.id })
+	w.prev = job.Job{}
 	if w.exists() {
 		w.prev = w.f.Jobs[w.i]
 		if err := readOnly(w.prev); err != nil {
@@ -128,7 +128,7 @@ func (w *rowWrite) declare() {
 	// Every door into the store declares here, so a record naming no state
 	// is stored as declared: the guard reads an empty state as ended.
 	if w.kind == asDeclaration && w.row.State == "" {
-		w.row.State = types.StateDeclared
+		w.row.State = job.StateDeclared
 	}
 	if w.kind == asDeclaration && w.exists() && widensInPlace(w.prev, w.row) {
 		w.row.State = w.prev.State
@@ -144,7 +144,7 @@ func (w *rowWrite) authorize(ctx context.Context) error {
 			return err
 		}
 		e := &w.row.Entries[len(w.row.Entries)-1]
-		e.By, e.At, e.Consumed = trail.StampOrigin(ctx, types.Origin{}), w.now, 0
+		e.By, e.At, e.Consumed = trail.StampOrigin(ctx, job.Origin{}), w.now, 0
 	case w.kind.graded():
 		if err := authorizeRow(w.actor, w.id, w.kind, w.prev, w.row, w.exists(), w.f.Jobs); err != nil {
 			return err
@@ -198,7 +198,7 @@ func (w *rowWrite) foldAttempt() error {
 	if err != nil {
 		return err
 	}
-	tries := types.NewJobAttempts(all)
+	tries := job.NewAttempts(all)
 	if err := refuseAttempt(w.id, tries.LiveN(w.id), w.row); err != nil {
 		return err
 	}
@@ -237,13 +237,13 @@ func (w *rowWrite) endReason() error {
 	switch {
 	case row.State.Live():
 		row.EndReason = ""
-	case w.exists() && prev.State.Live() && row.State == types.StateNoReturn:
+	case w.exists() && prev.State.Live() && row.State == job.StateNoReturn:
 		all, err := w.s.Attempts()
 		if err != nil {
 			return err
 		}
-		row.EndReason = endedReason(prev, types.NewJobAttempts(all).Result(w.id) != nil, w.s.endsOwnRow(prev))
-	case w.exists() && prev.State.Live() && row.State == types.StatePass && gradedByHolder(prev):
+		row.EndReason = endedReason(prev, job.NewAttempts(all).Result(w.id) != nil, w.s.endsOwnRow(prev))
+	case w.exists() && prev.State.Live() && row.State == job.StatePass && gradedByHolder(prev):
 		row.EndReason = returnedReason
 	}
 	return nil
@@ -305,7 +305,7 @@ func (w *rowWrite) count() {
 	if w.kind != asObservation {
 		row.ReworkRounds = prev.ReworkRounds
 	}
-	if w.kind != asNarrowing && w.exists() && (prev.State == types.StateRunning || prev.State == types.StateExited) &&
+	if w.kind != asNarrowing && w.exists() && (prev.State == job.StateRunning || prev.State == job.StateExited) &&
 		slices.ContainsFunc(row.Paths.Write, func(p string) bool { return !slices.Contains(prev.Paths.Write, p) }) {
 		row.Widenings++
 	}
@@ -348,7 +348,7 @@ func (w *rowWrite) place(ctx context.Context) error {
 		row.RegisteredBy = prev.RegisteredBy
 		w.f.Jobs[w.i] = *row
 	} else {
-		row.RegisteredBy = trail.StampOrigin(ctx, types.Origin{})
+		row.RegisteredBy = trail.StampOrigin(ctx, job.Origin{})
 		w.f.Jobs = append(w.f.Jobs, *row)
 	}
 	if w.exists() && !prev.State.Terminal() && row.State.Terminal() {

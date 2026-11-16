@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
@@ -23,7 +24,6 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -655,11 +655,11 @@ func (s *SpawnRuleSuite) TestAForkAboveItsParentIsRefusedWithTheRulesCode() {
 		SpawnCeiling: func(context.Context) (builtin.Setting, error) { return builtin.Setting{Decision: builtin.Deny}, nil },
 	})
 	put := func(id, parent, model string) error {
-		row := types.Job{
-			ID: id, Parent: parent, Agent: &agent.Spec{Instructions: "goal for " + id, Model: agent.Model{Tier: model}, Worker: agent.Worker{Type: agent.WorkerTypeResumed}}, Checkpoint: "abc123",
-			Paths: types.JobPaths{Write: []string{"internal/" + id}}, Validation: "magus run test", State: types.StateDeclared,
+		row := jobtypes.Job{
+			ID: id, Parent: parent, Agent: &jobtypes.Agent{Instructions: "goal for " + id, Model: jobtypes.Model{Tier: model}, Worker: jobtypes.Worker{Type: jobtypes.WorkerTypeResumed}}, Checkpoint: "abc123",
+			Paths: jobtypes.Paths{Write: []string{"internal/" + id}}, Validation: "magus run test", State: jobtypes.StateDeclared,
 		}
-		_, err := store.Update(t.Context(), id, func(cur *types.Job) { *cur = row })
+		_, err := store.Update(t.Context(), id, func(cur *jobtypes.Job) { *cur = row })
 		return err
 	}
 	s.Require().NoError(put("p", "", "low"))

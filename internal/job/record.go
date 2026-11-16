@@ -10,13 +10,12 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
-	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 )
 
 // jobRecord is one row of jobs.jsonl, the persistence type of
-// [types.Job] (ADR 0030). [recordJob] and [jobRecord.job] are the one
+// [job.Job] (ADR 0030). [recordJob] and [jobRecord.job] are the one
 // conversion. Unknown, here and on spec and status, is what a newer
 // magus wrote, carried back out unchanged.
 type jobRecord struct {
@@ -32,7 +31,7 @@ type jobSpec struct {
 	Parent       string                     `json:"parent,omitempty"`
 	Agent        *agentRecord               `json:"agent,omitempty"`
 	Checkpoint   string                     `json:"checkpoint,omitempty"`
-	Paths        types.JobPaths             `json:"paths,omitzero"`
+	Paths        job.Paths                  `json:"paths,omitzero"`
 	DependsOn    []string                   `json:"dependsOn,omitempty"`
 	Integrates   []string                   `json:"integrates,omitempty"`
 	Breaks       []string                   `json:"breaks,omitempty"`
@@ -42,61 +41,61 @@ type jobSpec struct {
 	Follows      string                     `json:"follows,omitempty"`
 	MaxAttempts  int                        `json:"maxAttempts,omitzero"`
 	MaxClaims    int                        `json:"maxClaims,omitzero"`
-	Deferred     []types.JobDeferred        `json:"deferred,omitempty"`
+	Deferred     []job.Deferred             `json:"deferred,omitempty"`
 	LeftUnmerged string                     `json:"leftUnmerged,omitempty"`
 	Weight       float64                    `json:"weight,omitzero"`
 	Check        *leaseCheckRecord          `json:"check,omitempty"`
 	Validation   string                     `json:"validation,omitempty"`
 	Goals        []goalRecord               `json:"goals,omitempty"`
 	ReadOnly     bool                       `json:"readOnly,omitzero"`
-	Deviations   []types.Deviation          `json:"deviations,omitempty"`
+	Deviations   []job.Deviation            `json:"deviations,omitempty"`
 	Unknown      map[string]json.RawMessage `json:",unknown"`
 }
 
 // jobStatus is what the store computes. Its conditions are the row's
 // lifecycle; see [lifecycleConditions].
 type jobStatus struct {
-	Conditions      []apiversion.Condition       `json:"conditions,omitempty"`
-	ModelTier       *modelTierRecord             `json:"modelTier,omitempty"`
-	ReworkRounds    int                          `json:"reworkRounds,omitzero"`
-	Widenings       int                          `json:"widenings,omitzero"`
-	Claims          []claimRecord                `json:"claims,omitempty"`
-	Landed          bool                         `json:"landed,omitzero"`
-	Paused          int64                        `json:"paused,omitzero"`
-	PausedBy        originRecord                 `json:"pausedBy,omitzero"`
-	PauseReason     string                       `json:"pauseReason,omitempty"`
-	PausedUntil     int64                        `json:"pausedUntil,omitzero"`
-	Rejection       *rejectionRecord             `json:"rejection,omitempty"`
-	Releases        []releaseRecord              `json:"releases,omitempty"`
-	Unattributed    []types.JobUnattributedWrite `json:"unattributed,omitempty"`
-	Entries         []entryRecord                `json:"entries,omitempty"`
-	ReleaseRequests []types.JobReleaseRequest    `json:"releaseRequests,omitempty"`
-	WriteProof      string                       `json:"writeProof,omitempty"`
-	Validated       int64                        `json:"validated,omitzero"`
-	ReportedBase    string                       `json:"reportedBase,omitempty"`
-	BaseVerdict     string                       `json:"baseVerdict,omitempty"`
-	RegisteredBy    originRecord                 `json:"registeredBy,omitzero"`
-	Authority       string                       `json:"authority,omitempty"`
-	Registered      int64                        `json:"registered,omitzero"`
-	HolderStopped   int64                        `json:"holderStopped,omitzero"`
-	CheckoutRoot    string                       `json:"checkoutRoot,omitempty"`
-	Worktree        *worktreeRecord              `json:"worktree,omitempty"`
-	EndReason       string                       `json:"endReason,omitempty"`
-	Created         int64                        `json:"created"`
-	Updated         int64                        `json:"updated"`
-	Deadline        int64                        `json:"deadline,omitzero"`
-	Attempt         *runAttemptRecord            `json:"attempt,omitempty"`
-	GateAttempts    []gateAttemptRecord          `json:"gateAttempts,omitempty"`
-	LastRun         *runRecord                   `json:"lastRun,omitempty"`
-	Integration     *integrationRecord           `json:"integration,omitempty"`
-	WaiterEvidence  *integrationRecord           `json:"waiterEvidence,omitempty"`
-	Unknown         map[string]json.RawMessage   `json:",unknown"`
+	Conditions      []apiversion.Condition     `json:"conditions,omitempty"`
+	ModelTier       *modelTierRecord           `json:"modelTier,omitempty"`
+	ReworkRounds    int                        `json:"reworkRounds,omitzero"`
+	Widenings       int                        `json:"widenings,omitzero"`
+	Claims          []claimRecord              `json:"claims,omitempty"`
+	Landed          bool                       `json:"landed,omitzero"`
+	Paused          int64                      `json:"paused,omitzero"`
+	PausedBy        originRecord               `json:"pausedBy,omitzero"`
+	PauseReason     string                     `json:"pauseReason,omitempty"`
+	PausedUntil     int64                      `json:"pausedUntil,omitzero"`
+	Rejection       *rejectionRecord           `json:"rejection,omitempty"`
+	Releases        []releaseRecord            `json:"releases,omitempty"`
+	Unattributed    []job.UnattributedWrite    `json:"unattributed,omitempty"`
+	Entries         []entryRecord              `json:"entries,omitempty"`
+	ReleaseRequests []job.ReleaseRequest       `json:"releaseRequests,omitempty"`
+	WriteProof      string                     `json:"writeProof,omitempty"`
+	Validated       int64                      `json:"validated,omitzero"`
+	ReportedBase    string                     `json:"reportedBase,omitempty"`
+	BaseVerdict     string                     `json:"baseVerdict,omitempty"`
+	RegisteredBy    originRecord               `json:"registeredBy,omitzero"`
+	Authority       string                     `json:"authority,omitempty"`
+	Registered      int64                      `json:"registered,omitzero"`
+	HolderStopped   int64                      `json:"holderStopped,omitzero"`
+	CheckoutRoot    string                     `json:"checkoutRoot,omitempty"`
+	Worktree        *worktreeRecord            `json:"worktree,omitempty"`
+	EndReason       string                     `json:"endReason,omitempty"`
+	Created         int64                      `json:"created"`
+	Updated         int64                      `json:"updated"`
+	Deadline        int64                      `json:"deadline,omitzero"`
+	Attempt         *runAttemptRecord          `json:"attempt,omitempty"`
+	GateAttempts    []gateAttemptRecord        `json:"gateAttempts,omitempty"`
+	LastRun         *runRecord                 `json:"lastRun,omitempty"`
+	Integration     *integrationRecord         `json:"integration,omitempty"`
+	WaiterEvidence  *integrationRecord         `json:"waiterEvidence,omitempty"`
+	Unknown         map[string]json.RawMessage `json:",unknown"`
 }
 
 // recordJob is row as the line jobs.jsonl stores. stored is the row's
 // record as read, nil for a new row: what it carries that row cannot say
 // is kept.
-func recordJob(row types.Job, stored *jobRecord) jobRecord {
+func recordJob(row job.Job, stored *jobRecord) jobRecord {
 	var prev jobRecord
 	if stored != nil {
 		prev = *stored
@@ -112,7 +111,7 @@ func recordJob(row types.Job, stored *jobRecord) jobRecord {
 }
 
 // recordSpec is the declared half of row's record.
-func recordSpec(row types.Job, unknown map[string]json.RawMessage) jobSpec {
+func recordSpec(row job.Job, unknown map[string]json.RawMessage) jobSpec {
 	spec := jobSpec{
 		Parent: row.Parent, Agent: recordAgent(row.Agent), Checkpoint: row.Checkpoint,
 		Paths:     row.Paths,
@@ -135,7 +134,7 @@ func recordSpec(row types.Job, unknown map[string]json.RawMessage) jobSpec {
 
 // recordStatus is the computed half of row's record. prev is the stored
 // status, whose conditions and unknown members carry over.
-func recordStatus(row types.Job, prev jobStatus) jobStatus {
+func recordStatus(row job.Job, prev jobStatus) jobStatus {
 	st := jobStatus{
 		Conditions:   lifecycleConditions(row, prev.Conditions),
 		ModelTier:    recordModelTier(row.ModelTier),
@@ -168,7 +167,7 @@ func recordStatus(row types.Job, prev jobStatus) jobStatus {
 }
 
 // recordRuns sets the worktree and the run evidence of st from row.
-func recordRuns(st *jobStatus, row types.Job) {
+func recordRuns(st *jobStatus, row job.Job) {
 	if row.Worktree != nil {
 		w := worktreeRecord(*row.Worktree)
 		st.Worktree = &w
@@ -188,19 +187,19 @@ func recordRuns(st *jobStatus, row types.Job) {
 
 // job is r as the domain type, refusing a record of another kind or
 // version.
-func (r jobRecord) job() (types.Job, error) {
+func (r jobRecord) job() (job.Job, error) {
 	if r.TypeMeta != jobType {
-		return types.Job{}, &apiversion.RefusedError{Want: jobType, Got: r.TypeMeta}
+		return job.Job{}, &apiversion.RefusedError{Want: jobType, Got: r.TypeMeta}
 	}
 	state, err := lifecycleState(r.Status.Conditions)
 	if err != nil {
-		return types.Job{}, fmt.Errorf("job %s: %w", r.Metadata.Name, err)
+		return job.Job{}, fmt.Errorf("job %s: %w", r.Metadata.Name, err)
 	}
 	var bad wireReads
 	row := r.Spec.job(&bad)
 	r.Status.populate(&row, &bad)
 	if err := bad.refusal(); err != nil {
-		return types.Job{}, fmt.Errorf("job %s: %w", r.Metadata.Name, err)
+		return job.Job{}, fmt.Errorf("job %s: %w", r.Metadata.Name, err)
 	}
 	row.ID, row.Generation, row.State = r.Metadata.Name, int(r.Metadata.Generation), state
 	for _, f := range r.Metadata.Requires(recordGroup) {
@@ -211,8 +210,8 @@ func (r jobRecord) job() (types.Job, error) {
 }
 
 // job is s as the declared members of a domain row.
-func (s jobSpec) job(bad *wireReads) types.Job {
-	row := types.Job{
+func (s jobSpec) job(bad *wireReads) job.Job {
+	row := job.Job{
 		Parent: s.Parent, Agent: s.Agent.spec(bad), Checkpoint: s.Checkpoint,
 		Paths:     s.Paths,
 		DependsOn: s.DependsOn, Integrates: s.Integrates, Breaks: s.Breaks,
@@ -222,7 +221,7 @@ func (s jobSpec) job(bad *wireReads) types.Job {
 		Validation: s.Validation, ReadOnly: s.ReadOnly, Deviations: s.Deviations,
 	}
 	if s.Check != nil {
-		c := types.LeaseCheck(*s.Check)
+		c := job.LeaseCheck(*s.Check)
 		row.Check = &c
 	}
 	for _, g := range s.Goals {
@@ -232,7 +231,7 @@ func (s jobSpec) job(bad *wireReads) types.Job {
 }
 
 // populate sets the computed members of row from st.
-func (st jobStatus) populate(row *types.Job, bad *wireReads) {
+func (st jobStatus) populate(row *job.Job, bad *wireReads) {
 	row.ModelTier = st.ModelTier.tier(bad)
 	row.ReworkRounds, row.Widenings, row.Landed = st.ReworkRounds, st.Widenings, st.Landed
 	row.Paused, row.PausedBy, row.PauseReason, row.PausedUntil = st.Paused, st.PausedBy.origin(bad), st.PauseReason, st.PausedUntil
@@ -245,36 +244,36 @@ func (st jobStatus) populate(row *types.Job, bad *wireReads) {
 	row.Created, row.Updated, row.Deadline = st.Created, st.Updated, st.Deadline
 	row.Integration, row.WaiterEvidence = st.Integration.integration(), st.WaiterEvidence.integration()
 	for _, c := range st.Claims {
-		row.Claims = append(row.Claims, types.JobClaim{
-			Path: c.Path, Evidence: types.ClaimEvidence{Kind: wireClaimKind.read(c.Evidence.Kind, bad), Subject: c.Evidence.Subject},
+		row.Claims = append(row.Claims, job.Claim{
+			Path: c.Path, Evidence: job.ClaimEvidence{Kind: wireClaimKind.read(c.Evidence.Kind, bad), Subject: c.Evidence.Subject},
 			Proof: c.Proof, At: c.At, By: c.By.origin(bad),
 		})
 	}
 	for _, rel := range st.Releases {
-		row.Releases = append(row.Releases, types.JobRelease(rel))
+		row.Releases = append(row.Releases, job.Release(rel))
 	}
 	for _, e := range st.Entries {
-		row.Entries = append(row.Entries, types.JobEntry{Path: e.Path, By: e.By.origin(bad), At: e.At, Consumed: e.Consumed})
+		row.Entries = append(row.Entries, job.Entry{Path: e.Path, By: e.By.origin(bad), At: e.At, Consumed: e.Consumed})
 	}
 	if st.Worktree != nil {
-		w := types.JobWorktree(*st.Worktree)
+		w := job.Worktree(*st.Worktree)
 		row.Worktree = &w
 	}
 	if st.Attempt != nil {
-		a := types.JobAttempt(*st.Attempt)
+		a := job.CapturedRun(*st.Attempt)
 		row.Attempt = &a
 	}
 	for _, g := range st.GateAttempts {
-		row.GateAttempts = append(row.GateAttempts, types.JobGateAttempt{GateID: g.GateID, Attempt: types.JobAttempt(g.Attempt)})
+		row.GateAttempts = append(row.GateAttempts, job.GateAttempt{GateID: g.GateID, Attempt: job.CapturedRun(g.Attempt)})
 	}
 	if st.LastRun != nil {
-		run := types.JobRun(*st.LastRun)
+		run := job.Run(*st.LastRun)
 		row.LastRun = &run
 	}
 }
 
 // unknownMembers names the members of top, spec and status, as
-// [types.Job.Unknown] spells them.
+// [job.Job.Unknown] spells them.
 func unknownMembers(top, spec, status map[string]json.RawMessage) []string {
 	if len(top)+len(spec)+len(status) == 0 {
 		return nil
@@ -295,25 +294,25 @@ func unknownMembers(top, spec, status map[string]json.RawMessage) []string {
 
 // lifecycleCondition is the condition a state is stored as, True.
 type lifecycleCondition struct {
-	state        types.JobState
+	state        job.State
 	kind, reason string
 }
 
 // lifecycle is every state's condition. Failed takes two reasons, as a
 // Kubernetes Job's Failed does.
 var lifecycle = []lifecycleCondition{
-	{types.StateDeclared, "Declared", "Declared"},
-	{types.StateRunning, "Running", "Running"},
-	{types.StateExited, "Exited", "Exited"},
-	{types.StatePass, "Complete", "Passed"},
-	{types.StateFail, "Failed", "CriteriaUnmet"},
-	{types.StateNoReturn, "Failed", "NoReturn"},
+	{job.StateDeclared, "Declared", "Declared"},
+	{job.StateRunning, "Running", "Running"},
+	{job.StateExited, "Exited", "Exited"},
+	{job.StatePass, "Complete", "Passed"},
+	{job.StateFail, "Failed", "CriteriaUnmet"},
+	{job.StateNoReturn, "Failed", "NoReturn"},
 }
 
 // lifecycleConditions are row's conditions: its state's, then every
 // condition of stored no state names, kept as stored. A state's condition
 // keeps its stored transition time; a new one transitioned at Updated.
-func lifecycleConditions(row types.Job, stored []apiversion.Condition) []apiversion.Condition {
+func lifecycleConditions(row job.Job, stored []apiversion.Condition) []apiversion.Condition {
 	var out []apiversion.Condition
 	for _, l := range lifecycle {
 		if l.state != row.State {
@@ -340,8 +339,8 @@ func lifecycleConditions(row types.Job, stored []apiversion.Condition) []apivers
 
 // lifecycleState is the state conditions hold True, "" for none. Two
 // is a record no magus writes.
-func lifecycleState(conditions []apiversion.Condition) (types.JobState, error) {
-	var state types.JobState
+func lifecycleState(conditions []apiversion.Condition) (job.State, error) {
+	var state job.State
 	for _, c := range conditions {
 		if c.Status != apiversion.ConditionTrue {
 			continue
@@ -408,15 +407,15 @@ func camelCase(v string) string {
 }
 
 var (
-	wireWriteProof  = newWireEnum(types.WriteProofAlone, types.WriteProofDisjoint, types.WriteProofOverlapping)
-	wireBaseVerdict = newWireEnum(types.BaseMatch, types.BaseRevisionMatch, types.BaseDiverged, types.BaseUnknown)
-	wireBriefFormat = newWireEnum(types.BriefFormatMarkdown, types.BriefFormatBuzz)
-	wireGoalKind    = newWireEnum(types.GoalKinds()...)
-	wireGoalExpect  = newWireEnum(types.GoalExpects()...)
-	wireClaimKind   = newWireEnum(types.ClaimRefs, types.ClaimTest, types.ClaimOutput, types.ClaimReleased, types.ClaimDeadHolder)
-	wireEntryPoint  = newWireEnum(types.EntryPointCLI, types.EntryPointHook, types.EntryPointMCP, types.EntryPointRPC, types.EntryPointServer)
-	wireCredential  = newWireEnum(types.KindOperator, types.KindStored, types.KindShare, types.KindExchange, types.KindStdio, types.KindSocketPeer)
-	wireWorkerType  = newWireEnum(agent.WorkerTypeResumed, agent.WorkerTypeNew)
+	wireWriteProof  = newWireEnum(job.WriteProofAlone, job.WriteProofDisjoint, job.WriteProofOverlapping)
+	wireBaseVerdict = newWireEnum(job.BaseMatch, job.BaseRevisionMatch, job.BaseDiverged, job.BaseUnknown)
+	wireBriefFormat = newWireEnum(job.BriefFormatMarkdown, job.BriefFormatBuzz)
+	wireGoalKind    = newWireEnum(job.GoalKinds()...)
+	wireGoalExpect  = newWireEnum(job.GoalExpects()...)
+	wireClaimKind   = newWireEnum(job.ClaimRefs, job.ClaimTest, job.ClaimOutput, job.ClaimReleased, job.ClaimDeadHolder)
+	wireEntryPoint  = newWireEnum(job.EntryPointCLI, job.EntryPointHook, job.EntryPointMCP, job.EntryPointRPC, job.EntryPointServer)
+	wireCredential  = newWireEnum(job.KindOperator, job.KindStored, job.KindShare, job.KindExchange, job.KindStdio, job.KindSocketPeer)
+	wireWorkerType  = newWireEnum(job.WorkerTypeResumed, job.WorkerTypeNew)
 	wireTierSource  = newWireEnum(tier.SourceJob, tier.SourceMatrix, tier.SourceUserMatrix, tier.SourceDefault)
 	wireSkills      = newWireEnum(tier.SkillVariantShort, tier.SkillVariantFull)
 )
@@ -425,7 +424,7 @@ var (
 // type whose keys are all one word is stored as it is.
 
 type agentRecord struct {
-	Model        agent.Model  `json:"model,omitzero"`
+	Model        job.Model    `json:"model,omitzero"`
 	Instructions string       `json:"instructions,omitempty"`
 	Worker       workerRecord `json:"worker"`
 }
@@ -435,7 +434,7 @@ type workerRecord struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-func recordAgent(s *agent.Spec) *agentRecord {
+func recordAgent(s *job.Agent) *agentRecord {
 	if s == nil {
 		return nil
 	}
@@ -443,12 +442,12 @@ func recordAgent(s *agent.Spec) *agentRecord {
 		Worker: workerRecord{Type: wireWorkerType.spell(s.Worker.Type), Reason: s.Worker.Reason}}
 }
 
-func (r *agentRecord) spec(bad *wireReads) *agent.Spec {
+func (r *agentRecord) spec(bad *wireReads) *job.Agent {
 	if r == nil {
 		return nil
 	}
-	return &agent.Spec{Model: r.Model, Instructions: r.Instructions,
-		Worker: agent.Worker{Type: wireWorkerType.read(r.Worker.Type, bad), Reason: r.Worker.Reason}}
+	return &job.Agent{Model: r.Model, Instructions: r.Instructions,
+		Worker: job.Worker{Type: wireWorkerType.read(r.Worker.Type, bad), Reason: r.Worker.Reason}}
 }
 
 type leaseCheckRecord struct {
@@ -472,15 +471,15 @@ type goalRecord struct {
 	Signature   string           `json:"signature,omitempty"`
 }
 
-func recordGoal(g types.Goal) goalRecord {
+func recordGoal(g job.Goal) goalRecord {
 	return goalRecord{ID: g.ID, Description: g.Description, DependsOn: g.DependsOn,
 		Kind: wireGoalKind.spell(g.Kind), Expect: wireGoalExpect.spell(g.Expect), Check: leaseCheckRecord(g.Check),
 		Paths: g.Paths, Symbols: g.Symbols, Signature: g.Signature}
 }
 
-func (r goalRecord) goal(bad *wireReads) types.Goal {
-	return types.Goal{ID: r.ID, Description: r.Description, DependsOn: r.DependsOn,
-		Kind: wireGoalKind.read(r.Kind, bad), Expect: wireGoalExpect.read(r.Expect, bad), Check: types.LeaseCheck(r.Check),
+func (r goalRecord) goal(bad *wireReads) job.Goal {
+	return job.Goal{ID: r.ID, Description: r.Description, DependsOn: r.DependsOn,
+		Kind: wireGoalKind.read(r.Kind, bad), Expect: wireGoalExpect.read(r.Expect, bad), Check: job.LeaseCheck(r.Check),
 		Paths: r.Paths, Symbols: r.Symbols, Signature: r.Signature}
 }
 
@@ -522,22 +521,22 @@ type originRecord struct {
 }
 
 type credentialRecord struct {
-	Kind  string      `json:"class,omitempty"`
-	ID    string      `json:"id,omitempty"`
-	Name  string      `json:"name,omitempty"`
-	Grant types.Grant `json:"grant,omitzero"`
+	Kind  string     `json:"class,omitempty"`
+	ID    string     `json:"id,omitempty"`
+	Name  string     `json:"name,omitempty"`
+	Grant job.Access `json:"grant,omitzero"`
 }
 
-func recordOrigin(o types.Origin) originRecord {
+func recordOrigin(o job.Origin) originRecord {
 	return originRecord{User: o.User, UID: o.UID, EntryPoint: wireEntryPoint.spell(o.EntryPoint), Host: o.Host,
 		Session: o.Session, Agent: o.Agent, Credential: credentialRecord{
 			Kind: wireCredential.spell(o.Credential.Kind), ID: o.Credential.ID, Name: o.Credential.Name, Grant: o.Credential.Grant,
 		}}
 }
 
-func (r originRecord) origin(bad *wireReads) types.Origin {
-	return types.Origin{User: r.User, UID: r.UID, EntryPoint: wireEntryPoint.read(r.EntryPoint, bad), Host: r.Host,
-		Session: r.Session, Agent: r.Agent, Credential: types.Credential{
+func (r originRecord) origin(bad *wireReads) job.Origin {
+	return job.Origin{User: r.User, UID: r.UID, EntryPoint: wireEntryPoint.read(r.EntryPoint, bad), Host: r.Host,
+		Session: r.Session, Agent: r.Agent, Credential: job.Credential{
 			Kind: wireCredential.read(r.Credential.Kind, bad), ID: r.Credential.ID, Name: r.Credential.Name, Grant: r.Credential.Grant,
 		}}
 }
@@ -581,7 +580,7 @@ type verificationRecord struct {
 	Violations []string `json:"violations,omitempty"`
 }
 
-func recordVerifications(in []types.VerificationStatus) []verificationRecord {
+func recordVerifications(in []job.VerificationStatus) []verificationRecord {
 	if len(in) == 0 {
 		return nil
 	}
@@ -592,13 +591,13 @@ func recordVerifications(in []types.VerificationStatus) []verificationRecord {
 	return out
 }
 
-func verifications(in []verificationRecord) []types.VerificationStatus {
+func verifications(in []verificationRecord) []job.VerificationStatus {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]types.VerificationStatus, 0, len(in))
+	out := make([]job.VerificationStatus, 0, len(in))
 	for _, v := range in {
-		out = append(out, types.VerificationStatus(v))
+		out = append(out, job.VerificationStatus(v))
 	}
 	return out
 }
@@ -610,18 +609,18 @@ type rejectionRecord struct {
 	ObservedGeneration int                  `json:"observedGeneration,omitzero"`
 }
 
-func recordRejection(r *types.JobRejection) *rejectionRecord {
+func recordRejection(r *job.Rejection) *rejectionRecord {
 	if r == nil {
 		return nil
 	}
 	return &rejectionRecord{Unmet: recordVerifications(r.Unmet), Violations: r.Violations, At: r.At, ObservedGeneration: r.ObservedGeneration}
 }
 
-func (r *rejectionRecord) rejection() *types.JobRejection {
+func (r *rejectionRecord) rejection() *job.Rejection {
 	if r == nil {
 		return nil
 	}
-	return &types.JobRejection{Unmet: verifications(r.Unmet), Violations: r.Violations, At: r.At, ObservedGeneration: r.ObservedGeneration}
+	return &job.Rejection{Unmet: verifications(r.Unmet), Violations: r.Violations, At: r.At, ObservedGeneration: r.ObservedGeneration}
 }
 
 type worktreeRecord struct {
@@ -676,16 +675,16 @@ type integrationRecord struct {
 	ObservedGeneration int                  `json:"observedGeneration,omitzero"`
 }
 
-func recordIntegration(i *types.JobIntegration) *integrationRecord {
+func recordIntegration(i *job.Integration) *integrationRecord {
 	if i == nil {
 		return nil
 	}
 	return &integrationRecord{Checkout: i.Checkout, At: i.At, Verified: i.Verified, Gates: recordVerifications(i.Gates), ObservedGeneration: i.ObservedGeneration}
 }
 
-func (r *integrationRecord) integration() *types.JobIntegration {
+func (r *integrationRecord) integration() *job.Integration {
 	if r == nil {
 		return nil
 	}
-	return &types.JobIntegration{Checkout: r.Checkout, At: r.At, Verified: r.Verified, Gates: verifications(r.Gates), ObservedGeneration: r.ObservedGeneration}
+	return &job.Integration{Checkout: r.Checkout, At: r.At, Verified: r.Verified, Gates: verifications(r.Gates), ObservedGeneration: r.ObservedGeneration}
 }

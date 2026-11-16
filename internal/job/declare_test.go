@@ -12,9 +12,9 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
-	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -45,7 +45,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	// it at the version check instead, naming nothing it came here to compare.
 	piped, err := DecodeStdinDeclaration(strings.NewReader(fmt.Sprintf(`{
 	  "api_version": %q,
-	  "id": "adj/store",`, types.JobAPIVersion) + `
+	  "id": "adj/store",`, job.APIVersion) + `
 	  "parent": "adjacency",
 	  "agent": {"model": {"tier": "design"}, "instructions": "the store is the enforcement point", "worker": {"type": "resumed"}},
 	  "checkpoint": "cf5509d09",
@@ -58,13 +58,13 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 
 	fromFlags, err := FlagDeclaration("adj/store", *spec, tierWords("design"))
 	require.NoError(t, err)
-	require.NoError(t, fromFlags.Validate())
+	require.NoError(t, types.ValidateDeclaration(fromFlags))
 
-	var a, b types.Job
+	var a, b job.Job
 	fromFlags.Apply(&a)
 	piped.Apply(&b)
 	assert.Equal(t, a, b)
-	assert.Equal(t, types.BriefFormatBuzz, a.BriefFormat)
+	assert.Equal(t, job.BriefFormatBuzz, a.BriefFormat)
 }
 
 // A brief format is one of the two, refused at fork rather than read as markdown later.
@@ -72,18 +72,18 @@ func TestForkRefusesAnUnknownBriefFormat(t *testing.T) {
 	t.Parallel()
 	d, err := FlagDeclaration("adj/store", flaggen.JobForkFlags{Instructions: "c", BriefFormat: "json"}, tierWords())
 	require.NoError(t, err)
-	err = d.Validate()
+	err = types.ValidateDeclaration(d)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `brief_format "json"`)
 }
 
 // tierWords reads a --model word as a store declaring tiers would.
-func tierWords(tiers ...string) func(string) typesagent.Model {
-	return func(word string) typesagent.Model {
+func tierWords(tiers ...string) func(string) job.Model {
+	return func(word string) job.Model {
 		if slices.Contains(tiers, word) {
-			return typesagent.Model{Tier: word}
+			return job.Model{Tier: word}
 		}
-		return typesagent.Model{ID: word}
+		return job.Model{ID: word}
 	}
 }
 
@@ -98,13 +98,13 @@ func TestForkAgentFlags(t *testing.T) {
 	suite.Run(t, new(forkAgentFlagsSuite))
 }
 
-func (s *forkAgentFlagsSuite) fork(args ...string) types.Declaration {
+func (s *forkAgentFlagsSuite) fork(args ...string) job.Declaration {
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
 	spec := flaggen.BindJobFork(flags)
 	s.Require().NoError(flags.Parse(args))
 	d, err := FlagDeclaration("adj/store", *spec, tierWords("design"))
 	s.Require().NoError(err)
-	s.Require().NoError(d.Validate())
+	s.Require().NoError(types.ValidateDeclaration(d))
 	return d
 }
 
@@ -113,26 +113,26 @@ func (s *forkAgentFlagsSuite) TestNoAgentFlagWritesNoSection() {
 }
 
 func (s *forkAgentFlagsSuite) TestInstructionsResumeTheWarmWorker() {
-	s.Equal(&typesagent.Spec{
+	s.Equal(&job.Agent{
 		Instructions: "ship it",
-		Worker:       typesagent.Worker{Type: typesagent.WorkerTypeResumed},
+		Worker:       job.Worker{Type: job.WorkerTypeResumed},
 	}, s.fork("--read-only", "--instructions", "ship it").Agent)
 }
 
 func (s *forkAgentFlagsSuite) TestModelNamingATierRequestsTheTier() {
-	s.Equal(&typesagent.Spec{
-		Model:  typesagent.Model{Tier: "design"},
-		Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed},
+	s.Equal(&job.Agent{
+		Model:  job.Model{Tier: "design"},
+		Worker: job.Worker{Type: job.WorkerTypeResumed},
 	}, s.fork("--read-only", "--model", "design").Agent)
 }
 
 func (s *forkAgentFlagsSuite) TestModelNamingNoTierRequestsTheID() {
-	s.Equal(typesagent.Model{ID: "opus"}, s.fork("--read-only", "--model", "opus").Agent.Model)
+	s.Equal(job.Model{ID: "opus"}, s.fork("--read-only", "--model", "opus").Agent.Model)
 }
 
 func (s *forkAgentFlagsSuite) TestNewWorkerStartsANewWorkerForItsReason() {
-	s.Equal(&typesagent.Spec{
-		Worker: typesagent.Worker{Type: typesagent.WorkerTypeNew, Reason: "the warm one read the old limiter"},
+	s.Equal(&job.Agent{
+		Worker: job.Worker{Type: job.WorkerTypeNew, Reason: "the warm one read the old limiter"},
 	}, s.fork("--read-only", "--new-worker", "the warm one read the old limiter").Agent)
 }
 
@@ -146,7 +146,7 @@ func TestForkListFlags(t *testing.T) {
 	suite.Run(t, new(forkListFlagsSuite))
 }
 
-func (s *forkListFlagsSuite) declare(args ...string) (types.Declaration, error) {
+func (s *forkListFlagsSuite) declare(args ...string) (job.Declaration, error) {
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
 	spec := flaggen.BindJobFork(flags)
 	s.Require().NoError(flags.Parse(args))
@@ -189,12 +189,12 @@ func TestParsePauseUntilReadsADurationOrAnInstant(t *testing.T) {
 		"2027-01-15T09:00:00Z": 1_800_003_600,
 	}
 	for raw, want := range cases {
-		got, err := types.ParsePauseUntil(raw, now)
+		got, err := job.ParsePauseUntil(raw, now)
 		require.NoError(t, err, raw)
 		assert.Equal(t, want, got, raw)
 	}
 	for _, raw := range []string{"-2h", "tomorrow"} {
-		_, err := types.ParsePauseUntil(raw, now)
+		_, err := job.ParsePauseUntil(raw, now)
 		assert.Error(t, err, raw)
 	}
 }
@@ -208,23 +208,23 @@ func TestForkDelivery(t *testing.T) { suite.Run(t, new(forkDeliverySuite)) }
 func (s *forkDeliverySuite) TestTheFlagReachesTheRecord() {
 	flags := flag.NewFlagSet("job fork", flag.ContinueOnError)
 	spec := flaggen.BindJobFork(flags)
-	s.Require().NoError(flags.Parse([]string{"--instructions", "c", "--delivery", types.DeliveryFold}))
+	s.Require().NoError(flags.Parse([]string{"--instructions", "c", "--delivery", job.DeliveryFold}))
 	row, err := FlagDeclaration("adj/store", *spec, tierWords())
 	s.Require().NoError(err)
-	s.Require().NoError(row.Validate())
-	s.Equal(types.DeliveryFold, row.Delivery)
+	s.Require().NoError(types.ValidateDeclaration(row))
+	s.Equal(job.DeliveryFold, row.Delivery)
 }
 
 func (s *forkDeliverySuite) TestAStackedForkRecordsThisCheckoutsBranch() {
 	r := testkit.NewRepository(s.T(), nil)
 	r.Git("switch", "-q", "-c", "feat/parent")
-	row, err := StackedHead(s.T().Context(), r.Root(), types.Declaration{ID: "child", Delivery: types.DeliveryStacked}, types.VCSOptions{})
+	row, err := StackedHead(s.T().Context(), r.Root(), job.Declaration{ID: "child", Delivery: job.DeliveryStacked}, types.VCSOptions{})
 	s.Require().NoError(err)
 	s.Equal("feat/parent", row.ParentHead)
 }
 
 func (s *forkDeliverySuite) TestAStackedForkKeepsTheHeadTheRecordNames() {
-	row, err := StackedHead(s.T().Context(), "", types.Declaration{ID: "child", Delivery: types.DeliveryStacked, ParentHead: "feat/named"}, types.VCSOptions{})
+	row, err := StackedHead(s.T().Context(), "", job.Declaration{ID: "child", Delivery: job.DeliveryStacked, ParentHead: "feat/named"}, types.VCSOptions{})
 	s.Require().NoError(err)
 	s.Equal("feat/named", row.ParentHead)
 }
@@ -232,12 +232,12 @@ func (s *forkDeliverySuite) TestAStackedForkKeepsTheHeadTheRecordNames() {
 func (s *forkDeliverySuite) TestAStackedForkOnNoBranchIsRefused() {
 	r := testkit.NewRepository(s.T(), nil)
 	r.Git("switch", "-q", "--detach")
-	_, err := StackedHead(s.T().Context(), r.Root(), types.Declaration{ID: "child", Delivery: types.DeliveryStacked}, types.VCSOptions{})
+	_, err := StackedHead(s.T().Context(), r.Root(), job.Declaration{ID: "child", Delivery: job.DeliveryStacked}, types.VCSOptions{})
 	s.Require().ErrorContains(err, "is on no branch")
 }
 
 func (s *forkDeliverySuite) TestAnUnstackedForkReadsNoBranch() {
-	row, err := StackedHead(s.T().Context(), "", types.Declaration{ID: "child", Delivery: types.DeliverySeparate}, types.VCSOptions{})
+	row, err := StackedHead(s.T().Context(), "", job.Declaration{ID: "child", Delivery: job.DeliverySeparate}, types.VCSOptions{})
 	s.Require().NoError(err)
 	s.Empty(row.ParentHead)
 }
@@ -251,9 +251,9 @@ type widenSuite struct {
 func TestWidenSuite(t *testing.T) { suite.Run(t, new(widenSuite)) }
 
 func (s *widenSuite) SetupTest() {
-	row := types.Job{ID: "w", State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "bounded"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}}
+	row := job.Job{ID: "w", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	row.Paths.Write = []string{"a.go"}
-	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
+	row.Check = &job.LeaseCheck{Target: "test", Project: "."}
 	row.Validation = row.Check.String()
 	s.store = tempStore(s.T(), s.T().TempDir())
 	seed(s.T(), s.store, row)
@@ -262,7 +262,7 @@ func (s *widenSuite) SetupTest() {
 func (s *widenSuite) apply(add ...string) []Applied {
 	rec, err := WidenedDeclaration(s.store, "w", add)
 	s.Require().NoError(err)
-	applied, err := Apply(s.T().Context(), s.store, []types.Declaration{rec}, config.Jobs{}, nil, func() string { return "" }, false)
+	applied, err := Apply(s.T().Context(), s.store, []job.Declaration{rec}, config.Jobs{}, nil, func() string { return "" }, false)
 	s.Require().NoError(err)
 	return applied
 }
@@ -306,16 +306,16 @@ type narrowSuite struct {
 func TestNarrowSuite(t *testing.T) { suite.Run(t, new(narrowSuite)) }
 
 func (s *narrowSuite) SetupTest() {
-	row := types.Job{ID: "w", State: types.StateRunning, Agent: &typesagent.Spec{Model: typesagent.Model{Tier: "bounded"}, Worker: typesagent.Worker{Type: typesagent.WorkerTypeResumed}}}
+	row := job.Job{ID: "w", State: job.StateRunning, Agent: &job.Agent{Model: job.Model{Tier: "bounded"}, Worker: job.Worker{Type: job.WorkerTypeResumed}}}
 	row.Paths.Write = []string{"a.go", "b.go", "c.go#Run"}
-	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
+	row.Check = &job.LeaseCheck{Target: "test", Project: "."}
 	row.Validation = row.Check.String()
-	row.Goals = []types.Goal{{ID: "g", Kind: types.GoalKindPaths, Paths: []string{"a.go"}}}
+	row.Goals = []job.Goal{{ID: "g", Kind: job.GoalKindPaths, Paths: []string{"a.go"}}}
 	s.store = tempStore(s.T(), s.T().TempDir())
 	seed(s.T(), s.store, row)
 }
 
-func (s *narrowSuite) release(paths ...string) types.Declaration {
+func (s *narrowSuite) release(paths ...string) job.Declaration {
 	held, err := WidenedDeclaration(s.store, "w", nil)
 	s.Require().NoError(err)
 	rec, err := NarrowedDeclaration(held, "w", paths)
@@ -361,7 +361,7 @@ func TestStackedHeadSuite(t *testing.T) { suite.Run(t, new(stackedHeadSuite)) }
 
 func (s *stackedHeadSuite) TestStackedHeadPreservesResolutionFailures() {
 	repo := testkit.NewRepository(s.T(), nil)
-	row := types.Declaration{ID: "child", Delivery: types.DeliveryStacked}
+	row := job.Declaration{ID: "child", Delivery: job.DeliveryStacked}
 
 	got, err := StackedHead(s.T().Context(), repo.Root(), row, types.VCSOptions{Name: "not-a-vcs"})
 
@@ -372,7 +372,7 @@ func (s *stackedHeadSuite) TestStackedHeadPreservesResolutionFailures() {
 }
 
 func (s *stackedHeadSuite) TestStackedHeadPreservesMetadataFailures() {
-	row := types.Declaration{ID: "child", Delivery: types.DeliveryStacked}
+	row := job.Declaration{ID: "child", Delivery: job.DeliveryStacked}
 
 	got, err := StackedHead(s.T().Context(), s.T().TempDir(), row, types.VCSOptions{Name: "git"})
 

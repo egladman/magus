@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 func TestJobProblemErrCarriesItsCodeAndFix(t *testing.T) {
@@ -57,7 +59,7 @@ func TestPermitMatchesOnCodeAndSubject(t *testing.T) {
 	gate := JobProblem{Code: GateNotRun, Subject: "lint ."}
 	ps := JobProblems{broad, output, gate}
 
-	kept, permitted := ps.Permit([]Deviation{
+	kept, permitted := ps.Permit([]job.Deviation{
 		{Code: OutputOutsideWritePaths, Subject: "manpage/magus.1", Reason: "the root regenerates it"},
 		{Code: GateNotRun, Subject: "test .", Reason: "a different gate"},
 		{Code: WritePathTooBroad, Subject: "manpage/magus.1", Reason: "a different code's subject"},
@@ -70,7 +72,7 @@ func TestPermitMatchesOnCodeAndSubject(t *testing.T) {
 func TestPermitNeverPermitsAnUnpermissibleCode(t *testing.T) {
 	ps := JobProblems{{Code: JobRecordInvalid, Field: "id", Subject: "x"}}
 
-	kept, permitted := ps.Permit([]Deviation{{Code: JobRecordInvalid, Subject: "x", Reason: "no"}})
+	kept, permitted := ps.Permit([]job.Deviation{{Code: JobRecordInvalid, Subject: "x", Reason: "no"}})
 
 	assert.Equal(t, ps, kept)
 	assert.Empty(t, permitted)
@@ -85,7 +87,7 @@ func TestJobProblemsErrKeepsEachProblem(t *testing.T) {
 }
 
 func TestDoubleStarPermitsEveryRegeneratedOutputSubject(t *testing.T) {
-	w := Deviation{Code: OutputOutsideWritePaths, Subject: "**", Reason: "r"}
+	w := job.Deviation{Code: OutputOutsideWritePaths, Subject: "**", Reason: "r"}
 	for _, subject := range []string{
 		"**/gen/*test/*.go",
 		"internal/interp/bindings/gen/*.go !internal/interp/bindings/gen/*_test.go !internal/interp/bindings/gen/boundary_*.go",
@@ -94,6 +96,6 @@ func TestDoubleStarPermitsEveryRegeneratedOutputSubject(t *testing.T) {
 		"MAGUS.md",
 		"manpage/*.1",
 	} {
-		assert.Truef(t, w.Permits(JobProblem{Code: OutputOutsideWritePaths, Subject: subject}), "%q", subject)
+		assert.Truef(t, DeviationPermits(w, JobProblem{Code: OutputOutsideWritePaths, Subject: subject}), "%q", subject)
 	}
 }

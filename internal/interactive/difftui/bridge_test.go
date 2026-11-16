@@ -19,6 +19,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/diff"
@@ -309,7 +310,7 @@ func TestDialDiffBridgeCarriesAConsoleTokenAndRevokesIt(t *testing.T) {
 	cred, ok := auth.Verify(presented)
 	require.True(t, ok, "the token is live while the bridge is open")
 	cred.ID, cred.Name = "", ""
-	assert.Equal(t, types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}, cred)
+	assert.Equal(t, job.Credential{Kind: job.KindStored, Grant: job.AccessConsole}, cred)
 
 	b.Close()
 	_, ok = auth.Verify(presented)
@@ -333,7 +334,7 @@ func (s storeTokens) Mint(req auth.MintRequest) (string, auth.Token, error) {
 	if err != nil {
 		return "", auth.Token{}, err
 	}
-	secret, rec, err := store.Mint(types.GrantOperator, req)
+	secret, rec, err := store.Mint(job.AccessOperator, req)
 	if err != nil {
 		return "", auth.Token{}, err
 	}
@@ -345,7 +346,7 @@ func (s storeTokens) Revoke(id string) error {
 	if err != nil {
 		return err
 	}
-	_, err = store.Revoke(types.GrantOperator, id)
+	_, err = store.Revoke(job.AccessOperator, id)
 	return err
 }
 

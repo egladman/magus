@@ -3,20 +3,19 @@ package mcp
 import (
 	"context"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
 	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types/daemon"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 )
 
 // rootsSession is a client session that declares roots (or not) and counts how often the
@@ -146,7 +145,7 @@ func TestServedHasNoRootSkewOverStdio(t *testing.T) {
 		roots: []mcplib.Root{{URI: "file://" + other}},
 	}
 
-	res := callStamped(t, s, trail.ContextWithCredential(context.Background(), types.CredentialStdio), session)
+	res := callStamped(t, s, trail.ContextWithCredential(context.Background(), job.CredentialStdio), session)
 	assert.Zero(t, session.asked.Load())
 	assert.Equal(t, servedInfo{Root: root, Version: "v0.4.3-234", Commit: "00fd71e20", Transport: "stdio"}, servedMeta(t, res))
 }

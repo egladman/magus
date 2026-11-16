@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/ward"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // denyUnknownRowMembers refuses every call under a row carrying members this build does
@@ -42,7 +42,7 @@ func replacesJudge(ctx context.Context, deps Dependencies, lease, command string
 
 // unknownRowSpawnDenial refuses a spawn bound to a row this build cannot read.
 // Only the root can rebuild, so no worker is handed the row.
-func unknownRowSpawnDenial(deps Dependencies, row types.Job) denial {
+func unknownRowSpawnDenial(deps Dependencies, row jobtypes.Job) denial {
 	if len(row.Unknown) == 0 {
 		return denial{}
 	}
@@ -57,7 +57,7 @@ func unknownRowSpawnDenial(deps Dependencies, row types.Job) denial {
 
 // unknownRowDenial is the refusal for row, or none when this build declares every member
 // it carries.
-func unknownRowDenial(deps Dependencies, row types.Job) denial {
+func unknownRowDenial(deps Dependencies, row jobtypes.Job) denial {
 	if len(row.Unknown) == 0 {
 		return denial{}
 	}

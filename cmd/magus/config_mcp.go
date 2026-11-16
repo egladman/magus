@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -136,7 +137,7 @@ func configMCPConnectorCreate(args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
-	secret, rec, err := mintToken(auth.MintRequest{Name: cf.Name, Grant: types.GrantConnector, TTL: ttl}, false)
+	secret, rec, err := mintToken(auth.MintRequest{Name: cf.Name, Grant: job.AccessConnector, TTL: ttl}, false)
 	if err != nil {
 		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
@@ -242,7 +243,7 @@ func tokenRevoke(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
-	removed, err := store.Revoke(types.GrantOperator, rest[0])
+	removed, err := store.Revoke(job.AccessOperator, rest[0])
 	if err != nil {
 		return fmt.Errorf("magus %s: %w", cmd, err)
 	}
@@ -318,11 +319,11 @@ func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
 	if code {
 		mint, action = store.MintCode, "link.code"
 	}
-	secret, rec, err := mint(types.GrantOperator, req)
+	secret, rec, err := mint(job.AccessOperator, req)
 	if err != nil {
 		return "", auth.Token{}, err
 	}
-	operator := types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}
+	operator := job.Credential{Kind: job.KindOperator, Grant: job.AccessOperator}
 	auditMint(action, trail.MintRecord{Minted: rec.Credential(), Expires: rec.Expires, Minter: operator})
 	// Revealed here because every caller prints it to stdout: that is the hand-out.
 	return secret.Reveal(), rec, nil

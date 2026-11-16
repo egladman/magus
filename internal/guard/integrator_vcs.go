@@ -6,13 +6,13 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // integrationMerge reports the one merge an integrate row exists to run:
 // a listed branch, with --no-ff, --no-edit and -m. Anything else is judged
 // as for every worker.
-func integrationMerge(c hint.Invocation, row types.Job) bool {
+func integrationMerge(c hint.Invocation, row job.Job) bool {
 	if c.Name != "git" || !row.Integrating() || len(c.Args) < 2 || c.Args[0] != "merge" {
 		return false
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
@@ -99,7 +100,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	digest := recordPolicy(ctx, deps, at, true)
 	ctx = withJobStoreRows(ctx, at)
 	ctx = withOutputStore(ctx, at)
-	titled := spawnTitle(sync.OnceValues(func() (types.Job, bool) {
+	titled := spawnTitle(sync.OnceValues(func() (jobtypes.Job, bool) {
 		return spawnTitleJob(ctx, at, env.Spawn.Description)
 	}))
 
@@ -262,7 +263,7 @@ const handbackTool = "SubagentHandback"
 // store cannot attribute ends nothing, and the deadline bounds the try.
 func endHandedBack(ctx context.Context, at location, who hookAttribution, now time.Time) {
 	if b := boundJob(who, at); b.Job != "" && !b.Gone {
-		_ = job.NewStore(at.jobs()).EndAttempt(ctx, b.Job, types.AttemptEndHandback, now) // best effort: the deadline bounds the try
+		_ = job.NewStore(at.jobs()).EndAttempt(ctx, b.Job, jobtypes.AttemptEndHandback, now) // best effort: the deadline bounds the try
 	}
 }
 
@@ -320,7 +321,7 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 const denyRuleSpawnUnisolatedRow denyRuleName = "spawn-unisolated-row"
 
 // denyTitledSpawn judges the row a spawn title names.
-func denyTitledSpawn(ctx context.Context, at location, facts hint.Gate, env hookRequest, row types.Job) (denyRuleName, denial, bool) {
+func denyTitledSpawn(ctx context.Context, at location, facts hint.Gate, env hookRequest, row jobtypes.Job) (denyRuleName, denial, bool) {
 	if row.Validated == 0 {
 		return denyRuleSpawnUnvalidated, denySpawnUnvalidated(row), true
 	}
@@ -333,7 +334,7 @@ func denyTitledSpawn(ctx context.Context, at location, facts hint.Gate, env hook
 
 // denyUnisolatedRow refuses host isolation for a writing row bound to
 // the spawner's own checkout.
-func denyUnisolatedRow(isolated bool, row types.Job, workspace string) (denial, bool) {
+func denyUnisolatedRow(isolated bool, row jobtypes.Job, workspace string) (denial, bool) {
 	if !isolated || !rowSharesCheckout(row, workspace) {
 		return denial{}, false
 	}
@@ -347,7 +348,7 @@ func denyUnisolatedRow(isolated bool, row types.Job, workspace string) (denial, 
 
 // rowSharesCheckout is true when a writing row's worker would take the
 // spawner's checkout.
-func rowSharesCheckout(row types.Job, workspace string) bool {
+func rowSharesCheckout(row jobtypes.Job, workspace string) bool {
 	if row.ReadOnly {
 		return false
 	}
@@ -556,7 +557,7 @@ func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who h
 // mayHandOut reports whether a spawner acting under lease spawner may attribute a child to
 // job: always when it acts under none, else when job is spawner's own row or one whose
 // parent chain reaches it.
-func mayHandOut(rows []types.Job, spawner, job string) bool {
+func mayHandOut(rows []jobtypes.Job, spawner, job string) bool {
 	if spawner == "" {
 		return true
 	}
@@ -577,53 +578,53 @@ func mayHandOut(rows []types.Job, spawner, job string) bool {
 // the row `<job>`, else the row `<parent>/<job>`, since a job forked beneath its parent
 // carries the parent in its id. A title in any other form, or naming a job the store does
 // not hold live, names none.
-func spawnTitleJob(ctx context.Context, at location, title string) (types.Job, bool) {
+func spawnTitleJob(ctx context.Context, at location, title string) (jobtypes.Job, bool) {
 	if at.cacheDir == "" {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
-	live := slices.DeleteFunc(slices.Clone(rows), func(row types.Job) bool { return !row.State.Live() })
+	live := slices.DeleteFunc(slices.Clone(rows), func(row jobtypes.Job) bool { return !row.State.Live() })
 	return spawnTitleRow(live, title)
 }
 
 // spawnTitle is spawnTitleJob for one spawn, asked once however many rules read it.
-type spawnTitle func() (types.Job, bool)
+type spawnTitle func() (jobtypes.Job, bool)
 
 // spawnTitleRow is the row of rows a spawn title in the `<parent>/<role> <job>` form names,
 // tried as spawnTitleJob tries them, whatever the row's state.
-func spawnTitleRow(rows []types.Job, title string) (types.Job, bool) {
+func spawnTitleRow(rows []jobtypes.Job, title string) (jobtypes.Job, bool) {
 	fields := strings.Fields(title)
 	if len(fields) != 2 {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	slash := strings.LastIndex(fields[0], "/")
-	if slash <= 0 || slash == len(fields[0])-1 || !types.ValidJobID(fields[1]) {
-		return types.Job{}, false
+	if slash <= 0 || slash == len(fields[0])-1 || !jobtypes.ValidID(fields[1]) {
+		return jobtypes.Job{}, false
 	}
 	for _, id := range []string{fields[1], fmt.Sprintf("%s/%s", fields[0][:slash], fields[1])} {
-		if i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == id }); i >= 0 {
+		if i := slices.IndexFunc(rows, func(row jobtypes.Job) bool { return row.ID == id }); i >= 0 {
 			return rows[i], true
 		}
 	}
-	return types.Job{}, false
+	return jobtypes.Job{}, false
 }
 
 // spawnedJob reports whether one of the spawn records in facts attributed a worker to job:
 // its title names that row of rows, and its spawner could hand the job out.
-func spawnedJob(facts hint.Gate, rows []types.Job, job string) bool {
+func spawnedJob(facts hint.Gate, rows []jobtypes.Job, job string) bool {
 	return spawnedJobWhere(facts, rows, job, func(spawnedAgent) bool { return true })
 }
 
 // liveSpawnedJob is spawnedJob over the agents the host has not said stopped: a stopped
 // worker holds its job no longer, so a replacement may be spawned on it.
-func liveSpawnedJob(facts, stops hint.Gate, rows []types.Job, job string) bool {
+func liveSpawnedJob(facts, stops hint.Gate, rows []jobtypes.Job, job string) bool {
 	return spawnedJobWhere(facts, rows, job, func(rec spawnedAgent) bool { return !stoppedAgent(facts, stops, rec.ID) })
 }
 
-func spawnedJobWhere(facts hint.Gate, rows []types.Job, job string, keep func(spawnedAgent) bool) bool {
+func spawnedJobWhere(facts hint.Gate, rows []jobtypes.Job, job string, keep func(spawnedAgent) bool) bool {
 	for _, kind := range facts.Kinds(spawnedAgentPrefix) {
 		rec, ok := readMarker[spawnedAgent](facts, kind)
 		if !ok || rec.UntrustedJob != "" || !keep(rec) {
@@ -638,7 +639,7 @@ func spawnedJobWhere(facts hint.Gate, rows []types.Job, job string, keep func(sp
 
 // spawnedAsJob reports whether the spawn record filed under agentID attributed that agent to
 // job, as spawnedJob does for any agent of the session.
-func spawnedAsJob(facts hint.Gate, rows []types.Job, agentID, job string) bool {
+func spawnedAsJob(facts hint.Gate, rows []jobtypes.Job, agentID, job string) bool {
 	rec, ok := readMarker[spawnedAgent](facts, spawnedAgentKind(agentID))
 	if !ok || rec.UntrustedJob != "" {
 		return false
@@ -698,7 +699,7 @@ const agentBaseRefusals = "guard/agent-base"
 
 // agentBaseRefusedKind names one refused registration: row as it stood, every field of it,
 // from the checkout at workspace.
-func agentBaseRefusedKind(row types.Job, workspace string) hint.MarkerKind {
+func agentBaseRefusedKind(row jobtypes.Job, workspace string) hint.MarkerKind {
 	body, _ := json.Marshal(row)
 	sum := sha256.Sum256(append(body, "\x00"+workspace...))
 	return hint.MarkerKind("agent-base-refused-" + hex.EncodeToString(sum[:8]))
@@ -712,8 +713,8 @@ func agentBaseRefusedKind(row types.Job, workspace string) hint.MarkerKind {
 // Only a diverged row is refreshed. Revisions are compared exactly, so re-registering a
 // worker that committed on its checkpoint would read its own commit as a divergence.
 // Revisions only, through the cheap seam: the dirty digest moves on every edit.
-func baseSuperseded(ctx context.Context, deps Dependencies, at location, row types.Job) bool {
-	if row.BaseVerdict != types.BaseDiverged {
+func baseSuperseded(ctx context.Context, deps Dependencies, at location, row jobtypes.Job) bool {
+	if row.BaseVerdict != jobtypes.BaseDiverged {
 		return false
 	}
 	live := deps.revision(ctx, at.workspace, "")
@@ -723,13 +724,13 @@ func baseSuperseded(ctx context.Context, deps Dependencies, at location, row typ
 
 // continuedRow is the live row a continue's agent was spawned for, by its spawn title; false
 // for a spawn, or an agent bound to no live row.
-func continuedRow(ctx context.Context, at location, facts hint.Gate, env hookRequest) (types.Job, bool) {
+func continuedRow(ctx context.Context, at location, facts hint.Gate, env hookRequest) (jobtypes.Job, bool) {
 	if !env.IsContinue {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	rec, ok := readSpawnedAgent(facts, resolveAgentID(facts, env.Target))
 	if !ok {
-		return types.Job{}, false
+		return jobtypes.Job{}, false
 	}
 	return spawnTitleJob(ctx, at, rec.Description)
 }

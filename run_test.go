@@ -40,6 +40,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
@@ -2209,7 +2210,7 @@ func TestRun_NonRetryableFailureRecordsNotRetried(t *testing.T) {
 		spells.WithTargets("refused"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			calls.Add(1)
-			return nil, types.NonRetryable(errors.New("hook is not a command"), types.RetryAfterConfig, "edit the hook")
+			return nil, types.NonRetryable(errors.New("hook is not a command"), job.RetryAfterConfig, "edit the hook")
 		}),
 	)
 

@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/clikit/exit"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -113,7 +114,7 @@ type CallersEnv struct {
 // occurrence of the symbol name names, the [job.ClaimEnv] Callers lookup. It refuses with a
 // usage error a name that resolves to no symbol or to several, a symbol whose occurrences
 // the indexes cannot list whole, and a workspace with version control off.
-func ExpandCallers(ctx context.Context, root, name string, env CallersEnv) ([]types.JobClaimRequest, error) {
+func ExpandCallers(ctx context.Context, root, name string, env CallersEnv) ([]jobtypes.ClaimRequest, error) {
 	ws, err := env.OpenWorkspace(ctx, root)
 	if err != nil {
 		return nil, err
@@ -125,7 +126,7 @@ func ExpandCallers(ctx context.Context, root, name string, env CallersEnv) ([]ty
 	if res.VCS == nil {
 		return nil, exit.Usagef("magus job apply: version control is disabled here, so no caller of a symbol can be placed in a declaration")
 	}
-	declarations := func(file string) ([]types.RegionChange, error) {
+	declarations := func(file string) ([]jobtypes.RegionChange, error) {
 		body, err := os.ReadFile(filepath.Join(ws.Root(), filepath.FromSlash(file)))
 		if err != nil {
 			return nil, err
@@ -230,16 +231,16 @@ func ReadSymbolDelta(ctx context.Context, root string, g *knowledge.Graph, drive
 	}
 
 	var delta job.SymbolDelta
-	var goFiles []types.FileChange
+	var goFiles []jobtypes.FileChange
 	for _, p := range changed {
 		if _, present := after[p]; present && strings.HasSuffix(p, ".go") && !types.IsTestPath(p) {
-			goFiles = append(goFiles, types.FileChange{Path: p})
+			goFiles = append(goFiles, jobtypes.FileChange{Path: p})
 		}
 	}
 	if len(goFiles) > 0 {
 		// A graph that places no symbol in any changed Go file was not indexed over them,
 		// and reading it would report every addition as none.
-		if !slices.ContainsFunc(goFiles, func(f types.FileChange) bool { return g.SymbolAt(f.Path, math.MaxInt).ID != "" }) {
+		if !slices.ContainsFunc(goFiles, func(f jobtypes.FileChange) bool { return g.SymbolAt(f.Path, math.MaxInt).ID != "" }) {
 			return job.SymbolDelta{}, false
 		}
 		regions, err := driver.Regions(ctx, root, base, goFiles)
@@ -248,7 +249,7 @@ func ReadSymbolDelta(ctx context.Context, root string, g *knowledge.Graph, drive
 		}
 		seen := map[string]bool{}
 		for _, r := range regions {
-			if r.Side != types.RegionNew {
+			if r.Side != jobtypes.RegionNew {
 				continue
 			}
 			for line := r.Lines[0]; line <= r.Lines[1]; line++ {

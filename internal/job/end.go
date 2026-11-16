@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -34,7 +35,7 @@ type WrittenPaths func(ctx context.Context, root string, paths []string) ([]stri
 
 // descendant is a live row below one an end names, with the work it holds.
 type descendant struct {
-	row types.Job
+	row job.Job
 	// uncommitted are the paths inside its write paths that its checkout has not committed.
 	uncommitted []string
 	// unread is why its checkout's status could not be read, "" when it was.
@@ -43,7 +44,7 @@ type descendant struct {
 
 // describeDescendant reads the work row holds in its checkout. A row nobody took has no
 // checkout and holds none.
-func describeDescendant(ctx context.Context, row types.Job) descendant {
+func describeDescendant(ctx context.Context, row job.Job) descendant {
 	d := descendant{row: row}
 	if where := heldCheckout(row); where != "" {
 		d.uncommitted, d.unread = uncommitted(ctx, where, row)
@@ -86,7 +87,7 @@ func (d descendant) String() string {
 
 // heldCheckout is the checkout row's holder works in: the one its fork made, else the one
 // it was taken in, "" when nobody took it.
-func heldCheckout(row types.Job) string {
+func heldCheckout(row job.Job) string {
 	if row.Worktree.Standing() {
 		return row.Worktree.Root
 	}
@@ -94,7 +95,7 @@ func heldCheckout(row types.Job) string {
 }
 
 // runningCheck is the invocation of row's run that started and has not ended, "" for none.
-func runningCheck(row types.Job) string {
+func runningCheck(row job.Job) string {
 	if r := row.LastRun; r != nil && r.Invocation != "" && r.Ended == 0 {
 		return r.Invocation
 	}
@@ -104,7 +105,7 @@ func runningCheck(row types.Job) string {
 // uncommitted are the paths inside row's write paths that the checkout at root holds
 // uncommitted, and why its status could not be read when it could not. A directory no
 // version control answers in holds nothing to commit.
-func uncommitted(ctx context.Context, root string, row types.Job) ([]string, string) {
+func uncommitted(ctx context.Context, root string, row job.Job) ([]string, string) {
 	drv, _ := resolveDriver(ctx, root)
 	if drv == nil {
 		return nil, ""
@@ -123,8 +124,8 @@ func uncommitted(ctx context.Context, root string, row types.Job) ([]string, str
 
 // liveBelow are the live rows under id. With result, the end keeps id live, so only the
 // rows still editing hold it; without one, id ends and every live row under it ends with it.
-func liveBelow(rows []types.Job, id string, result bool) []types.Job {
-	return slices.DeleteFunc(types.JobDescendants(rows, id), func(r types.Job) bool {
+func liveBelow(rows []job.Job, id string, result bool) []job.Job {
+	return slices.DeleteFunc(job.Descendants(rows, id), func(r job.Job) bool {
 		if result {
 			return !r.State.Editing()
 		}
@@ -134,7 +135,7 @@ func liveBelow(rows []types.Job, id string, result bool) []types.Job {
 
 // refuseLiveDescendants refuses ending id while live rows below it would end unseen, or,
 // when result is set, while rows below it are still working.
-func refuseLiveDescendants(ctx context.Context, rows []types.Job, id string, result bool) error {
+func refuseLiveDescendants(ctx context.Context, rows []job.Job, id string, result bool) error {
 	live := liveBelow(rows, id, result)
 	if len(live) == 0 {
 		return nil
@@ -178,7 +179,7 @@ func joinDescendants(descs []descendant) string {
 // uncommitted work in its write paths or a running check. Then the end needs a person, who
 // disposes the attention request the refusal names (the guard denies an agent that), and
 // the same call proceeds afterwards.
-func Abandon(ctx context.Context, store *Store, ids []string) ([]types.Job, []error, []error) {
+func Abandon(ctx context.Context, store *Store, ids []string) ([]job.Job, []error, []error) {
 	rows, err := store.unswept()
 	if err != nil {
 		return nil, nil, []error{err}
@@ -214,7 +215,7 @@ func Abandon(ctx context.Context, store *Store, ids []string) ([]types.Job, []er
 			refused = append(refused, err)
 			for _, d := range holding {
 				blocked[d.row.ID] = true
-				for _, a := range types.JobAncestors(rows, d.row.ID) {
+				for _, a := range job.Ancestors(rows, d.row.ID) {
 					blocked[a.ID] = blocked[a.ID] || slices.Contains(ids, a.ID)
 				}
 			}
@@ -222,9 +223,9 @@ func Abandon(ctx context.Context, store *Store, ids []string) ([]types.Job, []er
 	}
 	order := slices.DeleteFunc(slices.Clone(ids), func(id string) bool { return blocked[id] })
 	slices.SortStableFunc(order, func(a, b string) int {
-		return cmp.Compare(len(types.JobAncestors(rows, b)), len(types.JobAncestors(rows, a)))
+		return cmp.Compare(len(job.Ancestors(rows, b)), len(job.Ancestors(rows, a)))
 	})
-	var ended []types.Job
+	var ended []job.Job
 	var already []error
 	for _, id := range order {
 		stored, err := Exit(ctx, store, id, nil, nil)
@@ -289,10 +290,10 @@ func (s *Store) confirmEnd(ctx context.Context, ids []string, holding []descenda
 
 // treeEndings are the rows of out that end only because an ancestor in out ends: neither
 // the sweep nor prune ends them on their own as rows stand.
-func (w *sweeper) treeEndings(rows []types.Job, out []Ending, window time.Duration) ([]types.Job, error) {
-	flagged := types.JobList{Jobs: rows}.Flag(w.now, window)
+func (w *sweeper) treeEndings(rows []job.Job, out []Ending, window time.Duration) ([]job.Job, error) {
+	flagged := job.List{Jobs: rows}.Flag(w.now, window)
 	x := indexRows(rows)
-	var taken []types.Job
+	var taken []job.Job
 	for _, e := range out {
 		row := x.byID[e.ID]
 		reason, err := w.reason(x, rows, row)
@@ -310,7 +311,7 @@ func (w *sweeper) treeEndings(rows []types.Job, out []Ending, window time.Durati
 // restated names each of them, and refuses until a person confirms when one it names
 // holds work (see [Store.confirmEnd]). An id in restated that names no such row is refused
 // too: a restatement is of what the prune showed.
-func (s *Store) refuseTreeEndings(ctx context.Context, taken []types.Job, restated []string) error {
+func (s *Store) refuseTreeEndings(ctx context.Context, taken []job.Job, restated []string) error {
 	var unstated, holding []descendant
 	for _, row := range taken {
 		d := describeDescendant(ctx, row)
@@ -322,7 +323,7 @@ func (s *Store) refuseTreeEndings(ctx context.Context, taken []types.Job, restat
 		}
 	}
 	for _, id := range restated {
-		if !slices.ContainsFunc(taken, func(r types.Job) bool { return r.ID == id }) {
+		if !slices.ContainsFunc(taken, func(r job.Job) bool { return r.ID == id }) {
 			return fmt.Errorf("job: prune does not end %s with an ancestor, so there is nothing to restate: `magus job prune --dry-run` lists what it ends", id)
 		}
 	}
@@ -345,24 +346,24 @@ func (s *Store) refuseTreeEndings(ctx context.Context, taken []types.Job, restat
 // taken in, is never removed: its row records [adoptedKept]. With written, the paths in a
 // checkout that magus wrote, and Go files whose only change is gofmt's, are restored first,
 // so they neither keep the checkout nor count as work. It returns the rows whose record changed.
-func (s *Store) EndCheckouts(ctx context.Context, written WrittenPaths, ended ...string) ([]types.Job, error) {
+func (s *Store) EndCheckouts(ctx context.Context, written WrittenPaths, ended ...string) ([]job.Job, error) {
 	return s.endCheckouts(ctx, written, ended, false)
 }
 
 // EndNamedCheckouts is [Store.EndCheckouts] for the jobs in ended alone: ending some jobs
 // restores and removes their checkouts and leaves every other ended row's as it stands.
-func (s *Store) EndNamedCheckouts(ctx context.Context, written WrittenPaths, ended ...string) ([]types.Job, error) {
+func (s *Store) EndNamedCheckouts(ctx context.Context, written WrittenPaths, ended ...string) ([]job.Job, error) {
 	return s.endCheckouts(ctx, written, ended, true)
 }
 
-func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []string, onlyNamed bool) ([]types.Job, error) {
+func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []string, onlyNamed bool) ([]job.Job, error) {
 	rows, err := s.unswept()
 	if err != nil {
 		return nil, err
 	}
 	s.releaseEnded(rows)
 	here, _ := filepath.Abs(s.root)
-	var changed []types.Job
+	var changed []job.Job
 	for _, row := range rows {
 		if !row.State.Terminal() || (onlyNamed && !slices.Contains(ended, row.ID)) {
 			continue
@@ -379,7 +380,7 @@ func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []
 			continue
 		}
 		now := time.Now().Unix()
-		stored, err := s.writeWorktree(ctx, row.ID, func(w *types.JobWorktree) {
+		stored, err := s.writeWorktree(ctx, row.ID, func(w *job.Worktree) {
 			w.Kept = kept
 			if kept == "" {
 				w.Removed = now
@@ -396,7 +397,7 @@ func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []
 // releaseEnded drops every binding that still names an ended row. The guard
 // releases one only when the holder ends its own row, so a row ended by
 // anyone else kept refusing its caller's forks.
-func (s *Store) releaseEnded(rows []types.Job) {
+func (s *Store) releaseEnded(rows []job.Job) {
 	ended := map[string]bool{}
 	for _, row := range rows {
 		if row.State.Terminal() {
@@ -422,7 +423,7 @@ func (s *Store) releaseEnded(rows []types.Job) {
 
 // endCheckout removes wt, the checkout ended job row worked in, and returns "", or returns
 // why it stays: this call runs in it, a live job is held in it, or it holds work.
-func endCheckout(ctx context.Context, rows []types.Job, here string, row types.Job, wt types.JobWorktree, written WrittenPaths) string {
+func endCheckout(ctx context.Context, rows []job.Job, here string, row job.Job, wt job.Worktree, written WrittenPaths) string {
 	if here != "" && within(here, wt.Root) {
 		return fmt.Sprintf("this call runs in it; `%s` from another checkout removes it", hint.JobWait.With(row.ID))
 	}

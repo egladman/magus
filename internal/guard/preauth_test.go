@@ -21,8 +21,8 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -210,9 +210,9 @@ func servedNextTemplates(t *testing.T) map[string]string {
 }
 
 // seedRemedyJob files row in the job store the fixtures are judged against.
-func seedRemedyJob(t *testing.T, at location, row types.Job) {
+func seedRemedyJob(t *testing.T, at location, row jobtypes.Job) {
 	t.Helper()
-	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).Update(t.Context(), row.ID, func(cur *jobtypes.Job) { *cur = row })
 	require.NoError(t, err)
 }
 
@@ -233,13 +233,13 @@ func servedRoles(t *testing.T) (context.Context, []servedRole) {
 	worker := narrowLease()
 	worker.ID, worker.Parent = "harness/worker", "harness/root"
 	exited := narrowLease()
-	exited.ID, exited.Parent, exited.State = "harness/exited", "harness/root", types.StateExited
-	reviewer := types.Job{
-		ID: "harness/reviewer", Agent: agent.Instructed("read the guard"),
-		ReadOnly: true, Paths: types.JobPaths{Read: []string{"cmd/magus/**"}},
-		State: types.StateRunning, Registered: 1,
+	exited.ID, exited.Parent, exited.State = "harness/exited", "harness/root", jobtypes.StateExited
+	reviewer := jobtypes.Job{
+		ID: "harness/reviewer", Agent: jobtypes.Instructed("read the guard"),
+		ReadOnly: true, Paths: jobtypes.Paths{Read: []string{"cmd/magus/**"}},
+		State: jobtypes.StateRunning, Registered: 1,
 	}
-	handed := types.Job{ID: "harness/handed", Agent: agent.Instructed("a row the root handed out"), Paths: types.JobPaths{Write: []string{"docs/**"}}, State: types.StateDeclared}
+	handed := jobtypes.Job{ID: "harness/handed", Agent: jobtypes.Instructed("a row the root handed out"), Paths: jobtypes.Paths{Write: []string{"docs/**"}}, State: jobtypes.StateDeclared}
 	ctx, _ := fleetFixture(t, worker, exited, reviewer, handed)
 	at := hookLocation(ctx, Dependencies{})
 	const host, session = "claude-code", "served"
@@ -462,7 +462,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 }
 
 // fixtureRows reads the job store the fixture's context pins.
-func fixtureRows(t *testing.T, ctx context.Context) []types.Job {
+func fixtureRows(t *testing.T, ctx context.Context) []jobtypes.Job {
 	t.Helper()
 	rows, err := leaseRows(ctx, hookLocation(ctx, Dependencies{}))
 	require.NoError(t, err)

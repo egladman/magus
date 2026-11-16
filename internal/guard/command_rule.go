@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
@@ -228,11 +229,11 @@ func isPullRequestText(c hint.Invocation) bool {
 // actingRole is where a caller acting under lease, spawned as spawned, stands, and the
 // lease's job row. A bound id the job store does not carry comes back with only its ID set,
 // so the rule can tell a dangling binding from no binding.
-func actingRole(ctx context.Context, at location, lease, spawned string) (types.AgentRole, *types.Job) {
+func actingRole(ctx context.Context, at location, lease, spawned string) (types.AgentRole, *job.Job) {
 	if lease == "" {
 		return types.AgentRoleRoot, nil
 	}
-	row := &types.Job{ID: lease}
+	row := &job.Job{ID: lease}
 	if rows, err := leaseRows(ctx, at); err == nil {
 		for _, r := range rows {
 			if r.ID == lease {

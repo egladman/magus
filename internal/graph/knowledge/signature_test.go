@@ -25,7 +25,7 @@ func TestSignatureMatches(t *testing.T) {
 	}{
 		{"same text", "go", "func Resolve(ctx context.Context) error", "func Resolve(ctx context.Context) error", true},
 		{"whitespace collapses", "go", "func Resolve(ctx context.Context) error", "func  Resolve(ctx  context.Context)\terror", true},
-		{"renamed parameter", "go", "func Resolve(ctx context.Context, row types.Job) error", "func Resolve(c context.Context, r types.Job) error", true},
+		{"renamed parameter", "go", "func Resolve(ctx context.Context, row job.Job) error", "func Resolve(c context.Context, r job.Job) error", true},
 		{"grouped parameters", "go", "func Diff(root string, rev string) error", "func Diff(root, rev string) error", true},
 		{"index renders the receiver bare", "go", "func (Goal).Resolve() Goal", "func (g Goal) Resolve() Goal", true},
 		{"pointer receiver", "go", "func (Store).Update(id string) error", "func (s *Store) Update(id string) error", true},

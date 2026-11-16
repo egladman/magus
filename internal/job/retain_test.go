@@ -8,18 +8,18 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const retainNow = int64(2_000_000_000)
 
-func aged(id string, state types.JobState, days int64) types.Job {
-	return types.Job{ID: id, State: state, Updated: retainNow - days*24*3600}
+func aged(id string, state job.State, days int64) job.Job {
+	return job.Job{ID: id, State: state, Updated: retainNow - days*24*3600}
 }
 
-func ids(rows []types.Job) []string {
+func ids(rows []job.Job) []string {
 	out := make([]string, len(rows))
 	for i, r := range rows {
 		out[i] = r.ID
@@ -30,24 +30,24 @@ func ids(rows []types.Job) []string {
 func TestRetireDropsWhatIsOverAndOld(t *testing.T) {
 	t.Parallel()
 
-	queued := aged("queued", types.StateDeclared, 9)
+	queued := aged("queued", job.StateDeclared, 9)
 	queued.DependsOn = []string{"dependency"}
-	child := aged("child", types.StateRunning, 0)
+	child := aged("child", job.StateRunning, 0)
 	child.Parent = "parent"
-	parent := aged("parent", types.StatePass, 9)
+	parent := aged("parent", job.StatePass, 9)
 	parent.Parent = "grandparent"
-	server := aged("server", types.StatePass, 9)
-	server.RegisteredBy = types.Origin{EntryPoint: types.EntryPointServer}
-	rows := []types.Job{
-		aged("passed", types.StatePass, 8),
-		aged("failed", types.StateFail, 8),
-		aged("ended", types.StateNoReturn, 8),
-		aged("uncollected", types.StateExited, 8),
-		aged("recent", types.StateNoReturn, 6),
-		aged("idle", types.StateRunning, 30),
-		aged("dependency", types.StatePass, 9),
+	server := aged("server", job.StatePass, 9)
+	server.RegisteredBy = job.Origin{EntryPoint: job.EntryPointServer}
+	rows := []job.Job{
+		aged("passed", job.StatePass, 8),
+		aged("failed", job.StateFail, 8),
+		aged("ended", job.StateNoReturn, 8),
+		aged("uncollected", job.StateExited, 8),
+		aged("recent", job.StateNoReturn, 6),
+		aged("idle", job.StateRunning, 30),
+		aged("dependency", job.StatePass, 9),
 		queued,
-		aged("grandparent", types.StateNoReturn, 20),
+		aged("grandparent", job.StateNoReturn, 20),
 		parent,
 		child,
 		server,
@@ -88,14 +88,14 @@ func TestAWriteRetainsOncePerInterval(t *testing.T) {
 	lostTemp := plant(".jobs.jsonl.tmp.123", 2*time.Hour)
 	other := plant("landing-probes.jsonl", week+time.Hour)
 
-	write := func(rows ...types.Job) {
+	write := func(rows ...job.Job) {
 		t.Helper()
 		require.NoError(t, s.update(t.Context(), func(f *jobsFile) error {
 			f.Jobs = append(f.Jobs, rows...)
 			return nil
 		}))
 	}
-	write(aged("old", types.StatePass, 8), aged("live", types.StateRunning, 8))
+	write(aged("old", job.StatePass, 8), aged("live", job.StateRunning, 8))
 	rows, err := s.read()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"old", "live"}, ids(rows.Jobs), "the first write stamps the clock and keeps every row")
@@ -103,7 +103,7 @@ func TestAWriteRetainsOncePerInterval(t *testing.T) {
 	assert.FileExists(t, oldArchive)
 
 	now = now.Add(retainEvery - time.Second)
-	write(aged("old-again", types.StatePass, 8))
+	write(aged("old-again", job.StatePass, 8))
 	rows, err = s.read()
 	require.NoError(t, err)
 	assert.True(t, slices.Contains(ids(rows.Jobs), "old"), "no pass inside the interval")
@@ -145,7 +145,7 @@ func TestARetentionPassReadsJobsRetain(t *testing.T) {
 			}
 			s := tempStore(t, root)
 			s.clock = func() time.Time { return time.Unix(retainNow, 0) }
-			rows := []types.Job{aged("ten-days", types.StatePass, 10), aged("two-days", types.StatePass, 2), aged("live", types.StateRunning, 10)}
+			rows := []job.Job{aged("ten-days", job.StatePass, 10), aged("two-days", job.StatePass, 2), aged("live", job.StateRunning, 10)}
 			err := s.update(t.Context(), func(f *jobsFile) error {
 				f.Jobs, f.Retained = rows, retainNow-int64(retainEvery/time.Second)
 				return nil

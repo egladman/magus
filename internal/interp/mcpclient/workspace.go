@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -59,6 +60,6 @@ func OpenWorkspace(ctx context.Context, errOut io.Writer, open Opener) (context.
 	}
 	ctx = spawn.WithOutputWriters(sandboxed, errOut, errOut)
 	ctx = trail.ContextWithBase(ctx, m.CacheDir)
-	ctx = types.WithJobLease(ctx, trail.LeaseFromEnv())
-	return trail.ContextWithEntryPoint(ctx, types.EntryPointMCP), nil
+	ctx = job.WithLease(ctx, trail.LeaseFromEnv())
+	return trail.ContextWithEntryPoint(ctx, job.EntryPointMCP), nil
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	qtypes "github.com/egladman/magus/internal/queue/types"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 type inflightDetailSuite struct {
@@ -18,35 +18,35 @@ type inflightDetailSuite struct {
 func TestInflightDetail(t *testing.T) { suite.Run(t, new(inflightDetailSuite)) }
 
 func (s *inflightDetailSuite) TestOnePartitionNamesOnlyThePosition() {
-	s.Equal("pos 2", InflightDetail(types.InflightChange{Partition: 1, Position: 2}, 1))
+	s.Equal("pos 2", InflightDetail(job.InflightChange{Partition: 1, Position: 2}, 1))
 }
 
 func (s *inflightDetailSuite) TestSeveralPartitionsNameThePartition() {
-	s.Equal("partition 1 pos 2", InflightDetail(types.InflightChange{Partition: 1, Position: 2}, 3))
+	s.Equal("partition 1 pos 2", InflightDetail(job.InflightChange{Partition: 1, Position: 2}, 3))
 }
 
 func (s *inflightDetailSuite) TestACodeWithAReasonOutranksTheMark() {
-	c := types.InflightChange{Position: 1, Code: "MGS1", Reason: "why", Mark: "needs_work"}
+	c := job.InflightChange{Position: 1, Code: "MGS1", Reason: "why", Mark: "needs_work"}
 
 	s.Equal("pos 1  MGS1: why", InflightDetail(c, 1))
 }
 
 func (s *inflightDetailSuite) TestAMarkReadsAsWords() {
-	s.Equal("needs work", InflightDetail(types.InflightChange{Mark: "needs_work"}, 0))
+	s.Equal("needs work", InflightDetail(job.InflightChange{Mark: "needs_work"}, 0))
 }
 
 func (s *inflightDetailSuite) TestNothingToSayIsEmpty() {
-	s.Empty(InflightDetail(types.InflightChange{}, 0))
+	s.Empty(InflightDetail(job.InflightChange{}, 0))
 }
 
-func inflightRows() []types.Job {
-	return []types.Job{
-		{ID: "fleet", State: types.StateRunning},
-		{ID: "fleet/kick", Parent: "fleet", State: types.StatePass, CheckoutRoot: "/w/kick"},
-		{ID: "fleet/queued", Parent: "fleet", State: types.StateRunning, CheckoutRoot: "/w/queued"},
-		{ID: "fleet/nopr", Parent: "fleet", State: types.StateRunning, CheckoutRoot: "/w/nopr"},
-		{ID: "other", State: types.StateRunning},
-		{ID: "other/work", Parent: "other", State: types.StateRunning, CheckoutRoot: "/w/theirs"},
+func inflightRows() []job.Job {
+	return []job.Job{
+		{ID: "fleet", State: job.StateRunning},
+		{ID: "fleet/kick", Parent: "fleet", State: job.StatePass, CheckoutRoot: "/w/kick"},
+		{ID: "fleet/queued", Parent: "fleet", State: job.StateRunning, CheckoutRoot: "/w/queued"},
+		{ID: "fleet/nopr", Parent: "fleet", State: job.StateRunning, CheckoutRoot: "/w/nopr"},
+		{ID: "other", State: job.StateRunning},
+		{ID: "other/work", Parent: "other", State: job.StateRunning, CheckoutRoot: "/w/theirs"},
 	}
 }
 
@@ -55,7 +55,7 @@ func inflightInput(me Identity) InflightInput {
 	theirs := qtypes.Change{ID: "3", Head: "h3", Branch: "theirs", Base: "main", Author: "ann", Method: qtypes.MethodRebase}
 	unapproved := qtypes.Change{ID: "4", Head: "h4", Base: "main", Author: "eli", Method: qtypes.MethodSquash}
 	return InflightInput{
-		Fetch: &types.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 100, ElapsedMS: 7},
+		Fetch: &job.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 100, ElapsedMS: 7},
 		Changes: qtypes.Changes{
 			Base:    "main",
 			Changes: []qtypes.Change{theirs, queued, unapproved},
@@ -77,21 +77,21 @@ func inflightInput(me Identity) InflightInput {
 
 func TestInflightJoinsChangesToJobsAndThePlan(t *testing.T) {
 	t.Parallel()
-	list := Inflight(types.JobList{Jobs: inflightRows()}, inflightInput(Identity{Lease: "fleet/queued", Login: "eli"}))
+	list := Inflight(job.List{Jobs: inflightRows()}, inflightInput(Identity{Lease: "fleet/queued", Login: "eli"}))
 
-	assert.Equal(t, types.JobList{
+	assert.Equal(t, job.List{
 		Jobs:    inflightRows(),
-		Fetched: &types.InflightFetch{Provider: "github", Host: "github.com", Base: "main", Tip: "tip", At: 100, ElapsedMS: 7},
+		Fetched: &job.InflightFetch{Provider: "github", Host: "github.com", Base: "main", Tip: "tip", At: 100, ElapsedMS: 7},
 		// Provider order, another base's change left out, each joined by branch and placed by the plan.
-		Changes: []types.InflightChange{
+		Changes: []job.InflightChange{
 			{ID: "3", Head: "h3", Branch: "theirs", Base: "main", Author: "ann", Jobs: []string{"other/work"}, Intent: "rebase",
-				Partition: 1, Position: 2, Attention: types.AttentionQueue},
+				Partition: 1, Position: 2, Attention: job.AttentionQueue},
 			{ID: "2", Title: "queued", Head: "h2", Branch: "queued", Base: "main", Author: "eli", Jobs: []string{"fleet/queued"}, Intent: "squash",
-				Partition: 1, Position: 1, Mine: true, Attention: types.AttentionQueue},
+				Partition: 1, Position: 1, Mine: true, Attention: job.AttentionQueue},
 			{ID: "4", Head: "h4", Base: "main", Author: "eli", Intent: "squash",
-				Decision: "wait", Code: "WAIT_NOT_APPROVED", Reason: "no approval", Mine: true, Attention: types.AttentionReview},
-			{ID: "1", Head: "h1", Branch: "kick", Base: "main", Jobs: []string{"fleet/kick"}, Mark: "kicked_back", Mine: true, Attention: types.AttentionAuthor},
-			{ID: "6", Head: "h6", Base: "main", Author: "eli", Mine: true, Attention: types.AttentionNone},
+				Decision: "wait", Code: "WAIT_NOT_APPROVED", Reason: "no approval", Mine: true, Attention: job.AttentionReview},
+			{ID: "1", Head: "h1", Branch: "kick", Base: "main", Jobs: []string{"fleet/kick"}, Mark: "kicked_back", Mine: true, Attention: job.AttentionAuthor},
+			{ID: "6", Head: "h6", Base: "main", Author: "eli", Mine: true, Attention: job.AttentionNone},
 		},
 		// A live job of the tree on a branch no change carries.
 		Unproposed: []string{"fleet/nopr"},
@@ -104,7 +104,7 @@ func TestInflightMineIsTheJobTreeThenTheLogin(t *testing.T) {
 	t.Parallel()
 	mine := func(me Identity) []string {
 		var ids []string
-		for _, c := range Inflight(types.JobList{Jobs: inflightRows()}, inflightInput(me)).Changes {
+		for _, c := range Inflight(job.List{Jobs: inflightRows()}, inflightInput(me)).Changes {
 			if c.Mine {
 				ids = append(ids, c.ID)
 			}
@@ -119,15 +119,15 @@ func TestInflightMineIsTheJobTreeThenTheLogin(t *testing.T) {
 
 func TestInflightAttention(t *testing.T) {
 	t.Parallel()
-	for want, ch := range map[types.InflightAttention]types.InflightChange{
-		types.AttentionAuthor: {Intent: "squash", Decision: "kick", Code: "KICK_RED"},
-		types.AttentionReview: {Intent: "squash", Decision: "wait", Code: "WAIT_NOT_APPROVED"},
-		types.AttentionQueue:  {Intent: "squash", Decision: "wait", Code: "WAIT_CHECKS"},
-		types.AttentionNone:   {Mark: "queued"},
+	for want, ch := range map[job.InflightAttention]job.InflightChange{
+		job.AttentionAuthor: {Intent: "squash", Decision: "kick", Code: "KICK_RED"},
+		job.AttentionReview: {Intent: "squash", Decision: "wait", Code: "WAIT_NOT_APPROVED"},
+		job.AttentionQueue:  {Intent: "squash", Decision: "wait", Code: "WAIT_CHECKS"},
+		job.AttentionNone:   {Mark: "queued"},
 	} {
 		assert.Equal(t, want, changeAttention(ch), "%+v", ch)
 	}
-	assert.Equal(t, types.AttentionAuthor, changeAttention(types.InflightChange{Mark: "needs_regeneration"}))
+	assert.Equal(t, job.AttentionAuthor, changeAttention(job.InflightChange{Mark: "needs_regeneration"}))
 }
 
 // A plan for another base, or for a head that has moved, places nothing.
@@ -135,14 +135,14 @@ func TestInflightIgnoresAPlanThatIsNotForTheseHeads(t *testing.T) {
 	t.Parallel()
 	in := inflightInput(Identity{})
 	in.Changes.Changes[1].Head = "moved"
-	list := Inflight(types.JobList{Jobs: inflightRows()}, in)
+	list := Inflight(job.List{Jobs: inflightRows()}, in)
 	require.Len(t, list.Changes, 5)
 	assert.Zero(t, list.Changes[1].Position, "the head moved since planning")
 	assert.Equal(t, 2, list.Changes[0].Position)
 
 	in = inflightInput(Identity{})
 	in.Plan.Base = "release"
-	list = Inflight(types.JobList{Jobs: inflightRows()}, in)
+	list = Inflight(job.List{Jobs: inflightRows()}, in)
 	assert.Empty(t, list.Fetched.Tip)
 	for _, c := range list.Changes {
 		assert.Zero(t, c.Position)
@@ -152,7 +152,7 @@ func TestInflightIgnoresAPlanThatIsNotForTheseHeads(t *testing.T) {
 
 func TestInflightNeverFetchedLeavesTheListAlone(t *testing.T) {
 	t.Parallel()
-	list := types.JobList{Jobs: inflightRows(), Changes: []types.InflightChange{{ID: "stale"}}, Unproposed: []string{"x"}}
+	list := job.List{Jobs: inflightRows(), Changes: []job.InflightChange{{ID: "stale"}}, Unproposed: []string{"x"}}
 	got := Inflight(list, InflightInput{Me: Identity{Lease: "fleet"}})
-	assert.Equal(t, types.JobList{Jobs: inflightRows()}, got)
+	assert.Equal(t, job.List{Jobs: inflightRows()}, got)
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -29,12 +30,12 @@ func deadlineAfter(d time.Duration) int64 { return time.Now().Add(d).Unix() }
 // row with neither loses any bound it carried.
 //
 // row must have passed Validate; an unparsable timeout reads as none.
-func Declare(row types.Declaration, defaultTimeout time.Duration) func(*types.Job) {
+func Declare(row job.Declaration, defaultTimeout time.Duration) func(*job.Job) {
 	d, _ := types.ParseJobTimeout(row.Timeout)
 	if d == 0 {
 		d = defaultTimeout
 	}
-	return func(u *types.Job) {
+	return func(u *job.Job) {
 		row.Apply(u)
 		u.Deadline = 0
 		if d > 0 {
@@ -50,21 +51,21 @@ func Declare(row types.Declaration, defaultTimeout time.Duration) func(*types.Jo
 // symbol goals settled in the same pass: the error joins every problem left after the row's
 // deviations, and nothing is written then. read may be nil where no graph is at hand, which
 // skips only the ambiguity check.
-func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.Job, error) {
+func ForkMerge(ctx context.Context, store *Store, id string, merge func(*job.Job), limits config.Jobs, read SymbolReader) (job.Job, error) {
 	rows, err := store.List()
 	if err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
 	v, merge := validateFork(ctx, store, rows, id, merge, limits, read)
 	if err := v.Error(); err != nil {
-		return types.Job{}, err
+		return job.Job{}, err
 	}
 	return writeMerge(ctx, store, id, merge, limits, v.WriteProof)
 }
 
 // writeMerge stores a merge that validated, stamping when it did.
-func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.Job), limits config.Jobs, proof types.JobWriteProof) (types.Job, error) {
-	stored, err := store.Update(ctx, id, func(u *types.Job) {
+func writeMerge(ctx context.Context, store *Store, id string, merge func(*job.Job), limits config.Jobs, proof job.WriteProof) (job.Job, error) {
+	stored, err := store.Update(ctx, id, func(u *job.Job) {
 		created := u.Created == 0
 		merge(u)
 		if created && u.Deadline == 0 && limits.DefaultTimeout > 0 {
@@ -84,10 +85,10 @@ func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.
 // mergeBase is the row a merge into id lands on, and whether the merge updates that row
 // rather than declares it. A row that ended and that the merge brings back is declared
 // anew, so it meets every rule a new row meets.
-func mergeBase(rows []types.Job, id string, merge func(*types.Job)) (types.Job, bool) {
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+func mergeBase(rows []job.Job, id string, merge func(*job.Job)) (job.Job, bool) {
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id })
 	if i < 0 {
-		return types.Job{ID: id}, false
+		return job.Job{ID: id}, false
 	}
 	prev := rows[i].Clone()
 	if !prev.State.Terminal() {
@@ -101,15 +102,15 @@ func mergeBase(rows []types.Job, id string, merge func(*types.Job)) (types.Job, 
 // addedChecks is merged cut to the checks an update adds to prev: its check when it
 // changed, and every goal check prev carried under no goal. A check the row already held
 // was graded when it entered, so an unrelated update never re-grades it.
-func addedChecks(prev, merged types.Job, checkChanged bool) types.Job {
+func addedChecks(prev, merged job.Job, checkChanged bool) job.Job {
 	added := merged
 	if !checkChanged {
 		added.Check = nil
 	}
 	held := prev.EffectiveGoals()
-	added.Goals = slices.DeleteFunc(slices.Clone(merged.Goals), func(goal types.Goal) bool {
-		return goal.Kind != types.GoalKindCheck || slices.ContainsFunc(held, func(g types.Goal) bool {
-			return g.Kind == types.GoalKindCheck && types.SameLeaseCheck(&g.Check, &goal.Check)
+	added.Goals = slices.DeleteFunc(slices.Clone(merged.Goals), func(goal job.Goal) bool {
+		return goal.Kind != job.GoalKindCheck || slices.ContainsFunc(held, func(g job.Goal) bool {
+			return g.Kind == job.GoalKindCheck && job.SameLeaseCheck(&g.Check, &goal.Check)
 		})
 	})
 	return added
@@ -118,8 +119,8 @@ func addedChecks(prev, merged types.Job, checkChanged bool) types.Job {
 // Applied is one record `magus job apply` wrote, or would write: the row before (zero when
 // Created), the row after, and the spec fields that differ.
 type Applied struct {
-	Prev    types.Job
-	Next    types.Job
+	Prev    job.Job
+	Next    job.Job
 	Created bool
 	Changed []string
 }
@@ -163,7 +164,7 @@ func listChange(pair [2][]string) []string {
 	return parts
 }
 
-func goalIDs(goals []types.Goal) []string {
+func goalIDs(goals []job.Goal) []string {
 	ids := make([]string, len(goals))
 	for i, g := range goals {
 		ids[i] = g.ID
@@ -191,7 +192,7 @@ func goalIDs(goals []types.Goal) []string {
 // is judged first: the store's authorization refuses at once, as it did before the pass.
 // dryRun returns what would be written and writes nothing, a refusal's release request
 // included.
-func Apply(ctx context.Context, store *Store, records []types.Declaration, limits config.Jobs, read SymbolReader, checkpoint func() string, dryRun bool) ([]Applied, error) {
+func Apply(ctx context.Context, store *Store, records []job.Declaration, limits config.Jobs, read SymbolReader, checkpoint func() string, dryRun bool) ([]Applied, error) {
 	rows, err := store.List()
 	if err != nil {
 		return nil, err
@@ -201,8 +202,8 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		refusing = store.dry()
 	}
 	plan := make([]Applied, 0, len(records))
-	merges := make([]func(*types.Job), 0, len(records))
-	proofs := make([]types.JobWriteProof, 0, len(records))
+	merges := make([]func(*job.Job), 0, len(records))
+	proofs := make([]job.WriteProof, 0, len(records))
 	returning := make([]bool, 0, len(records))
 	var problems types.JobProblems
 	for _, rec := range records {
@@ -214,8 +215,8 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 			invalid("state", fmt.Sprintf("the record for %s carries state %q, which is status: apply writes the spec and never moves a job", rec.ID, rec.State),
 				fmt.Sprintf("drop state; a holder moves its own job with `%s` and `%s`", hint.JobExec.With(rec.ID), hint.JobExit.With(rec.ID)))
 		}
-		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
-		var prev types.Job
+		i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == rec.ID })
+		var prev job.Job
 		if i >= 0 {
 			prev = rows[i]
 		}
@@ -226,7 +227,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 			}
 		}
 		ended := i >= 0 && prev.State.Terminal()
-		redeclares := i >= 0 && (ended || prev.State == types.StateExited) && widensWritePaths(prev, rec)
+		redeclares := i >= 0 && (ended || prev.State == job.StateExited) && widensWritePaths(prev, rec)
 		switch {
 		case rec.Enter != "":
 			invalid("enter", fmt.Sprintf("the record for %s enters %s, which declares nothing to apply", rec.ID, rec.Enter),
@@ -245,9 +246,9 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		merge := specMerge(rec, i < 0, checkpoint)
 		if redeclares {
 			spec := merge
-			merge = func(u *types.Job) {
+			merge = func(u *job.Job) {
 				spec(u)
-				u.State = types.StateDeclared
+				u.State = job.StateDeclared
 			}
 		}
 		if resolved, err := resolveMerge(ctx, refusing, rows, rec.ID, merge, read); err != nil {
@@ -259,7 +260,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		next.ID = rec.ID
 		merge(&next)
 		if next.State == "" {
-			next.State = types.StateDeclared
+			next.State = job.StateDeclared
 		}
 		// An empty write set is no boundary at all (the guard scopes nothing by it), so
 		// dropping the last path would free the job rather than stop it.
@@ -300,7 +301,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		// A widening alone keeps a live row's state (see widensInPlace), so the move back to
 		// declared is a write of its own.
 		if returning[k] {
-			if stored, err = store.Update(ctx, stored.ID, func(u *types.Job) { u.State = types.StateDeclared }); err != nil {
+			if stored, err = store.Update(ctx, stored.ID, func(u *job.Job) { u.State = job.StateDeclared }); err != nil {
 				return plan[:k], fmt.Errorf("wrote %d of %d record(s), then re-declaring %s: %w", k, len(plan), plan[k].Next.ID, err)
 			}
 		}
@@ -311,13 +312,13 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 
 // droppedGoalProblems is one problem per goal next lacks, when it also
 // gives up a write path.
-func droppedGoalProblems(prev, next types.Job) types.JobProblems {
+func droppedGoalProblems(prev, next job.Job) types.JobProblems {
 	if subset(prev.Paths.Write, next.Paths.Write) {
 		return nil
 	}
 	var ps types.JobProblems
 	for _, g := range prev.Goals {
-		if slices.ContainsFunc(next.Goals, func(n types.Goal) bool { return n.ID == g.ID }) {
+		if slices.ContainsFunc(next.Goals, func(n job.Goal) bool { return n.ID == g.ID }) {
 			continue
 		}
 		ps = append(ps, types.JobProblem{
@@ -330,7 +331,7 @@ func droppedGoalProblems(prev, next types.Job) types.JobProblems {
 }
 
 // boundCheckout is the checkout row is bound to or held in, "" when neither.
-func boundCheckout(row types.Job) string {
+func boundCheckout(row job.Job) string {
 	if row.Worktree.Standing() {
 		return row.Worktree.Root
 	}
@@ -338,7 +339,7 @@ func boundCheckout(row types.Job) string {
 }
 
 // differentCheckout is the problem of rec naming a checkout its row lacks.
-func differentCheckout(rec types.Declaration, bound string) (message, fix string) {
+func differentCheckout(rec job.Declaration, bound string) (message, fix string) {
 	if bound == "" {
 		return fmt.Sprintf("the record for %s names checkout %s, and no checkout is bound to that job, which only a fork makes", rec.ID, rec.Checkout),
 			fmt.Sprintf("drop checkout, or feed this record to `%s`", hint.JobFork.With("--stdin"))
@@ -348,22 +349,22 @@ func differentCheckout(rec types.Declaration, bound string) (message, fix string
 }
 
 // widensWritePaths reports whether rec names a write path prev's do not cover.
-func widensWritePaths(prev types.Job, rec types.Declaration) bool {
-	var next types.Job
+func widensWritePaths(prev job.Job, rec job.Declaration) bool {
+	var next job.Job
 	rec.ApplySpec(&next)
 	return !subset(next.Paths.Write, prev.Paths.Write)
 }
 
-// specMerge is rec's spec as a merge: [types.Declaration.ApplySpec], plus the checkpoint a
+// specMerge is rec's spec as a merge: [job.Declaration.ApplySpec], plus the checkpoint a
 // new row records when the record names none, and the deadline restamped from a timeout the
 // record names.
-func specMerge(rec types.Declaration, creates bool, checkpoint func() string) func(*types.Job) {
+func specMerge(rec job.Declaration, creates bool, checkpoint func() string) func(*job.Job) {
 	d, _ := types.ParseJobTimeout(rec.Timeout)
 	cp := ""
 	if creates && !rec.ReadOnly && strings.TrimSpace(rec.Checkpoint) == "" && checkpoint != nil {
 		cp = checkpoint()
 	}
-	return func(u *types.Job) {
+	return func(u *job.Job) {
 		rec.ApplySpec(u)
 		if soft := slices.DeleteFunc(slices.Clone(u.Paths.Soft), func(p string) bool { return !slices.Contains(u.Paths.Write, p) }); len(soft) != len(u.Paths.Soft) {
 			u.Paths.Soft = soft
@@ -382,7 +383,7 @@ func specMerge(rec types.Declaration, creates bool, checkpoint func() string) fu
 
 // specChanges names the spec fields that differ between prev and next, in the wire
 // spelling; [changedFields] less the ones apply never writes.
-func specChanges(prev, next types.Job) []string {
+func specChanges(prev, next job.Job) []string {
 	return slices.DeleteFunc(changedFields(prev, next), func(f string) bool {
 		return f == "state" || f == "reported_base" || f == "deadline"
 	})
@@ -413,12 +414,12 @@ func prefixed(id string, ps types.JobProblems) types.JobProblems {
 //
 // A literal whole-file entry does not cover its file here. The fork
 // narrows that hold to the claims.
-func ResolveSymbolGoals(ctx context.Context, row types.Job, read SymbolReader) (types.Job, []string, error) {
+func ResolveSymbolGoals(ctx context.Context, row job.Job, read SymbolReader) (job.Job, []string, error) {
 	row = row.Clone()
 	var refused, claims []string
 	for i, goal := range row.Goals {
 		goal = goal.Resolve()
-		if goal.Kind != types.GoalKindSymbol {
+		if goal.Kind != job.GoalKindSymbol {
 			continue
 		}
 		for _, name := range goal.Symbols {
@@ -430,7 +431,7 @@ func ResolveSymbolGoals(ctx context.Context, row types.Job, read SymbolReader) (
 			if read != nil {
 				fact, ok = read(ctx, name, "")
 			}
-			if goal.Expect == types.ExpectSignature && strings.TrimSpace(goal.Signature) == "" {
+			if goal.Expect == job.ExpectSignature && strings.TrimSpace(goal.Signature) == "" {
 				signature, why := frozenSignature(name, read != nil, ok, fact)
 				if why != "" {
 					refused = append(refused, fmt.Sprintf("goal %q %s", goal.ID, why))
@@ -444,7 +445,7 @@ func ResolveSymbolGoals(ctx context.Context, row types.Job, read SymbolReader) (
 		}
 	}
 	if len(refused) > 0 {
-		return types.Job{}, nil, fmt.Errorf("job: %s", strings.Join(refused, "; "))
+		return job.Job{}, nil, fmt.Errorf("job: %s", strings.Join(refused, "; "))
 	}
 	slices.Sort(claims)
 	row.Paths.Write = append(row.Paths.Write, claims...)
@@ -475,9 +476,9 @@ func frozenSignature(name string, hasReader, read bool, fact SymbolFact) (string
 
 // derivedClaim is the write path claim a goal expecting expect of an existing symbol adds
 // to row, or "" when it adds none.
-func derivedClaim(row types.Job, expect types.GoalExpect, read bool, fact SymbolFact) string {
+func derivedClaim(row job.Job, expect job.GoalExpect, read bool, fact SymbolFact) string {
 	switch expect {
-	case types.ExpectChanged, types.ExpectAbsent, types.ExpectSignature:
+	case job.ExpectChanged, job.ExpectAbsent, job.ExpectSignature:
 	default:
 		return ""
 	}
@@ -490,7 +491,7 @@ func derivedClaim(row types.Job, expect types.GoalExpect, read bool, fact Symbol
 		return ""
 	}
 	for _, entry := range row.Paths.Write {
-		p, decl := types.SplitClaim(entry)
+		p, decl := job.SplitClaim(entry)
 		switch {
 		case decl == "" && coversPath(p, file) && (path.Clean(p) != file || strings.ContainsAny(p, globMeta)):
 			return ""
@@ -537,10 +538,10 @@ func declarationWord(signature string) string {
 // signatures and the derived claims store can place. A signature the stored row already
 // froze for the same goal is kept rather than read again, so a re-applied record does not
 // re-freeze a shape its holder has since changed.
-func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), read SymbolReader) (func(*types.Job), error) {
-	probe := types.Job{ID: id}
-	var prev types.Job
-	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
+func resolveMerge(ctx context.Context, store *Store, rows []job.Job, id string, merge func(*job.Job), read SymbolReader) (func(*job.Job), error) {
+	probe := job.Job{ID: id}
+	var prev job.Job
+	if i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id }); i >= 0 {
 		prev = rows[i]
 		probe = prev.Clone()
 	}
@@ -572,7 +573,7 @@ func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string
 			}
 		}
 	}
-	return func(u *types.Job) {
+	return func(u *job.Job) {
 		merge(u)
 		u.Goals, u.Paths.Write = goals, paths
 	}, nil
@@ -593,7 +594,7 @@ func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]
 	}
 	files := make([]string, len(derived))
 	for i, claim := range derived {
-		files[i], _ = types.SplitClaim(claim)
+		files[i], _ = job.SplitClaim(claim)
 	}
 	driver, drivers, err := claimDrivers(ctx, store.root, files)
 	switch {
@@ -604,7 +605,7 @@ func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]
 	}
 	var kept, refused []string
 	for _, claim := range derived {
-		file, word := types.SplitClaim(claim)
+		file, word := job.SplitClaim(claim)
 		if drivers[file] == "" {
 			continue
 		}
@@ -633,13 +634,13 @@ func PlaceDerivedClaims(ctx context.Context, store *Store, derived []string) ([]
 
 // keepFrozenSignatures fills each signature goal of row that declares none from prev's goal
 // of the same id on the same symbols.
-func keepFrozenSignatures(row *types.Job, prev types.Job) {
+func keepFrozenSignatures(row *job.Job, prev job.Job) {
 	for i, goal := range row.Goals {
-		if goal.Resolve().Expect != types.ExpectSignature || strings.TrimSpace(goal.Signature) != "" {
+		if goal.Resolve().Expect != job.ExpectSignature || strings.TrimSpace(goal.Signature) != "" {
 			continue
 		}
 		for _, old := range prev.Goals {
-			if old.ID == goal.ID && old.Resolve().Expect == types.ExpectSignature && slices.Equal(old.Symbols, goal.Symbols) {
+			if old.ID == goal.ID && old.Resolve().Expect == job.ExpectSignature && slices.Equal(old.Symbols, goal.Symbols) {
 				row.Goals[i].Signature = old.Signature
 			}
 		}
@@ -647,16 +648,16 @@ func keepFrozenSignatures(row *types.Job, prev types.Job) {
 }
 
 // emptyResult reports a result with no changed path, evidence or risk.
-func emptyResult(r types.JobResult) bool {
-	return len(r.ChangedPaths) == 0 && r.Validation == (types.JobResultValidation{}) &&
+func emptyResult(r job.Result) bool {
+	return len(r.ChangedPaths) == 0 && r.Validation == (job.ResultValidation{}) &&
 		len(r.VerificationEvidence) == 0 && len(r.UnresolvedRisks) == 0
 }
 
 // resultShape is the result row's holder files, as JSON naming the row's
 // goals, then how a check the machine would not seat is filed.
-func resultShape(row types.Job) string {
-	shape := types.JobResult{
-		Schema:          types.Schema{Version: types.JobResultAPIVersion},
+func resultShape(row job.Job) string {
+	shape := job.Result{
+		Schema:          job.Schema{Version: job.ResultAPIVersion},
 		Job:             row.ID,
 		ChangedPaths:    []string{},
 		UnresolvedRisks: []string{},
@@ -666,11 +667,11 @@ func resultShape(row types.Job) string {
 	}
 	for _, goal := range row.EffectiveGoals() {
 		switch {
-		case goal.Kind != types.GoalKindCheck:
-		case goal.ID == types.PrimaryGoalID:
-			shape.Validation = types.JobResultValidation{Command: goal.Check.String(), OutputRef: "<ref its run printed>"}
+		case goal.Kind != job.GoalKindCheck:
+		case goal.ID == job.PrimaryGoalID:
+			shape.Validation = job.ResultValidation{Command: goal.Check.String(), OutputRef: "<ref its run printed>"}
 		default:
-			shape.VerificationEvidence = append(shape.VerificationEvidence, types.VerificationEvidence{GateID: goal.ID, OutputRef: "<ref its run printed>"})
+			shape.VerificationEvidence = append(shape.VerificationEvidence, job.VerificationEvidence{GateID: goal.ID, OutputRef: "<ref its run printed>"})
 		}
 	}
 	encoded, err := json.MarshalIndent(shape, "", "  ")
@@ -678,7 +679,7 @@ func resultShape(row types.Job) string {
 		return fmt.Sprintf("the shape did not encode: %v", err)
 	}
 	return fmt.Sprintf("%s\nA check the machine would not seat has no ref: set \"output_ref\": \"\" and \"owed\": %q on its validation or verification_evidence entry.",
-		encoded, types.OwedNoSeat)
+		encoded, job.OwedNoSeat)
 }
 
 // FiledShape is [resultShape] for the row named id, or where to read the
@@ -686,7 +687,7 @@ func resultShape(row types.Job) string {
 func FiledShape(store *Store, id string) string {
 	rows, err := store.List()
 	if err == nil {
-		if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
+		if i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == id }); i >= 0 {
 			return resultShape(rows[i])
 		}
 	}
@@ -695,10 +696,10 @@ func FiledShape(store *Store, id string) string {
 
 // RenderGoalCommands writes the exact command of each of row's check goals,
 // so a holder never guesses one a fork added, then the result it files.
-func RenderGoalCommands(out io.Writer, row types.Job) {
+func RenderGoalCommands(out io.Writer, row job.Job) {
 	fmt.Fprintln(out, "goal commands")
 	for _, goal := range row.EffectiveGoals() {
-		if goal.Kind == types.GoalKindCheck {
+		if goal.Kind == job.GoalKindCheck {
 			fmt.Fprintf(out, "  %s: %s\n", goal.ID, goal.Check)
 		}
 	}
@@ -708,8 +709,8 @@ func RenderGoalCommands(out io.Writer, row types.Job) {
 // RenderFiled writes the run each output ref of a filed result resolved to.
 // A ref names a step, and a rerun of that step takes the ref over, so only
 // the attempt id names one run.
-func RenderFiled(out io.Writer, row types.Job) {
-	line := func(id string, a types.JobAttempt) {
+func RenderFiled(out io.Writer, row job.Job) {
+	line := func(id string, a job.CapturedRun) {
 		outcome := "passed"
 		if a.Failed {
 			outcome = "failed"
@@ -717,7 +718,7 @@ func RenderFiled(out io.Writer, row types.Job) {
 		fmt.Fprintf(out, "  %s: %s is attempt %s, which %s\n", id, a.Ref, a.AttemptID, outcome)
 	}
 	if row.Attempt != nil {
-		line(types.PrimaryGoalID, *row.Attempt)
+		line(job.PrimaryGoalID, *row.Attempt)
 	}
 	for _, gate := range row.GateAttempts {
 		line(gate.GateID, gate.Attempt)
@@ -726,7 +727,7 @@ func RenderFiled(out io.Writer, row types.Job) {
 
 // rewroteOutside is each of dirty, the checkout's uncommitted paths, that a
 // declared output of target matches and row's write paths do not hold, sorted.
-func rewroteOutside(row types.Job, projects []*types.Project, target string, dirty []string) []string {
+func rewroteOutside(row job.Job, projects []*types.Project, target string, dirty []string) []string {
 	var out []string
 	for _, p := range dirty {
 		if _, held := matching(row.Paths.Write, p); held {
@@ -756,7 +757,7 @@ func LeaseRewrites(ctx context.Context, loc Location, target string, projects []
 	if err != nil {
 		return lease, nil, err
 	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == lease })
+	i := slices.IndexFunc(rows, func(r job.Job) bool { return r.ID == lease })
 	if i < 0 {
 		return lease, nil, nil
 	}
@@ -777,7 +778,7 @@ func LeaseRewrites(ctx context.Context, loc Location, target string, projects []
 // RenderGates writes a gate report one gate per line, each unmet one followed by why, then
 // the grade's notes, and says when evidence was taken against an earlier spec or a stale
 // symbol index left the symbol goals ungraded.
-func RenderGates(out io.Writer, status types.JobStatus) {
+func RenderGates(out io.Writer, status job.Status) {
 	if len(status.Gates) == 0 {
 		fmt.Fprintf(out, "%s declares no check and no goal, so there is nothing here to grade.\n", status.Job)
 		fmt.Fprintf(out, "Declare one in the record's goals: `%s` prints the shape.\n", hint.JobFork.With("--schema"))
@@ -829,7 +830,7 @@ func RenderGates(out io.Writer, status types.JobStatus) {
 //
 // A status no diff was ever read for, such as an integration grade, carries no reason the
 // footprint is unknown, and renders none of it: there was no diff to measure.
-func renderDelta(out io.Writer, status types.JobStatus) {
+func renderDelta(out io.Writer, status job.Status) {
 	if !status.FootprintKnown && status.FootprintReason == "" && !status.SymbolDeltaKnown {
 		return
 	}
@@ -863,11 +864,11 @@ func renderDelta(out io.Writer, status types.JobStatus) {
 // `<ancestor>/<goal>` so it cannot collide with the row's own. Only symbol goals travel: a
 // check or a paths goal names work the ancestor does, while a symbol goal names a fact
 // about the tree that a child's changes can break.
-func inheritGoals(row types.Job, rows []types.Job) types.Job {
-	var inherited []types.Goal
-	for _, ancestor := range types.JobAncestors(rows, row.ID) {
+func inheritGoals(row job.Job, rows []job.Job) job.Job {
+	var inherited []job.Goal
+	for _, ancestor := range job.Ancestors(rows, row.ID) {
 		for _, goal := range ancestor.Goals {
-			if goal = goal.Resolve(); goal.Kind != types.GoalKindSymbol {
+			if goal = goal.Resolve(); goal.Kind != job.GoalKindSymbol {
 				continue
 			}
 			goal.ID = fmt.Sprintf("%s/%s", ancestor.ID, goal.ID)

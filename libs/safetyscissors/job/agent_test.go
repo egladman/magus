@@ -1,9 +1,9 @@
-package agent
+package job
 
 import (
+	"encoding/json"
 	"testing"
 
-	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -21,23 +21,23 @@ func (s *specSuite) TestAResumedWorkerIsValid() {
 }
 
 func (s *specSuite) TestAnEmptyWorkerTypeIsRefused() {
-	s.ErrorContains(Spec{Instructions: "ship it"}.Validate(), "names no worker.type, one of resumed, new")
+	s.ErrorContains(Agent{Instructions: "ship it"}.Validate(), "names no worker.type, one of resumed, new")
 }
 
 func (s *specSuite) TestAnUnknownWorkerTypeIsRefused() {
-	s.ErrorContains(Spec{Worker: Worker{Type: "warm"}}.Validate(), `worker.type "warm" is not one of resumed, new`)
+	s.ErrorContains(Agent{Worker: Worker{Type: "warm"}}.Validate(), `worker.type "warm" is not one of resumed, new`)
 }
 
 func (s *specSuite) TestANewWorkerNeedsAReason() {
-	s.ErrorContains(Spec{Worker: Worker{Type: WorkerTypeNew}}.Validate(), "worker.reason")
+	s.ErrorContains(Agent{Worker: Worker{Type: WorkerTypeNew}}.Validate(), "worker.reason")
 }
 
 func (s *specSuite) TestAResumedWorkerCarriesNoReason() {
-	s.ErrorContains(Spec{Worker: Worker{Type: WorkerTypeResumed, Reason: "why"}}.Validate(), "carries none")
+	s.ErrorContains(Agent{Worker: Worker{Type: WorkerTypeResumed, Reason: "why"}}.Validate(), "carries none")
 }
 
 func (s *specSuite) TestTheWorkerTypeIsAlwaysWritten() {
-	body, err := json.Marshal(Spec{Worker: Worker{Type: WorkerTypeResumed}})
+	body, err := json.Marshal(Agent{Worker: Worker{Type: WorkerTypeResumed}})
 	s.Require().NoError(err)
 	s.JSONEq(`{"worker": {"type": "resumed"}}`, string(body), "a zero model and no instructions are left out")
 }
@@ -49,12 +49,12 @@ func (s *specSuite) TestAModelNamesItsTierThenItsID() {
 }
 
 func (s *specSuite) TestANilSectionRequestsNoModel() {
-	var spec *Spec
+	var spec *Agent
 	s.True(spec.RequestedModel().IsZero())
 	s.Nil(spec.Clone())
 }
 
 func (s *specSuite) TestTrimmedTrimsTheModelAndReason() {
-	got := (&Spec{Model: Model{ID: " opus "}, Worker: Worker{Type: WorkerTypeNew, Reason: " why "}}).Trimmed()
-	s.Equal(&Spec{Model: Model{ID: "opus"}, Worker: Worker{Type: WorkerTypeNew, Reason: "why"}}, got)
+	got := (&Agent{Model: Model{ID: " opus "}, Worker: Worker{Type: WorkerTypeNew, Reason: " why "}}).Trimmed()
+	s.Equal(&Agent{Model: Model{ID: "opus"}, Worker: Worker{Type: WorkerTypeNew, Reason: "why"}}, got)
 }

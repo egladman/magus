@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -16,11 +17,11 @@ import (
 // the roots it judged them in.
 type gradeRecorder struct {
 	verdict CheckVerdict
-	graded  []types.Job
+	graded  []job.Job
 	roots   []string
 }
 
-func (r *gradeRecorder) grade(_ context.Context, root string, row types.Job) CheckVerdict {
+func (r *gradeRecorder) grade(_ context.Context, root string, row job.Job) CheckVerdict {
 	r.roots = append(r.roots, root)
 	r.graded = append(r.graded, row)
 	return r.verdict
@@ -44,7 +45,7 @@ func TestReplacementCheckSuite(t *testing.T) {
 }
 
 func (s *ReplacementCheckSuite) fix(paths ...string) string {
-	return replacementCheckFix(types.Job{ID: "w", Paths: types.JobPaths{Write: paths}})
+	return replacementCheckFix(job.Job{ID: "w", Paths: job.Paths{Write: paths}})
 }
 
 func (s *ReplacementCheckSuite) TestABuzzRowIsOfferedAScriptCheckNotGoVet() {
@@ -70,7 +71,7 @@ func TestStoreGradesAgainstItsOwnRoot(t *testing.T) {
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{})
-	assert.Empty(t, deniedCheckProblems(t.Context(), s, types.Job{ID: "w", Check: forkCheck()}))
+	assert.Empty(t, deniedCheckProblems(t.Context(), s, job.Job{ID: "w", Check: forkCheck()}))
 	assert.Equal(t, []string{s.root}, rec.roots)
 	assert.Nil(t, tempStore(t, t.TempDir()).grader, "a Location that names no grader grades nothing")
 }
@@ -79,11 +80,11 @@ func TestDeniedCheckProblemsQuoteTheVerdictAndNameATargetThatCompiles(t *testing
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus;\nask the main session"})
-	build := &types.LeaseCheck{Target: "go-build", Project: "."}
+	build := &job.LeaseCheck{Target: "go-build", Project: "."}
 
-	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, build }, config.Jobs{}, nil)
+	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, build }, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.JobCheckUnrunnable)
-	ps := deniedCheckProblems(t.Context(), s, types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/b.go"}}, Check: build})
+	ps := deniedCheckProblems(t.Context(), s, job.Job{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: build})
 	require.Len(t, ps, 1)
 	assert.Equal(t, "check", ps[0].Field)
 	assert.NotContains(t, ps[0].Message, "\n", "a message is one line")
@@ -99,7 +100,7 @@ func TestDeniedCheckProblemsQuoteTheVerdictAndNameATargetThatCompiles(t *testing
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a refused fork wrote nothing")
 
-	_, err = Apply(t.Context(), s, []types.Declaration{{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/b.go"}}, Check: build}}, config.Jobs{}, nil, nil, true)
+	_, err = Apply(t.Context(), s, []job.Declaration{{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: build}}, config.Jobs{}, nil, nil, true)
 	require.ErrorContains(t, err, "would be denied to its worker", "job apply grades too")
 }
 
@@ -107,20 +108,20 @@ func TestDeniedCheckProblemsAcceptWhatTheGuardLets(t *testing.T) {
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{})
-	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, forkCheck() }, config.Jobs{}, nil)
+	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = []string{"pkg/b.go"}, forkCheck() }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	require.Len(t, rec.graded, 1)
 
-	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Agent = modelRequest("opus") }, config.Jobs{}, nil)
+	_, err = ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Agent = modelRequest("opus") }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 1, "an update that leaves the check alone is not graded again")
 
-	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Check = &types.LeaseCheck{Target: "lint", Project: "."} }, config.Jobs{}, nil)
+	_, err = ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Check = &job.LeaseCheck{Target: "lint", Project: "."} }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 2, "a changed check is")
 
-	assert.Empty(t, deniedCheckProblems(t.Context(), tempStore(t, t.TempDir()), types.Job{ID: "w", Check: forkCheck()}), "a store with no grader finds nothing")
-	_, err = ForkMerge(t.Context(), s, "scout", func(u *types.Job) { u.ReadOnly = true }, config.Jobs{}, nil)
+	assert.Empty(t, deniedCheckProblems(t.Context(), tempStore(t, t.TempDir()), job.Job{ID: "w", Check: forkCheck()}), "a store with no grader finds nothing")
+	_, err = ForkMerge(t.Context(), s, "scout", func(u *job.Job) { u.ReadOnly = true }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 2, "a job with no check has nothing to grade")
 }
@@ -132,8 +133,8 @@ func TestDeniedCheckProblemsReportACheckNobodyGradedOnce(t *testing.T) {
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{NotGraded: "the guard denies this worker `magus run go::go-vet .` as well: the hook binary is older than the tree"})
-	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/b.go"}}, Check: forkCheck(), Goals: []types.Goal{
-		{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
+	row := job.Job{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: forkCheck(), Goals: []job.Goal{
+		{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}},
 	}}
 
 	ps := deniedCheckProblems(t.Context(), s, row)
@@ -146,7 +147,7 @@ func TestDeniedCheckProblemsReportACheckNobodyGradedOnce(t *testing.T) {
 	assert.NotEmpty(t, ps[0].Fix)
 	assert.Len(t, rec.graded, 1, "grading stops at the first check nobody could grade")
 
-	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Paths.Write, u.Check = row.Paths.Write, row.Check }, config.Jobs{}, nil)
+	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = row.Paths.Write, row.Check }, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.JobUngraded)
 }
 
@@ -156,7 +157,7 @@ func humanOnlyGrader(t *testing.T) (*Store, *gradeRecorder) {
 	t.Helper()
 	rec := &gradeRecorder{}
 	loc := tempLocation(t, testRoot(t).Root())
-	loc.Grader = func(ctx context.Context, root string, row types.Job) CheckVerdict {
+	loc.Grader = func(ctx context.Context, root string, row job.Job) CheckVerdict {
 		rec.grade(ctx, root, row)
 		if row.Check.Target != "bench" {
 			return CheckVerdict{}
@@ -170,7 +171,7 @@ func TestDeniedCheckProblemsWordAHumanOnlyCheckAsOneAPersonRuns(t *testing.T) {
 	t.Parallel()
 
 	s, _ := humanOnlyGrader(t)
-	ps := deniedCheckProblems(t.Context(), s, types.Job{ID: "w", Check: &types.LeaseCheck{Target: "bench", Project: "."}})
+	ps := deniedCheckProblems(t.Context(), s, job.Job{ID: "w", Check: &job.LeaseCheck{Target: "bench", Project: "."}})
 	require.Len(t, ps, 1)
 	p := ps[0]
 	assert.NotContains(t, p.Message, "\n", "a message is one line")
@@ -188,10 +189,10 @@ func TestDeniedCheckProblemsGradeEveryGoalCheck(t *testing.T) {
 	t.Parallel()
 
 	s, rec := humanOnlyGrader(t)
-	lint := types.LeaseCheck{Target: "lint", Project: "."}
-	row := types.Job{ID: "w", Check: &lint, Goals: []types.Goal{
-		{ID: "again", Kind: types.GoalKindCheck, Check: lint},
-		{ID: "paid", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "bench", Project: "."}},
+	lint := job.LeaseCheck{Target: "lint", Project: "."}
+	row := job.Job{ID: "w", Check: &lint, Goals: []job.Goal{
+		{ID: "again", Kind: job.GoalKindCheck, Check: lint},
+		{ID: "paid", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "bench", Project: "."}},
 	}}
 	ps := deniedCheckProblems(t.Context(), s, row)
 	require.Len(t, ps, 1)
@@ -202,14 +203,14 @@ func TestDeniedCheckProblemsGradeEveryGoalCheck(t *testing.T) {
 	assert.Equal(t, "bench", rec.graded[1].Check.Target, "a goal's check is graded as the row with that check")
 	assert.Equal(t, row.Goals, rec.graded[1].Goals)
 
-	goalsOnly := types.Job{ID: "g", Goals: []types.Goal{{ID: "paid", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "bench", Project: "."}}}}
+	goalsOnly := job.Job{ID: "g", Goals: []job.Goal{{ID: "paid", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "bench", Project: "."}}}}
 	require.ErrorContains(t, deniedCheckProblems(t.Context(), s, goalsOnly).Error(), "g's goal paid's check", "a row with no check of its own still has its goals graded")
 
-	assert.Empty(t, deniedCheckProblems(t.Context(), s, types.Job{ID: "ok", Check: &lint}), "an ordinary check passes")
+	assert.Empty(t, deniedCheckProblems(t.Context(), s, job.Job{ID: "ok", Check: &lint}), "an ordinary check passes")
 
-	both := types.Job{ID: "b", Goals: []types.Goal{
-		{ID: "paid", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "bench", Project: "."}},
-		{ID: "paid-too", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "bench", Project: "docs"}},
+	both := job.Job{ID: "b", Goals: []job.Goal{
+		{ID: "paid", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "bench", Project: "."}},
+		{ID: "paid-too", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "bench", Project: "docs"}},
 	}}
 	assert.Len(t, deniedCheckProblems(t.Context(), s, both), 2, "every denied check is found, not the first")
 }
@@ -220,14 +221,14 @@ func TestDeniedCheckProblemsDeferWhenTheRulesDidNotLoad(t *testing.T) {
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{Deferred: "the workspace's rules did not load: magusfile.buzz:3: expected ';'"})
-	row := types.Job{ID: "w", Paths: types.JobPaths{Write: []string{"pkg/b.go"}}, Check: forkCheck(), Goals: []types.Goal{
-		{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
+	row := job.Job{ID: "w", Paths: job.Paths{Write: []string{"pkg/b.go"}}, Check: forkCheck(), Goals: []job.Goal{
+		{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}},
 	}}
 
 	assert.Empty(t, deniedCheckProblems(t.Context(), s, row))
 	assert.Len(t, rec.graded, 1, "grading stops at the first deferred check")
 
-	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Paths.Write, u.Check = row.Paths.Write, row.Check }, config.Jobs{}, nil)
+	_, err := ForkMerge(t.Context(), s, "w", func(u *job.Job) { u.Paths.Write, u.Check = row.Paths.Write, row.Check }, config.Jobs{}, nil)
 	require.NoError(t, err)
 }
 

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
@@ -21,19 +22,19 @@ import (
 
 type ScriptEvidenceSuite struct {
 	suite.Suite
-	row  types.Job
-	gate types.Goal
+	row  job.Job
+	gate job.Goal
 }
 
 func TestScriptEvidenceSuite(t *testing.T) { suite.Run(t, new(ScriptEvidenceSuite)) }
 
 func (s *ScriptEvidenceSuite) SetupTest() {
-	s.row = types.Job{ID: "job-a"}
-	s.gate = types.Goal{ID: "g", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Script: "p.buzz", Args: []string{"x"}}}
+	s.row = job.Job{ID: "job-a"}
+	s.gate = job.Goal{ID: "g", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Script: "p.buzz", Args: []string{"x"}}}
 }
 
-func (s *ScriptEvidenceSuite) attempt(lease string, args []string) types.JobAttempt {
-	return types.JobAttempt{Found: true, Project: ".", Target: "buzz p.buzz", Lease: lease, ExtraArgs: args}
+func (s *ScriptEvidenceSuite) attempt(lease string, args []string) job.CapturedRun {
+	return job.CapturedRun{Found: true, Project: ".", Target: "buzz p.buzz", Lease: lease, ExtraArgs: args}
 }
 
 func (s *ScriptEvidenceSuite) TestRunOfThisJobWithTheCheckArgsVerifies() {
@@ -63,23 +64,23 @@ func (s *ScriptEvidenceSuite) TestRunUnderNoLeaseSaysSo() {
 	s.Contains(strings.Join(got.Violations, "\n"), "acted under no lease")
 }
 
-func acceptRow() types.Job {
-	check := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
-	return types.Job{
+func acceptRow() job.Job {
+	check := job.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
+	return job.Job{
 		ID:         "harness/ledger-accept",
-		Paths:      types.JobPaths{Write: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"}},
+		Paths:      job.Paths{Write: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"}},
 		Check:      &check,
 		Validation: check.String(),
-		State:      types.StateRunning,
+		State:      job.StateRunning,
 	}
 }
 
-func passingResult() types.JobResult {
-	return types.JobResult{
-		Schema:       types.Schema{Version: types.JobResultAPIVersion},
+func passingResult() job.Result {
+	return job.Result{
+		Schema:       job.Schema{Version: job.ResultAPIVersion},
 		Job:          "harness/ledger-accept",
 		ChangedPaths: []string{"internal/ledger/report.go", "cmd/magus/ledger.go"},
-		Validation: types.JobResultValidation{
+		Validation: job.ResultValidation{
 			Command:   "magus run go::go-test . -- -run Ledger",
 			OutputRef: "a1b2c3d4",
 		},
@@ -90,36 +91,36 @@ func passingResult() types.JobResult {
 // passingRun is what the output store recorded for a passing run of acceptRow's own
 // validation, which is what an honest result cites. The zero Attempt is a ref the store
 // does not hold.
-var passingRun = types.JobAttempt{Found: true, Project: ".", Target: "go-test", Spell: "go"}
+var passingRun = job.CapturedRun{Found: true, Project: ".", Target: "go-test", Spell: "go"}
 
 // verifyClaim grades a result against a diff that shows exactly what it claims, so a case
 // about another rule is not failed by the diff check.
-func verifyClaim(row types.Job, rep types.JobResult, att types.JobAttempt, declared []types.Job) Status {
+func verifyClaim(row job.Job, rep job.Result, att job.CapturedRun, declared []job.Job) Status {
 	return VerifyGates(row, rep, att, nil, declared, claimed(rep))
 }
 
-func claimed(rep types.JobResult) Observed {
+func claimed(rep job.Result) Observed {
 	return Observed{Changed: rep.ChangedPaths, ChangedKnown: true, TestSelection: goCheckSelection}
 }
 
-func goalRow() types.Job {
-	return types.Job{
+func goalRow() job.Job {
+	return job.Job{
 		ID:    "harness/gated",
-		Paths: types.JobPaths{Write: []string{"internal/job"}},
-		State: types.StateRunning,
-		Goals: []types.Goal{
-			{ID: "unit", Description: "job package tests pass", Check: types.LeaseCheck{Target: "go::go-test", Project: "."}},
-			{ID: "docs", Description: "docs checks pass", Check: types.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"unit"}},
+		Paths: job.Paths{Write: []string{"internal/job"}},
+		State: job.StateRunning,
+		Goals: []job.Goal{
+			{ID: "unit", Description: "job package tests pass", Check: job.LeaseCheck{Target: "go::go-test", Project: "."}},
+			{ID: "docs", Description: "docs checks pass", Check: job.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"unit"}},
 		},
 	}
 }
 
-func goalResult() types.JobResult {
-	return types.JobResult{
-		Schema:       types.Schema{Version: types.JobResultAPIVersion},
+func goalResult() job.Result {
+	return job.Result{
+		Schema:       job.Schema{Version: job.ResultAPIVersion},
 		Job:          "harness/gated",
 		ChangedPaths: []string{"internal/job/verify.go"},
-		VerificationEvidence: []types.VerificationEvidence{
+		VerificationEvidence: []job.VerificationEvidence{
 			{GateID: "unit", OutputRef: "unit-ref"},
 			{GateID: "docs", OutputRef: "docs-ref"},
 		},
@@ -127,10 +128,10 @@ func goalResult() types.JobResult {
 	}
 }
 
-func goalAttempts() []types.JobGateAttempt {
-	return []types.JobGateAttempt{
-		{GateID: "unit", Attempt: types.JobAttempt{Found: true, Ref: "unit-ref", Project: ".", Target: "go-test", Spell: "go"}},
-		{GateID: "docs", Attempt: types.JobAttempt{Found: true, Ref: "docs-ref", Project: "docs", Target: "test"}},
+func goalAttempts() []job.GateAttempt {
+	return []job.GateAttempt{
+		{GateID: "unit", Attempt: job.CapturedRun{Found: true, Ref: "unit-ref", Project: ".", Target: "go-test", Spell: "go"}},
+		{GateID: "docs", Attempt: job.CapturedRun{Found: true, Ref: "docs-ref", Project: "docs", Target: "test"}},
 	}
 }
 
@@ -145,14 +146,14 @@ func TestVerifyTakesAResultInsideTheBoundary(t *testing.T) {
 		Verified: true,
 		Command:  "magus run go::go-test . -- -run Ledger",
 		// The primary check reports as the gate it is. See the note in lifecycle_test.go.
-		Gates: []types.VerificationStatus{{ID: types.PrimaryGoalID, OutputRef: passingResult().Validation.OutputRef, Verified: true}},
+		Gates: []job.VerificationStatus{{ID: job.PrimaryGoalID, OutputRef: passingResult().Validation.OutputRef, Verified: true}},
 	}, got)
 }
 
 func TestVerifyGoalsRequireEvidenceForEveryDeclaredGate(t *testing.T) {
 	t.Parallel()
 
-	status := VerifyGates(goalRow(), goalResult(), types.JobAttempt{}, goalAttempts(), nil, claimed(goalResult()))
+	status := VerifyGates(goalRow(), goalResult(), job.CapturedRun{}, goalAttempts(), nil, claimed(goalResult()))
 	assert.True(t, status.Verified, status.Violations)
 	require.Len(t, status.Gates, 2)
 	assert.True(t, status.Gates[0].Verified)
@@ -164,14 +165,14 @@ func TestVerifyGoalsRejectMissingOrWrongEvidence(t *testing.T) {
 
 	rep := goalResult()
 	rep.VerificationEvidence = rep.VerificationEvidence[:1]
-	status := VerifyGates(goalRow(), rep, types.JobAttempt{}, goalAttempts()[:1], nil, Observed{})
+	status := VerifyGates(goalRow(), rep, job.CapturedRun{}, goalAttempts()[:1], nil, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), `goal "docs"`)
 
 	rep = goalResult()
 	attempts := goalAttempts()
 	attempts[1].Attempt.Project = "."
-	status = VerifyGates(goalRow(), rep, types.JobAttempt{}, attempts, nil, Observed{})
+	status = VerifyGates(goalRow(), rep, job.CapturedRun{}, attempts, nil, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "different run")
 }
@@ -180,12 +181,12 @@ func TestVerifyGoalsRejectUndeclaredEvidence(t *testing.T) {
 	t.Parallel()
 
 	rep := goalResult()
-	rep.VerificationEvidence = append(rep.VerificationEvidence, types.VerificationEvidence{GateID: "invented", OutputRef: "invented-ref"})
-	attempts := append(goalAttempts(), types.JobGateAttempt{
+	rep.VerificationEvidence = append(rep.VerificationEvidence, job.VerificationEvidence{GateID: "invented", OutputRef: "invented-ref"})
+	attempts := append(goalAttempts(), job.GateAttempt{
 		GateID:  "invented",
-		Attempt: types.JobAttempt{Found: true, Ref: "invented-ref", Project: ".", Target: "go-test"},
+		Attempt: job.CapturedRun{Found: true, Ref: "invented-ref", Project: ".", Target: "go-test"},
 	})
-	status := VerifyGates(goalRow(), rep, types.JobAttempt{}, attempts, nil, Observed{})
+	status := VerifyGates(goalRow(), rep, job.CapturedRun{}, attempts, nil, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "undeclared goal \"invented\"")
 }
@@ -197,7 +198,7 @@ func TestVerifyGoalsRejectAnUnrunCheckTheJobDoesNotDeclare(t *testing.T) {
 
 	rep := goalResult()
 	rep.Validation.Unrun = "docker is down"
-	status := VerifyGates(goalRow(), rep, types.JobAttempt{}, goalAttempts(), nil, claimed(rep))
+	status := VerifyGates(goalRow(), rep, job.CapturedRun{}, goalAttempts(), nil, claimed(rep))
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "declares no check")
 }
@@ -208,10 +209,10 @@ func TestVerifyGoalsRejectAnUnrunCheckTheJobDoesNotDeclare(t *testing.T) {
 func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
 	t.Parallel()
 
-	ciRow := func(target, project string) types.Job {
+	ciRow := func(target, project string) job.Job {
 		row := acceptRow()
 		row.Created = 100
-		row.Check = &types.LeaseCheck{Target: target, Project: project}
+		row.Check = &job.LeaseCheck{Target: target, Project: project}
 		return row
 	}
 	rep := passingResult()
@@ -220,12 +221,12 @@ func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
 
 	seen := claimed(rep)
 	seen.GreenGate = green
-	status := VerifyGates(ciRow("ci", "."), rep, types.JobAttempt{}, nil, nil, seen)
+	status := VerifyGates(ciRow("ci", "."), rep, job.CapturedRun{}, nil, nil, seen)
 	assert.True(t, status.Verified, status.Violations)
-	assert.Equal(t, []types.VerificationStatus{{ID: types.PrimaryGoalID, Verified: true}}, status.Gates)
+	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryGoalID, Verified: true}}, status.Gates)
 
 	for name, tc := range map[string]struct {
-		row  types.Job
+		row  job.Job
 		gate GreenGate
 	}{
 		"no green gate":               {ciRow("ci", "."), GreenGate{}},
@@ -238,7 +239,7 @@ func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			seen := claimed(rep)
 			seen.GreenGate = tc.gate
-			status := VerifyGates(tc.row, rep, types.JobAttempt{}, nil, nil, seen)
+			status := VerifyGates(tc.row, rep, job.CapturedRun{}, nil, nil, seen)
 			assert.False(t, status.Verified)
 			assert.Contains(t, strings.Join(status.Violations, "\n"), "carries no output_ref")
 		})
@@ -276,16 +277,16 @@ func TestVerifyGoalDependenciesPropagate(t *testing.T) {
 	t.Parallel()
 
 	row := goalRow()
-	row.Goals = append(row.Goals, types.Goal{
-		ID: "publish", Check: types.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"docs"},
+	row.Goals = append(row.Goals, job.Goal{
+		ID: "publish", Check: job.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"docs"},
 	})
 	rep := goalResult()
-	rep.VerificationEvidence = append(rep.VerificationEvidence, types.VerificationEvidence{GateID: "publish", OutputRef: "publish-ref"})
-	attempts := append(goalAttempts(), types.JobGateAttempt{
-		GateID: "publish", Attempt: types.JobAttempt{Found: true, Ref: "publish-ref", Project: "docs", Target: "test"},
+	rep.VerificationEvidence = append(rep.VerificationEvidence, job.VerificationEvidence{GateID: "publish", OutputRef: "publish-ref"})
+	attempts := append(goalAttempts(), job.GateAttempt{
+		GateID: "publish", Attempt: job.CapturedRun{Found: true, Ref: "publish-ref", Project: "docs", Target: "test"},
 	})
 	attempts[0].Attempt.Failed = true
-	status := VerifyGates(row, rep, types.JobAttempt{}, attempts, nil, Observed{})
+	status := VerifyGates(row, rep, job.CapturedRun{}, attempts, nil, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, status.Gates[1].Violations, `depends_on goal "unit" has not verified`)
 	assert.Contains(t, status.Gates[2].Violations, `depends_on goal "docs" has not verified`)
@@ -296,7 +297,7 @@ func TestVerifyGoalsEnforceJobDependencies(t *testing.T) {
 
 	row := goalRow()
 	row.DependsOn = []string{"upstream"}
-	status := VerifyGates(row, goalResult(), types.JobAttempt{}, goalAttempts(), []types.Job{{ID: "upstream", State: types.StateExited}}, Observed{})
+	status := VerifyGates(row, goalResult(), job.CapturedRun{}, goalAttempts(), []job.Job{{ID: "upstream", State: job.StateExited}}, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "upstream")
 }
@@ -312,7 +313,7 @@ func TestVerifyNamesEveryViolation(t *testing.T) {
 	rep.ChangedPaths = append(rep.ChangedPaths, "internal/sessions/store.go")
 	rep.Validation.OutputRef = ""
 
-	v := verifyClaim(acceptRow(), rep, types.JobAttempt{}, nil)
+	v := verifyClaim(acceptRow(), rep, job.CapturedRun{}, nil)
 	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 3)
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "internal/sessions/store.go")
@@ -363,7 +364,7 @@ func TestVerifyRefusesTheFabricatedResult(t *testing.T) {
 	rep := passingResult()
 	rep.ChangedPaths = nil
 	rep.Validation.OutputRef = "deadbeef"
-	v := verifyClaim(acceptRow(), rep, types.JobAttempt{Found: true, Project: ".", Target: "generate"}, nil)
+	v := verifyClaim(acceptRow(), rep, job.CapturedRun{Found: true, Project: ".", Target: "generate"}, nil)
 	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 3)
 	assert.Contains(t, v.Violations[0], "no changed paths at all")
@@ -446,7 +447,7 @@ func TestVerifyGradesAScopedRunOfTheCheck(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.Check = &types.LeaseCheck{Target: "go::go-test", Project: "."}
+	row.Check = &job.LeaseCheck{Target: "go::go-test", Project: "."}
 	scoped := passingRun
 	scoped.ExtraArgs = []string{"-run", "Spawn|Waiter"}
 
@@ -456,12 +457,12 @@ func TestVerifyGradesAScopedRunOfTheCheck(t *testing.T) {
 	assert.Equal(t, "goal \"check\" was graded on output ref \"a1b2c3d4\", a run scoped with `-- -run Spawn|Waiter`:"+
 		" -run and -skip select tests inside the packages `magus run go::go-test .` runs, so it ran every package the check does", v.Notes[0])
 	require.Len(t, v.Gates, 1)
-	assert.Equal(t, types.VerificationStatus{ID: "check", Verified: true, OutputRef: "a1b2c3d4", Scope: "-- -run Spawn|Waiter"}, v.Gates[0])
+	assert.Equal(t, job.VerificationStatus{ID: "check", Verified: true, OutputRef: "a1b2c3d4", Scope: "-- -run Spawn|Waiter"}, v.Gates[0])
 	var out strings.Builder
 	RenderGates(&out, v)
 	assert.Contains(t, out.String(), "  [met] check, a run scoped with `-- -run Spawn|Waiter`\nnote: goal \"check\" was graded on output ref \"a1b2c3d4\", a run scoped")
 
-	for name, att := range map[string]types.JobAttempt{
+	for name, att := range map[string]job.CapturedRun{
 		"another target":  {Found: true, Project: ".", Target: "lint", Spell: "go", ExtraArgs: []string{"-run", "Spawn"}},
 		"another project": {Found: true, Project: "docs", Target: "go-test", Spell: "go", ExtraArgs: []string{"-run", "Spawn"}},
 		"another flag":    {Found: true, Project: ".", Target: "go-test", Spell: "go", ExtraArgs: []string{"-run", "Spawn", "-short"}},
@@ -472,8 +473,8 @@ func TestVerifyGradesAScopedRunOfTheCheck(t *testing.T) {
 		assert.Empty(t, v.Notes, name)
 	}
 
-	lint := types.LeaseCheck{Target: "go::lint", Project: "."}
-	assert.False(t, ranCheck(lint, types.JobAttempt{Found: true, Project: ".", Target: "lint", Spell: "go", ExtraArgs: []string{"-run", "X"}}, nil, goCheckSelection),
+	lint := job.LeaseCheck{Target: "go::lint", Project: "."}
+	assert.False(t, ranCheck(lint, job.CapturedRun{Found: true, Project: ".", Target: "lint", Spell: "go", ExtraArgs: []string{"-run", "X"}}, nil, goCheckSelection),
 		"-run scopes go test only")
 }
 
@@ -494,16 +495,16 @@ func TestVerifyTakesTheChecksEvidenceUnderItsGoalID(t *testing.T) {
 
 	rep := passingResult()
 	ref := rep.Validation.OutputRef
-	rep.VerificationEvidence = []types.VerificationEvidence{{GateID: types.PrimaryGoalID, OutputRef: ref}}
-	snapshots := []types.JobGateAttempt{{GateID: types.PrimaryGoalID, Attempt: passingRun}}
+	rep.VerificationEvidence = []job.VerificationEvidence{{GateID: job.PrimaryGoalID, OutputRef: ref}}
+	snapshots := []job.GateAttempt{{GateID: job.PrimaryGoalID, Attempt: passingRun}}
 
 	v := VerifyGates(acceptRow(), rep, passingRun, snapshots, nil, claimed(rep))
 	assert.True(t, v.Verified, "%q", v.Violations)
-	assert.Equal(t, []types.VerificationStatus{{ID: types.PrimaryGoalID, OutputRef: ref, Verified: true}}, v.Gates)
+	assert.Equal(t, []job.VerificationStatus{{ID: job.PrimaryGoalID, OutputRef: ref, Verified: true}}, v.Gates)
 
 	only := rep
 	only.Validation.OutputRef = ""
-	v = VerifyGates(acceptRow(), only, types.JobAttempt{}, snapshots, nil, claimed(only))
+	v = VerifyGates(acceptRow(), only, job.CapturedRun{}, snapshots, nil, claimed(only))
 	assert.True(t, v.Verified, "evidence filed only under verification_evidence: %q", v.Violations)
 
 	two := rep
@@ -531,18 +532,18 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	t.Parallel()
 
-	att := types.JobAttempt{Found: true, Project: "internal/ledger", Target: "test"}
+	att := job.CapturedRun{Found: true, Project: "internal/ledger", Target: "test"}
 	for _, line := range []string{
 		"magus run test internal/ledger",
 		"./magus run test internal/ledger",
 		"magus run test internal/ledger -- -run Ledger",
 	} {
-		c, err := types.ParseLeaseRunLine(line)
+		c, err := job.ParseLeaseRunLine(line)
 		require.NoError(t, err, line)
 		assert.True(t, ranCheck(c, att, nil, goCheckSelection), line)
 	}
 
-	c, err := types.ParseLeaseRunLine("magus run test cmd/magus")
+	c, err := job.ParseLeaseRunLine("magus run test cmd/magus")
 	require.NoError(t, err)
 	assert.False(t, ranCheck(c, att, nil, goCheckSelection), "another project is another run")
 }
@@ -552,11 +553,11 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 func TestScriptCheckBindsToItsRecordedRun(t *testing.T) {
 	t.Parallel()
 
-	c := types.LeaseCheck{Script: "probes/key.buzz"}
-	assert.True(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/key.buzz"}, []string{"rw"}, goCheckSelection))
-	assert.True(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz ./probes/key.buzz"}, nil, goCheckSelection), "one path spelled two ways")
-	assert.False(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/other.buzz"}, nil, goCheckSelection), "another script")
-	assert.False(t, ranCheck(c, types.JobAttempt{Found: true, Project: ".", Target: "test"}, nil, goCheckSelection), "a target run")
+	c := job.LeaseCheck{Script: "probes/key.buzz"}
+	assert.True(t, ranCheck(c, job.CapturedRun{Found: true, Project: ".", Target: "buzz probes/key.buzz"}, []string{"rw"}, goCheckSelection))
+	assert.True(t, ranCheck(c, job.CapturedRun{Found: true, Project: ".", Target: "buzz ./probes/key.buzz"}, nil, goCheckSelection), "one path spelled two ways")
+	assert.False(t, ranCheck(c, job.CapturedRun{Found: true, Project: ".", Target: "buzz probes/other.buzz"}, nil, goCheckSelection), "another script")
+	assert.False(t, ranCheck(c, job.CapturedRun{Found: true, Project: ".", Target: "test"}, nil, goCheckSelection), "a target run")
 }
 
 // Passing tests and a passing main are different facts, so a test check binds to the
@@ -564,16 +565,16 @@ func TestScriptCheckBindsToItsRecordedRun(t *testing.T) {
 func TestScriptTestCheckBindsOnlyToItsTestRun(t *testing.T) {
 	t.Parallel()
 
-	main := types.JobAttempt{Found: true, Project: ".", Target: "buzz probes/key.buzz"}
-	tests := types.JobAttempt{Found: true, Project: ".", Target: "buzz -t probes/key.buzz"}
-	script := types.LeaseCheck{Script: "probes/key.buzz"}
-	tested := types.LeaseCheck{Script: "probes/key.buzz", Test: true}
+	main := job.CapturedRun{Found: true, Project: ".", Target: "buzz probes/key.buzz"}
+	tests := job.CapturedRun{Found: true, Project: ".", Target: "buzz -t probes/key.buzz"}
+	script := job.LeaseCheck{Script: "probes/key.buzz"}
+	tested := job.LeaseCheck{Script: "probes/key.buzz", Test: true}
 
 	assert.True(t, ranCheck(tested, tests, nil, goCheckSelection))
 	assert.False(t, ranCheck(tested, main, nil, goCheckSelection), "a main run is not evidence of passing tests")
 	assert.True(t, ranCheck(script, main, nil, goCheckSelection))
 	assert.False(t, ranCheck(script, tests, nil, goCheckSelection), "a test run is not evidence of a passing main")
-	assert.False(t, ranCheck(tested, types.JobAttempt{Found: true, Project: ".", Target: "buzz -t probes/other.buzz"}, nil, goCheckSelection), "another script")
+	assert.False(t, ranCheck(tested, job.CapturedRun{Found: true, Project: ".", Target: "buzz -t probes/other.buzz"}, nil, goCheckSelection), "another script")
 }
 
 // A CHARM is part of a run's identity, not a spelling of it. The store records what was
@@ -583,15 +584,15 @@ func TestScriptTestCheckBindsOnlyToItsTestRun(t *testing.T) {
 func TestCheckBindsOnCharm(t *testing.T) {
 	t.Parallel()
 
-	written := types.JobAttempt{Found: true, Project: ".", Target: "generate:rw"}
-	gated := types.JobAttempt{Found: true, Project: ".", Target: "generate"}
+	written := job.CapturedRun{Found: true, Project: ".", Target: "generate:rw"}
+	gated := job.CapturedRun{Found: true, Project: ".", Target: "generate"}
 
-	charmless, err := types.ParseLeaseRunLine("magus run generate .")
+	charmless, err := job.ParseLeaseRunLine("magus run generate .")
 	require.NoError(t, err)
 	assert.False(t, ranCheck(charmless, written, nil, goCheckSelection), "a written run is not evidence of a gated one")
 	assert.True(t, ranCheck(charmless, gated, nil, goCheckSelection))
 
-	rw, err := types.ParseLeaseRunLine("magus run generate:rw .")
+	rw, err := job.ParseLeaseRunLine("magus run generate:rw .")
 	require.NoError(t, err)
 	assert.True(t, ranCheck(rw, written, nil, goCheckSelection))
 	assert.False(t, ranCheck(rw, gated, nil, goCheckSelection), "a gated run is not evidence of a written one")
@@ -608,25 +609,25 @@ func TestCheckBindsUnderDefaultCharms(t *testing.T) {
 	cases := []struct {
 		name  string
 		check string
-		att   types.JobAttempt
+		att   job.CapturedRun
 		want  bool
 	}{
-		{"the default charm applied", "magus run test .", types.JobAttempt{Project: ".", Target: "test:rw"}, true},
-		{"an explicit rw", "magus run test:rw .", types.JobAttempt{Project: ".", Target: "test:rw"}, true},
-		{"its own charm stacked on the default", "magus run test:verify .", types.JobAttempt{Project: ".", Target: "test:verify,rw"}, true},
-		{"narrowing args, which the store does not record", "magus run test . -- -run X", types.JobAttempt{Project: ".", Target: "test:rw"}, true},
-		{"a spell filter", "magus run go::go-test .", types.JobAttempt{Project: ".", Target: "go-test:rw", Spell: "go"}, true},
-		{"ci, which never runs with rw", "magus run ci .", types.JobAttempt{Project: ".", Target: "ci"}, true},
-		{"a different target", "magus run test .", types.JobAttempt{Project: ".", Target: "lint:rw"}, false},
-		{"a different project", "magus run test docs", types.JobAttempt{Project: ".", Target: "test:rw"}, false},
-		{"a run without the defaults", "magus run test .", types.JobAttempt{Project: ".", Target: "test"}, false},
-		{"an extra charm", "magus run test .", types.JobAttempt{Project: ".", Target: "test:rw,verify"}, false},
+		{"the default charm applied", "magus run test .", job.CapturedRun{Project: ".", Target: "test:rw"}, true},
+		{"an explicit rw", "magus run test:rw .", job.CapturedRun{Project: ".", Target: "test:rw"}, true},
+		{"its own charm stacked on the default", "magus run test:verify .", job.CapturedRun{Project: ".", Target: "test:verify,rw"}, true},
+		{"narrowing args, which the store does not record", "magus run test . -- -run X", job.CapturedRun{Project: ".", Target: "test:rw"}, true},
+		{"a spell filter", "magus run go::go-test .", job.CapturedRun{Project: ".", Target: "go-test:rw", Spell: "go"}, true},
+		{"ci, which never runs with rw", "magus run ci .", job.CapturedRun{Project: ".", Target: "ci"}, true},
+		{"a different target", "magus run test .", job.CapturedRun{Project: ".", Target: "lint:rw"}, false},
+		{"a different project", "magus run test docs", job.CapturedRun{Project: ".", Target: "test:rw"}, false},
+		{"a run without the defaults", "magus run test .", job.CapturedRun{Project: ".", Target: "test"}, false},
+		{"an extra charm", "magus run test .", job.CapturedRun{Project: ".", Target: "test:rw,verify"}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			c, err := types.ParseLeaseRunLine(tc.check)
+			c, err := job.ParseLeaseRunLine(tc.check)
 			require.NoError(t, err)
 			tc.att.Found = true
 			assert.Equal(t, tc.want, ranCheck(c, tc.att, defaults, goCheckSelection))
@@ -641,14 +642,14 @@ func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
 	t.Parallel()
 
 	defaults := []string{types.CharmReadWrite}
-	gated := types.JobAttempt{Found: true, Project: ".", Target: "generate"}
-	written := types.JobAttempt{Found: true, Project: ".", Target: "generate:rw"}
+	gated := job.CapturedRun{Found: true, Project: ".", Target: "generate"}
+	written := job.CapturedRun{Found: true, Project: ".", Target: "generate:rw"}
 
-	optOut := types.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}
+	optOut := job.LeaseCheck{Target: "generate", Project: ".", NoDefaultCharms: true}
 	assert.True(t, ranCheck(optOut, gated, defaults, goCheckSelection), "the --no-default-charms run")
 	assert.False(t, ranCheck(optOut, written, defaults, goCheckSelection), "a written run is not evidence of a gated one")
 
-	plain := types.LeaseCheck{Target: "generate", Project: "."}
+	plain := job.LeaseCheck{Target: "generate", Project: "."}
 	assert.True(t, ranCheck(plain, written, defaults, goCheckSelection), "a plain check still binds the default-charm run")
 	assert.False(t, ranCheck(plain, gated, defaults, goCheckSelection))
 
@@ -662,14 +663,14 @@ func TestCheckOptsOutOfDefaultCharms(t *testing.T) {
 func TestCheckOptOutIsARecordField(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := types.ParseLeaseCheck("generate . --no-default-charms")
+	parsed, err := job.ParseLeaseCheck("generate . --no-default-charms")
 	require.NoError(t, err)
 	assert.True(t, parsed.NoDefaultCharms)
 
 	decl, err := decodeDeclaration(declaration(`"id":"adj/drift"`,
 		`"check":{"target":"generate","project":".","no_default_charms":true}`))
 	require.NoError(t, err)
-	var row types.Job
+	var row job.Job
 	decl.Apply(&row)
 	require.NotNil(t, row.Check)
 	assert.True(t, row.Check.NoDefaultCharms)
@@ -681,14 +682,14 @@ func TestCheckOptOutIsARecordField(t *testing.T) {
 func TestCheckGateUnderDefaultCharms(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "fix/job-store"}
-	gate := types.Goal{ID: "check", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "test", Project: "."}}
+	row := job.Job{ID: "fix/job-store"}
+	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: job.LeaseCheck{Target: "test", Project: "."}}
 	seen := Observed{DefaultCharms: []string{types.CharmReadWrite}}
 
-	status := verifyGate(row, gate, "out57a24bec47f2", types.JobAttempt{Found: true, Project: ".", Target: "test:rw"}, seen)
+	status := verifyGate(row, gate, "out57a24bec47f2", job.CapturedRun{Found: true, Project: ".", Target: "test:rw"}, seen)
 	assert.True(t, status.Verified, status.Violations)
 
-	status = verifyGate(row, gate, "out57a24bec47f2", types.JobAttempt{Found: true, Project: ".", Target: "lint:rw"}, seen)
+	status = verifyGate(row, gate, "out57a24bec47f2", job.CapturedRun{Found: true, Project: ".", Target: "lint:rw"}, seen)
 	assert.False(t, status.Verified)
 	require.Len(t, status.Violations, 1)
 	assert.Contains(t, status.Violations[0], "this goal's check runs `magus run test:rw .`")
@@ -699,9 +700,9 @@ func TestCheckGateUnderDefaultCharms(t *testing.T) {
 func TestCheckGateRefusesARunTheJobWroteAfter(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "fix/job-store"}
-	gate := types.Goal{ID: "check", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "test", Project: "."}}
-	run := types.JobAttempt{Found: true, Ref: "out57a24bec47f2", AttemptID: "att1", Project: ".", Target: "test"}
+	row := job.Job{ID: "fix/job-store"}
+	gate := job.Goal{ID: "check", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: job.LeaseCheck{Target: "test", Project: "."}}
+	run := job.CapturedRun{Found: true, Ref: "out57a24bec47f2", AttemptID: "att1", Project: ".", Target: "test"}
 
 	status := verifyGate(row, gate, run.Ref, run, Observed{Stale: map[string]string{"out57a24bec47f2": "the ref, not the run"}})
 	assert.True(t, status.Verified, status.Violations)
@@ -777,7 +778,7 @@ func TestVerifyRejectsADescendantNoRowDeclares(t *testing.T) {
 
 	rep := passingResult()
 	rep.Descendants = []string{"harness/ledger-accept/child", "harness/ghost"}
-	declared := []types.Job{{ID: "harness/ledger-accept/child"}}
+	declared := []job.Job{{ID: "harness/ledger-accept/child"}}
 
 	v := verifyClaim(acceptRow(), rep, passingRun, declared)
 	assert.False(t, v.Verified)
@@ -791,7 +792,7 @@ func TestVerifyRefusesARowThatIsAlreadyClosed(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.State = types.StatePass
+	row.State = job.StatePass
 
 	v := verifyClaim(row, passingResult(), passingRun, nil)
 	assert.False(t, v.Verified)
@@ -804,7 +805,7 @@ func TestVerifyRefusesARowThatIsAlreadyClosed(t *testing.T) {
 func TestVerifyRejectsEvidenceTheStoreDoesNotHold(t *testing.T) {
 	t.Parallel()
 
-	v := verifyClaim(acceptRow(), passingResult(), types.JobAttempt{}, nil)
+	v := verifyClaim(acceptRow(), passingResult(), job.CapturedRun{}, nil)
 	assert.False(t, v.Verified)
 	assert.Contains(t, v.Violations[0], "a1b2c3d4")
 }
@@ -834,8 +835,8 @@ func TestResultSchemaMatchesTheStruct(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(ResultSchema), &schema))
 	require.NoError(t, json.Unmarshal(schema.Properties["validation"], &validation))
 
-	assert.ElementsMatch(t, jsonFields(types.JobResult{}), keys(schema.Properties))
-	assert.ElementsMatch(t, jsonFields(types.JobResultValidation{}), keys(validation.Properties))
+	assert.ElementsMatch(t, jsonFields(job.Result{}), keys(schema.Properties))
+	assert.ElementsMatch(t, jsonFields(job.ResultValidation{}), keys(validation.Properties))
 }
 
 // jsonFields is the wire name of every field a struct serializes, which is the set the
@@ -863,31 +864,31 @@ func keys(m map[string]json.RawMessage) []string {
 func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "unit", Created: 1, Paths: types.JobPaths{Write: []string{"run.go#executeStages"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
-	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"run.go"}}
-	placed := func(decl string) types.RegionChange {
-		return types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"run.go#executeStages"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
+	rep := job.Result{Job: "unit", ChangedPaths: []string{"run.go"}}
+	placed := func(decl string) job.RegionChange {
+		return job.RegionChange{File: job.FileChange{Path: "run.go"}, Side: job.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
 	}
-	seen := func(regions ...types.RegionChange) Observed {
+	seen := func(regions ...job.RegionChange) Observed {
 		return Observed{Changed: []string{"run.go"}, ChangedKnown: true, ChangedFrom: "abc1234", Regions: regions, RegionsKnown: true}
 	}
 	const outside = "the diff since abc1234 changed run.go#func RunCI() {, outside every declaration the job claims in run.go (executeStages)"
 
-	inside := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, seen(placed("func (m *Magus) executeStages() {"), placed("")))
+	inside := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, seen(placed("func (m *Magus) executeStages() {"), placed("")))
 	assert.NotContains(t, inside.Violations, outside)
 	assert.Empty(t, inside.FootprintUnclaimed, "its own declaration and the preamble")
 
-	wandered := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, seen(placed("func RunCI() {")))
+	wandered := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, seen(placed("func RunCI() {")))
 	assert.Contains(t, wandered.Violations, outside)
 	assert.Equal(t, []string{"run.go#func RunCI() {"}, wandered.FootprintUnclaimed)
 
 	unread := Observed{Changed: []string{"run.go"}, ChangedKnown: true, RegionsReason: "git does not report changed regions (RegionReporter)"}
-	blind := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, unread)
+	blind := VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, unread)
 	assert.Contains(t, blind.Violations, "job unit claims declarations and its footprint is not known (git does not report changed regions (RegionReporter)), so no claim could be checked")
 
 	whole := row
 	whole.Paths.Write = []string{"run.go"}
-	assert.NotContains(t, VerifyGates(whole, rep, types.JobAttempt{}, nil, []types.Job{whole}, unread).Violations,
+	assert.NotContains(t, VerifyGates(whole, rep, job.CapturedRun{}, nil, []job.Job{whole}, unread).Violations,
 		"job unit claims declarations and its footprint is not known (git does not report changed regions (RegionReporter)), so no claim could be checked",
 		"a job claiming no declaration is not graded on its footprint")
 }
@@ -897,16 +898,16 @@ func TestVerifyGatesGradesTheFootprintAgainstDeclarationClaims(t *testing.T) {
 func TestVerifyGatesGradesTheFootprintAgainstDeclarationDenies(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "unit", Created: 1, Paths: types.JobPaths{Write: []string{"run.go"}, Deny: []string{"run.go#executeStages"}}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
-	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"run.go"}}
-	placed := func(decl string) types.RegionChange {
-		return types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
+	row := job.Job{ID: "unit", Created: 1, Paths: job.Paths{Write: []string{"run.go"}, Deny: []string{"run.go#executeStages"}}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
+	rep := job.Result{Job: "unit", ChangedPaths: []string{"run.go"}}
+	placed := func(decl string) job.RegionChange {
+		return job.RegionChange{File: job.FileChange{Path: "run.go"}, Side: job.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
 	}
-	unplaced := types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{4, 4}}
+	unplaced := job.RegionChange{File: job.FileChange{Path: "run.go"}, Side: job.RegionNew, Lines: [2]int{4, 4}}
 	verify := func(seen Observed) []string {
-		return VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, seen).Violations
+		return VerifyGates(row, rep, job.CapturedRun{}, nil, []job.Job{row}, seen).Violations
 	}
-	seen := func(regions ...types.RegionChange) Observed {
+	seen := func(regions ...job.RegionChange) Observed {
 		return Observed{Changed: []string{"run.go"}, ChangedKnown: true, ChangedFrom: "abc1234", Regions: regions, RegionsKnown: true}
 	}
 	denied := func(violations []string) []string {
@@ -924,87 +925,87 @@ func TestVerifyGatesGradesTheFootprintAgainstDeclarationDenies(t *testing.T) {
 	whole := row
 	whole.Paths.Deny = []string{"run.go"}
 	assert.Equal(t, []string{`changed path "run.go" is one the job is denied (run.go)`},
-		denied(VerifyGates(whole, rep, types.JobAttempt{}, nil, []types.Job{whole}, seen(placed("func RunCI() {"))).Violations))
+		denied(VerifyGates(whole, rep, job.CapturedRun{}, nil, []job.Job{whole}, seen(placed("func RunCI() {"))).Violations))
 }
 
 func TestUnclaimedFootprint(t *testing.T) {
 	t.Parallel()
 
-	placed := func(path, decl string) types.RegionChange {
-		return types.RegionChange{File: types.FileChange{Path: path}, Side: types.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
+	placed := func(path, decl string) job.RegionChange {
+		return job.RegionChange{File: job.FileChange{Path: path}, Side: job.RegionNew, Lines: [2]int{1, 2}, Declaration: decl, Driver: "golang"}
 	}
-	unplaced := types.RegionChange{File: types.FileChange{Path: "run.go"}, Side: types.RegionNew, Lines: [2]int{4, 4}}
+	unplaced := job.RegionChange{File: job.FileChange{Path: "run.go"}, Side: job.RegionNew, Lines: [2]int{4, 4}}
 	for _, tc := range []struct {
 		name       string
 		writePaths []string
-		releases   []types.JobRelease
-		regions    []types.RegionChange
+		releases   []job.Release
+		regions    []job.RegionChange
 		want       []string
 	}{
 		{
 			name:       "a pattern covers a file whole beside a claim on it",
 			writePaths: []string{"**/*.go", "run.go#executeStages"},
-			regions:    []types.RegionChange{placed("run.go", "func RunCI() {")},
+			regions:    []job.RegionChange{placed("run.go", "func RunCI() {")},
 		},
 		{
 			name:       "a pattern no longer covers a file its row released",
 			writePaths: []string{"**/*.go", "run.go#executeStages"},
-			releases:   []types.JobRelease{{Path: "run.go", Digest: "sha256:ab"}},
-			regions:    []types.RegionChange{placed("run.go", "func RunCI() {"), placed("order.go", "func Order() {")},
+			releases:   []job.Release{{Path: "run.go", Digest: "sha256:ab"}},
+			regions:    []job.RegionChange{placed("run.go", "func RunCI() {"), placed("order.go", "func Order() {")},
 			want:       []string{"run.go#func RunCI() {"},
 		},
 		{
 			name:       "inside the claimed declaration",
 			writePaths: []string{"run.go#executeStages"},
-			regions:    []types.RegionChange{placed("run.go", "func (m *Magus) executeStages(ctx context.Context) error {")},
+			regions:    []job.RegionChange{placed("run.go", "func (m *Magus) executeStages(ctx context.Context) error {")},
 		},
 		{
 			name:       "a neighbour is outside, once however many hunks land in it",
 			writePaths: []string{"run.go#executeStages"},
-			regions:    []types.RegionChange{placed("run.go", "func RunCI() {"), placed("run.go", "func RunCI() {")},
+			regions:    []job.RegionChange{placed("run.go", "func RunCI() {"), placed("run.go", "func RunCI() {")},
 			want:       []string{"run.go#func RunCI() {"},
 		},
 		{
 			name:       "the preamble is exempt",
 			writePaths: []string{"run.go#executeStages"},
-			regions:    []types.RegionChange{placed("run.go", "")},
+			regions:    []job.RegionChange{placed("run.go", "")},
 		},
 		{
 			name:       "a line no driver placed is the whole file",
 			writePaths: []string{"run.go#executeStages"},
-			regions:    []types.RegionChange{unplaced},
+			regions:    []job.RegionChange{unplaced},
 			want:       []string{"run.go"},
 		},
 		{
 			name:       "a file also claimed whole is not graded by declaration",
 			writePaths: []string{"run.go#executeStages", "."},
-			regions:    []types.RegionChange{placed("run.go", "func RunCI() {")},
+			regions:    []job.RegionChange{placed("run.go", "func RunCI() {")},
 		},
 		{
 			name:       "a file claimed by no entry is the path rules' to report",
 			writePaths: []string{"run.go#executeStages"},
-			regions:    []types.RegionChange{placed("order.go", "func Order() {")},
+			regions:    []job.RegionChange{placed("order.go", "func Order() {")},
 		},
 		{
 			name:       "any of several claims on the file names it",
 			writePaths: []string{"run.go#executeStages", "run.go#RunCI"},
-			regions:    []types.RegionChange{placed("run.go", "func RunCI() {")},
+			regions:    []job.RegionChange{placed("run.go", "func RunCI() {")},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, unclaimedFootprint(types.Job{Paths: types.JobPaths{Write: tc.writePaths}, Releases: tc.releases}, tc.regions))
+			assert.Equal(t, tc.want, unclaimedFootprint(job.Job{Paths: job.Paths{Write: tc.writePaths}, Releases: tc.releases}, tc.regions))
 		})
 	}
 }
 
 // integrationRow seeds a job checked by `test .` with one more check goal, in state.
-func integrationRow(t *testing.T, state types.JobState) *Store {
+func integrationRow(t *testing.T, state job.State) *Store {
 	t.Helper()
 	s := tempStore(t, t.TempDir())
-	_, err := s.Update(t.Context(), "w", func(u *types.Job) {
-		types.Declaration{ID: "w", Paths: types.JobPaths{Write: []string{"a.go"}}, Check: forkCheck(), Goals: []types.Goal{
-			{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "docs"}},
+	_, err := s.Update(t.Context(), "w", func(u *job.Job) {
+		job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Check: forkCheck(), Goals: []job.Goal{
+			{ID: "lint", Check: job.LeaseCheck{Target: "lint", Project: "docs"}},
 		}}.Apply(u)
 		u.State = state
 	})
@@ -1014,19 +1015,19 @@ func integrationRow(t *testing.T, state types.JobState) *Store {
 
 // runs resolves each ref to a recorded run of target in project, failed when named so.
 func runs(byRef map[string][2]string, failed ...string) AttemptResolver {
-	return func(_ context.Context, ref string) (types.JobAttempt, error) {
+	return func(_ context.Context, ref string) (job.CapturedRun, error) {
 		run, ok := byRef[ref]
 		if !ok {
-			return types.JobAttempt{}, nil
+			return job.CapturedRun{}, nil
 		}
-		return types.JobAttempt{Found: true, Ref: ref, TimestampMs: time.Now().Add(time.Minute).UnixMilli(),
+		return job.CapturedRun{Found: true, Ref: ref, TimestampMs: time.Now().Add(time.Minute).UnixMilli(),
 			Target: run[0], Project: run[1], Failed: slices.Contains(failed, ref)}, nil
 	}
 }
 
-func integrationEvidence() types.JobResult {
-	return types.JobResult{Job: "w", Validation: types.JobResultValidation{OutputRef: "out1"},
-		VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}}
+func integrationEvidence() job.Result {
+	return job.Result{Job: "w", Validation: job.ResultValidation{OutputRef: "out1"},
+		VerificationEvidence: []job.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}}
 }
 
 // A job that already passed where it was written gains an integration grade from runs in
@@ -1034,7 +1035,7 @@ func integrationEvidence() types.JobResult {
 func TestWaitIntegrationRecordsBesideAPassedJob(t *testing.T) {
 	t.Parallel()
 
-	s := integrationRow(t, types.StatePass)
+	s := integrationRow(t, job.StatePass)
 	resolve := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}})
 	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged", nil)
 	require.NoError(t, err)
@@ -1043,7 +1044,7 @@ func TestWaitIntegrationRecordsBesideAPassedJob(t *testing.T) {
 
 	rows, err := s.List()
 	require.NoError(t, err)
-	assert.Equal(t, types.StatePass, rows[0].State)
+	assert.Equal(t, job.StatePass, rows[0].State)
 	require.NotNil(t, rows[0].Integration)
 	assert.Equal(t, "/merged", rows[0].Integration.Checkout)
 	assert.NotZero(t, rows[0].Integration.At)
@@ -1055,7 +1056,7 @@ func TestWaitIntegrationRecordsBesideAPassedJob(t *testing.T) {
 func TestWaitIntegrationRecordsAFailureWithoutMovingTheState(t *testing.T) {
 	t.Parallel()
 
-	s := integrationRow(t, types.StateExited)
+	s := integrationRow(t, job.StateExited)
 	resolve := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}}, "out2")
 	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged", nil)
 	require.NoError(t, err)
@@ -1065,16 +1066,16 @@ func TestWaitIntegrationRecordsAFailureWithoutMovingTheState(t *testing.T) {
 
 	rows, err := s.List()
 	require.NoError(t, err)
-	assert.Equal(t, types.StateExited, rows[0].State)
+	assert.Equal(t, job.StateExited, rows[0].State)
 	assert.False(t, rows[0].Integration.Verified)
 }
 
 func TestWaitIntegrationRefusesEvidenceForAGoalItDoesNotHold(t *testing.T) {
 	t.Parallel()
 
-	s := integrationRow(t, types.StatePass)
+	s := integrationRow(t, job.StatePass)
 	rep := integrationEvidence()
-	rep.VerificationEvidence = append(rep.VerificationEvidence, types.VerificationEvidence{GateID: "nope", OutputRef: "out3"})
+	rep.VerificationEvidence = append(rep.VerificationEvidence, job.VerificationEvidence{GateID: "nope", OutputRef: "out3"})
 	_, err := WaitIntegration(t.Context(), s, "w", rep, runs(nil), "/merged", nil)
 	require.ErrorContains(t, err, `goal "nope"`)
 	rows, err := s.List()
@@ -1087,9 +1088,9 @@ func TestWaitIntegrationRefusesEvidenceForAGoalItDoesNotHold(t *testing.T) {
 func TestWaitIntegrationAcceptsARunUnderAnotherLease(t *testing.T) {
 	t.Parallel()
 
-	s := integrationRow(t, types.StatePass)
+	s := integrationRow(t, job.StatePass)
 	byRef := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}})
-	resolve := func(ctx context.Context, ref string) (types.JobAttempt, error) {
+	resolve := func(ctx context.Context, ref string) (job.CapturedRun, error) {
 		att, err := byRef(ctx, ref)
 		att.Lease = "root/validate"
 		return att, err
@@ -1113,18 +1114,18 @@ func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) 
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
-	_, err := s.Update(t.Context(), "w", func(u *types.Job) {
-		types.Declaration{ID: "w", Paths: types.JobPaths{Write: []string{"a.go"}}, Goals: []types.Goal{
-			{ID: "moved", Kind: types.GoalKindSymbol, Symbols: []string{"Api"}},
-			{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Api"}, Signature: "func Api()"},
-			{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}},
+	_, err := s.Update(t.Context(), "w", func(u *job.Job) {
+		job.Declaration{ID: "w", Paths: job.Paths{Write: []string{"a.go"}}, Goals: []job.Goal{
+			{ID: "moved", Kind: job.GoalKindSymbol, Symbols: []string{"Api"}},
+			{ID: "shape", Kind: job.GoalKindSymbol, Expect: job.ExpectSignature, Symbols: []string{"Api"}, Signature: "func Api()"},
+			{ID: "gone", Kind: job.GoalKindSymbol, Expect: job.ExpectAbsent, Symbols: []string{"Legacy"}},
 		}}.Apply(u)
-		u.State = types.StatePass
+		u.State = job.StatePass
 	})
 	require.NoError(t, err)
 
 	merged := goalGraph{{id: "symbol:go a/Api().", label: "Api", file: "a.go", signature: "func Api(n int)"}}
-	grade, err := WaitIntegration(t.Context(), s, "w", types.JobResult{Job: "w"}, runs(nil), "/merged", GraphSymbols(merged))
+	grade, err := WaitIntegration(t.Context(), s, "w", job.Result{Job: "w"}, runs(nil), "/merged", GraphSymbols(merged))
 	require.NoError(t, err)
 	assert.False(t, grade.Verified)
 	require.Len(t, grade.Gates, 2, "the changed goal belongs to the holder's checkout")
@@ -1132,9 +1133,9 @@ func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) 
 	wantShape.ID = "shape"
 	wantShape.Violations = []string{"\"Api\" is declared `func Api(n int)`, and this goal expects `func Api()`"}
 	assert.Equal(t, wantShape, grade.Gates[0])
-	assert.Equal(t, types.VerificationStatus{ID: "gone", Verified: true}, grade.Gates[1])
+	assert.Equal(t, job.VerificationStatus{ID: "gone", Verified: true}, grade.Gates[1])
 
-	blind, err := WaitIntegration(t.Context(), s, "w", types.JobResult{Job: "w"}, runs(nil), "/merged", nil)
+	blind, err := WaitIntegration(t.Context(), s, "w", job.Result{Job: "w"}, runs(nil), "/merged", nil)
 	require.NoError(t, err)
 	assert.False(t, blind.Verified, "a graph nobody read never passes a symbol goal")
 	assert.Contains(t, strings.Join(blind.Gates[1].Violations, "\n"), "could not read the symbol graph")
@@ -1143,23 +1144,23 @@ func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) 
 func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}, Paths: types.JobPaths{Write: []string{"a.go", "b.go"}}, State: types.StateRunning}
-	rep := types.JobResult{
-		Schema:               types.Schema{Version: types.JobResultAPIVersion},
+	row := job.Job{ID: "integrate", Integrates: []string{"a", "b"}, Paths: job.Paths{Write: []string{"a.go", "b.go"}}, State: job.StateRunning}
+	rep := job.Result{
+		Schema:               job.Schema{Version: job.ResultAPIVersion},
 		Job:                  "integrate",
 		ChangedPaths:         []string{"a.go", "MAGUS.md"},
-		VerificationEvidence: []types.VerificationEvidence{{GateID: "go-test", OutputRef: "test-ref"}, {GateID: "lint", OutputRef: "lint-ref"}},
+		VerificationEvidence: []job.VerificationEvidence{{GateID: "go-test", OutputRef: "test-ref"}, {GateID: "lint", OutputRef: "lint-ref"}},
 	}
-	attempts := []types.JobGateAttempt{
-		{GateID: "go-test", Attempt: types.JobAttempt{Found: true, Ref: "test-ref", Project: ".", Target: "go-test"}},
-		{GateID: "lint", Attempt: types.JobAttempt{Found: true, Ref: "lint-ref", Project: ".", Target: "lint"}},
+	attempts := []job.GateAttempt{
+		{GateID: "go-test", Attempt: job.CapturedRun{Found: true, Ref: "test-ref", Project: ".", Target: "go-test"}},
+		{GateID: "lint", Attempt: job.CapturedRun{Found: true, Ref: "lint-ref", Project: ".", Target: "lint"}},
 	}
-	status := VerifyGates(row, rep, types.JobAttempt{}, attempts, nil, Observed{Changed: []string{"a.go", "b.go", "c.go"}, ChangedKnown: true})
+	status := VerifyGates(row, rep, job.CapturedRun{}, attempts, nil, Observed{Changed: []string{"a.go", "b.go", "c.go"}, ChangedKnown: true})
 	assert.True(t, status.Verified, "the merge range is the change, and the integrator's runs are declared evidence: %v", status.Violations)
 	require.Len(t, status.Gates, 2)
 
 	rep.VerificationEvidence = rep.VerificationEvidence[:1]
-	status = VerifyGates(row, rep, types.JobAttempt{}, attempts[:1], nil, Observed{})
+	status = VerifyGates(row, rep, job.CapturedRun{}, attempts[:1], nil, Observed{})
 	assert.False(t, status.Verified, "the integrator's lint run is required, not optional")
 	assert.Contains(t, strings.Join(status.Violations, "\n"), `goal "lint"`)
 }
@@ -1167,7 +1168,7 @@ func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
 func TestIntegratorGoalsLeaveADeclaredGoalOnTheTarget(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "integrate", Integrates: []string{"a"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+	row := job.Job{ID: "integrate", Integrates: []string{"a"}, Check: &job.LeaseCheck{Target: "go-test", Project: "."}}
 	goals := integratorGoals(row)
 	require.Len(t, goals, 1)
 	assert.Equal(t, "lint", goals[0].ID)
@@ -1180,8 +1181,8 @@ func TestVerifyFailsACheckFiledAsUnrunNamingTheCause(t *testing.T) {
 	t.Parallel()
 
 	rep := passingResult()
-	rep.Validation = types.JobResultValidation{Command: acceptRow().Validation, Unrun: "node_modules is missing"}
-	v := verifyClaim(acceptRow(), rep, types.JobAttempt{}, nil)
+	rep.Validation = job.ResultValidation{Command: acceptRow().Validation, Unrun: "node_modules is missing"}
+	v := verifyClaim(acceptRow(), rep, job.CapturedRun{}, nil)
 	assert.False(t, v.Verified)
 	require.Len(t, v.Gates, 1)
 	assert.Equal(t, []string{"did not run: node_modules is missing; it fails until the check runs where that is fixed"}, v.Gates[0].Violations)
@@ -1193,26 +1194,26 @@ func TestVerifyFailsACheckFiledAsUnrunNamingTheCause(t *testing.T) {
 func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 	t.Parallel()
 
-	owed := func(reason string) types.JobResult {
+	owed := func(reason string) job.Result {
 		rep := passingResult()
-		rep.Validation = types.JobResultValidation{Command: acceptRow().Validation, Owed: reason}
+		rep.Validation = job.ResultValidation{Command: acceptRow().Validation, Owed: reason}
 		return rep
 	}
-	v := verifyClaim(acceptRow(), owed(types.OwedNoSeat), types.JobAttempt{}, nil)
-	assert.Equal(t, Status{Job: acceptRow().ID, Verified: true, UnresolvedRisks: []string{}, Command: acceptRow().Validation, Gates: []types.VerificationStatus{{ID: "check", Owed: types.OwedNoSeat}},
+	v := verifyClaim(acceptRow(), owed(job.OwedNoSeat), job.CapturedRun{}, nil)
+	assert.Equal(t, Status{Job: acceptRow().ID, Verified: true, UnresolvedRisks: []string{}, Command: acceptRow().Validation, Gates: []job.VerificationStatus{{ID: "check", Owed: job.OwedNoSeat}},
 		Notes: []string{"goal \"check\" is owed (no seat): the integration that merges harness/ledger-accept runs it"}}, v)
 	var out strings.Builder
 	RenderGates(&out, v)
 	assert.Contains(t, out.String(), "harness/ledger-accept: 0 of 1 goal(s) met\n  [owed] check (no seat)\n")
 
-	v = verifyClaim(acceptRow(), owed("slow"), types.JobAttempt{}, nil)
+	v = verifyClaim(acceptRow(), owed("slow"), job.CapturedRun{}, nil)
 	assert.False(t, v.Verified)
 	assert.Equal(t, []string{"goal \"check\": files its run as owed because \"slow\", and the one reason a run is owed is \"no seat\""}, v.Violations)
 
-	integration := types.Job{ID: "integrate", Integrates: []string{"a"}, Check: acceptRow().Check}
-	rep := owed(types.OwedNoSeat)
+	integration := job.Job{ID: "integrate", Integrates: []string{"a"}, Check: acceptRow().Check}
+	rep := owed(job.OwedNoSeat)
 	rep.Job = "integrate"
-	v = VerifyGates(integration, rep, types.JobAttempt{}, nil, nil, Observed{})
+	v = VerifyGates(integration, rep, job.CapturedRun{}, nil, nil, Observed{})
 	assert.False(t, v.Verified)
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "goal \"check\": an integration runs the checks it owns: its check waits for a seat itself")
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "raises budget_wait or frees a holder")
@@ -1221,11 +1222,11 @@ func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 func TestAnIntegrationOwingACheckIsToldWhatClearsMemoryToo(t *testing.T) {
 	t.Parallel()
 
-	row := types.Job{ID: "integrate", Integrates: []string{"a"}, Check: acceptRow().Check}
+	row := job.Job{ID: "integrate", Integrates: []string{"a"}, Check: acceptRow().Check}
 	rep := passingResult()
 	rep.Job = "integrate"
-	rep.Validation = types.JobResultValidation{Command: acceptRow().Validation, Owed: types.OwedNoSeat}
-	v := VerifyGates(row, rep, types.JobAttempt{}, nil, nil, Observed{})
+	rep.Validation = job.ResultValidation{Command: acceptRow().Validation, Owed: job.OwedNoSeat}
+	v := VerifyGates(row, rep, job.CapturedRun{}, nil, nil, Observed{})
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "after MGS3053, which no seat clears, frees memory and runs the check again")
 }
 
@@ -1234,32 +1235,32 @@ func TestAnIntegrationOwingACheckIsToldWhatClearsMemoryToo(t *testing.T) {
 func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 	t.Parallel()
 
-	scoped := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}}
-	worker := types.Job{ID: "a", Check: &scoped, Goals: []types.Goal{
-		{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
-		{ID: "buzz", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "buzz-test", Project: "docs"}},
+	scoped := job.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}}
+	worker := job.Job{ID: "a", Check: &scoped, Goals: []job.Goal{
+		{ID: "lint", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "lint", Project: "."}},
+		{ID: "buzz", Kind: job.GoalKindCheck, Check: job.LeaseCheck{Target: "buzz-test", Project: "docs"}},
 	}}
-	owed := &types.JobResult{
-		Validation:           types.JobResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: types.OwedNoSeat},
-		VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat}, {GateID: "buzz", Owed: types.OwedNoSeat}},
+	owed := &job.Result{
+		Validation:           job.ResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: job.OwedNoSeat},
+		VerificationEvidence: []job.VerificationEvidence{{GateID: "lint", Owed: job.OwedNoSeat}, {GateID: "buzz", Owed: job.OwedNoSeat}},
 	}
-	paid := types.Job{ID: "b", Check: &types.LeaseCheck{Target: "buzz-test", Project: "console"}}
+	paid := job.Job{ID: "b", Check: &job.LeaseCheck{Target: "buzz-test", Project: "console"}}
 	elsewhere := worker
 	elsewhere.ID = "c"
-	tries := types.NewJobAttempts([]types.Attempt{
+	tries := job.NewAttempts([]job.Attempt{
 		filedTry("a", owed),
-		filedTry("b", &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out1"}}),
+		filedTry("b", &job.Result{Validation: job.ResultValidation{OutputRef: "out1"}}),
 		filedTry("c", owed),
 	})
-	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}}
+	row := job.Job{ID: "integrate", Integrates: []string{"a", "b"}}
 	held := integratorGoals(row)
 
-	got := owedGoals(row, []types.Job{worker, paid, elsewhere}, tries, held)
-	want := []types.Goal{
-		{ID: "buzz-test-docs", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "buzz-test", Project: "docs"}},
+	got := owedGoals(row, []job.Job{worker, paid, elsewhere}, tries, held)
+	want := []job.Goal{
+		{ID: "buzz-test-docs", Kind: job.GoalKindCheck, Expect: job.ExpectPassed, Check: job.LeaseCheck{Target: "buzz-test", Project: "docs"}},
 	}
 	assert.Equal(t, want, got, "the scoped go-test and lint ride the full runs; a check paid for and a branch not merged add nothing")
-	assert.Empty(t, owedGoals(types.Job{ID: "w"}, []types.Job{worker}, tries, nil), "a job that integrates nothing owes nothing")
+	assert.Empty(t, owedGoals(job.Job{ID: "w"}, []job.Job{worker}, tries, nil), "a job that integrates nothing owes nothing")
 }
 
 // narrowedRunSuite pins a file-scoped goal grading what the row changed.
@@ -1269,19 +1270,19 @@ type narrowedRunSuite struct {
 
 func TestNarrowedRun(t *testing.T) { suite.Run(t, new(narrowedRunSuite)) }
 
-func (s *narrowedRunSuite) row(args ...string) types.Job {
+func (s *narrowedRunSuite) row(args ...string) job.Job {
 	row := acceptRow()
-	row.Goals = []types.Goal{types.Goal{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true, Args: args}}.Resolve()}
+	row.Goals = []job.Goal{job.Goal{ID: "lint", Check: job.LeaseCheck{Target: "lint", Project: ".", NoDefaultCharms: true, Args: args}}.Resolve()}
 	return row
 }
 
-func (s *narrowedRunSuite) grade(row types.Job, seen Observed, args ...string) Status {
+func (s *narrowedRunSuite) grade(row job.Job, seen Observed, args ...string) Status {
 	seen.TestSelection = goCheckSelection
-	check := types.JobAttempt{Found: true, Target: "go-test", Project: ".", ExtraArgs: []string{"-run", "Ledger"}}
-	lint := types.JobAttempt{Found: true, Target: "lint", Project: ".", Ref: "out2", ExtraArgs: args}
+	check := job.CapturedRun{Found: true, Target: "go-test", Project: ".", ExtraArgs: []string{"-run", "Ledger"}}
+	lint := job.CapturedRun{Found: true, Target: "lint", Project: ".", Ref: "out2", ExtraArgs: args}
 	rep := passingResult()
-	rep.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}
-	return VerifyGates(row, rep, check, []types.JobGateAttempt{{GateID: "lint", Attempt: lint}}, nil, seen)
+	rep.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}
+	return VerifyGates(row, rep, check, []job.GateAttempt{{GateID: "lint", Attempt: lint}}, nil, seen)
 }
 
 func (s *narrowedRunSuite) seen(changed ...string) Observed {
@@ -1340,82 +1341,82 @@ func (s *narrowedRunSuite) TestStaleRunIsStillRefused() {
 }
 
 func (s *narrowedRunSuite) TestNestedProjectReadsItsOwnFiles() {
-	c := types.LeaseCheck{Target: "lint", Project: "libs/x", Args: []string{"a.go", "b.go"}}
-	run := types.JobAttempt{Found: true, Target: "lint", Project: "libs/x", ExtraArgs: []string{"a.go"}}
+	c := job.LeaseCheck{Target: "lint", Project: "libs/x", Args: []string{"a.go", "b.go"}}
+	run := job.CapturedRun{Found: true, Target: "lint", Project: "libs/x", ExtraArgs: []string{"a.go"}}
 
 	s.True(ranOver(c, run, nil, []string{"libs/x/a.go", "cli/other.go"}, nil, goCheckSelection), "a file outside the project is not this goal's")
 	s.False(ranOver(c, run, nil, []string{"libs/x/b.go"}, nil, goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestCheckOverFilesGetsTheSameAnswer() {
-	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "b.go"}}
-	run := types.JobAttempt{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"a.go"}}
+	c := job.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "b.go"}}
+	run := job.CapturedRun{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"a.go"}}
 
 	s.True(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go", "b.go")(c), goCheckSelection))
 }
 
 // named writes files into a checkout and answers [namedFiles] over a check.
-func (s *narrowedRunSuite) named(files ...string) func(types.LeaseCheck, ...string) map[string]bool {
+func (s *narrowedRunSuite) named(files ...string) func(job.LeaseCheck, ...string) map[string]bool {
 	tree := s.T().TempDir()
 	for _, f := range files {
 		s.Require().NoError(os.WriteFile(filepath.Join(tree, f), nil, 0o644))
 	}
-	return func(c types.LeaseCheck, changed ...string) map[string]bool {
-		return namedFiles(tree, []types.Goal{{Kind: types.GoalKindCheck, Check: c}}, changed)
+	return func(c job.LeaseCheck, changed ...string) map[string]bool {
+		return namedFiles(tree, []job.Goal{{Kind: job.GoalKindCheck, Check: c}}, changed)
 	}
 }
 
 func (s *narrowedRunSuite) TestAnArgumentNamingNoFileIsComparedVerbatim() {
-	c := types.LeaseCheck{Target: "deploy-check", Project: ".", Args: []string{"staging"}}
-	run := types.JobAttempt{Found: true, Target: "deploy-check", Project: ".", ExtraArgs: []string{"a.go"}}
+	c := job.LeaseCheck{Target: "deploy-check", Project: ".", Args: []string{"staging"}}
+	run := job.CapturedRun{Found: true, Target: "deploy-check", Project: ".", ExtraArgs: []string{"a.go"}}
 
 	s.False(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go")(c, "a.go"), goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestAFileTheRowDeletedStillNamesAFile() {
-	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "gone.go"}}
-	run := types.JobAttempt{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"a.go"}}
+	c := job.LeaseCheck{Target: "format", Project: ".", Args: []string{"a.go", "gone.go"}}
+	run := job.CapturedRun{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"a.go"}}
 
 	s.True(ranOver(c, run, nil, []string{"a.go"}, s.named("a.go")(c, "gone.go"), goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestADirectoryIsNotAFile() {
-	c := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"pkg"}}
-	run := types.JobAttempt{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"pkg/a.go"}}
+	c := job.LeaseCheck{Target: "format", Project: ".", Args: []string{"pkg"}}
+	run := job.CapturedRun{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"pkg/a.go"}}
 
 	s.False(ranOver(c, run, nil, []string{"pkg/a.go"}, s.named()(c), goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestAnArgumentResolvesAgainstItsProject() {
-	c := types.LeaseCheck{Target: "format", Project: "libs/x", Args: []string{"a.go"}}
+	c := job.LeaseCheck{Target: "format", Project: "libs/x", Args: []string{"a.go"}}
 
 	s.Equal(map[string]bool{"libs/x/a.go": true}, s.named()(c, "libs/x/a.go"))
 }
 
 func (s *narrowedRunSuite) TestNoArgCheckThatIsNotLintStaysWhole() {
-	vet := types.LeaseCheck{Target: "go-vet", Project: "."}
-	narrowed := types.JobAttempt{Found: true, Target: "go-vet", Project: ".", ExtraArgs: []string{"a.go"}}
+	vet := job.LeaseCheck{Target: "go-vet", Project: "."}
+	narrowed := job.CapturedRun{Found: true, Target: "go-vet", Project: ".", ExtraArgs: []string{"a.go"}}
 
 	s.False(ranOver(vet, narrowed, nil, []string{"a.go"}, nil, goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestRunWithAFlagIsAnotherRun() {
-	c := types.LeaseCheck{Target: "lint", Project: ".", Args: []string{"a.go"}}
-	run := types.JobAttempt{Found: true, Target: "lint", Project: ".", ExtraArgs: []string{"--fix", "a.go"}}
+	c := job.LeaseCheck{Target: "lint", Project: ".", Args: []string{"a.go"}}
+	run := job.CapturedRun{Found: true, Target: "lint", Project: ".", ExtraArgs: []string{"--fix", "a.go"}}
 
 	s.False(ranOver(c, run, nil, []string{"a.go"}, nil, goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestScriptArgsStayItsArgv() {
-	c := types.LeaseCheck{Script: "probes/key.buzz", Args: []string{"a.go", "b.go"}}
-	run := types.JobAttempt{Found: true, Target: "buzz probes/key.buzz", Project: ".", ExtraArgs: []string{"a.go"}}
+	c := job.LeaseCheck{Script: "probes/key.buzz", Args: []string{"a.go", "b.go"}}
+	run := job.CapturedRun{Found: true, Target: "buzz probes/key.buzz", Project: ".", ExtraArgs: []string{"a.go"}}
 
 	s.False(ranOver(c, run, nil, []string{"a.go"}, nil, goCheckSelection))
 }
 
 func (s *narrowedRunSuite) TestPackageArgumentDoesNotScopeGoTest() {
-	c := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "./other"}}
-	run := types.JobAttempt{Found: true, Target: "go-test", Project: ".", ExtraArgs: []string{"./pkg"}}
+	c := job.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"./pkg", "./other"}}
+	run := job.CapturedRun{Found: true, Target: "go-test", Project: ".", ExtraArgs: []string{"./pkg"}}
 
 	s.False(ranOver(c, run, nil, []string{"pkg/a.go"}, nil, goCheckSelection))
 }
@@ -1426,7 +1427,7 @@ func (s *narrowedRunSuite) TestRowFilesPreferWhatLanded() {
 		s.Require().NoError(os.WriteFile(filepath.Join(tree, f), []byte("x\n"), 0o644))
 	}
 	seen := Observed{Changed: []string{"own.go", "merged.go"}, ChangedKnown: true, Landed: []string{"own.go", "gen.go", "deleted.go"}, LandedKnown: true}
-	result := types.JobResult{ChangedPaths: []string{"claimed.go"}}
+	result := job.Result{ChangedPaths: []string{"claimed.go"}}
 	generated := func(p string) bool { return p == "gen.go" }
 
 	s.Equal([]string{"claimed.go", "own.go"}, rowFiles(tree, seen, result, generated), "a merged line's file is not the row's")

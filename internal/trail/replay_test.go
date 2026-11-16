@@ -2,14 +2,15 @@ package trail
 
 import (
 	"context"
-	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types/diff"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -414,7 +415,7 @@ func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
 	assert.Equal(t, "s1", got.Session)
 
 	stamped := t.TempDir()
-	Append(t.Context(), stamped, Event{Kind: KindAgentCommand, Origin: types.Origin{Session: "s1"}})
+	Append(t.Context(), stamped, Event{Kind: KindAgentCommand, Origin: job.Origin{Session: "s1"}})
 	_, ok = LastAgentActivity(stamped)
 	assert.False(t, ok, "an observation with no timestamp has no age to report")
 }

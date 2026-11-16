@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -24,7 +25,7 @@ import (
 // has been told once. It is false for a new row, for news, for a block that has
 // no row to live in (no source id, no repository), and on error. An empty root is no
 // repository.
-func FileAttention(ctx context.Context, root string, ev types.Event, origin types.Origin, version string, place func(root string) (Location, error)) (held bool, err error) {
+func FileAttention(ctx context.Context, root string, ev types.Event, origin job.Origin, version string, place func(root string) (Location, error)) (held bool, err error) {
 	if ev.Outcome != types.OutcomeWaiting && ev.Outcome != types.OutcomePermission {
 		return false, nil
 	}

@@ -7,8 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/libs/safetyscissors/budget"
-	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"net"
 	"net/http"
@@ -28,7 +26,10 @@ import (
 	"github.com/egladman/magus/internal/proc/sockdir"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
 )
 
 // maxArgs caps runRequest.Args to prevent OOM from untrusted callers.
@@ -143,7 +144,7 @@ type Options struct {
 //
 // Every request carries the server's token, the mounted paths included.
 // Where the platform reports a peer uid, the peer must also run as this user.
-// It is admitted as [types.CredentialSocketPeer] and held to its route's Need.
+// It is admitted as [job.CredentialSocketPeer] and held to its route's Need.
 // Elsewhere Mount refuses: nothing needing a credential rides a socket that
 // cannot name its caller.
 type Server struct {
@@ -336,7 +337,7 @@ func (s *Server) routes() (http.Handler, error) {
 	if !s.peerChecked {
 		return tokened, nil
 	}
-	return httpx.PeerGuard(rpcerr.FormatJSON, os.Getuid(), types.CredentialSocketPeer, tokened), nil
+	return httpx.PeerGuard(rpcerr.FormatJSON, os.Getuid(), job.CredentialSocketPeer, tokened), nil
 }
 
 // requireToken refuses any socket request without this server's token.
@@ -557,7 +558,7 @@ func (s *service) run(reqCtx context.Context, req runRequest, reply *runReply) e
 
 	ctx = WithRoot(ctx, req.Root)
 	ctx = WithCurrentWorkingDirectory(ctx, req.Cwd)
-	ctx = types.WithJobLease(ctx, req.Lease)
+	ctx = job.WithLease(ctx, req.Lease)
 	// A run of its own, so its env\set reaches no other run this server holds.
 	ctx = environ.With(ctx)
 	if req.Sandbox.Enabled() {

@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"fmt"
-	"github.com/egladman/magus/types/daemon"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -11,12 +10,13 @@ import (
 	"sync"
 	"time"
 
-	mcplib "github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
-
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
+	mcplib "github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 )
 
 // servedMetaKey is the key under a tool result's _meta that carries the served identity.
@@ -109,7 +109,7 @@ func (s *served) stamp(ctx context.Context, res *mcplib.CallToolResult) {
 
 func (s *served) info(ctx context.Context) servedInfo {
 	info := servedInfo{Root: s.root, Version: s.build.Version, Commit: s.build.Commit, Transport: "http"}
-	stdio := trail.CredentialFromContext(ctx).Kind == types.KindStdio
+	stdio := trail.CredentialFromContext(ctx).Kind == job.KindStdio
 	if stdio {
 		info.Transport = "stdio"
 	}

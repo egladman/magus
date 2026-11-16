@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -155,7 +156,7 @@ func attentionDispose(root string, args []string) error {
 		return err
 	}
 	req, err := sessions.DisposeRequest(dir, rest[0], reason, sessions.InvocationStart{
-		Origin:    localOrigin(types.EntryPointCLI),
+		Origin:    localOrigin(jobtypes.EntryPointCLI),
 		Workspace: root,
 		Version:   version,
 	})
@@ -217,5 +218,5 @@ func noteAttentionOpenFailure(err error) {
 // fileAttention files an event as an attention request of the repository at root; see
 // [job.FileAttention] for which events open one.
 func fileAttention(ctx context.Context, root string, ev types.Event) (held bool, err error) {
-	return job.FileAttention(ctx, resolveRootOrEmpty(root), ev, localOrigin(types.EntryPointHook), version, jobPlace)
+	return job.FileAttention(ctx, resolveRootOrEmpty(root), ev, localOrigin(jobtypes.EntryPointHook), version, jobPlace)
 }

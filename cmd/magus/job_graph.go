@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/job/evidence"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 
 	"github.com/egladman/magus"
@@ -43,7 +44,7 @@ func jobEvidenceEnv() evidence.Env {
 		DomainGraph: func(ctx context.Context, m *magus.Magus) (*knowledge.Graph, error) {
 			return graphReads.LoadGraph(ctx, m, globalCfg, false, false, false)
 		},
-		Notes: func(ctx context.Context, m *magus.Magus, row types.Job) ([]job.RegeneratedOutput, []job.UnrunGate) {
+		Notes: func(ctx context.Context, m *magus.Magus, row jobtypes.Job) ([]job.RegeneratedOutput, []job.UnrunGate) {
 			notes := collectNotes(ctx, m, row)
 			return notes.RegeneratedOutside, notes.UnrunGates
 		},
@@ -56,11 +57,11 @@ func newJobGraph(root string, rebuild bool) *evidence.Graph {
 	return evidence.New(root, rebuild, jobEvidenceEnv())
 }
 
-func jobRefusesTheGate(ctx context.Context, root string, row types.Job) error {
+func jobRefusesTheGate(ctx context.Context, root string, row jobtypes.Job) error {
 	return evidence.RefusesTheGate(ctx, root, row, jobEvidenceEnv())
 }
 
-func leaseBoundary(ctx context.Context, root string, store *job.Store, row types.Job, leases []types.Job, graph *evidence.Graph) job.TermsFacts {
+func leaseBoundary(ctx context.Context, root string, store *job.Store, row jobtypes.Job, leases []jobtypes.Job, graph *evidence.Graph) job.TermsFacts {
 	return evidence.LeaseBoundary(ctx, root, store, row, leases, graph, jobEvidenceEnv())
 }
 

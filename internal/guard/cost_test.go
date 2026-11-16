@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -438,7 +439,7 @@ func TestNoteForkReadsEveryShape(t *testing.T) {
 		{"cd /r && ./magus job fork a1", []string{"a1"}},
 		{fmt.Sprintf(`./magus job fork --stdin <<'EOF'
 {"api_version": %q, "id": "a2", "read_only": true}
-EOF`, string(types.JobAPIVersion)), []string{"a2"}},
+EOF`, string(jobtypes.APIVersion)), []string{"a2"}},
 		{`client op=put id="a3" parent="root"`, []string{"a3"}},
 		{`./magus buzz -e 'import "magus"; magus\workspace().putJob("a4", opts: {"parent": "root"});'`, []string{"a4"}},
 		{"./magus job wait a1", nil},
@@ -462,8 +463,8 @@ EOF`, string(types.JobAPIVersion)), []string{"a2"}},
 func TestForkConfirmedOnlyAfterTheStoreShowsTheRow(t *testing.T) {
 	t.Parallel()
 	judged := time.Unix(1_700_000_000, 0)
-	rows := map[string]types.Job{}
-	live := func(id string) (types.Job, bool) {
+	rows := map[string]jobtypes.Job{}
+	live := func(id string) (jobtypes.Job, bool) {
 		row, ok := rows[id]
 		return row, ok
 	}
@@ -473,8 +474,8 @@ func TestForkConfirmedOnlyAfterTheStoreShowsTheRow(t *testing.T) {
 	assert.Empty(t, st.Forked, "the store shows no row yet")
 	assert.Len(t, st.Forks, 2)
 
-	rows["old"] = types.Job{ID: "old", State: types.StateRunning, Created: judged.Unix() - 60}
-	rows["a1"] = types.Job{ID: "a1", State: types.StateDeclared, Created: judged.Unix()}
+	rows["old"] = jobtypes.Job{ID: "old", State: jobtypes.StateRunning, Created: judged.Unix() - 60}
+	rows["a1"] = jobtypes.Job{ID: "a1", State: jobtypes.StateDeclared, Created: judged.Unix()}
 	confirmForks(&st, live, judged.Add(2*time.Second))
 	assert.Equal(t, costState{
 		Forked: []string{"a1"},
@@ -661,11 +662,11 @@ func TestRootWorkClassPlacesAHomePathOutsideTheCheckout(t *testing.T) {
 func TestMainWorkClearsTheForkedRowsCheck(t *testing.T) {
 	t.Parallel()
 	at, _ := orchestratorFixture(t)
-	rows := []types.Job{
-		{ID: "a1", State: types.StateRunning, Check: &types.LeaseCheck{Target: "go-test", Project: "."}},
-		{ID: "a2", State: types.StatePass, Check: &types.LeaseCheck{Target: "lint", Project: "docs"}},
+	rows := []jobtypes.Job{
+		{ID: "a1", State: jobtypes.StateRunning, Check: &jobtypes.LeaseCheck{Target: "go-test", Project: "."}},
+		{ID: "a2", State: jobtypes.StatePass, Check: &jobtypes.LeaseCheck{Target: "lint", Project: "docs"}},
 	}
-	tries := []types.Attempt{filedResult("a2", &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out9"}})}
+	tries := []jobtypes.Attempt{filedResult("a2", &jobtypes.Result{Validation: jobtypes.ResultValidation{OutputRef: "out9"}})}
 	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: rows, Attempts: tries})
 	forked := costState{Forked: []string{"a1", "a2"}}
 

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -62,7 +63,7 @@ func TestForwardCarriesTheLease(t *testing.T) {
 	srv, err := New(t.Context(), Options{
 		Limiter: budget.NewLimiter(4),
 		Handler: func(ctx context.Context, _ []string) error {
-			got <- types.JobLeaseFromContext(ctx)
+			got <- job.LeaseFromContext(ctx)
 			return nil
 		},
 	})
@@ -668,7 +669,7 @@ func TestSocketRoutes(t *testing.T) {
 		return
 	}
 	unmount, err := srv.Mount(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if trail.CredentialFromContext(r.Context()) != types.CredentialSocketPeer {
+		if trail.CredentialFromContext(r.Context()) != job.CredentialSocketPeer {
 			w.WriteHeader(http.StatusTeapot)
 		}
 	}))

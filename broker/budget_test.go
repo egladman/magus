@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -178,7 +178,7 @@ func TestAParkedQueueSeatsTheHeavierJobFirst(t *testing.T) {
 	for _, w := range []struct {
 		target string
 		weight float64
-	}{{"light", 0.25}, {"unbound", 0}, {"heavy", 1}, {"named-default", types.DefaultJobWeight}} {
+	}{{"light", 0.25}, {"unbound", 0}, {"heavy", 1}, {"named-default", job.DefaultWeight}} {
 		parked[w.target] = claimAsync(t, t.Context(), addr, c, budget.Claim{Target: w.target, Slots: 1, Weight: w.weight})
 	}
 	assert.Equal(t, []string{"heavy", "unbound", "named-default", "light"}, seatInOrder(t, c, held, parked),

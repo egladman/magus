@@ -7,12 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
-func running(id string) types.Job {
+func running(id string) job.Job {
 	row := lease(id)
-	row.State = types.StateRunning
+	row.State = job.StateRunning
 	return row
 }
 
@@ -70,12 +70,12 @@ func TestGrantEndsWithTheJob(t *testing.T) {
 	now := time.Now().Unix()
 
 	ended := row
-	ended.State = types.StatePass
+	ended.State = job.StatePass
 	_, live, err := s.LiveGrant(ended, "hooks-off", now)
 	require.NoError(t, err)
 	assert.False(t, live, "a grant ends at the job's terminal state")
 
-	superseded := types.Attempt{Job: "a", N: 1, Status: types.AttemptStatus{State: types.StateFail}}
+	superseded := job.Attempt{Job: "a", N: 1, Status: job.AttemptStatus{State: job.StateFail}}
 	require.NoError(t, s.appendAttempts(t.Context(), superseded))
 	_, live, err = s.LiveGrant(row, "hooks-off", now)
 	require.NoError(t, err)

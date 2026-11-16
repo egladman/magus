@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/types"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,7 +41,7 @@ func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
 	}
 	assert.Empty(t, acting(context.Background()), "an unbound caller installs its own skills")
 
-	claimed := types.WithJobLease(context.Background(), "fleet/claimed")
+	claimed := jobtypes.WithLease(context.Background(), "fleet/claimed")
 	assert.Equal(t, "fleet/claimed", acting(claimed), "the claim")
 
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/env")

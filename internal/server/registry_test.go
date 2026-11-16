@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types/daemon"
 
@@ -27,7 +28,6 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -341,10 +341,10 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	dir := t.TempDir()
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: dir, Root: dir})
 
-	ctx := trail.ContextWithEntryPoint(t.Context(), types.EntryPointServer)
-	_, err := store.Update(ctx, "sync-graph", func(row *types.Job) {
-		row.State = types.StateRunning
-		row.LastRun = &types.JobRun{Invocation: "inv-1"}
+	ctx := trail.ContextWithEntryPoint(t.Context(), jobtypes.EntryPointServer)
+	_, err := store.Update(ctx, "sync-graph", func(row *jobtypes.Job) {
+		row.State = jobtypes.StateRunning
+		row.LastRun = &jobtypes.Run{Invocation: "inv-1"}
 	})
 	require.NoError(t, err)
 
@@ -355,23 +355,23 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	require.Len(t, rows, 1)
 	got := rows[0]
 	assert.True(t, got.ServerRun(), "the server registered its own row")
-	assert.Equal(t, types.StatePass, got.State)
+	assert.Equal(t, jobtypes.StatePass, got.State)
 	require.NotNil(t, got.LastRun)
 	assert.Positive(t, got.LastRun.Ended)
 	run := *got.LastRun
 	run.Ended = 0
-	assert.Equal(t, types.JobRun{Invocation: "inv-1", DurationMs: 250, OK: true}, run)
+	assert.Equal(t, jobtypes.Run{Invocation: "inv-1", DurationMs: 250, OK: true}, run)
 
 	completeJobRow(t.Context(), store, []string{"graph", "build"}, time.Second, errors.New("graph build failed"))
 
 	rows, err = store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.StateFail, rows[0].State)
+	assert.Equal(t, jobtypes.StateFail, rows[0].State)
 	require.NotNil(t, rows[0].LastRun)
 	run = *rows[0].LastRun
 	run.Ended = 0
-	assert.Equal(t, types.JobRun{Invocation: "inv-1", DurationMs: 1000, Error: "graph build failed"}, run)
+	assert.Equal(t, jobtypes.Run{Invocation: "inv-1", DurationMs: 1000, Error: "graph build failed"}, run)
 }
 
 // TestCompleteJobRowIgnoresAnAdoptedRun keeps the callback narrow: it fires for every

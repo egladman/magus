@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -351,12 +352,12 @@ func dropTrailingIndent(out *strings.Builder) {
 }
 
 // OverlappingClaims returns the first pair of claimed declarations, one from each list,
-// that can name one declaration: equal, or one naming the other by types.NamesDeclaration.
+// that can name one declaration: equal, or one naming the other by job.NamesDeclaration.
 // ok is false when the two lists are disjoint.
 func OverlappingClaims(ours, theirs []string) (a, b string, ok bool) {
 	for _, x := range ours {
 		for _, y := range theirs {
-			if x == y || types.NamesDeclaration(x, y) || types.NamesDeclaration(y, x) {
+			if x == y || job.NamesDeclaration(x, y) || job.NamesDeclaration(y, x) {
 				return x, y, true
 			}
 		}
@@ -460,7 +461,7 @@ func sideEdits(file string, base, side []byte, which mergeSide) ([]claimEdit, bo
 	i, j := 0, 0 // the base and side line just past the last edit
 	for _, r := range regions {
 		lo, hi := r.Lines[0]-1, r.Lines[1]
-		if r.Side == types.RegionOld {
+		if r.Side == job.RegionOld {
 			j += lo - i
 			out = append(out, claimEdit{side: which, bs: lo, be: hi, ss: j, se: j})
 			i = hi
@@ -539,7 +540,7 @@ func (m *claimMerger) settle(c []claimEdit, start, end int) ([]string, error) {
 		return m.sides[e.side][e.ss:e.se], nil
 	}
 	if m.imports(c) {
-		m.note(types.Location{Path: m.path, Declaration: types.Preamble}, types.MergeImportSet)
+		m.note(job.Location{Path: m.path, Declaration: job.Preamble}, types.MergeImportSet)
 		return importSet(m.o[start:end], m.render(c, sideOurs, start, end), m.render(c, sideTheirs, start, end)), nil
 	}
 	if start == end {
@@ -572,8 +573,8 @@ func (m *claimMerger) render(c []claimEdit, side mergeSide, start, end int) []st
 // claimed reports the first declaration e reaches that its side's claims do not name.
 func (m *claimMerger) claimed(e claimEdit) error {
 	for _, d := range m.reached(e) {
-		if d == "" || !slices.ContainsFunc(m.claims[e.side], func(c string) bool { return types.NamesDeclaration(c, d) }) {
-			return fmt.Errorf("%s: %s changed it, and none of that side's claims names it", types.Location{Path: m.path, Declaration: orPreamble(d)}, e.side)
+		if d == "" || !slices.ContainsFunc(m.claims[e.side], func(c string) bool { return job.NamesDeclaration(c, d) }) {
+			return fmt.Errorf("%s: %s changed it, and none of that side's claims names it", job.Location{Path: m.path, Declaration: orPreamble(d)}, e.side)
 		}
 	}
 	return nil
@@ -604,21 +605,21 @@ func (m *claimMerger) imports(c []claimEdit) bool {
 	return true
 }
 
-func (m *claimMerger) note(loc types.Location, kind types.MergeKind) {
-	m.regions = append(m.regions, types.MergeRegion{Locations: []types.Location{loc}, Kind: kind})
+func (m *claimMerger) note(loc job.Location, kind types.MergeKind) {
+	m.regions = append(m.regions, types.MergeRegion{Locations: []job.Location{loc}, Kind: kind})
 }
 
-func (m *claimMerger) location(e claimEdit) types.Location {
+func (m *claimMerger) location(e claimEdit) job.Location {
 	d := m.reached(e)
 	if len(d) == 0 {
-		return types.Location{Path: m.path, Declaration: types.Preamble}
+		return job.Location{Path: m.path, Declaration: job.Preamble}
 	}
-	return types.Location{Path: m.path, Declaration: orPreamble(d[0])}
+	return job.Location{Path: m.path, Declaration: orPreamble(d[0])}
 }
 
 func orPreamble(decl string) string {
 	if decl == "" {
-		return types.Preamble
+		return job.Preamble
 	}
 	return decl
 }

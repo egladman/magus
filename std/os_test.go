@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -667,7 +668,7 @@ func TestOsRetryRefusesAMisconfiguredBackoff(t *testing.T) {
 // an error typed non-retryable gets one call and comes back as it is, not as an
 // exhaustion count.
 func TestOsRetryStopsOnANonRetryableError(t *testing.T) {
-	boom := types.NonRetryable(errors.New("hook is not a command"), types.RetryAfterConfig, "edit the hook")
+	boom := types.NonRetryable(errors.New("hook is not a command"), job.RetryAfterConfig, "edit the hook")
 	cb := alwaysFail(boom)
 
 	_, err := OsRetry(context.Background(), 5, cb.run, covFastRetry)

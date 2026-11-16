@@ -10,13 +10,13 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // rewriteDenial words the refusal of a run the rw charm would have write
 // past the row's write paths. Say names the files, since a host shows the
 // agent Say and leaves Why behind the verdict's ref.
-func rewriteDenial(v runVerdict, me types.Job, defaults []string) denial {
+func rewriteDenial(v runVerdict, me job.Job, defaults []string) denial {
 	r, next := v.run, v.run.readOnly(defaults)
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` rewrites %s outside lease %s's write paths; run `%s`.", r.target, outsideShown(v.outside), me.ID, next),
@@ -37,7 +37,7 @@ func outsideShown(globs []string) string {
 
 // writePathsShown lists row's write paths, the first writePathsShownMax of
 // them, then names how many more and where they are.
-func writePathsShown(row types.Job) string {
+func writePathsShown(row job.Job) string {
 	if len(row.Paths.Write) <= writePathsShownMax {
 		return strings.Join(row.Paths.Write, ", ")
 	}

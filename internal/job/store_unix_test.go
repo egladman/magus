@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,22 +37,22 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	require.NoError(t, big.Close())
 
 	s := tempStore(t, root)
-	seed(t, s, types.Job{
+	seed(t, s, job.Job{
 		ID:    "u1",
-		Paths: types.JobPaths{Write: []string{"escape.go", "pipe", "big.bin"}},
-		State: types.StateRunning,
+		Paths: job.Paths{Write: []string{"escape.go", "pipe", "big.bin"}},
+		State: job.StateRunning,
 	})
 
 	// Released off the test goroutine with a deadline, because the failure this is
 	// really about is a HANG: os.Open on a fifo blocks until somebody writes to it, and
 	// it would block holding the store's mutex, wedging every other ledger caller.
 	type result struct {
-		lease types.Job
+		lease job.Job
 		err   error
 	}
 	done := make(chan result, 1)
 	go func() {
-		u, uerr := s.Update(ctx, "u1", func(u *types.Job) { u.Paths.Write = nil })
+		u, uerr := s.Update(ctx, "u1", func(u *job.Job) { u.Paths.Write = nil })
 		done <- result{lease: u, err: uerr}
 	}()
 
@@ -68,10 +68,10 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	for _, r := range got.lease.Releases {
 		digests[r.Path] = r.Digest
 	}
-	assert.Equal(t, types.DigestAbsent, digests["escape.go"],
+	assert.Equal(t, job.DigestAbsent, digests["escape.go"],
 		"a link out of the workspace is not this workspace's content, and is never followed")
-	assert.Equal(t, types.DigestUnreadable, digests["pipe"])
-	assert.Equal(t, types.DigestUnreadable, digests["big.bin"])
+	assert.Equal(t, job.DigestUnreadable, digests["pipe"])
+	assert.Equal(t, job.DigestUnreadable, digests["big.bin"])
 }
 
 // A symlink INSIDE the root is ordinary content, so resolving links must not turn every
@@ -86,8 +86,8 @@ func TestStoreDigestFollowsALinkThatStaysInside(t *testing.T) {
 	require.NoError(t, os.Symlink(filepath.Join(root, "real.go"), filepath.Join(root, "link.go")))
 
 	s := tempStore(t, root)
-	seed(t, s, types.Job{ID: "u1", Paths: types.JobPaths{Write: []string{"link.go"}}})
-	stored, err := s.Update(ctx, "u1", func(u *types.Job) { u.Paths.Write = nil })
+	seed(t, s, job.Job{ID: "u1", Paths: job.Paths{Write: []string{"link.go"}}})
+	stored, err := s.Update(ctx, "u1", func(u *job.Job) { u.Paths.Write = nil })
 	require.NoError(t, err)
 	require.Len(t, stored.Releases, 1)
 	assert.Equal(t, "sha256:"+fileHash(t, filepath.Join(root, "real.go")), stored.Releases[0].Digest)
@@ -101,7 +101,7 @@ func TestDeleteRemovesOneRowAndRefusesATerminalOneWithoutForce(t *testing.T) {
 	store := NewStore(loc)
 
 	for _, id := range []string{"keep", "drop"} {
-		_, err := store.Update(t.Context(), id, func(row *types.Job) { row.Paths.Write = []string{"internal/job"} })
+		_, err := store.Update(t.Context(), id, func(row *job.Job) { row.Paths.Write = []string{"internal/job"} })
 		require.NoError(t, err)
 	}
 
@@ -117,7 +117,7 @@ func TestDeleteRemovesOneRowAndRefusesATerminalOneWithoutForce(t *testing.T) {
 	_, err = store.Delete(t.Context(), "gone", false)
 	assert.ErrorContains(t, err, `there is no job "gone"`)
 
-	_, err = store.Update(t.Context(), "keep", func(row *types.Job) { row.State = types.StatePass })
+	_, err = store.Update(t.Context(), "keep", func(row *job.Job) { row.State = job.StatePass })
 	require.NoError(t, err)
 	_, err = store.Delete(t.Context(), "keep", false)
 	assert.ErrorContains(t, err, "the record of what happened", "a terminal row is the account of the work")
@@ -134,7 +134,7 @@ func TestDeleteRemovesOneRowAndRefusesATerminalOneWithoutForce(t *testing.T) {
 func TestDeleteRefusesABoundHolder(t *testing.T) {
 	loc := tempLocation(t, t.TempDir())
 	store := NewStore(loc)
-	_, err := store.Update(t.Context(), "held", func(row *types.Job) { row.Paths.Write = []string{"internal/job"} })
+	_, err := store.Update(t.Context(), "held", func(row *job.Job) { row.Paths.Write = []string{"internal/job"} })
 	require.NoError(t, err)
 
 	bound := NewStore(Location{CacheDir: loc.CacheDir, Root: loc.Root, StateBase: loc.StateBase, Actor: &Actor{Lease: "held"}})

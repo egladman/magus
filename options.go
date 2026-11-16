@@ -4,16 +4,16 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/step"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
-	"github.com/egladman/magus/types"
 )
 
 // WithJobReader has the guard's lease rules read jobs from r in place of
 // the workspace's job store: a Go program embedding magus brings its own tasks
-// as jobs. The lease a call puts on its context (types.WithJobLease) names the
+// as jobs. The lease a call puts on its context (job.WithLease) names the
 // job r answers for. Open fails on a nil r.
-func WithJobReader(r types.JobReader) Option {
+func WithJobReader(r job.Reader) Option {
 	return func(o workspace.Options) { l := o.Loading(); l.JobReader, l.JobReaderGiven = r, true }
 }
 

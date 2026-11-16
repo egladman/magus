@@ -10,8 +10,8 @@ import (
 
 	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
-	"github.com/egladman/magus/types"
 )
 
 // defaultPoll is how often the follow loop re-reads the trail and the job rows. Both are
@@ -27,7 +27,7 @@ type Option func(*Service)
 // WithJobs gives the view the repository's job plan, read at call time rather than
 // captured: rows change state, release paths and appear while the server runs, and a slice
 // taken at mount time would attribute against a plan that stopped being true.
-func WithJobs(rows func() []types.Job) Option {
+func WithJobs(rows func() []job.Job) Option {
 	return func(s *Service) { s.jobs = rows }
 }
 
@@ -147,7 +147,7 @@ func (s *Service) history(past []trail.Event, filter *activityv1.ActivityQuery) 
 }
 
 // rows is the job plan this call reads, empty when no source was supplied.
-func (s *Service) rows() []types.Job {
+func (s *Service) rows() []job.Job {
 	if s.jobs == nil {
 		return nil
 	}
@@ -189,7 +189,7 @@ func wireFeedEvent(e jobstore.FeedEvent) *activityv1.ActivityEvent {
 		Error:      e.Error,
 		Preview:    e.Note,
 	}
-	if e.Origin != (types.Origin{}) {
+	if e.Origin != (job.Origin{}) {
 		out.Actor = e.Origin.Label()
 	}
 	switch e.Kind {
@@ -234,12 +234,12 @@ func matchWire(e *activityv1.ActivityEvent, q *activityv1.ActivityQuery) bool {
 func fromWire(e *activityv1.ActivityEvent) trail.Event {
 	return trail.Event{
 		Ts: e.GetTime().AsTime().UnixMilli(),
-		Origin: types.Origin{
-			User: e.GetUser(), EntryPoint: types.EntryPoint(e.GetEntryPoint()), Host: e.GetHost(),
+		Origin: job.Origin{
+			User: e.GetUser(), EntryPoint: job.EntryPoint(e.GetEntryPoint()), Host: e.GetHost(),
 			Session: e.GetSession(), Agent: e.GetAgent(),
 			// The filter matches a credential by kind, id and name; the grant is not a filter.
-			Credential: types.Credential{
-				Kind: types.CredentialKind(e.GetCredential().GetClass()),
+			Credential: job.Credential{
+				Kind: job.CredentialKind(e.GetCredential().GetClass()),
 				ID:   e.GetCredential().GetId(),
 				Name: e.GetCredential().GetName(),
 			},

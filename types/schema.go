@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 )
 
 // Schema is the envelope a record magus rewrites in place embeds. A reader ignores the
@@ -86,26 +87,26 @@ func (l FormatLedger) Features() []string {
 // Its features are the ones a stored row requires; see [JobFeatures].
 var DeclarationSchema = FormatLedger{
 	Name:    "declaration",
-	Type:    reflect.TypeFor[Declaration](),
-	Version: JobAPIVersion,
+	Type:    reflect.TypeFor[job.Declaration](),
+	Version: job.APIVersion,
 	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
 	// refused as an unknown member.
 	Reserved: []string{"completion_gates", "waivers", "schema_version", "criteria", "model", "fresh_reason", "tier",
 		"write_paths", "deny_paths", "read_paths", "soft_paths"},
-	Added: map[string]APIVersion{"agent": JobAPIVersion, "paths": JobAPIVersion},
+	Added: map[string]APIVersion{"agent": job.APIVersion, "paths": job.APIVersion},
 	Requires: map[string]APIVersion{
-		"dead-job-end":       JobAPIVersion,
-		"claim-declarations": JobAPIVersion,
-		"signature-goals":    JobAPIVersion,
-		"job-generations":    JobAPIVersion,
+		"dead-job-end":       job.APIVersion,
+		"claim-declarations": job.APIVersion,
+		"signature-goals":    job.APIVersion,
+		"job-generations":    job.APIVersion,
 	},
 }
 
 // JobResultSchema is the ledger of the result a holder files.
 var JobResultSchema = FormatLedger{
 	Name:     "job-result",
-	Type:     reflect.TypeFor[JobResult](),
-	Version:  JobResultAPIVersion,
+	Type:     reflect.TypeFor[job.Result](),
+	Version:  job.ResultAPIVersion,
 	Reserved: []string{"gate_evidence", "schema_version"},
 }
 

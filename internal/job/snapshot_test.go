@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,8 +13,8 @@ func TestSnapshotFromContext(t *testing.T) {
 	t.Parallel()
 
 	readError := errors.New("jobs.jsonl line 1: unexpected end of JSON input")
-	row := func() types.Job {
-		return types.Job{ID: "orchestrator/guard-facts", State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}
+	row := func() job.Job {
+		return job.Job{ID: "orchestrator/guard-facts", State: job.StateRunning, Paths: job.Paths{Write: []string{"internal/guard/**"}}}
 	}
 	cases := []struct {
 		name   string
@@ -23,7 +23,7 @@ func TestSnapshotFromContext(t *testing.T) {
 		pinned bool
 	}{
 		{"nothing pinned", nil, Snapshot{}, false},
-		{"rows", &Snapshot{Rows: []types.Job{row()}}, Snapshot{Rows: []types.Job{row()}}, true},
+		{"rows", &Snapshot{Rows: []job.Job{row()}}, Snapshot{Rows: []job.Job{row()}}, true},
 		{"an unreadable store", &Snapshot{Err: readError}, Snapshot{Err: readError}, true},
 	}
 	for _, tc := range cases {
@@ -47,7 +47,7 @@ func TestSnapshotFromContext(t *testing.T) {
 func TestSnapshotReadSharesAndCloneIsolates(t *testing.T) {
 	t.Parallel()
 
-	pinned := Snapshot{Rows: []types.Job{{ID: "orchestrator/guard-facts", Paths: types.JobPaths{Write: []string{"internal/guard/**"}}}}}
+	pinned := Snapshot{Rows: []job.Job{{ID: "orchestrator/guard-facts", Paths: job.Paths{Write: []string{"internal/guard/**"}}}}}
 	ctx := WithSnapshot(t.Context(), pinned)
 
 	read, ok := SnapshotFromContext(ctx)

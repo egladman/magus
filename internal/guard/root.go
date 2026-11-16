@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
@@ -490,7 +491,7 @@ type forkedTier struct {
 // boundModelTier is the tier row was forked at, as tierIn finds it in the workspace's
 // declaration. The declaration is asked for only once a row carries a tier, since reading
 // it opens the workspace.
-func boundModelTier(deps Dependencies, row types.Job) (forkedTier, bool) {
+func boundModelTier(deps Dependencies, row jobtypes.Job) (forkedTier, bool) {
 	if row.ModelTier == nil || deps.ModelTiers == nil {
 		return forkedTier{}, false
 	}
@@ -500,7 +501,7 @@ func boundModelTier(deps Dependencies, row types.Job) (forkedTier, bool) {
 // tierIn is the tier row was forked at in set. It is false when the row records none, set
 // is nil, or set no longer has a case of that name at that rank: a row forked before its
 // enum changed is graded by nothing rather than by a guess.
-func tierIn(set *tier.Set, row types.Job) (forkedTier, bool) {
+func tierIn(set *tier.Set, row jobtypes.Job) (forkedTier, bool) {
 	if set == nil || row.ModelTier == nil {
 		return forkedTier{}, false
 	}
@@ -587,7 +588,7 @@ func (f forkedTier) rankedAbove(host, model string) string {
 // recoversOwnCheckout reports a line that runs root's checkout.bootstrap with
 // --here --recover and nothing else. Only that entry is root work; ordinary
 // builds remain delegated. A workspace declaring no hook has no such line.
-func readsCitedResult(tries types.JobAttempts, line string, at location) bool {
+func readsCitedResult(tries jobtypes.Attempts, line string, at location) bool {
 	paths := focusReadPaths(line, cmp.Or(at.dir, at.workspace), userHome())
 	if len(paths) == 0 {
 		return false
