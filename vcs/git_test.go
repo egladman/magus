@@ -4233,19 +4233,15 @@ func TestCreateCheckoutReusesABranchAtTheRevision(t *testing.T) {
 	require.ErrorContains(t, err, "would strand them", "a branch holding commits past the revision is never reused")
 }
 
+// AttrsSpaceSuite builds a repository only in the test that installs into it.
 type AttrsSpaceSuite struct {
 	suite.Suite
-	dir string
 }
 
 func TestAttrsSpaceSuite(t *testing.T) { suite.Run(t, new(AttrsSpaceSuite)) }
 
-func (s *AttrsSpaceSuite) SetupTest() {
-	s.dir = testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"}).Root()
-}
-
-func (s *AttrsSpaceSuite) attr(name, path string) string {
-	out, err := exec.Command("git", "-C", s.dir, "check-attr", name, "--", path).Output()
+func (s *AttrsSpaceSuite) attr(dir, name, path string) string {
+	out, err := exec.Command("git", "-C", dir, "check-attr", name, "--", path).Output()
 	s.Require().NoError(err)
 	return strings.TrimSpace(string(out))
 }
@@ -4263,15 +4259,49 @@ func (s *AttrsSpaceSuite) TestPatternWithoutASpaceStaysBare() {
 }
 
 func (s *AttrsSpaceSuite) TestGitMatchesAQuotedPatternAndCheckPasses() {
+	dir := testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"}).Root()
 	globs := types.MergeDriverGlobs{Outputs: []string{"docs/reference/config *.md"}}
-	s.Require().NoError(gitVCS{}.InstallMergeDriver(s.T().Context(), s.dir, globs))
+	s.Require().NoError(gitVCS{}.InstallMergeDriver(s.T().Context(), dir, globs))
 
-	got := s.attr("merge", "docs/reference/config x.md")
-	ok, err := gitVCS{}.CheckMergeDriver(s.T().Context(), s.dir)
+	got := s.attr(dir, "merge", "docs/reference/config x.md")
+	ok, err := gitVCS{}.CheckMergeDriver(s.T().Context(), dir)
 
 	s.Equal("docs/reference/config x.md: merge: magus", got)
 	s.Require().NoError(err)
 	s.True(ok)
-	_, statErr := os.Stat(filepath.Join(s.dir, ".gitattributes"))
+	_, statErr := os.Stat(filepath.Join(dir, ".gitattributes"))
 	s.NoError(statErr)
+}
+
+type GitCancelSuite struct{ suite.Suite }
+
+func TestGitCancelSuite(t *testing.T) { suite.Run(t, new(GitCancelSuite)) }
+
+// TestACancelledMergeLeavesNoDriverTempFiles pins that a merge cut off
+// while its driver runs returns at the deadline and still leaves no
+// .merge_file_* copies. The stop hook's merged check cancels it this way.
+func (s *GitCancelSuite) TestACancelledMergeLeavesNoDriverTempFiles() {
+	t := s.T()
+	dir := testkit.NewRepository(t, map[string]string{"f.txt": "base\n", ".gitattributes": "f.txt merge=slow\n"}).Root()
+	gitRun(t, dir, "config", "merge.slow.driver", "sleep 3")
+	base := gitTestOutput(t, dir, "rev-parse", "HEAD")
+	writeRepositoryFile(t, dir, "f.txt", "ours\n")
+	gitRun(t, dir, "commit", "-q", "-am", "ours")
+	ours := gitTestOutput(t, dir, "rev-parse", "HEAD")
+	gitRun(t, dir, "checkout", "-q", base)
+	writeRepositoryFile(t, dir, "f.txt", "theirs\n")
+	gitRun(t, dir, "commit", "-q", "-am", "theirs")
+	theirs := gitTestOutput(t, dir, "rev-parse", "HEAD")
+
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := gitVCS{}.MergeTrees(ctx, dir, types.TreeMerge{Ours: ours, Theirs: theirs})
+	s.Require().ErrorIs(err, context.DeadlineExceeded)
+	s.Less(time.Since(start), 2*time.Second, "the caller does not wait out the driver")
+
+	s.Eventually(func() bool {
+		leaked, err := filepath.Glob(filepath.Join(dir, ".merge_file_*"))
+		return err == nil && len(leaked) == 0
+	}, 15*time.Second, 100*time.Millisecond, "git removes the driver's copies once it finishes")
 }

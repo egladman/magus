@@ -295,8 +295,8 @@ func conformanceLimitFailures(field string, metric types.ConformanceMetric, l Co
 	for _, scope := range slices.Sorted(maps.Keys(l.Scopes)) {
 		scoped := fmt.Sprintf("%s.scopes.%s", field, scope)
 		switch {
-		case metric != types.ConformanceDepFanout:
-			out = append(out, FieldFailure{Field: scoped, Tag: "conformance_scope_metric", Param: string(types.ConformanceDepFanout), Value: scope})
+		case metric != types.ConformanceImportedPackages:
+			out = append(out, FieldFailure{Field: scoped, Tag: "conformance_scope_metric", Param: string(types.ConformanceImportedPackages), Value: scope})
 		case !filepath.IsLocal(filepath.FromSlash(scope)) || path.Clean(scope) != scope:
 			out = append(out, FieldFailure{Field: scoped, Tag: "conformance_scope_path", Value: scope})
 		}

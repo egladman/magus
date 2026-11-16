@@ -221,8 +221,8 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 	assert.Equal(t, 2, ws.builds, "a new evaluation rebuilds")
 }
 
-// A refs lookup asks for the shards of its own symbol, and one evaluation builds that
-// scope once while a different symbol builds its own.
+// A refs lookup asks for the shards of its own symbol. One evaluation
+// builds that scope once, while a different symbol builds its own.
 func TestRefsMemoizesPerSymbolScope(t *testing.T) {
 	t.Parallel()
 	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
@@ -482,9 +482,9 @@ func TestConformanceReportsRowsBesideIndexFreshness(t *testing.T) {
 	assert.Equal(t, wantReport, report)
 	assert.True(t, ws.readAfter, "freshness is read after the freshen")
 	lines := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopSource}
-	i := slices.IndexFunc(report.Rows, func(r types.ConformanceRow) bool { return r.Key == lines })
-	require.GreaterOrEqual(t, i, 0, "rows: %v", report.Rows)
-	row := report.Rows[i]
+	i := slices.IndexFunc(report.Distributions, func(r types.ConformanceDistribution) bool { return r.Key == lines })
+	require.GreaterOrEqual(t, i, 0, "rows: %v", report.Distributions)
+	row := report.Distributions[i]
 	wantRow := row
 	wantRow.N = 2 // a declared output is never counted
 	wantRow.Value = 100

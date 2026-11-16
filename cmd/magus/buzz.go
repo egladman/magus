@@ -31,7 +31,7 @@ import (
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -527,7 +527,10 @@ func recordLease(ctx context.Context, root, script string) (string, error) {
 	}
 	rows, err := readJobRows(ctx, here)
 	if err != nil {
-		return "", err
+		// The rows only bind the run to a lease. A store this magus cannot read
+		// is no reason to lose the run's record.
+		fmt.Fprintf(os.Stderr, "magus buzz: --record: the job store cannot be read (%v); the run is recorded without a lease\n", err)
+		return "", nil
 	}
 	return scriptCheckHolder(rows, here, script), nil
 }

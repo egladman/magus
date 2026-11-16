@@ -13,11 +13,11 @@ type ToolReport struct {
 	Count      int    `json:"count" yaml:"count"`
 	// Lifecycle says where the rows' cycle, eol and support columns came from.
 	Lifecycle LifecycleStatus `json:"lifecycle" yaml:"lifecycle"`
-	Tools     []ToolRow       `json:"tools" yaml:"tools"`
+	Tools     []ToolStatus    `json:"tools" yaml:"tools"`
 }
 
-// ToolRow is one binary a project's spells drive, with the window it is held to.
-type ToolRow struct {
+// ToolStatus is one binary a project's spells drive, with the window it is held to.
+type ToolStatus struct {
 	Project string `json:"project" yaml:"project"`
 	Bin     string `json:"bin" yaml:"bin"`
 	Spell   string `json:"spell" yaml:"spell"`

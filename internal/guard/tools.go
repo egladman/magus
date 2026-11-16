@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 )
 
 // unjudgedTool is the tool of a call that carries nothing a rule reads, "" when the host's
@@ -32,25 +34,37 @@ func inertCall(req Request) bool {
 	return ok && env.Inert
 }
 
-// denyRuleUnjudgedTool is a tool call no rule could read.
-const denyRuleUnjudgedTool denyRuleName = "unjudged-tool"
+// denyRuleUnjudgedStep is a step no row declares: a host tool
+// call no rule could read, or a step of an undeclared kind.
+const denyRuleUnjudgedStep denyRuleName = "unjudged-step"
 
-// denyUnjudgedTool is unjudged-tool's refusal of a call to tool. With no tool rows to read,
-// the refusal says so and names the install that writes them.
+// denyUnjudgedTool is unjudged-step's refusal of a call to a host
+// tool. With no tool rows to read, it names the install that
+// writes them.
 func denyUnjudgedTool(tool string, tools agent.ToolRows) denial {
 	if tools.Err != nil {
+		argv := []string{"magus", "agent", "harness", "install"}
+		if tools.Host != "" {
+			argv = append(argv, "--id", tools.Host)
+		}
 		return denial{
+			Next: []types.NextStep{hint.NextForDenyRemedy(string(denyRuleUnjudgedStep), argv,
+				"writes the tool rows that say what each tool does, so the guard can judge this call.")},
 			Say: fmt.Sprintf("magus workspace: no rule could judge this %s call: its input carries no command, file path, search, prompt or skill, "+
 				"and no tool row says what %s does: %v.", tool, tool, tools.Err),
 			Why: "Every tool call reaches the guard, and the host's tool rows say what a tool does where the shape of its input cannot. " +
 				"A shell command is still judged by its shape, so the install that writes the rows runs.",
 		}
 	}
+	via := ""
+	if tools.FellBackTo != "" {
+		via = fmt.Sprintf(" (this checkout has no tool rows installed, so the primary checkout's at %s were read)", tools.FellBackTo)
+	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: no rule could judge this %s call, and no tool row names it: use a tool the guard judges, or ask a person to add a %s row to mgs_listTools.", tool, tool),
+		Say: fmt.Sprintf("magus workspace: no rule could judge this %s call, and no tool row names it%s: use a tool the guard judges, or ask a person to add a %s row to mgs_listTools.", tool, via, tool),
 		Why: "Every tool call reaches the guard, and the guard judges a call by the shape of its input: a command, file path, search, prompt or skill. A tool whose input has none of the shapes it reads " +
 			"could do anything a rule exists to stop, and nothing would say so. A shell command or a file read or write is judged; a row for the tool in the harness spell's mgs_listTools says what it does. " +
-			"Setting unjudged-tool to advise or off in magus\\guard.builtins, which allows it unjudged, is the person's call.",
+			"Setting unjudged-step to advise or off in magus\\guard.builtins, which allows it unjudged, is the person's call.",
 	}
 }
 

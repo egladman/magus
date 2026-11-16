@@ -464,7 +464,7 @@ type budgetWait struct {
 
 	mu      sync.Mutex
 	since   time.Time
-	holders string
+	holders []types.MachineClaimant
 	verdict types.MachineVerdict
 	timer   *time.Timer
 	gen     int
@@ -482,7 +482,6 @@ func (g *machineGate) newBudgetWait(ctx context.Context, c types.MachineClaim) (
 // run passes in silence and clears the bound a wait on other invocations
 // started. A wait on other invocations says so, and again when they change.
 func (w *budgetWait) parked(ctx context.Context, v types.MachineVerdict) {
-	held := describeMachineHolders(v.Holders)
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if v.OwnRun {
@@ -492,7 +491,7 @@ func (w *budgetWait) parked(ctx context.Context, v types.MachineVerdict) {
 			w.timer = nil
 		}
 		if !w.fired {
-			w.since, w.holders = time.Time{}, ""
+			w.since, w.holders = time.Time{}, nil
 		}
 		return
 	}
@@ -501,7 +500,7 @@ func (w *budgetWait) parked(ctx context.Context, v types.MachineVerdict) {
 		return
 	}
 	if w.since.IsZero() {
-		w.since, w.holders = time.Now(), held
+		w.since, w.holders = time.Now(), v.Holders
 		if w.bound.d <= 0 || w.blind {
 			w.fired = true
 			w.cancel()
@@ -516,15 +515,39 @@ func (w *budgetWait) parked(ctx context.Context, v types.MachineVerdict) {
 			w.bound.d, w.bound.source))
 		return
 	}
-	if held == w.holders {
+	change := describeHolderChange(w.holders, v.Holders)
+	w.holders = v.Holders
+	if change == "" {
 		return
 	}
-	w.holders = held
-	now := time.Now()
-	elapsed := now.Sub(w.since)
-	w.say(ctx, fmt.Sprintf("still waiting for a seat for %s %s after %s: now %s%s; it gives up in %s",
+	elapsed := time.Since(w.since)
+	w.say(ctx, fmt.Sprintf("still waiting for a seat for %s %s after %s: %s%s; it gives up in %s",
 		displayProject(w.claim.Project), w.claim.Target, elapsed.Round(time.Second),
-		describeMachineWait(v, now), describeMachineQueue(v), max(w.bound.d-elapsed, 0).Round(time.Second)))
+		change, describeMachineQueue(v), max(w.bound.d-elapsed, 0).Round(time.Second)))
+}
+
+// describeHolderChange names the holders that arrived and left since the
+// last report, by pid. The full list was said once when the wait began; an
+// unchanged set returns "".
+func describeHolderChange(before, now []types.MachineClaimant) string {
+	was := make(map[int]bool, len(before))
+	for _, h := range before {
+		was[h.PID] = true
+	}
+	is := make(map[int]bool, len(now))
+	var parts []string
+	for _, h := range now {
+		is[h.PID] = true
+		if !was[h.PID] {
+			parts = append(parts, fmt.Sprintf("arrived pid %d %s %s", h.PID, displayProject(h.Project), h.Target))
+		}
+	}
+	for _, h := range before {
+		if !is[h.PID] {
+			parts = append(parts, fmt.Sprintf("left pid %d %s %s", h.PID, displayProject(h.Project), h.Target))
+		}
+	}
+	return strings.Join(parts, "; ")
 }
 
 // describeMachineWait names each holder with what its claim is made of,
@@ -904,7 +927,7 @@ func workingDir() string {
 	return dir
 }
 
-// The exit status is per refusal (types.ExitError, and see libs/cmdline/exit.Code for the
+// The exit status is per refusal (types.ExitError, and see libs/clikit/exit.Code for the
 // server side). EX_TEMPFAIL says "try again"; a declaration that cannot fit and a nested magus
 // that lost its ancestry both answer the same way forever, so a wrapper retrying on 75
 // would loop on them.

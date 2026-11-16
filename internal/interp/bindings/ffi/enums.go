@@ -3,8 +3,10 @@ package ffi
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
+	"weak"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -58,6 +60,24 @@ func (enumBacking) Instance(_ string, names []string, fields []vm.Value) vm.Valu
 	return m
 }
 
+// compileLocks holds a mutex per session that sessionEnums compiles into. A
+// Session compiles for one goroutine at a time, and a guard rule's session
+// judges calls that run at once. An entry goes when its session is collected.
+var compileLocks sync.Map // weak.Pointer[buzz.Session] -> *sync.Mutex
+
+// compiling runs f holding sess's entry in compileLocks.
+func compiling(sess *buzz.Session, f func() error) error {
+	key := weak.Make(sess)
+	v, loaded := compileLocks.LoadOrStore(key, new(sync.Mutex))
+	if !loaded {
+		runtime.AddCleanup(sess, func(k weak.Pointer[buzz.Session]) { compileLocks.Delete(k) }, key)
+	}
+	mu, _ := v.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+	return f()
+}
+
 type sessionEnums struct {
 	ctx    context.Context //nolint:containedctx // class b: EnumCases is called by 420 generated encoder sites with no ctx; no benchmark or optimization: comment (29d8b3deb)
 	sess   *buzz.Session
@@ -82,13 +102,19 @@ func (s *sessionEnums) Instance(object string, names []string, fields []vm.Value
 			params[i] = fmt.Sprintf("f%d: any", i)
 			inits[i] = fmt.Sprintf("%s = f%d", name, i)
 		}
-		fn := "__object_" + object
+		fn := "__object_" + strings.ReplaceAll(object, `\`, "_")
 		decl := fmt.Sprintf("import %q; fun %s(%s) > any { return %s{ %s }; }",
-			s.module, fn, strings.Join(params, ", "), s.qualify(object), strings.Join(inits, ", "))
-		if _, err := s.sess.Eval(s.ctx, decl); err != nil {
+			s.importPath(object), fn, strings.Join(params, ", "), s.qualify(object), strings.Join(inits, ", "))
+		err := compiling(s.sess, func() error {
+			if _, err := s.sess.Eval(s.ctx, decl); err != nil {
+				return err
+			}
+			ctor = s.sess.GetGlobal(fn)
+			return nil
+		})
+		if err != nil {
 			panic(fmt.Sprintf("declaring %s's constructor: %v", s.qualify(object), err))
 		}
-		ctor = s.sess.GetGlobal(fn)
 		s.mu.Lock()
 		if s.defs == nil {
 			s.defs = map[string]vm.Value{}
@@ -111,8 +137,12 @@ func (s *sessionEnums) Case(enum, value string) vm.Value {
 	cases, ok := s.cases[enum]
 	s.mu.Unlock()
 	if !ok {
-		var err error
-		if cases, err = s.read(enum); err != nil {
+		err := compiling(s.sess, func() error {
+			var err error
+			cases, err = s.read(enum)
+			return err
+		})
+		if err != nil {
 			panic(fmt.Sprintf("reading %s: %v", s.qualify(enum), err))
 		}
 		s.mu.Lock()
@@ -127,9 +157,20 @@ func (s *sessionEnums) Case(enum, value string) vm.Value {
 }
 
 // qualify spells enum as a call site does: Buzz binds a slash-path import under its
-// last segment.
+// last segment. A nested namespace's enum comes qualified.
 func (s *sessionEnums) qualify(enum string) string {
+	if strings.Contains(enum, `\`) {
+		return enum
+	}
 	return fmt.Sprintf(`%s\%s`, s.module[strings.LastIndex(s.module, "/")+1:], enum)
+}
+
+// importPath is the module the expression qualify spells is read from.
+func (s *sessionEnums) importPath(enum string) string {
+	if i := strings.LastIndex(enum, `\`); i >= 0 {
+		return strings.ReplaceAll(enum[:i], `\`, "/")
+	}
+	return s.module
 }
 
 // definition is the enum's definition on the module value the session registered.
@@ -172,8 +213,8 @@ func (s *sessionEnums) read(enum string) (map[string]vm.Value, error) {
 // rejects a top-level return. Redeclaring the function for a second reader of the same
 // session replaces the first, which is what the same expression asks for.
 func (s *sessionEnums) value(part, enum, expr string) (vm.Value, error) {
-	name := fmt.Sprintf("__enum_%s_%s", part, enum)
-	decl := fmt.Sprintf("import %q; fun %s() > any { return %s; }", s.module, name, expr)
+	name := fmt.Sprintf("__enum_%s_%s", part, strings.ReplaceAll(enum, `\`, "_"))
+	decl := fmt.Sprintf("import %q; fun %s() > any { return %s; }", s.importPath(enum), name, expr)
 	if _, err := s.sess.Eval(s.ctx, decl); err != nil {
 		return vm.Null, err
 	}

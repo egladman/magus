@@ -47,6 +47,7 @@ type Spell struct {
 	symbolIndexer       *SymbolIndexer  // declared symbol-indexing capability; nil when the spell declares none
 	coverage            *Coverage       // declared coverage profile; nil when the spell declares none
 	sandbox             *Sandbox        // declared host grants for its tools; nil when the spell declares none
+	scopes              *Command        // what a relinked build reads; nil when the spell declares none
 	serviceTargets      map[string]bool // target names backed by a service op (long-running; uncacheable)
 	opaque              bool
 	internal            bool
@@ -146,6 +147,10 @@ func (s *Spell) Coverage() *Coverage { return s.coverage }
 // Sandbox returns what the spell's tools need from the host under the sandbox, or nil
 // when it declares nothing.
 func (s *Spell) Sandbox() *Sandbox { return s.sandbox }
+
+// Scopes returns the command that prints the globs a build of a package reads,
+// the package appended to its args, or nil when the spell declares none.
+func (s *Spell) Scopes() *Command { return s.scopes }
 
 // IsServiceTarget reports whether target name is backed by a service op (a
 // long-running process). The runner forces such targets uncacheable.
@@ -396,6 +401,11 @@ func WithCoverage(c *Coverage) Option {
 // WithSandbox sets the host grants the spell's tools need under the sandbox.
 func WithSandbox(sb *Sandbox) Option {
 	return func(s *Spell) { s.sandbox = sb }
+}
+
+// WithScopes sets the command that prints what a relinked build reads.
+func WithScopes(c *Command) Option {
+	return func(s *Spell) { s.scopes = c }
 }
 
 // WithSyntax sets the comment and stub syntax the spell declares for its

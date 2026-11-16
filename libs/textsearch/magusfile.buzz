@@ -69,5 +69,5 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 
 // The anchor `magus affected ci` keys off.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, test);
+    ctx.needs(generate, lint, test);
 }

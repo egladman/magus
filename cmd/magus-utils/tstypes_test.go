@@ -33,7 +33,7 @@ func TestRunTSTypes(t *testing.T) {
 }
 
 func TestRenderTSTypes(t *testing.T) {
-	src, err := renderTSTypes(boundaryTypes)
+	src, err := renderTSTypes(boundaryTypes())
 	require.NoError(t, err)
 	got := string(src)
 
@@ -98,7 +98,7 @@ func TestTSTypesTypeCheck(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	src, err := renderTSTypes(boundaryTypes)
+	src, err := renderTSTypes(boundaryTypes())
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "types.ts"), src, 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "check.ts"), []byte(tsTypeCheck), 0o600))

@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/clikit/generate"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -182,7 +183,7 @@ func (m *Magus) replayAtBase(ctx context.Context, dir string, c coverageSource) 
 	if err != nil {
 		return err
 	}
-	env := append(slices.Clone(m.environ), fmt.Sprintf("%s=%s", config.EnvName("MAGUS", "cache", "dir"), store))
+	env := append(slices.Clone(m.environ), fmt.Sprintf("%s=%s", generate.EnvName("MAGUS", "cache", "dir"), store))
 	base, err := Open(ctx, dir, append(m.processOptions(), WithEnv(env))...)
 	if err != nil {
 		return fmt.Errorf("this magus cannot load the base tree: %w", err)

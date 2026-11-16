@@ -15,18 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The inbound list names registry entries by their Buzz name, so a typo or a type
-// dropped from boundaryTypes must fail here rather than at generate time in CI.
-func TestInboundTypesAreRegistered(t *testing.T) {
-	seen := map[string]bool{}
-	for _, name := range inboundTypes {
-		assert.False(t, seen[name], "%s is listed twice", name)
-		seen[name] = true
-		_, ok := boundaryTypeNamed(name)
-		assert.True(t, ok, "inbound type %s is not in boundaryTypes", name)
-	}
-}
-
 func TestRunBoundaryDecode(t *testing.T) {
 	dir := t.TempDir()
 	args := func(n string) []string {
@@ -77,7 +65,7 @@ func TestDecodeEmitterRefusesANestedTypeThatIsNotInbound(t *testing.T) {
 	e := newDecodeEmitter([]boundaryType{lang})
 	err := e.emitStruct(lang)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "add Syntax to inboundTypes")
+	assert.Contains(t, err.Error(), "(Syntax) is not inbound")
 }
 
 // Every spell contract type must generate: Tool reaches enums, maps of structs, optional

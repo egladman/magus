@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,7 +24,92 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
+
+// lapsedWork holds a wait for each piece of work a deadline stopped waiting for that no
+// test has waited for since. TestMain hands leftRunning its hold.
+var lapsedWork unwaitedWork
+
+// lapsedWorkBound is how long a test waits for the work it left running before it fails.
+const lapsedWorkBound = time.Minute
+
+type unwaitedWork struct {
+	mu      sync.Mutex
+	waits   []func()
+	waiters map[testing.TB]bool
+}
+
+func (u *unwaitedWork) hold(wait func()) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.waits = append(u.waits, wait)
+}
+
+func (u *unwaitedWork) take() []func() {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	waits := u.waits
+	u.waits = nil
+	return waits
+}
+
+// enlist reports whether t had not enlisted yet.
+func (u *unwaitedWork) enlist(t testing.TB) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.waiters[t] {
+		return false
+	}
+	if u.waiters == nil {
+		u.waiters = map[testing.TB]bool{}
+	}
+	u.waiters[t] = true
+	return true
+}
+
+func (u *unwaitedWork) dismiss(t testing.TB) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	delete(u.waiters, t)
+}
+
+// waitForLapsedWork makes t wait, once it returns, for every phase a deadline left
+// running. Call it after t sets the dirs that work reads and before it registers the
+// cleanup that releases a stalled phase: cleanups run last first, so the wait comes after
+// the release and before the dirs are put back. Later calls for the same t add nothing.
+func waitForLapsedWork(t testing.TB) {
+	t.Helper()
+	if !lapsedWork.enlist(t) {
+		return
+	}
+	t.Cleanup(func() {
+		defer lapsedWork.dismiss(t)
+		drainLapsedWork(t)
+	})
+}
+
+// drainLapsedWork waits for the work held so far and for what that work leaves running in
+// turn, as a lapsed judgment's own phases lapse after it. It fails t past lapsedWorkBound.
+func drainLapsedWork(t testing.TB) {
+	t.Helper()
+	bound := time.After(lapsedWorkBound)
+	for waits := lapsedWork.take(); len(waits) > 0; waits = lapsedWork.take() {
+		for _, wait := range waits {
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				wait()
+			}()
+			select {
+			case <-done:
+			case <-bound:
+				t.Errorf("work a deadline left running did not finish within %s", lapsedWorkBound)
+				return
+			}
+		}
+	}
+}
 
 func TestWithHookDeadlineKeepsAnEarlierOne(t *testing.T) {
 	early, cancel := context.WithTimeout(t.Context(), time.Second)
@@ -106,6 +192,7 @@ func (s *InheritedHookDeadlineSuite) TestAnInheritedDeadlineEarlierThanTheBudget
 }
 
 func (s *InheritedHookDeadlineSuite) TestTheJudgmentLapsesWithTheInheritedDeadline() {
+	waitForLapsedWork(s.T())
 	parent := strconv.FormatInt(time.Now().Add(100*time.Millisecond).UnixMilli(), 10)
 	ctx, cancel, err := WithInheritedHookDeadline(s.T().Context(), parent)
 	defer cancel()
@@ -254,6 +341,7 @@ func TestTimeRuleLoadLapsesOnlyAFailurePastTheDeadline(t *testing.T) {
 // later call of it in the judgment answers at once without running. The call itself never
 // sees ctx's cancel, so a memoized answer cannot be cached as cancelled.
 func TestBoundedPhaseLapsesOncePerJudgment(t *testing.T) {
+	waitForLapsedWork(t)
 	ctx, cancel := context.WithTimeout(withPhaseLog(t.Context(), trail.Phase{}), judgeReserve+50*time.Millisecond)
 	defer cancel()
 	release := make(chan struct{})
@@ -319,6 +407,7 @@ func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			ctx, cacheDir := spawnFixture(t)
+			waitForLapsedWork(t)
 			ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 			defer cancel()
 			release := make(chan struct{})
@@ -425,6 +514,7 @@ func TestDryRunJudgesWithoutTheHookBudget(t *testing.T) {
 // not graded rather than that a host would have cut it off.
 func TestDryRunLapseIsNotGraded(t *testing.T) {
 	ctx, root, _ := writeFixture(t)
+	waitForLapsedWork(t)
 	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
 	loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
@@ -445,6 +535,7 @@ func TestDryRunLapseIsNotGraded(t *testing.T) {
 // Decision 127 keeps a write in a job's checkout denied; see LapseDegradeSuite.
 func TestJudgeWithinDegradesACommandAfterConsecutiveLapses(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
+	waitForLapsedWork(t)
 	req := Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1"}
 	slowLoad := func(ctx context.Context) types.GuardJudgment {
 		_, _, _ = TimeRuleLoad(ctx, func() (int, error) {
@@ -509,6 +600,7 @@ func TestStageFor(t *testing.T) {
 // and goes through with the note.
 func TestUnjudgedPassesAReadOnlyPipeline(t *testing.T) {
 	ctx, _ := spawnFixture(t)
+	waitForLapsedWork(t)
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 	release := make(chan struct{})
@@ -562,6 +654,7 @@ func TestUnjudgedPassesAnAppendOutsideEveryCheckout(t *testing.T) {
 // at once, and the verdict is on time.
 func TestJudgeWithinAnswersAWriteWhoseWorkspaceOpenStalls(t *testing.T) {
 	ctx, root, _ := writeFixture(t)
+	waitForLapsedWork(t)
 	release := make(chan struct{})
 	defer close(release)
 	var opens atomic.Int32
@@ -594,8 +687,8 @@ func TestJudgeOpensAWorkspaceOnceForALargePick(t *testing.T) {
 
 	wt, sibling := r.add("lease-job"), r.add("sibling")
 	worker := narrowLease()
-	worker.Parent, worker.CheckoutRoot, worker.WritePaths = "orchestrator", wt, []string{"pkg/**"}
-	holder := types.Job{ID: "sibling", Criteria: "hold the package", WritePaths: []string{"pkg/**"}, State: types.StateRunning, Registered: 1, CheckoutRoot: sibling}
+	worker.Parent, worker.CheckoutRoot, worker.Paths.Write = "orchestrator", wt, []string{"pkg/**"}
+	holder := types.Job{ID: "sibling", Agent: typesagent.Instructed("hold the package"), Paths: types.JobPaths{Write: []string{"pkg/**"}}, State: types.StateRunning, Registered: 1, CheckoutRoot: sibling}
 	ctx, _ := fleetFixture(t, worker, holder)
 
 	opens := map[string]int{}
@@ -742,6 +835,7 @@ func (s *JudgeBudgetSuite) TestDryRunNestedInAHookHasTheHooksBudget() {
 
 func (s *JudgeBudgetSuite) TestJudgeLapsedReportsARuleThatRanOut() {
 	ctx, root, _ := writeFixture(s.T())
+	waitForLapsedWork(s.T())
 	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
 	loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
@@ -762,6 +856,7 @@ func (s *JudgeBudgetSuite) TestJudgeLapsedLeavesARealDenyAlone() {
 
 func (s *JudgeBudgetSuite) TestJudgeLapsedKeepsARuleDenyPastALapsedPhase() {
 	ctx, _, _ := writeFixture(s.T())
+	waitForLapsedWork(s.T())
 	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
 	defer cancel()
 	release := make(chan struct{})
@@ -821,7 +916,7 @@ func (s *JudgeBudgetSuite) TestStallBetweenPhasesNamesTheSpan() {
 }
 
 func (s *JudgeBudgetSuite) TestLapsedRowKeepsABoundLease() {
-	row := types.Job{ID: "bound-job", Criteria: "hold a lease", State: types.StateRunning, WritePaths: []string{"internal/held/**"}}
+	row := types.Job{ID: "bound-job", Agent: typesagent.Instructed("hold a lease"), State: types.StateRunning, Paths: types.JobPaths{Write: []string{"internal/held/**"}}}
 	ctx, _ := fleetFixture(s.T(), row)
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
 	bindCaller(s.T(), ctx, who, row.ID)

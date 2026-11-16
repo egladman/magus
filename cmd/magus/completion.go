@@ -7,7 +7,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 )
 
 //go:embed completions/magus.bash
@@ -26,7 +27,7 @@ func completion(args []string) error {
 	fs := flag.NewFlagSet("self completion", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = completionUsage
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {

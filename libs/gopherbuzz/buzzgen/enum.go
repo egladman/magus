@@ -30,19 +30,23 @@ type EnumCase struct {
 	Const string
 }
 
-// EnumOf derives an enum from the exported constants of named's exact
-// type in its own package, layered with ref's settings. A case is named
-// for its value (executable-bit is executableBit), else for its constant
-// less the leading words it shares with the type. A cases setting
-// overrides either. An empty, reserved or repeated name is an error.
-func EnumOf(named *types.Named, ref TypeRef) (Enum, error) {
+// DeriveEnum derives an enum from the exported constants of named's exact
+// type declared in the from packages, layered with ref's settings. A
+// case is named for its value (executable-bit is executableBit), else
+// for its constant less the leading words it shares with the type. A
+// cases setting overrides either. An empty, reserved or repeated name
+// is an error.
+func DeriveEnum(named *types.Named, ref TypeRef, from []*types.Package) (Enum, error) {
 	basic, ok := named.Underlying().(*types.Basic)
 	if !ok || basic.Kind() != types.String {
 		return Enum{}, fmt.Errorf("buzzgen: %s is not a named string type", named)
 	}
-	consts := declaredConstants(named)
+	if len(from) == 0 {
+		return Enum{}, fmt.Errorf("buzzgen: %s: no package to read constants from", named)
+	}
+	consts := declaredConstants(named, from)
 	if len(consts) == 0 {
-		return Enum{}, fmt.Errorf("buzzgen: %s declares no constants to derive cases from", named)
+		return Enum{}, fmt.Errorf("buzzgen: %s declares no constants to derive cases from in %s", named, packagePaths(from))
 	}
 	typeWords := camelWords(named.Obj().Name())
 	enum := Enum{Name: ref.BuzzName(), GoType: named}
@@ -94,19 +98,31 @@ func EnumOf(named *types.Named, ref TypeRef) (Enum, error) {
 }
 
 // declaredConstants are the exported constants of exactly named's type in
-// its package, in source order. Scope order is alphabetical, so they are
-// sorted by position.
-func declaredConstants(named *types.Named) []*types.Const {
-	scope := named.Obj().Pkg().Scope()
+// from, packages in the order given and each in source order. Scope order
+// is alphabetical, so a package's constants are sorted by position.
+func declaredConstants(named *types.Named, from []*types.Package) []*types.Const {
 	var consts []*types.Const
-	for _, name := range scope.Names() {
-		c, ok := scope.Lookup(name).(*types.Const)
-		if ok && c.Exported() && types.Identical(c.Type(), named) {
-			consts = append(consts, c)
+	for _, pkg := range from {
+		scope := pkg.Scope()
+		var found []*types.Const
+		for _, name := range scope.Names() {
+			c, ok := scope.Lookup(name).(*types.Const)
+			if ok && c.Exported() && types.Identical(c.Type(), named) {
+				found = append(found, c)
+			}
 		}
+		slices.SortFunc(found, func(a, b *types.Const) int { return int(a.Pos() - b.Pos()) })
+		consts = append(consts, found...)
 	}
-	slices.SortFunc(consts, func(a, b *types.Const) int { return int(a.Pos() - b.Pos()) })
 	return consts
+}
+
+func packagePaths(pkgs []*types.Package) string {
+	paths := make([]string, len(pkgs))
+	for i, pkg := range pkgs {
+		paths[i] = pkg.Path()
+	}
+	return strings.Join(paths, ", ")
 }
 
 // CaseName is the case name buzzgen derives for value, declared as

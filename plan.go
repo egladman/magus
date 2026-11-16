@@ -407,7 +407,7 @@ func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string
 	rec := types.NewStepLog()
 	ctx = types.WithStepLog(ctx, rec)
 	ctx = types.WithTrace(types.WithCharms(ctx, charms))
-	ctx = project.WithExtraArgs(installWorkspaceRegistry(ctx, m.wsReg), args)
+	ctx = project.WithExtraArgs(m.installWorkspaceRegistry(ctx), args)
 	ctx = types.WithWorkspace(ctx, m.internals())
 	ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns())
 	if err := m.runTarget(ctx, p, anchor); err != nil {

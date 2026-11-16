@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"

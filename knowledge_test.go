@@ -1652,3 +1652,115 @@ func TestRootModuleGapsDropsDirectoryExcludedByBuildConstraint(t *testing.T) {
 
 	assert.Equal(t, []string{"internal/built"}, got)
 }
+
+// evaluationKnowledgeGraphSuite counts the warm graph's rebuilds, which a
+// one-shot CLI pays on every Get.
+type evaluationKnowledgeGraphSuite struct {
+	suite.Suite
+	m        *Magus
+	rebuilds int
+}
+
+func TestEvaluationKnowledgeGraphSuite(t *testing.T) {
+	suite.Run(t, new(evaluationKnowledgeGraphSuite))
+}
+
+func (s *evaluationKnowledgeGraphSuite) SetupTest() {
+	s.rebuilds = 0
+	s.m = &Magus{}
+	s.m.warmGraphOnce.Do(func() {})
+	s.m.warmGraph = newWarmGraph(func(context.Context, bool) (*knowledge.Graph, error) {
+		s.rebuilds++
+		return knowledge.NewGraph(), nil
+	}, slog.New(slog.DiscardHandler))
+}
+
+func (s *evaluationKnowledgeGraphSuite) read(ctx context.Context, refresh bool) *knowledge.Graph {
+	g, err := s.m.evaluationKnowledgeGraph(ctx, refresh)
+	s.Require().NoError(err)
+	return g
+}
+
+func (s *evaluationKnowledgeGraphSuite) TestOneEvaluationReadsTheWarmGraphOnce() {
+	ctx := types.WithEvalMemo(s.T().Context())
+	first := s.read(ctx, false)
+	s.Same(first, s.read(ctx, false))
+	s.Equal(1, s.rebuilds)
+}
+
+func (s *evaluationKnowledgeGraphSuite) TestANewEvaluationReadsItAgain() {
+	s.read(types.WithEvalMemo(s.T().Context()), false)
+	s.read(types.WithEvalMemo(s.T().Context()), false)
+	s.Equal(2, s.rebuilds)
+}
+
+func (s *evaluationKnowledgeGraphSuite) TestARefreshRebuildsInsideAnEvaluation() {
+	ctx := types.WithEvalMemo(s.T().Context())
+	s.read(ctx, false)
+	s.read(ctx, true)
+	s.Equal(2, s.rebuilds)
+}
+
+func (s *evaluationKnowledgeGraphSuite) TestAReadOutsideAnEvaluationReadsEveryTime() {
+	s.read(s.T().Context(), false)
+	s.read(s.T().Context(), false)
+	s.Equal(2, s.rebuilds)
+}
+
+// cloneWithSymbolsSuite merges symbols into a clone of the default graph
+// as the warm graph publishes it, which other readers hold.
+type cloneWithSymbolsSuite struct {
+	suite.Suite
+	root string
+	ws   types.WorkspaceRepository
+	cfg  config.Config
+	log  *slog.Logger
+	base *knowledge.Graph
+}
+
+func TestCloneWithSymbolsSuite(t *testing.T) {
+	suite.Run(t, new(cloneWithSymbolsSuite))
+}
+
+func (s *cloneWithSymbolsSuite) SetupTest() {
+	s.root, s.ws, s.cfg = indexedWorkspace(s.T())
+	s.log = slog.New(slog.DiscardHandler)
+	var err error
+	s.base, err = ensureKnowledgeGraph(s.T().Context(), s.ws, s.root, s.cfg, false, knowledge.AllClasses, s.log)
+	s.Require().NoError(err)
+	s.base.MarkShared()
+}
+
+func (s *cloneWithSymbolsSuite) output(g *knowledge.Graph) string {
+	b, err := json.Marshal(g.Output())
+	s.Require().NoError(err)
+	return string(b)
+}
+
+func (s *cloneWithSymbolsSuite) TestAMergeLeavesTheSharedGraphUnchanged() {
+	before := s.output(s.base)
+	merged, err := cloneWithSymbols(s.T().Context(), s.ws, s.root, s.cfg, s.base, types.AllSymbols, s.log)
+	s.Require().NoError(err)
+	s.True(merged.HasSymbols(), "the fixture's index is merged into the clone")
+	s.False(s.base.HasSymbols())
+	s.Equal(before, s.output(s.base))
+}
+
+func (s *cloneWithSymbolsSuite) TestTheMergedCloneEqualsAFreshMerge() {
+	want, err := buildKnowledgeGraph(s.T().Context(), s.ws, s.root, s.cfg, false, s.log)
+	s.Require().NoError(err)
+	s.Require().NoError(mergeWorkspaceSymbols(s.T().Context(), s.ws, s.root, s.cfg, want, s.log))
+	got, err := cloneWithSymbols(s.T().Context(), s.ws, s.root, s.cfg, s.base, types.AllSymbols, s.log)
+	s.Require().NoError(err)
+	s.Equal(s.output(want), s.output(got))
+	s.Equal(s.root, got.Root())
+}
+
+func (s *cloneWithSymbolsSuite) TestARefScopeEqualsAFreshRefMerge() {
+	want, err := buildKnowledgeGraph(s.T().Context(), s.ws, s.root, s.cfg, false, s.log)
+	s.Require().NoError(err)
+	s.Require().NoError(mergeWorkspaceSymbolsForRef(s.T().Context(), s.ws, s.root, s.cfg, want, "Foo", s.log))
+	got, err := cloneWithSymbols(s.T().Context(), s.ws, s.root, s.cfg, s.base, types.SymbolsMentioning("Foo"), s.log)
+	s.Require().NoError(err)
+	s.Equal(s.output(want), s.output(got))
+}

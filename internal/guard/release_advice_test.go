@@ -86,7 +86,7 @@ func TestReleaseAdviceSuite(t *testing.T) {
 
 func (s *ReleaseAdviceSuite) TestTheMarkerIsPerLeaseNotPerSession() {
 	rows := fixture.FleetLeases()
-	rows[1].State, rows[1].WritePaths, rows[1].DenyPaths = types.StateRunning, rows[0].WritePaths, nil
+	rows[1].State, rows[1].Paths.Write, rows[1].Paths.Deny = types.StateRunning, rows[0].Paths.Write, nil
 	ctx, _ := fleetFixture(s.T(), rows...)
 	fileReleaseRequest(s.T(), ctx, "lease-a")
 	fileReleaseRequest(s.T(), ctx, "lease-b")
@@ -131,7 +131,7 @@ func (s *ReleaseAdviceSuite) TestALeasedCallOpensNoSessionFile() {
 
 func (s *ReleaseAdviceSuite) TestAGrantedHoldNamesTheForkAndWhatIsLeft() {
 	row := fixture.FleetLeases()[0]
-	row.WritePaths = []string{"internal/ledger/store.go", "internal/ledger/store.go#Open"}
+	row.Paths.Write = []string{"internal/ledger/store.go", "internal/ledger/store.go#Open"}
 	row.Releases = []types.JobRelease{{Path: "internal/ledger/store.go", Narrowed: true, TakenBy: "lease-b"}}
 	s.Equal("magus workspace: lease lease-a now holds part of a file by declaration.\n"+
 		"internal/ledger/store.go: fork lease-b was granted declarations you had not touched; you hold it by internal/ledger/store.go#Open\n"+
@@ -140,7 +140,7 @@ func (s *ReleaseAdviceSuite) TestAGrantedHoldNamesTheForkAndWhatIsLeft() {
 
 func (s *ReleaseAdviceSuite) TestAGrantedHoldWithNoClaimSaysSo() {
 	row := fixture.FleetLeases()[0]
-	row.WritePaths = []string{"internal/ledger/store.go"}
+	row.Paths.Write = []string{"internal/ledger/store.go"}
 	row.Releases = []types.JobRelease{{Path: "internal/ledger/store.go", Narrowed: true, TakenBy: "lease-b"}}
 	s.Contains(adviseLeaseNarrowed(row).Say, "you hold it by no declaration yet")
 }

@@ -75,7 +75,7 @@ func run(pass *analysis.Pass, opts Options, changes changeSource) error {
 		}
 		before, err := baseCounts(base)
 		if err != nil {
-			return fmt.Errorf("blankerror: base %s: %w", name, err)
+			return fmt.Errorf("counting blank errors at the base of %s: %w", name, err)
 		}
 		checkFile(pass, opts, f, changed, before, changes.Rev())
 	}

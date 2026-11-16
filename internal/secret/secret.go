@@ -736,9 +736,9 @@ func redactValue(r *Resolver, v slog.Value) slog.Value {
 // An attr key in this codebase is a compile-time constant naming a field, and the default
 // renderer reads several of them back by exact name (internal/cache/log.go pulls
 // "project", "label", "ref", "holder_pid"). Masking a key cannot fail loudly; it silently
-// renders a run with no repro command and no output ref. Since no call site builds a key
-// from a resolved secret, redacting keys would trade a real contract for a hypothetical.
-// If one ever does, the fix is that call site, not this function.
+// renders a run with no repro command and no output ref.
+// A call site that builds a key from script data redacts it there.
+// magus\log fields pass theirs through [RedactString].
 func redactAttrs(r *Resolver, as []slog.Attr) []slog.Attr {
 	out := make([]slog.Attr, len(as))
 	for i, a := range as {

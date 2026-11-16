@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 func commandFunc(name, params string) types.KnowledgeSymbol {
@@ -31,7 +32,7 @@ func TestConformanceFindsParameterOrderDrift(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
 
-	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(diff.CheckParamOrder,
+	assert.Equal(t, map[string][]check.Check{symID(subj): {advice(diff.CheckParamOrder,
 		"`jobWatchFiles` takes `out` before `root`; 5 of 5 functions in its scope that take both take `root` first",
 		"`root` first: applyDoctorFixes, checkpointCmd, notifyCmd",
 	)}}, got)
@@ -50,7 +51,7 @@ func TestConformanceFindsParameterOrderDriftInTypeScript(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj)})
 
-	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(diff.CheckParamOrder,
+	assert.Equal(t, map[string][]check.Check{symID(subj): {advice(diff.CheckParamOrder,
 		"`drawBadge` takes `row` before `host`; 5 of 5 functions in its scope that take both take `host` first",
 		"`host` first: drawFold, drawGutter, drawHunk",
 	)}}, got)

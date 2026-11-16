@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -102,7 +103,7 @@ func claimFixture(t *testing.T, extra ...types.Job) (context.Context, string) {
 
 func claimLease(id string, paths ...string) types.Job {
 	return types.Job{
-		ID: id, Criteria: "work on " + id, WritePaths: paths, State: types.StateRunning,
+		ID: id, Agent: agent.Instructed("work on " + id), Paths: types.JobPaths{Write: paths}, State: types.StateRunning,
 		Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
 	}
 }
@@ -205,7 +206,7 @@ magus\project({
 // its claims, in a git checkout under the buzz and golang drivers.
 type narrowedHoldSuite struct {
 	suite.Suite
-	ctx  context.Context
+	ctx  func() context.Context // a func: containedctx flags a struct holding a Context
 	root string
 }
 
@@ -216,7 +217,7 @@ func TestNarrowedHold(t *testing.T) { suite.Run(t, new(narrowedHoldSuite)) }
 func narrowedLease(id, file string, decls ...string) types.Job {
 	row := claimLease(id, file)
 	for _, d := range decls {
-		row.WritePaths = append(row.WritePaths, fmt.Sprintf("%s#%s", file, d))
+		row.Paths.Write = append(row.Paths.Write, fmt.Sprintf("%s#%s", file, d))
 	}
 	return row
 }
@@ -230,7 +231,8 @@ func narrowSeeded(ctx context.Context, t *testing.T, root, id, file string) {
 }
 
 func (s *narrowedHoldSuite) start(leases ...types.Job) {
-	s.ctx, s.root = fleetFixture(s.T(), leases...)
+	ctx, root := fleetFixture(s.T(), leases...)
+	s.ctx, s.root = func() context.Context { return ctx }, root
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, ".gitattributes"), []byte("*.buzz diff=buzz\n*.go diff=golang\n"), 0o644))
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magusfile.buzz"), []byte(claimedMagusfile), 0o644))
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "run.go"), []byte(claimedGo), 0o644))
@@ -242,13 +244,13 @@ func (s *narrowedHoldSuite) start(leases ...types.Job) {
 }
 
 func (s *narrowedHoldSuite) row(id string) types.Job {
-	rows, err := leaseRows(s.ctx, hookLocation(s.ctx, Dependencies{}))
+	rows, err := leaseRows(s.ctx(), hookLocation(s.ctx(), Dependencies{}))
 	s.Require().NoError(err)
 	return rows[slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })]
 }
 
 func (s *narrowedHoldSuite) write(lease, file string, fields writeFields) writeGrade {
-	return gradeLeasedEdit(s.ctx, Dependencies{}, lease, filepath.Join(s.root, file), fields)
+	return gradeLeasedEdit(s.ctx(), Dependencies{}, lease, filepath.Join(s.root, file), fields)
 }
 
 // A lease holding every Buzz file by a pattern narrows its hold on the magusfile to the keys
@@ -266,7 +268,7 @@ func (s *narrowedHoldSuite) TestAPatternHoldNarrowsOnFirstWrite() {
 	s.Require().Equal("advise", got.Decision, got.Reason)
 	s.Contains(got.Context, `lease cfg now holds magusfile.buzz by "magusfile.buzz#project.targets.test"`)
 	cfg := s.row("cfg")
-	s.Equal([]string{"**/*.buzz", "magusfile.buzz#project.targets.test"}, cfg.WritePaths)
+	s.Equal([]string{"**/*.buzz", "magusfile.buzz#project.targets.test"}, cfg.Paths.Write)
 	s.Require().Len(cfg.Releases, 1)
 	s.Equal("magusfile.buzz", cfg.Releases[0].Path)
 	s.True(cfg.Releases[0].Narrowed)
@@ -276,7 +278,7 @@ func (s *narrowedHoldSuite) TestAPatternHoldNarrowsOnFirstWrite() {
 	s.Equal("deny", s.write("cfg", "magusfile.buzz", name).Decision, "a key another lease claims")
 	s.Equal("deny", s.write("keys", "magusfile.buzz", timeout).Decision, "the holder's new claim is graded")
 	s.Empty(s.write("keys", "magusfile.buzz", name).Decision)
-	s.Len(s.row("cfg").WritePaths, 2, "a denied write narrows nothing")
+	s.Len(s.row("cfg").Paths.Write, 2, "a denied write narrows nothing")
 }
 
 func (s *narrowedHoldSuite) TestAPatternHoldOnAnyPlacedFileNarrows() {
@@ -285,37 +287,37 @@ func (s *narrowedHoldSuite) TestAPatternHoldOnAnyPlacedFileNarrows() {
 	got := s.write("code", "run.go", writeFields{OldText: "c()", NewText: "c2()"})
 	s.Require().Equal("advise", got.Decision, got.Reason)
 	s.Contains(got.Context, `lease code now holds run.go by "run.go#C"`)
-	s.Equal([]string{"*.go", "run.go#C"}, s.row("code").WritePaths)
+	s.Equal([]string{"*.go", "run.go#C"}, s.row("code").Paths.Write)
 }
 
 func (s *narrowedHoldSuite) TestANarrowedLiteralEntryGrowsOnWrite() {
 	s.start(narrowedLease("lit", "run.go", "B"), claimLease("own-a", "run.go#A"))
-	narrowSeeded(s.ctx, s.T(), s.root, "lit", "run.go")
+	narrowSeeded(s.ctx(), s.T(), s.root, "lit", "run.go")
 
 	got := s.write("lit", "run.go", writeFields{OldText: "c()", NewText: "c2()"})
 	s.Require().Equal("advise", got.Decision, got.Reason)
 	s.Contains(got.Context, `lease lit's hold on run.go grew by "run.go#C"; it now holds the file by "run.go#B", "run.go#C"`)
-	s.Equal([]string{"run.go", "run.go#B", "run.go#C"}, s.row("lit").WritePaths, "the entry stays")
+	s.Equal([]string{"run.go", "run.go#B", "run.go#C"}, s.row("lit").Paths.Write, "the entry stays")
 
 	s.Empty(s.write("lit", "run.go", writeFields{OldText: "b()", NewText: "b2()"}).Decision, "a write inside its claims grows nothing")
 	s.Equal("deny", s.write("lit", "run.go", writeFields{OldText: "a()", NewText: "a2()"}).Decision, "a declaration another lease claims")
-	s.Len(s.row("lit").WritePaths, 3, "a denied write grows nothing")
+	s.Len(s.row("lit").Paths.Write, 3, "a denied write grows nothing")
 }
 
 func (s *narrowedHoldSuite) TestANarrowedHoldWithNoClaimYetIsDeniedAnotherJobsDeclaration() {
 	s.start(narrowedLease("lit", "run.go"), claimLease("own-a", "run.go#A"))
-	narrowSeeded(s.ctx, s.T(), s.root, "lit", "run.go")
+	narrowSeeded(s.ctx(), s.T(), s.root, "lit", "run.go")
 
 	got := s.write("lit", "run.go", writeFields{OldText: "a()", NewText: "a2()"})
-	s.Equal("deny", got.Decision, got.Reason)
-	s.Equal(string(denyRuleClaimedDeclaration), got.Rule)
+	s.Equal(writeGrade{Decision: "deny", Rule: string(denyRuleClaimedDeclaration)},
+		writeGrade{Decision: got.Decision, Rule: got.Rule}, got.Reason)
 }
 
 func (s *narrowedHoldSuite) TestALiteralEntryNobodyNarrowedStaysWhole() {
 	s.start(claimLease("lit", "run.go"))
 
 	s.Empty(s.write("lit", "run.go", writeFields{OldText: "c()", NewText: "c2()"}).Decision)
-	s.Equal([]string{"run.go"}, s.row("lit").WritePaths)
+	s.Equal([]string{"run.go"}, s.row("lit").Paths.Write)
 }
 
 const siblingKeysMagusfile = `import "magus";

@@ -10,13 +10,14 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 const mb = int64(1) << 20
 
 func TestHistoryUnreadableCheckNamesTheRebuildForANewerHistory(t *testing.T) {
 	skew := historyUnreadableCheck("memory-declarations", &forecast.UnsupportedVersionError{Have: 9, Max: 8, Path: "h"})
-	assert.Equal(t, types.CheckAdvice, skew.Status)
+	assert.Equal(t, check.Advice, skew.Status)
 	assert.Contains(t, skew.Message, "version 9")
 	assert.Contains(t, skew.Fix, "build")
 
@@ -89,7 +90,7 @@ func TestMemoryDeclarationsReportsUnderDeclaration(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {MemoryMB: 2048}}),
 	})
 
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Equal(t, check.Advice, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "declares 2048MB and reached at least 9000MB")
 }
@@ -104,7 +105,7 @@ func TestMemoryDeclarationsNeverReportsOverDeclaration(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {MemoryMB: 10240}}),
 	})
 
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.Empty(t, got.Details)
 }
 
@@ -112,7 +113,7 @@ func TestMemoryDeclarationsNeverReportsOverDeclaration(t *testing.T) {
 // declaration only when those peaks spread by more than a quarter. A failed
 // run's early death is no spread: a claim is never sized from it.
 func TestMemoryDeclarationsReportsAnUnstableUndeclaredTarget(t *testing.T) {
-	check := func(outcomes ...forecast.Outcome) types.Check {
+	grade := func(outcomes ...forecast.Outcome) check.Check {
 		h := forecast.History{
 			Version:  forecast.HistoryVersion,
 			Projects: map[string]map[string]forecast.Stats{"console": {"typescript/test": {RecentOutcomes: outcomes}}},
@@ -123,13 +124,13 @@ func TestMemoryDeclarationsReportsAnUnstableUndeclaredTarget(t *testing.T) {
 		return forecast.Outcome{Result: result, MaxRSSBytes: peakMB * mb}
 	}
 
-	got := check(run(forecast.OutcomePass, 2900), run(forecast.OutcomePass, 5312), run(forecast.OutcomeVolatile, 4000))
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	got := grade(run(forecast.OutcomePass, 2900), run(forecast.OutcomePass, 5312), run(forecast.OutcomeVolatile, 4000))
+	assert.Equal(t, check.Advice, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "declares no memory_mb and its passing runs reached from 2900MB to 5312MB; a claim measured from them is their highest peak")
 
-	got = check(run(forecast.OutcomePass, 5000), run(forecast.OutcomePass, 5312), run(forecast.OutcomeFail, 900))
-	assert.Equal(t, types.CheckOK, got.Status, "a stable heavy target is sized from its runs")
+	got = grade(run(forecast.OutcomePass, 5000), run(forecast.OutcomePass, 5312), run(forecast.OutcomeFail, 900))
+	assert.Equal(t, check.OK, got.Status, "a stable heavy target is sized from its runs")
 	assert.Empty(t, got.Details)
 }
 
@@ -154,7 +155,7 @@ func TestMemoryDeclarationsStaysQuiet(t *testing.T) {
 			got := newRunner(path).checkMemoryDeclarations(t.Context(), []*types.Project{
 				projectWith(".", map[string]types.Target{"test": {MemoryMB: tc.declared}}),
 			})
-			assert.Equal(t, types.CheckOK, got.Status)
+			assert.Equal(t, check.OK, got.Status)
 			assert.Empty(t, got.Details)
 		})
 	}
@@ -181,7 +182,7 @@ func TestMemoryDeclarationsSaysWhenNothingHasRun(t *testing.T) {
 	got := newRunner(filepath.Join(t.TempDir(), "absent.json")).
 		checkMemoryDeclarations(t.Context(), []*types.Project{projectWith(".", nil)})
 
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.Contains(t, got.Message, "nothing to compare")
 }
 

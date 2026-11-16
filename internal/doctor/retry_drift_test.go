@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // retryHistoryWith writes a history whose outcomes for one "<spell>/<target>" key carry
@@ -40,7 +41,7 @@ func TestRetryDeclarationsReportsRetriesThatRescueNothing(t *testing.T) {
 		}),
 	})
 
-	assert.Equal(t, types.CheckAdvice, got.Status)
+	assert.Equal(t, check.Advice, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "retried 4 recorded failure(s) and rescued none")
 	assert.Contains(t, got.Details[0], "the suite shares a port with the dev server",
@@ -56,7 +57,7 @@ func TestRetryDeclarationsIsQuietWhenARetryRescuedARun(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {RetryOnVolatile: true}}),
 	})
 
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.Empty(t, got.Details)
 }
 
@@ -67,7 +68,7 @@ func TestRetryDeclarationsWaitsForEnoughRetries(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {RetryOnVolatile: true}}),
 	})
 
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.Empty(t, got.Details)
 }
 
@@ -84,7 +85,7 @@ func TestRetryDeclarationsIgnoresFailuresThatWereNeverRetried(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {RetryOnVolatile: true}}),
 	})
 
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.Empty(t, got.Details)
 }
 
@@ -95,6 +96,6 @@ func TestRetryDeclarationsIsQuietWithoutADeclaration(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {}}),
 	})
 
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.Contains(t, got.Message, "no target declares retry_on_volatile")
 }

@@ -6,10 +6,10 @@
 // `go generate`, never this file.
 
 export object QueueRunOrigin {
-    repo: str = "",
-    headRepo: str = "",
-    headBranch: str = "",
-    event: str = "",
-    branchEvent: bool = false,
-    definition: str = "",
+    repo: str,
+    headRepo: str,
+    headBranch: str,
+    event: str,
+    branchEvent: bool,
+    definition: str,
 }

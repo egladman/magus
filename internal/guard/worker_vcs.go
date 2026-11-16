@@ -620,7 +620,7 @@ func directoryLandings(command string, d Dialect, start, home, checkout string, 
 		}
 		rel, inside := workspaceRelative(checkout, dest)
 		info, err := os.Lstat(source)
-		if !inside || err != nil || !info.IsDir() || !holdsDeclaredPath(me.WritePaths, rel) {
+		if !inside || err != nil || !info.IsDir() || !holdsDeclaredPath(me.Paths.Write, rel) {
 			continue
 		}
 		if _, err := os.Lstat(dest); err == nil {
@@ -647,8 +647,8 @@ func firstUnwritableLanding(source, rel string, me types.Job) string {
 			return err
 		}
 		landing := path.Join(rel, filepath.ToSlash(under))
-		_, denied, errDeny := declarationCovering(me.DenyPaths, landing)
-		_, mine, errMine := declarationCovering(me.WritePaths, landing)
+		_, denied, errDeny := declarationCovering(me.Paths.Deny, landing)
+		_, mine, errMine := declarationCovering(me.Paths.Write, landing)
 		if errDeny != nil || errMine != nil || denied || !mine {
 			outside = landing
 			return filepath.SkipAll

@@ -17,7 +17,7 @@ export object Conformance {
 }
 
 export final POLICY = Conformance{
-    checks = ["file-lines", "func-lines", "clone-tokens", "export-scope", "dep-fanout", "main-logic", "store-path-export", "file-split"],
+    checks = ["file-lines", "func-lines", "clone-tokens", "export-scope", "imported-packages", "main-logic", "store-path-export", "file-split"],
 };
 
 test "a metric in checks is held and any other is advice" {

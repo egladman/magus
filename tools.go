@@ -25,7 +25,7 @@ func (m *Magus) Tools(ctx context.Context, projects ...string) (types.ToolReport
 		err error
 	}
 	memo := map[string]reading{}
-	var rows []types.ToolRow
+	var tools []types.ToolStatus
 	for _, p := range m.ws.All() {
 		if len(projects) > 0 && !slices.Contains(projects, p.Path) {
 			continue
@@ -47,43 +47,45 @@ func (m *Magus) Tools(ctx context.Context, projects ...string) (types.ToolReport
 					r.raw, r.err = sp.ProbeVersion(ctx, bin, p.Dir)
 					memo[k] = r
 				}
-				rows = append(rows, buildToolRow(p.Path, bin, sp.Name(), t, p.ToolBounds[bin], r.raw, r.err))
+				tools = append(tools, buildToolStatus(p.Path, bin, sp.Name(), t, p.ToolBounds[bin], r.raw, r.err))
 			}
 		}
 	}
-	status, lifecycles, err := m.Lifecycles(ctx, rows...)
+	status, lifecycles, err := m.Lifecycles(ctx, tools...)
 	if err != nil {
 		return types.ToolReport{}, err
 	}
 	now := time.Now()
-	for i := range rows {
-		joinLifecycle(&rows[i], status.State, lifecycles, now)
+	for i := range tools {
+		joinLifecycle(&tools[i], status.State, lifecycles, now)
 	}
-	sortToolRows(rows)
+	sortToolStatuses(tools)
 	return types.ToolReport{
 		Definition: types.ToolDefinition,
 		Workspace:  m.ws.Root,
-		Count:      len(rows),
+		Count:      len(tools),
 		Lifecycle:  status,
-		Tools:      rows,
+		Tools:      tools,
 	}, nil
 }
 
-// sortToolRows orders by project, bin, then spell. Spell is the third key, not decoration:
+// sortToolStatuses orders by project, bin, then spell.
+// Spell is the third key, not decoration:
 // two spells in one project can declare the same bin, and without it their order is
 // whatever pdqsort happened to do.
-func sortToolRows(rows []types.ToolRow) {
-	slices.SortFunc(rows, func(a, b types.ToolRow) int {
+func sortToolStatuses(statuses []types.ToolStatus) {
+	slices.SortFunc(statuses, func(a, b types.ToolStatus) int {
 		return cmp.Or(cmp.Compare(a.Project, b.Project), cmp.Compare(a.Bin, b.Bin), cmp.Compare(a.Spell, b.Spell))
 	})
 }
 
-// buildToolRow turns one probe outcome into a row. Pure (no context, no exec) because
+// buildToolStatus turns one probe outcome into a status.
+// Pure (no context, no exec) because
 // welding this state machine inside the fork loop is what let four distinct outcomes
 // collapse into one blank "not found".
-func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.VersionBounds, raw string, probeErr error) types.ToolRow {
+func buildToolStatus(project, bin, spell string, t spells.Tool, projBounds spells.VersionBounds, raw string, probeErr error) types.ToolStatus {
 	window := t.Supported.Intersect(projBounds)
-	row := types.ToolRow{
+	row := types.ToolStatus{
 		Project: project, Bin: bin, Spell: spell,
 		SpellBounds:     t.Supported.Window(),
 		WorkspaceBounds: projBounds.Window(),
@@ -122,7 +124,7 @@ func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.V
 // whose spell names no product, or a workspace that wires no provider, keeps the columns
 // empty; everything else the answer cannot place reads unknown, and the report's
 // lifecycle state says why.
-func joinLifecycle(row *types.ToolRow, state string, lifecycles []spells.Lifecycle, now time.Time) {
+func joinLifecycle(row *types.ToolStatus, state string, lifecycles []spells.Lifecycle, now time.Time) {
 	if row.Lifecycle == "" || state == types.LifecycleUnwired {
 		return
 	}

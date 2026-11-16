@@ -6,7 +6,7 @@ import "magus/figure";
 export fun configLoadFigure() > figure\Figure !> any {
     final config = magus\graph().dir("internal/config");
     final gen = magus\graph().dir("internal/config/gen");
-    final cfgen = magus\graph().dir("internal/config/generate");
+    final cfgen = magus\graph().dir("libs/clikit/generate");
     final httpx = magus\graph().dir("internal/httpx");
     final endpoint = magus\graph().dir("internal/proc/endpoint");
     final ward = magus\graph().dir("internal/ward");

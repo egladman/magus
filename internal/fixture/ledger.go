@@ -7,6 +7,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,10 +26,13 @@ func StateBase(tb testing.TB) string {
 // test off the developer's own ledger. A lease with no validated stamp gets one, as a fork
 // would give it, so a titled spawn of it is not refused as unvalidated. It returns the
 // workspace root, then the cache dir the store lives under.
+//
+// The root is a git repository, so each fork records the authority ADR 0045 has
+// the guard require of a leased call.
 func SeedLeases(tb testing.TB, leases ...types.Job) (root, cacheDir string) {
 	tb.Helper()
 	testkit.Isolate(tb)
-	root, cacheDir = tb.TempDir(), tb.TempDir()
+	root, cacheDir = testkit.NewRepository(tb, nil).Root(), tb.TempDir()
 	store := job.NewStore(job.Location{CacheDir: cacheDir, StateBase: StateBase(tb), Root: root})
 	for _, lease := range leases {
 		if lease.Validated == 0 {
@@ -51,8 +55,8 @@ func FleetLeases() []types.Job {
 	return []types.Job{
 		{
 			ID:           "lease-a",
-			Criteria:     "own the ledger store\nacceptance: List stays cheap",
-			WritePaths:   []string{"internal/ledger/**"},
+			Agent:        agent.Instructed("own the ledger store\nacceptance: List stays cheap"),
+			Paths:        types.JobPaths{Write: []string{"internal/ledger/**"}},
 			State:        types.StateRunning,
 			Checkpoint:   "rev-a",
 			ReportedBase: "rev-a",
@@ -60,10 +64,12 @@ func FleetLeases() []types.Job {
 			Registered:   1,
 		},
 		{
-			ID:           "lease-b",
-			Criteria:     "grade writes in the guard",
-			WritePaths:   []string{"cmd/magus/**", "docs/guard.md"},
-			DenyPaths:    []string{"cmd/magus/gen/**"},
+			ID:    "lease-b",
+			Agent: agent.Instructed("grade writes in the guard"),
+			Paths: types.JobPaths{
+				Write: []string{"cmd/magus/**", "docs/guard.md"},
+				Deny:  []string{"cmd/magus/gen/**"},
+			},
 			State:        types.StateDeclared,
 			Checkpoint:   "rev-a",
 			ReportedBase: "rev-a",

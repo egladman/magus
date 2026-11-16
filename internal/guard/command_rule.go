@@ -90,7 +90,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types
 		}
 	}
 	asked := askWorkspaceRules(ctx, seamCommand, deps, resolve, bind(deps.CommandRule))
-	denied := asked.denyShort(func() judgedCall { return commandCall(ctx, in, at) }, at)
+	denied := asked.denyShort(ctx, func() judgedCall { return commandCall(ctx, in, at) }, at)
 	if in.preauth != "" && asked.answer.Decision != types.GuardDeny {
 		return verdict, workspaceRuleRecord{failures: asked.failures}
 	}
@@ -107,7 +107,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict types
 	}
 	note := ruleFailureNote(ruleFailureReport{
 		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamCommand, failures: asked.failures, answered: asked.answered, toldInFull: asked.lapse != nil,
-		judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, in.lease) },
+		judging: func() string { return judgingBinaryNote(ctx, deps, at, asked.loadFailure, in.lease) },
 		lead:    loadFailureLead(deps.LoadFailure, at.workspace),
 	})
 	return applyRuleFailureNote(verdict, note, advisoryCommandRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}

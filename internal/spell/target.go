@@ -300,7 +300,7 @@ var (
 
 // The harness contract's records (types/harness_contract.go): what a harness spell's mgs_
 // functions return and the ShippedAgent mgs_renderAgents takes. Each file carries the enum
-// its fields name; ModelRow follows Price and PriceStep, and HarnessTools HarnessTool.
+// its fields name; HarnessModel follows Price and PriceStep, and HarnessTools HarnessTool.
 //
 //go:generate go run ../../cmd/magus-utils types -type HarnessConfig -out gen/types/harnessconfig.buzz
 //go:generate go run ../../cmd/magus-utils types -type HarnessAsset -out gen/types/harnessasset.buzz
@@ -312,7 +312,7 @@ var (
 //go:generate go run ../../cmd/magus-utils types -type McpServer -out gen/types/mcpserver.buzz
 //go:generate go run ../../cmd/magus-utils types -type Price -out gen/types/price.buzz
 //go:generate go run ../../cmd/magus-utils types -type PriceStep -out gen/types/pricestep.buzz
-//go:generate go run ../../cmd/magus-utils types -type ModelRow -out gen/types/modelrow.buzz
+//go:generate go run ../../cmd/magus-utils types -type HarnessModel -out gen/types/harnessmodel.buzz
 //go:generate go run ../../cmd/magus-utils types -type HarnessTool -out gen/types/harnesstool.buzz
 //go:generate go run ../../cmd/magus-utils types -type HarnessTools -out gen/types/harnesstools.buzz
 //go:generate go run ../../cmd/magus-utils types -type AgentFile -out gen/types/agentfile.buzz
@@ -341,8 +341,8 @@ var (
 	priceSource string
 	//go:embed gen/types/pricestep.buzz
 	priceStepSource string
-	//go:embed gen/types/modelrow.buzz
-	modelRowSource string
+	//go:embed gen/types/harnessmodel.buzz
+	harnessModelSource string
 	//go:embed gen/types/harnesstool.buzz
 	harnessToolSource string
 	//go:embed gen/types/harnesstools.buzz
@@ -408,5 +408,5 @@ var SpellModuleSource = strings.Join([]string{pathSource, targetModuleSource, pa
 	reviewTargetSource, reviewCommentSource, projectQuerySource,
 	listPullsRequestSource, rateLimitSource, forgeCheckSource, baseCommitSource, baseBranchSource, forgePullSource, pullListSource,
 	harnessConfigSource, harnessAssetSource, harnessSource, harnessSkillsSource, hookCommandSource, hookBindingSource, managedEntriesSource, mcpServerSource,
-	priceSource, priceStepSource, modelRowSource, harnessToolSource, harnessToolsSource,
+	priceSource, priceStepSource, harnessModelSource, harnessToolSource, harnessToolsSource,
 	agentFileSource, promptSource, settingSource, limitsSource, shippedAgentSource}, "\n")

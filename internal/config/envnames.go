@@ -5,26 +5,10 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
-
-// EnvName returns the env var name: parts joined with "_", uppercased, prefixed with prefix+"_" when non-empty.
-func EnvName(prefix string, parts ...string) string {
-	body := strings.Join(parts, "_")
-	if prefix != "" {
-		body = fmt.Sprintf("%s_%s", prefix, body)
-	}
-	body = strings.ReplaceAll(body, "-", "_")
-	return strings.ToUpper(body)
-}
-
-// FlagName returns the CLI flag name: parts joined with "-" with "_" replaced by "-".
-func FlagName(parts ...string) string {
-	return strings.ReplaceAll(strings.Join(parts, "-"), "_", "-")
-}
 
 const envPrefix = "MAGUS_"
 
@@ -46,34 +30,13 @@ func Offline() bool {
 // against a parent it cannot adopt anyway.
 var inheritedEnv = map[string]bool{"MAGUS_DAEMON_SOCKET": true}
 
-var registeredEnv = sync.OnceValue(func() map[string]bool {
-	docs := EnvVars()
-	out := make(map[string]bool, len(docs))
-	for _, d := range docs {
-		out[d.Name] = true
-	}
-	return out
-})
-
-// registeredSuffixes are the registered names without the prefix, sorted so a tie in
-// distance resolves the same way every run.
-var registeredSuffixes = sync.OnceValue(func() []string {
-	out := make([]string, 0, len(registeredEnv()))
-	for name := range registeredEnv() {
-		if !strings.Contains(name, "<") {
-			out = append(out, strings.TrimPrefix(name, envPrefix))
-		}
-	}
-	slices.Sort(out)
-	return out
-})
-
-// KnownEnvVar reports whether magus reads name from its environment: a variable
-// EnvVars registers, a per-VCS MAGUS_VCS_<NAME>_BASE_REF override, or one an older
-// magus parent passes down. A retired variable is not known. An unknown name is not
-// necessarily wrong (see EnvVarProblem); doctor reports every one.
+// KnownEnvVar reports whether magus reads name from its environment: a
+// variable Spec lists, a per-VCS MAGUS_VCS_<NAME>_BASE_REF override,
+// or one an older magus parent passes down. A retired variable is not known.
+// An unknown name is not necessarily wrong (see EnvVarProblem); doctor
+// reports every one.
 func KnownEnvVar(name string) bool {
-	if registeredEnv()[name] || inheritedEnv[name] {
+	if _, ok := Spec.Variable(name); ok || inheritedEnv[name] {
 		return true
 	}
 	vcsName, ok := strings.CutPrefix(name, "MAGUS_VCS_")
@@ -117,8 +80,13 @@ func nearestRegistered(suffix string) string {
 		budget = 2
 	}
 	best, bestDist := "", budget+1
-	for _, known := range registeredSuffixes() {
-		if d := hint.Distance(suffix, known); d < bestDist {
+	for _, s := range Spec.Settings {
+		known, ok := strings.CutPrefix(s.EnvVar, envPrefix)
+		if !ok || strings.Contains(known, "<") {
+			continue
+		}
+		// The smaller name wins a tie, so the answer is the same every run.
+		if d := hint.Distance(suffix, known); d < bestDist || d == bestDist && known < best {
 			best, bestDist = known, d
 		}
 	}

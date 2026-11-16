@@ -18,7 +18,8 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -41,7 +42,7 @@ func configMCPCommand(args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Run `magus config mcp <subcommand> -h` for flags.")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	rest := fs.Args()
@@ -85,7 +86,7 @@ func configMCPConnector(args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Run `magus config mcp connector <subcommand> -h` for flags.")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	rest := fs.Args()
@@ -127,7 +128,7 @@ func configMCPConnectorCreate(args []string) error {
 		fmt.Fprintln(os.Stderr, "Flags:")
 		printOwnDefaults(fs)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 
@@ -225,7 +226,7 @@ func tokenRevoke(cmd string, args []string) error {
 		fmt.Fprintln(os.Stderr, "Delete a stored token by its exact 8-hex id or its exact name. The server stops")
 		fmt.Fprintln(os.Stderr, "accepting it at once, open streams included.")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	rest := fs.Args()

@@ -1,12 +1,12 @@
 package commands
 
-import "github.com/egladman/magus/libs/cmdline"
+import "github.com/egladman/magus/libs/clikit/command"
 
 // selfCompletionCommand and selfManCommand live outside the build-tagged self
 // pages because neither depends on the updater.
-var selfCompletionCommand = cmdline.Command{
+var selfCompletionCommand = command.Command{
 	Name:               "completion",
-	Effect:             cmdline.EffectRead,
+	Effect:             command.EffectRead,
 	UnstructuredOutput: true, // stdout is the shell script
 	Short:              "Print a shell completion script",
 	Long: `Print a shell completion script to stdout. Every script registers both
@@ -32,7 +32,7 @@ Install differs per shell, and zsh is the one that bites:
   powershell  append it to $PROFILE. pwsh is accepted as an alias, for the
               cross-platform PowerShell binary's own name.`,
 	Usage: "magus self completion <bash|zsh|fish|powershell>",
-	Examples: []cmdline.Example{
+	Examples: []command.Example{
 		{Comment: "Bash: source from the rc, never goes stale", Command: `echo 'source <(magus self completion bash)' >> ~/.bashrc`},
 		{Comment: "Zsh: install onto $fpath (not into ~/.zshrc)", Command: "magus self completion zsh > ~/.zsh/completions/_magus"},
 		{Comment: "Fish", Command: "magus self completion fish > ~/.config/fish/completions/magus.fish"},
@@ -40,18 +40,18 @@ Install differs per shell, and zsh is the one that bites:
 	},
 }
 
-var selfManCommand = cmdline.Command{
+var selfManCommand = command.Command{
 	Name:   "man",
-	Effect: cmdline.EffectLocalWrite,
+	Effect: command.EffectLocalWrite,
 	Short:  "Install the section 1 man pages embedded in this binary",
 	Long: `Write the complete magus manpage set carried by this binary. The installer
 uses this command to place the pages under the selected installation prefix.`,
 	Usage: "magus self man [--dir <path>] [--dry-run]",
-	Flags: []cmdline.Flag{
-		{Name: "dir", Kind: cmdline.String, Doc: "Directory for section 1 man pages (default: the user manpath)"},
-		{Name: "dry-run", Kind: cmdline.Bool, Effect: cmdline.EffectRead, Default: false, Doc: "Print what would be written without touching the filesystem"},
+	Flags: []command.Flag{
+		{Name: "dir", Kind: command.String, Doc: "Directory for section 1 man pages (default: the user manpath)"},
+		{Name: "dry-run", Kind: command.Bool, Effect: command.EffectRead, Default: false, Doc: "Print what would be written without touching the filesystem"},
 	},
-	Examples: []cmdline.Example{
+	Examples: []command.Example{
 		{Comment: "Install to the default user manpath", Command: "magus self man"},
 		{Comment: "Install to a custom prefix", Command: "magus self man --dir ~/.local/share/man/man1"},
 	},

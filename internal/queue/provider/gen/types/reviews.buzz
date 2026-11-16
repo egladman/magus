@@ -6,6 +6,6 @@
 // `go generate`, never this file.
 
 export object QueueReviews {
-    head: str = "",
-    approving: [QueueReview] = [],
+    head: str,
+    approving: [QueueReview],
 }

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/vcs"
 )
 
 // KindCheckpoint is the fact a session writes when it stops with work unfinished.
@@ -24,10 +24,10 @@ const KindCheckpoint = "checkpoint"
 // meant a session id passed by hand, a guessed transcript location, and three failed
 // commands before it emerged that the commits were unreachable.
 //
-// It is the same noun [types.VCSCheckpoint] names, kept rather than computed: `magus vcs
-// checkpoint` works one out and prints it, this records one and keeps it. What makes a
-// checkpoint worth keeping is Note, so the position arrives with the reason someone
-// stopped at it.
+// It is the same noun [vcs.Checkpoint] names, kept rather than computed.
+// `magus vcs checkpoint` works one out and prints it, this records one and
+// keeps it. What makes a checkpoint worth keeping is Note, so the position
+// arrives with the reason someone stopped at it.
 //
 // Tree is where the work sits, and its Revision is the field that earns the record. A
 // reader whose checkout cannot resolve it is looking at work that was never pushed,
@@ -42,12 +42,12 @@ const KindCheckpoint = "checkpoint"
 // fill it from a host's payload: a sentence about where the work stands is written by
 // whoever stopped working, or by a wrapper that chose to pass one.
 type Checkpoint struct {
-	Host        string              `json:"host,omitempty"`
-	HostSession string              `json:"host_session,omitempty"`
-	Transcript  string              `json:"transcript,omitempty"`
-	Workspace   string              `json:"workspace,omitempty"`
-	Tree        types.VCSCheckpoint `json:"tree"`
-	Note        string              `json:"note,omitempty"`
+	Host        string         `json:"host,omitempty"`
+	HostSession string         `json:"host_session,omitempty"`
+	Transcript  string         `json:"transcript,omitempty"`
+	Workspace   string         `json:"workspace,omitempty"`
+	Tree        vcs.Checkpoint `json:"tree"`
+	Note        string         `json:"note,omitempty"`
 }
 
 // CheckpointRecord is one checkpoint with the envelope's timestamp resolved, mirroring

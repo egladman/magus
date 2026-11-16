@@ -36,8 +36,8 @@ In the docs:
 - [Choose a skill form deliberately](../guides/integrations/agents/skills.md#choose-a-skill-form-deliberately)
 - [skill-description-budget](../reference/proofread/skill-description-budget.md#skill-description-budget)
 - [skill-set-description-budget](../reference/proofread/skill-set-description-budget.md#skill-set-description-budget)
-- [installed-skill](../reference/rules/installed-skill.md#installed-skill)
-- [skill-source](../reference/rules/skill-source.md#skill-source)
+- [architecture-before-skill](../reference/rules/architecture-before-skill.md#architecture-before-skill)
+- [buzz-before-skill](../reference/rules/buzz-before-skill.md#buzz-before-skill)
 
 In the code (`magus refs <name>` lists every site):
 

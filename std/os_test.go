@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestOsExecTeesToOutputWriters verifies proc.exec sends output through the run's
@@ -957,4 +960,225 @@ func TestProcExecDetachRefusesWhatNothingCouldHonor(t *testing.T) {
 	ctx := sandbox.WithPolicy(t.Context(), &sandbox.Policy{})
 	_, err := ProcExec(ctx, "true", nil, "", types.ExecOptions{Detach: true})
 	assert.ErrorContains(t, err, "sandbox policy")
+}
+
+type RunSeatedSuite struct{ suite.Suite }
+
+func TestRunSeatedSuite(t *testing.T) { suite.Run(t, new(RunSeatedSuite)) }
+
+func seatLabel(i int) string { return fmt.Sprintf("call %d", i) }
+
+// stepHolding is a context whose step holds n slots of a limiter of capacity.
+func (s *RunSeatedSuite) stepHolding(capacity, n int) (context.Context, *cache.Limiter) {
+	lim := cache.NewLimiter(capacity)
+	s.Require().NoError(lim.AcquireN(s.T().Context(), n))
+	s.T().Cleanup(func() { lim.ReleaseN(n) })
+	return cache.WithSlotsHeld(cache.ContextWithLimiter(s.T().Context(), lim), n), lim
+}
+
+// recorder is a run writer a call can watch from inside the batch.
+type recorder struct {
+	mu   sync.Mutex
+	buf  bytes.Buffer
+	seen map[string]chan struct{}
+}
+
+func newRecorder(watch ...string) *recorder {
+	r := &recorder{seen: map[string]chan struct{}{}}
+	for _, w := range watch {
+		r.seen[w] = make(chan struct{})
+	}
+	return r
+}
+
+func (r *recorder) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.buf.Write(p)
+	if ch, ok := r.seen[string(p)]; ok {
+		close(ch)
+		delete(r.seen, string(p))
+	}
+	return len(p), nil
+}
+
+func (r *recorder) String() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.buf.String()
+}
+
+// Call 0 waits until call 1's output reached the console, so a slow call
+// holds back only its own output.
+func (s *RunSeatedSuite) TestOutputReachesTheWritersAsEachCallEnds() {
+	out := newRecorder("1;")
+	wrote := out.seen["1;"]
+	ctx, _ := s.stepHolding(2, 2)
+	errs := runSeated(spawn.WithOutputWriters(ctx, out, out), 2, seatLabel, func(ctx context.Context, i int) error {
+		stdout, _ := spawn.OutputWriters(ctx)
+		if i == 0 {
+			select {
+			case <-wrote:
+			case <-time.After(5 * time.Second):
+				return errors.New("call 1's output was held back")
+			}
+		}
+		_, err := fmt.Fprintf(stdout, "%d;", i)
+		return err
+	})
+	s.Equal([]error{nil, nil}, errs)
+	s.Equal("1;0;", out.String())
+}
+
+func (s *RunSeatedSuite) TestOneCallsOutputIsNotInterleavedWithAnothers() {
+	out := newRecorder()
+	ctx, _ := s.stepHolding(4, 4)
+	runSeated(spawn.WithOutputWriters(ctx, out, out), 4, seatLabel, func(ctx context.Context, i int) error {
+		stdout, _ := spawn.OutputWriters(ctx)
+		for range 3 {
+			_, _ = fmt.Fprintf(stdout, "%d", i)
+		}
+		return nil
+	})
+	got := out.String()
+	s.Len(got, 12)
+	for i := range 4 {
+		s.Contains(got, strings.Repeat(strconv.Itoa(i), 3))
+	}
+}
+
+func (s *RunSeatedSuite) TestStdoutAndStderrKeepTheirStreams() {
+	var out, errw bytes.Buffer
+	ctx, _ := s.stepHolding(1, 1)
+	runSeated(spawn.WithOutputWriters(ctx, &out, &errw), 1, seatLabel, func(ctx context.Context, _ int) error {
+		stdout, stderr := spawn.OutputWriters(ctx)
+		_, _ = fmt.Fprint(stdout, "o")
+		_, _ = fmt.Fprint(stderr, "e")
+		return nil
+	})
+	s.Equal("o", out.String())
+	s.Equal("e", errw.String())
+}
+
+// A call that writes callBlockBytes has its output written before it ends,
+// so buffering stays bounded.
+func (s *RunSeatedSuite) TestAChattyCallsOutputIsWrittenBeforeItEnds() {
+	out := newRecorder()
+	ctx, _ := s.stepHolding(1, 1)
+	var before int
+	runSeated(spawn.WithOutputWriters(ctx, out, out), 1, seatLabel, func(ctx context.Context, _ int) error {
+		stdout, _ := spawn.OutputWriters(ctx)
+		_, _ = stdout.Write(bytes.Repeat([]byte("x"), callBlockBytes))
+		before = len(out.String())
+		_, _ = fmt.Fprint(stdout, "end")
+		return nil
+	})
+	s.Equal(callBlockBytes, before)
+	s.Len(out.String(), callBlockBytes+3)
+}
+
+// Calls wait for their siblings, so a batch any wider than the step's two
+// slots would run three at once.
+func (s *RunSeatedSuite) TestNoMoreRunAtOnceThanTheStepHoldsSlots() {
+	ctx, lim := s.stepHolding(8, 2)
+	var running, peak, arrived atomic.Int32
+	all := make(chan struct{})
+	errs := runSeated(ctx, 3, seatLabel, func(context.Context, int) error {
+		n := running.Add(1)
+		defer running.Add(-1)
+		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
+		}
+		if arrived.Add(1) == 3 {
+			close(all)
+		}
+		select {
+		case <-all:
+		case <-time.After(100 * time.Millisecond):
+		}
+		return nil
+	})
+	s.Equal([]error{nil, nil, nil}, errs)
+	s.Equal(int32(2), peak.Load())
+	s.Equal(2, lim.Snapshot().Running, "the step's slots, never handed back")
+}
+
+func (s *RunSeatedSuite) TestTheStepKeepsItsSlotsWhileItsCallsRun() {
+	ctx, lim := s.stepHolding(2, 2)
+	var during int
+	runSeated(ctx, 1, seatLabel, func(context.Context, int) error {
+		during = lim.Snapshot().Running
+		return nil
+	})
+	s.Equal(2, during)
+}
+
+func (s *RunSeatedSuite) TestEveryCallRunsAndKeepsItsOwnError() {
+	ctx, _ := s.stepHolding(2, 2)
+	var ran atomic.Int32
+	boom := errors.New("boom")
+	errs := runSeated(ctx, 6, seatLabel, func(_ context.Context, i int) error {
+		ran.Add(1)
+		if i == 1 || i == 4 {
+			return boom
+		}
+		return nil
+	})
+	s.Equal(int32(6), ran.Load())
+	s.Equal([]error{nil, boom, nil, nil, boom, nil}, errs)
+}
+
+func (s *RunSeatedSuite) TestACancelledBatchStartsNothingMore() {
+	step, _ := s.stepHolding(1, 1)
+	ctx, cancel := context.WithCancel(step)
+	defer cancel()
+	var ran atomic.Int32
+	errs := runSeated(ctx, 3, seatLabel, func(context.Context, int) error {
+		ran.Add(1)
+		cancel()
+		return nil
+	})
+	s.Equal(int32(1), ran.Load())
+	s.Require().Len(errs, 3)
+	s.Require().NoError(errs[0])
+	s.ErrorIs(errs[1], context.Canceled)
+	s.ErrorContains(errs[1], "call 1: not started")
+	s.ErrorContains(errs[2], "call 2: not started")
+}
+
+func (s *RunSeatedSuite) TestWithNoLimiterTheCallsRunOneAtATime() {
+	s.Equal(1, seatWidth(s.T().Context(), 4))
+}
+
+func (s *RunSeatedSuite) TestACallerHoldingNoSlotRunsTheCallsOneAtATime() {
+	ctx := cache.ContextWithLimiter(s.T().Context(), cache.NewLimiter(8))
+	s.Equal(1, seatWidth(ctx, 4))
+}
+
+func (s *RunSeatedSuite) TestTheWidthIsTheSlotsTheStepHolds() {
+	ctx, _ := s.stepHolding(8, 3)
+	s.Equal(3, seatWidth(ctx, 4))
+}
+
+// BenchmarkRunSeated is 32 processes sleeping 50ms each, on a step holding 8
+// slots and on one holding none, which runs them one at a time.
+func BenchmarkRunSeated(b *testing.B) {
+	sleep := func(ctx context.Context, _ int) error {
+		_, err := spawn.Exec(ctx, "sleep", []string{"0.05"}, spawn.ExecOptions{Quiet: true})
+		return err
+	}
+	b.Run("slots=8", func(b *testing.B) {
+		lim := cache.NewLimiter(8)
+		if err := lim.AcquireN(b.Context(), 8); err != nil {
+			b.Fatal(err)
+		}
+		ctx := cache.WithSlotsHeld(cache.ContextWithLimiter(b.Context(), lim), 8)
+		for b.Loop() {
+			runSeated(ctx, 32, seatLabel, sleep)
+		}
+	})
+	b.Run("serial", func(b *testing.B) {
+		for b.Loop() {
+			runSeated(b.Context(), 32, seatLabel, sleep)
+		}
+	})
 }

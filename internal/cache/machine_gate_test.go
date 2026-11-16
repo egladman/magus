@@ -862,7 +862,9 @@ func (s *BudgetWaitSuite) TestAHolderChangeSaysSoOnce() {
 	s.Require().True(s.b.Request(types.MachineClaim{Project: "web", Target: "lint", MemoryMB: 500, PID: 300}, 0).Granted)
 	s.adm.wake()
 	s.Eventually(func() bool { return s.said("still waiting for a seat for docs ci") }, 5*time.Second, 5*time.Millisecond)
-	s.True(s.said("pid 300 web lint"))
+	s.True(s.said("arrived pid 300 web lint"))
+	s.False(strings.Contains(s.logged.String()[strings.Index(s.logged.String(), "still waiting"):], "pid 100"),
+		"the progress line does not repeat the holders already listed")
 	s.adm.wake()
 	s.Never(func() bool { return strings.Count(s.logged.String(), "still waiting") > 1 }, 100*time.Millisecond, 10*time.Millisecond,
 		"no change says nothing")

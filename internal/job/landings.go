@@ -56,7 +56,7 @@ type probeLog struct {
 // rows a landing can be judged for. The checkout's diff decides, so a row
 // whose holder filed no result still qualifies.
 func landingCandidate(row types.Job) bool {
-	return (row.State == types.StateExited || row.State == types.StateRunning) && row.Holder.OrSession() != types.HolderServer && !row.ReadOnly &&
+	return (row.State == types.StateExited || row.State == types.StateRunning) && !row.ServerRun() && !row.ReadOnly &&
 		row.CheckoutRoot != "" &&
 		checkpointRevision(row.Checkpoint) != ""
 }
@@ -318,19 +318,20 @@ func mergeChangesNothing(ctx context.Context, driver types.VCSDriver, root, chec
 // replay reads as merged. A row's answer is stored and read again until its
 // head or the branch moves, and a read spends [unmergedBudget] at most, so a
 // stop hook can call it. What the budget left unread is named in Unknown.
-// Repo policy decides what a fact stops.
-func Unmerged(ctx context.Context, root string, rows []types.Job) types.JobUnmergedReport {
+// Repo policy decides what a fact stops. tries holds each row's filed result.
+func Unmerged(ctx context.Context, root string, rows []types.Job, tries types.JobAttempts) types.JobUnmergedReport {
 	var report types.JobUnmergedReport
 	var work []types.Job
 	for _, row := range rows {
-		if row.Holder.OrSession() == types.HolderServer || row.LeftUnmerged != "" || !ownTree(rows, root, row) {
+		if row.ServerRun() || row.LeftUnmerged != "" || !ownTree(rows, root, row) {
 			continue
 		}
-		if row.Result != nil {
-			report.Rows = append(report.Rows, unanswered(rows, row, row.Result.FollowUps, "its result defers this and no row carries it")...)
-			report.Risks = append(report.Risks, unanswered(rows, row, row.Result.UnresolvedRisks, "its result names this risk and no row carries it")...)
+		result := tries.Result(row.ID)
+		if result != nil {
+			report.Jobs = append(report.Jobs, unanswered(rows, row, result.FollowUps, "its result defers this and no row carries it")...)
+			report.Risks = append(report.Risks, unanswered(rows, row, result.UnresolvedRisks, "its result names this risk and no row carries it")...)
 		}
-		if !row.ReadOnly && !row.State.Editing() && (row.Result != nil || row.State.Terminal()) && !row.Landed {
+		if !row.ReadOnly && !row.State.Editing() && (result != nil || row.State.Terminal()) && !row.Landed {
 			work = append(work, row)
 		}
 	}
@@ -357,10 +358,10 @@ func Unmerged(ctx context.Context, root string, rows []types.Job) types.JobUnmer
 		return report
 	}
 	report.Branch = branch
-	read := unmergedRead{driver: driver, root: root, branch: branch, tip: meta.ID, now: time.Now().Unix()}
+	read := unmergedRead{driver: driver, root: root, branch: branch, tip: meta.ID, now: time.Now().Unix(), tries: tries}
 	read.run(ctx, rows, work)
 	for _, row := range work {
-		report.Rows = append(report.Rows, read.facts(rows, row)...)
+		report.Jobs = append(report.Jobs, read.facts(rows, row)...)
 	}
 	report.Unknown = read.unknown()
 	return report
@@ -372,7 +373,7 @@ func unanswered(rows []types.Job, row types.Job, items []string, why string) []t
 	var out []types.JobUnmerged
 	for _, item := range items {
 		i := slices.IndexFunc(row.Deferred, func(d types.JobDeferred) bool { return d.Item == item })
-		if i >= 0 && (row.Deferred[i].Reason != "" || slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == row.Deferred[i].Row })) {
+		if i >= 0 && (row.Deferred[i].Reason != "" || slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == row.Deferred[i].Job })) {
 			continue
 		}
 		out = append(out, types.JobUnmerged{
@@ -437,6 +438,7 @@ type unmergedRead struct {
 	unread    int
 	stale     int
 	recut     int
+	tries     types.JobAttempts
 }
 
 // run answers every row in work from the stored facts, then asks the version
@@ -650,7 +652,7 @@ func (r *unmergedRead) facts(rows []types.Job, row types.Job) []types.JobUnmerge
 	case rr.headErr != nil && rr.dirtyDue:
 		return nil
 	case rr.headErr != nil:
-		if rr.where == "" && (row.Result == nil || len(row.Result.ChangedPaths) == 0 || integratedByPass(rows, row.ID)) {
+		if result := r.tries.Result(row.ID); rr.where == "" && (result == nil || len(result.ChangedPaths) == 0 || integratedByPass(rows, row.ID)) {
 			return nil
 		}
 		return []types.JobUnmerged{fact("", fmt.Sprintf("its head cannot be read: %s", rr.headErr), "restore its branch "+row.ID)}
@@ -789,7 +791,11 @@ func (s *Store) Settle(ctx context.Context, records []types.Declaration, dryRun 
 	if err != nil {
 		return nil, err
 	}
-	if err := checkSettles(rows, records); err != nil {
+	all, err := s.Attempts()
+	if err != nil {
+		return nil, err
+	}
+	if err := checkSettles(rows, types.NewJobAttempts(all), records); err != nil {
 		return nil, err
 	}
 	settled := make([]types.Job, 0, len(records))
@@ -818,7 +824,7 @@ func (s *Store) Settle(ctx context.Context, records []types.Declaration, dryRun 
 	return settled, nil
 }
 
-func checkSettles(rows []types.Job, records []types.Declaration) error {
+func checkSettles(rows []types.Job, tries types.JobAttempts, records []types.Declaration) error {
 	var errs []error
 	for _, rec := range records {
 		if !rec.Settles() {
@@ -834,25 +840,25 @@ func checkSettles(rows []types.Job, records []types.Declaration) error {
 			errs = append(errs, fmt.Errorf("nothing declares job %s, so nothing settles", rec.ID))
 			continue
 		}
-		errs = append(errs, settleErrors(rows, rows[i], rec)...)
+		errs = append(errs, settleErrors(rows, tries.Result(rows[i].ID), rec)...)
 	}
 	return errors.Join(errs...)
 }
 
 // settleErrors refuses an answer naming an item the result lacks or a row
 // nobody declared, so a typo never reads as settled.
-func settleErrors(rows []types.Job, row types.Job, rec types.Declaration) []error {
+func settleErrors(rows []types.Job, result *types.JobResult, rec types.Declaration) []error {
 	var errs []error
 	var items []string
-	if row.Result != nil {
-		items = slices.Concat(row.Result.UnresolvedRisks, row.Result.FollowUps)
+	if result != nil {
+		items = slices.Concat(result.UnresolvedRisks, result.FollowUps)
 	}
 	for _, d := range rec.Deferred {
 		if !slices.Contains(items, d.Item) {
 			errs = append(errs, fmt.Errorf("%s's result defers no item %q", rec.ID, d.Item))
 		}
-		if d.Row != "" && !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == d.Row }) {
-			errs = append(errs, fmt.Errorf("%s answers %q with row %s, which nothing declares", rec.ID, d.Item, d.Row))
+		if d.Job != "" && !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == d.Job }) {
+			errs = append(errs, fmt.Errorf("%s answers %q with row %s, which nothing declares", rec.ID, d.Item, d.Job))
 		}
 	}
 	return errs

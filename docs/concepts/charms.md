@@ -83,7 +83,7 @@ The project is a **positional** argument, not part of the token. See the full gr
 
 `rw` carries no special flag. Like every other charm, you activate it with a `:rw` suffix (`magus run format:rw`). There is no `-w`/`--write` shortcut and no `--write` flag: the suffix is the one way to ask for it.
 
-**CI is always read-only.** `Magus.RunCI` strips the `rw` charm before dispatch, so the composite `ci` pipeline can never mutate the tree even if a caller requests it (e.g. `ci:rw`). `rw` and `update` are the two charms with this strip status; the other built-ins (`cd`, `gha`) and every workspace charm you define are ordinary vocabulary that survive into `ci`.
+**CI verifies read-only.** Every pass of `Magus.RunCI` runs with `rw` and `update` stripped, so the verdict is always a verify pass over the bytes as they stand. `rw` and `update` are the two charms with this strip status; the other built-ins (`cd`, `gha`) and every workspace charm you define are ordinary vocabulary that survive into `ci`. When the run carries `rw` (`ci:rw`, or `default_charms: [rw]`), a failing target that itself declares a write and reads `rw` is run once under `rw`, then ci verifies again. A run that changed the working tree fails with [MGS3057](../reference/codes/sandbox/MGS3057.md) until you commit the change; [ADR 0048](../decisions/0048-a-local-ci-repairs-a-declared-writer.md) says which targets qualify. A run without `rw`, such as a CI runner's `--no-default-charms` run, never writes.
 
 ## The `update` charm
 
@@ -174,7 +174,7 @@ risky change are the usual ones.
 
 ## Defaulting charms per workspace (`default_charms`)
 
-Every run is read-only by default. A workspace can opt into a different baseline with `default_charms` in `magus.yaml`: charms applied to every `magus run` and `magus x` automatically, so a team that wants local autofix does not type `:rw` each time:
+Every run is read-only by default. A workspace can opt into a different baseline with `default_charms` in `magus.yaml`: charms applied to every `magus run`, `magus affected` and `magus x` automatically, so a team that wants local autofix does not type `:rw` each time:
 
 ```yaml
 # magus.yaml
@@ -183,8 +183,8 @@ default_charms: [rw] # `magus run format` now writes; no :rw needed
 
 Per-run charms stack on top, exactly as if you had typed the whole set. Three things keep it safe:
 
-- **`magus affected` does not apply them**, so CI (which runs `magus affected ci`) stays read-only regardless of the workspace default.
-- **`RunCI` still strips `rw` and `update`**, so even a local `magus run ci` verifies without writing, and never re-resolves dependencies or refreshes a scanner database.
+- **A CI runner passes `--no-default-charms`** to its ci run (`magus run ci --no-default-charms`, `magus affected ci --no-default-charms`), so it carries no `rw` and only verifies.
+- **`RunCI` verifies with `rw` and `update` stripped**, so a local `magus run ci` never re-resolves dependencies or refreshes a scanner database. Under a default `rw` it repairs a failing declared writer, then fails naming the changed files until you commit them ([MGS3057](../reference/codes/sandbox/MGS3057.md)). A sized `magus affected ci` verifies only.
 - **`--no-default-charms`** ignores the defaults for one run (`magus run format --no-default-charms` to check without rewriting).
 
 `MAGUS_DEFAULT_CHARMS` (comma-separated) is the environment equivalent. It only sets the default baseline; it never changes what a charm means, so `has_charm("rw")` in spells and targets is unaffected.
@@ -552,7 +552,7 @@ type Charm struct {
 | Term             | Definition                                                                                                                                                                                                    |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Charm**        | A named, shared execution modifier carried in context. `Target.Charms` / `[]string`.                                                                                                                          |
-| **`rw`**         | A built-in charm: mutate in place (format/generate; lint autofix where supported). Read via `has_charm("rw")`. Stripped from `ci`.                                                                            |
+| **`rw`**         | A built-in charm: mutate in place (format/generate; lint autofix where supported). Read via `has_charm("rw")`. Off in ci's verify passes.                                                                     |
 | **`gha`**        | A built-in charm: opt into GitHub Actions output. Swap a tool to its GHA annotation format (ruff/buf/sqlfluff/vitest). Set via `:gha`. A no-op where unsupported; not stripped from `ci`.                     |
 | **`extended`**   | A built-in charm: the extended test suite. A `test` target reads it to add the tests that need more of the host than the default gate. Set via `:extended` (`magus run ci:extended`); not stripped from `ci`. |
 | **JSON Patch**   | The RFC 6902 document a charm declares: an ordered list of element-level ops (`add`/`remove`/`replace`/`move`/`copy`/`test`) over the target's argv.                                                          |

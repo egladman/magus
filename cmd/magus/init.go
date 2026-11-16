@@ -19,7 +19,8 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/settle"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/pick"
 	"github.com/egladman/magus/libs/xdg"
@@ -85,7 +86,7 @@ func initCommand(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "Flags:")
 		printOwnDefaults(fs)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 

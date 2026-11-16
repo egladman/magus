@@ -59,14 +59,21 @@ func ReadLock(root string) (Lock, error) {
 }
 
 func parseLock(raw []byte) (Lock, error) {
+	// A newer lock names its version, not the fields this magus lacks.
+	var header struct {
+		Version types.APIVersion `yaml:"version"`
+	}
+	if err := yaml.Unmarshal(raw, &header); err != nil {
+		return Lock{}, fmt.Errorf("%s: %w", LockFile, err)
+	}
+	if err := types.RefuseVersion(lockVersion, header.Version, LockFile, "rewrite it with `magus spell lock --update`"); err != nil {
+		return Lock{}, err
+	}
 	var l Lock
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
 	if err := dec.Decode(&l); err != nil && !errors.Is(err, io.EOF) {
 		return Lock{}, fmt.Errorf("%s: %w", LockFile, err)
-	}
-	if err := lockVersion.Refuse(LockFile, l.Version, "rewrite it with `magus spell lock --update`"); err != nil {
-		return Lock{}, err
 	}
 	for path, e := range l.Spells {
 		if !spells.IsRemoteImport(path) {

@@ -419,17 +419,9 @@ func AnyVal(v any) vm.Value {
 	case map[string]string:
 		return StringMapVal(x)
 	}
-	// A DEFINED type over a basic kind (types.CheckStatus, daemon.TargetRunState,
-	// spells.PatchOpKind) matches none of the cases above, because a type switch
-	// matches on identity and not on underlying type. That is the same trap the
-	// BuzzObject case documents, and it had the same symptom one layer down: a
-	// generated BuzzObject emits `v.Status` typed, so `doctor().checks[0].status` read
-	// as NULL in a magusfile rather than "ok", and a caller told to branch on status
-	// instead of grepping console text was branching on nothing.
-	//
-	// Handled reflectively rather than by naming each type, because the failure is
-	// silent and the next defined type would reintroduce it. Reflection is confined to
-	// this fallthrough, which the cases above have already skipped.
+	// A defined type over a basic kind, such as check.Status, misses every
+	// case above. Reflection catches it, since naming each type would
+	// silently read the next one as null.
 	return namedBasicVal(v)
 }
 

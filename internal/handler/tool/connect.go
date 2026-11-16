@@ -54,7 +54,7 @@ type workspace interface {
 // lifecycleSource is a workspace with a lifecycle provider wired (a *magus.Magus is one).
 // A workspace that is not reads as one with no provider wired.
 type lifecycleSource interface {
-	Lifecycles(ctx context.Context, installed ...types.ToolRow) (types.LifecycleStatus, []spells.Lifecycle, error)
+	Lifecycles(ctx context.Context, installed ...types.ToolStatus) (types.LifecycleStatus, []spells.Lifecycle, error)
 }
 
 // Service is the ToolService Connect handler.
@@ -96,7 +96,7 @@ func (s *Service) ListTools(ctx context.Context, req *connect.Request[toolv1.Lis
 	want := req.Msg.GetParent()
 	out := &toolv1.ListToolsResponse{}
 	matched := false
-	var installed []types.ToolRow
+	var installed []types.ToolStatus
 	for _, p := range s.ws.All() {
 		if want != "" && p.Path != want {
 			continue
@@ -112,7 +112,7 @@ func (s *Service) ListTools(ctx context.Context, req *connect.Request[toolv1.Lis
 			continue // a project declaring no probeable tool is noise in this view
 		}
 		for _, t := range tools {
-			installed = append(installed, types.ToolRow{Project: p.Path, Bin: t.Bin, Lifecycle: t.Lifecycle, InstalledVersion: t.InstalledVersion})
+			installed = append(installed, types.ToolStatus{Project: p.Path, Bin: t.Bin, Lifecycle: t.Lifecycle, InstalledVersion: t.InstalledVersion})
 		}
 		out.Projects = append(out.Projects, &toolv1.Project{Path: p.Path, Name: p.Name, Tools: tools})
 	}
@@ -139,7 +139,7 @@ func (s *Service) ListTools(ctx context.Context, req *connect.Request[toolv1.Lis
 
 // lifecycles returns the provider's answer, memoized: lifecycleTTL for one that arrived,
 // probeTTL for one that did not.
-func (s *Service) lifecycles(ctx context.Context, installed []types.ToolRow) (lifecycleAnswer, error) {
+func (s *Service) lifecycles(ctx context.Context, installed []types.ToolStatus) (lifecycleAnswer, error) {
 	source, ok := s.ws.(lifecycleSource)
 	if !ok {
 		return lifecycleAnswer{status: types.LifecycleStatus{State: types.LifecycleUnwired}}, nil

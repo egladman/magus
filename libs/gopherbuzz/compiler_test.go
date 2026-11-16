@@ -3,11 +3,14 @@ package buzz
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 )
@@ -955,6 +958,69 @@ while (i < 100) {
 	}
 }
 
+// accumulationSizes are the line counts the accumulation benchmarks run at.
+// The largest once pinned 32.7 GB building one string this way.
+var accumulationSizes = []struct {
+	name  string
+	lines int
+}{{"1e3", 1000}, {"1e4", 10000}, {"3e4", 30803}}
+
+// benchAccumulation joins 68-byte lines at each accumulation size: decl
+// declares the accumulator, step extends it from line, tail leaves the
+// result in kept. Its metrics are what each run leaves after a forced GC,
+// as BenchmarkSessionChurn reports them; B/op cannot show what a run keeps.
+// The default benchtime grows one process to tens of GB here, so run one
+// size per process with -benchtime 20x.
+func benchAccumulation(b *testing.B, decl, step, tail string) {
+	for _, size := range accumulationSizes {
+		b.Run(size.name, func(b *testing.B) {
+			chunk, env := benchSetup(b, "", fmt.Sprintf(`final pad = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefg";
+%s
+for (var i = 0; i < %d; i = i + 1) {
+    final line = "{pad}{10000000 + i}\n";
+    %s
+}
+%s
+final __r = kept.len();`, decl, size.lines, step, tail))
+			slots0, inuse0 := retained()
+			benchRun(b, chunk, env)
+			b.StopTimer()
+			slots1, inuse1 := retained()
+			b.ReportMetric(float64(slots1-slots0)/float64(b.N), "liveslots/op")
+			b.ReportMetric((float64(inuse1)-float64(inuse0))/float64(b.N), "heapinuse-B/op")
+		})
+	}
+}
+
+// retained reports the live heap slots and Go heap bytes a forced GC leaves.
+// Under buzz_safe or buzz_unsafe the slot count reads 0.
+func retained() (slots int, inuse uint64) {
+	runtime.GC()
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	return vmpackage.ReadHeapStats().Objects, ms.HeapInuse
+}
+
+// BenchmarkStringConcatLoop extends one string with `+` per line. B/op and
+// ns/op stay linear in the line count only while each step shares the
+// buffer of the step before it.
+func BenchmarkStringConcatLoop(b *testing.B) {
+	benchAccumulation(b, `var kept = "";`, `kept = kept + line;`, "")
+}
+
+// BenchmarkStringInterpLoop is BenchmarkStringConcatLoop through an
+// interpolation whose first part is the accumulator.
+func BenchmarkStringInterpLoop(b *testing.B) {
+	benchAccumulation(b, `var kept = "";`, `kept = "{kept}{line}";`, "")
+}
+
+// BenchmarkJoinLoop collects the same lines in a list and joins them once,
+// the linear baseline for the two benchmarks above.
+func BenchmarkJoinLoop(b *testing.B) {
+	benchAccumulation(b, `final parts: mut [str] = mut [];`,
+		`parts.append(line);`, `final kept = parts.join("");`)
+}
+
 // BenchmarkCall measures the overhead of calling a simple Buzz function
 // repeatedly — frame allocation, parameter binding, and return.
 func BenchmarkCall(b *testing.B) {
@@ -1432,6 +1498,177 @@ final evens = doubled.filter(fun (_: int, v: int) > bool => v % 4 == 0);
 final __r = evens.reduce::<int>(fun (_: int, v: int, acc: int) > int => acc + v, initial: 0);`,
 	)
 	benchRun(b, chunk, env)
+}
+
+// BenchmarkMapCallback is list.map alone, so per-callback cost is the figure.
+func BenchmarkMapCallback(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`var seed = mut [<int>];
+foreach (i in 0..2000) {
+    seed.append(i);
+}`,
+		`final __r = seed.map(fun (_: int, v: int) > int => v + 1);`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkSortCallback sorts 2000 shuffled ints with a Buzz comparator, about
+// n log n callbacks. The copy is on the clock in every run.
+func BenchmarkSortCallback(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`var seed = mut [<int>];
+var x = 12345;
+foreach (i in 0..2000) {
+    x = (x * 1103515245 + 12345) % 2147483648;
+    seed.append(x);
+}`,
+		`final xs = seed.cloneMutable();
+xs.sort(fun (a: int, b: int) > bool => a < b);`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// BenchmarkNestedCallback runs builtins inside a callback of an outer builtin.
+func BenchmarkNestedCallback(b *testing.B) {
+	chunk, env := benchSetup(b,
+		`var rows = mut [<[int]>];
+foreach (i in 0..100) {
+    final row = mut [<int>];
+    foreach (j in 0..20) {
+        row.append(i * j);
+    }
+    rows.append(row);
+}`,
+		`final __r = rows.map(fun (_: int, row: [int]) > int => row
+    .map(fun (_: int, v: int) > int => v + 1)
+    .reduce::<int>(fun (_: int, v: int, acc: int) > int => acc + v, initial: 0));`,
+	)
+	benchRun(b, chunk, env)
+}
+
+// callbackSuite pins what reusing one VM per builtin call must not change.
+type callbackSuite struct{ suite.Suite }
+
+func TestCallbackSuite(t *testing.T) { suite.Run(t, new(callbackSuite)) }
+
+func (s *callbackSuite) TestAMapInsideAMapCallbackKeepsBothResults() {
+	got := evalString(s.T(), `return [[1, 2], [3]].map(fun (_: int, row: [int]) > [int] {
+    return row.map(fun (_: int, v: int) > int => v * 10);
+});`)
+	s.Equal("[[10, 20], [30]]", got)
+}
+
+func (s *callbackSuite) TestARecursiveFunctionReentersTheSameBuiltin() {
+	sess := newSession(context.Background())
+	s.Require().NoError(sess.Exec(context.Background(), `fun depth(n: int) > int {
+    if (n == 0) { return 0; }
+    return [n].map(fun (_: int, v: int) > int => depth(v - 1) + 1)[0];
+}
+final __r = depth(6);`))
+	s.Equal("6", sess.GetGlobal("__r").String())
+}
+
+func (s *callbackSuite) TestACallbackThatCatchesKeepsTheLoopRunning() {
+	got := evalString(s.T(), `return [1, 2, 3].map(fun (_: int, v: int) > int {
+    try {
+        if (v == 2) { throw "skip"; }
+        return v;
+    } catch (e) {
+        return 0;
+    }
+});`)
+	s.Equal("[1, 0, 3]", got)
+}
+
+func (s *callbackSuite) TestAnUncaughtThrowInACallbackFailsTheCall() {
+	err := evalError(s.T(), `return [1, 2, 3].map(fun (_: int, v: int) > int {
+    if (v == 2) { throw "boom"; }
+    return v;
+});`)
+	s.ErrorContains(err, "boom")
+}
+
+func (s *callbackSuite) TestACallbackAfterAFailedCallStartsClean() {
+	got := evalString(s.T(), `var failed = false;
+try {
+    _ = [1, 2].map(fun (_: int, v: int) > int {
+        if (v == 1) { throw "boom"; }
+        return v;
+    });
+} catch (e) {
+    failed = true;
+}
+return [failed, [4, 5].map(fun (_: int, v: int) > int => v + 1)];`)
+	s.Equal("[true, [5, 6]]", got)
+}
+
+// The inner callback's garbage arms the automatic sweep. The outer callback
+// still holds held in a local, so the sweep must mark its VM.
+func (s *callbackSuite) TestASweepInANestedCallbackKeepsTheOuterCallbacksLocals() {
+	got := evalString(s.T(), `var heldCollected = false;
+
+object Held {
+    id: int,
+
+    fun collect() > void {
+        heldCollected = true;
+    }
+}
+
+object Garbage {
+    id: int,
+
+    fun collect() > void {}
+}
+
+return [1].map(fun (_: int, _: int) > bool {
+    final held = Held{ id = 1 };
+    _ = [1].map(fun (_: int, _: int) > int {
+        var i = 0;
+        while (i < 600) {
+            _ = Garbage{ id = i };
+            i = i + 1;
+        }
+        return i;
+    });
+    _ = held.id;
+    return heldCollected;
+});`)
+	s.Equal("[false]", got)
+}
+
+func (s *callbackSuite) TestSortKeepsEqualElementsInTheirOrder() {
+	got := evalString(s.T(), `var l = mut ["bb", "a", "cc", "d", "ee", "f"];
+l.sort(fun (a: str, b: str) > bool => a.len() < b.len());
+return l;`)
+	s.Equal("[a, d, f, bb, cc, ee]", got)
+}
+
+// Past 20 elements the stable sort merges blocks, not just insertion sorts.
+func (s *callbackSuite) TestSortIsStablePastOneInsertionBlock() {
+	var want []string
+	for r := range 3 {
+		for i := range 60 {
+			if i%3 == r {
+				want = append(want, strconv.Itoa(i))
+			}
+		}
+	}
+	got := evalString(s.T(), `var l = mut [<int>];
+foreach (i in 0..60) { l.append(i); }
+l.sort(fun (a: int, b: int) > bool => a % 3 < b % 3);
+return l;`)
+	s.Equal("["+strings.Join(want, ", ")+"]", got)
+}
+
+func (s *callbackSuite) TestASortComparatorErrorFailsTheSort() {
+	err := evalError(s.T(), `var l = mut [3, 1, 2];
+l.sort(fun (a: int, b: int) > bool {
+    if (a == 1 or b == 1) { throw "cmp"; }
+    return a < b;
+});
+return l;`)
+	s.ErrorContains(err, "cmp")
 }
 
 // BenchmarkMutListAppend measures repeated append to a mut list, so the growth of

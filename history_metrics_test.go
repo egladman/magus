@@ -230,7 +230,7 @@ func TestModelTierLensReportsWhatTheJobHistoryHolds(t *testing.T) {
 
 	empty, err := m.ModelTierLens(t.Context())
 	require.NoError(t, err, "a workspace that never ran a job has nothing to report, not a failure")
-	assert.Equal(t, types.ModelTiers{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}, empty)
+	assert.Equal(t, types.ModelTiers{Definition: types.ModelTiersDefinition, Models: []types.ModelTierRecord{}}, empty)
 
 	require.NoError(t, forecast.UpdateHistory(t.Context(), m.cfg.HistoryPath, func(h *forecast.History) error {
 		h.RecordJob(types.JobOutcome{Job: "a", ModelTier: "economy", Kind: types.JobKindCheck, State: types.StatePass, ChecksRun: 2})
@@ -238,10 +238,10 @@ func TestModelTierLensReportsWhatTheJobHistoryHolds(t *testing.T) {
 	}))
 	got, err := m.ModelTierLens(t.Context())
 	require.NoError(t, err)
-	require.Len(t, got.Rows, 1)
-	wantRow := got.Rows[0]
+	require.Len(t, got.Models, 1)
+	wantRow := got.Models[0]
 	wantRow.ModelTier, wantRow.Rank, wantRow.ChecksPerJob = "economy", -1, 2
-	assert.Equal(t, wantRow, got.Rows[0], "a workspace with no declaration ranks nothing")
+	assert.Equal(t, wantRow, got.Models[0], "a workspace with no declaration ranks nothing")
 }
 
 // TestProjectDisplayName resolves the label the history-metric lenses attach to a

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 type admissionsKey struct{}
@@ -24,21 +25,21 @@ const admissionsWindow = 24 * time.Hour
 
 // checkBudgetAdmissions counts refusals in the last day and seated waits past
 // a quarter of their bound. It changes nothing and never fails.
-func (r *runner) checkBudgetAdmissions(ctx context.Context) types.Check {
+func (r *runner) checkBudgetAdmissions(ctx context.Context) check.Check {
 	load, ok := ctx.Value(admissionsKey{}).(func(context.Context) ([]types.MachineAdmission, error))
 	if !ok {
-		return types.Check{Name: budgetAdmissionsCheck, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no admissions reader supplied; skipped"}
+		return check.Check{Name: budgetAdmissionsCheck, Status: check.OK, Evidence: check.EvidenceUnknown, Message: "no admissions reader supplied; skipped"}
 	}
 	admissions, err := load(ctx)
 	if err != nil {
-		return types.Check{Name: budgetAdmissionsCheck, Status: types.CheckAdvice, Evidence: types.EvidenceUnknown, Message: fmt.Sprintf("could not read the broker's admissions: %v", err)}
+		return check.Check{Name: budgetAdmissionsCheck, Status: check.Advice, Evidence: check.EvidenceUnknown, Message: fmt.Sprintf("could not read the broker's admissions: %v", err)}
 	}
 	return gradeBudgetAdmissions(admissions, time.Now())
 }
 
 // gradeBudgetAdmissions counts refusals within admissionsWindow of now, and
 // waits past a quarter of their bound.
-func gradeBudgetAdmissions(admissions []types.MachineAdmission, now time.Time) types.Check {
+func gradeBudgetAdmissions(admissions []types.MachineAdmission, now time.Time) check.Check {
 	var refused, slow int
 	for _, a := range admissions {
 		if now.Sub(a.At) > admissionsWindow {
@@ -53,9 +54,9 @@ func gradeBudgetAdmissions(admissions []types.MachineAdmission, now time.Time) t
 			}
 		}
 	}
-	return types.Check{
+	return check.Check{
 		Name:   budgetAdmissionsCheck,
-		Status: types.CheckOK,
+		Status: check.OK,
 		Message: fmt.Sprintf("%d refusal(s) in the last %s, %d wait(s) past a quarter of their bound",
 			refused, admissionsWindow, slow),
 	}

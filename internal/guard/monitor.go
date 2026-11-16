@@ -151,7 +151,7 @@ func watchSubjects(command string, d Dialect) []string {
 	var out []string
 	for _, c := range cmds {
 		switch name := path.Base(c.Name); name {
-		case "pgrep", "pkill", "pidof":
+		case "pkill":
 			if args := nonFlagArgs(c.Args); len(args) > 0 {
 				out = append(out, "proc:"+args[len(args)-1])
 			}

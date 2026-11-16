@@ -187,6 +187,52 @@ func (v jjVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, er
 	return splitLines(out), nil
 }
 
+// ChangedSince implements RevisionDiffer. jj's working copy is a commit, so
+// `diff --from rev` sees every edit. It runs from the root: see DirtyFiles.
+func (v jjVCS) ChangedSince(ctx context.Context, dir, rev string, paths []string) ([]string, error) {
+	if err := checkRef(rev); err != nil {
+		return nil, err
+	}
+	root, prefix, err := repositoryPathPrefix(ctx, v, dir)
+	if err != nil {
+		return nil, err
+	}
+	args := []string{"diff", "--name-only", "--from", rev}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		for _, p := range paths {
+			args = append(args, prefix+p)
+		}
+	}
+	out, err := vcsOutput(ctx, root, "jj", args...)
+	if err != nil {
+		return nil, fmt.Errorf("jj diff: %w", err)
+	}
+	return splitStatusLines(out), nil
+}
+
+// ListFilesAt implements types.RevisionLister via `jj file list`. "" is
+// `@-`, as for ReadFileAt. It runs from root, where its paths are
+// root-relative.
+func (v jjVCS) ListFilesAt(ctx context.Context, root, rev, dir string) ([]string, error) {
+	if rev == "" {
+		rev = "@-"
+	}
+	if err := checkRef(rev); err != nil {
+		return nil, err
+	}
+	out, err := vcsOutput(ctx, root, "jj", "file", "list", "-r", rev, "--", fmt.Sprintf("root:%q", dir))
+	if err != nil {
+		return nil, fmt.Errorf("jj file list -r %s: %w", rev, err)
+	}
+	files := splitLines([]byte(out))
+	for i, f := range files {
+		files[i] = filepath.ToSlash(f)
+	}
+	slices.Sort(files)
+	return files, nil
+}
+
 func (v jjVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
 	cmd := vcsExec(ctx, "jj", "log", "-r", "@", "--no-graph", "-T", "commit_id")
 	cmd.Dir = dir

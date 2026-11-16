@@ -28,7 +28,7 @@ import (
 
 // formatVersion changes whenever a shard this indexer writes would come out different
 // for the same source, so a pack written before is rebuilt whole.
-const formatVersion = "goindex 4"
+const formatVersion = "goindex 5"
 
 // scheme is the SCIP scheme of every symbol the indexer names. Keys drop it with the
 // version, so a key matches the one scip-go named the same symbol by.
@@ -98,7 +98,22 @@ func (ix *Indexer) env(overlay map[string]string) []string {
 	for _, k := range sortedKeys(overlay) {
 		env = append(env, fmt.Sprintf("%s=%s", k, overlay[k]))
 	}
-	return env
+	return trimPaths(env)
+}
+
+// trimPaths adds -trimpath to env's GOFLAGS. The build cache then keys export
+// data by content, not directory, so a tree exported to a fresh path reuses it.
+func trimPaths(env []string) []string {
+	flags := ""
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "GOFLAGS="); ok {
+			flags = v
+		}
+	}
+	if slices.Contains(strings.Fields(flags), "-trimpath") {
+		return env
+	}
+	return append(env, "GOFLAGS="+strings.TrimSpace(flags+" -trimpath"))
 }
 
 func (ix *Indexer) patterns() []string {
@@ -112,7 +127,7 @@ func (ix *Indexer) patterns() []string {
 // has one, which holds every file the plain package does, and its external test package
 // as a unit of its own. A unit's digest covers its files' paths and bytes, the files the
 // host's build constraints exclude included, so an edit to a _windows.go file on a Mac
-// moves it too.
+// moves it too. It covers the module's go.mod as well.
 // `./...` skips a package the host excludes whole, so each of Builds lists too.
 func (ix *Indexer) Units(ctx context.Context) ([]symbols.Unit, error) {
 	overlays := slices.Concat([]map[string]string{nil}, ix.Builds)
@@ -122,7 +137,7 @@ func (ix *Indexer) Units(ctx context.Context) ([]symbols.Unit, error) {
 		g.Go(func() error {
 			cfg := &packages.Config{
 				Context: gctx, Dir: ix.Dir, Env: ix.env(overlay), Tests: true,
-				Mode: packages.NeedName | packages.NeedFiles | packages.NeedImports,
+				Mode: packages.NeedName | packages.NeedFiles | packages.NeedImports | packages.NeedModule,
 			}
 			pkgs, err := packages.Load(cfg, ix.patterns()...)
 			if err != nil {
@@ -143,7 +158,7 @@ func (ix *Indexer) Units(ctx context.Context) ([]symbols.Unit, error) {
 				continue
 			}
 			files := slices.Concat(p.GoFiles, goOnly(p.IgnoredFiles))
-			digest, err := ix.digest(files)
+			digest, err := ix.digest(files, p.Module)
 			if err != nil {
 				return nil, err
 			}
@@ -219,8 +234,13 @@ func goOnly(files []string) []string {
 	return out
 }
 
-func (ix *Indexer) digest(files []string) (string, error) {
+// digest covers files and mod's go.mod, whose requirements give the version
+// each symbol of a dependency carries.
+func (ix *Indexer) digest(files []string, mod *packages.Module) (string, error) {
 	files = slices.Clone(files)
+	if mod != nil && mod.GoMod != "" {
+		files = append(files, mod.GoMod)
+	}
 	slices.Sort(files)
 	h := sha256.New()
 	for _, f := range files {
@@ -758,6 +778,10 @@ func receiverNamed(t types.Type) *types.Named {
 // scanFields records the owner path of every field of p's named struct types, nested
 // anonymous structs included (Outer#field.inner), and of a package-level variable's
 // anonymous struct (v:field.), the descriptors scip-go gave each.
+//
+// Types declared one from another (type b A) share one struct, so a field has
+// several owners. The first in scope order wins. Exported names sort first,
+// so a load from export data, which omits unexported types, names it too.
 func (w *walker) scanFields(p *types.Package) {
 	if w.scanned[p] {
 		return
@@ -768,7 +792,9 @@ func (w *walker) scanFields(p *types.Package) {
 		for i := range st.NumFields() {
 			f := st.Field(i)
 			descs := append(slices.Clone(prefix), &scip.Descriptor{Name: f.Name(), Suffix: scip.Descriptor_Term})
-			w.owners[f] = descs
+			if _, owned := w.owners[f]; !owned {
+				w.owners[f] = descs
+			}
 			if inner, ok := f.Type().(*types.Struct); ok {
 				walk(inner, descs)
 			}

@@ -18,7 +18,7 @@ func TestRunBoundaryList(t *testing.T) {
 	assert.Contains(t, got, "Zero: types.ExecResult{}, Encode:")
 
 	// A non-runtime entry gets no encoder and must not reach the list.
-	assert.NotContains(t, got, "Zero: types.Path{}")
+	assert.NotContains(t, got, "Zero: types.Declaration{}")
 
 	assertDeterministic(t, runBoundaryList, args)
 

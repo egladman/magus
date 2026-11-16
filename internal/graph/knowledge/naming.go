@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 // The conformance lens reports how a symbol a change adds, renames or re-signs sits against what
@@ -55,11 +56,11 @@ type ConformanceChange struct {
 // across the change, strongest first, ties broken by check name, message and subject so two runs
 // over one graph agree byte for byte.
 //
-// Each finding is a [types.Check] with Status advice and Evidence inferred: a fact about the
+// Each finding is an inferred [check.Check] at advice: a fact about the
 // index, never a rule. It reads only language-neutral facts (name, kind, scope, calls,
 // references, and the declaration shape a language's reader reports), reads a file only through
 // ConformanceChange.Read, and never fails: a symbol it cannot place is skipped.
-func (g *Graph) ConformanceChecks(c ConformanceChange) map[string][]types.Check {
+func (g *Graph) ConformanceChecks(c ConformanceChange) map[string][]check.Check {
 	if len(c.Subjects) == 0 && len(c.Touched) == 0 {
 		return nil
 	}
@@ -80,11 +81,11 @@ func (g *Graph) ConformanceChecks(c ConformanceChange) map[string][]types.Check 
 		return cmp.Or(cmp.Compare(b.score, a.score), cmp.Compare(a.check, b.check),
 			cmp.Compare(a.message, b.message), cmp.Compare(a.subject, b.subject))
 	})
-	out := map[string][]types.Check{}
+	out := map[string][]check.Check{}
 	for _, f := range all[:min(len(all), x.gates.MaxFindings)] {
-		out[f.subject] = append(out[f.subject], types.Check{
-			Name: f.check, Status: types.CheckAdvice, Message: f.message, Details: f.details,
-			Evidence: types.EvidenceInferred,
+		out[f.subject] = append(out[f.subject], check.Check{
+			Name: f.check, Status: check.Advice, Message: f.message, Details: f.details,
+			Evidence: check.EvidenceInferred,
 		})
 	}
 	return out

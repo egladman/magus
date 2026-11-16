@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/json"
 )
@@ -95,4 +96,46 @@ func TestIndexHumanOnlyStopsAtTheFirstHumanOnlyTarget(t *testing.T) {
 func TestIndexHumanOnlyOfAWorkspaceDeclaringNone(t *testing.T) {
 	ws := humanOnlyWorkspace{projects: []*Project{{Path: ".", TargetChains: map[string][]ChainStep{"ci": {{Target: "test"}}}}}}
 	assert.Equal(t, TargetPolicyIndex{Projects: []string{"."}}, IndexTargetPolicies(ws))
+}
+
+// productIndexSuite pins how a product declaration reaches the guard's index.
+type productIndexSuite struct {
+	suite.Suite
+	ix TargetPolicyIndex
+}
+
+func TestProductIndexSuite(t *testing.T) {
+	suite.Run(t, new(productIndexSuite))
+}
+
+func (s *productIndexSuite) SetupTest() {
+	s.ix = IndexTargetPolicies(humanOnlyWorkspace{projects: []*Project{{
+		Path: ".",
+		TargetPolicies: map[string]Target{
+			"go-build": {Relinks: "./magus", Product: "bin/magus", ProductTarget: "go-build-product"},
+		},
+	}}})
+}
+
+func (s *productIndexSuite) TestTheProductTargetFindsItsRelinkingPolicy() {
+	pol, ok := s.ix.ProductBuild(TargetRef{Project: ".", Target: "go-build-product"})
+	s.Require().True(ok)
+	s.Equal(TargetPolicy{
+		TargetRef: TargetRef{Project: ".", Target: "go-build"},
+		Relinks:   "./magus", Product: "bin/magus", ProductTarget: "go-build-product",
+	}, pol)
+}
+
+func (s *productIndexSuite) TestTheRelinkingTargetIsNotItsOwnProductBuild() {
+	_, ok := s.ix.ProductBuild(TargetRef{Project: ".", Target: "go-build"})
+	s.False(ok)
+}
+
+func (s *productIndexSuite) TestAnotherProjectsTargetIsNoProductBuild() {
+	_, ok := s.ix.ProductBuild(TargetRef{Project: "web", Target: "go-build-product"})
+	s.False(ok)
+}
+
+func (s *productIndexSuite) TestProductsListsEveryProductPath() {
+	s.Equal([]string{"bin/magus"}, s.ix.Products())
 }

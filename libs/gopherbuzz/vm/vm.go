@@ -104,9 +104,8 @@ type VM struct {
 	// see gc_collect.go for why reachability is computed over the VM's own roots
 	// rather than left to Go's GC.
 	collectables []*objectInst
-	// gcParent links a fiber's VM to the VM that created it; nil on a root VM. It
-	// carries the registry lookup and the "currently executing" chain the sweep
-	// walks. See gcRoot.
+	// gcParent links a fiber, callback or collector VM to the VM that started
+	// it; nil on a root VM. The registry lookup and the sweep walk it.
 	gcParent *VM
 	// gcThreshold is the registry length that arms an automatic sweep, and
 	// gcSweeping declines a sweep nested inside one already running. Meaningful only
@@ -1466,7 +1465,9 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			if lo.tag() != tagInt || hi.tag() != tagInt {
 				return Null, errorRangeOperands(lo, hi)
 			}
-			vm.push(rangeValue(lo.AsInt(), hi.AsInt()))
+			// Owned: an unowned slot here outlives the session, one per
+			// execution of the range expression.
+			vm.push(alloc(vm, tagRange, &rangeObj{Lo: lo.AsInt(), Hi: hi.AsInt()}))
 
 		case OpIs:
 			name := vm.asString(f.chunk.Consts[ins.A]).V
@@ -1587,17 +1588,30 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			//     overwriting strScratch on the next OpBuildStr is safe.
 			n := int(ins.A)
 			parts := vm.stack[len(vm.stack)-n:]
+			// A long leading str is the accumulator of `s = "{s}{x}"`, and
+			// appendString extends it. A short one stays here: routing it
+			// through cost BenchmarkStringInterp 12%.
+			first := Null
 			buf := vm.strScratch[:0]
-			for _, p := range parts {
+			for i, p := range parts {
 				if p.tag() == tagStr {
-					buf = append(buf, vm.asString(p).V...)
+					s := vm.asString(p)
+					if i == 0 && (s.buf != nil || len(s.V) >= strBufThreshold) {
+						first = p
+						continue
+					}
+					buf = append(buf, s.V...)
 				} else {
 					buf = append(buf, p.String()...)
 				}
 			}
 			vm.strScratch = buf // retain the (possibly grown) backing array
 			vm.stack = vm.stack[:len(vm.stack)-n]
-			vm.push(StringValue(string(buf)))
+			if first.tag() == tagStr {
+				vm.push(appendString(first, buf))
+			} else {
+				vm.push(StringValue(string(buf)))
+			}
 
 		case OpBinLC:
 			// optimization: fused GetLocal;LoadConst;<binop>. Reads the local and the
@@ -2318,38 +2332,43 @@ func (vm *VM) Call(callee Value, args []Value) error {
 		return nil
 
 	case tagFun:
-		fn := vm.asFun(callee)
-		if fn.Chunk == nil {
-			return fmt.Errorf("buzz: function has no compiled chunk")
-		}
-		if len(vm.frames) >= maxFrames {
-			return fmt.Errorf("buzz: call stack overflow (limit %d)", maxFrames)
-		}
-		base := len(vm.stack)
-		// Push args into slot positions 0..argCount-1
-		for _, arg := range args {
-			vm.push(arg)
-		}
-		// Pre-allocate remaining local slots
-		localCount := fn.Chunk.LocalCount
-		for i := len(args); i < localCount; i++ {
-			vm.push(Null)
-		}
-		// Receiver rides in frame.this, not a per-call Env — see OpCall.
-		vm.frames = append(vm.frames, frame{
-			chunk: fn.Chunk,
-			ip:    0,
-			env:   fn.Env,
-			fun:   fn,
-			base:  base,
-			retSP: base, // truncate back to base on return (no callee on stack)
-			this:  fn.This,
-		})
-		return nil
+		return vm.pushFrame(vm.asFun(callee), args)
 
 	default:
 		return fmt.Errorf("buzz: %s is not callable", callee.buzzKind())
 	}
+}
+
+// pushFrame pushes fn's frame for Exec to run. Unlike Call it never hands
+// args to a host function, so args does not escape.
+func (vm *VM) pushFrame(fn *funObj, args []Value) error {
+	if fn.Chunk == nil {
+		return fmt.Errorf("buzz: function has no compiled chunk")
+	}
+	if len(vm.frames) >= maxFrames {
+		return fmt.Errorf("buzz: call stack overflow (limit %d)", maxFrames)
+	}
+	base := len(vm.stack)
+	// Push args into slot positions 0..argCount-1
+	for _, arg := range args {
+		vm.push(arg)
+	}
+	// Pre-allocate remaining local slots
+	localCount := fn.Chunk.LocalCount
+	for i := len(args); i < localCount; i++ {
+		vm.push(Null)
+	}
+	// Receiver rides in frame.this, not a per-call Env — see OpCall.
+	vm.frames = append(vm.frames, frame{
+		chunk: fn.Chunk,
+		ip:    0,
+		env:   fn.Env,
+		fun:   fn,
+		base:  base,
+		retSP: base, // truncate back to base on return (no callee on stack)
+		this:  fn.This,
+	})
+	return nil
 }
 
 // Invoke runs receiver.name(args) to completion: the embedder's OpInvoke, resolving

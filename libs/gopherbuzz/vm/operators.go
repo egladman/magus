@@ -27,7 +27,14 @@ func arith(vm *VM, op OpCode, left, right Value) (Value, error) {
 	// String concatenation (OpAdd only)
 	if op == OpAdd {
 		if left.tag() == tagStr {
-			return StringValue(vm.asString(left).V + right.String()), nil
+			// A short left is interned with right, as appendString would, so
+			// staging right in the scratch first copies it twice and leaves the
+			// scratch at right's size for the VM's life.
+			if l := vm.asString(left); l.buf == nil && len(l.V) < strBufThreshold {
+				return StringValue(l.V + right.String()), nil
+			}
+			vm.strScratch = append(vm.strScratch[:0], right.String()...)
+			return appendString(left, vm.strScratch), nil
 		}
 		if left.tag() == tagList && right.tag() == tagList {
 			leftList, rightList := vm.asList(left), vm.asList(right)
@@ -601,7 +608,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 				start = 0
 			}
 			if start > len(lo.Items) {
-				return listValue(nil, lo.Mut), nil
+				return vm.listValue(nil, lo.Mut), nil
 			}
 			end := len(lo.Items)
 			if len(args) >= 2 && args[1].IsInt() {
@@ -615,7 +622,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			}
 			cp := make([]Value, end-start)
 			copy(cp, lo.Items[start:end])
-			return listValue(cp, lo.Mut), nil
+			return vm.listValue(cp, lo.Mut), nil
 		})
 	case "indexOf":
 		return newDirect("list.indexOf", func(_ context.Context, args []Value) (Value, error) {
@@ -646,9 +653,9 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.forEach: requires a callback function")
 			}
-			cb := args[0]
+			cb := newCallback(ctx, vm, args[0])
 			for i, it := range lo.Items {
-				if _, err := callValue(ctx, vm, cb, []Value{IntValue(int64(i)), it}); err != nil {
+				if _, err := cb.call(IntValue(int64(i)), it); err != nil {
 					return Null, err
 				}
 			}
@@ -659,27 +666,27 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.map: requires a callback function")
 			}
-			cb := args[0]
+			cb := newCallback(ctx, vm, args[0])
 			items := lo.Items
 			out := make([]Value, len(items))
 			for i, it := range items {
-				v, err := callValue(ctx, vm, cb, []Value{IntValue(int64(i)), it})
+				v, err := cb.call(IntValue(int64(i)), it)
 				if err != nil {
 					return Null, err
 				}
 				out[i] = v
 			}
-			return ListValue(out), nil
+			return vm.listValue(out, false), nil
 		})
 	case "filter":
 		return newDirect("list.filter", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.filter: requires a callback function")
 			}
-			cb := args[0]
+			cb := newCallback(ctx, vm, args[0])
 			var out []Value
 			for i, it := range lo.Items {
-				v, err := callValue(ctx, vm, cb, []Value{IntValue(int64(i)), it})
+				v, err := cb.call(IntValue(int64(i)), it)
 				if err != nil {
 					return Null, err
 				}
@@ -687,17 +694,17 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 					out = append(out, it)
 				}
 			}
-			return listValue(out, lo.Mut), nil
+			return vm.listValue(out, lo.Mut), nil
 		})
 	case "reduce":
 		return newDirect("list.reduce", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 2 {
 				return Null, fmt.Errorf("list.reduce: requires (callback, initial)")
 			}
-			cb := args[0]
+			cb := newCallback(ctx, vm, args[0])
 			acc := args[1]
 			for i, it := range lo.Items {
-				v, err := callValue(ctx, vm, cb, []Value{IntValue(int64(i)), it, acc})
+				v, err := cb.call(IntValue(int64(i)), it, acc)
 				if err != nil {
 					return Null, err
 				}
@@ -710,35 +717,21 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.sort: requires a comparator callback")
 			}
-			cb := args[0]
+			cb := newCallback(ctx, vm, args[0])
 			// Upstream sorts IN PLACE and returns the list ("Sorts the list in place with
 			// the comparison callback and returns the list"), so its own tests discard the
 			// result and inspect the receiver. Sorting a copy left the receiver untouched.
 			if !lo.Mut {
 				return Null, errorImmutable("list")
 			}
-			// Sort a SNAPSHOT and write the result back, rather than sorting lo.Items in
-			// place: the comparator re-enters the VM, so it can append to or truncate the
-			// same list and reallocate the backing array under sort.SliceStable, which
-			// holds the pre-call slice header. That turned guest code into an
-			// index-out-of-range "internal error". Writing back preserves the in-place
-			// contract upstream documents ("sorts the list in place ... returns the list").
+			// Sort a snapshot, then write it back. The comparator can
+			// resize this list mid-sort, and an in-place sort would index
+			// a stale array.
 			snapshot := make([]Value, len(lo.Items))
 			copy(snapshot, lo.Items)
-			var sortErr error
-			sort.SliceStable(snapshot, func(i, j int) bool {
-				if sortErr != nil {
-					return false
-				}
-				v, err := callValue(ctx, vm, cb, []Value{snapshot[i], snapshot[j]})
-				if err != nil {
-					sortErr = err
-					return false
-				}
-				return v.Bool()
-			})
-			if sortErr != nil {
-				return Null, sortErr
+			identity := func(v Value) Value { return v }
+			if err := sortStable(snapshot, &cb, identity); err != nil {
+				return Null, err
 			}
 			// Only as many elements as the list still has: a comparator that shrank it
 			// must not resurrect the dropped tail.
@@ -751,7 +744,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			for i, v := range lo.Items {
 				cp[len(lo.Items)-1-i] = v
 			}
-			return listValue(cp, lo.Mut), nil
+			return vm.listValue(cp, lo.Mut), nil
 		})
 	case "fill":
 		// fill(value, start: int?, len: int?): upstream fills a RANGE, defaulting to
@@ -792,7 +785,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 		return newDirect("list."+name, func(_ context.Context, _ []Value) (Value, error) {
 			cp := make([]Value, len(lo.Items))
 			copy(cp, lo.Items)
-			return listValue(cp, mut), nil
+			return vm.listValue(cp, mut), nil
 		})
 	}
 	return nil
@@ -844,22 +837,22 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 		return newDirect("map.keys", func(_ context.Context, _ []Value) (Value, error) {
 			out := make([]Value, len(mp.keyVals))
 			copy(out, mp.keyVals)
-			return ListValue(out), nil
+			return vm.listValue(out, false), nil
 		})
 	case "values":
 		return newDirect("map.values", func(_ context.Context, _ []Value) (Value, error) {
 			out := make([]Value, len(mp.Vals))
 			copy(out, mp.Vals)
-			return ListValue(out), nil
+			return vm.listValue(out, false), nil
 		})
 	case "forEach":
 		return newDirect("map.forEach", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("map.forEach: requires a callback function")
 			}
-			cb := args[0]
+			cb := newCallback(ctx, vm, args[0])
 			for i, k := range mp.keyVals {
-				if _, err := callValue(ctx, vm, cb, []Value{k, mp.Vals[i]}); err != nil {
+				if _, err := cb.call(k, mp.Vals[i]); err != nil {
 					return Null, err
 				}
 			}
@@ -875,10 +868,10 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("map.map: requires a callback function")
 			}
-			cb := args[0]
-			out := NewMap()
+			cb := newCallback(ctx, vm, args[0])
+			out := vm.mapValue(false)
 			for i, k := range mp.keyVals {
-				entry, err := callValue(ctx, vm, cb, []Value{k, mp.Vals[i]})
+				entry, err := cb.call(k, mp.Vals[i])
 				if err != nil {
 					return Null, err
 				}
@@ -899,10 +892,10 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("map.filter: requires a callback function")
 			}
-			cb := args[0]
-			out := mapValue(mp.Mut)
+			cb := newCallback(ctx, vm, args[0])
+			out := vm.mapValue(mp.Mut)
 			for i, k := range mp.keyVals {
-				v, err := callValue(ctx, vm, cb, []Value{k, mp.Vals[i]})
+				v, err := cb.call(k, mp.Vals[i])
 				if err != nil {
 					return Null, err
 				}
@@ -917,10 +910,10 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			if len(args) < 2 {
 				return Null, fmt.Errorf("map.reduce: requires (callback, initial)")
 			}
-			cb := args[0]
+			cb := newCallback(ctx, vm, args[0])
 			acc := args[1]
 			for i, k := range mp.keyVals {
-				v, err := callValue(ctx, vm, cb, []Value{k, mp.Vals[i], acc})
+				v, err := cb.call(k, mp.Vals[i], acc)
 				if err != nil {
 					return Null, err
 				}
@@ -941,7 +934,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 		// and copyImmutable are upstream's aliases for the two clone forms.
 		mut := name == "cloneMutable" || name == "copyMutable"
 		return newDirect("map."+name, func(_ context.Context, _ []Value) (Value, error) {
-			nm := mapValue(mut)
+			nm := vm.mapValue(mut)
 			for i, k := range mp.keyVals {
 				nm.asMap().setVal(k, mp.Vals[i])
 			}
@@ -953,7 +946,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.diff: requires a map argument")
 			}
 			other := args[0]
-			out := mapValue(mp.Mut)
+			out := vm.mapValue(mp.Mut)
 			for i, k := range mp.keyVals {
 				if _, ok := other.asMap().getVal(k); !ok {
 					out.asMap().setVal(k, mp.Vals[i])
@@ -967,7 +960,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				return Null, fmt.Errorf("map.intersect: requires a map argument")
 			}
 			other := args[0]
-			out := mapValue(mp.Mut)
+			out := vm.mapValue(mp.Mut)
 			for i, k := range mp.keyVals {
 				if _, ok := other.asMap().getVal(k); ok {
 					out.asMap().setVal(k, mp.Vals[i])
@@ -984,7 +977,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			if !mp.Mut {
 				return Null, errorImmutable("map")
 			}
-			cb := args[0]
+			cb := newCallback(ctx, vm, args[0])
 			type pair struct {
 				display string
 				k       Value
@@ -994,20 +987,9 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			for i, k := range mp.keyVals {
 				pairs[i] = pair{mp.Keys[i], k, mp.Vals[i]}
 			}
-			var sortErr error
-			sort.SliceStable(pairs, func(i, j int) bool {
-				if sortErr != nil {
-					return false
-				}
-				v, err := callValue(ctx, vm, cb, []Value{pairs[i].k, pairs[j].k})
-				if err != nil {
-					sortErr = err
-					return false
-				}
-				return v.Bool()
-			})
-			if sortErr != nil {
-				return Null, sortErr
+			key := func(p pair) Value { return p.k }
+			if err := sortStable(pairs, &cb, key); err != nil {
+				return Null, err
 			}
 			// Upstream "sorts the map key order IN PLACE ... and returns the map", so its
 			// tests discard the result and iterate the receiver. Building a fresh map left
@@ -1172,7 +1154,7 @@ func stringMethod(vm *VM, s Value, name string) *directObj {
 			for i, p := range parts {
 				out[i] = StringValue(p)
 			}
-			return ListValue(out), nil
+			return vm.listValue(out, false), nil
 		})
 	case "sub":
 		return newDirect("str.sub", func(_ context.Context, args []Value) (Value, error) {
@@ -1255,7 +1237,7 @@ func stringMethod(vm *VM, s Value, name string) *directObj {
 					out = append(out, StringValue(string(r)))
 				}
 			}
-			return ListValue(out), nil
+			return vm.listValue(out, false), nil
 		})
 	}
 	return nil
@@ -1286,7 +1268,7 @@ func rngMethod(vm *VM, r Value, name string) *directObj {
 		})
 	case "invert":
 		return newDirect("rng.invert", func(context.Context, []Value) (Value, error) {
-			return rangeValue(ro.Hi, ro.Lo), nil
+			return alloc(vm, tagRange, &rangeObj{Lo: ro.Hi, Hi: ro.Lo}), nil
 		})
 	case "toList":
 		return newDirect("rng.toList", func(context.Context, []Value) (Value, error) {
@@ -1298,7 +1280,7 @@ func rngMethod(vm *VM, r Value, name string) *directObj {
 			for i := ro.Lo; i != ro.Hi; i += step {
 				items = append(items, IntValue(i))
 			}
-			return ListValue(items), nil
+			return vm.listValue(items, false), nil
 		})
 	case "contains":
 		return newDirect("rng.contains", func(_ context.Context, args []Value) (Value, error) {
@@ -1347,38 +1329,76 @@ func fibMethod(vm *VM, fib Value, name string) *directObj {
 	return nil
 }
 
-// callValue invokes a Buzz callable (direct or fun) with args.
-// Used by higher-order list/map methods (forEach, map, filter, reduce, sort).
-func callValue(ctx context.Context, vm *VM, callee Value, args []Value) (Value, error) {
-	switch callee.tag() {
+// sortStable sorts items by the Buzz comparator cb, stably, as upstream's
+// insertion sort does. sort.Stable asks only Less, the one answer a Buzz
+// comparator gives. The first comparator error ends the calls.
+func sortStable[T any](items []T, cb *callback, key func(T) Value) error {
+	var sortErr error
+	sort.Stable(byLess[T]{items: items, less: func(a, b T) bool {
+		if sortErr != nil {
+			return false
+		}
+		v, err := cb.call(key(a), key(b))
+		if err != nil {
+			sortErr = err
+			return false
+		}
+		return v.Bool()
+	}})
+	return sortErr
+}
+
+type byLess[T any] struct {
+	items []T
+	less  func(a, b T) bool
+}
+
+func (s byLess[T]) Len() int           { return len(s.items) }
+func (s byLess[T]) Less(i, j int) bool { return s.less(s.items[i], s.items[j]) }
+func (s byLess[T]) Swap(i, j int)      { s.items[i], s.items[j] = s.items[j], s.items[i] }
+
+// callback runs the callbacks of one higher-order list or map builtin call.
+// Each builtin call builds its own, so a callback that itself calls map runs
+// the inner callbacks on a different VM.
+type callback struct {
+	ctx    context.Context
+	caller *VM
+	callee Value
+	vm     *VM
+}
+
+func newCallback(ctx context.Context, caller *VM, callee Value) callback {
+	return callback{ctx: ctx, caller: caller, callee: callee}
+}
+
+// optimization: one VM runs every callback of a builtin call.
+// measured: BenchmarkMapCallback (libs/gopherbuzz) -86% ns/op, -99.8% allocs.
+// trade-off: the VM outlives one callback, so it must come back empty.
+// assumes: a builtin stops at its first error; Exec returns frameless.
+func (c *callback) call(args ...Value) (Value, error) {
+	switch c.callee.tag() {
 	case tagDirect:
-		result, err := vm.asDirect(callee).Fn(ctx, args)
+		fn := c.caller.asDirect(c.callee).Fn
+		result, err := fn(c.ctx, slices.Clone(args))
 		if err != nil {
 			return Null, err
 		}
-		vm.adopt(result)
+		c.caller.adopt(result)
 		return result, nil
 	case tagFun:
-		// Parented to the caller's tree, so a collectable the callback allocates joins
-		// the one registry and is swept later. Detached, its registry died with this
-		// VM and its collect() never ran at all; measured: five Tracked built inside
-		// a map callback and then dropped collected ZERO times, where the same five
-		// built outside collected five.
-		//
-		// It also makes the sweep SAFER, not riskier: CollectUnreachable walks the
-		// chain from the requesting VM up to the root, so an object the caller still
-		// holds is marked even when the sweep is armed in here. (A detached VM was not
-		// collecting live outer objects, contrary to a review finding: registry and
-		// roots were both scoped to this VM, so a sweep could only reach its own
-		// garbage. The defect was the orphaning, not premature collection.)
-		callVM := NewVM(ctx)
-		callVM.gcParent = vm.gcRoot()
-		if err := callVM.Call(callee, args); err != nil {
+		if c.vm == nil {
+			c.vm = NewVM(c.ctx)
+			// The sweep marks from the requesting VM up through gcParent, so
+			// parenting to the root would skip an outer callback's frames.
+			c.vm.gcParent = c.caller
+		}
+		if err := c.vm.pushFrame(c.caller.asFun(c.callee), args); err != nil {
 			return Null, err
 		}
-		return callVM.Exec()
+		return c.vm.Exec()
 	default:
-		return Null, fmt.Errorf("buzz: value of kind %q is not callable", callee.buzzKind())
+		kind := c.callee.buzzKind()
+		return Null, fmt.Errorf("buzz: value of kind %q is not callable", kind)
 	}
 }
 

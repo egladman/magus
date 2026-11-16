@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // Callers racing for one target run it once and all see its error; a failed run is not
@@ -89,4 +91,56 @@ func TestTargetRunsMarkDoneAndPassed(t *testing.T) {
 	assert.Equal(t, []string{"format", "lint"}, runs.Passed("."))
 	assert.Equal(t, []string{"lint"}, runs.Passed("docs"))
 	assert.Error(t, runs.Once(t.Context(), failed, func() error { return nil }), "MarkDone kept the failure")
+}
+
+func TestTargetRunsSuite(t *testing.T) { suite.Run(t, new(TargetRunsSuite)) }
+
+// TargetRunsSuite pins the failed list a ci repair reads.
+type TargetRunsSuite struct{ suite.Suite }
+
+func (s *TargetRunsSuite) run(runs *TargetRuns, project, target string, err error) {
+	_ = runs.Once(s.T().Context(), types.TargetRef{Project: project, Target: target}, func() error { return err })
+}
+
+func (s *TargetRunsSuite) TestFailedListsEachFailedTargetWithItsError() {
+	runs := NewTargetRuns()
+	lint, build := errors.New("lint failed"), errors.New("build failed")
+	s.run(runs, "docs", "lint", lint)
+	s.run(runs, ".", "test", nil)
+	s.run(runs, ".", "build", build)
+
+	s.Equal([]TargetFailure{
+		{Ref: types.TargetRef{Project: ".", Target: "build"}, Err: build},
+		{Ref: types.TargetRef{Project: "docs", Target: "lint"}, Err: lint},
+	}, runs.Failed())
+}
+
+func (s *TargetRunsSuite) TestFailedLeavesOutACancelledSibling() {
+	runs := NewTargetRuns()
+	s.run(runs, ".", "test", fmt.Errorf("waiting on .:build: %w", context.Canceled))
+
+	s.Empty(runs.Failed())
+}
+
+func (s *TargetRunsSuite) TestFailedLeavesOutATimedOutSibling() {
+	runs := NewTargetRuns()
+	s.run(runs, ".", "test", fmt.Errorf("go test: %w", context.DeadlineExceeded))
+
+	s.Empty(runs.Failed())
+}
+
+func (s *TargetRunsSuite) TestFailedLeavesOutARunStillGoing() {
+	runs := NewTargetRuns()
+	_, first := runs.TryRun(types.TargetRef{Project: ".", Target: "slow"})
+	s.Require().True(first)
+
+	s.Empty(runs.Failed())
+}
+
+func (s *TargetRunsSuite) TestFailedIsEmptyAfterACleanPass() {
+	runs := NewTargetRuns()
+	s.run(runs, ".", "lint", nil)
+	runs.MarkDone(types.TargetRef{Project: ".", Target: "format"})
+
+	s.Empty(runs.Failed())
 }

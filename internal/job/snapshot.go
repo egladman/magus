@@ -10,6 +10,8 @@ import (
 // running inside that reader sees the same rows instead of opening the store again.
 type Snapshot struct {
 	Rows []types.Job
+	// Attempts are the tries the store held, as [Store.Attempts] read them.
+	Attempts []types.Attempt
 	// Err is why the store could not be read, nil when it could.
 	Err error
 }
@@ -21,7 +23,22 @@ func (s Snapshot) Clone() Snapshot {
 	for i, row := range s.Rows {
 		rows[i] = row.Clone()
 	}
-	return Snapshot{Rows: rows, Err: s.Err}
+	tries := make([]types.Attempt, len(s.Attempts))
+	for i, a := range s.Attempts {
+		tries[i] = a.Clone()
+	}
+	return Snapshot{Rows: rows, Attempts: tries, Err: s.Err}
+}
+
+// ReadSnapshot reads store's rows, swept as [Store.List] sweeps them, and
+// its tries.
+func ReadSnapshot(store *Store) Snapshot {
+	rows, err := store.List()
+	if err != nil {
+		return Snapshot{Err: err}
+	}
+	tries, err := store.Attempts()
+	return Snapshot{Rows: rows, Attempts: tries, Err: err}
 }
 
 type snapshotKey struct{}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -29,6 +30,7 @@ import (
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // Magus declares the host-declarable subset of the magus module. The remaining
@@ -91,6 +93,16 @@ var Magus = Module{
 			Returns: []Ret{{Object: "ExecResult"}},
 			Raises:  true,
 			Impl:    MagusCommand,
+		},
+		{
+			Name: "cmd_all",
+			Doc:  "Run several nested magus commands at once. Each is magus\\cmd's sub, args and opts as one Subcommand record, so commands may differ in subcommand, dir and every option. They run on the slots the calling target's step holds, as many at once as it holds, so a batch runs as wide as its step was granted and never past it: declare the target's slots to widen it. With no budget on the context, as in a bare `magus buzz` script, or a caller that holds no slot, they run one at a time and a line says so. Results come back in input order. Each command's output is buffered and written to the console as one block when it ends, in the order the commands end, or every 1 MiB for one that writes more. Every started command runs to its end whatever its siblings do; then the call raises naming each command that failed, unless that command's opts.allowFailure is set, which returns its result instead: set it on every command to read every result. A cancelled run starts no further command. run and affected are refused, since this run's pool adopts them and they would wait for a slot the batch holds: call magus\\run for those. A command is not handed this run's pool socket, so a nested run it starts is its own invocation, which the workspace lock refuses for any project this run holds.",
+			Args: []Arg{
+				{Name: "commands", Object: "[Subcommand]"},
+			},
+			Returns: []Ret{{Object: "[ExecResult]"}},
+			Raises:  true,
+			Impl:    MagusCommandAll,
 		},
 		{
 			Name: "where",
@@ -241,7 +253,7 @@ var Magus = Module{
 				"opts.session is the host's session id, empty for the one with the newest observation; opts.since is a " +
 				"duration back from opts.until (`6h`) or an RFC3339 time, default 24h; opts.until is an RFC3339 time, " +
 				"default now. An unknown option raises, and MGS1022 outside a workspace.",
-			Args:    []Arg{{Name: "opts", Optional: true, Object: "SessionOptions"}},
+			Args:    []Arg{{Name: "opts", Optional: true, Object: `magus\trail\ReadOptions`}},
 			Returns: []Ret{{Object: "Session"}},
 			Raises:  true,
 			Impl:    MagusSessionOpen,
@@ -303,15 +315,16 @@ var Magus = Module{
 				"which magus reads once at load. tiers is that enum and default one of its cases. " +
 				"hosts maps each harness the magusfile wired, keyed by the harness id " +
 				"magus\\harness.provider returns, to a function from a tier to the model alias that harness spawns; " +
-				"bounds maps a tier to its magus\\ModelTierBounds (maxLive, maxContext; a zero field is " +
-				"no cap); skills maps a tier to the magus\\SkillVariant its workers load. Write each " +
+				"bounds maps a tier to its magus\\agent\\ModelTierBounds (maxLive, maxContext; a zero field is " +
+				"no cap); skills maps a tier to the magus\\agent\\SkillVariant its workers load. Write each " +
 				"function as an exhaustive match over the enum, so a tier added later fails " +
 				"`magus check` until every function covers it. No model name is magus's: the aliases " +
 				"are yours. hosts, bounds and skills are checked at load against the enum, and the " +
 				"declaration must follow the magus\\harness.provider calls it maps. A declaration " +
 				"magus cannot use is MGS1052, and so is a second call or one outside the root " +
 				"magusfile. magus\\modelTiers(null) turns tiers off. With no call the workspace " +
-				"gets the magus/modeltiers module: economy, standard and principal. This declares; " +
+				"gets the magus/modeltiers module: routine, bounded, design and frontier. Adjacent " +
+				"tiers may share a host's alias, for a host with fewer models than tiers. This declares; " +
 				"it never selects a model for a call, retries or escalates, and prints nothing. " +
 				"The recorded outcomes per tier are magus\\workspace().tierOutcomes().",
 			Args: []Arg{
@@ -340,7 +353,7 @@ var Magus = Module{
 	},
 	// The objects a modelTiers declaration and a modelTier function take,
 	// which no signature names.
-	CallbackObjects: []string{"ModelTierRequest", "ModelTierBounds", "JobModelTier"},
+	CallbackObjects: []string{"ModelTierRequest", `magus\agent\ModelTierBounds`, `magus\agent\JobModelTier`},
 	Objects:         magusObjects,
 	// Each namespace below is reached THROUGH rather than called
 	// (`magus\cache.remote(<spell>)`), so it is declared as an object with static
@@ -354,7 +367,7 @@ var Magus = Module{
 	Namespaces: []Namespace{
 		{
 			Name: "log",
-			Doc:  "Emitting a message without changing control flow: the four levels, plus hint. magus\\fatal and magus\\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this module hard to read.",
+			Doc:  "Emitting a message without changing control flow: the four levels, plus hint. magus\\fatal and magus\\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this module hard to read. Inside a target every level is written to the target's captured output, in log.format, so `magus query output <ref>` holds the whole log whatever -q or -v said. The console shows a line only at or above the run's log level, passing target or failing.",
 			Methods: []Method{
 				{
 					Name:   "debug",
@@ -494,14 +507,28 @@ var Magus = Module{
 					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.StopRequest) (types.GuardVerdict, error)) error)(nil),
 				},
 				{
+					Name: "step",
+					Doc: "Register the function the agent guard calls on every step of kind that a program " +
+						"embedding magus asks it to judge: fun(req: StepRequest) > GuardVerdict. kind is a row's " +
+						"kind, lowercase words joined by hyphens; a seam's name and step are refused. The rule runs " +
+						"after the built-in rules and the program's own Go rules, and the strictest decision wins. " +
+						"An unnamed verdict reports as workspace:step. Declared at the top level of the root " +
+						"magusfile, once per kind. Strengthen only and evaluated from both the committed and the " +
+						"working-tree sources, exactly as guard.command is. A rule that fails judges nothing and " +
+						"says so; a row nothing else judges is then denied. Registering a kind twice, from another " +
+						"project, or with a non-function is MGS1045. magus ships no rule.",
+					Args:   []Arg{{Name: "kind"}, {Name: "rule"}},
+					Extern: (func(ctx context.Context, kind string, rule func(ctx context.Context, req agent.StepRequest) (types.GuardVerdict, error)) error)(nil),
+				},
+				{
 					Name:    "allow",
-					Doc:     "The verdict a spawn, command, write or stop rule returns to add nothing.",
+					Doc:     "The verdict a spawn, command, write, stop or step rule returns to add nothing.",
 					Returns: []Ret{{Object: "GuardVerdict"}},
 					Extern:  (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name: "advise",
-					Doc: "The verdict a spawn, command, write or stop rule returns to let the call through with text for the agent. " +
+					Doc: "The verdict a spawn, command, write, stop or step rule returns to let the call through with text for the agent. " +
 						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>.",
 					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
 					Returns: []Ret{{Object: "GuardVerdict"}},
@@ -509,7 +536,7 @@ var Magus = Module{
 				},
 				{
 					Name: "deny",
-					Doc: "The verdict a spawn, command, write or stop rule returns to block the call, with text saying why. " +
+					Doc: "The verdict a spawn, command, write, stop or step rule returns to block the call, with text saying why. " +
 						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>, is stored, " +
 						"and a repeat in the same session shortens to its first line.",
 					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
@@ -557,7 +584,7 @@ var Magus = Module{
 			},
 			// Brief is no method's: a buzz-format spawn brief is one magus\Brief literal the
 			// guard type-checks against this declaration.
-			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "StopRequest", "GuardBinary", "Brief"},
+			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "StopRequest", `magus\agent\StepRequest`, `magus\agent\Step`, "GuardBinary", "Brief"},
 		},
 		{
 			Name: "harness",
@@ -1248,6 +1275,50 @@ func MagusCommand(ctx context.Context, sub string, args []string, opts types.Mag
 	return runMagusSub(ctx, sub, args, opts)
 }
 
+// MagusCommandAll implements magus\cmdAll: each command as magus\cmd runs it,
+// as many at once as the calling step holds slots. Results keep input order.
+// Every started command ends before a failure raises.
+func MagusCommandAll(ctx context.Context, commands []types.MagusSubcommand) ([]types.ExecResult, error) {
+	for i, c := range commands {
+		if adoptedSubcommand(c.Sub) {
+			return nil, fmt.Errorf(`magus.cmdAll: command %d: magus %s is refused: this run's pool adopts it, where it would wait for a slot the batch holds, so call magus\run for it`, i, c.Sub)
+		}
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("magus.cmdAll: executable: %w", err)
+	}
+	env := batchCommandEnv(ctx)
+	argvs := make([][]string, len(commands))
+	for i, c := range commands {
+		warnIfTypedSubcommand(ctx, c.Sub, c.Args)
+		argvs[i] = nestedArgv(append([]string{c.Sub}, c.Args...), c.Opts)
+	}
+	label := func(i int) string { return "magus " + strings.Join(argvs[i], " ") }
+	results := make([]types.ExecResult, len(commands))
+	errs := runSeated(ctx, len(commands), label, func(ctx context.Context, i int) error {
+		res, err := spawn.Exec(nestedMagusContext(ctx), self, argvs[i], nestedExecOptions(ctx, commands[i].Opts, env))
+		results[i], err = nestedResult("cmdAll", argvs[i], res, err, commands[i].Opts)
+		return err
+	})
+	failed := 0
+	for _, err := range errs {
+		if err != nil {
+			failed++
+		}
+	}
+	if failed > 0 {
+		return nil, fmt.Errorf("magus.cmdAll: %d of %d commands failed: %w", failed, len(commands), errors.Join(errs...))
+	}
+	return results, nil
+}
+
+// adoptedSubcommand reports whether this run's pool adopts a nested magus sub
+// rather than letting it start a pool of its own.
+func adoptedSubcommand(sub string) bool {
+	return sub == "run" || sub == "affected"
+}
+
 // warnIfTypedSubcommand warns when sub (and, for describe, its noun) names a
 // command with a dedicated typed method, nudging authors off the escape hatch.
 // A describe noun with no method draws nothing: magus.cmd is the way to reach it.
@@ -1508,20 +1579,21 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	// Recovered by assertion like workspaceCacheDir; declared here, inside the one
 	// declaration this door owns.
 	type modelTiered interface {
-		ModelTiers(ctx context.Context) *types.ModelTierSet
+		ModelTiers(ctx context.Context) *agent.ModelTierSet
 		ModelTierMatrix() types.ModelTierMatrix
-		CheckSpawn(parent, child types.ModelTier) error
+		CheckSpawn(parent, child agent.ModelTier) error
+		SpawnCeiling(ctx context.Context) (builtin.Setting, error)
 	}
 	if tiers, ok := ws.(modelTiered); ok {
 		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(ctx), tiers.ModelTierMatrix()
-		loc.SpawnRule = tiers.CheckSpawn
+		loc.SpawnRule, loc.SpawnCeiling = tiers.CheckSpawn, tiers.SpawnCeiling
 	}
 	// std cannot import internal/agent, which loads the harness spells, so the workspace
 	// supplies the reader.
-	if rows, ok := ws.(interface {
-		ModelRows(ctx context.Context) func() []types.ModelPricing
+	if models, ok := ws.(interface {
+		Models(ctx context.Context) func() []types.ModelPricing
 	}); ok {
-		loc.ModelRows = rows.ModelRows(ctx)
+		loc.ModelRows = models.Models(ctx)
 	}
 	if owned, ok := ws.(interface {
 		AffectedFromPaths(ctx context.Context, paths []string) (*types.AffectedResult, error)
@@ -1558,7 +1630,10 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 		if snap.Err != nil {
 			return types.JobList{}, snap.Err
 		}
-		return types.NewJobList(snap.Clone().Rows), nil
+		snap = snap.Clone()
+		list := types.NewJobList(snap.Rows)
+		list.Attempts = job.BoundAttempts(snap.Rows, snap.Attempts, time.Now().Unix())
+		return list, nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.list")
 	if err != nil {
@@ -1587,17 +1662,18 @@ func MagusUnmergedJob(ctx context.Context, workspace string) (types.JobUnmergedR
 		if snap.Err != nil {
 			return types.JobUnmergedReport{}, snap.Err
 		}
-		return job.Unmerged(ctx, workspace, snap.Clone().Rows), nil
+		snap = snap.Clone()
+		return job.Unmerged(ctx, workspace, snap.Rows, types.NewJobAttempts(snap.Attempts)), nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.unmerged")
 	if err != nil {
 		return types.JobUnmergedReport{}, err
 	}
-	rows, err := store.List()
-	if err != nil {
-		return types.JobUnmergedReport{}, err
+	snap := job.ReadSnapshot(store)
+	if snap.Err != nil {
+		return types.JobUnmergedReport{}, snap.Err
 	}
-	return job.Unmerged(ctx, workspace, rows), nil
+	return job.Unmerged(ctx, workspace, snap.Rows, types.NewJobAttempts(snap.Attempts)), nil
 }
 
 // checkoutCacheDir is the cache directory of the workspace on ctx, or the one
@@ -1937,12 +2013,7 @@ func runMagus(ctx context.Context, label string, args []string, opts types.Magus
 		return types.ExecResult{}, fmt.Errorf("magus.%s: executable: %w", label, err)
 	}
 
-	// Global flags (e.g. --root) precede the subcommand and its args.
-	var full []string
-	if opts.Root != "" {
-		full = append(full, "--root", opts.Root)
-	}
-	full = append(full, args...)
+	full := nestedArgv(args, opts)
 
 	// childEnv withholds server sockets from subprocesses, while a recursive Magus
 	// call must retain both that trusted transport and its captured lease.
@@ -1960,6 +2031,16 @@ func runMagus(ctx context.Context, label string, args []string, opts types.Magus
 		return types.ExecResult{}, fmt.Errorf("magus.%s: %w", label, err)
 	}
 	return rec, cmdErr
+}
+
+// nestedArgv is a nested magus's argv: global flags (--root) precede the
+// subcommand and its args.
+func nestedArgv(args []string, opts types.MagusCommandOptions) []string {
+	var full []string
+	if opts.Root != "" {
+		full = append(full, "--root", opts.Root)
+	}
+	return append(full, args...)
 }
 
 // nestedResult turns a nested magus's exit into what the calling method returns.
@@ -2017,10 +2098,7 @@ func nestedMagusContext(ctx context.Context) context.Context {
 // It deliberately rebuilds BAGGAGE from the context instead of forwarding the mutable
 // process value, so a script cannot shed its bound lease before calling magus\cmd.
 func recursiveMagusEnv(ctx context.Context) []string {
-	var env []string
-	if lease := types.JobLeaseFromContext(ctx); lease != "" {
-		env = append(env, fmt.Sprintf("%s=%s=%s", trail.EnvBaggage, trail.BaggageLease, lease))
-	}
+	env := leaseEnv(ctx)
 	for _, k := range spawn.ProcForwardVars {
 		if v := os.Getenv(k); v != "" {
 			env = append(env, fmt.Sprintf("%s=%s", k, v))
@@ -2029,6 +2107,27 @@ func recursiveMagusEnv(ctx context.Context) []string {
 		}
 	}
 	return env
+}
+
+// leaseEnv is the BAGGAGE through which a nested magus keeps its caller's lease.
+func leaseEnv(ctx context.Context) []string {
+	if lease := types.JobLeaseFromContext(ctx); lease != "" {
+		return []string{fmt.Sprintf("%s=%s=%s", trail.EnvBaggage, trail.BaggageLease, lease)}
+	}
+	return nil
+}
+
+// batchCommandEnv is a magus\cmdAll command's: the lease without this run's
+// pool socket. The command holds a slot of its step, so a nested run it
+// forwarded here would queue for that slot.
+func batchCommandEnv(ctx context.Context) []string {
+	for _, k := range spawn.ProcForwardVars {
+		if os.Getenv(k) != "" {
+			slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,
+				`magus socket withheld from a magus\cmdAll command`), "var", k)
+		}
+	}
+	return leaseEnv(ctx)
 }
 
 // MagusDiagnoseDrift diagnoses a generate gate's drift into a coded diagnostic. Given the

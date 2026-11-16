@@ -283,6 +283,191 @@ export fun magusFix(root: str) > str {
     return "Install magus ({SETUP_URL}), or set __MAGUS_BIN to its path.";
 }
 
+// RELINK is ward.RelinkCommand: it links ./magus from the tree and loads no
+// magusfile, so it runs while nothing loads the tree.
+// cmd/magus/shell_test.go pins the copy.
+final RELINK = "GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus";
+
+// aimedAt is line with -C root after its go, runnable from any directory.
+fun aimedAt(line: str, root: str) > str {
+    final at = path\abs(root) catch root;
+    return line.replace(" go ", with: " go -C {shellWord(at)} ");
+}
+
+// recoveryLine is the one recovery for root, a checkout of magus, as the Go
+// guard spells it: the relink over a ./magus, else the bootstrap. Both are
+// aimed at root. "" outside a checkout of magus.
+export fun recoveryLine(root: str) > str {
+    if (root == "" or !buildsMagus(root)) { return ""; }
+    if (fs\exists("{root}/magus") catch false) { return aimedAt(RELINK, root: root); }
+    return aimedAt(BOOTSTRAP, root: root);
+}
+
+// recovers reports a line that runs while no magus judges: the bootstrap
+// or the relink, bare or aimed at root.
+export fun recovers(command: str, root: str) > bool {
+    final line = command.trim();
+    if (isBootstrap(line) or line == RELINK) { return true; }
+    if (root == "" or !buildsMagus(root)) { return false; }
+    return line == aimedAt(BOOTSTRAP, root: root) or line == aimedAt(RELINK, root: root);
+}
+
+// exitsJob is a `magus job exit`, the call a worker files its result through.
+// It writes no tracked file, and refusing it leaves the row with no word on
+// why its holder stopped.
+export fun exitsJob(command: str) > bool {
+    final words = command.trim().split(" ");
+    if (words.len() < 3 or words[1] != "job" or words[2] != "exit") { return false; }
+    return words[0] == "magus" or words[0].endsWith("/magus");
+}
+
+test "a worker's job exit runs while no magus judges, and nothing else does" {
+    std\assert(exitsJob("./magus job exit rename-x --stdin"), message: "the checkout's binary");
+    std\assert(exitsJob("magus job exit rename-x"), message: "the binary on PATH");
+    std\assert(exitsJob("/abs/path/magus job exit rename-x --stdin"), message: "an absolute binary");
+    std\assert(!exitsJob("./magus job fork rename-x"), message: "a fork changes the store's plan");
+    std\assert(!exitsJob("./magus run test ."), message: "a run");
+    std\assert(!exitsJob("notmagus job exit x"), message: "another binary");
+}
+
+// recoveryFix names that line, or the install page outside a magus checkout.
+export fun recoveryFix(root: str) > str {
+    final line = recoveryLine(root);
+    if (line == "") { return magusFix(root); }
+    return "Build ./magus in {root}, alone on its line: `{line}`. "
+        + "Until a magus loads this tree, that line and reads are all that run.";
+}
+
+// shellWord quotes word for a POSIX shell, and leaves it bare when it can.
+fun shellWord(word: str) > str {
+    final safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@%+=:,./-_";
+    var bare = word != "";
+    foreach (i in 0..word.len()) {
+        if (safe.indexOf(word.sub(i, len: 1)) == null) { bare = false; }
+    }
+    if (bare) { return word; }
+    return "'" + word.replace("'", with: "'\\''") + "'";
+}
+
+// errorLines is what a failed magus said, WARN lines dropped: a config the
+// binary is too old for warns before it fails, a symptom and not the error.
+export fun errorLines(stderr: str) > str {
+    final lines = mut [<str>];
+    foreach (line in stderr.split("\n")) {
+        if (line != "" and line.indexOf("WARN") == null and lines.len() < 12) { lines.append(line); }
+    }
+    return lines.join("\n");
+}
+
+// A binary that cannot load the tree denies under the stale-binary rule. A
+// glue rendering a template prefixes UNLOADED_HEAD, which marks that deny on
+// its own line. Its passes stand: they are the reads and fixes it lets through.
+final UNLOADED_MARK = "__MAGUS_UNLOADED__";
+final UNLOADED_HEAD = `{{with index . "rule"}}{{if and (eq . "stale-binary") (eq (index $ "decision") "deny")}}__MAGUS_UNLOADED__{{toJson (index $ "reason")}}` + "\n" + `{{end}}{{end}}`;
+
+// What a binary older than its magus.yaml prints as it exits unjudged.
+final LOAD_FAILURES = ["MGS1040", "MGS1021", "this magus does not know", "invalid config"];
+
+// unloadedTemplate is response with the mark unloadedWhy reads put ahead of it.
+export fun unloadedTemplate(response: str) > str {
+    return UNLOADED_HEAD + response;
+}
+
+// unloadedWhy says why attempt's binary could not load the tree, "" when its
+// answer stands. It reads a marked template reply and a `-o json` verdict.
+// A kill or a crash stands: another binary would not fix it.
+export fun unloadedWhy(attempt: proc\ExecResult?) > str {
+    if (attempt == null) { return "it could not be run"; }
+    final printed = attempt!.stdout;
+    if (printed.startsWith(UNLOADED_MARK)) {
+        final head = firstLine(printed.sub(UNLOADED_MARK.len(), len: printed.len() - UNLOADED_MARK.len()));
+        final why = firstLine(((json\parse(head) catch null) as? str) ?? "");
+        if (why != "") { return why; }
+        return "it denied under the stale-binary rule";
+    }
+    if (printed.trim().startsWith("\{")) {
+        final verdict = json\parse(printed) catch null;
+        if (field(verdict, dotPath: "rule") == "stale-binary" and field(verdict, dotPath: "decision") == "deny") {
+            final why = firstLine(field(verdict, dotPath: "reason"));
+            if (why != "") { return why; }
+            return "it denied under the stale-binary rule";
+        }
+    }
+    if (attempt!.code == 0 or trimTrailingNewlines(printed) != "") { return ""; }
+    final lines = errorLines(attempt!.stderr);
+    foreach (marker in LOAD_FAILURES) {
+        if (lines.indexOf(marker) != null) { return lines; }
+    }
+    return "";
+}
+
+fun checkoutsUp(root: str) > [str] {
+    final found = mut [<str>];
+    var at = root;
+    while (at != "") {
+        found.append(at);
+        at = workspaceRootAt(parentDir(at));
+    }
+    return found;
+}
+
+// binCandidates is every binary that may judge a call from cwd, in asking
+// order. first is resolveBin's pick, __MAGUS_BIN when that is set. Each later
+// one is asked only while every one before it cannot load the tree: the
+// call's checkout, the session's, each checkout above them, then PATH.
+export fun binCandidates(first: str, cwd: str) > [str] {
+    final found = mut [first];
+    final bins = mut [<str>];
+    foreach (root in checkoutsUp(workspaceRootAt(cwd)) + checkoutsUp(binRoot(""))) {
+        bins.append("{root}/magus");
+    }
+    bins.append(env\get("__MAGUS_BIN") catch "");
+    bins.append(proc\which("magus") catch "");
+    foreach (bin in bins) {
+        if (bin != "" and found.indexOf(bin) == null and isExecutable(bin)) { found.append(bin); }
+    }
+    return found;
+}
+
+// Judged is the first answer that stands, and the binaries passed over for it.
+export object Judged {
+    result: proc\ExecResult?,
+    // by is the binary whose answer stands, "" when none loads the tree.
+    by: str,
+    // trail has one line per binary passed over: which, and why.
+    trail: [str],
+}
+
+// judgeFirstLoaded asks each candidate in turn and keeps the first answer
+// that stands. ask runs one judgment with the binary it is given.
+export fun judgeFirstLoaded(candidates: [str], ask: fun (bin: str) > proc\ExecResult?) > Judged {
+    final trail = mut [<str>];
+    foreach (candidate in candidates) {
+        final attempt = ask(candidate);
+        final why = unloadedWhy(attempt);
+        if (why == "") { return Judged{ result = attempt, by = candidate, trail = trail }; }
+        final verb = if (trail.len() == 0) "tried" else "fell to";
+        trail.append("{verb} {candidate}, which could not load this tree: {why}");
+    }
+    return Judged{ result = null, by = "", trail = trail };
+}
+
+// unloadedVerdict refuses when no candidate loads; what is "call" or "write".
+export fun unloadedVerdict(judged: Judged, what: str) > str {
+    return "magus guard could not judge this {what}: no magus it tried can load this tree\n"
+        + judged.trail.join("\n") + "\nno other magus is left to fall to";
+}
+
+// fellToNotice tells the person which binaries were passed over and which
+// judged, "" when the first one did.
+export fun fellToNotice(judged: Judged, what: str, root: str) > str {
+    if (judged.trail.len() == 0) { return ""; }
+    var rebuild = "";
+    final line = recoveryLine(root);
+    if (line != "") { rebuild = " Get ./magus in {root} a binary that reads its tree: `{line}`."; }
+    return judged.trail.join("\n") + "\nfell to {judged.by}, which judged this {what}.{rebuild}";
+}
+
 final REFUSAL_FALLBACK = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not judge this call"}}`;
 
 // refusal is the Claude Code PreToolUse deny of a call no magus judged. The
@@ -488,4 +673,76 @@ test "the whole envelope goes to magus unless a host names a field to select" {
     std\assert(wholeEvent(mcp, dotPath: "tool_input.command", toolPath: "tool_name"), message: "an MCP call is never reduced to a field");
     final todo = json\parse("\{\"tool_name\":\"TodoWrite\",\"tool_input\":\{\"todos\":[]}}") catch null;
     std\assert(wholeEvent(todo, dotPath: "tool_input.command", toolPath: "tool_name"), message: "an absent field sends the envelope");
+}
+
+test "the recovery line aims the bootstrap, or the relink over a binary, at the checkout of magus" {
+    final root = fs\tempDir("hook-recovery-");
+    fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
+    final line = recoveryLine(root);
+    std\assert(line == "GOEXPERIMENT=jsonv2 go -C {root} run -trimpath ./cmd/magus run go-build --no-cache .", message: line);
+    std\assert(recoveryFix(root).indexOf(line) != null, message: "the fix names the line that passes");
+    std\assert(recovers(" {line} ", root: root) and recovers(BOOTSTRAP, root: root), message: "both spellings run");
+    std\assert(!recovers(line + " && ls", root: root), message: "a line after it is not the recovery");
+    plantBinary(root);
+    final relink = recoveryLine(root);
+    std\assert(relink == "GOEXPERIMENT=jsonv2 go -C {root} build -trimpath -o magus ./cmd/magus", message: relink);
+    std\assert(recovers(relink, root: root) and recovers(RELINK, root: root), message: "the relink runs, bare or aimed");
+    std\assert(recovers(line, root: root), message: "the bootstrap still runs over a binary");
+    std\assert(!recovers(relink + " && ls", root: root), message: "a line after the relink is not the recovery");
+    fs\writeFile("{root}/go.mod", content: "module example.com/other\n");
+    std\assert(recoveryLine(root) == "", message: "no bootstrap outside a checkout of magus");
+    std\assert(shellWord("/a b/it's") == "'/a b/it'\\''s'", message: shellWord("/a b/it's"));
+    fs\removeAll(root);
+}
+
+fun stub(dir: str, name: str, body: str) > str !> any {
+    final bin = "{dir}/{name}";
+    fs\writeFile(bin, content: "#!/bin/sh\ncat > /dev/null\n{body}\n");
+    fs\chmod(bin, mode: 493);
+    return bin;
+}
+
+fun run(bin: str) > proc\ExecResult? {
+    return proc\exec(bin, args: [<str>], opts: proc\ExecOptions{ quiet = true, allowFailure = true, stdin = "" }) catch null;
+}
+
+test "a binary that cannot load the tree is passed over for the next" {
+    final dir = fs\tempDir("hook-candidates-");
+    final config = stub(dir, name: "config", body: "echo 'magus: WARN config' >&2\n"
+        + "echo '[MGS1040] magus.yaml has a key this magus does not know:' >&2\n"
+        + "echo '  - ci.remote_gate  (line 3)' >&2\nexit 1");
+    final stale = stub(dir, name: "stale", body: "printf '%s\\n%s' '{UNLOADED_MARK}\"stale predates magus.yaml\\nmore\"' '\{}'\nexit 2");
+    final staleJSON = stub(dir, name: "stale-json", body: "echo '\{\"decision\":\"deny\",\"rule\":\"stale-binary\",\"reason\":\"json predates\"}'\nexit 2");
+    final killed = stub(dir, name: "killed", body: "echo 'signal: killed' >&2\nexit 137");
+    final loads = stub(dir, name: "loads", body: "echo VERDICT");
+
+    final judged = judgeFirstLoaded([config, stale, staleJSON, loads], ask: run);
+    std\assert(judged.by == loads and judged.result!.stdout.trim() == "VERDICT", message: "{judged.by}");
+    std\assert(judged.trail.len() == 3, message: judged.trail.join("|"));
+    std\assert(judged.trail[0] == "tried {config}, which could not load this tree: "
+        + "[MGS1040] magus.yaml has a key this magus does not know:\n  - ci.remote_gate  (line 3)", message: judged.trail[0]);
+    std\assert(judged.trail[1] == "fell to {stale}, which could not load this tree: stale predates magus.yaml", message: judged.trail[1]);
+    std\assert(judged.trail[2] == "fell to {staleJSON}, which could not load this tree: json predates", message: judged.trail[2]);
+    std\assert(fellToNotice(judged, what: "call", root: "").indexOf("fell to {loads}, which judged this call.") != null, message: "the notice names the judge");
+
+    final standing = judgeFirstLoaded([config, killed, loads], ask: run);
+    std\assert(standing.by == killed, message: "a kill is answered once, never asked of another binary");
+
+    final none = judgeFirstLoaded([config, stale], ask: run);
+    std\assert(none.by == "" and none.trail.len() == 2, message: none.trail.join("|"));
+    std\assert(unloadedVerdict(none, what: "write").indexOf("no other magus is left to fall to") != null, message: unloadedVerdict(none, what: "write"));
+    fs\removeAll(dir);
+}
+
+test "the next candidates are the checkouts up from the call, then PATH" {
+    final parent = fs\tempDir("hook-parent-");
+    fs\writeFile("{parent}/magus.yaml", content: "");
+    plantBinary(parent);
+    final worktree = "{parent}/.claude/worktrees/agent-x";
+    fs\mkdirAll("{worktree}/docs");
+    fs\writeFile("{worktree}/magus.yaml", content: "");
+    final found = binCandidates("/first/magus", cwd: "{worktree}/docs");
+    std\assert(found[0] == "/first/magus" and found[1] == "{parent}/magus", message: found.join("|"));
+    std\assert(found.indexOf("{worktree}/magus") == null, message: "a checkout with no ./magus offers none");
+    fs\removeAll(parent);
 }

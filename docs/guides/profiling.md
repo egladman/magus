@@ -97,7 +97,8 @@ heap: 30660 objects live, 30660 peak this run
   growth by source position, largest first:
     coverage.buzz:88                         30352
   a position that climbs with input size is quadratic in memory;
-  build into a list and join once rather than reassigning a string.
+  a list or map built with + copies every pass, so append to a mut one;
+  a string grows in place only as the first operand: s = s + x, not s = x + s.
 ```
 
 `.heap` sits alongside `.where`, `.locals` and `.globals`; see
@@ -114,39 +115,47 @@ served.
 This is the one worth recognizing on sight:
 
 ```buzz
-var kept = "";
+var kept = [<str>];
 foreach (line in profile.split("\n")) {
-    kept = kept + line + "\n";
+    kept = kept + [line];
 }
 ```
 
-Every `+` builds a whole new string, and every intermediate is pinned. Over a
-30,803-line file that measured a **13.1GB peak to produce 2.1MB of output**, which
-is enough to kill a 16GB CI runner.
+Every `+` builds a whole new list, and on the default nanbox build every
+intermediate is pinned, so memory grows with the square of the line count.
 
-Collect and join once:
+Append to a `mut` list instead:
 
 ```buzz
-var kept = mut [<str>];
+final kept = mut [<str>];
 foreach (line in profile.split("\n")) {
     kept.append(line);
 }
-final out = kept.join("\n");
 ```
 
-Same output, **29.5MB** peak. A list appends a reference per line; the
-intermediates never exist.
+A list appends a reference per line; the intermediates never exist.
+
+A string extended at its end used to cost the same way: over a 30,803-line file,
+`kept = kept + line + "\n"` measured a **13.1GB peak to produce 2.1MB of
+output**. gopherbuzz now extends a string of 1024 bytes or more in one shared
+buffer when it is the left end of a `+` chain or the first part of an
+interpolation. That loop costs linear time and memory: at 8,000 lines its peak
+fell from 2,158MiB to 68MiB, the same as collecting the lines in a list and
+joining once. Text put before the string, as in `kept = line + kept`, still
+copies the whole string every pass.
 
 The same shape appears whenever a value is rebuilt inside a loop:
 
-| Instead of                                             | Write                         |
-| ------------------------------------------------------ | ----------------------------- |
-| `s = s + x` in a loop                                  | append to a list, `join` once |
-| `while (s.indexOf(x) != null) { s = s.replace(x, y) }` | `s.split(x).join(y)`          |
-| counting with `replace` in a loop                      | `s.split(x).len() - 1`        |
+| Instead of                                             | Write                                  |
+| ------------------------------------------------------ | -------------------------------------- |
+| `xs = xs + [x]` in a loop                              | `xs.append(x)` on a `mut` list         |
+| `m = m + {k: v}` in a loop                             | `m[k] = v` on a `mut` map              |
+| `s = x + s` in a loop                                  | append to a list, `reverse().join("")` |
+| `while (s.indexOf(x) != null) { s = s.replace(x, y) }` | `s.replace(x, with: y)`                |
+| counting with `replace` in a loop                      | `s.split(x).len() - 1`                 |
 
-Note `str.replace` substitutes only the FIRST occurrence, which is why the
-rescanning loop gets written in the first place.
+`str.replace` substitutes every occurrence, so one call does what the
+rescanning loop does, unless a replacement creates a new match.
 
 ## Scale is what makes it fatal
 
@@ -155,10 +164,12 @@ fine and stays fine. The cost is the pattern multiplied by the input, so the
 same three lines are harmless over a config file and fatal over a coverage
 profile.
 
-That is also why magus does not lint for it. A source scan for `x = x + …` across
-this repository flags several hundred sites, nearly all of them loop counters and
-small string building. No static check can see the input size, so magus measures
-instead and speaks only when the measurement says something.
+The Buzz checker warns on the shape, as BZZ3002: a list or map that outlives one
+pass of a loop and is rebuilt from itself with `+`, or a `str` rebuilt with text
+before it. `s = s + x` and `s = "{s}{x}"` stay quiet. It reads types, so loop
+counters stay quiet, and the warning never fails a run. No static check can see
+the input size, so magus also measures, and speaks only when the measurement
+says something.
 
 ## Declaring what a target needs
 

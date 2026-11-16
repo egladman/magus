@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,9 +21,9 @@ func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
 	t.Helper()
 	row := types.Job{
 		ID:         "cli-ls-files",
-		Criteria:   "add vcs ls-files",
+		Agent:      agent.Instructed("add vcs ls-files"),
 		State:      types.StateRunning,
-		WritePaths: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"},
+		Paths:      types.JobPaths{Write: []string{"cmd/magus/vcs.go", "internal/commands/registry.go"}},
 		Registered: 1,
 	}
 	ctx, root := fleetFixture(t, row)
@@ -35,7 +36,7 @@ func leaseClaimFixture(t *testing.T) (context.Context, string, types.Job) {
 		CacheDir: hookLocation(ctx, Dependencies{}).cacheDir, StateBase: fixture.StateBase(t), Root: root,
 		Actor: &job.Actor{Lease: row.ID},
 	})
-	stored, err := held.Update(ctx, row.ID, func(u *types.Job) { u.WritePaths = []string{"cmd/magus/vcs.go"} })
+	stored, err := held.Update(ctx, row.ID, func(u *types.Job) { u.Paths.Write = []string{"cmd/magus/vcs.go"} })
 	require.NoError(t, err)
 	require.Len(t, stored.Releases, 1)
 	return ctx, root, stored
@@ -78,9 +79,9 @@ func TestServedClaimLinePassesTheGuardForTheWorker(t *testing.T) {
 		"session_id": "5d1c", "hook_event_name": "PreToolUse", "tool_name": "Write", "cwd": root,
 		"tool_input": map[string]any{"file_path": filepath.Join(root, "internal/commands/registry.go"), "content": "package x\n"},
 	})})
-	require.Len(t, write.Next, 1, "the refusal serves the apply line to the worker: %+v", write)
-	assert.Equal(t, line, write.Next[0].Run)
-	write.Next = nil
+	require.Len(t, write.NextSteps, 1, "the refusal serves the apply line to the worker: %+v", write)
+	assert.Equal(t, line, write.NextSteps[0].Run)
+	write.NextSteps = nil
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleLeaseClaim)), unworded(write))
 }
 

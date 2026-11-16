@@ -121,7 +121,7 @@ knowledge:
   vcs:
     enabled: true
   # The anchors are magus's shipped defaults, tightened where this repository measured
-  # tighter: func-lines and the internal dep-fanout scope. It adds what names its own
+  # tighter: func-lines and the internal imported-packages scope. It adds what names its own
   # layout: libs/gopherbuzz follows upstream Buzz, and cmd/magus is the one binary that
   # imports every package. Writing checks replaces the defaults whole, so every check is
   # restated here. Which checks hold a change to its base's counts is the lint target's
@@ -147,7 +147,7 @@ knowledge:
       clone-tokens:
         source: { percentile: 50, anchor: 80 }
         main: { percentile: 50, anchor: 80 }
-      dep-fanout:
+      imported-packages:
         source: { percentile: 95, anchor: 62, scopes: { cmd/magus: 89, internal: 14 } }
       export-scope:
         source: { percentile: 0, anchor: 0 }

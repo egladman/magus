@@ -37,13 +37,33 @@ const levelTrace slog.Level = slog.LevelDebug - 4
 // general diagnostics render in the same compact style as cache events instead of raw
 // "time=... level=..." lines interleaving with the pretty output.
 func newLogger(format string, level slog.Level) *slog.Logger {
+	w := os.Stderr
+	if strings.EqualFold(format, "json") {
+		w = os.Stdout
+	}
+	return slog.New(NewLogHandler(w, format, &slog.HandlerOptions{Level: level}))
+}
+
+// NewLogHandler returns the handler log.format names, writing to w. The
+// display, the cache's logger and a step's captured log all build theirs
+// here. "text" and "json" are redacting slog handlers; pretty, plain and ""
+// are a [PrettyHandler]. Config validation refuses any other format. A nil
+// opts.Level means info, as in slog. A -o jsonl display is built by its caller.
+func NewLogHandler(w io.Writer, format string, opts *slog.HandlerOptions) slog.Handler {
+	if opts == nil {
+		opts = &slog.HandlerOptions{}
+	}
 	switch strings.ToLower(format) {
 	case "text":
-		return slog.New(secret.NewRedactingHandler(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
+		return secret.NewRedactingHandler(slog.NewTextHandler(w, opts))
 	case "json":
-		return slog.New(secret.NewRedactingHandler(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
+		return secret.NewRedactingHandler(slog.NewJSONHandler(w, opts))
 	default:
-		return slog.New(NewPrettyHandler(os.Stderr, level))
+		level := slog.LevelInfo
+		if opts.Level != nil {
+			level = opts.Level.Level()
+		}
+		return prettyHandler(w, level)
 	}
 }
 
@@ -249,17 +269,10 @@ func (h *PrettyHandler) ensureLease() {
 	h.lease = h.zone.Acquire(stickyRegionRows)
 }
 
-// NewPrettyHandler builds the unified pretty handler. Color is driven by the
-// terminal-ness of w's file descriptor (any writer exposing Fd(), not just an
-// *os.File); a writer without one -- a bytes.Buffer in tests, a pipe -- renders
-// plain. TTY detection runs per-Handle so late redirects are noticed.
-//
-// On a TTY writer, a sticky region is reserved at the bottom of the terminal:
-// a live pool status line on top, then [fail] lines that do not scroll off.
-// The reservation is lazy (the region opens on the first cache.pool or
-// cache.error) and reset on cache.summary or Close; a pipe / bytes.Buffer /
-// non-TTY writer disables it.
-func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
+// prettyHandler builds the pretty handler. Color and the sticky band at
+// the terminal's bottom follow whether w's Fd is a terminal, checked per
+// Handle. A pipe or buffer renders plain, with no band.
+func prettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
 	// One handler per terminal, for the same reason there is one tty.Zone: the
 	// display is process-scoped because the terminal is. Two handlers (the
 	// CLI's process-wide default and the Cache's own) became two views of one
@@ -285,7 +298,7 @@ func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
 	return stderrPretty
 }
 
-// The process's display handler for standard error. See NewPrettyHandler.
+// The process's display handler for standard error. See prettyHandler.
 var (
 	stderrPrettyMu sync.Mutex
 	stderrPretty   *PrettyHandler
@@ -1844,10 +1857,9 @@ func FailureHintPlain() string {
 // Exported for a caller that is deliberately NOT the process terminal: the
 // documentation renderer, which drives a real handler against an in-memory
 // screen so the pictures it publishes are drawn by the code a reader will
-// actually meet. [NewPrettyHandler] is the production entry point and keys on
-// standard error to keep one handler per terminal; this one makes no such
-// claim, so two callers get two independent handlers and neither takes the
-// process band.
+// actually meet. [NewLogHandler] is the production entry point. It keeps one
+// handler per terminal by keying on standard error. This one makes no such
+// claim: two callers get two handlers, and neither takes the process band.
 // A nil now defaults to time.Now; pass a fixed one to render a picture whose
 // bytes do not depend on when it was rendered.
 func NewPrettyHandlerWith(w io.Writer, level slog.Level, p termkit.Probe, now func() time.Time) *PrettyHandler {

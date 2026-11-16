@@ -183,7 +183,7 @@ A callback is declared by the Impl's Go parameter type, and nothing else. `Arg.F
 
 ```go
 func FsWalk(ctx context.Context, root string,
-	callback func(ctx context.Context, path string, isDir bool) (types.WalkStep, error)) error
+    callback func(ctx context.Context, path string, isDir bool) (types.WalkStep, error)) error
 ```
 
 - The parameter is a Go func type whose first parameter is `context.Context` and whose
@@ -510,3 +510,134 @@ field, is mirrored with no config line. A package sets `all: true`, with
 `include-type-regex` and `exclude-type-regex`, for types scripts build that no
 signature reaches. A type is listed only for a setting. Keys are kebab-case
 (`zero-case`), as mockery v3's are.
+
+### 2026-11-11: cases may be declared elsewhere, and a generic instance is a field
+
+The versioned envelope in `libs/apiversion` names its kinds with a type that declares
+none: each spec type's package declares `const KindJob apiversion.Kind = "Job"`. A type
+sets `casesFrom`, a list of packages, to say where its cases are declared. Unset, only
+the type's own package is read; set, only the listed ones are, in order, and a type with
+no case in any of them is still refused. Listed packages are loaded with the rest.
+
+A field or slice element that is a concrete generic instance, such as
+`apiversion.Object[types.JobSpec]`, mirrors as `Object::<JobSpec>`, defaulting to
+`Object::<JobSpec>{}`. The arguments are read from reflect's name for the instance, so
+each keeps its Go name: a `Namer` rename of an argument does not apply, and a map
+argument is refused.
+
+### 2026-11-11: membership is derived from declared roots
+
+Measured on 2026-11-11 at 2e6365f13. A Go type crossing into Buzz was listed by hand in
+up to five places: `boundaryTypes` (418 entries) and `boundaryEnumTypes` (104) in
+`cmd/magus-utils/boundary_types.go`, `inboundTypes` (about 150 names) in
+`boundary_decode.go`, `.buzzgen.yaml` (103 entries, 79 of them a bare `{}` that only said
+the type was a member), and `job_schema.go`'s `jobSources` and `closedSets`. Adding
+`agent.Spec` that day took an edit in four of them, and the guard refused each as more
+than one edge from what the job changed. Part 2's "the full list is the 413 registry
+entries carried over" kept membership a list, so it is replaced, as Eli approved:
+
+- **Membership is reach.** A type crosses when a host module's method signature, a
+  provider op, or a declared root reaches it, directly or through a field, slice, map,
+  pointer or callback. A field added to a crossing struct crosses with it, and no list is
+  edited. `buzzgen.Reach` walks the closure, and magus-utils only hands it the roots.
+- **Direction is reach too**, as part 2 said. A parameter crosses in, a result crosses
+  out, and a callback's parameters cross opposite to the callback. In gets a decoder, out
+  gets an encoder. `RuntimeObject` and `inboundTypes` are deleted.
+- **The config holds settings only**: `name`, `module`, `open`, `required`, `ts`,
+  `zeroCase`, `cases`, `casesFrom` and a new `mirror`. `mirror` names the struct a type
+  crosses as when the host converts it first, as `types.Status` crosses as `StatusRecord`.
+  A line for a type nothing crosses as is an error that names the line to delete.
+- **`required` has one meaning.** The decoder refuses a value without the field, and the
+  mirror declares it with no default, so a literal that leaves it out fails the check. A
+  struct that holds such a struct by value must require that field too. `requiredMembers`
+  is deleted.
+- **Refusals are loud.** Two crossing types that take one Buzz name in one scope are an
+  error naming the root that reached each. So is a reached type that is unexported, or that
+  comes from an `internal` package with no line in the config.
+- **One load.** The packages of every reached type load in one go/packages call. It
+  derives the enums and gives jobschema the files and closed sets the job records reach.
+  `jobSources` and `closedSets` are deleted. `narrowedSets` keeps one entry, Deviation.Code's
+  permissible codes, because that set is narrower than any enum.
+
+The roots that remain are 53 `reflect.TypeFor` entries in `boundaryRoots`, grouped by
+owner: the spell and harness contracts, records the bindings assemble by hand, records
+only a script builds, and five strings an `Arg.Enum` names. They exist because the
+renderers read `reflect`, which knows only types compiled code hands it. They move to the
+config when the renderers read `go/types` (part 1). The derivation reproduced all 418
+structs. Generated decoders and encoders reordered by Buzz name and gained one decoder
+(`GuardVerdict`, which a guard callback returns) and seven encoders. 26 enums the old list
+declared were never emitted, so they are no longer derived. Four dead config lines went
+with them: `daemon.Readiness`, `diff.Author`, `ProjectOrigin` and `EventType`.
+
+| Item                                                                                                                       | State     |
+| -------------------------------------------------------------------------------------------------------------------------- | --------- |
+| Membership and direction derived by reach; `boundaryTypes`, `boundaryEnumTypes`, `inboundTypes`, `requiredMembers` deleted | done      |
+| `.buzzgen.yaml` holds settings only; a line nothing crosses as is an error                                                 | done      |
+| `required` drops the mirror default; `agent.Worker.type` is required                                                       | done      |
+| jobschema reads the derived set; `jobSources`, `closedSets` deleted                                                        | done      |
+| Roots declared in `.buzzgen.yaml` instead of `boundaryRoots`                                                               | not built |
+
+Alternatives:
+
+- **Generate a reflect anchor file from a go/packages closure.** It lost because
+  magus-utils would link a file buzzgen writes. A stale anchor stops the generator that
+  repairs it from building, which is the problem part 1 solves by not linking. Reopen if
+  the go/types renderer port is dropped.
+- **Keep membership in the config and refuse an unlisted type loudly.** That was part 2.
+  It lost because every new or moved type still takes a config edit that no graph edge
+  reaches, as the agent.Spec job measured. Reopen if derived membership is measured
+  pulling in types no script should see.
+
+Principles checked:
+
+- [Delete before you add](../design/principles/delete-before-you-add.md): four hand lists
+  and the 79 bare lines are deleted, and only a 53-entry root list remains.
+- [One source, every door](../design/principles/one-source-every-door.md): the Go
+  signatures say what crosses and in which direction, and the config says only what Go
+  cannot.
+- [The checker catches it; the runtime is the backstop](../design/principles/the-checker-catches-it.md):
+  a required field left out of a literal is a check-time error. Before, it decoded as
+  the field's zero value.
+- [No silent defaults](../design/judgment/no-silent-defaults.md): a collision, an
+  unexported or undeclared internal type, and a dead config line each fail with what to
+  change.
+
+### 2026-11-12: a child package is a nested namespace
+
+ADR 0047 decides that a Go package is a Buzz namespace. This amendment is how buzzgen
+builds that, with invented names first. A config sets `module: shop` at the top level.
+
+- `module` is an import path. `http` is a host module, and `shop/order` is the nested
+  namespace `shop\order`.
+- A package whose parent package the config lists, and whose own config sets no
+  `module`, derives one: the top-level `module`, a slash and the package's last path
+  element. `shop/types/order` becomes `shop/order`. The top-level `module` is the root
+  of that derivation and never a default, so the root package's types keep the
+  placement they have.
+- A package config may set `module: ""` to keep its types bundled where they are
+  reached, as they were before. A type's own `module` still wins.
+- A nested module is one declaration file, `<decls>/shop/order.buzz`. It opens with
+  `namespace shop\order;` and holds the module's enums and mirrors, leaf first.
+- A file whose declarations name a nested module's type imports it and writes the type
+  qualified. `shop.buzz` declares no namespace, so it writes `import "shop/order";` and
+  `shop\order\Step`.
+- A nested module whose last segment is a function or member group of its parent is
+  refused, naming both. Two packages deriving one module are refused, naming the
+  `module` line to add.
+- An encoder names a nested enum by its qualified name, `shop\order\Size`, and the
+  session reads its cases through `import "shop/order"`.
+
+In magus, `types/agent` is the namespace `magus\agent`. Three packages keep `module: ""`.
+`types/diff` has a field naming a `magus` type, and `magus`'s functions return `diff`
+types, so the two declaration files would import each other. `types/trail` declares the
+`Trail` handle, whose methods call the `magus` module's private externs. `types/daemon`
+is not in ADR 0047's scope. `types/image` keeps `module: ""` as well:
+`TestTwoModulesShareAnObjectMethodName` pins its records bundling into any module.
+
+| Item                                                                  | State     |
+| --------------------------------------------------------------------- | --------- |
+| `module` takes a slash path and a child package derives it            | done      |
+| One declaration file per nested namespace, opening with `namespace`   | done      |
+| A declaration file imports the nested namespaces it names             | done      |
+| A nested segment that is also a parent member is refused              | done      |
+| `types/diff` and `types/trail` move to `magus\diff` and `magus\trail` | not built |

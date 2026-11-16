@@ -12,6 +12,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -167,7 +168,7 @@ func TestObjectEnumFieldsCrossAsTheResolversCase(t *testing.T) {
 		field string
 		want  string
 	}{
-		{"Check.status", objectMap(t, ObjectCheck(types.Check{Status: types.CheckFail}, enums)), "status", "CheckStatus.fail"},
+		{"Check.status", objectMap(t, ObjectCheck(check.Check{Status: check.Fail}, enums)), "status", `magus\check\Status.fail`},
 		{"TargetRun.state", objectMap(t, ObjectStatusTargetRun(daemon.TargetRun{State: daemon.TargetRunPassed}, enums)), "state", "TargetRunState.passed"},
 		{"ModelTierRequest.kind", objectMap(t, ObjectModelTierRequest(types.ModelTierRequest{Kind: types.JobKindSymbol}, enums)), "kind", "JobKind.symbol"},
 	} {

@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -106,7 +106,7 @@ func (neverEOF) Read([]byte) (int, error) { select {} }
 func TestCheckpointRecordedLineDistinguishesANewOneFromAnUnchangedOne(t *testing.T) {
 	c := sessions.Checkpoint{
 		Workspace: "/repo",
-		Tree:      types.VCSCheckpoint{Revision: "9cd51c88aef0d1e2", Branch: "handoff", Dirty: true},
+		Tree:      vcs.Checkpoint{Revision: "9cd51c88aef0d1e2", Branch: "handoff", Dirty: true},
 		Note:      "mid-refactor",
 	}
 
@@ -127,7 +127,7 @@ func TestRenderCheckpointsBoundsTheListAndPointsAtTheRest(t *testing.T) {
 	var records []sessions.CheckpointRecord
 	for _, branch := range []string{"one", "two", "three", "four", "five"} {
 		records = append(records, sessions.CheckpointRecord{
-			Checkpoint: sessions.Checkpoint{Workspace: "/repo", Tree: types.VCSCheckpoint{Revision: "abcdef012345", Branch: branch}},
+			Checkpoint: sessions.Checkpoint{Workspace: "/repo", Tree: vcs.Checkpoint{Revision: "abcdef012345", Branch: branch}},
 			At:         at,
 		})
 	}
@@ -151,7 +151,7 @@ func TestRenderCheckpointsShowsTheHostPointersWhenThereAreAny(t *testing.T) {
 			HostSession: "01a07dab-240a",
 			Transcript:  "/tmp/rollout.jsonl",
 			Workspace:   "/repo",
-			Tree:        types.VCSCheckpoint{Revision: "abcdef012345", Branch: "main"},
+			Tree:        vcs.Checkpoint{Revision: "abcdef012345", Branch: "main"},
 			Note:        "usage limit",
 		},
 		At: time.Now(),

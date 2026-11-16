@@ -206,6 +206,6 @@ func leaseCoversWrite(ctx context.Context, actingLease string, location location
 	if !enrolled || !me.State.Live() {
 		return false
 	}
-	_, mine, err := declarationCovering(me.WritePaths, rel)
+	_, mine, err := declarationCovering(me.Paths.Write, rel)
 	return err == nil && mine
 }

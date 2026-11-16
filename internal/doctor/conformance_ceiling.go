@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 )
 
 const checkConformanceCeilingName = "conformance-ceiling"
@@ -13,7 +14,7 @@ const checkConformanceCeilingName = "conformance-ceiling"
 // An anchor raised past the code moves no subject, so `magus diff` is silent about it and the
 // slack shows here. Per-file counts need no upkeep: a change is held to its base revision's.
 // Advice, never a failure.
-func (r *runner) checkConformanceCeiling(ctx context.Context, _ []*types.Project) types.Check {
+func (r *runner) checkConformanceCeiling(ctx context.Context, _ []*types.Project) check.Check {
 	analyzer, ok := r.ws.(types.HistoryMetrics)
 	if !ok {
 		return conformanceUnmeasured("this workspace exposes no conformance lens")
@@ -21,10 +22,10 @@ func (r *runner) checkConformanceCeiling(ctx context.Context, _ []*types.Project
 	out, err := analyzer.Conformance(ctx)
 	if err != nil {
 		// A misconfiguration is a failure rather than a quiet pass.
-		return types.Check{
+		return check.Check{
 			Name:     checkConformanceCeilingName,
-			Status:   types.CheckFail,
-			Evidence: types.EvidenceUnknown,
+			Status:   check.Fail,
+			Evidence: check.EvidenceUnknown,
 			Message:  "conformance anchors could not be measured",
 			Details:  []string{err.Error()},
 		}
@@ -40,44 +41,44 @@ func (r *runner) checkConformanceCeiling(ctx context.Context, _ []*types.Project
 }
 
 // conformanceUnmeasured is the check when no anchor could be measured, saying why.
-func conformanceUnmeasured(why string) types.Check {
-	return types.Check{
+func conformanceUnmeasured(why string) check.Check {
+	return check.Check{
 		Name:     checkConformanceCeilingName,
-		Status:   types.CheckOK,
-		Evidence: types.EvidenceUnknown,
+		Status:   check.OK,
+		Evidence: check.EvidenceUnknown,
 		Message:  "conformance anchors were not measured: " + why,
 		Details:  []string{"build the symbol index with `magus graph build`, then run doctor again"},
 	}
 }
 
 // conformanceProposals is the check over out's rows: advice naming each anchor that can tighten.
-func (r *runner) conformanceProposals(out types.Conformance) types.Check {
+func (r *runner) conformanceProposals(out types.Conformance) check.Check {
 	checks := r.opts.cfg.Knowledge.Conformance.Checks
 	var details []string
-	for _, row := range out.Rows {
+	for _, row := range out.Distributions {
 		if row.Propose > 0 {
 			details = append(details, conformanceProposal(row, checks[row.Key.Metric][row.Key.Population].Percentile))
 		}
 	}
 	if len(details) == 0 {
-		return types.Check{
+		return check.Check{
 			Name:     checkConformanceCeilingName,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceMeasured,
+			Status:   check.OK,
+			Evidence: check.EvidenceMeasured,
 			Message:  "no conformance anchor is looser than the code measures",
 		}
 	}
-	return types.Check{
+	return check.Check{
 		Name:     checkConformanceCeilingName,
-		Status:   types.CheckAdvice,
-		Evidence: types.EvidenceMeasured,
+		Status:   check.Advice,
+		Evidence: check.EvidenceMeasured,
 		Message:  fmt.Sprintf("%d conformance anchor(s) can tighten", len(details)),
 		Details:  details,
 	}
 }
 
 // conformanceProposal names the magus.yaml key a row's proposal lowers.
-func conformanceProposal(row types.ConformanceRow, percentile float64) string {
+func conformanceProposal(row types.ConformanceDistribution, percentile float64) string {
 	field := fmt.Sprintf("knowledge.conformance.checks.%s.%s.anchor", row.Key.Metric, row.Key.Population)
 	if row.Key.Scope != "" {
 		field = fmt.Sprintf("knowledge.conformance.checks.%s.%s.scopes.%s", row.Key.Metric, row.Key.Population, row.Key.Scope)

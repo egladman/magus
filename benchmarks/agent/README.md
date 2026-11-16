@@ -9,8 +9,8 @@ good" but two falsifiable claims:
    (outcome quality).
 
 If the numbers say the integration costs more for the same outcomes, that is a
-finding. Design and citations: `plans/harness-effectiveness-benchmark-2026-09-02.md`
-in the memory store.
+finding. The design notes lived in the memory store and went with it; the published
+runs are under `docs/benchmarks/`.
 
 ## Arms
 

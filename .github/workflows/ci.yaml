@@ -450,7 +450,7 @@ jobs:
       - uses: ./.github/actions/codec-deps
 
       # The gate box builds with GOCACHE and GOMODCACHE under its --cache, in
-      # .magus/spell-caches/golang (internal/queue's spellCacheEnv, internal/cache's
+      # .magus/spell-caches/go (internal/queue's spellCacheEnv, internal/cache's
       # SpellCacheDir), which the local tier's cas, manifests and logs leave out. Only
       # a green main run exports them as a signed bundle, so while main is red every
       # shard compiles Go and downloads modules cold. A pull request keeps its own
@@ -461,8 +461,8 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            .magus/spell-caches/golang/GOCACHE
-            .magus/spell-caches/golang/GOMODCACHE
+            .magus/spell-caches/go/GOCACHE
+            .magus/spell-caches/go/GOMODCACHE
           key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage0-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-
@@ -507,9 +507,15 @@ jobs:
           name: magus-plan-${{ github.run_attempt }}
           path: ${{ github.workspace }}/.magus
 
-      - name: Free runner disk and report it
+      - name: Free runner disk if it is short, and report it
         run: |
           df -h / "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          free=$(df --output=avail -BG / | tail -n 1 | tr -dc 0-9)
+          if [ "$free" -ge 40 ]; then
+            echo "${free}G free on /, at least 40G: nothing removed"
+            exit 0
+          fi
+          echo "${free}G free on /, under 40G: removing the unused preinstalled SDKs"
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
 
@@ -545,8 +551,8 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            .magus/spell-caches/golang/GOCACHE
-            .magus/spell-caches/golang/GOMODCACHE
+            .magus/spell-caches/go/GOCACHE
+            .magus/spell-caches/go/GOMODCACHE
           key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage0-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload the cache stage zero built
@@ -709,12 +715,27 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            .magus/spell-caches/golang/GOCACHE
-            .magus/spell-caches/golang/GOMODCACHE
+            .magus/spell-caches/go/GOCACHE
+            .magus/spell-caches/go/GOMODCACHE
           key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage1-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-
             ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-
+
+      # conformance-base measures the base commit, cold, in a gate that finds no measure:
+      # 3m33 to 5m10 (runs 42030377752, 42002954798; 4m41 in 43519003561). No Actions
+      # cache step carries the measures or the symbol packs: nothing an Actions cache
+      # restores is verified, and a queue validation can plant an entry in main's scope
+      # (docs/concepts/merge-queue.md). The gate reads them from the remote tier instead,
+      # in the @conformance namespace, keyed by the measure's file name (commit, measure
+      # version, policy, indexers) and each pack's commit, project, op and indexer
+      # version. magus uses an entry only when it verifies against
+      # MAGUS_CACHE_REMOTE_TRUSTED_KEYS, seeds head's symbol packs from the signed packs
+      # beside it, and logs why it measured cold: no remote tier, no entry, or the
+      # verification's refusal. Only main's shard gates hold MAGUS_CACHE_SIGNING_KEY, so
+      # only main signs and stores what it measured; a pull request's run logs that it
+      # stored nothing. A pull request reuses main's measure of its merge base, never one
+      # its own earlier pushes took.
 
       # The caches the spells declare (Go's GOCACHE and GOMODCACHE), from the bundle main
       # signed, so a magus miss rebuilds only what changed. Restored in a box of the same
@@ -815,15 +836,24 @@ jobs:
             fi
           done
 
-      # Run 41956616259 shard 0 hit ENOSPC in scip with 70 MB left, the log held no df, and
-      # the runner's 14 GB free is shared by the checkout, the gate's box copy with its own
-      # go build cache, test binaries, the OCI layout and .magus/symbols. The android SDK,
-      # dotnet, ghc and CodeQL are preinstalled and unused here, and removing them gives
-      # back about 25 GB. The two disk lines bracket the gate so the next overrun names
-      # what grew.
-      - name: Free runner disk and report it
+      # Run 41956616259 shard 0 hit ENOSPC in scip with 70 MB left. The checkout, the gate's
+      # box copy with its own go build cache, test binaries, the OCI layout and .magus/symbols
+      # share the root disk. Two runner shapes answer ubuntu-latest: most have a 145G root
+      # with 74-81G free, and some (image 20261018.96.1, which that ENOSPC ran on; run
+      # 42002954798's docs shard) a 72G root with 4.3G free. A shard grew .magus to 18G at
+      # most (run 42030377752). So the android SDK, dotnet, ghc and CodeQL, about 18G
+      # preinstalled and unused here, go only under 40G free: removing them cost 69-265 s a
+      # job on runners that never needed the room (run 43519003561). The two disk lines
+      # bracket the gate so the next overrun names what grew.
+      - name: Free runner disk if it is short, and report it
         run: |
           df -h / "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          free=$(df --output=avail -BG / | tail -n 1 | tr -dc 0-9)
+          if [ "$free" -ge 40 ]; then
+            echo "${free}G free on /, at least 40G: nothing removed"
+            exit 0
+          fi
+          echo "${free}G free on /, under 40G: removing the unused preinstalled SDKs"
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
 
@@ -919,8 +949,8 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            .magus/spell-caches/golang/GOCACHE
-            .magus/spell-caches/golang/GOMODCACHE
+            .magus/spell-caches/go/GOCACHE
+            .magus/spell-caches/go/GOMODCACHE
           key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage1-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # The notes store's anchors, gated on the ONE finding worth blocking a merge for.

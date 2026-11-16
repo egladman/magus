@@ -12,8 +12,10 @@ import "./hack/policy/verdict" as verdict;
 import "./hack/policy/mandate" as mandate;
 
 final isolationDenial = "a worker that changes code would share this checkout; spawn it with "
-    + "`isolation: \"worktree\"`.\n"
-    + "A worker that changes code gets its own checkout, and detaches onto its branch "
+    + "`isolation: \"worktree\"`.";
+
+// isolationReason is the rationale for the isolation refusal, sent with the session's first one.
+final isolationReason = "\nA worker that changes code gets its own checkout, and detaches onto its branch "
     + "(`git switch --detach <branch>`) as its first act. Measured 09-22: 312 writes from 7 workers sharing a checkout landed in the "
     + "orchestrator's tree, and no isolated writer's did. Thinking roles (plan, review, research, "
     + "scout) may share it, and so does integrate, which lands the work in this checkout.";
@@ -40,9 +42,6 @@ export object Spawn {
     prompt: str = "",
     // checkout is the checkout the spawn runs in, "" when unread.
     checkout: str = "",
-    // ownBuild: the spawned job owns its checkout and its write paths cover a build input of
-    // ./cmd/magus there, so its worker builds ./magus (see builds\OwnBuild).
-    ownBuild: bool = false,
     // agentType is the host's subagent type. No rule reads it: the type is the
     // orchestrator's choice, and the host enforces the tools it carries.
     agentType: str = "",
@@ -69,31 +68,34 @@ fun lineage(title: str) > Lineage? {
 // would share the spawning checkout, then a brief that tells its worker to build magus. rows is null when the store could not be read, which
 // unreadable says why: the row rule then advises and never denies. A continue starts
 // nothing, so it passes both.
-export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
+export fun decideSpawn(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str, once: fun (key: str) > bool) > GuardVerdict {
     if (spawn.kind != magus\SpawnKind.spawn) {
         return magus\guard.allow();
     }
-    final row = decideJobRow(spawn, rows: rows, unreadable: unreadable);
+    final row = decideNamedJob(spawn, rows: rows, unreadable: unreadable);
     if (row.decision == magus\GuardDecision.deny) {
         return row;
     }
     if (!spawn.isolated and changeRoles.indexOf(helpers\titleRole(spawn.title)) != null) {
+        if (once("spawn-isolation-refusal")) {
+            return magus\guard.deny(isolationDenial + isolationReason);
+        }
         return magus\guard.deny(isolationDenial);
     }
     if (helpers\titleRole(spawn.title) == integrateRole) {
         return row;
     }
-    final building = builds\briefDenial(spawn.prompt, ownBuild: spawn.ownBuild);
+    final building = builds\briefDenial(spawn.prompt);
     if (building != "") {
         return magus\guard.deny(building);
     }
     return row;
 }
 
-// decideJobRow is spawn-without-job-row: the title must name a live row the spawner may hand
+// decideNamedJob is spawn-without-job-row: the title must name a live row the spawner may hand
 // out, or the guard cannot bind the child to its lease. The job is the row `<job>`, else
 // `<parent>/<job>`, the same resolution the guard binds with.
-fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
+fun decideNamedJob(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVerdict {
     if (rows == null) {
         return magus\guard.advise("The job store could not be read ({unreadable}), so whether this spawn "
             + "names a live job row went unchecked and it passes. Its child will not be bound to a lease. "
@@ -105,7 +107,7 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
             + "The description is `{spawn.title}`, and <job> is a live row in this workspace's job store. "
             + remedy(spawn, line: null));
     }
-    var found: helpers\JobRow? = null;
+    var found: helpers\JobSummary? = null;
     foreach (id in [line!.job, "{line!.parent}/{line!.job}"]) {
         foreach (r in rows!) {
             if (found == null and r.id == id) {
@@ -133,14 +135,14 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
             + "`{found!.checkoutRoot}`, where the guard takes its lease and the child would find no lease to hold. "
             + "The holder of a `--checkout` row runs the gate in that checkout itself, so it needs no integrator from here. "
             + "Otherwise spawn it from a session in `{found!.checkoutRoot}`, or fork a row bound to this checkout: "
-            + "`magus job fork {found!.id}-here --write-paths <paths> --criteria \"<what done means>\"` (no --checkout), "
+            + "`magus job fork {found!.id}-here --write-paths <paths> --instructions \"<what done means>\"` (no --checkout), "
             + "then spawn with `{line!.parent}/integrate {found!.id}-here`.");
     }
     return magus\guard.allow();
 }
 
 // descends reports whether job is ancestor or has ancestor in its parent chain.
-fun descends(rows: [helpers\JobRow], job: str, ancestor: str) > bool {
+fun descends(rows: [helpers\JobSummary], job: str, ancestor: str) > bool {
     final parents = mut {<str: str>};
     foreach (r in rows) {
         parents[r.id] = r.parent;
@@ -182,16 +184,16 @@ fun remedy(spawn: Spawn, line: Lineage?) > str {
         tool = tool + "parent = \"{parent}\", ";
     }
     fork = fork + " --model {model}";
-    tool = tool + "model = \"{model}\"";
+    final modelKey = if (spawn.model != "") "id" else "tier";
     if (thinkingRoles.indexOf(role) != null) {
         fork = fork + " --read-only";
-        tool = tool + ", read_only = true";
+        tool = tool + "read_only = true";
     } else {
         fork = fork + " --write-paths <paths>";
-        tool = tool + ", write_paths = [\"<paths>\"]";
+        tool = tool + "paths = .\{ write = [\"<paths>\"] }";
     }
-    fork = fork + " --criteria \"<what done means>\"";
-    tool = tool + ", criteria = \"<what done means>\" })";
+    fork = fork + " --instructions \"<what done means>\"";
+    tool = tool + ", agent = \{\"model\": \{\"{modelKey}\": \"{model}\"}, \"instructions\": \"<what done means>\", \"worker\": \{\"type\": \"resume\"}} })";
     var scope = "";
     if (spawn.lease != "") {
         scope = " Under your lease the row is a child of `{spawn.lease}`: its write paths are ones "
@@ -207,19 +209,19 @@ fun request(title: str, isolated: bool) > Spawn {
 }
 
 final store = [
-    helpers\JobRow{ id = "guard-command", state = magus\JobState.running },
-    helpers\JobRow{ id = "naming-advisory", state = magus\JobState.declared },
-    helpers\JobRow{ id = "changelog-fragments", state = magus\JobState.exited },
-    helpers\JobRow{ id = "v050-prep", state = magus\JobState.running },
-    helpers\JobRow{ id = "v050-prep/scout-callers", state = magus\JobState.declared, parent = "v050-prep" },
-    helpers\JobRow{ id = "drop-improve", state = magus\JobState.pass, parent = "v050-prep" },
-    helpers\JobRow{ id = "footprint", state = magus\JobState.noReturn },
-    helpers\JobRow{ id = "elsewhere", state = magus\JobState.running },
+    helpers\JobSummary{ id = "guard-command", state = magus\JobState.running },
+    helpers\JobSummary{ id = "naming-advisory", state = magus\JobState.declared },
+    helpers\JobSummary{ id = "changelog-fragments", state = magus\JobState.exited },
+    helpers\JobSummary{ id = "v050-prep", state = magus\JobState.running },
+    helpers\JobSummary{ id = "v050-prep/scout-callers", state = magus\JobState.declared, parent = "v050-prep" },
+    helpers\JobSummary{ id = "drop-improve", state = magus\JobState.pass, parent = "v050-prep" },
+    helpers\JobSummary{ id = "footprint", state = magus\JobState.noReturn },
+    helpers\JobSummary{ id = "elsewhere", state = magus\JobState.running },
 ];
 
 // judged is decideSpawn with every denial held to the verdict shape.
-fun judged(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
-    return verdict\checked(decideSpawn(spawn, rows: rows, unreadable: unreadable), label: spawn.title);
+fun judged(spawn: Spawn, rows: [helpers\JobSummary]?, unreadable: str) > GuardVerdict {
+    return verdict\checked(decideSpawn(spawn, rows: rows, unreadable: unreadable, once: fun (key: str) > bool { return false; }), label: spawn.title);
 }
 
 test "a live row passes" {
@@ -279,6 +281,25 @@ test "an unreadable store advises and never denies" {
     std\assert(judged(request("orchestrator/feat anything", isolated: false), rows: null, unreadable: "x").decision == magus\GuardDecision.deny, message: "isolation still denies");
 }
 
+test "the isolation refusal gives its rationale with the first refusal only" {
+    final told = mut [<str>];
+    final once = fun (key: str) > bool {
+        if (told.indexOf(key) != null) {
+            return false;
+        }
+        told.append(key);
+        return true;
+    };
+    final first = decideSpawn(request("orchestrator/feat guard-command", isolated: false), rows: store, unreadable: "", once: once);
+    std\assert(first.decision == magus\GuardDecision.deny, message: "first refused");
+    std\assert(first.reason.indexOf("312 writes") != null and first.reason.indexOf("git switch --detach") != null, message: "first carries the rationale");
+    final later = decideSpawn(request("orchestrator/fix naming-advisory", isolated: false), rows: store, unreadable: "", once: once);
+    std\assert(later.decision == magus\GuardDecision.deny, message: "later still refused");
+    std\assert(later.reason.indexOf("isolation: \"worktree\"") != null, message: "later keeps the remedy");
+    std\assert(later.reason.indexOf("312 writes") == null, message: "later omits the rationale");
+    std\assert(decideSpawn(request("orchestrator/review naming-advisory", isolated: true), rows: store, unreadable: "", once: once).decision == magus\GuardDecision.allow, message: "an isolated spawn is told nothing");
+}
+
 test "a code-changing spawn without its own checkout is denied" {
     foreach (title in ["orchestrator/feat guard-command", "v050-prep/fix naming-advisory", "orchestrator/docs changelog-fragments"]) {
         final v = judged(request(title, isolated: false), rows: store, unreadable: "");
@@ -289,9 +310,9 @@ test "a code-changing spawn without its own checkout is denied" {
 
 test "an integrate spawn is refused for a row bound to another checkout, naming where to spawn it" {
     final rows = [
-        helpers\JobRow{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
-        helpers\JobRow{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
-        helpers\JobRow{ id = "unbound", state = magus\JobState.declared },
+        helpers\JobSummary{ id = "land", state = magus\JobState.declared, checkoutRoot = "/w/other" },
+        helpers\JobSummary{ id = "here", state = magus\JobState.declared, checkoutRoot = "/w/main" },
+        helpers\JobSummary{ id = "unbound", state = magus\JobState.declared },
     ];
     final at = fun (title: str) > Spawn {
         return Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = false, checkout = "/w/main" };
@@ -312,7 +333,7 @@ test "a thinking role, an isolated worker and a continue pass" {
 }
 
 test "a spawn differing only in agent type gets the same verdict" {
-    final rows = [helpers\JobRow{ id = "guard-command", state = magus\JobState.running }];
+    final rows = [helpers\JobSummary{ id = "guard-command", state = magus\JobState.running }];
     foreach (title in ["orchestrator/review guard-command", "orchestrator/feat guard-command", "orchestrator/review nothing-here"]) {
         foreach (isolated in [true, false]) {
             final plain = judged(Spawn{ kind = magus\SpawnKind.spawn, title = title, isolated = isolated }, rows: rows, unreadable: "");
@@ -363,11 +384,10 @@ test "a brief that forbids the build or builds something else passes" {
     std\assert(judged(continued, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "a continue starts nothing");
 }
 
-test "a spawn whose job builds its own binary may brief the build" {
+test "a brief for a job that owns its checkout may not teach the build either" {
     final prompt = "Run `magus run go-build .` first.";
-    final own = Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/feat guard-command", isolated = true, prompt = prompt, ownBuild = true };
-    std\assert(judged(own, rows: store, unreadable: "").decision == magus\GuardDecision.allow, message: "its own build");
-    std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == magus\GuardDecision.deny, message: "the same brief for any other job");
+    final own = Spawn{ kind = magus\SpawnKind.spawn, title = "orchestrator/feat guard-command", isolated = true, prompt = prompt };
+    std\assert(judged(own, rows: store, unreadable: "").decision == magus\GuardDecision.deny, message: "no row pins a worker's build");
 }
 
 // A starting guess, not a measurement: change it here when it stops fitting.
@@ -430,18 +450,45 @@ fun describePublished(counts: ForkCounts) > str {
     return said;
 }
 
-// onRemoteRef is whether a remote ref holds branch's head. A branch git does
-// not know, or a git that fails, is the Result's error.
-export fun onRemoteRef(branch: str) > result\Result::<bool> {
+// remotePublished answers "does a remote ref hold branch's head" for every
+// branch from one `git branch --merged` listing, since a git per branch costs
+// ~0.1s each and the guard has seconds. A git that fails is every branch's
+// error; a branch git does not list is not on a remote.
+export fun remotePublished() > fun (branch: str) > result\Result::<bool> {
+    final held = mut {<str: bool>};
+    var failed = "";
     try {
-        final found = vcs\cmd(["branch", "--remotes", "--contains", branch], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
-        if (!found.ok) {
-            return result\fail::<bool>("git branch --remotes --contains {branch}: {found.stderr.trim()}");
+        final remotes = vcs\cmd(["for-each-ref", "--format=%(refname)", "refs/remotes"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+        if (!remotes.ok) {
+            failed = "git for-each-ref refs/remotes: {remotes.stderr.trim()}";
+        } else {
+            final args = mut ["branch", "--format=%(refname:short)"];
+            foreach (ref in remotes.stdout.trim().split("\n")) {
+                if (ref != "") {
+                    args.append("--merged={ref}");
+                }
+            }
+            if (args.len() > 2) {
+                final listed = vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+                if (!listed.ok) {
+                    failed = "git branch --merged: {listed.stderr.trim()}";
+                } else {
+                    foreach (name in listed.stdout.trim().split("\n")) {
+                        held[name] = true;
+                    }
+                }
+            }
         }
-        return result\ok::<bool>(found.stdout.trim() != "");
     } catch (err: any) {
-        return result\caught::<bool>(err, doing: "git branch --remotes --contains {branch}");
+        failed = "git branch --merged: {err}";
     }
+    final why = failed;
+    return fun (branch: str) > result\Result::<bool> {
+        if (why != "") {
+            return result\fail::<bool>(why);
+        }
+        return result\ok::<bool>(held[branch] ?? false);
+    };
 }
 
 // withoutPublished drops each finished branch whose head a remote ref holds:
@@ -514,32 +561,89 @@ fun sift(entries: [str], held: fun (branch: str) > result\Result::<bool>) > Sift
     return Sifted{ kept = kept, skipped = skipped, unread = unread };
 }
 
-// landedOnBase is whether merging branch into HEAD, and into the VCS base,
-// leaves either tree unchanged. A conflict reads as not landed.
-export fun landedOnBase(branch: str) > result\Result::<bool> {
+// mergeTreeBudget bounds the merge-tree calls one fork line may make; a branch
+// past it stays counted and the denial says why.
+export final mergeTreeBudget = 6;
+
+// MergedListing is what one fork line reads up front: the bases a branch may
+// have merged into, each base's tree, and every branch already merged into one.
+object MergedListing {
+    bases: [str],
+    trees: [str] = [],
+    merged: {str: bool} = {<str: bool>},
+    failed: str = "",
+}
+
+// mergedListing lists the branches merged into HEAD or the VCS base with one
+// `git branch --merged` call, and both trees with one rev-parse.
+fun mergedListing() > MergedListing {
+    final bases = mut ["HEAD"];
     try {
-        final bases = mut ["HEAD"];
         final base = vcs\base();
         if (base != "" and base != "HEAD") {
             bases.append(base);
         }
+        final args = mut ["branch", "--format=%(refname:short)"];
+        final revs = mut ["rev-parse"];
         foreach (b in bases) {
-            final tree = vcs\cmd(["rev-parse", "{b}^\{tree\}"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
-            if (!tree.ok) {
-                return result\fail::<bool>("git rev-parse {b}: {tree.stderr.trim()}");
-            }
-            final merged = vcs\cmd(["merge-tree", "--write-tree", b, branch], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
-            if (merged.code > 1) {
-                return result\fail::<bool>("git merge-tree {b} {branch}: {merged.stderr.trim()}");
-            }
-            if (merged.code == 0 and merged.stdout.trim() == tree.stdout.trim()) {
-                return result\ok::<bool>(true);
-            }
+            args.append("--merged={b}");
+            revs.append("{b}^\{tree\}");
         }
-        return result\ok::<bool>(false);
+        final listed = vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+        if (!listed.ok) {
+            return MergedListing{ bases = bases, failed = "git branch --merged: {listed.stderr.trim()}" };
+        }
+        final parsed = vcs\cmd(revs, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+        if (!parsed.ok) {
+            return MergedListing{ bases = bases, failed = "git rev-parse trees: {parsed.stderr.trim()}" };
+        }
+        final merged = mut {<str: bool>};
+        foreach (name in listed.stdout.trim().split("\n")) {
+            merged[name] = true;
+        }
+        return MergedListing{ bases = bases, trees = parsed.stdout.trim().split("\n"), merged = merged };
     } catch (err: any) {
-        return result\caught::<bool>(err, doing: "git merge-tree {branch}");
+        return MergedListing{ bases = bases, failed = "git branch --merged: {err}" };
     }
+}
+
+// landedReader answers "does the base already hold branch's change" for every
+// branch. A branch mergedListing names is landed. Only a branch neither base
+// holds (a squash merge) pays merge-tree, at most mergeTreeBudget calls. A
+// conflict reads as not landed.
+export fun landedReader() > fun (branch: str) > result\Result::<bool> {
+    final listing = mergedListing();
+    final bases = listing.bases;
+    final trees = listing.trees;
+    final merged = listing.merged;
+    final why = listing.failed;
+    final spent = mut [0];
+    return fun (branch: str) > result\Result::<bool> {
+        if (why != "") {
+            return result\fail::<bool>(why);
+        }
+        if (merged[branch] ?? false) {
+            return result\ok::<bool>(true);
+        }
+        try {
+            foreach (i, b in bases) {
+                if (spent[0] >= mergeTreeBudget) {
+                    return result\fail::<bool>("git merge-tree {branch}: more than {mergeTreeBudget} merge checks on one line");
+                }
+                spent[0] = spent[0] + 1;
+                final tried = vcs\cmd(["merge-tree", "--write-tree", b, branch], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+                if (tried.code > 1) {
+                    return result\fail::<bool>("git merge-tree {b} {branch}: {tried.stderr.trim()}");
+                }
+                if (tried.code == 0 and tried.stdout.trim() == trees[i]) {
+                    return result\ok::<bool>(true);
+                }
+            }
+            return result\ok::<bool>(false);
+        } catch (err: any) {
+            return result\caught::<bool>(err, doing: "git merge-tree {branch}");
+        }
+    };
 }
 
 fun describeTest(counts: ForkCounts) > str {
@@ -561,10 +665,10 @@ export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (pat
         if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
             continue;
         }
-        var counts = withoutPublished(facts(), published: onRemoteRef);
+        var counts = withoutPublished(facts(), published: remotePublished());
         // Each landed check merges trees, so only a count at the limit pays.
         if (counts.finishedBranches.len() >= limit) {
-            counts = withoutLanded(counts, landed: landedOnBase);
+            counts = withoutLanded(counts, landed: landedReader());
         }
         final judged = decideFork(fork, counts: counts, limit: limit);
         if (judged.decision != magus\GuardDecision.allow) {
@@ -666,6 +770,19 @@ test "a branch the base cannot be checked against stays counted, and says why" {
     std\assert(broken.finishedBranches.len() == 10 and broken.landedSkipped == 0, message: "counted");
     final v = decideFork(mandate\Fork{ id = "next" }, counts: broken, limit: finishedBranchLimit);
     std\assert(v.reason.indexOf("bad object") != null, message: v.reason);
+}
+
+test "the published check asks git once, and a branch git does not list is not published" {
+    final published = remotePublished();
+    final answer = published("no-such-branch-guard-latency");
+    std\assert(answer.error == null and answer.value == false, message: "unknown branch");
+    std\assert(published("another-no-such-branch").error == null, message: "same listing answers every branch");
+}
+
+test "the landed check lists merged branches once, and a branch git does not list is not landed" {
+    final landed = landedReader();
+    final answer = landed("no-such-branch-guard-latency");
+    std\assert(answer.error != null or answer.value == false, message: "unknown branch");
 }
 
 test "a branch that is on no remote ref stays counted, and an unreadable one says why" {

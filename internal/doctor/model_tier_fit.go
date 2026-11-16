@@ -10,6 +10,8 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/types/check"
 )
 
 const (
@@ -25,7 +27,7 @@ const (
 // modelTiered is the workspace's model tier declaration, which the workspace the real
 // loader returns carries and a bare WorkspaceReader does not.
 type modelTiered interface {
-	ModelTiers(ctx context.Context) *types.ModelTierSet
+	ModelTiers(ctx context.Context) *agent.ModelTierSet
 }
 
 // checkModelTierFit reports each (model tier, job kind) pair whose recorded jobs mostly did
@@ -36,15 +38,15 @@ type modelTiered interface {
 // It only reports. A tier that fails one kind of job may be right for every other, and
 // moving work is a decision about cost the history cannot make, so nothing here edits a
 // declaration and nothing re-routes a job. Advice, never a failure.
-func (r *runner) checkModelTierFit(ctx context.Context, _ []*types.Project) types.Check {
+func (r *runner) checkModelTierFit(ctx context.Context, _ []*types.Project) check.Check {
 	const name = "model-tier-fit"
 
 	tiered, ok := r.ws.(modelTiered)
 	if !ok || tiered.ModelTiers(ctx) == nil {
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceUnknown,
+			Status:   check.OK,
+			Evidence: check.EvidenceUnknown,
 			Message:  "this workspace declares no model tiers, so no job is routed by one",
 		}
 	}
@@ -71,24 +73,24 @@ func (r *runner) checkModelTierFit(ctx context.Context, _ []*types.Project) type
 
 	switch {
 	case judged == 0:
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceMeasured,
+			Status:   check.OK,
+			Evidence: check.EvidenceMeasured,
 			Message:  fmt.Sprintf("no model tier has %d recorded jobs of one kind yet, so none is judged", modelTierFitJobs),
 		}
 	case len(details) == 0:
-		return types.Check{
+		return check.Check{
 			Name:     name,
-			Status:   types.CheckOK,
-			Evidence: types.EvidenceMeasured,
+			Status:   check.OK,
+			Evidence: check.EvidenceMeasured,
 			Message:  fmt.Sprintf("%d model tier and job kind pair(s) pass often enough to keep their tier", judged),
 		}
 	}
-	return types.Check{
+	return check.Check{
 		Name:     name,
-		Status:   types.CheckAdvice,
-		Evidence: types.EvidenceMeasured,
+		Status:   check.Advice,
+		Evidence: check.EvidenceMeasured,
 		Message: fmt.Sprintf("%d of %d model tier and job kind pair(s) passed too rarely to trust at that tier; magus changes none of them",
 			len(details), judged),
 		Details: details,
@@ -96,18 +98,18 @@ func (r *runner) checkModelTierFit(ctx context.Context, _ []*types.Project) type
 }
 
 // modelTierFitDetail is one pair's finding: how it did, what it cost, and the line to edit.
-func modelTierFitDetail(rec types.ModelTierRecord, set *types.ModelTierSet, outcomes []types.JobOutcome) string {
+func modelTierFitDetail(rec types.ModelTierRecord, set *agent.ModelTierSet, outcomes []types.JobOutcome) string {
 	lead := fmt.Sprintf("%s on %s jobs: %d of %d passed (pass rate lower bound %.2f), %.1f check(s), %.1f rework round(s) and %.1f widening(s) per job",
 		rec.ModelTier, rec.Kind, rec.Pass, rec.Jobs, rec.PassLower, rec.ChecksPerJob, rec.ReworkPerJob, rec.WideningsPerJob)
 
-	chose := map[types.ModelTierSource]int{}
+	chose := map[agent.ModelTierSource]int{}
 	reasons, sites := map[string]int{}, map[string]int{}
 	for _, o := range outcomes {
 		if o.ModelTier != rec.ModelTier || o.Kind != rec.Kind || !o.State.Terminal() {
 			continue
 		}
 		chose[o.Source]++
-		if o.Source == types.ModelTierSourceMatrix {
+		if o.Source == agent.ModelTierSourceMatrix {
 			reasons[o.Reason]++
 			if o.Site != "" {
 				sites[o.Site]++
@@ -115,10 +117,10 @@ func modelTierFitDetail(rec types.ModelTierRecord, set *types.ModelTierSet, outc
 		}
 	}
 	var fixes []string
-	if n := chose[types.ModelTierSourceDefault]; n > 0 {
+	if n := chose[agent.ModelTierSourceDefault]; n > 0 {
 		fixes = append(fixes, fmt.Sprintf("%d took the declared default: change the default in the model tier declaration at %s", n, set.Site()))
 	}
-	if n := chose[types.ModelTierSourceMatrix]; n > 0 {
+	if n := chose[agent.ModelTierSourceMatrix]; n > 0 {
 		matrix := "the function registered with magus\\modelTier"
 		if site := commonest(sites); site != "" {
 			matrix += " at " + site
@@ -126,7 +128,7 @@ func modelTierFitDetail(rec types.ModelTierRecord, set *types.ModelTierSet, outc
 		fixes = append(fixes, fmt.Sprintf("%d were routed here by %s (most often %q): route %s jobs to another tier there",
 			n, matrix, commonest(reasons), rec.Kind))
 	}
-	if n := chose[types.ModelTierSourceRow]; n > 0 {
+	if n := chose[agent.ModelTierSourceJob]; n > 0 {
 		fixes = append(fixes, fmt.Sprintf("%d named the tier or model themselves: fork them with another --model", n))
 	}
 	if len(fixes) == 0 {

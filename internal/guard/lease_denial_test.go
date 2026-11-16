@@ -19,24 +19,24 @@ type LeaseDenialTextSuite struct {
 func TestLeaseDenialTextSuite(t *testing.T) { suite.Run(t, new(LeaseDenialTextSuite)) }
 
 func (s *LeaseDenialTextSuite) TestListsAtMostFiveWritePaths() {
-	row := types.Job{ID: "wide", WritePaths: []string{"a/**", "b/**", "c/**", "d/**", "e/**", "f/**", "g/**"}}
+	row := types.Job{ID: "wide", Paths: types.JobPaths{Write: []string{"a/**", "b/**", "c/**", "d/**", "e/**", "f/**", "g/**"}}}
 	s.Equal("a/**, b/**, c/**, d/**, e/** and 2 more (magus describe job wide)", writePathsShown(row))
 }
 
 func (s *LeaseDenialTextSuite) TestListsFiveWritePathsWhole() {
-	row := types.Job{ID: "narrow", WritePaths: []string{"a/**", "b/**", "c/**", "d/**", "e/**"}}
+	row := types.Job{ID: "narrow", Paths: types.JobPaths{Write: []string{"a/**", "b/**", "c/**", "d/**", "e/**"}}}
 	s.Equal("a/**, b/**, c/**, d/**, e/**", writePathsShown(row))
 }
 
 func (s *LeaseDenialTextSuite) TestTheRewriteRefusalTrimsItsWritePaths() {
-	row := types.Job{ID: "wide", WritePaths: []string{"a/**", "b/**", "c/**", "d/**", "e/**", "f/**"}}
+	row := types.Job{ID: "wide", Paths: types.JobPaths{Write: []string{"a/**", "b/**", "c/**", "d/**", "e/**", "f/**"}}}
 	got := rewriteDenial(runVerdict{run: targetRun{verb: "run", target: "generate", projects: []string{"."}}, outside: []string{"z.go"}}, row, nil)
 	s.Contains(got.Why, "and 1 more (magus describe job wide)")
 	s.NotContains(got.Why, "f/**")
 }
 
 func (s *LeaseDenialTextSuite) TestTheRewriteRefusalNamesTheFilesInItsVerdict() {
-	row := types.Job{ID: "docs", WritePaths: []string{"docs/reference/*.md"}}
+	row := types.Job{ID: "docs", Paths: types.JobPaths{Write: []string{"docs/reference/*.md"}}}
 	got := rewriteDenial(runVerdict{run: targetRun{verb: "run", target: "catalog-docs-generate", projects: []string{"docs"}}, outside: []string{"docs/concepts/spells/*.md", "docs/reference/buzz/*.md"}}, row, nil)
 	s.Contains(got.Say, "`docs/concepts/spells/*.md`, `docs/reference/buzz/*.md`")
 }

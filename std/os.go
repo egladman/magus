@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"os"
@@ -655,4 +656,140 @@ func ProcWithSlots(ctx context.Context, n int, cb func(ctx context.Context) erro
 		ctx = seated
 	}
 	return cb(ctx)
+}
+
+// runSeated runs call(ctx, i) for each i below n, as many at once as the
+// caller's step holds slots. The step keeps them throughout, so a batch runs
+// as wide as it was granted. errs[i] is call i's error.
+func runSeated(ctx context.Context, n int, label func(i int) string, call func(ctx context.Context, i int) error) []error {
+	errs := make([]error, n)
+	stdout, stderr := spawn.OutputWriters(ctx)
+	sink := &blockSink{stdout: stdout, stderr: stderr}
+	beat := cache.ProgressFromContext(ctx).Beat
+	seats := make(chan struct{}, seatWidth(ctx, n))
+	var wg sync.WaitGroup
+	for i := range n {
+		if err := takeSeat(ctx, seats); err != nil {
+			for j := i; j < n; j++ {
+				errs[j] = fmt.Errorf("%s: not started: %w", label(j), err)
+			}
+			break
+		}
+		out := &callOutput{sink: sink, beat: beat}
+		seated := spawn.WithOutputWriters(ctx, streamWriter{out: out}, streamWriter{out: out, stderr: true})
+		wg.Go(func() {
+			defer func() { <-seats }()
+			defer out.flush()
+			errs[i] = call(seated, i)
+		})
+	}
+	wg.Wait()
+	return errs
+}
+
+// takeSeat takes one of seats. A done ctx refuses even with a seat free,
+// so a cancelled batch starts nothing more.
+func takeSeat(ctx context.Context, seats chan struct{}) error {
+	if err := context.Cause(ctx); err != nil {
+		return err
+	}
+	select {
+	case seats <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	}
+}
+
+// seatWidth is how many of n calls runSeated runs at once.
+func seatWidth(ctx context.Context, n int) int {
+	if n < 2 {
+		return 1
+	}
+	if cache.LimiterFromContext(ctx) == nil {
+		slog.InfoContext(ctx, "no concurrency limiter on the context, so the commands run one at a time", "commands", n)
+		return 1
+	}
+	held := cache.SlotsHeld(ctx)
+	if held < 1 {
+		slog.InfoContext(ctx, "the caller holds no slot of the concurrency limiter, so the commands run one at a time", "commands", n)
+		return 1
+	}
+	return held
+}
+
+// callBlockBytes bounds what one call buffers before its output so far is
+// written as a block.
+const callBlockBytes = 1 << 20
+
+// blockSink writes one block at a time, so two calls' output never
+// interleaves inside a block.
+type blockSink struct {
+	mu     sync.Mutex
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func (s *blockSink) write(block []outputChunk) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range block {
+		w := s.stdout
+		if c.stderr {
+			w = s.stderr
+		}
+		_, _ = w.Write(c.data) // a failed console write has nowhere else to go
+	}
+}
+
+// callOutput holds one call's writes to both streams in write order. They are
+// written as a block when the call ends, or once callBlockBytes have built up.
+// Each write beats the step's progress: its taps see nothing until then.
+type callOutput struct {
+	sink *blockSink
+	beat func()
+	// mu is held across a block's write, so one call's blocks keep order.
+	mu     sync.Mutex
+	chunks []outputChunk
+	size   int
+}
+
+type outputChunk struct {
+	stderr bool
+	data   []byte
+}
+
+func (o *callOutput) write(stderr bool, p []byte) {
+	o.mu.Lock()
+	o.chunks = append(o.chunks, outputChunk{stderr: stderr, data: slices.Clone(p)})
+	o.size += len(p)
+	if o.size >= callBlockBytes {
+		o.flushLocked()
+	}
+	o.mu.Unlock()
+	o.beat()
+}
+
+func (o *callOutput) flush() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.flushLocked()
+}
+
+func (o *callOutput) flushLocked() {
+	if len(o.chunks) > 0 {
+		o.sink.write(o.chunks)
+	}
+	o.chunks, o.size = nil, 0
+}
+
+// streamWriter is one stream of a callOutput.
+type streamWriter struct {
+	out    *callOutput
+	stderr bool
+}
+
+func (w streamWriter) Write(p []byte) (int, error) {
+	w.out.write(w.stderr, p)
+	return len(p), nil
 }

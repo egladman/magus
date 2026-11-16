@@ -55,6 +55,10 @@ type Manifest struct {
 	// so any checkout sharing the store replays this log; a hit compares roots (MGS8005).
 	// Empty on entries written before the field existed.
 	Checkout string `json:"checkout,omitempty"`
+	// LogRecords locates each magus log record in the entry's log, so a hit
+	// shows only those at the console's level. Empty on an entry whose run
+	// logged none.
+	LogRecords []logSpan `json:"logRecords,omitempty"`
 }
 
 // OutputRecord captures one declared output file.

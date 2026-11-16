@@ -695,8 +695,8 @@ func (x *StoreStatus) GetIssues() []string {
 
 type ListNotesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Bounded at the same tier as ListActivity and ListMemories; see ListMemoriesRequest for
-	// why the three keep their own flat field rather than sharing a pagination message.
+	// Bounded at the same tier as ListActivityEvents. A flat field rather than a shared
+	// pagination message: each list RPC owns its own bounds.
 	PageSize      int32  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields

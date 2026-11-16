@@ -117,6 +117,19 @@ func (s *Shard) References(set map[string]bool) bool {
 	return false
 }
 
+// promotes reports whether one of s's method sets holds a method in set,
+// as a type embedding another holds that type's methods.
+func (s *Shard) promotes(set map[string]bool) bool {
+	for _, ms := range s.MethodSets {
+		for _, m := range ms.Methods {
+			if set[m.Symbol] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Unit is what an indexer declares about one unit before indexing it: the digest of every
 // input that decides its shard, and the units its shard's references resolve into.
 type Unit struct {
@@ -126,8 +139,8 @@ type Unit struct {
 }
 
 // UnitIndexer is an indexer that works per unit. UpdatePack asks it for every unit, then
-// hands Index only the units whose digest moved, and later any dependents whose
-// references a removed symbol invalidated.
+// hands Index only the units whose digest moved, and later any dependents
+// a re-indexed unit made stale.
 type UnitIndexer interface {
 	// Version names the indexer and what shapes its output; a pack written by another
 	// version is rebuilt whole.
@@ -377,7 +390,7 @@ func writePack(path, indexer string, units []Unit, shards []Shard) error {
 }
 
 // UpdateResult says what UpdatePack did. Indexed holds the units whose digest moved,
-// Dependents the units re-indexed because a removed symbol was referenced from them, and
+// Dependents the units a re-indexed unit made stale, and
 // Kept the count of shards carried over unchanged. Gaps is every gap the updated pack
 // holds, kept shards' included, so a file that still does not parse is named on every run.
 type UpdateResult struct {
@@ -391,9 +404,15 @@ type UpdateResult struct {
 
 // UpdatePack brings the pack at path up to date with ix: it indexes each unit whose
 // digest moved or that the pack lacks, drops units ix no longer declares, and copies
-// every other shard's bytes across. When a re-indexed unit no longer defines a symbol it
-// did, every unit depending on it whose shard references that symbol is re-indexed too,
-// until no removal is left unresolved. A missing pack, one in another format, or one
+// every other shard's bytes across.
+//
+// A digest covers a unit's own files alone. So a dependent is re-indexed
+// when a unit it depends on stops defining a symbol the dependent references.
+// It is re-indexed too when that unit moves the method set of a type the
+// dependent references or embeds. Rounds repeat until one reaches no
+// dependent.
+//
+// A missing pack, one in another format, or one
 // written by another indexer version is rebuilt whole, and Rebuilt says so.
 func UpdatePack(ctx context.Context, path string, ix UnitIndexer) (UpdateResult, error) {
 	var res UpdateResult
@@ -413,11 +432,11 @@ func UpdatePack(ctx context.Context, path string, ix UnitIndexer) (UpdateResult,
 	for _, u := range dirty {
 		res.Indexed = append(res.Indexed, u.ID)
 	}
-	removed, err := droppedDefinitions(old, units, &res)
+	touched, err := droppedDefinitions(old, units, &res)
 	if err != nil {
 		return res, err
 	}
-	fresh, err := reindex(ctx, ix, old, units, dirty, removed, &res)
+	fresh, err := reindex(ctx, ix, old, units, dirty, touched, &res)
 	if err != nil {
 		return res, err
 	}
@@ -482,11 +501,12 @@ func droppedDefinitions(old *packFile, units []Unit, res *UpdateResult) (map[str
 	return removed, nil
 }
 
-// reindex indexes dirty, then each round's dependents that reference a symbol the round
-// removed, until a round removes none; it returns every shard it indexed by unit.
-func reindex(ctx context.Context, ix UnitIndexer, old *packFile, units, dirty []Unit, removed map[string]bool, res *UpdateResult) (map[string]Shard, error) {
+// reindex indexes dirty, then each round's dependents holding a symbol the
+// round touched, until a round touches none. It returns every shard it
+// indexed by unit. touched starts as the dropped units' definitions.
+func reindex(ctx context.Context, ix UnitIndexer, old *packFile, units, dirty []Unit, touched map[string]bool, res *UpdateResult) (map[string]Shard, error) {
 	fresh := map[string]Shard{}
-	for pending := dirty; len(pending) > 0; clear(removed) {
+	for pending := dirty; len(pending) > 0; clear(touched) {
 		shards, err := ix.Index(ctx, pending)
 		if err != nil {
 			return nil, err
@@ -497,11 +517,11 @@ func reindex(ctx context.Context, ix UnitIndexer, old *packFile, units, dirty []
 		}
 		for _, s := range shards {
 			fresh[s.Unit] = s
-			if err := noteRemoved(old, s, removed, changed); err != nil {
+			if err := noteTouched(old, s, touched, changed); err != nil {
 				return nil, err
 			}
 		}
-		pending, err = dependentsReferencing(old, units, fresh, changed, removed)
+		pending, err = dependentsReferencing(old, units, fresh, changed, touched)
 		if err != nil {
 			return nil, err
 		}
@@ -512,9 +532,10 @@ func reindex(ctx context.Context, ix UnitIndexer, old *packFile, units, dirty []
 	return fresh, nil
 }
 
-// noteRemoved adds to removed each symbol old's shard for s's unit defined and s does not,
-// and marks the unit changed when there is one.
-func noteRemoved(old *packFile, s Shard, removed, changed map[string]bool) error {
+// noteTouched adds to touched each symbol old's shard for s's unit defined
+// and s does not. It adds each type whose method set moved, with the set's
+// methods before and after. It marks the unit changed when it adds any.
+func noteTouched(old *packFile, s Shard, touched, changed map[string]bool) error {
 	if old == nil {
 		return nil
 	}
@@ -528,11 +549,48 @@ func noteRemoved(old *packFile, s Shard, removed, changed map[string]bool) error
 	now := s.Defined()
 	for _, sym := range prev.Defined() {
 		if _, found := slices.BinarySearch(now, sym); !found {
-			removed[sym] = true
+			touched[sym] = true
 			changed[s.Unit] = true
 		}
 	}
+	for _, sym := range movedMethodSets(prev.MethodSets, s.MethodSets) {
+		touched[sym] = true
+		changed[s.Unit] = true
+	}
 	return nil
+}
+
+// movedMethodSets is the type of each method set that prev and now disagree
+// on, with every method it holds in either.
+func movedMethodSets(prev, now []MethodSet) []string {
+	before := make(map[string]MethodSet, len(prev))
+	for _, ms := range prev {
+		before[ms.Symbol] = ms
+	}
+	var out []string
+	add := func(ms MethodSet) {
+		out = append(out, ms.Symbol)
+		for _, m := range ms.Methods {
+			if m.Symbol != "" {
+				out = append(out, m.Symbol)
+			}
+		}
+	}
+	for _, ms := range now {
+		was, ok := before[ms.Symbol]
+		delete(before, ms.Symbol)
+		if ok && was.Interface == ms.Interface && slices.Equal(was.Methods, ms.Methods) {
+			continue
+		}
+		add(ms)
+		if ok {
+			add(was)
+		}
+	}
+	for _, was := range before {
+		add(was)
+	}
+	return out
 }
 
 // writeUpdated writes units to a new pack at path: each fresh shard encoded, every other
@@ -566,9 +624,9 @@ func writeUpdated(path, version string, old *packFile, units []Unit, fresh map[s
 }
 
 // dependentsReferencing is the units not yet re-indexed that depend on a changed unit and
-// whose stored shard references a removed symbol.
-func dependentsReferencing(old *packFile, units []Unit, fresh map[string]Shard, changed, removed map[string]bool) ([]Unit, error) {
-	if old == nil || len(removed) == 0 {
+// whose stored shard references or promotes a touched symbol.
+func dependentsReferencing(old *packFile, units []Unit, fresh map[string]Shard, changed, touched map[string]bool) ([]Unit, error) {
+	if old == nil || len(touched) == 0 {
 		return nil, nil
 	}
 	var out []Unit
@@ -586,7 +644,7 @@ func dependentsReferencing(old *packFile, units []Unit, fresh map[string]Shard, 
 		if err != nil {
 			return nil, err
 		}
-		if s.References(removed) {
+		if s.References(touched) || s.promotes(touched) {
 			out = append(out, u)
 		}
 	}

@@ -161,6 +161,22 @@ func TestUnplacedLocalDeclarationStillBindsItsName(t *testing.T) {
 	require.NotEmpty(t, warnings, "the unplaced headers are reported")
 }
 
+// TestNestedNamespaceLiteralIsIndexed pins that a literal written through a
+// nested namespace (geo\shapes\Point{}) indexes without a gap and records
+// its type.
+func TestNestedNamespaceLiteralIsIndexed(t *testing.T) {
+	idx, warnings, err := indexDir(filepath.Join("testdata", "nested-namespace-literal"))
+	require.NoError(t, err)
+	require.Empty(t, warnings)
+	for _, doc := range idx.Documents {
+		if doc.RelativePath == "main.buzz" {
+			require.NotEmpty(t, spots(doc, "scip-buzz buzz . . `lib/shapes.buzz`/Point#"))
+			return
+		}
+	}
+	require.Fail(t, "no main.buzz document")
+}
+
 // TestGenericObjectLiteralTypeIsFoundBehindItsTypeArguments pins that a
 // literal with type arguments still records its type, though `>` precedes
 // the brace.

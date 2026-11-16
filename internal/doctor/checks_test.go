@@ -25,6 +25,8 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
+	"github.com/egladman/magus/types/check"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -76,9 +78,9 @@ func TestCacheYieldExemptsSkipCacheTargets(t *testing.T) {
 
 	got := r.checkCacheYield(projects)
 
-	assert.Equal(t, types.Check{
+	assert.Equal(t, check.Check{
 		Name:    "cache-yield",
-		Status:  types.CheckOK,
+		Status:  check.OK,
 		Message: "no target is running uncached (1 declared skip_cache)",
 	}, got, "the charm suffix must not defeat the policy lookup, and the exemption stays visible")
 }
@@ -98,7 +100,7 @@ func TestCacheYieldStillReportsUndeclaredTargets(t *testing.T) {
 
 	got := r.checkCacheYield(projects)
 
-	require.Equal(t, types.CheckFail, got.Status)
+	require.Equal(t, check.Fail, got.Status)
 	require.Len(t, got.Details, 2, "one finding plus the advice line")
 	assert.Contains(t, got.Details[0], "docs build: 9 runs, 0 cached")
 	assert.NotContains(t, strings.Join(got.Details, "\n"), "generate",
@@ -115,7 +117,7 @@ func TestCacheYieldAdviceNamesBothCauses(t *testing.T) {
 	r := &runner{root: dir, ws: detectingWorkspace{}}
 	got := r.checkCacheYield(nil)
 
-	require.Equal(t, types.CheckFail, got.Status)
+	require.Equal(t, check.Fail, got.Status)
 	advice := got.Details[len(got.Details)-1]
 	assert.Contains(t, advice, "wider than it reads", "the footprint cause")
 	assert.Contains(t, advice, "volatile state", "the version-stamp cause")
@@ -156,9 +158,9 @@ func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
 
 	got := r.checkDeadOutputGlobs(t.Context(), []*types.Project{deadOutputProject(repo)})
 
-	assert.Equal(t, types.Check{
+	assert.Equal(t, check.Check{
 		Name:    "dead-output-globs",
-		Status:  types.CheckOK,
+		Status:  check.OK,
 		Message: "no dead output globs",
 	}, got, "a committed generated tree is not evidence the project was built")
 }
@@ -174,8 +176,8 @@ func TestDeadOutputGlobsReportsOnceBuilt(t *testing.T) {
 
 	got := r.checkDeadOutputGlobs(t.Context(), []*types.Project{p})
 
-	assert.Equal(t, types.Check{
-		Status:  types.CheckFail,
+	assert.Equal(t, check.Check{
+		Status:  check.Fail,
 		Details: []string{`console: output glob "dist/**" matched no files while the project's other outputs did`},
 	}, withoutWording(got), "only dist/** is dead; gen/** is built and src/gen/** is committed")
 }
@@ -191,8 +193,8 @@ func TestDeadOutputGlobsWithoutTrackedReporter(t *testing.T) {
 
 	got := r.checkDeadOutputGlobs(t.Context(), []*types.Project{deadOutputProject(dir)})
 
-	assert.Equal(t, types.Check{
-		Status:  types.CheckFail,
+	assert.Equal(t, check.Check{
+		Status:  check.Fail,
 		Details: []string{`console: output glob "gen/**" matched no files while the project's other outputs did`},
 	}, withoutWording(got))
 }
@@ -231,8 +233,8 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 				"format":   {{Glob: "gen/**"}},
 			},
 		}})
-		assert.Equal(t, types.Check{
-			Status:  types.CheckFail,
+		assert.Equal(t, check.Check{
+			Status:  check.Fail,
 			Details: []string{`docs: output glob "gen/**" is declared by format and generate`},
 		}, withoutWording(got), "owners are sorted so the message is stable")
 	})
@@ -245,9 +247,9 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 				"build-assets": {{Glob: "gen/assets/app.js"}},
 			},
 		}})
-		assert.Equal(t, types.Check{
+		assert.Equal(t, check.Check{
 			Name:    "output-ownership",
-			Status:  types.CheckOK,
+			Status:  check.OK,
 			Message: "every declared output has one owning target",
 		}, got, "distinct globs are not an overlap, even nested ones")
 	})
@@ -260,7 +262,7 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 				"format":   {{Glob: "gen/*.md", Except: []string{"gen/runtime.go"}}},
 			},
 		}})
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 	})
 
 	t.Run("one target repeating a glob is not two owners", func(t *testing.T) {
@@ -270,7 +272,7 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 				"generate": {{Glob: "gen/**"}, {Glob: "gen/**"}},
 			},
 		}})
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 	})
 }
 
@@ -313,7 +315,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		root := t.TempDir()
 		t.Setenv("PATH", t.TempDir()) // empty: no magus anywhere
 		c := checkGuardWiring(harnessProbeContext(), root, testProbeBudget)
-		require.Equal(t, types.CheckFail, c.Status)
+		require.Equal(t, check.Fail, c.Status)
 		assert.Contains(t, c.Message, "no ./magus and no magus on PATH")
 	})
 
@@ -322,7 +324,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		w.WriteExecutable("magus", "#!/bin/sh\nexit 0\n")
 
 		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget)
-		require.Equal(t, types.CheckFail, c.Status)
+		require.Equal(t, check.Fail, c.Status)
 		assert.Contains(t, c.Message, "did not return a deny")
 		joined := strings.Join(c.Details, "\n")
 		assert.Contains(t, joined, "rebuild: magus run build .")
@@ -333,7 +335,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		w.WriteExecutable("magus", denyingProbeScript)
 
 		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget)
-		require.Equal(t, types.CheckAdvice, c.Status)
+		require.Equal(t, check.Advice, c.Status)
 		assert.Contains(t, c.Message, "no harness descriptor found")
 		assert.Contains(t, strings.Join(c.Details, "\n"), "magus\\harness.provider")
 	})
@@ -344,7 +346,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		writeCheckpointHarness(t, w, guardedHarnessConfig())
 
 		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "test-host")
-		require.Equal(t, types.CheckOK, c.Status)
+		require.Equal(t, check.OK, c.Status)
 		assert.Contains(t, c.Details, w.Path("host", "hooks.json"))
 	})
 
@@ -354,7 +356,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		writeCheckpointHarness(t, w, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"other hook"}]}]}}`)
 
 		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "test-host")
-		require.Equal(t, types.CheckFail, c.Status)
+		require.Equal(t, check.Fail, c.Status)
 		joined := strings.Join(c.Details, "\n")
 		assert.Contains(t, c.Message, "harness wiring is incomplete")
 		assert.Contains(t, joined, "missing managed entry")
@@ -420,14 +422,14 @@ func (s *modPluginSuite) write(path, body string) {
 	s.Require().NoError(os.WriteFile(path, []byte(body), 0o644))
 }
 
-func (s *modPluginSuite) check() types.Check {
+func (s *modPluginSuite) check() check.Check {
 	return checkGuardWiring(harnessProbeContext(), s.w.Root(), testProbeBudget, "mod-host")
 }
 
 func (s *modPluginSuite) TestUninstalledModFailsNamingTheInstallLine() {
 	writeModHarness(s.T(), s.w, true, "")
 	c := s.check()
-	s.Equal(types.CheckFail, c.Status)
+	s.Equal(check.Fail, c.Status)
 	s.Contains(strings.Join(c.Details, "\n"), "claude plugin install magus@magus")
 }
 
@@ -435,14 +437,14 @@ func (s *modPluginSuite) TestModBehindTheMarketplaceFailsNamingTheUpdateLine() {
 	writeModHarness(s.T(), s.w, true, `{"version": 2, "plugins": {"magus@magus": [{"scope": "user", "gitCommitSha": "0e683071aaaabbbb"}]}}`)
 	s.marketplace()
 	c := s.check()
-	s.Equal(types.CheckFail, c.Status)
+	s.Equal(check.Fail, c.Status)
 	s.Contains(strings.Join(c.Details, "\n"), "claude plugin update magus@magus")
 }
 
 func (s *modPluginSuite) TestModWithAnUnknownCurrencyIsAdvice() {
 	writeModHarness(s.T(), s.w, true, `{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`)
 	c := s.check()
-	s.Equal(types.CheckAdvice, c.Status)
+	s.Equal(check.Advice, c.Status)
 	s.Contains(strings.Join(c.Details, "\n"), "unknown")
 }
 
@@ -450,14 +452,14 @@ func (s *modPluginSuite) TestModAtTheMarketplaceHeadIsNoProblem() {
 	writeModHarness(s.T(), s.w, true, fmt.Sprintf(`{"version": 2, "plugins": {"magus@magus": [{"scope": "user", "gitCommitSha": %q}]}}`, modHead))
 	s.marketplace()
 	c := s.check()
-	s.NotEqual(types.CheckFail, c.Status)
+	s.NotEqual(check.Fail, c.Status)
 	s.NotContains(strings.Join(c.Details, "\n"), "plugin")
 }
 
 func (s *modPluginSuite) TestModTheWorkspaceDoesNotEnableIsSilent() {
 	writeModHarness(s.T(), s.w, false, "")
 	c := s.check()
-	s.NotEqual(types.CheckFail, c.Status)
+	s.NotEqual(check.Fail, c.Status)
 	s.NotContains(strings.Join(c.Details, "\n"), "plugin")
 }
 
@@ -465,7 +467,7 @@ func (s *modPluginSuite) TestMachineWhereTheHostNeverRanIsSilent() {
 	writeModHarness(s.T(), s.w, true, "")
 	s.T().Setenv("CLAUDE_CONFIG_DIR", filepath.Join(s.T().TempDir(), "absent"))
 	c := s.check()
-	s.NotEqual(types.CheckFail, c.Status)
+	s.NotEqual(check.Fail, c.Status)
 	s.NotContains(strings.Join(c.Details, "\n"), "plugin")
 }
 
@@ -481,9 +483,9 @@ func TestLanguageCoverageRespectsNoLanguage(t *testing.T) {
 			{Path: "evals", NoLanguage: "polyglot harness; no single pack describes it"},
 			{Path: "api", Spell: "go"},
 		})
-		assert.Equal(t, types.Check{
+		assert.Equal(t, check.Check{
 			Name:    "language-coverage",
-			Status:  types.CheckOK,
+			Status:  check.OK,
 			Message: "every project matched a spell or declared no_language (1 exempt)",
 		}, got)
 	})
@@ -493,8 +495,8 @@ func TestLanguageCoverageRespectsNoLanguage(t *testing.T) {
 			{Path: "evals", NoLanguage: "polyglot harness; no single pack describes it"},
 			{Path: "forgot-the-import"},
 		})
-		assert.Equal(t, types.Check{
-			Status:  types.CheckAdvice,
+		assert.Equal(t, check.Check{
+			Status:  check.Advice,
 			Details: []string{"forgot-the-import"},
 		}, withoutWording(got))
 	})
@@ -617,7 +619,7 @@ func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 	// A non-git tree resolves no VCS, which is the same degrade path.
 	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	got := r.checkSelfStalingOutputs(t.Context(), nil)
-	assert.Equal(t, types.EvidenceUnknown, got.Evidence, "a skip is counted unknown, never a pass")
+	assert.Equal(t, check.EvidenceUnknown, got.Evidence, "a skip is counted unknown, never a pass")
 	assert.Contains(t, got.Message, "skipped")
 }
 
@@ -653,8 +655,8 @@ func TestUndeclaredSeedingFilesReportsTheStandingSet(t *testing.T) {
 
 	got := r.checkUndeclaredSeedingFiles(t.Context(), []*types.Project{seedingProject()})
 
-	require.Equal(t, types.Check{
-		Status:  types.CheckAdvice,
+	require.Equal(t, check.Check{
+		Status:  check.Advice,
 		Details: []string{".golangci.yml"},
 	}, withoutWording(got), "main.go is declared, and the untracked coverage.out is a different problem")
 	assert.Contains(t, got.Message, "MGS1028")
@@ -670,7 +672,7 @@ func TestUndeclaredSeedingFilesIsAdviceNotFailure(t *testing.T) {
 
 	got := r.checkUndeclaredSeedingFiles(t.Context(), []*types.Project{seedingProject()})
 
-	assert.NotEqual(t, types.CheckFail, got.Status, "this check must never gate a build")
+	assert.NotEqual(t, check.Fail, got.Status, "this check must never gate a build")
 }
 
 // TestUndeclaredSeedingFilesClearsOnceDeclared is the other half of the fix line:
@@ -684,7 +686,7 @@ func TestUndeclaredSeedingFilesClearsOnceDeclared(t *testing.T) {
 
 	got := r.checkUndeclaredSeedingFiles(t.Context(), []*types.Project{p})
 
-	assert.Equal(t, types.CheckOK, got.Status, got.Message)
+	assert.Equal(t, check.OK, got.Status, got.Message)
 }
 
 // TestUndeclaredSeedingFilesWithoutVCS degrades rather than guesses: with nothing to
@@ -696,7 +698,7 @@ func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 
 	got := r.checkUndeclaredSeedingFiles(t.Context(), []*types.Project{seedingProject()})
 
-	assert.Equal(t, types.EvidenceUnknown, got.Evidence, "a check with nothing to enumerate did not run, so it is no pass")
+	assert.Equal(t, check.EvidenceUnknown, got.Evidence, "a check with nothing to enumerate did not run, so it is no pass")
 	assert.Contains(t, got.Message, "skipped")
 }
 
@@ -712,7 +714,7 @@ func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
 
 	got := r.checkUnmatchableSourceGlobs([]*types.Project{p})
 
-	require.Equal(t, types.CheckFail, got.Status, got.Message)
+	require.Equal(t, check.Fail, got.Status, got.Message)
 	require.Len(t, got.Details, 1, "only the glob reaching into gen/ is unmatchable")
 	assert.Contains(t, got.Details[0], "proto/gen/*.binpb")
 	assert.Contains(t, got.Details[0], `prunes "gen"`)
@@ -732,7 +734,7 @@ func TestUnmatchableSourceGlobsIgnoresExactPaths(t *testing.T) {
 
 	got := r.checkUnmatchableSourceGlobs([]*types.Project{p})
 
-	assert.Equal(t, types.CheckOK, got.Status, got.Message)
+	assert.Equal(t, check.OK, got.Status, got.Message)
 	assert.Empty(t, got.Details)
 }
 
@@ -744,7 +746,7 @@ func TestCheckAgentSkills(t *testing.T) {
 
 		got := r.checkAgentSkills(t.Context())
 
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "skipped")
 	})
 
@@ -754,7 +756,7 @@ func TestCheckAgentSkills(t *testing.T) {
 
 		got := r.checkAgentSkills(t.Context())
 
-		require.Equal(t, types.CheckAdvice, got.Status)
+		require.Equal(t, check.Advice, got.Status)
 		assert.Contains(t, strings.Join(got.Details, "\n"), "magus agent install")
 		assert.Empty(t, got.Fix, "install into WHICH directory is the developer's choice, so there is nothing to apply")
 	})
@@ -768,8 +770,8 @@ func TestCheckAgentSkills(t *testing.T) {
 
 		got := r.checkAgentSkills(t.Context())
 
-		want := types.Check{
-			Status: types.CheckFail,
+		want := check.Check{
+			Status: check.Fail,
 			// One line per install location; what they say is internal/agent's to test.
 			Details: got.Details,
 			Fix:     []string{"agent", "harness", "install", "--id", "test-host"},
@@ -784,15 +786,15 @@ func TestCheckAgentSkills(t *testing.T) {
 		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, types.SkillFormBoth)
 		require.NoError(t, err)
 		w.Write(".agents/skills/magus-retired/SKILL.md",
-			string(catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), types.SkillVariantShort)))
+			string(catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), typesagent.SkillVariantShort)))
 		r := &runner{ws: boundWorkspace(t, w.Root(), "test-host")}
 		r.opts.skills = catalog
 
 		got := r.checkAgentSkills(t.Context())
 
-		want := types.Check{
+		want := check.Check{
 			Name:    "agent-skills",
-			Status:  types.CheckFail,
+			Status:  check.Fail,
 			Message: "installed skills are behind this binary: .agents/skills",
 			// One line per install location; what they say is internal/agent's to test.
 			Details: got.Details,
@@ -815,9 +817,9 @@ func TestCheckAgentSkills(t *testing.T) {
 
 		// Misconfiguration is a failure, not a warning, and a reinstall changes nothing here,
 		// so --fix has nothing to run.
-		assert.Equal(t, types.Check{
+		assert.Equal(t, check.Check{
 			Name:    "agent-skills",
-			Status:  types.CheckFail,
+			Status:  check.Fail,
 			Message: "installed skills are behind this binary: .agents/skills; a reinstall leaves these directories, remove them by hand: .agents/skills/magus-retired",
 			Details: []string{".agents/skills: magus-retired: empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir .agents/skills/magus-retired"},
 		}, got)
@@ -836,8 +838,8 @@ func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
 
-	require.Equal(t, types.Check{
-		Status:  types.CheckAdvice,
+	require.Equal(t, check.Check{
+		Status:  check.Advice,
 		Details: []string{"libs/leaf/MAGUS.md is libs/leaf's output and .'s source"},
 	}, withoutWording(got), got.Message)
 }
@@ -852,7 +854,7 @@ func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
 
-	assert.Equal(t, types.CheckOK, got.Status, got.Message)
+	assert.Equal(t, check.OK, got.Status, got.Message)
 }
 
 // A pattern output is not reported, which is the decidability line MGS4002 draws: whether two globs
@@ -866,7 +868,7 @@ func TestOutputIsAnotherProjectsSourceSkipsPatternOutputs(t *testing.T) {
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
 
-	assert.Equal(t, types.CheckOK, got.Status, got.Message)
+	assert.Equal(t, check.OK, got.Status, got.Message)
 }
 
 // loadOneEvent puts a single event into the session store for root, dated at.
@@ -889,7 +891,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 
 		got := (&runner{root: t.TempDir()}).checkSessionLoad()
 
-		assert.Equal(t, types.CheckAdvice, got.Status)
+		assert.Equal(t, check.Advice, got.Status)
 		assert.Contains(t, got.Message, "has ever been loaded")
 		assert.Contains(t, got.Details[len(got.Details)-1], "magus session load")
 	})
@@ -901,7 +903,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 
 		got := (&runner{root: root}).checkSessionLoad()
 
-		assert.Equal(t, types.CheckAdvice, got.Status)
+		assert.Equal(t, check.Advice, got.Status)
 		assert.Contains(t, got.Message, "30 days old")
 	})
 
@@ -912,7 +914,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 
 		got := (&runner{root: root}).checkSessionLoad()
 
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 	})
 }
 
@@ -975,7 +977,7 @@ func TestSameStepWritesCheck(t *testing.T) {
 
 	t.Run("an unordered reader fails", func(t *testing.T) {
 		got := r.checkSameStepWrites([]*types.Project{sameStepFixture(false)})
-		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, check.Fail, got.Status)
 		require.Len(t, got.Details, 1)
 		assert.Equal(t,
 			`root: ci runs . coverage-badge, which reads "**/*.go", alongside . mocks-generate, which writes "**/mocks/*.go", and needs neither from the other (refused at run time)`,
@@ -985,9 +987,9 @@ func TestSameStepWritesCheck(t *testing.T) {
 
 	t.Run("the ctx.needs edge silences it", func(t *testing.T) {
 		got := r.checkSameStepWrites([]*types.Project{sameStepFixture(true)})
-		assert.Equal(t, types.Check{
+		assert.Equal(t, check.Check{
 			Name:    "same-step-writes",
-			Status:  types.CheckOK,
+			Status:  check.OK,
 			Message: "no composed target runs a reader and a writer of the same files unordered",
 		}, got)
 	})
@@ -998,12 +1000,12 @@ func TestSameStepWritesCheck(t *testing.T) {
 		// whole-project over-approximation, and an overlap through a guess is not a
 		// finding a FAIL may rest on.
 		p.TargetInputs = nil
-		assert.Equal(t, types.CheckOK, r.checkSameStepWrites([]*types.Project{p}).Status)
+		assert.Equal(t, check.OK, r.checkSameStepWrites([]*types.Project{p}).Status)
 	})
 
 	t.Run("a project with no composed target is not a project with no answer", func(t *testing.T) {
 		got := r.checkSameStepWrites([]*types.Project{{Path: "docs", Name: "docs"}})
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 	})
 }
 
@@ -1039,7 +1041,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck",
 			spells.Tool{Probe: probe, Observe: probe}))
 
-		require.Equal(t, types.CheckFail, got.Status, got.Message)
+		require.Equal(t, check.Fail, got.Status, got.Message)
 		require.Len(t, got.Details, 1)
 		assert.Contains(t, got.Details[0], "govulncheck -version")
 		assert.Contains(t, got.Message, "MGS1037")
@@ -1055,7 +1057,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 			Observe: spells.Command{Bin: "trivy", Args: []string{"version", "--format", "json"}},
 		}))
 
-		assert.Equal(t, types.CheckOK, got.Status, got.Message)
+		assert.Equal(t, check.OK, got.Status, got.Message)
 	})
 
 	t.Run("same command with a key -> ok", func(t *testing.T) {
@@ -1065,7 +1067,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 			Probe: probe, Observe: probe, Key: spells.VersionKey{UpTo: spells.VersionPatch},
 		}))
 
-		assert.Equal(t, types.CheckOK, got.Status, got.Message)
+		assert.Equal(t, check.OK, got.Status, got.Message)
 	})
 
 	t.Run("observe with no probe -> ok", func(t *testing.T) {
@@ -1076,13 +1078,13 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck",
 			spells.Tool{Observe: probe}))
 
-		assert.Equal(t, types.CheckOK, got.Status, got.Message)
+		assert.Equal(t, check.OK, got.Status, got.Message)
 	})
 }
 
 func TestCheckJSONCodec(t *testing.T) {
 	got := (&runner{}).checkJSONCodec()
-	assert.Equal(t, types.CheckOK, got.Status)
+	assert.Equal(t, check.OK, got.Status)
 	assert.True(t, strings.HasPrefix(got.Message, "encoding/json "), got.Message)
 }
 
@@ -1097,12 +1099,12 @@ func (g graphErrorWorkspace) Graph() (*types.Graph, error) { return nil, g.err }
 
 func TestCheckGraphCycles(t *testing.T) {
 	ok := (&runner{ws: graphErrorWorkspace{}}).checkGraphCycles()
-	assert.Equal(t, types.Check{Name: "dependency-graph", Status: types.CheckOK, Message: "no cycles detected"}, ok)
+	assert.Equal(t, check.Check{Name: "dependency-graph", Status: check.OK, Message: "no cycles detected"}, ok)
 
 	// The graph builder is what detects a cycle, so its error IS the finding and has
 	// to reach the report rather than being replaced with a generic message.
 	bad := (&runner{ws: graphErrorWorkspace{err: errors.New("cycle: a -> b -> a")}}).checkGraphCycles()
-	assert.Equal(t, types.Check{Name: "dependency-graph", Status: types.CheckFail, Message: "cycle: a -> b -> a"}, bad)
+	assert.Equal(t, check.Check{Name: "dependency-graph", Status: check.Fail, Message: "cycle: a -> b -> a"}, bad)
 }
 
 // TestCheckConcurrencySizing pins the machine's size through MAGUS_CONCURRENCY so the
@@ -1110,19 +1112,19 @@ func TestCheckGraphCycles(t *testing.T) {
 func TestCheckConcurrencySizing(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "4")
 
-	sized := func(n int) types.Check {
+	sized := func(n int) check.Check {
 		return (&runner{opts: options{cfg: config.Config{Concurrency: n}}}).checkConcurrencySizing()
 	}
 
 	t.Run("unset", func(t *testing.T) {
 		got := sized(0)
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "unset; sized to this machine (4)")
 	})
 
 	t.Run("matches the machine", func(t *testing.T) {
 		got := sized(4)
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "4, which is what this machine sizes to")
 	})
 
@@ -1130,8 +1132,8 @@ func TestCheckConcurrencySizing(t *testing.T) {
 	// cannot tell it apart from a stale one.
 	t.Run("undersized", func(t *testing.T) {
 		got := sized(2)
-		assert.Equal(t, types.Check{
-			Status:  types.CheckAdvice,
+		assert.Equal(t, check.Check{
+			Status:  check.Advice,
 			Details: []string{fmt.Sprintf("%d cpu(s) detected", runtime.NumCPU())},
 			Fix:     []string{"config", "set", "key=concurrency,value=4"},
 		}, withoutWording(got))
@@ -1143,8 +1145,8 @@ func TestCheckConcurrencySizing(t *testing.T) {
 	// points at the cause.
 	t.Run("oversized", func(t *testing.T) {
 		got := sized(16)
-		assert.Equal(t, types.Check{
-			Status:  types.CheckAdvice,
+		assert.Equal(t, check.Check{
+			Status:  check.Advice,
 			Details: []string{fmt.Sprintf("%d cpu(s) detected", runtime.NumCPU())},
 			Fix:     []string{"config", "set", "key=concurrency,value=4"},
 		}, withoutWording(got))
@@ -1158,8 +1160,8 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 
 	t.Run("no server", func(t *testing.T) {
 		got := (&runner{}).checkWorkspaceRegistration()
-		assert.Equal(t, types.Check{
-			Name: "workspace-registration", Status: types.CheckOK,
+		assert.Equal(t, check.Check{
+			Name: "workspace-registration", Status: check.OK,
 			Message: "no loaded workspaces in server",
 		}, got)
 	})
@@ -1182,7 +1184,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}, {Root: "/other", LastAccess: loaded}},
 		}}}
 		got := r.checkWorkspaceRegistration()
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "loaded in server")
 		assert.Contains(t, got.Message, "(2 workspace(s) total)")
 		require.Len(t, got.Details, 2)
@@ -1198,7 +1200,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 			Workspaces: []LoadedWorkspace{{Root: "/elsewhere", LastAccess: loaded}},
 		}}}
 		got := r.checkWorkspaceRegistration()
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "not yet loaded in server")
 	})
 
@@ -1247,13 +1249,13 @@ func TestIsSocketAlive(t *testing.T) {
 func TestCheckStaleSockets(t *testing.T) {
 	t.Run("no socket directory configured", func(t *testing.T) {
 		got := (&runner{}).checkStaleSockets(t.Context())
-		assert.Equal(t, types.Check{Name: "sockets", Status: types.CheckOK, Message: "no socket directory"}, got)
+		assert.Equal(t, check.Check{Name: "sockets", Status: check.OK, Message: "no socket directory"}, got)
 	})
 
 	t.Run("socket directory does not exist", func(t *testing.T) {
 		r := &runner{opts: options{serverInfo: &ServerInfo{SockDir: filepath.Join(t.TempDir(), "absent")}}}
 		got := r.checkStaleSockets(t.Context())
-		assert.Equal(t, types.Check{Name: "sockets", Status: types.CheckOK, Message: "no socket directory"}, got)
+		assert.Equal(t, check.Check{Name: "sockets", Status: check.OK, Message: "no socket directory"}, got)
 	})
 
 	// named is a ServerInfo carrying the socket names the CLI passes, over dir.
@@ -1263,8 +1265,8 @@ func TestCheckStaleSockets(t *testing.T) {
 
 	t.Run("empty directory", func(t *testing.T) {
 		got := (&runner{opts: options{serverInfo: named(t.TempDir())}}).checkStaleSockets(t.Context())
-		assert.Equal(t, types.Check{
-			Name: "sockets", Status: types.CheckOK,
+		assert.Equal(t, check.Check{
+			Name: "sockets", Status: check.OK,
 			Message: "server not running, broker not running, 0 per-process pool(s)",
 		}, got)
 	})
@@ -1278,8 +1280,8 @@ func TestCheckStaleSockets(t *testing.T) {
 		listenUnix(t, filepath.Join(dir, "magus-41221-abc.sock"))
 
 		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets(t.Context())
-		assert.Equal(t, types.Check{
-			Name: "sockets", Status: types.CheckOK,
+		assert.Equal(t, check.Check{
+			Name: "sockets", Status: check.OK,
 			Message: "server live, broker live, 1 per-process pool(s)",
 		}, got)
 	})
@@ -1295,8 +1297,8 @@ func TestCheckStaleSockets(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "magus-dir.sock"), 0o755))
 
 		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets(t.Context())
-		assert.Equal(t, types.Check{
-			Name: "sockets", Status: types.CheckOK,
+		assert.Equal(t, check.Check{
+			Name: "sockets", Status: check.OK,
 			Message: "server stale, broker stale, 0 per-process pool(s), 3 stale socket(s)",
 			Details: []string{
 				"stale: " + filepath.Join(dir, "broker.sock"),
@@ -1314,8 +1316,8 @@ func TestCheckStaleSockets(t *testing.T) {
 		listenUnix(t, filepath.Join(dir, "magus-custom.sock"))
 
 		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets(t.Context())
-		assert.Equal(t, types.Check{
-			Name: "sockets", Status: types.CheckFail,
+		assert.Equal(t, check.Check{
+			Name: "sockets", Status: check.Fail,
 			Message: "2 live server sockets: more than one server is running",
 			Details: []string{
 				"live: " + filepath.Join(dir, "server.sock"),
@@ -1332,8 +1334,8 @@ func TestCheckStaleSockets(t *testing.T) {
 		listenUnix(t, filepath.Join(dir, "magus-41221-abc.sock"))
 
 		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets(t.Context())
-		assert.Equal(t, types.Check{
-			Name: "sockets", Status: types.CheckOK,
+		assert.Equal(t, check.Check{
+			Name: "sockets", Status: check.OK,
 			Message: "server live, broker not running, 1 per-process pool(s)",
 		}, got)
 	})
@@ -1358,8 +1360,8 @@ func TestCheckStaleSockets(t *testing.T) {
 		si := named(dir)
 		si.ClientVersion = "current-build"
 		got := (&runner{opts: options{serverInfo: si}}).checkStaleSockets(t.Context())
-		assert.Equal(t, types.Check{
-			Status: types.CheckFail,
+		assert.Equal(t, check.Check{
+			Status: check.Fail,
 			// The pool's pid, version and address, which the proc package owns.
 			Details: got.Details,
 			Fix:     []string{"server", "stop", "--pools"},
@@ -1376,16 +1378,16 @@ func TestCheckStaleShadowAcks(t *testing.T) {
 
 	t.Run("nothing acknowledged", func(t *testing.T) {
 		got := (&runner{}).checkStaleShadowAcks()
-		assert.Equal(t, types.Check{
-			Name: "stale-spell-shadow-acknowledgments", Status: types.CheckOK,
+		assert.Equal(t, check.Check{
+			Name: "stale-spell-shadow-acknowledgments", Status: check.OK,
 			Message: "no allow_shadow entries",
 		}, got)
 	})
 
 	t.Run("workspace not loaded", func(t *testing.T) {
 		got := (&runner{opts: options{cfg: acks}}).checkStaleShadowAcks()
-		assert.Equal(t, types.Check{
-			Name: "stale-spell-shadow-acknowledgments", Status: types.CheckOK,
+		assert.Equal(t, check.Check{
+			Name: "stale-spell-shadow-acknowledgments", Status: check.OK,
 			Message: "workspace not loaded",
 		}, got)
 	})
@@ -1395,7 +1397,7 @@ func TestCheckStaleShadowAcks(t *testing.T) {
 	t.Run("every ack is stale", func(t *testing.T) {
 		r := &runner{ws: rootedWorkspace{root: t.TempDir()}, opts: options{cfg: acks}}
 		got := r.checkStaleShadowAcks()
-		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, check.Fail, got.Status)
 		assert.Contains(t, got.Message, "2 allow_shadow entr(ies) no longer match a real shadow")
 		require.Len(t, got.Details, 2)
 		// Sorted, so the report does not reorder between runs over the same config.
@@ -1456,7 +1458,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		touchAt(t, bin, now.Add(-time.Hour))
 
 		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary(t.Context())
-		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, check.Fail, got.Status)
 		assert.Contains(t, got.Message, "stale rules")
 		require.Len(t, got.Details, 3)
 		assert.Contains(t, got.Details[1], filepath.FromSlash("main.go"))
@@ -1471,7 +1473,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		touchAt(t, bin, now)
 
 		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary(t.Context())
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "hook would run ./magus")
 	})
 
@@ -1483,7 +1485,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		t.Setenv("PATH", bin.Root())
 
 		got := (&runner{ws: boundWorkspace(t, t.TempDir())}).checkGuardBinary(t.Context())
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "no ./magus built")
 		assert.Contains(t, got.Message, onPath)
 	})
@@ -1491,8 +1493,8 @@ func TestCheckGuardBinary(t *testing.T) {
 	t.Run("no binary anywhere", func(t *testing.T) {
 		withoutPathMagus(t)
 		got := (&runner{ws: boundWorkspace(t, t.TempDir())}).checkGuardBinary(t.Context())
-		assert.Equal(t, types.Check{
-			Status:  types.CheckFail,
+		assert.Equal(t, check.Check{
+			Status:  check.Fail,
 			Details: []string{"build one: magus run build ."},
 		}, withoutWording(got))
 		assert.Contains(t, got.Message, "a guard hook is unenforced")
@@ -1506,7 +1508,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		w.Write("magus", "not a binary\n")
 
 		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary(t.Context())
-		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, check.Fail, got.Status)
 		assert.Contains(t, got.Message, "no ./magus and no magus on PATH")
 	})
 }
@@ -1664,7 +1666,7 @@ func TestCheckObserverRecording(t *testing.T) {
 	// people to ignore the check.
 	t.Run("nothing recorded", func(t *testing.T) {
 		got := (&runner{root: t.TempDir()}).checkObserverRecording()
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "no agent activity recorded yet")
 	})
 
@@ -1676,7 +1678,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		observe(t, root, "file.write", observerMinSample-1)
 
 		got := (&runner{root: root}).checkObserverRecording()
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "too few to judge")
 		assert.Contains(t, got.Message, strconv.Itoa(observerMinSample-1)+" observation(s)")
 	})
@@ -1689,7 +1691,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		observe(t, root, "shell.command", 40)
 
 		got := (&runner{root: root}).checkObserverRecording()
-		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, check.Fail, got.Status)
 		assert.Contains(t, got.Message, "NOT ONE read")
 		require.NotEmpty(t, got.Details)
 		assert.Contains(t, got.Details[0], "writes: 20")
@@ -1705,7 +1707,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		observe(t, root, "file.write", 60)
 
 		got := (&runner{root: root}).checkObserverRecording()
-		assert.Equal(t, types.CheckAdvice, got.Status)
+		assert.Equal(t, check.Advice, got.Status)
 		assert.Contains(t, got.Message, "too sparse to explain a change")
 		assert.Contains(t, got.Message, "5 read(s) against 60 write(s)")
 	})
@@ -1716,7 +1718,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		observe(t, root, "file.write", 10)
 
 		got := (&runner{root: root}).checkObserverRecording()
-		assert.Equal(t, types.CheckOK, got.Status)
+		assert.Equal(t, check.OK, got.Status)
 		assert.Contains(t, got.Message, "recording: 60 read(s), 10 write(s)")
 	})
 }
@@ -1886,7 +1888,7 @@ func TestGuardTemplateBasenamesAreShipped(t *testing.T) {
 
 // withoutWording blanks the name and message of c, the two fields a test leaves to the check or
 // pins by substring, so the rest of the Check compares whole and a field added later is covered.
-func withoutWording(c types.Check) types.Check {
+func withoutWording(c check.Check) check.Check {
 	c.Name, c.Message = "", ""
 	return c
 }

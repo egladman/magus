@@ -2,8 +2,6 @@ package types
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
@@ -1030,6 +1028,17 @@ type RevisionFileReader interface {
 	ReadFileAt(ctx context.Context, root, rev, path string) (string, error)
 }
 
+// RevisionLister lists the files a revision holds under one directory,
+// without materializing a tree. With ReadFileAt it reads a subtree at a
+// revision, as the contract digest of an authority does (ADR 0045).
+//
+// It is optional: VCSDriver does not embed it, and a caller asserts it.
+type RevisionLister interface {
+	// ListFilesAt is the sorted root-relative paths of each file rev holds
+	// under dir, rev spelled as for ReadFileAt. An absent dir lists nothing.
+	ListFilesAt(ctx context.Context, root, rev, dir string) ([]string, error)
+}
+
 // RevisionExporter is the capability to materialize a revision's tracked files into a
 // directory (a "checkout to a throwaway tree" without touching the working copy). It
 // powers `magus graph diff --rev`, which builds a base knowledge graph from the exported
@@ -1593,84 +1602,9 @@ type LsFilesExcluded struct {
 	URL     string `json:"url,omitempty" yaml:"url,omitempty"`
 }
 
-// VCSCheckpoint is the identity of the working state a piece of work was handed:
-// what was true in this tree, at this moment, in a form a ledger can record and a
-// later reader can act on.
-//
-// It RESOLVES AND RECORDS; it never MINTS. No tag, no stash, no ref, no file: a
-// checkpoint is a pure read, so nothing about it can be lost by not keeping it and
-// nothing about the tree changes by taking it. That is what makes it safe to take
-// one per lease, and it is why this is a plain value with no id of its own:
-// an identity magus invented would be a fact only magus could confirm.
-//
-// Two things a reader can do with it. Revision feeds anything that takes a rev
-// (`magus graph diff --rev <rev>`). PatchDigest compares against another worker's:
-// equal digests mean the two saw the same uncommitted patch, which no revision alone
-// can tell you, because a dirty tree's revision is the same one everybody else has.
-type VCSCheckpoint struct {
-	// Revision is the resolved head revision id (VCSMeta.ID): git SHA, hg node, jj
-	// commit_id. Full, never abbreviated: it is meant to be fed back to a VCS.
-	Revision string `json:"revision" yaml:"revision"`
-	// Branch is the movable name pointing at Revision, or empty where the backend has
-	// none. VCSMeta.Ref's value under the name a caller recording a handoff writes;
-	// empty is ordinary (a detached HEAD, or jj's usual anonymous change), not an error.
-	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
-	// Dirty reports uncommitted changes, on the vcs package's existing definition
-	// (VCSMeta.IsDirty, which for git is a non-empty `status --porcelain` and so counts
-	// untracked files too).
-	Dirty bool `json:"dirty" yaml:"dirty"`
-	// PatchDigest fingerprints the uncommitted patch, empty when the tree is clean.
-	//
-	// It covers exactly what the backend's DirtyDiff covers, which is TRACKED content
-	// against the checked-out revision. Untracked files are UntrackedDigest's subject:
-	// this digest matches internal/changeset.PatchDigest byte for byte, so a checkpoint and a
-	// review session over one tree produce the same string, and folding anything else in
-	// would break that.
-	PatchDigest string `json:"patch_digest,omitempty" yaml:"patch_digest,omitempty"`
-	// UntrackedDigest fingerprints the untracked files' paths AND content, empty when
-	// there are none.
-	//
-	// Untracked files sit in no commit, so they are the work a whole-tree revert destroys
-	// irrecoverably, and a checkpoint blind to them answers "same tree?" wrong in the
-	// direction that costs most. Content and not only paths, because an edit to an
-	// untracked file is invisible in a path-only fingerprint.
-	UntrackedDigest string `json:"untracked_digest,omitempty" yaml:"untracked_digest,omitempty"`
-	// VCS is the resolved backend name (git, hg, jj), so a reader knows whose revision
-	// syntax Revision is written in.
-	VCS string `json:"vcs,omitempty" yaml:"vcs,omitempty"`
-	// Preserved is the handle to a capture of the uncommitted work, empty unless one was
-	// asked for and the tree was dirty.
-	//
-	// The only field a checkpoint MINTS: the digests say whether two trees match, this
-	// one gets a tree back. Opaque and backend-native (see VCSDriver.Preserve), so only
-	// the backend VCS names can read it.
-	Preserved string `json:"preserved,omitempty" yaml:"preserved,omitempty"`
-}
-
-// Token is the checkpoint as the one string a ledger cell gives it, the form `magus vcs
-// checkpoint -o name` prints and a job row records: Revision for a clean tree,
-// `<Revision>+<digest>` for a dirty one. The "+" marks a revision PLUS uncommitted work
-// rather than a revision anyone can check out. [ParseCheckpointToken] reads it back.
-//
-// The digest is PatchDigest when nothing is untracked, so a tracked-only token still
-// compares with a review session's patch digest. Untracked files fold in beside it: a
-// job's diff since its checkpoint counts them as its work, and a token blind to them
-// would name a tree holding only new files by the digest of an empty patch.
-func (cp VCSCheckpoint) Token() string {
-	if !cp.Dirty {
-		return cp.Revision
-	}
-	if cp.UntrackedDigest == "" {
-		return fmt.Sprintf("%s+%s", cp.Revision, cp.PatchDigest)
-	}
-	// The width of PatchDigest, so every dirty token's digest reads alike.
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s", cp.PatchDigest, cp.UntrackedDigest)))
-	return fmt.Sprintf("%s+%s", cp.Revision, hex.EncodeToString(sum[:16]))
-}
-
-// ParseCheckpointToken splits a token [VCSCheckpoint.Token] printed into its revision and
-// its digest, trimming surrounding space. digest is empty for a clean tree's token. Only
-// the revision is something a VCS can resolve; the digest says whether two trees match.
+// ParseCheckpointToken splits a token that Checkpoint.Token printed into its
+// revision and digest, trimming space. The digest is empty for a clean tree.
+// Only the revision resolves in a VCS; the digest says whether trees match.
 func ParseCheckpointToken(token string) (revision, digest string) {
 	revision, digest, _ = strings.Cut(strings.TrimSpace(token), "+")
 	return strings.TrimSpace(revision), digest

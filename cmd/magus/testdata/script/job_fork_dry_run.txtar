@@ -11,9 +11,9 @@ cp $WORK/code.go src/code.go
 
 ! exec magus job fork wave/many --dry-run --write-paths 'src,**/*.go' --check 'nosuch .'
 stdout '^3 problems:$'
-stdout '\[MGS3018\] write_paths\[0\]'
+stdout '\[MGS3018\] paths.write\[0\]'
 stdout '\[MGS3040\] check\.target'
-stdout '\[MGS3043\] write_paths\[1\]'
+stdout '\[MGS3043\] paths.write\[1\]'
 stdout '^     fix: '
 stdout '^would store:$'
 stdout '"id": "wave/many"'
@@ -33,7 +33,7 @@ exec magus job fork wave/clean --dry-run --write-paths src/code.go --check 'test
 stdout '^no problems$'
 stdout '^would store:$'
 stdout '"id": "wave/clean"'
-stdout '"write_paths"'
+stdout '"paths": \{'
 exec magus ls jobs -o name
 ! stdout .
 
@@ -61,6 +61,6 @@ exec magus ls jobs -o name
 -- code.go --
 package pkg
 -- broad.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/broad", "write_paths": ["**/*.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/broad", "paths": {"write": ["**/*.go"]},
  "check": {"target": "test", "project": "."},
  "deviations": [{"code": "MGS3043", "subject": "**/*.go", "reason": "the job tunes every Go file"}]}

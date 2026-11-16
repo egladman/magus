@@ -11,7 +11,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/clikit/command"
+	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/types"
 )
 
@@ -41,7 +42,7 @@ func configConsoleCommand(args []string) error {
 		fmt.Fprintln(os.Stderr, "Subcommands:")
 		fmt.Fprintln(os.Stderr, "  token   create, list, or revoke console tokens")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	rest := fs.Args()
@@ -80,7 +81,7 @@ func configConsoleToken(args []string) error {
 		fmt.Fprintln(os.Stderr, "  ls       show names, ids, grants, and expiry (never the secret)")
 		fmt.Fprintln(os.Stderr, "  revoke   delete a console token by name or id")
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	rest := fs.Args()
@@ -118,7 +119,7 @@ func configConsoleTokenCreate(args []string) error {
 		fmt.Fprintln(os.Stderr, "Flags:")
 		printOwnDefaults(fs)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := command.Parse(fs, args); err != nil {
 		return err
 	}
 	ttl, err := parseExpiry(cf.Expires)

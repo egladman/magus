@@ -16,8 +16,8 @@ import (
 )
 
 // providerOp is one function a provider spell exports and magus calls with a Target and a
-// typed request. Req is a RuntimeObject in boundaryTypes, since magus encodes it, and Resp
-// is listed in inboundTypes, since magus decodes it.
+// typed request. Req crosses out and Resp crosses in, so the reach gives
+// Req an encoder and Resp a decoder.
 type providerOp struct {
 	Family string
 	Op     string
@@ -114,7 +114,7 @@ func goCase(snake string) string {
 // providerSignature is the Buzz parameter list and return annotation op's export declares.
 func providerSignature(op providerOp) (params, returns string, err error) {
 	if _, ok := boundaryTypeNamed(buzzName(op.Req)); !ok {
-		return "", "", fmt.Errorf("provider op %s: request %s is not registered in boundaryTypes", op.Op, op.Req)
+		return "", "", fmt.Errorf("provider op %s: request %s does not cross into Buzz", op.Op, op.Req)
 	}
 	returns, _, err = buzzgen.FieldType(op.Resp, mirrorOptions())
 	if err != nil {
@@ -135,8 +135,8 @@ func checkProviderOps() error {
 	seen := map[string]providerOp{}
 	for _, op := range providerOps {
 		entry, ok := boundaryTypeNamed(buzzName(op.Req))
-		if !ok || !entry.RuntimeObject {
-			return fmt.Errorf("provider op %s: request %s must be a RuntimeObject in boundaryTypes", op.Op, op.Req)
+		if !ok || !entry.Outbound {
+			return fmt.Errorf("provider op %s: request %s does not cross out to Buzz", op.Op, op.Req)
 		}
 		if objects.reachesEnum(op.Req) {
 			return fmt.Errorf("provider op %s: request %s reaches an enum, which a ProviderOp encoder cannot write", op.Op, op.Req)

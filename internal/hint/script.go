@@ -316,7 +316,7 @@ func MissingScripts(cacheDir string) ([]string, bool) {
 }
 
 // scriptPlaceholders are the facts a script's args may name.
-var scriptPlaceholders = []string{"ref", "rule", "project", "file", "checkout"}
+var scriptPlaceholders = []string{"ref", "rule", "project", "file", "checkout", "lease"}
 
 var placeholderRe = regexp.MustCompile(`\{([a-z]+)\}`)
 
@@ -337,6 +337,16 @@ func MatchScripts(cacheDir, situation string, facts map[string]string) ([]types.
 		return nil, nil
 	}
 	return x.serve(x.Serves[situation], facts, nil), nil
+}
+
+// ServingScriptArgv is the argv of the first script serving situation, bound
+// to facts. argv[0] is BinaryName. False when none serves it.
+func ServingScriptArgv(cacheDir, situation string, facts map[string]string) ([]string, bool) {
+	next, err := MatchScripts(cacheDir, situation, facts)
+	if err != nil || len(next) == 0 {
+		return nil, false
+	}
+	return next[0].Argv, true
 }
 
 // MatchReplaced returns the breadcrumbs for every script the index under cacheDir

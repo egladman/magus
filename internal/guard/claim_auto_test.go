@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -75,8 +76,8 @@ func autoClaimFixture(t *testing.T, row types.Job, others ...types.Job) (context
 }
 
 func autoClaimRow() types.Job {
-	return types.Job{ID: "render-change", Criteria: "change hint.Render", State: types.StateRunning,
-		WritePaths: []string{"internal/hint/render.go"}, Registered: 1}
+	return types.Job{ID: "render-change", Agent: agent.Instructed("change hint.Render"), State: types.StateRunning,
+		Paths: types.JobPaths{Write: []string{"internal/hint/render.go"}}, Registered: 1}
 }
 
 func TestGradeLeasedWriteClaimsAFileOneEdgeOut(t *testing.T) {
@@ -90,7 +91,7 @@ func TestGradeLeasedWriteClaimsAFileOneEdgeOut(t *testing.T) {
 
 	stored, ok := leaseRow(ctx, hookLocation(ctx, deps), row.ID)
 	require.True(t, ok)
-	assert.Equal(t, []string{"internal/hint/render.go", "internal/guard/render.go"}, stored.WritePaths)
+	assert.Equal(t, []string{"internal/hint/render.go", "internal/guard/render.go"}, stored.Paths.Write)
 	require.Len(t, stored.Claims, 1)
 	assert.Equal(t, types.JobClaim{Path: "internal/guard/render.go", Evidence: types.ClaimEvidence{Kind: types.ClaimRefs, Subject: "hint.Render"},
 		Proof: "internal/guard/render.go references hint.Render, which the job's diff changes in internal/hint/render.go",
@@ -103,7 +104,7 @@ func TestGradeLeasedWriteClaimsAFileOneEdgeOut(t *testing.T) {
 
 func TestGradeLeasedWriteClaimsATestOfAFileTheJobHolds(t *testing.T) {
 	row := autoClaimRow()
-	row.WritePaths = append(row.WritePaths, "internal/lease/lease.go")
+	row.Paths.Write = append(row.Paths.Write, "internal/lease/lease.go")
 	ctx, root, deps := autoClaimFixture(t, row)
 
 	got := gradeLeasedWrite(ctx, deps, row.ID, filepath.Join(root, "internal/lease/lease_test.go"))
@@ -113,12 +114,12 @@ func TestGradeLeasedWriteClaimsATestOfAFileTheJobHolds(t *testing.T) {
 
 	stored, ok := leaseRow(ctx, hookLocation(ctx, deps), row.ID)
 	require.True(t, ok)
-	assert.Equal(t, []string{"internal/hint/render.go", "internal/lease/lease.go", "internal/lease/lease_test.go"}, stored.WritePaths)
+	assert.Equal(t, []string{"internal/hint/render.go", "internal/lease/lease.go", "internal/lease/lease_test.go"}, stored.Paths.Write)
 }
 
 func TestGradeLeasedWriteDeniesWhatItWillNotClaim(t *testing.T) {
-	holder := types.Job{ID: "held-change", Criteria: "own held", State: types.StateRunning,
-		WritePaths: []string{"internal/held/held.go"}, Registered: 1}
+	holder := types.Job{ID: "held-change", Agent: agent.Instructed("own held"), State: types.StateRunning,
+		Paths: types.JobPaths{Write: []string{"internal/held/held.go"}}, Registered: 1}
 	for name, tc := range map[string]struct {
 		path, stop string
 		maxClaims  int
@@ -174,7 +175,7 @@ func TestGradeLeasedWriteDeniesWhatItWillNotClaim(t *testing.T) {
 
 			stored, ok := leaseRow(ctx, hookLocation(ctx, deps), row.ID)
 			require.True(t, ok)
-			assert.False(t, slices.Contains(stored.WritePaths, tc.path), "nothing was claimed")
+			assert.False(t, slices.Contains(stored.Paths.Write, tc.path), "nothing was claimed")
 		})
 	}
 }

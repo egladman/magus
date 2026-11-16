@@ -45,7 +45,7 @@ func ungradableClaimProblems(ctx context.Context, store *Store, row types.Job) t
 	for _, list := range []struct {
 		label, field string
 		entries      []string
-	}{{"", "write_paths", row.WritePaths}, {"deny path ", "deny_paths", row.DenyPaths}} {
+	}{{"", "paths.write", row.Paths.Write}, {"deny path ", "paths.deny", row.Paths.Deny}} {
 		for i, entry := range list.entries {
 			if !types.HasClaim(entry) {
 				continue
@@ -126,7 +126,7 @@ func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row types.J
 		ps    types.JobProblems
 		files []string
 	)
-	for i, entry := range row.WritePaths {
+	for i, entry := range row.Paths.Write {
 		if types.HasClaim(entry) {
 			continue
 		}
@@ -144,7 +144,7 @@ func wholeFileConfigClaimProblems(ctx context.Context, store *Store, row types.J
 		}
 		ps = append(ps, types.JobProblem{
 			Code:  types.WritePathConfigWholeFile,
-			Field: fmt.Sprintf("write_paths[%d]", i),
+			Field: fmt.Sprintf("paths.write[%d]", i),
 			Message: fmt.Sprintf("%q holds a project's configuration whole, and every job that changes the workspace's configuration"+
 				" writes that file, so a whole-file hold blocks them all for one line", entry),
 			Fix: "claim the declarations and keys the job changes instead, such as " + listClaims(file, all),
@@ -245,16 +245,16 @@ func driverPattern(p string) string {
 // A claim on declarations the holder left alone narrows the holder instead.
 // That writes the holder's row (see grantUntouched).
 func unorderedFileShareProblems(ctx context.Context, store *Store, rows []types.Job, row types.Job) types.JobProblems {
-	if store == nil || store.root == "" || len(row.WritePaths) == 0 || row.Integrating() {
+	if store == nil || store.root == "" || len(row.Paths.Write) == 0 || row.Integrating() {
 		return nil
 	}
 	here, _ := filepath.Abs(store.root)
 	// A re-fork replaces its stored row, so the pair is ordered by what it declares now.
 	combined := append(slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool { return r.ID == row.ID }), row)
 	var ps types.JobProblems
-	for i, mine := range row.WritePaths {
+	for i, mine := range row.Paths.Write {
 		if p, ok := sharedFileProblem(ctx, store, rows, combined, row, here, mine); ok {
-			p.Field = fmt.Sprintf("write_paths[%d]", i)
+			p.Field = fmt.Sprintf("paths.write[%d]", i)
 			ps = append(ps, p)
 		}
 	}
@@ -272,7 +272,7 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 		return types.JobProblem{}, false
 	}
 	for _, holder := range rows {
-		if holder.ID == row.ID || !Editing(holder) || len(holder.WritePaths) == 0 {
+		if holder.ID == row.ID || !Editing(holder) || len(holder.Paths.Write) == 0 {
 			continue
 		}
 		// A row nobody has taken yet is not in a different checkout from anyone.
@@ -306,7 +306,7 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 
 // heldFile is the first entry of holder that holds file against row's mine.
 func heldFile(ctx context.Context, store *Store, rows []types.Job, row, holder types.Job, here, file, mine string) (sharedFile, bool) {
-	for _, theirs := range holder.WritePaths {
+	for _, theirs := range holder.Paths.Write {
 		if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file {
 			continue
 		}
@@ -402,7 +402,7 @@ type sharedFile struct {
 func sharedFileRefusal(ctx context.Context, store *Store, rows []types.Job, row, holder types.Job, s sharedFile) types.JobProblem {
 	touched, unreadable := touchedDeclarations(ctx, store, rows, holder.ID, s.file)
 	unused := unusedWritePaths(ctx, store, rows, holder)
-	wanted := slices.DeleteFunc(slices.Clone(row.WritePaths), func(entry string) bool {
+	wanted := slices.DeleteFunc(slices.Clone(row.Paths.Write), func(entry string) bool {
 		other, ok := literalClaimableFile(store.root, entry)
 		return !ok || other != s.file
 	})
@@ -698,6 +698,7 @@ func wordByte(b byte) bool {
 // file row shares with a job in the same checkout, or not yet taken (write_proof
 // overlapping), gets the claim pair that would split it.
 // A granted hold names what its holder now holds (see grantNotes).
+// A row above its parent's tier is advised so, unless the setting is off.
 // Nothing is written to a row.
 // A nil store, or one with no workspace root, has no tree and returns nil.
 func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Job) []string {
@@ -705,11 +706,14 @@ func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Jo
 		return nil
 	}
 	notes := grantNotes(rows, row)
+	if note := aboveParentNote(ctx, store, row, rows); note != "" {
+		notes = append(notes, note)
+	}
 	var configs []string
 	if note := claimLimitAdvice(row); note != "" {
 		notes = append(notes, note)
 	}
-	for _, entry := range row.WritePaths {
+	for _, entry := range row.Paths.Write {
 		file, ok := literalClaimableFile(store.root, entry)
 		if !ok {
 			continue

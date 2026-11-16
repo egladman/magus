@@ -30,13 +30,32 @@ func compileExample(src string, decls func(module string) (string, bool)) error 
 	defer func() { _ = sess.Close() }()
 
 	buzzstd.Register(sess)
+	// A declaration may import another, magus importing magus/agent, so the
+	// imports are followed through each declaration registered.
+	pending := []string{src}
+	seen := map[string]bool{}
 	for _, sm := range AllSource() {
 		sess.SetModuleDecls(sm.ImportPath(), sm.Source)
+		seen[sm.ImportPath()] = true
+		pending = append(pending, sm.Source)
 	}
-	for _, m := range importLine.FindAllStringSubmatch(src, -1) {
-		importPath := m[1]
-		if d, ok := decls(importPath[strings.LastIndex(importPath, "/")+1:]); ok {
-			sess.SetModuleDecls(importPath, d)
+	for len(pending) > 0 {
+		text := pending[0]
+		pending = pending[1:]
+		for _, m := range importLine.FindAllStringSubmatch(text, -1) {
+			importPath := m[1]
+			if seen[importPath] {
+				continue
+			}
+			seen[importPath] = true
+			d, ok := decls(importPath)
+			if !ok {
+				d, ok = decls(importPath[strings.LastIndex(importPath, "/")+1:])
+			}
+			if ok {
+				sess.SetModuleDecls(importPath, d)
+				pending = append(pending, d)
+			}
 		}
 	}
 

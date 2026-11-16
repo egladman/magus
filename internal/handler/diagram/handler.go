@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/vcs"
 )
 
 // Path is the listing route; a figure is served at Path + "/" + its id.
@@ -27,7 +28,7 @@ type workspace interface {
 	// SymbolIndex reports whether a symbol index exists without loading its shards.
 	SymbolIndex(ctx context.Context) (types.SymbolIndexDigest, error)
 	ReviewOrigin(ctx context.Context) diff.ReviewOrigin
-	RevisionCheckpoint(ctx context.Context, rev string) (types.VCSCheckpoint, error)
+	RevisionCheckpoint(ctx context.Context, rev string) (vcs.Checkpoint, error)
 }
 
 // Handler serves the figures the workspace can draw, rendered server-side by the embedded

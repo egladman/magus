@@ -86,9 +86,13 @@ export function demoJobs(nowMs: number): Job[] {
     // The root of the session work. Still running because one child never reported - see
     // dashboard-client below.
     session("claims-audience", {
-      criteria: "Carry an audience through the token path, and fix every reader of the old field",
+      agent: {
+        instructions:
+          "Carry an audience through the token path, and fix every reader of the old field",
+        model: { tier: "design" },
+        worker: { type: "resumed" },
+      },
       checkpoint: "services/identity:test and apps/dashboard:typecheck both green",
-      model: "principal",
       state: "running",
       check: "magus affected ci",
       created: at(104),
@@ -98,13 +102,18 @@ export function demoJobs(nowMs: number): Job[] {
     // on, which is what the release digest records.
     session("authkit-type", {
       parent: "claims-audience",
-      criteria: "Replace Claims.Scope with an Audience slice and document the wire contract",
+      agent: {
+        instructions: "Replace Claims.Scope with an Audience slice and document the wire contract",
+        model: { tier: "bounded" },
+        worker: { type: "resumed" },
+      },
       checkpoint: "libs/authkit builds and its own tests pass",
-      model: "standard",
       state: "pass",
       check: "magus run test libs/authkit",
-      writePaths: ["libs/authkit/claims.go", "libs/authkit/audience.go"],
-      denyPaths: ["services/**", "apps/**"],
+      paths: {
+        write: ["libs/authkit/claims.go", "libs/authkit/audience.go"],
+        deny: ["services/**", "apps/**"],
+      },
       created: at(104),
       updated: at(88),
       // A finished job with both halves of what the drawer now shows: the gate it was held to
@@ -140,13 +149,16 @@ export function demoJobs(nowMs: number): Job[] {
     // The Go reader. Green, and it waited on the type above.
     session("identity-verify", {
       parent: "claims-audience",
-      criteria: "Assert on the audience in the token verifier instead of the removed scope",
+      agent: {
+        instructions: "Assert on the audience in the token verifier instead of the removed scope",
+        model: { tier: "bounded" },
+        worker: { type: "resumed" },
+      },
       checkpoint: "services/identity:test green",
-      model: "standard",
       state: "pass",
       check: "magus run test services/identity",
       dependsOn: ["authkit-type"],
-      writePaths: ["services/identity/internal/token/"],
+      paths: { write: ["services/identity/internal/token/"] },
       created: at(96),
       updated: at(80),
     }),
@@ -155,13 +167,16 @@ export function demoJobs(nowMs: number): Job[] {
     // the reader decides whether the work was meant to be cut that way.
     session("verify-tests", {
       parent: "claims-audience",
-      criteria: "Cover the two-service audience case the old scope test could not express",
+      agent: {
+        instructions: "Cover the two-service audience case the old scope test could not express",
+        model: { tier: "bounded" },
+        worker: { type: "resumed" },
+      },
       checkpoint: "a test that fails before authkit-type and passes after",
-      model: "standard",
       state: "fail",
       check: "magus run test services/identity",
       dependsOn: ["identity-verify"],
-      writePaths: ["services/identity/internal/token/verify_test.go"],
+      paths: { write: ["services/identity/internal/token/verify_test.go"] },
       created: at(96),
       updated: at(58),
     }),
@@ -170,25 +185,31 @@ export function demoJobs(nowMs: number): Job[] {
     // stale mark belongs to docs-rename below, which is non-terminal and untouched.
     session("dashboard-client", {
       parent: "claims-audience",
-      criteria: "Read the audience array in the web client's session claims",
+      agent: {
+        instructions: "Read the audience array in the web client's session claims",
+        model: { tier: "bounded" },
+        worker: { type: "resumed" },
+      },
       checkpoint: "apps/dashboard:typecheck clean",
-      model: "standard",
       state: "no_return",
       check: "magus run typecheck apps/dashboard",
       dependsOn: ["authkit-type"],
-      writePaths: ["apps/dashboard/src/api/session.ts"],
+      paths: { write: ["apps/dashboard/src/api/session.ts"] },
       created: at(96),
       updated: at(84),
     }),
     // Never started: the work is declared and waiting on the two readers landing.
     session("docs-rename", {
       parent: "claims-audience",
-      criteria: "Rename the JWT page to tokens and fix the links that point at the old name",
+      agent: {
+        instructions: "Rename the JWT page to tokens and fix the links that point at the old name",
+        model: { tier: "routine" },
+        worker: { type: "resumed" },
+      },
       checkpoint: "no link in docs/ resolves to docs/auth/jwt.md",
-      model: "economy",
       state: "declared",
       dependsOn: ["identity-verify", "dashboard-client"],
-      writePaths: ["docs/auth/"],
+      paths: { write: ["docs/auth/"] },
       created: at(104),
       updated: at(104),
     }),
@@ -196,12 +217,15 @@ export function demoJobs(nowMs: number): Job[] {
     // no paths" a rendered case rather than a theoretical one.
     session("reach-survey", {
       parent: "claims-audience",
-      criteria: "Report every project referencing the claims type before anything is renamed",
+      agent: {
+        instructions: "Report every project referencing the claims type before anything is renamed",
+        model: { tier: "routine" },
+        worker: { type: "resumed" },
+      },
       checkpoint: "a list the parent can work from",
-      model: "economy",
       state: "pass",
       readOnly: true,
-      readPaths: ["libs/authkit/", "services/", "apps/"],
+      paths: { read: ["libs/authkit/", "services/", "apps/"] },
       created: at(104),
       updated: at(99),
     }),

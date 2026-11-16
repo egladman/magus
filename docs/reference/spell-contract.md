@@ -99,6 +99,14 @@ export fun mgs_getSandbox() > Sandbox
 
 What the spell's tools need from the host beyond the sandbox's own grants.
 
+## mgs_getScopes
+
+```buzz
+export fun mgs_getScopes() > Command
+```
+
+The command that prints the globs a build of the package magus appends reads. A leading ! excludes. Without it a relinked binary's build inputs are unknown.
+
 ## mgs_isOpaque
 
 ```buzz

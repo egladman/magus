@@ -30,11 +30,12 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/libs/cmdline/exit"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/check"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -267,8 +268,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
 	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, !af.DefaultCharms)
-	// Same as `magus run`: an affected ci run goes through RunCI and loses the write
-	// charms, so the header has to say so.
+	// Same as `magus run`: RunCI and a sized gate get the carried set and
+	// verify without the write charms, which the header names.
+	carried := charms
 	if target == "ci" {
 		charms = magus.CharmsForCI(charms)
 	}
@@ -296,7 +298,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	sized := gate.size(ctx, af.Base, !af.RedundancyCheck)
 	if sized != nil {
 		slog.InfoContext(ctx, renderSizing(target, *sized), attr.Notice(""), attr.Component("magus"))
-		if sized.Tier == types.RiskTrivial {
+		if sized.Tier == check.RiskTrivial {
 			return nil
 		}
 	}
@@ -331,9 +333,6 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	ctx = processStdioContext(ctx)
 	if len(extraArgs) > 0 {
 		runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
-	}
-	if len(charms) > 0 {
-		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
 	if spellFilter != "" {
 		if target == "ci" {
@@ -370,11 +369,11 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	invCtx, readReturns := types.WithReturnCapture(invCtx)
 	switch {
 	case sized != nil:
-		err = m.RunGate(invCtx, *sized, runOpts...)
+		err = m.RunGate(invCtx, *sized, withCharms(runOpts, carried)...)
 	case target == "ci":
-		err = m.RunCI(invCtx, targets, runOpts...)
+		err = m.RunCI(invCtx, targets, withCharms(runOpts, carried)...)
 	default:
-		err = m.Run(invCtx, targets, runOpts...)
+		err = m.Run(invCtx, targets, withCharms(runOpts, charms)...)
 	}
 	// Read the instant the run returns: after this line a cancellation means the signal
 	// arrived once the verdict was already decided, and dropping it would throw away a
@@ -408,8 +407,18 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	return nil
 }
 
+// withCharms is opts running under charms, when there are any.
+func withCharms(opts []magus.RunOption, charms []string) []magus.RunOption {
+	if len(charms) == 0 {
+		return opts
+	}
+	return append(slices.Clip(opts), magus.WithCharms(charms...))
+}
+
 // failedResults collects the failed target results the invocation's journal records, in
 // the order they arrive, so a gate that scrolled its failures away can name them again.
+// A ci run under rw verifies more than once, so a later pass clears a
+// failure.
 type failedResults struct {
 	mu     sync.Mutex
 	events []journal.Event
@@ -418,14 +427,25 @@ type failedResults struct {
 func (c *failedResults) Enabled(context.Context, slog.Level) bool { return true }
 
 func (c *failedResults) Handle(_ context.Context, r slog.Record) error {
-	e, ok := journal.EventFromRecord(r)
-	if !ok || e.Kind != journal.KindResult || e.Status != journal.StatusFail {
-		return nil
+	if e, ok := journal.EventFromRecord(r); ok {
+		c.add(e)
+	}
+	return nil
+}
+
+// add keeps each target's newest result when it failed.
+func (c *failedResults) add(e journal.Event) {
+	if e.Kind != journal.KindResult {
+		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.events = append(c.events, e)
-	return nil
+	c.events = slices.DeleteFunc(c.events, func(f journal.Event) bool {
+		return f.Project == e.Project && f.Target == e.Target
+	})
+	if e.Status == journal.StatusFail {
+		c.events = append(c.events, e)
+	}
 }
 
 func (c *failedResults) WithAttrs([]slog.Attr) slog.Handler { return c }
@@ -643,9 +663,9 @@ type planInheritPath struct {
 // no gate step can observe it, so the matrix is empty, and every changed path rides
 // along with its tier and what decided it.
 type planRisk struct {
-	Tier  types.Tier           `json:"tier"`
+	Tier  check.Tier           `json:"tier"`
 	Base  string               `json:"base"`
-	Paths []types.TierEvidence `json:"paths"`
+	Paths []check.TierEvidence `json:"paths"`
 }
 
 func newPlanRisk(rep types.TierReport) *planRisk {
@@ -703,9 +723,9 @@ func planOutputs(out planOutput) ([]planPublish, error) {
 // for the delta.
 func planSummaryMarkdown(out planOutput) string {
 	if out.Inherit != nil {
-		evidence := make([]types.TierEvidence, 0, len(out.Inherit.Paths))
+		evidence := make([]check.TierEvidence, 0, len(out.Inherit.Paths))
 		for _, p := range out.Inherit.Paths {
-			evidence = append(evidence, types.TierEvidence{Path: p.Path, Tier: types.Tier(p.Tier), Class: p.Class, Why: p.Why})
+			evidence = append(evidence, check.TierEvidence{Path: p.Path, Tier: check.Tier(p.Tier), Class: p.Class, Why: p.Why})
 		}
 		return (internalci.InheritFinding{
 			Run: out.Inherit.Run, Commit: out.Inherit.Commit,
@@ -931,7 +951,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// waits on a multi-target run.
 	var trivial *planRisk
 	if target == types.TargetCI && !pf.Stdin && len(only) == 0 && inherit == nil {
-		if rep, err := m.AssessChange(ctx, target, magus.AssessOptions{Base: pf.Base}); err == nil && rep.Tier == types.RiskTrivial {
+		if rep, err := m.AssessChange(ctx, target, magus.AssessOptions{Base: pf.Base}); err == nil && rep.Tier == check.RiskTrivial {
 			trivial = newPlanRisk(rep)
 			plan.StageZero, plan.Shards = nil, nil
 			plan.MaxParallel = 0

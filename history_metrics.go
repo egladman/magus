@@ -159,7 +159,7 @@ func (m *Magus) Volatility(ctx context.Context) (types.Volatility, error) {
 // Not named ModelTiers, which is the accessor for the workspace's declaration. A workspace
 // with no recorded outcome gets no rows and the definition, not an error.
 func (m *Magus) ModelTierLens(ctx context.Context) (types.ModelTiers, error) {
-	out := types.ModelTiers{Definition: types.ModelTiersDefinition, Rows: []types.ModelTierRecord{}}
+	out := types.ModelTiers{Definition: types.ModelTiersDefinition, Models: []types.ModelTierRecord{}}
 	if m.cfg.HistoryPath == "" {
 		return out, nil
 	}
@@ -167,7 +167,7 @@ func (m *Magus) ModelTierLens(ctx context.Context) (types.ModelTiers, error) {
 	if err := hist.Load(ctx, m.cfg.HistoryPath); err != nil {
 		return types.ModelTiers{}, err
 	}
-	out.Rows = job.ModelTierRecords(hist.Jobs, m.ModelTiers(ctx))
+	out.Models = job.ModelTierRecords(hist.Jobs, m.ModelTiers(ctx))
 	return out, nil
 }
 
@@ -303,7 +303,7 @@ func (m *Magus) Conformance(ctx context.Context) (types.Conformance, error) {
 	if !probed {
 		reason = types.ReasonCoverageUnknown
 	}
-	out.Answer = types.ClassifyAnswer(len(out.Rows) > 0, reason, gaps)
+	out.Answer = types.ClassifyAnswer(len(out.Distributions) > 0, reason, gaps)
 	return out, nil
 }
 

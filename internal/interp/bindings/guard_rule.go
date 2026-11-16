@@ -37,13 +37,19 @@ type functionRule struct {
 	judges string
 	// set records the registered function on the load's registry.
 	set func(reg *workspace.WorkspaceRegistry, sess *buzz.Session, fn vm.Value)
+	// stored reports whether the registry holds the rule the workspace load registered.
+	stored func(reg *workspace.WorkspaceRegistry) bool
 }
 
 // registerFunctionRule binds one function-valued seam onto guardMap. The function is kept,
 // not called: the agent guard calls it on each event it sees, long after this load.
 // Refusals are MGS1045 at load, because a rule that silently failed to register leaves a
 // workspace that reads as guarded.
-func registerFunctionRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value, r functionRule) {
+//
+// Only a parse-mode load stores the rule and keeps its session. A run-mode load checks the
+// call and stores nothing, so its session is released when it closes; a rule the workspace
+// load never registered is refused there, since nothing would read it.
+func registerFunctionRule(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value, r functionRule, parseMode bool) {
 	// Per session, not per registry: a worker session re-running the same root magusfile
 	// registers again legitimately, while two calls in one load do not.
 	registered := false
@@ -62,7 +68,15 @@ func registerFunctionRule(ctx context.Context, sess *buzz.Session, obs buzz.Dire
 				`%s: already registered in this magusfile, and a workspace has one such rule; fold the second one into the first`, name)
 		}
 		registered = true
-		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil && sess != nil {
+		reg := workspace.WorkspaceRegistryFromContext(ctx)
+		if !parseMode {
+			if reg != nil && !r.stored(reg) {
+				return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+					`%s: registered while a target runs and not when the workspace loaded; register it at the top of the root magusfile`, name)
+			}
+			return vm.Null, nil
+		}
+		if reg != nil && sess != nil {
 			r.set(reg, sess, args[0])
 			// The rule runs on this session after the load that registered it has
 			// closed, so its values are the registry's to release, not the load's.
@@ -180,7 +194,7 @@ var guardBinary = sync.OnceValue(func() types.GuardBinary {
 func ruleFactsArg(ctx context.Context, member string, args []vm.Value) (hint.Gate, hint.MarkerKind, error) {
 	facts, ok := ctx.Value(ruleFactsKey{}).(hint.Gate)
 	if !ok {
-		return hint.Gate{}, "", fmt.Errorf(`magus\guard.%s: only callable inside a magus\guard.spawn, command or write rule while the guard runs it, since it counts per agent session`, member)
+		return hint.Gate{}, "", fmt.Errorf(`magus\guard.%s: only callable inside a magus\guard.spawn, command, write, stop or step rule while the guard runs it, since it counts per agent session`, member)
 	}
 	if len(args) != 1 || !args[0].IsString() || args[0].AsString() == "" {
 		return hint.Gate{}, "", fmt.Errorf(`magus\guard.%s: expected one non-empty key string`, member)

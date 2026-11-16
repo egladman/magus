@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 func init() { //nolint:gochecknoinits // internal/agent cannot link the Buzz VM; the loader registers from the layer that can
@@ -96,7 +97,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 	}
 	// The model rows come first: the agents magus ships run on the one a row names for the
 	// cheapest tier.
-	rows, _, err := callHarness[[]types.ModelRow](ctx, drv, "mgs_listModels")
+	rows, _, err := callHarness[[]types.HarnessModel](ctx, drv, "mgs_listModels")
 	if err != nil {
 		return fail(err)
 	}
@@ -209,7 +210,7 @@ func shippedAgents(model string) (vm.Value, error) {
 // declares tiers and has no row for the cheapest one is an error naming the row to add.
 func cheapestTierModel(ctx context.Context, id string, tierModels map[string]string) (string, error) {
 	ws, ok := types.WorkspaceFromContext(ctx).(interface {
-		ModelTiers(ctx context.Context) *types.ModelTierSet
+		ModelTiers(ctx context.Context) *typesagent.ModelTierSet
 	})
 	if !ok {
 		return "", nil
@@ -228,7 +229,7 @@ func cheapestTierModel(ctx context.Context, id string, tierModels map[string]str
 	if len(tierModels) == 0 {
 		return "", nil
 	}
-	if model, ok := tierModels[cheapest.Name()]; ok {
+	if model, ok := rowTierModel(tierModels, cheapest.Name()); ok {
 		return model, nil
 	}
 	return "", fmt.Errorf("its mgs_listModels rows name a model for tiers %s and none for %s, the cheapest tier of the declaration at %s, so "+
@@ -247,7 +248,7 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 		if !ok {
 			continue
 		}
-		rows, _, err := callHarness[[]types.ModelRow](ctx, drv, "mgs_listModels")
+		rows, _, err := callHarness[[]types.HarnessModel](ctx, drv, "mgs_listModels")
 		if err != nil {
 			return nil, fmt.Errorf("harness spell %q: %w", id, err)
 		}
@@ -255,9 +256,8 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 		if err != nil {
 			return nil, fmt.Errorf("harness spell %q: mgs_listModels: %w", id, err)
 		}
-		// No declaration maps a tier yet. A tier of several rows
-		// runs the shipped default, or fails here without one.
-		tiers, err := pickTierModels(tierRows, shippedTierModel(id))
+		// No declaration maps a tier yet, so a tier of several rows fails here.
+		tiers, err := pickTierModels(tierRows, func(string) (string, bool) { return "", false })
 		if err != nil {
 			return nil, fmt.Errorf("harness spell %q: mgs_listModels: %w", id, err)
 		}
@@ -266,7 +266,7 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 		}
 		models := make([]string, len(cases))
 		for i, c := range cases {
-			model, ok := tiers[c]
+			model, ok := rowTierModel(tiers, c)
 			if !ok {
 				return nil, fmt.Errorf("harness spell %q: its mgs_listModels rows name no model for tier %s, so add tier = %q to the row of the model that tier runs on",
 					id, c, c)
@@ -278,27 +278,27 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 	return hosts, nil
 }
 
-// shippedTierModels is the model a harness runs for a tier of
-// several rows. It applies only when the workspace maps no tiers.
-var shippedTierModels = map[string]map[string]string{
-	"claude-code": {"principal": "claude-opus-5-5"},
-}
-
-// shippedTierModel maps a tier to its shippedTierModels entry.
-func shippedTierModel(id string) func(tier string) (string, bool) {
-	return func(tier string) (string, bool) {
-		model, ok := shippedTierModels[id][tier]
-		return model, ok
+// rowTierModel is the model tiers names for tier, also under the old name
+// a row may still spell it with. compat: see types/agent renamedModelTiers.
+func rowTierModel(tiers map[string]string, tier string) (string, bool) {
+	if model, ok := tiers[tier]; ok {
+		return model, true
 	}
+	for _, name := range slices.Sorted(maps.Keys(tiers)) {
+		if renamed, ok := typesagent.RenamedModelTier(name); ok && renamed == tier {
+			return tiers[name], true
+		}
+	}
+	return "", false
 }
 
 // declaredTierModels is each tier's default model under harness id.
 // A tier of several rows takes the id the declaration maps for it.
 // With no declaration in force, such a tier is left out.
 func declaredTierModels(ctx context.Context, id string, tierRows map[string][]string) (map[string]string, error) {
-	var set *types.ModelTierSet
+	var set *typesagent.ModelTierSet
 	if ws, ok := types.WorkspaceFromContext(ctx).(interface {
-		ModelTiers(ctx context.Context) *types.ModelTierSet
+		ModelTiers(ctx context.Context) *typesagent.ModelTierSet
 	}); ok {
 		set = ws.ModelTiers(ctx)
 	}
@@ -349,7 +349,7 @@ func pickTierModels(tierRows map[string][]string, mapped func(tier string) (stri
 // validateModelRows reads model rows into prices and each tier's row ids.
 // A half-set price step, or an alias without a tier or on two rows, names
 // no one model, so each is an error. Several rows may share a tier.
-func validateModelRows(rows []types.ModelRow) ([]types.ModelPricing, map[string][]string, error) {
+func validateModelRows(rows []types.HarnessModel) ([]types.ModelPricing, map[string][]string, error) {
 	out := make([]types.ModelPricing, len(rows))
 	aliases := map[string]string{}
 	var tiers map[string][]string

@@ -28,8 +28,8 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline/exit"
-	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/clikit/exit"
+	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/figure"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -41,7 +41,7 @@ import (
 // symbol index is not there to ask: no index is not the same as nothing to delete, and the
 // fork must not fail for it.
 func deletionCandidates(ctx context.Context, load func(context.Context) *knowledge.Graph, row types.Job) []types.UnreferencedEntry {
-	if row.ReadOnly || len(row.WritePaths) == 0 {
+	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil
 	}
 	g := load(ctx)
@@ -55,7 +55,7 @@ func deletionCandidates(ctx context.Context, load func(context.Context) *knowled
 // the gap that makes the list unknown. With no graph, or one holding no symbols, Referrers
 // answers nil for every file, which reads the same as nothing outside using them.
 func referencedOutside(ctx context.Context, load func(context.Context) *knowledge.Graph, root string, row types.Job, projects []*types.Project) (files []job.ReferencedFile, gap string) {
-	if row.ReadOnly || len(row.WritePaths) == 0 {
+	if row.ReadOnly || len(row.Paths.Write) == 0 {
 		return nil, ""
 	}
 	g := load(ctx)
@@ -86,18 +86,18 @@ const leaseAffinityCommits = 200
 // already does: the row alone carries the criteria, the boundary and the check, and a worker
 // in a tree whose magusfile is mid-edit is exactly who needs to read them.
 func leaseBoundary(ctx context.Context, root string, store *job.Store, row types.Job, leases []types.Job, graph *jobGraph) job.TermsFacts {
-	if len(row.WritePaths) == 0 {
+	if len(row.Paths.Write) == 0 {
 		return job.TermsFacts{}
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return job.TermsFacts{WorkspaceCold: true}
 	}
-	affected, err := m.AffectedFromPaths(ctx, row.WritePaths)
+	affected, err := m.AffectedFromPaths(ctx, row.Paths.Write)
 	if err != nil {
 		return job.TermsFacts{WorkspaceCold: true}
 	}
-	derived := generatedBoundary(m, affected.Affected, row.WritePaths)
+	derived := generatedBoundary(m, affected.Affected, row.Paths.Write)
 	here := job.WorkingCheckout(cmp.Or(row.CheckoutRoot, m.Root()), row)
 	derived = append(derived, leasedBoundary(row, leases, here, func() ([]*types.Project, string) { return m.All(), "" })...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
@@ -109,10 +109,10 @@ func leaseBoundary(ctx context.Context, root string, store *job.Store, row types
 		UnrunGates:         notes.UnrunGates,
 		Affinity:           leaseAffinity(ctx, m, affected.Seed),
 		Stage:              workspaceStage(ctx, m),
-		DeletionCandidates: deletionCandidates(ctx, graph.loadScoped(row.WritePaths), row),
-		TestScope:          job.NarrowTestScope(m.All(), row.WritePaths, here),
+		DeletionCandidates: deletionCandidates(ctx, graph.loadScoped(row.Paths.Write), row),
+		TestScope:          job.NarrowTestScope(m.All(), row.Paths.Write, here),
 	}
-	facts.ReferencedOutside, facts.ReferencedOutsideGap = referencedOutside(ctx, graph.loadScoped(row.WritePaths), m.Root(), row, m.All())
+	facts.ReferencedOutside, facts.ReferencedOutsideGap = referencedOutside(ctx, graph.loadScoped(row.Paths.Write), m.Root(), row, m.All())
 	// A history file that does not read leaves the section out, the way Affinity's scan does.
 	if grouping, err := store.GroupingLens(ctx, affected.Seed); err == nil {
 		facts.Grouping = &grouping
@@ -643,14 +643,14 @@ func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, r
 	// footprint referrers could extend.
 	var referrers func(file, declaration string) map[string]int
 	if job.FootprintMayExtend(root, declared) {
-		if g := graph.loadScoped(declared.WritePaths)(ctx); g != nil && g.HasSymbols() {
+		if g := graph.loadScoped(declared.Paths.Write)(ctx); g != nil && g.HasSymbols() {
 			referrers = g.Referrers
 		}
 	}
 	paths, _ := job.ExtendFootprint(root, declared, ws.Projects, referrers)
-	rec.WritePaths = append(rec.WritePaths, paths...)
-	rec.SoftPaths = append(rec.SoftPaths, paths...)
-	declared.WritePaths = append(declared.WritePaths, paths...)
+	rec.Paths.Write = append(rec.Paths.Write, paths...)
+	rec.Paths.Soft = append(rec.Paths.Soft, paths...)
+	declared.Paths.Write = append(declared.Paths.Write, paths...)
 	deviations := job.IntegratorDeviations(root, declared, ws.Projects, ws.Ignored)
 	rec.Deviations = append(rec.Deviations, deviations...)
 	var notes []string
@@ -734,7 +734,7 @@ func jobObserver(root string, graphIn func(tree string) *jobGraph) job.Observer 
 	return func(ctx context.Context, row types.Job) (job.Observed, error) {
 		tree := job.WorkTree(root, row)
 		graph := graphIn(tree)
-		seen, err := job.CheckpointObserver(root, graphSymbolReader(graph.loadScoped(row.WritePaths)))(ctx, row)
+		seen, err := job.CheckpointObserver(root, graphSymbolReader(graph.loadScoped(row.Paths.Write)))(ctx, row)
 		if err != nil {
 			return seen, err
 		}
@@ -760,7 +760,7 @@ func observeSymbolDelta(ctx context.Context, tree string, row types.Job, seen jo
 	if len(seen.Changed) == 0 {
 		return symbolDelta{}, true
 	}
-	g := graph.loadScoped(row.WritePaths)(ctx)
+	g := graph.loadScoped(row.Paths.Write)(ctx)
 	res, err := vcs.Resolve(ctx, tree, "", types.VCSOptions{})
 	if err != nil || res.Source == types.VCSSourceDisabled {
 		return symbolDelta{}, false

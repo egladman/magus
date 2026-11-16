@@ -4,13 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // ceilingFixture is a workspace whose tiers map claude-code to haiku, sonnet and opus, a
@@ -20,7 +20,7 @@ func ceilingFixture(t *testing.T, model string, reported bool) (context.Context,
 	set := testModelTiers(t, "claude-code")
 	ctx := tierFixture(t, set)
 	deps := levelDeps(t, types.GuardProfileStandard)
-	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	deps.ModelTiers = func() *agent.ModelTierSet { return set }
 	at := hookLocation(ctx, deps)
 	if reported {
 		hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
@@ -44,159 +44,6 @@ func judgeSpawnBy(ctx context.Context, t *testing.T, deps Dependencies, agent, m
 	return Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, env)})
 }
 
-// The root session runs on the model the person picked, and a spawn above its tier is
-// refused once the host has reported the thread, naming the way up.
-func TestSpawnAboveParentTierRefusesAProvenCeiling(t *testing.T) {
-	ctx, deps, _ := ceilingFixture(t, "sonnet", true)
-
-	v := judgeSpawnBy(ctx, t, deps, "", "opus")
-
-	shape, text := spoken(v)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
-	assert.Contains(t, text, "this spawn runs opus, model tier principal (rank 2), above this session's model, sonnet, model tier standard (rank 1)")
-	assert.Contains(t, text, "spawn it on sonnet or lower")
-}
-
-func TestSpawnAboveParentTierPassesAtOrBelowTheCeiling(t *testing.T) {
-	for _, model := range []string{"sonnet", "haiku"} {
-		t.Run(model, func(t *testing.T) {
-			ctx, deps, _ := ceilingFixture(t, "sonnet", true)
-			v := judgeSpawnBy(ctx, t, deps, "", model)
-			assert.NotEqual(t, string(denyRuleSpawnAboveParentTier), v.Rule)
-			assert.NotEqual(t, decisionDeny, v.Decision)
-		})
-	}
-}
-
-// A thread its host has not reported may not be the session's main thread, so the
-// session's model is only an inference and the ceiling advises.
-func TestSpawnAboveParentTierAdvisesAnInferredCeiling(t *testing.T) {
-	ctx, deps, _ := ceilingFixture(t, "sonnet", false)
-
-	v := judgeSpawnBy(ctx, t, deps, "", "opus")
-
-	shape, text := spoken(v)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
-	assert.Contains(t, text, "this spawn runs opus, model tier principal (rank 2)")
-}
-
-// A subagent's ceiling is the model its own spawn named, proven; one spawned on no model
-// inherited the session's, inferred.
-func TestSpawnAboveParentTierReadsASubagentsSpawnedModel(t *testing.T) {
-	ctx, deps, at := ceilingFixture(t, "opus", true)
-	facts := hint.NewGate(at.cacheDir, hookAttribution{Host: "claude-code", Session: "s"}.factsKey())
-	body, err := json.Marshal(spawnedAgent{Model: "haiku"})
-	require.NoError(t, err)
-	writeAgentMarker(facts, spawnedAgentKind("a1"), body)
-
-	v := judgeSpawnBy(ctx, t, deps, "a1", "sonnet")
-	shape, text := spoken(v)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
-	assert.Contains(t, text, "above the model this agent was spawned on, haiku, model tier economy (rank 0)")
-
-	ctx, deps, _ = ceilingFixture(t, "sonnet", true)
-	v = judgeSpawnBy(ctx, t, deps, "a2", "opus")
-	assert.Equal(t, decisionAdvise, v.Decision, "a subagent with no spawn record inherited the session's model")
-	assert.Contains(t, v.Context, "above the session's model, which this agent inherited, sonnet")
-}
-
-// The level comes from magus\guard.builtins, as every built-in's does.
-func TestSpawnAboveParentTierTakesItsDeclaredSetting(t *testing.T) {
-	ctx, deps, _ := ceilingFixture(t, "sonnet", true)
-	deps.Builtins[string(denyRuleSpawnAboveParentTier)] = builtin.Setting{Decision: builtin.Advise}
-	v := judgeSpawnBy(ctx, t, deps, "", "opus")
-	shape, _ := spoken(v)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleSpawnAboveParentTier)}, shape, "set to advise, proof is advised")
-
-	ctx, deps, _ = ceilingFixture(t, "sonnet", true)
-	deps.Builtins[string(denyRuleSpawnAboveParentTier)] = builtin.Setting{Decision: builtin.Off}
-	v = judgeSpawnBy(ctx, t, deps, "", "opus")
-	assert.NotEqual(t, string(denyRuleSpawnAboveParentTier), v.Rule)
-}
-
-// Nothing is judged without a reported session model or a declaration.
-func TestSpawnAboveParentTierNeedsASessionModelAndADeclaration(t *testing.T) {
-	ctx, deps, _ := ceilingFixture(t, "", true)
-	assert.NotEqual(t, string(denyRuleSpawnAboveParentTier), judgeSpawnBy(ctx, t, deps, "", "opus").Rule, "no session model")
-
-	ctx, deps, _ = ceilingFixture(t, "sonnet", true)
-	deps.ModelTiers = func() *types.ModelTierSet { return nil }
-	assert.NotEqual(t, string(denyRuleSpawnAboveParentTier), judgeSpawnBy(ctx, t, deps, "", "opus").Rule, "tiers turned off")
-}
-
-// A tier is an exact alias of the declaration or the exact id of a harness row naming one.
-// A model id that only contains an alias, or a model no row names, has an unknown tier: the
-// rule advises and names the row to add, never guessing.
-func TestSpawnAboveParentTierAdvisesAnUnknownTier(t *testing.T) {
-	tests := []struct {
-		name, session, spawn, why, add string
-	}{
-		{"spawn model id", "sonnet", "claude-opus-5-5", "this spawn's model, claude-opus-5-5 is in no mgs_listModels row", "add a row for claude-opus-5-5"},
-		{"session model id", "claude-sonnet-5-5", "opus", "this session's model, claude-sonnet-5-5 is in no mgs_listModels row", "add a row for claude-sonnet-5-5"},
-		{"both", "claude-sonnet-5-5", "gpt-5", "this spawn's model, gpt-5 and this session's model, claude-sonnet-5-5 are in no mgs_listModels row", "add a row for gpt-5 and claude-sonnet-5-5"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, deps, _ := ceilingFixture(t, tt.session, true)
-			v := judgeSpawnBy(ctx, t, deps, "", tt.spawn)
-			shape, text := spoken(v)
-			assert.Equal(t, types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
-			assert.Contains(t, text, tt.why)
-			assert.Contains(t, text, tt.add+` with a tier to the claude-code spell's mgs_listModels`)
-			assert.Contains(t, text, "the declaration at hack/tiers.buzz:3 maps haiku, sonnet, opus for claude-code")
-		})
-	}
-}
-
-// A session's full model id resolves by the harness row naming its tier, exactly, beside the
-// aliases a declaration maps for spawns.
-func TestSpawnAboveParentTierReadsTheHarnessRowsTier(t *testing.T) {
-	ctx, deps, _ := ceilingFixture(t, "claude-sonnet-5-5", true)
-	deps.ModelRows = func() []types.ModelPricing {
-		return []types.ModelPricing{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
-	}
-
-	v := judgeSpawnBy(ctx, t, deps, "", "opus")
-	shape, text := spoken(v)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
-	assert.Contains(t, text, "above this session's model, claude-sonnet-5-5, model tier standard (rank 1)")
-
-	v = judgeSpawnBy(ctx, t, deps, "", "claude-sonnet-5-5-20261001")
-	assert.Equal(t, decisionAdvise, v.Decision, "a dated spelling is another id until a row names it")
-	assert.Contains(t, v.Context, "add a row for claude-sonnet-5-5-20261001")
-}
-
-// A row's alias resolves a spawn that names it exactly, with no declaration mapping it; an
-// alias with a prefix or another case is no alias, and a row with an alias but no tier names
-// none.
-func TestSpawnAboveParentTierReadsTheHarnessRowsAlias(t *testing.T) {
-	fixture := func() (context.Context, Dependencies) {
-		ctx, deps, _ := ceilingFixture(t, "claude-sonnet-5-5", true)
-		deps.ModelRows = func() []types.ModelPricing {
-			return []types.ModelPricing{
-				{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "mid"},
-				{ID: "claude-opus-5-5", Tier: "principal", Alias: "top"},
-				{ID: "claude-fable-5-1", Alias: "fable"},
-			}
-		}
-		return ctx, deps
-	}
-
-	ctx, deps := fixture()
-	v := judgeSpawnBy(ctx, t, deps, "", "top")
-	shape, text := spoken(v)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, shape)
-	assert.Contains(t, text, "this spawn runs top, model tier principal (rank 2)")
-
-	// The unknown-tier advisory speaks once per caller, so each spawn gets its own session.
-	for _, spawn := range []string{"top-1", "Top", "fable"} {
-		ctx, deps := fixture()
-		v = judgeSpawnBy(ctx, t, deps, "", spawn)
-		assert.Equal(t, decisionAdvise, v.Decision, spawn)
-		assert.Contains(t, v.Context, "add a row for "+spawn, spawn)
-	}
-}
-
 // spoken splits a judgment into its shape, to compare whole, and the text it said, to
 // assert on: the text is wording a field-by-field comparison would pin to the letter.
 func spoken(v types.GuardJudgment) (shape types.GuardJudgment, text string) {
@@ -205,30 +52,284 @@ func spoken(v types.GuardJudgment) (shape types.GuardJudgment, text string) {
 	return v, text
 }
 
-// A host the declaration does not map names no tier, and the advice says so.
-func TestSpawnAboveParentTierNamesAnUnmappedHost(t *testing.T) {
-	assert.Contains(t, declaredAliases(testModelTiers(t, "codex"), "claude-code"), "maps no model for harness claude-code: its hosts are codex")
+type SpawnAboveParentTierSuite struct {
+	suite.Suite
 }
 
-func TestSpawnAboveParentTierResolvesASecondRowAtOneTierByIDAndAlias(t *testing.T) {
-	rows := func() []types.ModelPricing {
-		return []types.ModelPricing{
-			{ID: "claude-sonnet-5-5", Tier: "standard"},
-			{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
-			{ID: "claude-next-1", Tier: "principal", Alias: "next"},
-		}
-	}
-	for _, spawn := range []string{"claude-next-1", "next"} {
-		ctx, deps, _ := ceilingFixture(t, "claude-sonnet-5-5", true)
-		deps.ModelRows = rows
-		shape, text := spoken(judgeSpawnBy(ctx, t, deps, "", spawn))
-		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, shape, spawn)
-		assert.Contains(t, text, "model tier principal (rank 2)", spawn)
+func TestSpawnAboveParentTierSuite(t *testing.T) { suite.Run(t, new(SpawnAboveParentTierSuite)) }
+
+func (s *SpawnAboveParentTierSuite) advised() types.GuardJudgment {
+	return types.GuardJudgment{Decision: decisionAdvise, Rule: string(denyRuleSpawnAboveParentTier)}
+}
+
+func (s *SpawnAboveParentTierSuite) denied() types.GuardJudgment {
+	return types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}
+}
+
+// pricedRows price sonnet and opus by alias at the tiers the declaration maps.
+func pricedRows() []types.ModelPricing {
+	return []types.ModelPricing{
+		{ID: "claude-sonnet-5-5", Alias: "sonnet", Tier: "standard", Input: 3, Output: 15},
+		{ID: "claude-opus-5-5", Alias: "opus", Tier: "principal", Input: 5, Output: 25},
 	}
 }
 
-func TestSpawnAboveParentTierJudgesASessionOnASecondRowAtOneTier(t *testing.T) {
-	ctx, deps, _ := ceilingFixture(t, "claude-next-1", true)
+// The way up is allowed. The advice names both tiers, each model's cost, the
+// alias at the parent's tier and the setting that stops it.
+func (s *SpawnAboveParentTierSuite) TestAProvenHigherTierIsAdvisedWithItsCost() {
+	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
+	deps.ModelRows = pricedRows
+
+	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "opus"))
+
+	s.Equal(s.advised(), shape)
+	s.Contains(text, "this spawn runs opus, model tier principal (rank 2), above this session's model, sonnet, model tier standard (rank 1)")
+	s.Contains(text, "per million tokens, opus costs $5.00 input and $25.00 output, and sonnet costs $3.00 input and $15.00 output")
+	s.Contains(text, "sonnet stays at the parent's tier")
+	s.Contains(text, `setting spawn-above-parent-tier off in magus\guard.builtins stops this advice`)
+	s.NotContains(text, "or lower")
+}
+
+func (s *SpawnAboveParentTierSuite) TestAPriceNoRowGivesIsUnknown() {
+	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
+	deps.ModelRows = func() []types.ModelPricing {
+		return []types.ModelPricing{{ID: "claude-opus-5-5", Alias: "opus", Tier: "principal", Input: 5}}
+	}
+
+	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "opus"))
+
+	s.Equal(s.advised(), shape)
+	s.Contains(text, "opus costs $5.00 input and an unknown output price")
+	s.Contains(text, "sonnet's price is unknown, since no mgs_listModels row names it")
+}
+
+func (s *SpawnAboveParentTierSuite) TestTheSameTierSaysNothing() {
+	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
+
+	v := judgeSpawnBy(ctx, s.T(), deps, "", "sonnet")
+
+	s.NotEqual(string(denyRuleSpawnAboveParentTier), v.Rule)
+	s.NotContains(v.Reason+v.Context, "above this session's model")
+}
+
+func (s *SpawnAboveParentTierSuite) TestALowerTierSaysNothing() {
+	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
+
+	v := judgeSpawnBy(ctx, s.T(), deps, "", "haiku")
+
+	s.NotEqual(string(denyRuleSpawnAboveParentTier), v.Rule)
+	s.NotContains(v.Reason+v.Context, "above this session's model")
+}
+
+// A thread its host has not reported may not be the session's main thread, so the
+// session's model is only an inference.
+func (s *SpawnAboveParentTierSuite) TestAnInferredCeilingIsAdvised() {
+	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", false)
+
+	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "opus"))
+
+	s.Equal(s.advised(), shape)
+	s.Contains(text, "this spawn runs opus, model tier principal (rank 2)")
+}
+
+func (s *SpawnAboveParentTierSuite) TestADenySettingRefusesAProvenCeiling() {
+	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
+	deps.Builtins[string(denyRuleSpawnAboveParentTier)] = builtin.Setting{Decision: builtin.Deny}
+
+	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "opus"))
+
+	s.Equal(s.denied(), shape)
+	s.Contains(text, "this workspace sets spawn-above-parent-tier to deny, so spawn it on sonnet or lower")
+}
+
+func (s *SpawnAboveParentTierSuite) TestADenySettingOnlyAdvisesAnInferredCeiling() {
+	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", false)
+	deps.Builtins[string(denyRuleSpawnAboveParentTier)] = builtin.Setting{Decision: builtin.Deny}
+
+	shape, _ := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "opus"))
+
+	s.Equal(s.advised(), shape)
+}
+
+func (s *SpawnAboveParentTierSuite) TestOffSilencesTheRule() {
+	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
+	deps.Builtins[string(denyRuleSpawnAboveParentTier)] = builtin.Setting{Decision: builtin.Off}
+
+	v := judgeSpawnBy(ctx, s.T(), deps, "", "opus")
+
+	s.NotEqual(string(denyRuleSpawnAboveParentTier), v.Rule)
+	s.NotContains(v.Reason+v.Context, "above this session's model")
+}
+
+// A subagent's ceiling is the model its own spawn named, proven.
+func (s *SpawnAboveParentTierSuite) TestASubagentsCeilingIsTheModelItsSpawnNamed() {
+	ctx, deps, at := ceilingFixture(s.T(), "opus", true)
+	facts := hint.NewGate(at.cacheDir, hookAttribution{Host: "claude-code", Session: "s"}.factsKey())
+	body, err := json.Marshal(spawnedAgent{Model: "haiku"})
+	s.Require().NoError(err)
+	writeAgentMarker(facts, spawnedAgentKind("a1"), body)
+
+	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "a1", "sonnet"))
+
+	s.Equal(s.advised(), shape)
+	s.Contains(text, "above the model this agent was spawned on, haiku, model tier economy (rank 0)")
+}
+
+func (s *SpawnAboveParentTierSuite) TestASubagentSpawnedOnNoModelInheritsTheSessions() {
+	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
+
+	v := judgeSpawnBy(ctx, s.T(), deps, "a2", "opus")
+
+	s.Equal(decisionAdvise, v.Decision)
+	s.Contains(v.Context, "above the session's model, which this agent inherited, sonnet")
+}
+
+func (s *SpawnAboveParentTierSuite) TestNoSessionModelIsNotJudged() {
+	ctx, deps, _ := ceilingFixture(s.T(), "", true)
+
+	s.NotEqual(string(denyRuleSpawnAboveParentTier), judgeSpawnBy(ctx, s.T(), deps, "", "opus").Rule)
+}
+
+func (s *SpawnAboveParentTierSuite) TestNoDeclarationIsNotJudged() {
+	ctx, deps, _ := ceilingFixture(s.T(), "sonnet", true)
+	deps.ModelTiers = func() *agent.ModelTierSet { return nil }
+
+	s.NotEqual(string(denyRuleSpawnAboveParentTier), judgeSpawnBy(ctx, s.T(), deps, "", "opus").Rule)
+}
+
+// assertUnknownTier asserts the rule advises why a tier is unknown and which
+// row to add, never guessing one.
+func (s *SpawnAboveParentTierSuite) assertUnknownTier(session, spawn, why, add string) {
+	ctx, deps, _ := ceilingFixture(s.T(), session, true)
+
+	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", spawn))
+
+	s.Equal(s.advised(), shape)
+	s.Contains(text, why)
+	s.Contains(text, add+` with a tier to the claude-code spell's mgs_listModels`)
+	s.Contains(text, "the declaration at hack/tiers.buzz:3 maps haiku, sonnet, opus for claude-code")
+}
+
+// A model id that only contains an alias has an unknown tier.
+func (s *SpawnAboveParentTierSuite) TestAnUnknownSpawnModelIsAdvised() {
+	s.assertUnknownTier("sonnet", "claude-opus-5-5", "this spawn's model, claude-opus-5-5 is in no mgs_listModels row", "add a row for claude-opus-5-5")
+}
+
+func (s *SpawnAboveParentTierSuite) TestAnUnknownSessionModelIsAdvised() {
+	s.assertUnknownTier("claude-sonnet-5-5", "opus", "this session's model, claude-sonnet-5-5 is in no mgs_listModels row", "add a row for claude-sonnet-5-5")
+}
+
+func (s *SpawnAboveParentTierSuite) TestTwoUnknownModelsAreAdvisedTogether() {
+	s.assertUnknownTier("claude-sonnet-5-5", "gpt-5",
+		"this spawn's model, gpt-5 and this session's model, claude-sonnet-5-5 are in no mgs_listModels row", "add a row for gpt-5 and claude-sonnet-5-5")
+}
+
+// A session's full model id resolves by the harness row naming its tier.
+func (s *SpawnAboveParentTierSuite) TestTheHarnessRowsTierResolvesASessionsID() {
+	ctx, deps, _ := ceilingFixture(s.T(), "claude-sonnet-5-5", true)
+	deps.ModelRows = func() []types.ModelPricing {
+		return []types.ModelPricing{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
+	}
+
+	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "opus"))
+
+	s.Equal(s.advised(), shape)
+	s.Contains(text, "above this session's model, claude-sonnet-5-5, model tier standard (rank 1)")
+}
+
+func (s *SpawnAboveParentTierSuite) TestADatedSpellingIsAnotherID() {
+	ctx, deps, _ := ceilingFixture(s.T(), "claude-sonnet-5-5", true)
+	deps.ModelRows = func() []types.ModelPricing {
+		return []types.ModelPricing{{ID: "claude-sonnet-5-5", Tier: "standard"}, {ID: "claude-opus-5-5", Tier: "principal"}}
+	}
+
+	v := judgeSpawnBy(ctx, s.T(), deps, "", "claude-sonnet-5-5-20261001")
+
+	s.Equal(decisionAdvise, v.Decision)
+	s.Contains(v.Context, "add a row for claude-sonnet-5-5-20261001")
+}
+
+// aliasedRows carry aliases no declaration maps; fable's names no tier.
+func aliasedRows() []types.ModelPricing {
+	return []types.ModelPricing{
+		{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "mid"},
+		{ID: "claude-opus-5-5", Tier: "principal", Alias: "top"},
+		{ID: "claude-fable-5-1", Alias: "fable"},
+	}
+}
+
+// judgeAliased spawns spawn from a session on claude-sonnet-5-5.
+func (s *SpawnAboveParentTierSuite) judgeAliased(spawn string) types.GuardJudgment {
+	ctx, deps, _ := ceilingFixture(s.T(), "claude-sonnet-5-5", true)
+	deps.ModelRows = aliasedRows
+	return judgeSpawnBy(ctx, s.T(), deps, "", spawn)
+}
+
+func (s *SpawnAboveParentTierSuite) TestTheHarnessRowsAliasResolvesASpawn() {
+	shape, text := spoken(s.judgeAliased("top"))
+
+	s.Equal(s.advised(), shape)
+	s.Contains(text, "this spawn runs top, model tier principal (rank 2)")
+	s.Contains(text, "top costs an unknown input price and an unknown output price")
+}
+
+func (s *SpawnAboveParentTierSuite) TestAPrefixedAliasIsNoAlias() {
+	v := s.judgeAliased("top-1")
+
+	s.Equal(decisionAdvise, v.Decision)
+	s.Contains(v.Context, "add a row for top-1")
+}
+
+func (s *SpawnAboveParentTierSuite) TestAnAliasInAnotherCaseIsNoAlias() {
+	v := s.judgeAliased("Top")
+
+	s.Equal(decisionAdvise, v.Decision)
+	s.Contains(v.Context, "add a row for Top")
+}
+
+func (s *SpawnAboveParentTierSuite) TestARowWithNoTierNamesNone() {
+	v := s.judgeAliased("fable")
+
+	s.Equal(decisionAdvise, v.Decision)
+	s.Contains(v.Context, "add a row for fable")
+}
+
+// A host the declaration does not map names no tier.
+func (s *SpawnAboveParentTierSuite) TestAnUnmappedHostIsNamed() {
+	s.Contains(declaredAliases(testModelTiers(s.T(), "codex"), "claude-code"), "maps no model for harness claude-code: its hosts are codex")
+}
+
+// secondRows put two rows at the principal tier.
+func secondRows() []types.ModelPricing {
+	return []types.ModelPricing{
+		{ID: "claude-sonnet-5-5", Tier: "standard"},
+		{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
+		{ID: "claude-next-1", Tier: "principal", Alias: "next"},
+	}
+}
+
+func (s *SpawnAboveParentTierSuite) TestASecondRowAtOneTierResolvesByID() {
+	ctx, deps, _ := ceilingFixture(s.T(), "claude-sonnet-5-5", true)
+	deps.ModelRows = secondRows
+
+	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "claude-next-1"))
+
+	s.Equal(s.advised(), shape)
+	s.Contains(text, "model tier principal (rank 2)")
+}
+
+func (s *SpawnAboveParentTierSuite) TestASecondRowAtOneTierResolvesByAlias() {
+	ctx, deps, _ := ceilingFixture(s.T(), "claude-sonnet-5-5", true)
+	deps.ModelRows = secondRows
+
+	shape, text := spoken(judgeSpawnBy(ctx, s.T(), deps, "", "next"))
+
+	s.Equal(s.advised(), shape)
+	s.Contains(text, "model tier principal (rank 2)")
+}
+
+func (s *SpawnAboveParentTierSuite) TestASessionOnASecondRowAtOneTierPassesItsPeer() {
+	ctx, deps, _ := ceilingFixture(s.T(), "claude-next-1", true)
 	deps.ModelRows = func() []types.ModelPricing {
 		return []types.ModelPricing{
 			{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
@@ -236,6 +337,7 @@ func TestSpawnAboveParentTierJudgesASessionOnASecondRowAtOneTier(t *testing.T) {
 		}
 	}
 
-	v := judgeSpawnBy(ctx, t, deps, "", "opus")
-	assert.NotEqual(t, decisionDeny, v.Decision, "a principal child under a principal parent passes")
+	v := judgeSpawnBy(ctx, s.T(), deps, "", "opus")
+
+	s.NotEqual(string(denyRuleSpawnAboveParentTier), v.Rule, "a principal child under a principal parent passes")
 }

@@ -248,31 +248,18 @@ func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callD
 		return fail(why)
 	}
 
-	opts := deps.VCS
-	opts.Name = "git"
-	res, err := vcs.Resolve(ctx, s.gitDir, "", opts)
-	if err != nil || res.VCS == nil {
-		return fail("version control is disabled or unresolvable for this workspace, so nothing about the worktree can be read")
+	res, co, why := removableCheckout(ctx, deps, callDir, s)
+	if why != "" {
+		return fail(why)
 	}
 	drv := res.VCS
-	all, err := drv.RegisteredCheckouts(ctx, s.gitDir)
-	if err != nil {
-		return fail("the registered worktrees cannot be read (`git worktree list --porcelain`): " + err.Error())
-	}
-	i := slices.IndexFunc(all, func(co types.RegisteredCheckout) bool { return samePath(co.Root, s.target) })
-	switch {
-	case i < 0:
-		return fail("it is not a worktree of this repository (`git worktree list`)")
-	case all[i].Primary:
-		return fail("it is the main worktree, which holds the repository itself (`git worktree list`)")
-	}
-	co := all[i]
-	if within(callDir, co.Root) || within(s.gitDir, co.Root) {
-		return fail("this session runs in it; remove it from another checkout")
-	}
 
 	r.failed = append(r.failed, checkoutStateFailures(ctx, drv, co)...)
 	rows, err := jobRowsAt(ctx, at)
+	var tries types.JobAttempts
+	if err == nil {
+		tries, err = leaseAttempts(ctx, at)
+	}
 	if err != nil {
 		if co.Locked && !s.unlock {
 			r.failed = append(r.failed, lockHeld(co))
@@ -280,7 +267,7 @@ func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callD
 		r.failed = append(r.failed, fmt.Sprintf("the job store cannot be read, so who works in it is unknown (`%s`): %s", hint.LsJobs.String(), err.Error()))
 		return r
 	}
-	scan := scanCheckoutJobs(deps, rows, co)
+	scan := scanCheckoutJobs(deps, rows, tries, co)
 	r.failed = append(r.failed, scan.failed...)
 	lock := judgeCheckoutLock(deps, rows, scan.finished, co, s)
 	r.failed = append(r.failed, lock.failed...)
@@ -289,6 +276,34 @@ func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callD
 	}
 	r.addRemedy(scan, lock)
 	return r
+}
+
+// removableCheckout resolves the version control and the registered
+// checkout s names. why is "" when it is a linked worktree that this
+// session does not run in.
+func removableCheckout(ctx context.Context, deps Dependencies, callDir string, s removalSite) (res types.VCSResolution, co types.RegisteredCheckout, why string) {
+	opts := deps.VCS
+	opts.Name = "git"
+	res, err := vcs.Resolve(ctx, s.gitDir, "", opts)
+	if err != nil || res.VCS == nil {
+		return res, co, "version control is disabled or unresolvable for this workspace, so nothing about the worktree can be read"
+	}
+	all, err := res.VCS.RegisteredCheckouts(ctx, s.gitDir)
+	if err != nil {
+		return res, co, "the registered worktrees cannot be read (`git worktree list --porcelain`): " + err.Error()
+	}
+	i := slices.IndexFunc(all, func(co types.RegisteredCheckout) bool { return samePath(co.Root, s.target) })
+	switch {
+	case i < 0:
+		return res, co, "it is not a worktree of this repository (`git worktree list`)"
+	case all[i].Primary:
+		return res, co, "it is the main worktree, which holds the repository itself (`git worktree list`)"
+	}
+	co = all[i]
+	if within(callDir, co.Root) || within(s.gitDir, co.Root) {
+		return res, co, "this session runs in it; remove it from another checkout"
+	}
+	return res, co, ""
 }
 
 // checkoutStateFailures are the conditions co fails by its directory: gone,
@@ -315,7 +330,7 @@ type checkoutJobScan struct {
 	exited, unfiled string
 }
 
-func scanCheckoutJobs(deps Dependencies, rows []types.Job, co types.RegisteredCheckout) checkoutJobScan {
+func scanCheckoutJobs(deps Dependencies, rows []types.Job, tries types.JobAttempts, co types.RegisteredCheckout) checkoutJobScan {
 	var scan checkoutJobScan
 	for _, row := range rows {
 		if row.Worktree.Standing() && samePath(row.Worktree.Root, co.Root) && !mayWorkIn(deps, rows, row) {
@@ -326,7 +341,7 @@ func scanCheckoutJobs(deps Dependencies, rows []types.Job, co types.RegisteredCh
 			continue
 		}
 		switch {
-		case row.State == types.StateExited && row.Result == nil:
+		case row.State == types.StateExited && tries.Result(row.ID) == nil:
 			// No result was filed: only the tree can lose work.
 			scan.unfiled = row.ID
 		case row.State.Live():

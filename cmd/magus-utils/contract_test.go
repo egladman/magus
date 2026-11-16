@@ -29,7 +29,7 @@ func TestReadHarnessContract(t *testing.T) {
 		"mgs_getMcp":               "() > McpServer",
 		"mgs_listTools":            "() > HarnessTools",
 		"mgs_getLimits":            "() > Limits",
-		"mgs_listModels":           "() > [ModelRow]",
+		"mgs_listModels":           "() > [HarnessModel]",
 		"mgs_listSettings":         "() > [Setting]",
 		"mgs_renderAgents":         "(agents: [ShippedAgent]) > [AgentFile]",
 		"mgs_renderPrompts":        "(humanOnly: {str: str}) > [Prompt]",
@@ -56,6 +56,7 @@ func TestReadContract(t *testing.T) {
 		"mgs_getSymbolIndexer":  "SymbolIndexer",
 		"mgs_getCoverage":       "Coverage",
 		"mgs_getSandbox":        "Sandbox",
+		"mgs_getScopes":         "Command",
 		"mgs_isOpaque":          "bool",
 		"mgs_getModeArgs":       "{str: [str]}",
 		"mgs_listTargets":       "{str: fun(Target) Command}",
@@ -69,7 +70,7 @@ func TestReadContractRefuses(t *testing.T) {
 	cases := map[string]struct{ src, want string }{
 		"an unregistered type": {
 			src:  "type Contract struct {\n\tX time.Time `mgs:\"mgs_x\"`\n}",
-			want: "time.Time is not a registered boundary type",
+			want: "time.Time does not cross into Buzz",
 		},
 		"a missing tag": {
 			src:  "type Contract struct {\n\tX string\n}",

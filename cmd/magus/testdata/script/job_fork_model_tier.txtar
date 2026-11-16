@@ -1,7 +1,7 @@
-# A fork records the model tier its job runs at, and the step that chose it: the row when
+# A fork records the model tier its job runs at, and the step that chose it: the job when
 # it names a tier or a model, else the workspace's matrix, else the declared default. Fork
 # prints the line, describe job prints it again with the skill variant, and ls jobs shows
-# the tier when the row names no model. A dry-run apply assigns nothing and runs no matrix.
+# the tier when the job names no model. A dry-run apply assigns nothing and runs no matrix.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 exec magus init -local -vcs git
@@ -16,36 +16,36 @@ cp $WORK/code.go f.go
 # The matrix answers for a one-file job.
 stdin $WORK/small.json
 exec magus job fork --stdin
-stdout '^model tier: economy \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
+stdout '^model tier: routine \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
 exec magus describe job wave/small
-stdout '^model tier: economy \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
+stdout '^model tier: routine \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
 stdout '^skills: full$'
 
 # It declines for a wider one, and the shipped default decides.
 stdin $WORK/wide.json
 exec magus job fork --stdin
-stdout '^model tier: standard \(rank 1\), default: "the declared default" at magus/modeltiers$'
+stdout '^model tier: bounded \(rank 1\), default: "the declared default" at magus/modeltiers$'
 exec magus describe job wave/wide
 stdout '^skills: short$'
 
-# A row naming a tier wins and the matrix is not asked.
+# A job naming a tier wins and the matrix is not asked.
 stdin $WORK/named.json
 exec magus job fork --stdin
-stdout '^model tier: principal \(rank 2\), row: "the job names the tier principal"$'
+stdout '^model tier: design \(rank 2\), job: "the job names the tier design"$'
 
-# A model that maps to no tier is kept as the row's word and takes the default's rank.
+# A model that maps to no tier is kept as the job's word and takes the default's rank.
 stdin $WORK/model.json
 exec magus job fork --stdin
-stdout '^model tier: standard \(rank 1\), row: "the job names the model haiku, which no model tier maps to"$'
+stdout '^model tier: bounded \(rank 1\), job: "the job names the model haiku, which no model tier maps to"$'
 
-# ls jobs shows the tier where the row names no model, and the model where it does.
+# ls jobs shows the tier where the job names no model, and the model where it does.
 exec magus ls jobs
-stdout 'wave/small +- +declared +economy '
-stdout 'wave/wide +- +declared +standard '
-stdout 'wave/named +- +declared +principal '
+stdout 'wave/small +- +declared +routine '
+stdout 'wave/wide +- +declared +bounded '
+stdout 'wave/named +- +declared +design '
 stdout 'wave/model +- +declared +haiku '
 
-# A dry-run apply writes nothing and assigns no tier; the real one creates the row with one.
+# A dry-run apply writes nothing and assigns no tier; the real one creates the job with one.
 stdin $WORK/applied.json
 exec magus job apply --stdin --dry-run
 stdout '^would create wave/applied with 1 write path\(s\)$'
@@ -55,19 +55,20 @@ exec magus ls jobs -o name
 stdin $WORK/applied.json
 exec magus job apply --stdin
 stdout '^created wave/applied, declared, with 1 write path\(s\)$'
-stdout '^model tier: economy \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
+stdout '^model tier: routine \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
 
 -- matrix.buzz --
 import "magus";
+import "magus/agent";
 import "magus/modeltiers" as modeltiers;
 
-object Choice { tier: modeltiers\ModelTier, skills: magus\SkillVariant, reason: str }
+object Choice { tier: modeltiers\ModelTier, skills: magus\agent\SkillVariant, reason: str }
 
 fun choose(req: ModelTierRequest) > Choice? {
     if (req.writeFiles != 1 or req.writeProjects.len() != 1) { return null; }
     return Choice{
-        tier = modeltiers\ModelTier.economy,
-        skills = magus\SkillVariant.full,
+        tier = modeltiers\ModelTier.routine,
+        skills = magus\agent\SkillVariant.full,
         reason = "{req.writeFiles} file in {req.writeProjects.len()} project",
     };
 }
@@ -76,17 +77,17 @@ magus\modelTier(choose);
 -- code.go --
 package pkg
 -- small.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/small", "write_paths": ["a.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/small", "paths": {"write": ["a.go"]},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}
 -- wide.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/wide", "write_paths": ["b.go", "c.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/wide", "paths": {"write": ["b.go", "c.go"]},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["b.go", "c.go"]}]}
 -- named.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/named", "write_paths": ["d.go"], "model": "principal",
+{"api_version": "magus.job/v1alpha1", "id": "wave/named", "paths": {"write": ["d.go"]}, "agent": {"model": {"tier": "design"}, "worker": {"type": "resumed"}},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["d.go"]}]}
 -- model.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/model", "write_paths": ["e.go"], "model": "haiku",
+{"api_version": "magus.job/v1alpha1", "id": "wave/model", "paths": {"write": ["e.go"]}, "agent": {"model": {"id": "haiku"}, "worker": {"type": "resumed"}},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["e.go"]}]}
 -- applied.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/applied", "write_paths": ["f.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/applied", "paths": {"write": ["f.go"]},
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["f.go"]}]}

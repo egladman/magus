@@ -98,11 +98,11 @@ type checker struct {
 	// warnings are non-fatal diagnostics; they never fail Exec/Compile. Kept apart from
 	// errors so a caller cannot mistake one for the other by length alone.
 	warnings []typeError
-	// loopDepth counts the enclosing loop bodies being checked, so a statement can ask
-	// whether it runs repeatedly. Only the BODY counts: a for-clause is not a loop body.
-	loopDepth int
-	scopes    []map[string]scopeEntry
-	retTyp    types.Type
+	// loops holds each enclosing loop, so a statement can ask whether it
+	// runs repeatedly and whether a name outlives one pass.
+	loops  []loopEntry
+	scopes []map[string]scopeEntry
+	retTyp types.Type
 	// retWant is the expected type for a returned value: retTyp, or the
 	// anonObjectType of an `obj{ ... }` return annotation that retTyp erases.
 	retWant types.Type
@@ -159,6 +159,9 @@ type checker struct {
 	// valueImports names the imports the session's host resolver bound to a value
 	// (a remote spell handle) rather than a module; see Session.resolverBound.
 	valueImports map[string]bool
+	// nested are the nested namespaces this chunk's own imports bind, since
+	// upstream imports are per file. nil checks no chunk's imports.
+	nested *chunkNamespaces
 	// base holds the builtins and imported types beneath scopes[0] and types; nil
 	// means those two hold everything. A check writes to it only to memoize a
 	// namespace type (see namespaceType).
@@ -308,21 +311,23 @@ func (c *checker) baseEntry(name string) (scopeEntry, bool) {
 // the missing `export` instead of a bare "undefined". embedded mirrors
 // Session.embedded (see checker.embedded).
 func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool, embedded bool) (errs []typeError, warnings []typeError) {
-	return checkWithPrelude(prog, extraGlobals, (*checkPrelude)(nil).sync(imported), moduleFuncs, moduleTypes, moduleVars, nil, private, embedded, nil)
+	return checkWithPrelude(prog, extraGlobals, (*checkPrelude)(nil).sync(imported), moduleFuncs, moduleTypes, moduleVars, nil, private, embedded, nil, nil)
 }
 
 // checkWithPrelude is checkWithGlobals with the builtins and imported types
 // already registered in prelude. The check reads prelude and adds to it only the
 // namespace types it builds. valueImports names the imports bound to a value
-// rather than a module, whose members are read with a dot.
+// rather than a module, whose members are read with a dot. nested are the
+// nested namespaces the chunk's own imports bind.
 //
 // optimization: a session registers imported types and namespaces once, not per check.
 //
 //	measured: BenchmarkSessionImportedTypes -43% B/op, -77% allocs/op (benchstat, n=10).
 //	trade-off: a global resolves through two map layers (scopes[0], then base), and
 //	a type a check rewrites must be copied out of base first (ownBaseObject).
-func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPrelude, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, declImports map[string]map[string]string, private map[string]bool, embedded bool, valueImports map[string]bool) (errs []typeError, warnings []typeError) {
+func checkWithPrelude(prog *ast.Program, extraGlobals []string, prelude *checkPrelude, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, declImports map[string]map[string]string, private map[string]bool, embedded bool, valueImports map[string]bool, nested *chunkNamespaces) (errs []typeError, warnings []typeError) {
 	c := &checker{
+		nested:       nested,
 		types:        map[string]types.Type{},
 		moduleFuncs:  moduleFuncs,
 		moduleTypes:  moduleTypes,
@@ -481,6 +486,42 @@ func (c *checker) define(name string, typ types.Type, isConst bool) {
 	c.scopes[len(c.scopes)-1][name] = scopeEntry{typ: typ, isConst: isConst}
 }
 
+// loopEntry is one enclosing loop. scope is the first scope index a pass
+// starts over. A for body shares its clause's scope, so clause names the
+// bindings in it that the clause made once.
+type loopEntry struct {
+	scope  int
+	clause map[string]bool
+}
+
+func (c *checker) enterLoop() {
+	c.loops = append(c.loops, loopEntry{scope: len(c.scopes)})
+}
+
+// enterForLoop enters a for loop whose clause scope is the innermost one.
+func (c *checker) enterForLoop() {
+	inner := len(c.scopes) - 1
+	clause := make(map[string]bool, len(c.scopes[inner]))
+	for name := range c.scopes[inner] {
+		clause[name] = true
+	}
+	c.loops = append(c.loops, loopEntry{scope: inner, clause: clause})
+}
+
+func (c *checker) leaveLoop() { c.loops = c.loops[:len(c.loops)-1] }
+
+// declaredOutsideLoop reports whether name binds outside the innermost loop
+// body, so every pass of that loop sees the value the last one left.
+func (c *checker) declaredOutsideLoop(name string) bool {
+	loop := c.loops[len(c.loops)-1]
+	for i := len(c.scopes) - 1; i >= 0; i-- {
+		if _, ok := c.scopes[i][name]; ok {
+			return i < loop.scope || (i == loop.scope && loop.clause[name])
+		}
+	}
+	return true
+}
+
 func (c *checker) lookup(name string) (scopeEntry, bool) {
 	for i := len(c.scopes) - 1; i >= 0; i-- {
 		if e, ok := c.scopes[i][name]; ok {
@@ -528,6 +569,18 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 	for _, s := range prog.Stmts {
 		switch v := s.(type) {
 		case *ast.ImportStmt:
+			if rel, nested := c.nested.relative(v.Path); nested {
+				// The full path resolves through c.nested; only the relative
+				// spelling is a global.
+				if rel != "" {
+					if nt := c.namespaceType(rel); nt != nil {
+						c.define(rel, nt, false)
+					} else {
+						c.define(rel, types.Unknown, false)
+					}
+				}
+				break
+			}
 			// The module's lookup name is the path's last segment with the `buzz:` stdlib
 			// scheme stripped, which is the same bare name resolveImport binds under.
 			parts := strings.Split(strings.TrimPrefix(v.Path, "buzz:"), "/")
@@ -865,13 +918,13 @@ func (c *checker) checkStmt(n ast.Node) {
 		if cond != types.Any && cond != types.Unknown && cond != types.Bool {
 			c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "while condition must be bool, got %s", cond.TypeName())
 		}
-		c.loopDepth++
+		c.enterLoop()
 		c.checkBlock(v.Body)
-		c.loopDepth--
+		c.leaveLoop()
 	case *ast.DoStmt:
-		c.loopDepth++
+		c.enterLoop()
 		c.checkBlock(v.Body)
-		c.loopDepth--
+		c.leaveLoop()
 		cond := c.infer(v.Cond)
 		if cond != types.Any && cond != types.Unknown && cond != types.Bool {
 			c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "do-until condition must be bool, got %s", cond.TypeName())
@@ -887,19 +940,20 @@ func (c *checker) checkStmt(n ast.Node) {
 				c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "for condition must be bool, got %s", cond.TypeName())
 			}
 		}
+		// Post runs every pass, so it is checked inside the loop.
+		c.enterForLoop()
 		for _, post := range v.Post {
 			c.checkStmt(post)
 		}
-		c.loopDepth++
 		for _, s := range v.Body.Stmts {
 			c.checkStmt(s)
 		}
-		c.loopDepth--
+		c.leaveLoop()
 		c.popScope()
 	case *ast.ForEachStmt:
-		c.loopDepth++
+		c.enterLoop()
 		c.checkForEach(v)
-		c.loopDepth--
+		c.leaveLoop()
 	case *ast.FunDecl:
 		c.checkFunDecl(v)
 	case *ast.TestDecl:
@@ -996,7 +1050,7 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 }
 
 func (c *checker) checkAssign(v *ast.AssignStmt) {
-	c.flagStringAccumulation(v)
+	c.flagLoopAccumulation(v)
 	if id, ok := v.Target.(*ast.IdentExpr); ok {
 		// `_` is the discard target: accept any value and bind nothing.
 		if id.Name == "_" {
@@ -1191,32 +1245,70 @@ func (c *checker) checkBlock(b *ast.BlockStmt) {
 	c.popScope()
 }
 
-// flagStringAccumulation warns on `s = s + part` inside a loop. Every iteration copies the
-// whole string built so far, and on the default nanbox build each intermediate is pinned in
-// the global object heap for the life of the process, so none of those copies is ever
-// reclaimed: the cost is quadratic in time and unbounded in memory. Collecting the parts in
-// a list and joining once is the fix.
-//
-// Deliberately narrow: only a bare `+` spine with the target as one of its operands counts,
-// so `s = trim(s)` or `s = s.sub(1)` stay quiet. Those rebuild s too, but they do not GROW
-// it, and warning on every mention of s on the right would make this noise.
-func (c *checker) flagStringAccumulation(v *ast.AssignStmt) {
-	if c.loopDepth == 0 {
+// flagLoopAccumulation warns on a str, list or map rebuilt from itself in a
+// loop, copying it whole every pass. Only the bare target as an operand counts,
+// since `s = s.sub(1)` or a truncation does not grow s. A str that leads its
+// rebuild is exempt: vm.appendString extends it in place.
+func (c *checker) flagLoopAccumulation(v *ast.AssignStmt) {
+	if len(c.loops) == 0 {
 		return
 	}
 	id, ok := v.Target.(*ast.IdentExpr)
-	if !ok {
+	if !ok || !c.declaredOutsideLoop(id.Name) {
 		return
 	}
-	if e, found := c.lookup(id.Name); !found || e.typ != types.Str {
+	e, found := c.lookup(id.Name)
+	if !found {
 		return
 	}
-	if !concatSpineRefers(v.Value, id.Name) {
+	kind := accumulatorKind(e.typ)
+	if kind == "" || !extends(v.Value, id.Name) {
 		return
 	}
-	c.warnfc(v.Pos, StringAccumulation,
-		"%q is rebuilt from itself inside a loop, copying the whole string every iteration; collect the parts in a list and join() it once",
-		id.Name)
+	if kind == "string" {
+		if !leads(v.Value, id.Name) {
+			c.warnfc(v.Pos, LoopAccumulation,
+				"%q is rebuilt with text before it inside a loop, copying the whole string every iteration; make %q the first operand, which extends it in place",
+				id.Name, id.Name)
+		}
+		return
+	}
+	c.warnfc(v.Pos, LoopAccumulation,
+		"%q is rebuilt from itself with + inside a loop, copying the whole %s every iteration; %s",
+		id.Name, kind, accumulatorFixes[kind])
+}
+
+// leads reports whether name is the operand the VM extends in place. That is
+// the left end of a `+` chain or the first part of an interpolation.
+func leads(n ast.Node, name string) bool {
+	switch v := n.(type) {
+	case *ast.IdentExpr:
+		return v.Name == name
+	case *ast.BinaryExpr:
+		return v.Op == "+" && leads(v.Left, name)
+	case *ast.InterpExpr:
+		return len(v.Parts) > 0 && v.Parts[0].Expr != nil && leads(v.Parts[0].Expr, name)
+	}
+	return false
+}
+
+// accumulatorKind names a type whose rebuild copies a value that grows, or "".
+func accumulatorKind(t types.Type) string {
+	switch t.(type) {
+	case *types.ListType:
+		return "list"
+	case *types.MapType:
+		return "map"
+	}
+	if t == types.Str {
+		return "string"
+	}
+	return ""
+}
+
+var accumulatorFixes = map[string]string{
+	"list": "append() each element to a mut list instead",
+	"map":  "set each key on a mut map instead",
 }
 
 // flagRedundantUnwrap warns on `!` applied to an operand proven non-optional.
@@ -1250,21 +1342,30 @@ func (c *checker) flagDiscardedValue(v *ast.ExprStmt, t types.Type) {
 	c.warnfc(v.Pos, DiscardedValue, "discarded value of type `%s`", t.TypeName())
 }
 
-// concatSpineRefers reports whether n is a `+` chain carrying name as a direct operand.
-func concatSpineRefers(n ast.Node, name string) bool {
-	bin, ok := n.(*ast.BinaryExpr)
-	if !ok || bin.Op != "+" {
-		return false
-	}
-	for _, side := range []ast.Node{bin.Left, bin.Right} {
-		if id, ok := side.(*ast.IdentExpr); ok && id.Name == name {
-			return true
+// extends reports whether n is a `+` chain or an interpolated string
+// carrying name as a direct operand.
+func extends(n ast.Node, name string) bool {
+	switch v := n.(type) {
+	case *ast.BinaryExpr:
+		if v.Op != "+" {
+			return false
 		}
-		if concatSpineRefers(side, name) {
-			return true
+		return carries(v.Left, name) || carries(v.Right, name)
+	case *ast.InterpExpr:
+		for _, part := range v.Parts {
+			if part.Expr != nil && carries(part.Expr, name) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func carries(n ast.Node, name string) bool {
+	if id, ok := n.(*ast.IdentExpr); ok && id.Name == name {
+		return true
+	}
+	return extends(n, name)
 }
 
 func (c *checker) checkForEach(v *ast.ForEachStmt) {
@@ -2467,6 +2568,16 @@ func hasDefault(ft *types.FuncType) bool {
 }
 
 func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
+	// A nested namespace is its own module, not a member of its parent's.
+	if path := nestedPath(v); path != "" {
+		if nt := c.namespaceType(path); nt != nil {
+			if c.unboundQualifier(path) {
+				c.unimportedNamespace(v.Pos, path, fmt.Sprintf(`undefined: %s`, path))
+				return types.Unknown
+			}
+			return nt
+		}
+	}
 	if id, ok := v.Object.(*ast.IdentExpr); ok && v.Namespaced && !c.private[id.Name] && c.unboundQualifier(id.Name) {
 		c.unimportedNamespace(id.Pos, id.Name, fmt.Sprintf("undefined: %s\\%s", id.Name, v.Name))
 		return types.Unknown

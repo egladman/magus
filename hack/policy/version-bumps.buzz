@@ -28,7 +28,7 @@ export final counters = [
     Counter{ name = "job-schema-version", file = "types/job.go", declaration = "const JobAPIVersion APIVersion = " },
     Counter{ name = "job-result-schema-version", file = "types/job.go", declaration = "const JobResultAPIVersion APIVersion = " },
     Counter{ name = "event-schema-version", file = "types/event.go", declaration = "const EventAPIVersion APIVersion = " },
-    Counter{ name = "stored-output-schema-version", file = "types/output_record.go", declaration = "const StoredOutputAPIVersion APIVersion = " },
+    Counter{ name = "stored-output-schema-version", file = "types/output.go", declaration = "const StoredOutputAPIVersion APIVersion = " },
     Counter{ name = "sessions-schema-version", file = "internal/sessions/sessions.go", declaration = "const APIVersion types.APIVersion = " },
     Counter{ name = "goindex-format-version", file = "internal/symbols/goindex/goindex.go", declaration = "const formatVersion = " },
     Counter{ name = "auth-store-version", file = "internal/auth/store.go", declaration = "const storeVersion types.APIVersion = " },

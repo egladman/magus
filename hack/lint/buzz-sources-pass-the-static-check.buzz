@@ -196,7 +196,7 @@ test "a file with a warning is reported and a clean one is not" {
     final got = check(support\fixture({
         "hack/clean.buzz": "namespace clean;\n\nfun one() > int \{\n    return 1;\n}\n",
         "hack/rebuilt.buzz": "namespace rebuilt;\n\nfun join(parts: [str]) > str \{\n    var s = \"\";\n"
-            + "    foreach (p in parts) \{\n        s = s + p;\n    }\n    return s;\n}\n",
+            + "    foreach (p in parts) \{\n        s = p + s;\n    }\n    return s;\n}\n",
         "internal/x/testdata/bad.buzz": "this is not buzz\n",
     }));
     assert\equal(got.len(), want: 1, message: "one finding: {support\messages(got)}");

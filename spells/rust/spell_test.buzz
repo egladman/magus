@@ -17,7 +17,7 @@ fun claimAt(claims: [DiscoveredProject], dir: str) > DiscoveredProject {
         }
     }
     std\panic("no claim at {dir}");
-    return DiscoveredProject{};
+    return DiscoveredProject{ path = "", role = DiscoveryRole.none };
 }
 
 fun hasGap(c: DiscoveredProject, file: str, fragment: str) > bool {

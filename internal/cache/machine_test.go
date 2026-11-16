@@ -725,7 +725,7 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 
 	var out bytes.Buffer
 	c, err := Open(t.Context(), t.TempDir(),
-		WithLogger(slog.New(NewPrettyHandler(&out, slog.LevelInfo))),
+		WithLogger(slog.New(prettyHandler(&out, slog.LevelInfo))),
 		WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 
