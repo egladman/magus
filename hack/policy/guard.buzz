@@ -27,6 +27,11 @@
 //     by one the host reported no session for.
 //   unplaced-call (deny): a push, pull request call or relink after a cd magus
 //     cannot follow, which the other rules would judge in the wrong checkout.
+//   push-unverified (deny): a push or `gh pr create` whose commit changed a file, since its
+//     merge base, that no clean passing run in the pushing checkout read as that commit holds
+//     it, and one whose read could not finish. A changed file no target declares is named and
+//     does not block. It runs after push-authority and the cadence rules, before the branch
+//     name rules.
 //   branch-name (deny, or advise on a topic miss alone): a pushed branch or bookmark, or a
 //     pull request's head, that is not a short topic of lowercase words.
 //   foreign-binary (deny): a magus binary built in one checkout of magus run against another.
@@ -78,8 +83,8 @@
 //     base value, pass.
 //
 // Each rule lives beside its tests in the file named for what it guards: gh.buzz (the
-// GitHub calls), cadence.buzz (the gate and the push), branches.buzz (push-authority and
-// branch-name), binaries.buzz (foreign-binary and
+// GitHub calls), cadence.buzz (the gate and the push), push.buzz (push-unverified),
+// branches.buzz (push-authority and branch-name), binaries.buzz (foreign-binary and
 // go-into-checkout, with worker-builds-magus run first), builds.buzz (what counts as compiling
 // magus, and both build rules), stale.buzz, spawn.buzz (brief-builds-magus runs there),
 // commits.buzz, pull_requests.buzz,
@@ -98,6 +103,7 @@ import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 import "./hack/policy/gh" as gh;
 import "./hack/policy/cadence" as cadence;
+import "./hack/policy/push" as pushes;
 import "./hack/policy/binaries" as binaries;
 import "./hack/policy/builds" as builds;
 import "./hack/policy/stale" as stale;
@@ -235,7 +241,8 @@ export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > 
     final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent, holdsCheckout = cadence\gatesInHeldCheckout(req.lease, programs: programs, dir: req.dir, workspace: req.workspace) }, checkout: checkout,
         baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
         diff: pullRequests\pullRequestDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
-        publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic },
+        publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic,
+            verified = fun () > GuardVerdict { return pushes\decidePush(req.push, read: pushes\readUnverified); } },
         reads: host\readsFrom(req.workspace, dir: req.dir));
     return lastWord(req, programs: programs, decided: decided, forked: forked, once: once);
 }
@@ -353,12 +360,15 @@ fun requestPusher(req: CommandRequest) > branches\Pusher {
 
 // Publishing is what the publishing rules read about a line: who runs it, the branch or
 // bookmark its checkout is on, what the checkout knows of the remote, and the topic of the
-// branch's diff, read only when a name is judged.
+// branch's diff, read only when a name is judged. verified reads which of the files the push
+// publishes no clean passing run read, and runs only once push-authority and the cadence
+// rules have passed.
 export object Publishing {
     pusher: branches\Pusher,
     current: str,
     remote: branches\Remote,
     topic: fun (source: str) > branches\Topic,
+    verified: fun () > GuardVerdict,
 }
 
 // currentBranch is the branch or bookmark the guard read for a push, else the one the
@@ -578,8 +588,8 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
 }
 
 // decide is judge over plain records. The order is the verdict: push authority first, then
-// the gate and push denials, then the branch name denials, then the gh denials, then the
-// commit and pull request text denials, then the gh advisories, then the pull request text
+// the gate and push denials, then push-unverified, then the branch name denials, then the gh
+// denials, then the commit and pull request text denials, then the gh advisories, then the pull request text
 // advisories, then the branch name advisories. baseBranch is the checkout's branch when it
 // is the base branch, "" otherwise; line is the shell line as sent, files the description
 // files it names, diff reads the branch's diff for a description's budget, judge runs
@@ -598,16 +608,23 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
     if (cadenceVerdict.decision != magus\GuardDecision.allow) {
         return cadenceVerdict;
     }
+    final verified = publishing.verified();
+    if (verified.decision == magus\GuardDecision.deny) {
+        return verified;
+    }
     final names = branches\decideNames(programs, current: publishing.current, remote: publishing.remote,
         topic: publishing.topic, once: once);
     if (names.decision == magus\GuardDecision.deny) {
         return names;
     }
     final rest = decideText(programs, baseBranch: baseBranch, line: line, files: files, diff: diff, judge: judge, once: once);
-    if (rest.decision == magus\GuardDecision.allow) {
-        return names;
+    if (rest.decision != magus\GuardDecision.allow) {
+        return rest;
     }
-    return rest;
+    if (names.decision == magus\GuardDecision.allow) {
+        return verified;
+    }
+    return names;
 }
 
 // decideText is decide's gh and text rules: the gh denials, the commit and pull request text
@@ -717,4 +734,32 @@ test "the main session's cat of a task capture outside the workspace is denied n
     std\assert(allowed.decision == magus\GuardDecision.allow, message: "a workspace with no ./magus: " + allowed.decision + " " + allowed.reason);
     fs\removeAll(ws);
     fs\removeAll(host);
+}
+
+test "a worker's push is refused by push-authority before push-unverified reads" {
+    final asked = mut [<str>];
+    final programs = helpers\vcsRequest([["git", "push", "origin", "HEAD:x"]]);
+    final publishing = Publishing{
+        pusher = branches\Pusher{ role = magus\AgentRole.worker, title = "orchestrator/job", session = "s1", lease = "job" },
+        current = "topic",
+        remote = branches\Remote{ base = "main", branches = [<str>] },
+        topic = fun (source: str) > branches\Topic { return branches\unknownTopic(); },
+        verified = fun () > GuardVerdict {
+            asked.append("read");
+            return magus\guard.allow();
+        },
+    };
+    final facts = fun (head: str, base: str, number: str) > pullRequests\Facts {
+        return pullRequests\Facts{ known = true, fragments = 0, shipped = 0, lines = 1 };
+    };
+    final none = fun (text: str, kind: str) > [pullRequests\Judged] {
+        return [<pullRequests\Judged>];
+    };
+    final reads = host\Reads{ text = fun (path: str) > str { return ""; }, binary = fun () > bool { return false; } };
+    final v = decide(programs, caller: cadence\Caller{ role = magus\AgentRole.worker, title = "orchestrator/job" }, checkout: null,
+        baseBranch: "", line: "git push origin HEAD:x", files: {<str: str>}, diff: facts, judge: none,
+        once: fun (key: str) > bool { return false; }, publishing: publishing, reads: reads);
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.decision.value);
+    std\assert(v.reason.indexOf("lease job") != null, message: "push-authority answered: " + v.reason);
+    std\assert(asked.len() == 0, message: "push-unverified read {asked.len()} times");
 }
