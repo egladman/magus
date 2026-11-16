@@ -80,7 +80,7 @@ magus graph export -o json  # the whole graph
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                       |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      72 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                |
+| [.](MAGUS.md)                                                               |      73 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                |
 | [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `lint`, `build`, `install`                        |
 | [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `catalog-docs-generate`, `site-generate`, `lint`  |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |      10 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                   |
@@ -88,7 +88,7 @@ magus graph export -o json  # the whole graph
 | [libs/clikit](libs/clikit/MAGUS.md)                                         |       8 | `magus query project=libs/clikit`                     | `format`, `ci`, `test`                            |
 | [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `ci`, `test`                            |
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       8 | `magus query project=libs/diagnostics`                | `format`, `ci`, `test`                            |
-| libs/embed                                                                  |       8 | `magus query project=libs/embed`                      | `ci`, `format`, `build`                           |
+| libs/embed                                                                  |       8 | `magus query project=libs/embed`                      | `build`, `ci`, `lint`                             |
 | libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `ci`, `lint`, `test`                              |
 | [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      12 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `buzzbench-test`               |
 | [libs/kustomize](libs/kustomize/MAGUS.md)                                   |       5 | `magus query project=libs/kustomize`                  | `lint`, `ci`, `test`                              |
@@ -163,6 +163,7 @@ magus graph export -o json  # the whole graph
 | `agent-bench-run`              | Runs a benchmark manifest (default pilot.manifest) with CLAUDE_BENCH_TOKEN read through the secret provider, so the launching shell never holds it.                                                                                    |
 | `agent-eval`                   | Runs cmd/magus's agent eval, which skips in the ordinary test target because it spends tokens.                                                                                                                                         |
 | `retrieval-eval-test`          | Replays each eval set under testdata/retrieval through query, refs and explain and prints recall, MRR and nDCG per set; no score fails it.                                                                                             |
+| `conventions-test`             | Runs the tests that read the whole tree as data.                                                                                                                                                                                       |
 | `agent-harness-test`           | Drives the installed Claude Code, Codex, Cursor and OpenCode headless against a wired workspace; see docs/guides/integrations/agents.md.                                                                                               |
 | `deploy-generate`              | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root and the console under /console/.                                                                                                       |
 | `toolchain-report`             | Reports installed toolchains; excluded from CI because it probes remote tags.                                                                                                                                                          |
