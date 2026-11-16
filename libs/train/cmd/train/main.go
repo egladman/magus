@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/libs/train/embed/teacher"
+	"github.com/egladman/magus/libs/train/eval"
 	"github.com/egladman/magus/libs/train/probe"
 	"github.com/egladman/magus/libs/xdg"
 )
@@ -29,6 +31,11 @@ commands:
   fertility   append tokens per byte of held-in hand-written Buzz, Go and TS under each tokenizer
   pilot       run one mlx_lm.lora pilot on train-split Buzz and append its throughput and memory
   gguf-bench  run llama-bench (pp512, tg128) over each pinned GGUF and append its rates
+  dedup       find exact and near-duplicate files among the split's candidates (stage S1)
+  pin-split   pin the split split.buzz wrote in gen/split.digest (stage S1)
+  eval-sets   write the FIM dev and test sets and the Buzz pass@k tasks (stage S1)
+  fim         write the FIM training samples, decontaminated against the eval sets (stage S1)
+  g1          recount the G1 bullets from the datasets and write the report (stage S1)
 
 run "train <command> -h" for a command's flags`
 
@@ -45,6 +52,8 @@ func main() {
 		err = runPilot(os.Args[2:])
 	case "gguf-bench":
 		err = runBench(os.Args[2:])
+	case "dedup", "pin-split", "eval-sets", "fim", "g1":
+		err = runS1(os.Args[1], os.Args[2:])
 	default:
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
@@ -354,5 +363,92 @@ func runBench(args []string) error {
 			fmt.Printf("%-64s %-6s %9.1f ± %.1f t/s  load %.1f -> %.1f\n", in.Name, r.Test, r.AvgTS, r.StddevTS, row.Load1Start, row.Load1End)
 		}
 	}
+	return nil
+}
+
+// runS1 runs one stage S1 command. Every dataset goes under the cache root's train/s1
+// directory; only the digests it pins reach git.
+func runS1(cmd string, args []string) error {
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	var c common
+	c.register(fs)
+	rev := fs.String("rev", "HEAD", "the commit the split, the dedup and the test sets read")
+	digests := fs.String("digests", "gen/split.digest", "the digest file datasets are pinned in")
+	binary := fs.String("magus", "../../magus", "the magus binary --check runs with")
+	_ = fs.Parse(args)
+	cutoff, err := eval.ReadCutoff(c.inputs)
+	if err != nil {
+		return err
+	}
+	tip, err := revParse(c.root, *rev)
+	if err != nil {
+		return err
+	}
+	e := eval.Env{Root: c.root, Rev: tip, Cutoff: cutoff.Commit, Dir: filepath.Join(c.cache, "train", "s1"),
+		Digests: *digests, Magus: *binary}
+	if e.Magus, err = filepath.Abs(*binary); err != nil {
+		return err
+	}
+	switch cmd {
+	case "dedup":
+		rep, err := eval.RunDedup(e)
+		if err != nil {
+			return err
+		}
+		return printJSON(rep)
+	case "pin-split":
+		return eval.PinSplit(e)
+	case "eval-sets":
+		counts, err := eval.RunSets(e)
+		if err != nil {
+			return err
+		}
+		return printJSON(counts)
+	case "fim":
+		counts, err := eval.RunFIM(e)
+		if err != nil {
+			return err
+		}
+		return printJSON(counts)
+	default:
+		rep, err := eval.RunG1(e, cutoff)
+		if err != nil {
+			return err
+		}
+		for _, b := range rep.Bullets {
+			verdict := "pass"
+			if !b.Pass {
+				verdict = "FAIL"
+			}
+			fmt.Printf("%-4s %-24s %s (%s)\n", verdict, b.ID, b.Shown, b.Want)
+		}
+		if err := printJSON(map[string]any{"rev": rep.Rev, "cutoff": rep.Cutoff, "bytes": rep.Bytes, "files": rep.Files,
+			"groups_over_3_percent": rep.BigGroups, "bytes_in_groups_over_3_percent": rep.BigGroupBytes, "dedup_pairs": rep.Pairs,
+			"check_failures_by_reason": rep.CheckFails, "check_absent_at_cutoff": rep.CheckAbsent,
+			"held_out_buzz_files": rep.CheckFilesTotal, "check_pass_in_place_at_rev": rep.CheckAtRev,
+			"check_failures_at_rev_by_reason": rep.CheckAtRevFails, "fim_buzz_test_spans": rep.FIMBuzzTest, "fim_buzz_test_groups": rep.FIMBuzzGroups}); err != nil {
+			return err
+		}
+		if len(rep.Failed) > 0 {
+			return fmt.Errorf("G1 bullets that do not hold: %s", strings.Join(rep.Failed, ", "))
+		}
+		return nil
+	}
+}
+
+func revParse(root, rev string) (string, error) {
+	out, err := exec.Command("git", "-C", root, "rev-parse", "--verify", rev+"^{commit}").Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse %s: %w", rev, err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func printJSON(v any) error {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(b))
 	return nil
 }
