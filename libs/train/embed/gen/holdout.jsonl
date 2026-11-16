@@ -1292,6 +1292,7 @@
 {"group":"dir:internal/guard","path":"internal/guard/policy_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/preauth.go"}
 {"group":"dir:internal/guard","path":"internal/guard/preauth_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/process_lookup.go"}
 {"group":"dir:internal/guard","path":"internal/guard/process_signal.go"}
 {"group":"dir:internal/guard","path":"internal/guard/process_signal_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/push.go"}
