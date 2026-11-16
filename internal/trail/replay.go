@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
 
@@ -72,7 +73,7 @@ func AttachTouches(rev *diff.Diff, root, base string) {
 	}
 	byPath := replayTrail(root, base, paths, DefaultReplayEvents)
 	if dir, err := sessions.Dir(root); err == nil {
-		if fold, err := sessions.ReadAll(dir); err == nil {
+		if fold, err := session.ReadAll(dir); err == nil {
 			for path, touches := range replayLoaded(fold, paths) {
 				for _, t := range touches {
 					if !slices.ContainsFunc(byPath[path], func(h diff.Touch) bool { return h.Host == t.Host && h.Session == t.Session }) {
@@ -143,22 +144,22 @@ func replayTrail(root, base string, paths []string, limit int) map[string][]diff
 // sessions wrote each of paths and what they had read first. Loads store the
 // checkout-relative path and the reduced program, so nothing is relativized here; the events
 // are ordered by the host's own clock within each session.
-func replayLoaded(fold sessions.Fold, paths []string) map[string][]diff.Touch {
+func replayLoaded(fold session.Fold, paths []string) map[string][]diff.Touch {
 	var obs []observation
-	for session, ev := range sessions.EachAgentEvent(fold) {
+	for hostSession, ev := range session.EachAgentEvent(fold) {
 		var tool string
 		switch ev.Kind {
-		case sessions.EventFileRead:
+		case session.EventFileRead:
 			tool = toolRead
-		case sessions.EventFileWrite:
+		case session.EventFileWrite:
 			tool = toolWrite
-		case sessions.EventShellCommand:
+		case session.EventShellCommand:
 			tool = toolShell
 		default:
 			continue
 		}
 		obs = append(obs, observation{
-			Host: ev.Host, Session: session, Transcript: ev.Transcript,
+			Host: ev.Host, Session: hostSession, Transcript: ev.Transcript,
 			Tool: tool, Path: ev.Text, Program: ev.Program,
 			At: time.UnixMilli(ev.AtMs),
 		})

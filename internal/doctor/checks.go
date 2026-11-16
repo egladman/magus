@@ -35,6 +35,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -1997,11 +1998,11 @@ func (r *runner) checkSessionLoad() check.Check {
 	if err != nil {
 		return check.Check{Name: name, Status: check.Advice, Message: err.Error()}
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		return check.Check{Name: name, Status: check.Advice, Message: err.Error()}
 	}
-	newest := sessions.NewestEventMs(fold)
+	newest := session.NewestEventMs(fold)
 	if newest == 0 {
 		return check.Check{
 			Name: name, Status: check.Advice,

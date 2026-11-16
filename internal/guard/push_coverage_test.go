@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -241,8 +242,8 @@ func (s *NarrowPushSuite) TestAGateFoundByAReadThatOutlivedTheBudgetAdmits() {
 	dir, err := sessions.Dir(s.repo.Root())
 	s.Require().NoError(err)
 	s.Require().NoError(sessions.RecordGate(dir, sessions.GateResult{
-		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: head, Outcome: sessions.OutcomePass, Inv: "inv-green",
-	}, sessions.InvocationStart{Workspace: s.repo.Root()}))
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: head, Outcome: session.OutcomePass, Inv: "inv-green",
+	}, session.InvocationStart{Workspace: s.repo.Root()}))
 	s.deps.Revision = func(ctx context.Context, _, _ string) string {
 		<-ctx.Done()
 		return head[:12]

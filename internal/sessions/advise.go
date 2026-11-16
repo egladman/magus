@@ -134,7 +134,7 @@ func newDirectiveStore(dir string) DirectiveStore {
 // OpenDirectiveStore is the store of the repository at root, in
 // <XDG state>/magus/advisories/<repo>-<hash12>. It keys on repository
 // identity like [Dir], so every worktree reads one store. It does not live
-// under [Dir], because [Prune] removes files there at retention and an
+// under [Dir], because [session.Prune] removes files there at retention and an
 // advisory stands until retracted. It touches nothing until used.
 func OpenDirectiveStore(root string) (DirectiveStore, error) {
 	base, err := xdg.StateDir()

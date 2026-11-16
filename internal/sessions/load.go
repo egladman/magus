@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -42,7 +43,7 @@ type wireEvent struct {
 	// Agent is the adapter-supplied model/host-version pair, absent (or null,
 	// which decodes the same as absent) when an adapter's host does not carry
 	// either; see Agent.
-	Agent   Agent `json:"agent,omitzero"`
+	Agent   session.Agent `json:"agent,omitzero"`
 	Outcome struct {
 		Exit        int  `json:"exit"`
 		Denied      bool `json:"denied"`
@@ -72,10 +73,10 @@ type LoadSummary struct {
 	Deduped int `json:"deduped"`
 	Dropped int `json:"dropped_other_repo"`
 	// Rejects is one line per input line that was not loaded, with the reason.
-	Rejects []string       `json:"rejects,omitempty"`
-	ByKind  map[string]int `json:"by_kind,omitempty"`
-	Store   string         `json:"store"`
-	Events  []LoadEvent    `json:"-"`
+	Rejects []string            `json:"rejects,omitempty"`
+	ByKind  map[string]int      `json:"by_kind,omitempty"`
+	Store   string              `json:"store"`
+	Events  []session.LoadEvent `json:"-"`
 	// Commands holds each event's shell command text, positionally, for the served-next
 	// join and nothing else. Never stored: the text dies with this struct, which is the
 	// whole point of storedEvent dropping it.
@@ -137,7 +138,7 @@ func ReadLoadStream(in io.Reader, dir string, rejudge RejudgeFunc) (LoadSummary,
 // command text beside it for the served-next join, "" for every other kind. A line
 // that fails validation returns the reason; a well-formed line from another
 // repository returns neither an event nor a reason, which is the dropped case.
-func decodeLoadEvent(raw string, sameRepo func(string) bool, rejudge RejudgeFunc) (*LoadEvent, string, string) {
+func decodeLoadEvent(raw string, sameRepo func(string) bool, rejudge RejudgeFunc) (*session.LoadEvent, string, string) {
 	var ev wireEvent
 	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
 		return nil, "", fmt.Sprintf("not a JSON object: %v", err)
@@ -152,14 +153,14 @@ func decodeLoadEvent(raw string, sameRepo func(string) bool, rejudge RejudgeFunc
 	// inside the checkout, and every worktree of one repository shares that layout.
 	// Storing the checkout-relative path is what lets the @session shard land the
 	// event on a node.
-	if ev.Kind == EventFileRead || ev.Kind == EventFileWrite {
+	if ev.Kind == session.EventFileRead || ev.Kind == session.EventFileWrite {
 		ev.Text = vcs.CheckoutRelative(ev.Text)
 	}
 	command := ""
-	if ev.Kind == EventShellCommand {
+	if ev.Kind == session.EventShellCommand {
 		command = ev.Text
 	}
-	return &LoadEvent{Session: ev.Session, Event: storedEvent(ev, rejudge)}, command, ""
+	return &session.LoadEvent{Session: ev.Session, Event: storedEvent(ev, rejudge)}, command, ""
 }
 
 func validateLoadEvent(ev wireEvent) string {
@@ -170,10 +171,10 @@ func validateLoadEvent(ev wireEvent) string {
 		return "no session"
 	case ev.Ref == "":
 		return "no ref, so the event cannot be deduplicated"
-	case !ValidEventKind(ev.Kind):
-		return fmt.Sprintf("kind %q is not one of %s", ev.Kind, strings.Join(EventKinds, ", "))
+	case !session.ValidEventKind(ev.Kind):
+		return fmt.Sprintf("kind %q is not one of %s", ev.Kind, strings.Join(session.EventKinds, ", "))
 	}
-	if !ValidFileID(ev.Session) {
+	if !session.ValidFileID(ev.Session) {
 		return fmt.Sprintf("session id %q must be alphanumeric with - and _ (it names the session file)", ev.Session)
 	}
 	return ""
@@ -182,8 +183,8 @@ func validateLoadEvent(ev wireEvent) string {
 // storedEvent is what a wire event becomes on disk. A shell command loses its text
 // here and nowhere else, so this is the one function to read when asking whether a
 // command line can reach the store.
-func storedEvent(ev wireEvent, rejudge RejudgeFunc) AgentEvent {
-	out := AgentEvent{
+func storedEvent(ev wireEvent, rejudge RejudgeFunc) session.AgentEvent {
+	out := session.AgentEvent{
 		Host:        ev.Host,
 		Agent:       ev.Agent,
 		Kind:        ev.Kind,
@@ -195,11 +196,11 @@ func storedEvent(ev wireEvent, rejudge RejudgeFunc) AgentEvent {
 		Interrupted: ev.Outcome.Interrupted,
 	}
 	switch ev.Kind {
-	case EventShellCommand:
+	case session.EventShellCommand:
 		sum := sha256.Sum256([]byte(ev.Text))
 		out.Digest = hex.EncodeToString(sum[:])
 		out.Program, out.Verdict, out.Rule = rejudge(ev.Text)
-	case EventHookOutput:
+	case session.EventHookOutput:
 		out.Text = ev.Text
 		if len(out.Text) > loadHookTextCap {
 			out.Text = out.Text[:loadHookTextCap]
@@ -236,7 +237,7 @@ func repositoryScope(dir string) func(string) bool {
 func RenderLoadSummary(w io.Writer, s LoadSummary) {
 	fmt.Fprintf(w, "loaded %d, deduped %d, dropped %d (another repository), rejected %d\n",
 		s.Loaded, s.Deduped, s.Dropped, len(s.Rejects))
-	for _, kind := range EventKinds {
+	for _, kind := range session.EventKinds {
 		if n := s.ByKind[kind]; n > 0 {
 			fmt.Fprintf(w, "  %-14s %d\n", kind, n)
 		}

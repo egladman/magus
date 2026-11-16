@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"mvdan.cc/sh/v3/syntax"
@@ -150,7 +151,7 @@ var readGateFold = sessions.ReadGateResults
 // gateHistory is the store's gate verdicts, read once per push judgment.
 // A fold lists and stats every invocation in the store.
 type gateHistory struct {
-	fold sessions.Fold
+	fold session.Fold
 	// read is false when there was no store to read.
 	read bool
 }
@@ -185,7 +186,7 @@ func (h gateHistory) passedBranchGates() []sessions.GateRecord {
 		if rec.Kind != sessions.KindGateResult || json.Unmarshal(rec.Payload, &g) != nil {
 			continue
 		}
-		if g.Target != string(types.TargetCI) || g.Outcome != sessions.OutcomePass || !g.Scope.CoversBranch() || !matchableRevision(g.Commit) || seen[g.Commit] {
+		if g.Target != string(types.TargetCI) || g.Outcome != session.OutcomePass || !g.Scope.CoversBranch() || !matchableRevision(g.Commit) || seen[g.Commit] {
 			continue
 		}
 		seen[g.Commit] = true
@@ -209,7 +210,7 @@ func (h gateHistory) recordAt(commit string) (gateCoverage, sessions.GateRecord)
 		return gateUnscoped, rec
 	case !rec.BranchVerdict():
 		return gateProjectScoped, rec
-	case rec.Outcome == sessions.OutcomePass:
+	case rec.Outcome == session.OutcomePass:
 		return gatePassed, rec
 	default:
 		return gateFailed, rec

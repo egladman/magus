@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1/viewerv1alpha1connect"
@@ -22,13 +23,13 @@ import (
 
 // serveSessions mounts a Service over a real session store seeded with events, behind a real
 // transport so the RPC sees a loopback peer the way the server's does.
-func serveSessions(t *testing.T, events []sessions.LoadEvent) viewerv1alpha1connect.ViewerServiceClient { //nolint:ireturn // the generated client type is an interface; the implementation is chosen at runtime
+func serveSessions(t *testing.T, events []session.LoadEvent) viewerv1alpha1connect.ViewerServiceClient { //nolint:ireturn // the generated client type is an interface; the implementation is chosen at runtime
 	t.Helper()
 	testkit.Isolate(t)
 	root := t.TempDir()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = sessions.LoadEvents(t.Context(), dir, events, sessions.InvocationStart{Workspace: root, Command: "test"})
+	_, err = session.LoadEvents(t.Context(), dir, events, session.InvocationStart{Workspace: root, Command: "test"})
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
@@ -39,15 +40,15 @@ func serveSessions(t *testing.T, events []sessions.LoadEvent) viewerv1alpha1conn
 	return viewerv1alpha1connect.NewViewerServiceClient(srv.Client(), srv.URL)
 }
 
-func loaded(session string, at int64, kind, text string, mutate ...func(*sessions.AgentEvent)) sessions.LoadEvent {
-	ev := sessions.AgentEvent{
+func loaded(hostSession string, at int64, kind, text string, mutate ...func(*session.AgentEvent)) session.LoadEvent {
+	ev := session.AgentEvent{
 		Host: "claude-code", Kind: kind, Ref: fmt.Sprintf("ref-%d", at), AtMs: at, Text: text,
-		Transcript: fmt.Sprintf("/home/u/.claude/projects/x/%s.jsonl", session),
+		Transcript: fmt.Sprintf("/home/u/.claude/projects/x/%s.jsonl", hostSession),
 	}
 	for _, m := range mutate {
 		m(&ev)
 	}
-	return sessions.LoadEvent{Session: session, Event: ev}
+	return session.LoadEvent{Session: hostSession, Event: ev}
 }
 
 func atMs(ms int64) *timestamppb.Timestamp { return timestamppb.New(time.UnixMilli(ms)) }
@@ -57,17 +58,17 @@ func atMs(ms int64) *timestamppb.Timestamp { return timestamppb.New(time.UnixMil
 // output withheld and every transcript part the store cannot hold named as unrecorded.
 func TestGetSessionActivityWindowsTheLastWrite(t *testing.T) {
 	const s = "sess-1"
-	client := serveSessions(t, []sessions.LoadEvent{
-		loaded(s, 1, sessions.EventFileRead, "a.go"),
-		loaded(s, 2, sessions.EventFileWrite, "a.go"),
-		loaded(s, 3, sessions.EventShellCommand, "go test ./...", func(ev *sessions.AgentEvent) {
-			ev.Program, ev.Verdict, ev.Exit = "go", sessions.VerdictPass, 1
+	client := serveSessions(t, []session.LoadEvent{
+		loaded(s, 1, session.EventFileRead, "a.go"),
+		loaded(s, 2, session.EventFileWrite, "a.go"),
+		loaded(s, 3, session.EventShellCommand, "go test ./...", func(ev *session.AgentEvent) {
+			ev.Program, ev.Verdict, ev.Exit = "go", session.VerdictPass, 1
 		}),
-		loaded(s, 4, sessions.EventHookOutput, "denied: rm -rf /secret"),
-		loaded(s, 5, sessions.EventSkillLoad, "magus-run"),
-		loaded(s, 6, sessions.EventFileWrite, "a.go"),
-		loaded(s, 7, sessions.EventFileRead, "after.go"),
-		loaded("other", 5, sessions.EventFileWrite, "a.go"),
+		loaded(s, 4, session.EventHookOutput, "denied: rm -rf /secret"),
+		loaded(s, 5, session.EventSkillLoad, "magus-run"),
+		loaded(s, 6, session.EventFileWrite, "a.go"),
+		loaded(s, 7, session.EventFileRead, "after.go"),
+		loaded("other", 5, session.EventFileWrite, "a.go"),
 	})
 
 	resp, err := client.GetSessionActivity(context.Background(), connect.NewRequest(&viewerv1.GetSessionActivityRequest{Session: s, Path: "a.go"}))
@@ -80,10 +81,10 @@ func TestGetSessionActivityWindowsTheLastWrite(t *testing.T) {
 		Transcript: "/home/u/.claude/projects/x/sess-1.jsonl",
 		Wrote:      true,
 		Turns: []*viewerv1.SessionTurn{
-			{Role: tool, Kind: sessions.EventShellCommand, Program: "go", Verdict: sessions.VerdictPass, Exit: 1, Time: atMs(3)},
-			{Role: tool, Kind: sessions.EventHookOutput, Time: atMs(4)},
-			{Role: tool, Kind: sessions.EventSkillLoad, Text: "magus-run", Time: atMs(5)},
-			{Role: tool, Kind: sessions.EventFileWrite, Text: "a.go", Time: atMs(6)},
+			{Role: tool, Kind: session.EventShellCommand, Program: "go", Verdict: session.VerdictPass, Exit: 1, Time: atMs(3)},
+			{Role: tool, Kind: session.EventHookOutput, Time: atMs(4)},
+			{Role: tool, Kind: session.EventSkillLoad, Text: "magus-run", Time: atMs(5)},
+			{Role: tool, Kind: session.EventFileWrite, Text: "a.go", Time: atMs(6)},
 		},
 		Unrecorded: unrecordedParts(),
 	}
@@ -94,11 +95,11 @@ func TestGetSessionActivityWindowsTheLastWrite(t *testing.T) {
 // says it dropped the rest.
 func TestGetSessionActivityCapsTheWindow(t *testing.T) {
 	const s = "sess-long"
-	var events []sessions.LoadEvent
+	var events []session.LoadEvent
 	for i := range sessionTurnCap + 10 {
-		events = append(events, loaded(s, int64(i+1), sessions.EventFileRead, fmt.Sprintf("f%d.go", i)))
+		events = append(events, loaded(s, int64(i+1), session.EventFileRead, fmt.Sprintf("f%d.go", i)))
 	}
-	events = append(events, loaded(s, int64(sessionTurnCap+20), sessions.EventFileWrite, "a.go"))
+	events = append(events, loaded(s, int64(sessionTurnCap+20), session.EventFileWrite, "a.go"))
 	client := serveSessions(t, events)
 
 	resp, err := client.GetSessionActivity(context.Background(), connect.NewRequest(&viewerv1.GetSessionActivityRequest{Session: s, Path: "a.go"}))
@@ -112,7 +113,7 @@ func TestGetSessionActivityCapsTheWindow(t *testing.T) {
 // TestGetSessionActivityNoWrite is a session the store holds that never wrote the path: no
 // turns, Wrote false, and the unrecorded parts still stated.
 func TestGetSessionActivityNoWrite(t *testing.T) {
-	client := serveSessions(t, []sessions.LoadEvent{loaded("sess-2", 1, sessions.EventFileRead, "a.go")})
+	client := serveSessions(t, []session.LoadEvent{loaded("sess-2", 1, session.EventFileRead, "a.go")})
 
 	resp, err := client.GetSessionActivity(context.Background(), connect.NewRequest(&viewerv1.GetSessionActivityRequest{Session: "sess-2", Path: "a.go"}))
 	require.NoError(t, err)

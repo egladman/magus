@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
 
@@ -65,7 +66,7 @@ func FileAttention(ctx context.Context, root string, ev types.Event, origin job.
 		Files:     sessions.AttentionFiles(ev.Where),
 		Message:   ev.Message,
 	}
-	_, opened, err := sessions.OpenRequest(dir, ev.Source.ID, open, sessions.InvocationStart{
+	_, opened, err := sessions.OpenRequest(dir, ev.Source.ID, open, session.InvocationStart{
 		Origin:    origin,
 		Workspace: root,
 		Version:   version,

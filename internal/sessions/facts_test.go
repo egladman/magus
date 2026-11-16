@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,11 +29,11 @@ func TestFactOutcome(t *testing.T) {
 }
 
 func (s *factOutcomeSuite) TestAPermitIsGreen() {
-	s.Equal(OutcomePass, factOutcome(journal.StatusPermitted))
+	s.Equal(session.OutcomePass, factOutcome(journal.StatusPermitted))
 }
 
 func (s *factOutcomeSuite) TestAFailureIsRed() {
-	s.Equal(OutcomeFail, factOutcome(journal.StatusFail))
+	s.Equal(session.OutcomeFail, factOutcome(journal.StatusFail))
 }
 
 // emitFact pushes one event through h along the real capture path, rather than
@@ -61,7 +62,7 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run build", Version: "test-version"})
+	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run build", Version: "test-version"})
 	require.NotNil(t, h)
 
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurationMs: 20, Ref: "out1"})
@@ -70,14 +71,14 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 
-	summaries := Summarize(fold)
+	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 1)
 	// The journal's invocation id files the facts. Who ran it, when, and the span the
 	// invocation minted are the process's own, read back rather than set here.
-	assert.Equal(t, Summary{
+	assert.Equal(t, session.Summary{
 		Invocation: "inv1",
 		Origin:     summaries[0].Origin,
 		SpanID:     summaries[0].SpanID,
@@ -86,20 +87,20 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 		StartedMs:  summaries[0].StartedMs,
 		LastMs:     summaries[0].LastMs,
 		Facts:      4,
-		Targets: []TargetResult{
-			{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 20, Ref: "out1"},
-			{Target: "test", Project: "api", Outcome: OutcomeFail, DurationMs: 5},
-			{Target: "lint", Project: "web", Outcome: OutcomePass, Replayed: true},
+		Targets: []session.TargetResult{
+			{Target: "build", Project: "api", Outcome: session.OutcomePass, DurationMs: 20, Ref: "out1"},
+			{Target: "test", Project: "api", Outcome: session.OutcomeFail, DurationMs: 5},
+			{Target: "lint", Project: "web", Outcome: session.OutcomePass, Replayed: true},
 		},
 	}, summaries[0])
 
 	// One session-start plus one fact per result, and the start is always seq 1.
 	require.Len(t, fold.Records, 4)
-	assert.Equal(t, Record{
-		V:          APIVersion,
+	assert.Equal(t, session.Record{
+		V:          session.APIVersion,
 		Invocation: "inv1",
 		Seq:        1,
-		Kind:       KindInvocationStart,
+		Kind:       session.KindInvocationStart,
 		Ts:         fold.Records[0].Ts,
 		Payload:    fold.Records[0].Payload,
 	}, fold.Records[0])
@@ -109,7 +110,7 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run ci"})
+	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run ci"})
 	require.NotNil(t, h)
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurationMs: 20, Ref: "out1"})
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Project: "api", Status: journal.StatusFail})
@@ -118,16 +119,16 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
-	summaries := Summarize(fold)
+	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 1)
 
-	assert.Equal(t, []TargetResult{
-		{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 20, Ref: "out1"},
-		{Target: "test", Project: "api", Outcome: OutcomeFail},
-		{Target: "lint", Project: "web", Outcome: OutcomePass, Replayed: true},
-		{Target: "ci", Project: "api", Outcome: OutcomeFail, DiagnosticCode: "MGS3009"},
+	assert.Equal(t, []session.TargetResult{
+		{Target: "build", Project: "api", Outcome: session.OutcomePass, DurationMs: 20, Ref: "out1"},
+		{Target: "test", Project: "api", Outcome: session.OutcomeFail},
+		{Target: "lint", Project: "web", Outcome: session.OutcomePass, Replayed: true},
+		{Target: "ci", Project: "api", Outcome: session.OutcomeFail, DiagnosticCode: "MGS3009"},
 	}, summaries[0].Targets)
 }
 
@@ -135,7 +136,7 @@ func TestFactHandlerCopiesTheClaimAndCost(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run ci"})
+	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run ci"})
 	require.NotNil(t, h)
 	emitFact(t, h, journal.Event{
 		Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass,
@@ -146,18 +147,18 @@ func TestFactHandlerCopiesTheClaimAndCost(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
-	summaries := Summarize(fold)
+	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 1)
 
-	assert.Equal(t, []TargetResult{
+	assert.Equal(t, []session.TargetResult{
 		{
-			Target: "build", Project: "api", Outcome: OutcomePass,
+			Target: "build", Project: "api", Outcome: session.OutcomePass,
 			StartedMs: 1700000000000, Slots: 2, MemoryMB: 512, Sizing: journal.SizingDeclared,
 			WaitedMs: 40, MaxRSSBytes: 3 << 20, CPUMs: 900,
 		},
-		{Target: "lint", Project: "web", Outcome: OutcomePass, Replayed: true, Sizing: journal.SizingNone},
+		{Target: "lint", Project: "web", Outcome: session.OutcomePass, Replayed: true, Sizing: journal.SizingNone},
 	}, summaries[0].Targets)
 }
 
@@ -181,7 +182,7 @@ func (t recordTap) WithGroup(string) slog.Handler      { return t }
 func TestFactHandlerWithAttrsCarriesAttrsIntoTheSameStore(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
-	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run build"})
+	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run build"})
 	require.NotNil(t, h)
 
 	var captured slog.Record
@@ -197,18 +198,18 @@ func TestFactHandlerWithAttrsCarriesAttrsIntoTheSameStore(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
-	summaries := Summarize(fold)
+	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 1)
-	assert.Equal(t, []TargetResult{{Target: "build", Outcome: OutcomePass}}, summaries[0].Targets)
+	assert.Equal(t, []session.TargetResult{{Target: "build", Outcome: session.OutcomePass}}, summaries[0].Targets)
 }
 
 func TestFactHandlerIgnoresEverythingButResults(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run build"})
+	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run build"})
 	require.NotNil(t, h)
 	emitFact(t, h, journal.Event{Kind: journal.KindOutput, Inv: "inv1", Text: "compiling"})
 	emitFact(t, h, journal.Event{Kind: journal.KindExec, Inv: "inv1", Target: "build", Text: "go build"})
@@ -220,7 +221,7 @@ func TestFactHandlerIgnoresEverythingButResults(t *testing.T) {
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 	assert.Empty(t, fold.Records, "a run that produced no target result leaves no session")
 }
@@ -236,9 +237,9 @@ func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(linked, ".git"),
 		[]byte(fmt.Sprintf("gitdir: %s\n", filepath.Join(main, ".git", "worktrees", "feature"))), 0o644))
 
-	mainH := NewFactHandler(main, InvocationStart{Workspace: main, Command: "run build"})
+	mainH := NewFactHandler(main, session.InvocationStart{Workspace: main, Command: "run build"})
 	require.NotNil(t, mainH)
-	linkedH := NewFactHandler(linked, InvocationStart{Workspace: linked, Command: "run test"})
+	linkedH := NewFactHandler(linked, session.InvocationStart{Workspace: linked, Command: "run test"})
 	require.NotNil(t, linkedH)
 
 	emitFact(t, mainH, journal.Event{Kind: journal.KindResult, Inv: "invMain", Target: "build", Project: "api", Status: journal.StatusPass})
@@ -246,10 +247,10 @@ func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
 
 	dir, err := Dir(main)
 	require.NoError(t, err)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 
-	summaries := Summarize(fold)
+	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 2, "both worktrees write into one store")
 	var ids []string
 	for _, s := range summaries {
@@ -273,7 +274,7 @@ func TestFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
 	// permission bit a test running as root would then ignore.
 	require.NoError(t, os.WriteFile(dir, []byte("not a directory"), 0o644))
 
-	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run build"})
+	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run build"})
 	require.NotNil(t, h)
 
 	logged := captureFactWarnings(t, func() {
@@ -293,17 +294,17 @@ func TestFactHandlerStampsTheSuppliedLeaseOnEveryFact(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run ci", Lease: "fleet/f3"})
+	h := NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run ci", Lease: "fleet/f3"})
 	require.NotNil(t, h)
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Status: journal.StatusPass})
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 
-	summaries := Summarize(fold)
+	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 1)
 	assert.Equal(t, "fleet/f3", summaries[0].Lease)
 	require.Len(t, summaries[0].Targets, 2)
@@ -321,5 +322,5 @@ func TestNewFactHandlerIsNilWithoutAStateDir(t *testing.T) {
 	t.Setenv("USERPROFILE", "")
 	t.Setenv("LocalAppData", "")
 
-	assert.Nil(t, NewFactHandler(t.TempDir(), InvocationStart{}))
+	assert.Nil(t, NewFactHandler(t.TempDir(), session.InvocationStart{}))
 }

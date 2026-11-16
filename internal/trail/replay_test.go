@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -191,15 +192,15 @@ func TestReplayOnAnEmptyTrailIsEmptyNotAnError(t *testing.T) {
 // that preceded a write, ordered by the host's clock rather than by arrival.
 func TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	dir := t.TempDir()
-	_, err := sessions.LoadEvents(t.Context(), dir, []sessions.LoadEvent{
+	_, err := session.LoadEvents(t.Context(), dir, []session.LoadEvent{
 		// Handed out of order: the host clock is what sequences them.
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go", Transcript: "/tmp/s1.jsonl"}},
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r1", AtMs: 100, Text: "types/impact.go"}},
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventShellCommand, Ref: "r2", AtMs: 200, Program: "go"}},
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r4", AtMs: 400, Text: "late.go"}},
-	}, sessions.InvocationStart{})
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go", Transcript: "/tmp/s1.jsonl"}},
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r1", AtMs: 100, Text: "types/impact.go"}},
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventShellCommand, Ref: "r2", AtMs: 200, Program: "go"}},
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r4", AtMs: 400, Text: "late.go"}},
+	}, session.InvocationStart{})
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 
 	touches := replayLoaded(fold, []string{"magus.go"})["magus.go"]
@@ -224,11 +225,11 @@ func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = sessions.LoadEvents(t.Context(), dir, []sessions.LoadEvent{
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r1", AtMs: 100, Text: "from-load.go"}},
-		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileWrite, Ref: "r2", AtMs: 200, Text: "magus.go"}},
-		{Session: "s2", Event: sessions.AgentEvent{Host: "codex", Kind: sessions.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go"}},
-	}, sessions.InvocationStart{})
+	_, err = session.LoadEvents(t.Context(), dir, []session.LoadEvent{
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileRead, Ref: "r1", AtMs: 100, Text: "from-load.go"}},
+		{Session: "s1", Event: session.AgentEvent{Host: "claude-code", Kind: session.EventFileWrite, Ref: "r2", AtMs: 200, Text: "magus.go"}},
+		{Session: "s2", Event: session.AgentEvent{Host: "codex", Kind: session.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go"}},
+	}, session.InvocationStart{})
 	require.NoError(t, err)
 
 	rev := diff.Diff{Files: []diff.File{{Path: "magus.go"}, {Path: "untouched.go"}}}

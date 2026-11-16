@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -404,9 +405,9 @@ func (s *ReleaseRequestRowSuite) TestAttentionIsFiledWithoutReadingTheStore() {
 
 	dir, err := sessions.Dir(s.store.root)
 	s.Require().NoError(err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	s.Require().NoError(err)
-	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r sessions.Record) bool { return r.Kind != sessions.KindAttentionOpen })
+	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r session.Record) bool { return r.Kind != sessions.KindAttentionOpen })
 	s.Len(opens, 2)
 	s.Len(releaseRequests(s.T(), s.store.root), 1)
 }
@@ -455,7 +456,7 @@ func releaseRequests(t *testing.T, root string) []sessions.AttentionRequest {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 	return slices.DeleteFunc(sessions.AttentionQueue(fold), func(r sessions.AttentionRequest) bool { return r.Source != releaseRequestSource })
 }

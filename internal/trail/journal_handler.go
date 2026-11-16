@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
 // WithInvocationJournal adds this invocation's fact handler to the capture fan-out,
@@ -40,7 +41,7 @@ func WithInvocationJournal(ctx context.Context, handlers []slog.Handler, root, v
 		slog.With(attr.Component("magus")).WarnContext(ctx, "this invocation records no lease", attr.Error(err))
 		lease, leaseFrom = "", ""
 	}
-	h := sessions.NewFactHandler(root, sessions.InvocationStart{
+	h := sessions.NewFactHandler(root, session.InvocationStart{
 		Origin:       LocalOrigin(ctx),
 		Workspace:    root,
 		Command:      strings.Join(append([]string{verb}, args...), " "),

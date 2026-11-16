@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
 // CountedName is one repeated thing and how often it appeared.
@@ -43,7 +44,7 @@ type ShowSummary struct {
 	// Agent is the pair off the newest event that named one: what this session
 	// ended on, which is what today's guard rules would be checked against. Zero
 	// when no loaded event named either.
-	Agent        Agent          `json:"agent,omitzero"`
+	Agent        session.Agent  `json:"agent,omitzero"`
 	Events       int            `json:"events"`
 	FirstMs      int64          `json:"first_ms,omitempty"`
 	LastMs       int64          `json:"last_ms,omitempty"`
@@ -57,8 +58,8 @@ type ShowSummary struct {
 }
 
 // SummarizeSession folds one session's loaded events into the report.
-func SummarizeSession(session string, events []AgentEvent) ShowSummary {
-	out := ShowSummary{Session: session, Events: len(events), ByKind: map[string]int{}}
+func SummarizeSession(hostSession string, events []session.AgentEvent) ShowSummary {
+	out := ShowSummary{Session: hostSession, Events: len(events), ByKind: map[string]int{}}
 	byProgram := map[string]*commandGroup{}
 	skills, read, written := map[string]int{}, map[string]int{}, map[string]int{}
 
@@ -79,11 +80,11 @@ func SummarizeSession(session string, events []AgentEvent) ShowSummary {
 				out.LastMs = ev.AtMs
 			}
 		}
-		if ev.Agent != (Agent{}) && ev.AtMs >= pairAtMs {
+		if ev.Agent != (session.Agent{}) && ev.AtMs >= pairAtMs {
 			out.Agent, pairAtMs = ev.Agent, ev.AtMs
 		}
 		switch ev.Kind {
-		case EventShellCommand:
+		case session.EventShellCommand:
 			g := byProgram[ev.Program]
 			if g == nil {
 				g = &commandGroup{Program: ev.Program}
@@ -91,9 +92,9 @@ func SummarizeSession(session string, events []AgentEvent) ShowSummary {
 			}
 			g.Count++
 			switch ev.Verdict {
-			case VerdictDeny:
+			case session.VerdictDeny:
 				g.WouldDeny++
-			case VerdictAdvise:
+			case session.VerdictAdvise:
 				g.Advise++
 			default:
 				g.Pass++
@@ -104,13 +105,13 @@ func SummarizeSession(session string, events []AgentEvent) ShowSummary {
 			if ev.Rule != "" && !slices.Contains(g.Rules, ev.Rule) {
 				g.Rules = append(g.Rules, ev.Rule)
 			}
-		case EventSkillLoad:
+		case session.EventSkillLoad:
 			skills[ev.Text]++
-		case EventFileRead:
+		case session.EventFileRead:
 			read[ev.Text]++
-		case EventFileWrite:
+		case session.EventFileWrite:
 			written[ev.Text]++
-		case EventHookOutput:
+		case session.EventHookOutput:
 			out.HookOutputs++
 		}
 	}
@@ -152,7 +153,7 @@ const showListCap = 10
 // RenderShow prints the events half of `session show`, ending on the hook-output count.
 func RenderShow(w io.Writer, s ShowSummary) {
 	fmt.Fprintf(w, "%s  host %s  %d event(s)\n", s.Session, OrDash(s.Host), s.Events)
-	if s.Agent != (Agent{}) {
+	if s.Agent != (session.Agent{}) {
 		fmt.Fprintf(w, "model %s  host version %s\n", OrDash(s.Agent.Model), OrDash(s.Agent.HostVersion))
 	}
 	if s.FirstMs > 0 {
@@ -164,7 +165,7 @@ func RenderShow(w io.Writer, s ShowSummary) {
 		fmt.Fprintf(w, "transcript %s\n", s.Transcript)
 	}
 	fmt.Fprintln(w)
-	for _, kind := range EventKinds {
+	for _, kind := range session.EventKinds {
 		if n := s.ByKind[kind]; n > 0 {
 			fmt.Fprintf(w, "  %-14s %d\n", kind, n)
 		}

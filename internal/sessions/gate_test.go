@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,13 +17,13 @@ import (
 // it.
 func TestGateRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	start := InvocationStart{Workspace: "/repo", Command: "gate"}
+	start := session.InvocationStart{Workspace: "/repo", Command: "gate"}
 	g := GateResult{
 		Target:      "ci",
 		Scope:       GateScopeAffected,
 		Ref:         "polish",
 		Commit:      "abc123",
-		Outcome:     OutcomePass,
+		Outcome:     session.OutcomePass,
 		Fingerprint: "f1",
 		Projects:    []string{".", "docs"},
 		Charms:      []string{"quiet"},
@@ -33,7 +34,7 @@ func TestGateRoundTrip(t *testing.T) {
 	}
 	require.NoError(t, RecordGate(dir, g, start))
 
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 	rec, ok := LatestGate(fold, "polish", "ci")
 	require.True(t, ok)
@@ -50,15 +51,15 @@ func TestGateRoundTrip(t *testing.T) {
 // redundancy check must see a red branch, not the stale green behind it.
 func TestGateNewestWins(t *testing.T) {
 	dir := t.TempDir()
-	start := InvocationStart{Workspace: "/repo"}
-	pass := GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: OutcomePass, Fingerprint: "f1"}
+	start := session.InvocationStart{Workspace: "/repo"}
+	pass := GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: session.OutcomePass, Fingerprint: "f1"}
 	require.NoError(t, RecordGate(dir, pass, start))
 	// Records order by (Ts, Session, Seq); a same-millisecond write would tie.
 	time.Sleep(5 * time.Millisecond)
-	fail := GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c2", Outcome: OutcomeFail, Fingerprint: "f2"}
+	fail := GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c2", Outcome: session.OutcomeFail, Fingerprint: "f2"}
 	require.NoError(t, RecordGate(dir, fail, start))
 
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 	rec, ok := LatestGate(fold, "b", "ci")
 	require.True(t, ok)
@@ -68,7 +69,7 @@ func TestGateNewestWins(t *testing.T) {
 // TestLatestGateEmptyStore is the inert state: nothing recorded means no
 // finding, so the first gate on a branch always runs.
 func TestLatestGateEmptyStore(t *testing.T) {
-	fold, err := ReadAll(t.TempDir())
+	fold, err := session.ReadAll(t.TempDir())
 	require.NoError(t, err)
 	_, ok := LatestGate(fold, "b", "ci")
 	assert.False(t, ok)
@@ -79,16 +80,16 @@ func TestLatestGateEmptyStore(t *testing.T) {
 // the full id, and a deferral never counts as a verdict.
 func TestGateAtMatchesTheCommitOnAnyRef(t *testing.T) {
 	dir := t.TempDir()
-	start := InvocationStart{Workspace: "/repo"}
-	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "a", Commit: "a89dee5c7f00", Outcome: OutcomePass}, start))
+	start := session.InvocationStart{Workspace: "/repo"}
+	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "a", Commit: "a89dee5c7f00", Outcome: session.OutcomePass}, start))
 	time.Sleep(5 * time.Millisecond)
 	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "a89dee5c7f00", Outcome: OutcomeDeferred}, start))
 
-	fold, err := ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 	rec, ok := GateAt(fold, "a89dee5c", "ci")
 	require.True(t, ok)
-	assert.Equal(t, OutcomePass, rec.Outcome, "the deferral is skipped for the verdict behind it")
+	assert.Equal(t, session.OutcomePass, rec.Outcome, "the deferral is skipped for the verdict behind it")
 
 	_, ok = GateAt(fold, "0000000", "ci")
 	assert.False(t, ok)
@@ -102,14 +103,14 @@ func TestGateAtMatchesTheCommitOnAnyRef(t *testing.T) {
 type GateScopeSuite struct {
 	suite.Suite
 	dir   string
-	start InvocationStart
+	start session.InvocationStart
 }
 
 func TestGateScopeSuite(t *testing.T) { suite.Run(t, new(GateScopeSuite)) }
 
 func (s *GateScopeSuite) SetupTest() {
 	s.dir = s.T().TempDir()
-	s.start = InvocationStart{Workspace: "/repo"}
+	s.start = session.InvocationStart{Workspace: "/repo"}
 }
 
 func (s *GateScopeSuite) record(g GateResult) {
@@ -118,16 +119,16 @@ func (s *GateScopeSuite) record(g GateResult) {
 	time.Sleep(2 * time.Millisecond)
 }
 
-func (s *GateScopeSuite) fold() Fold {
-	fold, err := ReadAll(s.dir)
+func (s *GateScopeSuite) fold() session.Fold {
+	fold, err := session.ReadAll(s.dir)
 	s.Require().NoError(err)
 	return fold
 }
 
 func (s *GateScopeSuite) TestAProjectPassDoesNotHideARedBranch() {
-	red := GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: OutcomeFail}
+	red := GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: session.OutcomeFail}
 	s.record(red)
-	s.record(GateResult{Target: "ci", Scope: GateScopeProject, Ref: "b", Commit: "c1", Outcome: OutcomePass, Projects: []string{"libs/cmdline"}})
+	s.record(GateResult{Target: "ci", Scope: GateScopeProject, Ref: "b", Commit: "c1", Outcome: session.OutcomePass, Projects: []string{"libs/cmdline"}})
 
 	rec, ok := LatestGate(s.fold(), "b", "ci")
 	s.Require().True(ok)
@@ -139,7 +140,7 @@ func (s *GateScopeSuite) TestAProjectPassDoesNotHideARedBranch() {
 }
 
 func (s *GateScopeSuite) TestAProjectPassAloneIsNoBranchVerdict() {
-	narrow := GateResult{Target: "ci", Scope: GateScopeProject, Ref: "b", Commit: "c1", Outcome: OutcomePass, Projects: []string{"libs/cmdline"}}
+	narrow := GateResult{Target: "ci", Scope: GateScopeProject, Ref: "b", Commit: "c1", Outcome: session.OutcomePass, Projects: []string{"libs/cmdline"}}
 	s.record(narrow)
 
 	_, ok := LatestGate(s.fold(), "b", "ci")
@@ -152,8 +153,8 @@ func (s *GateScopeSuite) TestAProjectPassAloneIsNoBranchVerdict() {
 }
 
 func (s *GateScopeSuite) TestAProjectFailIsARedBranch() {
-	s.record(GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: OutcomePass})
-	red := GateResult{Target: "ci", Scope: GateScopeProject, Ref: "b", Commit: "c1", Outcome: OutcomeFail, Projects: []string{"libs/cmdline"}}
+	s.record(GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: session.OutcomePass})
+	red := GateResult{Target: "ci", Scope: GateScopeProject, Ref: "b", Commit: "c1", Outcome: session.OutcomeFail, Projects: []string{"libs/cmdline"}}
 	s.record(red)
 
 	rec, ok := LatestGate(s.fold(), "b", "ci")
@@ -162,9 +163,9 @@ func (s *GateScopeSuite) TestAProjectFailIsARedBranch() {
 }
 
 func (s *GateScopeSuite) TestAnEntryWithoutAScopeReadsAsProjectScope() {
-	w, err := Open(s.dir, NewID(), s.start)
+	w, err := session.Open(s.dir, NewID(), s.start)
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(KindGateResult, map[string]string{"target": "ci", "ref": "b", "commit": "c1", "outcome": OutcomePass}))
+	s.Require().NoError(w.Append(KindGateResult, map[string]string{"target": "ci", "ref": "b", "commit": "c1", "outcome": session.OutcomePass}))
 
 	_, ok := LatestGate(s.fold(), "b", "ci")
 	s.False(ok, "a pre-scope pass is not the branch gate")
@@ -176,7 +177,7 @@ func (s *GateScopeSuite) TestAnEntryWithoutAScopeReadsAsProjectScope() {
 }
 
 func (s *GateScopeSuite) TestRecordGateRefusesAResultWithNoScope() {
-	err := RecordGate(s.dir, GateResult{Target: "ci", Ref: "b", Commit: "c1", Outcome: OutcomePass}, s.start)
+	err := RecordGate(s.dir, GateResult{Target: "ci", Ref: "b", Commit: "c1", Outcome: session.OutcomePass}, s.start)
 	s.Require().Error(err)
 	s.Contains(err.Error(), `want "affected" or "project"`)
 	s.Empty(s.fold().Records, "nothing is written, not even the start record")
@@ -200,18 +201,18 @@ func (s *FailuresOwedSuite) SetupTest() { s.dir = s.T().TempDir() }
 
 // results files one invocation's target results, then waits out the millisecond so the
 // next record sorts after them.
-func (s *FailuresOwedSuite) results(inv string, results ...TargetResult) {
-	w, err := Open(s.dir, inv, InvocationStart{Workspace: "/repo"})
+func (s *FailuresOwedSuite) results(inv string, results ...session.TargetResult) {
+	w, err := session.Open(s.dir, inv, session.InvocationStart{Workspace: "/repo"})
 	s.Require().NoError(err)
 	for _, r := range results {
-		s.Require().NoError(w.Append(KindTargetResult, r))
+		s.Require().NoError(w.Append(session.KindTargetResult, r))
 	}
 	time.Sleep(2 * time.Millisecond)
 }
 
 func (s *FailuresOwedSuite) gate(inv, outcome string) GateRecord {
 	s.Require().NoError(RecordGate(s.dir, GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: outcome, Inv: inv},
-		InvocationStart{Workspace: "/repo"}))
+		session.InvocationStart{Workspace: "/repo"}))
 	time.Sleep(2 * time.Millisecond)
 	fold, err := ReadGateResults(s.dir)
 	s.Require().NoError(err)
@@ -221,30 +222,30 @@ func (s *FailuresOwedSuite) gate(inv, outcome string) GateRecord {
 }
 
 func (s *FailuresOwedSuite) owed(gate GateRecord) []types.TargetRef {
-	fold, err := ReadKind(s.dir, KindTargetResult)
+	fold, err := session.ReadKind(s.dir, session.KindTargetResult)
 	s.Require().NoError(err)
 	return FailuresOwed(gate, fold)
 }
 
 func (s *FailuresOwedSuite) TestARedGateOwesEachTargetItFailedButItself() {
 	s.results("red",
-		TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail},
-		TargetResult{Project: "docs", Target: "lint", Outcome: OutcomeFail},
-		TargetResult{Project: "docs", Target: "format", Outcome: OutcomePass},
-		TargetResult{Project: ".", Target: "ci", Outcome: OutcomeFail},
+		session.TargetResult{Project: ".", Target: "go-test", Outcome: session.OutcomeFail},
+		session.TargetResult{Project: "docs", Target: "lint", Outcome: session.OutcomeFail},
+		session.TargetResult{Project: "docs", Target: "format", Outcome: session.OutcomePass},
+		session.TargetResult{Project: ".", Target: "ci", Outcome: session.OutcomeFail},
 	)
-	red := s.gate("red", OutcomeFail)
+	red := s.gate("red", session.OutcomeFail)
 
 	s.Equal([]types.TargetRef{{Project: ".", Target: "go-test"}, {Project: "docs", Target: "lint"}}, s.owed(red))
 }
 
 func (s *FailuresOwedSuite) TestALaterPassOfTheTargetClearsIt() {
 	s.results("red",
-		TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail},
-		TargetResult{Project: "docs", Target: "lint", Outcome: OutcomeFail},
+		session.TargetResult{Project: ".", Target: "go-test", Outcome: session.OutcomeFail},
+		session.TargetResult{Project: "docs", Target: "lint", Outcome: session.OutcomeFail},
 	)
-	red := s.gate("red", OutcomeFail)
-	s.results("narrow", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomePass})
+	red := s.gate("red", session.OutcomeFail)
+	s.results("narrow", session.TargetResult{Project: ".", Target: "go-test", Outcome: session.OutcomePass})
 
 	s.Equal([]types.TargetRef{{Project: "docs", Target: "lint"}}, s.owed(red))
 }
@@ -252,49 +253,49 @@ func (s *FailuresOwedSuite) TestALaterPassOfTheTargetClearsIt() {
 // A standalone run files `lint:rw`; the gate filed `lint`.
 func (s *FailuresOwedSuite) TestAPassUnderACharmClearsTheBareTarget() {
 	s.results("red",
-		TargetResult{Project: ".", Target: "lint", Outcome: OutcomeFail},
-		TargetResult{Project: "docs", Target: "lint", Outcome: OutcomeFail},
+		session.TargetResult{Project: ".", Target: "lint", Outcome: session.OutcomeFail},
+		session.TargetResult{Project: "docs", Target: "lint", Outcome: session.OutcomeFail},
 	)
-	red := s.gate("red", OutcomeFail)
-	s.results("narrow", TargetResult{Project: ".", Target: "lint:rw", Outcome: OutcomePass, Replayed: true})
+	red := s.gate("red", session.OutcomeFail)
+	s.results("narrow", session.TargetResult{Project: ".", Target: "lint:rw", Outcome: session.OutcomePass, Replayed: true})
 
 	s.Equal([]types.TargetRef{{Project: "docs", Target: "lint"}}, s.owed(red))
 }
 
 func (s *FailuresOwedSuite) TestAFailUnderACharmOwesTheBareTarget() {
-	s.results("red", TargetResult{Project: ".", Target: "lint:rw", Outcome: OutcomeFail})
-	red := s.gate("red", OutcomeFail)
+	s.results("red", session.TargetResult{Project: ".", Target: "lint:rw", Outcome: session.OutcomeFail})
+	red := s.gate("red", session.OutcomeFail)
 
 	s.Equal([]types.TargetRef{{Project: ".", Target: "lint"}}, s.owed(red))
 }
 
 func (s *FailuresOwedSuite) TestAPassOfAnotherTargetUnderACharmClearsNothing() {
-	s.results("red", TargetResult{Project: ".", Target: "lint", Outcome: OutcomeFail})
-	red := s.gate("red", OutcomeFail)
-	s.results("narrow", TargetResult{Project: ".", Target: "generate:rw", Outcome: OutcomePass})
+	s.results("red", session.TargetResult{Project: ".", Target: "lint", Outcome: session.OutcomeFail})
+	red := s.gate("red", session.OutcomeFail)
+	s.results("narrow", session.TargetResult{Project: ".", Target: "generate:rw", Outcome: session.OutcomePass})
 
 	s.Equal([]types.TargetRef{{Project: ".", Target: "lint"}}, s.owed(red))
 }
 
 func (s *FailuresOwedSuite) TestAPassInAnotherProjectClearsNothing() {
-	s.results("red", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail})
-	red := s.gate("red", OutcomeFail)
-	s.results("narrow", TargetResult{Project: "libs/cmdline", Target: "go-test", Outcome: OutcomePass})
+	s.results("red", session.TargetResult{Project: ".", Target: "go-test", Outcome: session.OutcomeFail})
+	red := s.gate("red", session.OutcomeFail)
+	s.results("narrow", session.TargetResult{Project: "libs/cmdline", Target: "go-test", Outcome: session.OutcomePass})
 
 	s.Equal([]types.TargetRef{{Project: ".", Target: "go-test"}}, s.owed(red))
 }
 
 func (s *FailuresOwedSuite) TestAPassBeforeTheGateClearsNothing() {
-	s.results("earlier", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomePass})
-	s.results("red", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail})
-	red := s.gate("red", OutcomeFail)
+	s.results("earlier", session.TargetResult{Project: ".", Target: "go-test", Outcome: session.OutcomePass})
+	s.results("red", session.TargetResult{Project: ".", Target: "go-test", Outcome: session.OutcomeFail})
+	red := s.gate("red", session.OutcomeFail)
 
 	s.Equal([]types.TargetRef{{Project: ".", Target: "go-test"}}, s.owed(red))
 }
 
 func (s *FailuresOwedSuite) TestAGreenGateOwesNothing() {
-	s.results("green", TargetResult{Project: ".", Target: "go-test", Outcome: OutcomeFail})
-	green := s.gate("green", OutcomePass)
+	s.results("green", session.TargetResult{Project: ".", Target: "go-test", Outcome: session.OutcomeFail})
+	green := s.gate("green", session.OutcomePass)
 
 	s.Empty(s.owed(green))
 }
@@ -309,11 +310,11 @@ func TestHarnessWriteSuite(t *testing.T) { suite.Run(t, new(HarnessWriteSuite)) 
 func (s *HarnessWriteSuite) SetupTest() { s.dir = s.T().TempDir() }
 
 func (s *HarnessWriteSuite) record(paths ...string) {
-	s.Require().NoError(RecordHarnessWrite(s.dir, HarnessWrite{Paths: paths}, InvocationStart{Workspace: "/repo"}))
+	s.Require().NoError(RecordHarnessWrite(s.dir, HarnessWrite{Paths: paths}, session.InvocationStart{Workspace: "/repo"}))
 }
 
 func (s *HarnessWriteSuite) latest() (HarnessWriteRecord, bool) {
-	fold, err := ReadKind(s.dir, KindHarnessWrite)
+	fold, err := session.ReadKind(s.dir, KindHarnessWrite)
 	s.Require().NoError(err)
 	return LatestHarnessWrite(fold)
 }
@@ -326,7 +327,7 @@ func (s *HarnessWriteSuite) TestAWriteReadsBackSortedAndDeduplicated() {
 }
 
 func (s *HarnessWriteSuite) TestAnEmptyWriteIsRefused() {
-	err := RecordHarnessWrite(s.dir, HarnessWrite{}, InvocationStart{Workspace: "/repo"})
+	err := RecordHarnessWrite(s.dir, HarnessWrite{}, session.InvocationStart{Workspace: "/repo"})
 	s.Error(err)
 	_, ok := s.latest()
 	s.False(ok)
@@ -355,20 +356,20 @@ type LatestRepairSuite struct {
 func (s *LatestRepairSuite) SetupTest() { s.dir = s.T().TempDir() }
 
 func (s *LatestRepairSuite) record(g GateResult) {
-	s.Require().NoError(RecordGate(s.dir, g, InvocationStart{Workspace: "/repo"}))
+	s.Require().NoError(RecordGate(s.dir, g, session.InvocationStart{Workspace: "/repo"}))
 	// Records order by (Ts, Session, Seq); a same-millisecond write would tie.
 	time.Sleep(2 * time.Millisecond)
 }
 
-func (s *LatestRepairSuite) fold() Fold {
-	fold, err := ReadAll(s.dir)
+func (s *LatestRepairSuite) fold() session.Fold {
+	fold, err := session.ReadAll(s.dir)
 	s.Require().NoError(err)
 	return fold
 }
 
 func (s *LatestRepairSuite) repaired(ref, commit string) GateResult {
 	return GateResult{
-		Target: "ci", Scope: GateScopeAffected, Ref: ref, Commit: commit, Outcome: OutcomeFail,
+		Target: "ci", Scope: GateScopeAffected, Ref: ref, Commit: commit, Outcome: session.OutcomeFail,
 		RepairedFiles: []types.RepairedFile{{Path: "a.txt", Digest: "d1"}},
 	}
 }
@@ -383,7 +384,7 @@ func (s *LatestRepairSuite) TestRepairedFilesRoundTrip() {
 
 func (s *LatestRepairSuite) TestALaterPassWithoutRepairsDoesNotHideIt() {
 	s.record(s.repaired("b", "c1"))
-	s.record(GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c2", Outcome: OutcomePass})
+	s.record(GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c2", Outcome: session.OutcomePass})
 
 	rec, ok := LatestRepair(s.fold(), "ci")
 	s.Require().True(ok)
@@ -408,7 +409,7 @@ func (s *LatestRepairSuite) TestTheNewestRepairWins() {
 }
 
 func (s *LatestRepairSuite) TestNoRepairRecordedIsNone() {
-	s.record(GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: OutcomeFail})
+	s.record(GateResult{Target: "ci", Scope: GateScopeAffected, Ref: "b", Commit: "c1", Outcome: session.OutcomeFail})
 
 	_, ok := LatestRepair(s.fold(), "ci")
 	s.False(ok)

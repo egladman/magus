@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	guardverdict "github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
@@ -508,10 +509,10 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 			require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
-			w, err := sessions.Open(dir, "invmv00001", sessions.InvocationStart{Command: "run"})
+			w, err := session.Open(dir, "invmv00001", session.InvocationStart{Command: "run"})
 			require.NoError(t, err)
-			require.NoError(t, w.Append(sessions.KindTargetResult, sessions.TargetResult{
-				Target: "test", Project: ".", Outcome: sessions.OutcomePass, DurationMs: (14 * time.Minute).Milliseconds(),
+			require.NoError(t, w.Append(session.KindTargetResult, session.TargetResult{
+				Target: "test", Project: ".", Outcome: session.OutcomePass, DurationMs: (14 * time.Minute).Milliseconds(),
 			}))
 
 			out := captureStdout(t, func() {

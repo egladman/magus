@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/project"
 )
 
@@ -37,11 +38,11 @@ func NewRejudge(ctx context.Context, root string, loadRules func(ctx context.Con
 		v := Evaluate(deps(), text)
 		switch {
 		case v.Deny != "":
-			return program, sessions.VerdictDeny, v.RuleName()
+			return program, session.VerdictDeny, v.RuleName()
 		case v.Context != "":
-			return program, sessions.VerdictAdvise, v.AdvisoryKind()
+			return program, session.VerdictAdvise, v.AdvisoryKind()
 		}
-		return program, sessions.VerdictPass, ""
+		return program, session.VerdictPass, ""
 	}
 }
 

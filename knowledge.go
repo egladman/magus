@@ -42,6 +42,7 @@ import (
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -1210,13 +1211,13 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 	if err != nil {
 		return nil
 	}
-	fold, err := sessions.ReadAgentEvents(dir)
+	fold, err := session.ReadAgentEvents(dir)
 	if err != nil {
 		return nil
 	}
 	var out []knowledge.AgentContact
 	for _, rec := range fold.Records {
-		var ev sessions.AgentEvent
+		var ev session.AgentEvent
 		if json.Unmarshal(rec.Payload, &ev) != nil {
 			continue
 		}
@@ -1234,8 +1235,8 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 			// A loaded event is filed under the host session, so that is its invocation id.
 			Session: rec.Invocation,
 			Path:    vcs.CheckoutRelative(ev.Text),
-			Read:    ev.Kind == sessions.EventFileRead,
-			Write:   ev.Kind == sessions.EventFileWrite,
+			Read:    ev.Kind == session.EventFileRead,
+			Write:   ev.Kind == session.EventFileWrite,
 			AtMs:    ev.AtMs,
 			Denied:  ev.Denied,
 		})

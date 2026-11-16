@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/check"
@@ -316,10 +317,10 @@ func seedGreenGate(t *testing.T, root, fp string) {
 	require.NoError(t, err)
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
-		Outcome: sessions.OutcomePass, Fingerprint: fp,
+		Outcome: session.OutcomePass, Fingerprint: fp,
 		Projects: []string{"."}, Charms: []string{"quiet"},
 		Inv: "inv123",
-	}, sessions.InvocationStart{Workspace: root}))
+	}, session.InvocationStart{Workspace: root}))
 }
 
 // poolProbe answers a fixed load, so no test needs a broker.
@@ -372,7 +373,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 	rec, ok := sessions.LatestGate(fold, "b", types.TargetCI)
 	require.True(t, ok)
@@ -380,7 +381,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 	assert.Equal(t, sessions.GateRecord{
 		GateResult: sessions.GateResult{
 			Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
-			Outcome: sessions.OutcomePass, Fingerprint: "fp-1",
+			Outcome: session.OutcomePass, Fingerprint: "fp-1",
 			Projects: []string{"."}, Charms: []string{"quiet"},
 			Inv: "inv123",
 		},
@@ -473,8 +474,8 @@ func TestGateEvaluateFailedRecord(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "b", Commit: "c1",
-		Outcome: sessions.OutcomeFail, Fingerprint: "fp-1",
-	}, sessions.InvocationStart{Workspace: root}))
+		Outcome: session.OutcomeFail, Fingerprint: "fp-1",
+	}, session.InvocationStart{Workspace: root}))
 
 	g := &GateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1", scope: sessions.GateScopeAffected}
 	g.poolProbe = poolProbe(true)
@@ -615,7 +616,7 @@ func TestGateRecordsNothingWhenTheRunWasCutShort(t *testing.T) {
 	cancel()
 	g.Record(cut, nil, true /* cutShort */, nil)
 
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 	_, ok := sessions.LatestGate(fold, "b", types.TargetCI)
 	assert.False(t, ok, "a cancelled run must record no verdict, whatever it returned")
@@ -623,7 +624,7 @@ func TestGateRecordsNothingWhenTheRunWasCutShort(t *testing.T) {
 	g.Record(context.Background(), nil, false, nil)
 	rec, ok := sessions.LatestGate(fold2(t, dir), "b", types.TargetCI)
 	require.True(t, ok, "a run that finished still records")
-	assert.Equal(t, sessions.OutcomePass, rec.Outcome)
+	assert.Equal(t, session.OutcomePass, rec.Outcome)
 }
 
 // TestGateRecordsAVerdictDecidedBeforeTheSignal is the other half, and the reason
@@ -645,13 +646,13 @@ func TestGateRecordsAVerdictDecidedBeforeTheSignal(t *testing.T) {
 
 	rec, ok := sessions.LatestGate(fold2(t, dir), "b", types.TargetCI)
 	require.True(t, ok, "a verdict decided before the signal must survive it")
-	assert.Equal(t, sessions.OutcomePass, rec.Outcome)
+	assert.Equal(t, session.OutcomePass, rec.Outcome)
 }
 
 // fold2 re-reads the store, since a Fold is a snapshot rather than a live view.
-func fold2(t *testing.T, dir string) sessions.Fold {
+func fold2(t *testing.T, dir string) session.Fold {
 	t.Helper()
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 	return fold
 }
@@ -779,7 +780,7 @@ func (s *CIRecordSuite) TestRepairedRunRecordsAFailureWithEachFilesDigest() {
 			Scope:         sessions.GateScopeAffected,
 			Ref:           "b",
 			Commit:        repo.Head(),
-			Outcome:       sessions.OutcomeFail,
+			Outcome:       session.OutcomeFail,
 			Fingerprint:   "fp-1",
 			Projects:      []string{"."},
 			RepairedFiles: []types.RepairedFile{tidyRepair},

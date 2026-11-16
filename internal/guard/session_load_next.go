@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
 // nextJoinWindow bounds how long after a call's start a breadcrumb may have been
@@ -32,7 +33,7 @@ const nextJoinWindow = 10 * time.Minute
 // the most recent shell command that had started when the line was written. A stream
 // carrying several interleaved sessions can therefore credit the wrong one, which
 // costs a per-id rate some precision and costs the totals nothing.
-func JoinServedNext(events []sessions.LoadEvent, commands []string, journal []hint.ServedNextEntry) {
+func JoinServedNext(events []session.LoadEvent, commands []string, journal []hint.ServedNextEntry) {
 	if len(events) == 0 || len(journal) == 0 {
 		return
 	}
@@ -86,10 +87,10 @@ func ranArgv(command string) [][]string {
 
 // shellCommandOrder indexes the shell commands in the stream, oldest first. Only
 // those: a file read between two calls is not a call the lookahead should spend.
-func shellCommandOrder(events []sessions.LoadEvent, commands []string) []int {
+func shellCommandOrder(events []session.LoadEvent, commands []string) []int {
 	var order []int
 	for i := range events {
-		if i < len(commands) && events[i].Event.Kind == sessions.EventShellCommand {
+		if i < len(commands) && events[i].Event.Kind == session.EventShellCommand {
 			order = append(order, i)
 		}
 	}
@@ -101,7 +102,7 @@ func shellCommandOrder(events []sessions.LoadEvent, commands []string) []int {
 
 // servingCall returns the position in order of the call a breadcrumb printed at atMs
 // belongs to: the newest one that had already started, inside the join window.
-func servingCall(events []sessions.LoadEvent, order []int, atMs int64) (int, bool) {
+func servingCall(events []session.LoadEvent, order []int, atMs int64) (int, bool) {
 	for i := len(order) - 1; i >= 0; i-- {
 		at := events[order[i]].Event.AtMs
 		if at > atMs {

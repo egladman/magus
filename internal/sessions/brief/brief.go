@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -344,12 +345,12 @@ func recentLoadedSessions(root string) []briefSession {
 	if err != nil {
 		return nil
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		return nil
 	}
 	var out []briefSession
-	for _, s := range sessions.Summarize(fold) {
+	for _, s := range session.Summarize(fold) {
 		if s.Events == 0 {
 			continue
 		}
@@ -597,17 +598,17 @@ func lastRunFailures(r Readers, root string) []briefFailure {
 	if err != nil {
 		return nil
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		return nil
 	}
-	for _, s := range r.InCheckout(sessions.Summarize(fold), root) {
+	for _, s := range r.InCheckout(session.Summarize(fold), root) {
 		if len(s.Targets) == 0 {
 			continue
 		}
 		var out []briefFailure
 		for _, t := range s.Targets {
-			if t.Outcome != sessions.OutcomeFail {
+			if t.Outcome != session.OutcomeFail {
 				continue
 			}
 			f := briefFailure{Target: t.Target, Project: t.Project, Ref: t.Ref, DiagnosticCode: t.DiagnosticCode, At: briefTime(s.LastMs)}
@@ -629,7 +630,7 @@ func briefAttentionQueue(r Readers, root string) *briefAttention {
 	if err != nil {
 		return &briefAttention{Unread: err.Error()}
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		return &briefAttention{Unread: err.Error()}
 	}
@@ -640,7 +641,7 @@ func briefAttentionQueue(r Readers, root string) *briefAttention {
 	}
 	out.Oldest = &briefAttentionRow{ID: queue[0].ID, Source: queue[0].Source, Outcome: queue[0].Outcome, OpenedMs: queue[0].OpenedMs}
 
-	summaries := r.InCheckout(sessions.Summarize(fold), root)
+	summaries := r.InCheckout(session.Summarize(fold), root)
 	if len(summaries) > 0 {
 		current := summaries[0].Session
 		for _, s := range summaries {
@@ -1068,7 +1069,7 @@ type Readers struct {
 	// ConsoleURL is where a person opens the console, "" when none is served.
 	ConsoleURL func() string
 	// InCheckout keeps the invocations that ran in the checkout at root.
-	InCheckout func(summaries []sessions.Summary, root string) []sessions.Summary
+	InCheckout func(summaries []session.Summary, root string) []session.Summary
 }
 
 // orDash renders an empty or zero column as a dash.

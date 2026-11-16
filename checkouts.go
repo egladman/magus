@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -188,18 +189,18 @@ func (m *Magus) recordedCheckouts(ctx context.Context, ref string) []string {
 		slog.WarnContext(ctx, "other checkouts were not consulted for "+ref, attr.Error(err))
 		return nil
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		slog.WarnContext(ctx, "other checkouts were not consulted for "+ref, attr.Error(err))
 		return nil
 	}
 	self := resolvedPath(m.ws.Root)
 	var out []string
-	for _, s := range sessions.Summarize(fold) {
+	for _, s := range session.Summarize(fold) {
 		if s.Workspace == "" || slices.Contains(out, s.Workspace) || resolvedPath(s.Workspace) == self {
 			continue
 		}
-		if slices.ContainsFunc(s.Targets, func(t sessions.TargetResult) bool { return recordedRefMatches(t.Ref, ref) }) {
+		if slices.ContainsFunc(s.Targets, func(t session.TargetResult) bool { return recordedRefMatches(t.Ref, ref) }) {
 			out = append(out, s.Workspace)
 		}
 	}

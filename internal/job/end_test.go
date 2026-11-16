@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -30,7 +31,7 @@ func dispose(t *testing.T, root, id string) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = sessions.DisposeRequest(dir, id, "confirmed", sessions.InvocationStart{})
+	_, err = sessions.DisposeRequest(dir, id, "confirmed", session.InvocationStart{})
 	require.NoError(t, err)
 }
 

@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/xdg"
@@ -172,14 +173,14 @@ func TestSessionBriefAttentionMarksRowsSinceThePreviousSession(t *testing.T) {
 	raise := func(source, message string) {
 		t.Helper()
 		_, opened, err := sessions.OpenRequest(dir, "host-1", sessions.AttentionOpen{Outcome: "waiting", Source: source, Message: message},
-			sessions.InvocationStart{Workspace: elsewhere})
+			session.InvocationStart{Workspace: elsewhere})
 		require.NoError(t, err)
 		require.True(t, opened)
 	}
-	runIn := func(session, inv string) {
+	runIn := func(hostSession, inv string) {
 		t.Helper()
-		start := sessions.InvocationStart{Workspace: root, Command: "run test"}
-		start.Session = session
+		start := session.InvocationStart{Workspace: root, Command: "run test"}
+		start.Session = hostSession
 		h := sessions.NewFactHandler(root, start)
 		require.NotNil(t, h)
 		emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: inv, Target: "test", Project: ".", Status: journal.StatusPass})
@@ -321,7 +322,7 @@ func seedBriefLease(t *testing.T, root string) {
 // seedFailingRun journals one session in root whose one target failed with ref.
 func seedFailingRun(t *testing.T, root, ref string) {
 	t.Helper()
-	handler := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: root, Command: "run test"})
+	handler := sessions.NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "run test"})
 	require.NotNil(t, handler)
 	emitJournalEvent(t, handler, journal.Event{
 		Kind: journal.KindResult, Inv: "invBrief", Target: "test",
@@ -335,14 +336,14 @@ func TestSessionBriefFailuresAreThisCheckoutsAndCarryTheRefusalCode(t *testing.T
 	testkit.Isolate(t)
 	root := t.TempDir()
 
-	refused := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: root, Command: "affected ci"})
+	refused := sessions.NewFactHandler(root, session.InvocationStart{Workspace: root, Command: "affected ci"})
 	require.NotNil(t, refused)
 	emitJournalEvent(t, refused, journal.Event{
 		Kind: journal.KindResult, Inv: "invRefused", Target: "ci", Project: "pkg",
 		Status: journal.StatusFail, DiagnosticCode: string(types.MachineBudgetExhausted),
 	})
 	time.Sleep(2 * time.Millisecond) // the other checkout's run is the newer one
-	other := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: filepath.Join(root, "elsewhere"), Command: "run test"})
+	other := sessions.NewFactHandler(root, session.InvocationStart{Workspace: filepath.Join(root, "elsewhere"), Command: "run test"})
 	require.NotNil(t, other)
 	emitJournalEvent(t, other, journal.Event{
 		Kind: journal.KindResult, Inv: "invOther", Target: "test", Project: "other", Status: journal.StatusFail, Ref: "ref-other",
@@ -713,8 +714,8 @@ func testReaders(t *testing.T, root string) Readers {
 		CacheDir:    func(string) (string, error) { return "", errors.New("no cache directory in this test") },
 		ResolveRoot: func(root string) string { return root },
 		ConsoleURL:  func() string { return "" },
-		InCheckout: func(summaries []sessions.Summary, root string) []sessions.Summary {
-			var out []sessions.Summary
+		InCheckout: func(summaries []session.Summary, root string) []session.Summary {
+			var out []session.Summary
 			for _, s := range summaries {
 				if s.Workspace == "" || filepath.Clean(s.Workspace) == filepath.Clean(root) {
 					out = append(out, s)

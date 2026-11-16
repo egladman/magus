@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 )
@@ -42,9 +43,9 @@ func (s *HookRowAppendSuite) SetupTest() {
 func (s *HookRowAppendSuite) assertTwoOpensOneRow() {
 	dir, err := sessions.Dir(s.root)
 	s.Require().NoError(err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	s.Require().NoError(err)
-	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r sessions.Record) bool { return r.Kind != sessions.KindAttentionOpen })
+	opens := slices.DeleteFunc(slices.Clone(fold.Records), func(r session.Record) bool { return r.Kind != sessions.KindAttentionOpen })
 	s.Len(opens, 2)
 	s.Len(sessions.AttentionQueue(fold), 1)
 }
@@ -114,7 +115,7 @@ func TestStallRoutesAnUnclearableBlockToTheRoot(t *testing.T) {
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 	queue := sessions.AttentionQueue(fold)
 	require.Len(t, queue, 1, "one row per lease and rule")

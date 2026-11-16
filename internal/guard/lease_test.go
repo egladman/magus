@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
@@ -212,7 +213,7 @@ func verifyRepeatRepository(t *testing.T, runs int, outcome string) (context.Con
 	require.NoError(t, err)
 	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: repo.Head(), Outcome: outcome, Inv: "inv-green",
-	}, sessions.InvocationStart{Workspace: repo.Root()}))
+	}, session.InvocationStart{Workspace: repo.Root()}))
 	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()}), repo
 }
 
@@ -224,7 +225,7 @@ func TestDenyRepeatVerify(t *testing.T) {
 	const gate = "./magus affected ci"
 
 	t.Run("a third gate over an unchanged green tree", func(t *testing.T) {
-		ctx, repo := verifyRepeatRepository(t, 2, sessions.OutcomePass)
+		ctx, repo := verifyRepeatRepository(t, 2, session.OutcomePass)
 		// Dirty before the verdict: the tree the gate passed already held it.
 		repo.Write("a.go", "package a\n\nvar x = 1\n")
 		before := time.Now().Add(-time.Hour)
@@ -243,29 +244,29 @@ func TestDenyRepeatVerify(t *testing.T) {
 			"Judge reaches the rule through the role-scoped list")
 	})
 	t.Run("a file written after the verdict", func(t *testing.T) {
-		ctx, repo := verifyRepeatRepository(t, 2, sessions.OutcomePass)
+		ctx, repo := verifyRepeatRepository(t, 2, session.OutcomePass)
 		repo.Write("b.go", "package a\n")
 		after := time.Now().Add(time.Minute)
 		require.NoError(t, os.Chtimes(repo.Path("b.go"), after, after))
 		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", gate))
 	})
 	t.Run("a commit after the verdict", func(t *testing.T) {
-		ctx, repo := verifyRepeatRepository(t, 2, sessions.OutcomePass)
+		ctx, repo := verifyRepeatRepository(t, 2, session.OutcomePass)
 		repo.Commit("more", map[string]string{"c.go": "package a\n"})
 		after := time.Now().Add(time.Minute)
 		require.NoError(t, os.Chtimes(repo.Path("c.go"), after, after))
 		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", gate))
 	})
 	t.Run("a red verdict whose run recorded no failing target", func(t *testing.T) {
-		ctx, _ := verifyRepeatRepository(t, 2, sessions.OutcomeFail)
+		ctx, _ := verifyRepeatRepository(t, 2, session.OutcomeFail)
 		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", gate))
 	})
 	t.Run("the second gate", func(t *testing.T) {
-		ctx, _ := verifyRepeatRepository(t, 1, sessions.OutcomePass)
+		ctx, _ := verifyRepeatRepository(t, 1, session.OutcomePass)
 		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", gate))
 	})
 	t.Run("a gate placed in another checkout with its own changes", func(t *testing.T) {
-		ctx, landing := verifyRepeatRepository(t, 2, sessions.OutcomePass)
+		ctx, landing := verifyRepeatRepository(t, 2, session.OutcomePass)
 		other := testkit.NewRepository(t, map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n", "magusfile.buzz": "\n"})
 		otherRuns := filepath.Join(other.Root(), ".magus", "runs")
 		require.NoError(t, os.MkdirAll(otherRuns, 0o755))
@@ -275,8 +276,8 @@ func TestDenyRepeatVerify(t *testing.T) {
 		otherDir, err := sessions.Dir(other.Root())
 		require.NoError(t, err)
 		require.NoError(t, sessions.RecordGate(otherDir, sessions.GateResult{
-			Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: other.Head(), Outcome: sessions.OutcomePass, Inv: "inv-other",
-		}, sessions.InvocationStart{Workspace: other.Root()}))
+			Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: other.Head(), Outcome: session.OutcomePass, Inv: "inv-other",
+		}, session.InvocationStart{Workspace: other.Root()}))
 		other.Write("b.go", "package a\n")
 		after := time.Now().Add(time.Minute)
 		require.NoError(t, os.Chtimes(other.Path("b.go"), after, after))
@@ -288,7 +289,7 @@ func TestDenyRepeatVerify(t *testing.T) {
 			"the landing branch's verdict does not judge a gate that runs in another checkout")
 	})
 	t.Run("a command that is not the gate", func(t *testing.T) {
-		ctx, _ := verifyRepeatRepository(t, 2, sessions.OutcomePass)
+		ctx, _ := verifyRepeatRepository(t, 2, session.OutcomePass)
 		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", "./magus run test ."))
 		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", "./magus affected ci --plan"))
 	})
@@ -310,23 +311,23 @@ const redGate = "./magus affected ci"
 // SetupTest records a red gate at HEAD, run "inv-red", which failed the root's go-test
 // and docs' lint. No gate ran before it in the window.
 func (s *redGateSuite) SetupTest() {
-	ctx, repo := verifyRepeatRepository(s.T(), 0, sessions.OutcomeFail)
+	ctx, repo := verifyRepeatRepository(s.T(), 0, session.OutcomeFail)
 	s.layers, s.repo = locationLayers(ctx), repo
 	dir, err := sessions.Dir(repo.Root())
 	s.Require().NoError(err)
 	s.dir = dir
 	s.results("inv-green",
-		sessions.TargetResult{Project: ".", Target: "go-test", Outcome: sessions.OutcomeFail},
-		sessions.TargetResult{Project: "docs", Target: "lint", Outcome: sessions.OutcomeFail},
-		sessions.TargetResult{Project: ".", Target: types.TargetCI, Outcome: sessions.OutcomeFail},
+		session.TargetResult{Project: ".", Target: "go-test", Outcome: session.OutcomeFail},
+		session.TargetResult{Project: "docs", Target: "lint", Outcome: session.OutcomeFail},
+		session.TargetResult{Project: ".", Target: types.TargetCI, Outcome: session.OutcomeFail},
 	)
 }
 
-func (s *redGateSuite) results(inv string, results ...sessions.TargetResult) {
-	w, err := sessions.Open(s.dir, inv, sessions.InvocationStart{Workspace: s.repo.Root()})
+func (s *redGateSuite) results(inv string, results ...session.TargetResult) {
+	w, err := session.Open(s.dir, inv, session.InvocationStart{Workspace: s.repo.Root()})
 	s.Require().NoError(err)
 	for _, r := range results {
-		s.Require().NoError(w.Append(sessions.KindTargetResult, r))
+		s.Require().NoError(w.Append(session.KindTargetResult, r))
 	}
 }
 
@@ -344,29 +345,29 @@ func (s *redGateSuite) TestTheFirstRepeatIsRefusedNamingEachTargetAndItsNarrowRu
 
 func (s *redGateSuite) TestEachTargetPassingAloneAdmitsTheGate() {
 	time.Sleep(2 * time.Millisecond)
-	s.results("narrow-test", sessions.TargetResult{Project: ".", Target: "go-test", Outcome: sessions.OutcomePass})
+	s.results("narrow-test", session.TargetResult{Project: ".", Target: "go-test", Outcome: session.OutcomePass})
 	d := denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate)
 	s.Require().NotEmpty(d, "docs' lint is still owed")
 	s.NotContains(d.Say, "go-test")
 
-	s.results("narrow-lint", sessions.TargetResult{Project: "docs", Target: "lint", Outcome: sessions.OutcomePass})
+	s.results("narrow-lint", session.TargetResult{Project: "docs", Target: "lint", Outcome: session.OutcomePass})
 	s.Empty(denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAHarnessWriteAfterTheRedGateAdmitsIt() {
 	time.Sleep(2 * time.Millisecond)
 	s.Require().NoError(sessions.RecordHarnessWrite(s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
-		sessions.InvocationStart{Workspace: s.repo.Root()}))
+		session.InvocationStart{Workspace: s.repo.Root()}))
 	s.Empty(denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAHarnessWriteBeforeTheRedGateStillRefusesIt() {
 	s.Require().NoError(sessions.RecordHarnessWrite(s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
-		sessions.InvocationStart{Workspace: s.repo.Root()}))
+		session.InvocationStart{Workspace: s.repo.Root()}))
 	time.Sleep(2 * time.Millisecond)
 	s.Require().NoError(sessions.RecordGate(s.dir, sessions.GateResult{
-		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: s.repo.Head(), Outcome: sessions.OutcomeFail, Inv: "inv-green",
-	}, sessions.InvocationStart{Workspace: s.repo.Root()}))
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: s.repo.Head(), Outcome: session.OutcomeFail, Inv: "inv-green",
+	}, session.InvocationStart{Workspace: s.repo.Root()}))
 	s.NotEmpty(denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate))
 }
 

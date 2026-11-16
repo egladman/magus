@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
@@ -160,7 +161,7 @@ func fileStallRow(ctx context.Context, at location, who hookAttribution, lease s
 	}
 	origin := trail.StampOrigin(ctx, job.Origin{EntryPoint: job.EntryPointHook, Host: who.Host, Session: who.Session, Agent: who.Agent})
 	// MarkFired already said this block is new, and this runs inside a hook.
-	_ = sessions.AppendRequest(dir, cmp.Or(who.Session, lease), open, sessions.InvocationStart{Origin: origin, Workspace: at.workspace, Lease: lease})
+	_ = sessions.AppendRequest(dir, cmp.Or(who.Session, lease), open, session.InvocationStart{Origin: origin, Workspace: at.workspace, Lease: lease})
 }
 
 // workerModel is the model a leased worker runs on as magus recorded it: what its spawn

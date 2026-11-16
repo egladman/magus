@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/types"
 )
@@ -153,11 +154,11 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		return err
 	}
-	summaries := sessions.Summarize(fold)
+	summaries := session.Summarize(fold)
 	if !all {
 		summaries = sessions.InvocationsInCheckout(summaries, root)
 	}
@@ -208,7 +209,7 @@ func sessionLoadUsage(fs *flag.FlagSet) func() {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Load a normalized agent-session event stream into this repository's session")
 		fmt.Fprintln(os.Stderr, "store: one JSON object per line, host vocabulary already mapped onto magus's.")
-		fmt.Fprintf(os.Stderr, "Every line needs host, session, kind and ref; kind is one of %s.\n", strings.Join(sessions.EventKinds, ", "))
+		fmt.Fprintf(os.Stderr, "Every line needs host, session, kind and ref; kind is one of %s.\n", strings.Join(session.EventKinds, ", "))
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Events are keyed on (host, session, kind, ref), so re-running an adapter over the same")
 		fmt.Fprintln(os.Stderr, "transcript loads nothing twice. Events whose cwd belongs to another repository")
@@ -260,12 +261,12 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 	}
 	cacheDir, _ := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg))
 	guard.JoinServedNext(summary.Events, summary.Commands, hint.ReadServedNext(cacheDir))
-	result, err := sessions.LoadEvents(ctx, dir, summary.Events, sessions.InvocationStart{
+	result, err := session.LoadEvents(ctx, dir, summary.Events, session.InvocationStart{
 		Origin:    localOrigin(jobtypes.EntryPointCLI),
 		Workspace: root,
 		Command:   "session load",
 		Version:   version,
-	})
+	}, session.WithTie(sessions.AttentionTie()))
 	if err != nil {
 		return err
 	}
@@ -320,11 +321,11 @@ func sessionShow(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		return err
 	}
-	events := sessions.AgentEvents(fold, rest[0])
+	events := session.AgentEvents(fold, rest[0])
 	if len(events) == 0 {
 		return fmt.Errorf("magus session show: no loaded events for session %q in %s, load a host transcript with `%s`",
 			rest[0], dir, hint.SessionLoad.String())
@@ -563,7 +564,7 @@ func sessionHints(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		return err
 	}

@@ -23,11 +23,11 @@ import (
 // with the process, so two magus processes starting in the same millisecond both mint
 // the same first id. Attention producers hit exactly that case: `magus session notify` fires
 // from an agent hook, several hosts can fire at once, and each writes with its counter
-// at 1. A collision is not a lost write ([Writer.resume] continues the numbering
+// at 1. A collision is not a lost write ([session.Open] continues the numbering
 // already in the file), but the two processes then share one invocation id, and the
 // store says one command did what two did.
 //
-// The result satisfies the rule [ValidID] enforces (alphanumeric with `-` and `_`),
+// The result satisfies the rule [session.ValidFileID] enforces (alphanumeric with `-` and `_`),
 // because it names the invocation's file.
 func NewID() string {
 	return fmt.Sprintf("%s-%s", journal.NewInvocationID(), processSuffix())

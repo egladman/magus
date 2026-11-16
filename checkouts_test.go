@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 )
@@ -40,9 +41,9 @@ func recordSessionRun(t *testing.T, repoRoot, workspace, ref string) {
 	t.Helper()
 	dir, err := sessions.Dir(repoRoot)
 	require.NoError(t, err)
-	w, err := sessions.Open(dir, "inv"+strings.ToLower(strings.NewReplacer("/", "", "-", "").Replace(filepath.Base(workspace))), sessions.InvocationStart{Workspace: workspace})
+	w, err := session.Open(dir, "inv"+strings.ToLower(strings.NewReplacer("/", "", "-", "").Replace(filepath.Base(workspace))), session.InvocationStart{Workspace: workspace})
 	require.NoError(t, err)
-	require.NoError(t, w.Append(sessions.KindTargetResult, sessions.TargetResult{Target: "lint", Project: ".", Outcome: sessions.OutcomeFail, Ref: ref}))
+	require.NoError(t, w.Append(session.KindTargetResult, session.TargetResult{Target: "lint", Project: ".", Outcome: session.OutcomeFail, Ref: ref}))
 }
 
 // persistedRunRef puts a failed run's output and key inputs in workspace's own output store and

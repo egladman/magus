@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,7 +70,7 @@ func captureJournalRecord(t *testing.T, e journal.Event) slog.Record {
 
 // firstPayload returns the raw payload of the first record of kind, which is what the
 // shape assertions compare: the bytes on disk, not a re-decoded copy of them.
-func firstPayload(t *testing.T, fold sessions.Fold, kind string) string {
+func firstPayload(t *testing.T, fold session.Fold, kind string) string {
 	t.Helper()
 	for _, rec := range fold.Records {
 		if rec.Kind == kind {
@@ -93,29 +94,29 @@ func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
 
-	summaries := sessions.Summarize(fold)
+	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 1)
 	assert.Equal(t, "inv1", summaries[0].Invocation, "the journal's invocation id files the facts")
 	assert.Empty(t, summaries[0].Session, "a CLI run is in no host session")
 	assert.Equal(t, LocalOrigin(context.Background()).User, summaries[0].User, "the start records the OS account that ran it")
 	assert.Equal(t, "affected ci --base main", summaries[0].Command)
 	assert.Equal(t, root, summaries[0].Workspace)
-	assert.Equal(t, []sessions.TargetResult{
-		{Target: "build", Project: "api", Outcome: sessions.OutcomePass, DurationMs: 20, Ref: "out1"},
-		{Target: "test", Project: "api", Outcome: sessions.OutcomeFail},
-		{Target: "lint", Project: "web", Outcome: sessions.OutcomePass, Replayed: true},
+	assert.Equal(t, []session.TargetResult{
+		{Target: "build", Project: "api", Outcome: session.OutcomePass, DurationMs: 20, Ref: "out1"},
+		{Target: "test", Project: "api", Outcome: session.OutcomeFail},
+		{Target: "lint", Project: "web", Outcome: session.OutcomePass, Replayed: true},
 	}, summaries[0].Targets)
 
 	require.Len(t, fold.Records, 4, "one session-start plus one fact per result")
 	first := fold.Records[0]
-	assert.Equal(t, sessions.Record{
+	assert.Equal(t, session.Record{
 		V:          first.V,
 		Invocation: "inv1",
 		Seq:        1,
-		Kind:       sessions.KindInvocationStart,
+		Kind:       session.KindInvocationStart,
 		Ts:         first.Ts, // the clock at the start
 		Payload:    first.Payload,
 	}, first)
@@ -140,17 +141,17 @@ func TestWithInvocationJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 
 	runDir, err := sessions.Dir(runRoot)
 	require.NoError(t, err)
-	runFold, err := sessions.ReadAll(runDir)
+	runFold, err := session.ReadAll(runDir)
 	require.NoError(t, err)
 
 	affectedDir, err := sessions.Dir(affectedRoot)
 	require.NoError(t, err)
-	affectedFold, err := sessions.ReadAll(affectedDir)
+	affectedFold, err := session.ReadAll(affectedDir)
 	require.NoError(t, err)
 
 	assert.Equal(t,
-		firstPayload(t, runFold, sessions.KindTargetResult),
-		firstPayload(t, affectedFold, sessions.KindTargetResult))
+		firstPayload(t, runFold, session.KindTargetResult),
+		firstPayload(t, affectedFold, session.KindTargetResult))
 
 	// The two stores must also agree on the record envelope; only the recorded command
 	// line, which names the workspace and the verb, is allowed to differ.
@@ -180,14 +181,14 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 
 			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
-			fold, err := sessions.ReadAll(dir)
+			fold, err := session.ReadAll(dir)
 			require.NoError(t, err)
 
-			summaries := sessions.Summarize(fold)
+			summaries := session.Summarize(fold)
 			require.Len(t, summaries, 1)
 			assert.Equal(t, "fleet/f3", summaries[0].Lease)
-			assert.Equal(t, []sessions.TargetResult{
-				{Target: "ci", Project: "api", Outcome: sessions.OutcomePass, Lease: "fleet/f3", LeaseFrom: job.LeaseSourceEnv},
+			assert.Equal(t, []session.TargetResult{
+				{Target: "ci", Project: "api", Outcome: session.OutcomePass, Lease: "fleet/f3", LeaseFrom: job.LeaseSourceEnv},
 			}, summaries[0].Targets)
 		})
 	}
@@ -206,9 +207,9 @@ func TestWithInvocationJournalRecordsNoLeaseWhenTheBindingDoesNotRead(t *testing
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	require.NoError(t, err)
-	summaries := sessions.Summarize(fold)
+	summaries := session.Summarize(fold)
 	require.Len(t, summaries, 1)
 	assert.Empty(t, summaries[0].Lease)
 	assert.Empty(t, summaries[0].LeaseFrom)

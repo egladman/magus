@@ -1,7 +1,7 @@
 ---
 title: "ADR 0050: the harness is a module named safetyscissors"
 order: 50
-description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. Steps 1 to 4, the budget, the verdict and step types, the tier set and the JSON Lines helpers, are built, and so are step 8's job types."
+description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. Steps 1 to 4 and 6, the budget, the verdict and step types, the tier set, the JSON Lines helpers and the session store, are built, and so are step 8's job types."
 tags: [adr, decision, sdk, harness, guard, jobs, module]
 status: proposed
 date: 2026-11-15
@@ -273,7 +273,7 @@ Each step merges on its own and leaves magus green. Eli approved building every 
 | 3    | `tier`: `types/agent/model.go`, `internal/agent/model`, `TierCeiling` (`register.go:111-117`)                                                   | ~650 lines                    | no                                                                                                                                     | done                     |
 | 4    | the JSON Lines store helpers the module's stores need, copied into `internal/jsonl` with `types/enum` into `internal/enum`; magus keeps its own | ~500 lines                    | no                                                                                                                                     | done                     |
 | 5    | `trail` core; feedback marks, replay and env propagation stay in magus                                                                          | ~1,500 lines                  | no                                                                                                                                     | planned                  |
-| 6    | `session`, with the directory supplied by the caller                                                                                            | ~2,000 lines                  | no                                                                                                                                     | planned                  |
+| 6    | `session`, with the directory supplied by the caller                                                                                            | ~2,000 lines                  | no                                                                                                                                     | done                     |
 | 7    | `redact` from `internal/secret`                                                                                                                 | ~1,300 lines                  | no                                                                                                                                     | planned                  |
 | 8    | the job types out of `types`, with no alias, and the generated Buzz mirrors regenerated                                                         | ~5,000 lines                  | yes: 16+ importers                                                                                                                     | types done; mirrors owed |
 | 9    | the `job` store core, with config as `Limits`, VCS as a directory, env and stderr as options                                                    | ~8,000-10,000 of 23,431 lines | no: `jobs.jsonl` stays where `vcs.StateDir` puts it, and magus passes that directory (decided 2026-11-16 by the build, Eli to confirm) | planned                  |
@@ -311,6 +311,17 @@ call facts and billing. `TierCeiling` is `tier.Ceiling`, which refuses with
 `*tier.AboveParentError` or `*tier.IncomparableError`; the job store gives those MGS3055
 and MGS3056, since the module cannot name magus's codes. Each name lost its `ModelTier`
 prefix, with no alias. The Buzz names stay through `.buzzgen.yaml`.
+
+Step 6 moved the session store's ids, record writer and reader, fold and pruning into
+`session`, opened on a directory the caller names. `vcs.StateDir` and `xdg.StateDir` stay
+in magus as `sessions.Dir`, and so do attention, gates, checkpoints, advice, contact,
+the prompt cache and the adapters. Pruning keeps an attention request whole through a
+`session.Tie` magus passes with `WithTie`, since the queue that decides a request is open
+stays in magus; a payload that bounds itself is a `session.Bounder`. Minting an id needs
+process state, so `NewID` stays in magus and the module only checks one with
+`ValidFileID`. Nothing in the module assumes a host session: an editor pane names its
+own invocation. The clock is `WithClock`, the records are written through
+`internal/jsonl`, and no alias remains.
 
 Step 8 moved the job record types into `job` and left every rule that names an MGS code
 in magus. A record's own validation returns `job.Fault` values with a kind and no code,

@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability/gen/observabilitytest"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -44,7 +45,7 @@ func raise(t *testing.T, dir, agentSession, message string) string {
 		Source:  "claude/Notification",
 		Where:   "/repo",
 		Message: message,
-	}, sessions.InvocationStart{Workspace: "/repo"})
+	}, session.InvocationStart{Workspace: "/repo"})
 	if err != nil {
 		t.Fatalf("open request: %v", err)
 	}
@@ -172,12 +173,12 @@ func TestAttentionHandler_DisposeStampsTheConsoleAsTheDisposer(t *testing.T) {
 		t.Fatalf("want 200, got %d; body %s", w.Code, w.Body.String())
 	}
 
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		t.Fatalf("re-read store: %v", err)
 	}
 	var found bool
-	for _, s := range sessions.Summarize(fold) {
+	for _, s := range session.Summarize(fold) {
 		if !strings.HasPrefix(s.Command, "session dispose ") {
 			continue
 		}

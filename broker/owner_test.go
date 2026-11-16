@@ -19,6 +19,7 @@ import (
 
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/budget"
+	sessionstore "github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
 
@@ -274,7 +275,7 @@ func TestAStepGroupEndsWhenItsRunIsKilled(t *testing.T) {
 	require.NoError(t, err)
 	var queue []sessions.AttentionRequest
 	require.Eventually(t, func() bool {
-		fold, err := sessions.ReadAll(dir)
+		fold, err := sessionstore.ReadAll(dir)
 		queue = sessions.AttentionQueue(fold)
 		return err == nil && len(queue) > 0
 	}, 5*time.Second, 20*time.Millisecond, "the ending is filed in the run's workspace")
@@ -409,7 +410,7 @@ func TestALeaderlessStepGroupIsLeftRunning(t *testing.T) {
 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
+	fold, err := sessionstore.ReadAll(dir)
 	require.NoError(t, err)
 	queue := sessions.AttentionQueue(fold)
 	require.Len(t, queue, 1)

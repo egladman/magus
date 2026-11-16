@@ -9,6 +9,8 @@
 //   - job: the job record a caller declares and the row a store keeps, its write paths,
 //     goals, states, results, grants and attempts, the claim grammar, the origin every
 //     record stamps, and the faults a record shows on its own.
+//   - session: the append-only record of what invocations did, its fold, and the
+//     pruning that bounds it, opened on a directory the caller names.
 //   - step: one thing a program is about to do, as data, and the spec that declares
 //     each kind of step.
 //   - tier: the model tier set a caller declares, the assignment a job records, the

@@ -14,6 +14,8 @@ import (
 	"maps"
 	"slices"
 	"text/tabwriter"
+
+	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
 // NextLookahead is how many calls later a breadcrumb still counts as taken up. The
@@ -50,7 +52,7 @@ type HintUptakeReport struct {
 const HintUptakeDefinition = "hints reports, per hint id, how often a breadcrumb magus served was followed within the next few calls of the same session, against the calls that ran some other magus verb instead or re-ran the same command."
 
 // HintUptake counts each id's servings and what the calls after them did.
-func HintUptake(fold Fold) []HintUptakeRow {
+func HintUptake(fold session.Fold) []HintUptakeRow {
 	rows := map[string]*HintUptakeRow{}
 	row := func(id string) *HintUptakeRow {
 		if r, ok := rows[id]; ok {
@@ -68,11 +70,11 @@ func HintUptake(fold Fold) []HintUptakeRow {
 				r := row(id)
 				r.Served++
 				switch {
-				case slices.ContainsFunc(window, func(e AgentEvent) bool {
+				case slices.ContainsFunc(window, func(e session.AgentEvent) bool {
 					return slices.Contains(e.NextFollowed, id)
 				}):
 					r.Followed++
-				case slices.ContainsFunc(window, func(e AgentEvent) bool {
+				case slices.ContainsFunc(window, func(e session.AgentEvent) bool {
 					return e.Program == "magus"
 				}):
 					r.Rejected++
@@ -80,7 +82,7 @@ func HintUptake(fold Fold) []HintUptakeRow {
 				// Counted beside the two above rather than instead of them: re-running the
 				// command that printed the breadcrumb is the reflex the whole mechanism was
 				// measured against, and it happens whether or not the hint was taken.
-				if call.Digest != "" && slices.ContainsFunc(window, func(e AgentEvent) bool {
+				if call.Digest != "" && slices.ContainsFunc(window, func(e session.AgentEvent) bool {
 					return e.Digest == call.Digest
 				}) {
 					r.Reflex++
@@ -118,19 +120,19 @@ func HintUptake(fold Fold) []HintUptakeRow {
 // ONE pass over the records. Listing the sessions and then asking for each one's
 // events walks the whole fold once per session, and a store with 200 sessions over
 // 100k records decodes 20M payloads to answer one table.
-func shellCallsBySession(fold Fold) [][]AgentEvent {
-	bySession := map[string][]AgentEvent{}
-	for session, e := range EachAgentEvent(fold) {
+func shellCallsBySession(fold session.Fold) [][]session.AgentEvent {
+	bySession := map[string][]session.AgentEvent{}
+	for hostSession, e := range session.EachAgentEvent(fold) {
 		// The lookahead counts CALLS, so a file read between two of them must not
 		// spend one.
-		if e.Kind == EventShellCommand {
-			bySession[session] = append(bySession[session], e)
+		if e.Kind == session.EventShellCommand {
+			bySession[hostSession] = append(bySession[hostSession], e)
 		}
 	}
-	out := make([][]AgentEvent, 0, len(bySession))
-	for _, session := range slices.Sorted(maps.Keys(bySession)) {
-		calls := bySession[session]
-		slices.SortStableFunc(calls, func(a, b AgentEvent) int { return cmp.Compare(a.AtMs, b.AtMs) })
+	out := make([][]session.AgentEvent, 0, len(bySession))
+	for _, hostSession := range slices.Sorted(maps.Keys(bySession)) {
+		calls := bySession[hostSession]
+		slices.SortStableFunc(calls, func(a, b session.AgentEvent) int { return cmp.Compare(a.AtMs, b.AtMs) })
 		out = append(out, calls)
 	}
 	return out

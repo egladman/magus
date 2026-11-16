@@ -17,7 +17,7 @@ package agent
 import (
 	"slices"
 
-	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
 
@@ -58,4 +58,4 @@ func SessionStances() []string { return slices.Clone(sessionStances) }
 // shell.command is the one that gets re-judged offline against the current rules;
 // magus.call is a direct tool call to magus, which never appears as a shell command
 // and so would otherwise be invisible to the audit.
-func SessionKinds() []string { return slices.Clone(sessions.EventKinds) }
+func SessionKinds() []string { return slices.Clone(session.EventKinds) }

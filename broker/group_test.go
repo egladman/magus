@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/sessions"
+	sessionstore "github.com/egladman/magus/libs/safetyscissors/session"
 )
 
 // startGroup runs a command that outlives any test unless something stops it, as the
@@ -80,7 +81,7 @@ func TestAHeldCommandStopsAtItsDeadline(t *testing.T) {
 	require.NoError(t, err)
 	var queue []sessions.AttentionRequest
 	require.Eventually(t, func() bool {
-		fold, err := sessions.ReadAll(dir)
+		fold, err := sessionstore.ReadAll(dir)
 		queue = sessions.AttentionQueue(fold)
 		return err == nil && len(queue) > 0
 	}, 5*time.Second, 20*time.Millisecond)

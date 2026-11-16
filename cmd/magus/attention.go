@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
 
@@ -77,7 +78,7 @@ func attentionList(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		return err
 	}
@@ -155,7 +156,7 @@ func attentionDispose(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	req, err := sessions.DisposeRequest(dir, rest[0], reason, sessions.InvocationStart{
+	req, err := sessions.DisposeRequest(dir, rest[0], reason, session.InvocationStart{
 		Origin:    localOrigin(jobtypes.EntryPointCLI),
 		Workspace: root,
 		Version:   version,

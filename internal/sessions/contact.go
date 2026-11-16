@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -64,16 +65,16 @@ func readPathContact(dir, path string) PathContact {
 	if dir == "" || path == "" {
 		return out
 	}
-	fold, err := ReadAgentEvents(dir)
+	fold, err := session.ReadAgentEvents(dir)
 	if err != nil {
 		return out
 	}
 	var seen []string
 	for _, rec := range fold.Records {
-		if rec.Kind != KindAgentEvent {
+		if rec.Kind != session.KindAgentEvent {
 			continue
 		}
-		var ev AgentEvent
+		var ev session.AgentEvent
 		if json.Unmarshal(rec.Payload, &ev) != nil {
 			continue
 		}
@@ -90,9 +91,9 @@ func readPathContact(dir, path string) PathContact {
 			continue
 		}
 		switch ev.Kind {
-		case EventFileRead:
+		case session.EventFileRead:
 			out.Reads++
-		case EventFileWrite:
+		case session.EventFileWrite:
 			out.Writes++
 		default:
 			// Every other kind is path-less by construction: a shell command's text is

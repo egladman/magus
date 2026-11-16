@@ -6,15 +6,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
 func TestSummarizeTargetsCollapsesRepeats(t *testing.T) {
 	t.Parallel()
-	got := summarizeTargets([]TargetResult{
-		{Target: "build", Project: "api", Outcome: OutcomePass},
-		{Target: "build", Project: "api", Outcome: OutcomePass},
-		{Target: "build", Project: "web", Outcome: OutcomeFail},
-		{Target: "lint", Project: "web", Outcome: OutcomePass, Replayed: true},
+	got := summarizeTargets([]session.TargetResult{
+		{Target: "build", Project: "api", Outcome: session.OutcomePass},
+		{Target: "build", Project: "api", Outcome: session.OutcomePass},
+		{Target: "build", Project: "web", Outcome: session.OutcomeFail},
+		{Target: "lint", Project: "web", Outcome: session.OutcomePass, Replayed: true},
 	})
 	assert.Equal(t, "build api (pass), build web (fail), lint web (pass, cached)", got)
 }
@@ -71,10 +73,10 @@ func TestInvocationsSinceKeepsALongInvocationStillWorking(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	old := Summary{Invocation: "stale", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-47 * time.Hour).UnixMilli()}
-	long := Summary{Invocation: "long", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-time.Minute).UnixMilli()}
+	old := session.Summary{Invocation: "stale", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-47 * time.Hour).UnixMilli()}
+	long := session.Summary{Invocation: "long", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-time.Minute).UnixMilli()}
 
-	got := InvocationsSince([]Summary{old, long}, now.Add(-2*time.Hour))
+	got := InvocationsSince([]session.Summary{old, long}, now.Add(-2*time.Hour))
 	require.Len(t, got, 1)
 	assert.Equal(t, "long", got[0].Invocation)
 }
@@ -82,7 +84,7 @@ func TestInvocationsSinceKeepsALongInvocationStillWorking(t *testing.T) {
 func TestInvocationsSinceWithNoCutoffKeepsEverything(t *testing.T) {
 	t.Parallel()
 
-	all := []Summary{{Invocation: "a"}, {Invocation: "b"}}
+	all := []session.Summary{{Invocation: "a"}, {Invocation: "b"}}
 	assert.Equal(t, all, InvocationsSince(all, time.Time{}))
 }
 
@@ -90,7 +92,7 @@ func TestInvocationsInCheckoutKeepsThisCheckoutAndFactsWithNoWorkspace(t *testin
 	t.Parallel()
 
 	here, elsewhere := t.TempDir(), t.TempDir()
-	all := []Summary{
+	all := []session.Summary{
 		{Invocation: "here", Workspace: here},
 		{Invocation: "elsewhere", Workspace: elsewhere},
 		{Invocation: "legacy"},

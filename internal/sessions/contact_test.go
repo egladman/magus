@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,14 +26,14 @@ type contact struct {
 func contactStore(t *testing.T, events ...contact) string {
 	t.Helper()
 	dir := t.TempDir()
-	loaded := make([]LoadEvent, 0, len(events))
+	loaded := make([]session.LoadEvent, 0, len(events))
 	for i, e := range events {
-		loaded = append(loaded, LoadEvent{Session: e.session, Event: AgentEvent{
+		loaded = append(loaded, session.LoadEvent{Session: e.session, Event: session.AgentEvent{
 			Host: "test-host", Kind: e.kind, Ref: strconv.Itoa(i),
 			AtMs: e.atMs, Text: e.path, Denied: e.denied,
 		}})
 	}
-	_, err := LoadEvents(t.Context(), dir, loaded, InvocationStart{Workspace: t.TempDir(), Command: "test"})
+	_, err := session.LoadEvents(t.Context(), dir, loaded, session.InvocationStart{Workspace: t.TempDir(), Command: "test"})
 	require.NoError(t, err)
 	return dir
 }
@@ -42,10 +43,10 @@ func TestReadPathContactCountsSessionsNotEvents(t *testing.T) {
 
 	now := time.Now().UnixMilli()
 	dir := contactStore(t,
-		contact{session: "one", kind: EventFileWrite, path: "internal/guard/buzz.go", atMs: now - 3000},
-		contact{session: "one", kind: EventFileWrite, path: "internal/guard/buzz.go", atMs: now - 2000},
-		contact{session: "two", kind: EventFileRead, path: "internal/guard/buzz.go", atMs: now - 1000},
-		contact{session: "two", kind: EventFileWrite, path: "somewhere/else.go", atMs: now},
+		contact{session: "one", kind: session.EventFileWrite, path: "internal/guard/buzz.go", atMs: now - 3000},
+		contact{session: "one", kind: session.EventFileWrite, path: "internal/guard/buzz.go", atMs: now - 2000},
+		contact{session: "two", kind: session.EventFileRead, path: "internal/guard/buzz.go", atMs: now - 1000},
+		contact{session: "two", kind: session.EventFileWrite, path: "somewhere/else.go", atMs: now},
 	)
 
 	assert.Equal(t,
@@ -61,9 +62,9 @@ func TestReadPathContactIgnoresPathlessKinds(t *testing.T) {
 	t.Parallel()
 
 	dir := contactStore(t,
-		contact{session: "one", kind: EventShellCommand, path: "magusfile.buzz", atMs: 5},
-		contact{session: "one", kind: EventSpawn, path: "magusfile.buzz", atMs: 6},
-		contact{session: "one", kind: EventSkillLoad, path: "magusfile.buzz", atMs: 7},
+		contact{session: "one", kind: session.EventShellCommand, path: "magusfile.buzz", atMs: 5},
+		contact{session: "one", kind: session.EventSpawn, path: "magusfile.buzz", atMs: 6},
+		contact{session: "one", kind: session.EventSkillLoad, path: "magusfile.buzz", atMs: 7},
 	)
 
 	assert.Equal(t, PathContact{}, readPathContact(dir, "magusfile.buzz"))
@@ -73,8 +74,8 @@ func TestReadPathContactRecordsWhatTheHostRefused(t *testing.T) {
 	t.Parallel()
 
 	dir := contactStore(t,
-		contact{session: "one", kind: EventFileWrite, path: "gen/graph.json", atMs: 10, denied: true},
-		contact{session: "one", kind: EventFileWrite, path: "gen/graph.json", atMs: 11},
+		contact{session: "one", kind: session.EventFileWrite, path: "gen/graph.json", atMs: 10, denied: true},
+		contact{session: "one", kind: session.EventFileWrite, path: "gen/graph.json", atMs: 11},
 	)
 
 	assert.Equal(t,
@@ -90,8 +91,8 @@ func TestReadPathContactLeavesAnUndatedContactUndated(t *testing.T) {
 	t.Parallel()
 
 	dir := contactStore(t,
-		contact{session: "one", kind: EventFileWrite, path: "a.go", atMs: 0},
-		contact{session: "one", kind: EventFileRead, path: "a.go", atMs: 0},
+		contact{session: "one", kind: session.EventFileWrite, path: "a.go", atMs: 0},
+		contact{session: "one", kind: session.EventFileRead, path: "a.go", atMs: 0},
 	)
 
 	assert.Equal(t, PathContact{Sessions: 1, Writes: 1, Reads: 1}, readPathContact(dir, "a.go"))
@@ -100,7 +101,7 @@ func TestReadPathContactLeavesAnUndatedContactUndated(t *testing.T) {
 func TestReadPathContactSaysNothingWhenThereIsNothingToSay(t *testing.T) {
 	t.Parallel()
 
-	dir := contactStore(t, contact{session: "one", kind: EventFileWrite, path: "a.go", atMs: 1})
+	dir := contactStore(t, contact{session: "one", kind: session.EventFileWrite, path: "a.go", atMs: 1})
 
 	assert.Equal(t, PathContact{}, readPathContact(dir, "b.go"), "a path no session reached")
 	assert.Equal(t, PathContact{}, readPathContact(dir, ""), "a node that is about no file")

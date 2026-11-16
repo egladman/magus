@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -143,12 +144,12 @@ func latestGreenGate(ctx context.Context, root string, env Env) job.GreenGate {
 	if err != nil {
 		return job.GreenGate{}
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		return job.GreenGate{}
 	}
 	rec, ok := sessions.LatestGate(fold, meta.Ref, types.TargetCI)
-	if !ok || rec.Outcome != sessions.OutcomePass || rec.Commit == "" {
+	if !ok || rec.Outcome != session.OutcomePass || rec.Commit == "" {
 		return job.GreenGate{}
 	}
 	if meta.ID != rec.Commit {

@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/command"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -90,7 +91,7 @@ func denyRepeatVerify(ctx context.Context, deps Dependencies, _, command string)
 	if !ok {
 		return denial{}
 	}
-	if last.Outcome == sessions.OutcomeFail {
+	if last.Outcome == session.OutcomeFail {
 		return denyFailedGate(at.workspace, last)
 	}
 	runs, _ := recentGateRuns(workspaceRunsDir(at.cacheDir), time.Now())
@@ -114,7 +115,7 @@ func denyFailedGate(workspace string, red sessions.GateRecord) denial {
 	if err != nil {
 		return denial{}
 	}
-	results, err := sessions.ReadKind(dir, sessions.KindTargetResult)
+	results, err := session.ReadKind(dir, session.KindTargetResult)
 	if err != nil {
 		return denial{}
 	}
@@ -180,7 +181,7 @@ func gateUnchanged(ctx context.Context, deps Dependencies, workspace string) (se
 	if !ok || last.Commit == "" {
 		return sessions.GateRecord{}, false
 	}
-	if written, err := sessions.ReadKind(dir, sessions.KindHarnessWrite); err == nil {
+	if written, err := session.ReadKind(dir, sessions.KindHarnessWrite); err == nil {
 		if hw, ok := sessions.LatestHarnessWrite(written); ok && hw.At.After(last.At) {
 			return sessions.GateRecord{}, false
 		}

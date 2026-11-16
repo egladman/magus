@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 )
 
 // claudeLimits are the foreground limits one host's wiring declares: two minutes for a call
@@ -120,10 +121,10 @@ func recordRun(t *testing.T, root, project, target string, took time.Duration) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	w, err := sessions.Open(dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)), sessions.InvocationStart{Command: "run"})
+	w, err := session.Open(dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)), session.InvocationStart{Command: "run"})
 	require.NoError(t, err)
-	require.NoError(t, w.Append(sessions.KindTargetResult, sessions.TargetResult{
-		Target: target, Project: project, Outcome: sessions.OutcomePass, DurationMs: took.Milliseconds(),
+	require.NoError(t, w.Append(session.KindTargetResult, session.TargetResult{
+		Target: target, Project: project, Outcome: session.OutcomePass, DurationMs: took.Milliseconds(),
 	}))
 }
 
@@ -243,11 +244,11 @@ func (s *NarrowedRunPriceSuite) SetupTest() {
 func (s *NarrowedRunPriceSuite) recordNarrowed(took time.Duration) {
 	dir, err := sessions.Dir(s.root)
 	s.Require().NoError(err)
-	w, err := sessions.Open(dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)),
-		sessions.InvocationStart{Command: "run diagrams_generate docs -- -run TestA|TestB"})
+	w, err := session.Open(dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)),
+		session.InvocationStart{Command: "run diagrams_generate docs -- -run TestA|TestB"})
 	s.Require().NoError(err)
-	s.Require().NoError(w.Append(sessions.KindTargetResult, sessions.TargetResult{
-		Target: "diagrams-generate", Project: "docs", Outcome: sessions.OutcomePass, DurationMs: took.Milliseconds(),
+	s.Require().NoError(w.Append(session.KindTargetResult, session.TargetResult{
+		Target: "diagrams-generate", Project: "docs", Outcome: session.OutcomePass, DurationMs: took.Milliseconds(),
 	}))
 }
 

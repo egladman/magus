@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -12,12 +13,12 @@ import (
 
 // recordResults files each result under its own invocation, in the order given, so a later
 // one is newer by name the way minted ids are.
-func recordResults(t *testing.T, dir string, results ...TargetResult) {
+func recordResults(t *testing.T, dir string, results ...session.TargetResult) {
 	t.Helper()
 	for i, r := range results {
-		w, err := Open(dir, fmt.Sprintf("invmv%04d1", i), InvocationStart{Command: "run"})
+		w, err := session.Open(dir, fmt.Sprintf("invmv%04d1", i), session.InvocationStart{Command: "run"})
 		require.NoError(t, err)
-		require.NoError(t, w.Append(KindTargetResult, r))
+		require.NoError(t, w.Append(session.KindTargetResult, r))
 	}
 }
 
@@ -38,9 +39,9 @@ func (s *RunDurationWithSuite) SetupTest() {
 		{"run go-test . -- -run TestA", 20_000},
 		{"run go-test . --", 300_000},
 	} {
-		w, err := Open(s.dir, fmt.Sprintf("invwith%04d1", i), InvocationStart{Command: run.command})
+		w, err := session.Open(s.dir, fmt.Sprintf("invwith%04d1", i), session.InvocationStart{Command: run.command})
 		s.Require().NoError(err)
-		s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "go-test", Project: ".", Outcome: OutcomePass, DurationMs: run.took}))
+		s.Require().NoError(w.Append(session.KindTargetResult, session.TargetResult{Target: "go-test", Project: ".", Outcome: session.OutcomePass, DurationMs: run.took}))
 	}
 }
 
@@ -64,12 +65,12 @@ func (s *RunDurationWithSuite) TestOtherArgumentsHaveNoRecord() {
 func TestLastRunDurationIsTheNewestRun(t *testing.T) {
 	dir := t.TempDir()
 	recordResults(t, dir,
-		TargetResult{Target: "go-test", Project: ".", Outcome: OutcomePass, DurationMs: 400_000},
-		TargetResult{Target: "go::go-test:rw", Project: ".", Outcome: OutcomeFail, DurationMs: 300_000},
-		TargetResult{Target: "go-test", Project: ".", Outcome: OutcomePass, DurationMs: 5, Replayed: true},
-		TargetResult{Target: "go-test", Project: ".", Outcome: OutcomeFail, DiagnosticCode: "MGS3009"},
-		TargetResult{Target: "go-test", Project: "docs", Outcome: OutcomePass, DurationMs: 9_000},
-		TargetResult{Target: "lint", Project: ".", Outcome: OutcomePass, DurationMs: 70_000},
+		session.TargetResult{Target: "go-test", Project: ".", Outcome: session.OutcomePass, DurationMs: 400_000},
+		session.TargetResult{Target: "go::go-test:rw", Project: ".", Outcome: session.OutcomeFail, DurationMs: 300_000},
+		session.TargetResult{Target: "go-test", Project: ".", Outcome: session.OutcomePass, DurationMs: 5, Replayed: true},
+		session.TargetResult{Target: "go-test", Project: ".", Outcome: session.OutcomeFail, DiagnosticCode: "MGS3009"},
+		session.TargetResult{Target: "go-test", Project: "docs", Outcome: session.OutcomePass, DurationMs: 9_000},
+		session.TargetResult{Target: "lint", Project: ".", Outcome: session.OutcomePass, DurationMs: 70_000},
 	)
 
 	got, ok := LastRunDuration(dir, ".", "go-test")
@@ -90,10 +91,10 @@ func TestLastRunDurationIsTheNewestRun(t *testing.T) {
 
 func TestLastRunDurationReadsOnlyTheNewestFiles(t *testing.T) {
 	dir := t.TempDir()
-	results := make([]TargetResult, maxInvocationFiles+1)
-	results[0] = TargetResult{Target: "go-test", Project: ".", Outcome: OutcomePass, DurationMs: 60_000}
+	results := make([]session.TargetResult, maxInvocationFiles+1)
+	results[0] = session.TargetResult{Target: "go-test", Project: ".", Outcome: session.OutcomePass, DurationMs: 60_000}
 	for i := 1; i < len(results); i++ {
-		results[i] = TargetResult{Target: "lint", Project: ".", Outcome: OutcomePass, DurationMs: 1_000}
+		results[i] = session.TargetResult{Target: "lint", Project: ".", Outcome: session.OutcomePass, DurationMs: 1_000}
 	}
 	recordResults(t, dir, results...)
 

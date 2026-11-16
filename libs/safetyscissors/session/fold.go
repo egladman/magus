@@ -1,4 +1,4 @@
-package sessions
+package session
 
 import (
 	"fmt"
@@ -6,16 +6,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/apiversion"
+	"github.com/egladman/magus/libs/safetyscissors/internal/jsonl"
 )
 
 // foldCachePath is the file under a store that keeps one kind's records between reads.
-// It carries no fileExt, so neither [ReadAll] nor [Prune] mistakes it for an invocation,
-// and it sits beside its source so every worktree of the repository shares one: a new
-// worktree reuses the fold the others already paid for. One file per kind, so a reader
-// of the few gate results never decodes the agent events beside them.
+// It carries no FileExt, so neither [ReadAll] nor [Prune] mistakes it for an invocation,
+// and it sits beside its source so every reader of the store shares one: a new reader
+// reuses the fold the others already paid for. One file per kind, so a reader of a few
+// records of one kind never decodes the many of another beside them.
 func foldCachePath(dir, kind string) string {
 	return filepath.Join(dir, fmt.Sprintf(".fold-%s.json", kind))
 }
@@ -25,10 +24,10 @@ func foldCachePath(dir, kind string) string {
 const foldCacheFormat = 2
 
 type foldCache struct {
-	Format int                  `json:"format"`
-	Schema types.APIVersion     `json:"schema"`
-	Kind   string               `json:"kind"`
-	Files  map[string]foldEntry `json:"files"`
+	Format int                   `json:"format"`
+	Schema apiversion.APIVersion `json:"schema"`
+	Kind   string                `json:"kind"`
+	Files  map[string]foldEntry  `json:"files"`
 }
 
 // foldEntry is one invocation file's contribution to a kind's fold, valid while the file
@@ -44,15 +43,11 @@ type foldEntry struct {
 }
 
 func (e foldEntry) sameFile(fi os.FileInfo) bool {
-	ino, _, _ := file.Identity(fi)
-	return e.Size == fi.Size() && e.ModNs == fi.ModTime().UnixNano() && e.Ino == ino
+	return e.Size == fi.Size() && e.ModNs == fi.ModTime().UnixNano() && e.Ino == inode(fi)
 }
 
 // ReadAgentEvents is [ReadAll] narrowed to the [KindAgentEvent] records; see [ReadKind].
 func ReadAgentEvents(dir string) (Fold, error) { return ReadKind(dir, KindAgentEvent) }
-
-// ReadGateResults is [ReadAll] narrowed to the [KindGateResult] records; see [ReadKind].
-func ReadGateResults(dir string) (Fold, error) { return ReadKind(dir, KindGateResult) }
 
 // ReadKind is [ReadAll] narrowed to the records of one kind, with Invocations, Skipped and
 // Legacy counted over the whole store as ReadAll counts them.
@@ -74,14 +69,14 @@ func ReadKind(dir, kind string) (Fold, error) {
 		if os.IsNotExist(err) {
 			return fold, nil
 		}
-		return fold, fmt.Errorf("sessions: read store %s: %w", dir, err)
+		return fold, fmt.Errorf("session: read store %s: %w", dir, err)
 	}
 	cachePath := foldCachePath(dir, kind)
 	prev := readFoldCache(cachePath, kind)
 	next := foldCache{Format: foldCacheFormat, Schema: APIVersion, Kind: kind, Files: make(map[string]foldEntry, len(entries))}
 	changed := false
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), fileExt) {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), FileExt) {
 			continue
 		}
 		// Stat BEFORE the read. A writer appending in between leaves the records read
@@ -97,8 +92,7 @@ func ReadKind(dir, kind string) (Fold, error) {
 			if vanished {
 				continue
 			}
-			ino, _, _ := file.Identity(fi)
-			entry = foldEntry{Size: fi.Size(), ModNs: fi.ModTime().UnixNano(), Ino: ino, Skipped: skipped, Legacy: legacy}
+			entry = foldEntry{Size: fi.Size(), ModNs: fi.ModTime().UnixNano(), Ino: inode(fi), Skipped: skipped, Legacy: legacy}
 			for _, rec := range records {
 				if rec.Kind == kind {
 					entry.Records = append(entry.Records, rec)
@@ -114,8 +108,8 @@ func ReadKind(dir, kind string) (Fold, error) {
 	}
 	sortRecords(fold.Records)
 	if changed || len(next.Files) != len(prev.Files) {
-		if b, err := json.Marshal(next); err == nil {
-			_ = file.ReplaceFile(cachePath, b, 0o644)
+		if b, err := jsonl.Marshal(next); err == nil {
+			_ = jsonl.RewriteLines(cachePath, [][]byte{b}, 0o644)
 		}
 	}
 	return fold, nil
@@ -129,7 +123,7 @@ func readFoldCache(path, kind string) foldCache {
 		return foldCache{}
 	}
 	var c foldCache
-	if json.Unmarshal(b, &c) != nil || c.Format != foldCacheFormat || c.Schema != APIVersion || c.Kind != kind {
+	if jsonl.Unmarshal(b, &c) != nil || c.Format != foldCacheFormat || c.Schema != APIVersion || c.Kind != kind {
 		return foldCache{}
 	}
 	return c

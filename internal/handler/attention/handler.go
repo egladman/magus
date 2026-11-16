@@ -13,12 +13,13 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
 
 // consoleHost stamps the disposing invocation as having come through the console.
 //
-// sessions.InvocationStart.Host names the client that drove an invocation, and the CLI
+// session.InvocationStart.Host names the client that drove an invocation, and the CLI
 // leaves it empty because nothing on its run path knows the answer. This route DOES know
 // its client, so it is recorded as a fact at the moment of the write, beside the
 // credential the bearer guard verified. Neither says a person acted: any process of the
@@ -110,7 +111,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		h.Fail(w, r, "attention", err)
 		return
 	}
-	fold, err := sessions.ReadAll(dir)
+	fold, err := session.ReadAll(dir)
 	if err != nil {
 		h.Fail(w, r, "attention", err)
 		return
@@ -134,7 +135,7 @@ func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req, err := sessions.DisposeRequest(dir, body.ID, body.Reason, sessions.InvocationStart{
+	req, err := sessions.DisposeRequest(dir, body.ID, body.Reason, session.InvocationStart{
 		Origin:    trail.StampOrigin(r.Context(), jobtypes.Origin{Host: consoleHost}),
 		Workspace: h.root,
 		Version:   h.version,

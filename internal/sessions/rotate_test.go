@@ -1,18 +1,15 @@
 package sessions
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/gofrs/flock"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/egladman/magus/libs/safetyscissors/session"
+	"github.com/stretchr/testify/suite"
 )
 
 const retention = 30 * 24 * time.Hour
@@ -20,25 +17,32 @@ const retention = 30 * 24 * time.Hour
 // msAgo is a record timestamp age old, in the unix milliseconds a Record carries.
 func msAgo(age time.Duration) int64 { return time.Now().Add(-age).UnixMilli() }
 
-// writeAged lays down a session file and backdates its modification time to match.
-// Both halves matter and they are not the same knob: pruning DECIDES on the newest
-// record, and only reads a file at all once its modification time says it might be
-// old enough to be worth reading.
-func writeAged(t *testing.T, dir, session string, age time.Duration, records []Record) {
-	t.Helper()
-	writeRaw(t, dir, session, records)
-	when := time.Now().Add(-age)
-	require.NoError(t, os.Chtimes(filepath.Join(dir, session+fileExt), when, when))
+// AttentionTieSuite pins the attention exemption: pruning with [AttentionTie] never
+// splits a request, and never deletes one nobody answered.
+type AttentionTieSuite struct {
+	suite.Suite
+	dir string
 }
 
-// storedSessions names the session files still on disk, sorted.
-func storedSessions(t *testing.T, dir string) []string {
-	t.Helper()
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
+func TestAttentionTie(t *testing.T) { suite.Run(t, new(AttentionTieSuite)) }
+
+func (s *AttentionTieSuite) SetupTest() { s.dir = s.T().TempDir() }
+
+// writeAged lays down an invocation file and backdates its modification time to match.
+// Pruning DECIDES on the newest record, and only reads a file at all once its
+// modification time says it might be old enough to be worth reading.
+func (s *AttentionTieSuite) writeAged(invocation string, age time.Duration, records []session.Record) {
+	writeRaw(s.T(), s.dir, invocation, records)
+	when := time.Now().Add(-age)
+	s.Require().NoError(os.Chtimes(filepath.Join(s.dir, invocation+session.FileExt), when, when))
+}
+
+func (s *AttentionTieSuite) stored() []string {
+	entries, err := os.ReadDir(s.dir)
+	s.Require().NoError(err)
 	out := []string{}
 	for _, e := range entries {
-		if name, ok := strings.CutSuffix(e.Name(), fileExt); ok {
+		if name, ok := strings.CutSuffix(e.Name(), session.FileExt); ok {
 			out = append(out, name)
 		}
 	}
@@ -46,424 +50,109 @@ func storedSessions(t *testing.T, dir string) []string {
 	return out
 }
 
-func mustRead(t *testing.T, dir string) Fold {
-	t.Helper()
-	fold, err := ReadAll(dir)
-	require.NoError(t, err)
+func (s *AttentionTieSuite) read() session.Fold {
+	fold, err := session.ReadAll(s.dir)
+	s.Require().NoError(err)
 	return fold
 }
 
-func TestPruneDeletesASessionWhoseNewestFactAgedOut(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	writeAged(t, dir, "stale", 40*24*time.Hour, []Record{
-		attRecord(t, "stale", 1, msAgo(40*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
-	})
-	writeAged(t, dir, "fresh", time.Hour, []Record{
-		attRecord(t, "fresh", 1, msAgo(time.Hour), KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}),
-	})
-
-	Prune(dir, retention)
-
-	assert.Equal(t, []string{"fresh"}, storedSessions(t, dir))
-	assert.Len(t, mustRead(t, dir).Records, 1)
-}
-
-// A session that has run for months keeps its whole history, back to its first fact.
-// Retention is a question about the file, and the answer is delete or leave alone:
-// dropping the old records out of a live session file would leave a file whose
-// beginning is missing, which nothing that reads one is written to expect.
-func TestPruneKeepsEveryFactInAFileItSpares(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	writeAged(t, dir, "long-lived", 90*24*time.Hour, []Record{
-		attRecord(t, "long-lived", 1, msAgo(90*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
-		attRecord(t, "long-lived", 2, msAgo(80*24*time.Hour), KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}),
-		attRecord(t, "long-lived", 3, msAgo(time.Hour), KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}),
-	})
-
-	Prune(dir, retention)
-
-	assert.Equal(t, []string{"long-lived"}, storedSessions(t, dir),
-		"the newest record is inside the window, so the file is not old")
-	assert.Len(t, mustRead(t, dir).Records, 3, "a spared file is spared whole")
-}
-
-// The modification time is a pre-filter, never the verdict. A file the filesystem
-// calls ancient but whose records are recent survives, because a copy, a restore or a
-// touch can move a modification time without adding or removing a single fact.
-func TestPruneDecidesOnRecordsNotOnTheFilesystemClock(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	writeAged(t, dir, "misdated", 200*24*time.Hour, []Record{
-		attRecord(t, "misdated", 1, msAgo(time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
-	})
-
-	Prune(dir, retention)
-
-	assert.Equal(t, []string{"misdated"}, storedSessions(t, dir))
-}
+func (s *AttentionTieSuite) prune() { session.Prune(s.dir, retention, session.WithTie(AttentionTie())) }
 
 // Rule 1: a request nobody has answered pins every file naming it, however old. The
 // queue belongs to a person, and a retention window that emptied it would be an
 // expiry: the one thing this package refuses to have.
-func TestPruneExemptsAFileHoldingAStillOpenRequest(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
+func (s *AttentionTieSuite) TestExemptsAFileHoldingAStillOpenRequest() {
+	t := s.T()
 	age := 200 * 24 * time.Hour
-
-	writeAged(t, dir, "blocked", age, []Record{
+	s.writeAged("blocked", age, []session.Record{
 		attRecord(t, "blocked", 1, msAgo(age), KindAttentionOpen, openPayload("att-1", "needs a human")),
 	})
-	writeAged(t, dir, "quiet", age, []Record{
-		attRecord(t, "quiet", 1, msAgo(age), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
+	s.writeAged("quiet", age, []session.Record{
+		attRecord(t, "quiet", 1, msAgo(age), session.KindTargetResult, session.TargetResult{Target: "build", Outcome: session.OutcomePass}),
 	})
 
-	Prune(dir, retention)
+	s.prune()
 
-	assert.Equal(t, []string{"blocked"}, storedSessions(t, dir),
-		"the exemption covers the blocked session only; its neighbor ages out normally")
-
-	open := AttentionQueue(mustRead(t, dir))
-	require.Len(t, open, 1)
-	assert.Equal(t, "att-1", open[0].ID)
+	s.Equal([]string{"blocked"}, s.stored(), "the exemption covers the blocked invocation only; its neighbor ages out normally")
+	open := AttentionQueue(s.read())
+	s.Require().Len(open, 1)
+	s.Equal("att-1", open[0].ID)
 }
 
 // Rule 2, the resurrection half. The agent that raised the block is still running, so
 // its file is young; the person who disposed of it has not run magus since, so theirs
 // is old. Deleting the dispose alone would put an answered request back in the queue.
-func TestPruneWillNotResurrectARequestByDeletingItsDispose(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	writeAged(t, dir, "agent", time.Hour, []Record{
+func (s *AttentionTieSuite) TestWillNotResurrectARequestByDeletingItsDispose() {
+	t := s.T()
+	s.writeAged("agent", time.Hour, []session.Record{
 		attRecord(t, "agent", 1, msAgo(200*24*time.Hour), KindAttentionOpen, openPayload("att-1", "needs a human")),
-		attRecord(t, "agent", 2, msAgo(time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
+		attRecord(t, "agent", 2, msAgo(time.Hour), session.KindTargetResult, session.TargetResult{Target: "build", Outcome: session.OutcomePass}),
 	})
-	writeAged(t, dir, "human", 199*24*time.Hour, []Record{
+	s.writeAged("human", 199*24*time.Hour, []session.Record{
 		attRecord(t, "human", 1, msAgo(199*24*time.Hour), KindAttentionDispose, AttentionDispose{Request: "att-1", Note: "handled"}),
 	})
+	s.Require().Empty(AttentionQueue(s.read()), "the request is answered before pruning runs")
 
-	require.Empty(t, AttentionQueue(mustRead(t, dir)), "the request is answered before pruning runs")
+	s.prune()
 
-	Prune(dir, retention)
-
-	assert.Equal(t, []string{"agent", "human"}, storedSessions(t, dir))
-	assert.Empty(t, AttentionQueue(mustRead(t, dir)),
-		"an answered request must not come back because its answer was garbage-collected")
+	s.Equal([]string{"agent", "human"}, s.stored())
+	s.Empty(AttentionQueue(s.read()), "an answered request must not come back because its answer was garbage-collected")
 }
 
 // Rule 2, the other half: once no file naming a request is young enough to spare, the
-// whole request goes at once. Nothing is left half-deleted.
-func TestPruneDeletesARequestsFilesTogetherOnceBothAgedOut(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
+// whole request goes at once.
+func (s *AttentionTieSuite) TestDeletesARequestsFilesTogetherOnceBothAgedOut() {
+	t := s.T()
 	age := 200 * 24 * time.Hour
-
-	writeAged(t, dir, "agent", age, []Record{
+	s.writeAged("agent", age, []session.Record{
 		attRecord(t, "agent", 1, msAgo(age), KindAttentionOpen, openPayload("att-1", "needs a human")),
 	})
-	writeAged(t, dir, "human", age-time.Hour, []Record{
+	s.writeAged("human", age-time.Hour, []session.Record{
 		attRecord(t, "human", 1, msAgo(age-time.Hour), KindAttentionDispose, AttentionDispose{Request: "att-1", Note: "handled"}),
 	})
 
-	Prune(dir, retention)
+	s.prune()
 
-	assert.Empty(t, storedSessions(t, dir))
-	assert.Empty(t, Attention(mustRead(t, dir)))
+	s.Empty(s.stored())
+	s.Empty(Attention(s.read()))
 }
 
-// Exemptions travel: sparing a file for one request can spare a SECOND request that
-// shares it, which in turn spares the file holding that request's other half. Here
-// att-open pins the agent file, which pins att-done, which pins the human file, and
-// nothing but the pinning would stop att-done's open from outliving its dispose.
-//
-// One pass in an unlucky map order gets this wrong, which is why pruning iterates to
-// a fixed point.
-func TestPruneExemptionPropagatesThroughASharedFile(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
+// Exemptions travel: att-open pins the agent file, which pins att-done, which pins the
+// human file, and nothing but the pinning would stop att-done's open from outliving its
+// dispose.
+func (s *AttentionTieSuite) TestExemptionPropagatesThroughASharedFile() {
+	t := s.T()
 	age := 200 * 24 * time.Hour
-
-	writeAged(t, dir, "agent", age, []Record{
+	s.writeAged("agent", age, []session.Record{
 		attRecord(t, "agent", 1, msAgo(age), KindAttentionOpen, openPayload("att-open", "still waiting")),
 		attRecord(t, "agent", 2, msAgo(age), KindAttentionOpen, openPayload("att-done", "was waiting")),
 	})
-	writeAged(t, dir, "human", age, []Record{
+	s.writeAged("human", age, []session.Record{
 		attRecord(t, "human", 1, msAgo(age), KindAttentionDispose, AttentionDispose{Request: "att-done", Note: "handled"}),
 	})
 
-	Prune(dir, retention)
+	s.prune()
 
-	assert.Equal(t, []string{"agent", "human"}, storedSessions(t, dir))
-
-	open := AttentionQueue(mustRead(t, dir))
-	require.Len(t, open, 1, "att-done stays answered; only att-open is still a wait")
-	assert.Equal(t, "att-open", open[0].ID)
+	s.Equal([]string{"agent", "human"}, s.stored())
+	open := AttentionQueue(s.read())
+	s.Require().Len(open, 1, "att-done stays answered; only att-open is still a wait")
+	s.Equal("att-open", open[0].ID)
 }
 
-// Every producer opens, so opening is where the store pays for its own housekeeping.
-// Open writes no record, so a store with nothing left to keep ends up empty.
-func TestOpenPrunesTheStore(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	writeAged(t, dir, "ancient", 400*24*time.Hour, []Record{
-		attRecord(t, "ancient", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
+// Every magus writer opens with the tie, so the housekeeping an open runs keeps a
+// still-open request too.
+func (s *AttentionTieSuite) TestAMagusWriterPrunesWithTheTie() {
+	t := s.T()
+	age := 400 * 24 * time.Hour
+	s.writeAged("blocked", age, []session.Record{
+		attRecord(t, "blocked", 1, msAgo(age), KindAttentionOpen, openPayload("att-1", "needs a human")),
+	})
+	s.writeAged("ancient", age, []session.Record{
+		attRecord(t, "ancient", 1, msAgo(age), session.KindTargetResult, session.TargetResult{Target: "build", Outcome: session.OutcomePass}),
 	})
 
-	_, err := Open(dir, "current", InvocationStart{Workspace: "/repo"})
-	require.NoError(t, err)
+	s.Require().NoError(RecordGate(s.dir, GateResult{Target: "ci", Scope: GateScopeAffected, Commit: "abc123", Outcome: session.OutcomePass}, session.InvocationStart{}))
 
-	assert.Empty(t, storedSessions(t, dir))
-}
-
-// Pruning reads every session file's metadata, so Open does it at most once per
-// interval; a store pruned a moment ago is left alone.
-func TestOpenPrunesAtMostOncePerInterval(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	_, err := Open(dir, "first", InvocationStart{})
-	require.NoError(t, err)
-
-	writeAged(t, dir, "ancient", 400*24*time.Hour, []Record{
-		attRecord(t, "ancient", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
-	})
-	_, err = Open(dir, "second", InvocationStart{})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"ancient"}, storedSessions(t, dir))
-
-	stale := time.Now().Add(-2 * pruneInterval)
-	require.NoError(t, os.Chtimes(filepath.Join(dir, pruneStamp), stale, stale))
-	_, err = Open(dir, "third", InvocationStart{})
-	require.NoError(t, err)
-	assert.Empty(t, storedSessions(t, dir))
-}
-
-// A writer must never delete the file it is about to append to, whatever the clock
-// says about the session file already sitting under its session id.
-func TestOpenNeverPrunesItsOwnSessionFile(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	writeAged(t, dir, "resumed", 400*24*time.Hour, []Record{
-		attRecord(t, "resumed", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
-	})
-
-	w, err := Open(dir, "resumed", InvocationStart{})
-	require.NoError(t, err)
-	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
-
-	assert.Equal(t, []string{"resumed"}, storedSessions(t, dir))
-	assert.Len(t, mustRead(t, dir).Records, 3, "the old fact, the session start, and the new fact")
-}
-
-func TestPruneWithANonPositiveWindowKeepsEverything(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	writeAged(t, dir, "ancient", 400*24*time.Hour, []Record{
-		attRecord(t, "ancient", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
-	})
-
-	Prune(dir, 0)
-	Prune(dir, -time.Hour)
-
-	assert.Equal(t, []string{"ancient"}, storedSessions(t, dir))
-}
-
-// Pruning in one process runs against a fold another process is in the middle of
-// reading, so a listed file can be gone by the time the reader opens it. That is
-// housekeeping finishing first, not corruption, and it must not surface as either an
-// error or a damaged-line count.
-func TestReadAllTreatsAFileThatVanishedMidFoldAsAbsent(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	writeRaw(t, dir, "kept", []Record{
-		attRecord(t, "kept", 1, 10, KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
-	})
-
-	// A dangling symlink reproduces the race deterministically: the directory lists
-	// the name, and the open that follows fails with ENOENT: exactly what a reader
-	// meets when pruning unlinks a file between those two calls.
-	if err := os.Symlink(filepath.Join(dir, "already-pruned"), filepath.Join(dir, "gone"+fileExt)); err != nil {
-		t.Skipf("symlinks unavailable on this platform: %v", err)
-	}
-
-	fold, err := ReadAll(dir)
-	require.NoError(t, err, "a pruned file must not fail the fold")
-	assert.Len(t, fold.Records, 1)
-	assert.Equal(t, 1, fold.Invocations, "a file that is no longer there is not an invocation anybody can read")
-	assert.Zero(t, fold.Skipped, "pruning is not damage")
-}
-
-func TestReadFileReportsAMissingFileAsVanishedNotSkipped(t *testing.T) {
-	t.Parallel()
-
-	records, skipped, legacy, vanished := readFile(filepath.Join(t.TempDir(), "never-existed"+fileExt))
-	assert.Empty(t, records)
-	assert.Zero(t, skipped)
-	assert.Zero(t, legacy)
-	assert.True(t, vanished)
-}
-
-// A store written before the invocation rename holds schema-1 lines keyed `session`. The
-// clean break stands, so this build reads none of them, but it must neither delete their
-// files nor report them as damage: a reader has to be told they exist and why they are not
-// shown.
-// writeLegacy lays down a schema-1 file whose lines are dated at, with its modification
-// time backdated to match.
-func writeLegacy(t *testing.T, dir, id string, at time.Time) string {
-	t.Helper()
-	path := filepath.Join(dir, id+fileExt)
-	line := fmt.Sprintf(`{"v":1,"session":"%s","seq":1,"kind":"session_start","ts":%d,"payload":{}}`+"\n", id, at.UnixMilli())
-	require.NoError(t, os.WriteFile(path, []byte(line+line), 0o644))
-	require.NoError(t, os.Chtimes(path, at, at))
-	return path
-}
-
-// Schema-1 lines are never read as records, but they carry a timestamp. Keeping their
-// files forever is what left eleven thousand of them in one store after the rename.
-func TestASchemaOneFileIsCountedAndAgesOutByItsTimestamps(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	old := writeLegacy(t, dir, "0123456789abcdef", time.Now().Add(-90*24*time.Hour))
-	young := writeLegacy(t, dir, "fedcba9876543210", time.Now().Add(-24*time.Hour))
-	undated := filepath.Join(dir, "undated"+fileExt)
-	require.NoError(t, os.WriteFile(undated, []byte("not a record\n"), 0o644))
-	ancient := time.Now().Add(-90 * 24 * time.Hour)
-	require.NoError(t, os.Chtimes(undated, ancient, ancient))
-
-	fold, err := ReadAll(dir)
-	require.NoError(t, err)
-	assert.Empty(t, fold.Records)
-	assert.Equal(t, Fold{Records: fold.Records, Invocations: 3, Skipped: 1, Legacy: 4}, fold,
-		"a line written before the rename is not damage; the undated one is")
-
-	Prune(dir, DefaultRetention)
-	assert.NoFileExists(t, old, "a schema-1 file past the window ages out like any other")
-	assert.FileExists(t, young)
-	assert.FileExists(t, undated, "a file with no dated line has no known age, so it stays")
-}
-
-func TestPruneCapsTheStoreAtItsNewestFiles(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	for i := range 5 {
-		writeAged(t, dir, fmt.Sprintf("inv%d", i), time.Duration(i)*time.Hour, []Record{
-			{V: APIVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
-		})
-	}
-	writeLegacy(t, dir, "legacy", time.Now().Add(-30*time.Minute))
-
-	prune(dir, retention, 3, "inv4"+fileExt)
-
-	assert.Equal(t, []string{"inv0", "inv1", "inv4", "legacy"}, storedSessions(t, dir),
-		"the newest three by newest fact survive, schema-1 included, and the writer's own file is never past the cap")
-}
-
-func TestPruneCapSparesTheNewestLoadedSessions(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	writeAged(t, dir, "loaded", 3*time.Hour, []Record{
-		{V: APIVersion, Invocation: "loaded", Seq: 1, Kind: KindAgentEvent, Ts: msAgo(3 * time.Hour), Payload: []byte(`{"host":"h","event":"file.read","ref":"r","at":1}`)},
-	})
-	for i := range 3 {
-		writeAged(t, dir, fmt.Sprintf("inv%d", i), time.Duration(i)*time.Hour, []Record{
-			{V: APIVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
-		})
-	}
-
-	prune(dir, retention, 2, "")
-
-	assert.Equal(t, []string{"inv0", "inv1", "loaded"}, storedSessions(t, dir),
-		"a loaded host session is the rare kind the cap must not push out")
-}
-
-func TestPruneCapStillHonorsTheAttentionExemption(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-
-	writeAged(t, dir, "asker", 5*time.Hour, []Record{
-		attRecord(t, "asker", 1, msAgo(5*time.Hour), KindAttentionOpen, openPayload("att-1", "approve?")),
-	})
-	for i := range 3 {
-		writeAged(t, dir, fmt.Sprintf("inv%d", i), time.Duration(i)*time.Hour, []Record{
-			{V: APIVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
-		})
-	}
-
-	prune(dir, retention, 2, "")
-
-	assert.Equal(t, []string{"asker", "inv0", "inv1"}, storedSessions(t, dir),
-		"a file holding a still-open request is exempt from the cap as from retention")
-}
-
-// TestClaimStalePruneStampPrunesExactlyOnceUnderConcurrency pins the fix for a plain
-// Stat-then-write pair, which let every concurrent Open in the same window see the same
-// stale (or missing) stamp and each independently decide to prune, forking the 17ms scan
-// once per racing caller instead of once per interval. Racing many callers at a stale
-// stamp, only one may ever run prune.
-func TestClaimStalePruneStampPrunesExactlyOnceUnderConcurrency(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	stamp := filepath.Join(dir, pruneStamp)
-	require.NoError(t, os.WriteFile(stamp, nil, 0o644))
-	stale := time.Now().Add(-2 * pruneInterval)
-	require.NoError(t, os.Chtimes(stamp, stale, stale))
-	// A session old enough to prune: exactly one delete of it proves exactly one prune ran.
-	writeAged(t, dir, "ancient", 400*24*time.Hour, []Record{
-		attRecord(t, "ancient", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
-	})
-
-	const callers = 50
-	var ready sync.WaitGroup
-	ready.Add(callers)
-	var wg sync.WaitGroup
-	for range callers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			ready.Done()
-			ready.Wait() // line every goroutine up before any of them races the claim
-			claimStalePruneStamp(dir, stamp, "")
-		}()
-	}
-	wg.Wait()
-
-	assert.Empty(t, storedSessions(t, dir), "the one ancient session must be gone: some caller pruned")
-	fi, err := os.Stat(stamp)
-	require.NoError(t, err)
-	assert.WithinDuration(t, time.Now(), fi.ModTime(), time.Minute, "the winner must have refreshed the stamp")
-}
-
-// TestClaimStalePruneStampSkipsWhenAlreadyContended confirms a caller that loses the
-// TryLock race does nothing rather than blocking for its turn: with the lock already
-// held, a stale-looking stamp is left exactly as it was.
-func TestClaimStalePruneStampSkipsWhenAlreadyContended(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	stamp := filepath.Join(dir, pruneStamp)
-	require.NoError(t, os.WriteFile(stamp, nil, 0o644))
-	stale := time.Now().Add(-2 * pruneInterval)
-	require.NoError(t, os.Chtimes(stamp, stale, stale))
-
-	fl := flock.New(stamp + ".lock")
-	got, err := fl.TryLock()
-	require.NoError(t, err)
-	require.True(t, got)
-	defer func() { _ = fl.Unlock() }()
-
-	claimStalePruneStamp(dir, stamp, "")
-
-	fi, err := os.Stat(stamp)
-	require.NoError(t, err)
-	assert.True(t, fi.ModTime().Equal(stale), "a contended caller must not touch the stamp")
+	s.NotContains(s.stored(), "ancient")
+	s.Contains(s.stored(), "blocked")
 }

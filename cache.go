@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -365,7 +366,7 @@ func (m *Magus) FileDiskAttention(ctx context.Context, message string) error {
 		Severity: string(types.SeverityWarning),
 		Source:   diskAttentionSource,
 		Message:  message,
-	}, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: m.ws.Root})
+	}, session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: m.ws.Root})
 	return err
 }
 

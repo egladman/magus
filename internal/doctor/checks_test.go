@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
@@ -876,12 +877,12 @@ func loadOneEvent(t *testing.T, root string, at time.Time) {
 	t.Helper()
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	_, err = sessions.LoadEvents(t.Context(), dir, []sessions.LoadEvent{{
+	_, err = session.LoadEvents(t.Context(), dir, []session.LoadEvent{{
 		Session: "s1",
-		Event: sessions.AgentEvent{
-			Host: "h1", Kind: sessions.EventFileRead, Ref: "r1", AtMs: at.UnixMilli(), Text: "a.go",
+		Event: session.AgentEvent{
+			Host: "h1", Kind: session.EventFileRead, Ref: "r1", AtMs: at.UnixMilli(), Text: "a.go",
 		},
-	}}, sessions.InvocationStart{})
+	}}, session.InvocationStart{})
 	require.NoError(t, err)
 }
 

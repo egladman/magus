@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/safetyscissors/session"
 	"github.com/egladman/magus/types"
 )
 
@@ -103,7 +104,7 @@ func RecordHarnessWrite(ctx context.Context, root, command, version string, path
 	dir, err := sessions.Dir(root)
 	if err == nil {
 		err = sessions.RecordHarnessWrite(dir, sessions.HarnessWrite{Paths: paths},
-			sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: root, Command: command, Version: version})
+			session.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: root, Command: command, Version: version})
 	}
 	if err != nil {
 		slog.With(attr.Component(command)).WarnContext(ctx, "harness write not recorded", attr.Error(err))
