@@ -146,7 +146,7 @@ func runCLI() int {
 	// returns, and a profile that stops only on the happy path is a profile that is
 	// empty exactly when a run failed slowly. main() calls os.Exit on runCLI's RESULT,
 	// so this defer still runs. No-op unless MAGUS_PPROF is set.
-	defer startProfiling()()
+	defer observability.StartProfiling()()
 
 	var rootCtx context.Context
 	var stopSignals func()

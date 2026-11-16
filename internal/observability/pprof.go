@@ -1,4 +1,4 @@
-package main
+package observability
 
 import (
 	"fmt"
@@ -44,9 +44,9 @@ const pprofEnv = "MAGUS_PPROF"
 // pprofPid is the placeholder a profile path spells its writer's pid with.
 const pprofPid = "%p"
 
-// startProfiling honors MAGUS_PPROF and returns a stop function. The stop function is
+// StartProfiling honors MAGUS_PPROF and returns a stop function. The stop function is
 // always non-nil, so callers can defer it unconditionally.
-func startProfiling() func() {
+func StartProfiling() func() {
 	spec := strings.TrimSpace(os.Getenv(pprofEnv))
 	if spec == "" {
 		return func() {}

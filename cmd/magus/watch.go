@@ -7,36 +7,12 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
 	"syscall"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/types"
 )
-
-// ignoreFlag accumulates repeated --ignore values; satisfies flag.Value.
-type ignoreFlag struct {
-	patterns []types.IgnorePattern
-}
-
-func (f *ignoreFlag) String() string {
-	parts := make([]string, len(f.patterns))
-	for i, p := range f.patterns {
-		parts[i] = fmt.Sprintf("%s=%s", string(p.Type), p.Pattern)
-	}
-	return strings.Join(parts, ",")
-}
-
-func (f *ignoreFlag) Set(value string) error {
-	p, err := watch.ParsePattern(value)
-	if err != nil {
-		return err
-	}
-	f.patterns = append(f.patterns, p)
-	return nil
-}
 
 // watchCommand implements `magus watch`; output format matches `git diff --name-only` for pipe compatibility.
 func watchCommand(ctx context.Context, root string, rc runConfig, args []string) error {
@@ -45,7 +21,7 @@ func watchCommand(ctx context.Context, root string, rc runConfig, args []string)
 	wf := flaggen.BindWatch(fs)
 	// --ignore stays hand-bound: it is a repeatable custom flag.Value, a shape the
 	// registry has no kind for, so it is also absent from the man page.
-	var ignores ignoreFlag
+	var ignores watch.IgnoreFlag
 	fs.Var(&ignores, "ignore", "ignore pattern; repeatable. Form: type=<glob|regex|literal>,pattern=<value>")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus watch [flags]")
@@ -108,7 +84,7 @@ func watchCommand(ctx context.Context, root string, rc runConfig, args []string)
 	//   5. CLI ignores    — --ignore flags, highest user-supplied tier.
 	userPatterns := append([]types.IgnorePattern{}, rc.watchIgnores...)
 	userPatterns = append(userPatterns, projectIgnores...)
-	userPatterns = append(userPatterns, ignores.patterns...)
+	userPatterns = append(userPatterns, ignores.Patterns...)
 
 	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -147,7 +123,7 @@ func watchCommand(ctx context.Context, root string, rc runConfig, args []string)
 	// watch, it does not become a stream that silently emits nothing.
 	writeBatch := func(paths []string) error {
 		for _, p := range paths {
-			rel := toWorkspaceRel(ws.Root(), p)
+			rel := watch.ToWorkspaceRel(ws.Root(), p)
 			fmt.Fprint(out, rel, sep)
 		}
 		fmt.Fprint(out, batchSep)
@@ -182,15 +158,4 @@ func watchCommand(ctx context.Context, root string, rc runConfig, args []string)
 			}
 		}
 	}
-}
-
-func toWorkspaceRel(wsRoot, p string) string {
-	if !filepath.IsAbs(p) {
-		return p
-	}
-	rel, err := filepath.Rel(wsRoot, p)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return p
-	}
-	return filepath.ToSlash(rel)
 }

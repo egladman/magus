@@ -1,4 +1,4 @@
-package main
+package langservice
 
 import (
 	"bufio"
@@ -61,8 +61,8 @@ func TestLSPServerSession(t *testing.T) {
 	in.WriteString(frame(t, map[string]any{"jsonrpc": "2.0", "method": "exit"}))
 
 	var out bytes.Buffer
-	srv := &lspServer{docs: map[string]string{}}
-	require.NoError(t, srv.serve(strings.NewReader(in.String()), &out))
+	srv := NewServer("test")
+	require.NoError(t, srv.Serve(strings.NewReader(in.String()), &out))
 
 	msgs := readFrames(t, out.String())
 	require.Len(t, msgs, 4, "one response per request (notifications produce none)")
@@ -109,8 +109,8 @@ func TestLSPCompletionReplaceRange(t *testing.T) {
 	in.WriteString(frame(t, map[string]any{"jsonrpc": "2.0", "method": "exit"}))
 
 	var out bytes.Buffer
-	srv := &lspServer{docs: map[string]string{}}
-	require.NoError(t, srv.serve(strings.NewReader(in.String()), &out))
+	srv := NewServer("test")
+	require.NoError(t, srv.Serve(strings.NewReader(in.String()), &out))
 
 	// didOpen carries no reply; completion and shutdown each do.
 	msgs := readFrames(t, out.String())

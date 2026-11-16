@@ -407,7 +407,7 @@ linters:
             - {file: "benchmarks/agent/cmd/*/main.go", reason: a standalone benchmark tool with no log display}
             - {file: libs/testkit/environ.go, reason: a test binary's TestMain reports before any display exists}
             - {file: cmd/magus/main.go, reason: "reports flag and config errors before the display exists, and relays a worker's stderr"}
-            - {file: cmd/magus/pprof.go, reason: MAGUS_PPROF starts before the display exists}
+            - {file: internal/observability/pprof.go, reason: MAGUS_PPROF starts before the display exists}
             - {file: cmd/magus/bootstrap_exec.go, reason: runs before the display exists}
             - {file: cmd/magus/bootstrap_exec_unix.go, reason: runs before the display exists}
             - {file: cmd/magus/shell.go, reason: "the guard's verdict on stderr is the hook protocol a host reads"}
