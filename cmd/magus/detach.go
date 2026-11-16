@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/proc"
 )
 
 // detachRun starts this invocation again without --detach, as its own session leader
@@ -27,33 +27,16 @@ func detachRun(ctx context.Context) error {
 	}
 	defer func() { _ = closeSink() }()
 
-	logPath, err := newDetachedLog(time.Now())
+	logPath, err := proc.NewDetachedLog(stateLogPath("detached"), time.Now())
 	if err != nil {
 		return fmt.Errorf("--detach: %w", err)
 	}
-	pid, err := spawnDetached(withoutDetachFlag(os.Args[1:]), logPath)
+	pid, err := proc.SpawnDetached(withoutDetachFlag(os.Args[1:]), logPath)
 	if err != nil {
 		return fmt.Errorf("--detach: %w", err)
 	}
 	sink.EmitDetach(ctx, pid, logPath)
 	return nil
-}
-
-// newDetachedLog creates an empty log for one detached run and returns its path. The
-// name leads with the start time, so a directory listing sorts them.
-func newDetachedLog(now time.Time) (string, error) {
-	dir := stateLogPath("detached")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("create %s: %w", dir, err)
-	}
-	f, err := os.CreateTemp(dir, now.UTC().Format("20060102T150405Z")+"-*.log")
-	if err != nil {
-		return "", fmt.Errorf("create a log in %s: %w", dir, err)
-	}
-	if err := f.Close(); err != nil {
-		return "", fmt.Errorf("create %s: %w", f.Name(), err)
-	}
-	return filepath.Clean(f.Name()), nil
 }
 
 // withoutDetachFlag drops --detach from an argv, in every spelling the flag package
@@ -74,3 +57,10 @@ func withoutDetachFlag(args []string) []string {
 	}
 	return out
 }
+
+// The leased callers (broker.go, query.go) still name these; they forward to internal/proc.
+var (
+	spawnDetached       = proc.SpawnDetached
+	detachedCommand     = proc.DetachedCommand
+	detachedSysProcAttr = proc.DetachedSysProcAttr
+)

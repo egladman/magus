@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/egladman/magus/internal/server"
 )
 
 // lifecycle is how a long-lived magus process, the broker or a foreground server, answers
@@ -34,7 +36,7 @@ func ownsItsSignals(args []string) bool {
 	if len(subArgs) > 0 && subArgs[0] == "broker" {
 		return brokerServes(subArgs[1:])
 	}
-	return isServerRun(subArgs) && wantsForeground(subArgs)
+	return server.IsServerRun(subArgs) && server.WantsForeground(subArgs)
 }
 
 // early queues the signals a process ownsItsSignals names receives before its lifecycle
