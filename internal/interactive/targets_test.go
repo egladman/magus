@@ -175,91 +175,103 @@ func TestResolveTargetsEmptyWorkspace(t *testing.T) {
 	assert.Empty(t, targets, "an empty workspace resolves no targets; runTarget must fail loudly on this")
 }
 
-// TestResolveTargetsSkip covers --skip: it subtracts from whatever the positionals
-// resolved to, and refuses anything that would leave the caller believing a project was
-// gated when it was not.
-func TestResolveTargetsSkip(t *testing.T) {
+// skipTargets resolves the test target with skips from a cwd outside the workspace, so
+// "." names the root project rather than the cwd.
+func skipTargets(t *testing.T, named []string, skips ...string) ([]types.Target, error) {
+	t.Helper()
 	ws := &resolveWS{
 		root:     "/ws/b",
 		projects: []string{".", "api", "web"},
 		contains: map[string]string{"/ws/b/api": "api"},
 	}
+	targets, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Projects: named, Skips: skips, Cwd: "/ws/other"})
+	return targets, err
+}
 
+// testIn is the test target in each of paths.
+func testIn(paths ...string) []types.Target {
+	out := make([]types.Target, len(paths))
+	for i, p := range paths {
+		out[i] = types.Target{Path: p, Name: "test"}
+	}
+	return out
+}
+
+// TestResolveTargetsSkip covers --skip: it subtracts from whatever the positionals
+// resolved to, and refuses anything that would leave the caller believing a project was
+// gated when it was not.
+func TestResolveTargetsSkip(t *testing.T) {
 	t.Run("bare invocation skips from the full fan-out", func(t *testing.T) {
-		targets, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Skips: []string{"api"}, Cwd: "/ws/other"})
+		targets, err := skipTargets(t, nil, "api")
 		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}, {Path: "web", Name: "test"}}, targets)
+		assert.Equal(t, testIn(".", "web"), targets)
 	})
 
 	t.Run("repeatable", func(t *testing.T) {
-		targets, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Skips: []string{"api", "web"}, Cwd: "/ws/other"})
+		targets, err := skipTargets(t, nil, "api", "web")
 		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}}, targets)
+		assert.Equal(t, testIn("."), targets)
 	})
 
 	// The same grammar as a positional, resolver included: "." from outside the
 	// workspace is the root project, not the cwd.
 	t.Run("dot reference resolves like a positional", func(t *testing.T) {
-		targets, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Skips: []string{"."}, Cwd: "/ws/other"})
+		targets, err := skipTargets(t, nil, ".")
 		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}, {Path: "web", Name: "test"}}, targets)
+		assert.Equal(t, testIn("api", "web"), targets)
 	})
 
 	// A real project outside an explicit selection is not a contradiction (it was
 	// never going to run), so it subtracts nothing and stays silent.
 	t.Run("skipping an unselected project is a no-op", func(t *testing.T) {
-		targets, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"},
-			RunSelection{Projects: []string{"api"}, Skips: []string{"web"}, Cwd: "/ws/other"})
+		targets, err := skipTargets(t, []string{"api"}, "web")
 		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
+		assert.Equal(t, testIn("api"), targets)
 	})
 
 	t.Run("a reference no project matches is an error", func(t *testing.T) {
-		_, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Skips: []string{"apo"}, Cwd: "/ws/other"})
+		_, err := skipTargets(t, nil, "apo")
 		require.ErrorContains(t, err, "--skip apo")
 		require.ErrorIs(t, err, types.ErrUnknownProject)
 	})
 
 	t.Run("skipping a project the command line named is contradictory", func(t *testing.T) {
-		_, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"},
-			RunSelection{Projects: []string{"api"}, Skips: []string{"api"}, Cwd: "/ws/other"})
+		_, err := skipTargets(t, []string{"api"}, "api")
 		require.ErrorContains(t, err, "--skip api contradicts naming it on the command line")
 	})
 
 	t.Run("skipping every project is an error, not an empty pass", func(t *testing.T) {
-		_, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"},
-			RunSelection{Skips: []string{".", "api", "web"}, Cwd: "/ws/other"})
+		_, err := skipTargets(t, nil, ".", "api", "web")
 		require.ErrorContains(t, err, "removed every selected project")
 	})
 
 	// "/" is the all-projects sentinel ResolveProject passes through untouched; matched
 	// against project paths it would skip nothing at all.
 	t.Run("the all-projects sentinel is refused", func(t *testing.T) {
-		_, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Skips: []string{"/"}, Cwd: "/ws/other"})
+		_, err := skipTargets(t, nil, "/")
 		require.ErrorContains(t, err, "there is no all-projects skip")
 	})
 
 	t.Run("a glob subtracts every project it matches", func(t *testing.T) {
-		targets, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Skips: []string{"a*"}, Cwd: "/ws/other"})
+		targets, err := skipTargets(t, nil, "a*")
 		require.NoError(t, err)
-		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}, {Path: "web", Name: "test"}}, targets)
+		assert.Equal(t, testIn(".", "web"), targets)
 	})
 
 	t.Run("a glob matching no project is an error", func(t *testing.T) {
-		_, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Skips: []string{"z*"}, Cwd: "/ws/other"})
+		_, err := skipTargets(t, nil, "z*")
 		require.ErrorContains(t, err, "no project matches the glob")
 	})
 
 	t.Run("a glob covering an explicitly named project is contradictory", func(t *testing.T) {
-		_, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"},
-			RunSelection{Projects: []string{"api"}, Skips: []string{"a*"}, Cwd: "/ws/other"})
+		_, err := skipTargets(t, []string{"api"}, "a*")
 		require.ErrorContains(t, err, "contradicts naming it on the command line")
 	})
 
 	// "*" legitimately matches every single-segment path including ".", so it falls to
 	// the emptied-selection refusal rather than a special case.
 	t.Run("a glob skipping everything is the emptied-selection error", func(t *testing.T) {
-		_, _, err := ResolveTargets(t.Context(), ws, types.Target{Name: "test"}, RunSelection{Skips: []string{"*"}, Cwd: "/ws/other"})
+		_, err := skipTargets(t, nil, "*")
 		require.ErrorContains(t, err, "removed every selected project")
 	})
 }
@@ -282,31 +294,31 @@ func TestApplyTargetFilter(t *testing.T) {
 	}
 
 	t.Run("multi partial: skip the undefined, keep the defined", func(t *testing.T) {
-		got, err := applyTargetFilter(tgt(".", "gopherbuzz", "docs", "proto"), "go-vet", defines, label)
+		got, err := applyTargetFilter(context.Background(), tgt(".", "gopherbuzz", "docs", "proto"), "go-vet", defines, label)
 		require.NoError(t, err)
 		assert.Equal(t, tgt(".", "gopherbuzz"), got, "undefined projects are dropped, not errored")
 	})
 
 	t.Run("single project undefined: error", func(t *testing.T) {
-		_, err := applyTargetFilter(tgt("docs"), "go-vet", defines, label)
+		_, err := applyTargetFilter(context.Background(), tgt("docs"), "go-vet", defines, label)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "docs", "names the single project")
 	})
 
 	t.Run("single project defined: runs", func(t *testing.T) {
-		got, err := applyTargetFilter(tgt("gopherbuzz"), "go-vet", defines, label)
+		got, err := applyTargetFilter(context.Background(), tgt("gopherbuzz"), "go-vet", defines, label)
 		require.NoError(t, err)
 		assert.Equal(t, tgt("gopherbuzz"), got)
 	})
 
 	t.Run("none serve across many: unknown-target error", func(t *testing.T) {
-		_, err := applyTargetFilter(tgt("docs", "proto"), "bogus", func(string, string) bool { return false }, label)
+		_, err := applyTargetFilter(context.Background(), tgt("docs", "proto"), "bogus", func(string, string) bool { return false }, label)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "any of the 2 selected projects")
 	})
 
 	t.Run("all defined: pass through", func(t *testing.T) {
-		got, err := applyTargetFilter(tgt(".", "gopherbuzz"), "go-vet", defines, label)
+		got, err := applyTargetFilter(context.Background(), tgt(".", "gopherbuzz"), "go-vet", defines, label)
 		require.NoError(t, err)
 		assert.Len(t, got, 2)
 	})

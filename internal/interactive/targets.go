@@ -165,14 +165,14 @@ func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetNa
 // target across the selection. When some projects serve it and others don't, the ones
 // that don't are dropped with a warning: the tolerant multi-project behavior.
 func FilterServedTargets(ctx context.Context, ws types.WorkspaceRepository, targets []types.Target, targetName string) ([]types.Target, error) {
-	return applyTargetFilter(targets, targetName, DefinesTarget(ctx, ws), func(path string) string { return projectLabel(ws, path) })
+	return applyTargetFilter(ctx, targets, targetName, DefinesTarget(ctx, ws), func(path string) string { return projectLabel(ws, path) })
 }
 
 // applyTargetFilter is the pure policy behind FilterServedTargets: partition targets by
 // whether their project defines the target, error when none do (single project named vs
 // unknown-across-selection), otherwise drop the undefined ones with a warning. Split out
 // so the fault-tolerance matrix is testable without a live workspace.
-func applyTargetFilter(targets []types.Target, targetName string, defines func(path, target string) bool, label func(path string) string) ([]types.Target, error) {
+func applyTargetFilter(ctx context.Context, targets []types.Target, targetName string, defines func(path, target string) bool, label func(path string) string) ([]types.Target, error) {
 	var served, skipped []types.Target
 	for _, t := range targets {
 		if defines(t.Path, t.Name) {
@@ -192,7 +192,7 @@ func applyTargetFilter(targets []types.Target, targetName string, defines func(p
 		for _, t := range skipped {
 			names = append(names, label(t.Path))
 		}
-		slog.With(attr.Component("run")).Warn("target not defined in some selected projects; skipping them",
+		slog.With(attr.Component("run")).WarnContext(ctx, "target not defined in some selected projects; skipping them",
 			slog.String("target", targetName), slog.String("skipped", strings.Join(names, ", ")))
 	}
 	return served, nil
