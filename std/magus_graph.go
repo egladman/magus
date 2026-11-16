@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
@@ -189,10 +190,11 @@ func MagusPath(ctx context.Context, node, to string, opts types.KnowledgePathOpt
 }
 
 // MagusRefs backs magus\graph().refs: a symbol's definition and its users.
-// It is the record `magus refs -o json` prints.
-// A symbol nothing defines is an
-// answer carrying a verdict, never a raise: absent and unknown are different facts and a
-// caller branches on answer.verdict to tell them apart.
+// It is the record `magus refs -o json` prints, and it takes the command line's rule for a
+// bare name: one that labels more than one symbol raises, naming each, and a caller asks
+// again with a symbol ID. A symbol nothing defines is an answer carrying a verdict, never a
+// raise: absent and unknown are different facts and a caller branches on answer.verdict to
+// tell them apart.
 func MagusRefs(ctx context.Context, symbol string, opts types.KnowledgeRefsOptions) (types.KnowledgeRefsOutput, error) {
 	if symbol == "" {
 		return types.KnowledgeRefsOutput{}, errors.New("magus\\graph().refs: needs a symbol ID or a name that resolves to one")
@@ -207,6 +209,13 @@ func MagusRefs(ctx context.Context, symbol string, opts types.KnowledgeRefsOptio
 	kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.SymbolsMentioning(symbol)})
 	if err != nil {
 		return types.KnowledgeRefsOutput{}, err
+	}
+	if named := kg.SymbolsNamed(symbol); len(named) > 1 {
+		quoted := make([]string, len(named))
+		for i, id := range named {
+			quoted[i] = strconv.Quote(id)
+		}
+		return types.KnowledgeRefsOutput{}, fmt.Errorf("magus\\graph().refs: %q names %d symbols defined in this workspace, so ask for one by id: %s", symbol, len(named), strings.Join(quoted, ", "))
 	}
 	out, ok := kg.Refs(symbol)
 	if !ok {
