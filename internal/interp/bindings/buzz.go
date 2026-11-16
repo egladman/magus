@@ -75,27 +75,8 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	if err := registerMagusModules(ctx, sess); err != nil {
 		return err
 	}
-	// Built-in spells follow the same import idiom as std modules: each spell is
-	// reachable as `import "magus/spell/<name>"`, binding the spell handle under
-	// its basename.
-	builtins := spell.Builtins()
 	imports := remotespell.ImportsFromContext(ctx)
-	for name := range builtins {
-		// Native modules win over the resolver, so a declared override must not be
-		// registered here or the resolver below would never see its import.
-		if _, overridden := imports.Override(spells.ModulePath(name)); overridden {
-			continue
-		}
-		sess.SetNativeModule(spells.ModulePath(name), buzzSpellObject(name))
-	}
-	// A host-registered spell is no compiled built-in, so the loop misses it.
-	// The handle carries only the name: magus.project resolves the spec.
-	for _, sp := range project.DefaultSpellRegistry().All() {
-		if _, isBuiltin := builtins[sp.Name()]; isBuiltin {
-			continue
-		}
-		sess.SetNativeModule(spells.ModulePath(sp.Name()), buzzSpellObject(sp.Name()))
-	}
+	RegisterSpellImports(sess, imports)
 	// Workspace-local spells are imported by path: `import "spells/hello"` resolves
 	// ./spells/hello.buzz on demand and binds its handle under the basename (hello),
 	// registering by value when bound via magus.project.
@@ -117,6 +98,30 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		return resolveLocalSpellImport(ctx, imports, importPath)
 	})
 	return nil
+}
+
+// RegisterSpellImports binds every `import "magus/spell/<name>"` a session can
+// resolve: each compiled built-in and each host-registered spell, under the
+// handle a magusfile load binds. A path imports overrides is skipped, so the
+// session's module resolver sees that import instead; nil imports overrides
+// nothing. It loads no workspace and runs no op, which is why `magus buzz
+// --check` can call it.
+func RegisterSpellImports(sess *buzz.Session, imports *remotespell.Imports) {
+	builtins := spell.Builtins()
+	for name := range builtins {
+		if _, overridden := imports.Override(spells.ModulePath(name)); overridden {
+			continue
+		}
+		sess.SetNativeModule(spells.ModulePath(name), buzzSpellObject(name))
+	}
+	// A host-registered spell is no compiled built-in, so the loop misses it.
+	// The handle carries only the name: magus.project resolves the spec.
+	for _, sp := range project.DefaultSpellRegistry().All() {
+		if _, isBuiltin := builtins[sp.Name()]; isBuiltin {
+			continue
+		}
+		sess.SetNativeModule(spells.ModulePath(sp.Name()), buzzSpellObject(sp.Name()))
+	}
 }
 
 // magusMode names where the magus.* namespace is installed. A magusfile and a

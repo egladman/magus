@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
@@ -634,6 +635,35 @@ func TestBuzzCheckFile_MagusTypesNeedTheModulesOwnImport(t *testing.T) {
 			assert.Equal(t, buzz.Diagnostic{Line: 1, Col: got.Col, Code: got.Code, Msg: got.Msg, File: lib}, got)
 		})
 	}
+}
+
+// A magusfile's spell import resolves under --check, which reads the file by the
+// loader's embedded rules without --embedded. A misspelled one still fails BZZ2001,
+// naming the handle so the note can list the spells that resolve.
+func TestBuzzCheckFile_SpellImports(t *testing.T) {
+	dir := t.TempDir()
+	known := filepath.Join(dir, "known.buzz")
+	require.NoError(t, os.WriteFile(known, []byte("import \"magus\";\nimport \"magus/spell/go\";\nmagus\\project({\"spells\": [go]});\n"), 0o644))
+	typo := filepath.Join(dir, "typo.buzz")
+	require.NoError(t, os.WriteFile(typo, []byte("import \"magus/spell/gooo\";\n"), 0o644))
+
+	diags, err := buzzCheckFile(t.Context(), known, false)
+	require.NoError(t, err)
+	assert.Empty(t, diags)
+
+	diags, err = buzzCheckFile(t.Context(), typo, false)
+	require.NoError(t, err)
+	require.Len(t, diags, 1)
+	assert.Contains(t, diags[0].String(), buzzUnresolvedImport)
+	handle, ok := buzzUnresolvedSpellHandle(diags[0])
+	require.True(t, ok, diags[0].String())
+	assert.Equal(t, "gooo", handle)
+
+	note := interp.CheckSpellImports([]string{handle})
+	require.Error(t, note)
+	assert.Contains(t, note.Error(), `did you mean "go"`)
+	assert.Contains(t, note.Error(), "built-in spells:")
+	require.Error(t, buzzCheck(t.Context(), []string{typo}, false))
 }
 
 func TestBuzzCheck_WarningFails(t *testing.T) {
