@@ -70,7 +70,7 @@ Non-test Go source counted on 2026-11-15:
   No package below it can leave until those types do.
 - `internal/guard`, at 51,845 lines, imports `internal/workspace`, `internal/interp`,
   gopherbuzz, `internal/commands`, `cmd/magus/gen`, config, the project graph, the cache,
-  the broker and VCS. `Judge` (`internal/guard/guard.go:766`) runs the 106 built-in rules
+  the broker and VCS. `Judge` (`internal/guard/guard.go:766`) runs the 137 built-in rules
   directly, so they cannot be separated from it. The parts that belong to the harness
   itself are:
   - the verdict merge;
@@ -108,7 +108,9 @@ Policy, StrongDM Leash and Microsoft's Agent Governance Toolkit:
 ### 1. The harness layer is its own module
 
 The harness becomes a nested Go module in this repository, as gopherbuzz and
-diagnostics already are. Its packages, each with one job:
+diagnostics already are. Its path is `github.com/egladman/magus/libs/safetyscissors`. A
+vanity path waits until the module leaves the repository, if it ever does. Its packages,
+each with one job:
 
 | Package   | Holds                                                                                       |
 | --------- | ------------------------------------------------------------------------------------------- |
@@ -118,7 +120,7 @@ diagnostics already are. Its packages, each with one job:
 | `trail`   | append-only events, written and read                                                        |
 | `session` | session ids and their append-only records                                                   |
 | `sandbox` | read, write and exec policy, narrowed to a lease                                            |
-| `budget`  | the slot limiter and machine claims                                                         |
+| `budget`  | the slot limiter, machine claims, and a spend limit priced from rows the caller supplies    |
 | `tier`    | the model tier set and price table built from rows the caller supplies                      |
 | `redact`  | resolving secrets and redacting them from what is recorded                                  |
 
@@ -150,11 +152,44 @@ This exposes the shape ADR 0046 built (`WithStepSpecs`, `WithStepRule`, the step
 - Buzz stays magus's own way of writing policy. magus adapts each Buzz rule into a
   `step.Rule`, the shape `steps.Rule` already has (`internal/guard/steps/steps.go:16`).
 
-The module ships no built-in rule that reads magus's world: worktrees, `magus run`
-routing, approved sources and the magusfile all stay in magus. Rules that read only the
-step and its lease, such as a write outside the lease's paths, move with the module.
+Every built-in rule ships in the module, and none applies by default. A caller opts in
+by passing each rule, or a named group of them, as an option to the table. A rule that
+reads magus's world (worktrees, `magus run` routing, approved sources, the magusfile)
+takes what it reads from a seam the caller supplies, and the table refuses to build
+when the rule is passed without it. An empty table is still a construction error
+(part 2), so opting in to nothing fails loudly instead of allowing everything.
+`AllRules()` makes "everything" a call the caller writes, never what nil means.
 
-### 4. magus is the first client
+The shape is `go/analysis` with `multichecker.Main`. Every analyzer ships as a value,
+none runs unless the program passes it, and a group is a plain slice. `crypto/tls` and
+`crypto/x509` fit worse, because nil there means defaults the library picks.
+
+Today the 137 rules (99 deny, 31 advise, 7 off; `./magus describe rule`) are inline arms
+in `evaluateLine` (`internal/guard/shell.go:2758`) and `Judge`, so each becomes a value
+first. Sorted by what they read, as proposed on 2026-11-15 and not traced rule by rule:
+
+| Group        | Rules | Reads                                 | Seam the caller supplies      |
+| ------------ | ----: | ------------------------------------- | ----------------------------- |
+| `shell`      |    14 | the step                              | none                          |
+| `vcs`        |    11 | the step and VCS state                | a VCS reader                  |
+| `files`      |    11 | the step's path and declared outputs  | the declared outputs          |
+| `reads`      |     9 | the step and a symbol index           | an index reader               |
+| `lease`      |    25 | the lease and the job row             | none: the job store moves     |
+| `delegation` |    27 | the session, the spawn input, tiers   | none, except four magus rules |
+| `person`     |     7 | magus CLI verbs a person must run     | magus's command tree          |
+| `magus`      |    25 | the command tree, spells, the run log | magus's command tree and runs |
+| `guard`      |     8 | the guard's own state                 | two are the table's own       |
+
+### 4. What the caller owns
+
+- Prices. The module ships no model, provider or token price. A caller that wants a
+  spend limit passes its own price rows, and the budget refuses the step that would
+  cross it. A price that changes never waits on a release.
+- The graph. The module computes no project graph and imports none. A caller that wants
+  owners or dependents in a rule implements the reader the rule asks for, from magus's
+  graph, a JSON file built ahead of time, or anything else.
+
+### 5. magus is the first client
 
 `judge.go` builds a `step.Table` and registers magus's built-ins and Buzz adapters as
 rules. `internal/job` keeps worktrees, checkouts, landings, merges, plans and outcomes on
@@ -162,7 +197,7 @@ top of the module's job store. `vcs.StateDir` computes the directory magus passe
 `job.Open`. The CLI, the hooks, `magus agent install`, the MCP server and the
 workspace's rules stay in magus. The module never imports magus.
 
-### 5. The seams
+### 6. The seams
 
 Only seams that already have a second implementation become interfaces:
 
@@ -175,7 +210,7 @@ Only seams that already have a second implementation become interfaces:
 Repository identity becomes a directory string, not an interface. Each seam gets one
 option and a fake in `libs/testkit`.
 
-### 6. What it refuses
+### 7. What it refuses
 
 These stay out, as the
 [refusal of an agent loop in the SDK](../design/refusals.md) and
@@ -189,12 +224,16 @@ These stay out, as the
 - trust scores;
 - a hosted gateway or an account;
 - default allow, or auto-approve;
-- anything that rewrites what reaches the model.
+- anything that rewrites what reaches the model;
+- a caller writing the trail directly. The library records what passes through its own
+  calls, and an entry nobody witnessed would taint every other entry;
+- price tables or provider settings it would have to keep current;
+- a project graph, embeddings or retrieval.
 
 The names carry no agent vocabulary, because the mistakes it prevents are the ones a
 person makes too.
 
-### 7. The name is `safetyscissors`
+### 8. The name is `safetyscissors`
 
 Safety scissors cut. You cannot stab yourself with them, whoever holds them. That is the
 library's purpose stated as an object, and it says nothing about agents.
@@ -206,24 +245,24 @@ library's purpose stated as an object, and it says nothing about agents.
 
 Eli picked it on 2026-11-15.
 
-### 8. Extraction order
+### 9. Extraction order
 
 Each step merges on its own and leaves magus green. No step starts until the open
 pull requests on magus have merged.
 
-| Step | Moves                                                                                                | Size                          | Needs Eli's call                                          | State   |
-| ---- | ---------------------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------- | ------- |
-| 1    | `budget`: `internal/cache/limiter.go`, the machine claim and its three types                         | ~500 lines                    | no                                                        | planned |
-| 2    | `verdict` and `step` types out of `types/guard.go`, `types/guard_judgment.go`, `types/agent/step.go` | ~700 lines                    | yes: breaks the Go API lock                               | planned |
-| 3    | `tier`: `types/agent/model.go`, `internal/agent/model`, `TierCeiling` (`register.go:111-117`)        | ~650 lines                    | no                                                        | planned |
-| 4    | the JSON Lines store helpers the module's stores need                                                | ~1,500 lines                  | no                                                        | planned |
-| 5    | `trail` core; feedback marks, replay and env propagation stay in magus                               | ~1,500 lines                  | no                                                        | planned |
-| 6    | `session`, with the directory supplied by the caller                                                 | ~2,000 lines                  | no                                                        | planned |
-| 7    | `redact` from `internal/secret`                                                                      | ~1,300 lines                  | no                                                        | planned |
-| 8    | the job types out of `types`, with no alias, and the generated Buzz mirrors regenerated              | ~5,000 lines                  | yes: 16+ importers                                        | planned |
-| 9    | the `job` store core, with config as `Limits`, VCS as a directory, env and stderr as options         | ~8,000-10,000 of 23,431 lines | yes: the `jobs.jsonl` location and the record's API group | planned |
-| 10   | the guard engine: the step table and settings, with magus's 106 built-ins registered as rules        | the largest                   | yes: `Judge`'s structure changes                          | planned |
-| 11   | `sandbox`, after step 9, with its own grant type replacing `spells.Sandbox`                          | ~2,800 lines                  | no                                                        | planned |
+| Step | Moves                                                                                                | Size                          | Needs Eli's call                 | State   |
+| ---- | ---------------------------------------------------------------------------------------------------- | ----------------------------- | -------------------------------- | ------- |
+| 1    | `budget`: `internal/cache/limiter.go`, the machine claim and its three types                         | ~500 lines                    | no                               | planned |
+| 2    | `verdict` and `step` types out of `types/guard.go`, `types/guard_judgment.go`, `types/agent/step.go` | ~700 lines                    | yes: breaks the Go API lock      | planned |
+| 3    | `tier`: `types/agent/model.go`, `internal/agent/model`, `TierCeiling` (`register.go:111-117`)        | ~650 lines                    | no                               | planned |
+| 4    | the JSON Lines store helpers the module's stores need                                                | ~1,500 lines                  | no                               | planned |
+| 5    | `trail` core; feedback marks, replay and env propagation stay in magus                               | ~1,500 lines                  | no                               | planned |
+| 6    | `session`, with the directory supplied by the caller                                                 | ~2,000 lines                  | no                               | planned |
+| 7    | `redact` from `internal/secret`                                                                      | ~1,300 lines                  | no                               | planned |
+| 8    | the job types out of `types`, with no alias, and the generated Buzz mirrors regenerated              | ~5,000 lines                  | yes: 16+ importers               | planned |
+| 9    | the `job` store core, with config as `Limits`, VCS as a directory, env and stderr as options         | ~8,000-10,000 of 23,431 lines | yes: the `jobs.jsonl` location   | planned |
+| 10   | the guard engine: the step table and settings, with magus's 137 built-ins registered as rules        | the largest                   | yes: `Judge`'s structure changes | planned |
+| 11   | `sandbox`, after step 9, with its own grant type replacing `spells.Sandbox`                          | ~2,800 lines                  | no                               | planned |
 
 Sizes are estimates from the line counts above, not measured diffs.
 
@@ -237,7 +276,7 @@ Sizes are estimates from the line counts above, not measured diffs.
   the module judges, leases, records and grades. It never runs, edits or routes the
   caller's loop.
 - [What we do not build is the product](../design/principles/what-we-do-not-build.md):
-  part 6's refusals are the reason the module exists beside the agent frameworks, not a
+  part 7's refusals are the reason the module exists beside the agent frameworks, not a
   limit on it.
 - [Delete before you add](../design/principles/delete-before-you-add.md) and
   [Abstract at the right layer, or not at all](../design/principles/abstract-at-the-right-layer.md):
@@ -343,22 +382,46 @@ What would reopen it: a collision appearing before the first tag.
 
 ## Open questions
 
-- The module path. Two options:
-  - `github.com/egladman/magus/libs/safetyscissors` matches the existing nested modules,
-    but changes every importer's path if the module ever leaves the repository.
-  - A vanity path survives a move. It needs a domain and a `go-import` tag that points
-    at a subdirectory. Which Go release supports that has not been verified.
-- Which of magus's 106 built-in rules read only the step and its lease, and so move with
-  the module. Part 3 names one; the rest are unsorted.
-- The record's API group: job rows carry `batch.magus/v1alpha1` today (`internal/job/store.go:338`).
-- Whether a caller can append to the trail directly, or only through judging and job
-  events.
-- What an `ask` verdict does for a caller that can prompt a person. Today an ask is
-  denied (`judge.go:23-24`).
-- A spend budget for a caller's loop. The budget covers memory and slots; price is
-  computed only when a job ends.
-- Whether goals can be graded from a caller's own check result with no recorded magus
-  run (`types/job.go:155`). This has not been verified.
-- Sandbox confinement off Linux. Only `landlock_linux.go` exists.
-- A read-only door to graph answers, the part of magus the survey found nobody else
-  has, without pulling the graph into the module.
+Prototypes for the second, third and fourth questions were built on 2026-11-15 outside
+the repository, in Go with only the standard library, and pass `go test -race`. None is
+decided.
+
+- The rule groups in part 3 are proposed from each rule's catalog text. Nobody has
+  traced what each rule reads, and the four delegation rules that carry magus content
+  have no seam yet.
+- What an `ask` verdict does for a caller that can prompt a person. Today an ask
+  becomes a deny unless the host renders it (`internal/guard/guard.go:1461-1466`), and
+  the person's answer is never recorded. The prototype compared three shapes:
+  - a question token answered by a second call, which ties the approval to no step;
+  - an asker passed at construction, which blocks judging on a person and cannot span
+    the hook's two processes;
+  - judging the same step again with the answer attached. The answer counts only for
+    the step it was asked about, under the same policy, before a required time-to-live
+    runs out, and it is used up by the judgment it clears. This is the lean, because the
+    answer reaches the trail only through judging.
+
+  Who answered is a claim the library cannot verify, in every shape.
+- Grading a goal from a caller's own check. A result the caller hands over is evidence
+  the worker could author, so the lean is three bases, each named on the grade:
+  - witnessed: the caller passes its unstarted `exec.Cmd`, and the library checks the
+    argv, hashes the tree, digests the output and reads the real exit status. It still
+    starts nothing.
+  - attested: a statement signed by a key outside the worker's reach, such as CI.
+  - reported: the caller's word, accepted only by a goal that opts in to it.
+
+  A goal that accepts no basis is a construction error. A witnessed run still trusts
+  the `go` binary on `PATH`, and the prototype's trail is an in-memory hash chain, not
+  yet the `.jsonl` store.
+- Sandbox confinement off Linux. Landlock confines files only, and network is
+  unconfined (`internal/sandbox/landlock_linux.go:75-79`). The lean:
+  - macOS runs the child under `/usr/bin/sandbox-exec -p` with a profile generated from
+    the same rules, as Codex and Claude Code's sandbox runtime do. That needs no cgo.
+    `sandbox-exec` is deprecated and its profile language undocumented, and Apple names
+    no replacement.
+  - Windows starts unsupported. Restricted tokens, job objects and AppContainer are
+    reachable from `golang.org/x/sys/windows`, at several weeks of work each.
+  - The default mode becomes `required`. A platform with no confinement fails loudly
+    and names the opt-out, instead of today's notice and an unconfined child.
+- The record's new API group. Job rows carry `batch.magus/v1alpha1` today
+  (`internal/job/store.go:338`). It stops naming magus everywhere it is written, and the
+  string is still to pick.
