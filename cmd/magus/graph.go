@@ -163,15 +163,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 			return err
 		}
 		defer func() { _ = m.Close() }()
-		n, rerr := m.ReindexSymbols(ctx)
-		reindexed = n
-		slog.InfoContext(ctx, fmt.Sprintf("reindexed %d symbol index(es)", n), attr.Notice(""))
-		if rerr != nil {
-			// A missing or failing indexer must not block the domain-graph rebuild.
-			// Surface the actionable hints and carry on.
-			interactive.Hint(ctx, "some projects were not reindexed", attr.Error(rerr))
-			refused = maintenance.ReindexRefusals(rerr)
-		}
+		reindexed, refused = maintenance.ReindexSymbols(ctx, m.ReindexSymbols)
 	}
 
 	if bf.Sessions {
@@ -191,10 +183,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	}
 	out := g.Output()
 	slog.InfoContext(ctx, fmt.Sprintf("knowledge graph rebuilt: %d nodes, %d edges", out.NodeCount, out.EdgeCount), attr.Notice(""))
-	scriptsErr := writeGuardIndexes(ctx, root)
-	if refused != nil {
-		scriptsErr = errors.Join(scriptsErr, fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock or the build budget to refresh: %w", refused))
-	}
+	scriptsErr := errors.Join(writeGuardIndexes(ctx, root), refused)
 	omitted := knowledge.ShardErrors(config.CacheDir(root, globalCfg))
 	scriptsErr = errors.Join(scriptsErr, knowledge.GraphBuildShardFailure(ctx, omitted))
 	if opts.Format != outputText {
@@ -747,11 +736,8 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 // loopback server (--serve). Either way the graph stays on the machine: the site only
 // serves static assets.
 
-// fragmentWarnBytes is a conservative ceiling on the encoded fragment. The whole
-// URL rides on the command line to the browser and into the address bar; Chrome
-// handles multi-megabyte URLs, but Safari (~80 KB) and older Firefox (~64 KB)
-// cap shorter. Past this we point at --serve, which has no size limit.
-const fragmentWarnBytes = 48 * 1024
+// query.go, which a pending move holds, still names fragmentWarnBytes.
+const fragmentWarnBytes = interactive.FragmentWarnBytes
 
 // Two privacy-first delivery modes:
 //   - default: gzip+base64url the graph into a `#data=` URL fragment. A fragment
@@ -849,29 +835,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	if err != nil {
 		return err
 	}
-	openURL := fmt.Sprintf("%s/#data=%s", strings.TrimRight(base, "/"), encoded)
-
-	if len(encoded) > fragmentWarnBytes {
-		slog.WarnContext(ctx, fmt.Sprintf("this graph encodes to %d KB, near or past what Safari and older\n"+
-			"Firefox accept in a URL (Chrome is fine). If the page does not load, re-run with\n"+
-			"--serve to deliver it over a loopback server instead (no size limit). Continuing.", len(encoded)/1024),
-			attr.Notice("magus graph export --open"))
-	}
-
-	if printOnly {
-		fmt.Println(openURL)
-		return nil
-	}
-
-	slog.InfoContext(ctx, fmt.Sprintf("opening the graph explorer for this workspace (%d nodes, %d edges).\n"+
-		"your graph rides in the link fragment and is never uploaded - it does not leave your machine.", out.NodeCount, out.EdgeCount),
-		attr.Notice(""))
-	if err := interactive.OpenBrowser(openURL); err != nil {
-		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
-			attr.Why("Re-run with --print to get the URL, or open it yourself."))
-		return exit.Reported(exit.Failure)
-	}
-	return nil
+	return interactive.OpenGraphFragment(ctx, base, encoded, out.NodeCount, out.EdgeCount, printOnly)
 }
 
 // hostedPageAllowed refuses to open a page mcp.allowed_origins does not name.
