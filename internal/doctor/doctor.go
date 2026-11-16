@@ -42,7 +42,7 @@ type ServerInfo struct {
 	Running  int
 	Queued   int
 	// Workspaces lists workspace roots currently loaded by the server.
-	Workspaces []LoadedWorkspace
+	Workspaces []loadedWorkspace
 	// SockDir is the directory scanned for socket files.
 	SockDir string
 	// ServerSocket and BrokerSocket are the file names `magus server` and the broker
@@ -65,8 +65,8 @@ type ServerInfo struct {
 	Persistent bool
 }
 
-// LoadedWorkspace describes one workspace slot in the server.
-type LoadedWorkspace struct {
+// loadedWorkspace describes one workspace slot in the server.
+type loadedWorkspace struct {
 	Root       string
 	LoadedAt   time.Time
 	LastAccess time.Time
@@ -399,7 +399,7 @@ func BuildServerInfo(ctx context.Context, src ServerSource) ServerInfo {
 		if !w.Loaded() {
 			continue
 		}
-		di.Workspaces = append(di.Workspaces, LoadedWorkspace{
+		di.Workspaces = append(di.Workspaces, loadedWorkspace{
 			Root:       w.Root,
 			LoadedAt:   w.LoadedAt,
 			LastAccess: w.LastAccess,
