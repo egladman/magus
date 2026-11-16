@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
@@ -11,9 +10,6 @@ import (
 	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -27,9 +23,8 @@ import (
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/internal/server"
 	"github.com/egladman/magus/internal/service/console"
-	sysPID "github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -86,10 +81,6 @@ func serverUsage() {
 	fmt.Fprintln(os.Stderr, "or server.address in magus.yaml. When none is set, `server start` uses:")
 	fmt.Fprintln(os.Stderr, "  "+proc.ServerDefaultAddr())
 }
-
-// serverReadyTimeout bounds how long the backgrounding parent waits for the detached child
-// to start accepting on the socket before it reports the start as failed.
-const serverReadyTimeout = 60 * time.Second
 
 func serverStart(ctx context.Context, args []string) error {
 	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
@@ -196,7 +187,7 @@ var startServerServices = func(ctx context.Context, cancel context.CancelFunc) {
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("send SIGINT / SIGTERM or run `%s` to shut down; SIGHUP reloads configuration", hint.ServerStop), attr.Notice(""), attr.Component("magus"))
 
-	refreshVCSHooks(ctx)
+	server.RefreshVCSHooks(ctx)
 
 	// serverProvider was built by startServer (which runs before this command handler)
 	// so the bridge Magus shares the same OTel instruments the per-workspace builds record
@@ -214,159 +205,9 @@ var startServerServices = func(ctx context.Context, cancel context.CancelFunc) {
 	})
 }
 
-// startServerBackground implements the default auto-backgrounding of `server start`. It
-// runs in the launching process before the server is built. It returns done==true when it
-// fully handled the request (the caller returns exitCode without building a server): one
-// was already running (idempotent no-op), a detached child was spawned and became ready,
-// or spawning failed. It returns done==false for a foreground server: an explicit
-// `server start --foreground`, or the detached `server --foreground` child.
+// startServerBackground hands `server start` to the detached-server logic in internal/server.
 func startServerBackground(ctx context.Context, cfg config.Config, subArgs []string) (exitCode int, done bool) {
-	if wantsForeground(subArgs) {
-		return 0, false
-	}
-
-	addr := cfg.Server.Address // startup defaulted this to server.sock
-	// Idempotent start: a server already accepting on the socket means there is nothing to do.
-	if proc.SocketLive(ctx, addr) {
-		if st, err := proc.QueryStatus(ctx, addr); err == nil && st.ParentPID != 0 {
-			slog.InfoContext(ctx, fmt.Sprintf("server already running (pid %d) on %s%s", st.ParentPID, addr, servingSuffix(st)),
-				attr.Notice(""), attr.Component("magus"))
-		} else {
-			slog.InfoContext(ctx, "server already running on "+addr, attr.Notice(""), attr.Component("magus"))
-		}
-		return 0, true
-	}
-
-	logPath := serverLogPath()
-	pid, err := spawnDetached(serverChildArgs(os.Args[1:]), logPath)
-	if err != nil {
-		slog.With(attr.Component("server start")).ErrorContext(ctx, "could not background the server", attr.Error(err))
-		return 1, true
-	}
-	if err := waitServerReady(ctx, addr, serverReadyTimeout); err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("server (pid %d) did not become ready within %s; see %s", pid, serverReadyTimeout, logPath),
-			attr.Notice(""), attr.Component("magus"))
-		return 1, true
-	}
-	slog.InfoContext(ctx, fmt.Sprintf("server started (pid %d) on %s; logs at %s", pid, addr, logPath), attr.Notice(""), attr.Component("magus"))
-	return 0, true
-}
-
-// serverChildArgs turns a `server start` argv into the detached child's: the `start` verb
-// becomes --foreground, and every flag the person passed (a --server-address, say) rides
-// along so the child binds where the parent waits.
-func serverChildArgs(argv []string) []string {
-	out := make([]string, 0, len(argv)+1)
-	replaced := false
-	prev := ""
-	for _, a := range argv {
-		if !replaced && a == hint.ServerStart.Leaf() && prev == "server" {
-			out = append(out, "--foreground")
-			replaced = true
-			prev = a
-			continue
-		}
-		out = append(out, a)
-		prev = a
-	}
-	return out
-}
-
-// servingSuffix names the workspaces a running server has loaded, or "" when it has none yet.
-//
-// One socket per user serves every workspace, so "already running" answered the question the
-// caller asked and not the one they meant. Starting the server from a second worktree returns 0
-// with nothing loaded from THIS tree, and the console then shows the tree it was started in,
-// which reads as the command having worked. The roots are already on the status wire; the message
-// never said them.
-//
-// The workspace this call was made from is not marked, deliberately: a server loads a workspace
-// lazily on first use, so "not listed" means "not loaded yet" far more often than it means
-// "wrong server", and flagging it would raise an alarm about the ordinary case.
-func servingSuffix(st *proc.StatusReply) string {
-	if st == nil || len(st.Workspaces) == 0 {
-		return ""
-	}
-	roots := make([]string, 0, len(st.Workspaces))
-	for _, w := range st.Workspaces {
-		roots = append(roots, w.Root)
-	}
-	slices.Sort(roots)
-	return ", serving " + strings.Join(roots, ", ")
-}
-
-// detachedChildEnv returns this process's environment with the variables a detached broker
-// or server must not inherit removed.
-//
-// MAGUS_PROC_SOCKET: a child inheriting it believes it is already adopted, binds no
-// socket, and reports the parent's, leaving a server `server stop` cannot find.
-// MAGUS_PROC_TOKEN goes with it: it is the secret for that socket and no other.
-//
-// The invocation ancestry and recursion depth, because A BACKGROUND PROCESS DESCENDS FROM
-// NOBODY: the same rule submitJob already applies to a job's context. A run starts the
-// broker, and a command may start the server. Without this the child's environment
-// permanently records that one run's ancestry, and every workspace the server serves would
-// read those refs as its own. Claims belonging to an invocation that ended hours ago
-// would be excused from the budget, and a run with no ancestry of its own would be judged
-// a nested magus that had lost it.
-func detachedChildEnv() []string {
-	drop := []string{proc.SocketEnv + "=", proc.TokenEnv + "=", spawn.AncestorsEnvVar + "=", "MAGUS_LEVEL=", spawn.TreeMarkEnv + "="}
-	env := os.Environ()
-	out := make([]string, 0, len(env))
-	for _, kv := range env {
-		if slices.ContainsFunc(drop, func(p string) bool { return strings.HasPrefix(kv, p) }) {
-			continue
-		}
-		out = append(out, kv)
-	}
-	return out
-}
-
-// detachedCommand builds the re-exec command with Path set to exe verbatim, skipping
-// exec.Command's resolution. exe is the running binary's own path, so PATH and PATHEXT have
-// no say in which binary it is. On Windows their say is fatal: given an absolute path with
-// no extension, exec.Command demands a PATHEXT sibling on disk, and setup-magus installs an
-// extensionless magus, so the binary could not re-exec itself ("executable file not found
-// in %PATH%") and no broker ever started.
-func detachedCommand(exe string, args []string) *exec.Cmd {
-	return &exec.Cmd{Path: exe, Args: append([]string{exe}, args...)}
-}
-
-// spawnDetached re-execs this binary with args, detached, with its stdio appended to
-// logPath, and returns its pid. The child is fully detached (its own session on unix) and
-// Release()d so this process never waits on it. Its argv is its role: `broker`, or
-// `server --foreground`.
-func spawnDetached(args []string, logPath string) (pid int, err error) {
-	exe, err := os.Executable()
-	if err != nil {
-		// argv[0] may be a bare name, which detachedCommand will not search for; resolve it the
-		// way exec.Command used to.
-		exe = os.Args[0]
-		if lp, lerr := exec.LookPath(exe); lerr == nil {
-			exe = lp
-		}
-	}
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
-		return 0, fmt.Errorf("create log directory for %s: %w", logPath, err)
-	}
-	logf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return 0, fmt.Errorf("open log %s: %w", logPath, err)
-	}
-	defer func() { _ = logf.Close() }()
-
-	cmd := detachedCommand(exe, args)
-	cmd.Env = detachedChildEnv()
-	cmd.Stdin = nil
-	cmd.Stdout = logf
-	cmd.Stderr = logf
-	cmd.SysProcAttr = detachedSysProcAttr()
-	if err := cmd.Start(); err != nil {
-		return 0, fmt.Errorf("start %s: %w", strings.Join(args, " "), err)
-	}
-	pid = cmd.Process.Pid
-	_ = cmd.Process.Release() // detach: the child outlives us, so never wait/reap it
-	return pid, nil
+	return server.StartBackground(ctx, cfg, subArgs, serverLogPath(), os.Args[1:])
 }
 
 // consoleReadyTimeout bounds the wait for a freshly spawned server to serve the console.
@@ -404,7 +245,7 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 
 	slog.InfoContext(ctx, fmt.Sprintf("starting the server to serve the console, from %s.", root), attr.Notice(""), attr.Component("magus"))
 	logPath := serverLogPath()
-	pid, err := spawnDetached([]string{"server", "--foreground"}, logPath)
+	pid, err := proc.SpawnDetached([]string{"server", "--foreground"}, logPath)
 	if err != nil {
 		return fmt.Errorf("could not start the server: %w", err)
 	}
@@ -417,108 +258,25 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			reapSpawned(ctx, pid, "")
+			server.ReapSpawned(ctx, pid, "")
 			return fmt.Errorf("server (pid %d) did not serve the console at %s within %s, see %s", pid, addr, consoleReadyTimeout, logPath)
 		}
 		select {
 		case <-ctx.Done():
-			reapSpawned(ctx, pid, "")
+			server.ReapSpawned(ctx, pid, "")
 			return ctx.Err()
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
-}
-
-// reapSpawned kills a server this process spawned but never got a working socket out of.
-// Without it every failure path leaks the process: with console.enabled=false the wait
-// times out by construction, so each attempt left one more running.
-//
-// It checks WHO it is about to kill. The pid was Release()d to detach the child, so
-// this process is not its parent any more and the number is free for reuse the moment
-// it exits, and the callers reach here precisely when something went wrong, which is
-// when that is likeliest. A server answering on sock under a different pid means ours
-// is already gone and the number belongs to somebody else now. An empty sock skips that
-// half and checks liveness only, for a caller with no socket address to ask.
-//
-// os.FindProcess rather than the spawned handle, which was Release()d.
-func reapSpawned(ctx context.Context, pid int, sock string) {
-	if !sysPID.Alive(pid) {
-		return
-	}
-	if sock != "" {
-		if st, err := proc.QueryStatus(ctx, sock); err == nil && st.ParentPID != 0 && st.ParentPID != pid {
-			// Somebody else's server owns the socket, so ours exited and this pid is no
-			// longer ours to kill.
-			return
-		}
-	}
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return
-	}
-	_ = p.Kill()
-}
-
-// waitServerReady polls the server socket until it answers a status query or the timeout
-// elapses. A successful status round-trip is the readiness signal: the socket is bound and
-// the server is accepting, so a script that chained on `server start` can proceed.
-func waitServerReady(ctx context.Context, addr string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for {
-		if _, err := proc.QueryStatus(ctx, addr); err == nil {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("server did not become ready within %s", timeout)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(100 * time.Millisecond):
-		}
-	}
-}
-
-// isServerRun reports whether a `server` argv runs a server, here or detached: `start`
-// without a help flag, or the detached child's `--foreground`.
-func isServerRun(subArgs []string) bool {
-	if len(subArgs) == 0 {
-		return false
-	}
-	switch subArgs[0] {
-	case hint.ServerStart.Leaf():
-		return !isServerStartHelp(subArgs)
-	case "-foreground", "--foreground":
-		return true
-	}
-	return false
-}
-
-// isServerStartHelp reports whether `server start` was invoked only to print usage. subArgs
-// starts with "start"; a help token after it means the caller wants the flag list, not a
-// server, so startup skips the auto-background handoff and lets the normal dispatch print it.
-func isServerStartHelp(subArgs []string) bool {
-	for _, a := range subArgs[1:] {
-		if a == "-h" || a == "--help" || a == "help" {
-			return true
-		}
-	}
-	return false
-}
-
-// wantsForeground detects --foreground before the formal flag parse, so the
-// backgrounding decision is made in startup().
-func wantsForeground(args []string) bool {
-	for _, a := range args {
-		if a == "-foreground" || a == "--foreground" {
-			return true
-		}
-	}
-	return false
 }
 
 // serverStop shuts down the persistent server, or with --pools the live
 // per-process pool parents whose build differs from this binary.
+const stopTimeout = proc.StopTimeout
+
+// isServerRun is the name main.go reads; the argv logic lives in internal/server.
+var isServerRun = server.IsServerRun
+
 func serverStop(ctx context.Context, args []string) error {
 	var tf *flaggen.ServerStopFlags
 	_, err := commandParse("server stop", args, func(fs *flag.FlagSet) {
@@ -543,7 +301,7 @@ func serverStop(ctx context.Context, args []string) error {
 		if opts.Format != outputText {
 			return exit.Usagef("magus server stop --pools: -o is not supported")
 		}
-		return stopStalePools(ctx)
+		return proc.StopStalePools(ctx, version)
 	}
 
 	// Confirm a server is actually there before claiming to stop it, and capture its pid
@@ -570,7 +328,7 @@ func serverStop(ctx context.Context, args []string) error {
 	// Verify the server is actually gone rather than trusting the shutdown reply. The
 	// shutdown handler acknowledges before the process has torn down, and an earlier bug made
 	// stop a silent no-op, so stop must observe the socket stop answering before reporting.
-	if err := waitSocketGone(ctx, addr, stopTimeout); err != nil {
+	if err := proc.WaitSocketGone(ctx, addr, stopTimeout); err != nil {
 		return fmt.Errorf("server stop: server (pid %d) on %s did not stop within %s", st.ParentPID, addr, stopTimeout)
 	}
 	if opts.Format != outputText {
@@ -608,31 +366,6 @@ type serverPrunePreservedOutput struct {
 
 type serverRotateActivitiesOutput struct {
 	CacheDir string `json:"cache_dir"`
-}
-
-// stopTimeout bounds how long a stop waits to confirm a server or broker is gone after a
-// shutdown request. In-flight builds drain first, so allow generous headroom before
-// declaring the stop unverified.
-const stopTimeout = 30 * time.Second
-
-// waitSocketGone polls addr until it stops answering or the timeout elapses. It is the
-// verification half of a stop: a shutdown reply only means the request was accepted, so
-// stop confirms the socket has actually gone quiet before reporting success.
-func waitSocketGone(ctx context.Context, addr string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for {
-		if !proc.SocketLive(ctx, addr) {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("%s still answers after %s", addr, timeout)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(100 * time.Millisecond):
-		}
-	}
 }
 
 // resolveServerAddr is where the server listens: an explicit --socket, then
@@ -943,87 +676,6 @@ func serverPrunePreserved(ctx context.Context, root string, args []string) error
 		return emitRecord(opts, serverPrunePreservedOutput{VCS: res.Name, Dropped: names}, names)
 	}
 	return nil
-}
-
-// refreshVCSHooks rewrites each hook section magus already installed, and never a first
-// one: `magus init --vcs` does, so a repository holding neither (or jj, which has no
-// section reader) gets one notice naming that command. Best-effort: a failure is logged,
-// never fatal to starting the server.
-func refreshVCSHooks(ctx context.Context) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		slog.With(attr.Component("server start")).WarnContext(ctx, "could not read the working directory; no VCS hook refreshed", attr.Error(err))
-		return
-	}
-	res, err := vcs.Resolve(ctx, cwd, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return
-	}
-	root, err := res.VCS.Root(ctx, cwd)
-	if err != nil {
-		root = cwd
-	}
-	refresh, drift, err := installedVCSHooks(ctx, res.Name, root)
-	if errors.Is(err, types.ErrVCSUnsupported) {
-		return
-	}
-	if err != nil {
-		slog.With(attr.Component("server start")).WarnContext(ctx, "could not read the installed VCS hooks; none refreshed", attr.Error(err))
-		return
-	}
-	if !refresh && !drift {
-		slog.InfoContext(ctx, fmt.Sprintf("no magus VCS hooks are installed, so history changes do not reconcile the graph and generated drift goes unnoticed; `%s` installs them", hint.Init.With("--vcs", res.Name)), attr.Notice(""), attr.Component("magus"))
-		return
-	}
-	if refresh {
-		refreshVCSHook(ctx, res.VCS, res.Name, root, types.VCSDriver.InstallRefreshHook, hint.JobRun.With("sync-graph"),
-			"could not refresh VCS refresh hook",
-			"refreshed %s refresh hook(s) [%s]")
-	}
-	if drift {
-		refreshVCSHook(ctx, res.VCS, res.Name, root, types.VCSDriver.InstallDriftHook, hint.JobRun.With(job.NameCheckDrift),
-			"could not refresh VCS drift-notice hook",
-			"refreshed %s drift-notice hook(s) [%s]")
-	}
-}
-
-// installedVCSHooks reports which managed sections magus installed in root under the
-// named VCS. A VCS with no section reader reports neither.
-func installedVCSHooks(ctx context.Context, name, root string) (refresh, drift bool, err error) {
-	switch name {
-	case "git":
-		if _, refresh, err = vcs.ReadGitRefreshHook(ctx, root); err != nil {
-			return false, false, err
-		}
-		_, drift, err = vcs.ReadGitDriftHook(ctx, root)
-	case "hg":
-		if _, refresh, err = vcs.ReadHgRefreshHook(root); err != nil {
-			return false, false, err
-		}
-		_, drift, err = vcs.ReadHgDriftHook(root)
-	case "sl":
-		if _, refresh, err = vcs.ReadSaplingRefreshHook(root); err != nil {
-			return false, false, err
-		}
-		_, drift, err = vcs.ReadSaplingDriftHook(root)
-	}
-	return refresh, drift, err
-}
-
-// refreshVCSHook rewrites one hook kind's managed sections in root. refreshedFmt takes the
-// VCS name and the hook labels.
-func refreshVCSHook(ctx context.Context, driver types.VCSDriver, name, root string, install func(types.VCSDriver, context.Context, string, string) ([]string, error), command, failed, refreshedFmt string) {
-	changed, err := install(driver, ctx, root, command)
-	if errors.Is(err, types.ErrVCSUnsupported) {
-		return // this VCS has no hook support
-	}
-	if err != nil {
-		slog.With(attr.Component("server start")).WarnContext(ctx, failed, attr.Error(err))
-		return
-	}
-	if len(changed) > 0 {
-		slog.InfoContext(ctx, fmt.Sprintf(refreshedFmt, name, strings.Join(changed, ", ")), attr.Notice(""), attr.Component("magus"))
-	}
 }
 
 // serverReload drops the workspaces a running server holds open, so the next command
