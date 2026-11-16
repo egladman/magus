@@ -3,26 +3,28 @@ package difftui
 import (
 	"bytes"
 	"context"
-	"log/slog"
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
-
 	"fmt"
-	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/diff"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // heldDiffSession is the server's /api/v1/diff/session route, holding every request until the
 // test lets go.

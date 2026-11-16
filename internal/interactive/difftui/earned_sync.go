@@ -137,7 +137,7 @@ func (e *EarnedSync) SetViewed(digest string, on bool) {
 	e.ClosingSync.SetViewed(digest, on)
 }
 
-// close mints a receipt for every file whose hunks were all marked read, then shuts the
+// Close mints a receipt for every file whose hunks were all marked read, then shuts the
 // wrapped sync down.
 //
 // At close rather than per mark, because a file is not read until its last hunk is, and a
@@ -147,11 +147,11 @@ func (e *EarnedSync) SetViewed(digest string, on bool) {
 func (e *EarnedSync) Close() {
 	defer e.ClosingSync.Close()
 	if add := e.finished(); len(add) > 0 {
-		_ = review.Record(e.cacheDir, add)
+		_ = review.Record(e.cacheDir, add) // silent by design: see the doc comment
 	}
 }
 
-// pending is how many files the reader has finished but not yet had recorded, for the line
+// Pending is how many files the reader has finished but not yet had recorded, for the line
 // the viewer prints on the way out. Reading it before close is the point: a reader is told
 // what their session earned at the moment they finish it, not the next time they happen to
 // run a report.

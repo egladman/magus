@@ -274,7 +274,7 @@ func (b *Bridge) drain(ctx context.Context) {
 	}
 }
 
-// close stops the sender and gives what is already queued a bounded chance to leave: a mark
+// Close stops the sender and gives what is already queued a bounded chance to leave: a mark
 // made on the last keypress should not be lost to the process exiting, and a server that has
 // stopped answering should not hold the shell either.
 //
@@ -337,7 +337,7 @@ func (b *Bridge) post(ctx context.Context, op sessionOp) {
 	}
 	defer resp.Body.Close()
 	// Drained so the connection can be reused for the next keypress rather than torn down.
-	_, _ = io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body) // a failed drain costs only the connection's reuse
 }
 
 // Session is the review the server's session answered with.

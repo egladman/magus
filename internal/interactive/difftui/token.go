@@ -17,7 +17,7 @@ import (
 // Tokens is the shell's token store as a review call uses it: the operator mints and revokes,
 // and the token a call carries is a console one.
 type Tokens interface {
-	Mint(req auth.MintRequest) (secret string, rec auth.Token, err error)
+	Mint(req auth.MintRequest) (string, auth.Token, error)
 	Revoke(id string) error
 }
 
@@ -49,7 +49,7 @@ func MintToken(ctx context.Context, tk Tokens, addr string, ttl time.Duration) (
 		}
 		return types.Secret{}, "", false
 	}
-	_ = conn.Close()
+	_ = conn.Close() // a probe: nothing was written on it
 	secret, rec, err := tk.Mint(auth.MintRequest{Grant: types.GrantConsole, TTL: ttl})
 	if err != nil {
 		warn("the review is not shared with the server: its console token could not be minted", attr.Error(err))
